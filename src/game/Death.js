@@ -33,6 +33,7 @@ import { rosterEntry } from './CastleLife.js';
 import { newUid, isGodGift, ITEM_INFO } from './ItemTypes.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
+import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
 
 export const DEATH = {
     BODY_S: 300, // s the body lies (5 minutes)
@@ -82,6 +83,29 @@ export function lootOfVillager(role, { shield = false } = {}, rng = Math.random)
     if (shield || role === 'king') out.push({ kind: 'shield', uid: newUid(), type: 2, magic: false, max: 0 });
     out.push({ kind: 'coins', uid: newUid(), count: a + Math.floor(rng() * (b - a + 1)) });
     return out;
+}
+
+/**
+ * What falls from a dead creature's hand (the author: «если персонаж умер, палочка или предмет в руке сразу
+ * же выпадает из его руки»): the tool in its hand (VillagerModel tools) → a thing of the world.
+ *   'wand'   — its own wand (a wanderer's staff: a staff-wand) — a loose thing: picked up, «Акцио», cast with;
+ *   'sword'  — a real sword (the king's: magic +25); 'axe' — an axe;
+ *   'bow'    — a bow (a knight archer's longbow).
+ * Not here — no such thing among the world's things (yet), it goes with the body: a farmer's hoe and pitchfork,
+ * a builder's hammer (the hammer item is the magic one), a basket, a pouch, a bucket, a paddle, a pistol.
+ * The Ice Queen's Rod falls by her own death (IceQueen._die); a player's hands — playerDied (everything drops).
+ */
+export const HELD_DROP = { wand: 'wand', staff: 'wand', sword: 'sword', bigsword: 'sword', rapier: 'sword', cutlass: 'sword', axe: 'axe', longbow: 'bow' };
+
+/** The thing that falls from creature `c`'s hand (its model's tool), or null. Never twice: knocked out already — nothing. */
+export function heldDrop(c) {
+    const kind = c?.model?.toolKind;
+    const what = HELD_DROP[kind];
+    if (!what) return null;
+    if (what === 'wand') return WAND_TOOLS.has(kind) && !c.noWand ? { ...wizardWand(c) } : null;
+    if (c.disarmed) return null; // (its sword knocked out by «Экспеллиармус» already lies somewhere)
+    if (what === 'bow') return { kind: 'bow', uid: newUid(), type: 0, magic: false, bonus: 0, arrows: 6 };
+    return { kind: 'weapon', type: what, magic: c.role === 'king', bonus: c.role === 'king' ? 25 : 0 };
 }
 
 /** Where the i-th of n things lands around a body (x, z offsets): a ring, not one heap. */
@@ -244,14 +268,42 @@ export class DeathSystem {
     }
 
     // ------------------------------------------------------- creatures
+    /**
+     * (authority) Whatever creature `c` held in its hand falls from it now, a real thing on the ground with its
+     * physics (heldDrop) — the one place for every creature that dies (castle people, wanderers, sailors…).
+     * The host spawns it; everybody sees it (Items / Weapons sync). → the dropped thing's description, or null.
+     */
+    dropHeld(c, at = null) {
+        const g = this.game;
+        const d = heldDrop(c);
+        if (!d) { this._emptyHand(c); return null; }
+        const p = new THREE.Vector3(at?.x ?? c.x, (at?.y ?? c.y) + 2.4, at?.z ?? c.z);
+        // (out of the opening hand: a little forward and down, turning over)
+        const yaw = c.yaw || 0;
+        const vel = new THREE.Vector3(-Math.sin(yaw) * 1.2 + (Math.random() - 0.5), 0.8, -Math.cos(yaw) * 1.2 + (Math.random() - 0.5));
+        if (d.kind === 'weapon') this._dropWeapon(d, p, yaw + Math.PI / 2);
+        else if (g.items) {
+            if (d.kind === 'wand') { c.noWand = true; c.lostWand = null; } // (its wand lies on the ground now: never a second one)
+            this.dropItem(d, p, vel);
+        }
+        if (d.kind === 'weapon') c.disarmed = true;
+        this._emptyHand(c);
+        return d;
+    }
+
+    /** The hand of a dead creature lets go (its model): the thing is on the ground (or never was one of the world's). */
+    _emptyHand(c) { c?.model?.setHeldTool?.('none'); }
+
     /** (authority) A castle person died: the armed ones drop their things; everybody's body stays. */
     villagerDied(v) {
         const g = this.game;
         // «Дай»: nothing of them is left — no body, no things (the gods' gifts only); «Пилбидрио»: no body, the things fall (StrongMagic)
         if (v.annihilated) return;
         const y = this._ground(v.x, v.z, v.y + 1.5);
-        // (a sword knocked out by «Экспеллиармус» already lies somewhere: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !(v.disarmed && d.kind === 'weapon'));
+        // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
+        const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
+        // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...steel);
@@ -265,8 +317,8 @@ export class DeathSystem {
 
     /** The sword and the shield leave a dead armed villager's hands (they lie on the ground now). */
     stripVillager(v) {
+        v.model?.setHeldTool?.('none'); // (whatever was in the hand fell from it: dropHeld)
         if (v.role !== 'knight' && v.role !== 'king') return;
-        v.model?.setHeldTool?.('none');
         if (v.model?.shield) v.model.shield.visible = false;
     }
 

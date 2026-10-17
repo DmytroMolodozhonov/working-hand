@@ -248,16 +248,18 @@ export class Travelers {
     /** (host) Are they attacked (somebody fights them, frightens them, hurts them)? Calm again? */
     _watch(P, alive, dt) {
         const L = this.life;
-        let by = null, trouble = false;
+        let by = null, trouble = false, searching = false;
         for (const v of P.members) {
             const hurt = v.hp < (v._roadHp ?? v.hp) || (v.dead && !v._roadDead);
             v._roadHp = v.hp; if (v.dead) v._roadDead = true;
             const who = v.foe || v.fear?.danger?.by || v.fleeFrom || v.grudge?.id || null;
             if (v.foe || v.fear || v.fleeT > 0 || hurt) { trouble = true; by = by || who; }
+            if (v.investigate && !v.dead) searching = true; // (one searching for who cast at them: they wait — Startle.js)
         }
         if (trouble && P.state !== 'trouble') this.trouble(P, by || P.cart?.hitBy || null);
+        else if (searching && P.state === 'go') this.alert(P);
         if (P.state === 'trouble') {
-            P.calmT = trouble ? 0 : P.calmT + dt;
+            P.calmT = trouble || searching ? 0 : P.calmT + dt;
             if (P.calmT > ROAD.CALM) { P.state = 'go'; P.calmT = 0; this.log.push({ ev: 'calm', id: P.id }); }
         }
         // greeting a player who comes near
@@ -297,6 +299,18 @@ export class Travelers {
             } else if (at && !v.fear) L.fright?.scare?.(v, 'attacker', at, by);
             if (!said && Math.random() < 0.8) { said = true; L._say(v, pick(ALARM[P.kind])); }
         }
+    }
+
+    /**
+     * (host, CastleLife.startle) Something flew at them / by them (Startle.js): `by` seen — it is an attack
+     * (trouble); not seen — the cart stops and the riders get down, the fighters go to look where it came from.
+     */
+    alert(P, by = null) {
+        if (!P) return;
+        if (by != null) { this.trouble(P, by); return; }
+        if (P.state !== 'trouble') this.log.push({ ev: 'alert', id: P.id });
+        P.state = 'trouble'; P.calmT = 0;
+        for (const v of P.members) if (!v.dead && v.seated) this._getDown(v);
     }
 
     /** (host, from Carriages) The cart was hit. */

@@ -43,6 +43,7 @@ import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
+import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { creditKill } from './Mana.js';
@@ -107,6 +108,9 @@ const SHOUT = {
     fightBackKnight: ['Ты за это ответишь!', 'Ну держись, наглец!', 'Сам напросился, странник.'],
     petty: ['Эй! Ты что творишь?!', 'Окно разбил! Кто платить будет?', 'А ну перестань ломать!', 'Совсем совести нет!'],
     investigate: ['Что там грохнуло? За мной!', 'К стене, живо!', 'Кто посмел?! Проверить!'],
+    startled: ['Кто здесь?!', 'Это заклинание! Откуда?!', 'Нас атакуют! Ищите его!', 'Кто стрелял?! Покажись!'],
+    startledWiz: ['Чары! Кто колдует?!', 'Покажись, колдун!', 'Это было в меня?!'],
+    comrade: ['Его убили! Ищите убийцу!', 'Брат! Нет!', 'Убит! Он где-то рядом!', 'К оружию! Убийца рядом!'],
     wrecker: ['Вот он, разрушитель!', 'Держи колдуна!', 'Ты сломал нашу стену — ответишь!', 'Взять его, он ломает замок!'],
     captured: ['Король пал! Да здравствует новый король!', 'Мы служим вам, Ваше Величество!'],
     ambient: {
@@ -872,6 +876,16 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // startled (a spell flew past, a blast near — Startle.js): a flinch and a turn to where it came from
+        if (v.flinchT > 0) {
+            v.flinchT -= dt;
+            const f = v.flinchFrom;
+            if (f && !v.seated) v.yaw = turn(v.yaw, Math.atan2(-(f.x - v.x), -(f.z - v.z)), dt * 6);
+            v.speed = 0;
+            v.mode = v.flinchT > STARTLE.FLINCH * 0.45 ? 'flinch' : 'idle';
+            this._ground(v);
+            return;
+        }
         // in deep water: swims (never walks the bottom) — to the bank, and out
         if (this._swim(v, dt)) return;
         // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
@@ -1962,6 +1976,8 @@ export class CastleLife {
         if (!killed && by && !opts.via && !opts.spell && !opts.pierce && !opts.magic && !(opts.weapon && v.role === 'king') && this._personal(v, by, dmg, opts)) { deed(); return; }
         if (!killed && v.role !== 'knight' && v.role !== 'king') this._say(v, pick(SHOUT.hurt));
         if (by && this._offence(v.cs, by, v, killed, pos, opts)) deed();
+        // nobody knows who (too far, dark, behind a wall): the hurt one turns to where it came from and searches (Startle.js)
+        else if (!killed && by && !opts.via) this.startle(v, by, opts.src || this._feetOf(by) || pos, { hit: true });
     }
 
     /**
@@ -2022,6 +2038,80 @@ export class CastleLife {
     }
 
     /**
+     * (host) A threat passed by `v` — a spell flew past him, a ray or a blast close by — or a spell hit him that
+     * doesn't hurt (Startle.js). He flinches and turns to where it came from (`from`); he sees who did it
+     * (Blame.js) — the fighters go for him, the others run; he doesn't — the fighters search the place it came
+     * from, the others run from it. The ones near hear the cry. `by`: a player's id (others: nothing).
+     */
+    startle(v, by, from, { hit = false } = {}) {
+        if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by)) return false;
+        const cs = v.cs, now = Date.now();
+        if (!cs || v.foe || by === this.state(cs.def.id).owner) return false; // (fighting already; the king may do as he likes)
+        if (now - (v.startleAt || 0) < (hit ? 300 : STARTLE.AGAIN_MS)) return false; // (a volley: one threat; a hit told once)
+        v.startleAt = now;
+        if (v.sleep) this.night?.wake?.(v, 'alarm');
+        v.readyUntil = now + STARTLE.READY_MS; // (a wizard has his shield ready for the next one: WizardFight._notice)
+        if (!(v.stunT > 0) && !v.lev) { v.flinchT = STARTLE.FLINCH; v.flinchFrom = { x: from.x, z: from.z }; }
+        const knows = this._knows(v, by, null, null);
+        if (v.party) this.game.travelers?.alert?.(v.party, knows ? by : null); // (a cart stops, the riders get down)
+        if (v.seated && v.job !== 'cart') v.seated = false;
+        const r = startleReaction({ fights: this._fights(v), knows });
+        if (r === 'fight' || r === 'flee') {
+            cs.hostile.set(by, now + HOSTILE_MS);
+            if (r === 'fight') { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : v.role === 'king' ? SHOUT.king : SHOUT.knight), 3); }
+            else { const bp = this._playerPos(by); this.fright?.scare?.(v, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : from, by); this._say(v, pick(SHOUT.help), 3); }
+        } else if (r === 'search') {
+            v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by, t: STARTLE.SEARCH_S };
+            v.path = null; v.lookT = 0;
+            this._say(v, pick(v.wizard ? SHOUT.startledWiz : SHOUT.startled), 3);
+        } else {
+            v.fleeAt = { x: from.x, z: from.z }; v.fleeFrom = null; v.fleeT = STARTLE.FLEE_S; v.fleeing = false;
+            if (Math.random() < 0.6) this._say(v, pick(SHOUT.help), 3);
+        }
+        this._callNear(v, knows ? by : null, from, by);
+        return true;
+    }
+
+    /** (host) The cry of `v`: the fighters near with nothing to do come — at the culprit if he is known, else to look where it came from. */
+    _callNear(v, known, from, by) {
+        for (const o of v.cs.active.values()) {
+            if (o === v || o.dead || o.foe || o.investigate || o.servantOf != null || !this._fights(o) || o.sleep?.phase === 'lie') continue;
+            if (Math.abs(o.x - v.x) > STARTLE.CALL_R || Math.abs(o.z - v.z) > STARTLE.CALL_R || Math.hypot(o.x - v.x, o.z - v.z) > STARTLE.CALL_R) continue;
+            o.readyUntil = Date.now() + STARTLE.READY_MS;
+            if (known) { o.foe = known; o.path = null; }
+            else { o.investigate = { x: from.x, y: from.y ?? o.y, z: from.z, by, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
+        }
+    }
+
+    /**
+     * (host, Duel._fly) A player's charge flew p→q this frame (`from`: the caster's hand): everybody it passed close
+     * by is startled — not the one it hit (`hitId`: that one feels it in full: hit / applyToCreature).
+     */
+    passBy(p, q, by, from, hitId = null) {
+        if (!this.auth || !this._isPlayer(by)) return;
+        const R = STARTLE.BOLT_R + BODY_R;
+        const minX = Math.min(p.x, q.x) - R, maxX = Math.max(p.x, q.x) + R, minZ = Math.min(p.z, q.z) - R, maxZ = Math.max(p.z, q.z) + R;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.foe || v.id === hitId || v.x < minX || v.x > maxX || v.z < minZ || v.z > maxZ) continue;
+            if (segDist2(p.x, p.y, p.z, q.x, q.y, q.z, v.x, v.y + 2.4, v.z) > R * R) continue;
+            this.startle(v, by, from);
+        }
+    }
+
+    /** (host) A blast / a lightning at `p` (radius `r`): the ones near but not in it are startled (in it: hitAt hurts them). */
+    startleAround(p, r, by, from = null) {
+        if (!this.auth || !this._isPlayer(by)) return;
+        const bp = from || this._playerPos(by) || p;
+        const R = r + STARTLE.BLAST_R;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.foe || Math.abs(v.x - p.x) > R || Math.abs(v.z - p.z) > R) continue;
+            const d = Math.hypot(v.x - p.x, v.z - p.z);
+            if (d > R || d < r + 1) continue;
+            this.startle(v, by, bp);
+        }
+    }
+
+    /**
      * A blow without magic between one player and one villager. Returns false when it is no
      * longer personal: this player has hurt several people here lately (a rampage — the castle turns on them).
      */
@@ -2072,11 +2162,42 @@ export class CastleLife {
         v.path = null;
         const st = this.state(v.cs.def.id);
         st.killed.add(v.idx);
-        this.game.death?.villagerDied(v); // the body stays; a knight's sword, shield and coins drop
+        this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
+        this._comradeDown(v, by);
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         this._achDied(v, by);
         this._sendState(v.cs);
+    }
+
+    /** A player's feet (where a thing he did came from), or null. */
+    _feetOf(by) {
+        const p = this._isPlayer(by) ? this._playerPos(by) : null;
+        return p ? { x: p.x, y: p.y - 1.95, z: p.z } : null;
+    }
+
+    /**
+     * (host) `v` fell (the author: «тот, кто стоял возле него, как будто завис»): the ones near who see it cry out,
+     * flinch and turn — the killer seen: at him (the others run); not seen: they look round and search the way the
+     * death came from, and call the others (startle). BodyFound later raises the whole place when the body is found.
+     */
+    _comradeDown(v, by) {
+        if (!this.auth || !v.cs) return;
+        const at = { x: v.x, y: v.y, z: v.z };
+        const from = this._feetOf(by);
+        let said = false;
+        for (const o of v.cs.active.values()) {
+            if (o === v || o.dead || o.servantOf != null || o.sleep?.phase === 'lie') continue;
+            if (Math.abs(o.x - at.x) > 30 || Math.abs(o.z - at.z) > 30) continue;
+            const d = Math.hypot(o.x - at.x, o.z - at.z);
+            if (d > 30 || Math.abs(o.y - at.y) > 6 || (d > 4 && !this._sees(o, { x: at.x, y: at.y + 1.5, z: at.z }))) continue;
+            if (from) { if (this.startle(o, by, from, { hit: true }) && !said && this._fights(o)) { said = true; this._say(o, pick(SHOUT.comrade), 3); } continue; }
+            // (killed by no player — a zombie, a creature, a fall: they look at the body and search round it)
+            if (o.foe) continue;
+            o.flinchT = STARTLE.FLINCH; o.flinchFrom = { x: at.x, z: at.z };
+            if (this._fights(o) && !o.investigate) { o.investigate = { x: at.x, y: at.y, z: at.z, by: null, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
+            if (!said) { said = true; this._say(o, pick(SHOUT.comrade), 3); }
+        }
     }
 
     /** Which achievement this person's death is (Achievements.js): the king, the Ice Queen, a tower's Master. */
@@ -2198,9 +2319,8 @@ export class CastleLife {
         }
         if (kingHit) this._reinforce(cs, by);
         else if (!was && cs.def.knights > 0 && this.wantedLevel(by) >= 2) this._sendGuards(cs, pos, by, 3); // (a known killer: more of the guard come out)
-        const road = cs.def.kind === 'wander' || cs.def.kind === 'errant' || cs.def.kind === 'folk';
-        if (!was && by === g.localId) g.hud.setVoice(road ? '⚔️ Путники видели, что вы сделали' : '⚔️ Вас заметили! Стража замка идёт за вами', true);
-        else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
+        // (no hint to the player that «somebody saw it» — the author: a useless one; they see the people turn on them. Only the log.)
+        if (!was) console.info('[CastleLife] seen:', by, cs.def.name);
         return true;
     }
 
@@ -2364,8 +2484,7 @@ export class CastleLife {
                 if (!shouted) { shouted = true; this._say(k, pick(SHOUT.wrecker)); }
             }
         }
-        if (!was && by === g.localId) g.hud.setVoice('⚔️ Стража видела, кто ломает замок! Рыцари идут за вами', true);
-        else if (!was) g.sync?.villagerAlarm?.(by, cs.def.name);
+        if (!was) console.info('[CastleLife] caught wrecking:', by, cs.def.name); // (no hint: the knights coming say it)
     }
 
     /** A knight goes to the place of a blast and looks round; the culprit near → caught. */
@@ -2522,16 +2641,20 @@ export class CastleLife {
 
     hitAt(p, radius, dmg, by) {
         for (const v of [...this.byId.values()]) if (!v.dead && Math.hypot(v.x - p.x, v.z - p.z) < radius + 1 && Math.abs(v.y + 2 - p.y) < radius + 3 && !this.game.wards?.shields(p, { x: v.x, y: v.y + 2, z: v.z })) this.hit(v, dmg, _v.set(v.x - p.x, 0, v.z - p.z).normalize().clone(), by, { spell: true });
+        if (this.auth && by) this.startleAround(p, radius, by); // (the ones near: startled — Startle.js)
     }
 
     hitRay(o, d, len, width, dmg, by) {
         let any = false;
+        const near = this.auth && this._isPlayer(by);
         for (const v of [...this.byId.values()]) {
             if (v.dead) continue;
             const to = _v.set(v.x - o.x, v.y + 2 - o.y, v.z - o.z);
             const along = to.dot(d);
             if (along < 0 || along > len) continue;
-            if (to.addScaledVector(d, -along).length() < width + 1.2) { this.hit(v, dmg, d.clone(), by, { spell: true }); any = true; }
+            const off = to.addScaledVector(d, -along).length();
+            if (off < width + 1.2) { this.hit(v, dmg, d.clone(), by, { spell: true }); any = true; }
+            else if (near && off < width + 1.2 + STARTLE.RAY_R) this.startle(v, by, o); // (the ray went right by him)
         }
         return any;
     }

@@ -17,11 +17,15 @@
  *   - zombies, animals, sailors, villagers with tools: nothing to disarm — a small push.
  *   - a book-bird: knocked out of the air like by any charge (it falls as a book).
  *   - a living tree, the giant spider, a dragon: no effect (nothing in their «hands» to knock out).
+ *   - the Ice Queen: her Ice Rod stays in her hand — «Экспеллиармус» is a simple spell without a scroll
+ *     (IceQueen.iceBolt: such magic does nothing on her), and the Rod is a gift of the gods (godGift):
+ *     no simple spell tears it from its holder. A player holding the Rod keeps it too (knockOutOfMyHand).
  *   - a phoenix: nothing in its claws — only a push (and it is an attack: Phoenixes.TARGETS).
  * The host owns loose things and the castle people; everybody sees the same flying wand.
  */
 
 import * as THREE from 'three';
+import { starterWand, rollWand } from './ItemTypes.js';
 
 export const EXPELLIARMUS = {
     MIN: 4, // m: how far the wand flies at least
@@ -128,21 +132,35 @@ export function knockOutOfMyHand(game, rng = Math.random) {
     return null;
 }
 
-/** The wand a castle wizard holds (made once: a student's plain one, a teacher's or the Master's a real one). */
-export function wizardWand(v, roll) {
+/** A wizard's own wand, rolled: a student's plain one, a robed one's strong one; a wanderer's is a staff. */
+function rollWizardWand(v) {
+    const w = v.robe ? (({ power, ...x }) => ({ ...x, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand())
+        : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand();
+    if (v.model?.toolKind === 'staff' || v.role === 'wanderer') { w.staff = true; w.plain = false; } // (a long staff: a wand all the same — ItemTypes.wandModel draws it long)
+    return w;
+}
+
+/** His own wand (rolled once, then always the same: in his hand in a duel, the one «Экспеллиармус» knocks out, the one that falls when he dies). */
+export const wizardWandOf = (v) => v.wand || (v.wand = rollWizardWand(v));
+
+/** The wand a castle wizard holds (made once). */
+export function wizardWand(v, roll = wizardWandOf) {
     if (!v.wandItem) v.wandItem = roll(v);
     return v.wandItem;
 }
+
+/** The kinds of things in a castle person's hand that are a wand (VillagerModel tools): a wand, a wanderer's staff. */
+export const WAND_TOOLS = new Set(['wand', 'staff']);
 
 /**
  * (host) «Экспеллиармус» reached a castle person `v`: a wizard's wand / a knight's sword flies off.
  * → 'wand' | 'sword' | null (nothing knocked out: only the push).
  */
-export function disarmVillager(game, v, makeWand) {
+export function disarmVillager(game, v, makeWand = wizardWandOf) {
     const g = game, m = v.model;
     const kind = m?.toolKind;
     const hand = new THREE.Vector3(v.x, v.y + 2.6, v.z);
-    if (v.wizard && kind === 'wand' && !v.noWand && g.items) {
+    if (v.wizard && WAND_TOOLS.has(kind) && !v.noWand && g.items) {
         if (m.getWandTip && m.tool) m.getWandTip(hand);
         const item = wizardWand(v, makeWand);
         const f = pickFlight(g, hand);

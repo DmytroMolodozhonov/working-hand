@@ -25,7 +25,7 @@ import { SKIN_TONES } from './Appearance.js';
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
@@ -1368,6 +1368,13 @@ export class VillagerModel {
                 T.hx = -0.32; T.headX = 0.2;
                 T.aLX = 0.7; T.aRX = 0.7; T.aLZ = -0.55; T.aRZ = 0.55;
                 rate = 18; breathe = 0;
+                break;
+            case 'flinch':
+                // startled (a spell flew past — Startle.js): knees bent, ducked forward, the arms up before the head
+                T.kL = -0.7; T.kR = -0.6; T.lL = 0.25; T.lR = 0.15;
+                T.hx = -0.35; T.headX = 0.25;
+                T.aLX = 2.1; T.aRX = 1.7; T.aLZ = -0.45; T.aRZ = 0.35;
+                rate = 30; breathe = 0;
                 break;
             case 'cheer':
                 T.aLX = 2.85 + Math.sin(t * 9) * 0.2; T.aRX = 2.85 - Math.sin(t * 9) * 0.2;

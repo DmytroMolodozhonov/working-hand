@@ -108,8 +108,7 @@ export class BodyFound {
             L._say(v, pick(wiz ? BODY_LINES.suspectWiz : BODY_LINES.suspect), 3);
             // the others near hear the cry
             for (const o of cs.active.values()) if (!o.dead && !o.foe && o !== v && L._fights(o) && Math.hypot(o.x - v.x, o.z - v.z) < 35) o.foe = pl.id;
-            if (!was && pl.id === this.game.localId) this.game.hud?.setVoice?.(wiz ? '🧙 Волшебники ищут убийцу — и приняли вас за чужака!' : '⚔️ Стража ищет убийцу — вас приняли за подозреваемого!', true);
-            else if (!was) this.game.sync?.villagerAlarm?.(pl.id, cs.def.name);
+            if (!was) console.info('[BodyFound] suspect:', pl.id, cs.def.name); // (no hint: the cry and the people coming say it)
             return true;
         }
         return false;

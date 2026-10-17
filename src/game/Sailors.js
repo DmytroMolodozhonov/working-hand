@@ -35,6 +35,7 @@ import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { skeletonDamage } from './Skeletons.js';
 import { SHADOW_NEAR } from '../core/Shadows.js';
+import { STARTLE, segDist2 } from './Startle.js';
 
 /** A sailor doing these is moved every frame, however far (its blows land on the frame they come). */
 const BUSY = new Set(['attack', 'block', 'shoot', 'brace', 'cast', 'shield', 'climb', 'flail']);
@@ -103,6 +104,7 @@ const NAMES = ['Яков', 'Гаврила', 'Фома', 'Тимофей', 'Ма
 const SHOUT = {
     fight: ['На абордаж!', 'Полундра!', 'Свистать всех наверх!', 'Руби его!', 'Чужак на палубе!', 'К оружию, братва!'],
     hurt: ['Ай!', 'Тысяча чертей!', 'Разрази меня гром!'],
+    startled: ['Кто стрелял?!', 'Полундра! Колдун где-то рядом!', 'Тысяча чертей, что это было?!'],
     gang: ['Не подходи к трапу!', 'Прочь от нашего корабля!', 'Сунешься — пожалеешь!'],
     // the captain's orders in a fight (the crew takes turns, it doesn't rush him all at once)
     order: ['Окружай его! По двое — не толпись!', 'Двое вперёд, остальные — кольцом!', 'Не лезь все разом! По очереди!'],
@@ -389,6 +391,36 @@ export class Sailors {
         const list = this.crews.get(s.id) || [];
         const v = list.find((x) => !x.dead);
         if (v) this._say(v, pick(SHOUT.fight));
+    }
+
+    /**
+     * (host) A threat passed by sailor `v` — a charge flew past, or a spell hit him (Startle.js): he braces (crouched,
+     * feet wide) and, if anybody of the crew sees who did it (Blame.js), the crew turns on that player.
+     */
+    startle(v, by, from, { hit = false } = {}) {
+        const g = this.game;
+        if (!this.auth || !v || v.dead || v.overboard || !g.castleLife?._isPlayer?.(by)) return false;
+        const now = performance.now();
+        if (now - (v.startleAt || -1e9) < (hit ? 300 : STARTLE.AGAIN_MS)) return false;
+        v.startleAt = now;
+        const s = v.crew || v.ship;
+        if (!(v.stunT > 0) && !v.vy && !v.foe) v.braceT = Math.max(v.braceT || 0, STARTLE.FLINCH);
+        g.castleLife?.night?.wakeSailor?.(v, 'hit');
+        if (s && this._crewKnows(s, by, null, null)) this.provoke(s, by, null);
+        else if (v.sayT <= 0 && Math.random() < 0.6) this._say(v, pick(SHOUT.startled), 2.5);
+        return true;
+    }
+
+    /** (host, Duel._fly) A player's charge flew p→q: the sailors it passed close by (not `hitId`) are startled. */
+    passBy(p, q, by, from, hitId = null) {
+        if (!this.auth) return;
+        const R = STARTLE.BOLT_R + 0.5;
+        const minX = Math.min(p.x, q.x) - R, maxX = Math.max(p.x, q.x) + R, minZ = Math.min(p.z, q.z) - R, maxZ = Math.max(p.z, q.z) + R;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.id === hitId || v.x < minX || v.x > maxX || v.z < minZ || v.z > maxZ) continue;
+            if (segDist2(p.x, p.y, p.z, q.x, q.y, q.z, v.x, v.y + 2.2, v.z) > R * R) continue;
+            this.startle(v, by, from);
+        }
     }
 
     /** Somebody took the wheel. */
@@ -950,6 +982,7 @@ export class Sailors {
         v.hp = 0;
         v.mode = 'dead';
         v.deadT = 0;
+        if (this.auth) this.game.death?.dropHeld(v, { x: v.x, y: v.y, z: v.z }); // (his cutlass / rapier falls from the hand: a real thing on the deck)
         const s = v.crew || v.ship;
         s.crewKilled.add(v.idx);
         s.changed = true;
@@ -1809,7 +1842,7 @@ export class Sailors {
             v.net = { x: a[1], y: a[2], z: a[3], yaw: a[4] };
             v.mode = MODE_CODE[a[5]] || 'idle';
             v.hp = a[6]; v.armor = a[7];
-            if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); }
+            if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); v.model?.setHeldTool?.('none'); } // (what was in his hand lies on the deck now: the host's Death.dropHeld)
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
             v.buoyNet = Array.isArray(a[10]) ? { x: +a[10][0] || 0, y: +a[10][1] || 0, z: +a[10][2] || 0 } : null; // (the lifebuoy he threw)
             const deck = (a[11] && this.ships.list.get(a[11])) || s;

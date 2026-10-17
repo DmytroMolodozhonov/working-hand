@@ -49,8 +49,7 @@ import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook } from '../fx/IceLook.js';
-import { knockOutOfMyHand, disarmVillager } from './Expelliarmus.js';
-import { starterWand, rollWand } from './ItemTypes.js';
+import { knockOutOfMyHand, disarmVillager, wizardWandOf } from './Expelliarmus.js';
 import { wandPower } from './WandMagic.js';
 import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
@@ -310,6 +309,7 @@ const _qInv = new THREE.Quaternion();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _vFrom = new THREE.Vector3();
+const _vPass = new THREE.Vector3();
 const _armSh = new THREE.Vector3(), _armC = {};
 /**
  * The line of the arm (Duel.armStart): a body counts when it comes this close to it (× its
@@ -322,11 +322,6 @@ const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dd = new THREE.Vect
 
 /** The wand a castle wizard holds: a student's plain wooden one, the others' a real (random) one. */
 // (a wizard in a magic robe has a fine wand: strong, +35–50 % power)
-const rollWizardWand = (v) => (v.robe ? (({ power, ...w }) => ({ ...w, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand()) : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand());
-
-/** His own wand (rolled once, then always the same: in his hand in a duel, and the one «Экспеллиармус» knocks out). */
-const wizardWandOf = (v) => v.wand || (v.wand = rollWizardWand(v));
-
 let nextId = 1;
 
 /** Marker colours of wizards in a clash (blue, orange, magenta, green): who is who. */
@@ -879,6 +874,8 @@ export class Duel {
         // a wall or a floor on this step's way (looked at every 0.3 m): nothing behind it is touched
         const wallS = this._wallOnWay(from, b.front);
         const hit = firstTouched(from, b.front, this._bodies(b.by));
+        // (host) a player's charge flying close past people: a threat — they flinch, turn, look for who (Startle.js)
+        if (g.authority && !b.npc) this._passBy(b, from, Math.min(1, wallS, hit ? hit.s : 1), hit?.body);
         // the strong charges burst on a ship's hull, a mast, a sail (StrongSpells: «не действует» on ships); the black ship's barrier flares
         if (isStrongDuel(b.spell) && g.ships?.segmentHit) {
             const sh = g.ships.segmentHit(from, b.front);
@@ -904,6 +901,15 @@ export class Duel {
         if (wallS <= 1) b.front.lerpVectors(from, b.front, wallS);
         if (b.traveled > DUEL.RANGE || wallS <= 1) { this._end(b, 'fizzle'); return false; }
         return true;
+    }
+
+    /** (host) The people this step of charge `b` passed close by (up to `s` of it; not `hitBody`): startled. */
+    _passBy(b, from, s, hitBody) {
+        const g = this.game;
+        const to = _vPass.lerpVectors(from, b.front, s);
+        const hitV = hitBody?.kind === 'v' ? hitBody.id : null, hitC = hitBody?.kind === 'c' ? hitBody.id : null;
+        g.castleLife?.passBy?.(from, to, b.by, b.o, hitV);
+        g.ships?.crew?.passBy?.(from, to, b.by, b.o, hitC);
     }
 
     /**
@@ -1025,6 +1031,10 @@ export class Duel {
         const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
         this._hitBurst(spell, p, 30);
+        // a spell at a person is an attack, hurt or not (Остолбеней, Левиоса, Пески, a robe or a shield that took it…):
+        // he turns to it and, seeing who, fights or runs; not seeing — he searches (Startle.js; a hurt one: hit → _offence too)
+        if (g.authority && c.isSailor) g.ships?.crew?.startle?.(c, byId, src, { hit: true });
+        else if (g.authority && c.isVillager) g.castleLife?.startle?.(c, byId, src, { hit: true });
         // «Дай»: through any shield, dome or robe — dead at once (StrongMagic.annihilate)
         if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
