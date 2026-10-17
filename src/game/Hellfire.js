@@ -89,10 +89,10 @@ export const HELLFIRE = {
     LEFT_LIFE: 30, // s the fires left on the ground (after «стоп» / no mana) burn at full strength…
     LEFT_FADE: 6, // …then die down over this long
     LEFT_MAX: 18, // fires left at once (all wizards)
-    DOUSE_KNOCK: 1.3, // m off the blaze's radius by one «Firefighting» burst (it only knocks it back)…
+    DOUSE_KNOCK: 3.9, // (the author: «Firefighting» three times stronger — was 1.3) m off the blaze's radius by one «Firefighting» burst (it only knocks it back)…
     DOUSE_HOLD: 1.5, // …and it can't grow again for this long
-    DOUSE_RATE: 2, // m a second off it while «Firefighting Maxima» is held on it (it drowns)
-    LEFT_KNOCK: 1.6, // m off a fire left on the ground by a burst (the ring's sections go out)
+    DOUSE_RATE: 6, // (×3: was 2) m a second off it while «Firefighting Maxima» is held on it (it drowns)
+    LEFT_KNOCK: 4.8, // (×3: was 1.6) m off a fire left on the ground by a burst (the ring's sections go out)
     SEND: 0.1, // s between network updates
     STALE: 1.5, // s without news: another computer's fire is gone
 };

@@ -41,6 +41,7 @@ export const FIREFIGHT = {
     MAX_PUSH: 3, // m/s: the hose on a creature
     PUSH_EVERY: 1, // s: a creature is shoved by one hose at most this often
     WET: 4, // s a player soaked by it is not burnt by the Hellfire
+    SPREAD: 1.73, // (the author: three times stronger) the water puts out fire on √3× the radius — three times the area
 };
 
 /**
@@ -174,7 +175,7 @@ export class Firefighting {
         // trees, grass, leaves, wood, houses (every computer: Fire.js is the same everywhere); ships' fires (the host)
         for (let k = 1; k <= reach + 1; k += 1.5) {
             _a.copy(o).addScaledVector(d, k);
-            const r = 0.6 + k * tan;
+            const r = (0.6 + k * tan) * FIREFIGHT.SPREAD;
             if ((g.fire?.douse?.(_a, r) || 0) > 0) did = true;
             if (auth && (g.ships?.douse?.(_a, r + 0.5) || 0) > 0) did = true;
             if (auth && (g.carriages?.douse?.(_a, r + 0.5) || 0) > 0) did = true; // (a burning cart on the road)

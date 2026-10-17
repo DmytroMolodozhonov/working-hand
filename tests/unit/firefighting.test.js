@@ -68,7 +68,7 @@ test('a plain burst puts out a campfire, an «Инферно» stream and a «Fi
 function hellGame() {
     const game = { localId: 'me', character: { group: { position: V(0, 0, 0) } }, hud: { setVoice() {} }, collision: { groundY: () => 0 } };
     const H = new Hellfire(game);
-    H.state = { c: V(0, 2, -10), R: 4, k: 0, ang: 0, rr: 5, rw: HELLFIRE.RING_W, rh: HELLFIRE.RING_H, t: 3, worked: true };
+    H.state = { c: V(0, 2, -10), R: HELLFIRE.R_MAX, k: 0, ang: 0, rr: 5, rw: HELLFIRE.RING_W, rh: HELLFIRE.RING_H, t: 3, worked: true };
     game.hellfire = H;
     return { game, H };
 }
@@ -77,7 +77,7 @@ test('the Hellfire: a burst only knocks it back; «Firefighting Maxima» held on
     const { H } = hellGame();
     const hit = (c, r) => inCone(V(0, 2, 0), V(0, 0, -1), 15, FIREFIGHT.HALF, c, r);
     assert.ok(H.douse(hit, 0));
-    assert.ok(Math.abs(H.state.R - (4 - HELLFIRE.DOUSE_KNOCK)) < 1e-9, 'smaller');
+    assert.ok(Math.abs(H.state.R - (HELLFIRE.R_MAX - HELLFIRE.DOUSE_KNOCK)) < 1e-9, 'smaller');
     assert.ok(H.state.dousedT > 0, 'it can not grow back yet');
     assert.ok(H.state, 'one burst does not put it out');
     let t = 0;
@@ -90,11 +90,11 @@ test('the Hellfire: a burst only knocks it back; «Firefighting Maxima» held on
 test('the Hellfire\'s fires left on the ground: a burst puts out the small ones (the ring\'s parts), a big one only shrinks', () => {
     const { H } = hellGame();
     H.state = null;
-    H.left.push({ by: 'w', c: V(0, 1, -8), R0: 1.4, R: 1.4, k: 0, t: 0 }, { by: 'w', c: V(0, 2, -12), R0: 5, R: 5, k: 0, t: 0 });
+    H.left.push({ by: 'w', c: V(0, 1, -8), R0: 1.4, R: 1.4, k: 0, t: 0 }, { by: 'w', c: V(0, 2, -12), R0: 6.5, R: 6.5, k: 0, t: 0 });
     const hit = (c, r) => inCone(V(0, 2, 0), V(0, 0, -1), 15, FIREFIGHT.HALF, c, r);
     assert.ok(H.douse(hit, 0));
     assert.equal(H.left.length, 1);
-    assert.ok(Math.abs(H.left[0].R0 - (5 - HELLFIRE.LEFT_KNOCK)) < 1e-9);
+    assert.ok(Math.abs(H.left[0].R0 - (6.5 - HELLFIRE.LEFT_KNOCK)) < 1e-9);
 });
 
 test('learning: plain «Firefighting» is known by everyone; «Firefighting Maxima» only from its scroll (outside Creative), found in chests', () => {
