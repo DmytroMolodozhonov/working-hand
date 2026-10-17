@@ -24,7 +24,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0) {
         if (x < 0.55) out.push(r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
         else if (x < 0.64) {
             const y = r();
-            out.push({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.45 ? 'ToTheSun' : y < 0.8 ? 'Thunderwave' : 'LightningStrike' });
+            out.push({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.3 ? 'ToTheSun' : y < 0.55 ? 'Thunderwave' : y < 0.7 ? 'LightningStrike' : pick(r, SHOP_SPELLS) });
         } else if (x < 0.77) { const id = 100000 + Math.floor(r() * 1e6); out.push({ kind: 'book', uid: newUid(), id, spells: bookSpells(id) }); }
         else if (x < 0.82) out.push({ kind: 'wand', uid: newUid(), plain: true, model: 0, color: 0x6b4426, dir: null, fav: null, power: 0 });
         else out.push({ ...pick(r, [{ kind: 'bread', count: 1 }, { kind: 'cheese', count: 1 }, { kind: 'apple', count: 1 }, { kind: 'pie', count: 1 }]), uid: newUid() });
@@ -35,6 +35,10 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0) {
     return count > 0 ? fitThings(out, count, r) : out;
 }
 
+/** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */
+export const SHOP_SPELLS = ['Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
+    'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack'];
+
 /** The price of a scroll in a tower's shop (coins). */
 export function scrollShopPrice(it) {
     if (!it || it.kind !== 'scroll') return null;
@@ -43,7 +47,7 @@ export function scrollShopPrice(it) {
         case 'hp': return 70 + 10 * n;
         case 'fatigue': return 65 + 5 * n;
         case 'flight': return 380;
-        case 'spell': return { ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
+        case 'spell': return { ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
         default: return 100;
     }
 }
@@ -53,7 +57,7 @@ export function rollShopScroll(r = Math.random) {
     const x = r();
     if (x < 0.75) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
     const y = r();
-    return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.4 ? 'ToTheSun' : y < 0.75 ? 'Thunderwave' : 'LightningStrike' };
+    return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.25 ? 'ToTheSun' : y < 0.45 ? 'Thunderwave' : y < 0.6 ? 'LightningStrike' : pick(r, SHOP_SPELLS) };
 }
 
 /** «свиток здоровья +3», «свиток «Lightning Strike»», «свиток полёта». */

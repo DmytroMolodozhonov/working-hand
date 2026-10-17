@@ -62,9 +62,13 @@ export const SPELL_RU = {
     ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', // (the seventh and the eighth: the gods' shield — ProtectionGods.js)
     Die: 'Дай', // (the ninth: the gods' black beam — StrongSpells.js)
     Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', IceMaxima: 'Айс Максима', // (the strong duel spells: scrolls on the Earth)
+    // (scrolls since the author's list of what a beginner knows — SpellBook.js)
+    EarthquakeMaxima: 'Earthquake Максима', ProtectionMaxima: 'Protection Максима', JoltMaxima: 'Джолт Максима', GiveMyPower: 'Give Me My Power', Waterball: 'Waterbollow', WaterForming: 'Water forming',
+    AirBubble: 'Air Bubble', AirBubbleMaxima: 'Air Bubble Максима', WaveAttackMaxima: 'Wave Attack Максима', CircleAttackMaxima: 'Circle Attack Maxima', Snowman: 'Snowman',
+    CreateCastle: 'Create a Castle', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', Breakthrough: 'Breakthrough', BreakthroughMaxima: 'Breakthrough Максима',
 };
-/** Spells that outside Creative only a burnt scroll teaches (and the scroll's ribbon colour). */
-export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Die: 0x050008 }; // («Wind Impulse»: one scroll — its «Максима» too) // («Firefighting» itself is known too: only its Maxima hose comes from a scroll) // («Алохомора» itself is known; only its Maxima comes from a scroll)
+/** The spell scrolls and their ribbon colours (which spells a scroll teaches: SpellBook.js — TAUGHT_BY). */
+export const SCROLL_SPELL_COLOR = { LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Die: 0x050008, EarthquakeMaxima: 0x8a5a2b, LiquidationMaxima: 0x6fdc8c, ProtectionMaxima: 0x4aa3ff, IceMaxima: 0xaee9ff, JoltMaxima: 0xd9e8f0, CircleAttack: 0xff3b6b, Drawdown: 0x6b4a2a, Overgrown: 0x3e8e2f, Brainrot: 0xff7ad9, Waterball: 0x2a7fff, AirBubble: 0xbff3ff, WaveAttack: 0x0f5fa8, WaterVortex: 0x00a0b0, WaterVortexSuperMaxima: 0x003a70, Snowman: 0xffffff, Unfurl: 0xe8dcc0, CreateCastle: 0x8f8f9a, IceCastle: 0x7fd4ff, IceBridge: 0xcfefff, Breakthrough: 0xa0522d }; // (one scroll teaches a spell and its «Максима» for Wind Impulse, Circle Attack, Drawdown, Air Bubble, Wave Attack, Breakthrough; «Waterbollow» — «Water forming» too; «Анфёрл» — «Фёрл» too)
 /** What the temple's scrolls are for (GodsTemple.js — the library of the Temple of the Gods). */
 const TEMPLE_SCROLL_LINE = {
     CreatePlanet: 'Заклинание богов: создать в космосе новую планету',
@@ -80,7 +84,7 @@ const TEMPLE_SCROLL_LINE = {
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Die: 'чёрная, как ночь, с фиолетовым отблеском' };
+export const SCROLL_RIBBON_RU = { LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Die: 'чёрная, как ночь, с фиолетовым отблеском', EarthquakeMaxima: 'бурая', LiquidationMaxima: 'мятная', ProtectionMaxima: 'небесно-голубая', IceMaxima: 'ледяная', JoltMaxima: 'дымчатая', CircleAttack: 'алая', Drawdown: 'землистая', Overgrown: 'травяная', Brainrot: 'розовая', Waterball: 'синяя с волной', AirBubble: 'прозрачно-голубая', WaveAttack: 'морская', WaterVortex: 'цвета морской волны', WaterVortexSuperMaxima: 'тёмно-синяя, штормовая', Snowman: 'белоснежная', Unfurl: 'парусиновая', CreateCastle: 'каменно-серая', IceCastle: 'ледяная с инеем', IceBridge: 'хрустальная', Breakthrough: 'терракотовая' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -261,6 +265,7 @@ export const LOOT_EXTRA = { fishingRod: null };
 export function rollIceQueenLoot(r = Math.random, first = true) {
     const out = [rollKeyItem(r), rollKeyItem(r)];
     out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 2, 4) });
+    out.push(spellScroll(pick(r, ICE_SCROLLS))); // (her ice magic: an ice castle, an ice bridge, «Айс Максима», a snowman)
     out.push({ kind: 'potion', uid: newUid(), rec: 'heal', color: 0x9fe8ff }, { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xc8f4ff });
     if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', strong: ['Hellfire', 'LightningStrike'] });
     else if (r() < 0.5) out.push(rollKeyItem(r));
@@ -288,7 +293,7 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
     const sabre = (magic) => out.push({ kind: 'weapon', type: r() < 0.65 ? 'sword' : 'axe', magic, bonus: randInt(r, magic ? 30 : 1, 60), uid: newUid() });
     if (room === 'captain') {
         coins(250, 450); coins(150, 300);
-        out.push(rollKeyItem(r), rollKeyItem(r));
+        out.push(rollKeyItem(r), rollKeyItem(r), spellScroll(pick(r, SEA_SCROLLS))); // (and a scroll of the sea)
         sabre(true);
         if (r() < 0.5) out.push(rollKeyItem(r));
         return out;
@@ -296,6 +301,7 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
     if (room === 'officers') {
         coins(80, 180);
         out.push(rollKeyItem(r));
+        if (r() < 0.5) out.push(spellScroll(pick(r, SEA_SCROLLS)));
         sabre(r() < 0.6);
         if (r() < 0.4) out.push({ kind: 'arrows', uid: newUid(), count: randInt(r, 8, 16) });
         return out;
@@ -318,6 +324,7 @@ export function rollPortLoot(r = Math.random, count = 0) {
     for (let i = 0; i < n; i++) {
         const x = r();
         if (x < 0.08) { out.push(rollKeyItem(r)); continue; }
+        if (x < 0.10) { out.push(spellScroll(pick(r, SEA_SCROLLS))); continue; } // (the sailors' scrolls: the sails, the water)
         if (x < 0.16) out.push({ kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) }); // (the sailors' stores: wool for sails)
         else out.push(rollPlainItem(r));
     }
@@ -336,6 +343,7 @@ export function rollShipLoot(r = Math.random, captain = false, count = 0) {
         const x = r();
         if (x < (captain ? 0.92 : 0.86) && x >= 0.80) out.push(rollKeyItem(r)); // a wand, a scroll, a shield…
         else if (x < 0.10) out.push({ kind: 'cannonball', uid: newUid() }); // (ship's own: cannonballs to throw)
+        else if (x < 0.14) out.push(spellScroll(pick(r, SEA_SCROLLS))); // (the sailors' scrolls: the sails, the water)
         else out.push(rollPlainItem(r));
     }
     return count > 0 ? fitThings(out, count, r) : out;
@@ -366,41 +374,48 @@ export function rollScroll(r = Math.random, mild = false) {
     const it = _rollScroll(r);
     return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
 }
-const MIGHTY = new Set(['AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower']);
+const MIGHTY = new Set(['AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower', 'CircleAttack', 'WaterVortexSuperMaxima', 'CreateCastle']);
+/**
+ * The scrolls of a chest by weight (the author: the simple ones more often, the strong ones rarer). `hp` / `fatigue`:
+ * health and mana scrolls. Every spell a beginner does not know has a scroll somewhere (tests/unit/spell-book.test.js):
+ * here, or the bosses' own (rollIceQueenLoot, rollPirateLoot, a royal chest), the towers' shops, the book-birds.
+ */
+export const SCROLL_WEIGHTS = [
+    ['hp', 17], ['fatigue', 2.3],
+    // simple
+    ['LightningStrike', 12], ['Thunderwave', 12], ['ToTheSun', 5], ['AlohomoraMaxima', 6], ['ImproveHouse', 4], ['CreateBoard', 4.5],
+    ['Brainrot', 3], ['Unfurl', 3], ['Waterball', 3], ['Overgrown', 3], ['Snowman', 2.5], ['AirBubble', 2.5], ['WaveAttack', 2.5],
+    ['Drawdown', 2.5], ['Breakthrough', 2.5], ['LetItRain', 2], ['CreateHouse', 2],
+    // the Maximas and the medium ones
+    ['BombardoMaxima', 4], ['OvergrownMaxima', 3], ['FirefightingMaxima', 3], ['Alive', 3], ['EarthquakeMaxima', 2], ['LiquidationMaxima', 2],
+    ['ProtectionMaxima', 2], ['JoltMaxima', 2], ['IceMaxima', 1.5], ['WindImpulse', 1.5], ['Invisibility', 1.5], ['GiveMyPower', 2.5],
+    // strong and rare
+    ['AvadaKedavra', 4], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
+    ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
+];
+const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
+
+/** A scroll that teaches this spell. */
+export const spellScroll = (spell) => ({ kind: 'scroll', uid: newUid(), stat: 'spell', spell });
+
 function _rollScroll(r) {
     // «Inspirius»: only for a great wizard (the chance asked only then: nothing else changes for the rest)
-    if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Inspirius' };
-    const y = r();
-    // (no scroll of flight any more: «Флайн» is learned only from the swift book-bird's book)
-    // (spell scrolls teach «Lightning Strike» / «Thunderwave» / «To the Sun» outside Creative;
-    //  «Авада Кедавра» too — its scroll is the rarest)
-    return y < 0.16 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
-        : y < 0.28 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LightningStrike' }
-        : y < 0.40 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Thunderwave' }
-        : y < 0.45 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ToTheSun' }
-        : y < 0.48 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Alive' }
-        : y < 0.52 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AvadaKedavra' }
-        : y < 0.535 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'TotalDestruction' }
-        : y < 0.58 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateBoard' }
-        : y < 0.60 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LetItRain' }
-        : y < 0.66 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'AlohomoraMaxima' } // (the throne room's gates)
-        : y < 0.70 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'BombardoMaxima' }
-        : y < 0.73 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'OvergrownMaxima' }
-        : y < 0.745 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Hellfire' } // (rare: the strongest fire)
-        : y < 0.775 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'FirefightingMaxima' } // (the hose that drowns even the Hellfire)
-        : y < 0.79 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'LevitationMaxima' } // (houses, trees, ships in the air)
-        : y < 0.80 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }
-        : y < 0.82 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateHouse' } // (the first one is far easier: HouseMagic.scrollFor)
-        : y < 0.86 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ImproveHouse' }
-        : y < 0.875 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'WindImpulse' } // (and its «Максима»)
-        : y < 0.89 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Invisibility' }
-        : y < 0.915 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'GiveMyPower' } // (your power back from your own skeleton — Legacy.js)
-        // the strong duel spells (StrongSpells.js), as rare as «Авада Кедавра»; «Пилбидрио» rarer («Дай» — never on the Earth: the gods' temple only)
-        : y < 0.94 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Accentric' }
-        : y < 0.965 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Electrum' }
-        : y < 0.977 ? { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'Pilbidrio' }
-        : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    if ((LOOT_FOR.maxMana || 0) >= 500 && r() < 0.06) return spellScroll('Inspirius');
+    // (no scroll of flight: «Флайн» is learned only from the swift book-bird's book; «Дай» and the gods' — only in their temple)
+    let y = r() * SCROLL_TOTAL;
+    for (const [k, w] of SCROLL_WEIGHTS) {
+        if ((y -= w) >= 0) continue;
+        if (k === 'hp') return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
+        if (k === 'fatigue') return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+        return spellScroll(k);
+    }
+    return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
 }
+
+/** The sea's scrolls (a pirate's plunder, a ship's or a port's chest): the sails and the water. */
+export const SEA_SCROLLS = ['Unfurl', 'Unfurl', 'WaveAttack', 'AirBubble', 'Waterball', 'WaterVortex'];
+/** The Ice Queen's scrolls: the ice. */
+export const ICE_SCROLLS = ['IceCastle', 'IceBridge', 'IceMaxima', 'Snowman'];
 
 /** The precious thing of a chest: a wand, a scroll, a magic weapon, shield or bow, a backpack, Thor's hammer. */
 export function rollKeyItem(r = Math.random) {
@@ -453,6 +468,7 @@ function _rollLoot(r, { cave, key, royal }) {
     if (r() < key) out.push(rollKeyItem(r));
     // (a royal chest in the keep: many times more fine things than plain ones — a second precious thing too)
     if (royal && r() < 0.6) out.push(rollKeyItem(r));
+    if (royal && r() < 0.12) out.push(spellScroll('CreateCastle')); // (the king's own: a castle by magic)
     // a piece of armour now and then (never a whole set; magic ones half as often — ArmorTypes)
     const arm = rollChestArmor(r, { royal });
     if (royal) { if (arm) out.push(arm); if (r() < 0.3) out.push(rollPlainItem(r)); return out; }

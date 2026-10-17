@@ -52,7 +52,7 @@ export const HELD = {
     Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)
     Wave: { ru: 'Волна', icon: '🌊', own: ['WaveAttack', 'WaveAttackMaxima'] },
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
-    SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'UnfurlMaxima', 'Furl'] },
+    SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
     GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima'] }, // (the gods' shield: held — ProtectionGods.js)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)

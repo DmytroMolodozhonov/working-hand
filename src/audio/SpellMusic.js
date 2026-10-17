@@ -540,7 +540,7 @@ export const SPELL_SOUND = {
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
     Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] },
     Alohomora: { own: ['clang'] }, AlohomoraMaxima: { own: ['clang'] }, Lock: { own: ['clang'] },
-    Unfurl: { own: ['sand'] }, UnfurlMaxima: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
+    Unfurl: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
     Accio: { own: ['fxAccio'] }, SuitUp: { own: ['fxSuitUp'] },
     // the everyday spells: a short sound when they work (added here)
     Lumos: { cast: 'fxLumos' }, LumosMaxima: { cast: 'fxLumosMax' }, Nox: { cast: 'fxNox' }, Reveal: { cast: 'fxReveal' },

@@ -93,7 +93,7 @@ export function spaceSpellBlock(name, where, air, def = null) {
         if (vacuum) return where === 'space' ? '🔥 В космосе нет воздуха — огонь не горит' : '🔥 Здесь нет воздуха — огонь не горит';
     }
     if (/^(LightningStrike|LetItRain|Thunderwave)$/.test(name) && !clouds) return '⛈️ Здесь нет туч — молнии и дождю неоткуда взяться';
-    if (/^(Wind|WindMaxima|WindImpulse|WindImpulseMaxima|Unfurl|UnfurlMaxima|Furl)$/.test(name) && vacuum) return '🌬️ Без воздуха ветру нечем дуть';
+    if (/^(Wind|WindMaxima|WindImpulse|WindImpulseMaxima|Unfurl|Furl)$/.test(name) && vacuum) return '🌬️ Без воздуха ветру нечем дуть';
     if (/^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Drawdown|DrawdownMaxima)$/.test(name)) {
         return where === 'space' ? '💧 В космосе вода мгновенно замерзает — водяная магия не работает' : '💧 Здесь нет воды';
     }

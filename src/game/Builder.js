@@ -12,13 +12,14 @@
  *   With a water ball in the hand, everything is built of ICE, which melts
  *   away within a game day (24 min), dripping.
  *
- * Creative: every spell works. Other modes: only the spells learned from the
- * books of the book-birds.
+ * Creative: every spell works. Other modes: «Gather» from the start, the rest learned
+ * from the book-birds' books or scrolls (SpellBook.js).
  */
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, isWood, isLeaves, isCastleBlock } from '../world/Terrain.js';
 import { RESOURCE, STACK, resourceOf } from './Inventory.js';
+import { knows } from './SpellBook.js';
 
 export const BUILD_SPELLS = {
     Gather: { name: 'Gather', ru: 'собрать ресурс', cost: 3 },
@@ -51,12 +52,10 @@ export class Builder {
         return this.game.terrain ? this.game.terrain.data : null;
     }
 
-    /** May this spell be used now? (creative: all; elsewhere: learned from a book) */
+    /** May this spell be used now? (SpellBook.js — the one answer: Creative all; else from the start, a book or a scroll) */
     knows(spell) {
-        if (this.game.config.mode === 'creative') return true;
-        if (spell === 'Gather') return true; // (the author: anyone can gather from the start — no book, no scroll)
-        // (learned from a book-bird's book — or a burnt scroll, for the spells that have one)
-        return !!this.game.books?.learned?.has(spell) || !!this.game.bonus?.spells?.[spell];
+        const g = this.game;
+        return knows(spell, { mode: g.config.mode, spells: g.bonus?.spells, learned: g.books?.learned, flight: g.bonus?.flight });
     }
 
     // =================================================================== aim

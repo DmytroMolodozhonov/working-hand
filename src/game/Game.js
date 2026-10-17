@@ -51,7 +51,7 @@ import { Ships } from './Ships.js';
 import { sailorModels } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
-import { newUid, SPELL_RU, SCROLL_SPELL_COLOR, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
+import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
@@ -110,7 +110,8 @@ import { lookPitch } from '../input/PoseInterpreter.js';
 import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
-import { Mana, NOT_SPELLS } from './Mana.js';
+import { Mana, NOT_SPELLS, SAME_SPELL } from './Mana.js';
+import { knows as knowsSpellOf, howLearned, teachKey } from './SpellBook.js';
 import { Achievements } from './Achievements.js';
 import { BodyImpact } from './BodyImpact.js';
 import { Knockdown } from './Knockdown.js';
@@ -1337,6 +1338,16 @@ export class Game {
         return !!(this.wards?.setting || this.planetMagic?.busy || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
+    /** «Вы ещё не знаете …» — where it is learned (a scroll and its ribbon, a book-bird's book, the mana). */
+    _unknownHint(name) {
+        const key = teachKey(name), ru = SPELL_RU[name] || SPELL_RU[key] || name, sru = SPELL_RU[key] || ru, ribbon = SCROLL_RIBBON_RU[key];
+        const how = howLearned(name);
+        if (how === 'mana') return `✨ «${ru}» откроется, когда у вас будет 1000 ячеек маны`;
+        if (name === 'Flight') return '📘 Вы ещё не знаете «Флайн» — сожгите <b>быструю летающую книгу</b> (голубую, с серебром)';
+        if (how === 'book') return `📖 Вы ещё не знаете «${ru}» — найдите его в книге птицы-книги`;
+        return `📜 Вы ещё не знаете «${ru}» — найдите <b>свиток «${sru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`;
+    }
+
     _castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
         // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
@@ -1353,8 +1364,8 @@ export class Game {
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
-            const base = SCROLL_SPELL_COLOR[name] ? name : baseSpell(name), ru = SPELL_RU[base] || name, ribbon = SCROLL_RIBBON_RU[base];
-            if (isFinal) this.hud.setVoice(`📜 «${ru}» вы ещё не знаете. Найдите в сундуке <b>свиток «${ru}»</b>${ribbon ? ` (${ribbon} лента)` : ''} и сожгите его «Инферно»`, true);
+            if (isFinal) this.hud.setVoice(this._unknownHint(name), true); // (no mana spent)
+            this.lastCastWhy = 'это заклинание вы ещё не знаете';
             return null;
         }
         // «Protection…», «Бомбардо…» with nothing after them yet: «… Хаус», «… Максима» may still come
@@ -1482,7 +1493,7 @@ export class Game {
         if (name === 'Accio') return this._castAccio(isFinal);
         if (name === 'Alohomora' || name === 'AlohomoraMaxima') return this.locks.cast(name, isFinal); // (a lock the hand points at — Alohomora.js)
         if (name === 'Lock') return this.locks.castLock(isFinal); // (the door the hand points at shuts and locks — Alohomora.js)
-        if (name === 'Unfurl' || name === 'UnfurlMaxima' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
+        if (name === 'Unfurl' || name === 'Furl') return this.ships ? this.ships.castSails(name, text, isFinal) : null; // (a ship's sails)
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
@@ -2256,7 +2267,7 @@ export class Game {
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
         if (now - (this._lastBuild || 0) < 900) return null;
         if (!this.builder.knows(name)) {
-            if (isFinal) this.hud.setVoice(name === 'CreateBoard' ? '🏄 «Create a Board» ещё не изучено — найдите его в книге птицы или сожгите свиток' : `📖 «${BUILD_SPELLS[name].name}» ещё не изучено — найдите его в книге птицы`, true);
+            if (isFinal) this.hud.setVoice(this._unknownHint(name), true);
             return null;
         }
         if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает маны'); return null; }
@@ -3487,7 +3498,7 @@ export class Game {
     /** Start the flight spell (arms must be up). Returns true when it started. */
     /** «Флайн» is known: everywhere but «Выживание», where only the swift book-bird's book teaches it (an old scroll of flight too). */
     knowsFlight() {
-        return this.config.mode !== 'freeworld' || !!this.bonus?.flight || !!this.books?.learned?.has('Flight');
+        return this.knowsSpell('Flight');
     }
 
     /** Who last cast a fire / blast spell (a castle that catches fire blames them). */
@@ -3523,21 +3534,15 @@ export class Game {
         return point;
     }
 
-    /** Outside Creative «Lightning Strike», «Thunderwave», «To the Sun», «Let it rain» and «Авада Кедавра» are learnt from a burnt scroll only. */
+    /** Does the hero know this spell? One answer for everything (SpellBook.js: what is known from the start, the rest from scrolls and books). */
     knowsSpell(name) {
-        const base = baseSpell(name);
-        const m = this.config.mode;
-        // «Защита дома»: only from the book of protection (the dark-blue book-bird) — everybody knows it in Creative
-        if (isWardSpell(base)) return m === 'creative' || m === 'test' || !!this.books?.learned?.has(base);
-        const key = SCROLL_SPELL_COLOR[name] ? name : base; // («Алохомора Максима»: its own scroll — the plain one is known)
-        if (!SCROLL_SPELL_COLOR[key]) return true;
-        return m === 'creative' || m === 'test' || !!this.bonus?.spells?.[key];
+        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight });
     }
 
     /** Can the hero say this spell now (the pause menu's spell book outside Creative)? The same checks the cast makes. */
     canSaySpell(name) {
         if (!name) return false;
-        if (name === 'Flight' || name === 'FlyingMaxima') return this.knowsFlight();
+        if (name === 'FlyingMaxima') return this.knowsFlight() && this.knowsSpell(name);
         return this.knowsSpell(name);
     }
 

@@ -168,12 +168,12 @@ test('ships on the network and in chests; the sail spells', () => {
     assert.equal(n.id, 'a:ship0');
     assert.ok(Math.abs(n.x - 1.23) < 0.01 && n.state === 'moored' && n.plank === 'laid' && n.hp === 100 && n.flood === 0.25);
     for (const t of ['анфёрл', 'Анферл!', 'unfurl', 'open sails', 'подними паруса']) assert.equal(matchSpell(t), 'Unfurl', t);
-    assert.equal(matchSpell('анфёрл максима'), 'UnfurlMaxima');
+    assert.equal(matchSpell('анфёрл максима'), 'Unfurl', 'no Maxima: «Анфёрл» opens all the sails at once');
     for (const t of ['фёрл', 'убрать паруса', 'furl']) assert.equal(matchSpell(t), 'Furl', t);
     assert.equal(matchSpell('вайнд'), 'Wind');
     assert.equal(matchSpell('бомбардо максима'), 'BombardoMaxima');
     assert.equal(matchSpell('раскрой свои секреты'), 'Reveal');
-    assert.ok(SPELL_COST.Unfurl && SPELL_COST.UnfurlMaxima && SPELL_COST.Furl);
+    assert.ok(SPELL_COST.Unfurl && !SPELL_COST.UnfurlMaxima && SPELL_COST.Furl);
     let seed = 7;
     const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const loot = rollShipLoot(r, true);

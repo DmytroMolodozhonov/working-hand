@@ -163,7 +163,7 @@ export const SPELL_PHYSICS = {
     Alive: null, // (a tree comes alive: nobody is pushed by the spell itself)
     RodFrozen: null, RodIce: null, // (the Ice Rod: ice round a body / on a surface — nobody pushed)
     Snowman: null, // (snow rolls into a snowman where the hand points: nobody is pushed)
-    Unfurl: null, UnfurlMaxima: null, Furl: null, // (a ship's sails: they move the ship, not bodies)
+    Unfurl: null, Furl: null, // (a ship's sails: they move the ship, not bodies)
     // («Wind Impulse»: a ring of air from the caster, pushes straight away — WindImpulse.impulsePush gives the push)
     // (everybody in the ring is thrown off the feet and up a little — knights in plain armour too)
     WindImpulse: { push: 22, range: 3, always: true, down: 1.5, toss: 4, jolt: 1.5 }, WindImpulseMaxima: { push: 34, range: 9, always: true, down: 2, toss: 6, jolt: 2.5 },

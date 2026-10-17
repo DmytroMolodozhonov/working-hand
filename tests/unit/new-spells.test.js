@@ -27,7 +27,8 @@ test('the words: each spell (and its «Максима»), never mixed up with «
 test('mana and scrolls as the author said', () => {
     assert.deepEqual([SPELL_COST.WindImpulse, SPELL_COST.WindImpulseMaxima, SPELL_COST.Drawdown, SPELL_COST.DrawdownMaxima, SPELL_COST.Liquidation, SPELL_COST.LiquidationMaxima, SPELL_COST.Stitching, SPELL_COST.Invisibility], [10, 40, 5, 20, 10, 25, 7, 20]);
     assert.ok(SCROLL_SPELL_COLOR.WindImpulse && SCROLL_SPELL_COLOR.Invisibility, 'Wind Impulse and Invisibility: only from a scroll');
-    assert.ok(!SCROLL_SPELL_COLOR.Stitching && !SCROLL_SPELL_COLOR.Drawdown && !SCROLL_SPELL_COLOR.Liquidation);
+    assert.ok(!SCROLL_SPELL_COLOR.Stitching && !SCROLL_SPELL_COLOR.Liquidation, 'known from the start');
+    assert.ok(SCROLL_SPELL_COLOR.Drawdown && SCROLL_SPELL_COLOR.LiquidationMaxima, 'Drawdown and Liquidation Maxima: from a scroll (the author)');
 });
 
 test('«Wind Impulse»: away from the caster in every direction, 3 m (Maxima 9 m)', () => {

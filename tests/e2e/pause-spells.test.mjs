@@ -35,6 +35,17 @@ test('pause menu in Survival: only the spells the hero knows; «Подсказк
     assert.ok(before.some((n) => n.startsWith('Инферно')), 'a spell known without a scroll');
     assert.ok(!before.some((n) => n.startsWith('Тандервейв')), 'a scroll spell not learned yet: not listed');
     assert.ok(!before.some((n) => n.startsWith('Флайн')), 'no flight before the flying book');
+    assert.ok(before.some((n) => n.startsWith('Бомбардо')) && !before.some((n) => /^(Drawdown|Waterbollow|Анфёрл|Snowman)/.test(n)), 'the author\'s list of what a beginner knows');
+    const maxOf = (name) => page.evaluate((n) => {
+        for (const t of document.querySelectorAll('#pause-spell-cats .sub-tab')) {
+            t.click();
+            const c = [...document.querySelectorAll('#pause-spells-grid .item-card')].find((e) => e.querySelector('.item-name')?.textContent === n);
+            if (c) return !!c.querySelector('.item-max');
+        }
+        return null;
+    }, name);
+    assert.equal(await maxOf('Бомбардо'), false, 'no «Бомбардо Максима» before its scroll');
+    assert.equal(await maxOf('Wind'), true, '«Вайнд Максима» is known from the start');
     // learned from its scroll: listed at once
     await page.evaluate(() => { const g = window.__zns.game; g.bonus = { ...(g.bonus || {}), spells: { ...(g.bonus?.spells || {}), Thunderwave: true } }; });
     await page.click('[data-pause-tab="pause-main"]');

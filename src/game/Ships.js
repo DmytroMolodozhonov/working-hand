@@ -7,7 +7,7 @@
  * bulkheads stop bodies, and everyone standing on it is carried along when it
  * moves, turns and rides the waves (players, zombies, animals, things, weapons).
  *
- * Sails are furled by default: «Анфёрл» / «Анфёрл Максима» (point at the ship) lets all
+ * Sails are furled by default: «Анфёрл» (point at the ship) lets all
  * her sails down, «Фёрл» rolls them up again. A ship only moves when wind fills her
  * sails: «Вайнд» / «Вайнд Максима» at the sails (they bulge forward at once; the ship is
  * driven ahead, wherever the spell came from; Maxima jerks her forward and draws ~3× faster),
@@ -890,7 +890,7 @@ export class Ships {
         return best;
     }
 
-    /** «Анфёрл» / «Анфёрл Максима» / «Фёрл» said with the hand at the sails. */
+    /** «Анфёрл» (all the sails at once) / «Фёрл» said with the hand at the sails. */
     castSails(name, text, isFinal) {
         const g = this.game, ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || 'right';
