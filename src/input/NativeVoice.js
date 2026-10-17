@@ -16,7 +16,7 @@
  * one heard it very clearly), and never right at the cut edge of the look (SpellSpotter.EDGE).
  */
 
-import { unpack, hear, threshold, HEARD, WORDY, GOES_ON } from '../audio/SpellSpotter.js';
+import { unpack, hear, threshold, HEARD, WORDY, GOES_ON, goesOnKnown } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { spellPhrase } from '../audio/SpellPhrase.js';
 import { soundingLine } from '../audio/GameVoices.js';
@@ -106,7 +106,8 @@ export function lookAt(d, seg = {}) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo —
             // or, when what plays is the game's own voices (it knows their words: GameVoices) and the spell is
             // clear: at the wizards' tower the spell waited for the phrase's end, 2–3 s, behind their talk)
-            if (GOES_ON.has(h.spell.phrase) && !(h.tail >= MORE_WAIT) && !duelFast(h.spell.spell, d)) {
+            // (a longer spell only the hero knows is worth the wait: none known — cast now)
+            if (goesOnKnown(h.spell.phrase, d.knows) && !(h.tail >= MORE_WAIT) && !duelFast(h.spell.spell, d)) {
                 // «Protection…»: «Хаус» may yet come — the game waits (only an answer under fire can't: more)
                 if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
             } else if (next.fired !== name) {
@@ -154,6 +155,7 @@ export class NativeVoice {
         this.onEcho = null;   // (spell words) a spell heard only from the speakers
         this.onFail = null;   // () the native voice stopped working (the browser's takes over)
         this.onMiss = null;   // (written, meta) a finished phrase that gave the game nothing (the spell journal)
+        this.knows = null;    // (spell) → does the hero know it (the game sets it: a longer spell nobody knows is not waited for)
         this.segs = new Map();
         this.errors = 0;
         this.mic = ''; // the microphone chosen in the settings ('' — the system's default)
@@ -251,6 +253,7 @@ export class NativeVoice {
         // (the speakers played the game's own voices then — villagers, wizards: not a friend's)
         if ((d.far || 0) >= 0.25 && !d.final) { const w = this._when(d, {}); d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to); }
         d.duel = !!this.duelHot;
+        d.knows = this.knows; // (spell → does the hero know it: set by the game)
         const r = lookAt(d, this.segs.get(d.id));
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);

@@ -156,3 +156,27 @@ test('a duel\'s one-word spells don\'t wait for a «… Максима»; «Да
     assert.ok(n && fast >= 1, `${fast}/${n}`); // (a recording heard less clearly waits for the phrase's end — never for a «Максима»)
     assert.ok(!spellsIn('Дай мне хлеба!').has('Die') && spellsIn('Дай!').has('Die'));
 });
+
+test('«Бомбардо» waits for a «… Максима» only when the hero knows «Бомбардо Максима»', async () => {
+    const { lookAt } = await import('../../src/input/NativeVoice.js');
+    const fs = await import('node:fs');
+    const { unpack, prepare, V, BLANK, SPACE } = await import('../../src/audio/SpellSpotter.js');
+    const rows = JSON.parse(fs.readFileSync(new URL('../fixtures/voice-spells.json', import.meta.url), 'utf8'));
+    const look = (r, knows) => {
+        const lp0 = unpack(r.lp, r.T), P = prepare(lp0, r.T);
+        let end = r.T - 1; while (end > 0 && (P.am[end] === BLANK || P.am[end] === SPACE)) end--;
+        const T = end + 1 + 8, lp = new Float32Array(T * V); // (the word, then 320 ms of quiet)
+        lp.set(lp0.subarray(0, (end + 1) * V));
+        for (let t = end + 1; t < T; t++) for (let v = 0; v < V; v++) lp[t * V + v] = v === BLANK ? 0 : -25;
+        return lookAt({ id: 1, final: false, T, lp: Buffer.from(Array.from(lp, (x) => Math.round(-x * 10))).toString('base64'), far: 0, knows }, { last: 'бомбардо' }).say;
+    };
+    let checked = 0;
+    for (const r of rows.filter((x) => x.kind === 'spell' && x.text === 'бомбардо')) {
+        const known = look(r, () => true), unknown = look(r, (s) => s !== 'BombardoMaxima');
+        if (!known && !unknown) continue; // (heard too unclearly for a look before the end)
+        checked++;
+        assert.ok(known?.more, 'knows «Бомбардо Максима»: waits');
+        assert.ok(unknown?.settled, 'doesn\'t know it: cast now');
+    }
+    assert.ok(checked > 0);
+});

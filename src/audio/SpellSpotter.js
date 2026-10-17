@@ -162,6 +162,31 @@ export const VOCAB = build();
  */
 export const GOES_ON = new Set(VOCAB.filter((w) => VOCAB.some((l) => l.spell !== w.spell && l.phrase.startsWith(w.phrase + ' '))).map((w) => w.phrase));
 
+/**
+ * What each way of saying a spell may go on to (phrase → the longer spells: «бомбардо» → BombardoMaxima, «протекшн» →
+ * ProtectionHouse, ProtectionMaxima…), and each spell's longer spells. A hero who knows none of them has nothing to
+ * wait for — the author: «у человека есть Бомбардо, а Бомбардо Максиму он ещё не нашёл — ждать нет смысла».
+ */
+export const CONTINUES = new Map();
+export const LONGER_OF = new Map();
+for (const w of VOCAB) {
+    for (const l of VOCAB) {
+        if (l.spell === w.spell || !l.phrase.startsWith(w.phrase + ' ')) continue;
+        if (!CONTINUES.has(w.phrase)) CONTINUES.set(w.phrase, new Set());
+        CONTINUES.get(w.phrase).add(l.spell);
+        if (!LONGER_OF.has(w.spell)) LONGER_OF.set(w.spell, new Set());
+        LONGER_OF.get(w.spell).add(l.spell);
+    }
+}
+/** May this way of saying a spell still go on to a spell the hero knows? (knows: spell → bool; none given: all known) */
+export function goesOnKnown(phrase, knows = null) {
+    const more = CONTINUES.get(phrase);
+    if (!more) return false;
+    if (!knows) return true;
+    for (const s of more) if (knows(s)) return true;
+    return false;
+}
+
 // ------------------------------------------------------------------ the sound
 /** The rows from voice_native.py (base64 of −log-probability×10 as bytes) → log-probabilities. */
 export function unpack(b64, T) {

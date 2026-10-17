@@ -19,6 +19,7 @@ import { Chest } from '../entities/Chest.js';
 import { Effects } from '../fx/Effects.js';
 import { SpellManager, matchSpell } from '../fx/SpellManager.js';
 import { SpellLog } from '../core/SpellLog.js';
+import { LONGER_OF } from '../audio/SpellSpotter.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController, FLIGHT } from './Flight.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
@@ -1240,6 +1241,9 @@ export class Game {
      * @param {boolean} [isFinal]  false for an unfinished (interim) phrase
      */
     castLocalSpell(text, isFinal = true) {
+        // (a phrase still being said waits only for a longer spell the hero knows — «Бомбардо» with no «Бомбардо
+        // Максима» learnt yet has nothing to wait for: it is as good as said; Creative knows them all)
+        if (!isFinal) { const sp = matchSpell(text), longer = sp && LONGER_OF.get(sp); if (longer && ![...longer].some((l) => this.knowsSpell(l))) isFinal = true; }
         const paid = this.combat.paidCount || 0;
         this._manaLater = false;
         this.lastCastWhy = null; // (why it did not work — the spell journal: set where a spell is refused)
@@ -3051,6 +3055,7 @@ export class Game {
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         if (this.voice?.native) this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.());
+        if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
         if (earth) this._updateCaves(dt);
