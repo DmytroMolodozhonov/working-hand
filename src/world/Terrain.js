@@ -347,7 +347,7 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
     // generation 5: the far land is the new landscape (Landscape.js); the spawn's land as it was
     const land = lush ? createLandscape(seed) : null;
     const fn = (ix, iz) => {
-        fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+        fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
         // the creative test ground's river: water just past the pedestals, a valley through the hills
         let rcap = Infinity;
@@ -425,6 +425,9 @@ export function createHeightField(seed, mountains, seas = null, test = false, lu
             }
             // Valley sides rise gently from the banks
             h = Math.min(h, Math.floor(((rv - width) / (width * 2)) * 6));
+            // sandy banks: a strip of 1-3 blocks along the river, ragged by noise, with spits and coves
+            const bn = noise2(ix / 11 + 7, iz / 11 - 31) * 0.5 + noise2(ix / 4 - 3, iz / 4 + 9) * 0.25 + 0.5;
+            fn.bank = h <= 4 && rv < width * (1.25 + 1.5 * Math.max(0, bn));
         } else if (land && wet >= 1) {
             // (generation 5: through high land a river runs in a valley, its sides rising steeper
             // and steeper — not a slot cut straight down through a mountain)
@@ -542,14 +545,14 @@ export class TerrainData {
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas);
             this.iceCastle = ice;
             const fn = (ix, iz) => {
-                let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
+                let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, bank = raw.bank; // (read before landAt: finding a site re-samples raw)
                 const kind = raw.kind;
                 const mesa = raw.mesa, emer = raw.emer, moon = raw.moon, fant = raw.fant;
                 // (the Ice Castle's mountain: its peak, crags, the gorge, the ledge — IceCastle.shapeAt)
                 fn.iceRock = false;
                 if (ice) { const m = ice.shapeAt(ix, iz, h); if (ice.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } }
                 const land = idx.landAt(ix, iz);
-                fn.sea = sea; fn.beach = beach; fn.kind = kind;
+                fn.sea = sea; fn.beach = beach; fn.kind = kind; fn.bank = bank && !land;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
                 if (land && land.side === 'sea') {
                     // beyond a sea castle's quay: the sea (dug deep in the harbour)
@@ -577,13 +580,13 @@ export class TerrainData {
                     const def = planets.bySlot(slotAt(ix, iz));
                     if (def) {
                         const h = planetHeight(def, ix, iz);
-                        fn.water = planetHeight.water; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+                        fn.water = planetHeight.water; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
                         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
                         return h;
                     }
                 }
                 const h = earthH(ix, iz);
-                fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.kind = earthH.kind;
+                fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.bank = earthH.bank; fn.kind = earthH.kind;
                 fn.mesa = earthH.mesa; fn.emer = earthH.emer; fn.moon = earthH.moon; fn.fant = earthH.fant;
                 return h;
             };
@@ -717,7 +720,7 @@ export class TerrainData {
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
                 iceR[col] = H.iceRock ? 1 : 0;
-                flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0);
+                flags[col] = (H.water ? 1 : 0) | (H.sea ? 2 : 0) | (H.beach ? 4 : 0) | (H.bank ? 8 : 0);
                 kinds[col] = H.kind || 0;
                 fx.mesa = H.mesa || 0; fx.emer = H.emer || 0; fx.moon = H.moon || 0; fx.fant = H.fant || 0;
                 land.climate(x, z, clim);
@@ -733,7 +736,7 @@ export class TerrainData {
             for (let lx = 0; lx < CHUNK; lx++) {
                 const col = lz * CHUNK + lx, x = x0 + lx, z = z0 + lz;
                 const i0 = (lz + 1) * P + (lx + 1), h = hh[i0];
-                const f = flags[col], wet = water[col], sea = f & 2, beach = f & 4, kind = kinds[col];
+                const f = flags[col], wet = water[col], sea = f & 2, beach = f & 4, bank = f & 8, kind = kinds[col];
                 if (sea) (seaMask ||= new Uint8Array(cols))[col] = 1;
                 const slope = Math.max(Math.abs(hh[i0 + 1] - h), Math.abs(hh[i0 - 1] - h), Math.abs(hh[i0 + P] - h), Math.abs(hh[i0 - P] - h));
                 const r = hashLand(x, z, this.seed + 5);
@@ -758,6 +761,7 @@ export class TerrainData {
                     else if (wet && L === h) type = BLOCK.SAND;
                     else if (sea && L >= h - 3) type = BLOCK.SAND; // the seabed
                     else if (L === h && beach) type = BLOCK.SAND; // the beach
+                    else if (L === h && bank && h >= 0 && surf === BLOCK.GRASS) type = BLOCK.SAND; // the river's sandy bank
                     else if (L === h) type = surf;
                     else if (L >= h - deep && L >= h - 3) type = soil;
                     else if (L >= -1 && L <= 1 && h <= 6) type = BLOCK.DIRT;
