@@ -155,13 +155,25 @@ export const ITEM_INFO = {
 };
 
 /**
+ * A wand's worth — one rule for the market's price and for what a buyer pays (WizardMarket: the wand seller asks it,
+ * the pawnshop gives 60 % of it). Before, a buyer reckoned 150 + 2 × power while the market asked 180 + 11 × power:
+ * the author sold a wand stronger than the market's for ~100. 180 + 11 × its power; 60 less with no direction (the
+ * market's own wands always have one); a wanderer's staff (every spell 15 % stronger for 15 % less mana) 120 more.
+ */
+export function wandValue(it) {
+    if (it.plain) return 20;
+    if (it.dragon) return 900;
+    return Math.max(20, 180 + 11 * (it.power || 0) + (it.staff ? 120 : it.dir ? 0 : -60));
+}
+
+/**
  * What a thing is worth at a castle market (the merchant pays about this much;
  * magic things are dear). Weapons lying on a stall count too.
  */
 export function itemValue(it) {
     if (!it) return 0;
     switch (it.kind) {
-        case 'wand': return it.plain ? 20 : it.dragon ? 900 : 150 + 2 * (it.power || 0);
+        case 'wand': return wandValue(it);
         case 'dragonEgg': return 700;
         case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
