@@ -68,6 +68,7 @@ async function scene({ site, seconds, extra, side }) {
         if (v) { v.node = n.id; v.trips = 3; L._nextTrip(v); }
     }
     for (let i = 0; i < 40; i++) { stand(); await frames(3); }
+    console.log('[bench] ready: ' + cs.active.size + ' people');
     const clock = () => L.wizards.fight.clock;
     // where it goes off: the tower's wall facing the player, the ground floor (a hole ~4.5 m); the village: the street near the people
     let blast;
@@ -133,7 +134,7 @@ async function scene({ site, seconds, extra, side }) {
         stand();
         await frames(1);
         const t = clock() - t0;
-        if (t >= next) { look(t); next += 0.25; }
+        if (t >= next) { look(t); next += 0.25; if (Math.floor(t / 5) !== Math.floor((t - 0.25) / 5)) console.log(`[bench] ${t.toFixed(0)} с`); }
         if (window.__crowdDebug && !scanned && t > seconds / 2) {
             scanned = true; whyStuck();
             const pv = window.__probe;
@@ -256,6 +257,7 @@ const browser = await launch({});
 let code = 0;
 try {
     const { page } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 480, height: 270 } });
+    page.on('console', (m) => { if (m.text().startsWith('[bench]')) console.log(m.text()); });
     // the same world and the same random choices every run (so a run before a change and after it compare)
     await page.evaluate((seed) => {
         let s = seed >>> 0 || 0x2545F491;

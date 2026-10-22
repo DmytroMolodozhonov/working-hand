@@ -797,6 +797,20 @@ export class CastleLife {
         return out;
     }
 
+    /** Can one walk straight from where it stands to (x, z) — up and down the ground as it goes (≤ 40 m looked at)? */
+    _lineWalk(v, x, z) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return true;
+        const d = Math.hypot(x - v.x, z - v.z), n = Math.min(50, Math.ceil(d / 0.8));
+        let y = v.y;
+        for (let i = 1; i <= n; i++) {
+            const px = v.x + (x - v.x) * i / n, pz = v.z + (z - v.z) * i / n;
+            if (!this._walkable(px, pz, y)) return false;
+            y = t.floorBelow(Math.round(px), Math.round(pz), Math.round(y + 1.5) + 1) - 0.5;
+        }
+        return true;
+    }
+
     /** Can one walk the straight way between two path nodes (the floor there, no wall across)? */
     _edgeWalkable(a, b) {
         const d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.ceil(d / 0.6));
@@ -1474,10 +1488,17 @@ export class CastleLife {
         if (d > 11 || (d > 6 && !this._sees(v, fp))) {
             // far or behind walls: along the paths
             v.chaseT = (v.chaseT || 0) - dt;
-            // (out in the open beyond their land there are no paths: straight at them)
-            if (d > 10 && !this._sees(v, fp) && this._inLand(cs.def, fp, 0)) {
-                if (v.chaseT <= 0 || !v.path) { v.chaseT = 1.5; this._goTo(v, cs.graph.nearest(fp.x, fp.y - 1.95, fp.z, 6)); }
-                this._followPath(v, dt, RUSH);
+            // (out in the open beyond their land there are no paths: straight at them. Once on the paths
+            // they keep to them a while — him seen and lost behind a corner step by step is no reason to turn every frame)
+            if (d > 10 && !this._sees(v, fp) && this._inLand(cs.def, fp, 0)) v.byPathT = 1.5;
+            else v.byPathT = (v.byPathT || 0) - dt;
+            if (d > 10 && v.byPathT > 0 && this._inLand(cs.def, fp, 0)) {
+                if (v.chaseT <= 0 || !v.path) {
+                    v.chaseT = 1.5;
+                    const to = cs.graph.nearest(fp.x, fp.y - 1.95, fp.z, 6);
+                    if (v.path && to === v.goal && v.pathI < v.path.length) this._resyncPath(v); else this._goTo(v, to);
+                }
+                if (this._followPath(v, dt, RUSH)) { v.path = null; this._steer(v, fp.x, fp.z, RUSH, dt, 2.2); }
             } else this._steer(v, fp.x, fp.z, RUSH, dt, 2.2);
             v.mode = v.tac?.role === 'shield' ? 'block' : RUSH < RUN ? 'walk' : 'run';
             this._ground(v);
@@ -1873,7 +1894,10 @@ export class CastleLife {
         // (the paths only lead in and out of the walls; out in the open — straight. Once on the paths it
         // keeps to them a while: a wall's edge seen and lost step by step is no reason to turn every frame)
         const walls = d > 9 && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v));
-        if (walls && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)) v.byPathT = 1.5;
+        // (seen is not walkable: a fence, a low wall, a ditch between — over them the eyes go, the feet don't)
+        v.lineChkT = (v.lineChkT || 0) - dt;
+        if (walls && v.lineChkT <= 0) { v.lineChkT = 0.4; v.lineOk = !(c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)) && this._lineWalk(v, x, z); } // (looked at a few times a second)
+        if (walls && !v.lineOk) v.byPathT = 1.5;
         else v.byPathT = (v.byPathT || 0) - dt;
         if (cs.graph.nodes.length && (floor || (walls && v.byPathT > 0))) {
             if (!v.path || v.chaseT <= 0) {

@@ -182,7 +182,8 @@ export class ArenaDuels {
         if (!cs) return;
         // the dead and the gone are no longer the arena's
         for (const v of [...A.fans]) if (v.dead || !L.byId.has(v.id)) { A.fans.delete(v); this._freeSeat(A, v); }
-        const live = this._live(A);
+        // (not while the tower is alarmed — a blast, an enemy about: nobody strolls to the stands as if nothing happened)
+        const live = this._live(A) && !((cs.wizAlarmUntil || 0) > Date.now() || [...cs.hostile.values()].some((u) => u > Date.now()));
         // the fans: come by day, a few at a time; go home at night / with nobody near
         if (live && !A.def.practice) {
             if (!A.want) A.want = ARENA_DUEL.FANS[0] + Math.floor(Math.random() * (ARENA_DUEL.FANS[1] - ARENA_DUEL.FANS[0] + 1));
@@ -287,7 +288,7 @@ export class ArenaDuels {
     _referee(A, D, dt) {
         const L = this.life;
         D.t += dt;
-        const gone = (v) => !v || v.dead || !L.byId.has(v.id);
+        const gone = (v) => !v || v.dead || !L.byId.has(v.id) || !v.arena; // (or called away from the arena: a fight, a fright — step())
         if (D.phase === 'over') {
             if (D.t > 4.5) {
                 for (const v of [D.a, D.b]) if (v && !v.dead) this._release(v);

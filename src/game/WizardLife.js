@@ -149,6 +149,7 @@ export class WizardLife {
     /** (host) Keep a few students and teachers about near the players (fewer at night). */
     crowd(cs, dt) {
         const L = this.life, def = cs.def;
+        if ((cs.wizAlarmUntil || 0) > Date.now()) return; // (an alarm: nobody new strolls out as if nothing happened)
         if (def.kind === 'wizvillage') { crowdVillage(L, cs, dt); return; }
         if (def.kind !== 'tower') return;
         cs.spawnT -= dt;
@@ -240,7 +241,7 @@ export class WizardLife {
                 }
             }
             if (seen) L._catch(cs, by, pos);
-            if (isPlayer && isWizHome(cs.def)) cs.wizAlarmUntil = Math.max(cs.wizAlarmUntil || 0, now + 60000); // (no going to bed in the middle of it)
+            if (isWizHome(cs.def)) cs.wizAlarmUntil = Math.max(cs.wizAlarmUntil || 0, now + (isPlayer ? 60000 : 30000)); // (no going to bed in the middle of it, no strolling to the arena)
         }
     }
 
