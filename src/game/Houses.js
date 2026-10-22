@@ -362,7 +362,7 @@ export class Houses {
             if (!d || d.holdSide || d.lifted) continue;
             if (g.locks?.spellLocked?.(d.id)) { rec.auto = false; continue; } // («Lock»: their key doesn't open it — only «Алохомора»)
             let someone = null;
-            for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 3.6 && Math.abs(v.z - d.z) < 3.6) { someone = v; break; }
+            for (const v of people) if (!v.dead && Math.abs(v.x - d.x) < 1.9 && Math.abs(v.z - d.z) < 1.9 && !v.sleep) { someone = v; break; }
             if (someone) {
                 rec.auto = true;
                 rec.doorOpenT = 0;
@@ -370,10 +370,10 @@ export class Houses {
                 const sg = D.awaySign ? D.awaySign(d, someone.x, someone.z) : 1;
                 if (Math.abs(d.a) < 1.45) D.swing(rec.doorId, sg * Math.min(1.45, Math.abs(d.a) + dt * 2.5));
             } else if (rec.auto) {
-                // nobody in the doorway for a while: it closes behind them
-                const clear = Math.abs(me.x - d.x) > 3.5 || Math.abs(me.z - d.z) > 3.5;
+                // nobody in the doorway for a moment: it closes behind them (not on somebody standing in it)
+                const clear = Math.abs(me.x - d.x) > 1.3 || Math.abs(me.z - d.z) > 1.3;
                 rec.doorOpenT += dt;
-                if (clear && rec.doorOpenT > 3) {
+                if (clear && rec.doorOpenT > 1.5) {
                     const a = Math.sign(d.a) * Math.max(0, Math.abs(d.a) - dt * 1.8); // (shut from whichever side it is open to)
                     D.swing(rec.doorId, a);
                     if (a === 0) rec.auto = false;

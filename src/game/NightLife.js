@@ -135,7 +135,10 @@ export class NightLife {
             this._tickT = 1;
             for (const cs of this.life.castles.values()) {
                 if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'stall') continue; // (the Creative stall's merchant works all night)
-                if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this._tower(cs, part);
+                if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') {
+                    if (cs.def.stalls?.length && cs.packPart !== part && (part === 'pack' || part === 'home')) { cs.packPart = part; this._closeStalls(cs); } // (the sellers of a settlement pack up in the evening too)
+                    this._tower(cs, part);
+                }
                 else this._castle(cs, part); // (a hamlet, of wizards too: as a village — HamletLife.js)
             }
         }
@@ -163,21 +166,28 @@ export class NightLife {
         if (sleepTime(part)) { this._sendHome(cs); this._fillBeds(cs); }
     }
 
-    /** The merchants pack the goods off their counters (a minute of work) and go home. */
+    /**
+     * The merchants pack the goods off their counters and go home — one after another over the hour of packing
+     * (each in his own time): he stands to the counter, takes the goods by hand one by one into his bag, then
+     * walks home as a townsman (duty → _goRest). A stall with nobody to pack it is cleared at once (out of sight).
+     */
     _closeStalls(cs) {
         const g = this.game, talk = this.life.talk;
-        cs.def.stalls.forEach((stall, i) => {
-            const s = talk?.stalls?.get(talk._stallKey(cs.def, i));
-            if (s) {
-                for (const uid of s.goods) if (g.items?.loose.has(uid)) { g.items.removeLoose(uid); g.sync?.itemGone?.(uid, null, null); }
-                s.goods = []; s.restockAt = 0;
-            }
-        });
+        const packers = new Set();
         for (const v of cs.active.values()) {
-            if (v.dead || v.job !== 'stall' || v.foe || v.pack) continue;
-            v.pack = 3 + Math.random() * 3;
+            if (v.dead || v.job !== 'stall' || v.foe || v.entry?.stall == null) continue;
+            packers.add(v.entry.stall);
+            if (v.pack) continue;
+            v.pack = 1; v.packAt = this._t + Math.random() * 40; v.packNext = 0; v.packReach = 0;
             this.life._say(v, pick(LINES.close), 4);
         }
+        cs.def.stalls.forEach((stall, i) => {
+            if (packers.has(i)) return;
+            const s = talk?.stalls?.get(talk._stallKey(cs.def, i));
+            if (!s) return;
+            for (const uid of s.goods) if (g.items?.loose.has(uid)) { g.items.removeLoose(uid); g.sync?.itemGone?.(uid, null, null); }
+            s.goods = []; s.restockAt = 0;
+        });
     }
 
     /** The night watch: 1–3 knights (the gate, the walls, the village) with torches; the rest go to bed. */
@@ -577,10 +587,26 @@ export class NightLife {
     duty(v, dt) {
         const L = this.life;
         if (v.pack > 0) {
-            v.pack -= dt;
-            v.mode = 'work'; v.speed = 0;
-            if (v.pack <= 0) { v.pack = 0; this._goRest(v); }
+            v.speed = 0; v.mode = 'idle';
             L._ground(v);
+            if (this._t < v.packAt) return true; // (his turn has not come: he still stands at the counter)
+            const talk = L.talk, g = this.game;
+            const s = talk?.stalls?.get(talk._stallKey(v.cs.def, v.entry.stall));
+            if (v.packReach > 0) { // (the hand is out to the good: it goes into the bag when the hand comes back)
+                v.mode = 'work'; v.packReach -= dt;
+                if (v.packReach <= 0 && s) {
+                    const uid = s.goods.find((u) => g.items?.loose.has(u));
+                    if (uid != null) { g.items.removeLoose(uid); g.sync?.itemGone?.(uid, null, null); s.goods = s.goods.filter((u) => u !== uid); }
+                    v.packNext = 0.5;
+                }
+                return true;
+            }
+            v.packNext -= dt;
+            if (v.packNext > 0) return true;
+            if (s) s.goods = s.goods.filter((u) => g.items?.loose.has(u));
+            if (s?.goods.length) { v.packReach = 0.9; return true; }
+            if (s) s.restockAt = 0;
+            v.pack = 0; this._goRest(v); // (all packed: home on his own feet)
             return true;
         }
         if (!v.rounds) return false;

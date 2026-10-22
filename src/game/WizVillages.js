@@ -79,7 +79,7 @@ export function staffVillage(L, cs) {
     def.stalls.forEach((s, i) => {
         const idx = 1 + i;
         if (!night) put(idx, { ...s.back, yaw: s.yaw }, 'stall');
-        else { const v = cs.active.get(idx); if (v && !v.foe && !v.dead) L._deactivate(v); }
+        else { const v = cs.active.get(idx); if (v && !v.foe && !v.dead && !v.pack && !v.goingHome && !v.sleep) L._deactivate(v); } // (a packing seller finishes and walks home — NightLife.duty)
     });
     const posts = cs.vposts || (cs.vposts = villagePosts(def));
     if (!night) {

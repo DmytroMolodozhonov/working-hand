@@ -131,6 +131,7 @@ export function namedGood(text, goods) {
 
 const nameOf = (it) => (it.kind === 'coins' && it.magic ? 'магический мешочек' : it.kind === 'armor' || it.kind === 'robe' ? armorName(it).toLowerCase() : it.kind === 'weapon' ? (it.type === 'axe' ? 'топор' : 'меч') : (ITEM_INFO[it.kind]?.name || 'вещь')).toLowerCase();
 
+const _tagBox = new THREE.Box3();
 export class CastleTalk {
     constructor(game, life) {
         this.game = game;
@@ -1000,13 +1001,21 @@ export class CastleTalk {
                 x.font = 'bold 40px sans-serif'; x.fillText(String(sh.price), 64, 42);
                 x.font = '16px sans-serif'; x.fillText('монет', 64, 63);
                 const tex = new THREE.CanvasTexture(c);
-                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-                sp.scale.set(0.42, 0.24, 1);
+                // (never sunk into a bulky good — a robe, an armour: drawn over it, with its own offset, above its top)
+                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+                sp.renderOrder = 30;
+                sp.scale.set(0.46, 0.26, 1);
                 g.scene.add(sp);
-                t = { sp, tex };
+                t = { sp, tex, top: 0.42, topAt: 0 };
                 T.set(L.item.uid, t);
             }
-            t.sp.position.set(p.x, p.y + 0.42, p.z);
+            if (performance.now() - t.topAt > 1500) { // (the good's real height: a robe or a staff is taller than a flask)
+                t.topAt = performance.now();
+                _tagBox.setFromObject(L.model);
+                if (!_tagBox.isEmpty()) t.top = Math.min(1.6, Math.max(0.3, _tagBox.max.y - p.y + 0.16));
+            }
+            t.sp.position.set(p.x, p.y + t.top, p.z);
+            t.sp.visible = Math.hypot(p.x - me.x, p.z - me.z) < 12; // (a card is read near; far ones are not drawn through walls)
         }
         for (const [uid, t] of T) if (!want.has(uid)) { g.scene.remove(t.sp); t.tex.dispose(); t.sp.material.dispose(); T.delete(uid); }
     }

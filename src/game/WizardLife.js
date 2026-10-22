@@ -120,7 +120,7 @@ export class WizardLife {
         def.stalls.forEach((s, i) => {
             const idx = 1 + i;
             if (!night) put(idx, { ...s.back, yaw: s.yaw }, 'stall');
-            else { const v = cs.active.get(idx); if (v && !v.foe && !v.dead) L._deactivate(v); }
+            else { const v = cs.active.get(idx); if (v && !v.foe && !v.dead && !v.pack && !v.goingHome && !v.sleep) L._deactivate(v); } // (a packing seller finishes and walks home — NightLife.duty)
         });
         // teachers: at the lectern and a cauldron by day; two on watch at the door at night
         const T0 = 1 + def.stalls.length;
