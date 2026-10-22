@@ -832,7 +832,9 @@ export class ItemSystem {
         if (!gate.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed, heldMs: performance.now() - h.since })) return false;
         clampToCounter(st, h.model.position.copy(_f));
         h.model.position.y = st.counter.top + 0.3; // (laid right on it: no fall, no bounce off the edge)
+        const at = h.model.position.clone(), item = h.item;
         this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (нерабочая рука разжата над ним)' });
+        this.game.castleLife.talk.laid(st, { uid: item.uid, item, pos: at });
         return true;
     }
 

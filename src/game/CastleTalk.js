@@ -922,6 +922,24 @@ export class CastleTalk {
         return out;
     }
 
+    /** The buyer looks at a thing lying on his counter: refuses it, or names the (kept) sum. found: {uid|wid, item, pos} */
+    _offerSell(v, stall, key, found) {
+        const g = this.game;
+        if (stall.fence && !fenceTakes(found.item)) {
+            if (this._refused === (found.uid || found.wid)) return;
+            this._refused = found.uid || found.wid;
+            v.talking = 4;
+            this._sayReply(v, 'Не-не, магическое не беру. Неси такое волшебникам — у них в поселении есть скупка.', 6);
+            return;
+        }
+        const price = stall.pawn || stall.fence ? this.deals.price(key, dealKey(found), () => pawnPrice(found.item), performance.now()) : Math.max(1, itemValue(found.item));
+        this.offer = { v, kind: 'sell', price, ...found, stall: key };
+        const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
+        v.talking = 4;
+        this._sayReply(v, line, 6);
+        g.hud.setVoice?.(`💰 Торговец даёт ${price} монет — скажите «да», чтобы продать`, true);
+    }
+
     /** Things put on a counter (to sell) and things carried away unpaid (stolen). */
     _watchMarket() {
         const g = this.game;
@@ -966,19 +984,7 @@ export class CastleTalk {
                 if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) return;
                 // (only the settlement's pawnshop (anything, 40 % under) and a town's shady buyer (only plain things) buy — every other seller only sells: WizardMarket.js)
                 if (!stall.pawn && !stall.fence) return;
-                if (stall.fence && !fenceTakes(found.item)) {
-                    if (this._refused === (found.uid || found.wid)) return;
-                    this._refused = found.uid || found.wid;
-                    v.talking = 4;
-                    this._sayReply(v, 'Не-не, магическое не беру. Неси такое волшебникам — у них в поселении есть скупка.', 6);
-                    return;
-                }
-                const price = stall.pawn || stall.fence ? this.deals.price(key, dealKey(found), () => pawnPrice(found.item), performance.now()) : Math.max(1, itemValue(found.item));
-                this.offer = { v, kind: 'sell', price, ...found, stall: key };
-                const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
-                v.talking = 4;
-                this._sayReply(v, line, 6);
-                g.hud.setVoice?.(`💰 Торговец даёт ${price} монет — скажите «да», чтобы продать`, true);
+                this._offerSell(v, stall, key, found);
             });
         }
         // walked away with an unpaid good: «Вор!»
@@ -1022,6 +1028,22 @@ export class CastleTalk {
             if (!st || Math.hypot((st.counter.x0 + st.counter.x1) / 2 - me.x, (st.counter.z0 + st.counter.z1) / 2 - me.z) > 40) this.deals.leave(k);
         }
         this.signs.update([...this.life.castles.values()]);
+    }
+
+    /**
+     * The off hand just laid a thing on a buyer's counter (Items / Weapons): he looks at it at once — no waiting
+     * for it to settle — and names the sum.
+     */
+    laid(st, found) {
+        for (const cs of this.life.castles.values()) {
+            const i = cs.def.stalls.indexOf(st);
+            if (i < 0) continue;
+            const v = this._merchantOf(cs.def, i);
+            if (!v) return;
+            if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) return;
+            this._offerSell(v, st, this._stallKey(cs.def, i), found);
+            return;
+        }
     }
 
     /**

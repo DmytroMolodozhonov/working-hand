@@ -54,8 +54,10 @@ test('counter: only over it, at its height or higher; a thing lands on it', () =
     assert.ok(overCounter(stall, { x: 0, y: 5, z: 13 }));
     assert.ok(!overCounter(stall, { x: 0, y: 5, z: 20 }), 'not beside it');
     assert.ok(!overCounter(stall, { x: 0, y: 2, z: 13 }), 'not below it');
+    assert.ok(overCounter(stall, { x: 3.4, y: 5, z: 11.6 }), 'the counter reaches half a block past its end blocks\' centres');
     const p = clampToCounter(stall, new Vector3(2.95, 5, 11.9));
-    assert.ok(p.x <= 3 && p.x >= -3 && p.z >= 12 && p.z <= 14);
+    assert.ok(p.x <= 3.5 && p.x >= -3.5 && p.z >= 11.5 && p.z <= 14.5);
+    assert.ok(overCounter(stall, p), 'where it is laid is over the counter');
 });
 
 test('plaque: low on the counter\'s front, flush, facing the buyer; 2.4 × 0.9 m (the shady one 1.6 × 0.6)', () => {
@@ -63,10 +65,10 @@ test('plaque: low on the counter\'s front, flush, facing the buyer; 2.4 × 0.9 m
     assert.deepEqual([s.w, s.h], [2.4, 0.9]);
     assert.ok(s.y - s.h / 2 - ground >= 0.4 && s.y + s.h / 2 - ground <= 1.5, 'on the counter\'s front, below the hands and the face');
     assert.ok(s.w <= stall.counter.x1 - stall.counter.x0, 'not wider than the counter');
-    assert.ok(Math.abs(s.z - stall.counter.z1) <= 0.06, 'flush with the front face (+z, where the buyer is)');
+    assert.ok(Math.abs(s.z - (stall.counter.z1 + 0.5)) <= 0.06, 'flush with the front face (half a block past the end blocks\' centres; +z, where the buyer is)');
     assert.ok(Math.abs(s.yaw) < 1e-9);
     const f = signSpec({ fence: true, front: { x: -9, z: 0 }, counter: { x0: 0, x1: 2, z0: -1.5, z1: 1.5, top: 4 } });
-    assert.ok(f.w < s.w && f.w >= 1.5 && Math.abs(f.x - -0.05) < 1e-9);
+    assert.ok(f.w < s.w && f.w >= 1.5 && Math.abs(f.x - -0.55) < 1e-9);
     assert.ok(Math.abs(Math.abs(f.yaw) - Math.PI / 2) < 1e-9);
     assert.equal(signSpec({ front: { x: 0, z: 0 }, counter: stall.counter }), null, 'ordinary sellers have none');
 });

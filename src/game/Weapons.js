@@ -362,8 +362,10 @@ export class WeaponSystem {
                     else if (hs.buyDrop.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed })) {
                         this.release(side);
                         clampToCounter(st, w.position);
+                        const at = w.position.clone();
                         w.position.y = st.counter.top + 0.3;
                         w.velocity.set(0, 0, 0);
+                        this.game.castleLife.talk.laid(st, { wid: w.id, item: { kind: 'weapon', type: w.type, magic: !!w.magic, bonus: w.bonus || 0 }, pos: at });
                         return;
                     }
                 }

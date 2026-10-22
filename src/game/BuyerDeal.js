@@ -44,17 +44,20 @@ export class DealPrices {
 /** The hand that is NOT the leading one (the right-hander puts things with the left). */
 export const offSide = (leftHanded) => (leftHanded ? 'right' : 'left');
 
+const HALF = 0.5; // m: half a block
+
 /** Is a point over a buyer's counter (the hand reaches out above it at the counter's height or higher)? */
 export function overCounter(stall, p, margin = 0.1) {
     const c = stall?.counter;
     if (!c) return false;
-    return p.x >= c.x0 - margin && p.x <= c.x1 + margin && p.z >= c.z0 - margin && p.z <= c.z1 + margin && p.y > c.top - 0.2 && p.y < c.top + 2.6;
+    const m = HALF + margin; // (the counter's x0…z1 are the centres of its end blocks)
+    return p.x >= c.x0 - m && p.x <= c.x1 + m && p.z >= c.z0 - m && p.z <= c.z1 + m && p.y > c.top - 0.2 && p.y < c.top + 2.6;
 }
 
 /** The point of the counter nearest to p (a thing let go lies on it, never beside it). */
 export function clampToCounter(stall, p, inset = 0.25) {
     const c = stall.counter;
-    const clamp = (v, lo, hi) => (hi - lo < 2 * inset ? (lo + hi) / 2 : Math.min(hi - inset, Math.max(lo + inset, v)));
+    const clamp = (v, lo, hi) => Math.min(hi + HALF - inset, Math.max(lo - HALF + inset, v));
     p.x = clamp(p.x, c.x0, c.x1);
     p.z = clamp(p.z, c.z0, c.z1);
     return p;
@@ -92,8 +95,8 @@ export function signSpec(stall) {
     const mx = (c.x0 + c.x1) / 2, mz = (c.z0 + c.z1) / 2;
     const sx = along ? 0 : (stall.front.x >= mx ? 1 : -1), sz = along ? (stall.front.z >= mz ? 1 : -1) : 0;
     const OUT = 0.05;
-    const x = along ? mx : (sx > 0 ? c.x1 : c.x0) + sx * OUT;
-    const z = along ? (sz > 0 ? c.z1 : c.z0) + sz * OUT : mz;
+    const x = along ? mx : (sx > 0 ? c.x1 : c.x0) + sx * (HALF + OUT); // (the front face: half a block past the end blocks' centres)
+    const z = along ? (sz > 0 ? c.z1 : c.z0) + sz * (HALF + OUT) : mz;
     const ground = c.top - COUNTER_H;
     const pawn = !!stall.pawn;
     return { x, z, y: ground + 0.95, yaw: Math.atan2(sx, sz), w: pawn ? 2.4 : 1.6, h: pawn ? 0.9 : 0.6, kind: pawn ? 'pawn' : 'fence' };
