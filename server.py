@@ -48,6 +48,13 @@ from urllib.parse import parse_qs, urlparse
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+try:
+    # (Windows: a library it refuses — Smart App Control, «Bad Image 0xc0e90002» — is an error in the log, never
+    # a window that stops the game until someone presses OK; started by the launcher or a .bat alike)
+    import native_probe as _np
+    _np.quiet_errors()
+except Exception:  # noqa: BLE001
+    pass
 os.chdir(ROOT)
 
 PORT = int(os.environ.get("ZNS_PORT", "8000"))
@@ -910,14 +917,27 @@ def open_game_window(url):
 def ensure_pose_native():
     """The camera network as a program of its own (pose_native.py) needs Google's MediaPipe
     for Python. Not there yet: install it once, in the background (the game meanwhile uses
-    the browser's network; from the next game start it uses this one)."""
-    try:
-        import cv2  # noqa: F401
-        import mediapipe  # noqa: F401
+    the browser's network; from the next game start it uses this one). It is first tried in a process
+    of its own (native_probe.py): a library Windows refuses (Smart App Control — «Bad Image 0xc0e90002»)
+    never stops the game; the camera then goes through the browser and the log says why."""
+    import native_probe as NP
+    NP.quiet_errors()
+    why = NP.check()
+    if why is None:
         print("  Нейросеть камеры: отдельная программа (MediaPipe для Python) готова")
         return
-    except Exception:  # noqa: BLE001
-        pass
+    if why != "missing":
+        if NP.repair(why) and NP.check() is None:
+            print("  Нейросеть камеры: исправлено — со следующего входа в игру камера станет быстрее.")
+            return
+        why = (NP.result() or (why, ""))[0]
+        print("  Нейросеть камеры: " + NP.message(why))
+        try:
+            from pose_native import POSE
+            POSE.state, POSE.error = "unavailable", NP.message(why)
+        except Exception:  # noqa: BLE001
+            pass
+        return
     if os.environ.get("ZNS_NO_PIP"):
         return
     import subprocess
@@ -946,10 +966,14 @@ def ensure_pose_native():
         except Exception:  # noqa: BLE001
             pass
         importlib.invalidate_caches()
+        why = NP.check()  # (installed: does Windows let it run?)
+        if why is not None and NP.repair(why):
+            why = NP.check()
         if POSE:
-            POSE.state = "idle"
+            POSE.state = "idle" if why is None else "unavailable"
+            POSE.error = "" if why is None else NP.message(why)
             POSE._mp = None
-        print("  Нейросеть камеры: MediaPipe установлен. Выйдите в меню (Escape) и снова начните игру.")
+        print("  Нейросеть камеры: " + ("MediaPipe установлен. Выйдите в меню (Escape) и снова начните игру." if why is None else NP.message(why)))
     else:
         if POSE:
             POSE.state = "unavailable"

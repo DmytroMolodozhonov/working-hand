@@ -1323,7 +1323,20 @@ def handover(port):
         return False
 
 
+def quiet_errors():
+    """Windows: a library that cannot be loaded (Smart App Control: «Bad Image … 0xc0e90002») is an error
+    in the log, never a window that stops the launcher and the game until someone presses OK (native_probe.py)."""
+    if IS_WIN:
+        try:
+            import ctypes
+            k = ctypes.windll.kernel32
+            k.SetErrorMode(k.SetErrorMode(0) | 0x0001 | 0x8000)  # SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def main():
+    quiet_errors()
     L = Launcher()
     cur, prev = start_log(os.path.join(L.home, "logs"), "launcher")
     L.log_files = [cur, prev]

@@ -249,6 +249,18 @@ class NativePose:
         # (tests: "still being installed" for the first N seconds)
         if os.environ.get("ZNS_FAKE_INSTALL") and time.time() - _STARTED < float(os.environ["ZNS_FAKE_INSTALL"]):
             return False
+        # (loaded into the game's own process only once a process of its own could load it: a library
+        # Windows refuses — Smart App Control — never touches the game; native_probe.py)
+        try:
+            import native_probe
+            got = native_probe.result(wait=2.5)
+        except Exception:  # noqa: BLE001
+            got = None
+        if got is not None and got[0] is not None:
+            if got[0] != "checking":
+                self.state = "unavailable"
+                self.error = native_probe.message(got[0]) or got[0]
+            return False
         try:
             import cv2  # noqa: F401
             import mediapipe  # noqa: F401
