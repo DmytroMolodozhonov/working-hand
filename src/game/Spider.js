@@ -388,7 +388,7 @@ export class Spiders {
 
     _playerPos(id) {
         const g = this.game;
-        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p, true) : p); // (a boss: she sees the invisible)  (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
         if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat.dead ? null : seen(g.character.group.position);
         const r = g.remotes.get(id);
         return r && !r.dead ? seen(r.position) : null;

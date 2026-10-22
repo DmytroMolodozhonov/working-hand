@@ -436,7 +436,7 @@ export class SoundManager {
         this._playAt(this.sounds.death, position, 1.5, 5);
     }
 
-    playThunder() { this._spell(this.sounds.thunder, 1.0); }
+    playThunder(volume = 1) { this._spell(this.sounds.thunder, volume); }
 
     /** The rain's hiss (0 = silent … 1 = pouring): a looped noise of many small drops. */
     setRain(k) {

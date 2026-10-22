@@ -277,7 +277,9 @@ export class CastleLife {
 
     _playerPos(id) {
         const g = this.game;
-        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        const b = this._bossNow; // (the boss being thought: the king, the head of the wizards' tower — sees the invisible and cries out)
+        const boss = b ? { key: 'villager:' + b.id, x: b.x, z: b.z, say: (t) => this._say(b, t, 4, true, true) } : null;
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? g.localId : id, p, boss) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
         if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : seen(g.character.group.position);
         const r = g.remotes.get(id);
         return r && !r.dead ? seen(r.position) : null;
@@ -2712,7 +2714,12 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this._squads(dt);
             this._assignSlots();
-            for (const v of [...this.byId.values()]) if (!v.handLink) this._think(v, dt); // (held by the hand: HandHold leads them)
+            for (const v of [...this.byId.values()]) {
+                if (v.handLink) continue; // (held by the hand: HandHold leads them)
+                this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
+                this._think(v, dt);
+            }
+            this._bossNow = null;
             this._separate(dt);
         } else {
             for (const v of this.byId.values()) {

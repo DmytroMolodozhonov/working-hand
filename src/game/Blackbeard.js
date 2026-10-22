@@ -251,7 +251,8 @@ export class Blackbeard {
         const out = this._pl || (this._pl = []);
         out.length = 0;
         const put = (id, p0, shipId) => {
-            const p = g.invis ? g.invis.aiPos(id, p0) : p0;
+            const cap = g.invis?.hidden(id) ? this._captain() : null; // (the captain is a boss: he sees the invisible and cries out)
+            const p = g.invis ? g.invis.aiPos(id, p0, cap ? { key: 'blackbeard', x: this.ship?.st.x, z: this.ship?.st.z, say: (t) => this._shout(t) } : null) : p0;
             if (!p) return;
             out.push({ id, x: p.x, y: p.y, z: p.z, ship: shipId ? S.list.get(shipId) || null : null });
         };

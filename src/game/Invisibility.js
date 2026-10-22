@@ -55,8 +55,25 @@ export const INVIS_TARGETS = {
     servants: { does: 'none', why: 'мои слуги меня знают и идут за мной' },
     spells: { does: 'show', why: 'мои заклинания видны всем — игрокам и жителям: место заклинания выдаёт меня на 4 секунды' },
     hits: { does: 'show', why: 'удар по существу выдаёт место — на 4 секунды' },
+    bosses: { does: 'none', why: 'БОССЫ видят невидимого — это их способность: король, глава башни волшебников, паучиха, дракон, Ледяная Королева, капитан Чёрные Усы; при первом обнаружении кричат «Думаешь, я тебя не вижу?» (кто умеет говорить)' },
     things: { does: 'none', why: 'вещи, двери, корабли — невидимость касается только меня' },
 };
+
+/** The bosses see the invisible: this is what they cry out when they find the player out (BOSS_SEES). */
+export const BOSS_LINES = ['Думаешь, я тебя не вижу?', 'Твоя невидимость тебе не поможет!'];
+export const BOSS = { SEE_R: 45, AGAIN_T: 40 }; // m: how near a boss must be to cry out; s between its cries at the same player
+
+/**
+ * Pure: should boss `key` cry out now at player `id` (first time it sees them under invisibility, then once in
+ * a while)? `seen` is a Map (key|id → time of the last cry). It also forgets the old ones.
+ */
+export function bossCries(seen, key, id, now) {
+    const k = key + '|' + id, last = seen.get(k);
+    if (seen.size > 40) for (const [kk, t] of seen) if (now - t > BOSS.AGAIN_T * 1000) seen.delete(kk);
+    if (last != null && now - last < BOSS.AGAIN_T * 1000) return false;
+    seen.set(k, now);
+    return true;
+}
 
 const _v = new THREE.Vector3();
 
@@ -77,9 +94,21 @@ export class Invisibility {
     }
 
     /** Where the creatures of the world think player `id` is (see cluePos). */
-    aiPos(id, pos) {
+    aiPos(id, pos, boss = null) {
         if (!pos) return pos;
+        if (boss && this.hidden(id)) { this._bossSees(id, pos, boss); return pos; } // (a boss sees through it)
         return cluePos(this.hidden(id), pos, this.clues.get(id), performance.now());
+    }
+
+    /**
+     * A boss looks at the invisible player `id`: it sees them anyway and, near enough, cries out once in a while.
+     * `boss`: true (a creature without speech: spiders, dragons) or {key, x, z, say(text)}.
+     */
+    _bossSees(id, pos, boss) {
+        if (boss === true || !boss.say) return;
+        if (boss.x != null && Math.hypot(pos.x - boss.x, pos.z - boss.z) > BOSS.SEE_R) return;
+        if (!this._bossSeen) this._bossSeen = new Map();
+        if (bossCries(this._bossSeen, boss.key, id, performance.now())) boss.say(BOSS_LINES[Math.floor(Math.random() * BOSS_LINES.length)]);
     }
 
     /** Player `id` did something seen (a spell, a blow): the world knows about where. */

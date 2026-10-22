@@ -115,6 +115,18 @@ export class Storm {
         this.until = Math.min(this.until, performance.now() + seconds * 1000);
     }
 
+    /**
+     * How much of the weather reaches me (0: nothing — deep in a cave or a closed room; 1: the open sky).
+     * The lit mouth of a cave is in between: the nearer the exit, the louder.
+     */
+    heard() {
+        const w = this.game.world;
+        const e = 1 - Math.max(w.cave || 0, w.indoor || 0);
+        if (e <= 0.08) return 0;
+        const k = Math.min(1, (e - 0.08) / 0.92);
+        return k * k * (3 - 2 * k) * 0.8 + 0.2 * k;
+    }
+
     update(dt) {
         const now = performance.now();
         const want = this.raining ? 1 : 0;
@@ -132,8 +144,9 @@ export class Storm {
         // under a roof / deep in a cave no rain falls on you (it is heard, more softly)
         const w = this.game.world;
         const open = 1 - Math.max(w.cave || 0, w.indoor || 0);
+        const heard = this.heard(); // (deep in a cave nothing of the weather is heard or seen; near the mouth — muffled)
         const wet = Math.max(0, Math.min(1, (this.k - 0.1) / 0.5));
-        this.game.sound?.setRain?.(wet * (0.35 + 0.65 * open));
+        this.game.sound?.setRain?.(wet * heard);
         this._sound = wet > 0;
         // Rain around the camera
         const cam = this.game.camera.position;
@@ -172,9 +185,11 @@ export class Storm {
             this._flashT -= dt;
             if (this._flashT <= 0) {
                 this._flashT = 1.2 + Math.random() * 2.5;
+                const e = this.heard();
+                if (e <= 0) return; // (in a cave: no flash of the sky, no thunder)
                 const p = new THREE.Vector3(cam.x + (Math.random() - 0.5) * 120, cam.y + 40, cam.z + (Math.random() - 0.5) * 120);
-                this.game.fx.lightFlash(p, 0xcfe0ff, 4, 0.18, 200);
-                if (this.game.sound && Math.random() < 0.6) setTimeout(() => this.game.sound?.playThunder?.(), 400 + Math.random() * 900);
+                this.game.fx.lightFlash(p, 0xcfe0ff, 4 * e, 0.18, 200);
+                if (this.game.sound && Math.random() < 0.6) setTimeout(() => this.game.sound?.playThunder?.(0.15 + 0.85 * this.heard()), 400 + Math.random() * 900);
             }
         }
     }

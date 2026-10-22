@@ -564,14 +564,17 @@ export class IceCastleLife {
     }
 
     /** Players as targets: {id, p (feet), c (centre)} (the dead, the invisible far off not). */
-    _players() {
-        const g = this.game, out = this._pl || (this._pl = []);
-        // (once a frame, into the same objects: no garbage — every mind asks it)
-        if (this._plFrame === g.frameCount && g.frameCount != null) return out;
-        this._plFrame = g.frameCount;
-        const pool = this._plPool || (this._plPool = []);
+    _players(boss = false) {
+        const g = this.game, out = boss ? this._plB || (this._plB = []) : this._pl || (this._pl = []);
+        // (once a frame, into the same objects: no garbage — every mind asks it; the queen's own list: she sees the invisible)
+        const fk = boss ? '_plFrameB' : '_plFrame';
+        if (this[fk] === g.frameCount && g.frameCount != null) return out;
+        this[fk] = g.frameCount;
+        const pool = boss ? this._plPoolB || (this._plPoolB = []) : this._plPool || (this._plPool = []);
         out.length = 0;
-        const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p) : p);
+        const qn = boss ? this.list.find((c) => c.type === 'queen' && !c.dead) : null;
+        const bossInfo = qn ? { key: 'iceQueen', x: qn.model.position.x, z: qn.model.position.z, say: (t) => this._say(qn, t) } : null;
+        const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p, bossInfo) : p);
         const put = (id, p, rod) => {
             const e = pool[out.length] || (pool[out.length] = { id: null, p: new THREE.Vector3(), rod: false });
             e.id = id; _feet(p, e.p); e.rod = rod;
@@ -667,7 +670,7 @@ export class IceCastleLife {
     /** A body to fight: a player (not the rod's holder near its snowmen), or the one who struck it. */
     _enemy(c, range, from = c.model.position) {
         let best = null;
-        for (const q of this._players()) {
+        for (const q of this._players(c.type === 'queen')) {
             if (q.rod && c.type === 'snowman' && this.state.queenDead) continue; // (the rod's holder: the snowmen obey him)
             const d = Math.hypot(q.p.x - from.x, q.p.z - from.z);
             const r = q.id === c.foe ? range * 1.6 : range;

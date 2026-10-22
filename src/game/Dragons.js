@@ -314,7 +314,7 @@ export class Dragons {
     // ================================================================ players
     _playerPos(id) {
         const g = this.game;
-        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? this.me : id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
+        const seen = (p) => (p && g.invis ? g.invis.aiPos(id === 'local' ? this.me : id, p, true) : p); // (a boss: it sees the invisible)  (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
         if (id === this.me || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : seen(g.character.group.position);
         const r = g.remotes?.get(id);
         return r && !r.dead ? seen(r.position) : null;
