@@ -1,8 +1,10 @@
 /**
  * WizardTowers.js — the wizards' towers (academies) and the wizards' houses around them.
  *
- * A tower stands on its own in a castle-free cell of the castle grid (480 m), a few
- * times rarer than castles; one is always found 0.5–1.3 km from the spawn. It is a
+ * There is ONE tower in the whole world (the author: «башня магов всегда одна»; the wizards' towns may
+ * be many): in a castle-free cell of the castle grid (480 m) 0.5–1.3 km from the spawn (further out
+ * only if no cell there will do). Old worlds too: their other towers are no more (TowerIndex.isLost —
+ * their saved block edits are dropped, WorldSave.restoreWorld). It is a
  * wide round tower of blue-grey arcane stone: a cellar (the vault) and six floors
  * joined by a spiral stair along the wall, an observatory and the Master's study
  * under a pointed violet roof. Every floor is two rooms (a wall across the middle
@@ -25,12 +27,15 @@ import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 
 export const TOWER_ZONE = 58; // half-size of the levelled land
-const TOWER_P = 0.2; // share of castle-free cells that try to hold a tower
+const TOWER_P = 0.2; // (old worlds: the share of castle-free cells that held a tower — only to find them: isLost)
 const TOWER_M = TOWER_ZONE + BLEND + 10; // the tower land stays ≥ 10 m inside its cell
 const TOWER_SPAN = CASTLE_CELL - 2 * TOWER_M;
 const TRIES = 12;
 const MIN_SPAWN = 300 + TOWER_ZONE;
 const SPAWN_RING = [500, 1300];
+const FAR_RING = 4000; // (no cell in the ring will do: the nearest good one further out)
+/** The Master of the one tower (the lore — src/game/LoreBooks.js: wise, bearded, thorough; avoids fights). */
+export const TOWER_MASTER = 'Джовалилиус Правдиус Нотан';
 const WANDER_CELL = 700;
 
 // ------------------------------------------------------------- the shape
@@ -172,7 +177,7 @@ function buildTower(p, rng, out) {
     p.box(0, 0, 6, 6, -R_OUT - 1, -R_OUT - 1, B.ARCANE_LAMP);
 
     // ---- every floor: a wall across the middle with a doorway, two rooms
-    const rooms = [], chests = [], bedSpots = [], spots = [], dummies = [];
+    const rooms = [], chests = [], bedSpots = [], spots = [], dummies = [], lore = [];
     const stall = {};
     let throne = null, throneFront = null, dormNode = null, studyNode = null;
     LEVELS.forEach((l, li) => {
@@ -272,7 +277,7 @@ function buildTower(p, rng, out) {
         for (const half of [1, -1]) {
             const kind = half > 0 ? kb : kf;
             const room = { kind, half, l, li, name: TOWER_ROOMS[kind] };
-            furnishTower(p, room, rng, legs, { chests, bedSpots, spots, dummies, stall, set: (k, v) => { if (k === 'throne') throne = v; if (k === 'throneFront') throneFront = v; } });
+            furnishTower(p, room, rng, legs, { chests, bedSpots, spots, dummies, lore, stall, set: (k, v) => { if (k === 'throne') throne = v; if (k === 'throneFront') throneFront = v; } });
             const r = half > 0 ? p.rect(-14, 14, 1, 14) : p.rect(-14, 14, -14, -1);
             rooms.push({ kind, name: TOWER_ROOMS[kind], ...r, y: p.L(l) - 1.5, l, floor: li });
         }
@@ -286,7 +291,7 @@ function buildTower(p, rng, out) {
         const c = p.node(0, sp.nv > 0 ? (sp.l === 35 ? 4 : 6) : -6, sp.l);
         p.link(sp.node, c);
     }
-    Object.assign(out, { rooms, chests, bedSpots, spots, dummies, stall, throne, throneFront, windows, dormNode, studyNode });
+    Object.assign(out, { rooms, chests, bedSpots, spots, dummies, lore, stall, throne, throneFront, windows, dormNode, studyNode });
 }
 
 /**
@@ -329,6 +334,12 @@ function furnishTower(p, room, rng, legs, o) {
     const spot = (kind2, u, b, nu, nb, extra = {}) => { o.spots.push({ kind: kind2, ...p.pt(u, H * b, l), nu, nv: H * nb, l, ...extra }); };
     const firstOf = (cands, f) => { for (const c of cands) if (f(...c)) return c; return null; };
     const lamp = (u, b) => p.box(u, u, l + 5, l + 5, H * b, H * b, B.ARCANE_LAMP);
+    /** A desk 5 m long (the first clear of `cands` [u0, u1, b]) and the 7 places of the history books on it. */
+    const loreDesk = (cands) => firstOf(cands, (u0, u1, b) => {
+        if (!box(u0, u1, 0, 1, b, b, B.PLANKS_DARK)) return false;
+        for (let i = 0; i < 7; i++) o.lore.push({ ...p.pt(Math.min(u0, u1) - 0.1 + i * 0.7, H * b, l), y: p.L(l + 1) - 0.5 });
+        return true;
+    });
     switch (kind) {
         case 'vault': {
             let n = 0;
@@ -376,10 +387,14 @@ function furnishTower(p, room, rng, legs, o) {
                 for (let r = 4; r <= 8; r++) { const u = Math.round(r * Math.cos(a)), b = Math.round(r * Math.sin(a)); box(u, u, 0, 3, b, b, B.BOOKS); }
             }
             box(-2, 2, 0, 1, 9, 9, B.PLANKS_DARK);
+            // the desk of the world's history: its books lie on it (LoreLibrary.js — LoreBooks.js), in front of
+            // the shelves by the dividing wall, clear of the paths and the diagonal shelves
+            loreDesk([[5, 9, 2], [-9, -5, 2]]);
             lamp(-5, 5); lamp(5, 5);
             break;
         }
         case 'reading': {
+            if (!o.lore.length) loreDesk([[2, 6, 2], [-6, -2, 2]]); // (no room for it in the library — a stair in the way: here)
             for (const u of [-6, 6]) { box(u, u, 0, 1, 4, 4, B.PLANKS_DARK); box(u, u, 2, 2, 4, 4, B.BOOKS); }
             for (const [u, b] of [[-7, 8], [7, 8], [-3, 9], [3, 9]]) box(u, u, 0, 0, b, b, B.CARPET_PURPLE);
             if (box(5, 5, 0, 0, 8, 8, B.PLANKS_DARK)) box(5, 5, 1, 1, 8, 8, B.ARCANE_LAMP);
@@ -595,7 +610,8 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
     const id = 'wt' + gx + '_' + gz;
     const name = `Академия «${NAMES_A[Math.floor(rng() * NAMES_A.length)]} ${NAMES_B[Math.floor(rng() * NAMES_B.length)]}»`;
     const masterFirst = MASTER_A[Math.floor(rng() * MASTER_A.length)];
-    const master = `${masterFirst} ${MASTER_B[Math.floor(rng() * MASTER_B.length)]}`;
+    void MASTER_B[Math.floor(rng() * MASTER_B.length)]; // (the rng goes on as before: the same tower)
+    const master = TOWER_MASTER;
     const population = 24 + Math.floor(rng() * 25);
     const teachers = 3 + Math.floor(rng() * 3);
     const houses = out.houses.map((h, i) => ({ ...h, id: id + '_h' + i }));
@@ -616,6 +632,7 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
         rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
         houses, stalls: [out.stall, out.potionStall].filter(Boolean), fields: [], pens: [], market: null, wallWalk: [],
         dummies: out.dummies, spots: out.spots,
+        lore: out.lore, // (the desk of the library: where the books of the world's history lie — LoreLibrary.js)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
         topL: F + 1 + ROOF_L + 14,
     };
@@ -676,35 +693,74 @@ export class TowerIndex {
         return null;
     }
 
-    /** The cell of the tower always found near the spawn (a key, or −1). */
+    /**
+     * The cell of the world's one tower (a key, or −1): the nearest good castle-free cell 0.5–1.3 km from
+     * the spawn (the same cell old worlds had there), else the nearest good one further out.
+     */
     spawnKey() {
         if (this._spawn !== undefined) return this._spawn;
-        this._spawn = -1;
+        this._spawn = -1; this._spawnCell = null; // (a key may be negative — even −1, the cell (0, −1): ask _spawnCell)
         const cells = [];
-        const n = Math.ceil(SPAWN_RING[1] / CASTLE_CELL) + 1;
+        const n = Math.ceil(FAR_RING / CASTLE_CELL) + 1;
         for (let gz = -n; gz <= n; gz++) for (let gx = -n; gx <= n; gx++) {
             const d = Math.hypot((gx + 0.5) * CASTLE_CELL, (gz + 0.5) * CASTLE_CELL);
-            if (d >= SPAWN_RING[0] && d <= SPAWN_RING[1]) cells.push({ gx, gz, d });
+            if (d >= SPAWN_RING[0] && d <= FAR_RING) cells.push({ gx, gz, d, ring: d <= SPAWN_RING[1] ? 0 : 1 });
         }
-        cells.sort((a, b) => a.d - b.d || a.gx - b.gx || a.gz - b.gz);
+        cells.sort((a, b) => a.ring - b.ring || a.d - b.d || a.gx - b.gx || a.gz - b.gz);
         for (const c of cells) {
+            if (offEarth((c.gx + 1) * CASTLE_CELL)) continue;
             if (this.castles.cellOf(c.gx, c.gz)) continue;
-            if (this._place(c.gx, c.gz)) { this._spawn = this._key(c.gx, c.gz); break; }
+            if (this._place(c.gx, c.gz)) { this._spawn = this._key(c.gx, c.gz); this._spawnCell = c; this.cells.delete(this._spawn); break; } // (asked while it was being found: not yet known then)
         }
         return this._spawn;
+    }
+
+    /** The world's one tower (null only when no place on the Earth would do). */
+    only() {
+        this.spawnKey();
+        if (!this._spawnCell) return null;
+        return this.cellOf(this._spawnCell.gx, this._spawnCell.gz);
     }
 
     _makeTower(gx, gz) {
         if (offEarth((gx + 1) * CASTLE_CELL)) return null; // (no towers on other planets)
         if (this.castles.cellOf(gx, gz)) return null; // (one site per cell)
-        const pass = hash01(gx * 11 + 3, gz * 13 + 5, this.seed + 1700) <= TOWER_P;
-        if (!pass) {
-            const d = Math.hypot((gx + 0.5) * CASTLE_CELL, (gz + 0.5) * CASTLE_CELL);
-            if (d < SPAWN_RING[0] || d > SPAWN_RING[1] || this.spawnKey() !== this._key(gx, gz)) return null;
-        }
+        this.spawnKey();
+        const c = this._spawnCell;
+        if (!c || c.gx !== gx || c.gz !== gz) return null; // (the one tower of the world)
         const at = this._place(gx, gz);
         if (!at) return null;
         return buildTowerSite(this.seed, gx, gz, at.X, at.Z, 0, at.rng);
+    }
+
+    /**
+     * A tower an old world had here and has no more (the world keeps one tower now): its land rect
+     * {x0, x1, z0, z1} or null. Its saved block edits lay on its walls — on the bare land now they would
+     * be holes and floating stones, so the save drops them (WorldSave.restoreWorld). Cached per cell.
+     */
+    isLost(gx, gz) {
+        const key = this._key(gx, gz);
+        const lost = this._lost || (this._lost = new Map());
+        if (lost.has(key)) return lost.get(key);
+        let r = null;
+        this.spawnKey();
+        const one = this._spawnCell && this._spawnCell.gx === gx && this._spawnCell.gz === gz;
+        if (!offEarth((gx + 1) * CASTLE_CELL) && !one && !this.castles.cellOf(gx, gz)
+            && hash01(gx * 11 + 3, gz * 13 + 5, this.seed + 1700) <= TOWER_P) {
+            const at = this._place(gx, gz);
+            if (at) { const m = TOWER_ZONE + BLEND; r = { x0: at.X - m, x1: at.X + m, z0: at.Z - m, z1: at.Z + m }; }
+        }
+        lost.set(key, r);
+        return r;
+    }
+
+    /** Drops the saved block edits [x, L, z, block] that lay on towers an old world has no more. */
+    dropLostEdits(edits) {
+        return edits.filter((e) => {
+            if (!Array.isArray(e)) return true;
+            const r = this.isLost(Math.floor(e[0] / CASTLE_CELL), Math.floor(e[2] / CASTLE_CELL));
+            return !r || e[0] < r.x0 || e[0] > r.x1 || e[2] < r.z0 || e[2] > r.z1;
+        });
     }
 
     /** Towers whose land reaches within `r` of a point. */

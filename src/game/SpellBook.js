@@ -41,7 +41,7 @@ export const TAUGHT_BY = {
 export const BOOK_SPELLS = new Set(['CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard',
     'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'Flight']);
 
-/** Learned otherwise: «Flying Maxima» opens by itself at 1000 cells of mana (Space.checkUnlock). */
+/** Learned otherwise: «Flying Maxima», a spell of the gods, is their gift at 1000 cells of mana (Space.checkUnlock) — never a scroll, never sold. */
 export const MANA_SPELLS = new Set(['FlyingMaxima']);
 
 /** The scroll / book key that teaches this spell. */

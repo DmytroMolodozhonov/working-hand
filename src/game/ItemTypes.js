@@ -27,6 +27,7 @@
 import { irMaterial } from '../fx/Iridescent.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
+import { LORE_BY_ID } from './LoreBooks.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
 import { pouchModel } from './PouchModel.js';
@@ -198,7 +199,7 @@ export function itemValue(it) {
  */
 export const GOD_GIFTS = new Set(['iceRod']);
 export const isGodGift = (it) => !!it && (it.godGift === true || GOD_GIFTS.has(it.kind));
-export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || it.kind === 'book' || it.magic === true || (it.kind === 'scroll'));
+export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || (it.kind === 'book' && !it.lore) || it.magic === true || (it.kind === 'scroll'));
 
 const SHIELD_KINDS = [
     { name: 'Деревянный щит', color: 0x8b5a2b, rim: 0x5a3a1e },
@@ -518,6 +519,7 @@ export function describeItem(it) {
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Бросьте рядом 3 шерсти и 10 песка, нужно 3 дерева неподалёку; палочку на них и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы рядом с домом, палочку на них и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b>` : `Сожгите его: мана +<b>${it.amount}</b>`] };
         case 'book':
+            if (it.lore && LORE_BY_ID.has(it.lore)) return { title: `📗 «${LORE_BY_ID.get(it.lore).title}»`, color: LORE_BY_ID.get(it.lore).trim, lines: ['Книга из летописи мира: ' + LORE_BY_ID.get(it.lore).sub.toLowerCase(), 'Раскройте двумя руками и листайте пальцем', 'Это не книга заклинаний — её просто читают'] };
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
             if (it.ward || it.spells?.includes('ProtectionHouse')) return { title: '📘🛡️ Книга защиты', color: WARD_COVER, lines: ['Раскройте и прочитайте: в ней группа заклинаний <b>«Защита дома»</b> — Protection House, Protection Invisible, Protection House Grant', 'Прочитали одну страницу — выучили все три'] };
             if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Инферно» с книгой в руке или в огне): вы научитесь заклинанию <b>«Флайн»</b> (полёт)', 'Раскрыть и прочитать можно, но выучит «Флайн» только тот, кто её сожжёт'] };
@@ -924,7 +926,7 @@ function buildItemModel(it) {
         case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);
-        case 'book': return it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
+        case 'book': return it.lore && LORE_BY_ID.has(it.lore) ? makeSpellBookModel(LORE_BY_ID.get(it.lore).cover, LORE_BY_ID.get(it.lore).trim) : it.ward || it.spells?.includes('ProtectionHouse') ? makeSpellBookModel(WARD_COVER, WARD_TRIM) : it.swift || it.spells?.includes('Flight') ? makeSpellBookModel(SWIFT_COVER, SWIFT_TRIM) : makeSpellBookModel(COVERS[(it.id || 1) % COVERS.length]);
         default: { const g = new THREE.Group(); g.add(box(0.3, 0.3, 0.3, mat(0xaaaaaa))); return g; }
     }
 }

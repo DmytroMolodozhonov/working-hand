@@ -12,7 +12,7 @@
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
 
 /** The spells of the gods (the scrolls of their library): every boss is open to them — «на то они и божественные». */
-export const GODS = new Set(TEMPLE_SCROLLS);
+export const GODS = new Set([...TEMPLE_SCROLLS, 'FlyingMaxima']); // (and «Flying Maxima», the gods' own flight — Mana.GOD_SPELLS)
 export const isGodSpell = (kind) => !!kind && GODS.has(kind);
 
 /** Every dragon: its health. */

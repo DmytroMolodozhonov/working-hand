@@ -63,10 +63,11 @@ export const FIRST_SPELL = {
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
     TotalDestructionMaxima: 20, Hellfire: 20, WaterVortexSuperMaxima: 20,
     CircleAttack: 15, CircleAttackMaxima: 20, Inspirius: 20, CreateHouse: 8, ImproveHouse: 8, CreateCastle: 20,
-    IceCastle: 15, IceBridge: 3, FlyingMaxima: 10, GiveMyPower: 2,
+    IceCastle: 15, IceBridge: 3, GiveMyPower: 2,
     IceMaxima: 5, Accentric: 8, Electrum: 10, Pilbidrio: 12, // (the strong duel spells — StrongSpells.js)
     // the gods' scrolls (the author: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны»)
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
+    FlyingMaxima: 100, // (the gods' own flight through space: given by the gods at 1000 cells — Space.checkUnlock)
     Die: 100, // («Дай»: the ninth scroll of the gods' library — StrongSpells.js)
     ProtectionGods: 100, ProtectionGodsMaxima: 100, // (the gods' shield and its dome: each its own scroll, each its own first — ProtectionGods.js)
 };
@@ -79,10 +80,10 @@ export const DISCOVER = { space: 20, planet: 50 };
 
 /**
  * The spells of the gods (the scrolls of the gods' library — GodsTemple.TEMPLE_SCROLLS, so a new scroll there is one
- * of them by itself): +100 cells the first time, with a banner of its own; the gods' shield pays for them
+ * of them by itself — and «Flying Maxima», the gods' own flight: no scroll, the gods give it — Space.checkUnlock): +100 cells the first time, with a banner of its own; the gods' shield pays for them
  * (ProtectionGods.js: DIVINE_SPELLS is this list).
  */
-export const GOD_SPELLS = new Set(TEMPLE_SCROLLS); // (PlanetMagic.js' four, «Бум» — Boom.js, «Planet Liquidation» — PlanetDestroy.js, «Protection Gods (Maxima)» — ProtectionGods.js)
+export const GOD_SPELLS = new Set([...TEMPLE_SCROLLS, 'FlyingMaxima']); // (PlanetMagic.js' four, «Бум» — Boom.js, «Planet Liquidation» — PlanetDestroy.js, «Protection Gods (Maxima)» — ProtectionGods.js)
 
 /** Not spells (or nothing to learn): never grow the maximum. */
 export const NOT_SPELLS = new Set(['Stand', 'Stop', 'Pause', 'Nox', 'Attack', 'Reveal', 'Hammer', 'WardGrow', 'ProtectionHouseGrant']);

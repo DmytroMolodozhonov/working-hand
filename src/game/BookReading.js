@@ -33,6 +33,8 @@ import { BOOK, setBookAngle, pageHinge, makePageSheet, setPageSheet, disposePage
 import { frameFromHands, frameFromOneHand, viewRight, pageLimits, PageSheet, sheetLag, edgeInBook, halfQuat, bookFromHinge, frameOnPalm } from './BookPhysics.js';
 import { BOOK_POINTS, Steady } from '../entities/SimplifiedHand.js';
 import { ITEM_SCALE } from './ItemTypes.js';
+import { loreOf } from './LoreBooks.js';
+import { lorePages } from './LorePages.js';
 
 export const HOLD = {
     REACH: 0.32, // m from the edge of the covers (the fore-edge): a hand closing there takes it
@@ -134,6 +136,24 @@ export function drawRunPage(side) {
         }
     });
 }
+
+/** A spread of a book of history: each page painted when it is first shown (LorePages.js). */
+class LoreSpread {
+    constructor(l, r) { this._d = [l, r]; this._t = [null, null]; }
+    _get(i) { return this._t[i] || (this._t[i] = new THREE.CanvasTexture(this._d[i]())); }
+    get left() { return this._get(0); }
+    get right() { return this._get(1); }
+    dispose() { for (const t of this._t) t?.dispose(); this._t = [null, null]; }
+}
+/** A book of history's spreads: its pages two by two. */
+function loreSpreads(book) {
+    const pages = lorePages(book);
+    const out = [];
+    for (let i = 0; i < pages.length; i += 2) out.push(new LoreSpread(pages[i], pages[i + 1]));
+    return out;
+}
+/** A spread's textures given back (a book of history's: only the pages that were painted). */
+const disposeSpread = (t) => (t.dispose ? t.dispose() : (t.left.dispose(), t.right.dispose()));
 
 export class BookReading {
     /** @param {(spell: string, side: 'left'|'right') => THREE.Texture} drawPage */
@@ -565,7 +585,9 @@ export class BookReading {
         const b = s.model.userData.book;
         const spells = s.item.spells || [];
         // (the running book: one spread only)
-        s.tex = s.item.runbook ? [{ left: drawRunPage('left'), right: drawRunPage('right') }]
+        const lore = loreOf(s.item); // (a book of the world's history: only text and pictures — LoreBooks.js)
+        s.tex = lore ? loreSpreads(lore)
+            : s.item.runbook ? [{ left: drawRunPage('left'), right: drawRunPage('right') }]
             : [{ left: drawTitlePage('left', spells), right: drawTitlePage('right', spells) }, ...spells.map((sp) => ({ left: this.drawPage(sp, 'left'), right: this.drawPage(sp, 'right') }))];
         s.matL = new THREE.MeshBasicMaterial({ map: s.tex[0].left });
         s.matR = new THREE.MeshBasicMaterial({ map: s.tex[0].right });
@@ -842,7 +864,7 @@ export class BookReading {
         if (rr.sheet) { model.remove(rr.sheet.mesh); disposePageSheet(rr.sheet.mesh); }
         if (b) { b.faceL.material = rr.paper; b.faceR.material = rr.paper; }
         rr.matL.dispose(); rr.matR.dispose();
-        for (const t of rr.tex) { t.left.dispose(); t.right.dispose(); }
+        for (const t of rr.tex) disposeSpread(t);
         setBookAngle(model, 0);
     }
 
@@ -856,7 +878,7 @@ export class BookReading {
         if (s.sheet) { s.model.remove(s.sheet.mesh); disposePageSheet(s.sheet.mesh); }
         if (b) { b.faceL.material = s.paper; b.faceR.material = s.paper; }
         s.matL.dispose(); s.matR.dispose();
-        for (const t of s.tex) { t.left.dispose(); t.right.dispose(); }
+        for (const t of s.tex) disposeSpread(t);
         if (!gone) setBookAngle(s.model, 0);
         // the hand that held only a cover lets the fingers go
         const g = this.game;

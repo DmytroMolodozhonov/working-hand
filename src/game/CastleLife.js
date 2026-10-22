@@ -379,6 +379,7 @@ export class CastleLife {
         this._makeChests(cs);
         if (!this.auth) return;
         const def = cs.def;
+        this.game.loreLibrary?.wake(def); // (its library's books of the world's history — LoreLibrary.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
         if (this.night?.staffNight(cs)) return; // (at night: only the watch is out — NightLife.js)
@@ -428,6 +429,7 @@ export class CastleLife {
 
     _sleep(cs) {
         cs.awake = false;
+        if (this.auth) this.game.loreLibrary?.sleep(cs.def);
         for (const v of [...cs.active.values()]) this._deactivate(v);
         // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
         // unlocked one — Locks): a long flight over the world left every castle's chests in the scene

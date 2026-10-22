@@ -41,14 +41,20 @@ test('wizard towers: the same on every computer, one always near the spawn', () 
     }
 });
 
-test('wizard towers: rarer than castles, never on a castle, their land inside their own cell', () => {
+test('wizard towers: ONE in the world (the author), never on a castle, its land inside its own cell; an old world\'s others are lost', () => {
     for (const seed of [4242, 12345, 1]) {
         const t = world(seed);
         const towers = towersOf(t);
-        let castles = 0;
-        for (let gz = -8; gz < 8; gz++) for (let gx = -8; gx < 8; gx++) if (t.castles.cellOf(gx, gz)) castles++;
-        assert.ok(towers.length >= 8, `towers ${towers.length} (seed ${seed})`);
-        assert.ok(towers.length < 0.5 * castles, `towers ${towers.length} vs castles ${castles}`);
+        assert.equal(towers.length, 1, `towers ${towers.length} (seed ${seed})`);
+        assert.equal(towers[0], t.towers.only());
+        assert.equal(towers[0].master, 'Джовалилиус Правдиус Нотан');
+        // the towers old worlds had elsewhere: their saved edits are dropped, the one tower's are kept
+        let lost = null;
+        for (let gz = -8; gz < 8 && !lost; gz++) for (let gx = -8; gx < 8 && !lost; gx++) lost = t.towers.isLost(gx, gz);
+        assert.ok(lost, `an old world had other towers (seed ${seed})`);
+        const w0 = towers[0], cx = Math.round((lost.x0 + lost.x1) / 2), cz = Math.round((lost.z0 + lost.z1) / 2);
+        const kept = t.towers.dropLostEdits([[cx, 5, cz, 0], [Math.round(w0.x), 5, Math.round(w0.z), 0]]);
+        assert.deepEqual(kept, [[Math.round(w0.x), 5, Math.round(w0.z), 0]]);
         for (const w of towers) {
             assert.equal(t.castles.cellOf(w.gx, w.gz), null);
             const m = TOWER_ZONE + BLEND + 10;

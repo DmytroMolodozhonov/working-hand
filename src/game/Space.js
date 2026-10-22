@@ -148,7 +148,10 @@ export class Space {
     }
 
     // ─────────────────────────────────────────────────────────────── the gift at 1000 cells
-    /** Every second or so: the hero reached 1000 mana cells — the gods' gift, once. */
+    /**
+     * Every second or so: the hero reached 1000 mana cells — the gods' gift, once. «Flying Maxima» is a spell of the
+     * gods (Mana.GOD_SPELLS; the lore — LoreBooks.js): no scroll, no shop, no chest — only given to a truly strong wizard.
+     */
     checkUnlock() {
         const g = this.game;
         const m = g.config?.mode;
@@ -158,7 +161,7 @@ export class Space {
         g.bonus = g.bonus || {};
         g.bonus.spells = { ...(g.bonus.spells || {}), FlyingMaxima: true };
         const title = '✨ Поздравляем, вы приблизились к силе богов!';
-        const sub = 'Вам открыто заклинание «Flying Maxima»: в полёте скажите его — и летите вверх, за небо, в космос';
+        const sub = 'Боги даруют вам своё заклинание «Flying Maxima» — его нельзя найти или купить, только получить в дар. В полёте скажите его — и летите вверх, за небо, в космос';
         if (g.achievements?._banner) g.achievements._banner(title, sub, true);
         else g.hud?.notify?.(`${title} ${sub}`, 8000);
         g.hud?.setVoice?.(`${title}<br>${sub}`, true);

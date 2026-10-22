@@ -16,6 +16,7 @@
  * things or learned spells. (Old saves keyed by name still work once.)
  */
 
+import { onSpot } from './LoreLibrary.js'; // (a library's book still on its desk is not kept: the library lays it again)
 import { keepIn } from './HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 
@@ -240,7 +241,7 @@ export class WorldKeeper {
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
-            items: g.items ? [...g.items.loose.values()].map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
+            items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
@@ -291,7 +292,11 @@ export class WorldKeeper {
 export function restoreWorld(game, save, THREE) {
     const g = game;
     if (!save) return;
-    if (Array.isArray(save.edits) && save.edits.length) { g.builder?.applyEdits(save.edits); }
+    if (Array.isArray(save.edits) && save.edits.length) {
+        // (an old world's other wizards' towers are no more — the world keeps one: their edits would be holes in bare land)
+        const towers = g.world?.terrain?.data?.towers;
+        g.builder?.applyEdits(towers?.dropLostEdits ? towers.dropLostEdits(save.edits) : save.edits);
+    }
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
     for (const e of save.explosions || []) {
         // (k: the houses' spheres of protection it could not eat into — HouseWards.js)

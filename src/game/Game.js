@@ -83,6 +83,7 @@ import { captureLegacy, wipeHero } from './Legacy.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
+import { LoreLibrary } from './LoreLibrary.js';
 import { Blackbeard } from './Blackbeard.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
@@ -453,6 +454,7 @@ export class Game {
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
+        this.loreLibrary = new LoreLibrary(this); // the books of the world's history in the libraries (LoreBooks.js)
         this.temple = new Temple(this); // the abandoned Temple of the Gods (Venus — GodsTemple.js; Creative test on Earth: temple.placeTest())
         this.zombieSpawn = new ZombieSpawn(this); // zombies come out of the dark: caves, the night (ZombieSpawn.js)
         this.owls = new Owls(this); // clever owls: curious, fed with meat they love you and lead you to a boss once (Owls.js)
