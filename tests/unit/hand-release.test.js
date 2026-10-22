@@ -200,3 +200,17 @@ test('flying: nothing leaves the hand (the wand flew off in flight) — nor just
     assert.equal(holdsFast(ch, 1000 + GOT_UP_T * 500), true, 'the arms still coming down after landing');
     assert.equal(holdsFast(ch, 1000 + GOT_UP_T * 1000 + 10), false, 'on the ground again: as always');
 });
+
+test('ThrowDetector (the wand, strict): an overhand throw from by the head flies — a wand raised to cast and pointed forward does not', () => {
+    const run = (down) => {
+        const d = new ThrowDetector(); let now = 0, r = null;
+        const sh = { x: 0.2, y: 0, z: 0 };
+        const step = (hand, v, curl) => { now += 45; const x = d.update({ now, hand, shoulder: sh, vRel: v, vWorld: [0, 0, 0], curl, tracked: true, weight: 0.15, blurOk: true, strict: true }); if (x) r = x; };
+        for (let i = 0; i < 5; i++) step({ x: 0.2, y: 0.5, z: 0.05 }, { x: 0, y: 0, z: 0 }, 0.9);
+        for (let i = 1; i <= 4; i++) step({ x: 0.2, y: 0.5 - (down ? 0.35 : 0.1) * i, z: -0.35 * i }, { x: 0, y: down ? -8 : -1, z: down ? -5 : -9 }, 0.9);
+        for (let i = 0; i < 4; i++) step({ x: 0.2, y: down ? -0.9 : 0.1, z: -1.4 }, { x: 0, y: -1, z: -1 }, 0.1);
+        return !!r;
+    };
+    assert.equal(run(true), true, 'a swing down from by the head, the fingers open: thrown');
+    assert.equal(run(false), false, 'raised and pointed forward with the fingers loose: stays');
+});

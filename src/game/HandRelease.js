@@ -134,7 +134,7 @@ export class DropGate {
 export class ThrowDetector {
     constructor() { this.reset(); }
 
-    reset() { this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; this.seenHold = false; this.heldAt = -1e9; }
+    reset(why = null) { this.why = why; this.cockAt = -1e9; this.cock = null; this.peak = null; this.held = false; this.back = false; this.high = false; this.seenHold = false; this.heldAt = -1e9; }
 
     /** The swing (peak) went forward/up, not down, strong enough, and has slowed down: its end. */
     blurred(speed) {
@@ -155,7 +155,8 @@ export class ThrowDetector {
         const up = hand.y - shoulder.y;
         if (!this.peak && (up > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
             this.cockAt = now;
-            if (!this.cock) { this.held = false; this.back = false; }
+            if (!this.cock) { this.held = false; this.back = false; this.high = false; }
+            if (up > THROW.UP) this.high = true; // (by the head: an overhand throw's wind-up — for the wand only with a swing DOWN from there, below)
             // (the arm model always guesses the arm in front of the body: a wrist the camera saw
             // behind the shoulder is really back there — the swing starts from behind)
             if (behind || hand.z - shoulder.z > THROW.BACK) this.back = true;
@@ -165,13 +166,13 @@ export class ThrowDetector {
         if (!this.cock) return null;
         if (tracked && curl > THROW.HOLD) { this.held = true; this.heldAt = now; } // (a real throw starts with the thing held)
         const need = (strict ? THROW.STRICT_BASE : THROW.SPEED) + THROW.PER_KG * weight;
-        if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || (this.back && hand.y - shoulder.y > THROW.STRICT_LOW))
+        if (this.held && speed > need && (-vRel.z > 0 || vRel.y < 0) && (!strict || ((this.back || (this.high && -vRel.y > 0.5 * speed)) && hand.y - shoulder.y > THROW.STRICT_LOW))
             && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > (strict ? THROW.STRICT_TRAVEL : THROW.TRAVEL)
             && (!this.peak || speed > this.peak.speed)) this.peak = { speed, vRel: [vRel.x, vRel.y, vRel.z], vWorld: [...vWorld], at: now };
         if (!this.peak) return null;
-        if (now - this.peak.at > (strict ? THROW.STRICT_LATE_MS : THROW.LATE_MS)) { this.reset(); return null; } // the fist kept hold: a chop, not a throw
+        if (now - this.peak.at > (strict ? THROW.STRICT_LATE_MS : THROW.LATE_MS)) { this.reset(`замах ${this.peak.speed.toFixed(1)} м/с был, но пальцы не разжались вовремя (${strict ? 'нужно' : 'нужно'} curl<${strict ? THROW.STRICT_OPEN : THROW.OPEN})`); return null; } // the fist kept hold: a chop, not a throw
         // (the wand let go down at the hip / the ground: the hand went down to it, no throw)
-        if (strict && hand.y - shoulder.y < THROW.STRICT_LOW) { this.reset(); return null; }
+        if (strict && hand.y - shoulder.y < THROW.STRICT_LOW) { this.reset('бросок вниз, к земле — не считается'); return null; }
         // (the wand: the fingers seen really opening, just after they were seen holding it in the swing)
         if (tracked && (strict ? curl < THROW.STRICT_OPEN && now - this.heldAt < THROW.STRICT_HELD_MS : curl < THROW.OPEN)) { const p = this.peak; this.reset(); return p; } // (a hand lost in the blur waits ≤ LATE_MS)
         if (tracked && curl > THROW.HOLD) this.seenHold = true; // (seen still gripping after the swing: a chop)

@@ -802,6 +802,8 @@ export class ItemSystem {
             // the author threw it by accident just taking it; a light thing's lift by the head is no wind-up then)
             const strict = kind === 'wand' || kind === 'coins';
             const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1, blurOk: true, strict });
+            const td = this._thr[side];
+            if (td.why) { handLog(`бросок не засчитан (${side === 'right' ? 'правая' : 'левая'}): ${td.why}`); td.why = null; }
             if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side], why: `бросок (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)` }); continue; }
             // (the wand never falls out of an opened hand — the author holds it by one finger, the other four open:
             // it leaves the hand only thrown; a pouch only from a hand really opened wide, kept open: DROP.WAND_*)
