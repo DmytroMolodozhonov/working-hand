@@ -601,12 +601,11 @@ export class WandMagic {
                 if (it && it.item !== this.wand) { target = it.item; at = it.model.position.clone(); break; }
                 if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
             }
-            // (a running book about but the wand not on it: say so — not the wand's own secrets)
-            const rb = (g.runner?.accioTargets?.() || []).filter((r) => dir.angleTo(_v.subVectors(r.pos, tip).normalize()) < 0.9);
+            // (a running book far off but the wand pointed straight at it: say so; a book elsewhere is not mentioned)
+            const rb = (g.runner?.accioTargets?.() || []).filter((r) => dir.angleTo(_v.subVectors(r.pos, tip).normalize()) < 0.2);
             if (!target && rb.length) {
                 const near = Math.min(...rb.map((r) => r.pos.distanceTo(tip)));
-                g.hud.setVoice(near > 30 ? `🔮 Бегущая книга слишком далеко (${Math.round(near)} м) — подойдите ближе` : '🔮 Бегущая книга не там, куда показывает палочка (рука) — наведите прямо на неё и скажите ещё раз', true);
-                return false;
+                if (near > 30) { g.hud.setVoice(`🔮 Бегущая книга слишком далеко (${Math.round(near)} м) — подойдите ближе`, true); return false; }
             }
             if (!target && this.wand) { target = this.wand; at = tip.clone(); }
         }
@@ -682,7 +681,10 @@ export class WandMagic {
         }
         const tex = new THREE.CanvasTexture(c);
         tex.anisotropy = g.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
-        const PW = 2.4, PH = PW * H / W;
+        // (2.5 times bigger than it was, more when seen from afar, never filling the screen close by)
+        const cam = g.camera?.position;
+        const dist = cam ? cam.distanceTo(at) : 2.5;
+        const PW = Math.min(7, Math.max(3.6, dist * 2.4)), PH = PW * H / W;
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({
             map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide,
             depthWrite: false, depthTest: false, // (a wall, the hand or a tree never cut through the words)
