@@ -2303,7 +2303,7 @@ export class CastleLife {
         if (v.wizard && (v.fx & FX.DOME) && !opts.pierce && this.wizards.fight.shieldPays(v, opts.spell ? opts.kind || 'spell' : 'melee', true)) { this._flash(v); return; }
         // a shield held up (the shield wall, the ones holding a place, a wizard's hand shield) takes a blow
         // or a spell from the front: little gets through. «Авада Кедавра» passes any shield.
-        if (dir && !opts.pierce && v.foe && this._shieldUp(v)) {
+        if (dir && !opts.pierce && opts.kind !== 'Thunderwave' && v.foe && this._shieldUp(v)) { // (Thunderwave comes from above: a hand shield does not stop it)
             if (dir.x * -Math.sin(v.yaw) + dir.z * -Math.cos(v.yaw) < -0.35) {
                 dmg *= opts.fire ? 0.5 : 0.25; // (fire goes round a shield: it only halves it)
                 if (opts.fire) v.shieldHeat = (v.shieldHeat || 0) + 0.25; // (and the shield gets hot)
@@ -2315,6 +2315,7 @@ export class CastleLife {
         // armour takes most of the blow: the hearts go down many times slower
         if (v.magicSet && opts.fire) dmg *= 0.5; // (the whole magic set: fire does half)
         if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
+        else if (v.armor > 0 && opts.kind === 'Thunderwave' && !v.magicPieces?.length) v.hp -= dmg; // (plain steel does not hold a blow from above; a magic piece does)
         else if (v.armor > 0 && opts.fire) {
             // fire heats the armour through: it takes half, and burns less — but the hearts still go down
             const a = Math.min(v.armor, dmg * 0.5);

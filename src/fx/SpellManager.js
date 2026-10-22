@@ -16,6 +16,7 @@ import { alohomoraWords, isLockWord } from '../game/Alohomora.js';
 import * as THREE from 'three';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
+import { THUNDER, inThunderZone } from '../game/ThunderWave.js';
 import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
@@ -248,7 +249,7 @@ export function matchSpell(text) {
     // «Thunder wave» heard as «Сандер вейв»: the wave word wins over the Sand tokens
     if (has('тандер', 'сандер', 'сандэр', 'thunder', 'sander', 'сандр', 'тандр') || (has('вейв', 'wave', 'вэйв', 'уэйв') && has('сан', 'тан', 'san', 'tan', 'сун', 'фан'))) return 'Thunderwave';
     if (has('сап', 'sap', 'саб', 'sab', 'саф', 'saf', 'сат', 'sat', 'зап', 'zap')) return 'Sapira';
-    if (has('танд', 'thun', 'молн', 'гром', 'удар')) return 'Thunderwave';
+    if (has('танд', 'thun', 'гром')) return 'Thunderwave';
     // «Fire» (a campfire) before Inferno: «Инферно» never contains these words
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер', 'костёр', 'костер', 'костр')) return 'Fire';
     if (has('инфер', 'infer', 'огон')) return 'Inferno';
@@ -640,32 +641,44 @@ export class SpellManager {
             }
         }
         this.fx.lightFlash(origin, 0xaaddff, 3, 0.3, 50);
+        // one zone for everybody (ThunderWave.js): −10 to each creature in it, a bolt from above on each; nothing through a wall
+        const strike = (p) => { // (the bolt: from the sky to the one struck)
+            _a.set(p.x, p.y, p.z);
+            let prev = _b.set(p.x + (Math.random() - 0.5) * 6, p.y + 28, p.z + (Math.random() - 0.5) * 6);
+            for (let s = 1; s <= 5; s++) {
+                const next = s === 5 ? _a.clone() : new THREE.Vector3().lerpVectors(prev, _a, 0.25).add(_c.set((Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3));
+                this.fx.bolts.add(prev.clone(), next, 0.2);
+                prev = next;
+            }
+            this.fx.spark(_a, 0xcfe8ff, 0.2, _c.set(0, 2, 0), 0.5);
+        };
+        const d = direction.clone().normalize();
         for (const z of this.zombies) {
             if (z.isDead) continue;
-            const to = _a.subVectors(z.group.position, origin);
-            const dist = to.length();
-            const dirTo = _b.copy(to).normalize();
-            if ((dist < 4.0 && direction.dot(dirTo) > -0.2) || (dist < range && direction.angleTo(dirTo) < 1.2)) {
-                if (this.auth) {
-                    z.damageCooldown = 0;
-                    this._damage(z, 5, true, dirTo);
-                    if (!this.hooks.creatures) z.group.position.addScaledVector(dirTo, 8);
-                }
+            const zp = z.group.position, mid = _a.set(zp.x, zp.y + 1.5, zp.z);
+            if (!inThunderZone(origin, d, mid.x, mid.y, mid.z) || !this.hooks.clearWay?.(origin, mid)) continue;
+            strike(mid);
+            if (this.auth) {
+                z.damageCooldown = 0;
+                this._damage(z, THUNDER.DAMAGE, true, _b.subVectors(zp, origin).normalize());
+                if (!this.hooks.creatures) z.group.position.addScaledVector(_b, 8);
             }
         }
+        for (const p of this.hooks.thunder?.(origin, d, casterId, this.auth) || []) strike(p);
         // every creature in the wave is shoved by its strength there (near: off its feet; far: a stagger)
+        const wavePoint = (c) => c.group ? _c.set(c.group.position.x, c.group.position.y + 1.5, c.group.position.z) : _c.set(origin.x, origin.y, origin.z);
         const wave = (pos) => {
             const to = new THREE.Vector3().subVectors(pos, origin);
             const dist = to.length();
             const dirTo = to.clone().normalize();
-            if (!((dist < 4.0 && direction.dot(dirTo) > -0.2) || (dist < range && direction.angleTo(dirTo) < 1.2))) return null;
+            if (!inThunderZone(origin, d, pos.x, pos.y, pos.z)) return null;
             return dirTo.setY(0).normalize().multiplyScalar(thunderPush(dist)).setY(1);
         };
-        if (this.auth) this.hooks.creatures?.('Thunderwave', casterId, wave, { from: origin, noSlide: (c) => c.isAnimal /* (Animals throws its own) */ });
+        if (this.auth) this.hooks.creatures?.('Thunderwave', casterId, wave, { from: origin, noSlide: (c) => c.isAnimal /* (Animals throws its own) */, skip: (c) => !this.hooks.clearWay?.(origin, wavePoint(c)) });
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
-            const v = wave(p.center());
-            if (v) p.hit('Thunderwave', origin, v);
+            const v = this.hooks.clearWay?.(origin, p.center()) === false ? null : wave(p.center());
+            if (v) { p.hit('Thunderwave', origin, v); strike(p.center()); }
         }
     }
 

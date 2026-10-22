@@ -470,7 +470,7 @@ export class Sailors {
             if (dmg <= 0) { if (by) this.provoke(v.crew || v.ship, by === 'local' ? g.localId : by, null); return; }
         }
         if (opts.pierce) v.hp = 0;
-        else if (v.armor > 0) {
+        else if (v.armor > 0 && opts.kind !== 'Thunderwave') { // (plain steel does not hold Thunderwave: it comes from above)
             const a = Math.min(v.armor, dmg);
             v.armor -= a;
             v.hp -= a * 0.2 + (dmg - a);

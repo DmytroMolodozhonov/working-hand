@@ -64,6 +64,10 @@ test('blasts, rays and lightning reach every creature', () => {
     check('the «Инферно» stream (Game._burnRay)', body(g, '    _burnRay(o, d, len, casterId) {'), ['the giant spider', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
 });
 
+test('«Thunderwave» zone (ThunderWave.js) hits every creature kind', () => {
+    check('ThunderWave.strike', src('src/game/ThunderWave.js'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'living trees', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
+});
+
 test('pushes, knockdowns and gusts («Вайнд», blasts, blows) know every creature (CreatureImpact kinds)', async () => {
     // (Sailors.js registers its kind when it is loaded — as it is in the game)
     await import('../../src/game/Sailors.js');

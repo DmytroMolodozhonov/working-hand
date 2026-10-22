@@ -58,21 +58,20 @@ function me() {
 }
 const FRONT10 = new THREE.Vector3(0, 1.1, -10);
 
-test('Thunderwave at 10 m throws me on my back and hurts; held by a shield it only pushes the arm', () => {
+test('Thunderwave at 10 m throws me on my back and hurts; held by the dome (Protection Maxima) it only pushes the arm', () => {
     const g = me();
     const push = new THREE.Vector3(0, 0, 1).multiplyScalar(thunderPush(10));
     g.combat.hitBySpell('Thunderwave', FRONT10, 'enemy', push);
-    assert.equal(g.combat.hp, 17);
+    assert.equal(g.combat.hp, 10); // (−10: ThunderWave.js)
     assert.equal(g.knock.state, 'falling');
     assert.equal(g.knock.dir, 'back');
     // with Protection turned to the caster
     const s = me();
-    s.combat.shield = { type: 1, side: 'right', left: 5 };
+    s.combat.shield = { type: 2, side: 'right', left: 50 }; // (the dome: an ordinary Protection does not stop Thunderwave — it comes from above)
     s.combat.shieldFactor = () => 1;
     s.combat.hitBySpell('Thunderwave', FRONT10, 'enemy', push.clone());
     assert.equal(s.combat.hp, 20);
     assert.equal(s.knock.down, false, 'never a fall behind a shield (at most a step back)');
-    assert.ok(Math.abs(s.knockback.length() - 0.25 * push.length()) < 0.1, `felt: ${s.knockback.length()}`);
 });
 
 test('Sapira and Lightning knock down by their push; Inferno only drifts', () => {

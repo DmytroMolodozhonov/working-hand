@@ -62,7 +62,7 @@ export const SPELL_COST = {
     ProtectionGodsMaxima: 300, // … its dome: then 5 a second (the author: 300 + 5)
     Bombardo: 15,
     BombardoMaxima: 25,
-    Thunderwave: 15,
+    Thunderwave: 40, // (the author: very strong — 40 a cast; it hits everyone in the zone at once)
     Sapira: 20,
     Inferno: 10,
     Fire: 4, // a campfire
@@ -164,7 +164,7 @@ export const SPELL_COST = {
 /** Damage to players (HP is 10: most spells take 2–4). */
 export const PLAYER_DAMAGE = {
     Inferno: 1, // per tick while in the flames
-    Thunderwave: 3,
+    Thunderwave: 10, // (ThunderWave.js: −10 to everyone in the zone)
     Sapira: 4,
     Lightning: 12,
     Sands: 3,
@@ -195,8 +195,9 @@ export function bombardoDamage(dist, radius, power = 1) {
 export const PROTECTION_TARGETS = {
     holders: 'players (every mode; mana rules only in the free world) and the castle wizards (hand shield in the free hand, the Master\'s dome); no other creature casts it',
     duelCharges: 'Остолбеней, Авада Кедавра (−12,5), Айс, Левиоса, Сапира, Даст, Экспеллиармус, Джолт: stopped — half of their mana each',
-    spells: 'Сапира, Тандервейв, Даст, ice balls, lightning, the ice beam / Inferno / Вайнд (a held flame or beam is paid once), Fire Maxima, Water Vortex, Earthquake (the dome): stopped — half their mana',
+    spells: 'Сапира, Даст, ice balls, lightning, the ice beam / Inferno / Вайнд (a held flame or beam is paid once), Fire Maxima, Water Vortex, Earthquake (the dome): stopped — half their mana',
     blasts: 'Бомбардо (Максима), Total Destruction: a hand shield facing it −50 %, the dome −75 % — for half the spell\'s mana; out of mana the whole blast',
+    thunderwave: 'Тандервейв бьёт сверху: обычный Protection и щит в руке его НЕ останавливают (урон проходит); Protection Maxima (купол) и щит богов — останавливают, за полцены заклинания',
     outOfMana: 'the shield shatters (its pieces fly, everybody sees it) and the spell that broke it goes on as if there were no shield',
     arrows: 'mirrored off the disc / the dome (ShieldBounce.js) — no mana: an arrow is no spell; the shooter\'s own shield lets his arrow out',
     thrownThings: 'a thing thrown fast bounces off it the same way (Items.js) — no mana',
@@ -933,7 +934,9 @@ export class Combat {
      */
     hitBySpell(kind, from, byId, push = null) {
         if (!this.enabled || this.dead) return false;
-        if (this.shieldFactor(from) >= 1 && this._blocked(from, kind)) {
+        // «Thunderwave» comes from ABOVE: an ordinary «Protection» (and a shield in the hand) does not stop it — only the dome (Protection Maxima) and the gods' shield
+        const s0 = this.shield, fromAbove = kind === 'Thunderwave' && !(s0 && s0.left > 0 && (s0.type === 2 || s0.gods));
+        if (!fromAbove && this.shieldFactor(from) >= 1 && this._blocked(from, kind)) {
             // (still felt: the shield arm is pushed back, the body slides a little — never a fall)
             if (this.game.impact && kind !== 'Bounce' && !this.shield?.gods) this.game.impact.apply({ v: push ? push.clone() : this._pushOf(kind, from), from, by: byId, spell: kind });
             return false;

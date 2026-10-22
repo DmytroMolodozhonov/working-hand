@@ -120,6 +120,7 @@ import { Mana, NOT_SPELLS, SAME_SPELL } from './Mana.js';
 import { knows as knowsSpellOf, howLearned, teachKey } from './SpellBook.js';
 import { Achievements } from './Achievements.js';
 import { BodyImpact } from './BodyImpact.js';
+import { thunderZone, clearWay } from './ThunderWave.js';
 import { Knockdown } from './Knockdown.js';
 import { UpSpell } from './UpSpell.js';
 import { CreatureImpact } from './CreatureImpact.js';
@@ -315,8 +316,15 @@ export class Game {
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.owls?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, 20, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.livingTrees?.hitAt(point, 3, 20, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
+            clearWay: (a, b) => clearWay(this, a, b),
             birdRay: (o, d, len, width, name) => {
                 len = this.wards?.clipRay(o, d, len) ?? len; // (a house's sphere stops it from outside)
+                if (name === 'Thunderwave') { // (the creatures are hit by the zone — ThunderWave.js; the ray only breaks glass and chips carts)
+                    this.houses?.hitRay(o, d, len, width);
+                    if (this.authority) this.carriages?.hitRay(o, d, len, width, 6, this.localId, false);
+                    return;
+                }
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);

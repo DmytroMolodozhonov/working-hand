@@ -47,7 +47,7 @@ export const RU_SAID = {
     Rescue: /^(спаси|спасите|спасение)$/,
     Alive: /^(оживи|оживите|оживай|оживи[ст]ь|оживление)$/,
     Wind: /^(ветер|ветра)$/,
-    Thunderwave: /^(гром|молния|молнию|удар)$/,
+    Thunderwave: /^гром$/, // (40 mana a cast: a lone «удар» / «молния» in a talk must not burn it)
     Flight: /^(полет|полёт|взлет|взлёт)$/,
     Pause: /^(пауза|паузу)$/,
     Breakthrough: /^прорыв$/,

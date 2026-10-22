@@ -254,6 +254,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     for (const p of PIECES) { x -= ARMOR.COVER[p]; if (x < 0) { on = p; break; } }
     const it = on && worn[on];
     if (!it || !(it.hp > 0)) return { hp: a, wear };
+    if (kind === 'Thunderwave' && !it.magic) return { hp: a, wear }; // (a blow from above through plain steel: only a magic piece takes it)
     const soak = Math.min(it.hp, a * (FIRE.has(kind) ? ARMOR.FIRE_SOAK : ARMOR.SOAK));
     wear[on] = soak;
     return { hp: a - soak, wear };
