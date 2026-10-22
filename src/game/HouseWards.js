@@ -46,6 +46,12 @@
  *   - only these break it (from outside): «Total Destruction» and «Inspirius» at once, «Бомбардо Максима» — one
  *     blast on it, «Бомбардо» — about three (each cracks it; the cracks heal slowly if it is left
  *     alone for a minute), «Let the Hellfire Come» held against it for ~7 s (it glows red first).
+ *     Three strong duel charges break it each in its own way (from outside; Duel._fly → chargeHit): «Пилбидрио» takes 80 at
+ *     once (the beam dies at the surface); «Акцентрик» stays on it and eats 5 a second, 40 in all, then its haze goes out
+ *     (a second charge only refills it to 40); «Электром» held on one spot takes ~8.4 a second (a whole one in ~12 s):
+ *     the hexes crack round the spot more and more, it sparks and shivers; the hand off the spot — the cracks stay, they
+ *     heal as the others. Not the gods' temple / gifts of the gods (their golden protection is not a house's). Every
+ *     other charge (Остолбеней, Авада…) only flashes.
  *     Each such blow tells its owner at once, wherever in the world they are: «🛡️⚠️ Ваш дом пытаются
  *     разрушить — кто! Защита: N% (сколько км отсюда)» (every few seconds while it goes on).
  *     Broken: it falls apart in shards, «🛡️ Защита дома разрушена!» to the owner and to the one who
@@ -80,7 +86,10 @@ export const WARD = {
     SEE_NEAR: 3.5, // m from the sphere: an invisible house is all there
     SEE_FAR: 6.5, // m: … and not seen at all from this far
     HP: 100,
-    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100 }, // strength taken (nothing else breaks it)
+    BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100, Pilbidrio: 80 }, // strength taken (nothing else breaks it)
+    ACC_DPS: 5, // «Акцентрик» sitting on it: strength a second…
+    ACC_TOTAL: 40, // …until this much is taken, then its haze goes out by itself
+    ELEC_DPS: 8.4, // «Электром» held on it: strength a second (a whole one gives way in ~12 s); the cracks spread from the spot
     HELL_T: 7, // s of «Let the Hellfire Come» held against it: burnt through
     WARN_EVERY: 6, // s: its owner is told again that it is being broken (anywhere in the world)
     HEAL_AFTER: 60, // s left alone: its cracks heal…
@@ -214,7 +223,7 @@ void main() {
 // flowing (blue → violet → sea-green), a flickering rim and a bright ring where it meets the ground;
 // under the ground the same ball goes on, dim (seen only from a cave / a pit dug under it).
 const DOME_FS = `
-uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uGrow; uniform float uCrack; uniform float uHell;
+uniform vec3 uColor; uniform float uAlpha; uniform float uTime; uniform vec4 uFlash; uniform float uSet; uniform float uGrow; uniform float uCrack; uniform float uHell; uniform vec4 uCrackAt;
 varying vec3 vN; varying vec3 vW; varying vec3 vL;
 float hexDist(vec2 p) { p = abs(p); return max(dot(p, vec2(0.5, 0.866)), p.x); }
 float hexEdge(vec2 uv) {
@@ -244,15 +253,21 @@ void main() {
     float ce = hexEdge(cu);
     float pick = fract(sin(dot(floor(cu * 1.7), vec2(12.9898, 78.233))) * 43758.5453);
     float crack = uCrack > 0.0 && pick < uCrack ? ce : 0.0;
+    // «Электром» held on it: the hexes crack and go white round the spot, further the weaker it is
+    float ec = 0.0;
+    if (uCrackAt.w > 0.0) {
+        float d = distance(vW, uCrackAt.xyz) + 0.7 * sin(lon * 23.0 + n.y * 17.0 + uTime * 11.0);
+        ec = (hx * 0.9 + ce * 0.6) * smoothstep(uCrackAt.w, uCrackAt.w * 0.55, d) * (0.7 + 0.3 * sin(uTime * 37.0 + d * 3.0));
+    }
     // while it is set: the whole dome glimmers, its hexes flicker, the ring on the ground blazes while it grows
     float glim = uSet * (0.07 + hx * (0.12 + 0.1 * sin(uTime * 7.0 + lon * 5.0 + n.y * 9.0)) + ground * (0.25 + 0.6 * uGrow));
-    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12 + sweep * (0.1 + hx * 0.35) + ground * 0.5 + glim) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6;
+    float a = uAlpha * (0.05 + rim * 0.45 + shimmer * 0.04 + hx * 0.12 + sweep * (0.1 + hx * 0.35) + ground * 0.5 + glim) + hx * (0.05 * uSet + 0.6 * f) + f * 0.25 + crack * 0.6 + ec * 0.8;
     if (n.y < 0.0) a *= 0.3 * (1.0 - 0.85 * uSet); // (the half under the ground; while it is set — seen through walls — hardly)
     // the colours flow over it (the Hellfire's red stays red)
     float hue = 0.5 + 0.5 * sin(uTime * 0.7 + lon * 2.0 + n.y * 4.0);
     vec3 col = mix(uColor, mix(vec3(0.62, 0.55, 1.0), vec3(0.5, 1.0, 0.9), hue), 0.35 * (1.0 - uHell));
     col = col * (1.0 + f * 1.5 + sweep * 0.6 + ground * 0.8);
-    gl_FragColor = vec4(mix(col, vec3(1.0), crack * 0.7), clamp(a, 0.0, 0.9));
+    gl_FragColor = vec4(mix(col, vec3(1.0), clamp(crack * 0.7 + ec, 0.0, 1.0)), clamp(a, 0.0, 0.9));
 }`;
 
 export class HouseWards {
@@ -765,6 +780,8 @@ export class HouseWards {
         const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], r: r2(w.r), inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
         if (w.setting) { o.s = 1; if (w.f) { o.f = w.f; if (w.a) o.a = w.a; } }
         if (w.hellT > 0) o.h = Math.round(w.hellT * 10) / 10;
+        if (w.ac) { o.ac = Math.round(w.ac.left * 10) / 10; o.ap = w.ap; }
+        if (w.ep) o.ep = w.ep;
         if (w.hitKey || w.hitBy) { o.hk = w.hitKey || ''; o.hb = w.hitBy || ''; }
         if (ids) o.ids = this._ids(w);
         return o;
@@ -772,7 +789,7 @@ export class HouseWards {
 
     _fromRec(o) {
         if (!o || !Array.isArray(o.c) || !o.c.every(Number.isFinite)) return null;
-        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, hitKey: String(o.hk || ''), hitBy: String(o.hb || '').slice(0, 16), setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
+        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, ...(o.ac > 0 && Array.isArray(o.ap) ? { ac: { left: +o.ac, by: null }, ap: o.ap.slice(0, 3) } : {}), ...(Array.isArray(o.ep) ? { ep: o.ep.slice(0, 3) } : {}), hitKey: String(o.hk || ''), hitBy: String(o.hb || '').slice(0, 16), setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
     }
 
     netList() { return [...this.list.values()].map((w) => this._rec(w, true)); }
@@ -793,6 +810,8 @@ export class HouseWards {
                 const moved = Math.abs(r - old.r) > 1e-3;
                 // (struck: weaker, or the Hellfire burning on it longer — my own house: I am told)
                 const hurt = w.hp < old.hp || (w.hellT || 0) > (old.hellT || 0) + 0.3;
+                if (w.hp < old.hp) w.liveAt = this._t;
+                else w.liveAt = old.liveAt;
                 Object.assign(old, { ...w, r, gy: old.gy });
                 if (hurt) this._attacked(old);
                 if (moved && !old.setting) { old.gy = this._groundY(old.c, old.r); this._rebuildDisc(old); }
@@ -827,7 +846,7 @@ export class HouseWards {
     }
 
     /** The segment a→b goes into a sphere from outside: the point on its surface (it flashes there), else null. */
-    segmentHit(a, b) {
+    segmentHit(a, b, spell = null, by = null) {
         if (!this.list.size) return null;
         const hit = this.hitSegment(a, b);
         if (!hit) return null;
@@ -836,6 +855,8 @@ export class HouseWards {
         const out = _v1.set(p.x - hit.w.c.x, p.y - hit.w.c.y, p.z - hit.w.c.z);
         if (out.lengthSq() > 1e-8) p.addScaledVector(out.normalize(), 0.15);
         this.flash(hit.w, p);
+        this.lastHit = hit.w;
+        if (spell) this.chargeHit(hit.w, p, spell, by);
         return p;
     }
 
@@ -912,18 +933,58 @@ export class HouseWards {
                 broken = w.hp <= 0;
                 if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.2);
             }
-            w.hitAt = this._t;
-            // (who: its owner is told, wherever they are — the host's list carries it)
-            w.hitKey = by != null ? this.keyOf(by) : '';
-            w.hitBy = by != null ? String(this.game.playerName?.(by) || '').slice(0, 16) : '';
-            this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: w.hellT || 0 });
-            if (!broken) this._attacked(w);
-            if (broken) {
-                this._broken(w.id, by);
-                this._changed([{ id: w.id, by }]);
-            } else this._changed();
+            this._wounded(w, spell, by, broken);
         }
         return any;
+    }
+
+    /** (host) The sphere took a blow: who did it is noted, its owner told; broken — it falls apart. */
+    _wounded(w, spell, by, broken, quiet = false) {
+        w.hitAt = this._t;
+        // (who: its owner is told, wherever they are — the host's list carries it)
+        w.hitKey = by != null ? this.keyOf(by) : '';
+        w.hitBy = by != null ? String(this.game.playerName?.(by) || '').slice(0, 16) : '';
+        if (!quiet) this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: w.hellT || 0 });
+        if (!broken) this._attacked(w);
+        if (broken) {
+            this._broken(w.id, by);
+            this._changed([{ id: w.id, by }]);
+        } else if (!quiet) this._changed();
+    }
+
+    /**
+     * A strong duel charge (Duel._fly) touched the sphere from outside at `p` (host): «Пилбидрио» takes 80 at once,
+     * «Акцентрик» stays on it and eats 5 a second (40 in all, then goes out); «Электром» is held on it by its caster
+     * (StrongMagic: electrumTick). The charge itself dies at the surface; every other charge only flashes.
+     */
+    chargeHit(w, p, spell, by) {
+        if (!this.auth || !this.list.has(w.id)) return;
+        if (spell === 'Pilbidrio') {
+            w.hp -= WARD.BREAK.Pilbidrio;
+            const broken = w.hp <= 0;
+            if (!broken) this.game.sound?.playCrack?.(_v1.set(p.x, p.y, p.z), 1.4);
+            this._wounded(w, spell, by, broken);
+        } else if (spell === 'Accentric') {
+            // (one at a time: another charge only fills it up to a new 40, it never eats faster)
+            w.ac = { left: WARD.ACC_TOTAL, by };
+            w.ap = [r2(p.x), r2(p.y), r2(p.z)];
+            this.log.push({ ev: 'hit', id: w.id, spell, hp: w.hp, hellT: 0 });
+            this._wounded(w, spell, by, false, true);
+            this._changed();
+        }
+    }
+
+    /** (host) «Электром» held on the sphere at `p` by `by`: `dmg` taken; the cracks spread from the spot. */
+    electrumTick(id, dmg, by, p) {
+        const w = this.list.get(id);
+        if (!this.auth || !w || !(dmg > 0)) return;
+        w.hp -= dmg;
+        if (p) w.ep = [r2(p.x), r2(p.y), r2(p.z)];
+        w.liveAt = this._t;
+        const broken = w.hp <= 0;
+        if (!broken && Math.random() < 0.3) this.game.sound?.playCrack?.(_v1.set(w.ep?.[0] ?? w.c.x, w.ep?.[1] ?? w.c.y, w.ep?.[2] ?? w.c.z), 0.8);
+        this._wounded(w, 'Electrum', by, broken, true);
+        if (!broken && this._t - (w.sentAt ?? -1e9) > 0.25) { w.sentAt = this._t; this._changed(); }
     }
 
     /**
@@ -1134,7 +1195,7 @@ export class HouseWards {
         if (L) return L;
         const mat = new THREE.ShaderMaterial({
             vertexShader: DOME_VS, fragmentShader: DOME_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uGrow: { value: 0 }, uCrack: { value: 0 }, uHell: { value: 0 } },
+            uniforms: { uColor: { value: new THREE.Color(0x7fbfff) }, uAlpha: { value: 0 }, uTime: { value: 0 }, uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uSet: { value: 0 }, uGrow: { value: 0 }, uCrack: { value: 0 }, uHell: { value: 0 }, uCrackAt: { value: new THREE.Vector4(0, 0, 0, 0) } },
         });
         const dome = new THREE.Mesh(this._domeGeo, mat);
         dome.renderOrder = 3;
@@ -1229,6 +1290,17 @@ export class HouseWards {
             const seen = Math.max(w.setting ? (inside ? 0.12 : 0.3) + 0.4 * L.pulse : 0, Math.min(1, L.show) * (inside ? 0.25 : 0.6), L.near * 0.75, L.flash * 0.8, L.beam * 0.8, crack * 0.5, hell * 0.9);
             u.uAlpha.value = seen * k;
             u.uCrack.value = crack;
+            // «Электром»'s spot: the cracks grow from it as the strength goes (stay where the beam left them); live — it sparks
+            if (w.ep && crack > 0.01) {
+                u.uCrackAt.value.set(w.ep[0], w.ep[1], w.ep[2], 0.8 + crack * Math.min(w.r, 14) * 1.1);
+                if (this._t - (w.liveAt ?? -1e9) < 0.5 && Math.random() < 0.6) g.fx?.spark?.(_v2.set(w.ep[0], w.ep[1], w.ep[2]), Math.random() < 0.5 ? 0xbfe6ff : 0xffffff, 0.14, _v3.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.3);
+                if (this._t - (w.liveAt ?? -1e9) < 0.5) { L.flash = Math.max(L.flash, 0.5); L.flashAt = (L.flashAt || new THREE.Vector3()).set(w.ep[0], w.ep[1], w.ep[2]); L.pulse = Math.max(L.pulse, 0.25 + 0.25 * Math.random()); }
+            } else u.uCrackAt.value.w = 0;
+            // «Акцентрик» sitting on it: a lilac haze at its spot
+            if (w.ac && w.ap && Math.random() < 0.5) {
+                g.fx?.spark?.(_v2.set(w.ap[0] + (Math.random() - 0.5) * 2, w.ap[1] + (Math.random() - 0.5) * 2, w.ap[2] + (Math.random() - 0.5) * 2), Math.random() < 0.5 ? 0xb07cff : 0xd9b8ff, 0.2, _v3.set(0, 0.8, 0), 0.8);
+                L.flash = Math.max(L.flash, 0.35); L.flashAt = (L.flashAt || new THREE.Vector3()).set(w.ap[0], w.ap[1], w.ap[2]);
+            }
             u.uColor.value.setHex(0x7fbfff).lerp(_c.setHex(0xff3a1a), hell);
             // the hex pattern lights up where it is touched / pressed
             const fp = L.beam > Math.max(L.near, L.flash) ? L.beamAt : L.near > L.flash ? L.nearAt : L.flashAt;
@@ -1432,8 +1504,20 @@ export class HouseWards {
     /** (host) Left alone, its cracks heal slowly; the Hellfire taken off it, it cools. */
     _heal(dt) {
         let any = false;
-        for (const w of this.list.values()) {
+        for (const w of [...this.list.values()]) {
             if (w.hellT > 0 && this._t - (w.hellAt ?? -1e9) > 1.5) { w.hellT = 0; any = true; }
+            // «Акцентрик» sitting on it: −5 a second, 40 in all
+            if (w.ac) {
+                const by = w.ac.by ?? null, d = Math.min(WARD.ACC_DPS * dt, w.ac.left);
+                w.ac.left -= d;
+                w.hp -= d;
+                w.liveAt = this._t;
+                if (w.ac.left <= 0.001) { delete w.ac; delete w.ap; any = true; }
+                else if (this._t - (w.sentAt ?? -1e9) > 0.5) { w.sentAt = this._t; any = true; }
+                this._wounded(w, 'Accentric', by, w.hp <= 0, true);
+                continue;
+            }
+            if (w.ep && w.hp >= WARD.HP) { delete w.ep; any = true; }
             if (w.hp < WARD.HP && this._t - (w.hitAt ?? -1e9) > WARD.HEAL_AFTER) {
                 const was = Math.floor(w.hp / 10);
                 w.hp = Math.min(WARD.HP, w.hp + WARD.HEAL_RATE * dt);

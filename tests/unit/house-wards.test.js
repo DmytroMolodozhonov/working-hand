@@ -554,3 +554,38 @@ test('somebody breaking my house\'s protection: I am told at once, however far a
     W3.applyNet(F.W.netList());
     assert.ok(g3.voice.some((t) => t.includes('пытаются разрушить')));
 });
+
+test('strong charges against the protection: Пилбидрио −80 at once, Акцентрик −5/с до 40, Электром ~12 с до слома; обычные заряды не трогают', () => {
+    const p = { x: 8, y: 2, z: 0 };
+    // Pilbidrio: 80 at once, the ordinary charge nothing
+    const a = warded();
+    a.W.chargeHit(a.W.list.get('w'), p, 'Stupefy', 'P3');
+    assert.equal(a.W.list.get('w').hp, WARD.HP);
+    a.W.chargeHit(a.W.list.get('w'), p, 'Pilbidrio', 'P3');
+    assert.equal(a.W.list.get('w').hp, 20);
+    assert.ok(a.g.voice.length >= 0);
+    a.W.chargeHit(a.W.list.get('w'), p, 'Pilbidrio', 'P3');
+    assert.equal(a.W.list.size, 0, 'a second beam finishes it');
+    // Accentric: 5 a second, stops after 40; a second charge only refills to 40
+    const c = warded();
+    const w = c.W.list.get('w');
+    c.W.chargeHit(w, p, 'Accentric', 'P3');
+    for (let i = 0; i < 20; i++) { c.W._t += 0.1; c.W._heal(0.1); }
+    assert.ok(Math.abs(w.hp - 90) < 0.01, `after 2 s: ${w.hp}`);
+    c.W.chargeHit(w, p, 'Accentric', 'P3');
+    for (let i = 0; i < 200; i++) { c.W._t += 0.1; c.W._heal(0.1); }
+    assert.ok(Math.abs(w.hp - 50) < 0.01, `40 more, then it goes out: ${w.hp}`);
+    assert.ok(!w.ac);
+    // Electrum: ~12 s held breaks it; let go — it heals after a minute
+    const e = warded();
+    const ew = e.W.list.get('w');
+    for (let i = 0; i < 100; i++) { e.W._t += 0.1; e.W.electrumTick('w', WARD.ELEC_DPS * 0.1, 'P3', p); }
+    assert.ok(ew.hp > 10 && ew.hp < 20, `10 s: ${ew.hp}`);
+    assert.deepEqual(ew.ep, [8, 2, 0]);
+    for (let i = 0; i < 100; i++) { e.W._t += 1; e.W._heal(1); }
+    assert.equal(ew.hp, WARD.HP, 'healed');
+    assert.ok(!ew.ep, 'the cracks mended');
+    for (let i = 0; i < 130; i++) { e.W._t += 0.1; e.W.electrumTick('w', WARD.ELEC_DPS * 0.1, 'P3', p); }
+    assert.equal(e.W.list.size, 0, 'held ~12 s: broken');
+    assert.ok(e.g.voice.includes(refusal('wardBroken')));
+});

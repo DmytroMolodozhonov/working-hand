@@ -26,6 +26,7 @@ import { STRONG, isStrongDuel, isIceCharge, pilbidrioBursts, isTitan, TITAN_WHY,
 import { kindOf } from './CreatureImpact.js';
 import { isGodGift } from './ItemTypes.js';
 import { isCold } from './IceQueen.js';
+import { WARD } from './HouseWards.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3();
 const STRONG_OR_ICE = (spell) => isStrongDuel(spell) || isIceCharge(spell);
@@ -429,11 +430,12 @@ export class StrongMagic {
 
     // ============================================================ «Электром»
     /** My Electrum charge hit (Duel._end / remoteEnd): now the lightning is held on the target. */
-    startElectrum(side, tk, tid) {
+    startElectrum(side, tk, tid, at = null) {
         const g = this.game;
         if (tk === 'n' || tid == null) return;
-        this.electrum = { side, tk, tid, t: 0, off: 0, acc: 0, wand: !!g.wandSide?.() };
-        this._send({ op: 'el', by: this.me, side, tk, tid });
+        // (tk 'W': a house's protection — the lightning is held on one spot of it, `at`)
+        this.electrum = { side, tk, tid, t: 0, off: 0, acc: 0, wand: !!g.wandSide?.(), ...(tk === 'W' && at ? { at: new THREE.Vector3().copy(at) } : {}) };
+        this._send({ op: 'el', by: this.me, side, tk, tid, ...(this.electrum.at ? { at: this.electrum.at.toArray() } : {}) });
         this._note({ ev: 'elStart', tk, tid });
     }
 
@@ -456,8 +458,8 @@ export class StrongMagic {
         if (c.dead || g.isDeadLocal || c.frozen || c.stunned) { this.stopElectrum('focus'); return; }
         if (E.wand && !g.wandSide?.()) { this.stopElectrum('wand'); return; }
         if (g.character?.isArmRaised && !g.character.isArmRaised(E.side)) { this.stopElectrum('arm'); return; }
-        const tp = duel._targetPos({ tk: E.tk, tid: E.tid }, _t);
-        if (!tp) { this.stopElectrum('gone'); return; }
+        const tp = E.at ? _t.copy(E.at) : duel._targetPos({ tk: E.tk, tid: E.tid }, _t);
+        if (!tp || (E.at && !g.wards?.list?.has(E.tid))) { this.stopElectrum('gone'); return; }
         duel._myRay(E.side, _o, _d);
         g.castOrigin?.(E.side, _o);
         const to = _w.subVectors(tp, _o);
@@ -481,6 +483,12 @@ export class StrongMagic {
     /** One Electrum tick: who decides it gets it (the player hit — his computer; a creature — the host). */
     _tick(by, tk, tid, dmg) {
         const g = this.game;
+        if (tk === 'W') {
+            const at = this.electrum?.at;
+            if (this.auth) g.wards?.electrumTick(tid, dmg * (WARD.ELEC_DPS / STRONG.Electrum.dps), by, at);
+            else this._send({ op: 'et', by, tk, tid, dmg, at: at?.toArray() }, false);
+            return;
+        }
         if (tk === 'p') {
             if (tid === this.me) this.electrumOnMe(by, dmg);
             else this._send({ op: 'et', to: tid, by, tk, tid, dmg }, true);
@@ -504,7 +512,7 @@ export class StrongMagic {
         const duel = this.game.duel;
         if (!duel) return;
         for (const [by, b] of this.beams) {
-            const tp = duel._targetPos({ tk: b.tk, tid: b.tid }, _t);
+            const tp = b.at ? _t.copy(b.at) : duel._targetPos({ tk: b.tk, tid: b.tid }, _t);
             if (!tp || !duel._handOf(by, b.side, _o, _d)) { if (++b.miss > 120) this.beams.delete(by); continue; }
             b.miss = 0;
             duel._drawBolt('Electrum', _o, tp, by);
@@ -518,11 +526,12 @@ export class StrongMagic {
         if (!m || typeof m.op !== 'string') return;
         const sender = m.from && m.from !== 'H' ? m.from : m.by;
         switch (m.op) {
-            case 'el': if (m.by !== this.me && this.beams.size < 16) this.beams.set(m.by, { side: m.side === 'left' ? 'left' : 'right', tk: String(m.tk), tid: m.tid, miss: 0 }); break;
+            case 'el': if (m.by !== this.me && this.beams.size < 16) this.beams.set(m.by, { side: m.side === 'left' ? 'left' : 'right', tk: String(m.tk), tid: m.tid, miss: 0, ...(m.tk === 'W' && Array.isArray(m.at) ? { at: new THREE.Vector3().fromArray(m.at) } : {}) }); break;
             case 'elx': this.beams.delete(m.by); break;
             case 'et': {
                 const dmg = Math.max(0, Math.min(10, +m.dmg || 0));
                 if (m.tk === 'p') { if (m.to === this.me) this.electrumOnMe(sender, dmg); break; }
+                if (m.tk === 'W') { if (this.auth) this.game.wards?.electrumTick(m.tid, dmg * (WARD.ELEC_DPS / STRONG.Electrum.dps), sender, Array.isArray(m.at) ? _v.fromArray(m.at) : null); break; }
                 if (this.auth) this._tickCreature(sender, m.tk, m.tid, dmg);
                 break;
             }

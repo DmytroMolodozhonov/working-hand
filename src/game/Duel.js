@@ -902,8 +902,14 @@ export class Duel {
         b.front.addScaledVector(b.dir, step);
         b.traveled += step;
         // a house's sphere of protection: the charge bursts on it from outside (HouseWards.js)
-        const ward = g.wards?.segmentHit(from, b.front);
-        if (ward) { b.front.copy(ward); this._end(b, 'blocked'); return false; }
+        // (the strong ones take it down — Pilbidrio −80, Accentric −5/s up to 40, Electrum held on it: HouseWards.chargeHit)
+        const ward = g.wards?.segmentHit(from, b.front, isStrongDuel(b.spell) ? b.spell : null, b.by);
+        if (ward) {
+            b.front.copy(ward);
+            if (b.spell === 'Electrum' && b.by === this.me && g.wards.lastHit) g.strong?.startElectrum(b.side, 'W', g.wards.lastHit.id, ward);
+            this._end(b, 'blocked');
+            return false;
+        }
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         if (isJolt(b.spell)) this._joltThings(b, from);
