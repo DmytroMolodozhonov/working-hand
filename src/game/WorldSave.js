@@ -67,8 +67,8 @@ function tx(mode, fn) {
 export async function listWorlds() {
     try {
         const all = await tx('readonly', (st) => st.getAll());
-        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: w.mode, seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
-            .sort((a, b) => b.updated - a.updated);
+        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: w.mode, seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
+            .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b.updated - a.updated); // (favourites first, then newest)
     } catch (e) { return []; }
 }
 
@@ -82,6 +82,22 @@ export async function deleteWorld(id) {
 
 export async function putWorld(w) {
     await tx('readwrite', (st) => st.put(w));
+}
+
+export const NAME_MAX = 40;
+/** A world's name from what was typed: trimmed, one line, at most NAME_MAX; '' if empty. */
+export function cleanWorldName(v) {
+    return String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+}
+
+/** Rename a saved world / mark it as a favourite (changes only these fields of the record). */
+export async function updateWorldMeta(id, { name, fav } = {}) {
+    const w = await loadWorld(id);
+    if (!w) return null;
+    if (name !== undefined) { const n = cleanWorldName(name); if (n) w.name = n; }
+    if (fav !== undefined) w.fav = !!fav;
+    await putWorld(w);
+    return w;
 }
 
 export function newWorldId() {
@@ -171,10 +187,11 @@ export function applyPlayerSnapshot(game, s) {
  * Keeps the current game's world saved (host or single player only).
  */
 export class WorldKeeper {
-    constructor(game, { id, name, mode, seed, created, players, gen, createdVersion } = {}) {
+    constructor(game, { id, name, mode, seed, created, players, gen, createdVersion, fav } = {}) {
         this.game = game;
         this.id = id || newWorldId();
         this.name = name || 'Мир';
+        this.fav = !!fav; // the heart in the menu: kept by every autosave
         this.mode = mode || game.config.mode;
         this.seed = seed ?? game.seed;
         this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
@@ -228,6 +245,7 @@ export class WorldKeeper {
         return {
             id: this.id,
             name: this.name,
+            fav: this.fav || undefined,
             mode: this.mode,
             seed: this.seed,
             gen: this.gen,

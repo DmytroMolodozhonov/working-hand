@@ -15,7 +15,7 @@ import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab } from './ui/Codex.js';
-import { listWorlds, loadWorld, deleteWorld, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
+import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
@@ -975,12 +975,14 @@ async function renderSavedWorlds() {
         const ver = worldVersionLabel(w);
         return `
         <div class="world-row" data-id="${w.id}">
-            <span class="world-name">${escapeHtml(w.name)}</span>
+            <button class="world-fav${w.fav ? ' on' : ''}" title="${w.fav ? 'Убрать из избранного' : 'В избранное'}">${w.fav ? '♥' : '♡'}</button>
+            <span class="world-name" title="Нажмите, чтобы переименовать">${escapeHtml(w.name)}</span>
             <span class="world-meta">${modeLabel(w.mode)} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
             <button class="mp-btn world-play">▶ Продолжить</button>
+            <button class="mp-btn mp-btn-grey world-ren" title="Переименовать">✏</button>
             <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
             <span class="world-ver${ver.old ? ' old' : ''}" title="${ver.old ? 'Сохранён другой версией игры' : 'Сохранён этой версией игры'}">${escapeHtml(ver.text)}</span>
-            <span class="world-confirm hidden">Удалить этот мир навсегда? <button class="mp-btn world-del-yes">Да, удалить</button> <button class="mp-btn mp-btn-grey world-del-no">Нет</button></span>
+            <span class="world-confirm hidden">${w.fav ? 'Это избранный мир! ' : ''}Удалить этот мир навсегда? <button class="mp-btn world-del-yes">Да, удалить</button> <button class="mp-btn mp-btn-grey world-del-no">Нет</button></span>
         </div>`;
     }).join('');
     for (const row of box.querySelectorAll('.world-row')) {
@@ -989,8 +991,33 @@ async function renderSavedWorlds() {
         const asking = (on) => {
             ask.classList.toggle('hidden', !on);
             row.classList.toggle('confirming', on);
-            for (const b of row.querySelectorAll('.world-play, .world-del')) b.classList.toggle('hidden', on);
+            for (const b of row.querySelectorAll('.world-play, .world-del, .world-ren')) b.classList.toggle('hidden', on);
         };
+        row.querySelector('.world-fav').onclick = async () => {
+            const w = worlds.find((x) => x.id === id);
+            await updateWorldMeta(id, { fav: !w?.fav });
+            renderSavedWorlds();
+        };
+        // rename: the name turns into a text field right in the row (Enter saves, Escape cancels)
+        const rename = () => {
+            const nameEl = row.querySelector('.world-name');
+            if (!nameEl || row.querySelector('.world-name-edit')) return;
+            const w = worlds.find((x) => x.id === id);
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.className = 'world-name-edit'; inp.maxLength = NAME_MAX; inp.value = w?.name || '';
+            nameEl.replaceWith(inp);
+            inp.focus(); inp.select();
+            let done = false;
+            const finish = async (save) => {
+                if (done) return; done = true;
+                if (save && cleanWorldName(inp.value) && cleanWorldName(inp.value) !== w?.name) await updateWorldMeta(id, { name: inp.value });
+                renderSavedWorlds();
+            };
+            inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); };
+            inp.onblur = () => finish(true);
+        };
+        row.querySelector('.world-ren').onclick = rename;
+        row.querySelector('.world-name').onclick = rename;
         row.querySelector('.world-play').onclick = async () => {
             const w = await loadWorld(id);
             if (!w) return;

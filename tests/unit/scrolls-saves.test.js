@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { WorldKeeper, worldVersionLabel, setGameVersion, GAME_VERSION, playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
+import { cleanWorldName, WorldKeeper, worldVersionLabel, setGameVersion, GAME_VERSION, playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
 import { uniqueName } from '../../src/net/Network.js';
 import { Combat, PVP } from '../../src/game/Combat.js';
 import { ItemSystem } from '../../src/game/Items.js';
@@ -94,4 +94,14 @@ test('«Выживание»: health and mana are as they were when the player l
     assert.equal(g2.combat.hp, 13);
     assert.equal(g2.playerHP, 13);
     assert.equal(g2.combat.fatigue, 12.5);
+});
+
+test('the heart and the new name of a world survive the autosave', () => {
+    const k = new WorldKeeper(stubGame(), { name: 'Мой мир', fav: true });
+    const s = k.snapshot();
+    assert.equal(s.fav, true);
+    assert.equal(s.name, 'Мой мир');
+    assert.equal(cleanWorldName('   a\n  b  '), 'a b');
+    assert.equal(cleanWorldName('x'.repeat(100)).length, 40);
+    assert.equal(cleanWorldName('   '), '');
 });
