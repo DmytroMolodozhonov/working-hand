@@ -849,6 +849,59 @@ export class HouseMagic {
         (this.game._openedChests || new Set()).delete(c.id);
     }
 
+    // ============================================== «Вингардиум Левиоса Максима»
+    get lifting() { return this._lifting || (this._lifting = new Set()); }
+
+    /** The house a block (x, L, z) is part of (its walls, floor, roof), or null. */
+    houseOfBlock(x, L, z) {
+        for (const rec of this.list.values()) {
+            if (this.lifting.has(rec.id) || (this.magic && this.magic.id === rec.id)) continue;
+            const rc = this._rectOf(rec);
+            if (x < rc.x0 - 1 || x > rc.x1 + 1 || z < rc.z0 - 1 || z > rc.z1 + 1) continue;
+            if (this.plan(rec).own.has(x + ',' + L + ',' + z)) return rec;
+        }
+        return null;
+    }
+
+    /** Its blocks as they stand now (what «Левиоса Максима» lifts): [[x, L, z, type]]. */
+    blocksOf(rec) {
+        const data = this.data, out = [];
+        if (!data) return out;
+        for (const c of this.plan(rec).cells) if (c[3] !== BLOCK.AIR && data.get(c[0], c[1], c[2]) === c[3]) out.push([c[0], c[1], c[2], c[3]]);
+        return out;
+    }
+
+    /** (every computer) Lifted: its door, beds, chests and glass go up with it (what is in the chests stays in the record). */
+    liftUp(rec) {
+        this.lifting.add(rec.id);
+        this._unfurnish(rec);
+    }
+
+    /**
+     * (every computer) It came down. Whole: the same house stands where it was set down (moved by d = [dx, dL, dz]),
+     * furnished again. Broken: it is no more — what was in its chests spills out round `at` (the host).
+     */
+    putDown(rec, d, broken, at) {
+        const g = this.game;
+        this.lifting.delete(rec.id);
+        if (broken) {
+            if (this.auth) for (const items of Object.values(rec.store || {})) for (const it of items || []) {
+                const a = Math.random() * Math.PI * 2;
+                g.items?.spawnLoose(it, new THREE.Vector3(at.x + Math.cos(a) * 2.5, at.y + 1.5, at.z + Math.sin(a) * 2.5), { vel: new THREE.Vector3(Math.cos(a) * 3, 3, Math.sin(a) * 3) });
+            }
+            this._relight(rec);
+            this.list.delete(rec.id);
+            return;
+        }
+        this._relight(rec);
+        rec.x += d[0]; rec.G += d[1]; rec.z += d[2];
+        for (const k of [...this._plans.keys()]) if (k.startsWith(rec.id + ':')) this._plans.delete(k);
+        this._rects?.delete(rec);
+        rec.miss = [];
+        this._relight(rec);
+        this._furnish(rec, this.auth);
+    }
+
     // ============================================================== ruins
     /** (host) A house blown down to less than a third of its blocks is a ruin: its chests spill. */
     _ruinCheck() {
@@ -856,6 +909,7 @@ export class HouseMagic {
         if (!data || this.magic) return;
         const pts = [g.character.group.position, ...[...(g.remotes?.values() || [])].map((r) => r.position).filter(Boolean)];
         for (const rec of [...this.list.values()]) {
+            if (this.lifting.has(rec.id)) continue; // (up in the air: «Левиоса Максима»)
             if (!pts.some((p) => Math.hypot(p.x - rec.x, p.z - rec.z) < 120)) continue;
             const p = this.plan(rec);
             let have = 0;
@@ -923,7 +977,7 @@ export class HouseMagic {
      */
     _missing(rec) {
         const data = this.data;
-        if (!data || (this.magic && this.magic.id === rec.id)) return rec.miss || [];
+        if (!data || (this.magic && this.magic.id === rec.id) || this.lifting.has(rec.id)) return rec.miss || [];
         const p = this.plan(rec), out = [];
         for (const c of p.cells) {
             if (c[3] === BLOCK.AIR) continue;

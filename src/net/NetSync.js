@@ -166,6 +166,7 @@ export class NetSync {
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.netList() || [], // houses' spheres of protection
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
+            ltlooks: g.livingTrees?.netLooks?.() || [], // the living trees' own looks (LivingTrees.treeOwnLook)
             mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
@@ -178,6 +179,7 @@ export class NetSync {
             rain: g.storm?.rainLeft?.() || 0, // («Let it rain» still falling)
             edits: g.blockEdits || [],
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
+            treesMoved: g.world.movedTrees?.() || [],
             crystals: g.crystals?.snapshot() || [],
             ships: g.ships ? g.ships.snapshot(true) : [],
             guns: g.ships ? g.ships.cannons.snapshot() : [],
@@ -189,6 +191,7 @@ export class NetSync {
         const g = this.game;
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
         for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
+        g.world.restoreMovedTrees?.(msg.treesMoved);
         if (msg.crystals) g.crystals?.restore(msg.crystals);
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
         if (msg.weather > 0) g.gear?.startWeather(msg.weather);
@@ -203,6 +206,7 @@ export class NetSync {
         if (msg.wards) g.wards?.applyNet(msg.wards);
         if (msg.beds) g.beds?.restore(msg.beds);
         if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
+        for (const l of msg.ltlooks || []) g.livingTrees?.setLook(l.id, l);
         if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
         if (msg.icemagic) g.iceMagic?.applyNet(msg.icemagic);
         if (msg.planets) g.space?.planets.applyJSON(msg.planets);
@@ -675,7 +679,7 @@ export class NetSync {
     // ---- «Alive»: living trees (the host moves them), servants of «Брейнрот»
     livingTrees(list, servants) { if (this.net.isHost) this.net.send({ t: 'ltree', l: list, sv: servants }); }
     /** (guest) my «Alive» took this tree: the host makes it a monster. */
-    aliveCast(d) { this.net.send({ t: 'alive', d: { x: r3(d.x), y: r3(d.y), z: r3(d.z), ry: r3(d.ry || 0), kind: d.kind | 0, trunk: d.trunk | 0, leaf: d.leaf | 0, h: d.h | 0, max: d.max ? 1 : 0, delay: r3(d.delay || 0), ...(d.skel ? { skel: 1, gid: String(d.gid || ''), ex: r3(d.ex), ez: r3(d.ez) } : {}) } }, true); }
+    aliveCast(d) { this.net.send({ t: 'alive', d: { x: r3(d.x), y: r3(d.y), z: r3(d.z), ry: r3(d.ry || 0), kind: d.kind | 0, trunk: d.trunk | 0, leaf: d.leaf | 0, h: d.h | 0, max: d.max ? 1 : 0, delay: r3(d.delay || 0), ...(d.skel ? { skel: 1, gid: String(d.gid || ''), ex: r3(d.ex), ez: r3(d.ez) } : {}), ...(d.inst != null ? { inst: d.inst } : d.cells ? { cells: d.cells, fx: d.fx, fz: d.fz, L0: d.L0 } : {}) } }, true); } // (the tree's own look: LivingTrees.treeOwnLook)
     /** (guest) My blade / fist broke a skeleton's bones (LivingTrees._hitSkel): the host decides. */
     aliveHit(id, dmg, kind) { this.net.send({ t: 'alivehit', id, dmg: r3(dmg), kind: String(kind || '') }, true); }
     /** (guest) my living tree ends (my mana is gone / «стоп»). */
@@ -872,7 +876,9 @@ export class NetSync {
             case 'brainrot': if (this.net.isHost) { if (m.k && m.k !== 'z') g.servants?.make(m.k, m.id, m.from || m.by); else g.applyBrainrot(m.id, m.from || m.by); } break;
             case 'ltree': if (!this.net.isHost) { g.livingTrees?.applyNet(m.l); g.servants?.applyNet(m.sv); } break;
             case 'alivehit': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t?.skel && Number.isFinite(+m.dmg)) g.livingTrees.hit(t, Math.min(20, Math.max(0, +m.dmg)), m.kind === 'fist' ? 'fist' : 'melee', m.from); } break;
-            case 'alive': if (this.net.isHost && m.d?.skel && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z) && Number.isFinite(+m.d.ex) && Number.isFinite(+m.d.ez)) { if (!g.livingTrees?.list.some((t) => t.d.gid === m.d.gid)) g.livingTrees?.spawn({ skel: 1, gid: String(m.d.gid || ''), x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, ex: +m.d.ex, ez: +m.d.ez, kind: 0, trunk: 0, leaf: 0, h: 2, max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)) }, m.from); } else if (this.net.isHost && m.d && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z)) g.livingTrees?.spawn({ x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, kind: m.d.kind | 0, trunk: m.d.trunk | 0, leaf: m.d.leaf | 0, h: Math.min(20, Math.max(5, m.d.h | 0)), max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)) }, m.from); break;
+            case 'alive': if (this.net.isHost && m.d?.skel && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z) && Number.isFinite(+m.d.ex) && Number.isFinite(+m.d.ez)) { if (!g.livingTrees?.list.some((t) => t.d.gid === m.d.gid)) g.livingTrees?.spawn({ skel: 1, gid: String(m.d.gid || ''), x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, ex: +m.d.ex, ez: +m.d.ez, kind: 0, trunk: 0, leaf: 0, h: 2, max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)) }, m.from); } else if (this.net.isHost && m.d && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z)) g.livingTrees?.spawn({ x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, kind: m.d.kind | 0, trunk: m.d.trunk | 0, leaf: m.d.leaf | 0, h: Math.min(20, Math.max(5, m.d.h | 0)), max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)), inst: m.d.inst, cells: m.d.cells, fx: m.d.fx, fz: m.d.fz, L0: m.d.L0 }, m.from); break;
+            case 'treemoved': if (!this.net.isHost) g.world?.restoreMovedTrees?.(m.l); break; // (a spawn-area tree put down elsewhere / felled: World.placeTree)
+            case 'ltlook': if (!this.net.isHost) g.livingTrees?.setLook(m.id, m); break; // (what tree a living tree is: its blocks / its model)
             case 'aliveend': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t && t.owner === m.from) g.livingTrees.end(t, m.why === 'mana' || m.why === 'far' || m.why === 'focus' ? m.why : 'stop'); } break;
             case 'svatk': if (this.net.isHost && m.k) g.servants?.command(m.from, { k: m.k, id: m.id }); break;
             case 'svhit': if (m.to === this.me && Array.isArray(m.d)) g.servants?.hitMe(Math.min(10, +m.dmg || 1), new THREE.Vector3(+m.d[0] || 0, 0, +m.d[1] || 1), m.by, m.k === 'tree' ? 'tree' : 'servant'); break;

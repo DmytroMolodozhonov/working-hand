@@ -207,8 +207,8 @@ Object.assign(PATTERN_OF, {
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
-/** The shader pattern of a block type. */
-export const patternOf = (t) => PATTERN_OF[t] || 0;
+/** The shader pattern of a block type (lush: a generation-5 world — its grass has its own). */
+export const patternOf = (t, lush = false) => (lush ? PATTERN_OF_LUSH : PATTERN_OF)[t] || 0;
 // a few shades per kind so crowns and trunks don't look like plastic boxes
 const SHADES = {
     [BLOCK.WOOD]: [0x8B4513, 0x7a3d12, 0x8f5020, 0x80461a, 0x8B4513],

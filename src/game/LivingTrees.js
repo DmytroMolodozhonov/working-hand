@@ -34,6 +34,7 @@ import { avoidStep } from './Avoid.js';
 import { crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget } from './FaceTarget.js';
 import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL, layInGrave, assembleSkeleton, wholeSkeleton, scatterSkeleton, straighten } from './Skeletons.js';
+import { voxelGeometry, voxelMaterial, felledOf } from './LevitationMaxima.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -101,6 +102,13 @@ export const aliveDrain = (mana, dt, creative = false, rate = ALIVE.DRAIN) => (c
 /** How fast my servants drain my mana: «Alive» 0.5 a second, each one of «Alive Maxima» 1. */
 export const aliveRate = (list) => list.reduce((a, t) => a + (t.d?.max ? ALIVE.MAX_DRAIN : ALIVE.DRAIN), 0);
 
+/** A tree's own look in a message / a record: {cells, fx, fz, L0} (its blocks round its foot) or {inst} (a spawn-area tree). */
+function lookOf(d) {
+    if (d?.inst != null && Number.isFinite(+d.inst)) return { inst: +d.inst | 0 };
+    if (!Array.isArray(d?.cells) || d.cells.length < 32 || d.cells.length > 4 * 900) return {};
+    return { cells: d.cells.map((v) => v | 0), fx: d.fx | 0, fz: d.fz | 0, L0: d.L0 | 0 };
+}
+
 const PHASES = ['rise', 'alive', 'stiff', 'fall', 'burn'];
 const WHY = ['', 'mana', 'far', 'stop', 'focus'];
 const LEG = 2.6; // m: the root legs (s = 1)
@@ -113,9 +121,60 @@ const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a
 /** A grave's id as a number (its dead's bones lie the same way on every computer). */
 const hashId = (s) => { let h = 2166136261; for (const c of String(s || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
+/**
+ * The tree's own look (slova avtora: «должно быть то же дерево»): its trunk and its crown as they stood —
+ * the very blocks of a tree of blocks (d.cells), the very model of a spawn-area tree (d.inst) — for the
+ * body and the head. null: none known (a guest before the host's word: the made-up look for a moment).
+ * → {trunk: [meshes], crown: [meshes], crownY (m above the foot), half (the trunk's half width), mats}
+ */
+export function treeOwnLook(d, { data = null, world = null } = {}) {
+    const turn = new THREE.Matrix4().makeRotationY(-(d.ry || 0)); // (inside the turned body: still as it stood in the world)
+    if (d.inst != null && world?.trunkMesh) {
+        const t = world.trees?.find((q) => q.index === d.inst);
+        if (!t) return null;
+        const [tm, lm] = world.treeMatrices({ ...t, x: d.x, y: d.y, z: d.z, fallen: null });
+        const back = new THREE.Matrix4().makeTranslation(-d.x, -d.y, -d.z).premultiply(turn);
+        const one = (src, m) => {
+            const o = new THREE.InstancedMesh(src.geometry, src.material, 1);
+            o.setMatrixAt(0, back.clone().multiply(m));
+            if (src.instanceColor) { src.getColorAt(t.index, _c); o.setColorAt(0, _c); }
+            o.castShadow = true;
+            o.frustumCulled = false;
+            o.userData.shared = true; // (the world's shapes and materials)
+            return o;
+        };
+        return { trunk: [one(world.trunkMesh, tm)], crown: [one(world.leafMesh, lm)], crownY: 5.3 * (t.scale ?? 1), half: 0.8, mats: [] };
+    }
+    if (!Array.isArray(d.cells) || d.cells.length < 8) return null;
+    const k = TREE_KINDS[d.kind | 0] || TREE_KINDS[0];
+    const fx = d.fx | 0, fz = d.fz | 0, L0 = d.L0 | 0;
+    const cells = [];
+    for (let i = 0; i + 3 < d.cells.length; i += 4) cells.push([fx + d.cells[i], L0 + d.cells[i + 1], fz + d.cells[i + 2], d.cells[i + 3]]);
+    // the crown: from its lowest leaves up (the branches in it too); below it the trunk
+    let crownL = Infinity;
+    for (const c of cells) if (c[3] === k.leaves) crownL = Math.min(crownL, c[1]);
+    if (!Number.isFinite(crownL)) crownL = L0 + 4;
+    const origin = new THREE.Vector3(fx, L0 - 1.5, fz);
+    const part = (list) => {
+        if (!list.length) return [];
+        const mat = voxelMaterial(origin);
+        const m = new THREE.Mesh(voxelGeometry(list, fx, L0, fz, data), mat);
+        // (its foot's middle — the body's middle is where it stood, d.x / d.z — turned back as it stood)
+        m.position.set(fx - d.x, 0, fz - d.z).applyMatrix4(turn);
+        m.rotation.y = -(d.ry || 0);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        return [m];
+    };
+    const trunkPart = part(cells.filter((c) => c[1] < crownL)), crownPart = part(cells.filter((c) => c[1] >= crownL));
+    let half = 0.5;
+    for (const c of cells) if (c[1] < crownL) half = Math.max(half, Math.abs(c[0] - d.x) + 0.5, Math.abs(c[2] - d.z) + 0.5);
+    return { trunk: trunkPart, crown: crownPart, crownY: crownL - L0, half: Math.min(1.5, half), mats: [...trunkPart, ...crownPart].map((m) => m.material) };
+}
+
 /** The monster made of a tree's own colours: trunk body, branch arms, root legs, a crown for a head. */
-export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = {}) {
-    const s = Math.min(1.3, Math.max(0.75, h / 10));
+export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = {}, own = null) {
+    const s = own ? 1 : Math.min(1.3, Math.max(0.75, h / 10)); // (its own blocks: as big as it really is)
     const root = new THREE.Group();
     const fall = new THREE.Group(); // (the topple turns round the feet)
     root.add(fall);
@@ -147,16 +206,20 @@ export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = 
         rig.add(hip);
         legs.push(hip);
     }
-    // the body: the trunk
+    // the body: the trunk (its own blocks / the made-up one)
     const body = new THREE.Group();
     body.position.y = LEG;
     rig.add(body);
-    box(body, 1.7, 4.4, 1.5, bark, 0, 2.2, 0);
-    box(body, 0.5, 1.4, 0.3, barkDark, 0.5, 1.2, 0.72);
-    box(body, 0.4, 1.0, 0.3, barkDark, -0.55, 3.0, -0.72);
-    // the face: deep sockets with glowing eyes under angry brows, a jagged mouth
+    const cy = own ? own.crownY : 4.4; // (where the crown begins)
+    if (own) body.add(...own.trunk);
+    else {
+        box(body, 1.7, 4.4, 1.5, bark, 0, 2.2, 0);
+        box(body, 0.5, 1.4, 0.3, barkDark, 0.5, 1.2, 0.72);
+        box(body, 0.4, 1.0, 0.3, barkDark, -0.55, 3.0, -0.72);
+    }
+    // the face: deep sockets with glowing eyes under angry brows, a jagged mouth (on its own bark: a little under the crown)
     const face = new THREE.Group();
-    face.position.set(0, 0, -0.76);
+    face.position.set(0, own ? Math.max(0.2, cy - 4.3) : 0, own ? -own.half - 0.03 : -0.76);
     body.add(face);
     const eyes = [];
     for (const side of [-1, 1]) {
@@ -177,7 +240,7 @@ export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = 
     const arms = [];
     for (const side of [-1, 1]) {
         const sh = new THREE.Group();
-        sh.position.set(side * 1.0, LEG + 4.0, 0);
+        sh.position.set(side * (own ? own.half + 0.5 : 1.0), LEG + (own ? Math.max(2, cy - 0.4) : 4.0), 0);
         box(sh, 0.5, 2.6, 0.5, bark, 0, -1.3, 0);
         box(sh, 1.0, 0.8, 0.9, leaves, side * 0.15, 0.1, 0.1);
         const elbow = new THREE.Group();
@@ -199,14 +262,19 @@ export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = 
     }
     // the head: its crown
     const head = new THREE.Group();
-    head.position.set(0, LEG + 4.4, 0);
+    head.position.set(0, LEG + cy, 0);
     rig.add(head);
-    box(head, 3.8, 2.6, 3.4, leaves, 0, 1.4, 0.1);
-    box(head, 2.4, 1.8, 2.4, leaves, 0.6, 2.9, -0.1);
-    box(head, 2.0, 1.6, 2.0, leaves, -1.3, 2.0, 0.9);
-    box(head, 0.2, 1.2, 0.2, barkDark, 1.2, 3.4, -0.9).rotation.z = -0.5;
-    box(head, 0.2, 1.0, 0.2, barkDark, -1.4, 3.2, -0.6).rotation.z = 0.6;
-    root.userData = { fall, rig, legs, body, arms, head, eyes, eyeMat, glow, mouth, s, mats: [bark, barkDark, leaves, tooth], base: [bark.color.clone(), barkDark.color.clone(), leaves.color.clone(), tooth.color.clone()], trunk: new THREE.Color(trunk) };
+    if (own) for (const m of own.crown) { m.position.y -= cy; head.add(m); }
+    else {
+        box(head, 3.8, 2.6, 3.4, leaves, 0, 1.4, 0.1);
+        box(head, 2.4, 1.8, 2.4, leaves, 0.6, 2.9, -0.1);
+        box(head, 2.0, 1.6, 2.0, leaves, -1.3, 2.0, 0.9);
+        box(head, 0.2, 1.2, 0.2, barkDark, 1.2, 3.4, -0.9).rotation.z = -0.5;
+        box(head, 0.2, 1.0, 0.2, barkDark, -1.4, 3.2, -0.6).rotation.z = 0.6;
+    }
+    const mats = [bark, barkDark, leaves, tooth, ...(own?.mats || [])];
+    // (own: while it is still a tree nothing of the monster shows — the face and the arms grow out as it wakes)
+    root.userData = { fall, rig, legs, body, arms, head, face, eyes, eyeMat, glow, mouth, s, ownLook: !!own, mats, base: mats.map((m) => m.color.clone()), trunk: new THREE.Color(trunk) };
     return root;
 }
 
@@ -411,9 +479,10 @@ export class LivingTrees {
         if (aim.inst) {
             const t = aim.inst;
             const k = TREE_KINDS[t.kind || 0];
+            const y = t.y ?? g.collision.groundY(t.x, t.z);
             g.world.removeTree(t);
             g.sync?.treeGone?.(t.index);
-            return { x: t.x, y: g.collision.groundY(t.x, t.z), z: t.z, kind: t.kind || 0, trunk: BASE_COLORS[k.wood], leaf: BASE_COLORS[k.leaves], h: 11 };
+            return { x: t.x, y, z: t.z, kind: t.kind || 0, trunk: BASE_COLORS[k.wood], leaf: BASE_COLORS[k.leaves], h: 11, inst: t.index };
         }
         const k = TREE_KINDS[aim.kind];
         const b = g.builder;
@@ -425,10 +494,13 @@ export class LivingTrees {
         let sx = 0, sz = 0, n = 0;
         for (const c of cells) if (data.get(c.x, c.L, c.z) === k.wood && c.L === minL) { sx += c.x; sz += c.z; n++; }
         if (!n) { for (const c of cells) { sx += c.x; sz += c.z; n++; } }
+        // (its very blocks, round its foot: the monster is made of them — treeOwnLook)
+        const fx = Math.round(sx / n), fz = Math.round(sz / n), own = [];
+        for (const c of cells) own.push(c.x - fx, c.L - minL, c.z - fz, data.get(c.x, c.L, c.z));
         const edits = [];
         for (const c of cells) { data.set(c.x, c.L, c.z, BLOCK.AIR); edits.push([c.x, c.L, c.z, BLOCK.AIR]); }
         b._sendEdits(edits);
-        return { x: sx / n, y: minL - 1.5, z: sz / n, kind: aim.kind, trunk: BASE_COLORS[k.wood], leaf: BASE_COLORS[k.leaves], h: Math.max(6, maxL - minL + 1) };
+        return { x: sx / n, y: minL - 1.5, z: sz / n, kind: aim.kind, trunk: BASE_COLORS[k.wood], leaf: BASE_COLORS[k.leaves], h: Math.max(6, maxL - minL + 1), cells: own, fx, fz, L0: minL };
     }
 
     // ============================================================== spawn
@@ -436,7 +508,7 @@ export class LivingTrees {
     spawn(d, owner, id = null) {
         const g = this.game;
         const skel = !!d.skel;
-        const model = skel ? skeletonModel(hashId(d.gid)) : livingTreeModel(d);
+        const model = skel ? skeletonModel(hashId(d.gid)) : this._model({ ...d, cells: undefined, inst: undefined, ...lookOf(d) });
         model.position.set(d.x, d.y, d.z);
         if (skel) {
             // it stands up at the grave's foot, its back to it; its bones lie on the floor of the grave (a metre down)
@@ -448,7 +520,7 @@ export class LivingTrees {
         g.scene.add(model);
         const t = {
             id: id ?? (g.localId || 'h') + ':' + (++this._seq), owner, master: owner, masterUntil: 0, isLivingTree: true,
-            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10, skel: skel ? 1 : 0, gid: d.gid || '', ex: d.ex ?? d.x, ez: d.ez ?? d.z, ry: d.ry || 0, max: d.max ? 1 : 0 },
+            model, group: model, d: { x: d.x, y: d.y, z: d.z, kind: d.kind | 0, trunk: d.trunk, leaf: d.leaf, h: d.h || 10, skel: skel ? 1 : 0, gid: d.gid || '', ex: d.ex ?? d.x, ez: d.ez ?? d.z, ry: d.ry || 0, max: d.max ? 1 : 0, ...lookOf(d) },
             skel, // (a skeleton raised from a grave: Skeletons.js)
             hp: ALIVE.HP, phase: 'rise', form: -(Math.min(3, +d.delay || 0)) / (skel ? SKEL.RISE : ALIVE.GROW), // («Alive Maxima»: one after another)
             theta: 0, omega: 0, pt: 0, why: '',
@@ -458,6 +530,9 @@ export class LivingTrees {
         };
         this.list.push(t);
         this.byId.set(t.id, t);
+        // (host: the others are told what tree it is — its blocks / its model — to draw the same one)
+        if (this.auth && !skel && (t.d.cells || t.d.inst != null)) g.sync?.net?.send?.({ t: 'ltlook', id: t.id, ...lookOf(t.d) });
+        else if (!skel && !t.d.cells && t.d.inst == null && this.looks.has(t.id)) this.setLook(t.id, this.looks.get(t.id));
         // (host, a new tree: who of the people saw its caster wake it — only they will know it is his, Blame.js)
         if (this.auth && id == null) g.castleLife?.witnessCast?.(owner, 'Alive');
         // (host: the dead rising in a graveyard frightens the village — Danger.js «undead»)
@@ -465,13 +540,44 @@ export class LivingTrees {
         return t;
     }
 
+    /** The monster's model: of the tree's own blocks / model when known (treeOwnLook), else made up of its colours. */
+    _model(d) {
+        const g = this.game;
+        return livingTreeModel(d, treeOwnLook(d, { data: g.terrain?.data || g.world?.terrain?.data, world: g.world }));
+    }
+
+    get looks() { return this._looks || (this._looks = new Map()); }
+
+    /** (guests) The host says what tree it is: drawn again of its own blocks / model. */
+    setLook(id, m) {
+        const look = lookOf(m);
+        if (!look.cells && look.inst == null) return;
+        const t = this.byId.get(id);
+        if (!t) { this.looks.set(id, look); if (this.looks.size > 40) this.looks.delete(this.looks.keys().next().value); return; }
+        this.looks.delete(id);
+        if (t.skel || t.d.cells || t.d.inst != null) return;
+        Object.assign(t.d, look);
+        const old = t.model, model = this._model(t.d);
+        model.position.copy(old.position);
+        model.rotation.copy(old.rotation);
+        this.game.scene.add(model);
+        this.game.scene.remove(old);
+        old.traverse((o) => { if (o.isMesh && !o.userData.shared) o.geometry.dispose(); });
+        for (const mt of old.userData.mats) mt.dispose();
+        t.model = t.group = model;
+    }
+
+    /** What the others need to draw the same tree (for a friend joining). */
+    netLooks() { return this.list.filter((t) => !t.skel && (t.d.cells || t.d.inst != null)).map((t) => ({ id: t.id, ...lookOf(t.d) })); }
+
     _remove(t) {
         const g = this.game;
         t.gone = true;
         g.scene.remove(t.model);
-        t.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.shared) o.geometry.dispose(); }); // (a skeleton's shapes are everybody's)
+        t.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.shared && !o.userData.shared) o.geometry.dispose(); }); // (a skeleton's shapes are everybody's; a spawn-area tree's are the world's)
         for (const m of t.model.userData.mats) m.dispose();
         for (const m of t.model.userData.own || []) m.dispose();
+        this.looks.delete(t.id);
         if (t.skel && this.game.fx) {
             // the bones crumble to dust
             const p = t.model.position;
@@ -643,6 +749,28 @@ export class LivingTrees {
         const ry = t.model.rotation.y;
         const dx = -Math.sin(ry), dz = -Math.cos(ry);
         const k = TREE_KINDS[t.d.kind] || TREE_KINDS[0];
+        // its own tree lies there: the spawn-area tree's model felled, the blocks of a tree of blocks along its fall
+        const dir = Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'x' : '-x') : (dz > 0 ? 'z' : '-z');
+        if (t.d.inst != null && g.world?.placeTree) {
+            const w = g.world.trees?.find((q) => q.index === t.d.inst);
+            if (w && !w.alive) {
+                const y = data ? data.topLayer(Math.round(p.x), Math.round(p.z)) - 0.5 : t.d.y;
+                g.world.placeTree(w, p.x, y, p.z, dir);
+                g.sync?.net?.send?.({ t: 'treemoved', l: g.world.movedTrees().filter((e) => e[0] === w.index) });
+                t.laid = 1;
+                return;
+            }
+        }
+        if (t.d.cells && data) {
+            const fx = Math.round(p.x), fz = Math.round(p.z), L0 = data.topLayer(fx, fz) + 1, c = t.d.cells, up = [];
+            for (let i = 0; i + 3 < c.length; i += 4) up.push([fx + c[i], L0 + c[i + 1], fz + c[i + 2], c[i + 3]]);
+            const res = felledOf(up, [fx, L0, fz], dir, (x, z) => data.topLayer(x, z));
+            const edits = [];
+            for (const b of res.set) if (data.get(b[0], b[1], b[2]) === BLOCK.AIR) { data.set(b[0], b[1], b[2], b[3]); edits.push(b); }
+            if (edits.length) g.builder?._sendEdits(edits);
+            t.laid = edits.length;
+            return;
+        }
         const len = Math.max(5, Math.round(t.d.h * 0.62));
         const edits = [];
         const put = (x, z, up, type) => {
@@ -859,7 +987,7 @@ export class LivingTrees {
         t.walkT += dt * t.speed * 1.4;
         for (const a of u.arms) {
             const swingIt = t.swing && (a.side > 0 ? 1 : 0) === t.swingSide ? t.swing.t : -1;
-            a.sh.scale.setScalar(0.35 + 0.65 * arm);
+            a.sh.scale.setScalar(u.ownLook ? Math.max(1e-3, arm) : 0.35 + 0.65 * arm); // (its own tree: no arm shows until it wakes)
             a.sh.rotation.z = a.side * (2.7 * (1 - arm) + 0.35 * arm);
             let rx = Math.sin(t.walkT + (a.side > 0 ? Math.PI : 0)) * 0.45 * walk;
             if (swingIt >= 0) rx = swingIt < 0.4 ? -2.5 * smooth(0, 0.4, swingIt) : swingIt < 0.6 ? -2.5 + 2.1 * smooth(0.4, 0.6, swingIt) : -0.4 * (1 - smooth(0.6, 1, swingIt));
@@ -870,6 +998,7 @@ export class LivingTrees {
         u.body.rotation.y = Math.sin(t.walkT * 0.5) * 0.06 * walk;
         u.head.rotation.z = Math.sin(performance.now() / 700) * 0.05 * arm;
         // the eyes light up, the mouth opens
+        if (u.ownLook) u.face.scale.setScalar(Math.max(1e-3, smooth(0, 0.3, k))); // (the face opens in its bark as it wakes)
         const eye = smooth(0.25, 0.6, k);
         u.eyeMat.color.copy(u.trunk).multiplyScalar(0.5).lerp(_c.set(0xffd23a), eye);
         u.glow.opacity = 0.55 * eye * (0.8 + 0.2 * Math.sin(performance.now() / 160));

@@ -66,6 +66,31 @@ test('a tree: its wood and leaves and a lump of earth on its roots', () => {
     assert.equal(t.cells.filter((c) => c[3] === BLOCK.LEAVES).length, 9);
     assert.ok(t.earth >= 9, 'the lump of earth');
     assert.equal(treeCells(world(cells), 0, 9, 0), null, 'grass is no tree');
+    // logs with no crown (a wall of logs, a magic house's wall): no tree — no roots under it
+    const wall = [];
+    for (let L = 10; L <= 13; L++) for (let x = 0; x <= 3; x++) wall.push([x, L, 0, BLOCK.WOOD]);
+    assert.equal(treeCells(world(wall), 1, 11, 0), null, 'logs alone are no tree');
+    assert.ok(wallCells(world(wall), 1, 11, 0)?.length >= 4, 'they are a wall');
+});
+
+test('a house breaks as it fell: toppled the way it flew (or leaned), crushed on the side that struck', () => {
+    const cells = [];
+    for (let L = 10; L <= 17; L++) for (let x = 0; x <= 6; x++) for (let z = 0; z <= 6; z++) if (x === 0 || x === 6 || z === 0 || z === 6 || L === 10) cells.push([x, L, z, BLOCK.PLANKS]);
+    const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const heap = (how, seed = 7) => rubbleOf(cells, 0, 0, () => 9, rng(seed), 0.5, how);
+    const meanX = (r) => r.set.reduce((a, c) => a + c[0], 0) / r.set.length;
+    const east = heap({ v: [12, -3, 0], h: 6 }), west = heap({ v: [-12, -3, 0], h: 6 });
+    assert.ok(meanX(east) > 3 + 1 && meanX(west) < 3 - 1, `thrown east it lies east, west — west: ${meanX(east)} ${meanX(west)}`);
+    assert.equal(east.set.length + east.broken.length, cells.length);
+    // the side that struck first breaks more than the back
+    const lead = east.broken.filter((c) => c[0] >= 5).length, back = east.broken.filter((c) => c[0] <= 1).length;
+    assert.ok(lead > back, `the leading side crushed: ${lead} > ${back}`);
+    // dropped straight down, leaning to +z: it goes over that way
+    const meanZ = (r) => r.set.reduce((a, c) => a + c[2], 0) / r.set.length;
+    assert.ok(meanZ(heap({ v: [0, -9, 0], h: 8, tilt: [0.1, 0] })) > 3.5, 'it goes over the way it leaned');
+    // the higher the fall, the more of it breaks; never the same heap twice
+    assert.ok(heap({ v: [6, -3, 0], h: 14 }).broken.length > heap({ v: [6, -3, 0], h: 1 }).broken.length);
+    assert.notDeepEqual(heap({ v: [6, -3, 0], h: 6 }, 3).set, heap({ v: [6, -3, 0], h: 6 }, 11).set);
 });
 
 /** Rock the wand for `sec` s: side to side by ±amp rad at `hz`, pointing `up` rad higher than at first. */

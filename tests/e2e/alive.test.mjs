@@ -135,7 +135,7 @@ test('survival: «Alive» is learnt from its scroll; the tree lives on the mana 
             if (b === 6 || b === 12 || b === 14 || b === 16 || b === 18) wood++;
         }
         await frames(40);
-        return { refused, said, paid, drained, ended, sawFall, removed: !g.livingTrees.list.includes(lt), laid: lt.laid || 0, wood, manaBack: g.combat.fatigue };
+        return { refused, said, paid, drained, ended, sawFall, removed: !g.livingTrees.list.includes(lt), laid: lt.laid || 0, wood, felled: tree.alive && tree.fallen || null, manaBack: g.combat.fatigue };
     });
     assert.equal(r.refused, null, 'not without its scroll');
     assert.equal(r.said, 'Alive');
@@ -145,7 +145,8 @@ test('survival: «Alive» is learnt from its scroll; the tree lives on the mana 
     assert.equal(r.ended.phase, 'stiff', 'the mana gone, it stiffens');
     assert.ok(r.sawFall, 'and falls over');
     assert.ok(r.removed, 'the monster is gone');
-    assert.ok(r.laid > 5 && r.wood >= 4, `a fallen tree lies there (${r.laid} blocks, ${r.wood} of wood on top)`);
+    // (a spawn-area tree: the same tree — its own model — lies felled there; LivingTrees._lay)
+    assert.ok(r.felled || (r.laid > 5 && r.wood >= 4), `a fallen tree lies there (${r.felled || 'not felled'}; ${r.laid} blocks, ${r.wood} of wood on top)`);
     assert.ok(r.manaBack > 0.5, 'the mana comes back once the tree is gone');
     assert.deepEqual(realErrors(errors), []);
     await page.close();

@@ -239,6 +239,7 @@ export class WorldKeeper {
             explosions: g.explosions.slice(-4000),
             edits: (g.blockEdits || []).slice(-30000),
             treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
+            treesMoved: g.world.movedTrees?.() || [], // (carried by «Левиоса Максима»: World.placeTree)
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
             items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
@@ -298,6 +299,7 @@ export function restoreWorld(game, save, THREE) {
         g.builder?.applyEdits(towers?.dropLostEdits ? towers.dropLostEdits(save.edits) : save.edits);
     }
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
+    g.world.restoreMovedTrees?.(save.treesMoved);
     for (const e of save.explosions || []) {
         // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
         if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater — BoomCarve.js)

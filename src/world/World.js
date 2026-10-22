@@ -388,7 +388,7 @@ export class VoxelWorld {
             // the crown's bulk (crownGeo × scale; it turns in 90° steps, so the box stays the same):
             // leaves are solid for flying spells, as the voxel trees' leaves are further out
             const crown = { minX: x - 3.1 * scale, maxX: x + 3.1 * scale, minY: 5.3 * scale, maxY: 11.3 * scale, minZ: z - 3.1 * scale, maxZ: z + 3.1 * scale };
-            this.trees.push({ x, z, alive: true, index: placed, boxId, kind, crown });
+            this.trees.push({ x, z, alive: true, index: placed, boxId, kind, crown, turn, scale, y: -0.5 }); // (y: the ground under it)
             placed++;
         }
         for (let i = 0; i < placed; i++) { const tk = SPAWN_TREE_TINTS[this.trees[i].kind].trunk; this.trunkMesh.setColorAt(i, tint.setRGB(tk[0], tk[1], tk[2])); }
@@ -413,6 +413,57 @@ export class VoxelWorld {
         this.trunkMesh.instanceMatrix.needsUpdate = true;
         this.leafMesh.instanceMatrix.needsUpdate = true;
         this.collision.removeBox(t.boxId);
+    }
+
+    /**
+     * A spawn-area tree put down somewhere else — the same tree (its own model, turn, size and tint) — standing
+     * on the ground at y, or lying felled towards `dir` ('x', '-x', 'z', '-z'): «Левиоса Максима» carried it.
+     */
+    placeTree(t, x, y, z, dir = null) {
+        if (!this.trunkMesh || !t) return;
+        if (t.alive) this.collision.removeBox(t.boxId);
+        Object.assign(t, { x, y, z, fallen: dir || null, alive: true, moved: true });
+        const [tm, lm] = this.treeMatrices(t);
+        this.trunkMesh.setMatrixAt(t.index, tm);
+        this.leafMesh.setMatrixAt(t.index, lm);
+        this.trunkMesh.instanceMatrix.needsUpdate = true;
+        this.leafMesh.instanceMatrix.needsUpdate = true;
+        const s = t.scale ?? 1, dx = dir === 'x' ? 1 : dir === '-x' ? -1 : 0, dz = dir === 'z' ? 1 : dir === '-z' ? -1 : 0;
+        const along = (a0, a1, w) => (dx ? { minX: x + Math.min(a0 * dx, a1 * dx), maxX: x + Math.max(a0 * dx, a1 * dx), minZ: z - w, maxZ: z + w }
+            : { minX: x - w, maxX: x + w, minZ: z + Math.min(a0 * dz, a1 * dz), maxZ: z + Math.max(a0 * dz, a1 * dz) });
+        if (dir) {
+            t.boxId = this.collision.addBox({ ...along(-0.5, 5.5, 0.8), minY: y, maxY: y + 1.6, kind: 'tree', noSupport: true });
+            t.crown = { ...along(5.3 * s, 11.3 * s, 3.1 * s), minY: y, maxY: y + 0.8 + 3.1 * s };
+        } else {
+            t.boxId = this.collision.addBox({ minX: x - 1, maxX: x + 1, minY: y, maxY: y + 6, minZ: z - 1, maxZ: z + 1, kind: 'tree', noSupport: true });
+            t.crown = { minX: x - 3.1 * s, maxX: x + 3.1 * s, minY: y + 0.5 + 5.3 * s, maxY: y + 0.5 + 11.3 * s, minZ: z - 3.1 * s, maxZ: z + 3.1 * s };
+        }
+    }
+
+    /** A spawn-area tree's model where it is now: [trunk, crown] matrices (standing, or felled towards t.fallen). */
+    treeMatrices(t) {
+        const x = t.x, y = t.y ?? -0.5, z = t.z, s = t.scale ?? 1, dir = t.fallen;
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.turn || 0);
+        const fell = new THREE.Matrix4();
+        if (dir) {
+            // (turned over round its foot: the crown lies towards dir, the trunk on the ground)
+            const dx = dir === 'x' ? 1 : dir === '-x' ? -1 : 0, dz = dir === 'z' ? 1 : dir === '-z' ? -1 : 0;
+            const R = new THREE.Matrix4().makeRotationAxis(new THREE.Vector3(dz, 0, -dx), Math.PI / 2);
+            fell.makeTranslation(x, y + 0.8, z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-x, -y, -z));
+        }
+        const trunk = fell.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, y + 3, z), q, new THREE.Vector3(1, 1, 1)));
+        const leaf = fell.multiply(new THREE.Matrix4().compose(new THREE.Vector3(x, y + 0.5, z), q, new THREE.Vector3(s, s, s)));
+        return [trunk, leaf];
+    }
+
+    /** The trees put somewhere else (for the save / a friend joining): [index, x, y, z, dir]. */
+    movedTrees() {
+        const r = (v) => Math.round(v * 100) / 100;
+        return (this.trees || []).filter((t) => t.moved && t.alive).map((t) => [t.index, r(t.x), r(t.y), r(t.z), t.fallen || 0]);
+    }
+
+    restoreMovedTrees(list) {
+        for (const [i, x, y, z, dir] of list || []) { const t = this.trees?.find((q) => q.index === i); if (t) this.placeTree(t, +x, +y, +z, dir || null); }
     }
 
     burnTree(t) {
