@@ -365,6 +365,7 @@ export class WeaponSystem {
                         const at = w.position.clone();
                         w.position.y = st.counter.top + 0.3;
                         w.velocity.set(0, 0, 0);
+                        this.game.hud.setVoice?.('🤲 Положено на прилавок скупщика', true);
                         this.game.castleLife.talk.laid(st, { wid: w.id, item: { kind: 'weapon', type: w.type, magic: !!w.magic, bonus: w.bonus || 0 }, pos: at });
                         return;
                     }

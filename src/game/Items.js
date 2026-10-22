@@ -834,6 +834,7 @@ export class ItemSystem {
         h.model.position.y = st.counter.top + 0.3; // (laid right on it: no fall, no bounce off the edge)
         const at = h.model.position.clone(), item = h.item;
         this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (нерабочая рука разжата над ним)' });
+        this.game.hud.setVoice?.('🤲 Положено на прилавок скупщика', true);
         this.game.castleLife.talk.laid(st, { uid: item.uid, item, pos: at });
         return true;
     }
