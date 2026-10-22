@@ -517,7 +517,7 @@ export class CastleLife {
         const data = g.world?.terrain?.data;
         for (const c of cs.def.chests) {
             if (g.chests.some((x) => x.id === c.id) || g.burnWreck?.burnt.has(c.id)) continue; // (burnt down: BurnWreck.js)
-            if (data?.chunks && !data.chunks.has(chunkKey(Math.floor(c.x / CHUNK), Math.floor(c.z / CHUNK)))) { cs.chestsMade = false; continue; } // (its land not made on this computer yet — making it now was a long frame: at the next look, _scan)
+            if (data?.chunks && ![-1, 1].every((dx) => [-1, 1].every((dz) => data.chunks.has(chunkKey(Math.floor((c.x + dx) / CHUNK), Math.floor((c.z + dz) / CHUNK)))))) { cs.chestsMade = false; continue; } // (its land — and the column the floor is read from, rounded — not made on this computer yet: making it now was a long frame; at the next look, _scan)
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
             const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale, style: CHEST_LOOK[c.room] });
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)

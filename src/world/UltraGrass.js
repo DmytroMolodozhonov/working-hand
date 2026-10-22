@@ -17,8 +17,8 @@ import { applySkyComp } from './VoxelShading.js';
 import { ULTRA } from '../fx/UltraUniforms.js';
 
 export const ULTRA_GRASS = {
-    NEAR: 9, // m: full thickness up to here
-    FAR: 34, // m: none beyond
+    NEAR: 8, // m: full thickness up to here
+    FAR: 30, // m: none beyond (the blades past ~25 m are a pixel or two: 34 m cost a fifth more vertices for nothing seen)
     PASSES: 4, // a chunk's blades in 4 even layers (so the near part of the list is an even, thinner lawn)
     PER_PASS: 2, // blades a block in each layer (8 a block near)
     SLOTS: 16, // chunks drawn at most (CHUNK = 32 m: all that touch the circle)

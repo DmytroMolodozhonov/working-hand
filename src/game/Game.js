@@ -1142,11 +1142,13 @@ export class Game {
             for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [])) {
                 if (cv.x0 != null ? p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
+                // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
+                const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
+                // (its chambers' land must be made already: fitting a chest reads the blocks round it — not made here in a frame)
+                if (t.landMade && !spots.every((sp) => t.landMade(sp.x - 4, sp.z - 4) && t.landMade(sp.x + 4, sp.z + 4) && t.landMade(sp.x - 4, sp.z + 4) && t.landMade(sp.x + 4, sp.z - 4))) continue;
                 if (built) { this._caveT = 0.1; continue; } // (one cave's chests a frame: the next one at the next look)
                 built = true;
                 this._caveChests.add(cv.id);
-                // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
-                const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
                 spots.forEach((sp0, k) => {
                     const sp = cv.segs && t.chestSpot ? t.chestSpot(sp0) : sp0; // (never stuck in the rock)
                     if (!sp) return;

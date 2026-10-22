@@ -36,6 +36,8 @@ export function boundsOf(p) {
     return [a, b, c, d, e, f];
 }
 
+const POOL_MAX = 64; // idle chunk shells kept for reuse
+
 /**
  * Terrain = data + THREE meshes for the chunks around the player.
  * update(focus) streams chunks in and out; explosions rebuild only the
@@ -599,7 +601,17 @@ export class Terrain {
         this.meshes.delete(key);
         entry.ground.visible = false;
         entry.water.visible = false;
-        this.pool.push(entry);
+        // (a shell in the pool keeps nothing: the chunk's buffers — a third of a megabyte or more each, in the processor's
+        // memory and the video card's — go now, not when the shell is used again; a flight over the world left 200–300
+        // idle shells holding them. Past a few dozen the shell itself goes.)
+        for (const m of [entry.ground, entry.water]) {
+            if (m.geometry.attributes.position) { m.geometry.dispose(); m.geometry = new THREE.BufferGeometry(); }
+        }
+        if (this.pool.length >= POOL_MAX) {
+            this.group.remove(entry.ground, entry.water);
+            entry.ground.geometry.dispose();
+            entry.water.geometry.dispose();
+        } else this.pool.push(entry);
         this.stats.unloaded++;
     }
 
