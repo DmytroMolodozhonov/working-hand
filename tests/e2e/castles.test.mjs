@@ -209,30 +209,46 @@ test('market and talk: coins on the counter + the good named = bought (the rest 
     }, goods[0]);
     assert.ok(buy.heard && buy.paid, JSON.stringify(buy));
     assert.equal(buy.rest, 100 - buy.price);
-    // sell: a wand put on the counter — the merchant names a price — «да» — a pouch to take
+    // a market merchant only sells: a wand put on his counter — no offer
     await page.evaluate(() => {
         const g = window.__zns.game;
         g.items.releaseHand('right');
         const c = window.__castle.stalls[0].counter;
         g.items.spawnLoose({ kind: 'wand', uid: 'test-wand', model: 1, color: 0x8844ff, dir: 'duel', fav: 'Inferno', power: 20 }, { x: (c.x0 + c.x1) / 2, y: c.top + 0.6, z: (c.z0 + c.z1) / 2, clone() { return { ...this }; } });
     });
+    await frames(page, 80);
+    assert.equal(await page.evaluate(() => window.__zns.game.castleLife.talk.offer?.kind === 'sell'), false, 'a market merchant buys nothing');
+    // the shady buyer out of the way: a plain bow — 60 % of its price; «да» — a pouch to take
+    await page.evaluate(() => {
+        const g = window.__zns.game, f = window.__castle.stalls.find((t) => t.fence);
+        g.items.removeLoose('test-wand');
+        g.character.group.position.set(f.front.x, f.front.y + 1.95, f.front.z);
+        g.world.terrain.flushAround(f.front.x, f.front.z);
+    });
+    await page.waitForFunction(() => [...window.__zns.game.castleLife.byId.values()].some((v) => v.cs.def === window.__castle && v.role === 'merchant' && window.__castle.stalls[v.entry.stall]?.fence), null, { timeout: 30000, polling: 300 });
+    await page.evaluate(() => {
+        const g = window.__zns.game, c = window.__castle.stalls.find((t) => t.fence).counter;
+        g.items.spawnLoose({ kind: 'bow', uid: 'test-bow', type: 0, magic: false, bonus: 0, arrows: 5 }, { x: (c.x0 + c.x1) / 2, y: c.top + 0.3, z: (c.z0 + c.z1) / 2, clone() { return { ...this }; } });
+    });
     let sellOffer = null;
     for (let i = 0; i < 20 && !sellOffer; i++) {
         await frames(page, 8);
         sellOffer = await page.evaluate(() => { const o = window.__zns.game.castleLife.talk.offer; return o && o.kind === 'sell' ? { price: o.price, uid: o.uid } : null; });
     }
-    assert.ok(sellOffer && sellOffer.uid === 'test-wand' && sellOffer.price >= 150, `a magic wand is dear: ${JSON.stringify(sellOffer)}`);
+    assert.deepEqual(sellOffer, { price: 15, uid: 'test-bow' }, 'the shady buyer pays 60 % of 25');
     const sold = await page.evaluate(() => {
         const g = window.__zns.game, T = g.castleLife.talk;
         const before = g.inventory.coins();
         T.hear('да');
-        const wandGone = !g.items.loose.has('test-wand');
-        const pouch = [...g.items.loose.values()].find((L) => L.item.kind === 'coins');
+        const gone = !g.items.loose.has('test-bow');
+        const f = window.__castle.stalls.find((t) => t.fence).front;
+        const pouch = [...g.items.loose.values()].find((L) => L.item.kind === 'coins' && !L.item.shop && Math.hypot(L.model.position.x - f.x, L.model.position.z - f.z) < 8);
         if (pouch) g.items.pickUp(pouch.item.uid, g.localId, 'right');
-        return { wandGone, pouch: !!pouch, gained: g.inventory.coins() - before };
+        return { gone, pouch: !!pouch, gained: g.inventory.coins() - before };
     });
-    assert.ok(sold.wandGone && sold.pouch, JSON.stringify(sold));
+    assert.ok(sold.gone && sold.pouch, JSON.stringify(sold));
     assert.equal(sold.gained, sellOffer.price);
+    await page.evaluate(() => { const g = window.__zns.game, p = window.__castle.stalls[0].front; g.character.group.position.set(p.x, p.y + 1.95, p.z); });
     // only villagers near me hear me
     const ear = await page.evaluate(() => {
         const g = window.__zns.game, T = g.castleLife.talk;

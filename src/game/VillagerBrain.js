@@ -1372,6 +1372,7 @@ export class VillagerBrain {
         }
 
         if (intent === 'sell') {
+            if (ctx.buys === false) { out.reply = ctx.heldItem?.magic ? 'Я только продаю. Волшебные вещи берёт скупка в поселении волшебников.' : 'Я только продаю, ничего не покупаю. Ищи скупщика — он не на рынке.'; return out; }
             const held = ctx.heldItem;
             if (!held) { out.reply = say('putOnTable'); return out; }
             const price = this._sellPrice(held);

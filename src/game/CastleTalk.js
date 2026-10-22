@@ -190,6 +190,7 @@ export class CastleTalk {
             selfId: g.localId,
             following: v.follow === g.localId,
             danger: v.cs.hostile.size > 0 || !!g.isNight,
+            buys: !!(v.cs.def.stalls?.[v.entry?.stall]?.pawn || v.cs.def.stalls?.[v.entry?.stall]?.fence), // (who buys things at all: the pawnshop, the shady buyer)
         };
         const held = g.items?.held.right || g.items?.held.left;
         if (held) ctx.heldItem = { name: nameOf(held.item), magic: isMagicItem(held.item), value: itemValue(held.item) };
@@ -919,8 +920,8 @@ export class CastleTalk {
                 }
                 if (!found) return;
                 if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) return;
-                // (a settlement's sellers only sell — its pawnshop buys anything 40 % under; a town's shady buyer — only plain things: WizardMarket.js)
-                if (stall.trade && !stall.pawn) return;
+                // (only the settlement's pawnshop (anything, 40 % under) and a town's shady buyer (only plain things) buy — every other seller only sells: WizardMarket.js)
+                if (!stall.pawn && !stall.fence) return;
                 if (stall.fence && !fenceTakes(found.item)) {
                     if (this._refused === (found.uid || found.wid)) return;
                     this._refused = found.uid || found.wid;
