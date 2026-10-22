@@ -64,7 +64,6 @@ test('hamlets\' people: wizards only weak or middling, every seller weak; a folk
 test('a wizards\' seller\'s goods: a scroll, a flask or a crystal, something more — every one with a price', () => {
     for (let n = 0; n < 40; n++) for (let k = 0; k < 3; k++) {
         const g = magicStallGood(n, k);
-        assert.ok(g.kind && g.price > 0, JSON.stringify(g));
-        if (g.item) assert.equal(g.item.kind, g.kind);
+        assert.ok(g.item?.kind && g.item.uid && g.price > 0, JSON.stringify(g));
     }
 });

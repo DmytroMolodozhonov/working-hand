@@ -51,19 +51,11 @@ export class SiteIndex {
         return b.length || c.length || v.length || h.length ? a.concat(b, v, c, h) : a;
     }
 
-<<<<<<< HEAD
     /** The site of an id: castles «cs…», towers «wt…», settlements «wv…», hamlets «hm…», the people of the roads: wandering wizards «ww…», knights errant «wk…», travelling folk «wc…» (riders too). */
     byId(id) {
         const h = /^hm(-?\d+)_(-?\d+)_(\d+)$/.exec(id);
         if (h) return this.hamlets ? this.hamlets.byId(+h[1], +h[2], +h[3]) : null;
         const m = /^(cs|wt|wv|ww|wk|wc)(-?\d+)_(-?\d+)$/.exec(id);
-=======
-    /** The site of an id: castles «cs…», towers «wt…», hamlets «hm…», the people of the roads: wandering wizards «ww…», knights errant «wk…», travelling folk «wc…» (riders too). */
-    byId(id) {
-        const h = /^hm(-?\d+)_(-?\d+)_(\d+)$/.exec(id);
-        if (h) return this.hamlets ? this.hamlets.byId(+h[1], +h[2], +h[3]) : null;
-        const m = /^(cs|wt|ww|wk|wc)(-?\d+)_(-?\d+)$/.exec(id);
->>>>>>> 8909720 (Всадники на конях: рыцари, жители и волшебники; хутора в справочнике и на миникарте)
         if (!m) return null;
         if (m[1] === 'wv') return this.villages ? this.villages.cellOf(+m[2], +m[3]) : null;
         return m[1] === 'cs' ? this.castles.cellOf(+m[2], +m[3]) : m[1] === 'wt' ? this.towers.cellOf(+m[2], +m[3]) : this.towers.wanderDef(+m[2], +m[3], m[1]);
