@@ -526,6 +526,7 @@ function _rollLoot(r, { cave, key, royal, deep }) {
 /** «Раскрой свои секреты»: what the hologram says about an item. */
 export function describeItem(it) {
     if (!it) return null;
+    if (!it.kind) return { title: 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     switch (it.kind) {
         case 'wand': {
             if (it.staff) return { title: '🪄 Посох странника', color: it.color, lines: ['Длинный посох с кристаллом — колдует, как палочка', 'Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны', `Сила посоха: <b>+${it.power || 0}%</b> в бою`] };
@@ -584,7 +585,7 @@ export function describeItem(it) {
         case 'armor': case 'robe': return describeArmor(it);
         case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
-        default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Не волшебный'] };
+        default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     }
 }
 
