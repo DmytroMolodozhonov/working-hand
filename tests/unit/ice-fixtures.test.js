@@ -47,16 +47,16 @@ test('her magic gone: the gates are plain ice — one «Бомбардо Мак�
 test('the chandelier hangs on its chain from the vault; its hook melted — it falls and shatters', () => {
     const { f, life, t } = setup();
     const P = life.plan;
-    t.set(0, 48, -2, BLOCK.ICE_WALL); // (the vault over it)
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) t.set(dx, 48, -2 + dz, BLOCK.ICE_WALL); // (the vault over it)
     f.make();
     f.update(0.016);
     assert.ok(f.ch.model && f.ch.chain, 'hung on a chain');
     assert.equal(f.ch.hookL, 48);
     f.update(1);
     assert.ok(!life.state.chandFallen, 'held while its hook is there');
-    t.set(0, 48, -2, BLOCK.AIR); // (melted)
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) t.set(dx, 48, -2 + dz, BLOCK.AIR);
     f.update(1);
-    assert.ok(life.state.chandFallen, 'no hook: it falls');
+    assert.ok(life.state.chandFallen, 'the vault round the hook blown away: a lone block does not hold it in the air');
     for (let i = 0; i < 200 && !f.ch.wreck; i++) f.update(0.02);
     assert.ok(f.ch.wreck, 'it lies broken on the floor');
     assert.ok(f.ch.model.position.y < P.floor + 2);

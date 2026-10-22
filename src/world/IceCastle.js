@@ -38,6 +38,20 @@ export const ICE_CASTLE = {
 
 /** The ice blocks' ids (Terrain.BLOCK keeps the same numbers). */
 export const ICE_BLOCK = { WALL: 59, GLOW: 60, FLOOR: 61, DARK: 62 };
+
+/**
+ * The queen's ice is her own (the author: «лёд замка Королевы особенный: его можно разрушить, но он в разы более
+ * плотный и устойчивый к взрывам и огню»): a blast breaks it only in the heart of the blast (BLAST: that share of
+ * its radius — ~8 times less ice than other blocks), fire melts it FIRE times as fast as other ice (Terrain.removeSphere,
+ * IceQueen.meltAt). The gods' «Бум» carves through it as through anything (CLAUDE.md: the gods' spells are stronger). (The ice made by «Create an Ice Castle»
+ * and «Ice Bridge» is plain ice.)
+ */
+export const PALACE_ICE = { BLAST: 0.5, FIRE: 0.3 };
+
+/** Is (x, z) in the queen's palace (its plan's bounds)? */
+export function inIcePalace(P, x, z) {
+    return !!P && x >= P.x0 - 1 && x <= P.x1 + 1 && z >= P.z0 - 1 && z <= P.z1 + 1;
+}
 const SNOW = 4, AIR = 0;
 const TAU = Math.PI * 2;
 

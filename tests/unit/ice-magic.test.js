@@ -10,13 +10,13 @@ import { iceCastleMagicPlan, iceBridgePlan, waterOrSnowNear } from '../../src/wo
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { BLOCK, isPalaceIce } from '../../src/world/Terrain.js';
 
-function world({ water = true, snow = false, G = 10 } = {}) {
+function world({ water = true, snow = false, G = 10, ground = () => G, sea = () => false } = {}) {
     const cells = new Map();
     const data = {
-        get: (x, L, z) => cells.get(x + ',' + L + ',' + z) ?? (L <= G ? BLOCK.GRASS : BLOCK.AIR),
+        get: (x, L, z) => cells.get(x + ',' + L + ',' + z) ?? (L <= ground(x, z) ? BLOCK.GRASS : BLOCK.AIR),
         set: (x, L, z, t) => cells.set(x + ',' + L + ',' + z, t),
-        topLayer(x, z) { let L = G + 40; while (L > G - 5 && this.get(x, L, z) === BLOCK.AIR) L--; return L; },
-        isSeaColumn: () => false,
+        topLayer(x, z) { let L = ground(x, z) + 40; while (L > ground(x, z) - 30 && this.get(x, L, z) === BLOCK.AIR) L--; return L; },
+        isSeaColumn: sea,
     };
     // a pond (or a patch of snow) 16 m away
     for (let x = 16; x <= 20; x++) for (let z = -2; z <= 2; z++) data.set(x, G, z, water ? BLOCK.WATER : snow ? BLOCK.SNOW : BLOCK.GRASS);
@@ -97,6 +97,13 @@ test('the castle: the words, a stamp — the snowflake floor spreads; the hands 
     assert.ok(g.doors.list.has(rec.id + 'gL') && g.doors.list.has(rec.id + 'gR'), 'the ice gates');
     assert.ok(g.beds.list.has(rec.id + 'b'), 'a bed');
     assert.deepEqual(g.mana.got, ['IceCastle']);
+    // the chandelier hangs on a chain from the dome; the hook's block melted — it falls and shatters on the floor
+    run(1);
+    const look = M.look.get(rec.id);
+    assert.ok(look.chain && look.hookL > rec.G + 18, 'hung on a chain from the dome');
+    data.set(rec.x, look.hookL, rec.z, BLOCK.AIR);
+    run(4);
+    assert.ok(look.wreck && look.ch.position.y < rec.G + 2, 'it lies broken on the floor');
     // the record saved and put back in another world
     const snap = M.snapshot();
     assert.equal(snap.list[0].f, 1);
@@ -207,4 +214,34 @@ test('the words heard before the phrase ended: the player is still told to stamp
     assert.equal(g.iceMagic.cast('IceCastle', true), null); // (the same phrase, finished: nothing new)
     g.iceMagic.stamp();
     assert.ok(g.iceMagic.magic, 'the stamp starts the castle');
+});
+
+test('no level ground needed: on a slope by the sea the floor lies at the foot, then columns of ice lift it level', () => {
+    // a slope: the ground climbs 1 layer every 3 m along x; the sea (the ground deep under it) from x ≥ 12
+    const ground = (x) => (x >= 12 ? -10 : 10 + Math.floor(x / 3));
+    const { g, data, run } = world({ ground, sea: (x) => x >= 12 });
+    const M = g.iceMagic;
+    assert.equal(M.cast('IceCastle'), 'IceCastle');
+    M.stamp();
+    assert.ok(M.magic, `it starts (said: ${g.hud.said})`);
+    const rec = M.magic.rec;
+    assert.equal(rec.G0, 10);
+    assert.ok(rec.G > rec.G0, 'the floor will be lifted over the slope');
+    M.testLift = 0.2;
+    run(ICE_SPELL.FLOOR_T + 0.5);
+    assert.ok(isPalaceIce(data.get(0, rec.G0, 0)), 'the floor first at the foot');
+    run((rec.G - rec.G0) / ICE_SPELL.LIFT_SPEED + 2);
+    const plan = M.planNow(rec);
+    assert.equal(iceCount(data, plan.floor), plan.floor.length, 'the whole floor level at G');
+    assert.ok(plan.pillars.length > 50, 'columns under it');
+    assert.equal(iceCount(data, plan.pillars), plan.pillars.length, 'the columns stand down to the ground');
+    // over the sea: a column reaches the bottom
+    const deep = plan.pillars.filter((c) => c[0] >= 12);
+    assert.ok(deep.length && deep.some((c) => c[1] === -9), 'a column on the sea\'s bottom');
+    // the player was carried up with the floor (never inside the ice)
+    assert.ok(g.character.group.position.y >= rec.G + 1.4, `the caster stands on the lifted floor: ${g.character.group.position.y}`);
+    M.testLift = 2;
+    run(10);
+    assert.equal(M.magic, null, 'done');
+    assert.ok(iceCount(data, plan.cells) > plan.cells.length * 0.97);
 });

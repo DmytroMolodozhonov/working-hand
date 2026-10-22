@@ -72,3 +72,26 @@ test('it is made, wanders, and runs from a campfire — melting smaller near it,
     assert.equal(life.snapshot().friends.length, 1);
     assert.ok(d);
 });
+
+test('the palace struck from afar: the snowmen and the monsters go out after whoever did it', () => {
+    const g = fakeGame();
+    g.character.group.position.set(0, 1.95, 140); // (far off: a «Бомбардо» from 140 m)
+    const life = new IceCastleLife(g);
+    const at = (x, z) => ({ x, y: 0, z });
+    life._plan = {
+        x: 0, z: 0, R: 30, rot: 0, x0: -30, x1: 30, z0: -30, z1: 30, floor: 0.5,
+        hall: { ...at(0, -2), r: 13, top: 30 }, throne: at(0, -10), chandelier: { ...at(0, -2), y: 20 },
+        gate: { ...at(0, 13), w: 5, h: 6, inner: at(0, 9), out: at(0, 21) }, guard: [at(-5, 22), at(5, 22)], chests: [],
+    };
+    life.update(0.05);
+    for (let i = 0; i < 20; i++) { g.frameCount++; life.update(0.05); }
+    const snow = life.list.filter((c) => c.type === 'snowman');
+    assert.ok(snow.length && snow.every((c) => c.target?.id !== 'me'), 'far off: nobody minds him');
+    life.attacked(new THREE.Vector3(0, 6, 13), 3, 'me');
+    assert.ok(life._offender('me'));
+    const d0 = Math.min(...snow.map((c) => 140 - c.model.position.z));
+    for (let i = 0; i < 200; i++) { g.frameCount++; life.update(0.05); }
+    assert.ok(snow.some((c) => c.target?.id === 'me'), 'the snowmen go for him');
+    assert.ok(Math.min(...snow.map((c) => 140 - c.model.position.z)) < d0 - 10, 'and come out towards him');
+    assert.ok(life.list.some((c) => c.type === 'monster' && c.target?.id === 'me'), 'the monsters too');
+});

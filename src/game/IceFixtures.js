@@ -67,6 +67,19 @@ export function gateDamage(kind, power, queenDead) {
 /** The gates' strength now: her magic gone, no more than plain ice. */
 export function gateCap(queenDead) { return queenDead ? GATE.WEAK_HP : GATE.HP; }
 
+/**
+ * Is the hook's block still part of the vault — not a lone block left in the air when the vault round it
+ * was blown away or melted (CLAUDE.md: nothing hangs in the air)? It is, when a solid block touches it
+ * (at its sides or over it).
+ */
+export function hookHeld(t, x, L, z) {
+    x = Math.round(x); z = Math.round(z);
+    if (!isSolid(t.get(x, L, z))) return false;
+    if (isSolid(t.get(x, L + 1, z))) return true;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isSolid(t.get(x + dx, L, z + dz))) return true;
+    return false;
+}
+
 /** The first solid layer above (x, L0, z) within `up` layers (the hook of a chandelier); null: none (yet). */
 export function hookAbove(t, x, L0, z, up = 26) {
     for (let L = L0; L <= L0 + up; L++) if (isSolid(t.get(Math.round(x), L, Math.round(z)))) return L;
@@ -157,7 +170,7 @@ export class IceFixtures {
             else if (this.held0.get(id)) { this.breakGates('frame'); break; }
         }
         const c = this.ch;
-        if (c && !this.st.chandFallen && c.hookL != null && !isSolid(t.get(Math.round(this.plan.chandelier.x), c.hookL, Math.round(this.plan.chandelier.z)))) this.fallChandelier('hook');
+        if (c && !this.st.chandFallen && c.hookL != null && !hookHeld(t, this.plan.chandelier.x, c.hookL, this.plan.chandelier.z)) this.fallChandelier('hook');
     }
 
     /** Her magic in the gates: the frost-glow while she lives, plain ice when she is gone. */
@@ -190,6 +203,8 @@ export class IceFixtures {
             c.chain = iceChainModel(c.hookY - (c.y + CHANDELIER_HUB));
             c.chain.position.set(X, c.hookY, Z);
             g.scene?.add(c.model, c.chain);
+            // (it is a thing, not a picture: a bolt bursts on it, nobody flies through it)
+            if (g.collision?.addBox) c.boxId = g.collision.addBox({ minX: X - 2, maxX: X + 2, minY: c.y - CHANDELIER_LOW, maxY: c.y + CHANDELIER_HUB, minZ: Z - 2, maxZ: Z + 2, kind: 'chandelier' });
             return;
         }
         if (this.st.chandFallen && !c.falling && !c.wreck) this._startFall(); // (the host's word reached me)
@@ -225,6 +240,7 @@ export class IceFixtures {
         if (!c?.model || c.falling || c.wreck) return;
         c.falling = true;
         c.vy = 0;
+        if (c.boxId != null) { g.collision?.removeBox(c.boxId); c.boxId = null; } // (it falls: the box of it hanging goes)
         if (c.chain) { g.scene?.remove(c.chain); c.chain = null; } // (the chain snaps: its end goes with it)
         g.sound?.playClang?.(0.5);
     }

@@ -3,7 +3,9 @@
  *
  *   «Create an Ice Castle»  (500 mana; free in Creative) Water or snow within 30 m. Say the words, then
  *        STAMP a foot (a knee up and down hard — the camera's legs, PoseInterpreter.stompAt): a snowflake
- *        of ice runs over the ground from the foot, 15 m round it (the floor). Then bring BOTH HANDS from
+ *        of ice runs over the ground from the foot, 15 m round it (the floor). Not level ground (a slope, the
+ *        mountains, the shore)? Columns of ice grow under the floor and lift it, level, over the ground —
+ *        as in the film: the floor first, the columns raise it from below. Then bring BOTH HANDS from
  *        below up over the head: the palace rises out of the floor after them — as high as the hands are,
  *        so far it has grown (hands lowered: it waits; hands up again past where it stopped: it grows on),
  *        hands straight up: the dome closes, the spires get their tips — the castle is done: ice gates
@@ -41,13 +43,17 @@
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, isLeaves, isSolid, isCastleBlock, isPalaceIce, SNOW_BAND } from '../world/Terrain.js';
 import { iceLocal, iceYaw } from '../world/IceCastle.js';
-import { ICE_MAGIC, iceCastleMagicSteps, iceBridgePlan, rotTowards, waterOrSnowNear } from '../world/IceMagicPlan.js';
-import { chandelierModel } from './IceModels.js';
+import { ICE_MAGIC, iceCastleMagicSteps, iceBridgePlan, icePillarCells, rotTowards, waterOrSnowNear } from '../world/IceMagicPlan.js';
+import { chandelierModel, iceChainModel, CHANDELIER_HUB, CHANDELIER_LOW } from './IceModels.js';
+import { hookAbove, hookHeld, GATE } from './IceFixtures.js';
+
+const PLAYER_GROUND_OFFSET = 2.0; // (Character.js: the body's centre over the feet)
 
 export const ICE_SPELL = {
     NEED_CASTLE: 30, NEED_BRIDGE: 18, // m: water or snow this near
     STOMP_WAIT: 25, // s to stamp after the words
     FLOOR_T: 2.4, // s the snowflake floor takes to spread
+    LIFT_SPEED: 2.5, // layers a second: the ice columns grow under the floor and lift it (a slope, the mountains, water)
     LIFT_LO: 0.35, LIFT_HI: 1.7, // the hands (armLift: 0 hanging, 1 level, 2 straight up): the castle's floor … its top
     RISE: 0.24, // the castle grows at most this share of its height a second (≥ 4 s up)
     BRIDGE_SPEED: 11, // m a second at most
@@ -237,11 +243,28 @@ export class IceMagic {
         return { L, wet: false };
     }
 
-    /** May ice stand on these columns (x, z, from L0 to L1)? null or why not. */
-    _blocked(cols, L0, L1, own = null) {
+    /**
+     * (host) The columns under the floor at G: each cell and the ground under it (through the air, the water,
+     * the leaves, the snow — down to the earth or the sea's bottom). → [x, z, bottom, …] (the record keeps it).
+     */
+    _pillarFeet(x, z, G) {
+        const data = this.data, out = [];
+        for (const [cx, cz] of icePillarCells(x, z)) {
+            let L = G - 1;
+            for (let k = 0; k < ICE_MAGIC.PILLAR_DEEP && L > -60; k++, L--) {
+                const t = data.get(cx, L, cz);
+                if (isSolid(t) && t !== BLOCK.WATER && !isLeaves(t) && !TREE_WOOD.has(t) && t !== BLOCK.SNOW) break;
+            }
+            if (L < G - 1) out.push(cx, cz, L);
+        }
+        return out;
+    }
+
+    /** May ice stand on these columns (x, z, from L0 to L1)? null or why not. (sea: the castle stands over it on its columns) */
+    _blocked(cols, L0, L1, own = null, sea = false) {
         const g = this.game, data = this.data;
         for (const [x, z] of cols) {
-            if (data.isSeaColumn?.(x, z) && !own) return '🌊 Тут море — лёд здесь не встанет';
+            if (data.isSeaColumn?.(x, z) && !own && !sea) return '🌊 Тут море — лёд здесь не встанет';
             for (let L = L0; L <= L1; L += 1) {
                 const t = data.get(x, L, z);
                 if (isCastleBlock(t)) return '🏘️ Здесь уже что-то построено — найдите свободное место';
@@ -262,23 +285,24 @@ export class IceMagic {
         if (ask.k === 'castle') {
             const x = Math.round(+ask.c?.[0] || 0), z = Math.round(+ask.c?.[1] || 0);
             if (!waterOrSnowNear(data, x, z, ICE_SPELL.NEED_CASTLE + 2)) return '❄️ Рядом нет ни воды, ни снега';
-            const s = this._surface(x, z);
-            const G = s.L;
+            // (no level ground needed — the author: «колонны всё равно поднимут пол вверх и скомпенсируют»: the floor
+            // lies at the foot, then columns of ice lift it, level, over the higher ground round it — at most LIFT_MAX)
+            const G0 = this._surface(x, z).L;
             const R = ICE_MAGIC.FLOOR_R;
-            const cols = [];
-            let bad = 0;
-            for (let dx = -R; dx <= R; dx += 2) for (let dz = -R; dz <= R; dz += 2) {
+            const cols = [], hs = [];
+            for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
                 if (Math.hypot(dx, dz) > R) continue;
-                cols.push([x + dx, z + dz]);
-                if (Math.abs(this._surface(x + dx, z + dz).L - G) > 6) bad++;
+                hs.push(this._surface(x + dx, z + dz).L);
+                if (!(dx & 1) && !(dz & 1)) cols.push([x + dx, z + dz]);
             }
-            if (bad > cols.length * 0.2) return '⛰️ Слишком неровно — для замка нужно место поровнее';
-            const why = this._blocked(cols, G - 1, G + 26);
+            hs.sort((a, b) => a - b);
+            const G = Math.max(G0, Math.min(G0 + ICE_MAGIC.LIFT_MAX, hs[Math.floor(hs.length * 0.9)]));
+            const why = this._blocked(cols, G0 - 1, G + 26, false, true);
             if (why) return why;
             if (g.houseMagic?.houseNear?.({ x, z }, R + 2)) return '🏠 Здесь стоит дом — найдите свободное место';
             for (const o of this.list.values()) if (o.k === 'castle' && Math.hypot(o.x - x, o.z - z) < 2 * R + 6) return '❄️ Слишком близко к другому ледяному замку';
             if (g.wards?.list?.size && g.wards.forbids?.(g.character.group.position, _v.set(x, G + 1, z))) return '🛡️ Здесь чужая защита дома';
-            rec = { id, k: 'castle', x, z, G, rot: (ask.rot | 0) & 3, f: 0 };
+            rec = { id, k: 'castle', x, z, G, G0, rot: (ask.rot | 0) & 3, f: 0, pil: this._pillarFeet(x, z, G) };
         } else {
             const ax = +ask.p0?.[0] || 0, az = +ask.p0?.[1] || 0, bx = +ask.p1?.[0] || 0, bz = +ask.p1?.[1] || 0;
             const len = Math.hypot(bx - ax, bz - az);
@@ -353,7 +377,7 @@ export class IceMagic {
 
     _startPlan(rec) {
         if (this._plans.has(rec.id) || this._gen?.id === rec.id) return;
-        if (this._gen) this._queue.push(rec); else this._gen = { id: rec.id, rec, it: iceCastleMagicSteps({ x: rec.x, z: rec.z, G: rec.G, rot: rec.rot }) };
+        if (this._gen) this._queue.push(rec); else this._gen = { id: rec.id, rec, it: iceCastleMagicSteps({ x: rec.x, z: rec.z, G: rec.G, rot: rec.rot, pil: rec.pil }) };
     }
 
     get _queue() { return this.__q || (this.__q = []); }
@@ -373,7 +397,7 @@ export class IceMagic {
         let p = this.plan(rec);
         if (p) return p;
         if (this._gen?.id === rec.id) { for (;;) { const r = this._gen.it.next(); if (r.done) { p = r.value; break; } } this._gen = null; }
-        else { const it = iceCastleMagicSteps({ x: rec.x, z: rec.z, G: rec.G, rot: rec.rot }); for (;;) { const r = it.next(); if (r.done) { p = r.value; break; } } }
+        else { const it = iceCastleMagicSteps({ x: rec.x, z: rec.z, G: rec.G, rot: rec.rot, pil: rec.pil }); for (;;) { const r = it.next(); if (r.done) { p = r.value; break; } } }
         this._plans.set(rec.id, p);
         return p;
     }
@@ -389,6 +413,7 @@ export class IceMagic {
             if (m.by === g.localId) this._casterGrow(m, dt);
             if (this.auth && this.magic === m) this._build(m);
             if (this.magic === m) this._sparkle(m, dt);
+            if (this.magic === m && m.k === 'castle' && (m.rec.G0 ?? m.rec.G) < m.rec.G && m.t >= ICE_SPELL.FLOOR_T) this._ride(m);
         }
         if (this.auth) {
             if (this._waiting.length) this._placeWaiting(dt);
@@ -400,6 +425,7 @@ export class IceMagic {
         if (this._repairQ.length) this._repairStep();
         if (!this.auth) for (const r of this.list.values()) if (r.cold === false && this.magic?.id !== r.id) r.age = (r.age || 0) + dt; // (the drips: the host's clock decides)
         this._drips(dt);
+        this._chandeliers(dt);
         for (const L of this.look.values()) if (L.fade < 1) { L.fade = Math.min(1, L.fade + dt); L.gloss.forEach((s) => s.scale.setScalar(1).multiply(s.userData.k).multiplyScalar(0.96 + 0.04 * L.fade)); }
     }
 
@@ -436,7 +462,7 @@ export class IceMagic {
         if (g.combat?.dead) { this.stopMine('dead'); return; }
         let want = m.want;
         if (m.k === 'castle') {
-            if (m.t < ICE_SPELL.FLOOR_T) return; // (the floor first)
+            if (m.t < this._liftEnd(m.rec)) return; // (the floor first, then the columns lift it)
             const lift = this._lift();
             if (lift != null) want = Math.max(want, Math.min(1, (lift - ICE_SPELL.LIFT_LO) / (ICE_SPELL.LIFT_HI - ICE_SPELL.LIFT_LO)));
             m.f = Math.min(want, m.f + ICE_SPELL.RISE * dt);
@@ -493,10 +519,33 @@ export class IceMagic {
         if (m.k === 'castle') {
             const plan = this._plans.get(m.id);
             if (!plan) return; // (made over a few frames)
-            if (!m.cols) m.cols = this._floorColumns(plan, m.rec);
-            const r = (Math.min(1, m.t / ICE_SPELL.FLOOR_T)) * (ICE_MAGIC.FLOOR_R + 1);
-            for (; m.fi < m.cols.length && m.cols[m.fi].d <= r && !out(); m.fi++) this._floorColumn(m.cols[m.fi], m.rec.G, edits);
-            if (m.fi >= m.cols.length && !m.cleared) { m.cleared = true; for (const c of plan.clear) if (data.get(c[0], c[1], c[2]) !== AIR) { data.set(c[0], c[1], c[2], AIR); edits.push([c[0], c[1], c[2], AIR]); } }
+            const G = m.rec.G, G0 = m.rec.G0 ?? G;
+            if (!m.cols) { m.cols = this._floorColumns(plan, m.rec); m.lv = G0; m.st = 0; m.pc = this._pillarCols(m.rec); }
+            if (m.st === 0) {
+                // the snowflake floor runs over the ground from the foot (at the foot's level)
+                const r = (Math.min(1, m.t / ICE_SPELL.FLOOR_T)) * (ICE_MAGIC.FLOOR_R + 1);
+                for (; m.fi < m.cols.length && m.cols[m.fi].d <= r && !out(); m.fi++) this._floorAt(m.cols[m.fi], G0, G0, edits);
+                if (m.fi >= m.cols.length) { m.fi = 0; m.st = G > G0 ? 1 : 2; }
+            }
+            if (m.st === 1) {
+                // the columns grow under it and lift it, layer by layer, level over the ground round it
+                const want = Math.min(G, G0 + Math.floor(Math.max(0, m.t - ICE_SPELL.FLOOR_T) * ICE_SPELL.LIFT_SPEED));
+                while (m.lv < want && !out()) {
+                    const l = m.lv + 1;
+                    for (; m.fi < m.cols.length && !out(); m.fi++) this._floorAt(m.cols[m.fi], l, G0, edits);
+                    if (m.fi < m.cols.length) break;
+                    this._pillarsTo(m.pc, l - 1, edits);
+                    m.fi = 0; m.lv = l;
+                    this._unbury(m.rec, l);
+                }
+                if (m.lv >= G) m.st = 2;
+            }
+            if (m.st === 2) {
+                // level at last: a hill higher than the floor is cut away over it, and what grows on it
+                for (; m.fi < m.cols.length && !out(); m.fi++) this._floorColumn(m.cols[m.fi], G, edits);
+                if (m.fi >= m.cols.length) { m.st = 3; this._pillarsTo(m.pc, G - 1, edits); }
+            }
+            if (m.st === 3 && !m.cleared) { m.cleared = true; for (const c of plan.clear) if (data.get(c[0], c[1], c[2]) !== AIR) { data.set(c[0], c[1], c[2], AIR); edits.push([c[0], c[1], c[2], AIR]); } }
             if (m.cleared) this._grow(m, plan, edits, out);
         } else {
             this._grow(m, this.plan(m.rec), edits, out);
@@ -527,12 +576,53 @@ export class IceMagic {
         return false;
     }
 
-    /** The floor's columns, nearest the foot first: {x, z, t, d}. */
+    /** The floor's columns, nearest the foot first: {x, z, t, d, g (the ground's layer), pil (a column of ice under it)}. */
     _floorColumns(plan, rec) {
-        return plan.floor.map((c) => ({ x: c[0], z: c[2], t: c[3], d: Math.hypot(c[0] - rec.x, c[2] - rec.z) })).sort((a, b) => a.d - b.d);
+        const pil = new Set();
+        for (let i = 0, P = rec.pil || []; i + 2 < P.length; i += 3) pil.add(P[i] + ',' + P[i + 1]);
+        return plan.floor.map((c) => ({ x: c[0], z: c[2], t: c[3], d: Math.hypot(c[0] - rec.x, c[2] - rec.z), g: this._surface(c[0], c[2]).L, pil: pil.has(c[0] + ',' + c[2]) })).sort((a, b) => a.d - b.d);
     }
 
-    /** (host) One column of the floor: ice in the ground's place, cleared over it, ice under it down to the ground. */
+    /** The columns under the floor (host, building): [{x, z, top}] — top: the layer they have grown to. */
+    _pillarCols(rec) {
+        const out = [];
+        for (let i = 0, P = rec.pil || []; i + 2 < P.length; i += 3) out.push({ x: P[i], z: P[i + 1], top: P[i + 2] });
+        return out;
+    }
+
+    /** (host) The columns grow up to layer L (deep ice in the air, the water, the leaves, the snow — never in the earth). */
+    _pillarsTo(pc, L, edits) {
+        const data = this.data;
+        for (const p of pc) {
+            for (let l = p.top + 1; l <= L; l++) {
+                const t = data.get(p.x, l, p.z);
+                if (t === BLOCK.ICE_DARK || t === BLOCK.BEDROCK) continue;
+                if (isSolid(t) && t !== BLOCK.WATER && !isLeaves(t) && !TREE_WOOD.has(t) && t !== BLOCK.SNOW && !isPalaceIce(t)) continue;
+                data.set(p.x, l, p.z, BLOCK.ICE_DARK); edits.push([p.x, l, p.z, BLOCK.ICE_DARK]);
+            }
+            p.top = Math.max(p.top, L);
+        }
+    }
+
+    /**
+     * (host) The floor at layer l in one column (the spreading at the foot's level G0, then lifted a layer at a time):
+     * a hill higher than l keeps it under (it comes out as the floor rises past it — or is cut at the end); lifted,
+     * the layer it left is deep ice over the ground or on a column, else air.
+     */
+    _floorAt(c, l, G0, edits) {
+        if (c.g > l) return;
+        const data = this.data;
+        const set = (L, t) => { const cur = data.get(c.x, L, c.z); if (cur === t || cur === BLOCK.BEDROCK) return; data.set(c.x, L, c.z, t); edits.push([c.x, L, c.z, t]); };
+        set(l, c.t);
+        if (l > G0) {
+            const b = l - 1;
+            if (b < c.g) { /* (the floor came out of the hill here: earth under it) */ } else if (b === c.g || c.pil) set(b, BLOCK.ICE_DARK);
+            else if (isPalaceIce(data.get(c.x, b, c.z))) set(b, AIR);
+        }
+        if (l === G0) this._treesGone(c);
+    }
+
+    /** (host) One column of the floor at its last level: ice in the ground's place, cleared over it, the water under it frozen. */
     _floorColumn(c, F, edits) {
         const data = this.data;
         const set = (L, t) => { const cur = data.get(c.x, L, c.z); if (cur === t || cur === BLOCK.BEDROCK) return; data.set(c.x, L, c.z, t); edits.push([c.x, L, c.z, t]); };
@@ -541,14 +631,42 @@ export class IceMagic {
             const t = data.get(c.x, L, c.z);
             if (t !== AIR && !isPalaceIce(t)) set(L, AIR);
         }
-        for (let L = F - 1, k = 0; k < 10; L--, k++) {
-            const t = data.get(c.x, L, c.z);
-            if (isSolid(t) && t !== BLOCK.WATER && !isLeaves(t) && !TREE_WOOD.has(t)) break;
-            set(L, BLOCK.ICE_DARK);
-        }
-        // (the instanced trees standing where the floor goes: gone)
+        // (the water right under it freezes; deeper — the columns hold it)
+        for (let L = F - 1, k = 0; k < 3 && data.get(c.x, L, c.z) === BLOCK.WATER; L--, k++) set(L, BLOCK.ICE_DARK);
+        this._treesGone(c);
+    }
+
+    /** (the instanced trees standing where the floor goes: gone) */
+    _treesGone(c) {
         const g = this.game;
         for (const t of g.world?.trees || []) if (t.alive && Math.abs(t.x - c.x) < 0.6 && Math.abs(t.z - c.z) < 0.6) { g.world.removeTree?.(t); g.sync?.treeGone?.(t.index); }
+    }
+
+    /** When the castle's floor is done lifting (s after the stamp): the hands raise the castle from then on. */
+    _liftEnd(rec) {
+        const d = rec.G - (rec.G0 ?? rec.G);
+        return ICE_SPELL.FLOOR_T + (d > 0 ? d / ICE_SPELL.LIFT_SPEED + 0.4 : 0);
+    }
+
+    /** (every computer) I stand on the rising floor: it carries me up (never inside the ice). */
+    _ride(m) {
+        const g = this.game, me = g.character?.group?.position, data = this.data, rec = m.rec;
+        if (!me || !data || g.flight?.active) return;
+        if (Math.hypot(me.x - rec.x, me.z - rec.z) > ICE_MAGIC.FLOOR_R + 1) return;
+        const ix = Math.round(me.x), iz = Math.round(me.z);
+        let L = Math.floor(me.y - PLAYER_GROUND_OFFSET + 1.5 + 1e-3), n = 0;
+        while (n < 4 && isPalaceIce(data.get(ix, L, iz))) { L++; n++; }
+        if (n) { me.y = L - 1 - 0.5 + PLAYER_GROUND_OFFSET; g._lastFree?.copy(me); if (g.character.verticalVelocity < 0) g.character.verticalVelocity = 0; }
+    }
+
+    /** (host) The creatures standing on the floor rise with it (zombies, people of the castles, animals). */
+    _unbury(rec, l) {
+        const g = this.game, R = ICE_MAGIC.FLOOR_R + 1;
+        const near = (q) => Math.hypot(q.x - rec.x, q.z - rec.z) <= R;
+        const lift = (q, feet, off) => { if (near(q) && feet > l - 2.6 && feet < l - 0.5) q.y = l - 0.5 + off; };
+        for (const z of g.zombies || []) { const q = z.group?.position; if (q && !z.isDead) lift(q, q.y - 1.0, 1.0); }
+        for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) lift(v, v.y, 0);
+        for (const a of g.animals?.list || []) { const q = a.group?.position; if (q && !a.dead) lift(q, q.y - 0.5, 0.5); }
     }
 
     /** (host) Blocks that waited for a body to go. */
@@ -634,7 +752,7 @@ export class IceMagic {
             dome.scale.copy(dome.userData.k);
             for (const s of [wall, dome]) { s.renderOrder = 2; group.add(s); }
             g.scene.add(group);
-            this.look.set(rec.id, { group, gloss: [wall, dome], fade: 0 });
+            this.look.set(rec.id, { group, gloss: [wall, dome], fade: 0, rec, ch, chain: null, hookL: null, vy: 0, falling: false, wreck: false, boxId: null, checkT: 0 });
         }
         if (host && g.beds && !g.beds.list?.has(rec.id + 'b')) {
             const p = iceLocal(S, 5.2, -3.6);
@@ -664,11 +782,87 @@ export class IceMagic {
         data._litPair = prev && !prevS ? null : data.litLand;
     }
 
+    /**
+     * (every computer, from the blocks — the same on all) The chandelier hangs on a chain from a hook in the
+     * dome: the hook's block melted or blown away, or left alone in the air with the dome gone round it — it
+     * falls and shatters on the floor (CLAUDE.md: nothing hangs in the air); a bolt bursts on it.
+     */
+    _chandeliers(dt) {
+        const g = this.game, data = this.data;
+        if (!data) return;
+        for (const L of this.look.values()) {
+            const ch = L.ch, rec = L.rec;
+            if (!ch || L.wreck) continue;
+            const X = rec.x, Z = rec.z, floor = rec.G - 0.5; // (the hall's walking height: the floor block's top)
+            if (L.falling) {
+                L.vy -= 20 * dt;
+                ch.position.y += L.vy * dt;
+                ch.rotation.z = Math.min(0.5, ch.rotation.z + dt * 0.4);
+                if (ch.position.y - CHANDELIER_LOW > floor) continue;
+                L.falling = false;
+                this._chandelierCrash(L, _v.set(X, floor + 0.5, Z));
+                continue;
+            }
+            if ((L.checkT -= dt) > 0) continue;
+            L.checkT = 0.5;
+            if (L.hookL == null) {
+                const hub = ch.position.y + CHANDELIER_HUB;
+                const H = hookAbove(data, X, Math.round(hub + 1.5) + 1, Z, 12);
+                if (H == null) { if ((L.noHook = (L.noHook || 0) + 1) > 6) this._chandelierFall(L); continue; } // (the dome's blocks not here yet — or gone)
+                L.hookL = H;
+                L.chain = iceChainModel(H - 1.5 - hub);
+                L.chain.position.set(X, H - 1.5, Z);
+                L.group.add(L.chain);
+                if (g.collision?.addBox) L.boxId = g.collision.addBox({ minX: X - 2, maxX: X + 2, minY: ch.position.y - CHANDELIER_LOW, maxY: hub, minZ: Z - 2, maxZ: Z + 2, kind: 'chandelier' });
+                continue;
+            }
+            if (!hookHeld(data, X, L.hookL, Z)) this._chandelierFall(L);
+        }
+    }
+
+    _chandelierFall(L) {
+        const g = this.game;
+        if (L.falling || L.wreck) return;
+        L.falling = true; L.vy = 0;
+        if (L.chain) { L.group.remove(L.chain); L.chain = null; }
+        if (L.boxId != null) { g.collision?.removeBox(L.boxId); L.boxId = null; }
+        g.sound?.playClang?.(0.5);
+    }
+
+    /** It shatters on the floor: whoever is under it is hurt; its wreck lies there (a box to walk round). */
+    _chandelierCrash(L, p) {
+        const g = this.game, me = g.character?.group?.position;
+        if (g.sound?.playExplosion && me) g.sound.playExplosion(p, me, 0.35);
+        g.sound?.playFrozenHit?.();
+        const debris = [];
+        for (let i = 0; i < 30; i++) debris.push({ x: p.x + (Math.random() - 0.5) * 6, y: p.y + Math.random() * 1.5, z: p.z + (Math.random() - 0.5) * 6, color: i % 3 ? 0xcdeffd : 0xe8fbff, size: 0.5 });
+        g.fx?.debrisFrom?.(debris, p, 40);
+        if (me && Math.hypot(me.x - p.x, me.z - p.z) < GATE.FALL_R && Math.abs(me.y - 1.95 - p.y) < 3 && !g.isDeadLocal) {
+            if (g.combat?.enabled) g.combat.damage?.(GATE.FALL_DMG, null, 'collapse'); else g.damageLocalPlayer?.(GATE.FALL_DMG);
+            g.hud?.setVoice?.(`💥 На вас рухнула люстра: −${GATE.FALL_DMG}`, true);
+        }
+        if (this.auth) {
+            g.iceCastle?.hitAt?.(p, GATE.FALL_R, GATE.FALL_DMG, 'collapse');
+            g.castleLife?.hitAt?.(p, GATE.FALL_R, GATE.FALL_DMG, null);
+            g.animals?.hitAt?.(p, GATE.FALL_R, GATE.FALL_DMG, null);
+        }
+        this._chandelierWreck(L);
+    }
+
+    _chandelierWreck(L) {
+        const g = this.game, ch = L.ch, rec = L.rec, floor = rec.G - 0.5;
+        L.wreck = true;
+        ch.position.set(rec.x, floor + 1.1, rec.z);
+        ch.rotation.set(0.25, 0.7, 1.15);
+        ch.scale.set(1, 0.55, 1);
+        if (g.collision?.addBox) L.boxId = g.collision.addBox({ minX: rec.x - 2.4, maxX: rec.x + 2.4, minY: floor, maxY: floor + 1.6, minZ: rec.z - 2.4, maxZ: rec.z + 2.4, kind: 'wreck' });
+    }
+
     _unfurnish(rec) {
         const g = this.game;
         for (const s of ['gL', 'gR']) g.doors?.remove?.(rec.id + s);
         const L = this.look.get(rec.id);
-        if (L) { g.scene?.remove(L.group); L.gloss.forEach((s) => s.geometry.dispose()); this.look.delete(rec.id); }
+        if (L) { g.scene?.remove(L.group); L.gloss.forEach((s) => s.geometry.dispose()); if (L.boxId != null) g.collision?.removeBox(L.boxId); this.look.delete(rec.id); }
     }
 
     // ================================================================= the look and the sound
@@ -677,7 +871,19 @@ export class IceMagic {
         if (!fx?.spark) return;
         m.soundT -= dt;
         if (rec.k === 'castle') {
-            const F = rec.G;
+            const G0 = rec.G0 ?? rec.G;
+            let F = G0;
+            if (m.t >= ICE_SPELL.FLOOR_T + 0.3 && m.t < this._liftEnd(rec)) {
+                // the columns lifting the floor: frost round its rising rim, the ice creaking under it
+                const lv = Math.min(rec.G, G0 + (m.t - ICE_SPELL.FLOOR_T) * ICE_SPELL.LIFT_SPEED);
+                for (let i = 0; i < 10; i++) {
+                    const a = Math.random() * Math.PI * 2, r = ICE_MAGIC.FLOOR_R * (0.3 + 0.7 * Math.random());
+                    fx.spark(_v.set(rec.x + Math.cos(a) * r, lv - 0.6 - Math.random() * 2, rec.z + Math.sin(a) * r), i % 2 ? 0xffffff : 0xa8e8ff, 0.13, _v2.set(0, 2.5, 0), 0.7);
+                }
+                if (m.soundT <= 0) { m.soundT = 0.3 + Math.random() * 0.2; g.sound?.playIce?.('iceCrack', _v.set(rec.x, lv, rec.z), 0.6); }
+                return;
+            }
+            if (m.t >= ICE_SPELL.FLOOR_T + 0.3) F = rec.G;
             if (m.t < ICE_SPELL.FLOOR_T + 0.3) {
                 // the frost running over the ground from the foot: a ring of sparkles, six bright arms
                 const r = Math.min(1, m.t / ICE_SPELL.FLOOR_T) * ICE_MAGIC.FLOOR_R;
@@ -746,7 +952,7 @@ export class IceMagic {
             const p = this.plan(rec);
             if (!p) { this._startPlan(rec); continue; }
             // (the order it melts in: the highest blocks first, the floor last)
-            const all = rec._melt || (rec._melt = [...p.cells.filter((c) => c[4] <= rec.f + 1e-6).sort((a, b) => b[1] - a[1]), ...(p.floor || [])]);
+            const all = rec._melt || (rec._melt = [...p.cells.filter((c) => c[4] <= rec.f + 1e-6).sort((a, b) => b[1] - a[1]), ...(p.floor || []), ...(p.pillars || [])]);
             const k = Math.min(1, (rec.age - ICE_SPELL.MELT_START) / (ICE_SPELL.MELT_END - ICE_SPELL.MELT_START));
             const want = Math.ceil(k * all.length);
             const edits = [];
@@ -800,7 +1006,7 @@ export class IceMagic {
         const data = this.data;
         if (!data || this.magic?.id === rec.id) return rec.miss || [];
         const p = this.planNow(rec), out = [];
-        for (const c of [...(p.floor || []), ...p.cells]) {
+        for (const c of [...(p.floor || []), ...(p.pillars || []), ...p.cells]) {
             if (c[4] > rec.f + 1e-6) break;
             if (data.get(c[0], c[1], c[2]) !== c[3]) { out.push(c[0] + ',' + c[1] + ',' + c[2]); if (out.length >= 6000) break; }
         }
@@ -818,7 +1024,7 @@ export class IceMagic {
         if (!data) return;
         const miss = new Set(rec.miss || []);
         const edits = [];
-        for (const c of [...(p.floor || []), ...p.cells]) {
+        for (const c of [...(p.floor || []), ...(p.pillars || []), ...p.cells]) {
             if (c[4] > rec.f + 1e-6) break;
             if (miss.has(c[0] + ',' + c[1] + ',' + c[2]) || data.get(c[0], c[1], c[2]) === c[3]) continue;
             data.set(c[0], c[1], c[2], c[3]);

@@ -103,3 +103,21 @@ test('the Ice Queen\'s chests (every boss has chests): ice things — her robe, 
     assert.match(fs.readFileSync(new URL('../../src/game/Liquidation.js', import.meta.url), 'utf8'), /isGodGift\(L\.item\)/, '«Liquidation» never takes it');
     assert.match(fs.readFileSync(new URL('../../src/world/World.js', import.meta.url), 'utf8'), /godGift: true/, 'the creative pedestals');
 });
+
+test('the queen\'s ice is dense: a blast breaks several times less of it than of the same ice elsewhere', () => {
+    const d = world(42, true);
+    const p = d.iceCastle.plan;
+    const isIce = (t) => t >= ICE_BLOCK.WALL && t <= ICE_BLOCK.DARK;
+    // the hall's wall, at the gates' side: a blast of radius 4 on it
+    const g = p.gate;
+    let L = Math.round(g.y + 4);
+    let x = Math.round(g.x), z = Math.round(g.z);
+    for (let i = 0; i < 6 && !isIce(d.get(x, L, z)); i++) L++;
+    const before = d.removeSphere(x, L - 1, z, 4).filter((b) => isIce(b.type)).length;
+    // the same ice outside the palace: a block of it far away, the same blast
+    for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) for (let k = -4; k <= 4; k++) d.set(500 + i, 60 + k, 500 + j, ICE_BLOCK.WALL);
+    const plain = d.removeSphere(500, 59, 500, 4).filter((b) => isIce(b.type)).length;
+    assert.ok(plain > 150, `plain ice: ${plain}`);
+    assert.ok(before > 0, 'the heart of the blast still breaks it');
+    assert.ok(before < plain / 4, `the queen's ice: ${before} < ${plain} / 4`);
+});

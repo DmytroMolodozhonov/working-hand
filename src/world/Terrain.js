@@ -27,7 +27,7 @@ import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
-import { IceCastleSite, ICE_BLOCK } from './IceCastle.js';
+import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
@@ -1598,6 +1598,11 @@ export class TerrainData {
         const z0 = Math.floor(cz - radius), z1 = Math.ceil(cz + radius);
         const L0 = Math.max(MIN_LAYER + 1, Math.floor(cy - radius + 1.5));
         const L1 = Math.min(MAX_LAYER, Math.ceil(cy + radius + 1.5));
+        // (the Ice Queen's palace: its dense ice breaks only in the heart of the blast — PALACE_ICE; the gods' «Бум»
+        // carves with carveColumn, as through anything)
+        const ip = this.iceCastle?.plan;
+        const dense = ip && cx + radius >= ip.x0 && cx - radius <= ip.x1 && cz + radius >= ip.z0 && cz - radius <= ip.z1 ? ip : null;
+        const d2 = r2 * PALACE_ICE.BLAST * PALACE_ICE.BLAST;
         for (let iz = z0; iz <= z1; iz++) {
             for (let ix = x0; ix <= x1; ix++) {
                 const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
@@ -1606,10 +1611,12 @@ export class TerrainData {
                 for (let L = L0; L <= L1; L++) {
                     const by = L - 1.0; // block centre y
                     const dx = ix - cx, dy = by - cy, dz = iz - cz;
-                    if (dx * dx + dy * dy + dz * dz > r2) continue;
+                    const dd = dx * dx + dy * dy + dz * dz;
+                    if (dd > r2) continue;
                     const idx = ((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx;
                     const type = c.blocks[idx];
                     if (type === BLOCK.AIR || type === BLOCK.BEDROCK || type === BLOCK.WATER) continue;
+                    if (dense && dd > d2 && isPalaceIce(type) && inIcePalace(dense, ix, iz)) continue;
                     if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
                     if (this.godGiftAt && this.godGiftAt(ix, by, iz)) continue; // (a gift of the gods: the temple's ground)
                     c.blocks[idx] = BLOCK.AIR;

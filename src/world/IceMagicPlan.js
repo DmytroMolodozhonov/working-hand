@@ -28,6 +28,9 @@ export const ICE_MAGIC = {
     TOP: 36, // layers: the highest point (the dome's finial) over the floor
     BRIDGE_MIN: 5, BRIDGE_MAX: 60, // m: how long a bridge can be
     BRIDGE_RISE: 22, // layers: the most the two ends may differ
+    LIFT_MAX: 12, // layers: the most the ice columns lift the floor over the ground at the foot
+    PILLAR_STEP: 5, PILLAR_R: 1.25, // m: the columns under the floor (a grid of round columns of deep ice)
+    PILLAR_DEEP: 80, // layers: the deepest a column goes down to the ground (a ravine, the sea's bottom)
 };
 
 const AIR = 0;
@@ -35,8 +38,9 @@ const { WALL, GLOW, FLOOR, DARK } = ICE_BLOCK;
 const TAU = Math.PI * 2;
 
 /**
- * The castle. S: {x, z, G (the floor's layer), rot (0…3: the gates face +z, +x, −z, −x)}.
- * @returns {{cells: Array, clear: Array, floor: Array, gate, throne, chandelier, bed, stair, rect, H}}
+ * The castle. S: {x, z, G (the floor's layer), rot (0…3: the gates face +z, +x, −z, −x), pil (the
+ * columns under the floor: [x, z, bottom, …] — the layer of the ground under each of their cells)}.
+ * @returns {{cells: Array, clear: Array, floor: Array, pillars: Array, gate, throne, chandelier, bed, stair, rect, H}}
  */
 export function iceCastleMagicPlan(S) {
     const it = iceCastleMagicSteps(S);
@@ -96,6 +100,10 @@ export function* iceCastleMagicSteps(S) {
     yield;
     const floor = [...map.values()].map((c) => { c[4] = 0; return c; });
     map.clear();
+    // ---- the columns that hold the floor up (on a slope, over a ravine, over water): deep ice from the ground up
+    const pillars = [];
+    const pil = S.pil || [];
+    for (let i = 0; i + 2 < pil.length; i += 3) for (let L = pil[i + 2] + 1; L < F; L++) pillars.push([pil[i], L, pil[i + 1], DARK, 0]);
 
     yield;
     // ---- the hall: walls of glacier ice two thick, glowing bands, the gates, the windows
@@ -180,7 +188,7 @@ export function* iceCastleMagicSteps(S) {
     const at = (u, v, L) => { const p = iceLocal(S, u, v); return { x: p.x, y: L - 0.5, z: p.z }; };
     const R = FR + 1;
     return {
-        cells, clear, floor, H, F,
+        cells, clear, floor, pillars, H, F,
         gate: { ...at(0, gv + 0.1, F), w: 5, h: 6, gv },
         throne: at(0, tv + 0.5, F + 2),
         chandelier: { ...at(0, 0, F), y: W1 + 4 },
@@ -188,6 +196,27 @@ export function* iceCastleMagicSteps(S) {
         stair: at(Math.sin(STAIR_A0) * (HR - 3), Math.cos(STAIR_A0) * (HR - 3), F),
         rect: { x0: S.x - R, x1: S.x + R, z0: S.z - R, z1: S.z + R },
     };
+}
+
+/**
+ * The cells of the columns under the floor: a grid round (x, z) — every PILLAR_STEP m, inside the floor —
+ * and six more under the rim, at the snowflake's arms. → [[x, z], …] (each column a few cells round).
+ */
+export function icePillarCells(x, z) {
+    const out = [], seen = new Set();
+    const R = ICE_MAGIC.FLOOR_R - 1.5, st = ICE_MAGIC.PILLAR_STEP, pr = ICE_MAGIC.PILLAR_R;
+    const centres = [];
+    for (let u = -2 * st; u <= 2 * st; u += st) for (let v = -2 * st; v <= 2 * st; v += st) if (Math.hypot(u, v) <= R) centres.push([u, v]);
+    for (let k = 0; k < 6; k++) centres.push([Math.sin((k / 6) * TAU + TAU / 12) * (R + 0.5), Math.cos((k / 6) * TAU + TAU / 12) * (R + 0.5)]);
+    for (const [u, v] of centres) {
+        const cx = x + u, cz = z + v;
+        for (let i = Math.floor(cx - pr); i <= Math.ceil(cx + pr); i++) for (let j = Math.floor(cz - pr); j <= Math.ceil(cz + pr); j++) {
+            if (Math.hypot(i - cx, j - cz) > pr || seen.has(i + ',' + j)) continue;
+            seen.add(i + ',' + j);
+            out.push([i, j]);
+        }
+    }
+    return out;
 }
 
 /** World (x, z) → the castle's local (u, v). */

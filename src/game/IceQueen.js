@@ -27,7 +27,7 @@ import * as THREE from 'three';
 import { crowdStep } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { iceQueenModel, snowmanModel, friendSnowmanModel, puddleModel, iceMonsterModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP, FRIEND_H } from './IceModels.js';
-import { iceYaw, iceLocal } from '../world/IceCastle.js';
+import { iceYaw, iceLocal, PALACE_ICE, inIcePalace } from '../world/IceCastle.js';
 import { IceFixtures, GATE } from './IceFixtures.js';
 import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
@@ -47,6 +47,9 @@ export const ICE = {
     // the friendly snowman of the spell «Snowman» (nobody's: it only wanders and fears the heat)
     FRIEND: { HP: 10, H: FRIEND_H, R: 0.65, SPEED: 1.2, TURN: 3, MAX: 12, BUILD: 3.6, RANGE: 16, ROAM: 12, FLEE: 13, MELT: 4.5, MELT_DPS: 1.6, FLEE_K: 2.4, AWAKE: 150 },
     ROD: { FREEZE_T: 10, CREATURE_T: 12, RANGE: 45, LAYER: 2.3, LAYERS: 6, FOLLOW: 38, AIM: 1.2 },
+    // the castle attacked from afar (a blast, fire, lightning on its ice — the author: «её подданные могут спуститься и
+    // напасть на обидчика, защищая замок»): the snowmen and the monsters go out after whoever did it — this far, this long
+    DEFEND: { R: 240, T: 120 }, // (R: past ICE.ACTIVE — from wherever the castle is awake)
     G: 14, // the shots' gravity
 };
 
@@ -449,7 +452,7 @@ export class IceCastleLife {
                 let dNear = dMe;
                 for (const r of g.remotes?.values() || []) if (r.position) dNear = Math.min(dNear, Math.hypot(r.position.x - P.x, r.position.z - P.z));
                 if (!this.active && dNear < ICE.ACTIVE) this._wake();
-                else if (this.active && dNear > ICE.SLEEP) this._sleep();
+                else if (this.active && dNear > ICE.SLEEP && !this._offender()) this._sleep();
                 if (this.active) this._respawn(dt);
             }
         }
@@ -481,6 +484,41 @@ export class IceCastleLife {
         this._updateRod(dt);
         this._hudBar();
         this._netSend(dt);
+    }
+
+    /** (host) Is this player (or anybody, id omitted) the one who attacked the castle lately? */
+    _offender(id = undefined) {
+        const o = this.offender;
+        if (!o) return false;
+        if (Date.now() > o.until) { this.offender = null; return false; }
+        return id === undefined || o.id === id;
+    }
+
+    /**
+     * (host) Someone struck the palace (a blast, lightning, fire on its ice — Game.applyExplosion, lightningAt,
+     * meltAt): if it was a player, the castle wakes and its snowmen and monsters go out after him, wherever he
+     * stands (ICE.DEFEND); the queen calls them. A guest's fire reaches here as {e: 'atk'}.
+     */
+    attacked(pos, radius, by) {
+        const g = this.game, P = this.plan;
+        if (!P || !pos || !this.auth) return;
+        if (by === 'local') by = g.localId;
+        if (by == null || !(by === g.localId || g.remotes?.has(by))) return;
+        if (pos.x < P.x0 - radius - 2 || pos.x > P.x1 + radius + 2 || pos.z < P.z0 - radius - 2 || pos.z > P.z1 + radius + 2) return;
+        if (!this.active) this._wake();
+        // (CLAUDE.md: a creature knows who did it only if it saw the cast — else it goes to the threat itself)
+        const at = this._players().find((q) => q.id === by)?.p;
+        const seen = at && this.list.some((c) => !c.dead && c.type !== 'friend' && Math.hypot(at.x - c.model.position.x, at.z - c.model.position.z) < ICE.DEFEND.R && this._sees(c, at));
+        if (!seen) {
+            for (const c of this.list) if (c.type === 'snowman' && !c.dead && !c.target) { c.roam = { x: pos.x, z: pos.z }; c.roamT = 15; }
+            return;
+        }
+        const fresh = !this._offender(by);
+        this.offender = { id: by, until: Date.now() + ICE.DEFEND.T * 1000 };
+        if (!fresh) return;
+        for (const c of this.list) if (c.type === 'snowman' || c.type === 'monster') { c.foe = by; c.roam = null; }
+        const q = this.queen;
+        if (q) this._say(q, 'Кто посмел напасть на мой замок?! Слуги, схватите его!');
     }
 
     /** (host) A player came near: the queen on her throne, the monsters at the gates, snowmen about. */
@@ -673,7 +711,7 @@ export class IceCastleLife {
         for (const q of this._players(c.type === 'queen')) {
             if (q.rod && c.type === 'snowman' && this.state.queenDead) continue; // (the rod's holder: the snowmen obey him)
             const d = Math.hypot(q.p.x - from.x, q.p.z - from.z);
-            const r = q.id === c.foe ? range * 1.6 : range;
+            const r = c.type !== 'queen' && this._offender(q.id) ? Math.max(range, ICE.DEFEND.R) : q.id === c.foe ? range * 1.6 : range;
             if (d < r && (!best || d < best.d)) best = { k: 'p', id: q.id, p: q.p.clone(), d };
         }
         return best;
@@ -732,7 +770,7 @@ export class IceCastleLife {
         // guards: whoever comes near the gates (or struck it) — within its leash of its post
         let e = this._enemy(c, M.GUARD, _v3.set(P.gate.x, p.y, P.gate.z));
         if (!e && c.foe) e = this._enemy(c, M.LEASH);
-        if (e && Math.hypot(e.p.x - c.home.x, e.p.z - c.home.z) > M.LEASH + 6) e = null;
+        if (e && Math.hypot(e.p.x - c.home.x, e.p.z - c.home.z) > (this._offender(e.id) ? ICE.DEFEND.R : M.LEASH + 6)) e = null;
         c.target = e;
         if (c.act) { c.moving = false; return; }
         if (!e) {
@@ -1383,6 +1421,7 @@ export class IceCastleLife {
             if (!isPalaceIce(b) && b !== BLOCK.ICE && b !== BLOCK.SNOW) continue;
             const d = Math.hypot(x - p.x, L - 1 - p.y, z - p.z);
             if (d > R || (d > R * 0.4 && Math.random() > 0.35 + 0.2 * power - d / R * 0.4)) continue; // (the heart of the fire: all of it)
+            if (isPalaceIce(b) && inIcePalace(this.plan, x, z) && Math.random() > PALACE_ICE.FIRE) continue; // (her own ice: dense — melts slower)
             if (b === BLOCK.SNOW && (L <= (this.plan?.F ?? -99) || power < 2)) continue; // (the mountain's own snow stays)
             t.set(x, L, z, BLOCK.AIR);
             edits.push([x, L, z, BLOCK.AIR]);
@@ -1390,6 +1429,7 @@ export class IceCastleLife {
         }
         if (edits.length) {
             g.builder?._sendEdits?.(edits);
+            if (by != null && inIcePalace(this.plan, p.x, p.z)) { if (this.auth) this.attacked(p, R, by); else g.sync?.ice?.({ e: 'atk', p: [r2(p.x), r2(p.y), r2(p.z)] }); }
             if (this.plan && Math.hypot(p.x - this.plan.x, p.z - this.plan.z) < this.plan.R + 30 && (this._meltSaidT || 0) < performance.now()) {
                 this._meltSaidT = performance.now() + 15000;
                 const q = this.queen;
@@ -1620,6 +1660,7 @@ export class IceCastleLife {
             case 'enc': if (!this.auth && typeof m.k === 'string') g.duel?._encase?.(m.k, m.id, Math.min(20, +m.T || 10)); break;
             case 'cmd': if (this.auth && typeof m.k === 'string') this.rodCmd = { k: m.k, id: m.id }; break;
             case 'fix': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.fixtures.applyFire(vec(m.p), m.r, m.pw); break; // (a guest's fire at the gates / the chandelier)
+            case 'atk': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.attacked(vec(m.p), 2, from); break; // (a guest's fire melted the palace)
             case 'mk': if (this.auth && Array.isArray(m.p) && m.p.every(Number.isFinite)) this.makeFriend(vec(m.p), +m.ry || 0); break; // (a guest's «Snowman»)
             default: break;
         }
