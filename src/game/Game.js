@@ -1431,7 +1431,7 @@ export class Game {
         if (performance.now() - (this._castAt || -1e9) < 4000) return true;
         // (Lumos lit, or just thrown by a flick: that flick throws the light, never the wand)
         if (this.wandMagic?.light || performance.now() - (this.wandMagic?._thrownAt || -1e9) < 1500) return true;
-        return !!(this.wards?.setting || this.planetMagic?.busy || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
+        return !!(this.wards?.setting || this.wards?.feeding || this.planetMagic?.busy || this.hellfire?.busy || this.waterStorm?.busy || this.vortex?.busy || this.water?.active || this.levitation?.active || this.levMax?.active || this.accio?.active || this.waves?.busy || this.lightning || this.wandMagic?.drawing);
     }
 
     /** «Вы ещё не знаете …» — where it is learned (a scroll and its ribbon, a book-bird's book, the mana). */
@@ -1485,7 +1485,7 @@ export class Game {
         // «Stand» places a door / finishes a building; «стоп» also ends every spell still going
         // (before the duel's block: nothing may keep you from stopping your own spells)
         if (name === 'Stand') {
-            if (this.wards?.setting) { this.wards.fix(); return 'Stand'; } // («стоп»: my house's dome stays as big as it grew)
+            if (this.wards?.setting || this.wards?.feeding) { this.wards.fix(); return 'Stand'; } // («стоп»: my house's dome stays as big as it grew)
             const placed = !!this.doors?.stand?.() || (this.builder.build ? (this.builder.finish(), true) : false);
             const stopped = (!placed || /стоп|stop/i.test(text)) && this.stopSpells();
             return placed ? 'Stand' : stopped ? 'Stop' : null;

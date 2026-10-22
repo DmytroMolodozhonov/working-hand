@@ -142,6 +142,8 @@ export function matchSpell(text) {
     if (jolt) return jolt;
     // «Create a Castle» («криейт э касл», «создай замок»): before the house (its own words)
     if (castleWords(s)) return 'CreateCastle';
+    // «Strengthen House» («стренгзен хаус», «усиль дом»): the beam feeding a sphere (HouseWards.js)
+    if (strengthenWords(s)) return 'StrengthenHouse';
     // «Create a House» / «Improve a House» (before the beds and «Protection House»: its own words)
     const house = houseWords(s);
     if (house) return house;
@@ -284,6 +286,15 @@ export function wardWords(s) {
     if (INVIS_W.test(s)) return 'ProtectionInvisible';
     if (HOUSE_W.test(s)) return GRANT_W.test(s) ? 'ProtectionHouseGrant' : 'ProtectionHouse';
     return null;
+}
+
+// «Strengthen House» («стренгзен хаус», «стрэнгсен хаус», «усиль дом», «укрепи дом»): a word of strengthening AND
+// «house» / «дом» — never «Protection House» (its own word «protection»), never «дом» alone in talk.
+const STRENGTH_W = /(стренг|стрэнг|стренс|стрэнс|стренз|стрэнз|стренк|стрэнк|strength|strenth|усил|укреп)/;
+export function strengthenWords(s) {
+    s = String(s || '').toLowerCase();
+    if (PROTECT_W.test(s) || !STRENGTH_W.test(s)) return false;
+    return /(хаус|хауз|хаос|house|haus|хоус)/.test(s) || s.split(/[^a-zа-яё]+/).some((w) => /^(дом|дома|домик)$/.test(w));
 }
 
 // «Create a House» («криейт э хаус», «создай дом»), «Improve a House» («импрув э хаус», «улучши дом»):

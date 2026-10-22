@@ -233,6 +233,16 @@ const TUNES = {
         melody([[0, 'B5', 1], [1, 'E6', 1], [2, 'D#6', 0.5], [2.5, 'B5', 0.5], [3, 'G#6', 2]], 0.6, 2.7, (f, t) => bell(o, sr, f, t, 0.17, 2.4));
         return finish(o, sr, { rms: 0.065 });
     },
+    /** «Strengthen House»: the beam feeding the guard — the ward's E major climbing higher and brighter, a rising glow, a bell on top. */
+    thStrengthen(sr) {
+        const o = buf(sr, 6.5), r = rng(59);
+        pad(o, sr, ['E3', 'B3', 'G#4', 'B4'], 0, 5.4, 0.42, { att: 1.4, rel: 1.2, harm: 3, vib: 0.005 });
+        glide(o, sr, 0.2, 4.2, 0.06, (u) => 330 + 660 * u * u, (u) => Math.sin(u * Math.PI * 0.5) * (1 - 0.3 * u), 2);
+        const up = ['E4', 'B4', 'E5', 'G#5', 'B5', 'E6', 'G#6', 'B6'];
+        for (let k = 0; k < 16; k++) pluck(o, sr, hz(up[k % 8] ), 0.15 + k * 0.22, 0.2, 1.4, r);
+        melody([[0, 'E5', 1.5], [1.5, 'G#5', 1.5], [3, 'B5', 1.5], [4.5, 'E6', 3]], 0.55, 1.6, (f, t) => bell(o, sr, f, t, 0.16, 2.2));
+        return finish(o, sr, { rms: 0.068 });
+    },
     /** «Total Destruction»: grim — low brass pulses on a tritone, war drums quickening, falling cries. */
     thDestroy(sr) {
         const o = buf(sr, 8), r = rng(61);
@@ -480,6 +490,8 @@ const LOOPS = {
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** A living tree: the wood's slow creak over a low drone. */
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
+    /** «Strengthen House» held: a bright steady hum (E and B) with a quick shimmer of silver bells climbing. */
+    loopStrengthen(sr) { const o = buf(sr, 2.3); pad(o, sr, [164.8, 246.9, 329.6], 0, 2.3, 0.26, { att: 0.01, rel: 0, harm: 2, vib: 0.005 }); glide(o, sr, 0, 2.3, 0.05, (u) => 600 + 400 * u, () => 1, 1); for (const [t, n] of [[0.2, 'B5'], [0.9, 'E6'], [1.6, 'G#6']]) bell(o, sr, hz(n), t, 0.04, 0.7, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** «Электром» held: the hum of a live wire and its crackle. */
@@ -528,6 +540,7 @@ export const SPELL_SOUND = {
     GiveMyPower: { own: ['magic'], theme: 'thPower' },
     ProtectionHouse: { own: ['wardHum', 'wardChime'], theme: 'thWard' }, ProtectionInvisible: { own: ['wardHum', 'wardChime'], theme: 'thWard', rate: 0.94 },
     ProtectionHouseGrant: { own: ['wardChime'], cast: 'fxShield' },
+    StrengthenHouse: { own: ['wardChime'], theme: 'thStrengthen' },
     TotalDestruction: { own: ['rumble', 'explosion'], theme: 'thDestroy' }, TotalDestructionMaxima: { own: ['rumble', 'explosion'], theme: 'thDestroy', rate: 0.9 },
     FlyingMaxima: { own: ['spaceRise'], theme: 'thOrbit' },
     CreatePlanet: { own: ['spaceRise', 'spaceGift'], theme: 'thPlanet' },
@@ -578,6 +591,7 @@ export const HELD_SOUND = {
     PlanetMove: { loop: 'loopLev', rate: 0.6, end: 'endLev' },
     Alive: { loop: 'loopAlive', end: 'endAlive' },
     Build: { loop: 'loopBuild', end: 'fxStop' },
+    WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },

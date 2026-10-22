@@ -48,6 +48,7 @@ export const HELD = {
     Castle: { ru: 'Магия замка', icon: '🏰', own: ['CreateCastle'] },
     IceMagic: { ru: 'Ледяная магия', icon: '❄️', own: ['IceCastle', 'IceBridge'] },
     Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant'] },
+    WardBeam: { ru: 'Усиление дома', icon: '🛡️', own: ['StrengthenHouse'] }, // (the beam feeding a sphere with mana: HouseWards.js)
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
     Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)
     Wave: { ru: 'Волна', icon: '🌊', own: ['WaveAttack', 'WaveAttackMaxima'] },
@@ -96,6 +97,7 @@ export class Concentration {
         if (g.castleMagic?.magic && g.castleMagic.magic.by === g.localId) return 'Castle';
         if (g.iceMagic?.mine?.()) return 'IceMagic';
         if (g.wards?.setting) return 'Ward';
+        if (g.wards?.feeding) return 'WardBeam';
         if (g.builder?.build) return 'Build';
         if (g._inDuel?.()) return 'Duel';
         if (g.waves?.busy) return 'Wave';
@@ -157,6 +159,7 @@ export class Concentration {
         if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');
         if (g.ships?.stopWind?.()) done.push('ветер в паруса');
+        if (g.wards?.feeding) { g.wards.stopFeed?.(); done.push('усиление дома'); }
         if (g.wards?.setting) { g.wards.fix?.(); done.push('защита дома'); }
         if (g.builder?.build) { g.builder.finish?.(); done.push('стройка'); }
         if (g.houseMagic?.breakMine?.()) done.push('магия дома');

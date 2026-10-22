@@ -6,9 +6,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
-import { HouseWards, WARD, WARD_SPELLS, wardCost, wardRadius, growTime, mayPass, crossInto, bodyPush, seenK, houseBounds, keepIn } from '../../src/game/HouseWards.js';
+import { HouseWards, WARD, WARD_SPELLS, wardMax, hellTime, wardCost, wardRadius, growTime, mayPass, crossInto, bodyPush, seenK, houseBounds, keepIn } from '../../src/game/HouseWards.js';
 import { BookBirds, bookSpells, isWardId, isSwiftId, WARD_ID, SWIFT_ID, rollBirdId, wardBookFalls } from '../../src/game/BookBirds.js';
 import { refusal } from '../../src/game/Hints.js';
+import { spaceSpellBlock } from '../../src/game/Space.js';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 
 test('the three spells are heard as whole phrases — and the plain shield stays the plain shield', () => {
@@ -588,4 +589,169 @@ test('strong charges against the protection: Пилбидрио −80 at once, �
     for (let i = 0; i < 130; i++) { e.W._t += 0.1; e.W.electrumTick('w', WARD.ELEC_DPS * 0.1, 'P3', p); }
     assert.equal(e.W.list.size, 0, 'held ~12 s: broken');
     assert.ok(e.g.voice.includes(refusal('wardBroken')));
+});
+
+// ------------------------------------------------------------ «Strengthen House» (the beam feeding a sphere with mana)
+function myWard(g) {
+    const W = new HouseWards(g);
+    assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
+    const w = [...W.list.values()][0];
+    w.r = 5.5;
+    W.fix();
+    g.combat.fatigue = 100;
+    return { W, w };
+}
+
+test('«Strengthen House»: five seconds of the beam = −25 mana and +25 strength (and +25 to the maximum); nothing at once', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    assert.equal(wardMax(w), WARD.HP);
+    w.hp = 60; w.hitAt = W._t; // (cracked, just hit: it does not heal by itself yet)
+    assert.equal(W.cast('StrengthenHouse'), 'StrengthenHouse');
+    assert.equal(g.combat.fatigue, 100, 'no price at once');
+    assert.ok(W.feeding);
+    run(W, 5);
+    assert.ok(Math.abs(100 - g.combat.fatigue - 25) < 0.01, `mana ${g.combat.fatigue}`);
+    assert.ok(Math.abs(w.hp - 85) < 0.01, `hp ${w.hp}`);
+    assert.ok(Math.abs(wardMax(w) - 125) < 0.01, `max ${wardMax(w)}`);
+    assert.equal(w.feedKey, 'pid-H', 'the beam is marked for everybody');
+    // «стоп»: it goes out and the mark with it
+    assert.ok(W.fix());
+    assert.equal(W.feeding, null);
+    assert.equal(w.feedKey, '');
+    run(W, 2);
+    assert.ok(Math.abs(100 - g.combat.fatigue - 25) < 0.01, 'nothing more taken');
+});
+
+test('«Strengthen House»: no mana — it will not begin; mana running out — the beam goes out; the hand off it — it waits, back — it goes on', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    g.combat.fatigue = 3;
+    assert.equal(W.cast('StrengthenHouse'), null);
+    assert.equal(W.feeding, null);
+    assert.ok(/мана|маны/i.test(g.voice.at(-1)), g.voice.at(-1));
+    g.combat.fatigue = 12;
+    assert.equal(W.cast('StrengthenHouse'), 'StrengthenHouse');
+    run(W, 6);
+    assert.equal(W.feeding, null, 'mana gone: the beam is out');
+    assert.equal(g.combat.fatigue, 0);
+    assert.ok(w.hp > WARD.HP + 5 && w.hp < WARD.HP + 13, `fed with what there was: ${w.hp}`);
+    // the hand off the sphere
+    g.combat.fatigue = 50;
+    const aim = g.character.getHandDirection;
+    assert.equal(W.cast('StrengthenHouse'), 'StrengthenHouse');
+    g.character.getHandDirection = (s, out) => out.set(-1, 0.3, 0).normalize();
+    const hp0 = w.hp;
+    run(W, 3);
+    assert.equal(w.hp, hp0, 'not fed while the hand is off it');
+    assert.ok(W.feeding, 'it waits');
+    assert.equal(w.feedKey, '', 'no beam');
+    g.character.getHandDirection = aim;
+    run(W, 2);
+    assert.ok(w.hp > hp0 + 9, 'back on it: it feeds on');
+    assert.equal(g.combat.fatigue > 30, true);
+});
+
+test('«Strengthen House»: not a sphere of mine — "не ваша"; no sphere there — the hint; a granted player feeds as the owner', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    w.owner = 'pid-someone';
+    w.ownerName = 'Чужой';
+    assert.equal(W.cast('StrengthenHouse'), null);
+    assert.ok(g.voice.at(-1).includes('Чужой'), g.voice.at(-1));
+    assert.equal(W.feeding, null);
+    w.grant = ['pid-H'];
+    assert.equal(W.cast('StrengthenHouse'), 'StrengthenHouse', 'let in with Grant: as the owner');
+    W.fix();
+    W.list.clear();
+    assert.equal(W.cast('StrengthenHouse'), null);
+    assert.equal(g.voice.at(-1), refusal('wardFeedNone'));
+});
+
+test('«Strengthen House»: a guest sends portions, the host adds them (a stranger cannot, a portion is small)', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    w.grant = ['pid-P2'];
+    const m0 = wardMax(w), hp0 = w.hp;
+    W.apply({ op: 'feed', id: w.id, d: 1.25, on: true }, 'P2');
+    assert.ok(Math.abs(w.hp - hp0 - 1.25) < 1e-9 && Math.abs(wardMax(w) - m0 - 1.25) < 1e-9);
+    assert.equal(w.feedKey, 'pid-P2');
+    W.apply({ op: 'feed', id: w.id, d: 999, on: true }, 'P2');
+    assert.equal(w.hp, hp0 + 1.25 + WARD.FEED_PORTION, 'one portion is capped');
+    W.apply({ op: 'feed', id: w.id, d: 1, on: false }, 'P2');
+    assert.equal(w.feedKey, '');
+    const before = w.hp;
+    W.apply({ op: 'feed', id: w.id, d: 2, on: true }, 'P3'); // (not let in)
+    assert.equal(w.hp, before);
+    // a guest's own computer: the portions go to the host
+    const gg = fakeGame({ id: 'P2', host: false });
+    const sent = [];
+    gg.sync = { wardOp: (op) => sent.push(op) };
+    const Wg = new HouseWards(gg);
+    Wg.applyNet(W.netList());
+    gg.character.getHandDirection = g.character.getHandDirection;
+    assert.equal(Wg.cast('StrengthenHouse'), 'StrengthenHouse');
+    run(Wg, 2);
+    const fed = sent.filter((o) => o.op === 'feed').reduce((a, o) => a + o.d, 0);
+    assert.ok(fed > 7 && fed <= 10.1, `sent ${fed}`);
+    assert.equal(Wg.list.get(w.id).hp, Math.round(w.hp), 'the host\'s number stays until its list comes');
+});
+
+test('the maximum grows without a limit, the cracks heal up to it, the Hellfire burns 7 s for every 100, old saves have 100', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    w.hp = 300; w.max = 340;
+    w.hp = 100;
+    w.hitAt = -1e9;
+    W._t = 100;
+    W._heal(1000);
+    assert.equal(w.hp, 340, 'healed to the new maximum, not to 100');
+    // the hellfire
+    assert.equal(hellTime({ max: 100 }), 7);
+    assert.equal(hellTime({}), 7, 'no maximum: 100');
+    assert.equal(hellTime({ max: 50 }), 7, 'never less than 7');
+    assert.ok(Math.abs(hellTime({ max: 340 }) - 23.8) < 1e-9);
+    const f = warded();
+    const fw = f.W.list.get('w');
+    fw.max = 340; fw.hp = 340;
+    for (let t = 0; t <= 20; t += 0.5) { f.W._t = t; f.W.struck(f.at, 3, 'Hellfire'); }
+    assert.equal(f.W.list.size, 1, '20 s: a 340 one still holds');
+    for (let t = 20.5; t <= 25; t += 0.5) { f.W._t = t; f.W.struck(f.at, 3, 'Hellfire'); }
+    assert.equal(f.W.list.size, 0, '24 s: burnt through');
+    // the fixed blows take their fixed strength from the bigger number
+    const b = warded();
+    const bw = b.W.list.get('w');
+    bw.max = 340; bw.hp = 340;
+    b.W.struck(b.at, 3, 'Bombardo');
+    assert.equal(bw.hp, 340 - WARD.BREAK.Bombardo);
+    b.W.chargeHit(bw, b.at, 'Pilbidrio', 'P3');
+    assert.equal(bw.hp, 340 - WARD.BREAK.Bombardo - WARD.BREAK.Pilbidrio);
+    // saved and sent with the max; a save from before has none
+    const rec = W._rec(w);
+    assert.equal(rec.mx, 340);
+    assert.equal(W._fromRec(rec).max, 340);
+    delete rec.mx;
+    assert.equal(W._fromRec(rec).max, WARD.HP, 'old saves: 100');
+    assert.equal(W._rec({ ...w, max: undefined }).mx, undefined, 'never fed: not written');
+});
+
+test('the owner is told "N%" of the maximum and the numbers', () => {
+    const g = fakeGame();
+    const { W, w } = myWard(g);
+    w.max = 340; w.hp = 170;
+    W._attacked(w);
+    assert.ok(/Защита: 50% \(170\/340\)/.test(g.voice.at(-1)), g.voice.at(-1));
+});
+
+test('«Strengthen House» in space and on the planets: nothing to feed; the word is told apart from the other house spells', () => {
+    assert.ok(/нечего усиливать/.test(spaceSpellBlock('StrengthenHouse', 'space', 'space')));
+    assert.ok(/нечего усиливать/.test(spaceSpellBlock('StrengthenHouse', 'moon', 'none')));
+    assert.equal(spaceSpellBlock('StrengthenHouse', 'earth', 'air'), null);
+    for (const t of ['Strengthen House', 'стренгзен хаус', 'стренсен хаус', 'усиль дом', 'укрепи дом']) assert.equal(matchSpell(t), 'StrengthenHouse', t);
+    assert.equal(matchSpell('Protection House'), 'ProtectionHouse');
+    assert.equal(matchSpell('протекшн хаус'), 'ProtectionHouse');
+    assert.equal(matchSpell('Improve a House'), 'ImproveHouse');
+    assert.equal(matchSpell('Create a House'), 'CreateHouse');
+    assert.notEqual(matchSpell('сильный дом'), 'StrengthenHouse');
+    assert.notEqual(matchSpell('красивый дом'), 'StrengthenHouse');
 });

@@ -88,6 +88,7 @@ const HOW = {
     ProtectionHouse: { words: 'Protection House', hand: 'house', text: 'Направьте палочку на дом (или на всё, что хотите защитить) и скажите заклинание (20 маны): заряд влетит в дом и зажжёт над ним купол защиты. Держите палочку на куполе — он растёт сам (3 маны за метр). Накрыл всё, что нужно, — скажите «стоп». Войти может только хозяин и те, кого он пустит; заклинания снаружи разбиваются о него, подкоп снизу тоже не проходит.' },
     ProtectionInvisible: { words: 'Protection Invisible', hand: 'invisible', text: 'Направьте руку на дом под защитой (15 маны). Издалека его больше не видно — только земля и трава, как вокруг. Ближе 3–4 м он медленно проступает.' },
     ProtectionHouseGrant: { words: 'Protection House Grant', hand: 'grant', text: 'Встаньте у своего защищённого дома, направьте руку на друга и скажите заклинание (5 маны): теперь и он свободно входит в дом и выходит из него.' },
+    StrengthenHouse: { words: 'Strengthen House', hand: 'house', text: 'Направьте палочку на защиту своего дома и скажите заклинание: из палочки пойдёт луч и будет подпитывать защиту вашей маной — 5 маны в секунду, и защита крепчает на 5 в секунду. Предела нет. Хватит — скажите «стоп».' },
     Flight: { words: 'Флайн', hand: 'up', text: 'Поднимите обе руки вверх и скажите «Флайн» — вы взлетите. Рулите корпусом: наклон вперёд — вниз, назад — вверх, повороты плечами. «Паузин» — парить на месте. Приземление — направьте себя в землю. Полёт тратит ману.' },
     CreateDoor: { words: 'Create a Door', hand: 'door', text: 'Держите в руке дерево (не меньше 12). Скажите заклинание — кубик станет маленькой дверью. Отводите руку — дверь растёт; покажите, куда её поставить, и скажите «Stand».' },
 };
@@ -103,7 +104,7 @@ function rngFrom(seed) {
 /** Up to three spells, random but the same on every computer for this id. */
 export function bookSpells(id) {
     if (isSwiftId(id)) return ['Flight']; // (the swift book: only «Флайн»)
-    if (isWardId(id)) return WARD_SPELLS.slice(); // (the book of protection: its group of three)
+    if (isWardId(id)) return WARD_SPELLS.slice(); // (the book of protection: its group of four)
     const r = rngFrom(id * 7919 + 17);
     const n = 1 + Math.floor(r() * 3);
     const out = [];

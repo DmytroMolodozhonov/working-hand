@@ -57,7 +57,7 @@ export const FIRST_SPELL = {
     Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2, WindImpulse: 2, Liquidation: 2,
     WindMaxima: 3, Inferno: 3, Stupefy: 3, Expelliarmus: 3, Disarmor: 3, SuitUp: 1, ProtectionInvisible: 3,
     DrawdownMaxima: 3, Invisibility: 4, LiquidationMaxima: 4,
-    OvergrownMaxima: 4, WaveAttackMaxima: 4, BreakthroughMaxima: 4, ProtectionMaxima: 4, ProtectionHouse: 4, Thunderwave: 4,
+    OvergrownMaxima: 4, WaveAttackMaxima: 4, BreakthroughMaxima: 4, ProtectionMaxima: 4, ProtectionHouse: 4, StrengthenHouse: 4, Thunderwave: 4,
     EarthquakeMaxima: 5, WindImpulseMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
     // strong: up to +20
     Snowman: 3, WaterVortex: 8, Alive: 8, AliveMaxima: 12, LevitationMaxima: 8, AvadaKedavra: 10, LightningStrike: 12, TotalDestruction: 15,
@@ -339,7 +339,7 @@ const TITLES = {
     Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',
     Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', GiveMyPower: 'Give Me My Power', Frozen: 'Frozen', RodFrozen: 'Frozen (Ледяной Жезл)', RodIce: 'Лёд Ледяного Жезла', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
-    Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', Thunderwave: 'Тандервейв',
+    Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',

@@ -25,6 +25,20 @@
  *   «Protection House Grant»  by (or in) your protected house, aim at a player (−5 mana): that player
  *                             may come in and go out freely, like the owner.
  *
+ *   «Strengthen House»        (the author's «Усили дом») the wand on the sphere of YOUR house (or of one who let you
+ *                             in with «Grant» — as the owner): a beam, a little warmer and brighter than the dome's own,
+ *                             goes from the wand into it and feeds it with your mana — WARD.FEED_MANA (5) mana a second
+ *                             and WARD.FEED_HP (5) strength a second, bit by bit every frame, while the wand stays on it
+ *                             (on the dome or on the house under it, ≤ 40 m), you have mana and have not said «стоп».
+ *                             No price at once (5 mana to begin). The hand taken off it: the beam goes out and WAITS
+ *                             (as the growing dome does: back on it — it feeds on; 30 s idle — it ends). No limit: the
+ *                             sphere has its own maximum (`w.max`, 100 at first) that grows with every drop fed —
+ *                             the cracks heal up to it, the owner is told "N%" of it. In Creative no mana is spent.
+ *                             Not yours / an NPC wizard's sphere: «Это не ваша защита». A held spell (concentration).
+ *                             Table «who/what × how» (CLAUDE.md): it acts on NO creature and NO thing — only on the
+ *                             sphere of its owner or of a granted player; off the Earth (space, planets) there are no
+ *                             spheres: «нечего усиливать» (Space.spaceSpellBlock).
+ *
  * What the sphere does — for EVERY kind (CLAUDE.md «на кого и на что»):
  *   - while it is set the caster's beam goes on from the wand: it strikes the house (the house fills with the
  *     magic), then — the dome grown round it — the dome itself, its hex lit where it strikes, until «стоп»
@@ -50,7 +64,8 @@
  *     once (the beam dies at the surface); «Акцентрик» stays on it and eats 5 a second, 40 in all, then its haze goes out
  *     (a second charge only refills it to 40); «Электром» held on one spot takes ~8.4 a second (a whole one in ~12 s):
  *     the hexes crack round the spot more and more, it sparks and shivers; the hand off the spot — the cracks stay, they
- *     heal as the others. Not the gods' temple / gifts of the gods (their golden protection is not a house's). Every
+ *     heal as the others. A sphere fed with «Strengthen House» has a bigger maximum: the blows above take the same
+ *     fixed strength, but the Hellfire burns HELL_T s for every 100 of the maximum (never less). Not the gods' temple / gifts of the gods (their golden protection is not a house's). Every
  *     other charge (Остолбеней, Авада…) only flashes.
  *     Each such blow tells its owner at once, wherever in the world they are: «🛡️⚠️ Ваш дом пытаются
  *     разрушить — кто! Защита: N% (сколько км отсюда)» (every few seconds while it goes on).
@@ -85,7 +100,11 @@ export const WARD = {
     GRANT_NEAR: 5, // m from the sphere: near enough to grant
     SEE_NEAR: 3.5, // m from the sphere: an invisible house is all there
     SEE_FAR: 6.5, // m: … and not seen at all from this far
-    HP: 100,
+    HP: 100, // the strength (and the maximum) of a sphere nobody has fed
+    FEED_MANA: 5, // «Strengthen House»: mana a second…
+    FEED_HP: 5, // …and strength a second (and the maximum grows by the same)
+    FEED_SEND: 0.25, // s between the portions a guest sends the host
+    FEED_PORTION: 4, // the most strength the host takes from one message
     BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100, Pilbidrio: 80 }, // strength taken (nothing else breaks it)
     ACC_DPS: 5, // «Акцентрик» sitting on it: strength a second…
     ACC_TOTAL: 40, // …until this much is taken, then its haze goes out by itself
@@ -104,9 +123,9 @@ export const WARD = {
     HIDE_MAX: 8, // invisible houses drawn hidden at once (the nearest)
 };
 
-/** The three spells of the book of protection. */
-export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant'];
-export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant' };
+/** The spells of the book of protection. */
+export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'StrengthenHouse'];
+export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House' };
 export const isWardSpell = (n) => WARD_SPELLS.includes(n);
 
 /** Mana of a dome grown to radius `r` (the charge + every metre it grew). */
@@ -115,6 +134,11 @@ export const wardCost = (r) => WARD.COST + WARD.GROW_MANA * Math.max(0, Math.min
 export const growTime = (r, fast = false) => Math.max(0, Math.min(WARD.MAX_R, r) - WARD.START_R) / (fast ? WARD.GROW_V_MAX : WARD.GROW_V);
 /** (worlds saved before it grew by itself) its radius after `n` «Максима». */
 export const wardRadius = (n) => Math.min(WARD.MAX_R, 2.5 + WARD.STEP * Math.max(0, n)); // (it started at 2.5 m then)
+
+/** The sphere's maximum strength (100 for one nobody fed, and for worlds saved before). */
+export const wardMax = (w) => (w.max > 0 ? w.max : WARD.HP);
+/** Seconds of the Hellfire that burn the sphere through: 7 for every 100 of its maximum, never less. */
+export const hellTime = (w) => WARD.HELL_T * Math.max(1, wardMax(w) / WARD.HP);
 
 /** May the one with this key (lasting id) pass through the sphere? The owner and the granted. */
 export const mayPass = (w, key) => !!key && (w.owner === key || (w.grant || []).includes(key));
@@ -196,13 +220,15 @@ const _Z = new THREE.Vector3(0, 0, 1), _Y = new THREE.Vector3(0, 1, 0);
 
 /** The caster's beam (shared shape and materials — HouseWards._beams): a core and a glow, length 1 along +y. */
 let BEAM = null;
-function beamModel() {
+/** feed: the «Strengthen House» beam — silver-blue, a little warmer and brighter than the dome's own. */
+function beamModel(feed = false) {
     if (!BEAM) {
         const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
-        BEAM = { geo: new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).translate(0, 0.5, 0), core: mat(0xffffff, 0.95), glow: mat(0x8fd0ff, 0.45) };
+        BEAM = { geo: new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).translate(0, 0.5, 0), core: mat(0xffffff, 0.95), glow: mat(0x8fd0ff, 0.45), feedCore: mat(0xfffaf0, 1), feedGlow: mat(0xbfe4ff, 0.6), feedHalo: mat(0xffe9b8, 0.18) };
     }
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(BEAM.geo, BEAM.core), new THREE.Mesh(BEAM.geo, BEAM.glow));
+    if (feed) g.add(new THREE.Mesh(BEAM.geo, BEAM.feedCore), new THREE.Mesh(BEAM.geo, BEAM.feedGlow), new THREE.Mesh(BEAM.geo, BEAM.feedHalo));
+    else g.add(new THREE.Mesh(BEAM.geo, BEAM.core), new THREE.Mesh(BEAM.geo, BEAM.glow));
     for (const m of g.children) { m.renderOrder = 5; m.frustumCulled = false; }
     g.userData.noWardHide = true;
     return g;
@@ -275,6 +301,7 @@ export class HouseWards {
         this.game = game;
         this.list = new Map(); // id -> ward {id, owner, ownerName, c, r, n, inv, grant, grantNames, hp, gy, setting, ids}
         this.looks = new Map(); // id -> {dome, disc, k, flash}
+        this.feeding = null; // my beam feeding a sphere with mana: {id, idle, send, acc, aimed, on, rayT}
         this.setting = null; // my dome growing: {id, idle, wait, fast, need, covered, send}
         this.bolts = []; // the charges flying to the houses (seen on every computer)
         this._t = 0;
@@ -437,6 +464,7 @@ export class HouseWards {
         if (name === 'ProtectionHouse') return this._castHouse(isFinal, fast);
         if (name === 'ProtectionInvisible') return this._castInvisible(isFinal);
         if (name === 'ProtectionHouseGrant') return this._castGrant(isFinal);
+        if (name === 'StrengthenHouse') return this._castStrengthen(isFinal);
         return null;
     }
 
@@ -488,10 +516,11 @@ export class HouseWards {
         return 'WardGrow';
     }
 
-    /** «стоп»: the dome stays as it is now. */
+    /** «стоп»: the dome stays as it is now (and a beam feeding a sphere goes out). */
     fix() {
+        const fed = this.stopFeed();
         const s = this.setting;
-        if (!s) return false;
+        if (!s) return fed;
         this.setting = null;
         const w = this.list.get(s.id);
         if (!w) return false;
@@ -564,6 +593,102 @@ export class HouseWards {
         const R = Math.max(w.r, s.need || 0) + 1.5;
         s.rayOn = !!hit && Math.hypot(hit.x - w.c.x, hit.z - w.c.z) < R && hit.y > w.c.y - 2 && hit.y < w.c.y + R + 1;
         return s.rayOn;
+    }
+
+
+    // ------------------------------------------------------------ «Strengthen House»
+    /** The sphere the hand shows: the dome itself, else the house / land under it (the dome round it). */
+    _wardShown(h) {
+        const on = this._wardOnRay(h.o, h.d);
+        if (on) return on.w;
+        const hit = this.game.terrain?.data?.raycast?.(h.o, h.d, WARD.AIM);
+        if (!hit) return null;
+        let best = null, bd = 1e9;
+        for (const w of this.list.values()) {
+            const d = Math.hypot(hit.x - w.c.x, hit.z - w.c.z);
+            if (d < w.r + 1.5 && hit.y > w.c.y - 2 && hit.y < w.c.y + w.r + 1 && d < bd) { bd = d; best = w; }
+        }
+        return best;
+    }
+
+    /** Mana to begin: the first second of the beam. */
+    _feedMana() { return WARD.FEED_MANA; }
+
+    /** «Strengthen House»: the beam from the wand into my (or a granted) sphere; a held spell. */
+    _castStrengthen() {
+        const g = this.game;
+        if (this.setting) return null; // (the dome still growing holds the hand)
+        const h = this._hand();
+        if (!h) return this._no('wardNoHand', { name: 'Strengthen House' });
+        const w = this._wardShown(h);
+        if (!w) return this._no('wardFeedNone');
+        if (!mayPass(w, this.myKey)) return this._no('wardNotYours', { owner: w.ownerName });
+        const c = g.combat;
+        if (c && c.enabled !== false) {
+            if (c.dead || c.frozen || c.stunned) return null;
+            if (c.fatigue < this._feedMana()) return this._no('wardFeedNoMana');
+        }
+        if (this.feeding?.id === w.id) return 'StrengthenHouse'; // (said again: it goes on)
+        this.stopFeed();
+        this.feeding = { id: w.id, idle: 0, send: 0, acc: 0, aimed: true, on: false, rayT: 0 };
+        g.hud?.setVoice?.(`🛡️ Луч питает защиту: −${WARD.FEED_MANA} маны и +${WARD.FEED_HP} силы в секунду, пока палочка на ней. Хватит — скажите «стоп»`, true);
+        this.log.push({ ev: 'feed', id: w.id });
+        return 'StrengthenHouse';
+    }
+
+    /** The beam goes out (стоп / no mana / the sphere gone): what was fed is sent. True if it was going. */
+    stopFeed() {
+        const s = this.feeding;
+        if (!s) return false;
+        this.feeding = null;
+        this._sendFeed(s, 0, false);
+        this.log.push({ ev: 'feedEnd', id: s.id });
+        return true;
+    }
+
+    /** Each frame: the beam feeds while the wand is on the sphere. */
+    _feed(dt) {
+        const s = this.feeding;
+        const w = s && this.list.get(s.id);
+        if (!w || !mayPass(w, this.myKey)) { this.feeding = null; return; }
+        const aimed = this._onMine(w, s, dt);
+        if (aimed !== s.aimed) { s.aimed = aimed; if (!aimed) this._sendFeed(s, 0, false); }
+        if (!aimed) { // (the hand off it: the beam is out, it waits — as the growing dome does)
+            s.idle += dt;
+            if (s.idle > WARD.SET_IDLE) this.stopFeed();
+            return;
+        }
+        s.idle = 0;
+        const c = this.game.combat;
+        if (c && c.enabled !== false) {
+            const ok = c.fatigue > 0 && (c.drain ? c.drain(WARD.FEED_MANA * dt, dt) : ((c.fatigue = Math.max(0, c.fatigue - WARD.FEED_MANA * dt)), true));
+            if (!ok) { this._no('wardFeedNoMana'); this.stopFeed(); return; }
+        }
+        const d = WARD.FEED_HP * dt;
+        if (this.auth) {
+            w.hp += d;
+            w.max = wardMax(w) + d;
+            w.feedKey = this.myKey;
+            w.feedAt = this._t;
+            if (this._t - (s.sentAt ?? -1e9) >= WARD.FEED_SEND) { s.sentAt = this._t; this._changed(); }
+        } else {
+            s.acc += d;
+            s.send -= dt;
+            if (s.send <= 0) { s.send = WARD.FEED_SEND; const a = s.acc; s.acc = 0; this._sendFeed(s, a, true); }
+        }
+        s.on = true;
+    }
+
+    /** (a guest) a portion to the host; (the host) the beam's mark only. */
+    _sendFeed(s, d, on) {
+        const w = this.list.get(s.id);
+        if (!w) return;
+        if (this.auth) {
+            if (!on && w.feedKey === this.myKey) { w.feedKey = ''; this._changed(); }
+            return;
+        }
+        if (s.acc > 0 && !on) { d += s.acc; s.acc = 0; }
+        this.game.sync?.wardOp?.({ op: 'feed', id: s.id, d: r2(d), on: !!on });
     }
 
     // ------------------------------------------------------------ the charge
@@ -705,7 +830,7 @@ export class HouseWards {
         const w = op.id != null ? this.list.get(String(op.id)) : null;
         if (op.op === 'new') {
             if (w || !Array.isArray(op.c) || !op.c.every(Number.isFinite)) return;
-            const nw = this._add({ id: String(op.id).slice(0, 60), owner: key, ownerName: String(op.name || this.game.playerName?.(from) || 'Игрок').slice(0, 16), c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true });
+            const nw = this._add({ id: String(op.id).slice(0, 60), owner: key, ownerName: String(op.name || this.game.playerName?.(from) || 'Игрок').slice(0, 16), c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, max: WARD.HP, setting: true });
             this._fresh(nw, op);
         } else if (!w) return;
         else if (op.op === 'grow') {
@@ -721,6 +846,13 @@ export class HouseWards {
             w.setting = !!op.on;
             if (!w.setting) { w.gy = this._groundY(w.c, w.r); this._rebuildDisc(w); }
         }
+        else if (op.op === 'feed') {
+            // (a granted player feeds as the owner; the portion is the guest's own mana: a few moments' worth at most)
+            if (!mayPass(w, key)) return;
+            const d = Math.max(0, Math.min(WARD.FEED_PORTION, +op.d || 0));
+            if (d > 0) { w.hp += d; w.max = wardMax(w) + d; }
+            if (op.on) { w.feedKey = key; w.feedAt = this._t; } else if (w.feedKey === key) w.feedKey = '';
+        }
         else if (op.op === 'inv') { if (w.owner === key) w.inv = true; }
         else if (op.op === 'vis') { if (w.owner === key) w.inv = false; }
         else if (op.op === 'grant') {
@@ -733,7 +865,7 @@ export class HouseWards {
 
     /** (guest) Seen at once on my own computer. */
     _applyLocal(op, from) {
-        if (op.op === 'new' && !this.list.has(op.id)) this._fresh(this._add({ id: op.id, owner: this.myKey, ownerName: op.name, c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, setting: true, ids: [from] }), op);
+        if (op.op === 'new' && !this.list.has(op.id)) this._fresh(this._add({ id: op.id, owner: this.myKey, ownerName: op.name, c: { x: op.c[0], y: op.c[1], z: op.c[2] }, r: WARD.START_R, n: 0, inv: false, grant: [], grantNames: [], hp: WARD.HP, max: WARD.HP, setting: true, ids: [from] }), op);
         const w = this.list.get(op.id);
         if (!w) return;
         if (op.op === 'grow' && Number.isFinite(op.r) && op.r > w.r) w.r = Math.min(WARD.MAX_R, op.r);
@@ -766,6 +898,7 @@ export class HouseWards {
             this.looks.delete(id);
         }
         if (this.setting?.id === id) this.setting = null;
+        if (this.feeding?.id === id) this.feeding = null;
         WARD_HIDE.n.value = 0; // (filled again next frame)
     }
 
@@ -778,6 +911,8 @@ export class HouseWards {
     /** One sphere as it is sent and saved. */
     _rec(w, ids = false) {
         const o = { id: w.id, o: w.owner, on: w.ownerName, c: [r2(w.c.x), r2(w.c.y), r2(w.c.z)], r: r2(w.r), inv: w.inv ? 1 : 0, g: w.grant.slice(), gn: w.grantNames.slice(), hp: Math.round(w.hp) };
+        if (wardMax(w) > WARD.HP) o.mx = Math.round(wardMax(w));
+        if (w.feedKey) o.fk = w.feedKey;
         if (w.setting) { o.s = 1; if (w.f) { o.f = w.f; if (w.a) o.a = w.a; } }
         if (w.hellT > 0) o.h = Math.round(w.hellT * 10) / 10;
         if (w.ac) { o.ac = Math.round(w.ac.left * 10) / 10; o.ap = w.ap; }
@@ -789,7 +924,7 @@ export class HouseWards {
 
     _fromRec(o) {
         if (!o || !Array.isArray(o.c) || !o.c.every(Number.isFinite)) return null;
-        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, hellT: +o.h || 0, ...(o.ac > 0 && Array.isArray(o.ap) ? { ac: { left: +o.ac, by: null }, ap: o.ap.slice(0, 3) } : {}), ...(Array.isArray(o.ep) ? { ep: o.ep.slice(0, 3) } : {}), hitKey: String(o.hk || ''), hitBy: String(o.hb || '').slice(0, 16), setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
+        return { id: String(o.id), owner: String(o.o || ''), ownerName: String(o.on || ''), c: { x: o.c[0], y: o.c[1], z: o.c[2] }, r: Number.isFinite(o.r) ? o.r : wardRadius(Math.max(0, o.n | 0)), n: Math.max(0, o.n | 0), inv: !!o.inv, grant: Array.isArray(o.g) ? o.g.map(String) : [], grantNames: Array.isArray(o.gn) ? o.gn.map(String) : [], hp: Number.isFinite(o.hp) ? o.hp : WARD.HP, max: o.mx > 0 ? +o.mx : WARD.HP, feedKey: String(o.fk || ''), hellT: +o.h || 0, ...(o.ac > 0 && Array.isArray(o.ap) ? { ac: { left: +o.ac, by: null }, ap: o.ap.slice(0, 3) } : {}), ...(Array.isArray(o.ep) ? { ep: o.ep.slice(0, 3) } : {}), hitKey: String(o.hk || ''), hitBy: String(o.hb || '').slice(0, 16), setting: !!o.s, ids: Array.isArray(o.ids) ? o.ids : null, ...(Array.isArray(o.f) ? { f: o.f.slice(0, 3), a: Array.isArray(o.a) ? o.a.slice(0, 3) : null } : {}) };
     }
 
     netList() { return [...this.list.values()].map((w) => this._rec(w, true)); }
@@ -925,7 +1060,7 @@ export class HouseWards {
                 const gap = this._t - (w.hellAt ?? -1e9);
                 w.hellT = gap < 1.5 ? (w.hellT || 0) + gap : 0;
                 w.hellAt = this._t;
-                broken = w.hellT >= WARD.HELL_T;
+                broken = w.hellT >= hellTime(w);
             } else {
                 const n = WARD.BREAK[spell];
                 if (!n) continue;
@@ -997,12 +1132,12 @@ export class HouseWards {
         const now = performance.now();
         if (now - (w.warnAt || -1e9) < WARD.WARN_EVERY * 1000) return;
         w.warnAt = now;
-        const hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
-        const left = Math.max(0, Math.round(Math.min(w.hp / WARD.HP, 1 - hell) * 100));
+        const hell = Math.min(1, (w.hellT || 0) / hellTime(w));
+        const left = Math.max(0, Math.round(Math.min(w.hp / wardMax(w), 1 - hell) * 100));
         const me = g.character?.group?.position;
         const far = me ? Math.hypot(me.x - w.c.x, me.z - w.c.z) : 0;
         const where = far > 60 ? ` (${far >= 1000 ? (far / 1000).toFixed(1) + ' км' : Math.round(far) + ' м'} отсюда)` : '';
-        g.hud?.setVoice?.(`🛡️⚠️ Ваш дом пытаются разрушить${w.hitBy ? ` — ${w.hitBy}` : ''}! Защита: ${left}%${where}`, true);
+        g.hud?.setVoice?.(`🛡️⚠️ Ваш дом пытаются разрушить${w.hitBy ? ` — ${w.hitBy}` : ''}! Защита: ${left}% (${Math.max(0, Math.round(w.hp))}/${Math.round(wardMax(w))})${where}`, true);
         g.sound?.playCrack?.(me || _v1.set(w.c.x, w.c.y, w.c.z), 0.6);
         this.log.push({ ev: 'warned', id: w.id, by: w.hitBy || null, left });
     }
@@ -1276,7 +1411,7 @@ export class HouseWards {
             L.grow = w.setting && dr > 1e-5 ? 1 : Math.max(0, L.grow - dt * 3);
             u.uGrow.value = L.grow;
             if (L.grow > 0.5 && !coming) this._growSparks(w, L, dt);
-            u.uHell.value = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
+            u.uHell.value = Math.min(1, (w.hellT || 0) / hellTime(w));
             // not seen — but while it is being set (and a moment after «стоп»), where one who may not
             // come in is close, where magic hits it, while it is cracked or the Hellfire burns on it
             if (L.wasSetting && !w.setting) this._setDone(w, L);
@@ -1285,10 +1420,12 @@ export class HouseWards {
             // the walls as everything is, brightest where the caster's beam strikes it — _beams)
             L.show = Math.max(0, L.show - dt);
             const inside = inWard(w, _v2.set(eye.x, eye.y + 1, eye.z));
-            const crack = Math.max(0, 1 - w.hp / WARD.HP), hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
+            const crack = Math.max(0, 1 - w.hp / wardMax(w)), hell = Math.min(1, (w.hellT || 0) / hellTime(w));
             L.flash = Math.max(0, L.flash - dt * 1.5);
-            const seen = Math.max(w.setting ? (inside ? 0.12 : 0.3) + 0.4 * L.pulse : 0, Math.min(1, L.show) * (inside ? 0.25 : 0.6), L.near * 0.75, L.flash * 0.8, L.beam * 0.8, crack * 0.5, hell * 0.9);
-            u.uAlpha.value = seen * k;
+            const seen = Math.max(w.setting ? (inside ? 0.12 : 0.3) + 0.4 * L.pulse : 0, Math.min(1, L.show) * (inside ? 0.25 : 0.6), L.near * 0.75, L.flash * 0.8, L.beam * 0.8, (L.feed || 0) * 0.5, crack * 0.5, hell * 0.9);
+            // (a sphere fed to a great strength glows brighter: ×1 at 100, ×1.45 at 1600)
+            const big = Math.min(1, Math.log2(Math.max(1, wardMax(w) / WARD.HP)) / 4);
+            u.uAlpha.value = Math.min(1, seen * (1 + 0.45 * big)) * k;
             u.uCrack.value = crack;
             // «Электром»'s spot: the cracks grow from it as the strength goes (stay where the beam left them); live — it sparks
             if (w.ep && crack > 0.01) {
@@ -1301,13 +1438,14 @@ export class HouseWards {
                 g.fx?.spark?.(_v2.set(w.ap[0] + (Math.random() - 0.5) * 2, w.ap[1] + (Math.random() - 0.5) * 2, w.ap[2] + (Math.random() - 0.5) * 2), Math.random() < 0.5 ? 0xb07cff : 0xd9b8ff, 0.2, _v3.set(0, 0.8, 0), 0.8);
                 L.flash = Math.max(L.flash, 0.35); L.flashAt = (L.flashAt || new THREE.Vector3()).set(w.ap[0], w.ap[1], w.ap[2]);
             }
-            u.uColor.value.setHex(0x7fbfff).lerp(_c.setHex(0xff3a1a), hell);
+            u.uColor.value.setHex(0x7fbfff).lerp(_c.setHex(0xdcefff), 0.7 * (L.feed || 0)).lerp(_c.setHex(0xff3a1a), hell); // (fed now: whiter, warmer)
             // the hex pattern lights up where it is touched / pressed
             const fp = L.beam > Math.max(L.near, L.flash) ? L.beamAt : L.near > L.flash ? L.nearAt : L.flashAt;
             if (fp) u.uFlash.value.set(fp.x, fp.y, fp.z, Math.max(L.flash, L.near * 0.8, L.beam));
             else u.uFlash.value.w = 0;
             L.near = Math.max(0, L.near - dt * 1.5);
             L.beam = Math.max(0, (L.beam || 0) - dt * 4);
+            L.feed = Math.max(0, (L.feed || 0) - dt * 4);
             L.dome.visible = k > 0.01 && seen > 0.005 && !coming;
             if (w.inv && k < 0.999) hidden.push({ w, k, d: Math.hypot(eye.x - w.c.x, eye.z - w.c.z) });
             // the land over it, seen from far
@@ -1417,46 +1555,62 @@ export class HouseWards {
      * dome's `setting` comes by the network; the caster's hand is his avatar's).
      */
     _beams(dt) {
-        const g = this.game;
-        const live = new Set();
+        const live = this._liveBeams || (this._liveBeams = new Set());
+        live.clear();
         for (const w of this.list.values()) {
-            if (!w.setting || (w.landAt != null && this._t < w.landAt)) continue; // (its charge still flying)
-            const h = this._casterHand(w);
-            if (!h) continue;
-            live.add(w.id);
-            const B = this._beamOf(w.id);
-            // where it strikes: the dome from outside; from inside (or past it) the house / the land it shows
-            let end = null, onDome = false;
-            if (!inWard(w, h.o)) {
-                const fx = h.o.x - w.c.x, fy = h.o.y - w.c.y, fz = h.o.z - w.c.z;
-                const b = fx * h.d.x + fy * h.d.y + fz * h.d.z, c = fx * fx + fy * fy + fz * fz - w.r * w.r, D = b * b - c;
-                const t = D >= 0 ? -b - Math.sqrt(D) : -1;
-                if (t > 0 && t < WARD.AIM + w.r) { end = _v1.copy(h.o).addScaledVector(h.d, t); onDome = true; }
-            }
-            if (!end) {
-                B.rayT = (B.rayT ?? 0) - dt;
-                if (B.rayT <= 0) { B.rayT = 0.1; const hit = g.terrain?.data?.raycast?.(h.o, h.d, WARD.AIM); B.hit = hit ? (B.hit || new THREE.Vector3()).set(hit.x, hit.y, hit.z) : null; }
-                end = B.hit ? _v1.copy(B.hit) : _v1.copy(h.o).addScaledVector(h.d, WARD.AIM * 0.5);
-            }
-            this._drawBeam(B, h.o, end, dt);
-            // its end: the dome lights up there — or the house drinks the magic in
-            const L = this.looks.get(w.id);
-            if (onDome && L) { L.beam = 1; L.beamAt = (L.beamAt || new THREE.Vector3()).copy(end); }
-            B.sparkAcc = Math.min(4, (B.sparkAcc || 0) + dt * (onDome ? 25 : 40));
-            for (; B.sparkAcc >= 1; B.sparkAcc--) {
-                const v = _v2.set(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize().multiplyScalar(onDome ? 1.5 : 0.8 + Math.random());
-                g.fx?.spark?.(end, Math.random() < 0.5 ? 0x9fd8ff : Math.random() < 0.5 ? 0xcfe8ff : 0xb7a6ff, 0.05 + Math.random() * 0.05, v, onDome ? 0.35 : 0.7);
-            }
+            if (w.setting && !(w.landAt != null && this._t < w.landAt)) this._beamOne(w, dt, false, live); // (its charge not still flying)
+            if (this._feedKey(w)) this._beamOne(w, dt, true, live);
         }
         for (const [id, B] of this._beamMap || []) if (!live.has(id)) { this.game.scene?.remove(B.group); this._beamMap.delete(id); }
     }
 
-    /** The hand (the wand) of the one setting this dome: me, or his avatar. {o, d} */
-    _casterHand(w) {
+    /** Who feeds this sphere with a beam right now (a lasting key), else ''. My own: by my own wand, not the list. */
+    _feedKey(w) {
+        if (this.feeding?.id === w.id) return this.feeding.aimed ? this.myKey : '';
+        return w.feedKey && w.feedKey !== this.myKey ? w.feedKey : '';
+    }
+
+    _beamOne(w, dt, feed, live) {
         const g = this.game;
-        if (w.owner === this.myKey) return this.setting?.id === w.id ? this._hand() : null;
+        const h = this._casterHand(w, feed ? this._feedKey(w) : w.owner);
+        if (!h) return;
+        const bid = feed ? w.id + '~f' : w.id;
+        live.add(bid);
+        const B = this._beamOf(bid, feed);
+        // where it strikes: the dome from outside; from inside (or past it) the house / the land it shows
+        let end = null, onDome = false;
+        if (!inWard(w, h.o)) {
+            const fx = h.o.x - w.c.x, fy = h.o.y - w.c.y, fz = h.o.z - w.c.z;
+            const b = fx * h.d.x + fy * h.d.y + fz * h.d.z, c = fx * fx + fy * fy + fz * fz - w.r * w.r, D = b * b - c;
+            const t = D >= 0 ? -b - Math.sqrt(D) : -1;
+            if (t > 0 && t < WARD.AIM + w.r) { end = _v1.copy(h.o).addScaledVector(h.d, t); onDome = true; }
+        }
+        if (!end) {
+            B.rayT = (B.rayT ?? 0) - dt;
+            if (B.rayT <= 0) { B.rayT = 0.1; const hit = g.terrain?.data?.raycast?.(h.o, h.d, WARD.AIM); B.hit = hit ? (B.hit || new THREE.Vector3()).set(hit.x, hit.y, hit.z) : null; }
+            end = B.hit ? _v1.copy(B.hit) : _v1.copy(h.o).addScaledVector(h.d, WARD.AIM * 0.5);
+        }
+        this._drawBeam(B, h.o, end, dt);
+        // its end: the dome lights up there — or the house drinks the magic in
+        const L = this.looks.get(w.id);
+        if (onDome && L) {
+            L.beam = 1; L.beamAt = (L.beamAt || new THREE.Vector3()).copy(end);
+            if (feed) { L.feed = 1; L.pulse = Math.max(L.pulse, 0.3 + 0.2 * Math.sin(this._t * 9)); } // (the dome throbs a little as it drinks)
+        }
+        B.sparkAcc = Math.min(4, (B.sparkAcc || 0) + dt * (onDome ? 25 : 40) * (feed ? 1.3 : 1));
+        for (; B.sparkAcc >= 1; B.sparkAcc--) {
+            const v = _v2.set(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize().multiplyScalar(onDome ? 1.5 : 0.8 + Math.random());
+            g.fx?.spark?.(end, feed ? (Math.random() < 0.5 ? 0xd6f0ff : 0xfff1c8) : (Math.random() < 0.5 ? 0x9fd8ff : Math.random() < 0.5 ? 0xcfe8ff : 0xb7a6ff), 0.05 + Math.random() * 0.05, v, onDome ? 0.35 : 0.7);
+        }
+    }
+
+    /** The hand (the wand) of the one setting this dome: me, or his avatar. {o, d} */
+    _casterHand(w, key = w.owner) {
+        const g = this.game;
+        if (!key) return null;
+        if (key === this.myKey) return this.setting?.id === w.id || this.feeding?.id === w.id ? this._hand() : null;
         for (const [id, r] of g.remotes || []) {
-            if (this.keyOf(id) !== w.owner || r.dead) continue;
+            if (this.keyOf(id) !== key || r.dead) continue;
             const ch = r.character, side = ch?.getHandWorldPosition ? (ch.getHandWorldPosition('left').y > ch.getHandWorldPosition('right').y ? 'left' : 'right') : 'right';
             const hp = r.handPose(side);
             return { o: hp.origin.addScaledVector(hp.dir, 0.3), d: hp.dir };
@@ -1464,10 +1618,10 @@ export class HouseWards {
         return null;
     }
 
-    _beamOf(id) {
+    _beamOf(id, feed = false) {
         const M = this._beamMap || (this._beamMap = new Map());
         let B = M.get(id);
-        if (!B) { B = { group: beamModel() }; this.game.scene?.add(B.group); M.set(id, B); }
+        if (!B) { B = { group: beamModel(feed) }; this.game.scene?.add(B.group); M.set(id, B); }
         return B;
     }
 
@@ -1480,6 +1634,7 @@ export class HouseWards {
         const f = 1 + 0.25 * Math.sin(B.t * 37) + 0.15 * Math.sin(B.t * 23);
         G.children[0].scale.set(0.025 * f, len, 0.025 * f);
         G.children[1].scale.set(0.09 * f, len, 0.09 * f);
+        if (G.children[2]) G.children[2].scale.set(0.2 * f, len, 0.2 * f); // (the feeding beam's warm halo)
     }
 
     // ------------------------------------------------------------ frame
@@ -1487,6 +1642,7 @@ export class HouseWards {
         this._t += dt;
         // my dome grows while the hand is on it
         if (this.setting) this._grow(dt);
+        if (this.feeding) this._feed(dt);
         if (this.bolts.length) this._updateBolts(dt);
         if (!this.list.size && !this.looks.size && !this._hidden.size) { if (this._humOn) this._hum(); return; }
         if (this.auth) { this._creatures(dt); this._heal(dt); }
@@ -1517,12 +1673,15 @@ export class HouseWards {
                 this._wounded(w, 'Accentric', by, w.hp <= 0, true);
                 continue;
             }
-            if (w.ep && w.hp >= WARD.HP) { delete w.ep; any = true; }
-            if (w.hp < WARD.HP && this._t - (w.hitAt ?? -1e9) > WARD.HEAL_AFTER) {
+            const mx = wardMax(w);
+            if (w.ep && w.hp >= mx) { delete w.ep; any = true; }
+            if (w.hp < mx && this._t - (w.hitAt ?? -1e9) > WARD.HEAL_AFTER) {
                 const was = Math.floor(w.hp / 10);
-                w.hp = Math.min(WARD.HP, w.hp + WARD.HEAL_RATE * dt);
-                if (Math.floor(w.hp / 10) !== was || w.hp >= WARD.HP) any = true;
+                w.hp = Math.min(mx, w.hp + WARD.HEAL_RATE * dt);
+                if (Math.floor(w.hp / 10) !== was || w.hp >= mx) any = true;
             }
+            // (nobody fed it for a moment: the beam is not drawn any more)
+            if (w.feedKey && this._t - (w.feedAt ?? -1e9) > 1.5) { w.feedKey = ''; any = true; }
         }
         if (any) this._changed();
     }

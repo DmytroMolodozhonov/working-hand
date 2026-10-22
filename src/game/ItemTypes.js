@@ -53,7 +53,7 @@ export const SPELL_RU = {
     LightningStrike: 'Lightning Strike', ToTheSun: 'To the Sun', WaveAttack: 'Wave Attack', Lumos: 'Люмос', Gather: 'Gather', Brainrot: 'Брейнрот', Alive: 'Alive',
     WaterVortex: 'Water Vortex', CreateBoard: 'Create a Board', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', Inspirius: 'Inspirius', LetItRain: 'Let it rain', Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima',
     Unfurl: 'Анфёрл', Furl: 'Фёрл', Overgrown: 'Overgrown', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', Alohomora: 'Алохомора', Lock: 'Lock', AlohomoraMaxima: 'Алохомора Максима', LevitationMaxima: 'Вингардиум Левиоса Максима', BombardoMaxima: 'Бомбардо Максима', OvergrownMaxima: 'Overgrown Максима', Jolt: 'Джолт', Firefighting: 'Firefighting', FirefightingMaxima: 'Firefighting Максима',
-    ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
+    ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
     Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge',
@@ -563,7 +563,7 @@ export function describeItem(it) {
         case 'book':
             if (it.lore && LORE_BY_ID.has(it.lore)) return { title: `📗 «${LORE_BY_ID.get(it.lore).title}»`, color: LORE_BY_ID.get(it.lore).trim, lines: ['Книга из летописи мира: ' + LORE_BY_ID.get(it.lore).sub.toLowerCase(), 'Раскройте двумя руками и листайте пальцем', 'Это не книга заклинаний — её просто читают'] };
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
-            if (it.ward || it.spells?.includes('ProtectionHouse')) return { title: '📘🛡️ Книга защиты', color: WARD_COVER, lines: ['Раскройте и прочитайте: в ней группа заклинаний <b>«Защита дома»</b> — Protection House, Protection Invisible, Protection House Grant', 'Прочитали одну страницу — выучили все три'] };
+            if (it.ward || it.spells?.includes('ProtectionHouse')) return { title: '📘🛡️ Книга защиты', color: WARD_COVER, lines: ['Раскройте и прочитайте: в ней группа заклинаний <b>«Защита дома»</b> — Protection House, Protection Invisible, Protection House Grant, Strengthen House', 'Прочитали одну страницу — выучили все четыре'] };
             if (it.swift || it.spells?.includes('Flight')) return { title: '📘 Быстрая книга', color: SWIFT_COVER, lines: ['Сожгите её («Инферно» с книгой в руке или в огне): вы научитесь заклинанию <b>«Флайн»</b> (полёт)', 'Раскрыть и прочитать можно, но выучит «Флайн» только тот, кто её сожжёт'] };
             return { title: '📖 Книга заклинаний', color: 0xffe9a8, lines: ['Раскройте и прочитайте (или сожгите «Инферно»): в ней заклинания для стройки'] };
         case 'backpack':

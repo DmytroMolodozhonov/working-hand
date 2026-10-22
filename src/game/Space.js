@@ -85,6 +85,8 @@ export function spaceSpellBlock(name, where, air, def = null) {
     // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
     if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
     if (where === 'earth') return null;
+    // («Strengthen House»: the spheres of houses are the Earth's — in space and on every planet there is none to feed; HouseWards.js)
+    if (name === 'StrengthenHouse') return '🛡️ Здесь нет защиты дома — нечего усиливать';
     if (def?.terraformed && def.climate === 'green' && /^(LightningStrike|LetItRain|Thunderwave|Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|Firefighting|FirefightingMaxima|AirBubble|AirBubbleMaxima|WaveAttack|WaveAttackMaxima|Frozen|Drawdown|DrawdownMaxima)$/.test(name)) return null;
     const vacuum = where === 'space' || air === 'none';
     const clouds = where === 'venus' || !!def?.storms || def?.kind === 'gas';

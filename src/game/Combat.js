@@ -108,6 +108,7 @@ export const SPELL_COST = {
     WardGrow: 3, // … each metre its dome grows while the hand is on it (1 m a second; «Maxima»: 2)
     ProtectionInvisible: 15, // the protected house is not seen from far
     ProtectionHouseGrant: 5, // a friend may come into the house
+    StrengthenHouse: 5, // «Strengthen House»: the least to begin — then 5 a second while the beam feeds the sphere (nothing at once; HouseWards.js)
     AvadaKedavra: 25,
     // the strong duel spells (StrongSpells.js)
     Accentric: 50, // «Акцентрик»: the haze — −40 over 8 s, a minute lost
