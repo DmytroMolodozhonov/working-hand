@@ -187,3 +187,21 @@ test('a wall in its way: it goes round, it does not push into it', () => {
     assert.equal(inWall, 0, 'never in the wall');
     assert.ok(g.hits.length, `round it and at the player (at ${z.group.position.x.toFixed(1)}, ${z.group.position.z.toFixed(1)})`);
 });
+
+test('in deep water a zombie does not walk the bottom: it comes up, paddles to the bank and climbs out', async () => {
+    const { BLOCK } = await import('../../src/world/Terrain.js');
+    const g = fakeGame();
+    const pool = (x) => Math.abs(Math.round(x)) < 6; // (a pond 11 m wide, 5 deep: the floor at layer −5, water up to layer 0)
+    g.terrain.data.floorBelow = (ix) => (pool(ix) ? -5 : 0);
+    g.terrain.data.get = (ix, L) => (pool(ix) && L >= -4 && L <= 0 ? BLOCK.WATER : L <= (pool(ix) ? -5 : 0) ? BLOCK.STONE ?? 1 : BLOCK.AIR);
+    g.collision.groundY = (x) => (pool(x) ? -5.5 : GROUND);
+    g.character.group.position.set(0, GROUND + 2, 200); // (nobody near: only getting out)
+    const z = g._createZombie(new THREE.Vector3(0, -5.5 + 1, 0));
+    let low = 0, t = 0;
+    while (t < 30 && !(Math.abs(z.group.position.x) >= 6 && !z.swimming)) {
+        g.frameCount++; g._updateZombies(dt); t += dt;
+        if (t > 2 && pool(z.group.position.x) && z.group.position.y - z.gOff < -3.5) low++;
+    }
+    assert.equal(low, 0, 'up at the top, not along the bottom');
+    assert.ok(Math.abs(z.group.position.x) >= 5.5 && z.group.position.y - z.gOff > -1, `out on the bank after ${t.toFixed(0)} s`);
+});

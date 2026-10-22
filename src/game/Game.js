@@ -6,7 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
-import { deepAt } from './CreatureSwim.js';
+import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { BODY_R } from './Crowd.js';
@@ -155,6 +155,8 @@ const MANA_LATER = new Set(['CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet'
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
+/** A zombie in deep water: floats like a person (its chest at the top), slow, any bank of a step it climbs; no air to run out. */
+const ZOMBIE_SWIM = { ...SWIMMERS.person, speed: 0.9, float: 2.1, air: Infinity }; // (float: the feet this far under the top — the water at its chest)
 /** What a zombie notices: hears a player this near (m), sees him this far with nothing between, follows him this far. */
 export const ZSENSE = { HEAR: 10, SEE: 34, LOSE: 48, ROAM: 7, SCENT: 90 }; // (SCENT: it drifts towards the living this near)
 const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
@@ -690,6 +692,36 @@ export class Game {
         if (!shut(st.x, st.z)) { z._sideT = 0; return st; }
         z._side = -side; // (shut all round on this side: next time the other way)
         return null;
+    }
+
+    /**
+     * (host) A zombie in deep water (thrown in, a bank gave way under it): it doesn't walk the bottom (the author:
+     * «зомби ходит под водой» — no). The body comes up, the head over the water, the arms paddling, and it
+     * makes for the nearest place it can get out (CreatureSwim.swimStep / findExit), slowly; it doesn't breathe,
+     * so it never drowns. Out — it climbs on the bank and goes on. → true while it swims.
+     */
+    _zombieSwim(z, dt) {
+        const t = this.terrain?.data;
+        if (!t || z.isDead || z.isFrozen || z.lev) return false;
+        const p = z.group.position;
+        const b = this._zSwimB || (this._zSwimB = { x: 0, y: 0, z: 0, yaw: 0 });
+        b.x = p.x; b.y = p.y - z.gOff; b.z = p.z; b.yaw = z.yaw;
+        const sw = z._swim || (z._swim = {});
+        const x0 = p.x, z0 = p.z;
+        const r = swimStep(b, sw, ZOMBIE_SWIM, { t, legH: 0.9 }, dt);
+        if (!r) { z.swimming = false; return false; }
+        if (r.out) { p.set(r.out.x, r.out.y + z.gOff + 0.05, r.out.z); z.vy = 0; z.swimming = false; return true; } // (pulled out on the bank)
+        z.swimming = true;
+        p.x = b.x; p.z = b.z; p.y = b.y + z.gOff; z.vy = 0;
+        const mx = p.x - x0, mz = p.z - z0;
+        if (mx * mx + mz * mz > 1e-8) z.turnTo(Math.atan2(mx, mz), dt);
+        // arms paddling in front, legs kicking
+        const k = (sw.t || 0) * 5;
+        z._setArm(z.leftArm, -Math.PI / 2 + Math.sin(k) * 0.35);
+        z._setArm(z.rightArm, -Math.PI / 2 - Math.sin(k) * 0.35);
+        z._setLegs(Math.sin(k * 0.8) * 0.3);
+        splashes(this, p.x, b.y + ZOMBIE_SWIM.float, p.z, dt, false, sw);
+        return true;
     }
 
     _createZombie(pos, id = null) {
@@ -3613,6 +3645,7 @@ export class Game {
             if (z.lev) { z._spinHalo?.(dt); continue; }
             const target = z.dummy ? null : this._zombieTarget(z);
             if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => this._zombieStep(me, p, ux, uz, d, speed, sdt);
+            if (this._zombieSwim(z, dt)) continue; // (in deep water: up at the top, paddling to the bank — not along the bottom)
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
             if (z.dummy && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) {
                 // pushed by a blow, it steps back to its place (stands on the spot)

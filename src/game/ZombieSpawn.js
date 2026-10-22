@@ -35,9 +35,17 @@ export const ZSPAWN = {
     // (a tree's crown, a house's eaves, a cliff's side give only a light daytime shade: no zombie comes out there)
     SUN: 0.45, // by day a zombie standing in light this bright (the open sky, a tree's shade) burns
     NIGHT_DIM: 0.92, // how much the night takes off the daylight
-    MIN_D: 20, // m: never nearer a player
-    MAX_D: 55, // m: and not farther (a cave: along its tunnels)
-    NIGHT_D: [32, 60], // m out on the open ground
+    MIN_D: 32, // m: never nearer a player (the author: not too close)
+    MAX_D: 75, // m: and not farther (a cave: along its tunnels)
+    NIGHT_D: [45, 75], // m out on the open ground
+    // (the author: «a zombie can't come out of nowhere — it was always there, or it got there»: never where a player
+    // is looking now, nor where a player has been — it comes out far off, round a bend, and comes from there)
+    SEEN_D: 45, // m: a spot a player can see this near (nothing in between) is no place to come out
+    LOOK_D: 110, // m: … and as far as the local hero's eyes go, in front of him
+    LOOK_COS: 0.5, // (in front: within 60° of where the camera looks)
+    BEEN_CELL: 8, // m: the cells of «where the players have been»
+    BEEN_R: 1, // cells round a player marked (~±12 m), up and down one
+    BEEN_MAX: 30000, // cells remembered (the oldest forgotten first)
     LIGHT_R: 14, // m round a light: no zombie comes out there
     NEAR: 80, NEAR_CAP: 3, // zombies of the dark round a player
     CAP: 10, // and in the whole world
@@ -88,6 +96,8 @@ export class ZombieSpawn {
         this._t = ZSPAWN.EVERY * 0.5;
         this._seenCaves = new Set(); // cave systems a player has already come near (the first meeting: at once)
         this.log = []; // (tests) where zombies came out: 'cave' / 'night'
+        this.been = new Map(); // cell key → 1: where the players have been (never a zombie out there)
+        this._beenT = 0;
     }
 
     get enabled() {
@@ -121,6 +131,8 @@ export class ZombieSpawn {
             if (!z.fromDark || z.isDead || z.isThrall) continue;
             if (!ps.some((p) => Math.hypot(p.x - z.group.position.x, p.z - z.group.position.z) < ZSPAWN.FORGET)) g.removeZombie(z);
         }
+        this._beenT -= dt;
+        if (this._beenT <= 0) { this._beenT = 0.5; for (const p of ps) this.markBeen(p.x, p.y, p.z); }
         this._gap = (this._gap || 0) - dt;
         this._t -= dt;
         if (this._t > 0 || this._gap > 0) return;
@@ -131,6 +143,44 @@ export class ZombieSpawn {
         if (dark.filter((z) => Math.hypot(P.x - z.group.position.x, P.z - z.group.position.z) < ZSPAWN.NEAR).length >= ZSPAWN.NEAR_CAP) return;
         const lights = worldLights(g);
         if (this.trySpawn(P, ps, lights)) this._gap = rnd(...ZSPAWN.GAP); // (one — the next one much later)
+    }
+
+    _beenKey(cx, cy, cz) { return ((cx + 4096) * 8192 + (cz + 4096)) * 64 + ((cy + 32) & 63); }
+
+    /** A player is at (x, y, z) (their eyes or feet): the cells round them are «been». */
+    markBeen(x, y, z) {
+        const C = ZSPAWN.BEEN_CELL, R = ZSPAWN.BEEN_R, m = this.been;
+        const cx = Math.floor(x / C), cy = Math.floor(y / C), cz = Math.floor(z / C);
+        for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) for (let dy = -1; dy <= 1; dy++) {
+            const k = this._beenKey(cx + dx, cy + dy, cz + dz);
+            if (m.has(k)) { m.delete(k); } // (fresh again: to the end of the order)
+            m.set(k, 1);
+        }
+        while (m.size > ZSPAWN.BEEN_MAX) m.delete(m.keys().next().value);
+    }
+
+    /** Has a player been near (x, y, z)? (Or seen it in a cave — the hero's cave map, CaveMap.js.) */
+    beenAt(x, y, z, cave = false) {
+        const C = ZSPAWN.BEEN_CELL;
+        if (this.been.has(this._beenKey(Math.floor(x / C), Math.floor(y / C), Math.floor(z / C)))) return true;
+        return !!(cave && this.game.caveMap?.has?.(x, z));
+    }
+
+    /** Can a player see the spot now (near, nothing in between; or far, in front of the local hero's eyes)? */
+    seenNow(x, y, z) {
+        const g = this.game, c = g.collision;
+        if (!c?.lineOfSight) return false;
+        const look = g.camera ? (this._look || (this._look = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(g.camera.quaternion) : null;
+        const eyes = [];
+        if (!g.isDeadLocal && g.character) eyes.push({ p: g.camera?.position || g.character.group.position, me: true });
+        for (const r of g.remotes?.values?.() || []) if (!r.dead && r.position) eyes.push({ p: r.position });
+        for (const e of eyes) {
+            const dx = x - e.p.x, dy = y + 1.5 - e.p.y, dz = z - e.p.z, d = Math.hypot(dx, dy, dz);
+            const ahead = e.me && look && d > 1e-3 && (dx * look.x + dy * look.y + dz * look.z) / d > ZSPAWN.LOOK_COS;
+            if (d > (ahead ? ZSPAWN.LOOK_D : ZSPAWN.SEEN_D)) continue;
+            if (c.lineOfSight(e.p.x, e.p.y, e.p.z, x, y + 1.5, z, 1.5)) return true;
+        }
+        return false;
     }
 
     /** (host) One check round a player: a cave first, else the open night. → the zombie or null. */
@@ -164,11 +214,12 @@ export class ZombieSpawn {
         return z;
     }
 
-    /** Is this a place a zombie may come out at: far enough from every player, unlit? */
-    _clear(x, y, z, ps, lights) {
+    /** Is this a place a zombie may come out at: far enough from every player, unlit, where nobody has been, out of sight? */
+    _clear(x, y, z, ps, lights, cave = false) {
         for (const p of ps) if (Math.hypot(p.x - x, p.y - y, p.z - z) < ZSPAWN.MIN_D) return false;
         for (const o of this.game.zombies || []) if (!o.isDead && Math.hypot(o.group.position.x - x, o.group.position.z - z) < ZSPAWN.APART) return false; // (never in a group)
-        return !litAt(lights, x, y, z);
+        if (litAt(lights, x, y, z) || this.beenAt(x, y, z, cave)) return false;
+        return !this.seenNow(x, y, z);
     }
 
     /** A dark spot in a cave system (its tunnels, its chambers) near the player, or null. */
@@ -193,7 +244,7 @@ export class ZombieSpawn {
             if (t.isWaterAt?.(ix, L, iz)) continue; // (water over the floor; isWaterAt takes a world y: layer = ⌊y + 1.5⌋)
             const fy = L - 0.5;
             if (lightLevel(t.skyAt ? t.skyAt(ix, fy, iz) : 1, night) > ZSPAWN.DARK) continue; // (the lit mouth: no)
-            if (!this._clear(ix, fy, iz, ps, lights)) continue;
+            if (!this._clear(ix, fy, iz, ps, lights, true)) continue;
             return { x: ix + 0.5, y: fy + ZOMBIE_GROUND_OFFSET, z: iz + 0.5 }; // (a zombie's origin: 1 m over its feet)
         }
         return null;
@@ -203,7 +254,7 @@ export class ZombieSpawn {
     nightSpot(P, ps, lights) {
         const t = this.game.terrain.data;
         const night = this.night();
-        for (let k = 0; k < 12; k++) {
+        for (let k = 0; k < 20; k++) {
             const a = Math.random() * Math.PI * 2, r = rnd(...ZSPAWN.NIGHT_D);
             const ix = Math.round(P.x + Math.cos(a) * r), iz = Math.round(P.z + Math.sin(a) * r);
             if (t.isSeaColumn?.(ix, iz)) continue;

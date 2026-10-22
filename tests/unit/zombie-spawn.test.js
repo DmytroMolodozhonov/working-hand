@@ -27,8 +27,8 @@ const sys = t.cavesNear(0, 0, 700).find((s) => s.segs?.length > 30);
 const seg = sys.segs[Math.floor(sys.segs.length / 2)];
 const inCave = new THREE.Vector3(seg.bx, seg.by, seg.bz);
 let meadow = null;
-for (let k = 0; k < 400 && !meadow; k++) {
-    const x = 300 + (k % 20) * 37, z = -600 + Math.floor(k / 20) * 41;
+for (let k = 0; k < 3600 && !meadow; k++) {
+    const x = -1500 + (k % 60) * 53, z = -1500 + Math.floor(k / 60) * 51;
     if (!t.cavesNear(x, z, ZSPAWN.CAVE_NEAR + 20).length && !t.isSeaColumn(x, z) && !t.sites?.landAt(x, z)) meadow = new THREE.Vector3(x, t.surfaceY(x, z), z);
 }
 
@@ -112,4 +112,37 @@ test('the open ground: no new zombie by day at all; at night one at a time, much
     for (let i = 1; i < at.length; i++) assert.ok(at[i] - at[i - 1] >= ZSPAWN.GAP[0] - 1, 'one at a time, the next much later');
     const zs = night.zombies;
     for (let i = 0; i < zs.length; i++) for (let j = i + 1; j < zs.length; j++) assert.ok(zs[i].group.position.distanceTo(zs[j].group.position) >= ZSPAWN.APART - 1, 'not in a group');
+});
+
+test('never where a player has been (nor in the part of a cave the hero has seen), never where a player looks', () => {
+    const g = fakeGame(inCave);
+    let n = 0;
+    for (let i = 0; i < 30; i++) {
+        const z = g.zombieSpawn.trySpawn(inCave, [inCave], [], true);
+        if (!z) continue;
+        const p = z.group.position;
+        assert.ok(!g.zombieSpawn.beenAt(p.x, p.y - 1, p.z), 'not in a cell already walked');
+        g.zombieSpawn.markBeen(p.x, p.y, p.z); // (as if a player had gone there)
+        g.zombies.length = 0; n++;
+    }
+    assert.ok(n >= 3, `still elsewhere (${n})`);
+    // the hero's cave map: what he saw there is no place either
+    const m = fakeGame(inCave);
+    const seen = new Set();
+    m.caveMap = { has: (x, z) => seen.has(Math.floor(x / 4) + ',' + Math.floor(z / 4)) };
+    for (let i = 0; i < 20; i++) { const z = m.zombieSpawn.trySpawn(inCave, [inCave], [], true); if (!z) continue; const p = z.group.position; assert.ok(!seen.has(Math.floor(p.x / 4) + ',' + Math.floor(p.z / 4))); seen.add(Math.floor(p.x / 4) + ',' + Math.floor(p.z / 4)); m.zombies.length = 0; }
+    // in sight: nothing between and in front of the eyes — no zombie comes out there
+    const v = fakeGame(meadow, { night: 1 });
+    v.collision = { lineOfSight: () => true };
+    v.camera = { position: meadow, quaternion: new THREE.Quaternion() }; // (looking along −Z)
+    let out = 0;
+    for (let i = 0; i < 30; i++) {
+        const z = v.zombieSpawn.trySpawn(meadow, [meadow], [], true);
+        if (!z) continue;
+        out++;
+        const d = z.group.position.clone().sub(meadow);
+        assert.ok(-d.z / d.length() <= ZSPAWN.LOOK_COS + 0.05, 'out of sight: behind or to the side');
+        v.zombies.length = 0;
+    }
+    assert.ok(out >= 5, `behind his back they still come (${out})`);
 });
