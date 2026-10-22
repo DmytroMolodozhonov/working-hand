@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { starterWand, rollWand } from './ItemTypes.js';
+import { handLog } from './HandRelease.js';
 
 export const EXPELLIARMUS = {
     MIN: 4, // m: how far the wand flies at least
@@ -113,6 +114,7 @@ export function knockOutOfMyHand(game, rng = Math.random) {
         const f = pickFlight(g, pos, rng);
         if (g.wandMagic?.light) g.wandMagic._nox?.(false); // (Lumos goes out with the wand)
         const item = items.releaseHand(w.side);
+        handLog('Волшебная палочка выбита из руки: «Экспеллиармус»');
         if (items.auth || !g.sync) items.spawnLoose(item, pos, { vel: f.vel, quat, spin: f.spin });
         else g.sync.itemThrow?.(item, pos, f.vel, quat, f.spin);
         return 'wand';

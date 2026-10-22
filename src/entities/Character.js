@@ -29,6 +29,7 @@ import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
 import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
+import { ArmPump } from '../game/ArmPump.js';
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -134,6 +135,8 @@ export class VoxelCharacter {
         // how fast the palm turns (rad/s, world axis × speed): a thrown thing keeps the wrist's snap
         this.palmSpin = { left: new THREE.Vector3(), right: new THREE.Vector3() };
         this._lastPalmQ = { left: null, right: null };
+        // running with the arms (a sprinter's swings, in turn): up to +40% while the legs run (ArmPump.js)
+        this.armPump = new ArmPump();
 
         this.createCharacter();
         this.scene.add(this.group);
@@ -431,6 +434,8 @@ export class VoxelCharacter {
                 lq.copy(_hq);
             } else this._lastPalmQ[side] = _hq.clone();
         }
+        const runs = this.isRunning && this.runIntensity > 0 && this.canRun !== false && !this.knockedDown;
+        this.armPump.update(dt, this.handLost('left') ? null : this.handRelVelocity.left, this.handLost('right') ? null : this.handRelVelocity.right, runs);
     }
 
     /**
@@ -752,8 +757,8 @@ export class VoxelCharacter {
                 this.group.position.z += this.jumpVel.z * dt;
             } else if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
-                // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book)
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * walkK(this.gravityK); // (a heavy planet: slower)
+                // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book; armPump: the arms working)
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (1 + this.armPump.bonus) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * walkK(this.gravityK); // (a heavy planet: slower)
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;

@@ -1,7 +1,8 @@
 /**
  * The wand and the ground: bending to the ground, a hand down at it, crouching, a hand pressed on
- * it, a spell at it — the wand stays in the hand. Only the outstretched hand opened, or a real
- * throw, lets it go — the same for either hand (a left-hander's too).
+ * it, a spell at it, the outstretched hand opened, held still a little lowered — the wand stays in the
+ * hand. Only a real throw lets it go — the same for either hand (a left-hander's too). Running and
+ * working the arms (ArmPump): faster, and the wand stays.
  * Run: node --test tests/e2e/wand-ground.test.mjs
  */
 import test from 'node:test';
@@ -76,7 +77,7 @@ const where = (page, uid) => page.evaluate((uid) => {
 }, uid);
 
 for (const dom of ['right', 'left']) {
-    test(`the wand and the ground (${dom === 'right' ? 'a right-hander' : 'a left-hander'}): bending, crouching, a hand at the ground keep it; the outstretched hand opened drops it; a throw with either hand throws it`, async () => {
+    test(`the wand and the ground (${dom === 'right' ? 'a right-hander' : 'a left-hander'}): bending, crouching, a hand at the ground keep it; the outstretched hand opened keeps it; a throw with either hand throws it`, async () => {
         const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
         await startFromMenu(page, 'creative');
         await waitHudVisible(page);
@@ -104,10 +105,13 @@ for (const dom of ['right', 'left']) {
             await page.evaluate(() => { window.__zns.game._castAt = -1e9; });
             await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 8);
             assert.deepEqual(await where(page, uid), { side, loose: false, v: 0 }, `${side}: working at the ground the wand stays in the hand`);
-            // the outstretched hand opened: it falls
+            // the outstretched hand opened (the author holds it by one finger, the other four open): it stays
             await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9, ...C(side, 0) }, 30);
-            const fell = await where(page, uid);
-            assert.ok(!fell.side && fell.loose, `${side}: the outstretched hand opened lets it fall ` + JSON.stringify(fell));
+            assert.deepEqual(await where(page, uid), { side, loose: false, v: 0 }, `${side}: the outstretched hand opened keeps the wand`);
+            // held still, a little lowered, swaying a little, the camera shaking, the fingers seen closing and opening
+            await feedF(page, (i) => ({ arms: 'forward', wristOffset: [0.01 * Math.sin(i / 3), 0.05 + 0.015 * Math.sin(i / 2)], jitter: 0.004, rightCurl: 0.9, leftCurl: 0.9, ...C(side, i % 7 < 2 ? 0.9 : 0) }), 50);
+            assert.deepEqual(await where(page, uid), { side, loose: false, v: 0 }, `${side}: held still and a little lowered, the wand stays\n` + await ring(page, side));
+            assert.deepEqual(await page.evaluate(() => [...window.__zns.game.items.letLog]), [], 'nothing left the hand');
             // a real throw with this hand
             await give(page, side, uid + 't');
             await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 8);
@@ -119,3 +123,60 @@ for (const dom of ['right', 'left']) {
         await page.close();
     });
 }
+
+/** Running on the spot (the shoulders bob), the arms pumping in turn as a runner's (`a`: how far, 0 — still). */
+function runFrame(i, a, wand = 0.9) {
+    const f = frame({ arms: 'forward', bob: i % 2 ? 0.006 : -0.006, rightCurl: i % 5 ? wand : 0, leftCurl: 0.9 });
+    const d = a * Math.sin(i * 2 * Math.PI / 12); // (a swing ~0.4 s each way)
+    const p = f.poseLandmarks;
+    p[15].y -= d; p[13].y -= d * 0.5; p[15].z -= d; // (the left forward and up …)
+    p[16].y += d; p[14].y += d * 0.5; p[16].z += d; // (… the right back and down, and the other way)
+    for (const h of f.hands) for (const q of h.landmarks) q.y += h.label === 'Right' ? -d : d;
+    return f;
+}
+async function feedRun(page, a, n) {
+    for (let i = 0; i < n; i++) {
+        const f0 = await page.evaluate(() => window.__zns.game.frameCount);
+        await page.evaluate((raw) => { raw.ts = performance.now(); window.__zns.poseService.injectRaw(raw); }, runFrame(i, a));
+        await new Promise((r) => setTimeout(r, 33));
+        for (let k = 0; k < 50 && (await page.evaluate(() => window.__zns.game.frameCount)) < f0 + 1; k++) await new Promise((r) => setTimeout(r, 10));
+    }
+}
+
+test('running and working the arms as a runner: up to +40% faster, and the wand never flies out of the hand', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    await watch(page);
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 10);
+    await give(page, 'right', 'rw');
+    await feedF(page, { arms: 'forward', rightCurl: 0.9, leftCurl: 0.9 }, 8);
+    // running, the arms still: no bonus
+    await feedRun(page, 0, 40);
+    const still = await page.evaluate(() => { const ch = window.__zns.game.character; return { run: ch.isRunning, k: ch.runIntensity, bonus: ch.armPump.bonus }; });
+    assert.ok(still.run, 'running ' + JSON.stringify(still));
+    assert.equal(still.bonus, 0, 'the arms still: no bonus');
+    // running and pumping the arms
+    let max = 0;
+    for (let k = 0; k < 4; k++) {
+        await feedRun(page, 0.09, 30);
+        const s = await page.evaluate(() => { const ch = window.__zns.game.character; return { bonus: ch.armPump.bonus, pump: ch.armPump.pumping, speed: ch.armPump.speed }; });
+        max = Math.max(max, s.bonus);
+        assert.ok(s.bonus <= 0.4 + 1e-9, 'never over +40% ' + JSON.stringify(s));
+    }
+    assert.ok(max > 0.1, 'the arms working: faster ' + max);
+    assert.deepEqual(await where(page, 'rw'), { side: 'right', loose: false, v: 0 }, 'the wand stays in the hand\n' + await ring(page, 'right'));
+    assert.deepEqual(await page.evaluate(() => [...window.__zns.game.items.letLog]), [], 'nothing left the hand');
+    // the arms working without the legs: nothing
+    for (let i = 0; i < 60; i++) {
+        const f = runFrame(i, 0.09);
+        const g = frame({ arms: 'forward' });
+        for (const k of [11, 12, 0, 9, 10]) f.poseLandmarks[k] = g.poseLandmarks[k];
+        await page.evaluate((raw) => { raw.ts = performance.now(); window.__zns.poseService.injectRaw(raw); }, f);
+        await new Promise((r) => setTimeout(r, 33));
+    }
+    const legsStill = await page.evaluate(() => { const ch = window.__zns.game.character; return { run: ch.isRunning, bonus: ch.armPump.bonus }; });
+    assert.ok(!legsStill.run && legsStill.bonus < 0.02, 'the arms without the legs: no bonus ' + JSON.stringify(legsStill));
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+});

@@ -519,11 +519,11 @@ export class BookReading {
             } else if (h.ext) {
                 this._let[H] = 0;
                 this._end(false);
-                g.items._throw(H, new THREE.Vector3());
+                g.items._throw(H, new THREE.Vector3(), { why: 'книга: вытянутая рука разжата' });
                 return;
             }
         } else if (s.support) {
-            if (open && !palmUp && h.ext) { this._let[H] = 0; this._end(false); g.items._throw(H, new THREE.Vector3()); return; }
+            if (open && !palmUp && h.ext) { this._let[H] = 0; this._end(false); g.items._throw(H, new THREE.Vector3(), { why: 'книга: вытянутая рука разжата' }); return; }
             // the fingers close on it again: it is held where it lies
             if (this._dwell(this._grab, H, h.curl > HOLD.GRAB_CURL, dt) >= HOLD.GRAB_T) {
                 this._grab[H] = 0;

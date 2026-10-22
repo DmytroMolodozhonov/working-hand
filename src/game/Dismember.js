@@ -526,7 +526,7 @@ export class Dismemberment {
         g.weapons?.release?.(side);
         if (g.items?.held?.[side]) {
             const vel = ch.handVelocity?.[side] || new THREE.Vector3();
-            if (g.items._throw) g.items._throw(side, vel); else g.items.releaseHand(side);
+            if (g.items._throw) g.items._throw(side, vel, { why: 'рука отрублена' }); else g.items.releaseHand(side);
         }
         if (g.combat.shield?.side === side) g.combat.shield = null;
         if (g.levitation?.active && g.levitation.state?.side === side) g.levitation.release(false);

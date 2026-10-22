@@ -30,6 +30,7 @@ export const DROP = {
     // …and only a hand SEEN letting go: the fingers seen closed on it this soon before they opened (a pinch the
     // camera keeps seeing open — the author: the wand fell out with no action of his — is no hand opened)
     WAND_CLOSED_MS: 1000,
+    // (the game's wand never uses this gate: Items — held by one finger, the other four open, it stays)
 };
 // (the things — an apple, a sword, a book: the author: «when I really throw, swinging properly, they won't go» —
 // the real camera, 15–24 pictures a second and smoothed, sees a swing slower and shorter than it was, and
@@ -72,10 +73,24 @@ export const poseBehind = (pose, side) => {
 
 /** s after getting up off the ground when the arms are still pushing up (no throw yet). */
 export const GOT_UP_T = 1.5;
+/** Running: really fast (the camera's run 0..1) — nothing leaves the hand; nor this long after (ms). */
+export const RUN_FAST = 0.6, RUN_HOLD_MS = 600;
+
+/**
+ * Why a thing left the hand — a line for the game's journal (settings → «Журнал») and the console:
+ * so an unwanted drop shows what did it. Never on the screen.
+ */
+export function handLog(line) {
+    try { console.info('[Руки]', line); } catch (_) { /* ignore */ }
+    try {
+        if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;
+        fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Руки', line: String(line) }) }).catch(() => {});
+    } catch (_) { /* ignore */ }
+}
 
 /**
  * While swimming the arms stroke (a reach up and back, a fast pull), flying they steer, and lying on
- * the ground they flail to get up (pushing up, a hand raised for «Up», waving): that is no throw and no
+ * the ground they flail to get up (pushing up, a hand raised for «Up», waving), running they pump: that is no throw and no
  * letting go — nothing leaves the hand then (the wand above all), nor in the moment after getting up / landing.
  */
 export function holdsFast(ch, now = performance.now()) {
@@ -85,7 +100,10 @@ export function holdsFast(ch, now = performance.now()) {
     // (the author: the wand flew off in flight) — nor in the moment after landing, the arms still coming down
     if (ch.flying) { ch._downUntil = Math.max(ch._downUntil || 0, now + GOT_UP_T * 1000); return true; }
     if (ch.knockedDown) { ch._downUntil = now + GOT_UP_T * 1000; return true; }
-    return now < (ch._downUntil || 0);
+    // running fast, or the arms pumping as a runner's do (ArmPump): the swings are no throw, an open hand
+    // in them no letting go (the author: running fast the wand must never fly off) — a throw only once stopped
+    if (ch.armPump?.pumping || (ch.isRunning && ch.runIntensity > RUN_FAST)) { ch._runUntil = now + RUN_HOLD_MS; return true; }
+    return now < (ch._downUntil || 0) || now < (ch._runUntil || 0);
 }
 
 export class DropGate {

@@ -155,6 +155,9 @@ const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
  * Both places are well outside the belly's middle, so a hand going to the wand never touches them.
  */
 export const OFF_POCKET = [-0.12, 0.08]; // (the wrist outward of the hip joint, torso heights)
+// (its height: the wrist from this far above the hip to this far below, torso heights — the author puts the hand
+// in a little higher than the hip joint: the opening of a real pocket is at the waist)
+export const OFF_POCKET_DY = [-0.45, 0.2];
 export const OFF_PURSE = [0.14, 0.6];
 export function offHip(lm, hand, aspect = 4 / 3) {
     const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = lm?.[24];
@@ -170,7 +173,7 @@ export function offHip(lm, hand, aspect = 4 / 3) {
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
     if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.45) return false;
-    if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > -0.3 && dy < 0.25) {
+    if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > OFF_POCKET_DY[0] && dy < OFF_POCKET_DY[1]) {
         if (!hand || hand.length < 21) return 'pocket';
         const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
         const len = Math.hypot(dxh, dyh);

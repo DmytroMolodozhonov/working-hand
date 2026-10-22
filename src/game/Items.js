@@ -26,8 +26,9 @@ import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, ro
 import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
-import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
 import { makePurseModel } from './CoinBelt.js';
+import { CappedLog } from '../core/CappedLog.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
 
 /**
@@ -126,6 +127,7 @@ export class ItemSystem {
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._drop = { right: new DropGate(), left: new DropGate() };
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
+        this.letLog = new CappedLog(); // (why things left the hands: tests)
         this._arm = { right: {}, left: {} };
         this._giveT = 0;
         this.remoteHeld = new Map(); // playerId -> {right, left, backpack}: models on other players
@@ -567,10 +569,12 @@ export class ItemSystem {
      * The thing leaves the hand with velocity `vel` (world), turned as it was in the hand,
      * spinning with `spin` (the wrist's snap; none: it tumbles a little).
      */
-    _throw(side, vel, { spin = null } = {}) {
+    _throw(side, vel, { spin = null, why = 'другое' } = {}) {
         const h = this.held[side];
         if (!h) return;
         const item = h.item;
+        handLog(`${ITEM_INFO[item.kind]?.name || item.kind} покинул(а) руку (${side === 'right' ? 'правую' : 'левую'}): ${why}, скорость ${vel.length().toFixed(1)}`);
+        this.letLog.push(why);
         const pos = h.model.position.clone();
         const quat = h.model.quaternion.clone();
         this.releaseHand(side);
@@ -780,11 +784,15 @@ export class ItemSystem {
             }
             const arm = ch.armState(side, this._arm[side]);
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
-            const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1, blurOk: true, strict: kind === 'wand' });
-            if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side] }); continue; }
-            // (a wand is held in a pinch like a pen: the camera often sees that hand half open — it falls
-            // out only of an outstretched hand really opened wide, and kept open longer: DROP.WAND_*)
-            if (this._drop[side].update({ now: gt, curl, tracked, ...arm, strict: kind === 'wand' })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2));
+            // (a coin pouch, as the wand: only a real throw — the fingers round a pouch are often seen open, and
+            // the author threw it by accident just taking it; a light thing's lift by the head is no wind-up then)
+            const strict = kind === 'wand' || kind === 'coins';
+            const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1, blurOk: true, strict });
+            if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side], why: `бросок (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)` }); continue; }
+            // (the wand never falls out of an opened hand — the author holds it by one finger, the other four open:
+            // it leaves the hand only thrown; a pouch only from a hand really opened wide, kept open: DROP.WAND_*)
+            if (kind === 'wand') { this._drop[side].since = 0; continue; }
+            if (this._drop[side].update({ now: gt, curl, tracked, ...arm, strict })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата вытянутая рука (пальцы ${curl.toFixed(2)})` });
         }
         this._eat(dt, ch);
         this._wear(dt, ch);
@@ -866,8 +874,17 @@ export class ItemSystem {
             else {
                 L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true;
                 // (lies down: a shield / a bow flat, a book on its side, the rest upright, keeping its turn about up)
-                const yaw = new THREE.Euler().setFromQuaternion(m.quaternion, 'YXZ').y;
-                m.rotation.set(L.item.kind === 'shield' || L.item.kind === 'bow' ? -Math.PI / 2 : 0, yaw, L.item.kind === 'book' ? Math.PI / 2 : 0, 'YXZ');
+                if (L.item.kind === 'wand') {
+                    // a wand falls over and lies flat on the ground, along the way it came down (its length is its +Y),
+                    // rolled as it happened to be — never left standing on its end
+                    const ax = _v.set(0, 1, 0).applyQuaternion(m.quaternion);
+                    const yaw = Math.hypot(ax.x, ax.z) > 1e-3 ? Math.atan2(-ax.x, -ax.z) : Math.random() * Math.PI * 2;
+                    m.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
+                    m.rotateY(Math.random() * Math.PI * 2);
+                } else {
+                    const yaw = new THREE.Euler().setFromQuaternion(m.quaternion, 'YXZ').y;
+                    m.rotation.set(L.item.kind === 'shield' || L.item.kind === 'bow' ? -Math.PI / 2 : 0, yaw, L.item.kind === 'book' ? Math.PI / 2 : 0, 'YXZ');
+                }
             }
         }
         if (L.thrower && this.auth && L.vel.lengthSq() > 36) this._thrownHit(L);
