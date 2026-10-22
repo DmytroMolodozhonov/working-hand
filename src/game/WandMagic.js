@@ -32,7 +32,8 @@ import { LumosThrow, poseBehind } from './HandRelease.js';
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
-const _q = new THREE.Quaternion();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _v4 = new THREE.Vector3();
 
 export const LUMOS = {
     LOSS_GRACE: 1.5, // s: the wand must stay gone this long before Lumos goes out (a tracking blink is not «put away»)
@@ -230,6 +231,20 @@ export class WandMagic {
         g.scene.remove(l.glow); l.glow.material.dispose(); this.light = null;
         this._thrownAt = performance.now();
         g.hud.setVoice('💫 Свет брошен — летит и гаснет; «Люмос» — зажечь палочку снова', true);
+    }
+
+    /**
+     * Where a thrown light goes: where the wand points at the swing's end (the hand aims with it; the camera
+     * can't see how far forward the arm went), turned a little towards the swing's own sideways way; a wand
+     * pointing down at the end: where the eyes look. A little up (one throws a bit above where one looks).
+     */
+    _throwDir(swing, out) {
+        const ch = this.game.character;
+        ch.group.getWorldQuaternion(_q);
+        const aim = this.tip(_v3, out) ? out : out.set(0, 0, -1).applyQuaternion(_q);
+        if (aim.y < -0.45) aim.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_q2) : _q);
+        const side = _v4.set(swing.x, 0, 0).applyQuaternion(_q);
+        return aim.addScaledVector(side, 0.35).setY(aim.y + 0.12).normalize();
     }
 
     /** A thrown light (mine or another player's). */
@@ -518,16 +533,12 @@ export class WandMagic {
             if (ch.isRunning || ch.stepping > 0 || ch.flying || ch.knockedDown || ch.swimming) this._movedAt = now;
             const det = this._lumosThr || (this._lumosThr = new LumosThrow());
             const other = g._castName && g._castName !== 'Lumos' && g._castName !== 'LumosMaxima' && now - (g._castAt || -1e9) < LUMOS.OTHER_MS;
-            if (!side || !ch.armState || now - (this._movedAt || 0) < LUMOS.STILL || other || (ch.isHandTracked && !ch.isHandTracked(side))) det.reset();
+            if (!side || !ch.armState || now - (this._movedAt || 0) < LUMOS.STILL || other) det.reset();
             else {
                 const arm = ch.armState(side, this._arm || (this._arm = {}));
-                const thr = det.update({ now, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, behind: poseBehind(g.currentPose, side) });
-                if (thr) {
-                    // the way the hand went (a little up: one throws a bit above where one looks), as hard as it went
-                    ch.group.getWorldQuaternion(_q);
-                    const dir = _v2.set(thr.dir.x, thr.dir.y + 0.15, thr.dir.z).normalize().applyQuaternion(_q);
-                    this._throwLight(dir, Math.min(1.6, Math.max(0.6, thr.speed / 8)));
-                }
+                const tracked = ch.isHandTracked ? ch.isHandTracked(side) : true;
+                const thr = det.update({ now, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, behind: poseBehind(g.currentPose, side), tracked });
+                if (thr) this._throwLight(this._throwDir(thr.dir, _v2), Math.min(1.6, Math.max(0.7, thr.speed / 7)));
             }
         }
         for (let i = this.thrown.length - 1; i >= 0; i--) {

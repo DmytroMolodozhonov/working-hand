@@ -170,18 +170,21 @@ export class ThrowDetector {
 
 /**
  * Throwing the Lumos light (WandMagic): the same rules as a real throw of a thing — a wind-up (the hand by
- * the head or behind the shoulder), a fast swing FORWARD, and the light leaves at the swing's end (when the
- * hand slows down), the way and as hard as the hand went. No wind-up — never; a swing down, sideways (a wave
- * while talking) or back — never. (No fingers: the light is not held, it leaves the wand.)
- * The author: «it is thrown unrealistically, not when I really throw».
+ * the head or behind the shoulder), a fast swing forward / down from there (the camera hardly sees depth: an
+ * overhand throw is seen mostly as the hand coming down — the author: «Lumos stopped being thrown at all»), and
+ * the light leaves at the swing's end (when the hand slows down, or a moment after the fastest point). No wind-up
+ * — never; a wave aside (talking), a swing back or up, a swing down to the ground — never. A hand lost in the
+ * swing's blur keeps the swing going (it is how a fast throw looks to the camera). (No fingers: the light is not
+ * held, it leaves the wand; where it flies — WandMagic: where the wand points, bent by the swing.)
  */
 export const LUMOS_THROW = {
-    SPEED: 5, // m/s against the body at the fastest moment
-    TRAVEL: 0.6, // the hand from the wind-up
-    WINDOW_MS: 1000, // the swing begins this soon after the wind-up
-    FWD: 0.55, // the swing's forward part (of its speed): mostly forward (an overhand throw goes down a little)
+    SPEED: 4.5, // m/s against the body at the fastest moment
+    TRAVEL: 0.5, // the hand from the wind-up
+    WINDOW_MS: 1200, // the swing begins this soon after the wind-up
+    SIDE: 0.85, // its sideways part no more than this share of its speed (a wave aside is no throw)
     END: 0.5, // its end: the speed fell below this share of the fastest …
-    MAX_MS: 400, // … or this long after the fastest moment (the camera smooths the end of a swing)
+    MAX_MS: 350, // … or this long after the fastest moment (the camera smooths the end of a swing)
+    LOW: -1.0, // the hand this far below the shoulder (the arm is 1.9 long): down at the ground — no throw
 };
 
 export class LumosThrow {
@@ -191,24 +194,28 @@ export class LumosThrow {
 
     /**
      * @param {object} s  now (ms); hand, shoulder, vRel — the body's space (x right, y up, z back); behind (the camera
-     *   sees the wrist behind the shoulder)
-     * @returns {null|{speed:number, dir:{x,y,z}}} the throw at the swing's end: the hand's direction (the body's space)
+     *   sees the wrist behind the shoulder); tracked (the camera sees the hand now)
+     * @returns {null|{speed:number, dir:{x,y,z}}} the throw at the swing's end (dir: the swing, the body's space)
      */
-    update({ now, hand, shoulder, vRel, behind = false }) {
+    update({ now, hand, shoulder, vRel, behind = false, tracked = true }) {
+        const peak = this.peak;
+        if (peak && now - peak.at > LUMOS_THROW.MAX_MS) { this.reset(); return hand.y - shoulder.y < LUMOS_THROW.LOW ? null : peak; }
+        if (!tracked) return null; // (lost in the blur: the swing goes on — its end by the time above)
         const speed = Math.hypot(vRel.x, vRel.y, vRel.z);
-        if (!this.peak && (hand.y - shoulder.y > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
+        if (!peak && (hand.y - shoulder.y > THROW.UP || hand.z - shoulder.z > THROW.BACK || behind)) {
             this.cockAt = now;
             this.cock = { x: hand.x, y: hand.y, z: hand.z + (behind || hand.z - shoulder.z > THROW.BACK ? THROW.BEHIND : 0) };
         }
-        if (this.cock && !this.peak && now - this.cockAt > LUMOS_THROW.WINDOW_MS) this.cock = null;
+        if (this.cock && !peak && now - this.cockAt > LUMOS_THROW.WINDOW_MS) this.cock = null;
         if (!this.cock) return null;
-        const fwd = -vRel.z;
-        if (speed > LUMOS_THROW.SPEED && fwd > LUMOS_THROW.FWD * speed && (!this.peak || speed > this.peak.speed)
-            && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > LUMOS_THROW.TRAVEL) {
+        const fwd = -vRel.z, down = -vRel.y;
+        if (speed > LUMOS_THROW.SPEED && (fwd > 0.3 * speed || down > 0.3 * speed) && Math.abs(vRel.x) < LUMOS_THROW.SIDE * speed && vRel.z < 0.3 * speed
+            && (!peak || speed > peak.speed) && Math.hypot(hand.x - this.cock.x, hand.y - this.cock.y, hand.z - this.cock.z) > LUMOS_THROW.TRAVEL) {
             this.peak = { speed, dir: { x: vRel.x / speed, y: vRel.y / speed, z: vRel.z / speed }, at: now };
         }
         if (!this.peak) return null;
-        if (speed < this.peak.speed * LUMOS_THROW.END || now - this.peak.at > LUMOS_THROW.MAX_MS) { const p = this.peak; this.reset(); return p; }
+        if (hand.y - shoulder.y < LUMOS_THROW.LOW) { this.reset(); return null; } // (swung down at the ground)
+        if (speed < this.peak.speed * LUMOS_THROW.END) { const p = this.peak; this.reset(); return p; }
         return null;
     }
 }

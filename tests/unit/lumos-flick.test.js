@@ -9,12 +9,12 @@ import { LumosThrow } from '../../src/game/HandRelease.js';
  * the shoulder, a fast swing forward — it leaves at the swing's end, the way the hand went. A 15-fps noisy camera.
  */
 const SH = { x: 0.7, y: 1.25, z: 0 };
-function swing(det, { start, v, n = 3, hold = 200, after = 10, seed = 3, behind = false }) {
+function swing(det, { start, v, n = 3, hold = 200, after = 10, seed = 3, behind = false, seen = () => true }) {
     let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647 - 0.5);
     let h = { ...start }, t = 0, out = null, at = -1, swingEnd = 0;
     const step = (vRel) => {
         const res = det.update({ now: t, hand: { x: h.x + rnd() * 0.05, y: h.y + rnd() * 0.05, z: h.z + rnd() * 0.05 }, shoulder: SH,
-            vRel: { x: vRel.x + rnd() * 0.6, y: vRel.y + rnd() * 0.6, z: vRel.z + rnd() * 0.6 }, behind: behind && t < hold });
+            vRel: { x: vRel.x + rnd() * 0.6, y: vRel.y + rnd() * 0.6, z: vRel.z + rnd() * 0.6 }, behind: behind && t < hold, tracked: seen(t) });
         if (res && !out) { out = res; at = t; }
     };
     for (; t < hold; t += 66) step({ x: 0, y: 0, z: 0 });
@@ -34,6 +34,10 @@ test('Lumos throw: the hand by the head (or behind the shoulder), a fast swing f
     assert.ok(side.out && side.out.dir.x > 0.4, 'to the right ' + JSON.stringify(side.out?.dir));
     // from behind the shoulder
     assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.4, z: 0.3 }, behind: true, v: { x: 0, y: -0.5, z: -6.5 } }).out, 'from behind the shoulder');
+    // as the camera sees a real overhand throw: the hand from by the head comes down in front (little depth)
+    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.75, z: -0.1 }, v: { x: 0, y: -6, z: -1.5 } }).out, 'overhand, seen mostly coming down');
+    // the hand lost in the swing's blur (not seen for 200 ms): still thrown, at the end
+    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.75, z: -0.1 }, v: { x: 0, y: -5, z: -4 }, seen: (t) => t < 340 || t > 540 }).out, 'lost in the blur');
     // a harder swing: a faster light
     const hard = swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1.5, z: -11 } });
     assert.ok(hard.out.speed > r.out.speed, 'harder');
@@ -42,7 +46,8 @@ test('Lumos throw: the hand by the head (or behind the shoulder), a fast swing f
 test('Lumos throw: never without a wind-up, never a wave while talking, a swing down or back, a slow move, the arm just held', () => {
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: 0, z: -7 } }).out, null, 'a jab from the chest: no wind-up');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 7, y: 0, z: -1 } }).out, null, 'a wave aside');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -7, z: -1.5 } }).out, null, 'a swing down');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -9, z: -1 }, n: 6 }).out, null, 'a swing down to the ground');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.0, z: -0.5 }, v: { x: 0, y: 7, z: -1 } }).out, null, 'a swing up');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: -0.5 }, v: { x: 0, y: 0, z: 6 } }).out, null, 'back');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1, z: -3 }, n: 6 }).out, null, 'slow');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: 0, z: 0 }, hold: 3000 }).out, null, 'held up');
