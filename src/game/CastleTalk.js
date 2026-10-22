@@ -42,6 +42,8 @@ import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
+import { DealPrices, dealKey, overCounter } from './BuyerDeal.js';
+import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
@@ -144,6 +146,8 @@ export class CastleTalk {
         this.brains = new Map(); // villager id -> brain (lives while the villager is out)
         this.memories = new Map(); // villager id -> brain memory (for the next time)
         this.offer = null; // {v, kind:'buy'|'sell', price, uid?, wid?, item}
+        this.deals = new DealPrices(); // the sums named by the pawnshop / the shady buyer: the same thing, the same sum (BuyerDeal.js)
+        this.signs = new BuyerSigns(game); // the «Скупка» plaques
         this.stalls = new Map(); // stall key -> {goods: [uid], restockAt}
         this._scanT = 0;
         this._greetT = new Map();
@@ -195,6 +199,16 @@ export class CastleTalk {
         };
         const held = g.items?.held.right || g.items?.held.left;
         if (held) ctx.heldItem = { name: nameOf(held.item), magic: isMagicItem(held.item), value: itemValue(held.item) };
+        // (a buyer names only the sum of the code — the one kept for this thing at his stall — never an invented one)
+        if (ctx.buys) {
+            const o = this.offer, sold = o && o.v === v && o.kind === 'sell';
+            const thing = sold ? o.item : held?.item;
+            if (thing) {
+                const sk = this._stallKey(v.cs.def, v.entry.stall);
+                const price = sold ? o.price : (thing.uid ? this.deals.peek(sk, 'u' + thing.uid, performance.now()) : null) ?? pawnPrice(thing);
+                ctx.heldItem = { name: nameOf(thing), magic: isMagicItem(thing), value: itemValue(thing), price };
+            }
+        }
         if (this.offer && this.offer.v === v) ctx.lastOffer = { item: { name: nameOf(this.offer.item) }, price: this.offer.price, kind: this.offer.kind };
         // (what just happened round him: the net answers about it — «что это грохнуло?»)
         const fk = v.fear?.danger?.kind;
@@ -775,6 +789,7 @@ export class CastleTalk {
         }
         // sell: the merchant takes the thing, a pouch of coins lies in its place
         const p = o.pos;
+        this.deals.close(o.stall, dealKey(o)); // (sold: the deal is over)
         if (g.authority) this.sellNow(o.uid, o.wid, o.price, p);
         else g.sync?.tradeSell?.(o.uid, o.wid, o.price, [p.x, p.y, p.z]);
         g.hud.setVoice?.(`💰 Продано за ${o.price} монет — возьмите мешочек с прилавка`, true);
@@ -882,7 +897,14 @@ export class CastleTalk {
         if (uid && g.items.loose.has(uid)) g.items.pickUp(uid, '#merchant', 'right');
         else if (wid) { const w = g.weapons.byId.get(wid); if (w) { g.weapons.remove(w); g.sync?.weaponGone?.(w); } }
         else return;
-        g.items.spawnLoose({ kind: 'coins', uid: newUid(), count: Math.max(1, Math.min(500, Math.round(price))) }, new THREE.Vector3(p.x, p.y + 0.3, p.z));
+        // (a pouch holds 500 at most: a bigger sum is several pouches)
+        let left = Math.max(1, Math.round(price)), k = 0;
+        while (left > 0) {
+            const n = Math.min(500, left);
+            left -= n;
+            g.items.spawnLoose({ kind: 'coins', uid: newUid(), count: n }, new THREE.Vector3(p.x + (k % 2) * 0.35, p.y + 0.3 + Math.floor(k / 2) * 0.3, p.z + (k % 2 ? 0.2 : 0)));
+            k++;
+        }
     }
 
     /** A thing of mine in my hands or slots, by uid. */
@@ -951,7 +973,7 @@ export class CastleTalk {
                     this._sayReply(v, 'Не-не, магическое не беру. Неси такое волшебникам — у них в поселении есть скупка.', 6);
                     return;
                 }
-                const price = stall.pawn || stall.fence ? pawnPrice(found.item) : Math.max(1, itemValue(found.item));
+                const price = stall.pawn || stall.fence ? this.deals.price(key, dealKey(found), () => pawnPrice(found.item), performance.now()) : Math.max(1, itemValue(found.item));
                 this.offer = { v, kind: 'sell', price, ...found, stall: key };
                 const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
                 v.talking = 4;
@@ -975,6 +997,50 @@ export class CastleTalk {
                 g.hud.setVoice?.('🚨 Вы ушли, не заплатив! Торговец зовёт стражу', true);
             }
         }
+    }
+
+    /**
+     * The pawnshop's / shady buyer's deals: the thing taken back from the counter ends the offer (no scolding;
+     * the sum named is kept for ~10 min — the same thing put again costs the same), a far walk forgets them,
+     * and the «Скупка» plaques are kept up.
+     */
+    _buyerDeals(now) {
+        const g = this.game, me = g.character.group.position;
+        const o = this.offer;
+        if (o && o.kind === 'sell' && o.stall) {
+            const [cid, s] = o.stall.split(':s');
+            const st = this.life.castles.get(cid)?.def.stalls[+s];
+            let still = false;
+            if (st && o.uid) { const L = g.items.loose.get(o.uid); still = !!L && !L.hover && onCounter(st, L.model.position); }
+            else if (st) { const w = g.weapons.byId.get(o.wid); still = !!w && !w.holder && onCounter(st, w.position); }
+            if (!still) this.offer = null;
+        }
+        this.deals.sweep(now);
+        for (const k of new Set([...this.deals.m.values()].map((e) => e.stall))) {
+            const [cid, s] = k.split(':s');
+            const st = this.life.castles.get(cid)?.def.stalls[+s];
+            if (!st || Math.hypot((st.counter.x0 + st.counter.x1) / 2 - me.x, (st.counter.z0 + st.counter.z1) / 2 - me.z) > 40) this.deals.leave(k);
+        }
+        this.signs.update([...this.life.castles.values()]);
+    }
+
+    /**
+     * The stall of a buyer (pawnshop / shady) whose counter this point is over — a hand held out there and
+     * opened lays the thing on it (Items / Weapons, the off hand). null elsewhere.
+     */
+    buyerCounterAt(p) {
+        for (const cs of this.life.castles.values()) {
+            if (!cs.awake) continue;
+            const stalls = cs.def.stalls;
+            for (let i = 0; i < stalls.length; i++) {
+                const st = stalls[i];
+                if ((st.pawn || st.fence) && overCounter(st, p)) {
+                    const v = this._merchantOf(cs.def, i);
+                    if (v && !v.dead && !v.foe && !(cs.hostile.get(this.game.localId) > Date.now())) return st;
+                }
+            }
+        }
+        return null;
     }
 
     /** A little card with the price beside every unpaid good on a counter near me. */
@@ -1055,6 +1121,7 @@ export class CastleTalk {
             this._scanT = 0.5;
             if (g.authority) this._restock(now);
             this._watchMarket();
+            this._buyerDeals(now);
             this._greetings(now);
             // offers expire when you walk away
             if (this.offer) {

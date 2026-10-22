@@ -26,7 +26,8 @@ import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, ro
 import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
-import { DropGate, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { clampToCounter } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
@@ -127,6 +128,7 @@ export class ItemSystem {
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._drop = { right: new DropGate(), left: new DropGate() };
+        this._dropBuy = { right: new DropGate(), left: new DropGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
         this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
         this.letLog = new CappedLog(); // (why things left the hands: tests)
@@ -265,6 +267,7 @@ export class ItemSystem {
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
         this._drop[side].reset(closed);
+        this._dropBuy[side].reset(closed);
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
@@ -793,6 +796,8 @@ export class ItemSystem {
             // counter by opening the hand on it)
             // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
+            // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
+            if (side === g.off && ch.armState && !holdsFast(ch) && this._buyerPut(side, h, gt, ch)) continue;
             if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
@@ -815,6 +820,19 @@ export class ItemSystem {
         this._wear(dt, ch);
         this._give(dt, ch);
         this._netSend(dt);
+    }
+
+    /** The off hand over a buyer's counter, held out and opened: the thing lies on the counter. true — it did. */
+    _buyerPut(side, h, gt, ch) {
+        const gate = this._dropBuy[side];
+        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
+        const st = ch.getHandWorldPosition(side, _f) && this.game.castleLife?.talk?.buyerCounterAt(_f);
+        if (!st) { if (curl > DROP.CLOSED) gate.armed = true; gate.since = 0; return false; }
+        const arm = ch.armState(side, this._arm[side]);
+        if (!gate.update({ now: gt, curl, tracked, ...arm })) return false;
+        clampToCounter(st, h.model.position.copy(_f));
+        this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (левая/нерабочая рука разжата над ним)' });
+        return true;
     }
 
     _physics(L, dt) {

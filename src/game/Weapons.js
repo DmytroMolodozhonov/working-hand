@@ -21,7 +21,8 @@ import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
-import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { clampToCounter } from './BuyerDeal.js';
 import { boneLines } from './CutBodies.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
@@ -72,7 +73,7 @@ export class WeaponSystem {
     }
 
     _handState() {
-        return { held: null, lastOpen: 0, lastOpenFrame: -1000, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false, drop: new DropGate(), thr: new ThrowDetector(), arm: {} };
+        return { held: null, lastOpen: 0, lastOpenFrame: -1000, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false, drop: new DropGate(), buyDrop: new DropGate(), thr: new ThrowDetector(), arm: {} };
     }
 
     spawn(type, position, quaternion, id) {
@@ -354,6 +355,18 @@ export class WeaponSystem {
                     return;
                 }
                 // the outstretched hand clearly opened: it falls out of it
+                // the pawnshop / the shady buyer: the off hand held out over his counter and opened lays it there (BuyerDeal.js)
+                if (side === this.game.off) {
+                    const st = ch.getHandWorldPosition(side, _b) && this.game.castleLife?.talk?.buyerCounterAt(_b);
+                    if (!st) { if (curl > DROP.CLOSED) hs.buyDrop.armed = true; hs.buyDrop.since = 0; }
+                    else if (hs.buyDrop.update({ now: gt, curl, tracked, ...arm })) {
+                        this.release(side);
+                        clampToCounter(st, w.position);
+                        w.position.y = Math.max(w.position.y, st.counter.top + 0.2);
+                        w.velocity.set(0, 0, 0);
+                        return;
+                    }
+                }
                 if (hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
             }
             this._driveHeld(side, dt, ch);

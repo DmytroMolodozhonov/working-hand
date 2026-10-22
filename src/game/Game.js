@@ -2902,6 +2902,7 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
+        for (const m of this.castleLife?.talk?.signs?.sampleModels?.() || []) zoo.add(m); // (the «Скупка» plaques of the buyers)
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
