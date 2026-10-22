@@ -42,7 +42,7 @@ export const ALIVE = {
     REGEN: 1, // mana a second back (where the free world's rules don't already give it)
     HP: 15,
     RANGE: 50, // m from its caster
-    AIM: 14, // m: the tree pointed at
+    AIM: 42, // m: the tree pointed at (three times the first 14: the author had to stand right at the tree)
     AIM_SLACK: 0.12, // rad: a tree this much beside the line of the hand still counts
     GROW: 3, // s to come alive
     STIFFEN: 2.6, // s to turn back into a tree
@@ -344,7 +344,7 @@ export class LivingTrees {
             if (!graves.length) return say(maxima ? '💀 На этом кладбище все могилы уже разрыты' : '💀 Эта могила уже разрыта — в ней никого нет');
         } else {
             if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
-            if (!aim) return say('🌳 Направьте руку на дерево или могилу (не дальше 14 м) и скажите «Alive»');
+            if (!aim) return say(`🌳 Направьте руку на дерево или могилу (не дальше ${ALIVE.AIM} м) и скажите «Alive»`);
             trees = maxima ? [aim, ...this._treesRound(aim)] : [aim];
         }
         // mana
