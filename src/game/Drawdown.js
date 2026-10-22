@@ -242,7 +242,7 @@ export class Drawdown {
             if (!inCol((b.minX + b.maxX) / 2, (b.minZ + b.maxZ) / 2)) continue;
             b.minY -= 1; b.maxY -= 1;
         }
-        for (const c of g.chests || []) if (inCol(c.mesh.position.x, c.mesh.position.z)) c.mesh.position.y -= 1;
+        for (const c of g.chests || []) if (!(c.cart && g.carriages?.list?.has(c.cart.id) && !g.carriages.list.get(c.cart.id).chestOut) && inCol(c.mesh.position.x, c.mesh.position.z)) c.mesh.position.y -= 1; // (a cart's chest goes with its cart)
         for (const b of g.beds?.list?.values() || []) if (b.model && inCol(b.model.position.x, b.model.position.z)) { b.model.position.y -= 1; if (b.y != null) b.y -= 1; }
         for (const d of g.doors?.list?.values() || []) if (d.model && inCol(d.x, d.z)) { d.model.position.y -= 1; d.y -= 1; }
         for (const w of g.weapons?.weapons || []) if (!w.holder && inCol(w.position.x, w.position.z)) w.wake?.();

@@ -2226,7 +2226,7 @@ export class CastleLife {
     }
 
     /** Does this one fight (knights, the king; the tower's wizards but a timid student)? */
-    _fights(v) { return v.role === 'knight' || v.role === 'king' || (!!v.wizard && WizardFight.fights(v)); }
+    _fights(v) { return v.role === 'knight' || v.role === 'king' || (!!v.wizard && WizardFight.fights(v)) || !!v.roadBrave; } // (a brave one of the road's folk too: Travelers.roadBrave)
 
     /** A shield up: a knight's in the shield wall / holding a place, a wizard's hand shield. */
     /**

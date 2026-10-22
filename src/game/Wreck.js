@@ -71,6 +71,8 @@ export class Wreck {
             else if (y < b.y - 0.3) g.beds._place({ id: b.id, x: b.x, y, z: b.z, ry: b.ry, color: b.color });
         }
         for (const c of g.chests || []) {
+            const cart = c.cart && g.carriages?.list?.get(c.cart.id);
+            if (cart && !cart.chestOut) continue; // (a cart's chest stands on the cart's floor, not on blocks: Carriages places it)
             const p = c.getPosition();
             if (!near(p.x, p.z)) continue;
             const y = floorUnder(t, p.x, p.y - 0.25, p.z); // (a chest stands on its floor: its mesh's y)

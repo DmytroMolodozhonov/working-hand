@@ -342,7 +342,7 @@ export class Carriages {
         this.list.set(id, c);
         // the chest (a real one: «Алохомора» opens it; the reward floats up out of it)
         if (g.chests) {
-            const ch = new Chest(g.scene, new THREE.Vector3(x, c.y + CART.FLOOR, z), 'loot', yaw + Math.PI, 'cart:' + id, { scale: 1.6 });
+            const ch = new Chest(g.scene, new THREE.Vector3(x, c.y + CART.FLOOR, z), 'loot', yaw, 'cart:' + id, { scale: 1.6 }); // (facing out, to the back)
             ch.locked = true;
             ch.cart = { id, magic };
             g.chests.push(ch);
@@ -502,7 +502,7 @@ export class Carriages {
         if (c.chest && !c.chestOut) {
             const p = cartToWorld(c.x, c.z, c.yaw, CHEST_AT.x, CHEST_AT.z);
             c.chest.mesh.position.set(p.x, c.y + CART.FLOOR - CHEST_AT.z * Math.sin(c.pitch) + (c.wreck ? -0.6 : 0), p.z);
-            c.chest.mesh.rotation.set(0, c.yaw + Math.PI, 0);
+            c.chest.mesh.rotation.set(0, c.yaw, 0); // (its front to the tailboard: opened from behind the cart — the author)
         }
         if (this.auth) this._leadHorses(c, dt);
     }

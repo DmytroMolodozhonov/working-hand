@@ -419,9 +419,24 @@ export class ArmorSystem {
 
     /** What a dead castle person leaves of armour (Death.villagerDied): a knight's plates, a wizard's magic robe. */
     villagerLoot(v) {
-        if ((v.role === 'knight' || v.role === 'king') && !v.stripped) return this._villagerSteel(v);
-        if (v.wizard && v.robe) return [makeRobe(true)];
-        return [];
+        let out = [];
+        if ((v.role === 'knight' || v.role === 'king') && !v.stripped) out = this._villagerSteel(v);
+        else if (v.wizard && v.robe && !v.stripped) out = [makeRobe(true)];
+        // (the author: «он продолжил лежать в доспехах, но с него выпали доспехи — продублировались»: what falls by
+        //  the body is no longer on it — the body lying there is made again without it, on every computer)
+        if (out.length) this._strippedDead(v);
+        return out;
+    }
+
+    /** (any computer) A dead one's lying model without its steel / robe (they lie beside it now). */
+    _strippedDead(v) {
+        v.armor = 0; v.maxArmor = 0;
+        this._restyle(v);
+        const m = v.model;
+        m?.setHeldTool?.('none');
+        if (m?.shield) m.shield.visible = false;
+        for (let i = 0; i < 12 && m && !m.isDeadDone; i++) m.update(0.1, { mode: 'dead' }); // (lying at once — not getting up and falling again)
+        if (this.game.authority) this.game.sync?.armor?.({ a: 'vstrip', id: v.id });
     }
 
     /** A dragon's lair: the named set (and now and then a magic robe) among the gold. */
@@ -455,7 +470,7 @@ export class ArmorSystem {
         } else if (m.a === 'vstrip' && !g.authority) {
             const v = g.castleLife?.byId?.get(m.id);
             this.stripped.add(m.id);
-            if (v && !v.stripped) this._restyle(v);
+            if (v && !v.stripped) { if (v.dead || v.mode === 'dead') this._strippedDead(v); else this._restyle(v); }
         }
     }
 

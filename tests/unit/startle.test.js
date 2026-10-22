@@ -86,3 +86,25 @@ test('death: the wand / the staff / the sword falls from the hand as a thing on 
     assert.ok(knight.disarmed);
     assert.equal(heldDrop({ model: model('hoe') }), null, 'no such thing in the world: goes with the body');
 });
+
+test('the road folk: about a third are brave and fight (fists too) — the rest run', async () => {
+    const { roadBrave } = await import('../../src/game/Travelers.js');
+    let n = 0;
+    for (let i = 0; i < 1000; i++) if (roadBrave({ entry: { seed: (i * 2654435761) >>> 0 } })) n++;
+    assert.ok(n > 200 && n < 500, `brave: ${n} of 1000`);
+    assert.equal(roadBrave({ entry: { seed: 0 }, brave: 0.9, elder: true }), false, 'not an old one');
+});
+
+test('a knight killed: his plates fall by the body — and the body lies without them (no double)', async () => {
+    const { ArmorSystem: Armor } = await import('../../src/game/Armor.js');
+    const A = Object.create(Armor.prototype);
+    A.game = { authority: true };
+    let restyled = 0;
+    A._restyle = (v) => { restyled++; v.stripped = true; };
+    const v = { role: 'knight', armor: 30, maxArmor: 50, dead: true, model: { setHeldTool() {}, update() {}, isDeadDone: true } };
+    const loot = A.villagerLoot(v);
+    assert.equal(loot.length, 3);
+    assert.equal(restyled, 1, 'the lying body is made without the steel');
+    assert.equal(v.armor, 0);
+    assert.equal(A.villagerLoot(v).length, 0, 'never twice');
+});

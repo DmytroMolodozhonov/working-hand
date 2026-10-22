@@ -41,6 +41,7 @@ export const ROAD = {
     DEST: [220, 1500], // m to where they go
     CALM: 12, // s with nobody fighting / afraid: back on the way
     HOSTILE_MS: 90000,
+    BRAVE: 0.62, // a road's folk this brave (0…1, their own nature) stand and fight — with a pitchfork or bare fists — the rest run (about a third)
     // what goes on the roads (weights): by day, at night
     DAY: { folkCart: 0.32, wizCart: 0.2, wizards: 0.24, knights: 0.24 },
     NIGHT: { folkCart: 0.12, wizCart: 0.18, wizards: 0.4, knights: 0.3 },
@@ -60,6 +61,14 @@ const ALARM = {
     folkCart: ['Разбойники!', 'Помогите!', 'Бежим!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const BRAVE_LINES = ['Ах ты так?! Получай!', 'Не дам в обиду своих!', 'А ну, отойди от нас!', 'Сейчас я тебе покажу!'];
+
+/** Is this one of the road's folk brave enough to fight (his own nature — the seed, as VillagerFear's `brave`; not an old one)? */
+export function roadBrave(v) {
+    const s = (v.entry?.seed ?? 0) >>> 0;
+    const brave = v.brave ?? ((s >>> 7) % 100) / 100;
+    return brave >= ROAD.BRAVE && !v.elder;
+}
 
 /** A weighted pick of what goes on the road. */
 export function pickKind(night, rnd = Math.random) {
@@ -129,12 +138,22 @@ export class Travelers {
             if (idx.landAt?.(Math.round(x), Math.round(z))) continue;
             const dest = o.dest || this._dest(x, z, pl.p);
             const yaw = Math.atan2(-(dest.x - x), -(dest.z - z));
-            // a firm, dry, open place (a cart needs room to start)
-            const need = cart ? 10 : 3;
-            if (wayFree(g, x, z, -Math.sin(yaw), -Math.cos(yaw), need, { half: cart ? CART.WID / 2 : 0.5, rise: 1, avoidLand: true, into: dest.into }) < need) continue;
+            // a firm, dry, open place — its whole length: from behind the tailboard (a walker: behind the last one),
+            // under the cart and the horses, and on ahead (a cart needs room to start); high enough for the riders
+            // and the hood (never in a tree, its crown, a rock, a wall, a house or water — the author)
+            if (!this._placeFree(x, z, yaw, cart, dest)) continue;
             return this._make(kind, x, z, yaw, dest);
         }
         return false;
+    }
+
+    /** Is the place for a party at (x, z) heading `yaw` free (Carriages.wayFree along its whole length)? */
+    _placeFree(x, z, yaw, cart, dest) {
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        const back = cart ? CART.LEN / 2 + 1.5 : 2.6 * 2 + 1.5; // (the tail of the cart / the last walker)
+        const need = back + (cart ? -CART.HORSE_Z + 2 + 6 : 4);
+        const o = { half: cart ? CART.WID / 2 + 0.4 : 0.6, rise: 1, clear: cart ? 5 : 4, avoidLand: true, into: dest.into };
+        return wayFree(this.game, x - fx * back, z - fz * back, fx, fz, need, o) >= need;
     }
 
     /** Where they go: a castle, a village or a tower past the player (they come by), else far beyond. */
@@ -192,6 +211,8 @@ export class Travelers {
             const v = L._activate(cs, i, { x: at.x, y: at.y, z: at.z, yaw: at.yaw ?? yaw }, P.cart ? 'cart' : 'road');
             if (!v) return;
             v.party = P;
+            // (the author: «кто-то, даже если у него ничего нет, даже с кулаками, всё равно пойдёт и попытается что-то сделать»)
+            if (!L._fights(v)) v.roadBrave = roadBrave(v);
             if (P.cart) { v.seat = k; v.seated = true; P.cart.seats[k] = v.id; v.mode = 'sit'; }
             P.members.push(v);
         });
@@ -295,7 +316,7 @@ export class Travelers {
             if (v.dead) continue;
             if (v.seated) this._getDown(v);
             if (L._fights(v)) {
-                if (isPlayer && !v.foe) { v.foe = by; v.path = null; }
+                if (isPlayer && !v.foe) { v.foe = by; v.path = null; if (v.roadBrave && Math.random() < 0.7) L._say(v, pick(BRAVE_LINES), 3); }
             } else if (at && !v.fear) L.fright?.scare?.(v, 'attacker', at, by);
             if (!said && Math.random() < 0.8) { said = true; L._say(v, pick(ALARM[P.kind])); }
         }
