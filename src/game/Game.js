@@ -3931,7 +3931,7 @@ export class Game {
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.()
                 || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active
                 || (this.config.mode === 'test' && this.testState === 'setup');
-            if (!first && !busy && ch.onGround && ch.jump(J.strength)) this._jumpAt = J.at;
+            if (!first && !busy && ch.onGround && ch.jump(J.strength)) { this._jumpAt = J.at; this._jumpOnto(); }
         } else if (J && J.air && ch.jumpAir && J.at === this._jumpAt) ch.jumpBoost(J.strength); // (it went up higher)
         const L = ch.landing;
         if (L && L.at !== this._landSeen) {
@@ -3940,6 +3940,28 @@ export class Game {
                 this.fx.shake = Math.max(this.fx.shake || 0, Math.min(0.35, 0.06 + L.speed / 45));
                 this.sound?.playLand?.(Math.min(1, 0.3 + L.speed / 14));
             }
+        }
+    }
+
+    /**
+     * A jump right in front of a ledge (a wall of up to three blocks, room on its top): the hero
+     * jumps up onto it, forward with the jump as a person does — the legs push off towards it.
+     * Too low a jump: the rock stops the body (Collision) and it lands back where it stood.
+     */
+    _jumpOnto() {
+        const ch = this.character, T = this.collision?.terrain, p = ch.group.position;
+        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2) return; // (a run carries it on already)
+        const fx = -Math.sin(ch.group.rotation.y), fz = -Math.cos(ch.group.rotation.y);
+        const feet = p.y - PLAYER_GROUND_OFFSET;
+        for (let d = PLAYER_RADIUS + 0.1; d <= PLAYER_RADIUS + 0.9; d += 0.2) {
+            const ix = Math.round(p.x + fx * d), iz = Math.round(p.z + fz * d);
+            if (ix === Math.round(p.x) && iz === Math.round(p.z)) continue;
+            const L = T.floorBelow ? T.floorBelow(ix, iz, Math.floor(feet + 3.5)) : T.topLayer(ix, iz);
+            const h = L - 0.5 - feet;
+            if (h < 0.3 || h > 3.05) continue;
+            if (T.solidIn && T.solidIn(ix, iz, L + 1, L + 4)) return; // (a wall, no room on its top)
+            ch.jumpVel.x = fx * 3; ch.jumpVel.z = fz * 3;
+            return;
         }
     }
 

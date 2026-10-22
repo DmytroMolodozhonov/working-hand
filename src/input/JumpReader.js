@@ -23,6 +23,8 @@
  * Strength 0..1: how fast and how high the body went up (a little hop — low, a real jump — high).
  * Counters (`jumps`, `lands`) only ever grow, as in LegReader: safe when a pose result is shown
  * for several frames — the game takes the difference.
+ * `rise`: where the hips are now against their standing height (− = squatting: LedgeClimb tells a squat
+ * from palms pressed down on an edge).
  * Pure (Node-testable).
  */
 
@@ -50,11 +52,12 @@ export const JUMP = {
 const vis = (p) => !!p && (p.visibility ?? 1) >= JUMP.VIS && p.y > -0.05 && p.y < 0.985;
 
 export class JumpReader {
-    constructor() { this.reset(); this.jumps = 0; this.lands = 0; this.strength = 0; this.at = 0; }
+    constructor() { this.reset(); this.jumps = 0; this.lands = 0; this.strength = 0; this.at = 0; this.rise = 0; }
 
     reset() {
         this.hist = [];
         this.base = null;  // the standing body: {hip, sh, T, ank, x}
+        this.rise = 0;     // the body above (+) / below (−) the standing height now (torso lengths)
         this.air = false;
         this.up = 0;       // frames up so far
         this.seen = -1e9;
@@ -70,7 +73,7 @@ export class JumpReader {
     read(lm, now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
         if (lm && lm !== this._last) { this._last = lm; this._step(lm, now); }
         else if (!lm && this.air && now - this.at > JUMP.AIR_MAX) this._land(now);
-        return { air: this.air, jumps: this.jumps, lands: this.lands, strength: this.strength, at: this.at };
+        return { air: this.air, jumps: this.jumps, lands: this.lands, strength: this.strength, at: this.at, rise: this.rise };
     }
 
     _step(lm, now) {
@@ -98,6 +101,7 @@ export class JumpReader {
         if (feet && B.ank == null) B.ank = ank;
         const T0 = B.T;
         const rH = (B.hip - hip) / T0, rS = (B.sh - sh) / T0; // (+ = up)
+        this.rise = rH; // (the hips over / under their standing height now: − a squat; leaning moves the shoulders only — LedgeClimb)
 
         if (this.air) {
             // the strength grows while the body still goes up (how high it went)

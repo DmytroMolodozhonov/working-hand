@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PeerServer } from 'peer';
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, realErrors } from './harness.mjs';
+import { jumpFrames } from './poses.mjs';
 
 const PORT = Number(process.env.ZNS_TEST_PORT) || 8163;
 const PEER_PORT = PORT + 1013; // (its own signalling server: other test files may run at the same time)
@@ -163,8 +164,16 @@ test('beds: wool from a sheep, logs thrown from the hand, «Create a Bed», «Ch
     assert.match(morning.said, /Доброе утро/);
     assert.equal(morning.lying, true, 'still in bed after waking up');
 
-    // stand up (the player stood up for real) → beside the bed, upright
+    // standing up straight is not enough (the author's rule) — a real jump gets the hero up → beside the bed, upright
     await page.evaluate(() => window.__zns.game.character.setCrouching(false));
+    await frames(page, 60);
+    assert.ok(await page.evaluate(() => !!window.__zns.game.beds.lying), 'standing up straight: still lying');
+    await page.evaluate(async (list) => {
+        // (a slow test machine can drop the camera's timing for one jump: up to three jumps, it stands at the first it sees)
+        for (let k = 0; k < 3 && window.__zns.game.beds.lying; k++) {
+            for (const f of structuredClone(list)) { f.ts = performance.now(); window.__zns.poseService.injectRaw(f); await new Promise((r) => setTimeout(r, 33)); }
+        }
+    }, jumpFrames({ h: 0.5 }));
     await waitFor(page, () => !window.__zns.game.beds.lying, null, 10000);
     const up = await page.evaluate(() => {
         const g = window.__zns.game, ch = g.character, b = [...g.beds.list.values()][0];

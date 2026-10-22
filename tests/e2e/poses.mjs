@@ -194,3 +194,29 @@ export async function feed(page, opts, count = 10, intervalMs = 33) {
         if (intervalMs) await new Promise((r) => setTimeout(r, intervalMs));
     }
 }
+
+/**
+ * A real jump as the camera sees it, frame by frame (30 FPS): standing `stand` s, a little squat,
+ * the push, the flight (`h` torso lengths at the top), the landing, standing again. The whole
+ * body is in the picture (the feet too). Feed with `ts` = now (JumpReader reads the clock).
+ */
+export function jumpFrames({ h = 0.5, stand = 1, after = 0.6, scale = 0.7 } = {}) {
+    const T = (0.8 - 0.42) * scale, out = [];
+    const tf = Math.sqrt(h) * 0.9, end = stand + 0.35 + tf + after;
+    for (let t = 0; t < end; t += 1 / 30) {
+        let up = 0, squat = 0;
+        if (t >= stand && t < stand + 0.25) squat = 0.25 * (t - stand) / 0.25;
+        else if (t >= stand + 0.25 && t < stand + 0.35) squat = 0.25 * (1 - (t - stand - 0.25) / 0.1); // (the push)
+        else if (t >= stand + 0.35) { const u = (t - stand - 0.35) / tf; if (u < 1) up = Math.max(0, 4 * h * u * (1 - u)); }
+        const f = frame({ arms: 'hang', legs: { left: 'stand', right: 'stand' }, scale });
+        const lm = f.poseLandmarks;
+        for (let i = 0; i < lm.length; i++) {
+            let d = -up * T;
+            if (squat && i < 25) d += squat * T; // (a squat: the body goes down, the feet stay)
+            lm[i].y += d;
+        }
+        for (const hd of f.hands) for (const q of hd.landmarks) q.y += -up * T + squat * T;
+        out.push(f);
+    }
+    return out;
+}

@@ -11,7 +11,8 @@
  *    its length along your view. Something missing — the hint says what.
  *  - «Change a color синий» pointed at a bed (up to 12 m): repainted at once.
  *  - Sleeping: stand at the bed and crouch (sit down) for 1.5 s — the hero
- *    lies down. Stand up (or walk) — he gets up. At night, when every living
+ *    lies down. He stays lying whatever the body does; only a real jump in front
+ *    of the camera (JumpReader) gets him up, and not in the first 1.5 s. At night, when every living
  *    player lies in a bed and keeps still for 3 s, the night passes: the
  *    screen fades, «💤 Вы заснули…», and it's morning. By day lying heals
  *    (+1 HP every 5 s).
@@ -51,6 +52,7 @@ import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
 const LIE_AFTER = 1.5; // s of crouching at a bed
 const STILL_NEEDED = 3; // s of keeping still in bed for the night to pass
+const UP_AFTER = 1.5; // s lying before a jump gets the hero up (the author: «нельзя так просто встать»)
 const LOGS_PER_THROW = 4;
 const SAND_PER_THROW = 10; // (a heap of sand: «Create a House» needs 10)
 const AIM_RANGE = 16, COLOR_RANGE = 12;
@@ -68,7 +70,7 @@ export class Beds {
         this.others = new Map(); // playerId -> {bed, ready}: the others' beds
         this.sleeping = null; // the night is passing: {t, dayStart, switched}
         this.testAim = null; // (tests) a point to aim the spells at instead of the hand
-        this._crouchT = 0; this._upT = 0; this._walkT = 0; this._stillT = 0; this._healT = 0;
+        this._crouchT = 0; this._upT = 0; this._bedJump = null; this._stillT = 0; this._healT = 0;
         this._standAt = 0;
         this._sent = '';
         this._waitSaid = false;
@@ -446,11 +448,11 @@ export class Beds {
     lieDown(b) {
         if (!b) return;
         this.lying = b.id;
-        this._upT = 0; this._walkT = 0; this._stillT = 0; this._healT = 0; this._waitSaid = false;
+        this._upT = 0; this._bedJump = this.game.currentPose?.jump?.jumps; this._stillT = 0; this._healT = 0; this._waitSaid = false;
         this._holdLying(b);
         const fresh = this.home?.id !== b.id;
         this.setHome(b);
-        this.game.hud.setVoice((this._isNight() ? '🛏️ Вы легли спать. Не двигайтесь — и ночь пройдёт' : '🛏️ Вы прилегли отдохнуть: здоровье понемногу восстанавливается. Встаньте, чтобы подняться')
+        this.game.hud.setVoice((this._isNight() ? '🛏️ Вы легли спать. Не двигайтесь — и ночь пройдёт. Чтобы встать — подпрыгните' : '🛏️ Вы прилегли отдохнуть: здоровье понемногу восстанавливается. Чтобы встать — подпрыгните')
             + (fresh ? '. Теперь вы будете возрождаться у этой кровати' : ''), true);
         if (fresh) this.game.hud.toast?.('🛏️ Теперь вы будете возрождаться у этой кровати', 3500);
     }
@@ -517,12 +519,15 @@ export class Beds {
             if (!b || dead || g.flight?.active) this.standUp();
             else {
                 this._holdLying(b);
-                // getting up: clearly standing (not crouching) or walking for a moment
-                this._upT = ch.isCrouching ? Math.max(0, this._upT - dt * 2) : this._upT + dt;
-                this._walkT = ch.isRunning ? this._walkT + dt : 0;
+                // getting up: ONLY a real jump (the author's rule) — standing, walking, the arms: still lying;
+                // and not at once: a jump in the first moments after lying down is the body settling
+                this._upT += dt;
+                const J = g.currentPose?.jump, seen = this._bedJump;
+                this._bedJump = J ? J.jumps : seen;
+                const jumped = J && seen != null && J.jumps !== seen;
                 const moving = ch.isRunning || ch.handVelocity.right.length() > 2.5 || ch.handVelocity.left.length() > 2.5;
                 this._stillT = moving ? 0 : this._stillT + dt;
-                if (this._upT > 1.2 || this._walkT > 0.7) { this.standUp(); g.hud.setVoice('🛏️ Вы встали с кровати', true); }
+                if (jumped && this._upT >= UP_AFTER) { this.standUp(); g.hud.setVoice('🛏️ Вы встали с кровати', true); }
                 else if (!this._isNight() && !this.sleeping) this._heal(dt);
             }
         } else if (!dead && !g.flight?.active && performance.now() - this._standAt > 2000) {
@@ -532,7 +537,7 @@ export class Beds {
             else {
                 // (or sitting down beside it a moment)
                 const b = this._bedAt(ch.group.position);
-                this._crouchT = b && ch.isCrouching ? this._crouchT + dt : Math.max(0, this._crouchT - dt * 2);
+                this._crouchT = b && ch.isCrouching ? this._crouchT + dt : b ? Math.max(0, this._crouchT - dt * 0.5) : 0; // (a moment's flicker of the crouch doesn't start it over)
                 if (b && this._crouchT >= LIE_AFTER) this.lieDown(b);
             }
         } else this._crouchT = 0;

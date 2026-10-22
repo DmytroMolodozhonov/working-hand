@@ -34,6 +34,8 @@ const HIPS = 2.0; // m above the feet (the hips): the palms pressed down to here
 const UNEVEN = 1.05; // m: the two palms on edges this far apart in height (a broken edge) still hold together
 const WATER_LIFT = 1.0; // m: afloat, the water carries the body this much higher towards the bank
 const OVER_TIME = 0.5; // s: from the hands on the edge onto the top
+const SQUAT = 0.08; // torso lengths: the person's hips this far under its standing height (JumpReader.rise) — a squat
+const PRESS = 0.12; // m: the palms pushed down this far from where they took the edge — a real press (not hands resting)
 const HINT_EVERY = 25000; // ms
 
 export class LedgeClimb {
@@ -114,7 +116,7 @@ export class LedgeClimb {
                 // (pulled down is the pull; moved away along the top, or lifted off — it lets go)
                 // (pulling down towards oneself brings the hand in towards the body too: that is the pull)
                 const away = Math.hypot(h.G.x - hold.x, h.G.z - hold.z);
-                const off = h.G.y > hold.y + LET_GO || (away > LET_GO && h.G.y > hold.y - 0.2) || away > REACH;
+                const off = h.G.y > hold.y0 + LET_GO || (away > LET_GO && h.G.y > hold.y - 0.2) || away > REACH;
                 if (off) delete this.climb.holds[side];
                 continue;
             }
@@ -126,7 +128,8 @@ export class LedgeClimb {
                 this.climb = { T: e.T, L: e.L, ix: e.ix, iz: e.iz, base: feet, lift: 0, holds: {}, over: null };
                 this._hint('🧗 Рука на краю. Положите обе ладони на край и тяните руки вниз, к себе — вы подтянетесь и выберетесь наверх');
             }
-            this.climb.holds[side] = { x: h.G.x, y: e.T + 0.06, z: h.G.z, T: e.T, L: e.L, ix: e.ix, iz: e.iz };
+            // (y: where the palm is drawn, on the top; y0: where the hand was when it took the edge — the pull is measured from there)
+            this.climb.holds[side] = { x: h.G.x, y: e.T + 0.06, y0: h.G.y, z: h.G.z, T: e.T, L: e.L, ix: e.ix, iz: e.iz };
             this._edge(this.climb);
         }
         const cl = this.climb;
@@ -137,12 +140,23 @@ export class LedgeClimb {
         const both = cl.holds.left && cl.holds.right;
         const one = !both && (cl.holds.left || cl.holds.right);
         let err = 0;
+        // the person squats (for a jump) or is up in a jump: the hands go down / up with the whole body,
+        // not pressed on the edge — before the body hangs on them it is no pull (where they hold is learned anew)
+        const J = g.currentPose?.jump;
+        if (cl.lift <= 0.01 && J && (J.air || (J.rise ?? 0) < -SQUAT)) {
+            for (const side of ['left', 'right']) { const hd = cl.holds[side]; if (hd) hd.y0 = this._hand(side).G.y; }
+            cl.press = 0;
+            this._drawHands();
+            return;
+        }
         if (both) {
             // the hands stay on the edge: pulled down by err, the body goes up by it
-            for (const side of ['left', 'right']) err += this._hand(side).G.y - cl.holds[side].y;
+            for (const side of ['left', 'right']) err += this._hand(side).G.y - cl.holds[side].y0;
             err /= 2;
             cl.lift += Math.max(-RATE * dt, Math.min(RATE * dt, -err));
-            cl.press = err < 0.25 ? (cl.press || 0) + dt : 0;
+            // (a low ledge: the palms really pressed down on it — hands just resting there, or hanging by the
+            // body at the edge's height, climb nothing: no accidental climbing)
+            cl.press = err < -PRESS ? (cl.press || 0) + dt : 0;
         } else if (one) {
             cl.lift -= SLIDE * dt; // (one hand can't hold the body up)
             if (cl.lift < 0.3 && !cl._toldOne) { cl._toldOne = true; this._hint('🧗 Одной рукой не подтянуться — положите на край и вторую', true); }
@@ -160,7 +174,7 @@ export class LedgeClimb {
         ch.airTop = null;
         if (cl.lift > 0.01) ch.setCrouching(false);
         // the palms pressed down to the hips on the edge (a low ledge: just leant on): over it, onto the top
-        if (both && cl.base + cl.lift >= cl.T - HIPS && (cl.lift > 0.05 || cl.press > 0.25)) this._startOver();
+        if (both && cl.base + cl.lift >= cl.T - HIPS && (cl.lift > PRESS || cl.press > 0.2)) this._startOver();
         this._drawHands();
     }
 
