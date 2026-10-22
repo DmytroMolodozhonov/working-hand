@@ -30,6 +30,9 @@ import { offEarth } from './Planets.js';
 export const HAMLET = {
     SLOTS: 3, // spots a castle cell may hold
     CHANCE: 0.5, // a spot holds something this often (before its ground is checked)
+    // …and a spot left empty holds a lone wizard's house this often more (the author: lone wizards' houses 37 % more often —
+    // 0.15 a spot → 0.2055). Laid after the others, in spots that were empty: the hamlets already in a world stay as they were.
+    EXTRA_MAGEHUT: 0.0555,
     WEIGHTS: { magehut: 0.3, hermit: 0.3, village: 0.25, magevillage: 0.15 },
     BLEND: 14, // m of slope from the levelled land into the wild
     MIN_SPAWN: 130, // m from the world's start
@@ -295,9 +298,7 @@ export class HamletIndex {
     _makeCell(gx, gz) {
         const out = [];
         if (offEarth((gx + 1) * CASTLE_CELL)) return out; // (nobody lives on the other planets: Planets.js)
-        for (let s = 0; s < HAMLET.SLOTS; s++) {
-            if (hash01(gx * 17 + s * 5 + 3, gz * 29 + s * 11 + 1, this.seed + 4242) > HAMLET.CHANCE) continue;
-            const type = pickType(hash01(gx * 23 + s * 7 + 9, gz * 31 + s * 3 + 2, this.seed + 4343));
+        const place = (s, type) => {
             const rng = createRng((this.seed * 48271 + gx * 92821 + gz * 68917 + s * 7331 + 17) >>> 0);
             const zone = ZONE[type], m = zone + HAMLET.BLEND + 6, span = CASTLE_CELL - 2 * m;
             for (let t = 0; t < TRIES; t++) {
@@ -310,6 +311,14 @@ export class HamletIndex {
                 out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng));
                 break;
             }
+        };
+        for (let s = 0; s < HAMLET.SLOTS; s++) {
+            if (hash01(gx * 17 + s * 5 + 3, gz * 29 + s * 11 + 1, this.seed + 4242) > HAMLET.CHANCE) continue;
+            place(s, pickType(hash01(gx * 23 + s * 7 + 9, gz * 31 + s * 3 + 2, this.seed + 4343)));
+        }
+        for (let s = 0; s < HAMLET.SLOTS; s++) { // (the extra lone wizards' houses, after all the others)
+            const h = hash01(gx * 17 + s * 5 + 3, gz * 29 + s * 11 + 1, this.seed + 4242);
+            if (h > HAMLET.CHANCE && h <= HAMLET.CHANCE + HAMLET.EXTRA_MAGEHUT) place(s, 'magehut');
         }
         return out;
     }

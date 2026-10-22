@@ -97,10 +97,12 @@ export function lumosGone(t, hasWand, dt) {
 export const FOLLOW = {
     LEVEL: 3,
     DRAIN: 0.1, // mana a second
-    SIDE: 0.9, UP: 0.9, AHEAD: 0.9, // m from the body's middle (a little over the right shoulder, ahead)
+    // m from the body's middle (feet + 2): up over the head and a little to the right and ahead — floating beside me,
+    // not right over the head (the author: «сверху рядом, как будто летит»); it was at the shoulder, in the way
+    SIDE: 0.7, UP: 1.8, AHEAD: 0.8,
     RUN_AHEAD: 0.3, // s of my speed it goes further ahead when I run (it lights the way)
-    K: 7, // the spring (1/s²) …
-    DAMP: 0.85, // … damped (1: critically) — smooth, a little lag, no wobble
+    K: 4, // the spring (1/s²) … (softer: it drifts after me, the author: «более плавно»)
+    DAMP: 1, // … damped critically — smooth, a little lag, no wobble
     MAX_SPEED: 22, // m/s
     TELEPORT: 30, // m: further (a teleport, a respawn): it comes along at once
 };
@@ -307,6 +309,8 @@ export class WandMagic {
         g.combat.pay('LumosFollowing');
         const d = new THREE.Vector3(0, 0, -1);
         const p = this.tip(new THREE.Vector3(), d) || g.character.group.position.clone().setY(g.character.group.position.y + 0.5);
+        // (the light of the tip IS the one that leaves: the wand goes dark — never two lights, the author)
+        this._nox(false, true);
         const glow = makeGlow(glowSize(FOLLOW.LEVEL));
         glow.position.copy(p);
         g.scene.add(glow);
