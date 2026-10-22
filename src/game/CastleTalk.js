@@ -1035,24 +1035,12 @@ export class CastleTalk {
      * for it to settle — and names the sum.
      */
     laid(st, found) {
-        const g = this.game;
-        try {
-            for (const cs of this.life.castles.values()) {
-                const i = cs.def.stalls.indexOf(st);
-                if (i < 0) continue;
-                const v = this._merchantOf(cs.def, i);
-                if (!v) { journal('скупщик: у прилавка нет продавца'); g.hud.setVoice?.('💰 Положено на прилавок, но скупщика за ним нет', true); return; }
-                // (a new laying always starts a new look: whatever offer hung before is void)
-                this.offer = null;
-                this._refused = null; // (laid by the hand: he answers again, whatever he said before)
-                this._offerSell(v, st, this._stallKey(cs.def, i), found);
-                return;
-            }
-            journal('скупщик: прилавок не найден');
-        } catch (e) {
-            journal(`скупщик: ошибка при укладке — ${e?.message || e}`);
-            g.hud.setVoice?.(`💰 Ошибка скупщика: ${e?.message || e}`, true);
-        }
+        // (a new laying starts a new look: whatever offer hung before is void; the usual watch of the counters —
+        // the one that always worked — sees the thing as soon as it lies, and he names the sum)
+        this.offer = null;
+        this._refused = null;
+        this._scanT = Math.min(this._scanT, 0.3);
+        journal(`скупщик: вещь положена рукой (${found.uid || found.wid})`);
     }
 
     /** (a hint while the hand is held out near a buyer's counter) where the hand is against it, or null when no buyer is near. */
