@@ -72,11 +72,14 @@ const _e = new THREE.Vector3();
 const _S = new THREE.Vector3();
 const _W = new THREE.Vector3();
 const _push = new THREE.Vector3();
+const _keep = new THREE.Vector3();
 
 export class HandBlocks {
     constructor(game) {
         this.game = game;
         this.pushed = { left: 0, right: 0 }; // m the hand was held back this frame (tests, other systems)
+        this._held = { left: new THREE.Vector3(), right: new THREE.Vector3() }; // the push of the last frames (no trembling at a wall)
+        this._at = { left: 0, right: 0 };
         this._pts = Array.from({ length: 8 }, () => new THREE.Vector3());
         this.solid = (x, y, z) => this._solid(x, y, z);
     }
@@ -128,12 +131,21 @@ export class HandBlocks {
             if (ch.limbs && ch.limbs[side + 'Arm'] != null) continue; // (a cut-off arm: its stump)
             (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_S);
             let total = 0;
+            // the push is remembered: it grows at once (never into the wall) and lets go slowly, so a hand
+            // pressed on a wall does not tremble in and out of it frame by frame
+            const keep = ch === this.game.character ? this._held[side] : _keep.set(0, 0, 0);
+            const now = performance.now(), dt = Math.min(0.1, Math.max(0, (now - (this._at[side] || now)) / 1000));
+            if (ch === this.game.character) this._at[side] = now;
+            keep.multiplyScalar(Math.exp(-14 * dt));
+            if (keep.lengthSq() > 1e-8) ch.reachHand(side, ch.getHandWorldPosition(side, _W).add(keep), 1, 0);
             for (let pass = 0; pass < 2; pass++) { // (the arm bent once more, if a fingertip is still in)
                 const push = handPushBack(_S, this._points(ch, side), this.solid, _push);
                 if (!push) break;
                 total += push.length();
+                keep.add(push);
                 ch.reachHand(side, ch.getHandWorldPosition(side, _W).add(push), 1, 0);
             }
+            total = Math.max(total, keep.length());
             if (ch === this.game.character) this.pushed[side] = total;
         }
     }
