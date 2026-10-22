@@ -2523,6 +2523,8 @@ export class CastleLife {
 
     _die(v, by) {
         v.dead = true;
+        this.talk?.speech?.cancelKey?.(v.id); // (the dead say nothing: his line stops, his queue is dropped)
+        v.bubble?.hide?.();
         v.mode = 'dead';
         v.foe = null;
         v.path = null;
@@ -3058,7 +3060,7 @@ export class CastleLife {
 
     // ------------------------------------------------------------ speech
     _say(v, text, seconds = 4, broadcast = true, force = false) {
-        if (!text || v.sayT > 0 && !broadcast && !force) return;
+        if (!text || v.dead || v.stunT > 0 || v.sayT > 0 && !broadcast && !force) return;
         v.sayT = 1.5;
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)

@@ -291,6 +291,16 @@ export class Speech {
         } catch (e) { g.gain.value = on ? DUCK_LEVEL : 1; }
     }
 
+    _live(opts) {
+        try { return opts.live() || { volume: 0 }; } catch (e) { return { volume: 0 }; }
+    }
+
+    /** One speaker falls silent (died, knocked out): his line is stopped, his queue dropped. */
+    cancelKey(key) {
+        if (this._pending && this._pending.opts.voiceKey === key) { const pend = this._pending; this._pending = null; this._safeCall(pend.opts.onEnd, false); }
+        if (this._current && this._current.voiceKey === key) this.cancel();
+    }
+
     _speakNeural(text, opts) {
         const cast = castNeural(opts);
         const entry = { voiceKey: opts.voiceKey, opts, stop: null, sources: [], started: false, add: null };
@@ -314,10 +324,24 @@ export class Speech {
             src.buffer = buf;
             src.playbackRate.value = cast.pitch; // played `pitch` times faster…
             const out = this._duckNode(ctx); // (quieter while the player speaks)
+            // (where the speaker stands NOW: he or I may have moved since the line was made — too far: not played at all)
+            const live = opts.live ? this._live(opts) : null;
+            if (live && live.volume < 0.03) { maybeDone(); return; }
             const gain = ctx.createGain();
-            gain.gain.value = opts.volume * loudness(pcm); // (every voice equally loud: a soft woman's voice too)
+            gain.gain.value = (live ? live.volume * Math.max(0, Math.min(1, Number(this.master()) || 0)) : opts.volume) * loudness(pcm); // (every voice equally loud: a soft woman's voice too)
             src.connect(gain);
-            gain.connect(out);
+            let tail = gain;
+            if (live && live.muffled && ctx.createBiquadFilter) { // (through a wall: dull)
+                const lp = ctx.createBiquadFilter();
+                lp.type = 'lowpass'; lp.frequency.value = 650;
+                tail.connect(lp); tail = lp;
+            }
+            if (live && ctx.createStereoPanner) { // (from the side where he stands)
+                const pn = ctx.createStereoPanner();
+                pn.pan.value = Math.max(-1, Math.min(1, live.pan || 0));
+                tail.connect(pn); tail = pn;
+            }
+            tail.connect(out);
             src.onended = ended;
             if (ctx.state === 'suspended') ctx.resume?.()?.catch?.(() => {});
             const now = ctx.currentTime || 0;
@@ -335,6 +359,7 @@ export class Speech {
         // one piece of the answer: each sentence plays as soon as it is ready, right after the one before
         entry.add = (piece) => {
             if (this._current !== entry) return;
+            if (opts.live && this._live(opts).volume < 0.03) { maybeDone(); return; } // (cannot be heard: not even made)
             open++;
             let closed = false;
             const close = () => { if (!closed) { closed = true; open--; } };
@@ -378,7 +403,7 @@ export class Speech {
         const { pitch, rate } = this.voiceParams({ ...opts, voice });
         u.pitch = pitch;
         u.rate = rate;
-        u.volume = opts.volume;
+        if (opts.live) { const l = this._live(opts); if (l.volume < 0.03) { this._safeCall(opts.onEnd, false); return false; } u.volume = Math.min(1, l.volume * Math.max(0, Number(this.master()) || 0)); } else u.volume = opts.volume;
         const entry = { voiceKey: opts.voiceKey, opts, stop: null };
         this._remember({ engine: 'system', voice: voice.name, female: opts.female, pitch, speed: rate, text });
         // (when it sounds, as best the browser tells: its spell words are not mine, GameVoices.js)

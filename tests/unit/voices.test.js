@@ -395,3 +395,16 @@ test('Speech.prepare: thinking words made in advance in each villager\'s own voi
     assert.equal(nv.calls.length, 3, 'from the cache, not made again');
     assert.equal(played.length, 1);
 });
+
+test('speech: cancelKey drops the dead speaker\'s queued line, a far live voice is silent', () => {
+    const sp = new Speech({ neural: null });
+    let ended = null;
+    sp._pending = { text: 'ещё', opts: { voiceKey: 'b', onEnd: (ok) => { ended = ok; } } };
+    sp.cancelKey('a');
+    assert.ok(sp._pending, 'another speaker is not touched');
+    sp.cancelKey('b');
+    assert.equal(sp._pending, null, 'the dead one\'s queued line is dropped');
+    assert.equal(ended, false);
+    assert.equal(sp._live({ live: () => ({ volume: 0 }) }).volume, 0);
+    assert.equal(sp._live({ live: () => { throw new Error('x'); } }).volume, 0);
+});

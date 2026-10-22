@@ -47,8 +47,8 @@ import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
 
 export const HEAR = 7; // m: a villager hears you this far
-const VOICE = 18; // m: a villager's voice carries this far
-const SHOUT_RANGE = 55; // m: a battle cry / a call for help carries much farther
+const VOICE = 35; // m: a villager's voice carries this far
+const SHOUT_RANGE = 60; // m: a battle cry / a call for help carries much farther
 /** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
 const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes), a magic coin pouch (CoinBelt). */
@@ -205,12 +205,14 @@ export class CastleTalk {
     /** A villager says a line: over the head, and aloud for those close enough. */
     voice(v, text, shout = false) {
         if (!this.voiceOn || !this.speech.supported || !text) return;
+        if (v.dead || v.stunT > 0) return; // (the dead and the knocked out say nothing)
         const me = this.game.character.group.position;
         const d = Math.hypot(v.x - me.x, v.z - me.z);
         const range = shout ? SHOUT_RANGE : VOICE;
         if (d > range) return;
         // a shout carries far and stays loud; a word is quiet beyond a few metres
-        const volume = shout ? Math.max(0.3, Math.min(1, 1 - (d - 8) / (range - 8) * 0.7)) : Math.max(0, Math.min(1, 1 - (d - 4) / (VOICE - 4)));
+        const volume = this._loud(v, shout).volume;
+        if (volume < 0.03) return;
         if (this._mute) return;
         // in a talk with me only my partner is heard: others' chatter never cuts the answer
         const P = this._partner;
@@ -226,7 +228,26 @@ export class CastleTalk {
         this._spoken = (this._spoken || []).filter((l) => now - l.at < 12000);
         this._spoken.push({ text, at: now });
         // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout, append: !!this._more });
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout, append: !!this._more, live: () => this._loud(v, shout) });
+    }
+
+    /** How loud the villager is for me right now: by distance from where he stands, dull through a wall, from his side. */
+    _loud(v, shout) {
+        if (v.dead || v.stunT > 0) return { volume: 0 };
+        const g = this.game, me = g.character.group.position;
+        const dx = v.x - me.x, dz = v.z - me.z;
+        const d = Math.hypot(dx, dz, ((v.y ?? me.y) - me.y) * 0.5);
+        const range = shout ? SHOUT_RANGE : VOICE;
+        if (d > range) return { volume: 0 };
+        // (falls off to nothing at the limit; a shout stays louder)
+        const k = Math.max(0, Math.min(1, 1 - (d - 4) / (range - 4)));
+        let volume = shout ? Math.max(0.12, k) : k * k;
+        const c = g.collision;
+        const muffled = !!(c?.lineOfSight && d > 3 && !c.lineOfSight(v.x, (v.y ?? me.y) + 1.6, v.z, me.x, me.y + 0.5, me.z, 0.6));
+        if (muffled) volume *= 0.45;
+        const yaw = g.character.group.rotation.y;
+        const pan = d > 1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d * 0.8 : 0;
+        return { volume, muffled, pan };
     }
 
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */

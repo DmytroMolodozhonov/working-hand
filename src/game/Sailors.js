@@ -978,7 +978,7 @@ export class Sailors {
 
     _die(v, by) {
         if (!v.dead && isBlackbeard(v)) this.game.achievements?.killed('blackbeard', v.id, by, v.model?.group?.getWorldPosition?.(v.model.group.position.clone()) || null); // (the captain: everyone who fought him)
-        v.dead = true;
+        v.dead = true; this.game.castleLife?.talk?.speech?.cancelKey?.(v.id);
         v.hp = 0;
         v.mode = 'dead';
         v.deadT = 0;
@@ -1593,7 +1593,7 @@ export class Sailors {
     /** A sailor says a line: over the head, and aloud (the villagers' voices) for those close enough. */
     _say(v, text, seconds = 4, broadcast = true) {
         const g = this.game;
-        if (!text || (v.sayT > 0 && !broadcast)) return;
+        if (!text || v.dead || v.stunT > 0 || (v.sayT > 0 && !broadcast)) return;
         if (v.role === 'skeleton') { if (broadcast && Math.random() < 0.6) return; text = pick(RATTLE); } // (no tongue: a rattle, a hiss, now and then)
         v.sayT = 1.5;
         if (!g.scene || typeof document === 'undefined') return;
