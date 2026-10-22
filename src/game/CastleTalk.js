@@ -922,6 +922,35 @@ export class CastleTalk {
         return out;
     }
 
+    /** A line for the journal at most once per `ms` (the same text is not repeated). */
+    _dbg(line, ms = 1500) {
+        const now = performance.now();
+        if (line === this._dbgLast && now - (this._dbgAt || 0) < ms) return;
+        this._dbgLast = line; this._dbgAt = now;
+        journal(line);
+    }
+
+    /** (journal) what a buyer's counter sees: who stands behind it, every loose thing near it and where it lies against it. */
+    _watchLog(cs, stall, i, key, dist) {
+        const g = this.game, c = stall.counter, now = performance.now();
+        if (now - (this._wlAt || 0) < 2000) return;
+        this._wlAt = now;
+        const v = this._merchantOf(cs.def, i);
+        const f = (n) => (typeof n === 'number' ? n.toFixed(2) : n);
+        const parts = [`скупщик ${key}: до прилавка ${f(dist)} м, ${stall.pawn ? 'ломбард' : 'тайный'}; прилавок x ${f(c.x0)}…${f(c.x1)} z ${f(c.z0)}…${f(c.z1)} верх ${f(c.top)}; продавец ${v ? `${v.name || v.id} (враг ${!!v.foe}, мёртв ${!!v.dead})` : 'НЕ НАЙДЕН'}; замок враждебен ${cs.hostile.get(g.localId) > Date.now()}; сцена спит ${!cs.awake}; предложение ${this.offer ? `${this.offer.price} за ${this.offer.uid || this.offer.wid}` : 'нет'}`];
+        for (const L of g.items.loose.values()) {
+            const p = L.model.position;
+            if (Math.hypot(p.x - (c.x0 + c.x1) / 2, p.z - (c.z0 + c.z1) / 2) > 7) continue;
+            parts.push(`  вещь ${L.item.kind} ${L.item.uid}: (${f(p.x)}, ${f(p.y)}, ${f(p.z)}) на прилавке ${onCounter(stall, p)}, скорость² ${f(L.vel.lengthSq())}, парит ${!!L.hover}, цена-карточка ${!!L.item.shop}, лежит ${!!L.rest}`);
+        }
+        for (const w of g.weapons.weapons) {
+            const p = w.position;
+            if (Math.hypot(p.x - (c.x0 + c.x1) / 2, p.z - (c.z0 + c.z1) / 2) > 7) continue;
+            parts.push(`  оружие ${w.type} #${w.id}: (${f(p.x)}, ${f(p.y)}, ${f(p.z)}) на прилавке ${onCounter(stall, p)}, в руке ${!!w.holder}, спит ${!!w.sleeping}`);
+        }
+        journal(parts.join('\n'));
+    }
+
     /** The buyer looks at a thing lying on his counter: refuses it, or names the (kept) sum. found: {uid|wid, item, pos} */
     _offerSell(v, stall, key, found) {
         const g = this.game;
@@ -944,12 +973,21 @@ export class CastleTalk {
     _watchMarket() {
         const g = this.game;
         const me = g.character.group.position;
+        if (performance.now() - (this._wcAt || 0) > 5000) { // (journal: does the scan see the buyers' places at all?)
+            this._wcAt = performance.now();
+            const near = [];
+            for (const cs of this.life.castles.values()) cs.def.stalls.forEach((st, i) => { if ((st.pawn || st.fence) && Math.hypot((st.counter.x0 + st.counter.x1) / 2 - me.x, (st.counter.z0 + st.counter.z1) / 2 - me.z) < 40) near.push(`${cs.def.id}:s${i} ${st.pawn ? 'ломбард' : 'тайный'} ${cs.awake ? 'проснулось' : 'СПИТ'}`); });
+            if (near.length) journal(`скупщики рядом (до 40 м): ${near.join('; ')}`);
+        }
         for (const cs of this.life.castles.values()) {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {
                 const c = stall.counter;
                 const key = this._stallKey(cs.def, i);
-                if (Math.hypot((c.x0 + c.x1) / 2 - me.x, (c.z0 + c.z1) / 2 - me.z) > 9) return;
+                const dist = Math.hypot((c.x0 + c.x1) / 2 - me.x, (c.z0 + c.z1) / 2 - me.z);
+                const buyer = !!(stall.pawn || stall.fence);
+                if (buyer && dist < 14) this._watchLog(cs, stall, i, key, dist);
+                if (dist > 9) return;
                 const v = this._merchantOf(cs.def, i);
                 if (!v || v.foe || cs.hostile.get(g.localId) > Date.now()) return;
                 const on = (p) => onCounter(stall, p);
@@ -981,7 +1019,8 @@ export class CastleTalk {
                     }
                 }
                 if (!found) return;
-                if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) return;
+                if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) { if (buyer) this._dbg(`скупщик ${key}: вещь ${found.uid || found.wid} уже в предложении (цена ${this.offer.price}), молчу`, 3000); return; }
+                if (buyer) this._dbg(`скупщик ${key}: нашёл вещь ${found.uid || found.wid} (${found.item.kind}) → называю цену`, 1000);
                 // (only the settlement's pawnshop (anything, 40 % under) and a town's shady buyer (only plain things) buy — every other seller only sells: WizardMarket.js)
                 if (!stall.pawn && !stall.fence) return;
                 this._offerSell(v, stall, key, found);
@@ -1035,12 +1074,13 @@ export class CastleTalk {
      * for it to settle — and names the sum.
      */
     laid(st, found) {
+        const p = found.pos;
+        journal(`скупщик: положено рукой ${found.uid || found.wid} (${found.item?.kind}) в (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}); прилавок x ${st.counter.x0.toFixed(2)}…${st.counter.x1.toFixed(2)} z ${st.counter.z0.toFixed(2)}…${st.counter.z1.toFixed(2)} верх ${st.counter.top.toFixed(2)}; на прилавке ${onCounter(st, p)}`);
         // (a new laying starts a new look: whatever offer hung before is void; the usual watch of the counters —
         // the one that always worked — sees the thing as soon as it lies, and he names the sum)
         this.offer = null;
         this._refused = null;
         this._scanT = Math.min(this._scanT, 0.3);
-        journal(`скупщик: вещь положена рукой (${found.uid || found.wid})`);
     }
 
     /** (a hint while the hand is held out near a buyer's counter) where the hand is against it, or null when no buyer is near. */
