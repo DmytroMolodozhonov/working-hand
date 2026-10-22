@@ -30,7 +30,7 @@ test('market: the body stays before the counter on the buyer\'s side only', () =
     assert.deepEqual([z.minZ, z.maxZ], [-0.5, 4.5]);
 });
 
-test('market: a good named by the buyer — the best match, a tie to the cheaper', () => {
+test('market: a good named by the buyer — the best match; a tie is never guessed', () => {
     const goods = [
         { item: { kind: 'steak' }, price: 6 }, { item: { kind: 'meat' }, price: 3 },
         { item: { kind: 'apple' }, price: 30 }, { item: { kind: 'redApple' }, price: 2 },
@@ -38,7 +38,7 @@ test('market: a good named by the buyer — the best match, a tie to the cheaper
     assert.equal(namedGood('дай сырое мясо', goods).item.kind, 'meat');
     assert.equal(namedGood('хочу мясо', goods).item.kind, 'steak');
     assert.equal(namedGood('золотое яблоко', goods).item.kind, 'apple');
-    assert.equal(namedGood('яблоко', goods).item.kind, 'redApple');
+    assert.equal(namedGood('яблоко', goods), null, 'a plain apple or the golden one: the merchant asks, never the cheaper by himself');
     assert.equal(namedGood('меч', goods), null);
 });
 
