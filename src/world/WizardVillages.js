@@ -10,7 +10,7 @@
  *  - the TOWN HALL (north, «Ратуша»): a great hall with the Elder's chair, a clock tower;
  *  - the CAULDRON HALL («Зельеварня»): a big cauldron where a wizard brews;
  *  - the small LIBRARY: shelves, a reading table with 2–5 scrolls of simple spells (different from
- *    place to place) and places on the shelves for the lore books (another module puts them there);
+ *    place to place) and the desk of the world's history (its books — LoreLibrary.js);
  *  - the MARKET (south): a crooked lane — leaning, twisted shops with overhanging upper floors,
  *    crooked spires and chimneys (strange, not logical), a counter in every shop's open front;
  *    trades: cauldrons and potions, potions, robes, wands, magic armour, scrolls, curiosities and
@@ -308,12 +308,10 @@ function buildLibrary(p, rng, out) {
     for (let i = 0; i < n; i++) { const k = Math.floor(rng() * pool.length); scrolls.push(pool.splice(k, 1)[0]); }
     const top = p.L(1) - 0.5;
     const spots = scrolls.map((_, i) => { const q = p.pt(du - 1.6 + (3.2 * i) / Math.max(1, n - 1), 20.5, 0); return { x: q.x, y: top, z: q.z }; });
-    // the lore books' places on the side shelves (their front faces), facing into the room
+    // the desk of the world's history before the back shelves: the books of the lore lie on it (LoreLibrary.js — LoreBooks.js)
+    p.box(31, 43, 0, 1, 24, 25, B.PLANKS_DARK);
     const lore = [];
-    for (const [a, b, face] of [[u0 + 1.55, 19, 1], [u0 + 1.55, 23, 1], [u1 - 1.55, 19, -1], [u1 - 1.55, 23, -1], [33, v1 - 1.55, 0], [41, v1 - 1.55, 0]]) {
-        const q = p.pt(a, b, 0);
-        lore.push({ x: q.x, y: p.L(2) - 0.5, z: q.z, ry: face === 0 ? p.yaw(0) : p.yaw(face > 0 ? -Math.PI / 2 : Math.PI / 2) });
-    }
+    for (let i = 0; i < 7; i++) { const q = p.pt(32 + i * 1.6, 24.5, 0); lore.push({ x: q.x, y: p.L(1) - 0.5, z: q.z }); }
     const door = p.node(du, 11, 0), inn = p.node(du, 17, 0, 'room:library'), desk = p.node(du, 18, 0, 'library');
     p.link(door, inn); p.link(inn, desk); p.link(door, p.node(du, 0, 0));
     out.spots.push({ kind: 'desk', ...p.pt(du, 18.6, 0), yaw: p.yaw(Math.PI), node: desk });
@@ -569,6 +567,7 @@ export function buildVillageSite(seed, gx, gz, X, Z, F, rng) {
         rooms: [], chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
         houses, stalls: out.stalls, fields: [], pens: [], market: out.market, wallWalk: [],
         dummies: [], spots: out.spots, fire: out.fire, statue: out.statue, library: out.library, arena: out.arena,
+        lore: out.library.lore, // (the library's desk: where the books of the world's history lie — LoreLibrary.js)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
         topL: F + 1 + 60,
     };

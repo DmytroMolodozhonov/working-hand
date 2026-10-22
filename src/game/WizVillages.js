@@ -14,8 +14,8 @@
  *  - the central fire never goes out: the host keeps a campfire burning in its ring (Campfires.js);
  *  - the plaque on the statue's pedestal: «Coprus the Clever» (one shared texture);
  *  - the library's table: 2–5 scrolls of simple spells; taken — gone for good (remembered as an opened
- *    chest: `_openedChests`, saved with the world); the lore books' places on the shelves are given to
- *    `game.loreBooks.placeLibrary(def, spots)` when that module is there (another part of the game).
+ *    chest: `_openedChests`, saved with the world); the books of the world's history lie on its desk
+ *    (`def.lore` — LoreLibrary.js lays them when the place wakes).
  */
 
 import * as THREE from 'three';
@@ -170,7 +170,6 @@ export class WizVillages {
         this.game = game;
         this.plaques = new Map(); // site id -> mesh
         this.scrolls = new Map(); // site id -> [{id, uid, x, y, z}]
-        this.lore = new Set(); // site ids whose lore places were given out
         this._t = 0;
         plaqueParts(); // (made now: prewarm compiles its material)
     }
@@ -191,12 +190,10 @@ export class WizVillages {
             const def = cs.def;
             seen.add(def.id);
             this._plaque(def);
-            if (!this.lore.has(def.id) && g.loreBooks?.placeLibrary && def.library?.lore) { this.lore.add(def.id); g.loreBooks.placeLibrary(def, def.library.lore); }
             if (this.auth) { this._fire(def); this._library(def); }
         }
         for (const [id, m] of [...this.plaques]) if (!seen.has(id)) { g.scene.remove(m); this.plaques.delete(id); }
         for (const id of [...this.scrolls.keys()]) if (!seen.has(id)) this._putAway(id);
-        for (const id of [...this.lore]) if (!seen.has(id)) { this.lore.delete(id); g.loreBooks?.clearLibrary?.(id); }
     }
 
     _plaque(def) {
