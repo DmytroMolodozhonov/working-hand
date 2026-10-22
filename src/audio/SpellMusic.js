@@ -548,7 +548,7 @@ export const SPELL_SOUND = {
     Overgrown: { own: ['fxGrow'] }, OvergrownMaxima: { own: ['fxGrow'] },
     Brainrot: { own: ['fxBrainrot'] }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
-    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] },
+    Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' },
     Alohomora: { own: ['clang'] }, AlohomoraMaxima: { own: ['clang'] }, Lock: { own: ['clang'] },
     Unfurl: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
     Accio: { own: ['fxAccio'] }, SuitUp: { own: ['fxSuitUp'] },

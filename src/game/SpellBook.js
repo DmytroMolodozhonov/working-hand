@@ -23,8 +23,8 @@ export const START_SPELLS = new Set([
     'Inferno', 'Bombardo', 'Earthquake', 'Liquidation', 'Protection',
     // water: only «Firefighting»
     'Firefighting',
-    // building: the campfire, a bed and its colour, a passage sewn up, gathering
-    'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'Gather',
+    // building: the campfire, a bed and its colour, a passage sewn up, gathering, a bridge (the author: «без свитка»)
+    'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'Gather', 'CreateBridge',
     // a thing in the hand is the key (the Ice Rod, Thor's hammer)
     'RodFrozen', 'RodIce', 'Hammer',
 ]);

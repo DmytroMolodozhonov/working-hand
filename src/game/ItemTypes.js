@@ -54,7 +54,7 @@ export const SPELL_RU = {
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
-    Stitching: 'Stitching', Invisibility: 'Invisibility',
+    Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge',
     // (the four scrolls of the Temple of the Gods' library — GodsTemple.js; the spells themselves: «Космос»)
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima',
     Boom: 'Бум', // (the fifth scroll of the library: Boom.js)

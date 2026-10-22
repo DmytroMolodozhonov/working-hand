@@ -109,6 +109,7 @@ export const TARGETS = {
     Brainrot: { does: 'none', why: '«Брейнрот»: сова никому не подчиняется — она слишком умна' },
     Drawdown: { does: 'none', why: '«Drawdown»: в воздухе не касается; на земле — вспархивает' },
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
+    CreateBridge: { does: 'none', why: '«Create a Bridge»: не касается' },
     Invisibility: { does: 'none', why: 'невидимого игрока не видит: не смотрит на него и не слышит просьбу' },
     Alohomora: { does: 'none', why: 'живая птица без замков' },
     Lock: { does: 'none', why: '«Lock» запирает только двери' },

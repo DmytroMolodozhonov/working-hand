@@ -243,6 +243,7 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
         Drawdown: [(await import('../../src/game/Drawdown.js')).DRAWDOWN_TARGETS, ['me', 'players', 'blocks', 'trees', 'furniture', 'looseThings', 'water', 'ships', 'ward']],
         Liquidation: [(await import('../../src/game/Liquidation.js')).LIQUIDATION_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'blocks', 'trees', 'furniture', 'ships', 'water', 'ground']],
         Stitching: [(await import('../../src/game/Stitching.js')).STITCH_TARGETS, ['me', 'players', 'blocks', 'houses', 'caves', 'open', 'water', 'ships', 'ward']],
+        'Create a Bridge': [(await import('../../src/game/Bridge.js')).BRIDGE_TARGETS, ['me', 'players', 'blocks', 'gap', 'water', 'trees', 'houses', 'ships', 'ward', 'godGift', 'fire', 'blast']],
         Invisibility: [(await import('../../src/game/Invisibility.js')).INVIS_TARGETS, ['me', 'players', 'servants', 'spells', 'hits', 'things']],
         'Ice Castle / Ice Bridge': [(await import('../../src/game/IceMagic.js')).ICE_MAGIC_TARGETS, ['me', 'players', 'blocks', 'trees', 'water', 'houses', 'ships', 'fire', 'looseThings', 'ward']],
     };

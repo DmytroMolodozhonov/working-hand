@@ -399,7 +399,7 @@ export class Stitching {
                         continue;
                     }
                     // in place: never into a body — it waits for it to step aside
-                    if (this._occupied(s.c)) { s.waitT += dt; if (s.waitT < 3) { rocks.setMatrixAt(i, hide); continue; } s.laid = true; continue; }
+                    if (occupied(g, s.c)) { s.waitT += dt; if (s.waitT < 3) { rocks.setMatrixAt(i, hide); continue; } s.laid = true; continue; }
                     s.laid = true;
                     this._lay(s, found.block, mine, color);
                 }
@@ -438,17 +438,16 @@ export class Stitching {
         data.set(s.c.x, s.c.L, s.c.z, block);
         g.builder?._sendEdits([[s.c.x, s.c.L, s.c.z, block]]);
     }
+}
 
-    /** Somebody's body is in this cell (the players, every creature Duel._bodies knows). */
-    _occupied(c) {
-        const g = this.game;
-        const lo = c.L - 1.5, hi = c.L - 0.5;
-        for (const e of g.duel?._bodies?.() || []) {
-            const yl = Math.min(e.a.y, e.b.y) - e.r, yh = Math.max(e.a.y, e.b.y) + e.r;
-            if (yh < lo || yl > hi) continue;
-            const mx = (e.a.x + e.b.x) / 2, mz = (e.a.z + e.b.z) / 2;
-            if (Math.abs(mx - c.x) < 0.5 + e.r && Math.abs(mz - c.z) < 0.5 + e.r) return true;
-        }
-        return false;
+/** Somebody's body is in this cell (the players, every creature Duel._bodies knows). */
+export function occupied(g, c) {
+    const lo = c.L - 1.5, hi = c.L - 0.5;
+    for (const e of g.duel?._bodies?.() || []) {
+        const yl = Math.min(e.a.y, e.b.y) - e.r, yh = Math.max(e.a.y, e.b.y) + e.r;
+        if (yh < lo || yl > hi) continue;
+        const mx = (e.a.x + e.b.x) / 2, mz = (e.a.z + e.b.z) / 2;
+        if (Math.abs(mx - c.x) < 0.5 + e.r && Math.abs(mz - c.z) < 0.5 + e.r) return true;
     }
+    return false;
 }
