@@ -27,6 +27,6 @@ test('a new herd appears far away and behind the player, a few animals at a time
         assert.ok((s.z - me.z) > 0 || Math.abs(s.x - me.x) > 60, 'behind the player');
         assert.ok(s.n >= 2 && s.n <= 5, 'a small herd');
     }
-    assert.ok(HERDS.EVERY >= 50 && HERDS.MAX_NEAR <= 11, 'rarely, and not many around'); // (the author: sheep ×2, pigs +30 %, cows +20 %)
+    assert.ok(HERDS.EVERY >= 45 && HERDS.MAX_NEAR <= 11, 'rarely, and not many around'); // (the author: sheep ×2.4, pigs +30 %, cows +20 %, horses +40 % — the tries a little more often)
     assert.ok(HERDS.GONE > HERDS.MAX_D + 50, 'a herd is not removed right where new ones appear');
 });
