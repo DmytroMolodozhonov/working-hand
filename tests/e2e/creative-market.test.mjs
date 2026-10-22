@@ -22,10 +22,17 @@ test('creative: a merchant stands at his stall by the start with goods on the co
     const r = await page.evaluate(() => {
         const g = window.__zns.game, cs = g.castleLife.castles.get('cvmarket'), v = [...cs.active.values()][0];
         const st = cs.def.stalls[0];
-        return { z: v.z, backZ: st.back.z, coins: g.inventory.coins(), keys: [...g.castleLife.talk.stalls.keys()] };
+        return { z: v.z, backZ: st.back.z, yaw: v.yaw, fz: Math.cos(v.yaw) * -1, frontZ: st.front.z, magic: g.inventory.purse.magic, coins: g.inventory.coins(), keys: [...g.castleLife.talk.stalls.keys()] };
     });
     assert.ok(Math.abs(r.z - r.backZ) < 3, `merchant at his stall ${JSON.stringify(r)}`);
     assert.ok(r.coins > 0, 'coins to test with');
+    assert.ok(r.magic, 'the magic pouch is on the belt');
+    assert.ok(r.fz > 0.9 && r.backZ < r.frontZ, `merchant looks at the buyer (+z) ${JSON.stringify(r)}`);
     await page.waitForFunction(() => { const s = window.__zns.game.castleLife.talk.stalls.get('cvmarket:s0'); return s && s.goods.length >= 3; }, null, { timeout: 30000 });
+    const on = await page.evaluate(() => {
+        const g = window.__zns.game, c = g.castleLife.castles.get('cvmarket').def.stalls[0].counter, s = g.castleLife.talk.stalls.get('cvmarket:s0');
+        return s.goods.map((uid) => { const p = g.items.loose.get(uid).model.position; return { x: p.x, y: p.y, z: p.z, inX: p.x > c.x0 - 0.5 && p.x < c.x1 + 0.5, inZ: p.z > c.z0 - 0.5 && p.z < c.z1 + 0.5, top: c.top }; });
+    });
+    for (const q of on) assert.ok(q.inX && q.inZ && q.y > q.top - 0.1, `good lies on the counter ${JSON.stringify(q)}`);
     assert.deepEqual(realErrors(errors), []);
 });

@@ -3003,9 +3003,15 @@ export class Game {
         this.lastTime = performance.now();
         this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
         // Creative: the magic pouch with 100 coins on the belt to start with (once; a world played before keeps its own coins)
-        if (this.config.mode === 'creative' && !this._playerRestored && !this._startCoins && this.inventory?.purse && this.inventory.coins() === 0) {
-            this._startCoins = true;
-            this.inventory.purse.tieMagic({ kind: 'coins', magic: true, uid: 'cmp-start', count: 100 });
+        // (also after coming back to the world: a save without the pouch — or one whose coins came as plain pouches — gets it back, with the coins it had)
+        if (this.config.mode === 'creative' && !this._startCoins && this.inventory?.purse) {
+            const inv = this.inventory, held = ['right', 'left'].map((s) => this.items?.held[s]?.item);
+            const has = inv.purse.magic || inv.slots.some((s) => s?.kind === 'coins' && s.magic) || held.some((it) => it?.kind === 'coins' && it.magic);
+            if (!has) {
+                this._startCoins = true;
+                inv.purse.tieMagic({ kind: 'coins', magic: true, uid: 'cmp-start', count: inv.coins() === 0 ? 100 : 0 });
+                inv._render?.();
+            }
         }
         this.prewarm();
         this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)
