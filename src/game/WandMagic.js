@@ -536,8 +536,8 @@ export class WandMagic {
         // the things in the hands (a second wand or a staff in the other hand counts; only the casting wand does not)
         for (const s of ['left', 'right']) {
             const it = g.items.held[s], w = g.weapons.hands[s].held;
-            if (it && it.item !== this.wand) things.push({ pos: it.model.position, item: it.item });
-            else if (w) things.push({ pos: w.position, item: { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus } });
+            if (it && it.item !== this.wand) things.push({ pos: it.model.position, item: it.item, held: true });
+            else if (w) things.push({ pos: w.position, item: { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }, held: true });
         }
         const pick = pickRevealTarget(tip, dir, things);
         if (pick.thing) {
@@ -548,11 +548,12 @@ export class WandMagic {
             return false;
         } else if (this.wand) { target = this.wand; at = tip.clone(); } // nothing near at all: the wand's own secrets
         if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
-        this._showHologram(info || describeItem(target), at);
+        // (a thing in my other hand: the card is right before the eyes — half the size, or it is too big to read: the author)
+        this._showHologram(info || describeItem(target), at, !!pick.thing?.held);
         return true;
     }
 
-    _showHologram(info, at) {
+    _showHologram(info, at, inHand = false) {
         const g = this.game;
         this._closeHolo();
         // Readable on any background (bright sky, a white wall, night): a dark, almost opaque plate
@@ -622,7 +623,7 @@ export class WandMagic {
         // (2.5 times bigger than it was, more when seen from afar, never filling the screen close by)
         const cam = g.camera?.position;
         const dist = cam ? cam.distanceTo(at) : 2.5;
-        const PW = Math.min(7, Math.max(3.6, dist * 2.4)), PH = PW * H / W;
+        const PW = Math.min(7, Math.max(3.6, dist * 2.4)) * (inHand ? 0.5 : 1), PH = PW * H / W;
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({
             map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide,
             depthWrite: false, depthTest: false, // (a wall, the hand or a tree never cut through the words)
