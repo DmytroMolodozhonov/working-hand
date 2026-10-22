@@ -883,8 +883,11 @@ export class Game {
         const me = this.character.group.position;
         const under = (p, h = 4.6) => p.x > x0 - 0.6 && p.x < x1 + 0.6 && p.z > z0 - 0.6 && p.z < z1 + 0.6 && p.y > y0 - h - 1 && p.y < y0 + 1.5;
         if (under({ x: me.x, y: me.y - 1.95, z: me.z }) && !this.isDeadLocal) {
-            if (this.combat?.enabled) this.combat.damage(dmg, null, 'collapse'); else this.damageLocalPlayer?.(dmg);
-            this.hud?.setVoice?.(`🧱 На вас обрушилось: −${dmg}`, true);
+            if (this.combat?.blastProof?.()) this.hud?.setVoice?.('🛡️ Обломки отскочили от купола', true); // (a dome: what falls does not reach me)
+            else {
+                if (this.combat?.enabled) this.combat.damage(dmg, null, 'collapse'); else this.damageLocalPlayer?.(dmg);
+                this.hud?.setVoice?.(`🧱 На вас обрушилось: −${dmg}`, true);
+            }
         }
         if (this.authority) {
             const at = new THREE.Vector3(c.x, y0 - 1, c.z);
@@ -962,7 +965,7 @@ export class Game {
         }
         // My own Bombardo too close to me hurts me too — the closer, the worse
         // (point-blank can kill). Not in creative. Other players' blasts: Combat.explosion.
-        if ((casterId === 'local' || casterId === this.localId) && !meSafe) {
+        if ((casterId === 'local' || casterId === this.localId) && !meSafe && !this.combat.blastProof?.()) { // (under a dome: my own blast does not reach me)
             const self = Math.round(bombardoDamage(this.combat.center(_v2).distanceTo(pos), radius, power));
             if (self > 0 && this.config.mode !== 'creative') {
                 if (this.combat.enabled) this.combat.damage(self, null, 'Bombardo');
@@ -1329,7 +1332,7 @@ export class Game {
         if (!name && !this.lastCastWhy) this.lastCastWhy = String(html).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
         const ch = this.character;
         const now = Date.now();
-        const intent = !!(this.isMagicActive || now - (this.lastMagicTime || 0) < 2500 || now - (this._armsUpAt || 0) < 2500 || ch?.isTPose?.());
+        const intent = !!(this.isMagicActive || now - (this.lastMagicTime || 0) < 2500 || now - (this._armsUpAt || 0) < 2500 || ch?.isTPose?.() || ch?.isArmsSpread?.());
         const talking = !intent && !!this.castleLife?.talk?._listener?.();
         const hints = this._castHints || (this._castHints = new CastHints());
         if (name) { hud.setVoice(html, true); return name; } // (the spell went off: its own line about it)
@@ -1459,6 +1462,12 @@ export class Game {
         if (name === 'ProtectionGods' || name === 'ProtectionGodsMaxima') return this._castProtection(name, isFinal);
         // «Максима» while my house's dome grows: it grows twice as fast (before the water's / the duel's)
         if (name === 'Maxima' && this.wards?.setting && !this._inDuel()) return this._castWard('WardGrow', isFinal);
+        // «Максима» said alone just after the hand shield went up («Протекшн… Максима» heard as two phrases): the
+        // shield grows into its dome — «Protection Maxima» / «Protection Gods Maxima» (arms spread, known, paid as one)
+        if (name === 'Maxima' && this.combat.shield?.type === 1 && Date.now() - (this._lastShieldCast || 0) < 4000 && !this._inDuel()) {
+            const dome = this.combat.shield.gods ? 'ProtectionGodsMaxima' : 'ProtectionMaxima';
+            if (this.knowsSpell(dome)) return this._castProtection(dome, isFinal);
+        }
         // «Максима» alone during my clash: more push (−5 mana, +5 %, once every 3 s — Duel.js)
         if (name === 'Maxima' && this._inDuel() && !this.water?.active) return this.duel.maxima(isFinal);
         // In a duel nothing else can be cast (only the shield, with the other hand)

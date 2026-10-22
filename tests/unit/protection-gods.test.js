@@ -133,3 +133,20 @@ test('the scrolls: each on its own pedestal of the gods\' library — and never 
         for (const n of ['ProtectionGods', 'ProtectionGodsMaxima']) assert.ok(!t.includes(`'${n}'`), `${f} names ${n}`);
     }
 });
+
+test('«Protection» first, then «… Maxima» / «… Gods» in the same phrase: the longer one is not thrown away as «too late»', async () => {
+    const { afterCast } = await import('../../src/audio/SpellPhrase.js');
+    const last = (spell) => ({ spell, at: 1000, seg: 7 });
+    assert.equal(afterCast(last('Protection'), 'ProtectionMaxima', { seg: 7, fit: 1 }, 1500), null);
+    assert.equal(afterCast(last('Protection'), 'ProtectionGods', { seg: 7, fit: 1 }, 1500), null);
+    assert.equal(afterCast(last('ProtectionGods'), 'ProtectionGodsMaxima', { seg: 7, fit: 1 }, 1500), null);
+    assert.ok(afterCast(last('Bombardo'), 'BombardoMaxima', { seg: 7, fit: 1 }, 1500), '(others: as before)');
+    // the hand shield taken over by the dome a moment later: its price comes back
+    const { c } = fakeGame({ tPose: true });
+    c.fatigue = c.maxFatigue = 100;
+    c.castProtection(false);
+    assert.equal(c.fatigue, 95);
+    c.castProtection(true);
+    assert.equal(c.shield.type, 2);
+    assert.equal(c.fatigue, 80, 'paid as one dome (20), the shield\'s 5 back');
+});

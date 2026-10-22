@@ -445,6 +445,9 @@ export class Boom {
         // mana it breaks — the rest of the blow goes on
         const full = boomDamage(0) || 1, gods = s?.gods ? c.godsHit(BOOM.NAME, null, boomDamage(dist) / full) : 1;
         if (gods <= 0) return;
+        // an ordinary dome («Protection Maxima»): proof against a blast outside the mountain — for half of «Бум»'s price
+        // (out of mana: it shatters — all of it); inside the mountain no shield holds
+        if (s && !s.gods && s.type === 2 && s.left > 0 && dist > R && c._payHit(BOOM.NAME)) { c._blastFx?.(b.c); return; }
         const th = boomThrow(dist);
         if (!g.flight?.active) {
             _v.set(me.x - b.c.x, 0, me.z - b.c.z);

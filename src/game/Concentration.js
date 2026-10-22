@@ -54,7 +54,7 @@ export const HELD = {
     Lightning: { ru: 'Молния', icon: '⚡', own: ['LightningStrike', 'Hammer'] },
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
-    GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima'] }, // (the gods' shield: held — ProtectionGods.js)
+    GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'] }, // (the gods' shield: held — ProtectionGods.js)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
 };
 

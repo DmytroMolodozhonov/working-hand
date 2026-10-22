@@ -491,6 +491,29 @@ export class VoxelCharacter {
         return len > 1e-3 && v.dot(_up) / len > -0.96;
     }
 
+    /**
+     * The arms spread out to the sides for a dome («Protection Maxima», «Protection Gods Maxima»): looser than
+     * isTPose (the camera seldom sees both arms dead straight at the frame's edges) — both hands well away from
+     * the shoulders, not far above or below them, and far apart (out to the sides, not forward).
+     */
+    isArmsSpread() {
+        if (this.isTPose()) return true;
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
+        const armLen = this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER;
+        for (const side of ['left', 'right']) {
+            if (this.handLost(side)) return false;
+            const shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(new THREE.Vector3());
+            const hand = this.getHandWorldPosition(side, _v1);
+            if (hand.distanceTo(shoulder) < 0.65 * armLen) return false;
+            if (Math.abs(hand.sub(shoulder).dot(_up)) > 0.6 * armLen) return false;
+        }
+        const l = this.getHandWorldPosition('left', new THREE.Vector3());
+        const r = this.getHandWorldPosition('right', _v1);
+        return l.distanceTo(r) > 1.55 * armLen;
+    }
+
     /** Both arms stretched out sideways at shoulder height (a «T»). */
     isTPose() {
         if (!this.isArmExtended('left') || !this.isArmExtended('right')) return false;

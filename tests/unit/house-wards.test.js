@@ -474,7 +474,7 @@ test('«Protection Invisible» said again on an invisible house: it is seen agai
     assert.equal(g.combat.fatigue, m0 - 15);
 });
 
-test('the dome grows from a small one while the wand is on it — or on the house under it; seen through the walls while it grows; «стоп» sets it with a flash and a click', () => {
+test('the dome grows from a small one while the wand is on it — or on the house under it; faint while it grows, the wand\'s beam on it; «стоп» sets it with a flash and a click', () => {
     const g = fakeGame();
     let sparks = 0, set = 0;
     const hum = [];
@@ -491,8 +491,9 @@ test('the dome grows from a small one while the wand is on it — or on the hous
     run(W, 2);
     assert.ok(w.r > r0 + 1.8, `on the house: grew ${w.r - r0}`);
     const L = W.looks.get(w.id);
-    assert.ok(L.dome.visible && L.dome.material.uniforms.uAlpha.value > 0.5, 'seen while it grows');
-    assert.equal(L.dome.material.depthTest, false, 'seen through the walls (and from inside the house)');
+    assert.ok(L.dome.visible && L.dome.material.uniforms.uAlpha.value > 0.05, 'seen while it grows');
+    assert.ok(L.dome.material.depthTest !== false, 'drawn as everything is — never over the whole screen (the author)');
+    assert.equal(W._beamMap?.size, 1, 'the caster\'s beam goes on from the wand into the house / the dome');
     assert.ok(L.dome.material.uniforms.uGrow.value > 0.5 && sparks > 20, `growing: the ring blazes, sparks (${sparks})`);
     assert.ok(hum.length && hum.at(-1) > 0, 'it hums');
     // a little beside the dome (a hand is never still): it still grows; quite away: it waits

@@ -5,7 +5,7 @@ import { Combat, PVP, shieldHitCost } from '../../src/game/Combat.js';
 import { bounceOffShields } from '../../src/game/ShieldBounce.js';
 
 /** One player at the origin facing −Z; `wand`: the hand holding a wand. */
-function fakeGame({ armOut = 'right', tPose = false, wand = null } = {}) {
+function fakeGame({ armOut = 'right', tPose = false, wand = null, leftUp = 0 } = {}) {
     const voice = [];
     const g = {
         config: { mode: 'freeworld' },
@@ -17,7 +17,7 @@ function fakeGame({ armOut = 'right', tPose = false, wand = null } = {}) {
         hud: { update() {}, setFatigue() {}, setStatus() {}, setFrozenOverlay() {}, damageFlash() {}, setVoice(t) { voice.push(t); } },
         character: {
             group: { position: new THREE.Vector3(0, 0.5, 0) },
-            getHandWorldPosition: (side, out = new THREE.Vector3()) => out.set(side === 'left' ? -0.6 : 0.6, 1.2, -1.5),
+            getHandWorldPosition: (side, out = new THREE.Vector3()) => out.set(side === 'left' ? -0.6 : 0.6, 1.2 + (side === 'left' ? leftUp : 0), -1.5),
             getHandDirection: (side, out = new THREE.Vector3()) => out.set(0, 0, -1),
             isArmExtended: (side) => armOut === side || armOut === 'both',
             isTPose: () => tPose,
@@ -66,27 +66,34 @@ test('out of mana: the shield shatters and the spell goes on through', () => {
     assert.ok(c.visuals.shards.length > 0, 'its pieces fly');
 });
 
-test('the dome: blast and spells cost half; out of mana a blast hits in full', () => {
+test('the dome: proof against a blast (it pays half the spell); out of mana a blast hits in full', () => {
     const { c } = fakeGame({ tPose: true });
     c.castProtection(true);
     assert.equal(c.shield.type, 2);
+    c.fatigue = 20;
+    const hp = c.hp;
+    c.explosion(new THREE.Vector3(1, 1, 1), 3.6, 1, 'enemy');
+    assert.equal(c.hp, hp, 'no harm under the dome');
+    assert.equal(c.fatigue, 12.5, 'Bombardo (15): half of it paid');
+    c.damage(5, null, 'collapse');
+    c.damage(5, null, 'Bombardo'); // (my own blast)
+    assert.equal(c.hp, hp, 'no falling pieces, no own blast');
     c.fatigue = 3;
     c.explosion(new THREE.Vector3(1, 1, 1), 3.6, 1, 'enemy');
     assert.equal(c.shield, null, 'Bombardo (15) needs 7.5: shattered');
     assert.ok(c.hp <= 10, `the whole blast, not a quarter (hp ${c.hp})`);
 });
 
-test('a wand in one hand: the other stretched hand takes the shield; a spell from the shield hand knocks it down', () => {
+test('a wand in one hand: the shield goes up at the wand; at the other hand only when it is raised higher', () => {
     const { c } = fakeGame({ armOut: 'both', wand: 'right' });
     c.castProtection(false);
-    assert.equal(c.shield.side, 'left', 'the free hand holds it');
-    assert.equal(c.castFrom('right'), false, 'the wand casts on: the shield stays');
-    assert.ok(c.shield);
-    const { c: c2 } = fakeGame({ armOut: 'right', wand: 'right' });
+    assert.equal(c.shield.side, 'right', 'at the wand');
+    assert.equal(c.castFrom('right'), true, 'the same wand cast again: it is gone');
+    assert.equal(c.shield, null);
+    const { c: c2 } = fakeGame({ armOut: 'both', wand: 'right', leftUp: 0.4 });
     c2.castProtection(false);
-    assert.equal(c2.shield.side, 'right');
-    assert.equal(c2.castFrom('right'), true, 'the same wand cast again: it is gone');
-    assert.equal(c2.shield, null);
+    assert.equal(c2.shield.side, 'left', 'the other hand raised higher holds it');
+    assert.equal(c2.castFrom('right'), false, 'the wand casts on: the shield stays');
     const { c: c3 } = fakeGame({ tPose: true, wand: 'right' });
     c3.castProtection(true);
     assert.equal(c3.castFrom('right'), false, 'the dome is not in a hand');

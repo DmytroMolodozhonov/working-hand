@@ -26,6 +26,9 @@
  *                             may come in and go out freely, like the owner.
  *
  * What the sphere does — for EVERY kind (CLAUDE.md «на кого и на что»):
+ *   - while it is set the caster's beam goes on from the wand: it strikes the house (the house fills with the
+ *     magic), then — the dome grown round it — the dome itself, its hex lit where it strikes, until «стоп»
+ *     (_beams; everybody sees it). The dome itself is faint meanwhile (never over the whole screen);
  *   - it is NOT seen: only while it is being set (and a moment after «стоп»), and when somebody who
  *     may not come in is close to it (≈1.5 m) — then it flashes into view, the hex pattern lighting
  *     up where they are, and fades again when they go;
@@ -180,7 +183,21 @@ export function keepIn(spheres) {
 
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
 const _c = new THREE.Color();
-const _Z = new THREE.Vector3(0, 0, 1);
+const _Z = new THREE.Vector3(0, 0, 1), _Y = new THREE.Vector3(0, 1, 0);
+
+/** The caster's beam (shared shape and materials — HouseWards._beams): a core and a glow, length 1 along +y. */
+let BEAM = null;
+function beamModel() {
+    if (!BEAM) {
+        const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+        BEAM = { geo: new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).translate(0, 0.5, 0), core: mat(0xffffff, 0.95), glow: mat(0x8fd0ff, 0.45) };
+    }
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(BEAM.geo, BEAM.core), new THREE.Mesh(BEAM.geo, BEAM.glow));
+    for (const m of g.children) { m.renderOrder = 5; m.frustumCulled = false; }
+    g.userData.noWardHide = true;
+    return g;
+}
 const r2 = (v) => Math.round(v * 100) / 100;
 
 // ------------------------------------------------------------ the look of the sphere
@@ -1123,7 +1140,7 @@ export class HouseWards {
         dome.userData.noWardHide = true;
         dome.frustumCulled = true;
         this.game.scene?.add(dome);
-        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0, near: 0, show: 0, wasSetting: !!w.setting, lastR: w.r, grow: 0, sparkAcc: 0 };
+        L = { dome, disc: null, k: 1, flash: 0, pulse: 0, discR: 0, near: 0, beam: 0, beamAt: null, show: 0, wasSetting: !!w.setting, lastR: w.r, grow: 0, sparkAcc: 0 };
         this.looks.set(w.id, L);
         return L;
     }
@@ -1202,21 +1219,22 @@ export class HouseWards {
             // come in is close, where magic hits it, while it is cracked or the Hellfire burns on it
             if (L.wasSetting && !w.setting) this._setDone(w, L);
             L.wasSetting = !!w.setting;
-            // while it is set (and a moment after) it is seen through the walls: the house's own walls
-            // hid a dome growing inside it (only a state of drawing: no shader is made again)
-            L.dome.material.depthTest = !(w.setting || L.show > 0);
+            // (the author: the dome being set must not cover the whole screen — it is drawn as it was: faint, behind
+            // the walls as everything is, brightest where the caster's beam strikes it — _beams)
             L.show = Math.max(0, L.show - dt);
+            const inside = inWard(w, _v2.set(eye.x, eye.y + 1, eye.z));
             const crack = Math.max(0, 1 - w.hp / WARD.HP), hell = Math.min(1, (w.hellT || 0) / WARD.HELL_T);
             L.flash = Math.max(0, L.flash - dt * 1.5);
-            const seen = Math.max(w.setting ? 0.9 + L.pulse : 0, Math.min(1, L.show) * 0.7, L.near * 0.75, L.flash * 0.8, crack * 0.5, hell * 0.9);
+            const seen = Math.max(w.setting ? (inside ? 0.12 : 0.3) + 0.4 * L.pulse : 0, Math.min(1, L.show) * (inside ? 0.25 : 0.6), L.near * 0.75, L.flash * 0.8, L.beam * 0.8, crack * 0.5, hell * 0.9);
             u.uAlpha.value = seen * k;
             u.uCrack.value = crack;
             u.uColor.value.setHex(0x7fbfff).lerp(_c.setHex(0xff3a1a), hell);
             // the hex pattern lights up where it is touched / pressed
-            const fp = L.near > L.flash ? L.nearAt : L.flashAt;
-            if (fp) u.uFlash.value.set(fp.x, fp.y, fp.z, Math.max(L.flash, L.near * 0.8));
+            const fp = L.beam > Math.max(L.near, L.flash) ? L.beamAt : L.near > L.flash ? L.nearAt : L.flashAt;
+            if (fp) u.uFlash.value.set(fp.x, fp.y, fp.z, Math.max(L.flash, L.near * 0.8, L.beam));
             else u.uFlash.value.w = 0;
             L.near = Math.max(0, L.near - dt * 1.5);
+            L.beam = Math.max(0, (L.beam || 0) - dt * 4);
             L.dome.visible = k > 0.01 && seen > 0.005 && !coming;
             if (w.inv && k < 0.999) hidden.push({ w, k, d: Math.hypot(eye.x - w.c.x, eye.z - w.c.z) });
             // the land over it, seen from far
@@ -1315,7 +1333,80 @@ export class HouseWards {
         this.looks.delete('__sample');
         this.game.scene?.remove(L.dome);
         L.dome.material.uniforms.uAlpha.value = 0.5;
-        return [L.dome];
+        return [L.dome, beamModel()];
+    }
+
+    // ------------------------------------------------------------ the beam
+    /**
+     * While a dome is being set (until «стоп»), its caster's beam goes on from the wand (the author): it strikes the
+     * house — the house fills with the magic (sparks run over it) — and once the dome has grown round the house it
+     * strikes the dome itself (its hex lights up where it touches). Every computer draws every caster's beam (the
+     * dome's `setting` comes by the network; the caster's hand is his avatar's).
+     */
+    _beams(dt) {
+        const g = this.game;
+        const live = new Set();
+        for (const w of this.list.values()) {
+            if (!w.setting || (w.landAt != null && this._t < w.landAt)) continue; // (its charge still flying)
+            const h = this._casterHand(w);
+            if (!h) continue;
+            live.add(w.id);
+            const B = this._beamOf(w.id);
+            // where it strikes: the dome from outside; from inside (or past it) the house / the land it shows
+            let end = null, onDome = false;
+            if (!inWard(w, h.o)) {
+                const fx = h.o.x - w.c.x, fy = h.o.y - w.c.y, fz = h.o.z - w.c.z;
+                const b = fx * h.d.x + fy * h.d.y + fz * h.d.z, c = fx * fx + fy * fy + fz * fz - w.r * w.r, D = b * b - c;
+                const t = D >= 0 ? -b - Math.sqrt(D) : -1;
+                if (t > 0 && t < WARD.AIM + w.r) { end = _v1.copy(h.o).addScaledVector(h.d, t); onDome = true; }
+            }
+            if (!end) {
+                B.rayT = (B.rayT ?? 0) - dt;
+                if (B.rayT <= 0) { B.rayT = 0.1; const hit = g.terrain?.data?.raycast?.(h.o, h.d, WARD.AIM); B.hit = hit ? (B.hit || new THREE.Vector3()).set(hit.x, hit.y, hit.z) : null; }
+                end = B.hit ? _v1.copy(B.hit) : _v1.copy(h.o).addScaledVector(h.d, WARD.AIM * 0.5);
+            }
+            this._drawBeam(B, h.o, end, dt);
+            // its end: the dome lights up there — or the house drinks the magic in
+            const L = this.looks.get(w.id);
+            if (onDome && L) { L.beam = 1; L.beamAt = (L.beamAt || new THREE.Vector3()).copy(end); }
+            B.sparkAcc = Math.min(4, (B.sparkAcc || 0) + dt * (onDome ? 25 : 40));
+            for (; B.sparkAcc >= 1; B.sparkAcc--) {
+                const v = _v2.set(Math.random() - 0.5, Math.random() * 0.9, Math.random() - 0.5).normalize().multiplyScalar(onDome ? 1.5 : 0.8 + Math.random());
+                g.fx?.spark?.(end, Math.random() < 0.5 ? 0x9fd8ff : Math.random() < 0.5 ? 0xcfe8ff : 0xb7a6ff, 0.05 + Math.random() * 0.05, v, onDome ? 0.35 : 0.7);
+            }
+        }
+        for (const [id, B] of this._beamMap || []) if (!live.has(id)) { this.game.scene?.remove(B.group); this._beamMap.delete(id); }
+    }
+
+    /** The hand (the wand) of the one setting this dome: me, or his avatar. {o, d} */
+    _casterHand(w) {
+        const g = this.game;
+        if (w.owner === this.myKey) return this.setting?.id === w.id ? this._hand() : null;
+        for (const [id, r] of g.remotes || []) {
+            if (this.keyOf(id) !== w.owner || r.dead) continue;
+            const ch = r.character, side = ch?.getHandWorldPosition ? (ch.getHandWorldPosition('left').y > ch.getHandWorldPosition('right').y ? 'left' : 'right') : 'right';
+            const hp = r.handPose(side);
+            return { o: hp.origin.addScaledVector(hp.dir, 0.3), d: hp.dir };
+        }
+        return null;
+    }
+
+    _beamOf(id) {
+        const M = this._beamMap || (this._beamMap = new Map());
+        let B = M.get(id);
+        if (!B) { B = { group: beamModel() }; this.game.scene?.add(B.group); M.set(id, B); }
+        return B;
+    }
+
+    /** The beam from `a` to `b`: a white core in a silver-blue glow, flickering. */
+    _drawBeam(B, a, b, dt) {
+        const G = B.group, len = a.distanceTo(b);
+        G.position.copy(a);
+        G.quaternion.setFromUnitVectors(_Y, _v2.subVectors(b, a).normalize());
+        B.t = (B.t || 0) + dt;
+        const f = 1 + 0.25 * Math.sin(B.t * 37) + 0.15 * Math.sin(B.t * 23);
+        G.children[0].scale.set(0.025 * f, len, 0.025 * f);
+        G.children[1].scale.set(0.09 * f, len, 0.09 * f);
     }
 
     // ------------------------------------------------------------ frame
@@ -1328,6 +1419,7 @@ export class HouseWards {
         if (this.auth) { this._creatures(dt); this._heal(dt); }
         for (const w of this.list.values()) this._look(w);
         this._intruders();
+        this._beams(dt);
         const hidden = this._updateLooks(dt);
         this._hum();
         this._scanT -= dt;
@@ -1354,6 +1446,8 @@ export class HouseWards {
         if (this._humOn) { this.game.sound?.wardHum?.(null, 0); this._humOn = false; }
         for (const B of this.bolts) if (B.mesh) this.game.scene?.remove(B.mesh);
         this.bolts = [];
+        for (const B of this._beamMap?.values() || []) this.game.scene?.remove(B.group);
+        this._beamMap?.clear();
         for (const id of [...this.list.keys()]) this._remove(id);
         WARD_HIDE.n.value = 0;
         for (const [o, vis] of this._hidden) o.visible = vis;

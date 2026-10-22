@@ -14,6 +14,9 @@ const _sh = { x: 0, y: 0, z: 0 };
 const _q = new THREE.Quaternion();
 const _d = new THREE.Vector3();
 
+/** m from the hand to a wand's tip (a remote player's hand shield stands there: Combat.shieldAt). */
+const WAND_LEN = 0.32;
+
 export class RemoteAvatar {
     constructor(scene, id, name, colorIndex = 0) {
         this.id = id;
@@ -94,6 +97,7 @@ export class RemoteAvatar {
             const was = this.combat.shield, wasSide = this.combat.side, wasGods = !!this.combat.gods;
             this.combat.shield = s.c[0];
             this.combat.gods = !!s.c[5]; // (ProtectionGods.js: their shield / dome golden)
+            this.combat.atWand = !!s.c[6]; // (their hand shield at their wand's tip)
             this.combat.side = s.c[1] ? 'left' : 'right';
             this.combat.shieldLeft = s.c[2];
             this.combat.frozen = s.c[3] > 0;
@@ -169,6 +173,7 @@ export class RemoteAvatar {
         if (this.visuals) {
             if (this.combat.shieldLeft > 0) this.combat.shieldLeft = Math.max(0, this.combat.shieldLeft - dt);
             const hp = this.handPose(this.combat.side);
+            if (this.combat.atWand) hp.origin.addScaledVector(hp.dir, WAND_LEN); // (at the wand's tip, as on their own screen)
             this.visuals.update(dt, this.combat, { center: this.position.clone().add(_d.set(0, 0.6, 0)), hand: hp.origin, dir: hp.dir });
         }
     }

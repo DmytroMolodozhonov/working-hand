@@ -7,7 +7,7 @@
  * at the head kicks it (HeadJolt): the head snaps the way it was hit and so does the first-person view.
  *
  *   Protection facing the source: the spell is felt but held — 25 % of the push, never a fall,
- *   the shield arm is pushed back. The dome: nothing moves me (blasts ×0.25). In water: half the
+ *   the shield arm is pushed back. The dome: nothing moves me, a blast's wave neither (any blast, mine too). In water: half the
  *   push, never a fall. Lifted by Leviosa: the magic holds the body (only the head jolts).
  *   Frozen: a push ≥ 3 topples the statue and it shatters.
  *   «Protection Gods» (… Maxima): no spell but the gods' own moves me at all (_godsHold).
@@ -44,6 +44,7 @@ export class BodyImpact {
         if (g.levitation?.lifted) { this._kickHead(o); return 'none'; }      // (the magic holds the body)
         if (g.circleAttack?.holdsMe?.()) return 'none'; // (my «Circle Attack»: I stand on my island — nothing pushes me off)
         if (this._godsHold(o)) { this._note(o, 'blocked'); return 'blocked'; } // (the gods' shield: no spell moves me — ProtectionGods.js)
+        if (o.blast && c.blastProof?.()) { this._note(o, 'blocked'); return 'blocked'; } // (a dome: a blast's wave never moves me — mine either)
         const dome = !!(c.shield && c.shield.type === 2 && c.shield.left > 0);
         const facing = !o.noShield && !!o.from && !dome && c.shieldFactor(o.from) >= 1;
         const swim = ch.swimY != null, frozen = !!c.frozen;

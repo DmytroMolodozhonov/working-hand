@@ -47,7 +47,7 @@ export function wardsOf(g, out) {
     if (me && s && s.left > 0 && !g.isDeadLocal) {
         if (s.type === 2) put(me.x, me.y - 1.95, me.z, WARD.DOME_R, 'me', true);
         else {
-            const h = g.character.getHandWorldPosition?.(s.side, handVec(me));
+            const h = g.combat.shieldAt ? g.combat.shieldAt(s.side, handVec(me)) : g.character.getHandWorldPosition?.(s.side, handVec(me)); // (at the wand's tip when it is there)
             if (h) put(h.x, me.y - 1.95, h.z, WARD.HAND_R, 'me', false);
         }
     }
