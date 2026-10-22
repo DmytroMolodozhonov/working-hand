@@ -111,17 +111,15 @@ export class ArenaDuels {
 
     _state(def) {
         // where the arena's people come from: the edge of the tower's land on the arena's side
-        let home = def.gates[0].out;
+        // (a settlement's arena: from its road, past the front gate)
+        const G = def.gates[0].out, c = def.centre, gl = Math.hypot(G.x - c.x, G.z - c.z) || 1;
+        let home = { x: G.x + (G.x - c.x) / gl * 12, y: G.y, z: G.z + (G.z - c.z) / gl * 12 };
         if (def.towerAt) {
             const dx = def.x - def.towerAt.x, dz = def.z - def.towerAt.z, d = Math.hypot(dx, dz) || 1;
             home = { x: def.towerAt.x + dx / d * (TOWER_ZONE + 4), y: def.gates[0].out.y, z: def.towerAt.z + dz / d * (TOWER_ZONE + 4) };
         }
         // the seats on the long sides only (a charge flies along the floor's axis — never into the crowd)
-        const seats = def.seats.map((s, i) => ({ ...s, i })).filter((s) => {
-            const ax = def.axis, dx = ax.b.x - ax.a.x, dz = ax.b.z - ax.a.z, l2 = dx * dx + dz * dz;
-            const t = ((s.x - ax.a.x) * dx + (s.z - ax.a.z) * dz) / l2;
-            return t > 0.05 && t < 0.95;
-        });
+        const seats = def.seats.map((s, i) => ({ ...s, i })).filter((s) => s.side);
         const restT = def.practice ? ARENA_DUEL.PRACTICE_REST[0] * Math.random() : 4;
         return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: [], owed: null, sayT: 0, netT: 0 };
     }

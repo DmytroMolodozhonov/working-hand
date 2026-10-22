@@ -13,6 +13,12 @@ import { runBoom } from '../../src/world/BoomCarve.js';
 import { onArenaFloor } from '../../src/world/DuelArenas.js';
 import { ARENA_DUEL, ARENA_SPELLS, isBanned, killVerdict, avengers, duelClock, arenaSpell, arenaDefence, arenaDownTime, softBlow } from '../../src/game/ArenaRules.js';
 
+/** A cell of the tower's wall (the drum, r 15…17 — not a window). */
+function wallCell(t, tw) {
+    for (let L = 1; L < 12; L++) for (const d of [16, 17, 15]) if (t.get(tw.x + d, L, tw.z) === BLOCK.ARCANE_WARD) return [tw.x + d, L, tw.z];
+    return null;
+}
+
 function world() {
     const t = new TerrainData();
     t.generate({ seed: 7, mountains: true, seas: true, lush: true, deepCaves: true });
@@ -30,7 +36,7 @@ test('an arena stands beside a tower: floor and stands of the enchanted stone, s
     assert.ok(isEnchanted(t.get(Math.round(s.x), sL, Math.round(s.z))), 'a seat on the stands');
     assert.ok(onArenaFloor(a, a.gates[0].mark.x, a.gates[0].mark.z) && onArenaFloor(a, a.gates[1].mark.x, a.gates[1].mark.z), 'the two marks on the floor');
     assert.equal(t.get(Math.round(a.desk.book.x), Math.round(a.desk.book.y), Math.round(a.desk.book.z)), BLOCK.BOOKS, 'the book of duels');
-    assert.equal(t.get(tw.x + 17, 3, tw.z), BLOCK.ARCANE_WARD, 'the tower\'s wall: the same enchanted stone');
+    assert.ok(wallCell(t, tw), 'the tower\'s wall: the same enchanted stone');
     // the same arena on another computer (from the seed)
     const b = world().a;
     assert.deepEqual([b.x, b.z, b.rot, b.F, b.seats.length], [a.x, a.z, a.rot, a.F, a.seats.length]);
@@ -42,8 +48,9 @@ test('«Бомбардо» and the deforming spells: the blast is, the enchanted
     const out = t.removeSphere(cx + 6, L - 1, cz, 5); // (Bombardo on the floor)
     assert.equal(out.filter((b) => isEnchanted(b.type)).length, 0);
     assert.equal(t.get(cx + 6, L, cz), BLOCK.ENCHANTED);
-    t.removeSphere(tw.x + 17, 3, tw.z, 4); // (and on the tower's wall)
-    assert.equal(t.get(tw.x + 17, 3, tw.z), BLOCK.ARCANE_WARD);
+    const w = wallCell(t, tw);
+    t.removeSphere(w[0], w[1] - 1, w[2], 4); // (and on the tower's wall)
+    assert.equal(t.get(w[0], w[1], w[2]), BLOCK.ARCANE_WARD);
     // a spell that changes a block (Stitching, Gather, Liquidation, ice…) — refused; never made by a spell either
     t.set(cx + 6, L, cz, BLOCK.AIR);
     assert.equal(t.get(cx + 6, L, cz), BLOCK.ENCHANTED);

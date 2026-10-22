@@ -4,10 +4,11 @@
  * stays), two gates at the ends for the duellists, lamps on the gate pillars, and by the front gate the
  * place to sign up for a duel — a stone lectern with the book of duels.
  *
- * Where: an arena stands at a wizards' settlement — for now beside every wizards' tower (ArenaIndex: on
- * its own levelled land, ~130 m from the tower, its front gate facing it). A big settlement of wizards
- * puts its own at its middle with `arenaSite(id, X, Z, F, rot)` + `ArenaIndex.add(def)` — the same
- * record, the same game (src/game/ArenaDuels.js).
+ * Where: beside every wizards' tower (ArenaIndex: on its own levelled land, ~130 m from the tower, its front
+ * gate facing it) and, round (ARENA_ROUND), on the place a big settlement of wizards keeps for it near its
+ * middle (WizardVillages: `def.arena`; ArenaIndex.ofVillage), its front gate to the town. Any other place:
+ * `arenaSite(id, X, Z, F, rot, extra, dims)` + `ArenaIndex.add(def)` — the same record, the same game
+ * (src/game/ArenaDuels.js).
  *
  * Pure data, deterministic from the seed (the terrain workers build the same arena on every computer);
  * its parts are the castles' kind (boxes k 0, discs k 1 — TerrainData._buildCastles). Rot-local
@@ -30,31 +31,37 @@ export const ARENA = {
     AWAY: TOWER_ZONE + 46 + 26, // from the tower's middle to the arena's
     SEAT_GAP: 2.4, // m between two seats in a row
 };
-const OUT_W = ARENA.W + ARENA.TIERS * ARENA.STEP; // the stands' outer half-width (25)
-const END = ARENA.S + OUT_W; // the stands' outer end along v (38)
+/**
+ * The round arena of a big settlement of wizards (WizardVillages.ARENA_SPOT: a level field of r 22 kept for
+ * it at the town's middle): a round floor, four rows, the marks closer.
+ */
+export const ARENA_ROUND = { W: 10, S: 0, TIERS: 4, STEP: 2, MARK: 8, ZONE: 0 };
+const dims = (d) => ({ ...ARENA, ...d });
 
-/** A stadium (a rectangle with round ends) of half-width r round the long axis, layers l0…l1. */
-function stadium(p, r, l0, l1, t) {
-    p.box(-r, r, l0, l1, -ARENA.S, ARENA.S, t);
-    p.cyl(0, -ARENA.S, r, l0, l1, t);
-    p.cyl(0, ARENA.S, r, l0, l1, t);
+/** A stadium (a rectangle with round ends) of half-width r round the long axis (half-length A.S), layers l0…l1. */
+function stadium(p, r, l0, l1, t, A = ARENA) {
+    if (A.S > 0) p.box(-r, r, l0, l1, -A.S, A.S, t);
+    p.cyl(0, -A.S, r, l0, l1, t);
+    if (A.S > 0) p.cyl(0, A.S, r, l0, l1, t);
 }
 
 /**
  * The arena's blocks into plan `p` and its places (world points): the marks, the gates, the seats, the
  * desk. The floor is flush with the levelled land (layer −1), four blocks of enchanted stone thick.
  */
-export function buildArena(p) {
-    const B = BLOCK, A = ARENA, T = A.TIERS;
+export function buildArena(p, d = ARENA) {
+    const B = BLOCK, A = dims(d), T = A.TIERS;
+    const OUT_W = A.W + T * A.STEP, END = A.S + OUT_W; // (the stands' outer half-width and end along v)
+    const stadium_ = (r, l0, l1, t) => stadium(p, r, l0, l1, t, A);
     // the foundation and the floor: one slab under all of it (it holds the stands — nothing hangs)
-    stadium(p, OUT_W + 1, -4, -1, B.ENCHANTED);
+    stadium_(OUT_W + 1, -4, -1, B.ENCHANTED);
     // the parapet round the top row (a block higher than it: to lean on)
-    stadium(p, OUT_W + 1, 0, T, B.ENCHANTED);
-    stadium(p, OUT_W, T, T + 6, B.AIR);
+    stadium_(OUT_W + 1, 0, T, B.ENCHANTED);
+    stadium_(OUT_W, T, T + 6, B.AIR);
     // the stands: from the outer row in — each row one block lower and STEP nearer the floor (row k: layers 0…k−1)
     for (let k = T; k >= 1; k--) {
-        stadium(p, A.W + k * A.STEP, 0, k - 1, B.ENCHANTED_SEAT);
-        stadium(p, A.W + (k - 1) * A.STEP, k - 1, T + 6, B.AIR);
+        stadium_(A.W + k * A.STEP, 0, k - 1, B.ENCHANTED_SEAT);
+        stadium_(A.W + (k - 1) * A.STEP, k - 1, T + 6, B.AIR);
     }
     // the floor's signs (of the darker enchanted stone — a blast never breaks them either): a ring in the middle, the two marks
     p.cyl(0, 0, 4, -1, -1, B.ENCHANTED_SEAT);
@@ -91,24 +98,26 @@ export function buildArena(p) {
             if (d < 2 * A.S) { u = r; v = -A.S + d; } else if (d < 2 * A.S + Math.PI * r) { const a = (d - 2 * A.S) / r; u = r * Math.cos(a); v = A.S + r * Math.sin(a); } else if (d < 4 * A.S + Math.PI * r) { u = -r; v = A.S - (d - 2 * A.S - Math.PI * r); } else { const a = Math.PI + (d - 4 * A.S - Math.PI * r) / r; u = r * Math.cos(a); v = -A.S + r * Math.sin(a); }
             if (Math.abs(u) <= A.GATE + 1.5 && Math.abs(v) > A.S) continue; // (a gate)
             const q = p.pt(u, v, k); // (standing on row k: its top is layer k − 1)
+            const side = Math.abs(v) <= A.S || Math.abs(u) >= Math.abs(Math.abs(v) - A.S); // (along the sides: a charge flies along v, never into them)
             // facing the floor: towards the nearest point of the floor's axis
             const cv = Math.max(-A.S, Math.min(A.S, v)), c = p.pt(0, cv, k);
-            out.seats.push({ x: q.x, y: q.y, z: q.z, row: k, yaw: Math.atan2(-(c.x - q.x), -(c.z - q.z)) });
+            out.seats.push({ x: q.x, y: q.y, z: q.z, row: k, side, yaw: Math.atan2(-(c.x - q.x), -(c.z - q.z)) });
         }
     }
     return out;
 }
 
 /** An arena's record at (X, Z) on land levelled to F (`rot`: its front gate towards −v turned by rot·90°). */
-export function arenaSite(id, X, Z, F, rot, extra = {}) {
+export function arenaSite(id, X, Z, F, rot, extra = {}, d = ARENA) {
+    const A = dims(d), OUT_W = A.W + A.TIERS * A.STEP;
     const p = new Plan(X, Z, F, rot);
-    const out = buildArena(p);
+    const out = buildArena(p, A);
     const c = p.pt(0, 0, 0);
     const def = {
-        id, kind: 'arena', x: X, z: Z, F, rot, zone: ARENA.ZONE, name: 'Арена дуэлей',
+        id, kind: 'arena', x: X, z: Z, F, rot, zone: A.ZONE, reach: Math.max(A.ZONE, OUT_W + 8), name: 'Арена дуэлей',
         centre: c, floorY: c.y, // (the floor's top: the duellists stand here)
         // the floor (local u ±W, v ±(S+W)) for «who is on it»: its axis and radius in world terms
-        axis: { a: p.pt(0, -ARENA.S), b: p.pt(0, ARENA.S), r: ARENA.W }, outer: OUT_W + 1,
+        axis: { a: p.pt(0, -A.S), b: p.pt(0, A.S), r: A.W }, outer: OUT_W + 1,
         gates: out.gates, desk: out.desk, seats: out.seats,
         parts: p.parts, _byChunk: new Map(),
         ...extra,
@@ -158,8 +167,9 @@ function arenaGround(raw, X, Z) {
  * and any a settlement adds. landAt / partsForChunk the castles' way (Sites.js).
  */
 export class ArenaIndex {
-    constructor(seed, raw, towers) {
-        this.seed = seed; this.raw = raw; this.towers = towers;
+    constructor(seed, raw, towers, villages = null) {
+        this.seed = seed; this.raw = raw; this.towers = towers; this.villages = villages;
+        this.byVillage = new Map(); // settlement id → its round arena (WizardVillages: `def.arena`, its place)
         this.byTower = new Map(); // tower id → arena def or null
         this.extra = new Map(); // id → def (put by a settlement: `add`)
         this._last = null;
@@ -192,14 +202,27 @@ export class ArenaIndex {
         return def;
     }
 
-    /** Arenas whose land reaches within `r` of a point (a tower's arena never leaves the tower's cell). */
+    /**
+     * The round arena at the middle of a big settlement (on the place it keeps for it: `vd.arena`), its front
+     * gate to the settlement's road; the town's wizards come to it. (The land is the settlement's own.)
+     */
+    ofVillage(vd) {
+        if (!vd?.arena) return null;
+        if (this.byVillage.has(vd.id)) return this.byVillage.get(vd.id);
+        const a = vd.arena;
+        const def = arenaSite('ar' + vd.id, Math.round(a.x), Math.round(a.z), vd.F, ((vd.rot | 0) + 2) % 4, { tower: vd.id, village: true }, ARENA_ROUND);
+        this.byVillage.set(vd.id, def);
+        return def;
+    }
+
+    /** Arenas whose land reaches within `r` of a point (a tower's / a settlement's arena never leaves its cell). */
     near(x, z, r = 0) {
         const out = [], m = ARENA.ZONE + BLEND + r;
         const g0x = Math.floor((x - m) / CASTLE_CELL), g1x = Math.floor((x + m) / CASTLE_CELL);
         const g0z = Math.floor((z - m) / CASTLE_CELL), g1z = Math.floor((z + m) / CASTLE_CELL);
         for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
-            const a = this.ofTower(this.towers.cellOf(gx, gz));
-            if (a && Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= a.zone + BLEND + r) out.push(a);
+            const a = this.ofTower(this.towers.cellOf(gx, gz)) || (this.villages ? this.ofVillage(this.villages.cellOf(gx, gz)) : null);
+            if (a && Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= a.reach + BLEND + r) out.push(a);
         }
         for (const a of this.extra.values()) if (Math.max(Math.abs(a.x - x), Math.abs(a.z - z)) <= a.zone + BLEND + r) out.push(a);
         return out;
@@ -209,7 +232,7 @@ export class ArenaIndex {
         // (asked for every column of the world: the tower of this column's cell, its arena — two map lookups)
         const gx = Math.floor(ix / CASTLE_CELL), gz = Math.floor(iz / CASTLE_CELL);
         let c = this._last;
-        if (!c || c.gx !== gx || c.gz !== gz) c = this._last = { gx, gz, a: this.ofTower(this.towers.cellOf(gx, gz)) };
+        if (!c || c.gx !== gx || c.gz !== gz) c = this._last = { gx, gz, a: this.ofTower(this.towers.cellOf(gx, gz)) }; // (a settlement's arena: the settlement levels its land)
         let a = c.a;
         if (!a || Math.max(Math.abs(ix - a.x), Math.abs(iz - a.z)) > a.zone + BLEND) {
             a = null;
