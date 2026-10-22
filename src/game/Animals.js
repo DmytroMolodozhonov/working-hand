@@ -71,14 +71,25 @@ export const PEGASUS = {
 };
 /** New herds: rare, small, far away and never in sight (they must not pop up next to the player). */
 export const HERDS = {
-    MAX_NEAR: 8, // animals within NEAR m: no new herd while there are this many
+    // (the author: sheep twice as often, pigs +30 %, cows +20 %, horses as they were — the tries come
+    //  more often and the cap is higher by the same share as the kinds' weights grew: 5.5 against 4)
+    MAX_NEAR: 11, // animals within NEAR m: no new herd while there are this many (was 8)
     NEAR: 120,
-    EVERY: 75, // s between tries (± a third)
+    EVERY: 55, // s between tries (± a third; was 75)
     MIN_D: 75, // m away (the player is ~4.6 m tall: closer is in plain sight)
     MAX_D: 115,
     BEHIND: 1.9, // rad from where the player looks (~110°): only behind them
     GONE: 200, // m: farther than this a herd is gone (only when not in sight)
 };
+/** How often each kind makes a new herd (relative): sheep ×2, pigs +30 %, cows +20 % of the first equal shares. */
+export const HERD_KINDS = { cow: 1.2, pig: 1.3, sheep: 2, horse: 1 };
+const HERD_TOTAL = Object.values(HERD_KINDS).reduce((a, b) => a + b, 0);
+/** A herd's kind by HERD_KINDS (`x` in 0…1). */
+export function herdKind(x) {
+    let y = x * HERD_TOTAL;
+    for (const [k, w] of Object.entries(HERD_KINDS)) if ((y -= w) < 0) return k;
+    return 'horse';
+}
 /** Is the point (x, z) outside the player's view: far enough off where `look` points? */
 export function outOfSight(me, look, x, z, behind = HERDS.BEHIND) {
     const dx = x - me.x, dz = z - me.z;
@@ -222,8 +233,7 @@ export class Animals {
     _spawnHerd() {
         const g = this.game;
         const me = g.character.group.position;
-        const types = ['cow', 'pig', 'sheep', 'horse'];
-        const type = types[Math.floor(Math.random() * types.length)];
+        const type = herdKind(Math.random());
         const n = 2 + Math.floor(Math.random() * 4);
         // far away, behind the player (where they don't look) — never popping up in sight
         const look = this._look(new THREE.Vector3());
