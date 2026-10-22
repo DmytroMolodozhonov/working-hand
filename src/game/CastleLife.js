@@ -73,6 +73,8 @@ const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
 const THEFT_MS = 90000;
+import { BUMP, knockOutcome } from './BumpRules.js';
+const SORRY_OK = ['Ладно, бывает.', 'Хорошо, я не сержусь.', 'Ну ладно, впредь аккуратнее.', 'Бывает. Забудем.'];
 const RAMPAGE = 3; // different people of a castle hurt by one player within 2 min: that is a rampage — the guard comes
 const PETTY = 12; // blocks of quiet damage (a pane, a few blocks) per player in 5 min: the people grumble, no guards
 const LEASH = 20; // m: out of their land, knights chase on until the enemy is this far ahead
@@ -2490,7 +2492,7 @@ export class CastleLife {
         const bumps = cs.bumps || (cs.bumps = new Map());
         const key = by + '|' + v.id;
         const prev = bumps.get(key);
-        const n = prev && now - prev.t < 30000 ? prev.n + 1 : 1;
+        const n = prev && now - prev.t < BUMP.AGAIN_MS ? prev.n + 1 : 1;
         bumps.set(key, { t: now, n });
         const hard = !!opts.weapon || !!opts.hard || dmg > 1;
         // (the people really hurt by this player lately — a single light knock is not counted)
@@ -2505,15 +2507,42 @@ export class CastleLife {
         const b = this.talk?.brain?.(v);
         if (b) { b.mood -= hard ? 0.5 : 0.2; b.memory.insults = (b.memory.insults || 0) + 1; }
         const knightly = v.role === 'knight' || v.role === 'king';
-        // (a light knock — a hand reaching for a handshake, a bump in a crowd — once: just told off)
-        if (!hard && n === 1) { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.bump), 3); return true; }
-        // (again and again, or the king of this castle himself: offended — not a fight)
-        if ((!hard && n < 3) || this.state(cs.def.id).owner === by) { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.offended), 3); return true; }
+        // (a light knock — a hand reaching for a handshake, a bump in a crowd — once: just told off; a second one within 20 s angers them)
+        v.offended = { by, t: now, hp: v.hp };
+        const out = knockOutcome({ hard, count: n, owner: this.state(cs.def.id).owner === by });
+        if (out === 'told') { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.bump), 3); return true; }
+        if (out === 'offended') { this._say(v, pick(knightly ? SHOUT.bumpKnight : SHOUT.offended), 3); return true; }
         // a hard blow (or the third knock): this one fights back — only them, only this player
         v.grudge = { id: by, until: now + GRUDGE_MS };
         if (v.foe !== by) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.seated = false; }
         this._say(v, pick(knightly ? SHOUT.fightBackKnight : SHOUT.fightBack), 3);
         if (by === g.localId) g.hud.setVoice?.(`😠 ${v.title} ${v.name} разозлился и дерётся с вами`, true);
+        return true;
+    }
+
+    /**
+     * «Извините» (CastleTalk): whoever I knocked in the last 15 s near me calms down — the grudge and the hostility to me are
+     * lifted, if it did not grow into a real fight (nobody dead, little damage). @returns {boolean} somebody was calmed
+     */
+    forgive(by = this.game.localId) {
+        if (!this.auth) { this.game.sync?.villagerSorry?.(); return false; }
+        const pp = this._playerPos(by), now = Date.now();
+        if (!pp) return false;
+        let calmed = null;
+        for (const v of this.byId.values()) {
+            const o = v.offended;
+            if (v.dead || !o || o.by !== by || now - o.t > BUMP.SORRY_MS) continue;
+            if (Math.hypot(v.x - pp.x, v.z - pp.z) > BUMP.SORRY_R || o.hp - v.hp > BUMP.MAX_HP_LOSS * Math.max(1, v.maxHp / 10) + 1) continue;
+            if (v.grudge?.id === by) v.grudge = null;
+            if (v.foe === by) { v.foe = null; v.path = null; v.fleeT = 0; }
+            v.offended = null;
+            calmed = v;
+            this._say(v, pick(SORRY_OK), 3);
+        }
+        if (!calmed) return false;
+        const cs = calmed.cs, st = this.state(cs.def.id);
+        if (!st.killed.size) cs.hostile.delete(by); // (nobody killed: the castle forgets it too)
+        for (const k of cs.active.values()) if (k.foe === by && !k.dead && now - (k.offended?.t || 0) < BUMP.SORRY_MS * 2) k.foe = null;
         return true;
     }
 

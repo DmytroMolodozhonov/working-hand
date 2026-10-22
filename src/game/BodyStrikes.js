@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { IMPACT, segmentBox } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
+import { blowSpeed, strikeLine, logLine, BUMP } from './BumpRules.js';
 
 const PUNCH_DAMAGE = 1;
 
@@ -112,6 +113,7 @@ export class BodyStrikes {
         this.prev = { left: new THREE.Vector3(), right: new THREE.Vector3() };
         this.has = { left: false, right: false };
         this.vel = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+        this.pvel = { left: new THREE.Vector3(), right: new THREE.Vector3() }; // (the frame before)
         this.cool = new Map();
         this.pushes = [];
         this.contact = { left: null, right: null };
@@ -163,6 +165,7 @@ export class BodyStrikes {
         let targets = null;
         for (const side of ['left', 'right']) {
             const p1 = this._knuckles(side, new THREE.Vector3());
+            this.pvel[side].copy(this.vel[side]);
             if (this.has[side] && dt > 0) this.vel[side].lerp(_d.subVectors(p1, this.prev[side]).divideScalar(Math.max(dt, 1 / 240)), 0.5);
             else this.vel[side].set(0, 0, 0);
             const p0 = this.has[side] ? this.prev[side].clone() : p1.clone();
@@ -179,8 +182,13 @@ export class BodyStrikes {
                 // the drawn hand rests on the body (never inside it)
                 if (hit.depth > 0) ch.setHandOffset?.(side, _a.copy(hit.nOut).multiplyScalar(hit.depth));
                 if (hit.inside) continue; // (still touching: no new blow)
+                // (a creature's own movement is not my blow: its walking into a still hand is only a collision.
+                // Players and flying ones keep the old way — their velocity is known and counted against mine)
                 const vRel = _d.subVectors(this.vel[side], t.vel || _b.set(0, 0, 0));
-                const speed = -vRel.dot(hit.nOut);
+                const n = hit.nOut;
+                const speed = t.creature && !t.vel
+                    ? blowSpeed(this.vel[side].toArray(), this.pvel[side].toArray(), this.bodyVel.toArray(), [n.x, n.y, n.z], IMPACT.TOUCH_V)
+                    : Math.min(BUMP.MAX_SPEED, -vRel.dot(n));
                 if (speed < IMPACT.TOUCH_V || this.cool.has(side + '|' + t.key)) continue;
                 this._strike(side, t, hit, shape, speed, vRel.clone().normalize());
                 break; // (one body per hand per frame)
@@ -221,6 +229,12 @@ export class BodyStrikes {
             return;
         }
         const c = t.creature, ck = kindOf(c);
+        if (c.isVillager) {
+            // every counted blow on a villager goes to the journal (so a repeat can be traced); a push is only a bump
+            const hard = msg.k === 'punch' && (msg.sp >= 8 || (msg.pt === 'head' && msg.sp >= 6));
+            logLine(strikeLine({ kind: msg.k, part: msg.pt, speed: msg.sp ?? 0, hand: msg.s, who: `${c.title || ''} ${c.name || c.id}`.trim(), by: g.localId, hard }));
+            if (msg.k === 'push' || msg.k === 'shove') g.onLocalHit?.(c, BUMP.SOFT_PUSH, dir.clone().setY(0).normalize(), false, { hard: false });
+        }
         // (a villager feels how hard it was: a light knock is not a hard blow)
         if (msg.k === 'punch') g.onLocalHit?.(c, PUNCH_DAMAGE, dir.clone().setY(0).normalize(), false, c.isVillager ? { hard: msg.sp >= 8 || (msg.pt === 'head' && msg.sp >= 6) } : null);
         const head = msg.pt === 'head' && msg.lp ? { lp: msg.lp, dir: [dir.x, dir.y, dir.z], speed: msg.sp } : null;
@@ -250,7 +264,7 @@ export class BodyStrikes {
         const body = Math.max(0, this.bodyVel.dot(dir));
         const v = (IMPACT.PUSH_GAIN * avg + IMPACT.BODY_GAIN * body) * (n === 2 ? 1 : IMPACT.ONE_HAND);
         for (const h of hands) this.cool.set(h.side + '|' + t.key, IMPACT.HAND_COOLDOWN);
-        const msg = { k: n === 2 ? 'shove' : 'push', n, pt: 'body', i: arr(dir.clone().multiplyScalar(v)), s: hands[0].side };
+        const msg = { k: n === 2 ? 'shove' : 'push', n, pt: 'body', sp: r2(avg), i: arr(dir.clone().multiplyScalar(v)), s: hands[0].side };
         this._send(t, msg, dir);
     }
 }

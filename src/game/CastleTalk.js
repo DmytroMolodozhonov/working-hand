@@ -31,6 +31,7 @@
  */
 
 import * as THREE from 'three';
+import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
@@ -400,6 +401,7 @@ export class CastleTalk {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
+        if (isApology(text) && this.life.forgive?.(g.localId)) return true; // («извините» to the one I knocked: calmed)
         const v = this._listener();
         if (!v) return false;
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
