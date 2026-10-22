@@ -9,7 +9,8 @@
  *  - wandering wizards (1–2, «Странник»), on foot, with their staffs;
  *  - knights errant (1–2), on foot, sword and bow;
  *  - a people's cart: a horse, a driver and 1–2 more going to town (farmers, builders, merchants);
- *  - a wizards' carriage: two horses, a driver and 1–2 more wizards with a chest of valuables.
+ *  - a wizards' carriage: two horses, a driver and 1–2 more wizards with a chest of valuables;
+ *  - riders (1–2) right on their horses: knights errant, ordinary people, wizards (Riders.js).
  * They appear 75–115 m from a player, out of sight (never popping up in front of anybody), on
  * their way from somewhere to a castle, a village or a wizards' tower that lies past the player
  * (so they really come by), or far beyond; they go round water, slopes, trees, walls and other
@@ -27,6 +28,7 @@
 
 import * as THREE from 'three';
 import { CART, wayFree } from './Carriages.js';
+import { Riders } from './Riders.js';
 import { outOfSight } from './Animals.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
 import { CappedLog } from '../core/CappedLog.js';
@@ -43,22 +45,29 @@ export const ROAD = {
     HOSTILE_MS: 90000,
     BRAVE: 0.62, // a road's folk this brave (0…1, their own nature) stand and fight — with a pitchfork or bare fists — the rest run (about a third)
     // what goes on the roads (weights): by day, at night
-    DAY: { folkCart: 0.32, wizCart: 0.2, wizards: 0.24, knights: 0.24 },
-    NIGHT: { folkCart: 0.12, wizCart: 0.18, wizards: 0.4, knights: 0.3 },
+    DAY: { folkCart: 0.32, wizCart: 0.2, wizards: 0.24, knights: 0.24, knightRider: 0.16, folkRider: 0.14, wizRider: 0.1 },
+    NIGHT: { folkCart: 0.12, wizCart: 0.18, wizards: 0.4, knights: 0.3, knightRider: 0.12, folkRider: 0.04, wizRider: 0.1 },
 };
 
-const TYPE = { folkCart: 'wc', wizCart: 'ww', wizards: 'ww', knights: 'wk' };
+const TYPE = { folkCart: 'wc', wizCart: 'ww', wizards: 'ww', knights: 'wk', knightRider: 'wk', folkRider: 'wc', wizRider: 'ww' };
+const RIDERS = new Set(['knightRider', 'folkRider', 'wizRider']);
 const GREET = {
     folkCart: ['Доброго пути!', 'Здравствуй, путник!', 'В город едем, на ярмарку.', 'Тпру… Здравствуй!'],
     wizCart: ['Светлой дороги.', 'Не подходи к сундуку, путник.', 'Мы едем в башню. Не задерживай нас.'],
     wizards: ['Долгая дорога…', 'Светлой дороги, путник.', 'Видал я и не такое в пути.'],
     knights: ['Честь и слава!', 'Доброй дороги, путник.', 'Мы странствуем от замка к замку.'],
+    knightRider: ['Честь и слава!', 'Дорогу, путник!', 'Скачу от замка к замку.'],
+    folkRider: ['Доброго пути!', 'Но, родимый! Здравствуй, путник.', 'В город еду.'],
+    wizRider: ['Светлой дороги.', 'Мой конь знает дорогу лучше меня.', 'Не задерживай, путник.'],
 };
 const ALARM = {
     wizCart: ['Защищайте сундук!', 'Нападение! К оружию!'],
     wizards: ['Ты пожалеешь об этом!'],
     knights: ['К оружию!', 'За честь!'],
     folkCart: ['Разбойники!', 'Помогите!', 'Бежим!'],
+    knightRider: ['К оружию!', 'Ты ответишь за это!'],
+    folkRider: ['Разбойники! Но-о!', 'Помогите!'],
+    wizRider: ['Ты пожалеешь об этом!'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const BRAVE_LINES = ['Ах ты так?! Получай!', 'Не дам в обиду своих!', 'А ну, отойди от нас!', 'Сейчас я тебе покажу!'];
@@ -88,6 +97,7 @@ export class Travelers {
         this._checkT = 0;
         this._n = 0;
         this.log = new CappedLog();
+        this.riders = new Riders(this); // (the riders right on their horses)
     }
 
     get auth() { return this.game.authority; }
@@ -114,6 +124,7 @@ export class Travelers {
             const lead = alive[0];
             if (lead) { P.cs.def.x = lead.x; P.cs.def.z = lead.z; }
             if (P.cart && !P.cart.wreck) this._drive(P, alive, dt);
+            if (P.riders) this.riders.update(P, dt);
             if (check && this._gone(P, alive)) this._remove(P);
         }
     }
@@ -193,7 +204,7 @@ export class Travelers {
         const nums = [];
         for (let i = 1; i < 400 && nums.length < n; i++) if (!cs.active.has(i) && !killed.has(i)) nums.push(i);
         if (!nums.length) return false;
-        const P = { id: 'road' + (++this._n), kind, cs, dest, members: [], cart: null, state: 'go', calmT: 0, greetT: 6, stuckT: 0 };
+        const P = { id: 'road' + (++this._n), kind, cs, dest, members: [], cart: null, state: 'go', calmT: 0, greetT: 6, stuckT: 0, riders: RIDERS.has(kind) };
         const carts = g.carriages;
         if (kind === 'folkCart' || kind === 'wizCart') {
             P.cart = carts.spawn(kind === 'wizCart', x, z, yaw);
@@ -208,11 +219,13 @@ export class Travelers {
                 at.y = g.collision?.groundY ? g.collision.groundY(at.x, at.z) : 0;
                 at.yaw = yaw;
             }
+            if (P.riders) { at.x = x + Math.sin(yaw) * 5 * k + Math.cos(yaw) * 1.6 * k; at.z = z + Math.cos(yaw) * 5 * k - Math.sin(yaw) * 1.6 * k; }
             const v = L._activate(cs, i, { x: at.x, y: at.y, z: at.z, yaw: at.yaw ?? yaw }, P.cart ? 'cart' : 'road');
             if (!v) return;
             v.party = P;
             // (the author: «кто-то, даже если у него ничего нет, даже с кулаками, всё равно пойдёт и попытается что-то сделать»)
             if (!L._fights(v)) v.roadBrave = roadBrave(v);
+            if (P.riders) this.riders.mount(v, P, at.x, at.z, yaw);
             if (P.cart) { v.seat = k; v.seated = true; P.cart.seats[k] = v.id; v.mode = 'sit'; }
             P.members.push(v);
         });
@@ -312,12 +325,13 @@ export class Travelers {
         let said = false;
         const from = isPlayer ? L._playerPos(by) : null;
         const at = from ? { x: from.x, y: from.y - 1.95, z: from.z } : P.cart ? { x: P.cart.x, y: P.cart.y, z: P.cart.z } : null;
+        if (P.riders) this.riders.trouble(P, at); // (the fighters get down; an ordinary rider gallops away)
         for (const v of P.members) {
             if (v.dead) continue;
-            if (v.seated) this._getDown(v);
+            if (v.seated && !v.horse) this._getDown(v);
             if (L._fights(v)) {
                 if (isPlayer && !v.foe) { v.foe = by; v.path = null; if (v.roadBrave && Math.random() < 0.7) L._say(v, pick(BRAVE_LINES), 3); }
-            } else if (at && !v.fear) L.fright?.scare?.(v, 'attacker', at, by);
+            } else if (at && !v.fear && !(v.horse && v.seated)) L.fright?.scare?.(v, 'attacker', at, by);
             if (!said && Math.random() < 0.8) { said = true; L._say(v, pick(ALARM[P.kind])); }
         }
     }
@@ -331,7 +345,7 @@ export class Travelers {
         if (by != null) { this.trouble(P, by); return; }
         if (P.state !== 'trouble') this.log.push({ ev: 'alert', id: P.id });
         P.state = 'trouble'; P.calmT = 0;
-        for (const v of P.members) if (!v.dead && v.seated) this._getDown(v);
+        for (const v of P.members) if (!v.dead && v.seated && !v.horse) this._getDown(v);
     }
 
     /** (host, from Carriages) The cart was hit. */
@@ -339,6 +353,7 @@ export class Travelers {
 
     /** (host, from Animals.hit) A harnessed horse was hit. */
     horseHit(a, by) {
+        if (a.mount) { const P = this.parties.get(a.mount.party); if (P) this.trouble(P, by); return; }
         const c = this.game.carriages?.ofHorse(a);
         if (c?.party) this.trouble(c.party, by);
     }
@@ -349,6 +364,8 @@ export class Travelers {
         const P = v.party, L = this.life;
         if (!P) { v.job = 'wander'; return false; }
         if (v.job === 'cart') return this._rider(v, P, dt);
+        if (v.job === 'ride') return this.riders.hold(v, P);
+        if (v.horse && this.riders.toHorse(v, P, dt)) return true; // (down from the horse: back to it and up)
         // on foot
         if (P.state !== 'go') { v.speed = 0; v.mode = v.talking > 0 ? 'talk' : 'idle'; L._ground(v); return true; }
         const walkers = P.members.filter((m) => !m.dead && m.job === 'road');
@@ -428,6 +445,7 @@ export class Travelers {
         for (const v of P.members) if (!v.dead && !v.removable) L._deactivate(v);
         for (const v of P.members) v.party = null;
         if (P.cart) { P.cart.party = null; if (!P.cart.wreck) this.game.carriages.remove(P.cart); }
+        if (P.riders) this.riders.remove(P);
         this.parties.delete(P.id);
         this.log.push({ ev: 'gone', id: P.id });
     }

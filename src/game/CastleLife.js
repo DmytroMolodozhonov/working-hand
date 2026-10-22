@@ -918,6 +918,7 @@ export class CastleLife {
         if (this._swim(v, dt)) return;
         // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
         if (v.seated && v.job === 'cart' && !v.foe && !v.fear && !(v.fleeT > 0) && g.travelers?.step(v, dt)) return;
+        if (v.seated && v.job === 'ride' && g.travelers?.step(v, dt)) return; // (in the saddle: Riders.js leads the horse — and gets down to fight)
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
         if (!v.seated && (v.wallT = (v.wallT || 0) - dt) <= 0) { v.wallT = 0.5; this._unwall(v); }
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())

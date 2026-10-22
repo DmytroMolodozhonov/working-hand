@@ -28,7 +28,7 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
@@ -1373,7 +1373,7 @@ export class VillagerModel {
         let breathe = 0.015;
 
         // ---- legs: walk / run cycle
-        const loco = mode !== 'sit' && mode !== 'bow' && speed > 0.05;
+        const loco = mode !== 'sit' && mode !== 'ride' && mode !== 'bow' && speed > 0.05;
         if (loco) {
             const G = GAITS[this.style.gait] || GAITS.plain;
             const gk = clamp01(1 - (speed - 2.5) / 2.5); // (the own walk shows at a walk; a run is a run for anybody)
@@ -1600,6 +1600,16 @@ export class VillagerModel {
                 rate = 26; breathe = 0;
                 break;
             }
+            case 'ride':
+                // in the saddle (Travelers.js riders): the thighs forward along the horse's sides, the shins
+                // down by its belly, the hands low before the body on the reins; the body rocks with the walk
+                T.lL = T.lR = 1.0; T.kL = T.kR = -1.25;
+                T.hx = 0.1 + Math.sin(t * 6) * 0.03;
+                T.aLX = T.aRX = 0.85; T.aLZ = -0.12; T.aRZ = 0.12;
+                T.wrist = -0.5;
+                T.headY = Math.sin(t * 0.4) * 0.25;
+                rate = 8;
+                break;
             case 'chore':
                 rate = this.chore ? choreBody(this, this.chore, T, t, dt) : 10;
                 break;
@@ -1630,7 +1640,7 @@ export class VillagerModel {
         const kh = 1 - Math.exp(-8 * dt); // the head turns at its own pace
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
         const choreSit = mode === 'chore' && SIT_CHORES.has(this.chore);
-        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || choreSit);
+        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || choreSit);
         if (this.chore) this._choreAfter(t, dt, mode === 'chore');
     }
 

@@ -299,7 +299,7 @@ export class Animals {
         a.damageCooldown = 0.35;
         if (a.fly) this._dropFromSky(a, 1.4); // (hit in the air: the wings fold, it falls)
         this.guards.attacked(a, by); // (the herd's hidden bull / ram wakes)
-        if (a.cart) this.game.travelers?.horseHit?.(a, by); // (a horse in a cart's harness: its people stop — Travelers.js)
+        if (a.cart || a.mount) this.game.travelers?.horseHit?.(a, by); // (a horse in a cart's harness / under a rider: its people stop — Travelers.js)
         if (a.type === 'horse') this._pegasusDefends(a, by); // (the herd's Pegasus flies at the attacker)
         for (let i = 0; i < 6; i++) this.game.fx.spark(_v.copy(a.group.position).add(_v2.set(0, 1, 0)), 0xb3001b, 0.08, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.6);
         if (dir) this.push(a, _v.copy(dir).setY(0).normalize().multiplyScalar(4).setY(1.5), 0.35); // a blow knocks it back
@@ -721,7 +721,7 @@ export class Animals {
         const me = g.character.group.position;
         let best = null;
         for (const a of this.list) {
-            if (a.dead || a.type !== 'horse' || a.rider || a.cart) continue; // (not a horse in a cart's harness)
+            if (a.dead || a.type !== 'horse' || a.rider || a.cart || a.mount?.on) continue; // (not a horse in a cart's harness, nor one ridden)
             const d = a.group.position.distanceTo(_v.set(me.x, a.group.position.y, me.z));
             if (d < 3 && (!best || d < best.d)) best = { a, d };
         }
@@ -779,7 +779,7 @@ export class Animals {
     horseNear() {
         const me = this.game.character.group.position;
         for (const a of this.list) {
-            if (a.dead || a.type !== 'horse' || a.rider || a.cart) continue;
+            if (a.dead || a.type !== 'horse' || a.rider || a.cart || a.mount?.on) continue;
             if (Math.hypot(a.group.position.x - me.x, a.group.position.z - me.z) < 3) return true;
         }
         return false;
@@ -1599,7 +1599,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)
                 const ap = a.group.position;
-                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && outOfSight(me, look, ap.x, ap.z, 1.2)) { this._remove(a); continue; }
+                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && outOfSight(me, look, ap.x, ap.z, 1.2)) { this._remove(a); continue; }
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
@@ -1617,6 +1617,7 @@ export class Animals {
                     continue;
                 }
                 if (a.cart && !(a.stunT > 0) && !a.vy) continue; // (in a cart's harness: it walks where the cart goes — Carriages.js)
+                if (a.mount?.on && !(a.stunT > 0) && !a.vy) continue; // (under a rider of the roads: he leads it — Riders.js)
                 this._think(a, dt);
             }
             this._burnInFire(dt); // (in a burning tree's / block's fire)
