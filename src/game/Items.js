@@ -632,7 +632,8 @@ export class ItemSystem {
         const g = this.game, hb = g.handBlocks, t = this._touchAt || (this._touchAt = { left: -1e9, right: -1e9 });
         let touch = (hb?.pushed?.[side] || 0) > 0.005;
         const S = h.shape;
-        if (!touch && S && hb?.solid && h.model) {
+        // (a long staff swung in a throw drags its foot over the ground every time: only the hand pressed on something counts for it)
+        if (!touch && S && hb?.solid && h.model && !h.item.staff) {
             for (const y of [S.y0, S.y1]) {
                 const p = h.model.localToWorld(_a.set(S.c.x, y, S.c.z));
                 if (hb.solid(p.x, p.y, p.z)) { touch = true; break; }

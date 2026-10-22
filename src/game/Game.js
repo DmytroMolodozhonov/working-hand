@@ -1421,6 +1421,8 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
+        if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             if (isFinal) this.hud.setVoice(this._unknownHint(name), true); // (no mana spent)
