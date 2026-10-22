@@ -27,6 +27,7 @@ import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
@@ -126,6 +127,7 @@ export class ItemSystem {
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._drop = { right: new DropGate(), left: new DropGate() };
+        this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
         this.letLog = new CappedLog(); // (why things left the hands: tests)
         this._arm = { right: {}, left: {} };
@@ -791,7 +793,7 @@ export class ItemSystem {
             // counter by opening the hand on it)
             // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
-            if (holdsFast(ch) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);
@@ -806,6 +808,7 @@ export class ItemSystem {
             if (kind === 'wand') { this._drop[side].since = 0; continue; }
             if (this._drop[side].update({ now: gt, curl, tracked, ...arm, strict })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата вытянутая рука (пальцы ${curl.toFixed(2)})` });
         }
+        this.swap.update(dt);
         this._eat(dt, ch);
         this._wear(dt, ch);
         this._give(dt, ch);

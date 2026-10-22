@@ -89,6 +89,8 @@ export function pocketStrike(hist, local, sx) {
 
 /** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
 export const POCKET_DWELL = 0.3;
+/** The hand away from the pocket this long (s) — the chosen slot's thing stays in it. */
+export const POCKET_PICK = 1.0;
 /**
  * The head bowed to look at the pocket / the pouches (the view's forward, down, in the body's own
  * space: ~20° down). Taking or putting there needs it; a glance (the wand's −0.1) does not.
@@ -497,13 +499,13 @@ export class Inventory {
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
+            if (this._cyc?.side === side && st.outT > POCKET_PICK) this._cyc = null; // (the hand went away and did not come back: what it holds is its choice)
             const putIn = st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
             if (putIn && now - st.out > 700) {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
-                if (g.items?.held[side] || g.weapons.hands[side].held) this.pocketRight(side);
-                else this.takeNext(side);
+                this.pocketTouch(side);
                 this._handsOff(side);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
@@ -551,6 +553,37 @@ export class Inventory {
         return true;
     }
 
+    /**
+     * The hand touched the pocket. The hand holding what it just took out of a slot (a touch again, after it
+     * moved away): that thing goes back into ITS slot and the next one comes into the hand — slot after slot,
+     * in a circle (the author: touch — the first, move away and touch — the second…; never thrown out).
+     * Any other thing in the hand goes into a slot; an empty hand takes the next thing.
+     */
+    pocketTouch(side) {
+        const g = this.game, c = this._cyc;
+        if (c && c.side === side) {
+            const h = g.items?.held[side];
+            if (h && h.item === c.item) {
+                const it = g.items.releaseHand(side);
+                this.slots[c.slot] = it; // (back into its own slot: it fits, it came from there)
+                if (this.inHand?.item === it) this.inHand = null;
+                this.selected = -1;
+                this._cyc = null;
+                this._next = c.slot;
+                return this.takeNext(side);
+            }
+            if (!h && c.res && !g.weapons.hands[side].held) { this._cyc = null; return this.takeNext(side); } // (blocks: no thing in the hand)
+            this._cyc = null;
+        }
+        if (g.items?.held[side] || g.weapons.hands[side].held) return this.pocketRight(side);
+        return this.takeNext(side);
+    }
+
+    /** Is this hand in the middle of going through the slots (its thing is not let go of by any release: no drop, no throw)? */
+    pocketCycling(side) {
+        return !!this._cyc && this._cyc.side === side;
+    }
+
     /** The things' pocket, an empty hand: the next thing of the slots into it (not the wand, not what goes on the back). */
     takeNext(side = 'right') {
         const n = this.slots.length;
@@ -561,6 +594,8 @@ export class Inventory {
             if (!it || it.kind === 'wand' || BACK_KINDS.has(it.kind)) continue;
             this._next = i;
             this.select(i, side);
+            this._cyc = { side, slot: i, item: this.inHand?.kind === 'item' ? this.inHand.item : null, res: it.kind === 'res' };
+            if (!this._cyc.item && !this._cyc.res) this._cyc = null; // (a weapon: it goes by its own rules)
             this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
             return true;
         }
