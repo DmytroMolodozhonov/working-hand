@@ -476,8 +476,8 @@ export class HouseWards {
         return null;
     }
 
-    /** What a sphere is worth: the strength put into it (100 for a plain one; «Strengthen» raises `max`). */
-    strengthOf(w) { return Math.round(Math.max(WARD.HP, w.max || 0)); }
+    /** What a sphere is worth: the strength put into it (100 for a plain one; «Strengthen House» raises `max`). */
+    strengthOf(w) { return Math.round(wardMax(w)); }
 
     /**
      * «Dispel Ward»: only on my own sphere, and twice (a sphere may cost a lot): the first word warns, the

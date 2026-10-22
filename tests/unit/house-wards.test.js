@@ -817,3 +817,17 @@ test('«Dispel Ward»: the second word after 6 s starts over; nothing under the 
     W.apply({ op: 'dispel', id: w.id }, 'H');
     assert.equal(W.list.size, 1);
 });
+
+test('«Dispel Ward» warns with the strength put in by «Strengthen House» — and it is lost', () => {
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    W.cast('ProtectionHouse'); W.fix();
+    const w = [...W.list.values()][0];
+    w.max = 340; w.hp = 340;
+    g.character.getHandDirection = (s, out) => out.set(w.c.x - 0, w.c.y - 2, w.c.z - 2).normalize();
+    W.cast('WardDispel');
+    assert.ok(g.voice.some((t) => /сила: 340/.test(t)), g.voice.join('|'));
+    W._dispel.at -= 2000;
+    assert.equal(W.cast('WardDispel'), 'WardDispel');
+    assert.equal(W.list.size, 0);
+});
