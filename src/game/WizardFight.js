@@ -67,7 +67,7 @@ export class WizardFight {
         this._t = 0.25;
         const L = this.life, now = this.clock;
         for (const cs of L.castles.values()) {
-            if (!(cs.awake || cs.def.kind === 'wander') || !(cs.def.kind === 'tower' || cs.def.kind === 'wander' || cs.def.kind === 'wizvillage')) continue; // (the wandering wizards' site is never «awake»: Travelers leads them)
+            if (!(cs.awake || cs.def.kind === 'wander') || !(cs.def.kind === 'tower' || cs.def.kind === 'wander' || cs.def.kind === 'wizvillage' || (cs.def.kind === 'hamlet' && cs.def.mage))) continue; // (the wandering wizards' site is never «awake»: Travelers leads them)
             const groups = new Map();
             for (const v of cs.active.values()) {
                 if (!v.W || v.dead || !v.foe || v.servantOf != null) { if (v.wt) v.wt = null; continue; }

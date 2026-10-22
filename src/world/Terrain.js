@@ -25,10 +25,11 @@ import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
 import { VillageIndex } from './WizardVillages.js';
 import { SiteIndex } from './Sites.js';
+import { HamletIndex } from './Hamlets.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
-import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace } from './IceCastle.js';
+import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
@@ -513,7 +514,7 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
             this.castles = new CastleIndex(seed, raw, this.seas, this.test);
@@ -523,7 +524,12 @@ export class TerrainData {
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
-            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages);
+            // the lone houses and the small villages between them (Hamlets.js): never on another site's land
+            const iceL = 2.4 * (this.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
+            const near = (x, z, r) => this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
+                || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
+            this.hamlets = new HamletIndex(seed, raw, near);
+            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets);
             this.iceCastle = ice;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)

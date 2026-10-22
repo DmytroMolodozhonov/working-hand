@@ -135,8 +135,8 @@ export class NightLife {
             this._tickT = 1;
             for (const cs of this.life.castles.values()) {
                 if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'stall') continue; // (the Creative stall's merchant works all night)
-                if (isWizSite(cs.def)) this._tower(cs, part);
-                else this._castle(cs, part);
+                if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this._tower(cs, part);
+                else this._castle(cs, part); // (a hamlet, of wizards too: as a village — HamletLife.js)
             }
         }
         this._senseT -= dt;
@@ -183,6 +183,7 @@ export class NightLife {
     /** The night watch: 1–3 knights (the gate, the walls, the village) with torches; the rest go to bed. */
     _watch(cs) {
         const L = this.life, def = cs.def;
+        if (def.kind === 'hamlet' && def.mage) { L.hamlets.mageWatch(cs); return; } // (a wizard with «Люмос» round the fire)
         const st = L.state(def.id);
         const W = watchCount(def.knights);
         const watch = [];
@@ -240,6 +241,7 @@ export class NightLife {
         const cs = v.cs, def = cs.def, g = cs.graph;
         let place = v.restAt && this._free(cs, v.restAt.key, v) ? v.restAt : null;
         if (!place && v.house != null) place = this._freePlace(cs, this._housePlaces(def, v.house), v);
+        if (!place && v.house == null && def.kind === 'hamlet' && v.entry?.home >= 0) place = this._freePlace(cs, this._housePlaces(def, v.entry.home), v); // (a hamlet's people: their own house)
         if (!place && v.role === 'king') place = this._freePlace(cs, this._castleBeds(def, 'king'), v);
         if (!place && v.role === 'advisor') place = this._freePlace(cs, this._castleBeds(def, 'bedroom'), v);
         if (v.role === 'king' || v.role === 'advisor') { v.dayJob = v.dayJob || v.job; v.dayPost = v.dayPost || v.post; }
@@ -351,7 +353,7 @@ export class NightLife {
             this._lieNow(v);
             out.push(v);
         };
-        if (isWizSite(def) && def.kind !== 'wizvillage') { // (a settlement sleeps as a castle's village does: every house its own people)
+        if (isWizSite(def) && def.kind !== 'wizvillage' && def.kind !== 'hamlet') { // (a settlement / a hamlet sleeps as a castle's village does: every house its own people)
             if (!st.kingDead && !cs.active.has(0)) take(0);
             for (let n = 0; n < 4 && out.length < places.length; n++) take(L._freeCommoner(cs, 'student'));
             return out;

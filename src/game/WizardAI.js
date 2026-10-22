@@ -14,7 +14,7 @@
 
 import { createRng } from '../core/math.js';
 
-export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz'];
+export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage'];
 
 /**
  * hp, ward (magic armour: takes spells and magic blows), mana and its regen per s,
@@ -35,6 +35,7 @@ WIZ.adept = { hp: 14, ward: 5, mana: 100, regen: 1.0, skill: 0.9, cast: 2.7, rea
 WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
 WIZ.townwiz = { ...WIZ.teacher }; // (a wizard of a settlement — WizardVillages.js: his rank decides how he fights)
+WIZ.mage = WIZ.teacher; // (a wizard of a hamlet — Hamlets.js: his rank decides how he fights)
 
 /**
  * A wizard's RANK (the author's rules): how much mana he has — and with it how strong he is in a
@@ -154,7 +155,7 @@ export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
-    master: ['Мастер', 'Мастер'], wanderer: ['Странник', 'Странница'], townwiz: ['Волшебник', 'Волшебница'],
+    master: ['Мастер', 'Мастер'], wanderer: ['Странник', 'Странница'], townwiz: ['Волшебник', 'Волшебница'], mage: ['Волшебник', 'Волшебница'],
 };
 
 const MALE = ['Альберт', 'Бенедикт', 'Валентин', 'Гаспар', 'Дориан', 'Евстафий', 'Игнатий', 'Леонард', 'Максимилиан', 'Натаниэль', 'Освальд', 'Персиваль', 'Руфус', 'Себастьян', 'Теодор', 'Феликс', 'Финеас', 'Эразм', 'Юлиан', 'Ярополк', 'Мирослав', 'Велимир', 'Светозар', 'Остромир'];

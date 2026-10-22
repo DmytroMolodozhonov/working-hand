@@ -24,7 +24,7 @@ import { DANGERS } from './Danger.js';
 import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
 
 export { FX };
-export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander' || def.kind === 'wizvillage');
+export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander' || def.kind === 'wizvillage' || (def.kind === 'hamlet' && !!def.mage)); // (a wizards' hamlet: Hamlets.js)
 /** A wizards' place that keeps a day and a night (a tower, a settlement — not the wanderers of the roads). */
 export const isWizHome = (def) => !!def && (def.kind === 'tower' || def.kind === 'wizvillage');
 
@@ -41,6 +41,7 @@ export const WIZ_SHOUT = {
         seller: ['Свитки! Свитки здоровья и силы!', 'Редкие свитки — подходите!', 'Возьмите свиток — я назову цену.'],
         master: ['Звёзды сегодня ясные…', 'Академия стоит уже триста лет.', 'Знание — сильнейшее из заклинаний.'],
         wanderer: ['Долгая дорога…', 'Ветер сегодня с севера.', 'Видал я и не такое в пути.'],
+        mage: ['Травы сегодня хорошо сохнут.', 'Тихо у нас, спокойно.', 'Опять зелье не загустело…', 'Звёзды сегодня ясные.', 'Огонь не гаси — он у нас всю ночь горит.'],
     },
     fight: ['Как ты смеешь — в академии!', 'Палочки к бою!', 'Ты пожалеешь об этом!', 'Защищайтесь, ученики!'],
     levFail: ['Не Левиоса́, а Леви́оса!', 'Взмах и рывок! Ещё раз.', 'Не так резко, плавнее!'],

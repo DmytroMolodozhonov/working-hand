@@ -23,8 +23,8 @@ import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
-export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz'];
-export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz']);
+export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage'];
+export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
@@ -291,6 +291,7 @@ function wizardLook(L, r, pick) {
         master: [0x3a1d5e],
         wanderer: [0x6d6a62, 0x6b5640, 0x55584f],
         townwiz: [0x2f7f86, 0x3b4f8a, 0x5b3a7a, 0x6a4a2a, 0x2f5a3a, 0x7a2f4a], // (the settlements' folk: all colours)
+        mage: [0x2b5f8e, 0x4b2a7a, 0x2f6b5a, 0x6b2f5a, 0x3d4a8a], // (a hamlet's wizard: Hamlets.js)
     }[role];
     L.dressColor = pick(robes);
     L.shirt = L.dressColor; // (the sleeves are the robe's)

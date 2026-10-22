@@ -66,6 +66,15 @@ function placeIcon(ctx, kind, s) {
         ctx.beginPath(); ctx.moveTo(-10, -1); ctx.lineTo(0, -10); ctx.lineTo(10, -1); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#5a3a1c'; ctx.fillRect(-2, 3, 4, 6);
         ctx.fillStyle = '#9fd8ff'; ctx.fillRect(3.5, 1.5, 2.5, 2.5);
+    } else if (kind === 'hamlet' || kind === 'magehamlet') {
+        // a hamlet's house (Hamlets.js): a wall, a roof (violet for wizards, with a star), a door
+        const mage = kind === 'magehamlet';
+        ctx.fillStyle = mage ? '#cfc6e6' : '#e2d2b0'; ctx.strokeStyle = '#2a2018';
+        ctx.beginPath(); ctx.rect(-7, -1, 14, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = mage ? '#7b4fd0' : '#b5552f';
+        ctx.beginPath(); ctx.moveTo(-10, -0.5); ctx.lineTo(0, -10); ctx.lineTo(10, -0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#2a2018'; ctx.fillRect(-2, 3, 4, 6);
+        if (mage) { ctx.fillStyle = '#ffd76a'; ctx.beginPath(); ctx.arc(0, -11, 1.8, 0, Math.PI * 2); ctx.fill(); }
     } else if (kind === 'ice') {
         // the Ice Castle: a glowing six-armed snowflake
         ctx.strokeStyle = '#dff7ff'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
@@ -767,13 +776,15 @@ export class Hud {
         };
         this.minimapCastles = [];
         // village graveyards: a small cross-and-headstone badge, only when it is on the map
+        const SMALL = { '✝': 'grave', '⌂': 'hamlet', '✦': 'magehamlet' }; // (a graveyard, a hamlet of folk / of wizards: Hamlets.js)
         for (const c of castles) {
-            if (c.icon !== '✝') continue;
+            const small = SMALL[c.icon];
+            if (!small) continue;
             const gx = (c.x - charPos.x) * scale, gz = (c.z - charPos.z) * scale;
             if (!inside(gx, gz, 10)) {
                 // beyond the edge: a small pointer on the edge of the map with the distance
                 const d = Math.hypot(gx, gz) / scale;
-                if (d > 450) continue;
+                if (d > 450 || small !== 'grave') continue; // (a hamlet: only when it is on the map)
                 const a = Math.atan2(gz, gx), m = 16;
                 const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
                 const bx = Math.cos(a) * k, by = Math.sin(a) * k;
@@ -785,11 +796,11 @@ export class Hud {
             }
             ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.arc(gx, gz, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
-            label('Кладбище', gx, Math.max(-hh + 12, gz - 13));
+            ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, small, 14); ctx.restore();
+            label(small === 'grave' ? 'Кладбище' : c.name, gx, Math.max(-hh + 12, gz - 13));
         }
         // (the Ice Castle — once seen — always among them, however many castles are nearer)
-        const shown = castles.filter((q) => q.icon !== '✝' && q.icon !== '❄').slice(0, 3);
+        const shown = castles.filter((q) => !SMALL[q.icon] && q.icon !== '❄').slice(0, 3);
         for (const q of castles) if (q.icon === '❄') shown.push(q);
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;

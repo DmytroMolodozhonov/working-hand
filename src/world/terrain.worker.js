@@ -52,7 +52,8 @@ self.onmessage = (e) => {
     if (m.type === 'site' && data && data.castles) {
         // a castle's / a wizard's tower's / a wizards' settlement's plan for a cell (the same as the main thread would make)
         const c = data.castles.cellOf(m.gx, m.gz), t = data.towers.cellOf(m.gx, m.gz), v = data.villages ? data.villages.cellOf(m.gx, m.gz) : null;
-        self.postMessage({ type: 'site', id: m.id, key: m.key, gx: m.gx, gz: m.gz, castle: c && { ...c, _byChunk: new Map() }, tower: t && (t._byChunk ? { ...t, _byChunk: new Map() } : t), village: v && { ...v, _byChunk: new Map() } });
+        const h = data.hamlets ? data.hamlets.cellOf(m.gx, m.gz).map((d) => ({ ...d, _byChunk: new Map() })) : null; // (the lone houses and small villages: Hamlets.js)
+        self.postMessage({ type: 'site', id: m.id, key: m.key, gx: m.gx, gz: m.gz, castle: c && { ...c, _byChunk: new Map() }, tower: t && (t._byChunk ? { ...t, _byChunk: new Map() } : t), village: v && { ...v, _byChunk: new Map() }, hamlets: h });
         return;
     }
     if (m.type === 'flora' && data) {

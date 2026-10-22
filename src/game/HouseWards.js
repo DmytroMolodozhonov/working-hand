@@ -301,6 +301,7 @@ export class HouseWards {
 
     /** A creature's way in: a servant comes in with its master. */
     _creatureMay(w, c) {
+        if (w.id.startsWith('site:') && c.cs?.def?.id === w.id.slice(5)) return true; // (a hamlet's wizard in his own sphere: HamletLife.js)
         const m = c.servantOf ?? c.master ?? null;
         return m != null && mayPass(w, this.keyOf(m));
     }

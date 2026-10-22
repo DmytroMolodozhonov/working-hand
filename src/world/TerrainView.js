@@ -226,7 +226,7 @@ export class Terrain {
         const g0z = Math.floor((z - r) / cell) - 1, g1z = Math.floor((z + r) / cell) + 1;
         for (let gz = g0z; gz <= g1z && this._siteAsked.size < 2; gz++) for (let gx = g0x; gx <= g1x && this._siteAsked.size < 2; gx++) {
             const key = S.castles._key(gx, gz);
-            if ((S.castles.cells.has(key) && S.towers.cells.has(key) && (!S.villages || S.villages.cells.has(key))) || this._siteAsked.has(key)) continue;
+            if ((S.castles.cells.has(key) && S.towers.cells.has(key) && (!S.villages || S.villages.cells.has(key)) && (!S.hamlets || S.hamlets.cells.has(key))) || this._siteAsked.has(key)) continue;
             let w = this._workers[0];
             for (const o of this._workers) if (o.load < w.load) w = o;
             w.load++;
@@ -264,6 +264,7 @@ export class Terrain {
             if (S && !S.castles.cells.has(m.key)) S.castles.cells.set(m.key, m.castle);
             if (S && !S.towers.cells.has(m.key)) S.towers.cells.set(m.key, m.tower);
             if (S?.villages && !S.villages.cells.has(m.key)) S.villages.cells.set(m.key, m.village || null);
+            if (S?.hamlets && m.hamlets && !S.hamlets.cells.has(m.key)) S.hamlets.cells.set(m.key, m.hamlets);
             return;
         }
         if (m.type === 'flora') {

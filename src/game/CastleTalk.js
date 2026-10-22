@@ -43,6 +43,7 @@ import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
 import { bookSpells } from './BookBirds.js';
+import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -626,7 +627,7 @@ export class CastleTalk {
     /** Sells and buys at a stall: a market merchant, the wizards' master of cauldrons and potions, a settlement's seller (WizardMarket.js). */
     _trader(v) {
         const st = v.role === 'seller' ? v.cs?.def?.stalls?.[v.entry?.stall] : null;
-        return v.role === 'merchant' || (!!st && (!!st.potions || !!st.trade));
+        return v.role === 'merchant' || (!!st && (!!st.potions || !!st.trade || !!st.magic)); // (st.magic: a hamlet's seller of magic things — HamletLife)
     }
 
     /** (host) keep goods on the counters of the markets near players. */
@@ -647,7 +648,8 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
-                    const wiz = stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
+                    const wiz = stall.magic ? magicStallGood(n, k) // (a hamlet's seller of magic things — HamletLife.js)
+                        : stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
                     const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));

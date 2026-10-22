@@ -42,6 +42,7 @@ const CHEST_LOOK = { king: 'rich', treasury: 'rich', throne: 'rich', vault: 'ric
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
+import { HamletLife, hamletRoster } from './HamletLife.js';
 import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
@@ -240,6 +241,7 @@ export class CastleLife {
         this.enabled = !game.config.map && game.config.mode !== 'test';
         this.talk = new CastleTalk(game, this); // conversations and the market
         this.wizards = new WizardLife(this); // the wizards' towers and the wandering wizards
+        this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -254,7 +256,7 @@ export class CastleLife {
     get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
 
     /** Who is person number `idx` of a site (a castle's villager or a wizard). */
-    _roster(def, idx) { return isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
+    _roster(def, idx) { return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
 
     state(id) {
         let s = this.states.get(id);
@@ -387,6 +389,7 @@ export class CastleLife {
         const def = cs.def;
         this.game.loreLibrary?.wake(def); // (its library's books of the world's history — LoreLibrary.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
+        if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
         if (this.night?.staffNight(cs)) return; // (at night: only the watch is out — NightLife.js)
         this._staffDay(cs);
@@ -395,6 +398,7 @@ export class CastleLife {
     /** (host) The castle's people at their day places (those not out already). */
     _staffDay(cs) {
         const def = cs.def;
+        if (def.kind === 'hamlet') { this.hamlets.staffDay(cs); return; } // (no king, no castle: HamletLife.js)
         const st = this.state(def.id);
         let k = 1; // knights by number
         const knight = (at, job, post) => { while (k <= def.knights && (st.killed.has(k) || cs.active.has(k))) k++; if (k > def.knights) return null; return this._activate(cs, k++, at, job, { post }); };
@@ -436,6 +440,7 @@ export class CastleLife {
     _sleep(cs) {
         cs.awake = false;
         if (this.auth) this.game.loreLibrary?.sleep(cs.def);
+        if (cs.def.kind === 'hamlet') this.hamlets.sleep(cs); // (its fire out, its sphere put away)
         for (const v of [...cs.active.values()]) this._deactivate(v);
         // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
         // unlocked one — Locks): a long flight over the world left every castle's chests in the scene
@@ -2737,7 +2742,8 @@ export class CastleLife {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
-            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def)) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            this.hamlets.update(dt);
             this.fright.update(dt);
             this.rebuild.update(dt);
             this.night?.update(dt);

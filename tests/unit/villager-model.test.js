@@ -30,7 +30,7 @@ for (const role of ROLES) {
             assert.ok(Math.abs(legs.min.y + 1.95) < 0.02, `feet ${legs.min.y}`);
             const all = boxOf(v.group);
             // (a wizard's pointed hat stands up to ~1 m over the head: the Master's tall one a little more)
-            const cap = role === 'king' ? 3.4 : role === 'master' ? 3.9 : ['student', 'teacher', 'seller', 'wanderer', 'townwiz'].includes(role) ? 3.72 : 3.3;
+            const cap = role === 'king' ? 3.4 : role === 'master' ? 3.9 : ['student', 'teacher', 'seller', 'wanderer', 'townwiz', 'mage'].includes(role) ? 3.72 : 3.3;
             assert.ok(all.max.y >= 2.68 && all.max.y <= cap, `top ${all.max.y}`);
             assert.ok(Math.abs(all.min.y + 1.95) < 0.02, `bottom ${all.min.y}`);
         }
