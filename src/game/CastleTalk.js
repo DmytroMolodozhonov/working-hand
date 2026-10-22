@@ -359,6 +359,7 @@ export class CastleTalk {
      * the words show only when no voice says them (voices off / still loading / too far to hear a word).
      */
     voiceCarries(v, shout = false) {
+        if (this._forceText) return false; // (a price is shown in words too, whatever the voice does)
         if (this.game.config.villagerText === 'always' || !this.voiceOn || !this.speech.supported) return false;
         const sp = this.speech;
         const neural = sp.engine === 'neural' && sp.neural && sp.neural.state !== 'failed';
@@ -750,7 +751,7 @@ export class CastleTalk {
         const line = this.brain(v).priceLine({ name: nameOf(item) }, item.shop.price, 'buy', this._ctx(v));
         v.talking = 4;
         this._sayReply(v, line, 6);
-        this.game.hud.setVoice?.(`💰 ${item.shop.price} монет — скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
+        this.game.hud.setVoice?.(`💰 ${item.shop.price} монет. «Да» — купить (у вас ${this.game.inventory.coins()})`, true);
     }
 
     _tradeYes(v, res = null) {
@@ -965,8 +966,9 @@ export class CastleTalk {
         this.offer = { v, kind: 'sell', price, ...found, stall: key };
         const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
         v.talking = 4;
-        this._sayReply(v, line, 6);
-        g.hud.setVoice?.(`💰 Торговец даёт ${price} монет — скажите «да», чтобы продать`, true);
+        this._forceText = true;
+        try { this._sayReply(v, line, 6); } finally { this._forceText = false; }
+        g.hud.setVoice?.(`💰 Скупщик даёт ${price} монет. «Да» — отдать вещь, убрать её с прилавка — передумать`, true); // (no «скажите»: the hint policy shows such hints once only — the price must show every time)
     }
 
     /** Things put on a counter (to sell) and things carried away unpaid (stolen). */
