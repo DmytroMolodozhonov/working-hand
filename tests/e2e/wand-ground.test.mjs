@@ -53,6 +53,7 @@ const give = (page, side, uid) => page.evaluate(({ side, uid }) => {
     for (const s of ['left', 'right']) { g.items.releaseHand(s); g.weapons.release(s); }
     for (const L of [...g.items.loose.values()]) if (L.item.kind === 'wand') g.items.removeLoose(L.item.uid);
     g._castAt = -1e9;
+    g.items.letLog.length = 0;
     g.items.takeIntoHand({ kind: 'wand', uid, plain: true, model: 0, color: 0x8b5a2b, power: 0 }, side);
 }, { side, uid });
 /** (for the messages) each hand every frame: up, speed, curl, hand above the shoulder, cocked / back / peak / held */
