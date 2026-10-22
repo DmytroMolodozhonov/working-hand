@@ -364,7 +364,7 @@ export class ArmorSystem {
     stripVillager(v, byId = null) {
         const g = this.game;
         if (v.dead || v.stripped) return 'none';
-        const steel = v.role === 'knight' || v.role === 'king';
+        const steel = v.role === 'knight' || v.role === 'king' || !!v.magicPieces;
         if (!steel && !v.wizard) return 'none';
         if (v.wizard && v.robe) return 'magic'; // (a magic robe stays on)
         const drops = steel ? this._villagerSteel(v) : [makeRobe(false)];
@@ -399,7 +399,8 @@ export class ArmorSystem {
     /** A knight's / the king's plates as things (as beaten as his armour was). */
     _villagerSteel(v) {
         const k = v.maxArmor > 0 ? Math.max(0.1, (v.armor || 0) / v.maxArmor) : 1;
-        return ['helmet', 'chest', 'legs'].map((p) => { const it = makePiece(p); it.hp = Math.max(1, Math.round(it.hp * k)); return it; });
+        const magic = v.magicPieces; // (the king's full magic set, the advisor's magic breastplate and greaves)
+        return (magic || ['helmet', 'chest', 'legs']).map((p) => { const it = makePiece(p, { magic: !!magic }); it.hp = Math.max(1, Math.round(it.hp * k)); return it; });
     }
 
     /** The villager's model made again without the steel / the plain robe (every computer). */
@@ -420,7 +421,7 @@ export class ArmorSystem {
     /** What a dead castle person leaves of armour (Death.villagerDied): a knight's plates, a wizard's magic robe. */
     villagerLoot(v) {
         let out = [];
-        if ((v.role === 'knight' || v.role === 'king') && !v.stripped) out = this._villagerSteel(v);
+        if ((v.role === 'knight' || v.role === 'king' || v.magicPieces) && !v.stripped) out = this._villagerSteel(v);
         else if (v.wizard && v.robe && !v.stripped) out = [makeRobe(true)];
         // (the author: «он продолжил лежать в доспехах, но с него выпали доспехи — продублировались»: what falls by
         //  the body is no longer on it — the body lying there is made again without it, on every computer)

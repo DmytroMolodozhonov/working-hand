@@ -160,6 +160,9 @@ const shade = (c, k) => {
 };
 const STEEL = 0xb8c2cc, STEEL_LIGHT = 0xdde3ea, STEEL_DARK = 0x7d8794;
 const GOLD = 0xe2b33c, GOLD_DARK = 0xb8862a;
+// magic steel (the king's set, the advisor's breastplate and greaves): a pale glowing blue, cyan runes
+const MSTEEL = 0x8ec9f0, MSTEEL_LIGHT = 0xcfeeff, MSTEEL_DARK = 0x5f9bc4, RUNE = 0xe6fbff;
+const VELVET = 0x6a1233, VELVET_DARK = 0x3d0a1f; // the advisor's office: deep burgundy velvet
 const RUBY = 0xd0182a, WOOD = 0x8b5a2b, IRON = 0x6f7780, LEATHER = 0x5a3a1e;
 const HAIR_COLORS = [0x2b1d14, 0x4a3728, 0x8b5a2b, 0xd9b46c, 0xa83e2a, 0x111111, 0x6b4a2b];
 export const GREY_HAIR = 0xd8d6cf;
@@ -247,6 +250,7 @@ export function villagerLook(seed, role = 'farmer', female, opts = {}) {
             L.tool = 'bigsword';
             L.boots = STEEL_DARK;
             L.accent = 0xb0202a; // cape
+            L.magic = true; // the king always wears the full magic set (Armor.js: magic pieces)
             if (L.hair === 'spiky') L.hair = 'long';
             break;
         default:
@@ -267,6 +271,8 @@ export function strippedLook(L) {
         S.unarmored = true;
         if (L.role === 'knight') { S.hat = 'none'; S.plume = false; }
         S.shirt = 0xcdbf98; S.pants = 0x5a4632; S.boots = 0x4a3020;
+    } else if (L.advisor) {
+        S.magicChest = false; S.magicLegs = false; // (his breastplate and greaves came off; the hat and the chain of office stay)
     } else if (L.wizard) {
         S.robeOff = true; S.dress = false; S.hat = 'none';
         S.shirt = 0xe8dcc0; S.pants = 0x4a3a2a;
@@ -501,6 +507,16 @@ function hatBoxes(L, B, cc) {
             b(B, 0.06, 0.06, 0.03, -0.05, 1.44, -0.75, 0x111111); b(B, 0.06, 0.06, 0.03, 0.05, 1.44, -0.75, 0x111111);
             break;
         }
+        case 'chancellor': { // the advisor's tall velvet cap: a gold band, a plume, a brooch
+            b(B, 1.46, 0.3, 1.46, 0, 1.3, 0.02, hcol);
+            b(B, 1.7, 0.46, 1.64, 0.04, 1.62, 0.04, hcol, 0, 0, -0.1);
+            b(B, 1.5, 0.12, 1.5, 0, 1.17, 0.02, GOLD);
+            b(B, 1.52, 0.05, 1.52, 0, 1.43, 0.02, GOLD_DARK);
+            b(B, 0.22, 0.22, 0.05, -0.45, 1.2, -0.76, RUBY, 0, 0, Math.PI / 4);
+            b(B, 0.1, 0.74, 0.3, 0.62, 2.0, 0.2, 0xf4f0ea, -0.45, 0, -0.5);
+            b(B, 0.06, 0.5, 0.2, 0.7, 2.1, 0.28, shade(0xf4f0ea, 0.85), -0.45, 0, -0.55);
+            break;
+        }
         case 'beret':
             b(B, 1.42, 0.24, 1.42, 0, 1.3, 0.05, hcol);
             b(B, 1.3, 0.1, 1.3, 0, 1.17, 0.02, GOLD);
@@ -532,6 +548,13 @@ function hatBoxes(L, B, cc) {
             if (L.plume) { b(B, 0.2, 0.34, 0.85, 0, 1.58, 0.1, cc); b(B, 0.2, 0.6, 0.22, 0, 1.3, 0.74, cc); }
             break;
         case 'crown': {
+            if (L.magic && !L.unarmored) { // under the crown: the magic helm (open face)
+                b(B, 1.42, 0.14, 1.42, 0, 0.95, 0, MSTEEL_LIGHT);
+                b(B, 0.12, 0.8, 0.9, -0.69, 0.5, 0.15, MSTEEL); b(B, 0.12, 0.8, 0.9, 0.69, 0.5, 0.15, MSTEEL);
+                b(B, 1.38, 0.9, 0.12, 0, 0.5, 0.69, MSTEEL);
+                b(B, 0.14, 0.5, 0.08, 0, 0.62, -0.68, MSTEEL_LIGHT);
+                for (const sx of [-1, 1]) b(B, 0.05, 0.3, 0.2, sx * 0.76, 0.5, 0.15, RUNE);
+            }
             b(B, 1.1, 0.22, 1.1, 0, 1.5, 0, 0xa0101e); // velvet cap inside
             b(B, 1.34, 0.3, 1.34, 0, 1.33, 0, GOLD);
             b(B, 1.38, 0.06, 1.38, 0, 1.2, 0, GOLD_DARK);
@@ -636,8 +659,9 @@ function bodyBoxes(L) {
         return B;
     }
     if (L.role === 'king') {
-        b(B, 1.2, 1.5, 0.8, 0, 0, 0, STEEL);
+        b(B, 1.2, 1.5, 0.8, 0, 0, 0, L.magic ? MSTEEL : STEEL);
         b(B, 1.12, 0.95, 0.08, 0, 0.18, -0.42, GOLD); // golden chest plate
+        if (L.magic) for (const [x, y] of [[-0.4, 0.45], [0.4, 0.45], [-0.4, -0.05], [0.4, -0.05]]) b(B, 0.1, 0.1, 0.03, x, y, -0.47, RUNE, 0, 0, Math.PI / 4); // glowing runes
         b(B, 0.86, 0.06, 0.09, 0, -0.1, -0.43, GOLD_DARK);
         b(B, 0.34, 0.34, 0.04, 0, 0.25, -0.47, cc, 0, 0, Math.PI / 4); // castle emblem
         b(B, 0.12, 0.12, 0.04, 0, 0.25, -0.5, RUBY);
@@ -647,6 +671,19 @@ function bodyBoxes(L) {
         for (const [x, z] of [[-0.55, -0.51], [-0.2, -0.51], [0.2, -0.51], [0.55, -0.51], [-0.4, 0.53], [0.4, 0.53]]) b(B, 0.08, 0.14, 0.02, x, 0.7, z, 0x111111);
         b(B, 1.26, 0.16, 0.86, 0, -0.62, 0, GOLD_DARK); b(B, 0.2, 0.16, 0.04, 0, -0.62, -0.44, RUBY);
         for (const sx of [-1, 1]) b(B, 0.16, 0.16, 0.06, sx * 0.55, 0.62, -0.5, GOLD); // cape clasps
+        return B;
+    }
+    if (L.advisor) { // the king's super-helper: a velvet tunic, a magic breastplate, the gold chain of office over it
+        b(B, 1.2, 1.5, 0.8, 0, 0, 0, VELVET);
+        if (L.magicChest) {
+            b(B, 1.1, 0.95, 0.08, 0, 0.2, -0.43, MSTEEL); b(B, 1.1, 0.95, 0.08, 0, 0.2, 0.43, MSTEEL);
+            b(B, 1.14, 0.08, 0.1, 0, 0.68, -0.43, MSTEEL_LIGHT); b(B, 1.14, 0.06, 0.1, 0, -0.26, -0.43, MSTEEL_DARK);
+            for (const [x, y] of [[-0.3, 0.4], [0.3, 0.4], [0, 0.05]]) b(B, 0.1, 0.1, 0.03, x, y, -0.48, RUNE, 0, 0, Math.PI / 4);
+        }
+        b(B, 1.25, 0.55, 0.85, 0, -0.95, 0, VELVET_DARK); // tunic skirt
+        b(B, 1.28, 0.1, 0.88, 0, -0.62, 0, GOLD_DARK); b(B, 0.2, 0.14, 0.04, 0, -0.62, -0.45, GOLD);
+        for (const sx of [-1, 1]) { b(B, 0.1, 0.9, 0.08, sx * 0.4, 0.3, -0.52, GOLD, 0, 0, sx * -0.35); b(B, 0.1, 0.1, 0.1, sx * 0.55, 0.66, -0.52, GOLD); } // the chain
+        b(B, 0.4, 0.1, 0.08, 0, -0.1, -0.54, GOLD); b(B, 0.26, 0.3, 0.06, 0, -0.32, -0.54, GOLD); b(B, 0.12, 0.12, 0.04, 0, -0.32, -0.58, RUBY); // the medallion
         return B;
     }
     b(B, 1.2, 1.5, 0.8, 0, 0, 0, L.shirt);
@@ -714,12 +751,13 @@ function armBoxes(L, side) {
     }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
         const king = L.role === 'king';
-        b(B, 0.42, 1.15, 0.42, 0, -0.375, 0, STEEL);
+        b(B, 0.42, 1.15, 0.42, 0, -0.375, 0, L.magic ? MSTEEL : STEEL);
         b(B, 0.62, 0.36, 0.64, side * 0.06, 0.17, 0, king ? GOLD : STEEL_LIGHT); // pauldron
         b(B, 0.56, 0.14, 0.58, side * 0.04, -0.06, 0, king ? GOLD_DARK : STEEL);
         b(B, 0.48, 0.18, 0.48, 0, -0.55, 0, king ? GOLD : STEEL_LIGHT); // elbow
         b(B, 0.5, 0.12, 0.5, 0, -0.92, 0, king ? GOLD : STEEL_DARK);
-        b(B, 0.44, 0.42, 0.44, 0, -1.15, 0, STEEL_DARK); // gauntlet
+        b(B, 0.44, 0.42, 0.44, 0, -1.15, 0, L.magic ? MSTEEL_DARK : STEEL_DARK); // gauntlet
+        if (L.magic) b(B, 0.1, 0.1, 0.03, 0, -0.55, -0.25, RUNE, 0, 0, Math.PI / 4);
         return B;
     }
     const sleeve = L.role === 'merchant' ? L.shirt : L.shirt;
@@ -748,8 +786,14 @@ function thighBoxes(L) {
         return B;
     }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
-        b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, STEEL);
+        b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, L.magic ? MSTEEL : STEEL);
         b(B, 0.56, 0.22, 0.58, 0, -0.92, -0.02, L.role === 'king' ? GOLD : STEEL_LIGHT);
+        return B;
+    }
+    if (L.magicLegs) { // the advisor's magic greaves
+        b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, MSTEEL);
+        b(B, 0.56, 0.22, 0.58, 0, -0.92, -0.02, MSTEEL_LIGHT);
+        b(B, 0.1, 0.1, 0.03, 0, -0.5, -0.26, RUNE, 0, 0, Math.PI / 4);
         return B;
     }
     b(B, 0.5, LEG_UP, 0.5, 0, -LEG_UP / 2, 0, L.dress ? shade(L.dressColor, 0.6) : L.pants);
@@ -769,9 +813,17 @@ function shinBoxes(L) {
         return B;
     }
     if ((L.role === 'knight' || L.role === 'king') && !L.unarmored) {
-        b(B, 0.5, 0.62, 0.5, 0, -0.31, 0, STEEL);
-        b(B, 0.54, 0.34, 0.66, 0, -0.78, -0.06, STEEL_DARK);
-        b(B, 0.4, 0.14, 0.2, 0, -0.88, -0.44, STEEL);
+        const m = L.magic;
+        b(B, 0.5, 0.62, 0.5, 0, -0.31, 0, m ? MSTEEL : STEEL);
+        b(B, 0.54, 0.34, 0.66, 0, -0.78, -0.06, m ? MSTEEL_DARK : STEEL_DARK);
+        b(B, 0.4, 0.14, 0.2, 0, -0.88, -0.44, m ? MSTEEL : STEEL);
+        return B;
+    }
+    if (L.magicLegs) {
+        b(B, 0.5, 0.62, 0.5, 0, -0.31, 0, MSTEEL);
+        b(B, 0.54, 0.34, 0.66, 0, -0.78, -0.06, MSTEEL_DARK);
+        b(B, 0.4, 0.14, 0.2, 0, -0.88, -0.44, MSTEEL_LIGHT);
+        b(B, 0.1, 0.1, 0.03, 0, -0.3, -0.26, RUNE, 0, 0, Math.PI / 4);
         return B;
     }
     const legC = L.dress ? shade(L.dressColor, 0.6) : L.pants;

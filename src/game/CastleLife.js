@@ -86,8 +86,8 @@ export const STATS = {
     farmer: { hp: 8, armor: 0, dmg: 1 },
     merchant: { hp: 8, armor: 0, dmg: 1 },
     knight: { hp: 20, armor: 50, dmg: 3 },
-    king: { hp: 30, armor: 100, dmg: 5 },
-    advisor: { hp: 8, armor: 0, dmg: 1 },
+    king: { hp: 30, armor: 200, dmg: 5 }, // (the full magic set: twice a knight's plates, mends itself)
+    advisor: { hp: 8, armor: 40, dmg: 1 }, // (a magic breastplate and greaves)
 };
 /** The king's advisor stands by the throne: roster number -1 (not one of the people counted by `population`). */
 export const ADVISOR_IDX = -1;
@@ -308,6 +308,7 @@ export class CastleLife {
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
+        if (e.role === 'advisor') Object.assign(look, { advisor: true, magicChest: true, magicLegs: true, hat: 'chancellor', hatColor: 0x6a1233, plume: false, shirt: 0x6a1233, pants: 0x3d0a1f, boots: 0x2b1a14, dress: false }); // (the king's super-helper: no helm, magic breastplate and greaves, the cap of office)
         if (e.rank) look.rank = e.rank; // (his rank: the robe's trim and cuffs — VillagerModel)
         if (e.elder) { look.female = false; look.hairColor = 0xd8d8d8; look.beard = 'long'; look.hat = 'wizardTall'; } // (a settlement's Elder: an old man — WizVillages.js)
         if (this.game.armor?.wasStripped(def.id + ':' + idx)) look = strippedLook(look); // («Disarmor» took the steel / the plain robe off)
@@ -327,8 +328,11 @@ export class CastleLife {
             bubble: null, bar: null, net: null,
         };
         if (e.robe) v.robe = true;
+        if (e.role === 'king') v.magicPieces = ['helmet', 'chest', 'legs'];
+        else if (e.role === 'advisor') v.magicPieces = ['chest', 'legs'];
+        if (v.magicPieces) { v.magicSet = v.magicPieces.length === 3; v.magicMend = 0; }
         if (look.unarmored || look.robeOff) v.stripped = true;
-        if (look.unarmored) { v.armor = 0; v.maxArmor = 0; } // (a wizard's ward is no steel: it stays)
+        if (look.unarmored || (e.role === 'advisor' && !look.magicChest)) { v.armor = 0; v.maxArmor = 0; v.magicPieces = null; v.magicSet = false; v.stripped = true; } // (a wizard's ward is no steel: it stays)
         if (WIZ[e.role]) this.wizards.init(v);
         v.group.position.set(v.x, v.y + VILLAGER_FOOT_OFFSET, v.z);
         v.group.rotation.y = v.yaw;
@@ -970,6 +974,7 @@ export class CastleLife {
                 }
             }
         }
+        if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
@@ -2000,6 +2005,7 @@ export class CastleLife {
         // (two wizards of the duel arena: a friendly duel — the blow never kills: ArenaDuels.soften)
         if (v.arena && this.game.arenaDuels) dmg = this.game.arenaDuels.soften(v, by, dmg);
         // armour takes most of the blow: the hearts go down many times slower
+        if (v.magicSet && opts.fire) dmg *= 0.5; // (the whole magic set: fire does half)
         if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
         else if (v.armor > 0 && opts.fire) {
             // fire heats the armour through: it takes half, and burns less — but the hearts still go down

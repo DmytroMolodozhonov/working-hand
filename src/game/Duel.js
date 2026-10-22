@@ -57,7 +57,7 @@ import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
 import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
-import { ROBE_BLOCKS } from './ArmorTypes.js';
+import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
@@ -1067,7 +1067,7 @@ export class Duel {
         if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
-        if (c.isVillager && c.robe && ROBE_BLOCKS.has(spell)) {
+        if (c.isVillager && ((c.robe && ROBE_BLOCKS.has(spell)) || (c.magicSet && !c.stripped && MAGIC_SET_BLOCKS.has(spell)))) {
             this._burst(p, 0xc39bff, 20);
             // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
             if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
