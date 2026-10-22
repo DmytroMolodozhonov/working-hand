@@ -105,6 +105,18 @@ export const CAST_HOLD = { MIN: 1.5, MAX: 2.5, MAX_T: 4, NEAR: 2 };
 export function castHold(rng = Math.random) {
     return CAST_HOLD.MIN + rng() * (CAST_HOLD.MAX - CAST_HOLD.MIN);
 }
+/**
+ * Before EVERY spell a wizard says it (the author): «даже если знает, что на него нападают, даже если
+ * видел — всё равно одна секунда»: he stands, faces the foe, the wand up and glowing, the words said
+ * (too quick to hear) — about a second — and only then the charge flies. So a player has time to get
+ * ready. Every rank, the Master and the wanderers too; no exception for one already on the alert.
+ * GIVE_UP: s he may still wait for the shot (a turn, a clear line) before he lets it go.
+ */
+export const CAST_PREP = { T: 1.0, JITTER: 0.25, GIVE_UP: 3 };
+export function prepTime(rng = Math.random) {
+    return CAST_PREP.T + rng() * CAST_PREP.JITTER;
+}
+
 /** Is he still holding still after his cast? `held` s since the cast, `left` s of the pose left, `flying` his charge still in the air. */
 export function holdsCast({ left = 0, held = 0, flying = false, fleeing = false, foeDist = Infinity }) {
     if (fleeing || foeDist < CAST_HOLD.NEAR) return false;

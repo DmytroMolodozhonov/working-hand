@@ -248,6 +248,7 @@ export class WizardLife {
         if (v.lostWand) return this._fetchWand(v, dt);
         // (no fight yet, but a player's spell flies at him: a shield — or a spell back, and the beams meet in a duel)
         if (W && !v.foe && !v.noWand && WizardFight.fights(v)) this.fight._react(v, dt);
+        if (W && !v.foe && this.fight._prepTick(v, dt)) { this.life._ground(v); return true; } // (saying a spell at a creature / back at a charge)
         if (W && !v.foe && this.fight.holdStill(v, dt)) return true; // (he just cast at a creature: stands in his pose)
         if (W && v.threatAt && this.fight.pursueThreat(v, dt)) return true; // (turning to a creature that hurt him, to answer it)
         if (v.foe && W) return this.fight.step(v, dt);
@@ -323,6 +324,7 @@ export class WizardLife {
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
+                if (v.prep) f |= FX.CAST; // (saying a spell: the wand glows — seen by all, before the charge flies)
                 if (v.noWand) f = FX.NOWAND; // (no wand in the hand: no Lumos, no magic of the hand — seen by all)
                 v.fx = (v.fx & (FX.SHIELD | FX.DOME | FX.BLINK)) | f;
             }

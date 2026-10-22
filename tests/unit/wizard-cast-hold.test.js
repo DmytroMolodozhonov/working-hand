@@ -92,3 +92,25 @@ test('«дуэльное мастерство»: +5 a new opponent, +3 a known o
     const M2 = new Mana(g); M2.restore(M.snapshot());
     assert.equal(M2.mastery, 21);
 });
+
+test('before every spell a wizard says it — about a second, standing, facing the foe — only then the charge flies', async () => {
+    const { CAST_PREP } = await import('../../src/game/WizardAI.js');
+    const foe = { x: 0, y: 1.95, z: -10 };
+    const f = new WizardFight({ life: { _ground() {}, _playerPos: () => foe }, game: { duel: { bolts: new Map(), clashes: [] }, collision: null } });
+    let firedAt = null, t = 0;
+    f._cast = () => { firedAt = t; return true; };
+    const v = { id: 3, x: 0, y: 0, z: 0, yaw: 0, speed: 2, mana: 50, W: { cast: 2 }, castCd: 0 };
+    assert.ok(f._begin(v, 'Stupefy', 'p1', foe, { cost: 12, cd: 2 }));
+    assert.ok(!f._begin(v, 'Stupefy', 'p1', foe), 'one at a time');
+    for (let i = 0; i < 120; i++) { t += 1 / 60; f._prepTick(v, 1 / 60); assert.equal(v.speed, 0); assert.equal(v.mode === 'cast' || firedAt != null, true); }
+    assert.ok(firedAt >= CAST_PREP.T - 1e-6 && firedAt <= CAST_PREP.T + CAST_PREP.JITTER + 0.05, `flew at ${firedAt}`);
+    assert.equal(v.mana, 38);
+    assert.ok(v.castCd >= 2 - 1e-6 && !v.prep);
+    // his back to the foe: he can't begin saying it (first he turns)
+    const w = { id: 4, x: 0, y: 0, z: 0, yaw: Math.PI, mana: 50, W: { cast: 2 } };
+    assert.ok(!f._begin(w, 'Stupefy', 'p1', foe));
+    // stunned while saying it: lost
+    const u = { id: 5, x: 0, y: 0, z: 0, yaw: 0, mana: 50, W: { cast: 2 } };
+    f._begin(u, 'Stupefy', 'p1', foe); u.stunT = 3;
+    assert.ok(!f._prepTick(u, 0.1) && !u.prep);
+});

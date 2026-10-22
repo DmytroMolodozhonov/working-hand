@@ -124,6 +124,15 @@ export class WizardFx {
                 s.visible = true;
                 if (fx && Math.random() < dt * 4) fx.spark(tip, 0xeaf6ff, 0.08, _w.set((Math.random() - 0.5), Math.random() * 0.6, (Math.random() - 0.5)), 0.4);
             }
+            if (f & FX.CAST) {
+                // saying a spell (WizardFight._prepTick): the tip glows brighter and brighter, sparks gather at it
+                const s = this.glows[gi] || this._glow();
+                gi++;
+                s.position.copy(tip);
+                s.scale.setScalar(1.3 + Math.sin(t * 22 + v.x) * 0.25);
+                s.visible = true;
+                if (fx && Math.random() < dt * 14) fx.spark(_w.copy(tip).add(_u.set((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8)), 0xffe9a8, 0.08, _u.set(0, 0.2, 0), 0.35);
+            }
             if (f & (FX.LEV | FX.LEVFAIL)) {
                 let p = this.props.find((q) => q.by === v.id && !q.used) || this.props.find((q) => !q.used && (!q.by || !wizards.some((o) => o.id === q.by && ((o.fx | 0) & (FX.LEV | FX.LEVFAIL)))));
                 if (p) {

@@ -112,7 +112,8 @@ test('a guest: the host says my duel against «Джолт» is lost — I am thr
 
 test('a wizard answers a «Джолт» flying at him with a spell back (a duel), as he does a «Остолбеней»', () => {
     const answered = [];
-    const v = { id: 'wiz1', x: 0, y: 0, z: -14, yaw: 0, mana: 100, role: 'teacher', fx: 0, shieldT: 0, foe: 'me', W: WIZ.teacher };
+    // (far enough to say a spell back first — a second, WizardAI.CAST_PREP: from nearer only the hand shield)
+    const v = { id: 'wiz1', x: 0, y: 0, z: -21, yaw: 0, mana: 100, role: 'teacher', fx: 0, shieldT: 0, foe: 'me', W: WIZ.teacher };
     const fight = Object.create(WizardFight.prototype);
     const b = { id: 'me:1', by: 'me', spell: 'Jolt', state: 'flying', tk: 'v', tid: 'wiz1', front: V(0, 0, 0), o: V(0, 0, 0), dir: V(0, 0, -1) };
     Object.assign(fight, { game: { duel: { bolts: new Map([[b.id, b]]) } }, life: { _isPlayer: () => true, _say() {} }, _counter: (w, x) => { answered.push(x.spell); return true; } });

@@ -30,7 +30,7 @@
  */
 
 import * as THREE from 'three';
-import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist } from './WizardAI.js';
+import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
@@ -248,6 +248,7 @@ export class WizardFight {
             return true;
         }
         this._react(v, dt);
+        if (this._prepTick(v, dt)) { L._ground(v); return true; } // (saying a spell: he stands, the wand up — then it flies)
         // in a duel (our beams pushing): stand, the wand on him, push (Duel.js referees it)
         if (this._inClash(v, dt)) { L._ground(v); return true; }
         const wt = v.wt, sq = wt?.sq;
@@ -411,14 +412,61 @@ export class WizardFight {
         // mercy: one helpless on the ground is not finished off (but kept down by a binder) — unless he is a known murderer
         const st = sq?.sit;
         if (T.mercy && st?.lying && !(wt?.role === 'binder') && !(Date.now() - (v.hurtAt || 0) < 5000)) return;
+        if (v.prep) return;
         const spell = this._spellFor(v, planSpell(plan, wt?.role, v.skillRole || v.role) || pickSpell(v.skillRole || v.role), T);
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return;
-        if (this._cast(v, spell, foe, fp)) {
-            v.mana -= cost;
-            v.castCd = W.cast * (CAST_PACE[plan] ?? 1) * T.pace * manaPace(v.mana, v.maxMana) * (0.8 + Math.random() * 0.4); // (low on mana: slower)
-            if (sq) sq.casts++;
-        }
+        // he says it first (a second: _prepTick casts it), then the pause before the next (low on mana: slower)
+        this._begin(v, spell, foe, fp, { cost, sq, cd: W.cast * (CAST_PACE[plan] ?? 1) * T.pace * manaPace(v.mana - cost, v.maxMana) * (0.8 + Math.random() * 0.4) });
+    }
+
+    /**
+     * He starts saying a spell (WizardAI.CAST_PREP): only facing the target fully («лицом к цели»); the
+     * charge flies when it is said (_prepTick). `o`: {cost, cd (the pause after it), sq, vs (the charge
+     * it answers), at (a creature {k, id} instead of a player)}. true: begun.
+     */
+    _begin(v, spell, foeId, fp, o = {}) {
+        if (v.prep || v.noWand) return false;
+        if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
+        const t = prepTime();
+        v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost: o.cost ?? (NPC_COST[spell] ?? 10), cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
+        v.castCd = Math.max(v.castCd ?? 0, t + 0.1); // (nothing else begun meanwhile)
+        return true;
+    }
+
+    /**
+     * (host, every frame) Saying a spell: he stands, turns to the target, the wand up and glowing (FX.CAST,
+     * the cast pose) — when it is said, the charge flies (`_cast`), its mana paid, the pause begun.
+     * Stunned, frozen, lifted, the wand gone, in a clash, the target gone — it is lost. true: busy with it.
+     */
+    _prepTick(v, dt) {
+        const P = v.prep;
+        if (!P) return false;
+        const lost = () => { v.prep = null; return false; };
+        if (v.dead || v.noWand || v.stunT > 0 || v.lev || v.vy) return lost();
+        if (this.game.duel?.clashes?.some((x) => x.a.by === v.id || x.b.by === v.id)) return lost();
+        P.t -= dt; P.age += dt;
+        let fp = null;
+        if (P.at) {
+            const c = this.game.duel?._creature?.(P.at.k, P.at.id);
+            if (c) { const at = this.game.duel._creaturePoint(c, _ch); fp = { x: at.x, y: at.y - 0.3, z: at.z }; }
+        } else fp = this.life._playerPos(P.foe);
+        if (!fp || P.age > CAST_PREP.GIVE_UP) return lost();
+        v.speed = 0; v.path = null;
+        this._turnTo(v, fp, dt);
+        const dh = Math.hypot(fp.x - v.x, fp.z - v.z) || 1;
+        v.aimPitch = Math.atan2(fp.y + 0.3 - (v.y + 3.4), dh);
+        v.mode = 'cast';
+        if (P.t > 0) return true;
+        if (v.mana < P.cost) return lost();
+        if (!this.clearShot(v, fp)) return true; // (a moment more: the line may clear)
+        if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
+        v.prep = null;
+        v.mana -= P.cost;
+        v.castCd = Math.max(v.castCd ?? 0, P.cd);
+        if (P.sq) P.sq.casts++;
+        if (P.at) v.threatAt = null;
+        return true;
     }
 
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
@@ -575,7 +623,7 @@ export class WizardFight {
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
             let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
-            if (r === 'counter' && !n.counter) r = 'shield'; // (no time to raise the wand and answer: only the hand shield)
+            if (r === 'counter' && (!n.counter || eta < CAST_PREP.T + 0.3)) r = 'shield'; // (no time to raise the wand and say it: only the hand shield)
             if (r === 'dome') this._dome(v);
             else if (r === 'counter' && this._counter(v, b)) { /* (a spell back: the beams meet — a duel) */ }
             else if (r === 'shield' || r === 'counter') {
@@ -622,8 +670,8 @@ export class WizardFight {
         if (v.mana < cost) return false;
         // not facing it yet: he turns to it first (pursueThreat), then casts
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) { v.threatAt = { ref, until: this.clock + 3 }; return false; }
-        if (this._cast(v, spell, null, fp, null, ref)) { v.mana -= cost; v.castCd = v.W.cast * manaPace(v.mana, v.maxMana); v.threatAt = null; return true; }
-        return false;
+        // he says it first (a second), then it flies (_prepTick)
+        return this._begin(v, spell, null, fp, { at: ref, cost, cd: v.W.cast * manaPace(v.mana - cost, v.maxMana) });
     }
 
     /** (host) A creature hurt him and he is turning to it to answer (threat): true — busy with it this frame. */
@@ -650,10 +698,8 @@ export class WizardFight {
         const spell = this._spellFor(v, pickSpell(v.skillRole || v.role), wantedTactics(L.wantedLevel(b.by), v.role));
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return false;
-        if (!this._cast(v, spell, b.by, fp, b.id)) return false;
-        v.mana -= cost;
-        v.castCd = Math.max(v.castCd ?? 0, v.W.cast * 0.6);
-        return true;
+        // (said first, a second — a charge too near is not met in time: then only the hand shield, _react)
+        return this._begin(v, spell, b.by, fp, { vs: b.id, cost, cd: v.W.cast * 0.6 });
     }
 
     _dome(v) {
