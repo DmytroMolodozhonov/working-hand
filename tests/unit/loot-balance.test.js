@@ -55,10 +55,18 @@ test('an ordinary chest holds exactly three things (a coin pouch counts as one)'
     assert.equal(fitThings([1, 2, 3, 4, 5].map((k) => ({ kind: 'bread', k })), 3, r).length, 3);
 });
 
-test('loot balance: a deep cave chest has no food; shields 20 % rarer, scrolls the commonest', () => {
-    const s = shares((r => () => rollLoot(r, { cave: true, deep: true, count: 3 }))(rng(9)));
-    assert.ok(!s.food && !s.cheese, `no food in a cave chest ${JSON.stringify(s)}`);
-    const base = shares((r => () => rollLoot(r, { cave: true, count: 3 }))(rng(9)));
-    assert.ok(s.shield < base.shield * 0.9, `shields fewer ${s.shield} vs ${base.shield}`);
-    assert.ok(s.scroll > base.scroll * 1.5 && s.scroll > s.weapon && s.scroll > s.shield, `scrolls more ${JSON.stringify(s)}`);
+test('loot balance: a deep cave chest gives the author\'s shares (no food; spell scrolls take the rest)', async () => {
+    const { CAVE_LOOT } = await import('../../src/game/ItemTypes.js');
+    const want = Object.fromEntries(CAVE_LOOT);
+    assert.ok(Math.abs(Object.values(want).reduce((a, b) => a + b, 0) - 100) < 1e-9, 'the shares make 100 %');
+    const c = {}; let tot = 0;
+    const r = rng(9);
+    for (let i = 0; i < 40000; i++) for (const it of rollLoot(r, { deep: true, count: 2 })) {
+        const k = it.kind === 'scroll' ? (it.stat === 'spell' ? 'spellScroll' : it.stat === 'hp' ? 'hpScroll' : 'manaScroll')
+            : it.kind === 'armor' ? (it.magic ? 'magicArmor' : 'armor') : it.kind === 'robe' ? (it.magic ? 'magicRobe' : 'robe')
+            : it.kind === 'coins' ? 'magicPouch' : it.kind;
+        c[k] = (c[k] || 0) + 1; tot++;
+    }
+    assert.ok(!['bread', 'cheese', 'steak', 'pie', 'apple'].some((k) => c[k]), `no food in a cave chest ${JSON.stringify(c)}`);
+    for (const [k, w] of Object.entries(want)) assert.ok(Math.abs(100 * (c[k] || 0) / tot - w) < 0.6, `${k}: ${(100 * (c[k] || 0) / tot).toFixed(2)} % vs ${w} %`);
 });

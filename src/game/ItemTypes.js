@@ -34,7 +34,7 @@ import { pouchModel } from './PouchModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
 import { DRAGON_KINDS } from './DragonKinds.js';
-import { rollChestArmor, armorValue, describeArmor } from './ArmorTypes.js';
+import { rollChestArmor, armorValue, describeArmor, makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { armorItemModel } from '../entities/ArmorLook.js';
 import { iceRodModel } from './IceModels.js';
 
@@ -440,17 +440,9 @@ export function rollKeyItem(r = Math.random) {
  * pouch stay rare: only `rollKeyItem` (the chest's 25 % precious thing) gives them.
  */
 export function rollPlainItem(r = Math.random, deep = false) {
+    if (deep) return rollCaveThing(r);
     const x = r() * 100;
     const mg = () => r() < 0.12;
-    // (a cave chest: no food — it would not have kept; shields 20 % rarer, scrolls take their share and the food's)
-    if (deep) {
-        if (x < 38.6) return rollScroll(r, true);
-        if (x < 50.6) { const m = mg(); return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; }
-        if (x < 62.6) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
-        if (x < 85.6) { const m = mg(); return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; }
-        const m = mg();
-        return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 };
-    }
     if (x < 6.5) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
     if (x < 13) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
     if (x < 19.5) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
@@ -465,11 +457,51 @@ export function rollPlainItem(r = Math.random, deep = false) {
 }
 
 /**
+ * A chest deep in a cave: each thing by the author's own share of all its things, in % (the coins come apart, in their
+ * pouch). No food — it would not have kept; the spell scrolls take what is left. (Two precious things in one chest can
+ * happen now and then — the shares are the author's, thing by thing.)
+ */
+export const CAVE_LOOT = [
+    ['spellScroll', 47.9], ['armor', 10], ['shield', 8], ['weapon', 7], ['magicPouch', 5], ['wand', 4.5], ['hpScroll', 4.1],
+    ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['manaScroll', 0.6], ['hammer', 0.3],
+];
+const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
+const CAVE_MAKE = {
+    spellScroll: (r) => { for (let i = 0; i < 30; i++) { const it = rollScroll(r, true); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); },
+    armor: (r) => makePiece(pick(r, PIECES)),
+    magicArmor: (r) => makePiece(pick(r, PIECES), { magic: true }),
+    shield: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 }; },
+    weapon: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; },
+    bow: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; },
+    arrows: (r) => ({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) }),
+    magicPouch: (r) => ({ kind: 'coins', uid: newUid(), magic: true, count: randInt(r, 0, 40) }), // (the bottomless pouch — CoinBelt)
+    wand: (r) => rollWand(r),
+    hpScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }),
+    manaScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) }), // (+1–10 cells of mana)
+    robe: (r) => makeRobe(false, r),
+    magicRobe: (r) => makeRobe(true, r),
+    backpack: (r) => ({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }),
+    hammer: () => ({ kind: 'hammer', uid: newUid(), charges: 0 }),
+};
+function rollCaveThing(r) {
+    let y = r() * 100;
+    for (const [k, w] of CAVE_LOOT) if ((y -= w) < 0) return CAVE_MAKE[k](r);
+    return CAVE_MAKE.spellScroll(r);
+}
+
+/**
  * A chest in a cave or a castle: one or two plain things (food, a plain bow, arrows…) — and only
  * now and then (`key`: 25%) ONE precious thing (a wand, a scroll, a magic weapon…), never more.
+ * A chest deep in a cave (`deep`): its own shares — CAVE_LOOT (a test chest, `key` 1: a precious thing first).
  * (Coins come apart, in their pouch: Game.openChest.)
  */
 export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false, count = 0, deep = false } = {}) {
+    if (deep && !royal) {
+        const out = key >= 1 ? [rollKeyItem(r)] : [];
+        const n = count > 0 ? count : randInt(r, 1, 2);
+        while (out.length < n) out.push(rollCaveThing(r));
+        return out;
+    }
     const out = _rollLoot(r, { cave, key, royal, deep });
     return count > 0 ? fitThings(out, count, r, deep) : out;
 }
