@@ -20,6 +20,7 @@
 
 import * as THREE from 'three';
 import { SKIN_TONES } from './Appearance.js';
+import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
@@ -917,7 +918,7 @@ const HANGING = new Set(['basket', 'pouch', 'bucket']);
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const lerp = (a, b2, t) => a + (b2 - a) * t;
 const ease = (t) => t * t * (3 - 2 * t);
-const POSE_KEYS = ['hx', 'hy', 'headX', 'headY', 'headZ', 'aLX', 'aLZ', 'aRX', 'aRY', 'aRZ', 'wrist', 'lL', 'lR', 'kL', 'kR', 'block', 'cape', 'bounce'];
+const POSE_KEYS = ['hx', 'hy', 'hz', 'headX', 'headY', 'headZ', 'aLX', 'aLZ', 'aRX', 'aRY', 'aRZ', 'wrist', 'lL', 'lR', 'kL', 'kR', 'block', 'cape', 'bounce'];
 const _v = new THREE.Vector3();
 const _mA = new THREE.Matrix4();
 const _mB = new THREE.Matrix4();
@@ -1056,6 +1057,10 @@ export class VillagerModel {
         // asleep: how far lain down (0…1), the turn onto a side, when the next turn over comes
         this._lie = 0; this._roll = 0; this._rollTo = 0; this._rollT = 12 + ((look.seed >>> 3) % 30);
         this.blanket = null; this.mat = null; this.torch = null;
+        // each moves in their own way: their walk; a wizard his stance, swing, shield… (MoveStyle.js — from the seed, the same everywhere)
+        this._wiz = WIZARD_LOOK_ROLES.has(look.role);
+        this.style = styleOf(look, this._wiz);
+        this._fightT = 99;
     }
 
     /** A burning torch in the left hand (the night watch). */
@@ -1283,7 +1288,7 @@ export class VillagerModel {
         if (speed == null || !Number.isFinite(speed)) speed = DEFAULT_SPEED[mode] || 0;
         if (speed < 0) speed = 0;
         const T = this._tg, P = this._p;
-        T.hx = 0; T.hy = 0; T.headX = 0; T.headZ = 0;
+        T.hx = 0; T.hy = 0; T.hz = 0; T.headX = 0; T.headZ = 0;
         T.headY = mode === 'idle' ? Math.sin(t * 0.45) * 0.25 : 0;
         T.aLX = 0; T.aLZ = -0.06; T.aRX = 0; T.aRY = 0; T.aRZ = 0.06; T.wrist = REST_WRIST;
         T.lL = 0; T.lR = 0; T.kL = 0; T.kR = 0; T.block = 0; T.cape = -0.1; T.bounce = 0;
@@ -1293,8 +1298,10 @@ export class VillagerModel {
         // ---- legs: walk / run cycle
         const loco = mode !== 'sit' && mode !== 'bow' && speed > 0.05;
         if (loco) {
-            this._phase += dt * (2.0 + 2.4 * speed);
-            const amp = Math.min(1, speed / 2.2) * 0.55 + clamp01((speed - 2.2) / 4) * 0.35;
+            const G = GAITS[this.style.gait] || GAITS.plain;
+            const gk = clamp01(1 - (speed - 2.5) / 2.5); // (the own walk shows at a walk; a run is a run for anybody)
+            this._phase += dt * (2.0 + 2.4 * speed) * lerp(1, G.cad, gk);
+            const amp = (Math.min(1, speed / 2.2) * 0.55 + clamp01((speed - 2.2) / 4) * 0.35) * lerp(1, G.amp, gk);
             const s = Math.sin(this._phase), c = Math.cos(this._phase);
             T.lL = s * amp; T.lR = -s * amp;
             T.kL = -Math.max(0, c) * amp * 1.5 - 0.05;
@@ -1302,12 +1309,16 @@ export class VillagerModel {
             T.aLX = -s * amp * 0.9; T.aRX = s * amp * 0.9;
             T.hx = -0.2 * clamp01((speed - 2.5) / 3);
             T.cape = -(0.14 + Math.min(0.5, speed * 0.1));
+            if (mode === 'walk' || mode === 'run') gaitPose(T, this.style.gait, s, gk, t, this.toolKind === 'staff');
             rate = 28;
             breathe = 0;
         }
 
-        // ---- upper body per mode
-        switch (mode) {
+        // ---- upper body per mode (a wizard's own moves first — MoveStyle.wizardPose)
+        const own = this._wiz ? wizardPose(this, T, mode, loco, dt, t) : 0;
+        if (own) rate = own;
+        else if (mode === 'idle' && !loco) idleShift(T, t, this.look.seed | 0);
+        if (!own) switch (mode) {
             case 'talk':
                 T.headX = Math.sin(t * 4.5) * 0.07 - 0.02;
                 T.headZ = Math.sin(t * 1.3) * 0.05;
@@ -1591,7 +1602,7 @@ export class VillagerModel {
         const P = this._p;
         const f = 1 - Math.exp(-6 * dt);
         const to = (key, v) => { P[key] += (v - P[key]) * f; };
-        to('hx', 0.1 * side); to('hy', 0); to('headX', 0.15); to('headY', this._roll * 0.15); to('headZ', 0);
+        to('hx', 0.1 * side); to('hy', 0); to('hz', 0); to('headX', 0.15); to('headY', this._roll * 0.15); to('headZ', 0);
         to('aLX', 0.25 + 0.5 * side); to('aLZ', -0.12); to('aRX', 0.25 + 0.5 * side); to('aRY', 0); to('aRZ', 0.12); to('wrist', REST_WRIST);
         to('lL', 0.55 * side); to('lR', 0.45 * side); to('kL', -0.8 * side); to('kR', -0.7 * side); to('block', 0); to('cape', -0.05); to('bounce', 0);
         const br = Math.sin(t * 1.25 + (this.look.seed % 7)); // (slow, deep breaths)
@@ -1603,7 +1614,7 @@ export class VillagerModel {
 
     _apply(t, breathe, sitting) {
         const P = this._p;
-        this.body.rotation.set(P.hx, P.hy, 0);
+        this.body.rotation.set(P.hx, P.hy, P.hz);
         this.torso.position.y = 0.75 + (breathe ? Math.sin(t * 2.2) * breathe : 0);
         this.head.rotation.set(P.headX, P.headY, P.headZ);
         this.leftArm.rotation.set(P.aLX, 0, P.aLZ);
@@ -1652,7 +1663,7 @@ export class VillagerModel {
         const P = this._p;
         const f = k >= 1 ? 1 : 1 - Math.exp(-10 * dt);
         const to = (key, v) => { P[key] += (v - P[key]) * f; };
-        to('hx', 0); to('hy', 0); to('headX', 0.1); to('headY', 0.35); to('headZ', 0);
+        to('hx', 0); to('hy', 0); to('hz', 0); to('headX', 0.1); to('headY', 0.35); to('headZ', 0);
         to('aLX', 0.15); to('aLZ', -1.25); to('aRX', 0.15); to('aRY', 0); to('aRZ', 1.25); to('wrist', REST_WRIST);
         to('lL', 0); to('lR', 0); to('kL', 0); to('kR', 0); to('block', 0); to('cape', -0.05); to('bounce', 0);
         this._apply(this._t, 0, true);
