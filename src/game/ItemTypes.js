@@ -462,9 +462,9 @@ export function rollPlainItem(r = Math.random, deep = false) {
  * happen now and then — the shares are the author's, thing by thing.)
  */
 export const CAVE_LOOT = [
-    ['spellScroll', 47.9], ['armor', 10], ['shield', 8], ['weapon', 7], ['magicPouch', 5], ['wand', 4.5], ['hpScroll', 4.1],
-    ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['manaScroll', 0.6], ['hammer', 0.3],
-];
+    ['spellScroll', 48.5], ['armor', 10], ['shield', 8], ['weapon', 7], ['magicPouch', 5], ['wand', 4.5], ['hpScroll', 4.1],
+    ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['hammer', 0.3],
+]; // (no mana scroll: the author — «useless»; its share went to the spell scrolls)
 const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
 const CAVE_MAKE = {
     spellScroll: (r) => { for (let i = 0; i < 30; i++) { const it = rollScroll(r, true); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); },
@@ -477,7 +477,6 @@ const CAVE_MAKE = {
     magicPouch: (r) => ({ kind: 'coins', uid: newUid(), magic: true, count: randInt(r, 0, 40) }), // (the bottomless pouch — CoinBelt)
     wand: (r) => rollWand(r),
     hpScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }),
-    manaScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) }), // (+1–10 cells of mana)
     robe: (r) => makeRobe(false, r),
     magicRobe: (r) => makeRobe(true, r),
     backpack: (r) => ({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }),
