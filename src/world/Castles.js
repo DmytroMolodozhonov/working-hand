@@ -360,6 +360,7 @@ export function furnish(p0, room, s, chests, aisles = []) {
         }
         default: break;
     }
+    if (kind === 'library') wants.length = 0; // (no chests in a library — the author; books stand on their own stands)
     // the chests: against a wall, their lids to the room, off the ways through it and the door side
     const keep = aisles.map((r) => [r.u0 - 0.5, r.u1 + 0.5, r.v0 - 0.5, r.v1 + 0.5]);
     const ds = { u0: [u0 - 0.5, u0 + 1.5, v0 - 0.5, v1 + 0.5], u1: [u1 - 1.5, u1 + 0.5, v0 - 0.5, v1 + 0.5], v0: [u0 - 0.5, u1 + 0.5, v0 - 0.5, v0 + 1.5], v1: [u0 - 0.5, u1 + 0.5, v1 - 1.5, v1 + 0.5] }[along];

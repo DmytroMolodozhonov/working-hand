@@ -2912,6 +2912,7 @@ export class Game {
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
         for (const m of this.castleLife?.talk?.signs?.sampleModels?.() || []) zoo.add(m); // (the «Скупка» plaques of the buyers)
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
+        for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
@@ -3153,6 +3154,7 @@ export class Game {
         this.achievements.update();
         this.death.update(dt);
         this.books?.update(dt); // (after the items: an open book leaves the fist for both hands)
+        this.loreLibrary?.update(dt); // (the books on the reading stands: their pages turned by a finger)
         if (earth) this.wards?.update(dt);
         this.houseMagic?.update(dt);
         this.castleMagic?.update(dt);

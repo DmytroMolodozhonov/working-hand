@@ -5,9 +5,9 @@
  * drawn by LorePages.js (text and the procedurally painted portraits).
  *
  * Pure data (no THREE, no DOM): any place may import it. Where they lie:
- *   - the library of the wizards' tower (WizardTowers.js: `def.lore` — the spots on its reading desk);
- *   - the library of a wizards' town: its site record gives `lore: [{x, y, z}]` spots (the top of a desk
- *     or shelf) and LoreLibrary.js lays the books there by itself — `loreForSite(def)` says which.
+ *   - the library of the wizards' tower (WizardTowers.js: `def.lore` — the reading stands, LoreStand.js);
+ *   - the library of a wizards' town: its site record gives `lore: [{x, y (the floor), z, face}]` stand spots
+ *     and LoreLibrary.js lays the books on them by itself (open on the stand; they can't be taken, only read) — `loreForSite(def)` says which.
  *
  * A book: { id, title, sub (under the title), cover, trim (colours), pages: [page…] }. A page is
  *   { pic: 'name', caption } — a full page picture (LorePages.PICTURES), or

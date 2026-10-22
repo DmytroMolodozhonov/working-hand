@@ -417,9 +417,9 @@ export class CastleLife {
     _wake(cs) {
         cs.awake = true;
         this._makeChests(cs);
+        this.game.loreLibrary?.wake(cs.def); // (its library's reading stands with the books of the world's history — LoreLibrary.js; on every computer)
         if (!this.auth) return;
         const def = cs.def;
-        this.game.loreLibrary?.wake(def); // (its library's books of the world's history — LoreLibrary.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
@@ -471,7 +471,7 @@ export class CastleLife {
 
     _sleep(cs) {
         cs.awake = false;
-        if (this.auth) this.game.loreLibrary?.sleep(cs.def);
+        this.game.loreLibrary?.sleep(cs.def);
         if (cs.def.kind === 'hamlet') this.hamlets.sleep(cs); // (its fire out, its sphere put away)
         for (const v of [...cs.active.values()]) this._deactivate(v);
         // the goods still lying unpaid on its counters are put away (laid out again when somebody comes):

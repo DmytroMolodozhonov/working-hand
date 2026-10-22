@@ -177,7 +177,7 @@ function buildTower(p, rng, out) {
     p.box(0, 0, 6, 6, -R_OUT - 1, -R_OUT - 1, B.ARCANE_LAMP);
 
     // ---- every floor: a wall across the middle with a doorway, two rooms
-    const rooms = [], chests = [], bedSpots = [], spots = [], dummies = [], lore = [];
+    const rooms = [], chests = [], bedSpots = [], spots = [], dummies = [], lore = [], res = new Set();
     const stall = {};
     let throne = null, throneFront = null, dormNode = null, studyNode = null;
     LEVELS.forEach((l, li) => {
@@ -277,7 +277,7 @@ function buildTower(p, rng, out) {
         for (const half of [1, -1]) {
             const kind = half > 0 ? kb : kf;
             const room = { kind, half, l, li, name: TOWER_ROOMS[kind] };
-            furnishTower(p, room, rng, legs, { chests, bedSpots, spots, dummies, lore, stall, set: (k, v) => { if (k === 'throne') throne = v; if (k === 'throneFront') throneFront = v; } });
+            furnishTower(p, room, rng, legs, { chests, bedSpots, spots, dummies, lore, res, stall, set: (k, v) => { if (k === 'throne') throne = v; if (k === 'throneFront') throneFront = v; } });
             const r = half > 0 ? p.rect(-14, 14, 1, 14) : p.rect(-14, 14, -14, -1);
             rooms.push({ kind, name: TOWER_ROOMS[kind], ...r, y: p.L(l) - 1.5, l, floor: li });
         }
@@ -309,16 +309,19 @@ function furnishTower(p, room, rng, legs, o) {
         for (const [u, v] of [[a0, b0], [a1, b0], [a0, b1], [a1, b1]]) if (Math.hypot(u, v) > 11.3 || v * H < 0.4) return false;
         return true;
     };
+    const occ = new Set(); // the floor cells with furniture on them ('u,v')
     /** A box of furniture (rot-local u, mirrored v by the half: b > 0 = away from the dividing wall). */
     const box = (u0, u1, l0, l1, b0, b1, t) => {
         const v0 = H * b0, v1 = H * b1;
         if (!clear(u0, u1, v0, v1)) return false;
         p.box(u0, u1, l + l0, l + l1, v0, v1, t);
+        if (l0 <= 2) for (let u = Math.min(u0, u1); u <= Math.max(u0, u1); u++) for (let v = Math.min(v0, v1); v <= Math.max(v0, v1); v++) occ.add(u + ',' + v); // (what stands on the floor: the stands keep off it)
         return true;
     };
     const floorMark = (u0, u1, b0, b1, t) => p.box(u0, u1, l - 1, l - 1, H * b0, H * b1, t); // (in the floor: never in the way)
     const yawTo = (du, db) => p.yaw(Math.atan2(-du, -(H * db))); // local facing of a (du, dv) direction: yaw 0 = towards −v
     const chest = (u, b, fu, fb, roomTag) => {
+        if (kind === 'library' || kind === 'reading') return false; // (no chests in a library)
         const v = H * b;
         if (!clear(u - 0.6, u + 0.6, v - 0.5, v + 0.5)) return false;
         o.chests.push({ ...p.pt(u, v, l), yaw: yawTo(fu, fb), room: roomTag });
@@ -334,12 +337,31 @@ function furnishTower(p, room, rng, legs, o) {
     const spot = (kind2, u, b, nu, nb, extra = {}) => { o.spots.push({ kind: kind2, ...p.pt(u, H * b, l), nu, nv: H * nb, l, ...extra }); };
     const firstOf = (cands, f) => { for (const c of cands) if (f(...c)) return c; return null; };
     const lamp = (u, b) => p.box(u, u, l + 5, l + 5, H * b, H * b, B.ARCANE_LAMP);
-    /** A desk 5 m long (the first clear of `cands` [u0, u1, b]) and the 7 places of the history books on it. */
-    const loreDesk = (cands) => firstOf(cands, (u0, u1, b) => {
-        if (!box(u0, u1, 0, 1, b, b, B.PLANKS_DARK)) return false;
-        for (let i = 0; i < 7; i++) o.lore.push({ ...p.pt(Math.min(u0, u1) - 0.1 + i * 0.7, H * b, l), y: p.L(l + 1) - 0.5 });
-        return true;
-    });
+    /**
+     * Reading stands of the world's history (LoreStand.js): up to `max` of them in this half-room, each on a post
+     * of two blocks with a free cell before it (the reader stands there), keeping off the shelves, the ways and
+     * each other; they face the middle of the room. A book lies on each (LoreLibrary.js — LoreBooks.js).
+     */
+    const loreStands = (max) => {
+        const free = (u, v) => !occ.has(u + ',' + v) && !o.res.has(l + ':' + u + ',' + v) && clear(u, u, v, v, 1.0);
+        const crowded = (u, v) => { for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) if (o.res.has('p' + l + ':' + (u + a) + ',' + (v + c))) return true; return false; }; // (a stand next to it, even a corner: the boards would meet)
+        for (let b = 3; b <= 10 && max > 0 && o.lore.length < 7; b++) {
+            for (let u = -10; u <= 10 && max > 0 && o.lore.length < 7; u++) {
+                const v = H * b;
+                if (!free(u, v) || crowded(u, v)) continue;
+                const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]].filter(([du, db]) => free(u + du, H * (b + db)) && free(u + 2 * du, H * (b + 2 * db)) && free(u + db, v + H * du) && free(u - db, v - H * du));
+                if (!dirs.length) continue;
+                dirs.sort((a2, c) => (c[0] * -u + c[1] * (6 - b)) - (a2[0] * -u + a2[1] * (6 - b))); // (towards the middle of the room first)
+                const [du, db] = dirs[0];
+                box(u, u, 0, 1, b, b, B.PLANKS_DARK);
+                o.res.add('p' + l + ':' + u + ',' + v);
+                for (const k of [1, 2]) o.res.add(l + ':' + (u + k * du) + ',' + H * (b + k * db)); // (where the reader stands: no stand there)
+                const q = p.pt(u, v, l), r = p.pt(u + du, H * (b + db), l);
+                o.lore.push({ x: q.x, y: q.y, z: q.z, face: Math.atan2(r.x - q.x, r.z - q.z) });
+                max--;
+            }
+        }
+    };
     switch (kind) {
         case 'vault': {
             let n = 0;
@@ -387,18 +409,16 @@ function furnishTower(p, room, rng, legs, o) {
                 for (let r = 4; r <= 8; r++) { const u = Math.round(r * Math.cos(a)), b = Math.round(r * Math.sin(a)); box(u, u, 0, 3, b, b, B.BOOKS); }
             }
             box(-2, 2, 0, 1, 9, 9, B.PLANKS_DARK);
-            // the desk of the world's history: its books lie on it (LoreLibrary.js — LoreBooks.js), in front of
-            // the shelves by the dividing wall, clear of the paths and the diagonal shelves
-            loreDesk([[5, 9, 2], [-9, -5, 2]]);
             lamp(-5, 5); lamp(5, 5);
+            loreStands(7); // (the stands of the world's history: what room is left after the shelves)
             break;
         }
         case 'reading': {
-            if (!o.lore.length) loreDesk([[2, 6, 2], [-6, -2, 2]]); // (no room for it in the library — a stair in the way: here)
             for (const u of [-6, 6]) { box(u, u, 0, 1, 4, 4, B.PLANKS_DARK); box(u, u, 2, 2, 4, 4, B.BOOKS); }
             for (const [u, b] of [[-7, 8], [7, 8], [-3, 9], [3, 9]]) box(u, u, 0, 0, b, b, B.CARPET_PURPLE);
             if (box(5, 5, 0, 0, 8, 8, B.PLANKS_DARK)) box(5, 5, 1, 1, 8, 8, B.ARCANE_LAMP);
             lamp(0, 9);
+            loreStands(3); // (the stands the library had no room for)
             break;
         }
         case 'classroom': {

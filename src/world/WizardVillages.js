@@ -10,7 +10,7 @@
  *  - the TOWN HALL (north, «Ратуша»): a great hall with the Elder's chair, a clock tower;
  *  - the CAULDRON HALL («Зельеварня»): a big cauldron where a wizard brews;
  *  - the small LIBRARY: shelves, a reading table with 2–5 scrolls of simple spells (different from
- *    place to place) and the desk of the world's history (its books — LoreLibrary.js);
+ *    place to place) and the reading stands of the world's history (a book on each — LoreLibrary.js);
  *  - the MARKET (south): a crooked lane — leaning, twisted shops with overhanging upper floors,
  *    crooked spires and chimneys (strange, not logical), a counter in every shop's open front;
  *    trades: cauldrons and potions, potions, robes, wands, magic armour, scrolls, curiosities and
@@ -31,6 +31,7 @@ import { BLOCK } from './Terrain.js';
 import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from './Castles.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
+import { faceYaw } from './LoreStand.js';
 
 export const VILLAGE_ZONE = 124; // half-size of the levelled land
 const VILLAGE_P = 0.6; // share of the castle- and tower-free cells that try to hold a settlement
@@ -297,13 +298,15 @@ function buildLibrary(p, rng, out) {
     for (let i = 0; i < n; i++) { const k = Math.floor(rng() * pool.length); scrolls.push(pool.splice(k, 1)[0]); }
     const top = p.L(1) - 0.5;
     const spots = scrolls.map((_, i) => { const q = p.pt(du - 1.6 + (3.2 * i) / Math.max(1, n - 1), 20.5, 0); return { x: q.x, y: top, z: q.z }; });
-    // the desk of the world's history before the back shelves: the books of the lore lie on it (LoreLibrary.js — LoreBooks.js)
-    p.box(31, 43, 0, 1, 24, 25, B.PLANKS_DARK);
+    // the reading stands of the world's history before the back shelves: one book on each (LoreLibrary.js — LoreBooks.js, LoreStand.js)
     const lore = [];
-    for (let i = 0; i < 7; i++) { const q = p.pt(32 + i * 1.6, 24.5, 0); lore.push({ x: q.x, y: p.L(1) - 0.5, z: q.z }); }
-    const door = p.node(du, 11, 0), inn = p.node(du, 17, 0, 'room:library'), desk = p.node(du, 18, 0, 'library');
+    for (let i = 0; i < 7; i++) {
+        const u = 31 + i * 2, q = p.pt(u, 25, 0), r = p.pt(u, 24, 0); // (the reader stands at the door side, v 24)
+        p.box(u, u, 0, 1, 25, 25, B.PLANKS_DARK);
+        lore.push({ x: q.x, y: q.y, z: q.z, face: faceYaw(r.x - q.x, r.z - q.z) });
+    }
+    const door = p.node(du, 11, 0), inn = p.node(du, 17, 0, 'room:library'), desk = p.node(du, 18, 0, 'library'); // (nobody sits there: no librarian)
     p.link(door, inn); p.link(inn, desk); p.link(door, p.node(du, 0, 0));
-    out.spots.push({ kind: 'desk', ...p.pt(du, 18.6, 0), yaw: p.yaw(Math.PI), node: desk });
     out.library = { scrolls, spots, lore, ...p.rect(u0 + 1, u1 - 1, v0 + 1, v1 - 1) };
     out.civic.push({
         kind: 'library', civic: true, rich: true, wizard: true, c: p.pt(du, 21), r: 10, doorRec: civicDoor(p, du, v0, 0, 1, 3, 6), windows,

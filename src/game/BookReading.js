@@ -878,6 +878,75 @@ export class BookReading {
         setBookAngle(model, 0);
     }
 
+    // ------------------------------------------------------------ a book lying on a stand (LoreLibrary.js)
+    /**
+     * A book of the world's history lies open on a reading stand: it can't be taken (it is not a loose thing:
+     * no hand, Accio, Levitation or blast moves it) — only read: a fingertip slides under the edge of a page and
+     * turns it, the same as in the hands. Returns its reading state.
+     */
+    standOpen(model, item) {
+        model.updateMatrixWorld(true);
+        const s = {
+            mode: 'stand', model, item, owner: null, phi: Math.PI, pos: model.getWorldPosition(new THREE.Vector3()), quat: model.getWorldQuaternion(new THREE.Quaternion()),
+            hold: { left: null, right: null }, spread: 0, sheet: null, readT: 0, catchT: 0, fingerSide: null,
+        };
+        this._initPages(s);
+        setBookAngle(model, s.phi);
+        return s;
+    }
+
+    /** One step of a book on a stand; `near`: the reader is at it (their fingers may turn the pages), else a page only finishes its fall. */
+    standStep(s, dt, near) {
+        s.model.updateMatrixWorld(true);
+        if (near) {
+            const sides = s.fingerSide ? [s.fingerSide] : ['right', 'left'];
+            let used = null;
+            for (const side of sides) {
+                if (!this._free(side)) continue;
+                const fh = this._hand(side);
+                this._finger(s, fh, dt);
+                this._pushOut(s, side, fh);
+                this._pushBoard(s, side, fh);
+                if (s.sheet) { used = side; break; }
+            }
+            s.fingerSide = used;
+        } else if (s.sheet) {
+            s.sheet.touch(null, dt);
+            s.fingerSide = null;
+        }
+        if (s.sheet || near) this._pages(s, dt);
+    }
+
+    /** The board under the book: a fingertip or the palm does not go into it (the hand is held above it). */
+    _pushBoard(s, side, fh) {
+        const hand = fh.hand;
+        if (!hand?.group?.visible || !hand.group.parent) return;
+        const sc = s.model.scale.x || 1;
+        const top = BOOK.B * sc + 0.004, bottom = top + 0.12; // m under the book's back: the board's thickness
+        let best = 0;
+        for (const p of this._handPoints(hand)) {
+            const l = s.model.worldToLocal(_v3.copy(p));
+            if (Math.abs(l.x) * sc > 0.85 || Math.abs(l.y) * sc > 0.625) continue;
+            const d = -l.z * sc; // m under the plane of the spine
+            if (d > top - 0.001 && d < bottom && d - top + 0.01 > best) best = d - top + 0.01;
+        }
+        if (!best) return;
+        _v5.set(0, 0, 1).transformDirection(s.model.matrixWorld).multiplyScalar(best);
+        hand.group.parent.getWorldQuaternion(_q).invert();
+        hand.group.position.add(_v5.applyQuaternion(_q).clampLength(0, HOLD.PUSH_MAX));
+        hand.group.updateMatrixWorld(true);
+    }
+
+    /** The reader walked away: the pages' pictures and the page being turned are given back (the book stays open on its stand). */
+    standClose(s) {
+        if (!s) return;
+        const b = s.model.userData.book;
+        if (s.sheet) { s.model.remove(s.sheet.mesh); disposePageSheet(s.sheet.mesh); s.sheet = null; }
+        if (b) { b.faceL.material = s.paper; b.faceR.material = s.paper; }
+        s.matL.dispose(); s.matR.dispose();
+        for (const t of s.tex) disposeSpread(t);
+    }
+
     /** Back into the fist (closed) — or the book is gone (thrown, in a slot, given away). */
     _end(gone) {
         const s = this.s;

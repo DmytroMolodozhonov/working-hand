@@ -3,7 +3,7 @@
  *
  * The people (a part of CastleLife / WizardLife — the host decides, as for all the castle people):
  *  - by day the Elder sits in his chair in the town hall, the sellers stand behind their counters in
- *    the crooked market lane, a wizard brews at the big cauldron, another reads in the library, two
+ *    the crooked market lane, a wizard brews at the big cauldron (nobody sits in the library), two
  *    warm themselves at the central fire; the townsfolk come out of their houses near the players and
  *    walk about: to the market, the plaza, the gardens, the hall and the library, back home;
  *  - at night most sleep at home (NightLife: in their beds), the shops shut, three wizards walk the
@@ -15,7 +15,7 @@
  *  - the figure of Coprus the Clever on his pedestal (a model: CopruStatue.js, with a collision box) and
  *    the plaque on the pedestal: «Coprus the Clever» (one shared texture);
  *  - the library's table: 2–5 scrolls of simple spells; taken — gone for good (remembered as an opened
- *    chest: `_openedChests`, saved with the world); the books of the world's history lie on its desk
+ *    chest: `_openedChests`, saved with the world); the books of the world's history lie on its reading stands
  *    (`def.lore` — LoreLibrary.js lays them when the place wakes).
  */
 
@@ -27,12 +27,11 @@ import { makeStatue, STATUE_BOX } from './CopruStatue.js';
 
 const SCROLL_TAKEN = 1.2; // m: a library scroll moved this far from its place (or picked up) is taken
 
-/** The day places besides the Elder and the sellers: the brewer, the librarian, two at the fire. */
+/** The day places besides the Elder and the sellers: the brewer, two at the fire (nobody sits in the library). */
 function villagePosts(def) {
     const out = [];
     for (const s of def.spots || []) {
         if (s.kind === 'cauldron') out.push({ key: 'brew', at: { x: s.x, y: s.y, z: s.z, yaw: s.yaw ?? 0 }, job: 'brew' });
-        if (s.kind === 'desk') out.push({ key: 'library', at: { x: s.x, y: s.y, z: s.z, yaw: s.yaw ?? 0 }, job: 'desk' });
     }
     const f = def.fire;
     if (f) {
