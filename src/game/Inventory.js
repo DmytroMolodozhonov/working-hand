@@ -29,7 +29,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
-import { CoinBelt } from './CoinBelt.js';
+import { CoinBelt, purseBags } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
 import { accioCatcher } from './Accio.js';
@@ -583,6 +583,16 @@ export class Inventory {
                 if (this._storeWeapon(c.weapon, c.slot)) return this.takeNext(side);
                 return false;
             }
+            if (c.pouch) { // (the pouch from the belt, the last of the circle: back onto the belt, the circle goes on from the start)
+                this._cyc = null;
+                if (h && h.item === c.item && this.purse.canTie(h.item)) {
+                    this._next = this.slots.length;
+                    this.purse._tieOn(side);
+                    this._render();
+                    return this.takeNext(side);
+                }
+                return g.items?.held[side] || g.weapons.hands[side].held ? this.pocketRight(side) : this.takeNext(side);
+            }
             if (h && c.item && h.item === c.item) {
                 const it = g.items.releaseHand(side);
                 this.slots[c.slot] = it; // (back into its own slot: it fits, it came from there)
@@ -615,10 +625,25 @@ export class Inventory {
 
     /** The things' pocket, an empty hand: the next thing of the slots into it (not the wand, not what goes on the back). */
     takeNext(side = 'right') {
-        const n = this.slots.length;
+        const n = this.slots.length + 1; // (the last of the circle — the pouch from the belt)
         const start = this._next ?? -1;
         for (let k = 1; k <= n; k++) {
             const i = (start + k) % n;
+            if (i === this.slots.length) { // the pouch cell: the best pouch of the belt comes into the hand
+                if (!this.purse.any) continue;
+                const g = this.game;
+                if (g.items?.held[side] || g.weapons.hands[side].held) { this.game.hud.toast?.('🎒 Руки заняты — достать нечем'); return false; }
+                this._putBackHand(side);
+                this.selected = -1;
+                this._next = i;
+                this.purse._take(side);
+                const got = g.items?.held[side];
+                if (!got || got.item.kind !== 'coins') { this._cyc = null; this._render(); return false; }
+                this._cyc = { side, pouch: true, item: got.item, slot: -1 };
+                (this._tookAt || (this._tookAt = { left: 0, right: 0 }))[side] = performance.now();
+                this._render();
+                return true;
+            }
             const it = this.slots[i];
             if (!it) continue; // (everything in the circle, in order: wands, weapons, shields too — the author: the wand never came)
             this._next = i;
@@ -841,7 +866,57 @@ export class Inventory {
             bar.appendChild(c);
             this.cells.push(c);
         }
+        // the pouch cell on the right (the hand's cell mirrored): the best pouch, and how many of them
+        const pouch = document.createElement('div');
+        pouch.className = 'hotbar-slot hand pouch';
+        pouch.innerHTML = '<div class="hb-icon"></div><div class="hb-count"></div>';
+        pouch.onclick = () => this.pouchClick();
+        bar.appendChild(pouch);
+        this.pouchCell = pouch;
+        this._pouchKey = null;
         this.bar = bar;
+        this._render();
+    }
+
+    /** The pouch cell: redrawn only when something changed. */
+    _renderPouch() {
+        const c = this.pouchCell;
+        if (!c) return;
+        const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
+        const key = o.count + '|' + o.magic + '|' + o.coins + '|' + sel;
+        if (key === this._pouchKey) return;
+        this._pouchKey = key;
+        c.classList.toggle('sel', sel);
+        c.classList.toggle('empty', o.count === 0);
+        c.querySelector('.hb-icon').innerHTML = pouchIcon(o.magic);
+        c.querySelector('.hb-count').textContent = o.count > 0 ? o.count : '';
+        c.title = o.count === 0 ? 'Мешочков нет' : (o.magic ? 'Бездонный мешочек, монет: ' : 'Мешочков: ' + o.count + ', монет: ') + o.coins;
+    }
+
+    /** My pouches: how many (the magic one counts as one), is there a magic one, all the coins. */
+    pouchInfo() {
+        const g = this.game, p = this.purse;
+        let count = p ? (p.magic ? 1 : purseBags(p.count).length) : 0;
+        const mine = (it) => !!it && it.kind === 'coins' && !it.shop;
+        for (const s of this.slots) if (mine(s)) count++;
+        for (const side of ['right', 'left']) if (mine(g.items?.held[side]?.item)) count++;
+        return { count, magic: this.hasMagicPouch(), coins: this.coins() };
+    }
+
+    /** A click on the pouch cell: a pouch in a hand goes back onto the belt, else the best pouch of the belt comes into a free hand. */
+    pouchClick() {
+        const g = this.game, dom = g.dom || 'right';
+        const sides = [dom, dom === 'right' ? 'left' : 'right'];
+        const hs = sides.find((sd) => g.items?.held[sd]?.item.kind === 'coins' && this.purse.canTie(g.items.held[sd].item));
+        if (hs) { this._cyc = null; this.purse._tieOn(hs); this._render(); return; }
+        if (!this.purse.any) { g.hud.toast?.('💰 Мешочков на поясе нет'); return; }
+        const free = sides.find((sd) => !g.items?.held[sd] && !g.weapons.hands[sd].held);
+        if (!free) { g.hud.toast?.('🎒 Руки заняты — достать нечем'); return; }
+        this._putBackHand(free);
+        this.selected = -1;
+        this._next = this.slots.length;
+        this.purse._take(free);
+        this._cyc = null;
         this._render();
     }
 
@@ -857,6 +932,7 @@ export class Inventory {
     /** The coin counter at the top right of the screen: my pouch (red — the magic one, brown — plain), 🪙 and all my coins. */
     _renderCoins() {
         if (typeof document === 'undefined') return;
+        this._renderPouch();
         const n = this.coins(), magic = this.hasMagicPouch();
         if (n === this._coinsShown && magic === this._pouchShown) return;
         const el = document.getElementById('coin-count');
@@ -875,6 +951,7 @@ export class Inventory {
 
     _render() {
         if (!this.cells) return;
+        this._renderPouch();
         this.handCell?.classList.toggle('sel', this.selected < 0);
         if (this.handCell) {
             const l = this._handThing('left'), r = this._handThing('right');

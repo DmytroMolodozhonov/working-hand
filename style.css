@@ -1428,6 +1428,9 @@ body {
 .hotbar-slot .hb-count { position: absolute; right: 6px; bottom: 2px; color: #fff; font-weight: bold; font-size: 19px; text-shadow: 0 0 3px #000, 0 1px 1px #000; }
 .hotbar-slot.hand { width: 66px; height: 66px; margin-top: 15px; border-style: dashed; background: rgba(40, 30, 10, 0.6); }
 .hotbar-slot.hand .hb-icon { inset: 8px; font-size: 33px; }
+.hotbar-slot.pouch { border-style: solid; }
+.hotbar-slot.pouch.empty { opacity: 0.45; }
+.hotbar-slot.pouch .hb-icon svg { width: 100%; height: 100%; }
 .hotbar-slot .hb-key { position: absolute; left: 6px; top: 2px; color: rgba(255, 255, 255, 0.55); font-size: 15px; }
 
 /* ---------------- Menu (single player / multiplayer / codex / settings) ---------------- */
