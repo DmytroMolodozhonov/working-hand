@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { TerrainData, CHUNK, chunkKey, mergeBuffers } from './Terrain.js';
 import { slotAt } from './Planets.js';
 import { applyVoxelDetail, applySkyComp } from './VoxelShading.js';
+import { applyUltraWater } from '../fx/UltraWater.js';
 
 /** ms a frame for sending changed chunks to the workers (and as much again for putting their meshes in). */
 const REBUILD_MS = 1.5;
@@ -48,10 +49,10 @@ export class Terrain {
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
-        this.waterMaterial = applySkyComp(new THREE.MeshPhongMaterial({
+        this.waterMaterial = applyUltraWater(applySkyComp(new THREE.MeshPhongMaterial({
             vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false,
             shininess: 90, specular: 0x88bbff,
-        }));
+        }))); // («Ультра качество»: lakes and rivers mirror the sky)
         this.group = new THREE.Group();
         this.group.name = 'terrain';
         this.meshes = new Map(); // chunk key -> {ground (= raised: one mesh for its land), water, cx, cz}

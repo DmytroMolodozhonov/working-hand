@@ -22,6 +22,13 @@ export const QUALITY_LEVELS = [
 ];
 
 /**
+ * «Ультра качество» (Ultra.js): the highest level's sharp picture and a bigger, sharper sun shadow
+ * (its edges softened). While it is on, «Авто» does not step the picture down — the player chose it;
+ * if it is not smooth the settings say so.
+ */
+export const ULTRA_LEVEL = { name: 'ультра', pixelRatio: 1.25, shadowSize: 3072, shadowEvery: 1, shadowFly: 110, view: 1.0, shadows: true, soft: true, clouds: true };
+
+/**
  * How far the world is drawn (settings → «Прорисовка мира»). The fog, the
  * loaded terrain chunks and the sea all follow this one number: the fog's
  * distances are multiplied by it, and the chunks load one chunk beyond the fog,
@@ -77,6 +84,16 @@ export class QualityManager {
         this.apply();
     }
 
+    /** «Ультра качество» on / off (Ultra.js). */
+    setUltra(on) {
+        if (!!this.ultra === !!on) return;
+        this.ultra = !!on;
+        this._bad = 0;
+        this._goodFor = 0;
+        this._sinceChange = 0;
+        this.apply();
+    }
+
     /** The level auto mode settled on last time (so a weak computer doesn't start with stutters). */
     static lastLevel() {
         try {
@@ -86,7 +103,7 @@ export class QualityManager {
     }
 
     get current() {
-        return QUALITY_LEVELS[this.level];
+        return this.ultra ? ULTRA_LEVEL : QUALITY_LEVELS[this.level];
     }
 
     /** Apply the current level to the renderer and the world. */
@@ -122,7 +139,7 @@ export class QualityManager {
         if (world) world.viewScale = q.view;
         // (in flight the sun's shadow covers a bigger box ahead: the cheap levels keep the small one)
         if (world) world.shadowFlyExtent = q.shadowFly;
-        if (this.auto) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
+        if (this.auto && !this.ultra) { try { localStorage.setItem('zns-quality-level', String(this.level)); } catch (e) { /* not remembered */ } }
     }
 
     /** Call once per frame with the real frame time (seconds). */
@@ -130,7 +147,7 @@ export class QualityManager {
         const q = this.current;
         this._frame++;
         if (q.shadowEvery > 1 && this._frame % q.shadowEvery === 0) this.renderer.shadowMap.needsUpdate = true;
-        if (!this.auto || !(deltaTime > 0) || deltaTime > 1) return;
+        if (!this.auto || this.ultra || !(deltaTime > 0) || deltaTime > 1) return;
         this._acc += deltaTime;
         this._frames++;
         this._sinceChange += deltaTime;

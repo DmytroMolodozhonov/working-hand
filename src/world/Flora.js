@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { CHUNK, chunkKey } from './Terrain.js';
 import { buildFlora } from './FloraBuild.js';
 import { applySkyComp } from './VoxelShading.js';
+import { ULTRA } from '../fx/UltraUniforms.js';
 
 export { buildFlora }; // (the blades themselves: FloraBuild.js — no THREE there, so a worker can make them too)
 
@@ -53,8 +54,10 @@ export class Flora {
             shader.uniforms.uWind = WIND.time;
             shader.uniforms.uFloraCenter = center;
             shader.uniforms.uFloraR = radius;
+            shader.uniforms.uUltraOn = ULTRA.on;
+            shader.uniforms.uUltraTime = ULTRA.time;
             shader.vertexShader = shader.vertexShader
-                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nvarying float vGlow;\nuniform float uWind;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;')
+                .replace('#include <common>', '#include <common>\nattribute float sway;\nattribute float glow;\nvarying float vGlow;\nuniform float uWind;\nuniform float uUltraOn;\nuniform float uUltraTime;\nuniform vec3 uFloraCenter;\nuniform float uFloraR;')
                 .replace('#include <begin_vertex>', `#include <begin_vertex>
 vGlow = glow;
 {
@@ -64,6 +67,8 @@ vGlow = glow;
     transformed.y -= sway * (1.0 - far) * 1.2;
     float s = sway * sway;
     float w = sin(uWind * 1.7 + wp.x * 0.37 + wp.z * 0.21) + 0.45 * sin(uWind * 3.1 + wp.x * 1.3 - wp.z * 0.9);
+    // («Ультра качество»: gusts roll over the meadow in waves, as in the ultra grass)
+    if (uUltraOn > 0.5) w = w * 0.6 + 1.6 * pow(0.5 + 0.5 * sin(dot(wp.xz, vec2(0.11, 0.07)) - uUltraTime * 1.25), 3.0);
     transformed.x += s * w * 0.07 * far;
     transformed.z += s * w * 0.045 * far;
 }`);
@@ -76,6 +81,20 @@ vGlow = glow;
         };
         m.customProgramCacheKey = () => 'flora';
         return applySkyComp(m);
+    }
+
+    /** One blade, to compile the shader on the loading screen (Game.prewarm): the first meadow made it in play. */
+    sampleModel() {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute([0, -1000, 0, 0.1, -1000, 0, 0, -999.7, 0], 3));
+        geo.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+        geo.setAttribute('color', new THREE.Float32BufferAttribute([0.3, 0.6, 0.2, 0.3, 0.6, 0.2, 0.4, 0.7, 0.3], 3));
+        geo.setAttribute('sway', new THREE.Float32BufferAttribute([0, 0, 0.3], 1));
+        geo.setAttribute('glow', new THREE.Float32BufferAttribute([0, 0, 0], 1));
+        const m = new THREE.Mesh(geo, this.material);
+        m.receiveShadow = true;
+        m.frustumCulled = false;
+        return m;
     }
 
     /** @param {{x:number, z:number}} focus  the player */

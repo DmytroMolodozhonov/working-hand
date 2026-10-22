@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { ULTRA_PARS, addUltraUniforms } from '../fx/UltraUniforms.js';
 
 /**
  * The daylight in the world's lights: `comp` undoes the dimming of the lights round a player deep
@@ -95,6 +96,25 @@ export function applySkyComp(material) {
     material.customProgramCacheKey = () => (key ? key() : material.type) + '-sky';
     return material;
 }
+
+const WET_FRAG = `
+if (uUltraOn > 0.5 && uUltraWet > 0.01) {
+    vec3 wn = normalize(vVoxNormal);
+    float wet = uUltraWet * smoothstep(0.55, 0.95, wn.y) * smoothstep(0.6, 0.95, vVoxSky);
+    if (wet > 0.005) {
+        float puddle = smoothstep(0.5, 0.72, vnoise(vVoxPos.xz * 0.23) * 0.7 + vnoise(vVoxPos.xz * 0.9) * 0.3);
+        vec2 rt = ultraRain(vVoxPos.xz, uUltraTime) * 0.1 * puddle;
+        vec3 n2 = normalize(wn + vec3(rt.x, 0.0, rt.y));
+        vec3 wV = normalize(vVoxPos - cameraPosition);
+        float fr = 0.03 + 0.97 * pow(1.0 - clamp(dot(-wV, n2), 0.0, 1.0), 5.0);
+        vec3 wR = reflect(wV, n2);
+        gl_FragColor.rgb *= 1.0 - 0.28 * wet;
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, ultraSky(wR) * 0.8, clamp(fr * wet * (0.35 + 0.65 * puddle), 0.0, 0.75));
+        float ws = max(dot(wR, normalize(uUltraSunDir)), 0.0);
+        gl_FragColor.rgb += uUltraSunCol * pow(ws, 160.0) * 1.5 * wet * uUltraSunVis;
+    }
+}
+#include <fog_fragment>`;
 
 export function applyVoxelDetail(material) {
     material.onBeforeCompile = (shader) => {
@@ -338,6 +358,15 @@ float snowflakeAt(vec2 uv) {
         totalEmissiveRadiance += diffuseColor.rgb * 0.5 * ring; // runes glow faintly
     }
 }`);
+    };
+    const detail = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+        detail(shader, renderer);
+        // «Ультра качество», in the rain: the open ground darkens and shines wet, puddles mirror the sky
+        addUltraUniforms(shader);
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\n' + ULTRA_PARS)
+            .replace('#include <fog_fragment>', WET_FRAG);
     };
     material.extensions = { ...(material.extensions || {}), derivatives: true }; // (fwidth on WebGL1)
     material.customProgramCacheKey = () => 'voxel-detail';

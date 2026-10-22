@@ -18,6 +18,7 @@ import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { waveGlsl, seaDepth, waveAmp, WAVES } from '../world/Sea.js';
 import { SPACE } from '../world/Planets.js';
 import { boomReach } from '../world/BoomCarve.js';
+import { applyUltraWater } from './UltraWater.js';
 
 const TEX = 256; // texels per side
 const TEXEL = 5; // m per texel → 1280 m covered
@@ -149,7 +150,7 @@ varying vec3 vSeaWorld;`)
                 diffuseColor.a = mix(diffuseColor.a, 0.95, seaFoam * 0.6 + seaK * 0.12);`);
         };
         mat.customProgramCacheKey = () => 'sea-surface-v2';
-        return mat;
+        return applyUltraWater(mat); // («Ультра качество»: the sky mirrored, ripples, the sun's path)
     }
 
     /** Start rebuilding the shore texture around (x, z). */

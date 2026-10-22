@@ -103,6 +103,7 @@ import { LivingTrees } from './LivingTrees.js';
 import { Servants } from './Servants.js';
 import { Duel } from './Duel.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
+import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
@@ -481,7 +482,10 @@ export class Game {
         this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
         this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
+        this.quality.ultra = Ultra.wanted(config.ultra); // (decided before the first apply: the shadows' kind is fixed then)
         this.quality.apply(this.world);
+        this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
+        this.ultra.set(this.quality.ultra);
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, isWeapon && w ? dmg * (w.damageScale || 1) : dmg, dir, isWeapon, hit, w);
 
@@ -2846,11 +2850,6 @@ export class Game {
         this.currentPose = null;
     }
 
-    /**
-     * Compile every shader the session can ever need NOW (during loading):
-     * effects that are hidden until first use would otherwise compile in the
-     * middle of a fight and freeze the game for a moment.
-     */
     /** Things whose slot pictures are made while loading (ItemIcons.warm): every kind, the wands of every shape, what I carry. */
     _iconSamples() {
         const out = [];
@@ -2863,6 +2862,16 @@ export class Game {
         return out;
     }
 
+    /** The scene to the screen: the usual way, or with the «Ультра качество» picture. */
+    _draw() {
+        if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
+    }
+
+    /**
+     * Compile every shader the session can ever need NOW (during loading):
+     * effects that are hidden until first use would otherwise compile in the
+     * middle of a fight and freeze the game for a moment.
+     */
     prewarm() {
         const hidden = [];
         this.scene.traverse((o) => {
@@ -2894,6 +2903,8 @@ export class Game {
         for (const m of this.iceMagic?.sampleModels?.() || []) zoo.add(m); // (the gloss of a castle of ice)
         for (const m of this.temple?.sampleModels?.() || []) zoo.add(m); // (the Temple of the Gods: its stone, marble, gold, books, sand, cobwebs, light)
         for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
+        for (const m of this.ultra?.sampleModels?.() || []) zoo.add(m); // («Ультра качество»: the soft lawn)
+        if (this.world.terrain?.flora) zoo.add(this.world.terrain.flora.sampleModel()); // (the meadows' tall grass and flowers)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
@@ -2935,6 +2946,7 @@ export class Game {
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
+        this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
 
@@ -3003,7 +3015,7 @@ export class Game {
             if (limit > 0 && t - this.lastRender < 1000 / limit - 1.5) return;
             this.lastRender = t;
             // the pause menu (alone in the world): the picture stays, time stands still
-            if (this.paused) { this.lastTime = performance.now(); this.renderer.render(this.scene, this.camera); return; }
+            if (this.paused) { this.lastTime = performance.now(); this._draw(); return; }
             try {
                 this.frame();
             } catch (e) {
@@ -3244,7 +3256,8 @@ export class Game {
         if (logic > (this.stats.worstLogicMs || 0)) this.stats.worstLogicMs = logic;
 
         mark('прочее');
-        if (!this.space?.render()) this.renderer.render(this.scene, this.camera); // (space: its own picture first — Space.render)
+        this.ultra?.update(deltaTime); // («Ультра качество»: nothing when off)
+        if (!this.space?.render()) this._draw(); // (space: its own picture first — Space.render)
         mark('графика');
         this._frameEnd = performance.now();
         this.perf?.frame(deltaTime * 1000, parts);
@@ -4013,6 +4026,7 @@ export class Game {
         this.scrolls?.dispose();
         this.swim?.dispose();
         this.seaSurface?.dispose();
+        this.ultra?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();
         this.vortex?.dispose();

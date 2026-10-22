@@ -4,7 +4,7 @@
  * over the new world (generation 5). Run:  node tools/flightbench.mjs [options]
  *
  *   --levels high,max   graphics presets to measure (high: quality «Высокая» + view «Высокая»;
- *                       max: quality «Высокая» + view «Максимальная»)
+ *                       max: quality «Высокая» + view «Максимальная»; ultra: «Высокая» + «Ультра качество»)
  *   --seed 20261015     the world's seed (the same world every run)
  *   --out file.json     save the numbers (and print a table)
  *   --check             fail (exit code 1) when the flight is not smooth (LIMITS below)
@@ -43,7 +43,7 @@ const SPACE_ROUTE = args.includes('--space');
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
 const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
-const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' } };
+const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' } };
 
 /** Runs in the page: fly the route, record every frame. */
 async function flyRoute() {
@@ -133,6 +133,7 @@ async function flyRoute() {
     wrap(t.data, '_generateChunk', 'земля:генерация');
     wrap(t, '_build', 'земля:меш');
     wrap(t.flora, 'update', 'трава');
+    wrap(g.ultra, 'update', 'ультра');
     wrap(g.seaSurface, 'update', 'море');
     wrap(g.world.sky, 'update', 'небо');
     wrap(g.renderer.shadowMap, 'render', 'тени');
@@ -324,13 +325,13 @@ async function runLevel(browser, url, level) {
     });
     const P = PRESETS[level];
     await page.evaluate(({ P, SEED }) => {
-        for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance]]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
+        for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
         // which things need a shader that was not ready (a material's first compile is noted, with
         // the objects using it — every material, the same way, so the shaders stay the ones the game makes)
         const seen = window.__compiled = [];
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance });
+        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
     }, { P, SEED });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });

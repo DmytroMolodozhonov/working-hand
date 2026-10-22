@@ -271,6 +271,7 @@ function readConfig() {
         delegate: $('vision-delegate')?.value || 'auto',
         engine: $('vision-engine')?.value || 'classic',
         graphics: $('graphics-quality')?.value || 'auto',
+        ultra: $('ultra-quality')?.value === 'on', // («Ультра качество»: Ultra.js)
         viewDistance: $('view-distance')?.value || 'medium',
         resolution: $('camera-res').value,
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
@@ -1073,6 +1074,7 @@ applyWalkMode();
 // the graphics settings change the running game at once (no restart of the world)
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
 $('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
+$('ultra-quality')?.addEventListener('change', (e) => { game?.ultra?.set(e.target.value === 'on'); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
 // «🛠 Творческий» in the pause menu: hand version and «show what I said», changed on the go.
 // Each control mirrors the one in the settings (same value, same saving).
@@ -1424,7 +1426,7 @@ function escapeHtml(s) {
 (function rememberSettings() {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
-        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
+        'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
         'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
