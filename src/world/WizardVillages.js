@@ -38,7 +38,7 @@ const V_M = VILLAGE_ZONE + BLEND + 10; // the land stays ≥ 10 m inside its cel
 const V_SPAN = CASTLE_CELL - 2 * V_M;
 const TRIES = 10;
 const MIN_SPAWN = 420 + VILLAGE_ZONE;
-const SPAWN_RING = [700, 2100];
+const SPAWN_RING = [700, 2100, 4000]; // (the nearest free cell with level land in the first ring — else in the second)
 export const MAX_HOUSES = 100;
 const R1 = 70, R2 = 106; // the ring roads (centre lines)
 const PLAZA_R = 18;
@@ -634,22 +634,29 @@ export class VillageIndex {
     /** A free cell: no castle, no tower. */
     _freeCell(gx, gz) { return !this.castles.cellOf(gx, gz) && !this.towers.cellOf(gx, gz); }
 
-    /** The cell of the settlement always found near the spawn (a key, or −1). */
+    /** The cell of the settlement always found near the spawn (a key, or −1; a key may be −1 too — the cell (0, −1): ask spawnCell). */
     spawnKey() {
         if (this._spawn !== undefined) return this._spawn;
-        this._spawn = -1;
+        this._spawn = -1; this._spawnCell = null;
         const cells = [];
-        const n = Math.ceil(SPAWN_RING[1] / CASTLE_CELL) + 1;
+        const R = SPAWN_RING[SPAWN_RING.length - 1];
+        const n = Math.ceil(R / CASTLE_CELL) + 1;
         for (let gz = -n; gz <= n; gz++) for (let gx = -n; gx <= n; gx++) {
             const d = Math.hypot((gx + 0.5) * CASTLE_CELL, (gz + 0.5) * CASTLE_CELL);
-            if (d >= SPAWN_RING[0] && d <= SPAWN_RING[1]) cells.push({ gx, gz, d });
+            if (d >= SPAWN_RING[0] && d <= R) cells.push({ gx, gz, d, ring: d <= SPAWN_RING[1] ? 0 : 1 });
         }
-        cells.sort((a, b) => a.d - b.d || a.gx - b.gx || a.gz - b.gz);
+        cells.sort((a, b) => a.ring - b.ring || a.d - b.d || a.gx - b.gx || a.gz - b.gz);
         for (const c of cells) {
             if (!this._freeCell(c.gx, c.gz)) continue;
-            if (this._place(c.gx, c.gz)) { this._spawn = this._key(c.gx, c.gz); break; }
+            if (this._place(c.gx, c.gz)) { this._spawn = this._key(c.gx, c.gz); this._spawnCell = c; break; }
         }
         return this._spawn;
+    }
+
+    /** The settlement near the spawn (or null). */
+    spawnVillage() {
+        this.spawnKey();
+        return this._spawnCell ? this.cellOf(this._spawnCell.gx, this._spawnCell.gz) : null;
     }
 
     _make(gx, gz) {
@@ -658,7 +665,10 @@ export class VillageIndex {
         const pass = hash01(gx * 17 + 9, gz * 19 + 2, this.seed + 3100) <= VILLAGE_P;
         if (!pass) {
             const d = Math.hypot((gx + 0.5) * CASTLE_CELL, (gz + 0.5) * CASTLE_CELL);
-            if (d < SPAWN_RING[0] || d > SPAWN_RING[1] || this.spawnKey() !== this._key(gx, gz)) return null;
+            if (d < SPAWN_RING[0] || d > SPAWN_RING[SPAWN_RING.length - 1]) return null;
+            this.spawnKey();
+            const c = this._spawnCell;
+            if (!c || c.gx !== gx || c.gz !== gz) return null;
         }
         const at = this._place(gx, gz);
         if (!at) return null;

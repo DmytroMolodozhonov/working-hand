@@ -556,7 +556,7 @@ export class Space {
         for (let gz = Math.floor((d.z - r) / cell) - 1; gz <= Math.floor((d.z + r) / cell) + 1; gz++) {
             for (let gx = Math.floor((d.x - r) / cell) - 1; gx <= Math.floor((d.x + r) / cell) + 1; gx++) {
                 const key = S.castles._key(gx, gz);
-                if (!S.castles.cells.has(key) || !S.towers.cells.has(key)) return false;
+                if (!S.castles.cells.has(key) || !S.towers.cells.has(key) || (S.villages && !S.villages.cells.has(key))) return false; // (the wizards' settlements too: WizardVillages.js)
             }
         }
         return true;

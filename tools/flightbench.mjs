@@ -17,9 +17,9 @@
  * The route (the same every run, real flight speed 26 m/s, the player's own flight):
  *   1. «прямой»   — straight fast flight away from spawn;
  *   2. «разворот» — a U-turn (the world behind loads again);
- *   3. «поселение» — to the wizards' settlement near the spawn (WizardVillages.js: ~100 houses), a circle over it;
  *   3. «замок»    — to the nearest castle with its village, and a circle round it;
- *   4. «горы»     — to the highest mountain about and over it.
+ *   4. «горы»     — to the highest mountain about and over it;
+ *   5. «поселение» — on to the wizards' settlement near the spawn (WizardVillages.js: ~100 houses), a circle over it.
  *
  * Numbers per part and for the whole flight: average FPS, the 1 % worst frames
  * (their average FPS), the longest frame, how many frames took longer than 33 ms.
@@ -59,9 +59,7 @@ async function flyRoute() {
         .sort((a, b) => Math.hypot(a.x - p0.x, a.z - p0.z) - Math.hypot(b.x - p0.x, b.z - p0.z));
     const castle = castles[0] || { x: p0.x - 600, z: p0.z + 300 };
     // the wizards' settlement near the spawn (its cell found by the world's own rule: no measuring yet)
-    const vk = data.villages?.spawnKey?.() ?? -1;
-    const vgz = ((vk % 65536) + 65536 + 32768) % 65536 - 32768, vgx = Math.round((vk - vgz) / 65536);
-    const village = vk !== -1 ? data.villages.cellOf(vgx, vgz) : null;
+    const village = data.villages?.spawnVillage?.() || null;
     let peak = { x: p0.x, z: p0.z + 800, h: -1 };
     for (let z = -1200; z <= 1200; z += 40) for (let x = -1200; x <= 1200; x += 40) {
         const h = data.heightAt(Math.round(p0.x + x), Math.round(p0.z + z)); // (the height alone: no chunk is made)
@@ -76,9 +74,9 @@ async function flyRoute() {
     const plan = [
         { name: 'прямой', time: 22 },
         { name: 'разворот', time: 7 },
-        ...(village ? [{ name: 'поселение', time: Math.min(110, Math.hypot(village.x - p0.x, village.z - p0.z) / SPEED + 30) }] : []),
         { name: 'замок', time: 32 },
         { name: 'горы', time: 30 },
+        ...(village ? [{ name: 'поселение', time: Math.min(110, Math.hypot(village.x - peak.x, village.z - peak.z) / SPEED + 30) }] : []),
     ];
     const origFlight = g._updateFlight.bind(g);
     let last = performance.now();
@@ -215,7 +213,7 @@ async function flyRoute() {
     ch.group.position.y += 20;
     const at = ch.group.position.clone();
     const t0 = performance.now();
-    while (!done && performance.now() - t0 < 420000) await new Promise((r) => setTimeout(r, 250));
+    while (!done && performance.now() - t0 < 900000) await new Promise((r) => setTimeout(r, 250));
     g._updateFlight = origFlight;
     g.frame = origFrame;
     for (const u of undo) u();
@@ -367,7 +365,7 @@ async function runLevel(browser, url, level) {
     }
     const res = { level, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
     res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), game: metrics(r.frames, 'game'), parts: partsAvg(r.frames) };
-    for (const s of ['прямой', 'разворот', 'замок', 'горы', ...(SPACE_ROUTE ? ['выход', 'космос', 'посадка', 'марс', 'домой'] : [])]) {
+    for (const s of ['прямой', 'разворот', 'замок', 'горы', 'поселение', ...(SPACE_ROUTE ? ['выход', 'космос', 'посадка', 'марс', 'домой'] : [])]) {
         const f = r.frames.filter((x) => x.seg === s);
         res.segs[s] = { frame: metrics(f, 'gap'), cpu: metrics(f, 'cpu'), game: metrics(f, 'game'), parts: partsAvg(f) };
     }

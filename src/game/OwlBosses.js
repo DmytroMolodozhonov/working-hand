@@ -90,7 +90,7 @@ function sitesReady(g, from, R) {
     for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) if (!planned(S, gx, gz)) return false;
     return true;
 }
-const planned = (S, gx, gz) => S.castles.cells.has(S.castles._key(gx, gz)) && S.towers.cells.has(S.towers._key(gx, gz));
+const planned = (S, gx, gz) => S.castles.cells.has(S.castles._key(gx, gz)) && S.towers.cells.has(S.towers._key(gx, gz)) && (!S.villages || S.villages.cells.has(S.villages._key(gx, gz)));
 
 /**
  * The castles and towers within job.R round `from` are planned (in the workers, or a little a

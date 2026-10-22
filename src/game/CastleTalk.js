@@ -634,10 +634,11 @@ export class CastleTalk {
     _restock(now) {
         const g = this.game;
         if (this.life.night?.closed()) return; // (the market is shut from an hour before the night till the morning)
+        let budget = 6; // (goods laid out at most in one go: a whole market at once — a model each — was a long frame; the rest at the next look)
         for (const cs of this.life.castles.values()) {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {
-                if (stall.fence || stall.pawn || !this._merchantOf(cs.def, i)) return; // (the shady buyer and the pawnshop only buy)
+                if (budget <= 0 || stall.fence || stall.pawn || !this._merchantOf(cs.def, i)) return; // (the shady buyer and the pawnshop only buy)
                 const key = this._stallKey(cs.def, i);
                 let s = this.stalls.get(key);
                 if (!s) { s = { goods: [], restockAt: 0 }; this.stalls.set(key, s); }
@@ -668,6 +669,7 @@ export class CastleTalk {
                     const z = along ? frontEdge(stall, GOOD_IN) : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
                     const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z));
                     s.goods.push(L.item.uid);
+                    budget--;
                 }
             });
         }

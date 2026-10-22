@@ -22,10 +22,7 @@ test('a wizards’ settlement comes to life: Elder, sellers with goods, the fire
     await waitHudVisible(page);
     const v = await page.evaluate(() => {
         const g = window.__zns.game;
-        const V = g.world.terrain.data.villages;
-        const k = V.spawnKey();
-        const gz = ((k % 65536) + 65536 + 32768) % 65536 - 32768, gx = Math.round((k - gz) / 65536);
-        const s = V.cellOf(gx, gz);
+        const s = g.world.terrain.data.villages.spawnVillage();
         window.__v = s;
         const f = s.stalls[0].front;
         g.character.group.position.set(f.x, f.y + 3, f.z);
@@ -46,7 +43,8 @@ test('a wizards’ settlement comes to life: Elder, sellers with goods, the fire
     await page.waitForFunction(() => {
         const g = window.__zns.game, s = window.__v;
         const goods = [...g.items.loose.values()].filter((L) => L.item.shop?.stall?.startsWith(s.id + ':'));
-        return goods.length >= 15 && g.campfires.nearest(s.fire, 2.5) && g.wizVillages.plaques.has(s.id) && (g.wizVillages.scrolls.get(s.id)?.length || 0) === s.library.scrolls.length;
+        const full = s.stalls.every((t, i) => t.pawn || goods.filter((L) => L.item.shop.stall === s.id + ':s' + i).length >= 3);
+        return full && g.campfires.nearest(s.fire, 2.5) && g.wizVillages.plaques.has(s.id) && (g.wizVillages.scrolls.get(s.id)?.length || 0) === s.library.scrolls.length;
     }, null, { timeout: 60000, polling: 500 });
     const shop = await page.evaluate(() => {
         const g = window.__zns.game, s = window.__v;

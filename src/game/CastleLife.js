@@ -30,7 +30,7 @@ import { crowdStep, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
-import { BLOCK } from '../world/Terrain.js';
+import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { ARMOR } from './ArmorTypes.js';
@@ -380,6 +380,7 @@ export class CastleLife {
             const far = players.every((pl) => Math.max(Math.abs(pl.p.x - cs.def.x), Math.abs(pl.p.z - cs.def.z)) > cs.def.zone + SLEEP);
             if (far) this._sleep(cs);
         }
+        for (const cs of this.castles.values()) if (cs.awake && !cs.chestsMade) this._makeChests(cs); // (the chests whose land was not made yet)
     }
 
     _wake(cs) {
@@ -462,8 +463,10 @@ export class CastleLife {
         if (cs.chestsMade) return;
         cs.chestsMade = true;
         const st = this.state(cs.def.id);
+        const data = g.world?.terrain?.data;
         for (const c of cs.def.chests) {
             if (g.chests.some((x) => x.id === c.id) || g.burnWreck?.burnt.has(c.id)) continue; // (burnt down: BurnWreck.js)
+            if (data?.chunks && !data.chunks.has(chunkKey(Math.floor(c.x / CHUNK), Math.floor(c.z / CHUNK)))) { cs.chestsMade = false; continue; } // (its land not made on this computer yet — making it now was a long frame: at the next look, _scan)
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
             const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale, style: CHEST_LOOK[c.room] });
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)

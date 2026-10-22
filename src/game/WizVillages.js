@@ -20,7 +20,8 @@
 
 import * as THREE from 'three';
 import { CAMPFIRE } from './Campfires.js';
-import { spellScroll } from './ItemTypes.js';
+import { spellScroll, makeItemModel } from './ItemTypes.js';
+import { CHUNK, chunkKey } from '../world/Terrain.js';
 
 const SCROLL_TAKEN = 1.2; // m: a library scroll moved this far from its place (or picked up) is taken
 
@@ -41,17 +42,29 @@ function villagePosts(def) {
     return out;
 }
 
-/** (host) The settlement's people at their places for the day / the night. */
+/** Is the land at (x, z) made on this computer? (A person put where it is not would make it now, in the frame: wait for it.) */
+function landReady(L, x, z) {
+    const d = L.game.world?.terrain?.data;
+    return !d?.chunks || d.chunks.has(chunkKey(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
+}
+
+const STAFF_STEP = 4; // people made at most in one go (a model each: flying in, all at once was a long frame); the rest next frames
+
+/** (host) The settlement's people at their places for the day / the night (a few at a time: `cs.vstaff` — crowdVillage goes on). */
 export function staffVillage(L, cs) {
     const def = cs.def;
     const st = L.state(def.id);
     const night = cs.wizNight;
+    let made = 0;
+    cs.vstaff = false;
     const put = (idx, post, job) => {
         if (!post || idx < 0) return null;
         const at = { x: post.x, y: post.y, z: post.z, yaw: post.yaw ?? 0 };
         let v = cs.active.get(idx);
         if (v) { if (!v.foe && !v.dead) { v.job = job; v.post = at; v.path = null; } return v; }
         if (st.killed.has(idx)) return null;
+        if (made >= STAFF_STEP || !landReady(L, at.x, at.z)) { cs.vstaff = true; return null; }
+        made++;
         return L._activate(cs, idx, at, job, { post: at });
     };
     // the Elder: in his chair in the hall by day, asleep at home at night
@@ -91,6 +104,7 @@ export function staffVillage(L, cs) {
 /** (host) Keep townsfolk about near the players (none at night: they sleep — NightLife). */
 export function crowdVillage(L, cs, dt) {
     const def = cs.def;
+    if (cs.vstaff) staffVillage(L, cs); // (the day's / the night's places not all taken yet)
     cs.spawnT -= dt;
     if (cs.spawnT > 0) return;
     cs.spawnT = 0.8;
@@ -114,7 +128,7 @@ export function crowdVillage(L, cs, dt) {
     for (let t = 0; t < 12 && from.length; t++) {
         const n = g.nodes[from[Math.floor(Math.random() * from.length)]];
         const d = Math.hypot(n.x - pl.p.x, n.z - pl.p.z);
-        if (d > 22 && d < 70) { node = n.id; break; }
+        if (d > 22 && d < 70 && landReady(L, n.x, n.z)) { node = n.id; break; }
     }
     if (node < 0) return;
     const idx = L._freeCommoner(cs);
@@ -176,7 +190,15 @@ export class WizVillages {
 
     get auth() { return this.game.authority; }
 
-    sampleModels() { const P = plaqueParts(); return [new THREE.Mesh(P.geo, P.mat)]; }
+    /** For Game.prewarm: the plaque, and every kind of good the market's counters show (WizardMarket.js). */
+    sampleModels() {
+        const P = plaqueParts();
+        const goods = [{ kind: 'potion', rec: 'heal', color: 0xe0405a }, { kind: 'potion', rec: 'invis', color: 0x9a7bd8 }, { kind: 'flask', count: 3 }, { kind: 'crystal', count: 1 },
+            { kind: 'web', count: 1 }, { kind: 'glass', count: 3 }, { kind: 'minotaurHorn' }, { kind: 'phoenixFeather', count: 1 }, { kind: 'owlFeather', count: 1 },
+            { kind: 'book', id: 123456, spells: [] }, { kind: 'robe', magic: false, color: 0x2c3e7a }, { kind: 'armor', piece: 'legs', magic: true }, { kind: 'shield', type: 2, magic: true, max: 30 },
+            { kind: 'wand', model: 7, color: 0x33aa66, power: 20 }, { kind: 'scroll', stat: 'spell', spell: 'Thunderwave' }];
+        return [new THREE.Mesh(P.geo, P.mat), ...goods.map((it) => makeItemModel(it))];
+    }
 
     update(dt) {
         this._t -= dt;
@@ -190,7 +212,7 @@ export class WizVillages {
             const def = cs.def;
             seen.add(def.id);
             this._plaque(def);
-            if (this.auth) { this._fire(def); this._library(def); }
+            if (this.auth && landReady(life, def.fire.x, def.fire.z)) { this._fire(def); this._library(def); } // (the middle's land made here first)
         }
         for (const [id, m] of [...this.plaques]) if (!seen.has(id)) { g.scene.remove(m); this.plaques.delete(id); }
         for (const id of [...this.scrolls.keys()]) if (!seen.has(id)) this._putAway(id);
@@ -239,8 +261,11 @@ export class WizVillages {
             }
             const s = L.spots[k];
             if (!s) return;
-            const it = I.spawnLoose(spellScroll(spell), new THREE.Vector3(s.x, s.y + 0.3, s.z));
-            if (it) list.push({ id, uid: it.item.uid, x: s.x, y: s.y, z: s.z });
+            const at = new THREE.Vector3(s.x, s.y + 0.3, s.z);
+            const it = I.spawnLoose(spellScroll(spell), at);
+            if (!it) return;
+            it.shelfAt = at.clone(); // (while it lies there it is the library's: not saved — LoreLibrary.onSpot, WorldSave)
+            list.push({ id, uid: it.item.uid, x: s.x, y: s.y, z: s.z });
         });
     }
 

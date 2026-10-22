@@ -13,10 +13,9 @@ function world(seed) {
     return worlds.get(seed);
 }
 function spawnVillage(t) {
-    const k = t.villages.spawnKey();
-    assert.ok(k !== -1, 'a settlement near the spawn');
-    const gz = ((k % 65536) + 65536 + 32768) % 65536 - 32768, gx = Math.round((k - gz) / 65536);
-    return t.villages.cellOf(gx, gz);
+    const s = t.villages.spawnVillage();
+    assert.ok(s, 'a settlement near the spawn');
+    return s;
 }
 
 test('wizards’ settlements: the same on every computer, one near the spawn, never in a castle’s or a tower’s cell', () => {
