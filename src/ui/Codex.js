@@ -12,6 +12,7 @@
 import { ACH, ACH_BY_ID } from '../game/Achievements.js';
 import { howLearned, teachKey } from '../game/SpellBook.js';
 import { matchSpell } from '../fx/SpellManager.js';
+import { firstSpellGain, SAME_SPELL } from '../game/Mana.js';
 
 export const SPELL_CATEGORIES = [
     { id: 'fight', name: '🔥 Боевые' },
@@ -543,7 +544,20 @@ export function learnBadge(spell, cat = null) {
     return `<span class="learn-badge ${cls}">${text}</span>`;
 }
 
-function card(item, can = null) {
+/**
+ * The pause menu's mark on a spell (`used(spell)`: its first success already paid — Mana.spellsUsed): ✅ the mana for
+ * it is had, ☐ +N — not yet (the author: «чтобы я понимал, за какое заклинание я уже получил очки маны, а за какое нет»).
+ */
+function manaMark(spell, used) {
+    if (!used || !spell) return '';
+    const n = firstSpellGain(spell);
+    if (!n) return '';
+    return used(SAME_SPELL[spell] || spell)
+        ? `<span class='learn-badge mana-done' title='Ячейки маны за первое удачное заклинание уже получены'>✅ мана получена</span>`
+        : `<span class='learn-badge mana-wait' title='Произнесите его удачно хотя бы раз — получите ячейки маны'>☐ +${n} к мане</span>`;
+}
+
+function card(item, can = null, used = null) {
     const el = document.createElement('div');
     el.className = 'item-card';
     const stat = (label, v) => (v && v !== '—' ? `<div class='stat-row'><span>${label}:</span><span class='stat-val'>${v}</span></div>` : '');
@@ -553,18 +567,18 @@ function card(item, can = null) {
     el.innerHTML = `
         <img src='${item.icon}' class='item-icon' onerror="this.style.display='none'">
         <div class='item-name'>${item.name}</div>
-        ${spell ? `<div class='item-learn'>${learnBadge(spell, item.cat)}</div>` : ''}
+        ${spell ? `<div class='item-learn'>${learnBadge(spell, item.cat)} ${manaMark(spell, used)}</div>` : ''}
         <div class='item-desc'>${item.desc}</div>
         ${item.say ? `<div class='item-desc'><b>Как:</b> ${item.say}</div>` : ''}
         ${item.next ? `<div class='item-desc'><b>Дальше:</b> ${item.next}</div>` : ''}
-        ${maxShown ? `<div class='item-desc item-max'><b>⚡ Максима</b> ${maxSpell ? learnBadge(maxSpell, item.cat) : ''}<br>${item.max}</div>` : ''}
+        ${maxShown ? `<div class='item-desc item-max'><b>⚡ Максима</b> ${maxSpell ? learnBadge(maxSpell, item.cat) + ' ' + manaMark(maxSpell, used) : ''}<br>${item.max}</div>` : ''}
         ${item.magic ? `<div class='item-desc item-max'><b>✨ Бывает волшебным:</b> ${item.magic}</div>` : ''}
         ${stats ? `<div class='item-stats'>${stats}</div>` : ''}`;
     return el;
 }
 
 /** Category buttons over a grid (spells and items share the look). */
-function renderCats(catsId, gridId, cats, list, current, pick, can = null) {
+function renderCats(catsId, gridId, cats, list, current, pick, can = null, used = null) {
     const box = document.getElementById(catsId);
     const grid = document.getElementById(gridId);
     if (!box || !grid) return;
@@ -577,7 +591,7 @@ function renderCats(catsId, gridId, cats, list, current, pick, can = null) {
         box.appendChild(b);
     }
     grid.innerHTML = '';
-    for (const s of list.filter((x) => x.cat === current)) grid.appendChild(card(s, can));
+    for (const s of list.filter((x) => x.cat === current)) grid.appendChild(card(s, can, used));
 }
 
 let currentCat = 'fight';
@@ -587,11 +601,11 @@ let currentItemCat = 'weapon';
  * The spell book: in the menu and in the game's pause menu. `can(spellId)` — only the spells the hero can say
  * now (outside Creative: the game's own «knows it» check — SpellBook.js), the empty sections left out.
  */
-export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid', can = null) {
+export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid', can = null, used = null) {
     const list = can ? SPELLS.filter((s) => can(cardSpell(s))) : SPELLS;
     const cats = can ? SPELL_CATEGORIES.filter((c) => list.some((s) => s.cat === c.id)) : SPELL_CATEGORIES;
     if (cats.length && !cats.some((c) => c.id === currentCat)) currentCat = cats[0].id;
-    renderCats(catsId, gridId, cats, list, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId, can); }, can);
+    renderCats(catsId, gridId, cats, list, currentCat, (id) => { currentCat = id; renderSpellsTab(catsId, gridId, can, used); }, can, used);
 }
 
 export function renderItemsTab(extra = []) {

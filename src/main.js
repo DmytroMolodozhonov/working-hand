@@ -1176,7 +1176,8 @@ function showPauseTab(id) {
     if (id === 'pause-audio') pauseAudio.sync();
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
-    if (id === 'pause-spells') renderSpellsTab('pause-spell-cats', 'pause-spells-grid', game?.config?.mode === 'creative' ? null : (spell) => !!game?.canSaySpell?.(spell));
+    // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
+    if (id === 'pause-spells') { const cr = game?.config?.mode === 'creative'; renderSpellsTab('pause-spell-cats', 'pause-spells-grid', cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell)); }
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);
 }
