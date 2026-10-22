@@ -37,6 +37,8 @@ import { ARMOR } from './ArmorTypes.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
+/** A chest's look by its room: the king's and the Master's own — rich; the port's — a sea chest (Chest.js). */
+const CHEST_LOOK = { king: 'rich', treasury: 'rich', throne: 'rich', vault: 'rich', study: 'rich', port: 'pirate' };
 import { createRng } from '../core/math.js';
 import { CastleTalk } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
@@ -454,7 +456,7 @@ export class CastleLife {
         for (const c of cs.def.chests) {
             if (g.chests.some((x) => x.id === c.id) || g.burnWreck?.burnt.has(c.id)) continue; // (burnt down: BurnWreck.js)
             const cy = Math.min(c.y, floorUnder(g.world?.terrain?.data, c.x, c.y, c.z) ?? c.y); // (its floor blown away: lower)
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale });
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, cy, c.z), 'loot', c.yaw, c.id, { scale: c.scale, style: CHEST_LOOK[c.room] });
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());

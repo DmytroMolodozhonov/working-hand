@@ -427,7 +427,7 @@ export class Ships {
         if (s.chests.length) return;
         s.layout.chests.forEach((c, k) => {
             const id = `${s.id}:ch${k}`;
-            const chest = new Chest(g.scene, new THREE.Vector3(), 'loot', 0, id);
+            const chest = new Chest(g.scene, new THREE.Vector3(), 'loot', 0, id, { style: 'pirate' }); // (a ship's chest: sea-worn)
             chest.ship = s;
             chest.local = c;
             chest.locked = c.locked === 'captain' && !s.owner && this.crew.captainAlive(s);

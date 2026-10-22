@@ -1363,7 +1363,7 @@ export class IceCastleLife {
         const ry = iceYaw(P);
         // her chests by the throne: locked while she lives (Game.openChest → Items.lootChest 'iceQueen')
         this._chests = (P.chests || []).map((c, i) => {
-            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', ry, 'iceChest' + i);
+            const chest = new Chest(g.scene, new THREE.Vector3(c.x, c.y, c.z), 'loot', ry, 'iceChest' + i, { style: 'ice' });
             chest.room = 'iceQueen';
             chest.locked = !this.state.queenDead;
             chest.mesh.updateMatrixWorld(true);
