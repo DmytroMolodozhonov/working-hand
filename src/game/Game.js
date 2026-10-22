@@ -102,7 +102,7 @@ import { Phoenixes, phoenixModel } from './Phoenixes.js';
 import { Owls } from './Owls.js';
 import { LivingTrees } from './LivingTrees.js';
 import { Servants } from './Servants.js';
-import { Duel } from './Duel.js';
+import { Duel, duelRange } from './Duel.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
@@ -1542,14 +1542,20 @@ export class Game {
         if (name === 'Disarmor') { const h = castingHand(this); if (h && pointsUp(h.dir)) return this.armor.disarmSelf(isFinal); }
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? (name === 'IceMaxima' ? 'IceDuelMaxima' : 'IceDuel') : isStrongDuel(name) ? name : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
-            const aim = this.duel.pickSide(false);
+            const reach = duelRange(name);
+            const aim = this.duel.pickSide(false, reach);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
             if (!side || !this.character.isArmRaised(side)) {
                 if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
                 return null;
             }
             // «Дай»: only at a target the raised hand (the wand) points right at — never cast into the air (StrongSpells.js)
-            if (name === 'Die' && !aim) { this.lastCastWhy = '«Дай»: рука не наведена на цель'; if (isFinal) this.hud.setVoice('🖤 «Дай» — только в цель: наведите поднятую руку (палочку) прямо на неё', true); return null; }
+            if (!aim) {
+                // heard, hand raised, but nothing within reach: too far (the creature is there, beyond the range) or no target — no charge, no mana
+                const far = isFinal && !(this._interimCast && Date.now() - this._interimCast.at < 3000) ? this.duel.farTarget(reach) : null;
+                if (far != null) { this.lastCastWhy = 'цель слишком далеко'; this._why('tooFar', name, { dist: Math.round(far), range: reach }); return null; }
+                if (name === 'Die') { this.lastCastWhy = '«Дай»: рука не наведена на цель'; if (isFinal) this._why('noTarget', name, { what: 'неё' }); return null; }
+            }
             return this._castDuel(ice ? (name === 'IceMaxima' ? 'IceMaxima' : 'Ice') : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
@@ -1647,10 +1653,10 @@ export class Game {
      * A recognized spell that did not work, and why (Hints.refusal), on the message line —
      * once per reason every two seconds (the recognizer repeats a phrase many times).
      */
-    _why(code, name = null) {
+    _why(code, name = null, extra = null) {
         const gate = this._hintGate || (this._hintGate = new HintGate(2000));
-        if (!gate.pass(code)) return;
-        const text = refusal(code, { name: name ? SPELL_RU[baseSpell(name)] || name : null });
+        if (!gate.pass(code + (name || ''))) return;
+        const text = refusal(code, { ...extra, name: name ? SPELL_RU[baseSpell(name)] || name : null });
         if (text) this.hud.setVoice(text, true);
     }
 

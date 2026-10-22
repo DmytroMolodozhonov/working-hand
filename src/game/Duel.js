@@ -145,6 +145,7 @@ export const JOLT_TARGETS = {
 export const DUEL = {
     SPEED: 15, // m/s — fast (≈0.7 s over 10 m), but still visible and answerable
     RANGE: 30, // m
+    RANGE_DIE: 50, // m: «Дай» (1000 mana, one charge in a fight) reaches farther than the rest
     CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
     CONTACT_GRACE: 0.25, // s off the opponent before a flick counts as "shaking it off"
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
@@ -260,6 +261,9 @@ export function segmentToSegment(p, q, a, b, out = {}) {
  * nearest along the line. bodies: [{a, b, r, …}]. → {body, along, k, dist, miss} | null
  * (miss: how far beside the body the line goes, rad; 0 = right through it).
  */
+/** How far a duel charge of this spell flies, m. */
+export const duelRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : DUEL.RANGE);
+
 export function pickBody(o, d, bodies, range = DUEL.RANGE) {
     let best = null;
     const c = {};
@@ -500,13 +504,13 @@ export class Duel {
      * The creature this hand points at: a wizard, a zombie, an animal, a castle person or a
      * book-bird right on the line of the hand (see pickBody). {kind, id, dist, miss} | null
      */
-    findTarget(side) {
+    findTarget(side, range = DUEL.RANGE) {
         // (one standing right up against me, the wand in him: him — wherever the hand's line goes on)
         const pb = this.pointBlank(side);
         if (pb) return { kind: pb.kind, id: pb.id, dist: 0, miss: 0 };
         const o = new THREE.Vector3(), d = new THREE.Vector3();
         this._myRay(side, o, d);
-        const hit = pickBody(o, d, this._bodies(this.me));
+        const hit = pickBody(o, d, this._bodies(this.me), range);
         return hit ? { kind: hit.body.kind, id: hit.body.id, dist: hit.along, miss: hit.miss } : null;
     }
 
@@ -627,17 +631,32 @@ export class Duel {
      * both do). A hand hanging along the body points at nothing — in the air it would
      * point at whatever is below.
      */
-    pickSide(preferPlayers = false) {
+    pickSide(preferPlayers = false, range = DUEL.RANGE) {
         const g = this.game, ch = g.character;
         const pref = g.magicHand || g.lastMagicHand || g.dom || 'right';
         let best = null;
         const wand = g.wandSide?.(); // (a wand in a hand: only that hand casts)
         for (const side of wand ? [wand] : [pref, pref === 'right' ? 'left' : 'right']) {
             if (ch.isArmRaised && !ch.isArmRaised(side)) continue;
-            const t = this.findTarget(side);
+            const t = this.findTarget(side, range);
             if (!t || (preferPlayers && t.kind !== 'p')) continue;
             // (the hand pointing more truly at its target)
             if (!best || t.miss < best.t.miss - 0.005) best = { side, t };
+        }
+        return best;
+    }
+
+    /** The creature a raised hand points at farther than the spell reaches: its distance (m), else null. */
+    farTarget(range) {
+        const g = this.game, ch = g.character;
+        const wand = g.wandSide?.();
+        let best = null;
+        for (const side of wand ? [wand] : ['right', 'left']) {
+            if (ch.isArmRaised && !ch.isArmRaised(side)) continue;
+            const o = new THREE.Vector3(), d = new THREE.Vector3();
+            this._myRay(side, o, d);
+            const hit = pickBody(o, d, this._bodies(this.me), 400);
+            if (hit && hit.along > range && (!best || hit.along < best)) best = hit.along;
         }
         return best;
     }
@@ -927,7 +946,7 @@ export class Duel {
             return true;
         }
         if (wallS <= 1) b.front.lerpVectors(from, b.front, wallS);
-        if (b.traveled > DUEL.RANGE || wallS <= 1) { this._end(b, 'fizzle'); return false; }
+        if (b.traveled > duelRange(b.spell) || wallS <= 1) { this._end(b, 'fizzle'); return false; }
         return true;
     }
 

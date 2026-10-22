@@ -101,6 +101,9 @@ export function refusal(code, d = {}) {
         case 'levWard': return '🛡️ Левиоса разбилась о защиту дома';
         case 'levHeld': return `🪶 ${d.who || 'Этого волшебника'} уже держит в воздухе другой`;
         case 'levBlocked': return `🪶 Левиоса попала не в ${d.who || 'волшебника'}: на пути был кто-то другой`;
+        // a targeted spell heard, but the target is out of its reach (no mana spent)
+        case 'tooFar': return `📏 Слишком далеко — подойдите ближе (до цели ${d.dist} м, ${name} достаёт до ${d.range} м)`;
+        case 'noTarget': return `🎯 Нет цели — наведите поднятую руку (палочку) прямо на ${d.what || 'цель'}`;
         default: return '';
     }
 }
