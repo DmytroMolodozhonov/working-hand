@@ -104,6 +104,7 @@ export function playerSnapshot(game) {
         extraSlots: inv ? Math.max(0, inv.slots.length - 5) : 0,
         purse: inv?.purse?.count || 0, // the coins in the pouches on the belt (CoinBelt)
         purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the magic pouch is on the belt (all the coins in it)
+        ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
@@ -130,6 +131,7 @@ export function applyPlayerSnapshot(game, s) {
         if (s.extraSlots && inv.setExtraSlots) inv.setExtraSlots(s.extraSlots);
         for (let i = 0; i < inv.slots.length; i++) inv.slots[i] = s.slots[i] ? { ...s.slots[i] } : null;
         inv.selected = -1;
+        if (typeof s.ownWand === 'string') inv.ownWand = s.ownWand;
         if (inv.purse) { inv.purse.count = 0; inv.purse.magic = false; inv.purse.magicUid = null; }
         if (inv.purse && s.purseMagic) inv.purse.tieMagic({ kind: 'coins', magic: true, uid: typeof s.purseMagic === 'string' ? s.purseMagic : undefined, count: 0 });
         if (inv.purse && Number.isFinite(s.purse) && s.purse > 0) { const rest = inv.purse.add(s.purse); if (rest > 0) inv.storeItem({ kind: 'coins', uid: 'c' + Date.now().toString(36), count: rest }); }

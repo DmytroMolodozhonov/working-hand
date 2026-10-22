@@ -28,6 +28,17 @@ export function accioCatcher(free, dom = 'right') {
     return free(dom) ? dom : free(off) ? off : null;
 }
 
+/** A dead animal «Акцио» acts on: a body, not yet bones (its meat all taken), nor one held by «Левиоса». Pure (tests). */
+export function accioBody(a) {
+    return !!a && !!a.dead && !a.lev && !a.bones;
+}
+
+/** A body pointed at loses to a thing pointed at as well (it lies big round it: its cone is wider). */
+const BODY_PENALTY = 0.6;
+
+/** s: whatever «Акцио» is waiting for, it never holds the spell longer (a flight cut short elsewhere). */
+export const ACCIO_STUCK = ACCIO.MAX_TIME + 4;
+
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
@@ -92,17 +103,19 @@ export class Accio {
                 const score = ang * 5 + d * 0.05 - 3;
                 if (!best || score < best.score) best = { rb: a, side, catcher, score, hand };
             }
-            // a dead animal's body (a cow, a running book…): pulled through the air to the feet
+            // a dead animal's body (a cow, a running book…): its meat flies into the free hand (none free: the
+            // body is pulled to the feet). Bones (the meat all taken) are nothing to summon: they never stand
+            // in the way of the things lying by them (the author: after a pig's meat «Акцио» stopped working)
             for (const a of g.animals?.list || []) {
-                if (!a.dead || a.lev) continue;
+                if (!accioBody(a)) continue;
                 const pos = g.levitation?._centreOf ? g.levitation._centreOf('a', a) : a.group.position;
                 const to = _v1.subVectors(pos, hand);
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
                 const ang = dir.angleTo(to.normalize());
                 if (ang > ACCIO.CONE + Math.atan2(1, d)) continue;
-                const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { body: a, side, score, hand };
+                const score = ang * 5 + d * 0.05 + BODY_PENALTY; // (a thing pointed at near it wins: a wand, a sword…)
+                if (!best || score < best.score) best = { body: a, side, catcher, score, hand };
             }
             // a surfboard (big: into both free hands, under the one free arm, or down in front of the feet)
             for (const { id, pos } of g.boards?.accioTargets() || []) {
@@ -161,7 +174,21 @@ export class Accio {
             if (!best.catcher) g.hud?.toast?.('🪄 Обе руки заняты — бегущая книга упала у ваших ног. Освободите руку, и «Акцио» принесёт её прямо в неё', 4000);
             return null;
         }
-        if (best.body) { g.runner?.accio(best.body, best.hand); if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.()); return null; }
+        if (best.body) {
+            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
+            const a = best.body;
+            if (best.catcher && (a.meat || 0) > 0 && g.animals) {
+                // its meat comes into the free hand (the host cuts it off and gives it, as when the hand takes it)
+                const from = g.levitation?._centreOf ? g.levitation._centreOf('a', a) : a.group.position;
+                for (let i = 0; i < 16; i++) g.fx.spark(from, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);
+                if (g.animals.auth) g.animals._takeMeat(a, g.localId, best.catcher);
+                else g.sync?.animalMeat?.(a.id, best.catcher);
+                g.mana?.success('Accio');
+                return null;
+            }
+            g.runner?.accio(a, best.hand);
+            return null;
+        }
         if (best.board) {
             if (!g.boards.accioStart(best.board)) return '🪄 Эту доску уже кто-то держит';
             this.state = { board: best.board, t: 0 };
@@ -278,6 +305,10 @@ export class Accio {
     update(dt) {
         const s = this.state;
         if (!s) return;
+        // (never stuck: whatever it waits for, a new «Акцио» can be said after a few seconds — the author's game
+        // ended when «Акцио» stopped working with his wand lying on the ground)
+        s.age = (s.age || 0) + dt;
+        if (s.age > ACCIO_STUCK) { this.stop(); return; }
         if (s.L) { this._updateItem(dt); return; }
         if (s.mc) { if (s.mc.done) this.state = null; return; } // (ManaCrystals: it cracked, its power flies to me)
         if (s.bk) { this._updateBook(dt); return; }

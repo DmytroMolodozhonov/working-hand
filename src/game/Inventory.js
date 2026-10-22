@@ -113,6 +113,13 @@ export function behindBack(local, speed) {
 }
 const _inv = new THREE.Matrix4();
 
+/** Two things of one kind that look the same stack (a pig's meat with a cow's, a red potion with a blue one — not). Pure (tests). */
+export function sameLook(a, b) {
+    for (const k of LOOK_KEYS) if ((a[k] ?? null) !== (b[k] ?? null)) return false;
+    return true;
+}
+const LOOK_KEYS = ['color', 'rec', 'cooked', 'stat', 'spell', 'model', 'type', 'from'];
+
 export class Inventory {
     constructor(game) {
         this.game = game;
@@ -223,9 +230,57 @@ export class Inventory {
         if (has) return false;
         const i = this.slots.findIndex((s) => !s);
         if (i < 0) return false;
-        this.slots[i] = starterWand();
+        this.slots[i] = { ...starterWand(), spare: true }; // (a stand-in: my own wand, if it lies somewhere, takes its place again — gotWand)
         this._render();
         return true;
+    }
+
+    /**
+     * A wand came into my hand: it is «my wand» (`ownWand`, kept in the save) — unless it is the stand-in while my own
+     * one is still lost (lying on the ground: dropped, knocked out, left there when the game was left).
+     */
+    heldWand(item) {
+        if (!item || item.kind !== 'wand' || !item.uid) return;
+        if (item.spare && this.ownWand && this.ownWand !== item.uid && !this.hasUid(this.ownWand)) return;
+        this.ownWand = item.uid;
+    }
+
+    /**
+     * My own lost wand is mine again («Акцио», picked up — after leaving the game too): the plain stand-in given
+     * meanwhile (ensureStarterWand) is gone — one wand, one place in the slots (the author saw two wands after it).
+     */
+    gotWand(item) {
+        if (!item || item.kind !== 'wand' || item.spare || !item.uid || item.uid !== this.ownWand) return false;
+        const g = this.game;
+        const k = this.slots.findIndex((x) => x?.kind === 'wand' && x.spare && x !== item);
+        if (k >= 0) this.slots[k] = null;
+        else {
+            const side = ['left', 'right'].find((sd) => g.items?.held[sd]?.item.kind === 'wand' && g.items.held[sd].item.spare && g.items.held[sd].item !== item);
+            if (!side) return false;
+            const it = g.items.releaseHand(side);
+            if (this.inHand?.item === it) this.inHand = null;
+        }
+        this._render();
+        return true;
+    }
+
+    /** Is the thing with this uid mine already (in a slot or a hand)? (one thing — one place: never twice) */
+    hasUid(uid) {
+        if (!uid) return false;
+        if (this.slots.some((x) => x?.uid === uid)) return true;
+        const h = this.game.items?.held;
+        return !!(h && (h.right?.item.uid === uid || h.left?.item.uid === uid));
+    }
+
+    /** Is there room in the slots for this thing (a free slot, or room on a stack of it)? */
+    canStore(item) {
+        if (!item) return false;
+        if (this.slots.some((x) => !x)) return true;
+        const max = item.magic && item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack;
+        if (!max) return false;
+        let room = 0;
+        for (const x of this.slots) if (x && x.kind === item.kind && !x.magic && sameLook(x, item)) room += Math.max(0, max - (x.count || 1));
+        return room >= (item.count || 1);
     }
 
     /** A found thing into a slot (food stacks up to 10, coins up to 500). */
@@ -233,7 +288,7 @@ export class Inventory {
         const max = item.magic && item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack; // (the magic pouch: a thing of its own, never stacked)
         if (max) {
             for (const s of this.slots) {
-                if (s && s.kind === item.kind && !s.magic && (s.count || 1) < max) {
+                if (s && s !== item && s.kind === item.kind && !s.magic && sameLook(s, item) && (s.count || 1) < max) {
                     const n = Math.min(max - (s.count || 1), item.count || 1);
                     s.count = (s.count || 1) + n;
                     item.count = (item.count || 1) - n;
@@ -246,6 +301,7 @@ export class Inventory {
 
     /** Put an item (weapon / book) into a free slot (the chosen one first). */
     store(item) {
+        if (item && (this.slots.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
         if (i < 0) { this.game.hud.toast?.('🎒 Все ячейки заняты'); return false; }
         this.slots[i] = item;
@@ -317,7 +373,11 @@ export class Inventory {
         const D = h.side || this.game.dom || 'right';
         if (by && (by !== D || (h.kind === 'item' && h.item?.kind === 'wand'))) return;
         if (h.kind === 'weapon' && this.game.weapons.hands[D].held === h.weapon) this._storeWeapon(h.weapon, slot);
-        if (h.kind === 'item' && this.game.items?.held[D]?.item === h.item) { const it = this.game.items.releaseHand(D); if (slot != null) this.slots[slot] = it; else this.storeItem(it); }
+        if (h.kind === 'item' && this.game.items?.held[D]?.item === h.item) {
+            if (slot == null && !this.canStore(h.item)) return; // (no room: it stays in the hand, never vanishes)
+            const it = this.game.items.releaseHand(D);
+            if (slot != null) this.slots[slot] = it; else this.storeItem(it);
+        }
     }
 
     _storeWeapon(w, slot = null) {
@@ -352,6 +412,9 @@ export class Inventory {
             const h = g.items?.held[side];
             if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
             if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
+            // (no room in the slots: it stays in the hand — a pouch, a scroll never vanish into a full pocket)
+            if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Все ячейки заняты'); return; }
+            this._handsOff(side);
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             if (this.storeItem(it)) this._fx('🎒 ' + (ITEM_INFO[it.kind]?.name || 'Предмет') + ' в ячейке');
@@ -368,6 +431,23 @@ export class Inventory {
         if (!h || g.weapons?.hands?.[side]?.held || g.boards?.hold) return false;
         const k = h.item.kind;
         return k !== 'wand' && k !== 'coins' && !BACK_KINDS.has(k);
+    }
+
+    /**
+     * The pocket and the pouches are at the same hip: what one of them just did, the hand there does not
+     * do again in the other at once (the author: a pouch tied on, the empty hand still there took the meat
+     * out of the pocket — «the coins counted as a second meat»). The hand goes away from the hip first.
+     */
+    _handsOff(side) {
+        const now = performance.now();
+        this.pocketHold(side);
+        if (this.purse) { this.purse._left = false; this.purse._at = now; this.purse._open = false; this.purse._tie = 0; }
+    }
+
+    /** The pocket on this hand's side waits until the hand has gone away from the hip (the pouches just did something). */
+    pocketHold(side) {
+        const st = this._pocket[side];
+        if (st) { st.armed = false; st.inT = 0; st.outT = 0; st.hold = performance.now() + 700; }
     }
 
     _fx(text, side = 'right') {
@@ -417,13 +497,14 @@ export class Inventory {
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
-            const putIn = st.armed && st.inT > POCKET_DWELL;
+            const putIn = st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
             if (putIn && now - st.out > 700) {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
                 if (g.items?.held[side] || g.weapons.hands[side].held) this.pocketRight(side);
                 else this.takeNext(side);
+                this._handsOff(side);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
             const b = this._back[side];
@@ -453,6 +534,7 @@ export class Inventory {
         }
         const h = g.items?.held[side];
         if (h && h.item.kind === 'wand') {
+            if (!this.canStore(h.item)) { this.game.hud.toast?.('🎒 Все ячейки заняты — палочка остаётся в руке'); return false; } // (never lost)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             const free = this.slots.findIndex((x) => !x);
@@ -486,16 +568,45 @@ export class Inventory {
         return false;
     }
 
+    /** What a hand holds, as a thing to draw (a weapon as {kind:'weapon', type}), or null. */
+    _handThing(side) {
+        const g = this.game;
+        const w = g.weapons?.hands?.[side]?.held;
+        if (w) return { kind: 'weapon', type: w.type, magic: !!w.magic };
+        return g.items?.held?.[side]?.item || null;
+    }
+
     /** What the hands hold, as a short key (to redraw the «hand» cell when it changes). */
     _handKey() {
-        const g = this.game;
         const one = (side) => {
-            const w = g.weapons?.hands?.[side]?.held;
-            if (w) return w.type === 'axe' ? '🪓' : '🗡️';
-            const h = g.items?.held?.[side];
-            return h ? ITEM_INFO[h.item.kind]?.icon || '❔' : '';
+            const t = this._handThing(side);
+            return t ? (t.kind === 'weapon' ? 'w' + t.type : t.kind + ':' + (t.uid || '')) : '';
         };
         return one('left') + '|' + one('right');
+    }
+
+    /**
+     * A thing's picture in a cell: its own model drawn small (ItemIcons.js) — or, until that is made, its emoji.
+     * `el` — the cell's icon box.
+     */
+    _pic(el, it, emoji) {
+        const url = this.game.itemIcons?.url(it);
+        if (url) {
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = emoji || '';
+            img.className = 'hb-pic';
+            el.appendChild(img);
+            return true;
+        }
+        el.appendChild(document.createTextNode(emoji || '❔'));
+        return false;
+    }
+
+    static emojiOf(it) {
+        if (!it) return '';
+        if (it.kind === 'weapon') return it.type === 'axe' ? '🪓' : '🗡️';
+        return ITEM_INFO[it.kind]?.icon || '❔';
     }
 
     /** What the hand holds, if it goes on the back: {kind:'weapon', w} | {kind:'item', h}. */
@@ -517,6 +628,7 @@ export class Inventory {
                 if (this.inHand?.weapon === t.w) this.inHand = null;
                 if (this._storeWeapon(t.w)) this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
             } else {
+                if (!this.canStore(t.h.item)) { g.hud.toast?.('🎒 Все ячейки заняты'); return; } // (it stays in the hand)
                 const it = g.items.releaseHand(side);
                 if (this.inHand?.item === it) this.inHand = null;
                 if (this.storeItem(it)) this._fx(`${ITEM_INFO[it.kind]?.icon || '🎒'} ${ITEM_INFO[it.kind]?.name || 'Предмет'} за спиной`, side);
@@ -682,10 +794,15 @@ export class Inventory {
         if (!this.cells) return;
         this.handCell?.classList.toggle('sel', this.selected < 0);
         if (this.handCell) {
-            const [l, r] = this._handKey().split('|');
+            const l = this._handThing('left'), r = this._handThing('right');
             const icon = this.handCell.querySelector('.hb-icon');
-            if (icon) icon.textContent = l || r ? (l && r ? l + r : l || r) : '✋';
-            this.handCell.title = l || r ? 'В руках' : 'Свободная рука';
+            if (icon) {
+                icon.textContent = '';
+                icon.classList.toggle('two', !!(l && r));
+                if (!l && !r) icon.textContent = '✋';
+                for (const t of [l, r]) if (t) this._pic(icon, t, Inventory.emojiOf(t));
+            }
+            this.handCell.title = l || r ? 'В руках: ' + [l, r].filter(Boolean).map((t) => (t.kind === 'weapon' ? (t.type === 'axe' ? 'Топор' : 'Меч') : ITEM_INFO[t.kind]?.name || 'Предмет')).join(', ') : 'Свободная рука';
         }
         this.cells.forEach((c, i) => {
             const s = this.slots[i];
@@ -696,6 +813,7 @@ export class Inventory {
             icon.style.background = 'none';
             icon.style.textShadow = '';
             icon.textContent = '';
+            icon.classList.remove('magic');
             count.textContent = '';
             if (!s) return;
             if (s.kind === 'res') {
@@ -705,19 +823,19 @@ export class Inventory {
                 count.textContent = s.count;
                 c.title = r?.name || '';
             } else if (s.kind === 'weapon') {
-                icon.textContent = s.type === 'axe' ? '🪓' : '🗡️';
-                if (s.magic) icon.style.textShadow = '0 0 8px #6fb8ff, 0 0 3px #fff';
-            } else if (s.kind === 'book') {
-                icon.textContent = '📖';
+                this._pic(icon, s, Inventory.emojiOf(s));
+                if (s.magic) icon.classList.add('magic');
+                c.title = (s.type === 'axe' ? 'Топор' : 'Меч') + (s.magic ? ' (магический)' : '');
             } else if (s.kind === 'armor' || s.kind === 'robe') {
-                // a piece of armour / a robe: its own little picture (Armor.js)
-                icon.innerHTML = armorIcon(s.kind === 'robe' ? 'robe' : s.piece, s.named ? 3 : s.magic ? 2 : 1, s.color || 0);
-                if (s.magic) icon.style.textShadow = '0 0 8px #6fb8ff';
+                // a piece of armour / a robe: its own model drawn small; until then its little drawn picture (Armor.js)
+                if (!this.game.itemIcons?.url(s)) icon.innerHTML = armorIcon(s.kind === 'robe' ? 'robe' : s.piece, s.named ? 3 : s.magic ? 2 : 1, s.color || 0);
+                else this._pic(icon, s, '');
+                if (s.magic) icon.classList.add('magic');
                 c.title = armorName(s);
             } else {
-                icon.textContent = ITEM_INFO[s.kind]?.icon || '❔';
-                if (s.kind === 'wand' && s.color != null) icon.style.background = `radial-gradient(circle, #${(s.color >>> 0).toString(16).padStart(6, '0')}55, transparent 70%)`;
-                if (s.kind === 'weapon') icon.textContent = s.type === 'axe' ? '🪓' : '🗡️';
+                // the thing itself, drawn small: a wand of its own wood and shape, a scroll with its ribbon, a potion of its colour…
+                this._pic(icon, s, Inventory.emojiOf(s));
+                if (s.magic) icon.classList.add('magic');
                 if (s.count > 1) count.textContent = s.count;
                 if (s.kind === 'bow') count.textContent = s.arrows ?? '';
                 c.title = ITEM_INFO[s.kind]?.name || '';

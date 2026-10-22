@@ -257,6 +257,8 @@ export class ItemSystem {
     /** A thing (from a slot / the ground / another player) into a hand. */
     takeIntoHand(item, side = 'right', { closed = false } = {}) {
         if (this.held[side]) return false;
+        const other = this.held[side === 'right' ? 'left' : 'right'];
+        if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
         this._drop[side].reset(closed);
         this._thr[side].reset();
@@ -264,6 +266,7 @@ export class ItemSystem {
         const model = makeItemModel(item);
         this.game.scene.add(model);
         this.held[side] = { item, model, since: performance.now(), shape: this._shapeOf(model) };
+        if (item.kind === 'wand') this.game.inventory?.heldWand?.(item); // (my wand: remembered, and in the save)
         if (this.game.sync) this.game.sync.itemHold?.(side, item);
         return true;
     }
@@ -918,6 +921,9 @@ export class ItemSystem {
 
     _gotItem(item, side) {
         delete item.home; // (it is mine now)
+        if (this.game.inventory?.hasUid?.(item.uid)) return; // (already mine — a second message about it: never two of one thing)
+        // my own lost wand back: the plain stand-in given meanwhile goes (Inventory.gotWand)
+        if (item.kind === 'wand') this.game.inventory?.gotWand?.(item);
         // a bundle of logs goes back into the wood stack (Beds.js)
         if (this.game.beds?.gotItem(item)) return;
         // blocks (dropped at a body, Death.js) go back into the resource stacks

@@ -52,7 +52,7 @@ import { Ships } from './Ships.js';
 import { sailorModels } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
-import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel } from './ItemTypes.js';
+import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
 import { prewarmVillagers } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
@@ -77,6 +77,7 @@ import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
+import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
@@ -395,6 +396,8 @@ export class Game {
         this.inventory = new Inventory(this); // five slots under the fatigue bar
         this.inventory._buildWeapon = buildWeapon; // (models of the weapons seen on the back)
         this.inventory._makeItemModel = makeItemModel;
+        // the slots' pictures: each thing as itself, a small picture of its own model (ItemIcons.js)
+        this.itemIcons = this.renderer ? new ItemIcons(this.renderer, { makeModel: makeItemModel, buildWeapon, dispose: disposeItemModel, onReady: () => { this.inventory._hk = null; this.inventory._render(); } }) : null;
         this.inventory.show(config.mode !== 'test');
         this.builder = new Builder(this); // «Gather», floors, walls, ceilings, roofs
         this.books = isTest ? null : new BookBirds(this); // book-birds: building spells are learned from their books
@@ -2844,6 +2847,18 @@ export class Game {
      * effects that are hidden until first use would otherwise compile in the
      * middle of a fight and freeze the game for a moment.
      */
+    /** Things whose slot pictures are made while loading (ItemIcons.warm): every kind, the wands of every shape, what I carry. */
+    _iconSamples() {
+        const out = [];
+        for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
+        out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'), { kind: 'scroll', stat: 'hp' }, { kind: 'scroll', stat: 'fatigue' });
+        for (const kind of ['apple', 'redApple', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather']) out.push({ kind });
+        out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
+        for (const s of this.inventory?.slots || []) if (s) out.push(s);
+        for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
+        return out;
+    }
+
     prewarm() {
         const hidden = [];
         this.scene.traverse((o) => {
@@ -2938,6 +2953,8 @@ export class Game {
      */
     async warmUp(progress = () => {}) {
         try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
+        // the slots' pictures of the things met most (and of what the hero carries now): made on the loading screen
+        try { this.itemIcons?.warm(this._iconSamples()); } catch (e) { console.warn('[Game] icons warm-up', e); }
         // the ships of a harbour by the start: made and woken now (in play — up to 50 ms a frame each)
         try {
             const sh = this.ships;
@@ -3077,6 +3094,7 @@ export class Game {
         if (earth) this.levMax?.update(dt);
         this.accio.update(dt);
         this.inventory.update(dt);
+        this.itemIcons?.update(1.5); // (a new look's picture: one by one, ~1.5 ms a frame at most)
         this.builder.update(dt);
         this.swim.update(dt);
         if (earth) this.boards?.update(dt); // (before the items and the weapons: a hand on a board holds nothing else)

@@ -190,6 +190,7 @@ export class CoinBelt {
         const g = this.game, inv = g.inventory;
         const h = g.items.held[side];
         if (!h) return;
+        inv?.pocketHold?.(side); // (the hand, empty now, still at the hip: it takes nothing out of the pocket — Inventory._handsOff)
         this._left = false;
         this._at = performance.now();
         const n = h.item.count || 0;
@@ -227,6 +228,7 @@ export class CoinBelt {
         if (this.magic) {
             const it = makeMagicPouch(this.magicUid || newUid(), this.count);
             if (!g.items.takeIntoHand(it, side)) { this.log.push('take-failed:' + side); return; }
+            inv?.pocketHold?.(side);
             this.count = 0; this.magic = false; this.magicUid = null;
             this.log.push('take-magic:' + side);
             this._open = false; this._left = false; this._at = performance.now();
@@ -238,6 +240,7 @@ export class CoinBelt {
         // put on a counter, it paid for nothing, and the coins seemed to be just gone)
         const c = purseBags(this.count)[0];
         if (!c || !g.items.takeIntoHand({ kind: 'coins', uid: newUid(), count: c }, side)) { this.log.push('take-failed:' + side); return; }
+        inv?.pocketHold?.(side); // (the pouch in the hand at the hip never goes straight into the pocket)
         this.count -= c;
         this.log.push('take:' + side);
         this._open = false;
