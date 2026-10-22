@@ -273,7 +273,9 @@ export class WorldKeeper {
             treesMoved: g.world.movedTrees?.() || [], // (carried by «Левиоса Максима»: World.placeTree)
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
-            items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
+            // (a good lying unpaid for sale is the market's, not the world's: the merchant lays it out again — kept, it came back
+            // beside his new goods at every load, the counters filling up with wands and price cards)
+            items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L) && !(L.item.shop && !L.item.shop.paid)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
@@ -344,7 +346,8 @@ export function restoreWorld(game, save, THREE) {
     if (save.ice && save.ice.length) g.applyIce(save.ice);
     if (save.liquidated) g.liquidation?.restore(save.liquidated); // (before the things themselves: what crumbled is not made again)
     for (const id of save.chests || []) { (g._openedChests = g._openedChests || new Set()).add(id); const c = g.chests?.find((x) => x.id === id); if (c) c.setOpenInstant(); }
-    for (const e of save.items || []) g.items?.spawnLoose(e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
+    for (const e of save.items || []) if (!(e.item?.shop && !e.item.shop.paid)) g.items?.spawnLoose( // (an older save's goods for sale: left out — see the snapshot)
+        e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
     if (save.doors) g.doors?.restore(save.doors);
     if (save.locks) g.locks?.restore(save.locks);

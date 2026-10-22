@@ -989,8 +989,8 @@ export class CastleTalk {
                 if (!v || v.foe || cs.hostile.get(g.localId) > Date.now()) return;
                 const on = (p) => onCounter(stall, p);
                 let found = null;
-                // my pouch of coins put down on the counter: «what do you want?»
-                for (const L of g.items.loose.values()) {
+                // my pouch of coins put down on the counter: «what do you want?» (not at a buyer's: he sells nothing — coins there mean nothing to him)
+                if (!stall.pawn && !stall.fence) for (const L of g.items.loose.values()) {
                     if (L.item.kind !== 'coins' || L.item.shop || !(L.item.count > 0) || L.hover || !on(L.model.position) || L.vel.lengthSq() > 0.05) continue;
                     if (this.purse?.uid !== L.item.uid) {
                         this.purse = { uid: L.item.uid, v };
