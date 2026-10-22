@@ -160,7 +160,9 @@ export class Firefighting {
         for (let k = 0.6; k < want; k += 0.5) {
             const x = o.x + d.x * k, y = o.y + d.y * k, z = o.z + d.z * k;
             if (g._flameBlock?.(x, y, z) === 'solid') return k + 0.5; // (it splashes onto what burns there)
-            const gy = g.collision?.groundY ? g.collision.groundY(x, z) : -Infinity;
+            // (the floor under this point — in a cave, a tunnel, a house it is not the hill's top over them:
+            // the water stopped at the hand there and never reached a campfire)
+            const gy = g.collision?.groundAt ? g.collision.groundAt(x, z, y) : g.collision?.groundY ? g.collision.groundY(x, z) : -Infinity;
             if (y < gy - 0.3) return k;
         }
         return want;

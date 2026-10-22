@@ -104,3 +104,14 @@ test('learning: plain «Firefighting» is known by everyone; «Firefighting Maxi
     for (let i = 0; i < 4000 && !found; i++) found = rollKeyItem()?.spell === 'FirefightingMaxima';
     assert.ok(found, 'a chest can hold its scroll');
 });
+
+test('«Fire»\'s campfire in a cave goes out: the water does not stop at the hill\'s top over the cave', () => {
+    const { game, out } = world();
+    // a cave: the land's top is 20 m over the player, the cave's floor is at y = 0
+    game.collision = { groundY: () => 20, groundAt: () => -0.5 };
+    const ff = new Firefighting(game);
+    const sp = { o: V(0, 1.4, 0), d: V(0, -0.1, -1).normalize(), max: false, t: 0.2, by: 'me' };
+    ff.act(sp, 0.05);
+    assert.deepEqual(out, ['c1'], 'the campfire went out');
+    assert.ok(sp.reach > 8, `the water flew to it (${sp.reach})`);
+});

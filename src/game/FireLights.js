@@ -14,11 +14,11 @@ import * as THREE from 'three';
 export const LIGHTS = 3; // real fire lights at once (the nearest fires)
 export const FIRE_LIGHT = {
     COLOR: 0xff9a45,
-    DIST: 14, // m it reaches (fades out to nothing there)
-    DECAY: 1.4,
+    DIST: 28, // m it reaches (fades out softly to nothing there: a tunnel is lit far, the light seen from afar)
+    DECAY: 1.15,
     DAY: 0.7, // intensity by day (a fire in the sun hardly shows)
-    DARK: 3.4, // …and in the dark (night, cave)
-    REACH: 50, // m from the player: farther fires get no light
+    DARK: 3.8, // …and in the dark (night, cave)
+    REACH: 70, // m from the player: farther fires get no light
     APART: 2.5, // two fires nearer than this: one light
 };
 
