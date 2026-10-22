@@ -62,7 +62,7 @@ test('wand swap: touching 3 s — done; 1 s — nothing; parted — starts over'
     let done = false;
     for (let i = 0; i < 60; i++) done = t.update(1 / 60, true) || done; // 1 s
     assert.ok(!done);
-    for (let i = 0; i < 30; i++) t.update(1 / 60, false); // parted
+    for (let i = 0; i < 60; i++) t.update(1 / 60, false); // parted (a second)
     assert.equal(t.t, 0);
     for (let i = 0; i < Math.ceil(SWAP_TIME * 60) + 2; i++) done = t.update(1 / 60, true) || done;
     assert.ok(done);
@@ -103,4 +103,15 @@ test('pocket: sand, wand, earth — three touches give sand, wand, earth (the wa
     assert.equal(inv.slots[1], wand, 'the wand is back in its slot');
     inv.pocketTouch('left');
     assert.equal(inv.selected, 0, 'and round again');
+});
+
+test('a wand just taken out of the pocket by the other hand is not tucked into the belt on the way back', () => {
+    const g = fakeGame(), inv = g.inventory;
+    const wand = { kind: 'wand', uid: 'w2' };
+    inv.slots[0] = wand;
+    assert.ok(!inv.justTook('left'));
+    inv.pocketTouch('left');
+    assert.equal(g.items.held.left.item, wand);
+    assert.ok(inv.justTook('left'), 'WandBelt leaves it in the hand for a while');
+    assert.ok(!inv.justTook('right'));
 });

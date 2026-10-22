@@ -117,7 +117,10 @@ export class WandBelt {
                 const fast = this._handV[side] > 3.0 || this._wristSpeed(side, rb, now) > 1.6; // (a swing moves a torso in ~0.2 s: 5 a second; the camera's jitter well under 1)
                 this._calm[side] = fast ? 0 : this._calm[side] + dt;
                 // ...and looking down at the belt (as one does tucking it in): a slight nod never does
-                this._tuck[side] = near && down && this._pushed[side] && this._calm[side] > CALM_S && this.lookingDown(TUCK_LOOK) ? this._tuck[side] + dt : 0;
+                // (...and never a wand this hand has just taken out of the pocket: reaching across to the other hip it
+                // passes the waistband looking down — the author's second wand went to the belt instead of the hand)
+                const fresh = inv.pocketCycling?.(side) || inv.justTook?.(side);
+                this._tuck[side] = !fresh && near && down && this._pushed[side] && this._calm[side] > CALM_S && this.lookingDown(TUCK_LOOK) ? this._tuck[side] + dt : 0;
                 if (this._tuck[side] > TUCK_S) { this._tuck[side] = 0; this._putAway(side); return; }
                 continue;
             }

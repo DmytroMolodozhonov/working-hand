@@ -412,7 +412,8 @@ export class Inventory {
         }
         for (const side of sides) {
             const h = g.items?.held[side];
-            if (!h || h.item.kind === 'wand') continue; // (the wand goes only to the waistband: WandBelt)
+            // (the leading hand's wand goes only to the waistband: WandBelt; a second wand in the other hand — into a slot)
+            if (!h || (h.item.kind === 'wand' && side === dom)) continue;
             if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             // (no room in the slots: it stays in the hand — a pouch, a scroll never vanish into a full pocket)
             if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Все ячейки заняты'); return; }
@@ -592,6 +593,15 @@ export class Inventory {
         return !!this._cyc && this._cyc.side === side;
     }
 
+    /**
+     * This hand took a thing out of the pocket just now (ms). The other hand reaching across to the pocket passes the
+     * waistband looking down: a wand it just took must not be tucked into the belt on the way back (the author: the
+     * second wand was chosen, but it was at the belt, not in the left hand — WandBelt).
+     */
+    justTook(side, ms = 5000) {
+        return performance.now() - (this._tookAt?.[side] || -1e9) < ms;
+    }
+
     /** The things' pocket, an empty hand: the next thing of the slots into it (not the wand, not what goes on the back). */
     takeNext(side = 'right') {
         const n = this.slots.length;
@@ -609,6 +619,7 @@ export class Inventory {
                 return false;
             }
             this._cyc = { side, slot: i, item: ih.kind === 'item' ? ih.item : null, weapon: ih.kind === 'weapon' ? ih.weapon : null, res: it.kind === 'res' };
+            (this._tookAt || (this._tookAt = { left: 0, right: 0 }))[side] = performance.now();
             this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
             return true;
         }

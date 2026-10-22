@@ -12,12 +12,16 @@
 import * as THREE from 'three';
 
 export const SWAP_TIME = 3;
-/** The wands count as touching this close (m, between their axes: a wand is thin). */
-export const TOUCH_DIST = 0.07;
-/** A touch lost for this long (s) starts over (a hand seen badly for a frame does not). */
-export const SWAP_GRACE = 0.25;
+/** The wands count as touching this close (m, between their axes). The camera's hands shake and two hands never quite
+ * meet in the game (the author: held together 3 s — nothing): a loose touch is enough. */
+export const TOUCH_DIST = 0.14;
+/** …or the two hands holding them this close (m): hands together, the wands together. */
+export const HANDS_TOUCH = 0.24;
+/** A touch lost for this long (s) starts over (a hand seen badly for a few frames does not). */
+export const SWAP_GRACE = 0.6;
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _hit = new THREE.Vector3();
+const _hl = new THREE.Vector3(), _hr = new THREE.Vector3();
 
 /** Shortest distance between segments a0–a1 and b0–b1 (the middle of the closest pair into `mid`). Pure. */
 export function segmentGap(a0, a1, b0, b1, mid = null) {
@@ -65,13 +69,23 @@ export class WandSwap {
     update(dt) {
         const it = this.items, g = it.game;
         const L = it.held.left, R = it.held.right;
-        if (!L || !R || L.item.kind !== 'wand' || R.item.kind !== 'wand' || g.spellBusy?.()) { this.timer.reset(); return; }
+        // (only a HELD spell stops it — Concentration: a lit Lumos or a spell just said never does; that was why the
+        // author's wands never changed hands)
+        if (!L || !R || L.item.kind !== 'wand' || R.item.kind !== 'wand' || g.focus?.held?.()) { this.timer.reset(); this._told = false; return; }
         const [a0, a1, b0, b1] = this._p;
         this._ends(L, a0, a1);
         this._ends(R, b0, b1);
-        const touching = segmentGap(a0, a1, b0, b1, _hit) < TOUCH_DIST;
+        let touching = segmentGap(a0, a1, b0, b1, _hit) < TOUCH_DIST;
+        const ch = g.character;
+        if (!touching && ch?.getHandWorldPosition) {
+            ch.getHandWorldPosition('left', _hl); ch.getHandWorldPosition('right', _hr);
+            if (_hl.distanceTo(_hr) < HANDS_TOUCH) { touching = true; _hit.addVectors(_hl, _hr).multiplyScalar(0.5); }
+        }
         const done = this.timer.update(dt, touching);
         const p = this.timer.progress;
+        // (the player is told it has begun: hold them together)
+        if (touching && p > 0.05 && !this._told) { this._told = true; g.hud?.toast?.('🪄 Палочки касаются — держите их вместе 3 секунды', 1600); }
+        if (this.timer.t === 0) this._told = false;
         if (touching && p > 0) {
             // a glow growing at the touch (sparks more and more, the light is the spark's own: no new light in the scene)
             if (Math.random() < dt * (4 + 30 * p)) g.fx?.spark?.(_hit, p > 0.66 ? 0xffffff : 0xffe9a8, 0.04 + 0.08 * p, _a.set((Math.random() - 0.5) * 1.5, Math.random() * 1.5, (Math.random() - 0.5) * 1.5), 0.4);
