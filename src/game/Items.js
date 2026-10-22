@@ -27,7 +27,7 @@ import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
-import { clampToCounter, BuyerGate } from './BuyerDeal.js';
+import { clampToCounter, BuyerGate, BUY_DROP } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
@@ -826,10 +826,19 @@ export class ItemSystem {
     _buyerPut(side, h, gt, ch) {
         const gate = this._dropBuy[side];
         const st = ch.getHandWorldPosition(side, _f) && this.game.castleLife?.talk?.buyerCounterAt(_f);
-        if (!st) { gate.reset(); return false; }
+        if (!st) {
+            gate.reset();
+            // (a hint, while the hand is held out near a buyer's counter and not yet over it)
+            const o = this.game.castleLife?.talk?.buyerDiag(_f);
+            if (o && performance.now() - (this._diagAt || 0) > 1500) { this._diagAt = performance.now(); this.game.hud.setVoice?.(`🤲 Рука не над прилавком: вбок ${o.side.toFixed(1)} м, по высоте ${o.up >= 0 ? '+' : ''}${o.up.toFixed(1)} м от стойки`, true); }
+            return false;
+        }
         const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
         const arm = ch.armState(side, this._arm[side]);
-        if (!gate.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed, heldMs: performance.now() - h.since })) return false;
+        if (!gate.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed, heldMs: performance.now() - h.since })) {
+            if (performance.now() - (this._diagAt || 0) > 1500) { this._diagAt = performance.now(); this.game.hud.setVoice?.(`🤲 Над прилавком. Пальцы ${curl.toFixed(2)} (нужно меньше ${BUY_DROP.OPEN}), рука ${arm.reach.toFixed(2)} (>${BUY_DROP.REACH}), ${tracked ? 'кисть видна' : 'кисть не видна'}`, true); }
+            return false;
+        }
         clampToCounter(st, h.model.position.copy(_f));
         h.model.position.y = st.counter.top + 0.3; // (laid right on it: no fall, no bounce off the edge)
         const at = h.model.position.clone(), item = h.item;

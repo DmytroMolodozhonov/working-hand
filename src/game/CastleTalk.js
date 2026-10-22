@@ -42,7 +42,7 @@ import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
-import { DealPrices, dealKey, overCounter } from './BuyerDeal.js';
+import { DealPrices, dealKey, overCounter, counterOffset } from './BuyerDeal.js';
 import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
@@ -1053,6 +1053,19 @@ export class CastleTalk {
             journal(`скупщик: ошибка при укладке — ${e?.message || e}`);
             g.hud.setVoice?.(`💰 Ошибка скупщика: ${e?.message || e}`, true);
         }
+    }
+
+    /** (a hint while the hand is held out near a buyer's counter) where the hand is against it, or null when no buyer is near. */
+    buyerDiag(p) {
+        for (const cs of this.life.castles.values()) {
+            if (!cs.awake) continue;
+            for (const st of cs.def.stalls) {
+                if (!st.pawn && !st.fence) continue;
+                const o = counterOffset(st, p);
+                if (o.side < 4 && Math.abs(o.up) < 4) return o;
+            }
+        }
+        return null;
     }
 
     /**

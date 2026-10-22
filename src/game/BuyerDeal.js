@@ -54,6 +54,13 @@ export function overCounter(stall, p, margin = 0.1) {
     return p.x >= c.x0 - m && p.x <= c.x1 + m && p.z >= c.z0 - m && p.z <= c.z1 + m && p.y > c.top - 0.2 && p.y < c.top + 2.6;
 }
 
+/** How far a point is from being over a counter: {side: m outside the rect (0 = over it), up: m above the counter top}. */
+export function counterOffset(stall, p) {
+    const c = stall.counter;
+    const dx = Math.max(c.x0 - HALF - p.x, 0, p.x - c.x1 - HALF), dz = Math.max(c.z0 - HALF - p.z, 0, p.z - c.z1 - HALF);
+    return { side: Math.hypot(dx, dz), up: p.y - c.top };
+}
+
 /** The point of the counter nearest to p (a thing let go lies on it, never beside it). */
 export function clampToCounter(stall, p, inset = 0.25) {
     const c = stall.counter;
@@ -68,7 +75,7 @@ export function clampToCounter(stall, p, inset = 0.25) {
  * the off hand held out over the counter, the fingers opened (a wand held in a pinch is seen half open, so
  * the bar is 0.4), whatever way the palm faces (giving is often palm up), nearly still, for a moment.
  */
-export const BUY_DROP = { OPEN: 0.4, HOLD_MS: 150, REACH: 0.55, FORWARD: 0.2, STILL: 3.5, HELD_MS: 700 };
+export const BUY_DROP = { OPEN: 0.5, HOLD_MS: 150, REACH: 0.4, FORWARD: 0, STILL: 5, HELD_MS: 600 };
 export class BuyerGate {
     constructor() { this.since = -1; }
     reset() { this.since = -1; }
