@@ -27,7 +27,7 @@ import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
-import { clampToCounter } from './BuyerDeal.js';
+import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
@@ -128,7 +128,7 @@ export class ItemSystem {
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._drop = { right: new DropGate(), left: new DropGate() };
-        this._dropBuy = { right: new DropGate(), left: new DropGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
+        this._dropBuy = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
         this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
         this.letLog = new CappedLog(); // (why things left the hands: tests)
@@ -267,7 +267,7 @@ export class ItemSystem {
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
         this._drop[side].reset(closed);
-        this._dropBuy[side].reset(closed);
+        this._dropBuy[side].reset();
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
@@ -825,13 +825,14 @@ export class ItemSystem {
     /** The off hand over a buyer's counter, held out and opened: the thing lies on the counter. true — it did. */
     _buyerPut(side, h, gt, ch) {
         const gate = this._dropBuy[side];
-        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
         const st = ch.getHandWorldPosition(side, _f) && this.game.castleLife?.talk?.buyerCounterAt(_f);
-        if (!st) { if (curl > DROP.CLOSED) gate.armed = true; gate.since = 0; return false; }
+        if (!st) { gate.reset(); return false; }
+        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
         const arm = ch.armState(side, this._arm[side]);
-        if (!gate.update({ now: gt, curl, tracked, ...arm })) return false;
+        if (!gate.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed, heldMs: performance.now() - h.since })) return false;
         clampToCounter(st, h.model.position.copy(_f));
-        this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (левая/нерабочая рука разжата над ним)' });
+        h.model.position.y = st.counter.top + 0.3; // (laid right on it: no fall, no bounce off the edge)
+        this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (нерабочая рука разжата над ним)' });
         return true;
     }
 

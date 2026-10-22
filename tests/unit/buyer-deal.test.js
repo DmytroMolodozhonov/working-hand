@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Box3, Vector3 } from 'three';
-import { DealPrices, DEAL_MS, dealKey, offSide, overCounter, clampToCounter, signSpec, COUNTER_H } from '../../src/game/BuyerDeal.js';
+import { DealPrices, DEAL_MS, dealKey, offSide, overCounter, clampToCounter, signSpec, COUNTER_H, BuyerGate } from '../../src/game/BuyerDeal.js';
 import { CastleTalk } from '../../src/game/CastleTalk.js';
 
 test('deal: put → price N; taken back → reset; put again → the same N; «да» → N coins', () => {
@@ -58,15 +58,26 @@ test('counter: only over it, at its height or higher; a thing lands on it', () =
     assert.ok(p.x <= 3 && p.x >= -3 && p.z >= 12 && p.z <= 14);
 });
 
-test('plaque: 3–4 m up, 2 × 1 m (the shady one smaller), over the counter facing the buyer', () => {
+test('plaque: low on the counter\'s front, flush, facing the buyer; 2.4 × 0.9 m (the shady one 1.6 × 0.6)', () => {
     const s = signSpec(stall), ground = stall.counter.top - COUNTER_H;
-    assert.deepEqual([s.w, s.h], [2, 1]);
-    const box = new Box3(new Vector3(s.x - s.w / 2, s.y - s.h / 2, s.z), new Vector3(s.x + s.w / 2, s.y + s.h / 2, s.z));
-    assert.ok(box.min.y - ground >= 3 && box.max.y - ground <= 4, 'between 3 and 4 m above the ground');
-    assert.ok(s.z >= stall.counter.z0 && s.z <= stall.counter.z1, 'over the counter, not sticking out');
-    assert.ok(Math.abs(s.yaw) < 1e-9, 'its front looks toward +z, where the buyer stands');
+    assert.deepEqual([s.w, s.h], [2.4, 0.9]);
+    assert.ok(s.y - s.h / 2 - ground >= 0.4 && s.y + s.h / 2 - ground <= 1.5, 'on the counter\'s front, below the hands and the face');
+    assert.ok(s.w <= stall.counter.x1 - stall.counter.x0, 'not wider than the counter');
+    assert.ok(Math.abs(s.z - stall.counter.z1) <= 0.06, 'flush with the front face (+z, where the buyer is)');
+    assert.ok(Math.abs(s.yaw) < 1e-9);
     const f = signSpec({ fence: true, front: { x: -9, z: 0 }, counter: { x0: 0, x1: 2, z0: -1.5, z1: 1.5, top: 4 } });
-    assert.ok(f.w < s.w && f.w >= 1.5);
+    assert.ok(f.w < s.w && f.w >= 1.5 && Math.abs(f.x - -0.05) < 1e-9);
     assert.ok(Math.abs(Math.abs(f.yaw) - Math.PI / 2) < 1e-9);
     assert.equal(signSpec({ front: { x: 0, z: 0 }, counter: stall.counter }), null, 'ordinary sellers have none');
+});
+
+test('letting go over the counter: a half-open pinch, palm any way, held a moment → drops; closed or fast → not', () => {
+    const g = new BuyerGate(), base = { tracked: true, reach: 0.7, forward: 0.4, speed: 1, heldMs: 2000 };
+    assert.equal(g.update({ now: 0, curl: 0.3, ...base }), false);
+    assert.equal(g.update({ now: 200, curl: 0.3, ...base }), true);
+    const h = new BuyerGate();
+    h.update({ now: 0, curl: 0.3, ...base });
+    assert.equal(h.update({ now: 300, curl: 0.7, ...base }), false, 'closed again');
+    assert.equal(new BuyerGate().update({ now: 0, curl: 0.1, ...base, heldMs: 100 }), false, 'just taken');
+    assert.equal(new BuyerGate().update({ now: 0, curl: 0.1, ...base, tracked: false }), false, 'a lost hand never lets go');
 });

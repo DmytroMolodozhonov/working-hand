@@ -951,7 +951,7 @@ export class CastleTalk {
                 for (const L of g.items.loose.values()) {
                     if (L.item.shop || L.item.kind === 'coins' || L.hover) continue;
                     const sp = L.model.position;
-                    if (!on(sp) || L.vel.lengthSq() > 0.05) continue;
+                    if (!on(sp) || L.vel.lengthSq() > 0.6) continue; // (lying, or nearly)
                     found = { uid: L.item.uid, item: L.item, pos: sp.clone() };
                     break;
                 }

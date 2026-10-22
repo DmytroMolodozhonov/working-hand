@@ -61,9 +61,28 @@ export function clampToCounter(stall, p, inset = 0.25) {
 }
 
 /**
- * The «Скупка» plaque over a buyer's counter. Sizes from the world's measures (a block is 1 m, the hero
- * ~3.5 m, the counter 2 m high, eyes ≈ 3.4 m): hung 3–4 m above the ground, over the counter, facing the buyer.
- * @returns {{x,y,z,yaw,w,h,top,kind}|null} y — its centre; top — where the chains end (the roof beam)
+ * Letting go over a buyer's counter is easier than anywhere else (the author: «рука разжата, а вещь не падает»):
+ * the off hand held out over the counter, the fingers opened (a wand held in a pinch is seen half open, so
+ * the bar is 0.4), whatever way the palm faces (giving is often palm up), nearly still, for a moment.
+ */
+export const BUY_DROP = { OPEN: 0.4, HOLD_MS: 150, REACH: 0.55, FORWARD: 0.2, STILL: 3.5, HELD_MS: 700 };
+export class BuyerGate {
+    constructor() { this.since = -1; }
+    reset() { this.since = -1; }
+    /** @returns {boolean} let go now */
+    update({ now, curl, tracked, reach, forward, speed = 0, heldMs = 1e9 }) {
+        const open = tracked && heldMs > BUY_DROP.HELD_MS && curl < BUY_DROP.OPEN && reach > BUY_DROP.REACH && forward > BUY_DROP.FORWARD && speed < BUY_DROP.STILL;
+        if (!open) { this.since = -1; return false; }
+        if (this.since < 0) this.since = now;
+        return now - this.since >= BUY_DROP.HOLD_MS;
+    }
+}
+
+/**
+ * The «Скупка» plaque, on the counter's FRONT face (low, flush: the author — it hung at the player's face and
+ * got in the way). Sizes from the world's measures (a block is 1 m, the hero ~3.5 m, the counter 2 m high):
+ * it covers the counter's front between 0.5 and 1.4 m above the ground and sticks out 5 cm.
+ * @returns {{x,y,z,yaw,w,h,kind}|null} (y — its centre)
  */
 export const COUNTER_H = 2; // m: the counter's height (ground = counter.top − COUNTER_H)
 export function signSpec(stall) {
@@ -72,11 +91,10 @@ export function signSpec(stall) {
     const along = c.x1 - c.x0 >= c.z1 - c.z0;
     const mx = (c.x0 + c.x1) / 2, mz = (c.z0 + c.z1) / 2;
     const sx = along ? 0 : (stall.front.x >= mx ? 1 : -1), sz = along ? (stall.front.z >= mz ? 1 : -1) : 0;
-    const IN = 0.35; // m: behind the counter's front face (it hangs over the counter, never sticks out)
-    const x = along ? mx : (sx > 0 ? c.x1 : c.x0) - sx * IN;
-    const z = along ? (sz > 0 ? c.z1 : c.z0) - sz * IN : mz;
+    const OUT = 0.05;
+    const x = along ? mx : (sx > 0 ? c.x1 : c.x0) + sx * OUT;
+    const z = along ? (sz > 0 ? c.z1 : c.z0) + sz * OUT : mz;
     const ground = c.top - COUNTER_H;
     const pawn = !!stall.pawn;
-    const w = pawn ? 2 : 1.6, h = pawn ? 1 : 0.7;
-    return { x, z, y: ground + (pawn ? 3.5 : 3.2), yaw: Math.atan2(sx, sz), w, h, top: ground + (pawn ? 6 : 5), kind: pawn ? 'pawn' : 'fence' };
+    return { x, z, y: ground + 0.95, yaw: Math.atan2(sx, sz), w: pawn ? 2.4 : 1.6, h: pawn ? 0.9 : 0.6, kind: pawn ? 'pawn' : 'fence' };
 }

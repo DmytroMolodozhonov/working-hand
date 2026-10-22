@@ -1,5 +1,5 @@
 /**
- * BuyerSigns.js — the «Скупка» plaque over the counter of the pawnshop (wizards' settlement) and the shady
+ * BuyerSigns.js — the «Скупка» plaque on the front of the counter of the pawnshop (wizards' settlement) and the shady
  * buyer's plaque in a town (signSpec in BuyerDeal.js has the sizes). One shared geometry per part, one
  * texture + material per kind (made once); a plaque is built when its stall is near and hidden far off.
  */
@@ -56,15 +56,8 @@ export class BuyerSigns {
         const S = shared();
         const g = new THREE.Group();
         const board = new THREE.Mesh(S.box, S.mats[spec.kind]);
-        board.scale.set(spec.w, spec.h, 0.1);
+        board.scale.set(spec.w, spec.h, 0.05);
         g.add(board);
-        const len = Math.max(0.2, spec.top - (spec.y + spec.h / 2));
-        for (const sx of [-1, 1]) {
-            const ch = new THREE.Mesh(S.box, S.chain);
-            ch.scale.set(0.06, len, 0.06);
-            ch.position.set(sx * (spec.w / 2 - 0.2), spec.h / 2 + len / 2, 0);
-            g.add(ch);
-        }
         g.position.set(spec.x, spec.y, spec.z);
         g.rotation.y = spec.yaw;
         g.userData.shared = true;
