@@ -1683,7 +1683,7 @@ export class Animals {
         this._netT = 0.2;
         const r = (v) => Math.round(v * 100) / 100;
         if (this.auth) {
-            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || 0, a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0, Math.round(a.hp * 10) / 10]));
+            g.sync.animals?.(this.list.map((a) => [a.id, a.type, r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.dead ? 1 : 0, a.meat, a.cooked ? 1 : 0, a.color ?? 0, a.tamed || 0, a.rider || (a.mount?.on ? 'npc' : 0), a.bonus, a.state !== 'graze' || a.spd > 0.2 ? 1 : 0, a.pose || 0, a.flyCode || 0, r(a.bank || 0), r(a.pitch || 0), a.form || 0, r(a.formK || 0), a.act || 0, Math.round(a.hp * 10) / 10]));
         } else if (this.riding) {
             const a = this.riding;
             g.sync.animalPos?.(a.id, [r(a.group.position.x), r(a.group.position.y), r(a.group.position.z), r(a.group.rotation.y), a.flyCode || 0]);
