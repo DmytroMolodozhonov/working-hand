@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
-import { SPELL_COST, PLAYER_DAMAGE } from '../../src/game/Combat.js';
+import { SPELL_COST } from '../../src/game/Combat.js';
+import { DAMAGE } from '../../src/game/Damage.js';
 import { SPELL_PHYSICS } from '../../src/game/Impact.js';
 import { overgrownPush } from '../../src/game/Overgrown.js';
 import { fallDamage } from '../../src/game/Levitation.js';
@@ -22,8 +23,8 @@ test('«Overgrown» is heard in English and as Russian recognition writes it; «
 test('«Overgrown» costs 10 mana, its Максима 20; the spell itself hurts nobody', () => {
     assert.equal(SPELL_COST.Overgrown, 10);
     assert.equal(SPELL_COST.OvergrownMaxima, 20);
-    assert.equal(PLAYER_DAMAGE.Overgrown, undefined);
-    assert.equal(PLAYER_DAMAGE.OvergrownMaxima, undefined);
+    assert.equal(DAMAGE.Overgrown, undefined);
+    assert.equal(DAMAGE.OvergrownMaxima, undefined);
 });
 
 const O = new THREE.Vector3(0, 1.6, 0);

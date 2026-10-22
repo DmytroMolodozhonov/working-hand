@@ -143,6 +143,7 @@ test('Hellfire: the first real burn gives +20 to the mana maximum — only once'
 test('Hellfire: the caster is not immune — the blaze on him burns him (a shield only halves it)', () => {
     const g = fakeGame();
     const c = g.combat;
+    c.maxHp = 400; c.hp = 400; // (a creature with more HP than 20 survives: the damage is the same for all)
     c.maxFatigue = 200; c.fatigue = 200;
     // (the wand pointing at his own feet)
     g.character.getPointingDirection = (side, out = new THREE.Vector3()) => out.set(0, -1, 0.05).normalize();
@@ -151,11 +152,11 @@ test('Hellfire: the caster is not immune — the blaze on him burns him (a shiel
     const hp0 = c.hp;
     run(g, 2);
     assert.ok(c.hp < hp0, `he burns in his own fire: ${hp0} → ${c.hp}`);
-    assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.by === 'self' && e.dmg === HELLFIRE.PLAYER_DMG));
+    assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.by === 'self' && e.dmg === HELLFIRE.CREATURE_DMG));
     c.shield = { type: 2, side: 'right', left: 99 };
     g.hellfire.log.length = 0;
     run(g, 1);
-    assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.dmg === HELLFIRE.PLAYER_DMG * HELLFIRE.SHIELD), 'a shield only halves it');
+    assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.dmg === HELLFIRE.CREATURE_DMG * HELLFIRE.SHIELD), 'a shield only halves it');
 });
 
 test('Hellfire: «стоп» costs 50 mana; without 50 it burns on until the mana runs out', () => {
@@ -202,6 +203,7 @@ test('Hellfire: stopped (or out of mana), it leaves fires that burn on ≥ 30 s 
 test('Hellfire: the fire left on the ground burns the caster who walks into it; out of mana leaves fires too', () => {
     const g = fakeGame();
     const c = g.combat;
+    c.maxHp = 400; c.hp = 400;
     c.maxFatigue = 200; c.fatigue = 82;
     g.hellfire.cast(true);
     run(g, 2);

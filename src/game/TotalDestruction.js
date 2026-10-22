@@ -24,7 +24,8 @@ import * as THREE from 'three';
 import { RUIN, ruinSample, hash01 } from '../world/Ruin.js';
 import { keepIn } from './HouseWards.js';
 import { BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
-import { bombardoDamage } from './Combat.js';
+import { DAMAGE, blastDamage } from './Damage.js';
+const BLAST = DAMAGE.BlastPeak;
 import { MAXIMA_POWER } from '../fx/SpellManager.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
@@ -275,7 +276,7 @@ export class TotalDestruction {
             g.impact?.apply({ v: _v.normalize().multiplyScalar(3 + 6 * k), from: null, by: d.by, spell: d.name, always: { down: 3 * harm }, toss: (3 + 5 * k) * Math.sqrt(harm), jolt: 3 * k, down: 3 * harm });
         }
         // 5× «Бомбардо Максима» (a shield takes part of it)
-        let dmg = 5 * harm * bombardoDamage(dist, R, MAXIMA_POWER); // (Maxima: twice)
+        let dmg = blastDamage(dist, R, d.P); // (the same blast for every body: 8 × power at the centre)
         const c = g.combat, s = c?.shield;
         if (s && s.left > 0 && c._payHit(d.name)) dmg *= s.type === 2 ? 0.25 : 0.5; // (half its mana; out of mana: shattered — all of it)
         dmg = Math.round(dmg);
@@ -298,22 +299,22 @@ export class TotalDestruction {
             const dir = new THREE.Vector3(zp.x - p.x, 0, zp.z - p.z);
             if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
             dir.normalize();
-            g.damageZombie(z, Math.max(2, Math.round(8 * P * k)), false, dir, null);
+            g.damageZombie(z, Math.max(2, Math.round(blastDamage(dd, R, P))), false, dir, null);
             z.velocity?.addScaledVector(dir, 4 * k);
             z.vy = Math.max(z.vy || 0, 3 + 6 * k);
         }
         const at = new THREE.Vector3(p.x, p.y, p.z);
-        g.animals?.hitAt(at, R, 6 * P, by);
-        g.spiders?.hitAt(at, R, 12 * P, d.name, by);
-        g.dragons?.hitAt(at, R, 12 * P, 'TotalDestruction', by);
-        g.iceCastle?.hitAt(at, R, 12 * P, 'TotalDestruction', by); // (a scroll's spell: it hurts the queen too)
-        g.phoenixes?.hitAt(at, R, 10 * P, d.name, by);
-        g.owls?.hitAt(at, R, 10 * P, d.name, by); // (a scroll's spell: it kills an owl)
-        g.castleLife?.hitAt(at, R, 8 * P, by);
+        g.animals?.hitAt(at, R, BLAST * P, by);
+        g.spiders?.hitAt(at, R, BLAST * P, d.name, by);
+        g.dragons?.hitAt(at, R, BLAST * P, 'TotalDestruction', by);
+        g.iceCastle?.hitAt(at, R, BLAST * P, 'TotalDestruction', by); // (a scroll's spell: it hurts the queen too)
+        g.phoenixes?.hitAt(at, R, BLAST * P, d.name, by);
+        g.owls?.hitAt(at, R, BLAST * P, d.name, by); // (a scroll's spell: it kills an owl)
+        g.castleLife?.hitAt(at, R, BLAST * P, by);
         g.crystals?.hitAt?.(at, R, by, d.name); // (mana crystals in it crack: their power to the caster)
-        g.livingTrees?.hitAt(at, R, 8 * P, d.name); // (the mightiest spells break a living tree too, not only fire)
+        g.livingTrees?.hitAt(at, R, BLAST * P, d.name); // (the mightiest spells break a living tree too, not only fire)
         g.ships?.blast?.(at, R, P, by);
-        g.ships?.crew?.hitAt(at, R, 8 * P, by, d.name);
+        g.ships?.crew?.hitAt(at, R, BLAST * P, by, d.name);
         g.creatureImpact?.spellArea(d.name, by, (c) => {
             const dd = Math.hypot(c.x - p.x, c.z - p.z);
             if (dd > reach || Math.abs(c.y - p.y) > 30) return null;

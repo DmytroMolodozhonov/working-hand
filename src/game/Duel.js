@@ -38,7 +38,8 @@
 
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
-import { PVP, PLAYER_DAMAGE } from './Combat.js';
+import { PVP } from './Combat.js';
+import { DAMAGE } from './Damage.js';
 import { SLOW } from './Slow.js';
 import { sharpJerk } from './Jerk.js';
 import { spiderBody, spiderCenter } from './Spider.js';
@@ -1112,7 +1113,7 @@ export class Duel {
         if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
-            hit(25, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
+            hit(DAMAGE.AvadaKedavra, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
             if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
         } else if (spell === 'Stupefy') {
             c.stunT = DUEL.STUN_TIME;
@@ -1123,7 +1124,7 @@ export class Duel {
             else { c.stunT = 3; c.vy = 11; }
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 3, 0.4, 20);
-            hit(10);
+            hit(DAMAGE.Sapira);
             if (!c.dead) g.creatureImpact?.spellHit(c, 'SapiraDuel', src, byId);
         } else if (spell === 'SandsDuel') {
             c.slowT = Math.max(c.slowT || 0, SLOW.TIME);
@@ -1190,7 +1191,7 @@ export class Duel {
             // the body crumples back (off the feet; up again by a squat)
             g.knock?.knock({ dir: 'back', down: 1.5, by: byId, kind: 'avada', strength: 0.5 });
             // (not a killing curse: −25 HP at once)
-            if (c.enabled) c.damage(25, byId, 'AvadaKedavra');
+            if (c.enabled) c.damage(DAMAGE.AvadaKedavra, byId, 'AvadaKedavra');
             else g.hud.setVoice('💚 Авада Кедавра попала в вас: −25 HP (здесь не ранит)', true);
         } else if (spell === 'Stupefy') {
             c.stun(DUEL.STUN_TIME, byId);
@@ -1203,14 +1204,14 @@ export class Duel {
         } else if (spell === 'SapiraDuel') {
             g.fx.lightFlash(p, 0x8e2de2, 4, 0.4, 20);
             g.hud.flashColor?.('rgba(142, 45, 226, 0.6)');
-            if (c.enabled) c.damage(4, byId, 'Sapira');
+            if (c.enabled) c.damage(DAMAGE.Sapira, byId, 'Sapira');
             else g.hud.setVoice('💜 Сапира попала в вас', true);
             g.impact?.apply({ v: push(12), from, by: byId, spell: 'SapiraDuel', jolt: 3, noShield: true });
         } else if (spell === 'SandsDuel') {
             this._sand(p);
             g.hud.flashColor?.('rgba(210, 180, 140, 0.6)');
             c.slow(SLOW.TIME, byId);
-            if (c.enabled) c.damage(PLAYER_DAMAGE.Sands ?? 3, byId, 'Sands');
+            if (c.enabled && DAMAGE.Sands > 0) c.damage(DAMAGE.Sands, byId, 'Sands');
             else g.hud.setVoice('🏜️ Даст попал в вас: песок в глазах — 5 секунд вы медленнее', true);
             g.impact?.apply({ v: push(5), from, by: byId, spell: 'SandsDuel', jolt: 2.5, noShield: true });
         } else if (spell === 'Expelliarmus') {

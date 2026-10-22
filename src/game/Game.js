@@ -28,6 +28,8 @@ import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
+import { DAMAGE, blastDamage } from './Damage.js';
+const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
 import { Levitation } from './Levitation.js';
 import { LevitationMaxima } from './LevitationMaxima.js';
 import { Accio, accioCatcher } from './Accio.js';
@@ -315,7 +317,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin) => this.sun?.cast(origin),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, 12, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, 20, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, 20, 'Lightning', casterId); this.owls?.hitAt(point, 3, 20, 'Lightning', casterId); this.dragons?.hitAt(point, 3, 40, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, 20, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, 12, casterId); this.livingTrees?.hitAt(point, 3, 20, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, 12, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
             birdRay: (o, d, len, width, name) => {
@@ -947,8 +949,8 @@ export class Game {
         this.fire.ignite(pos, radius + 2);
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
-        if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, 8 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
-        if (authoritative) { this.animals?.hitAt(pos, radius, 6 * power, casterId); this.spiders?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, 10 * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, 10 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, 12 * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, 12 * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, 8 * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, 8 * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
+        if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
+        if (authoritative) { this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -1003,7 +1005,7 @@ export class Game {
                 const d = _v1.set(zp.x - pos.x, zp.y + 0.5 - pos.y, zp.z - pos.z).length();
                 const blast = radius + 3;
                 if (d > blast) continue;
-                const dmg = Math.max(2, Math.round(8 * power * (1 - d / blast)));
+                const dmg = Math.max(2, Math.round(blastDamage(d, radius, power)));
                 const dir = _v2.set(zp.x - pos.x, 0, zp.z - pos.z).normalize().clone();
                 this.damageZombie(z, dmg, false, dir, null);
                 // Thrown through the air, not just slid along the ground
@@ -2155,7 +2157,7 @@ export class Game {
         this.impact.apply({ v: d.normalize().multiplyScalar(max ? -5 : -3), from: null, by: casterId,
             spell: max ? 'EarthquakeMaxima' : 'Earthquake', always: { down: max ? 2.5 : 1.5 }, toss: max ? 6 : 4 });
         this.fx.shake = Math.max(this.fx.shake, 1.2);
-        c.damage(max ? 9 : 3, casterId, 'Earthquake');
+        c.damage(max ? DAMAGE.EarthquakeMaxima : DAMAGE.Earthquake, casterId, 'Earthquake');
         return true;
     }
 
@@ -2338,8 +2340,8 @@ export class Game {
             const point = ch.group.position.clone();
             this.spells.cast('LightningHit', point, _v1.set(0, -1, 0), null, this.localId);
             if (this.sync) this.sync.spell('LightningHit', point, _v1.set(0, -1, 0), null);
-            if (this.combat.enabled) this.combat.damage(10, null, 'Lightning');
-            else this.damageLocalPlayer(6);
+            if (this.combat.enabled) this.combat.damage(DAMAGE.Lightning, null, 'Lightning');
+            else this.damageLocalPlayer(DAMAGE.Lightning);
             this.hud.setVoice('⚡ Вы слишком долго держали молнию — она ударила в вас!', true);
         }
     }

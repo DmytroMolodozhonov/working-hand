@@ -90,7 +90,6 @@ export const FIRE_MAXIMA = {
     RANGE: 22, // m
     RADIUS: 3.2, // m: the fire flower
     TRAVEL: 0.35, // s the fire spiral flies
-    PLAYER_DMG: 3,
     CREATURE_DMG: 6,
     MELT_TIME: 1.1, // s the ice takes to melt
 };
@@ -1272,7 +1271,7 @@ export class WaterVortex {
             if (c.shieldFactor(e.o) >= 1 && c._blocked(e.o, 'FireMaxima')) { /* held */ }
             else {
                 if (c.frozen) c.frozenLeft = 0; // (the ice on me melts too)
-                const dmg = FIRE_MAXIMA.PLAYER_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)
+                const dmg = FIRE_MAXIMA.CREATURE_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)
                 if (c.enabled) c.damage(dmg, e.by, 'Inferno');
                 else g.damageLocalPlayer?.(dmg);
             }

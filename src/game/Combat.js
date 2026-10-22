@@ -36,6 +36,7 @@
 import * as THREE from 'three';
 import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
+import { DAMAGE, blastDamage } from './Damage.js';
 import { SLOW } from './Slow.js';
 import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine, BREAKS_GODS } from './ProtectionGods.js';
 
@@ -159,30 +160,11 @@ export const SPELL_COST = {
     FlyingMaxima: 30, // «Flying Maxima»: up out of the air into space (Space.js; then breathing there: 0.5 a second)
 };
 
-/** Damage to players (HP is 10: most spells take 2–4). */
-export const PLAYER_DAMAGE = {
-    Inferno: 1, // per tick while in the flames
-    Thunderwave: 10, // (ThunderWave.js: −10 to everyone in the zone)
-    Sapira: 4,
-    Lightning: 12,
-    Sands: 3,
-    IceBall: 3,
-    Punch: 1,
-    BombardoMax: 3, // at the centre of a Bombardo; × power for Bombardo Maxima
-    Liquidation: 3, // «Liquidation» on anything alive (Liquidation.js)
-};
+/** Damage a spell does to me is the one every creature takes (Damage.js); here only the kinds that have a number. */
+const HIT_DAMAGE = { Inferno: 1, IceBall: 3, Thunderwave: DAMAGE.Thunderwave, Sapira: DAMAGE.Sapira, Lightning: DAMAGE.Lightning, Sands: DAMAGE.Sands, Liquidation: DAMAGE.Liquidation };
 
-/**
- * Bombardo damage by distance from the centre of the blast: point-blank kills
- * (20 HP; Bombardo Maxima 30), it falls off steeply and is ~0 at the edge of
- * the reach (radius + 3 m).
- */
-export function bombardoDamage(dist, radius, power = 1) {
-    const reach = radius + 3;
-    if (!(dist < reach)) return 0;
-    const k = 1 - dist / reach;
-    return PVP.MAX_HP * (power > 1 ? 1.5 : 1) * k * k;
-}
+/** Bombardo damage by distance from the centre of the blast — the same for every body (Damage.blastDamage). */
+export const bombardoDamage = blastDamage;
 
 /**
  * «Protection» / «Protection Maxima» — what they stop and what it costs (CLAUDE.md: every creature and
@@ -946,7 +928,7 @@ export class Combat {
             this.infernoCooldown = PVP.INFERNO_TICK;
         }
         // (fire from a wizard holding the dragon's wand burns 60% harder: Game.fireBoost)
-        this.damage((PLAYER_DAMAGE[kind] ?? 2) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
+        this.damage((HIT_DAMAGE[kind] ?? 2) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
         // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
         if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);
         else if (push) this.game.knockback.add(push);

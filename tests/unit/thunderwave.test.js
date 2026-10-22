@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { Combat, SPELL_COST, PLAYER_DAMAGE } from '../../src/game/Combat.js';
+import { Combat, SPELL_COST } from '../../src/game/Combat.js';
+import { DAMAGE } from '../../src/game/Damage.js';
 import { THUNDER, inThunderZone, thunderZone } from '../../src/game/ThunderWave.js';
 import { soakBlow, makePiece, wornEffects } from '../../src/game/ArmorTypes.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -14,7 +15,7 @@ const D = { x: 0, y: 0, z: -1 };
 test('cost 40, damage 10', () => {
     assert.equal(SPELL_COST.Thunderwave, 40);
     assert.equal(THUNDER.DAMAGE, 10);
-    assert.equal(PLAYER_DAMAGE.Thunderwave, 10);
+    assert.equal(DAMAGE.Thunderwave, 10);
 });
 
 test('the zone: close all round-and-ahead, far in a cone, nothing behind', () => {

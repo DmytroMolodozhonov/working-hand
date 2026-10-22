@@ -286,11 +286,11 @@ test('Fire Maxima elsewhere: burns the creatures in its flower (and stops at a s
     const hp = g.combat.hp;
     V.onNet({ by: 'other', ev: 'fire', id: 'other:f1', o: [0, 1, -10], p: [0, 0.6, 0], d: [0, 0, 1] });
     run(V, 0.6);
-    assert.equal(hp - g.combat.hp, FIRE_MAXIMA.PLAYER_DMG);
+    assert.equal(hp - g.combat.hp, FIRE_MAXIMA.CREATURE_DMG);
     g.combat.shield = { type: 2, side: 'right', left: 5 };
     V.onNet({ by: 'other', ev: 'fire', id: 'other:f2', o: [0, 1, -10], p: [0, 0.6, 0], d: [0, 0, 1] });
     run(V, 0.6);
-    assert.equal(hp - g.combat.hp, FIRE_MAXIMA.PLAYER_DMG, 'the dome stopped the second one');
+    assert.equal(hp - g.combat.hp, FIRE_MAXIMA.CREATURE_DMG, 'the dome stopped the second one');
 });
 
 test('the throw is a fast stream unwinding out of the rings; «Атака» throws it; «Bubble» said before still wraps the one it hits', () => {

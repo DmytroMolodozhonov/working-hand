@@ -77,12 +77,8 @@ export const HELLFIRE = {
     SURGE_PUSH: 9, // …a surge (the blaze swung fast, the ring spreading out) throws hard, off the feet
     SURGE_SPEED: 6, // m/s of the blaze that make a surge
     PUSH_EVERY: 0.5,
-    CREATURE_DMG: 4, // a burn (a tick) to a creature
-    PLAYER_TICK: 0.5, // s between burns of a player
-    PLAYER_DMG: 2, // HP a burn (4 HP a second: a 20-HP wizard lasts 5 s in it)
+    CREATURE_DMG: 4, // a burn (a tick) to ANY creature — a player too (one damage for all: Damage.js)
     SHIELD: 0.5, // what a shield lets through
-    PLAYER_HEAT_R: 1.5, // m from the fire's edge its heat burns a player…
-    PLAYER_HEAT_DMG: 1, // …1 HP a second (a shield: half)
     QUENCH: 2.2, // m a second of the blaze's radius lost in water
     MAX_LIFE: 90, // s at most (the mana runs out much sooner in the free world)
     STOP_COST: 50, // mana «стоп» takes to put it out (without it: it burns on until the mana runs out)
@@ -660,19 +656,21 @@ export class Hellfire {
         // (the ring of another wizard; my own ring goes round me)
         const ring = f.k > 0.2 && f !== this.state && inRing(body, f.rr, me, 0.45, f.rw, f.rh);
         // the heat right beside it burns too (less, and slower): from the blaze, or another wizard's ring
-        let near = false;
+        let near = false, heat = 1;
         if (!blaze && !ring) {
             const gb = 1 - f.k > 0.2 ? me.distanceTo(f.c) - f.R - 0.45 : Infinity;
             const gr = f.k > 0.2 && f !== this.state ? Math.abs(Math.hypot(me.x - body.x, me.z - body.z) - f.rr) - (f.rw || HELLFIRE.RING_W) / 2 - 0.45 : Infinity;
-            near = Math.min(gb, gr) < HELLFIRE.PLAYER_HEAT_R;
+            const heatR = HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R; // (the same reach as for every creature)
+            near = Math.min(gb, gr) < heatR;
             if (!near) return;
+            heat = Math.max(0, 1 - Math.max(0, Math.min(gb, gr)) / heatR);
         }
         // water magic round me keeps the fire off (soaked by «Firefighting» too)
         for (const s of g._flameWaters?.() || []) if (Math.hypot(me.x - s.x, me.y - s.y, me.z - s.z) < s.r) return;
         if (g.firefighting?.wetMe?.()) return;
-        f.meT = near ? HELLFIRE.PLAYER_TICK * 2 : HELLFIRE.PLAYER_TICK;
+        f.meT = HELLFIRE.TICK;
         const from = blaze || near ? f.c : body;
-        let dmg = (near ? HELLFIRE.PLAYER_HEAT_DMG : HELLFIRE.PLAYER_DMG) * (g.fireBoost?.(f === this.state ? this.me : f.by) ?? 1); // (the dragon's wand: 60% hotter)
+        let dmg = (near ? HELLFIRE.HEAT_DMG * heat : HELLFIRE.CREATURE_DMG) * (g.fireBoost?.(f === this.state ? this.me : f.by) ?? 1); // (the dragon's wand: 60% hotter)
         if ((c.shield && c.shield.left > 0) || c.shieldFactor?.(from) >= 1) dmg *= HELLFIRE.SHIELD; // (fire goes round a shield)
         if (c.frozen) c.frozenLeft = 0; // (the ice on me melts)
         const by = f === this.state || f.by === this.me ? null : f.by;

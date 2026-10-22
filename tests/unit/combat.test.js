@@ -47,17 +47,17 @@ test('free world: 20 HP, every spell hurts players, death at 0 HP', () => {
     const { combat, events } = fakeGame();
     assert.equal(combat.hp, PVP.MAX_HP);
     assert.equal(PVP.MAX_HP, 20);
-    combat.hp = 10; // (the arithmetic below starts from 10)
-    combat.hitBySpell('Sands', FRONT, 'enemy');
-    assert.equal(combat.hp, 7);
+    combat.hitBySpell('Sapira', FRONT, 'enemy'); // (one damage for everybody: Damage.js — Sapira 10)
+    assert.equal(combat.hp, 10);
     assert.equal(events.flashes, 1, 'red flash around the screen');
-    combat.hitBySpell('Sapira', FRONT, 'enemy');
-    assert.equal(combat.hp, 3);
+    combat.hitBySpell('Sands', FRONT, 'enemy'); // (Sands only slows and shoves: no harm)
+    assert.equal(combat.hp, 10);
+    combat.hp = 3;
     // Inferno ticks: not every frame
     combat.hitBySpell('Inferno', FRONT, 'enemy');
     combat.hitBySpell('Inferno', FRONT, 'enemy');
     assert.equal(combat.hp, 2);
-    combat.hitBySpell('Sands', FRONT, 'enemy');
+    combat.hitBySpell('Sapira', FRONT, 'enemy');
     assert.equal(combat.hp, 0);
     assert.equal(events.deaths.length, 1);
     assert.match(events.deaths[0].text, /Враг/);
@@ -99,7 +99,7 @@ test('Protection: arm out → the shield holds; spells from the front bounce off
     assert.equal(c2.fatigue, 50, 'Sapira (20) cost the shield 10');
     assert.equal(c2.hp, 20);
     assert.equal(c2.hitBySpell('Sapira', BEHIND, 'enemy'), true, 'hits from behind');
-    assert.equal(c2.hp, 16);
+    assert.equal(c2.hp, 10);
     // Bombardo blast in front: half damage through the shield
     c2.hp = 20;
     c2.explosion(new THREE.Vector3(0, 1.1, -2), 3.6, 1, 'enemy');
@@ -227,13 +227,13 @@ test('own Bombardo does not hurt me; creative mode has no PvP', () => {
     assert.equal(c.hp, 20);
 });
 
-test('Bombardo damage depends on the distance: point-blank kills, the edge barely hurts', async () => {
+test('Bombardo damage depends on the distance: the same for every body, the edge barely hurts', async () => {
     const { bombardoDamage } = await import('../../src/game/Combat.js');
-    assert.ok(bombardoDamage(0, 3.6, 1) >= PVP.MAX_HP, 'point-blank Bombardo kills');
+    assert.ok(bombardoDamage(0, 3.6, 1) >= 8, 'point-blank Bombardo: 8');
     assert.ok(bombardoDamage(0, 6.2, 3) > bombardoDamage(0, 3.6, 1), 'Maxima is stronger');
     const mid = bombardoDamage(2, 3.6, 1), far = bombardoDamage(5.5, 3.6, 1);
-    assert.ok(mid > 5 && mid < 15, `2 m away: ${mid}`);
-    assert.ok(far < 1, `at the edge: ${far}`);
+    assert.ok(mid > 2 && mid < 6, `2 m away: ${mid}`);
+    assert.ok(far < 2, `at the edge: ${far}`);
     assert.equal(bombardoDamage(7, 3.6, 1), 0, 'out of reach');
 });
 
