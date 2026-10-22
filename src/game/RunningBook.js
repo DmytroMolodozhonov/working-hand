@@ -15,14 +15,27 @@
  * wriggles out and runs on). The bonus is kept with the player (the save) and
  * lost on death.
  *
- * It is an animal of Animals.js (type 'runbook'), so blows, arrows, blasts,
- * «Левиоса», «Остолбеней» and the other spells work on it like on any
- * creature; «Акцио» pulls it flying into the caster's free hand (the one without the wand;
- * both free — the casting hand): the fingers take it — caught, as by hand. Already quick
- * from one: it is held wriggling, and runs off once let go (or put into a pocket). No free
- * hand: it lands dazed at the caster's feet. «Раскрой свои секреты» tells its secret.
- * Multiplayer: the host runs the book (Animals syncs it), decides catches;
- * the bonus is each player's own.
+ * Who / what acts on it, and how (alive it is an animal of Animals.js, type 'runbook' — so it is
+ * in every place spells look for creatures: Duel bodies, Game.explode, birdRay, lightningAt,
+ * CreatureImpact, Levitation, WaterVortex; killed or caught it is a thing — a 'book' item with
+ * `runbook`, in Items.loose or a hand, found where things are found):
+ *   - blows, arrows, blasts, «Авада», charges, lightning: hurt it (4 HP); killed — it is a plain
+ *     book lying there (died → _bury): no legs, never runs again; lifted by «Левиоса», summoned by
+ *     «Акцио» into a free hand, taken by the hand, read (its page still gives its quickness),
+ *     burnt, told by «Раскрой свои секреты» — like any book.
+ *   - fire («Инферно», «Fire», a burning tree, a campfire): paper — burns up at once, alive
+ *     (Animals.hit: all its HP) or as a book (on the ground, in the hand — «Инферно» said with it
+ *     in the hand, held in the flames): ash, nothing left, no quickness.
+ *   - «Левиоса», «Остолбеней», «Депульсо», wind, water: as on any small creature (CreatureImpact).
+ *   - «Акцио»: alive — it flies into the caster's free hand, either one (the leading one if free),
+ *     the fingers take it and it stays there; already quick from one: it is held wriggling and runs
+ *     off once let go (or put into a pocket); no free hand: it lands dazed at the caster's feet.
+ *     Killed — as a thing (Accio: Items.loose → the free hand).
+ *   - «Раскрой свои секреты»: alive (secret()), lying or held as a book (ItemTypes.describeItem).
+ *   - the hands: a free hand that closes on it catches it (the book is then in that hand).
+ *   - players, people, animals: they only scare it; it hurts nobody. Cold, ice: as an animal.
+ * Multiplayer: the host runs the book (Animals syncs it), decides catches, kills (its book is
+ * a loose item the host spawns for all); the bonus is each player's own.
  */
 
 import * as THREE from 'three';
@@ -190,6 +203,7 @@ export class RunningBook {
         this._frame = 0;
         this._toldT = -1e9;
         this._asked = new Map(); // id -> time a guest asked the host to catch it
+        this._died = []; // (host) killed this frame: [{a, fire}] — gone next frame (not in the middle of Animals' loops)
     }
 
     get auth() { return this.game.authority; }
@@ -501,6 +515,34 @@ export class RunningBook {
         if (ch) ch.runBonus = 1 + this.bonus;
     }
 
+    // ------------------------------------------------------------ killed
+    /** (host, Animals._die) Killed: burnt — ash; else it is a plain book lying there (no legs, no running). */
+    died(a, fire) {
+        if (!this._died.some((d) => d.a === a)) this._died.push({ a, fire });
+    }
+
+    _bury() {
+        const g = this.game, A = g.animals;
+        for (const { a, fire } of this._died.splice(0)) {
+            if (!A?.byId.has(a.id)) continue;
+            const p = _centre(a);
+            if (a.lev) { if (g.levitation?._endCarry) g.levitation._endCarry('a', a); else a.lev = null; }
+            A._remove(a);
+            this._checkT = RUNNER.CHECK * 3;
+            if (fire) {
+                // paper: it burns up — fire, ash, nothing left
+                for (let i = 0; i < 30; i++) g.fx?.spark(p, i % 3 ? 0xff8a1a : 0xffe066, 0.12, _v.set((Math.random() - 0.5) * 3, 1 + Math.random() * 3, (Math.random() - 0.5) * 3), 0.9);
+                for (let i = 0; i < 10; i++) g.fx?.spark(p, 0x3a3330, 0.1, _v.set(Math.random() - 0.5, 2 + Math.random() * 2, Math.random() - 0.5), 1.4);
+                g.fx?.lightFlash?.(p, 0xff8a1a, 1.5, 0.3, 8);
+                continue;
+            }
+            // a thing now, like any book: lifted by «Левиоса», summoned by «Акцио», taken by the hand,
+            // read (its page still gives its quickness), burnt, told by «Раскрой свои секреты»
+            const item = { kind: 'book', uid: 'rb' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), id: Math.abs(a.id | 0) % COVERS.length, spells: [], runbook: true, dead: true };
+            g.items?.spawnLoose(item, p, { vel: _v2.set(0, 1, 0) });
+        }
+    }
+
     // ------------------------------------------------------------ «Акцио»
     /** Running books a raised hand can summon (for Accio.js). */
     accioTargets() {
@@ -576,7 +618,7 @@ export class RunningBook {
         const g = this.game, items = g.items;
         if (!items) return;
         const slots = g.inventory?.slots;
-        const k = slots ? slots.findIndex((it) => it?.runbook && it.wild) : -1;
+        const k = slots ? slots.findIndex((it) => it?.runbook && it.wild && !it.dead) : -1;
         if (k >= 0) {
             const it = slots[k];
             slots[k] = null;
@@ -587,7 +629,7 @@ export class RunningBook {
         }
         if (!this.auth || !g.animals?.enabled || !items.loose?.size) return;
         for (const L of [...items.loose.values()]) {
-            if (!L.item?.runbook || !L.item.wild || L.accio || L.lev) continue;
+            if (!L.item?.runbook || !L.item.wild || L.item.dead || L.accio || L.lev) continue; // (a killed one never runs again)
             const at = L.model.position.clone();
             items.removeLoose(L.item.uid);
             g.sync?.itemGone?.(L.item.uid, null, null);
@@ -631,6 +673,7 @@ export class RunningBook {
     update(dt) {
         const g = this.game;
         this._apply();
+        if (this._died.length) this._bury();
         if (this._fly) this._updateFly(dt);
         this._escapes();
         if (!this.enabled) return;

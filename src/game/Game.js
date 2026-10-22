@@ -2605,7 +2605,7 @@ export class Game {
     /** «Инферно» said with a spell book in the hand: it burns there, its spells are mine. */
     burnHeldBook() {
         const h = this.items?.heldOf('book');
-        if (!h || h.item.runbook) return false;
+        if (!h) return false; // (the running book too: paper — it burns, nothing learned)
         const p = (this.items.held[h.side]?.model || this.character.group).getWorldPosition(new THREE.Vector3());
         const reading = !!this.books?.readingSide;
         const it = this.items.releaseHand(h.side);
@@ -2626,7 +2626,7 @@ export class Game {
         for (const side of ['left', 'right']) {
             const h = items.held[side];
             const it = h?.item;
-            const p = h?.model && (it?.kind === 'scroll' || (it?.kind === 'book' && !it.runbook)) ? h.model.getWorldPosition(_v1) : null;
+            const p = h?.model && (it?.kind === 'scroll' || it?.kind === 'book') ? h.model.getWorldPosition(_v1) : null;
             const hot = p && (this.campfires?._fireAt?.(p, 1.4, 2.6, true) || this.fire?.burningAt?.(p, 1.2));
             if (!hot) { this._paperFireT[side] = 0; continue; }
             this._paperFireT[side] += dt;

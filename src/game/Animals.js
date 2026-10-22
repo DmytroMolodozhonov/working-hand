@@ -294,6 +294,7 @@ export class Animals {
     hit(a, dmg, dir, by, fire = false) {
         if (!a || a.dead) return;
         if (!this.auth) { this.game.sync?.animalHit?.(a.id, dmg, dir, fire); return; }
+        if (fire && a.type === 'runbook') dmg = Math.max(dmg, a.hp); // (a running book is paper: the flame burns it up at once)
         a.hp -= dmg;
         a.damageCooldown = 0.35;
         if (a.fly) this._dropFromSky(a, 1.4); // (hit in the air: the wings fold, it falls)
@@ -339,6 +340,7 @@ export class Animals {
         if (a.rider === this.game.localId) this.dismount();
         this._layDown(a);
         if (a.type === 'sheep') this.game.beds?.dropWool(a.group.position); // wool for beds
+        if (a.type === 'runbook' && this.auth) this.game.runner?.died(a, !!cooked); // (burnt to ash, or a plain book on the ground)
     }
 
     _layDown(a) {

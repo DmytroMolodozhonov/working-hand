@@ -538,7 +538,8 @@ export class BookBirds {
      */
     learnBurnt(item) {
         const g = this.game;
-        if (!item || item.kind !== 'book' || item.runbook) return [];
+        if (!item || item.kind !== 'book') return [];
+        if (item.runbook) { g.hud?.toast?.('📕🔥 Бегущая книга сгорела — её быстрота сгорела с ней', 2500); return []; }
         const spells = Array.isArray(item.spells) ? item.spells : bookSpells(item.id);
         const fresh = spells.filter((sp) => (sp === 'Flight' ? !g.bonus?.flight : !this.learned.has(sp)));
         for (const sp of fresh) { if (sp === 'Flight') this.learnFlight(); else this.learned.add(sp); }

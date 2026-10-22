@@ -323,9 +323,11 @@ export class BookReading {
         const f = g.weapons.palmFrame(side, this._pfc || (this._pfc = {}));
         const T = (f.T || (f.T = new THREE.Vector3())).copy(f.X).multiplyScalar(f.thumb);
         if (h.bookSpine == null) {
-            // (decided when it comes into the hand: towards the middle of the body is the other hand's side)
-            const mid = g.character.group.position;
-            h.bookSpine = T.x * (mid.x - f.P.x) + T.z * (mid.z - f.P.z) < 0;
+            // (decided when it comes into the hand, by where the other hand is — not the body's middle:
+            // that is behind the hands, and a thumb turned a little forward or back read it wrong —
+            // the fore-edge went away from the other hand, out of its reach, and the book never opened)
+            const o = g.weapons.palmFrame(other(side), this._pfo || (this._pfo = {})).P;
+            h.bookSpine = T.x * (o.x - f.P.x) + T.z * (o.z - f.P.z) < 0;
         }
         // the covers lie flat on the palm; in the palm's plane the book stands as upright as it
         // can (it turns in the grip as a held book does; a palm turned up or down: along the fingers)
@@ -376,7 +378,11 @@ export class BookReading {
         m.updateMatrixWorld(true);
         const { W, H } = BOOK;
         const a = m.localToWorld(_v3.set(0, -H / 2, W)), b = m.localToWorld(_v4.set(0, H / 2, W));
-        const near = distToSegment(h.G, a, b) < HOLD.REACH;
+        // at the fore-edge — or anywhere on the covers' outer half (a hand closing on the covers there
+        // pinches them; on the spine's half it would only hold the book shut)
+        const l = m.worldToLocal(_v5.copy(h.G)), sc = m.scale.x || 1;
+        const onCovers = l.z > W * 0.45 && l.z < W && Math.abs(l.y) < H / 2 + 0.1 / sc && Math.abs(l.x) < BOOK.T + BOOK.B + 0.15 / sc;
+        const near = onCovers || distToSegment(h.G, a, b) < HOLD.REACH;
         if (!this._takes(B, h, near, dt)) return;
         // both hands now: each holds a half by its outer edge — the one on the reader's left
         // the left half; the book turns from how the fist held it into how both hands hold it
@@ -689,9 +695,13 @@ export class BookReading {
         s.readT = reading ? s.readT + dt : 0;
         // the running book: reading its page gives its quickness — then it is gone in golden sparks
         if (s.item.runbook && !s.item.wild && s.readT > HOLD.LEARN_T && !s.item.used) { // (a wild one has nothing left to give)
-            s.item.used = true;
             const g = this.game, side = s.owner, p = s.pos.clone();
-            g.runner?.bless?.();
+            if (!g.runner?.bless?.()) {
+                // (quick already: the page gives nothing more — the book stays a book)
+                if (!s.toldQuick) { s.toldQuick = true; g.hud?.toast?.('📕 Быстроту бегущей книги вы уже получили — вторая больше не даёт', 3000); }
+                return;
+            }
+            s.item.used = true;
             for (let i = 0; i < 40; i++) g.fx?.spark(p, i % 2 ? 0xffd23f : 0xfff2a8, 0.12, _v4.set((Math.random() - 0.5) * 4, Math.random() * 4, (Math.random() - 0.5) * 4), 1);
             g.items?.releaseHand(side);
             this._end(true);
