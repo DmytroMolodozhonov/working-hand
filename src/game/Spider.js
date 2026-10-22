@@ -1,7 +1,17 @@
 /**
  * Spider.js — the boss: a giant spider that comes out at night.
  *
- *  - 200 HP. Comes once a night to a player, hides again at dawn.
+ *  - 200 HP. She lives in her own lairs (src/world/SpiderLairs.js: rare — three times rarer than
+ *    castles, on dry land only). At night she is out at her lair (made when a player comes near
+ *    enough), by day she hides. She never comes to anyone by herself and isn't on the minimap:
+ *    she has to be found.
+ *  - She never attacks first: she wanders quietly round her lair, even with someone right beside
+ *    her. Only once a player or a creature attacks her (a weapon, a spell, an arrow, Bombardo…: any
+ *    hit, any duel charge, «Джолт») she fights — the tricks below — until the night is over.
+ *  - Killed, she never comes back to that lair (`slain`, saved with the world by the host).
+ *  - Never in a cave (the lairs are on the open ground, away from caves), never made inside rock
+ *    (on the column's top, only once its ground is loaded). She spits and grabs only at one she
+ *    sees (Collision.lineOfSight from her mouth), and her poison and web stop at rock and walls.
  *  - Poison: every 15 s it spits green poison at its target: −7 HP.
  *  - Web: every 7 s a web flies at its target: stuck for 4 seconds.
  *  - Grab: every 30 s, when close, a 44% chance to seize its target in its
@@ -27,6 +37,7 @@ import { rollWand, rollLoot, newUid } from './ItemTypes.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
 import { isGodSpell } from './DragonKinds.js';
+import { spiderLairOf, spiderLairsNear } from '../world/SpiderLairs.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -39,6 +50,10 @@ const BODY = { y: 2.6, z0: -1.0, z1: 2.4, r: 1.7 };
 const MOUTH = { fwd: 2.6, up: 1.6 };
 /** Reaches (unscaled): it stops this close; it grabs within this. */
 const STOP = 3.2, GRAB = 4.5;
+/** m: at night a lair's spider is made when a player comes this close, taken away again past LAIR_GONE. */
+const LAIR_NEAR = 120, LAIR_GONE = 200;
+/** m round her lair she wanders while nobody has attacked her, and how fast (slow, unhurried). */
+const HOME_R = 14, CALM_SPEED = 1.2 * SIZE;
 const SPIDER_TURN = 2.6; // rad/s — how fast the giant spider turns round (FaceTarget: «лицом к цели»)
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -130,7 +145,12 @@ export class Spiders {
         this.list = [];
         this.shots = []; // poison / web flying
         this._netT = 0;
-        this._nightDone = false;
+        this.slain = new Set(); // (host) lairs whose spider was killed: she never comes back there (saved with the world)
+        this._lairs = new Map(); // cell → its lair or null (a cache, cleared when it grows)
+        this._lairFn = (gx, gz) => this._lairOf(gx, gz);
+        this._near = [];
+        this._lairT = 0;
+        this._left = new Map(); // (host, this night) lair → {hp, angry} of a spider taken away because everyone went far
         this.held = null; // (me) seized by a spider: {spider, biteT}
         this.webbed = 0;
         this.enabled = !game.config.map && game.config.mode !== 'test' && game.config.mode !== 'creative';
@@ -155,6 +175,7 @@ export class Spiders {
             id: id ?? 'sp' + Date.now().toString(36), model, group: model, hp, dead: false, isBoss: true,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
             size: SIZE, bodyCapsule: (out) => spiderBody(s, out),
+            home: { x: pos.x, z: pos.z }, lair: null, angry: false, goal: null, wanderT: 0,
             damageCooldown: 0, target: null, walkT: 0, nextAny: 0, nextPoison: 6, nextWeb: 3, nextGrab: 12, holding: null, t: 0,
         };
         this.list.push(s);
@@ -167,15 +188,24 @@ export class Spiders {
         this.list.splice(this.list.indexOf(s), 1);
     }
 
+    /** (host) She was attacked: from now on (till the night is over) she fights. */
+    anger(s) {
+        if (!s || s.dead || s.angry) return;
+        s.angry = true;
+        s.goal = null;
+        s.nextAny = Math.max(s.nextAny || 0, 1); // (a moment to turn on them)
+    }
+
     /** Targets for weapons. */
     targets() { return this.list.filter((s) => !s.dead); }
 
     // -------------------------------------------------------------- damage
     hit(s, dmg, kind = null, by = undefined) {
         if (!s || s.dead) return;
+        if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
+        this.anger(s); // (attacked — even by what can't hurt her: she fights now)
         if (!isGodSpell(kind) && (kind === 'Ice' || kind === 'Frozen' || kind === 'Wind')) return; // it doesn't care (a spell of the gods — it does)
         if (kind === 'AvadaKedavra') dmg = 25;
-        if (!this.auth) { this.game.sync?.bossHit?.(s.id, dmg, kind); return; }
         s.lastBy = by === undefined ? this.game.localId : by; // (who struck: the killer gets the mana)
         this.game.achievements?.hit('spider', s.id, s.lastBy); // (everyone who took part gets the achievement)
         s.hp = Math.max(0, s.hp - dmg);
@@ -219,6 +249,7 @@ export class Spiders {
 
     /** A duel charge touched this spider's body. */
     boltHit(s, spell, by = undefined, p = null) {
+        if (this.auth) this.anger(s); // (any duel charge at her is an attack)
         // the strong charges and the ice («Айс Максима» by the part it hit — StrongMagic; plain «Айс»: no effect)
         if (this.game.strong?.boltHit?.('s', s, spell, by, p)) return;
         if (spell === 'Expelliarmus') return; // (no wand, no weapon in its legs: nothing to knock out — no effect)
@@ -233,6 +264,7 @@ export class Spiders {
      */
     jolt(s, spell, by = undefined) {
         const g = this.game, max = spell === 'JoltMaxima';
+        this.anger(s);
         const p = s.model.position;
         const from = by != null ? g.duel?._casterAt?.(by, { group: s.model }) : null;
         const d = _v.set(from ? p.x - from.x : -Math.sin(s.model.rotation.y), 0, from ? p.z - from.z : -Math.cos(s.model.rotation.y));
@@ -248,6 +280,7 @@ export class Spiders {
         s.dead = true;
         const g = this.game;
         s.killer = killer || null;
+        if (this.auth && s.lair) this.slain.add(s.lair); // (she never comes back to this lair)
         if (killer && (killer === g.localId || killer === 'local')) g.mana?.magicKill('spider'); // (mana: the first one, to whoever struck the last blow — every computer knows the killer)
         if (this.held?.spider === s) this._free();
         const c = spiderCenter(s, new THREE.Vector3());
@@ -296,6 +329,8 @@ export class Spiders {
             const to = _v2.subVectors(goal, sh.mesh.position);
             const d = to.length();
             sh.mesh.position.addScaledVector(to.normalize(), Math.min(d, 16 * dt));
+            const q = sh.mesh.position;
+            if (g.collision?.pointBlocked?.(q.x, q.y, q.z)) { g.fx.spark(q, sh.kind === 'web' ? 0xffffff : 0x5cff3a, 0.12, _v2.set(0, 1, 0), 0.5); this._dropShot(i); continue; } // (rock, a wall: it splashes there, never flies through)
             sh.mesh.rotation.x += dt * 8;
             if (Math.random() < 0.6) g.fx.spark(sh.mesh.position, sh.kind === 'web' ? 0xffffff : 0x5cff3a, 0.08, _v2.set(0, 0.5, 0), 0.4);
             if (d < 0.8) {
@@ -372,7 +407,7 @@ export class Spiders {
     _think(s, dt) {
         const g = this.game;
         s.t += dt;
-        const near = this._nearestPlayer(s.model.position);
+        const near = s.angry ? this._nearestPlayer(s.model.position) : null; // (calm: she goes after nobody)
         s.target = near?.id || null;
         const tp = near ? this._playerPos(near.id) : null;
         const p = s.model.position;
@@ -401,11 +436,16 @@ export class Spiders {
             s.model.rotation.y = turnToward(s.model.rotation.y, Math.atan2(-to.x, -to.z), SPIDER_TURN * dt);
             moving = true;
         } else if (tp) s.model.rotation.y = turnToward(s.model.rotation.y, yawTo(p.x, p.z, tp.x, tp.z), SPIDER_TURN * dt); // (a big body: it turns, never spins round at once)
+        else if (!s.angry) moving = this._wander(s, dt, slowK);
         p.y += (spiderGroundY(g.collision, p.x, p.z, s.model.rotation.y) - p.y) * Math.min(1, dt * 6);
+        // («не видит — не нападает»: rock, a wall, a hill between them — no tricks; checked 4 times a second)
+        s.seeT = (s.seeT || 0) - dt;
+        if (!tp) s.sees = false;
+        else if (s.seeT <= 0) { s.seeT = 0.25; s.sees = this._sees(s, tp); }
         // tricks (at least 3 s apart)
         s.nextPoison -= dt; s.nextWeb -= dt; s.nextGrab -= dt; s.nextAny -= dt;
         // («лицом к цели»: it grabs and spits only at one right in front of it)
-        if (tp && s.nextAny <= 0 && !s.holding && facesTarget(s.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.SHOT)) {
+        if (tp && s.sees && s.nextAny <= 0 && !s.holding && facesTarget(s.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.SHOT)) {
             if (confusedMiss(s)) s.nextAny = 3; // (lost in the haze: the trick goes nowhere)
             else if (s.nextGrab <= 0 && near.d < GRAB * SIZE) {
                 s.nextGrab = 30; s.nextAny = 3;
@@ -420,6 +460,35 @@ export class Spiders {
         this._animate(s, moving ? 1 : 0, dt);
     }
 
+    /** Can she see a player at `tp` from her mouth (nothing solid between)? */
+    _sees(s, tp) {
+        const col = this.game.collision, m = s.model, ry = m.rotation.y;
+        const fx = m.position.x - Math.sin(ry) * 2.4 * SIZE, fy = m.position.y + 2.2 * SIZE, fz = m.position.z - Math.cos(ry) * 2.4 * SIZE;
+        return col?.lineOfSight?.(fx, fy, fz, tp.x, tp.y + 1, tp.z, 1) !== false;
+    }
+
+    /** Calm: she wanders slowly round her lair, now and then sits still. */
+    _wander(s, dt, slowK) {
+        const p = s.model.position;
+        s.wanderT -= dt;
+        if (s.wanderT <= 0) {
+            s.wanderT = 4 + Math.random() * 6;
+            const a = Math.random() * Math.PI * 2, r = Math.random() * HOME_R;
+            s.goal = Math.random() < 0.4 ? null : { x: s.home.x + Math.cos(a) * r, z: s.home.z + Math.sin(a) * r };
+        }
+        if (!s.goal) return false;
+        const dx = s.goal.x - p.x, dz = s.goal.z - p.z, d = Math.hypot(dx, dz);
+        if (d < 1) { s.goal = null; return false; }
+        const to = _v.set(dx / d, 0, dz / d);
+        const sp = CALM_SPEED * slowK;
+        const a = crowdStep(this.game, s, p, to.x, to.z, d, { r: BODY_R.spider, speed: sp, dt, look: 5, dy: 4 });
+        if (!a) return false; // (someone in her way: she waits)
+        to.set(a.x, 0, a.z);
+        p.addScaledVector(to, Math.min(d, sp * dt));
+        s.model.rotation.y = turnToward(s.model.rotation.y, Math.atan2(-to.x, -to.z), SPIDER_TURN * dt);
+        return true;
+    }
+
     _animate(s, k, dt) {
         s.walkT += dt * 7 * k;
         s.model.userData.legs.forEach((l, i) => { l.rotation.x = Math.sin(s.walkT + i * 1.3) * 0.35 * k; });
@@ -431,21 +500,14 @@ export class Spiders {
         if (!this.enabled) return;
         const g = this.game;
         const night = g.isNight;
-        // one spider a night (the host decides)
+        // at night she is out at her lairs near the players (the host decides)
         if (this.auth) {
-            if (night && !this._nightDone && !this.list.length && earthly(g.character.group.position)) { // (never on another planet)
-                const me = g.character.group.position;
-                const a = Math.random() * Math.PI * 2;
-                const p = new THREE.Vector3(me.x + Math.cos(a) * 40, 0, me.z + Math.sin(a) * 40);
-                p.y = spiderGroundY(g.collision, p.x, p.z);
-                this.spawn(p);
-                this._nightDone = true;
-                g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...');
-                g.sync?.bossNotice?.();
-            }
-            if (!night) {
-                this._nightDone = false;
+            if (night) {
+                this._lairT -= dt;
+                if (this._lairT <= 0) { this._lairT = 1; this._visitLairs(); } // (once a second is plenty)
+            } else {
                 for (const s of [...this.list]) if (!s.dead) this._remove(s); // hides at dawn
+                this._left.clear();
             }
             for (const s of this.list) if (!s.dead && !s.lev) this._think(s, dt); // (held up by «Левиоса Максима»: it carries her)
         } else {
@@ -471,12 +533,60 @@ export class Spiders {
         }
         // boss bar
         if (this._hud) {
-            const s = this.list.find((x) => !x.dead && x.model.position.distanceTo(g.character.group.position) < 70 * SIZE);
+            // (only in a fight: a calm spider gives herself away by nothing — she has to be found)
+            const s = this.list.find((x) => !x.dead && x.angry && x.model.position.distanceTo(g.character.group.position) < 70 * SIZE);
             this._hud.style.display = s ? 'block' : 'none';
             if (s) this._hud.querySelector('.boss-fill').style.width = (100 * s.hp / HP).toFixed(1) + '%';
         }
         this._netSend(dt);
     }
+
+    /** A cell's lair (cached; the cache never grows without end). */
+    _lairOf(gx, gz) {
+        const key = gx * 65536 + gz;
+        if (this._lairs.has(key)) return this._lairs.get(key);
+        if (this._lairs.size > 256) this._lairs.clear();
+        const t = this.game.terrain?.data, H = t?.heightAt;
+        // (dry land only, never on a castle's / a tower's land or in its village)
+        // (and never in a cave: away from the caves and the dragons' lairs — «в пещерах паучиха не живёт»)
+        const L = H ? spiderLairOf(gx, gz, this.game.seed, (x, z) => { H(x, z); return !!(H.water || H.sea || t.sites?.landAt(x, z) || t.cavesNear?.(x, z, 30)?.length || t.lairsNear?.(x, z, 40)?.length); }) : null;
+        this._lairs.set(key, L);
+        return L;
+    }
+
+    /** (host, at night) The spiders of the lairs near the players are out; the ones everyone left far behind go. */
+    _visitLairs() {
+        const g = this.game;
+        const ps = [];
+        if (g.character?.group) ps.push(g.character.group.position);
+        for (const [, r] of g.remotes || []) if (r?.position) ps.push(r.position);
+        for (const p of ps) {
+            if (!earthly(p)) continue; // (never on another planet)
+            for (const L of spiderLairsNear(p.x, p.z, LAIR_NEAR, this._lairFn, this._near)) {
+                if (this.slain.has(L.id) || this.list.some((s) => s.lair === L.id)) continue;
+                const t = g.terrain?.data;
+                if (t?.hasChunk && !t.hasChunk(Math.floor(L.x / 32), Math.floor(L.z / 32))) continue; // (its ground not loaded yet: never made in the rock — nor the ground made in a frame)
+                const was = this._left.get(L.id);
+                this._left.delete(L.id);
+                const pos = new THREE.Vector3(L.x, spiderGroundY(g.collision, L.x, L.z), L.z);
+                const s = this.spawn(pos, 'sp' + L.id.replace(',', '_'), was?.hp ?? HP);
+                s.lair = L.id;
+                s.angry = !!was?.angry;
+                s.model.rotation.y = Math.random() * Math.PI * 2;
+            }
+        }
+        for (const s of [...this.list]) {
+            if (s.dead || !s.lair || s.holding) continue;
+            const q = s.model.position;
+            if (ps.some((p) => Math.hypot(p.x - q.x, p.z - q.z) < LAIR_GONE)) continue;
+            if (s.hp < HP || s.angry) this._left.set(s.lair, { hp: s.hp, angry: s.angry });
+            this._remove(s);
+        }
+    }
+
+    /** (host) For the world's save: the lairs whose spider was killed. */
+    snapshot() { return [...this.slain]; }
+    restore(a) { this.slain = new Set(Array.isArray(a) ? a : []); }
 
     _netSend(dt) {
         const g = this.game;
@@ -485,13 +595,13 @@ export class Spiders {
         if (this._netT > 0) return;
         this._netT = 0.1;
         const r = (v) => Math.round(v * 100) / 100;
-        g.sync.bosses?.(this.list.map((s) => [s.id, r(s.model.position.x), r(s.model.position.y), r(s.model.position.z), r(s.model.rotation.y), Math.round(s.hp), s.dead ? 1 : 0, s.holding || 0, s.killer || 0]));
+        g.sync.bosses?.(this.list.map((s) => [s.id, r(s.model.position.x), r(s.model.position.y), r(s.model.position.z), r(s.model.rotation.y), Math.round(s.hp), s.dead ? 1 : 0, s.holding || 0, s.killer || 0, s.angry ? 1 : 0]));
     }
 
     /** (guests) the host's spiders. */
     applyNet(list) {
         const seen = new Set();
-        for (const [id, x, y, z, ry, hp, dead, holding, killer] of list || []) {
+        for (const [id, x, y, z, ry, hp, dead, holding, killer, angry] of list || []) {
             seen.add(id);
             let s = this.list.find((q) => q.id === id);
             if (!s) s = this.spawn(new THREE.Vector3(x, y, z), id, hp);
@@ -501,6 +611,7 @@ export class Spiders {
             s.model.rotation.y = ry;
             s.hp = hp;
             s.holding = holding || null;
+            s.angry = !!angry;
             if (dead && !s.dead) this._die(s, killer || null);
         }
         for (const s of [...this.list]) if (!seen.has(s.id) && !s.dead) this._remove(s);

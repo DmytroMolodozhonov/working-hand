@@ -79,6 +79,7 @@ test('it walks twice as fast, stops and grabs twice as far, and stands on the hi
     const g = fakeGame();
     const S = new Spiders(g);
     const s = S.spawn(V(0, 0, -40));
+    s.angry = true; // (she fights only once attacked: spider-lairs.test.js)
     s.nextPoison = s.nextWeb = s.nextGrab = s.nextAny = 999;
     S._think(s, 0.5);
     assert.ok(Math.abs(s.model.position.z - (-40 + 4.2 * 2 * 0.5)) < 1e-6, `speed 8.4 m/s (${s.model.position.z})`);

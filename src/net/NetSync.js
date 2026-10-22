@@ -654,7 +654,6 @@ export class NetSync {
     bossShot(kind, from, to) { if (this.net.isHost) this.net.send({ t: 'bshot', kind, o: [r3(from.x), r3(from.y), r3(from.z)], to }, true); }
     bossGrab(id, to) { if (this.net.isHost) this.net.send({ t: 'bgrab', id, to }, true); }
     bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
-    bossNotice() { if (this.net.isHost) this.net.send({ t: 'bnote' }, true); }
     /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
     dragon(m) { this.net.send({ t: 'drg', ...m }); }
     /** The Ice Castle (IceQueen.js): its creatures' state, shots, the queen's magic, the Ice Rod. */
@@ -910,7 +909,6 @@ export class NetSync {
             case 'bshot': if (!this.net.isHost) g.spiders?._fire(m.kind, vec(m.o), m.to); break;
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
-            case 'bnote': g.hud.notify?.('🕷️ Из темноты выходит гигантская паучиха...'); break;
             case 'drg': g.dragons?.onNet(m, m.from); break;
             case 'ice': g.iceCastle?.onNet(m, m.from); break; // (the Ice Castle: IceQueen.js)
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)

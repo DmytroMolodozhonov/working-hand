@@ -251,6 +251,7 @@ export class WorldKeeper {
             rebuild: g.castleLife?.rebuild.snapshot() || null, // what the builders put back (Rebuild.js)
             bodies: g.death?.snapshot() || [],
             crystals: g.crystals?.snapshot() || [],
+            spiders: g.spiders?.snapshot() || [], // the giant spider's lairs whose spider was killed (she never comes back there: Spider.js)
             dragons: g.dragons?.snapshot() || {}, // dragons' lairs: the gold left, their dragons' health (Dragons.js)
             iceCastle: g.iceCastle?.snapshot() || null, // the Ice Castle: the queen dead or her health, the monsters, seen on the map (IceQueen.js; its melted ice — the block edits)
             ships: g.ships?.snapshot() || [], // ships that moved, burnt, sank, were captured…
@@ -306,6 +307,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.castles) g.castleLife?.restore(save.castles);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
+    if (save.spiders) g.spiders?.restore(save.spiders);
     if (save.dragons) g.dragons?.restore(save.dragons);
     if (save.iceCastle) g.iceCastle?.restore(save.iceCastle);
     if (save.ships) g.ships?.restore(save.ships);

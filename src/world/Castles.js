@@ -27,6 +27,8 @@ import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 
 export const CASTLE_CELL = 480;
+/** A cell holds a castle this often (before its land is checked): the giant spider's lairs are rarer by it (SpiderLairs.js). */
+export const CASTLE_CHANCE = 0.92;
 const MIN_SPAWN_DIST = 360;
 export const BLEND = 26; // m of slope between the flat castle land and the wild
 
@@ -1574,7 +1576,7 @@ export class CastleIndex {
     _makeCastle(gx, gz) {
         if (offEarth((gx + 1) * CASTLE_CELL)) return null; // (no castles on other planets: Planets.js)
         if (this.test && gx === 0 && gz === -1) return (this.seas?.test && this._makeTestSeaCastle(gx, gz)) || this._makeTestCastle(gx, gz);
-        if (hash01(gx * 5 + 1, gz * 3 + 7, this.seed + 900) > 0.92) return null;
+        if (hash01(gx * 5 + 1, gz * 3 + 7, this.seed + 900) > CASTLE_CHANCE) return null;
         const rng = createRng((this.seed * 7919 + gx * 104729 + gz * 1299709) >>> 0);
         const s = pickStyle(rng);
         const zone = s.villageR + 8; // flat land radius (square half-size)
