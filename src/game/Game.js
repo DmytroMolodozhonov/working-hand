@@ -3272,6 +3272,7 @@ export class Game {
         mark('мультиплеер');
 
         this.fx.update(dt);
+        this.mana?.update(dt); // (the beaten wizard's power flying to me)
         mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Combat } from '../../src/game/Combat.js';
-import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, animalMagicKind, creditKill, GOD_SPELLS, DISCOVER } from '../../src/game/Mana.js';
+import { Mana, MANA, FIRST_SPELL, NOT_SPELLS, SAME_SPELL, MAGIC_KILL, firstSpellGain, duelGain, killGain, animalMagicKind, creditKill, GOD_SPELLS, DISCOVER } from '../../src/game/Mana.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { readFileSync } from 'node:fs';
 import { playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
@@ -57,22 +57,24 @@ test('mana: the table — every spell matchSpell / SPELL_COST knows has its bonu
     assert.ok(firstSpellGain('BombardoMaxima') > firstSpellGain('Bombardo'));
 });
 
-test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1; a magical creature once per kind; a crystal +1 cell', () => {
+test('mana: a duel won — 45% of (the opponent\'s maximum − 30), at least +1; a magical creature once per kind; a crystal +1 cell', () => {
     assert.equal(duelGain(30), 1);
     assert.equal(duelGain(20), 1);
-    assert.equal(duelGain(35), 2, '1.5 → 2');
-    assert.equal(duelGain(40), 3, 'a teacher');
-    assert.equal(duelGain(80), 15, 'the Master');
+    assert.equal(duelGain(35), 2, '2.25 → 2');
+    assert.equal(duelGain(40), 5, 'a teacher');
+    assert.equal(duelGain(80), 23, 'the Master');
+    assert.equal(duelGain(530), 225);
+    assert.equal(killGain(530), 125);
     const { g, toasts } = fakeGame();
-    assert.equal(g.mana.duelWon(40), 3);
-    assert.ok(toasts.some((t) => t.includes('соперник повержен: +3')));
+    assert.equal(g.mana.duelWon(40), 5);
+    assert.ok(toasts.some((t) => t.includes('соперник повержен: +5')));
     assert.equal(g.mana.magicKill('spider'), 20);
     assert.equal(g.mana.magicKill('spider'), 0, 'the second spider: nothing');
     assert.equal(g.mana.magicKill('pegasus'), MAGIC_KILL.pegasus.n);
     assert.ok(toasts.some((t) => t.includes('Пегас: +8')));
     assert.equal(g.mana.magicKill('cow'), 0, 'an ordinary animal');
     g.mana.crystal();
-    assert.equal(g.mana.max, 30 + 3 + 20 + 8 + 1);
+    assert.equal(g.mana.max, 30 + 5 + 20 + 8 + 1);
     assert.equal(g.combat.fatigue, g.mana.max, 'the mana in it grows too');
 });
 
@@ -81,9 +83,9 @@ test('mana: a duel won without a kill +1…+3 at random; each opponent counts on
     assert.equal(g.mana.duelWonAlive('w1', () => 0), 1);
     assert.equal(g.mana.duelWonAlive('w1', () => 0.99), 0, 'the same one lifted again: nothing');
     assert.equal(g.mana.duelWonAlive('w2', () => 0.99), 3);
-    assert.equal(g.mana.duelWon(80, 'w1'), 15, 'then killed in a duel: the kill still counts');
+    assert.equal(g.mana.duelWon(80, 'w1'), 23, 'then killed in a duel: the kill still counts');
     assert.equal(g.mana.duelWon(80, 'w1'), 0, 'killed again (a player came back): nothing');
-    assert.equal(g.mana.max, 30 + 1 + 3 + 15);
+    assert.equal(g.mana.max, 30 + 1 + 3 + 23);
     g.mana.onDeath();
     assert.equal(g.mana.duelWonAlive('w1', () => 0), 1, 'after my death: earned again');
 });
@@ -119,7 +121,7 @@ test('mana: death → back to 30 (a burnt strength scroll stays)', () => {
     g.combat.addMaxFatigue(7); // a strength scroll
     g.mana.success('Bombardo');
     g.mana.duelWon(40);
-    assert.equal(g.mana.max, 42);
+    assert.equal(g.mana.max, 44);
     g.combat.die(null, 'test');
     g.combat.revive();
     assert.equal(g.mana.max, 37, '30 + the scroll');
@@ -171,14 +173,18 @@ test('mana: a duel charge that hits counts (the first time); a clash won + the o
     const b = { id: 'y', by: 'enemy', spell: 'Stupefy', front: new THREE.Vector3() };
     duel._finishClash({ a, b, marks: [0xffffff, 0xffffff] }, 'enemy');
     assert.equal(g.mana.max, 42, 'Avada hit: its first time +10');
-    assert.equal(duel.opponentDied('someone-else'), false);
+    assert.equal(duel.opponentDied('someone-else'), false, 'no clash won against him: not a duel');
+    assert.equal(g.mana.log.at(-1).why, 'killWiz');
+    assert.equal(g.mana.max, 43, 'a kill without a duel: 25% of nothing, still +1');
     assert.equal(duel.opponentDied('enemy', 40), true);
     assert.equal(g.mana.log.at(-1).why, 'duel');
-    assert.equal(g.mana.max, 45, 'a real duel won against a maximum of 40: +3');
-    assert.equal(duel.opponentDied('enemy'), false, 'only once');    duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives)
+    assert.equal(g.mana.max, 48, 'a real duel won against a maximum of 40: +5');
+    assert.equal(duel.opponentDied('enemy'), false, 'only once');
+    assert.equal(g.mana.max, 48, 'and no 25% on top');
+    duel._won = { id: 'wiz7', at: performance.now() - 9000 }; // (a clash won 9 s ago, he still lives)
     duel._wonAlive();
     assert.equal(g.mana.log.at(-1).why, 'duelAlive');
-    assert.ok(g.mana.max >= 46 && g.mana.max <= 48);
+    assert.ok(g.mana.max >= 49 && g.mana.max <= 51);
     assert.equal(duel._won, null);
 });
 
@@ -223,4 +229,16 @@ test('mana: space +20 the first time, each new planet +50 (once per life); death
     assert.equal(g.mana.discover('space'), 20, 'after death: earned again');
     const { g: c } = fakeGame('creative');
     assert.equal(c.mana.discover('space'), 0, 'Creative: mana does not count');
+});
+
+test('mana: a wizard killed without a duel — 25%, once per opponent, never twice with a duel; none in Creative', () => {
+    const { g } = fakeGame();
+    assert.equal(g.mana.killWon(530, 'k1'), 125);
+    assert.equal(g.mana.killWon(530, 'k1'), 0, 'the same one again: nothing');
+    assert.equal(g.mana.duelWon(530, 'k1'), 0, 'already paid: no top-up');
+    assert.equal(g.mana.duelWon(530, 'k2'), 225);
+    assert.equal(g.mana.killWon(530, 'k2'), 0, 'a duel paid: no 25% on top');
+    g.duel = { _won: null };
+    const cre = fakeGame('creative').g;
+    assert.equal(cre.mana.killWon(530, 'k3'), 0);
 });

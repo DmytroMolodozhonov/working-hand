@@ -2568,7 +2568,7 @@ export class CastleLife {
         st.killed.add(v.idx);
         this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
         this._comradeDown(v, by);
-        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30 }); // (mana: a wizard beaten in a duel)
+        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z] }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
             st.kingDead = true;

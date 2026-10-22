@@ -7,7 +7,8 @@
  *       (FIRST_SPELL below: Lumos +1 … Lightning Strike +12 … Hellfire +20). Every Maxima
  *       form is its own spell («Вайнд» +1, «Вайнд Максима» +3). Casting it again: nothing.
  *     • a duel won AND the opponent wizard killed by it (a player, a tower's wizard, a wanderer):
- *       30% of (his maximum − 30), at least +1 (duelGain); won but he lives (lifted with Leviosa,
+ *       45% of (his maximum − 30), at least +1 (duelGain); killed some other way (a bomb, a sword, an ambush): 25% (killGain), the
+ *       same flow-of-power animation; won but he lives (lifted with Leviosa,
  *       stunned…): +1…+3 at random. Each opponent counts once (a win once, a kill once).
  *     • the first kill of each MAGICAL creature kind, to whoever struck the last blow
  *       (MAGIC_KILL: the winged pig +3 … the giant spider, a dragon +20). Ordinary creatures —
@@ -26,10 +27,14 @@
 
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
 
+const _fp = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
+const _fv = { x: 0, y: 0, z: 0 };
+
 export const MANA = {
     BASE: 30,
     CRYSTAL: 1, // (the author: «одна ячейка маны за один кристалл»)
-    DUEL_K: 0.3, // a duel won: this share of (the opponent's maximum − BASE)
+    DUEL_K: 0.45, // a duel won: this share of (the opponent's maximum − BASE)
+    KILL_K: 0.25, // a wizard killed some other way (no clash won): this share, same formula
     DUEL_MIN: 1,
 };
 
@@ -137,10 +142,16 @@ export function duelGain(oppMax) {
     return Math.max(MANA.DUEL_MIN, n);
 }
 
+/** An opponent wizard killed without a duel won (a bomb, a sword, an arrow…). */
+export function killGain(oppMax) {
+    const n = Math.round(MANA.KILL_K * ((Number(oppMax) || MANA.BASE) - MANA.BASE));
+    return Math.max(MANA.DUEL_MIN, n);
+}
+
 /**
  * (whoever decides the kill — the host) `by` killed something worth mana: my own kill grows my
  * maximum here; another player's is sent to his computer (his own maximum grows there).
- * @param {{kind?: string, wiz?: string, mm?: number}} m  a magical kind, or an NPC wizard beaten
+ * @param {{kind?: string, wiz?: string, mm?: number, pos?: number[]}} m  a magical kind, or an NPC wizard beaten
  */
 export function creditKill(game, by, m) {
     if (!game || by == null || !m) return;
@@ -152,7 +163,7 @@ export function creditKill(game, by, m) {
 export function applyCredit(game, m) {
     if (!m) return;
     if (m.kind) game.mana?.magicKill(String(m.kind));
-    else if (m.wiz != null) game.duel?.opponentDied?.(m.wiz, Number(m.mm) || MANA.BASE);
+    else if (m.wiz != null) game.duel?.opponentDied?.(m.wiz, Number(m.mm) || MANA.BASE, m.pos);
 }
 
 export class Mana {
@@ -218,14 +229,60 @@ export class Mana {
     }
 
     /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
-    duelWon(oppMax = MANA.BASE, id = null) {
+    duelWon(oppMax = MANA.BASE, id = null, pos = null) {
         this.masteryWon(id, true);
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
         this.grow(n, 'duel');
         this._say(`🔷 Победа в дуэли, соперник повержен: +${n} к максимуму маны`);
+        this.powerFlow(pos, n, 'duel');
         return n;
+    }
+
+    /** The opponent `id` killed by me without a clash won (a bomb, a sword, an ambush): 25%, once per opponent. */
+    killWon(oppMax = MANA.BASE, id = null, pos = null) {
+        if (!this.combat?.enabled) return 0; // (Creative: no mana rules)
+        if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (already paid — a duel or a kill)
+        if (id != null) this.duelsWon.set(String(id), 'kill');
+        const n = killGain(oppMax);
+        this.grow(n, 'killWiz');
+        this.powerFlow(pos, n, 'kill');
+        return n;
+    }
+
+    /** The beaten one's power flies to my chest: a stream of sparks (the shared pool), a flash and a chime at the end. */
+    powerFlow(pos, n, how) {
+        const g = this.game;
+        if (!this.combat?.enabled) return;
+        if (how !== 'duel') this._say(`🔷 Сила побеждённого перешла к вам (победа без дуэли): +${n} ячеек маны`);
+        else this._say(`🔷 Сила побеждённого перешла к вам в дуэли: +${n} ячеек маны`);
+        if (!g.camera || !Array.isArray(pos) || pos.length < 3) return;
+        const list = this._flow || (this._flow = []);
+        const count = 30 + Math.floor(Math.random() * 21);
+        for (let i = 0; i < count; i++) {
+            list.push({ t: -Math.random() * 0.5, d: 1.0 + Math.random() * 0.5, fx: +pos[0] || 0, fy: (+pos[1] || 0) + 2.4, fz: +pos[2] || 0, ax: (Math.random() - 0.5) * 3, ay: 1 + Math.random() * 3, az: (Math.random() - 0.5) * 3, gold: Math.random() < 0.25 });
+        }
+        g.sound?.playSpace?.('spaceGift', 0.5);
+    }
+
+    /** (every frame) moves the sparks of powerFlow; nothing to do when none are flying. */
+    update(dt) {
+        const list = this._flow;
+        if (!list || !list.length) return;
+        const g = this.game;
+        const cam = g.camera.position;
+        let done = false;
+        for (let i = list.length - 1; i >= 0; i--) {
+            const p = list[i];
+            p.t += dt;
+            if (p.t < 0) continue;
+            const k = Math.min(1, p.t / p.d), e = k * k * (3 - 2 * k), a = 4 * e * (1 - e); // (an arc: a bulge in the middle)
+            _fp.set(p.fx + (cam.x - p.fx) * e + p.ax * a, p.fy + (cam.y - 0.5 - p.fy) * e + p.ay * a, p.fz + (cam.z - p.fz) * e + p.az * a);
+            g.fx.spark(_fp, p.gold ? 0xffd86b : 0xbfe6ff, 0.18, _fv, 0.22);
+            if (k >= 1) { list.splice(i, 1); done = true; }
+        }
+        if (done && !list.length) g.fx.lightFlash(_fp.set(cam.x, cam.y - 0.5, cam.z), 0xbfe6ff, 3, 0.35, 20);
     }
 
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
@@ -302,6 +359,7 @@ export class Mana {
         this.spellsUsed.clear();
         this.killsMade.clear();
         this.duelsWon.clear();
+        if (this._flow) this._flow.length = 0;
         this.found.clear();
         this.mastery = 0;
         this.beaten.clear();
