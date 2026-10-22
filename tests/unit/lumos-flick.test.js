@@ -1,68 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { LUMOS } from '../../src/game/WandMagic.js';
-import { LumosThrow } from '../../src/game/HandRelease.js';
 
-/**
- * The Lumos light is thrown like a thing (the author: «not when I really throw»): a wind-up by the head or behind
- * the shoulder, a fast swing forward — it leaves at the swing's end, the way the hand went. A 15-fps noisy camera.
- */
-const SH = { x: 0.7, y: 1.25, z: 0 };
-function swing(det, { start, v, n = 3, hold = 200, after = 10, seed = 3, behind = false, seen = () => true }) {
-    let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647 - 0.5);
-    let h = { ...start }, t = 0, out = null, at = -1, swingEnd = 0;
-    const step = (vRel) => {
-        const res = det.update({ now: t, hand: { x: h.x + rnd() * 0.05, y: h.y + rnd() * 0.05, z: h.z + rnd() * 0.05 }, shoulder: SH,
-            vRel: { x: vRel.x + rnd() * 0.6, y: vRel.y + rnd() * 0.6, z: vRel.z + rnd() * 0.6 }, behind: behind && t < hold, tracked: seen(t) });
-        if (res && !out) { out = res; at = t; }
-    };
-    for (; t < hold; t += 66) step({ x: 0, y: 0, z: 0 });
-    for (let i = 0; i < n; i++, t += 66) { h = { x: h.x + v.x * 0.066, y: h.y + v.y * 0.066, z: h.z + v.z * 0.066 }; step(v); }
-    swingEnd = t;
-    for (let k = 0; k < after; k++, t += 66) step({ x: v.x * 0.15, y: v.y * 0.15, z: v.z * 0.15 });
-    return { out, at, swingEnd };
-}
-
-test('Lumos throw: the hand by the head (or behind the shoulder), a fast swing forward — it flies that way at the swing\'s end', () => {
-    const r = swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1.5, z: -6.5 } });
-    assert.ok(r.out, 'thrown');
-    assert.ok(r.out.dir.z < -0.8, 'forward ' + JSON.stringify(r.out.dir));
-    assert.ok(r.at >= r.swingEnd - 66 && r.at <= r.swingEnd + 132, `at the swing's end (${r.at} vs ${r.swingEnd})`);
-    // to the right: it goes to the right
-    const side = swing(new LumosThrow(), { start: { x: 0.6, y: 1.7, z: 0 }, v: { x: 3.5, y: -1, z: -5.5 } });
-    assert.ok(side.out && side.out.dir.x > 0.4, 'to the right ' + JSON.stringify(side.out?.dir));
-    // from behind the shoulder
-    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.4, z: 0.3 }, behind: true, v: { x: 0, y: -0.5, z: -6.5 } }).out, 'from behind the shoulder');
-    // as the camera sees a real overhand throw: the hand from by the head comes down in front (little depth)
-    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.75, z: -0.1 }, v: { x: 0, y: -6, z: -1.5 } }).out, 'overhand, seen mostly coming down');
-    // the hand lost in the swing's blur (not seen for 200 ms): still thrown, at the end
-    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.75, z: -0.1 }, v: { x: 0, y: -5, z: -4 }, seen: (t) => t < 340 || t > 540 }).out, 'lost in the blur');
-    // a harder swing: a faster light
-    const hard = swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1.5, z: -11 } });
-    assert.ok(hard.out.speed > r.out.speed, 'harder');
-});
-
-test('Lumos throw: never a wave while talking, a swing down or back, a slow move, the arm just held', () => {
-    // (soft: no wind-up needed — a sharp jab forward from the chest, or a slow-ish flick seen by a smoothing camera, throws)
-    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: 0, z: -7 } }).out, 'a jab from the chest');
-    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: -1, z: -3.4 }, n: 4 }).out, 'a modest flick');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 7, y: 0, z: -1 } }).out, null, 'a wave aside');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -9, z: -1 }, n: 6 }).out, null, 'a swing down to the ground');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.0, z: -0.5 }, v: { x: 0, y: 7, z: -1 } }).out, null, 'a swing up');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: -0.5 }, v: { x: 0, y: 0, z: 6 } }).out, null, 'back');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -0.5, z: -1.5 }, n: 6 }).out, null, 'slow');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: 0, z: 0 }, hold: 3000 }).out, null, 'held up');
-    // talking: the hands move about at the chest, quick little moves every way
-    const d = new LumosThrow();
-    let any = null;
-    for (let t = 0; t < 5000; t += 50) any = any || d.update({ now: t, hand: { x: 0.6 + 0.1 * Math.sin(t / 90), y: 1.0 + 0.1 * Math.cos(t / 70), z: -0.5 }, shoulder: SH, vRel: { x: 3 * Math.cos(t / 90), y: -2 * Math.sin(t / 70), z: 1.5 * Math.sin(t / 50) } });
-    assert.equal(any, null, 'talking');
-    // the diary: why a move was no throw
-    const dw = new LumosThrow();
-    dw.update({ now: 0, hand: { x: 0.8, y: 1.2, z: -0.6 }, shoulder: SH, vRel: { x: 5, y: 0, z: 0 } });
-    assert.match(dw.why, /не вперёд/, 'the reason is written');
-    assert.ok(LUMOS.STILL >= 1000, 'walking / running: a moment standing still first');
+// (No gesture throws the Lumos any more — the author: only «Ahead» sends the light on.)
+test('Lumos: no throwing by gesture — the module has no throw detector', async () => {
+    const hr = await import('../../src/game/HandRelease.js');
+    assert.equal(hr.LumosThrow, undefined);
+    assert.equal(hr.LUMOS_THROW, undefined);
 });
 
 test('«Lightning Writing»: another player\'s drawing comes as points — joined into lines, broken where they broke it', async () => {
@@ -106,7 +50,7 @@ test('a thrown Lumos is seen flying: it slows down by itself, bounces off a wall
 });
 
 // ---- the Lumos' modes and «Lumos Following»
-import { WandMagic, FOLLOW, followStep } from '../../src/game/WandMagic.js';
+import { LUMOS, WandMagic, FOLLOW, followStep } from '../../src/game/WandMagic.js';
 // (the glow's picture is painted on a canvas: a stand-in one here)
 globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => ({ createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} }) }) };
 function lumosGame() {

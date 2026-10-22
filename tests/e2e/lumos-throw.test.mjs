@@ -1,6 +1,5 @@
 /**
- * The Lumos light: «Ahead» sends it out of the wand; a sharp swing of the hand with the wand throws it
- * (soft rules — no fingers, no big wind-up; a 20-fps camera); the wand itself stays in the hand.
+ * The Lumos light: «Ahead» sends it out of the wand; no gesture throws it.
  * Run: node --test tests/e2e/lumos-throw.test.mjs
  */
 import test from 'node:test';
@@ -50,26 +49,24 @@ test('«Ahead»: with the Lumos shining the light leaves the wand and flies; wit
     await page.close();
 });
 
-test('a sharp swing forward with the wand hand throws the light (a 20-fps camera); the wand stays in the hand', async () => {
+test('a sharp swing of the wand hand throws nothing: the Lumos just shines, the wand stays in the hand', async () => {
     const { page, errors } = await setup();
     await page.evaluate(async () => {
         const g = window.__zns.game;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
         g.castLocalSpell('Люмос', true);
-        g.wandMagic._movedAt = -1e9;
         await frames(60); // (standing still)
     });
-    // the hand by the head, then a fast swing forward / down, seen by a 20-fps camera
     await feed(page, { windup: 'right', rightCurl: 0.5, leftCurl: 0, jitter: 0.004 }, 14, 50);
     await feed(page, { arms: 'forward', rightCurl: 0.5, leftCurl: 0, jitter: 0.004 }, 10, 50);
     await feed(page, { arms: 'hang', rightCurl: 0.5, leftCurl: 0, jitter: 0.004 }, 6, 50);
     const r = await page.evaluate(() => {
         const g = window.__zns.game, W = g.wandMagic;
-        return { thrown: W.thrown.length, light: !!W.light, wand: !!g.items.heldOf('wand'), log: (g.perf?.events || []).slice(-6) };
+        return { thrown: W.thrown.length, light: !!W.light, wand: !!g.items.heldOf('wand') };
     });
-    assert.equal(r.thrown, 1, 'the light was thrown ' + JSON.stringify(r.log));
-    assert.equal(r.light, false);
-    assert.ok(r.wand, 'the wand did not fly away');
+    assert.equal(r.thrown, 0, 'no throw by gesture');
+    assert.equal(r.light, true, 'the Lumos shines on');
+    assert.ok(r.wand, 'the wand is in the hand');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

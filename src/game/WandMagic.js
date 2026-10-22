@@ -9,9 +9,9 @@
  *  - «Люмос»: the wand's tip shines — a real light that lights up everything
  *    around (no glass ball: a glow at the tip), costs a little strength over
  *    time. «Люмос Максима»: brighter — say it again for even more light.
- *    Thrown like a thing (HandRelease.LumosThrow: a wind-up by the head or behind the
- *    shoulder, a fast swing forward): at the swing's end the light leaves the tip (the tip goes
- *    dark) and flies the way the hand went, as hard — slowly enough to watch it go: it
+ *    No gesture throws it (the author: throwing «doesn't work out»): the wand with the Lumos just shines
+ *    whatever the hand does. Only the voice «Ahead» sends it on: the light leaves the tip (the tip goes
+ *    dark) and flies where the wand points — slowly enough to watch it go: it
  *    slows down by itself, bounces softly off walls, the ground and the cave's
  *    ceiling, then hangs in the air where it stopped — and fades out about 15 s
  *    after the throw. «Нокс» or «стоп» puts out all of it (the tip
@@ -35,7 +35,6 @@
 import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
-import { LumosThrow, poseBehind } from './HandRelease.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -57,8 +56,6 @@ export const LUMOS = {
     BEAM_ANGLE: 0.2, // rad: the flashlight's narrow beam
     BEAM_REACH: 26, // m (+ BEAM_PER_LEVEL a level: Максима farther)
     BEAM_PER_LEVEL: 6,
-    STILL: 1200, // ms standing still before a throw counts (walking swings the arms: never a throw)
-    OTHER_MS: 1500, // ms after another spell was cast (its gesture is no throw)
 };
 
 let _glowTex = null;
@@ -255,7 +252,7 @@ export class WandMagic {
         }
         this.light.level = max ? Math.min(5, Math.max(2, this.light.level + 1)) : Math.max(1, this.light.level);
         const L = this.light.level;
-        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; замах и бросок — бросить свет; «Flashlight» — фонарик, «Ahead» — свет вперёд)', true);
+        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; «Flashlight» — фонарик, «Ahead» — свет вперёд)', true);
     }
 
     /**
@@ -382,7 +379,7 @@ export class WandMagic {
         for (const t of this.thrown) if (t.by === by) t.age = LUMOS.LIFE;
     }
 
-    /** A flick of the wand: the light leaves the tip and flies (the others are told). */
+    /** «Ahead»: the light leaves the tip and flies (the others are told). */
     _throwLight(dir, k = 1) {
         const g = this.game;
         const l = this.light;
@@ -397,20 +394,6 @@ export class WandMagic {
         g.scene.remove(l.glow); l.glow.material.dispose(); this.light = null;
         this._thrownAt = performance.now();
         g.hud.setVoice('💫 Свет брошен — летит и гаснет; «Люмос» — зажечь палочку снова', true);
-    }
-
-    /**
-     * Where a thrown light goes: where the wand points at the swing's end (the hand aims with it; the camera
-     * can't see how far forward the arm went), turned a little towards the swing's own sideways way; a wand
-     * pointing down at the end: where the eyes look. A little up (one throws a bit above where one looks).
-     */
-    _throwDir(swing, out) {
-        const ch = this.game.character;
-        ch.group.getWorldQuaternion(_q);
-        const aim = this.tip(_v3, out) ? out : out.set(0, 0, -1).applyQuaternion(_q);
-        if (aim.y < -0.45) aim.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_q2) : _q);
-        const side = _v4.set(swing.x, 0, 0).applyQuaternion(_q);
-        return aim.addScaledVector(side, 0.35).setY(aim.y + 0.12).normalize();
     }
 
     /** A thrown light (mine or another player's). */
@@ -721,33 +704,13 @@ export class WandMagic {
         this._noWand = gone.t;
         if (this.light && gone.out) this._nox(false, true);
         this._flick = (this._flick || 0) + dt;
-        // Lumos at the tip (a little strength over time); a real throw of the hand throws it
+        // Lumos at the tip (a little strength over time); no gesture throws it — only «Ahead» (voice) sends it on
         if (this.light && hasWand) { // (a wand lost for a blink: the glow just stays where it was)
             const tip = this.tip(new THREE.Vector3(), _v2);
             this._updateBeam(tip, _v2);
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
-            // thrown like a thing: a wind-up, a fast swing forward, the light leaves at its end (HandRelease.LumosThrow);
-            // never walking or running (the arms swing), lying, swimming, nor with another spell's gesture
-            const ch = g.character, now = performance.now();
-            const side = g.items.heldOf('wand')?.side || this._bareSide();
-            if (ch.isRunning || ch.stepping > 0 || ch.flying || ch.knockedDown || ch.swimming) this._movedAt = now;
-            const det = this._lumosThr || (this._lumosThr = new LumosThrow());
-            const other = g._castName && g._castName !== 'Lumos' && g._castName !== 'LumosMaxima' && now - (g._castAt || -1e9) < LUMOS.OTHER_MS;
-            if (!side || !ch.armState || now - (this._movedAt || 0) < LUMOS.STILL || other) {
-                det.reset();
-                // (the diary: why the throw cannot even be seen now — written when the hand does move; 1 in 1.5 s)
-                const why = !side ? 'нет руки с палочкой' : !ch.armState ? 'нет позы руки' : other ? 'только что было другое заклинание' : 'вы идёте/бежите/падаете (нужно постоять секунду)';
-                if (side && ch.armState && now - (this._noteAt || -1e9) > 1500 && g.currentPose && now - (this._movedAt || 0) < LUMOS.STILL + 4000) { this._noteAt = now; g.perf?.note(`бросок Люмоса не засчитан: ${why}`); }
-            } else {
-                const arm = ch.armState(side, this._arm || (this._arm = {}));
-                const tracked = ch.isHandTracked ? ch.isHandTracked(side) : true;
-                const thr = det.update({ now, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, behind: poseBehind(g.currentPose, side), tracked });
-                if (det.why && now - (this._noteAt || -1e9) > 400) { this._noteAt = now; g.perf?.note(`бросок Люмоса не засчитан: ${det.why}`); }
-                if (thr) g.perf?.note(`бросок Люмоса засчитан: скорость ${thr.speed.toFixed(1)} м/с`);
-                if (thr) this._throwLight(this._throwDir(thr.dir, _v2), Math.min(1.6, Math.max(0.7, thr.speed / 7)));
-            }
         }
         if (!this.light || !hasWand) this._updateBeam(null, null);
         this._updateFollow(dt);
