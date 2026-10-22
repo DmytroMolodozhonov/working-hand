@@ -46,10 +46,10 @@ test('a long session of left/right turns leaves right as fast as left and as at 
 
 test('a player at rest beside the camera is learned (the view stops turning)', () => {
     const st = { neutral: 0 };
-    // the camera beside the screen: the head rests 0.12 off — inside the dead zone, learned
-    hold(st, 0.12, 60);
-    assert.ok(Math.abs(st.neutral - 0.12) < 0.01, `learned ${st.neutral}`);
-    assert.equal(hold(st, 0.12, 1), 0);
+    // the camera beside the screen: the head rests 0.08 off — inside the dead zone, learned
+    hold(st, 0.08, 60);
+    assert.ok(Math.abs(st.neutral - 0.08) < 0.01, `learned ${st.neutral}`);
+    assert.equal(hold(st, 0.08, 1), 0);
     // and then, from there, right and left turn equally
     const r = hold({ ...st }, st.neutral + 0.3, 1), l = -hold({ ...st }, st.neutral - 0.3, 1);
     assert.ok(Math.abs(r - l) < 1e-6);
@@ -87,4 +87,47 @@ test('glances to one side (the minimap) for half an hour do not move "straight":
     const go = (target, sec) => { for (let k = 0; k < sec / DT; k++) headTurnStep(st, head += (target - head) * Math.min(1, DT * 6), DT); };
     for (let m = 0; m < 30 * 60; m += 5) { go(0.12, 2); go(0, 3); if (m % 15 === 0) { go(0.5, 1); go(0, 2); } }
     assert.ok(Math.abs(st.neutral) < 0.02, `"straight" stayed (${st.neutral})`);
+});
+
+test('rests a little further right each time do not walk "straight" away: looking straight never spins', () => {
+    const st = { neutral: 0 };
+    let head = 0;
+    const go = (target, sec) => { let r = 0; for (let k = 0; k < sec / DT; k++) r += headTurnStep(st, head += (target - head) * Math.min(1, DT * 6), DT).rate * DT; return r; };
+    // (a book in the right hand, then a slow lean further and further right)
+    for (const p of [0.1, 0.2, 0.3, 0.4, 0.5]) { go(p, 90); go(0, 20); }
+    assert.ok(Math.abs(st.neutral) < HEAD_DEAD - 0.03, `"straight" stayed near (${st.neutral})`);
+    assert.equal(go(0, 10), 0, 'looking straight at the screen does not turn the view');
+});
+
+test('an hour of turning the head back and forth: at the end looking straight = the view straight', () => {
+    const st = { neutral: 0 };
+    const rightAtStart = hold({ neutral: 0 }, 0.3, 1);
+    let seed = 12345;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    let head = 0, lean = 0;
+    for (let t = 0; t < 3600;) {
+        const dt = (t % 900) > 600 ? 1 / 15 : DT; // (slow frames now and then)
+        lean += (rnd() - 0.45) * 0.03; lean = Math.max(-0.1, Math.min(0.3, lean)); // (the body shifting in the chair, mostly right)
+        const r = rnd();
+        const target = r < 0.4 ? lean // resting at the screen
+            : r < 0.55 ? lean + 0.1 + rnd() * 0.06 // a glance or a read to the right, held
+            : (rnd() < 0.6 ? 1 : -1) * (0.2 + rnd() * 0.6); // a turn, more to the right
+        const sec = r < 0.55 ? 2 + rnd() * 20 : 0.5 + rnd() * 3;
+        for (let k = 0; k < sec / dt; k++, t += dt) {
+            head += (target - head) * Math.min(1, dt * 4);
+            headTurnStep(st, head + (rnd() - 0.5) * 0.01, dt); // (+ the camera's jitter)
+        }
+        assert.ok(Number.isFinite(st.neutral) && Math.abs(st.neutral) <= NEUTRAL_MAX);
+    }
+    // looking straight again: right away the view does not spin…
+    let spun = 0;
+    for (let k = 0; k < 5 / DT; k++) spun += headTurnStep(st, head *= 0.9, DT).rate * DT;
+    assert.ok(Math.abs(spun) < 0.05, `no spinning when looking straight (${spun})`);
+    // …and after a little while "straight" is the camera's straight again, turns as at the start
+    hold(st, 0, 60);
+    assert.ok(Math.abs(st.neutral) < 0.02, `"straight" back (${st.neutral})`);
+    assert.ok(Math.abs(headTurnStep({ ...st }, 0, DT).rel) < 0.02);
+    const right = hold({ ...st }, 0.3, 1), left = -hold({ ...st }, -0.3, 1);
+    assert.ok(Math.abs(right - rightAtStart) < 0.05 * rightAtStart, `right as at the start (${rightAtStart} → ${right})`);
+    assert.ok(Math.abs(right - left) < 0.05 * right, `right ${right} vs left ${left}`);
 });

@@ -18,11 +18,21 @@
  * "straight" that way — after a long game a turn that way needed far more head. Now
  * "straight" is where the head RESTS most of the time (the most frequent still place
  * of the last minute): glances and the way through don't count.
+ *
+ * After a long game "straight" could still walk away step by step: a minute resting a little
+ * right (reading a book in the hand, a slow lean) moved it there, and from there the next rest
+ * a little further right was inside the dead zone again — and so on up to 0.5 rad. Looking
+ * straight at the screen then turned the view all the time («кружится»), and it never came
+ * back: "straight" learns only inside the dead zone, and the head at the screen was outside
+ * it. Now "straight" stays nearer to the camera's straight than the dead zone is wide, so
+ * the head at the screen never turns the view and is always learned back.
  * Pure logic, no THREE.
  */
 
 export const HEAD_DEAD = 0.15; // rad of head turn that doesn't turn the view
-export const NEUTRAL_MAX = 0.5; // "straight" is never further than this from the camera's straight
+// "straight" is never further than this from the camera's straight — less than HEAD_DEAD, so the
+// head looking straight at the camera is always inside the dead zone (never turns the view)
+export const NEUTRAL_MAX = 0.1;
 const LEARN_RATE = 0.12; // per second
 const MAX_SPEED = 2.2; // rad/s
 const BIN = 0.02; // rad: the rest places are counted in steps this wide
