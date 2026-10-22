@@ -46,10 +46,14 @@ export const ARMOR = {
     PIECE_PRICE: 450, // … a magic armour piece
 };
 
-/** Damage kinds steel takes (a blow, an arrow, a blast, a spell's charge, fire…); the others go through. */
-// (the blows of the body and of things: a zombie's blow on the host is 'zombie', on a guest 'bite' — both; a thing flung by Leviosa,
-// a house thrown by Leviosa Maxima, a pirate's pistol ball — the steel takes them too. Poison, cold, a fall — no blow on the steel.)
-const SOAKED = new Set(['melee', 'knight', 'arrow', 'bite', 'zombie', 'thrown', 'crush', 'Pistol', 'animal', 'Cannon', 'Bombardo', 'collapse', 'Sapira', 'Sands', 'IceBall', 'Thunderwave', 'Lightning', 'Inferno', 'Fire', 'Hellfire', 'fire']);
+/**
+ * What the steel never takes — no blow on it (the author: «броня должна защищать фактически от всего, кроме исключений»):
+ * poison and bleeding are inside, cold goes through it, no air, a fall or a crash onto the ground, the ice's bite while
+ * frozen, the web; the killing curse goes through steel as through a knight's (CastleLife). The gods' own spells go through
+ * any armour too (Armor.absorb: ProtectionGods.isDivine). EVERYTHING else — a blow, a beast, a zombie, an arrow, a thing
+ * thrown, a blast, a falling stone, any spell's charge, fire — the steel takes its share of (a new kind is taken by itself).
+ */
+const NOT_SOAKED = new Set(['poison', 'bleed', 'cold', 'air', 'fall', 'board', 'iceBite', 'web', 'AvadaKedavra']);
 const FIRE = new Set(['Inferno', 'Fire', 'Hellfire', 'fire']);
 
 /** The whole magic set: these simplest spells do nothing (they bounce off). */
@@ -244,7 +248,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     if (fx?.magicSet && FIRE.has(kind)) a *= 0.5; // (the whole magic set: fire does half)
     if (fx?.archmage && SPELL_DAMAGE.has(kind)) a *= ARCHMAGE.SPELL_K; // (the High Mage's suit: −40 % from any spell, on top of the rest)
     const wear = {};
-    if (a <= 0 || !SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
+    if (a <= 0 || NOT_SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
     // where it lands: a piece by its share of the body (bare where nothing is worn)
     let x = r(), on = null;
     for (const p of PIECES) { x -= ARMOR.COVER[p]; if (x < 0) { on = p; break; } }

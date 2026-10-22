@@ -27,6 +27,7 @@ import { PIECES, ARMOR, pieceMax, wornEffects, spellGuard, soakBlow, wornCode, w
 import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
 import { pickFlight } from './Expelliarmus.js';
+import { isDivine } from './ProtectionGods.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -153,7 +154,7 @@ export class ArmorSystem {
     absorb(amount, kind) {
         if (!(amount > 0)) return amount;
         if (kind === 'fall' && this.fx.stat.noFall && amount < 8) return 0; // (very strong falls still hurt)
-        if (!this.anyWorn()) return amount;
+        if (!this.anyWorn() || isDivine(kind)) return amount; // (the gods' own spells: no armour holds them)
         const res = soakBlow(this.worn, this.fx, amount, kind);
         for (const [slot, n] of Object.entries(res.wear)) {
             const it = this.worn[slot];
