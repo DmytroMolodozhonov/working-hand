@@ -1471,8 +1471,10 @@ export class IceCastleLife {
         for (const e of near) {
             const mid = _v.copy(e.a).lerp(e.b, 0.5);
             const along = _v2.subVectors(mid, o).dot(d);
-            if (along < 0 || along > L + e.r) continue;
             const dist = Math.sqrt(segmentSegmentDistSq([o.x, o.y, o.z], q, [e.a.x, e.a.y, e.a.z], [e.b.x, e.b.y, e.b.z]));
+            // (the rod's tip already in the body — it came right up: that one, though its middle is behind the tip)
+            if (along < 0 && Math.sqrt(segmentSegmentDistSq([o.x, o.y, o.z], [o.x, o.y, o.z], [e.a.x, e.a.y, e.a.z], [e.b.x, e.b.y, e.b.z])) <= e.r) { best = { ...e, along: 0 }; break; }
+            if (along < 0 || along > L + e.r) continue;
             if (dist > e.r + ICE.ROD.AIM + along * 0.04) continue;
             if (!best || along < best.along) best = { ...e, along };
         }

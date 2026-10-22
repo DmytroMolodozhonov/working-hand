@@ -195,6 +195,7 @@ export class Levitation {
             const dir = ch.getHandDirection(side, new THREE.Vector3());
             const anchor = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor;
             const shoulder = anchor?.getWorldPosition ? anchor.getWorldPosition(new THREE.Vector3()) : null;
+            const pb = g.duel?.pointBlank?.(side); // (the arm with the wand already in a creature: Duel.pointBlank)
             // a wizard: the point of his body (soles to hair) nearest to the line of the hand
             const list = cands.slice();
             for (const { id, r } of wizards) {
@@ -206,7 +207,8 @@ export class Levitation {
             for (const c of list) {
                 // somebody standing so close that the arm is in them (the hand in or through their body):
                 // that one is meant — the line of the hand, which starts beyond them, would miss them
-                if (shoulder && c.r && (c.kind === 'creature' || c.kind === 'wizard') && armIn(shoulder, hand, c.pos, c.r)) {
+                const blank = pb && ((c.kind === 'creature' && c.ck === pb.kind && c.obj.id === pb.id) || (c.kind === 'wizard' && pb.kind === 'p' && c.obj === pb.id));
+                if (blank || (shoulder && c.r && (c.kind === 'creature' || c.kind === 'wizard') && armIn(shoulder, hand, c.pos, c.r))) {
                     const d = c.pos.distanceTo(hand);
                     if (!best || best.score > -1) best = { ...c, side, score: -1, d };
                     continue;

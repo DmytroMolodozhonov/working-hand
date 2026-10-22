@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Duel } from '../../src/game/Duel.js';
 import { SpellManager } from '../../src/fx/SpellManager.js';
+import { Levitation } from '../../src/game/Levitation.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // my shoulder; the arm (+ wand) reaches 2 m forward along −Z (a big hero: a man is ~4 m tall)
@@ -121,4 +122,46 @@ test('«Бомбардо» goes off on a knight (any creature), not only on zomb
     g.duel = d;
     const at = bombardo(g, TIP.clone());
     assert.ok(at && Math.abs(at.z + 8) < 1, `on the knight 8 m away (z ${at?.z.toFixed(2)})`);
+});
+
+// ---- a zombie right up against me, the wand's tip inside it (the author's bug: spells did nothing until he ran off)
+/** A zombie at (x, z) (its origin 1 m over the ground), the same arm as above; a wall from z0 to z1 (or none). */
+function zombieWorld(x, z, wall = null) {
+    const { g, d } = world({ wall });
+    const zb = { id: 'z1', isDead: false, group: { position: V(x, 1, z), visible: true } };
+    g.zombies = [zb];
+    g.zombieById = new Map([['z1', zb]]);
+    g.duel = d;
+    const hits = [];
+    d.applyToZombie = (spell, zz) => hits.push([spell, zz.id]);
+    return { g, d, hits };
+}
+
+// in it straight on, the arm through its edge, and so close that my shoulder is in it too
+for (const [x, z] of [[0, -1.3], [0.6, -1], [0.3, -0.2]]) {
+    for (const spell of ['IceDuel', 'Stupefy', 'AvadaKedavra', 'Expelliarmus']) {
+        test(`a zombie right up against me (${x}, ${z}), the wand in it: «${spell}» hits it`, () => {
+            const { d, hits } = zombieWorld(x, z);
+            const aim = d.pickSide(false);
+            assert.equal(aim?.t.kind, 'z', 'it is the target');
+            d.cast(spell, aim, 'right');
+            run(d);
+            assert.deepEqual(hits, [[spell, 'z1']]);
+        });
+    }
+    test(`a zombie right up against me (${x}, ${z}), the wand in it: «Левиоса» lifts it`, () => {
+        const { g } = zombieWorld(x, z);
+        g.weapons = { weapons: [] };
+        const best = new Levitation(g)._pick();
+        assert.equal(best?.kind, 'creature');
+        assert.equal(best.obj.id, 'z1');
+    });
+}
+
+test('a zombie right up against me but behind a wall the hand is pushed into: not hit', () => {
+    const { d, hits } = zombieWorld(0, -1.6, [-0.8, -1.0]);
+    assert.equal(d.pointBlank('right'), null);
+    d.cast('Stupefy', d.pickSide(false), 'right');
+    run(d);
+    assert.deepEqual(hits, []);
 });
