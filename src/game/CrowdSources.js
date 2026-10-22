@@ -3,6 +3,7 @@
  * game has, with its size. A new walking creature is added here (and walks with `crowdStep`).
  */
 
+import { choreThingsAt } from './Chores.js';
 import { Crowd, steer, BODY_R, numId } from './Crowd.js';
 import { wardsOf, clipStep } from './ShieldWalls.js';
 
@@ -19,6 +20,9 @@ export function crowdOf(g) {
         for (const v of g.castleLife?.byId?.values?.() || []) {
             if (v.dead || v.seated || v.climb || v.group?.visible === false) continue;
             push({ x: v.x, y: v.y, z: v.z, r: v.role === 'knight' || v.role === 'king' ? BODY_R.knight : BODY_R.man, ref: v, id: v.id, kind: 'man', still: v.talking > 0 });
+            // the things of a chore (a ladder, a chopping block, a washing line, a dummy — Chores.js): walked round
+            const cp = choreThingsAt(v);
+            if (cp) push({ x: cp.x, y: v.y, z: cp.z, r: cp.r, ref: v, id: v.id + ':p', kind: 'man', still: true, vx: 0, vz: 0 });
         }
         // the animals (a horse in a cart's harness too: it is part of the cart)
         for (const a of g.animals?.list || []) {

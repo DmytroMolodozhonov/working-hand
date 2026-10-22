@@ -579,6 +579,9 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
+            ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
+            ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -975,6 +978,45 @@ export class SoundManager {
             this.sounds.hammer = buf;
         }
         this._playAt(this.sounds.hammer, position, volume, 6, 0.9 + Math.random() * 0.25);
+    }
+
+    /**
+     * A chore heard (Chores.js — the people's day): 'chop' the axe in the log, 'sweep' / 'wipe' the broom / the rag,
+     * 'catch' a ball caught, 'pluck' a lute's string (`note` semitones up), 'bubble' a potion, 'zap' / 'magic' a small
+     * spell, 'splash' a fish out of the water. Made ahead (prewarmStep); quiet, and not more than a few a second
+     * (the voices are kept for the fights and the spells).
+     */
+    playChore(beat, position, volume = 1, note = 0) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const now = performance.now();
+        if (now - (this._choreAt || 0) < 220) return;
+        this._choreAt = now;
+        const r = () => 0.9 + Math.random() * 0.2;
+        switch (beat) {
+            case 'chop': if (this.sounds.chore_chop) this._playAt(this.sounds.chore_chop, position, 0.9 * volume, 6, r()); break;
+            case 'sweep': if (this.sounds.chore_sweep) this._playAt(this.sounds.chore_sweep, position, 0.25 * volume, 3, r()); break;
+            case 'wipe': if (this.sounds.chore_sweep) this._playAt(this.sounds.chore_sweep, position, 0.18 * volume, 3, 1.5 * r()); break;
+            case 'catch': if (this.sounds.chore_catch) this._playAt(this.sounds.chore_catch, position, 0.5 * volume, 4, r()); break;
+            case 'pluck': if (this.sounds.chore_pluck) this._playAt(this.sounds.chore_pluck, position, 0.45 * volume, 5, Math.pow(2, note / 12)); break;
+            case 'bubble': if (this.sounds.chore_bubble) this._playAt(this.sounds.chore_bubble, position, 0.3 * volume, 4, 0.7 + Math.random() * 0.6); break;
+            case 'splash': if (this.sounds.splash) this._playAt(this.sounds.splash, position, 0.35 * volume, 5, 1.3 * r()); break;
+            case 'zap': case 'magic': if (this.sounds.magic) this._playAt(this.sounds.magic, position, (beat === 'zap' ? 0.3 : 0.18) * volume, 5, beat === 'zap' ? 1.4 : 1); break;
+            default: break;
+        }
+    }
+
+    /** A plucked string (Karplus–Strong): the lute of a villager playing on a bench. */
+    _synthPluck(f, seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const n = Math.max(2, Math.round(sr / f)), ring = new Float32Array(n);
+        for (let i = 0; i < n; i++) ring[i] = Math.random() * 2 - 1;
+        for (let i = 0, k = 0; i < len; i++, k = (k + 1) % n) {
+            const a = ring[k], b = ring[(k + 1) % n];
+            ring[k] = (a + b) * 0.5 * 0.996;
+            d[i] = a * 0.6 * Math.min(1, (len - i) / (sr * 0.05));
+        }
+        return buf;
     }
 
     /** Water rising out of a river into the ball. */

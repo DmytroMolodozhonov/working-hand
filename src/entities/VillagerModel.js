@@ -25,8 +25,10 @@ import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js'
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
+import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
+
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore'];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
@@ -1079,6 +1081,58 @@ export class VillagerModel {
         this._wiz = WIZARD_LOOK_ROLES.has(look.role);
         this.style = styleOf(look, this._wiz);
         this._fightT = 99;
+        // a chore (Chores.js / ChoreAnim.js): its things on the ground, what is in the hand
+        this.chore = null; this.choreSide = 0; this.choreBeat = null; this.choreNote = 0;
+        this.props = new THREE.Group(); // (on the villager's own ground: y 0 = the feet)
+        this.props.userData.farOne = true; // (a body's copy — Death.js — leaves the chore's things out)
+        this.root.add(this.props);
+        this._chores = {}; this._choreHands = {}; this._propMeshes = []; this._choreHand = null;
+        this._lift = 0; this._legZ = 0;
+    }
+
+    /** The shape of a chore's thing (shared by everybody — the shape cache), in the villager's one material. */
+    _propMesh(boxes) {
+        const m = new THREE.Mesh(takeGeo(partGeometry(boxes)), MAT);
+        m.castShadow = this._shadow;
+        m.raycast = () => {}; // (a blow at the ladder is no blow at the man)
+        this._propMeshes.push(m);
+        return m;
+    }
+
+    /** Start / stop a chore: its things shown, the tool in the hand changed. */
+    _setChore(key, side) {
+        const was = this.chore;
+        if (was && this._chores[was]) for (const o of this._chores[was].list) o.visible = false;
+        if (this._choreHand) this._choreHand.visible = false;
+        this._choreHand = null;
+        this.chore = key; this.choreSide = side;
+        this._lift = 0; this._legZ = 0;
+        this.root.position.y = -VILLAGER_FOOT_OFFSET;
+        this.leftLeg.rotation.z = this.rightLeg.rotation.z = 0;
+        if (this.tool) this.tool.visible = true;
+        if (!key) return;
+        let set = this._chores[key];
+        if (!set && PROPS[key]) {
+            set = this._chores[key] = { parts: {}, list: [] };
+            for (const [name, d] of Object.entries(PROPS[key])) {
+                const o = this._propMesh(d.boxes);
+                if (d.at) o.position.set(d.at[0], d.at[1], d.at[2]);
+                (d.torso ? this.torso : this.props).add(o);
+                set.parts[name] = o; set.list.push(o);
+            }
+        }
+        if (set) for (const o of set.list) o.visible = true;
+        const h = CHORE_HAND[key];
+        if (h) {
+            let o = this._choreHands[h];
+            if (!o) {
+                o = this._choreHands[h] = this._propMesh(HAND[h].boxes);
+                if (HAND[h].hang) o.rotation.x = -REST_WRIST;
+                this.handSlot.add(o);
+            }
+            o.visible = !(this.limbs && this.limbs.rightArm != null); // (no right arm — Dismember: nothing in it)
+            this._choreHand = o;
+        }
     }
 
     /** A burning torch in the left hand (the night watch). */
@@ -1292,9 +1346,12 @@ export class VillagerModel {
     update(dt, state = {}) {
         this.strikeNow = false;
         this.workStrikeNow = false;
+        this.choreBeat = null;
         if (!(dt > 0)) dt = 0;
         if (dt > 0.25) dt = 0.25;
         const mode = MODES.includes(state.mode) ? state.mode : 'idle';
+        const ck = state.chore || null;
+        if (ck !== this.chore || (ck && (state.side | 0) !== this.choreSide)) this._setChore(ck, state.side | 0);
         if (mode !== this.mode) this._enterMode(mode);
         if (this._flashT > 0) { this._flashT -= dt; if (this._flashT <= 0) { this._flashT = 0; this._applyMaterial(); } }
         if (mode === 'dead') { this._updateDead(dt); return; }
@@ -1541,6 +1598,9 @@ export class VillagerModel {
                 rate = 26; breathe = 0;
                 break;
             }
+            case 'chore':
+                rate = this.chore ? choreBody(this, this.chore, T, t, dt) : 10;
+                break;
             case 'sit':
                 T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
                 T.hx = 0.08;
@@ -1551,7 +1611,8 @@ export class VillagerModel {
                 break;
             default: break;
         }
-        if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail') T.headY = this._lookYaw;
+        if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
+        if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail' && mode !== 'chore') T.headY = this._lookYaw;
         if (this._flickT > 0) this._flickT -= dt;
         if (this.hat) {
             // the hat folds back under a low ceiling and stands up again (soft cloth)
@@ -1566,7 +1627,21 @@ export class VillagerModel {
         const k = 1 - Math.exp(-rate * dt);
         const kh = 1 - Math.exp(-8 * dt); // the head turns at its own pace
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
-        this._apply(t, breathe, mode === 'sit' || mode === 'situp');
+        const choreSit = mode === 'chore' && SIT_CHORES.has(this.chore);
+        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || choreSit);
+        if (this.chore) this._choreAfter(t, dt, mode === 'chore');
+    }
+
+    /** A chore after the body is posed: up on the ladder, legs apart, the tool away, the things moving. */
+    _choreAfter(t, dt, doing) {
+        const k = 1 - Math.exp(-6 * dt);
+        this._liftNow = (this._liftNow || 0) + ((doing ? this._lift : 0) - (this._liftNow || 0)) * k;
+        this.root.position.y = -VILLAGER_FOOT_OFFSET + this._liftNow;
+        const z = doing ? this._legZ : 0;
+        this.leftLeg.rotation.z += (z - this.leftLeg.rotation.z) * k;
+        this.rightLeg.rotation.z = -this.leftLeg.rotation.z;
+        if (this.tool) this.tool.visible = !this._choreHand && KEEP_WAND.has(this.chore);
+        if (doing) choreThings(this, this.chore, t, dt, _v);
     }
 
     // ------------------------------------------------------------- asleep
@@ -1697,7 +1772,7 @@ export class VillagerModel {
     dispose() {
         this.group.parent?.remove(this.group);
         if (this._lod) { this._lod.geometry.dispose(); this._lod = null; }
-        if (!this._gone) { this._gone = true; for (const m of this._meshes) giveGeo(m.geometry); } // (its shapes: given back once)
+        if (!this._gone) { this._gone = true; for (const m of this._meshes) giveGeo(m.geometry); for (const m of this._propMeshes) giveGeo(m.geometry); } // (its shapes: given back once)
     }
 }
 

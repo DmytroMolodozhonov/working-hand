@@ -58,6 +58,7 @@ import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
 import { FACE, facesTarget } from './FaceTarget.js';
 import { CSWIM, SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
+import { Chores, shownChore, choreCode, choreOf, choreThingsAt } from './Chores.js';
 
 const _wardP = { x: 0, y: 0, z: 0 }; // (ShieldWalls.pushOut: a person's feet, reused)
 
@@ -77,6 +78,7 @@ const HEAR_BOOM = 110; // m: a blast is heard this far (the guards come to look)
 const ARROW_SPEED = 42, ARROW_DMG = 3; // a knight's bow (KnightTactics: the archers)
 const URGENT = new Set(['rush', 'fallback', 'kingguard']); // (these cut a plan short)
 const BODY_R = 0.42; // m: a person's half-width (walls are kept this far from the middle of the body)
+const CHORE_SEEN = 60; // m: farther, a chore is not drawn (the person just stands — FPS)
 const MELEE = new Set(['sword', 'shield']);
 export const STATS = {
     builder: { hp: 8, armor: 0, dmg: 1 },
@@ -241,6 +243,7 @@ export class CastleLife {
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
+        this.chores = new Chores(this); // what the people do all day by their houses, at the well, the market (Chores.js)
         this.night = new NightLife(this); // the night: everybody home asleep, only the watch out (NightLife.js)
         this.wanted = new Wanted(); // (host) each player's hidden «wanted level»: how hard the knights and wizards fight them (Wanted.js)
         this.found = new BodyFound(this); // (host) a body found: the alarm, the search for strangers (BodyFound.js)
@@ -541,6 +544,7 @@ export class CastleLife {
 
     /** A wanderer picks where to go next (or goes home at the end). */
     _nextTrip(v) {
+        if (this.chores.plan(v)) return; // (a chore of their own: the roof, the wood, the well, the ball…)
         if (v.wizard && this.wizards.nextTrip(v)) return;
         const g = v.cs.graph;
         if (v.trips <= 0) { v.goingHome = true; this._goTo(v, this._homeNode(v)); return; }
@@ -1089,6 +1093,7 @@ export class CastleLife {
                 break;
             }
             default: { // wander
+                if (v.chore && this.chores.step(v, dt)) break; // (at their chore)
                 if (v.waitT > 0) {
                     v.waitT -= dt;
                     v.speed = 0;
@@ -1105,8 +1110,10 @@ export class CastleLife {
                     break;
                 }
                 if (!v.path) { this._nextTrip(v); if (!v.path) { v.waitT = 3; break; } }
+                if (v.chore) this.chores.walking(v); // (a bucket, a sack carried home)
                 if (this._followPath(v, dt, v.walk || WALK)) {
                     v.path = null;
+                    if (v.chorePlan && this.chores.arrive(v)) break; // (came to do the chore)
                     if (v.goingHome) { if (!this.night?.arriveHome(v)) this._deactivate(v); return; } // went into the house (at night: to bed)
                     // they stay a good while where they came (shopping, chatting, working)
                     v.waitT = v.purpose === 'chat' ? 15 + Math.random() * 30 : 10 + Math.random() * 35;
@@ -2764,8 +2771,10 @@ export class CastleLife {
                 if (d < 35 || v.foe || v.animT > (d < 60 ? 0.066 : 0.12)) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
-                    v.model.update(v.animT, { mode: v.mode, speed: v.speed });
+                    const ck = this.auth ? shownChore(v) : v.chore;
+                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide });
                     v.animT = 0;
+                    if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far) v.model.setFar(true);
                     // (a builder's hammer heard: the repairs — Rebuild.js)
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
@@ -2781,12 +2790,27 @@ export class CastleLife {
                 const o = 1.4 - d;
                 me.x += (me.x - v.x) / d * o * 0.7; me.z += (me.z - v.z) / d * o * 0.7;
             }
+            // (a chore's things — a ladder, a block, a line, a dummy: not walked through)
+            const ct = d < 8 && choreThingsAt(v);
+            if (ct && Math.abs(v.y - (me.y - 1.95)) < 2) {
+                const dx = me.x - ct.x, dz = me.z - ct.z, dd = Math.hypot(dx, dz), R = ct.r + 0.45;
+                if (dd < R && dd > 1e-3) { me.x += dx / dd * (R - dd); me.z += dz / dd * (R - dd); }
+            }
         }
         this.night?.visuals(dt); // (blankets, «z-z-z», the watch's torches; a hand on a sleeper)
         this.wizards.update(dt);
         this._chatter(dt);
         this.talk.update(dt);
         this._netSend(dt);
+    }
+
+    /** A chore heard (every computer, from the body's own moment: the blow, the catch, the bubble). */
+    _choreSound(v, beat, d) {
+        const s = this.game.sound;
+        if (!s) return;
+        const p = _v.set(v.x, v.y + 2, v.z), vol = d < 15 ? 1 : 1 - (d - 15) / 30;
+        if (beat === 'hammer') s.playHammer?.(p.setY(v.y + 5.5), 0.7 * vol);
+        else s.playChore?.(beat, p, vol, v.model.choreNote);
     }
 
     /** A health bar over a villager in a fight: hearts and (grey) armour. */
@@ -2828,7 +2852,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), v.disarmed ? 1 : 0]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), v.disarmed ? 1 : 0, choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -2837,7 +2861,7 @@ export class CastleLife {
         const idx = this.index;
         if (!idx) return;
         const seen = new Set();
-        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed, fx, pitch, disarmed] of list || []) {
+        for (const [id, x, y, z, yaw, mode, hp, armor, seated, speed, fx, pitch, disarmed, chore] of list || []) {
             seen.add(id);
             let v = this.byId.get(id);
             if (!v) {
@@ -2849,6 +2873,7 @@ export class CastleLife {
             }
             v.net = { x, y, z, yaw };
             v.mode = mode;
+            [v.chore, v.choreSide] = choreOf(chore); // (what they are doing: Chores.js)
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
             if (v.role === 'knight') { v.fx = fx ?? 0; v.aimPitch = pitch ?? 0; } // (a bow in his hands, where it aims)

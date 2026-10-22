@@ -260,6 +260,7 @@ export class NightLife {
             return;
         }
         // a townsman: home along the paths (CastleLife's wanderer: in through the door → arriveHome)
+        this.life.chores?.end(v); // (the chore left: home for the night)
         v.job = 'wander'; v.trips = 0; v.waitT = 0; v.post = null; v.purpose = 'home';
         v.goingHome = true; v.path = null; v.seated = false;
         this.life._goTo(v, this.life._homeNode(v));
