@@ -37,6 +37,7 @@ import { FX } from '../fx/WizardFx.js';
 import { DUEL, DUEL_SPELLS } from './Duel.js';
 import { PVP, shieldHitCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
+import { lessonSpell } from './BumpRules.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 
 const WALK = 2.3, RUN = 5.6;
@@ -472,6 +473,7 @@ export class WizardFight {
         const st = sq?.sit;
         if (T.mercy && st?.lying && !(wt?.role === 'binder') && !(Date.now() - (v.hurtAt || 0) < 5000)) return;
         if (v.prep) return;
+        if (v.lesson && this.life._pupilDown(v.foe)) return; // (a lesson never finishes off the one on the ground)
         const spell = this._spellFor(v, planSpell(plan, wt?.role, v.skillRole || v.role) || pickSpell(v.skillRole || v.role), T);
         const cost = NPC_COST[spell] ?? 10;
         if (v.mana < cost) return;
@@ -488,6 +490,7 @@ export class WizardFight {
         if (v.prep || v.noWand) return false;
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL)) return false;
         const t = prepTime();
+        if (v.lesson) v.lesson.casts++;
         v.prep = { spell, foe: foeId, at: o.at || null, vs: o.vs || null, cost: o.cost ?? (NPC_COST[spell] ?? 10), cd: o.cd ?? v.W.cast, sq: o.sq || null, t, age: 0 };
         v.castCd = Math.max(v.castCd ?? 0, t + 0.1); // (nothing else begun meanwhile)
         return true;
@@ -530,6 +533,7 @@ export class WizardFight {
 
     /** The spell a wizard really casts at this foe (by his wanted level: Wanted.wantedTactics). */
     _spellFor(v, spell, T) {
+        if (v.lesson) return lessonSpell(); // (a lesson: only Expelliarmus / Stupefy — never freezing, never deadly)
         if (spell === 'LevitateDuel' || spell === 'AvadaKedavra') spell = 'Stupefy'; // (they don't lift a man to hold him)
         if (T.soft && spell === 'SapiraDuel') spell = v.role !== 'student' && Math.random() < 0.4 ? 'IceDuel' : 'Stupefy'; // (calm: only stun, freeze)
         if (T.heavy && (spell === 'Stupefy' || spell === 'Jolt') && Math.random() < T.heavy) spell = 'SapiraDuel';

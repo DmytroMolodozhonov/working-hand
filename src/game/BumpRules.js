@@ -51,3 +51,27 @@ export function logLine(line) {
         fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Удары', line: String(line) }) }).catch(() => {});
     } catch (_) { /* ignore */ }
 }
+
+// ---- wizards stay reserved: a hand blow is answered by the beaten one alone, and only as a lesson
+export const LESSON = { BEATEN_N: 4, BEATEN_DMG: 3, BEATEN_MS: 60000, MS: 25000, MAX_CASTS: 6, SPELLS: ['Expelliarmus', 'Stupefy'], AGAIN_MS: 60000, WIND_DOWN_MS: 20000, WIND_TALK_MS: 60000 };
+
+/** Count a hand blow on a wizard. `rec`: his record of this player (or null). @returns {{rec, lesson: boolean}} */
+export function beating(rec, by, dmg, now) {
+    const r = rec && rec.by === by && now - rec.t < LESSON.BEATEN_MS ? rec : { by, n: 0, dmg: 0, t: now };
+    r.n++; r.dmg += dmg; r.t = now;
+    return { rec: r, lesson: r.n >= LESSON.BEATEN_N && r.dmg >= LESSON.BEATEN_DMG };
+}
+
+/** The wind knocked him down: [times within 20 s, the right to give a lesson (twice)] */
+export function windDowns(list, now) {
+    const l = (list || []).filter((t) => now - t < LESSON.WIND_DOWN_MS);
+    l.push(now);
+    return { list: l, lesson: l.length >= 2 };
+}
+
+/** The spell of a lesson: never freezing, never deadly. */
+export function lessonSpell(rnd = Math.random()) { return LESSON.SPELLS[rnd < 0.5 ? 0 : 1]; }
+
+// ---- anger of places survives leaving the game: the time left is saved, not the clock
+export function packHostile(until, now) { const r = Math.round(until - now); return r > 0 ? r : 0; }
+export function unpackHostile(rem, now) { return rem > 0 ? now + rem : 0; }

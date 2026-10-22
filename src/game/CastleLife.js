@@ -73,7 +73,7 @@ const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
 const THEFT_MS = 90000;
-import { BUMP, knockOutcome } from './BumpRules.js';
+import { BUMP, LESSON, knockOutcome, beating, windDowns, packHostile, unpackHostile } from './BumpRules.js';
 const SORRY_OK = ['Ладно, бывает.', 'Хорошо, я не сержусь.', 'Ну ладно, впредь аккуратнее.', 'Бывает. Забудем.'];
 const RAMPAGE = 3; // different people of a castle hurt by one player within 2 min: that is a rampage — the guard comes
 const PETTY = 12; // blocks of quiet damage (a pane, a few blocks) per player in 5 min: the people grumble, no guards
@@ -105,6 +105,8 @@ const SHOUT = {
     knight: ['Стой, негодяй!', 'Именем короля!', 'К оружию!', 'Ты за это ответишь!', 'Взять его!'],
     king: ['Стража! Ко мне!', 'Как ты смеешь?!', 'Рыцари! Защитите своего короля!'],
     hurt: ['Ай!', 'За что?!', 'Ох...', 'Больно же!'],
+    lesson: ['Сейчас я тебя проучу.', 'Довольно! Урок тебе не повредит.', 'Вот теперь ты узнаешь манеры.'],
+    lessonDone: ['Надеюсь, урок усвоен.', 'Хватит с тебя. Я возвращаюсь к делам.', 'Урок окончен.'],
     bump: ['Эй! Ты чего?!', 'Ай! Осторожнее!', 'Руки-то не распускай!', 'Смотри, куда машешь!'],
     bumpKnight: ['Ещё раз — и пожалеешь.', 'Полегче, странник.', 'Осторожнее с руками.'],
     bow: ['Ваше Величество!', 'Да здравствует король!', 'Слава новому королю!', 'Добро пожаловать, повелитель!'],
@@ -301,6 +303,8 @@ export class CastleLife {
         if (!cs) {
             cs = { def, graph: new Graph(def), awake: false, active: new Map(), hostile: new Map(), chests: [], spawnT: 0, reinforced: 0 };
             this.castles.set(def.id, cs);
+            const rem = this._pendingHostile?.get(def.id);
+            if (rem > 0) { cs.hostile.set(this.game.localId, unpackHostile(rem, Date.now())); this._pendingHostile.delete(def.id); }
         }
         return cs;
     }
@@ -1484,6 +1488,7 @@ export class CastleLife {
         const gone = !fp || (!this._inLand(cs.def, fp, 30) && (d > LEASH || !this._inLand(cs.def, fp, 160)));
         // (the whole castle against them — or only this one, angry at this player: a blow, a theft)
         const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > Date.now();
+        if (v.lesson && (gone || Date.now() > v.lesson.until || v.lesson.casts >= LESSON.MAX_CASTS || this._pupilDown(v.foe))) { this._lessonOver(v); return; }
         if (gone || !(cs.hostile.get(v.foe) > Date.now() || grudge)) {
             if (fp && gone) v.gaveUp = { id: v.foe, until: Date.now() + 15000 }; // (not straight back at them)
             v.foe = null; v.path = null; v.chaseT = 0; v.grudge = null;
@@ -2500,6 +2505,15 @@ export class CastleLife {
         const prev = bumps.get(key);
         const n = prev && now - prev.t < BUMP.AGAIN_MS ? prev.n + 1 : 1;
         bumps.set(key, { t: now, n });
+        // wizards are reserved: a hand blow (no weapon, no spell) is answered by the beaten one alone, and only after a real beating
+        if (v.wizard && !opts.weapon && !opts.magic && this.state(cs.def.id).owner !== by) {
+            const r = beating(v.beaten, by, dmg, now);
+            v.beaten = r.rec;
+            v.offended = { by, t: now, hp: v.hp };
+            if (r.lesson && this._lesson(v, by)) return true;
+            if (!v.foe) this._say(v, pick(n === 1 ? SHOUT.bump : SHOUT.offended), 3);
+            return true;
+        }
         const hard = !!opts.weapon || !!opts.hard || dmg > 1;
         // (the people really hurt by this player lately — a single light knock is not counted)
         if (hard || n > 1) {
@@ -3089,9 +3103,50 @@ export class CastleLife {
             if (along < 0 || along > len || to.addScaledVector(d, -along).length() > width + 1.2) continue;
             v.windAt = now;
             if (this.game.arenaDuels?.calm(v, by) || v.foe || by === this.state(v.cs.def.id).owner) continue;
-            if (Math.random() < 0.6) this._say(v, pick(v.wizard ? SHOUT.windedWiz : SHOUT.winded), 3);
-            if (v.wizard && this._fights(v) && Math.random() < 0.12) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; } // (a duel — maybe)
+            // (a gust is never punished: no duel, no alarm, no hostility — only a grumble now and then, once a minute at most)
+            if (now - (v.windSaid || 0) > LESSON.WIND_TALK_MS && Math.random() < 0.4) { v.windSaid = now; this._say(v, pick(v.wizard ? SHOUT.windedWiz : SHOUT.winded), 3); }
         }
+    }
+
+    /**
+     * (host) The wind knocked this one off his feet (CreatureImpact). Once: only a protest. Twice within 20 s, and he is a wizard:
+     * he alone may teach the one who blew a lesson (a soft one — `_lesson`). Nobody else stirs.
+     */
+    windKnocked(v, by) {
+        if (!this.auth || !v || v.dead || !v.wizard || !this._isPlayer(by) || v.servantOf != null) return;
+        if (this.game.arenaDuels?.calm(v, by) || v.foe || by === this.state(v.cs.def.id).owner) return;
+        const now = Date.now();
+        const r = windDowns(v.windDown, now);
+        v.windDown = r.list;
+        if (!r.lesson) { if (now - (v.windSaid || 0) > 5000) { v.windSaid = now; this._say(v, pick(SHOUT.windedWiz), 3); } return; }
+        v.windDown = [];
+        this._lesson(v, by);
+    }
+
+    /** A wizard teaches `by` a lesson: he alone, Expelliarmus / Stupefy only, then he leaves it (see `_fight`). */
+    _lesson(v, by) {
+        const now = Date.now();
+        if (!this._fights(v) || v.foe || v.lesson || now - (v.lessonEnd || 0) < LESSON.AGAIN_MS) return false;
+        v.lesson = { by, until: now + LESSON.MS, casts: 0 };
+        v.grudge = { id: by, until: now + LESSON.MS };
+        v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.seated = false;
+        this._say(v, pick(SHOUT.lesson), 3);
+        console.info('[CastleLife] lesson:', v.name, '→', by);
+        return true;
+    }
+
+    /** The lesson is over (the pupil stunned, time, enough casts): he calms down and goes about his business. */
+    _lessonOver(v) {
+        v.lesson = null; v.lessonEnd = Date.now();
+        v.foe = null; v.grudge = null; v.path = null; v.chaseT = 0; v.beaten = null; v.prep = null;
+        this._say(v, pick(SHOUT.lessonDone), 3);
+    }
+
+    _pupilDown(by) {
+        const g = this.game;
+        if (by === g.localId) return !!(g.combat?.stunned || g.combat?.dead || g.knock?.down);
+        const r = g.remotes?.get(by);
+        return !r || r.dead || !!r.combat?.stunned;
     }
 
     // ------------------------------------------------------------ speech
@@ -3336,11 +3391,29 @@ export class CastleLife {
     snapshot() {
         const out = {};
         for (const [id, s] of this.states) if (s.kingDead || s.killed.size) out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed] };
+        const h = this.hostileSnapshot();
+        if (Object.keys(h).length) out.__hostile = h;
+        return out;
+    }
+
+    /** The anger of the places at me: {castle id: ms left} (the time left, not the clock — leaving the game does not cool it). */
+    hostileSnapshot() {
+        const out = {}, now = Date.now(), me = this.game.localId;
+        for (const [id, rem] of this._pendingHostile || []) if (rem > 0) out[id] = rem;
+        for (const [id, cs] of this.castles) { const r = packHostile(cs.hostile.get(me), now); if (r) out[id] = r; else if (!this._pendingHostile?.has(id)) delete out[id]; }
         return out;
     }
 
     restore(data) {
-        for (const [id, s] of Object.entries(data || {})) this.applyState(id, s);
+        const { __hostile, ...states } = data || {};
+        for (const [id, s] of Object.entries(states)) this.applyState(id, s);
+        const now = Date.now(), me = this.game.localId;
+        this._pendingHostile = new Map();
+        for (const [id, rem] of Object.entries(__hostile || {})) {
+            const cs = this.castles.get(id);
+            if (cs) cs.hostile.set(me, unpackHostile(+rem, now));
+            else this._pendingHostile.set(id, +rem);
+        }
     }
 
     /** Castle captured by this player? (for the dialogue: «Ваше Величество») */

@@ -220,6 +220,7 @@ export class CreatureImpact {
         if (v / B.mass >= IMPACT.KNOCK_ANY && res === 'stagger') res = 'knockdown';
         if (res === 'knockdown' && K.noKnock?.(this.game, c)) res = 'stagger';
         this._note(ck, c, o, res);
+        if (res === 'knockdown' && ck === 'v' && (o.spell === 'Wind' || o.spell === 'WindMaxima')) this.game.castleLife?.windKnocked?.(c, o.by); // (a wizard knocked down twice by the wind may teach a lesson — nothing else)
         if (res !== 'none') K.struck?.(this.game, c, o); // (the kind's own answer to it: a sailor's crew takes offence)
         if (res === 'shatter') { K.shatter?.(this.game, c, o.by); return res; }
         const e = this._state(ck, c), s = e.s;

@@ -151,7 +151,7 @@ export function manaPace(mana, max) {
 }
 
 /** Mana a spell costs a wizard (the same as a player's base spell). */
-export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
+export const NPC_COST = { Expelliarmus: 8, Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel: 6, Jolt: 5, JoltMaxima: 15, AvadaKedavra: 25, Protection: 5, ProtectionMaxima: 20, Wind: 8 };
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
