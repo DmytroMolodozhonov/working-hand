@@ -184,6 +184,7 @@ export class WizVillages {
         this.game = game;
         this.plaques = new Map(); // site id -> mesh
         this.scrolls = new Map(); // site id -> [{id, uid, x, y, z}]
+        this.fires = new Map(); // site id -> its campfire (the host's)
         this._t = 0;
         plaqueParts(); // (made now: prewarm compiles its material)
     }
@@ -216,6 +217,7 @@ export class WizVillages {
         }
         for (const [id, m] of [...this.plaques]) if (!seen.has(id)) { g.scene.remove(m); this.plaques.delete(id); }
         for (const id of [...this.scrolls.keys()]) if (!seen.has(id)) this._putAway(id);
+        for (const [id, f] of [...this.fires]) if (!seen.has(id)) { this.fires.delete(id); if (this.auth && g.campfires?.list.get(f.id) === f) g.campfires._out(f); } // (nobody near: the wizards' fire is not left burning on)
     }
 
     _plaque(def) {
@@ -234,12 +236,13 @@ export class WizVillages {
     _fire(def) {
         const g = this.game, c = g.campfires, at = def.fire;
         if (!c || !at) return;
-        const f = c.nearest(at, 2.2);
+        let f = c.nearest(at, 2.2);
         if (!f) {
             const col = g.collision;
             const y = col?.groundAt ? col.groundAt(at.x, at.z, at.y + 2) : at.y;
-            c.kindle(at.x, y ?? at.y, at.z, CAMPFIRE.MAX);
+            f = c.kindle(at.x, y ?? at.y, at.z, CAMPFIRE.MAX);
         } else if (f.left < CAMPFIRE.MAX - 120) c.addWood(f, 2); // (the wizards keep putting wood on it)
+        if (f) this.fires.set(def.id, f);
     }
 
     /** (host) The library's scrolls on the reading table; a taken one is gone for good. */

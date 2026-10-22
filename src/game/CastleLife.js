@@ -40,7 +40,7 @@ import { Chest } from '../entities/Chest.js';
 /** A chest's look by its room: the king's and the Master's own — rich; the port's — a sea chest (Chest.js). */
 const CHEST_LOOK = { king: 'rich', treasury: 'rich', throne: 'rich', vault: 'rich', study: 'rich', port: 'pirate' };
 import { createRng } from '../core/math.js';
-import { CastleTalk } from './CastleTalk.js';
+import { CastleTalk, onCounter } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
 import { HamletLife, hamletRoster } from './HamletLife.js';
 import { WizardFight } from './WizardFight.js';
@@ -443,6 +443,18 @@ export class CastleLife {
         if (this.auth) this.game.loreLibrary?.sleep(cs.def);
         if (cs.def.kind === 'hamlet') this.hamlets.sleep(cs); // (its fire out, its sphere put away)
         for (const v of [...cs.active.values()]) this._deactivate(v);
+        // the goods still lying unpaid on its counters are put away (laid out again when somebody comes):
+        // a long flight left every market's goods of the world lying about
+        const talk = this.talk, items = this.game.items;
+        if (this.auth && talk?.stalls && items) cs.def.stalls.forEach((st, i) => {
+            const key = talk._stallKey(cs.def, i), s = talk.stalls.get(key);
+            if (!s) return;
+            for (const uid of s.goods) {
+                const L = items.loose.get(uid);
+                if (L && L.item.shop && !L.item.shop.paid && onCounter(st, L.model.position)) { items.removeLoose(uid); this.game.sync?.itemGone?.(uid, null, null); }
+            }
+            talk.stalls.delete(key);
+        });
         // its chests are put away too, as a village house's (an opened one is remembered — _openedChests; an
         // unlocked one — Locks): a long flight over the world left every castle's chests in the scene
         const g = this.game;
