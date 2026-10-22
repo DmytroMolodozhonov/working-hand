@@ -6,16 +6,23 @@
 import { CASTLE_CELL, hash01 } from '../world/Castles.js';
 import { herdKind } from './Animals.js';
 
+/**
+ * HERD_DENSITY — herd places per km² (before the land is checked: grass only, no castles, water, islands, so on the real meadow
+ * a bit fewer). The one knob for "more / fewer animals": change this number only (the most the grid holds is ~156). Was ~42
+ * (a herd tried every ~48 s around the player); now about twice. The kinds split it as HERD_KINDS (cow 1.2 : pig 1.3 : sheep 2.4 : horse 1.4).
+ */
+export const HERD_DENSITY = 90;
 export const SITES = {
-    CELL: CASTLE_CELL / 4, // m: 120 — a place per cell at most (a settlement sector of 480 m holds 16 cells)
-    CHANCE: 0.6, // of the cells have a herd place: ~42 per km² (before the land is checked: grass only, no castles, water, islands)
+    CELL: CASTLE_CELL / 6, // m: 80 — a place per cell at most (a settlement sector of 480 m holds 36 cells)
     EDGE: 20, // m: a place keeps this far from its cell's border — two places are never closer than 40 m
     MIN: 2, MAX: 5, // heads
 };
+/** The share of cells that have a herd place (follows HERD_DENSITY). */
+const chance = () => Math.min(1, HERD_DENSITY * (SITES.CELL / 1000) ** 2);
 
 /** The herd place of the cell (gx, gz) in a world of this seed, or null. Pure: same input — same place. */
 export function siteAt(gx, gz, seed) {
-    if (hash01(gx, gz, seed + 9101) >= SITES.CHANCE) return null;
+    if (hash01(gx, gz, seed + 9101) >= chance()) return null;
     const C = SITES.CELL, E = SITES.EDGE;
     return {
         key: gx + ',' + gz, gx, gz,

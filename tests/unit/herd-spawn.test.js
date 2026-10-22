@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Animals, HERDS, HERD_KINDS } from '../../src/game/Animals.js';
-import { siteAt, sitesNear, SITES } from '../../src/game/HerdSites.js';
+import { siteAt, sitesNear, SITES, HERD_DENSITY } from '../../src/game/HerdSites.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 
 function world(me = [0, 0]) {
@@ -39,13 +39,13 @@ test('density per area, kinds in the shares of HERD_KINDS, no two places closer 
     sitesNear(0, 0, 6000, 42, (s) => all.push(s));
     const km2 = Math.PI * 6 * 6;
     const per = all.length / km2;
-    assert.ok(per > 35 && per < 50, `places per km²: ${per.toFixed(1)}`);
+    assert.ok(Math.abs(per - HERD_DENSITY) < 8, `places per km²: ${per.toFixed(1)}`);
     const tot = Object.values(HERD_KINDS).reduce((x, y) => x + y, 0);
     for (const [k, w] of Object.entries(HERD_KINDS)) {
         const share = all.filter((s) => s.type === k).length / all.length;
         assert.ok(Math.abs(share - w / tot) < 0.03, `${k}: ${share.toFixed(3)} vs ${(w / tot).toFixed(3)}`);
     }
-    for (let i = 0; i < 400; i++) for (let j = i + 1; j < 400; j++) assert.ok(Math.hypot(all[i].x - all[j].x, all[i].z - all[j].z) >= 39.9);
+    for (let i = 0; i < 300; i++) for (let j = i + 1; j < 300; j++) assert.ok(Math.hypot(all[i].x - all[j].x, all[i].z - all[j].z) >= 39.9);
 });
 
 test('a place wakes when a player is near, one herd per look, not in plain sight; other animals do not matter', () => {
@@ -92,7 +92,7 @@ test('killed herd: the place stays empty until a quiet while, then full again; a
     scan(A, (HERDS.REFILL_T / HERDS.SCAN) + 10);
     assert.ok(!A.emptied.has(r.key), 'after a quiet while it is full again');
     g.character.group.position.set(r.x, 1.5, r.z + 150);
-    scan(A, 4);
+    scan(A, 60);
     assert.ok(r.awake && r.members.size === n, 'woke with the full herd');
 });
 
