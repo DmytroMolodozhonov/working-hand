@@ -1483,14 +1483,11 @@ export class IceCastleLife {
         if (!aim) return null;
         const body = this._aimBody(aim.o, aim.d, ICE.ROD.RANGE);
         const name = body ? 'RodFrozen' : 'RodIce';
-        const tired = g.combat?.check?.(name);
-        if (tired) { if (isFinal) g.hud?.setVoice?.(tired, true); return null; }
-        let ok;
+        let ok; // (the rod is the gods' gift: its own power, no mana is spent)
         if (body) ok = this._rodFreeze(body, aim);
         else ok = this._rodIce(aim);
         if (!ok) return null;
         this._rodAt = now;
-        g.combat?.pay?.(name);
         g.mana?.success?.(name);
         g.castleLife?.alarm?.(aim.o, 'ice', g.localId, 6);
         const cr = this.myRod()?.model.userData.crystal;
