@@ -197,7 +197,7 @@ export const DRAGON_FLAME = {
 
 // ============================================================ the hoard
 /** Coins one pouch holds (CoinBelt.POUCH_MAX). */
-const POUCH = 100;
+const POUCH = 500;
 
 /**
  * A lair's hoard (deterministic from its seed): 1000–5000 coins, most of it a heap of loose coins,

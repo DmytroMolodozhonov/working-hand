@@ -196,6 +196,12 @@ body {
     color: #ffd84a;
     white-space: nowrap;
 }
+/* my pouch by the coins: red with ∞ — the magic one (coins without end), brown — a plain one (Inventory.pouchIcon) */
+#coin-pouch svg {
+    vertical-align: -5px;
+    margin-right: 4px;
+    filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.8));
+}
 
 /* Game Over Screen */
 #game-over {

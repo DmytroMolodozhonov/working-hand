@@ -6,15 +6,15 @@ import { purseBags, purseAdd, pouchSize, BELT_MAX } from '../../src/game/CoinBel
 import { purseHand } from '../../src/input/PoseInterpreter.js';
 import { frame } from '../e2e/poses.mjs';
 
-test('pouches: up to 100 coins each, then a second and a third beside it (300 at most)', () => {
+test('pouches: up to 500 coins each, then a second and a third beside it (1500 at most)', () => {
     assert.deepEqual(purseBags(0), []);
     assert.deepEqual(purseBags(37), [37]);
-    assert.deepEqual(purseBags(100), [100]);
-    assert.deepEqual(purseBags(101), [100, 1]);
-    assert.deepEqual(purseBags(250), [100, 100, 50]);
-    assert.deepEqual(purseBags(999), [100, 100, 100]);
+    assert.deepEqual(purseBags(500), [500]);
+    assert.deepEqual(purseBags(501), [500, 1]);
+    assert.deepEqual(purseBags(1250), [500, 500, 250]);
+    assert.deepEqual(purseBags(9999), [500, 500, 500]);
     assert.deepEqual(purseAdd(0, 40), { have: 40, rest: 0 });
-    assert.deepEqual(purseAdd(280, 40), { have: BELT_MAX, rest: 20 }); // (what does not fit stays in the hand)
+    assert.deepEqual(purseAdd(1480, 40), { have: BELT_MAX, rest: 20 }); // (what does not fit stays in the hand)
     assert.ok(pouchSize(100) > pouchSize(50) && pouchSize(50) > pouchSize(5), 'the pouch grows with its coins');
 });
 

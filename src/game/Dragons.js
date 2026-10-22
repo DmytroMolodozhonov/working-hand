@@ -47,7 +47,7 @@ const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
 const TAU = Math.PI * 2;
 /** m from the heap's middle: a dead knight's bones, his named armour and sword (just beyond the fullest heap). */
 const BONES_R = 5.2;
-const POUCH = 100;
+const POUCH = 500; // (CoinBelt.POUCH_MAX)
 /** Wandering dragons: checked this often (s) by the host; this chance a check brings one. */
 const WANDER = { EVERY: 60, CHANCE: 0.02, FIRST: 600, /* (rare: about one in 50 minutes of play, none in the first 10 — «dragons fly too often», the author) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */

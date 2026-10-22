@@ -122,6 +122,17 @@ export function sameLook(a, b) {
 }
 const LOOK_KEYS = ['color', 'rec', 'cooked', 'stat', 'spell', 'model', 'type', 'from'];
 
+/** The little pouch by the coin counter: red velvet with a golden ribbon and ∞ (the magic one), or brown leather with a cord. */
+export function pouchIcon(magic) {
+    const [body, edge, tie] = magic ? ['#b3202a', '#5e0c13', '#f2c14e'] : ['#8b5a2b', '#3f2612', '#d8b67a'];
+    return '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' +
+        `<path d="M8.6 7.4C3.4 10.6 3 21 12 21s8.6-10.4 3.4-13.6z" fill="${body}" stroke="${edge}" stroke-width="1.2"/>` +
+        `<path d="M8.9 7.6 7.2 3.6Q12 5.2 16.8 3.6l-1.7 4z" fill="${body}" stroke="${edge}" stroke-width="1.1"/>` +
+        `<rect x="7.4" y="6.6" width="9.2" height="2" rx="1" fill="${tie}" stroke="${edge}" stroke-width="0.5"/>` +
+        (magic ? `<text x="12" y="17.8" font-size="9" font-weight="bold" text-anchor="middle" fill="${tie}" font-family="sans-serif">∞</text>` : '') +
+        '</svg>';
+}
+
 export class Inventory {
     constructor(game) {
         this.game = game;
@@ -834,15 +845,28 @@ export class Inventory {
         this._render();
     }
 
-    /** The coin counter at the top right of the screen: 🪙 and all my coins. */
+    /** Have I a magic pouch (on the belt, in a slot or in a hand)? One is enough: coins without end. */
+    hasMagicPouch() {
+        if (this.purse?.magic) return true;
+        const mine = (it) => !!it && it.kind === 'coins' && it.magic && !it.shop; // (one for sale, not paid for: not mine)
+        if (this.slots.some(mine)) return true;
+        for (const side of ['right', 'left']) if (mine(this.game.items?.held[side]?.item)) return true;
+        return false;
+    }
+
+    /** The coin counter at the top right of the screen: my pouch (red — the magic one, brown — plain), 🪙 and all my coins. */
     _renderCoins() {
         if (typeof document === 'undefined') return;
-        const n = this.coins();
-        if (n === this._coinsShown) return;
+        const n = this.coins(), magic = this.hasMagicPouch();
+        if (n === this._coinsShown && magic === this._pouchShown) return;
         const el = document.getElementById('coin-count');
         if (!el) return;
         this._coinsShown = n;
         el.textContent = n;
+        if (magic === this._pouchShown) return;
+        this._pouchShown = magic;
+        const ic = document.getElementById('coin-pouch');
+        if (ic) { ic.innerHTML = pouchIcon(magic); ic.title = magic ? 'Бездонный мешочек: монет — сколько угодно' : 'Обычный мешочек: до 500 монет (на поясе — до трёх, 1500)'; }
     }
 
     show(on) {

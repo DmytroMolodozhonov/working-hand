@@ -9,8 +9,8 @@
  *   - Tie a pouch on: the left hand holding a coin pouch is brought across to the right side
  *     of the belt, beside the hip, and kept there a moment — or its fingers opened there; the
  *     coins jingle. The first pouch is tied there; the next ones are emptied into it — the
- *     pouch grows with its coins. A pouch holds 100 coins: more, and a second pouch hangs
- *     beside it, then a third (300 coins on the belt at most). What does not fit stays in
+ *     pouch grows with its coins. A pouch holds 500 coins: more, and a second pouch hangs
+ *     beside it, then a third (1500 coins on the belt at most). What does not fit stays in
  *     the pouch in the hand.
  *   - Take one off: look down at it, bring the open left hand to it and close the
  *     fingers — the fullest pouch comes into the hand (to give, to pay, to throw).
@@ -23,7 +23,7 @@
  * расширением»): the same pouch to hold, tie on, take off, give, pay with, throw — but it holds
  * coins without end, and outside it stays small (pouchSize: it grows a little and stops). Tied on,
  * it is the only pouch on the belt: the plain ones tied on after it are emptied into it (and the
- * coins already on the belt go into it when it is tied on), and the 300 coins' limit is gone.
+ * coins already on the belt go into it when it is tied on), and the belt's limit is gone.
  * Taken off, it comes into the hand whole, with all the coins; at death it drops so, whole.
  */
 
@@ -33,7 +33,7 @@ import { POUCH_NECK_Y, tickPouchMagic } from './PouchModel.js';
 import { CappedLog } from '../core/CappedLog.js';
 
 /** Coins one pouch holds; pouches on the belt. */
-export const POUCH_MAX = 100;
+export const POUCH_MAX = 500; // (the author: «обычный мешочек — 500 монет», was 100)
 export const POUCHES = 3;
 export const BELT_MAX = POUCH_MAX * POUCHES;
 const TIE_S = 0.35; // s the hand is kept at the side to tie the pouch on
@@ -46,7 +46,7 @@ export const MAGIC_POUCH_PRICE = 750;
 /** A new magic pouch (empty, or with `count` coins). */
 export const makeMagicPouch = (uid, count = 0) => ({ kind: 'coins', uid, count, magic: true });
 
-/** The pouches for `n` coins on the belt: [100, 100, 37]; the magic pouch — itself, all in it: [n]. */
+/** The pouches for `n` coins on the belt: [500, 500, 37]; the magic pouch — itself, all in it: [n]. */
 export function purseBags(n, magic = false) {
     if (magic) return [Math.max(0, Math.floor(n || 0))];
     n = Math.max(0, Math.min(BELT_MAX, Math.floor(n || 0)));
