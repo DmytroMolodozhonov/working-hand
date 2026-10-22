@@ -428,6 +428,16 @@ const FX = {
     fxDie(sr) { const o = buf(sr, 1.6), r = rng(193); noise(o, sr, 0, 1.2, 0.35, (u) => 0.2 * (1 - u) + 0.02, swell(0.4, 0.3), r); glide(o, sr, 0.1, 1.3, 0.3, (u) => 300 - 230 * u, swell(0.1, 0.5), 3); drum(o, sr, 1.05, 0.9, 38, 0.55, r); reverb(o, sr, 0.4, 0.85); return finish(o, sr, { peak: 0.72 }); },
     /** «Wind»: a gust — noise through a sweeping resonance. */
     fxWind(sr) { const o = buf(sr, 1), r = rng(29); noise(o, sr, 0, 1, 0.5, (u) => 0.04 + 0.3 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI) ** 0.7, r); glide(o, sr, 0, 1, 0.04, (u) => 500 + 500 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI)); return finish(o, sr, { peak: 0.6 }); },
+    /** «Firefighting»: the air torn away from the fire — a sharp suck of air, a hollow clap where it vanished, the air rushing back. */
+    fxVacuum(sr) {
+        const o = buf(sr, 0.95), r = rng(211);
+        noise(o, sr, 0, 0.15, 0.55, (u) => 0.06 + 0.55 * u, (u) => u ** 2.2, r); // (the air sucked in)
+        noise(o, sr, 0.14, 0.035, 0.55, () => 0.45, (u) => 1 - u, r); // (the clap)
+        drum(o, sr, 0.14, 0.85, 52, 0.45, r); // (hollow: nothing there for a moment)
+        glide(o, sr, 0.14, 0.45, 0.16, (u) => 150 - 90 * u, (u) => (1 - u) ** 2, 2);
+        noise(o, sr, 0.2, 0.7, 0.22, (u) => 0.22 - 0.17 * u, (u) => Math.min(1, u * 6) * (1 - u) ** 1.5, r); // (the air rushing back, the fire's last hiss)
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** «Overgrown»: leaves rustling and wood groaning as it grows. */
     fxGrow(sr) { const o = buf(sr, 1.5), r = rng(37); noise(o, sr, 0, 1.5, 0.25, () => 0.5, (u) => Math.min(1, u * 4) * (1 - u) * (0.6 + 0.4 * Math.abs(Math.sin(u * 30))), r); glide(o, sr, 0.1, 1.3, 0.2, (u) => 80 + 70 * u + 8 * Math.sin(u * 60), swell(0.2, 0.3), 6); return finish(o, sr, { peak: 0.6 }); },
     /** «Wall Rise» (Breakthrough): stone grinding up, knocks as it settles. */
@@ -531,7 +541,7 @@ export const SPELL_SOUND = {
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
     Thunderwave: { own: ['thunder'] }, LightningStrike: { own: ['thunder'] }, Earthquake: { own: ['explosion'] }, EarthquakeMaxima: { own: ['explosion'] },
     Inferno: { own: ['inferno'] }, Fire: { own: ['inferno'] }, FireMaxima: { own: ['inferno'] },
-    Firefighting: { own: ['splash', 'waterRise'] }, FirefightingMaxima: { own: ['splash', 'waterRise'] },
+    Firefighting: { own: ['fxVacuum'] }, FirefightingMaxima: { own: ['fxVacuum'] }, // (no water: the air is taken from the fire)
     Waterball: { own: ['waterRise', 'splash'] }, WaterForming: { own: ['waterRise'] }, WaterVortex: { own: ['splash', 'waterRise'] },
     WaveAttack: { own: ['waterRise', 'splash'] }, WaveAttackMaxima: { own: ['waterRise', 'splash'] },
     Wind: { own: ['fxWind'] }, WindMaxima: { own: ['fxWind'] }, WindImpulse: { own: ['fxWind'] }, WindImpulseMaxima: { own: ['fxWind'] },

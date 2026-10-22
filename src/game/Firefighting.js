@@ -1,21 +1,26 @@
 /**
- * Firefighting.js — «Firefighting» and «Firefighting Maxima»: cold water from the hand puts fire out.
+ * Firefighting.js — «Firefighting» and «Firefighting Maxima»: the air is taken from the fire, and it goes out.
+ *
+ *   The idea    (the author) no water — where would it come from? The spell works the air: for a split
+ *                second there is no air where the hand points, and without air no fire can burn. Seen as
+ *                the air collapsing (pale haze rushing in, a shudder where it implodes, the smoke sinking),
+ *                heard as a suck of air and a hollow clap (SpellMusic fxVacuum). How far and how wide — as before.
  *
  *   Words        «Firefighting» as the Russian recognizer writes it: «файрфайтинг», «фаерфайтинг»,
  *                «файр файтинг», «фаер файтинг», «файрфайтин», «firefighting», «fire fighting»…
  *                (the fire word AND the fighting word: «Fire», «Fire Maxima», «Инферно» and «Let the
  *                Hellfire Come» never contain «файтинг»); with «Максима» — «Firefighting Maxima».
- *   Casting      a raised hand (or the wand), like «Вайнд»: the water comes from the hand / the wand's tip.
- *   Plain        5 mana: one burst — a cone of cold blue-white water and mist, up to 15 m (it stops at
+ *   Casting      a raised hand (or the wand), like «Вайнд»: the cone starts at the hand / the wand's tip.
+ *   Plain        5 mana: one collapse of the air — a cone up to 15 m (it stops at
  *                walls). Whatever fire it reaches goes out at once: campfires, burning trees, grass,
  *                houses, a burning living tree, ships' fires, an «Инферно» stream, a «Fire Maxima»
  *                flying or blooming. «Let the Hellfire Come» is stronger: a burst only knocks its blaze
  *                back (smaller, and it can't grow for a moment) and puts out the small fires it left on
  *                the ground (the ring's sections) — only «Firefighting Maxima» drowns the blaze.
- *   Maxima       20 mana: a hose of water for 5 s that follows the hand (aim it round), wider and up to
+ *   Maxima       20 mana: the air kept away for 5 s along a cone that follows the hand (aim it round), wider and up to
  *                25 m; it puts out everything it sweeps over, and held on the Hellfire (the blaze, the
- *                ring, what is left burning) it drowns it — the blaze shrinks while the water is on it
- *                and goes out. Steam hisses where the water meets fire. «Стоп» ends it early.
+ *                ring, what is left burning) it smothers it — the blaze shrinks while the cone is on it
+ *                and goes out; the smoke sinks where a fire died. «Стоп» ends it early.
  *   Mana         counted (+1, Maxima: the first time +3 more) only when it really put a fire out.
  *   Network      the spray is an ordinary spell ('spell' / 'stopSpells'): every computer runs it from the
  *                caster's live hand. Trees and blocks go out on every computer (Fire.js is the same
@@ -33,7 +38,7 @@ export const FIREFIGHT = {
     MAX_REACH: 25, // m: «Firefighting Maxima»…
     MAX_HALF: 0.4, // …wider
     BURST: 0.7, // s the plain burst is seen
-    AT: 0.12, // s after the words the plain burst reaches its fires (the water flies)
+    AT: 0.12, // s after the words the plain burst reaches its fires (the air collapses)
     MAX_LIFE: 5, // s «Firefighting Maxima» is held
     GROW: 0.35, // s the hose takes to reach its full length
     TICK: 0.15, // s between the hose's dousing of the world
@@ -41,43 +46,43 @@ export const FIREFIGHT = {
     MAX_PUSH: 3, // m/s: the hose on a creature
     PUSH_EVERY: 1, // s: a creature is shoved by one hose at most this often
     WET: 4, // s a player soaked by it is not burnt by the Hellfire
-    SPREAD: 1.73, // (the author: three times stronger) the water puts out fire on √3× the radius — three times the area
+    SPREAD: 1.73, // (the author: three times stronger) the airless cone puts out fire on √3× the radius — three times the area
 };
 
 /**
  * На КОГО и на ЧТО действует «Firefighting» (CLAUDE.md). `does`: what happens; «не действует» with why.
- * (Урона нет никому: это только вода.)
+ * (Урона нет никому: воздух лишь на миг исчезает и возвращается — огню этого хватает, живым нет.)
  */
 export const FIREFIGHT_TARGETS = {
     // ---- creatures
-    me: { does: 'облит водой: 4 с адский огонь меня не жжёт; не толкает (своя струя из руки — никогда)', why: 'вода гасит огонь на теле' },
-    players: { does: 'облиты: 4 с не горят в адском огне; не толкает и не ранит (решает компьютер самого игрока)', why: 'это вода, не удар' },
-    zombies: { does: 'лёгкий толчок (Maxima — сильнее, может пошатнуть), без урона', why: 'напор воды' },
-    castlePeople: { does: 'рыцари, король, волшебники, торговцы: лёгкий толчок, без урона', why: 'напор воды' },
-    animals: { does: 'лёгкий толчок, без урона', why: 'напор воды' },
-    sailors: { does: 'лёгкий толчок в координатах корабля (CreatureImpact), без урона; пожар на корабле гаснет', why: 'напор воды' },
-    spider: { does: 'не действует', why: 'огромная паучиха — вода просто стекает с неё' },
-    livingTrees: { does: 'горящее живое дерево гаснет (перестаёт гореть); не толкает', why: 'оно укоренено, а огонь на нём — вода гасит' },
-    bookBirds: { does: 'струя Maxima сбивает книгу-птицу (мокрые страницы); обычный всплеск — нет; книга защиты отскакивает', why: 'бумага тяжелеет от воды; защиту берёт только огонь и лёд' },
+    me: { does: 'воздух вокруг на миг исчез: 4 с адский огонь меня не жжёт; не толкает (своё заклинание — никогда)', why: 'без воздуха огонь на теле гаснет' },
+    players: { does: 'облиты: 4 с не горят в адском огне; не толкает и не ранит (решает компьютер самого игрока)', why: 'это воздух на миг, не удар' },
+    zombies: { does: 'лёгкий толчок (Maxima — сильнее, может пошатнуть), без урона', why: 'толчок схлопнувшегося воздуха' },
+    castlePeople: { does: 'рыцари, король, волшебники, торговцы: лёгкий толчок, без урона', why: 'толчок схлопнувшегося воздуха' },
+    animals: { does: 'лёгкий толчок, без урона', why: 'толчок схлопнувшегося воздуха' },
+    sailors: { does: 'лёгкий толчок в координатах корабля (CreatureImpact), без урона; пожар на корабле гаснет', why: 'толчок схлопнувшегося воздуха' },
+    spider: { does: 'не действует', why: 'огромную паучиху мгновение без воздуха не сдвигает' },
+    livingTrees: { does: 'горящее живое дерево гаснет (перестаёт гореть); не толкает', why: 'оно укоренено, а огонь на нём без воздуха гаснет' },
+    bookBirds: { does: 'Maxima сбивает книгу-птицу (ей не на что опереться страницами); обычное — нет; книга защиты отскакивает', why: 'без воздуха страницам-крыльям не на что опереться; защиту берёт только огонь и лёд' },
     servants: { does: 'как их вид (живое дерево, Брейнрот-зомби)', why: 'слуги — те же существа' },
-    iceCastle: { does: 'лёгкий толчок водой (снеговика сбивает, королеву и монстров только качает); не ранит', why: 'это вода — им, ледяным, она не вредит' },
-    blackship: { does: 'лёгкий толчок водой капитану и скелетам, без урона; огонь на чёрном корабле и так гаснет сам (проклятие)', why: 'это вода' },
-    dragon: { does: 'гасит огонь, которым дракон дышит (струя на пламени или на пасти): пламя обрывается, дракон 2 с не может дохнуть снова и злится на того, кто облил; сам дракон не ранен и не сдвинут', why: 'вода гасит огонь, а такого великана водой не сдвинуть' },
-    phoenix: { does: 'лёгкий толчок; пылающий феникс гаснет и бросает свою огненную атаку (улетает); без урона', why: 'вода против его огня (Phoenixes.watered)' },
-    owl: { does: 'не действует (не со свитка): сова увёртывается от воды и улетает', why: 'на умную сову действуют только заклинания со свитка (Owls.TARGETS)' },
+    iceCastle: { does: 'лёгкий толчок воздуха (снеговика сбивает, королеву и монстров только качает); не ранит', why: 'это воздух — им, ледяным, он не вредит' },
+    blackship: { does: 'лёгкий толчок воздуха капитану и скелетам, без урона; огонь на чёрном корабле и так гаснет сам (проклятие)', why: 'это воздух, не удар' },
+    dragon: { does: 'гасит огонь, которым дракон дышит (конус на пламени или на пасти): пламя обрывается, дракон 2 с не может дохнуть снова и злится на того, кто колдовал; сам дракон не ранен и не сдвинут', why: 'без воздуха огонь гаснет, а такого великана не сдвинуть' },
+    phoenix: { does: 'лёгкий толчок; пылающий феникс гаснет и бросает свою огненную атаку (улетает); без урона', why: 'без воздуха его огонь гаснет (Phoenixes.watered)' },
+    owl: { does: 'не действует (не со свитка): сова чует, как уходит воздух, увёртывается и улетает', why: 'на умную сову действуют только заклинания со свитка (Owls.TARGETS)' },
     // ---- things and the world
-    campfires: { does: 'костёр («Fire») гаснет совсем', why: 'вода' },
-    trees: { does: 'горящие деревья гаснут (что сгорело — сгорело)', why: 'вода' },
-    blocks: { does: 'горящая трава, листья, дерево, дома и стены замков гаснут', why: 'вода' },
-    inferno: { does: 'поток «Инферно», на который попала вода, гаснет сразу (у любого волшебника)', why: 'вода гасит пламя' },
-    fireMaxima: { does: 'огненная спираль «Fire Maxima» гаснет в полёте и не распускается; цветок гаснет', why: 'вода' },
-    hellfire: { does: 'обычный всплеск только сбивает его (меньше и не растёт пару секунд); Maxima, пока на нём, заливает: он уменьшается и гаснет (и кольцо тоже)', why: 'адский огонь сильнее обычной воды' },
-    hellfireLeft: { does: 'брошенные огни адского огня: маленькие (части кольца) гаснут от всплеска, большой — уменьшается; Maxima гасит все', why: 'вода' },
-    carts: { does: 'горящая повозка путников гаснет (Carriages.douse); на людей и коней на ней — как на всех', why: 'вода гасит пламя на досках' },
-    ships: { does: 'пожар на палубе и на парусах гаснет; корпус, паруса и палуба не ломаются', why: 'вода' },
+    campfires: { does: 'костёр («Fire») гаснет совсем', why: 'без воздуха огонь не горит' },
+    trees: { does: 'горящие деревья гаснут (что сгорело — сгорело)', why: 'без воздуха огонь не горит' },
+    blocks: { does: 'горящая трава, листья, дерево, дома и стены замков гаснут', why: 'без воздуха огонь не горит' },
+    inferno: { does: 'поток «Инферно», попавший в конус, гаснет сразу (у любого волшебника)', why: 'без воздуха пламя гаснет' },
+    fireMaxima: { does: 'огненная спираль «Fire Maxima» гаснет в полёте и не распускается; цветок гаснет', why: 'без воздуха огонь не горит' },
+    hellfire: { does: 'обычный всплеск только сбивает его (меньше и не растёт пару секунд); Maxima, пока на нём, заливает: он уменьшается и гаснет (и кольцо тоже)', why: 'адский огонь сильнее: мгновения без воздуха ему мало' },
+    hellfireLeft: { does: 'брошенные огни адского огня: маленькие (части кольца) гаснут от всплеска, большой — уменьшается; Maxima гасит все', why: 'без воздуха огонь не горит' },
+    carts: { does: 'горящая повозка путников гаснет (Carriages.douse); на людей и коней на ней — как на всех', why: 'без воздуха пламя на досках гаснет' },
+    ships: { does: 'пожар на палубе и на парусах гаснет; корпус, паруса и палуба не ломаются', why: 'без воздуха огонь не горит' },
     items: { does: 'вещи на земле и в руках не двигаются и не портятся', why: 'струя мягкая' },
-    water: { does: 'не действует', why: 'вода в воду' },
-    ground: { does: 'не действует (земля не мокнет и не размывается)', why: 'воды мало' },
+    water: { does: 'не действует', why: 'в воде и так ничего не горит' },
+    ground: { does: 'не действует (земля не мокнет и не размывается)', why: 'исчезает только воздух' },
     lava: { does: 'лавы в игре нет', why: 'появится — дописать сюда' },
 };
 
@@ -137,14 +142,14 @@ export class Firefighting {
         const hit = (c, r) => inCone(sp.o, sp.d, reach + 1, half, c, r);
         let did = false;
         if (!max) {
-            // the burst: everything once, when the water gets there
+            // the burst: everything once, when the air collapses there
             if (sp.done || sp.t < FIREFIGHT.AT) return false;
             sp.done = true;
             if (this._douse(sp, reach, half, hit)) did = true;
             if (g.hellfire?.douse?.(hit, 0)) { did = true; this._steamOn(sp, reach, hit); }
             return did;
         }
-        // the hose: the Hellfire every frame (it drowns while the water is on it), the rest every tick
+        // the hose: the Hellfire every frame (it smothers while the cone is on it), the rest every tick
         if (g.hellfire?.douse?.(hit, dt)) { did = true; if (Math.random() < dt * 6) this._steamOn(sp, reach, hit); }
         sp.tickT = (sp.tickT ?? 0) - dt;
         if (sp.tickT <= 0) {
@@ -154,14 +159,14 @@ export class Firefighting {
         return did;
     }
 
-    /** How far the water goes: `want` m, or to the first wall / the ground (water flies on through water). */
+    /** How far the cone goes: `want` m, or to the first wall / the ground (on through water). */
     _reach(o, d, want) {
         const g = this.game;
         for (let k = 0.6; k < want; k += 0.5) {
             const x = o.x + d.x * k, y = o.y + d.y * k, z = o.z + d.z * k;
             if (g._flameBlock?.(x, y, z) === 'solid') return k + 0.5; // (it splashes onto what burns there)
             // (the floor under this point — in a cave, a tunnel, a house it is not the hill's top over them:
-            // the water stopped at the hand there and never reached a campfire)
+            // the cone stopped at the hand there and never reached a campfire)
             const gy = g.collision?.groundAt ? g.collision.groundAt(x, z, y) : g.collision?.groundY ? g.collision.groundY(x, z) : -Infinity;
             if (y < gy - 0.3) return k;
         }
@@ -199,7 +204,7 @@ export class Firefighting {
                 did = true;
             }
         }
-        // «Инферно» streams (anyone's): water on the flame puts it out
+        // «Инферно» streams (anyone's): no air round the flame puts it out
         for (const s of g.spells?.spells || []) {
             if (s.kind !== 'Inferno' || !s.flame || !(s.life > 0) || !(s.flame.len > 0)) continue;
             const f = s.flame;
@@ -210,7 +215,7 @@ export class Firefighting {
             did = true;
             this._steam(_b, 1.2);
             this._note({ ev: 'inferno', by: s.by });
-            if (s.by === g.localId || s.by === 'local') g.hud?.setVoice?.('💨 Ваше пламя «Инферно» залили водой', true);
+            if (s.by === g.localId || s.by === 'local') g.hud?.setVoice?.('💨 Ваше пламя «Инферно» задохнулось — у него забрали воздух', true);
         }
         // «Fire Maxima» (every computer keeps its own): in flight it goes out, the flower too
         const fx = g.vortex?.effects;
@@ -243,7 +248,7 @@ export class Firefighting {
         this._creatures(sp, hit);
         this._me(sp, hit);
         if (sp.max && !sp.birds && auth) { sp.birds = true; g.books?.hitRay?.(o, d, reach, 0.9, 'water'); } // (the hose: wet pages, the bird falls)
-        if (did) { this._note({ ev: 'out', max: !!sp.max, by: sp.by }); g.sound?.playSplash?.(); }
+        if (did) this._note({ ev: 'out', max: !!sp.max, by: sp.by });
         return did;
     }
 
@@ -277,45 +282,73 @@ export class Firefighting {
         if (sp.by === g.localId || sp.by === 'local' || !c || c.dead) return;
         const me = c.center ? c.center(_c) : _c.copy(g.character.group.position);
         if (!hit(me, 0.45)) return;
-        if (!this.wetMe()) g.hud?.setVoice?.('💧 Вас окатило холодной водой — адский огонь пока не жжёт', true);
+        if (!this.wetMe()) g.hud?.setVoice?.('💨 Воздух вокруг вас на миг исчез — адский огонь пока не жжёт', true);
         this.wetUntil = performance.now() + FIREFIGHT.WET * 1000;
     }
 
     // ============================================================= drawing
-    /** The spray: cold blue-white water and mist flying out of the hand into the cone. */
+    /**
+     * No water (the author: «where would the water come from?»): the spell takes the air away — for a
+     * split second there is none in the cone, and without air no fire can burn. Seen as the air itself
+     * collapsing: rings of pale haze along the cone rushing in to its axis, a shudder at its far end where
+     * the air implodes, the flames dying in a puff of smoke that sinks. Heard: a suck of air and a hollow clap.
+     */
     _draw(sp, dt, reach, half) {
         const fx = this.game.fx;
-        if (!fx?.sparks) return;
+        if (!fx?.smoke) return;
         const o = sp.o, d = sp.d;
         const side = _a.set(-d.z, 0, d.x);
         if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
         side.normalize();
         const up = _b.crossVectors(side, d).normalize();
-        const live = sp.max || sp.t < 0.35; // (the burst: a short gush)
-        const rate = sp.max ? 260 : 420;
-        sp.acc = (sp.acc || 0) + (live ? rate * dt : 0);
-        let n = Math.min(80, Math.floor(sp.acc));
-        sp.acc -= n;
-        const speed = Math.max(8, reach / 0.55);
+        const live = sp.max || sp.t < 0.2; // (the burst: one collapse)
         const tan = Math.tan(half);
-        while (n-- > 0) {
-            const a = Math.random() * Math.PI * 2, s = Math.sqrt(Math.random()) * tan;
-            const vx = d.x + (side.x * Math.cos(a) + up.x * Math.sin(a)) * s;
-            const vy = d.y + (side.y * Math.cos(a) + up.y * Math.sin(a)) * s;
-            const vz = d.z + (side.z * Math.cos(a) + up.z * Math.sin(a)) * s;
-            const k = speed * (0.75 + Math.random() * 0.35);
-            const mist = Math.random() < 0.3;
-            const col = mist ? 0xf4fbff : COLORS[(Math.random() * COLORS.length) | 0];
-            fx.sparks.spawn(o.x + d.x * 0.3, o.y + d.y * 0.3, o.z + d.z * 0.3, vx * k, vy * k + (mist ? 0.5 : 0), vz * k, col,
-                mist ? 0.22 + Math.random() * 0.2 : 0.07 + Math.random() * 0.07, (reach / speed) * (0.8 + Math.random() * 0.3),
-                { gravity: mist ? 0 : -5, shrink: mist ? -0.4 : 0.2, spin: 3 });
+        // rings of air rushing in to the cone's axis (the hose: again and again along it)
+        sp.acc = (sp.acc || 0) + (live ? (sp.max ? 18 : 80) * dt : 0);
+        let rings = Math.min(12, Math.floor(sp.acc));
+        sp.acc -= rings;
+        while (rings-- > 0) {
+            const k = 0.8 + Math.random() * reach;
+            const R = (0.5 + k * tan) * 1.15;
+            const cx = o.x + d.x * k, cy = o.y + d.y * k, cz = o.z + d.z * k;
+            const n = 12, a0 = Math.random() * 6.28, T = 0.22 + Math.random() * 0.08;
+            for (let i = 0; i < n; i++) {
+                const a = a0 + (i / n) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+                const rx = (side.x * c + up.x * sn) * R, ry = (side.y * c + up.y * sn) * R, rz = (side.z * c + up.z * sn) * R;
+                fx.smoke.spawn(cx + rx, cy + ry, cz + rz, -rx / T, -ry / T, -rz / T, HAZE[(Math.random() * HAZE.length) | 0],
+                    0.16 + Math.random() * 0.12, T, { gravity: 0, shrink: 0.5, spin: 1 });
+            }
         }
-        // the sound: a gush, and the hose's rush every second
+        // the far end: the air implodes there (a shudder of haze into one point) — once for the burst
+        if (!sp.max && !sp.imploded && sp.t >= FIREFIGHT.AT * 0.5) { sp.imploded = true; this._implode(_c.copy(o).addScaledVector(d, Math.max(1, reach - 1)), 1.6); }
+        if (sp.max) {
+            sp.impT = (sp.impT ?? 0) - dt;
+            if (sp.impT <= 0) { sp.impT = 0.25; this._implode(_c.copy(o).addScaledVector(d, Math.max(1, reach - 1)), 1.2); }
+        }
+        // the sound: a suck of air and a hollow clap (the hose: again as it goes on)
         sp.soundT = (sp.soundT ?? 0) - dt;
-        if (sp.soundT <= 0 && live) { sp.soundT = sp.max ? 1 : 9; this.game.sound?.playWaterRise?.(); }
+        if (sp.soundT <= 0 && live) {
+            sp.soundT = sp.max ? 0.7 : 9;
+            const g = this.game;
+            g.sound?.playSpellFx?.('fxVacuum', _c.copy(o).addScaledVector(d, Math.min(4, reach * 0.4)), sp.max ? 0.8 : 1, sp.max ? 0.9 + Math.random() * 0.2 : 1);
+        }
     }
 
-    /** Steam where the water meets the Hellfire (a few points along the cone that reach a fire). */
+    /** The air rushing in from every side to one point (r: how far round it). */
+    _implode(p, r) {
+        const fx = this.game.fx;
+        if (!fx?.smoke) return;
+        const T = 0.24;
+        for (let i = 0; i < 44; i++) {
+            const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, q = Math.sqrt(1 - u * u);
+            const rr = r * (0.7 + Math.random() * 0.4);
+            const x = Math.cos(a) * q * rr, y = u * rr * 0.7, z = Math.sin(a) * q * rr;
+            fx.smoke.spawn(p.x + x, p.y + y, p.z + z, -x / T, -y / T, -z / T, HAZE[(Math.random() * HAZE.length) | 0],
+                0.2 + Math.random() * 0.16, T, { gravity: 0, shrink: 0.6, spin: 2 });
+        }
+    }
+
+    /** Where the Hellfire was smothered (a few points along the cone that reach a fire). */
     _steamOn(sp, reach, hit) {
         const H = this.game.hellfire;
         const fires = [];
@@ -323,19 +356,23 @@ export class Firefighting {
         for (const f of H?.remote?.values() || []) fires.push(f.c);
         for (const f of H?.left || []) fires.push(f.c);
         for (const c of fires) if (hit(c, 3)) this._steam(c, 2);
-        this.game.sound?.playSplash?.();
     }
 
-    /** A puff of white steam at p (size k). */
+    /** A fire smothered at p (size k): the flames die in a last flicker, the smoke sinks and spreads low (no air to lift it). */
     _steam(p, k = 1) {
         const fx = this.game.fx;
-        if (!fx?.sparks) return;
-        for (let i = 0; i < 14 * k; i++) {
-            fx.sparks.spawn(p.x + (Math.random() - 0.5) * k, p.y + Math.random() * k * 0.6, p.z + (Math.random() - 0.5) * k,
-                (Math.random() - 0.5) * 1.2, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 1.2,
-                Math.random() < 0.5 ? 0xe8eef2 : 0xcfd8de, 0.35 + Math.random() * 0.4, 1 + Math.random() * 0.8, { gravity: 1, shrink: -0.5, spin: 2 });
+        if (!fx?.smoke) return;
+        for (let i = 0; i < 18 * k; i++) {
+            const a = Math.random() * Math.PI * 2, v = 0.6 + Math.random() * 1.4;
+            const gr = 55 + ((Math.random() * 45) | 0);
+            fx.smoke.spawn(p.x + (Math.random() - 0.5) * k * 0.6, p.y + 0.2 + Math.random() * k * 0.5, p.z + (Math.random() - 0.5) * k * 0.6,
+                Math.cos(a) * v, -0.2 - Math.random() * 0.3, Math.sin(a) * v, (gr << 16) | (gr << 8) | gr, 0.35 + Math.random() * 0.35 * k, 1.8 + Math.random() * 1, { gravity: -0.3, shrink: -0.35, spin: 1 });
+        }
+        for (let i = 0; i < 5 * k; i++) {
+            fx.glow?.spawn(p.x + (Math.random() - 0.5) * k * 0.5, p.y + 0.3 + Math.random() * 0.4, p.z + (Math.random() - 0.5) * k * 0.5,
+                0, 0.3, 0, Math.random() < 0.5 ? 0xff7a20 : 0xffb040, 0.12 + Math.random() * 0.1, 0.25, { shrink: 0.8, spin: 2 });
         }
     }
 }
 
-const COLORS = [0xbfe6ff, 0x9fd4ff, 0xdff4ff, 0x7cc4ff, 0xe8f7ff];
+const HAZE = [0xe6edf3, 0xd4dde5, 0xf2f6f9, 0xc3ccd5]; // (the air seen as it collapses: a pale shimmering haze)

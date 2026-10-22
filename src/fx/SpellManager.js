@@ -589,7 +589,7 @@ export class SpellManager {
 
     // --------------------------------------------------------- Firefighting
     /**
-     * «Firefighting»: a burst of cold water from the hand that puts fire out; «… Maxima»: a hose held
+     * «Firefighting»: the air taken away in a cone from the hand — the fire there goes out; «… Maxima»: held
      * for 5 s that follows the caster's live hand («стоп» ends it). What it does: Firefighting.js.
      */
     castFirefighting(max, origin, direction, casterId, handSide = 'right') {

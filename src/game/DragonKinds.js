@@ -145,7 +145,7 @@ export const ON_DRAGON = {
     Lock: { dmg: 0, why: '«Lock» запирает только двери — не действует' },
     WaterVortex: { dmg: 0, why: 'водяной шар не вмещает его: вода только окатывает — дракон слишком большой' },
     WaveAttack: { dmg: 0, why: 'волна только окатывает — дракон слишком тяжёлый' },
-    Firefighting: { dmg: 0, why: '«Firefighting»: вода гасит его пламя (Firefighting.js), самого дракона не ранит и не сдвигает' },
+    Firefighting: { dmg: 0, why: '«Firefighting»: без воздуха его пламя гаснет (Firefighting.js), самого дракона не ранит и не сдвигает' },
     FirefightingMaxima: { dmg: 0, why: '«Firefighting Максима»: тоже только гасит пламя' },
     Earthquake: { dmg: 10, why: 'земля трясётся — он спотыкается (−10), но не падает' },
     WindImpulse: { dmg: 0, why: '«Wind Impulse»: волна воздуха — дракон только качнётся' },

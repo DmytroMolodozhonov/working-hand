@@ -104,7 +104,7 @@ export const TARGETS = {
     WaterVortex: { does: 'dodge', why: '«Water Vortex», «Bubble»: не действует, улетает' },
     WaterStorm: { does: 'dodge', why: 'водяная буря, волна, водяной шар: не действует, улетает' },
     CircleAttack: { does: 'dodge', why: '«Circle Attack» (и Максима) без свитка: не действует, улетает' },
-    Firefighting: { does: 'dodge', why: '«Firefighting»: вода — не действует, улетает' },
+    Firefighting: { does: 'dodge', why: '«Firefighting»: чует, как уходит воздух, — не действует, улетает' },
     Liquidation: { does: 'dodge', why: '«Liquidation» (без свитка): не действует, улетает' },
     Brainrot: { does: 'none', why: '«Брейнрот»: сова никому не подчиняется — она слишком умна' },
     Drawdown: { does: 'none', why: '«Drawdown»: в воздухе не касается; на земле — вспархивает' },
