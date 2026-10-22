@@ -57,7 +57,7 @@ test('beds: the recipe — 4 logs and 3 wool lying together', () => {
     assert.match(checkRecipe([logs(3), wool('a')]).message, /1 бревно и 2 клубка шерсти/);
     const nothing = checkRecipe([]);
     assert.equal(nothing.ok, false);
-    assert.match(nothing.message, /нет материалов/);
+    assert.match(nothing.message, /нет материалов/i);
     // using up: whole piles first; a bigger pile is used partly, the rest stays
     const plan = planConsumption([logs(3, 'p'), logs(4, 'q'), wool('a'), wool('b'), wool('c'), wool('d')]);
     assert.deepEqual(plan.filter((s) => s.kind === 'logs'), [{ uid: 'q', kind: 'logs', take: 4, left: 0 }]);

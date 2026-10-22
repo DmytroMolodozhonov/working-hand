@@ -45,7 +45,8 @@ import { newUid } from './ItemTypes.js';
 import { PVP } from './Combat.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
-import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
+import { stockOf, stockTake, cleanClaim } from './Stock.js';
+import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, countMaterials, BED_RECIPE, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 
@@ -213,25 +214,34 @@ export class Beds {
         const g = this.game;
         const at = this._aimPoint();
         if (!at) return '🛏️ Покажите рукой (или палочкой) на брёвна и шерсть, лежащие на земле';
-        const chk = checkRecipe(this._materialsAt(at));
+        const st = stockOf(g); // (what the hero carries counts too: nothing has to be thrown out)
+        const chk = checkRecipe(this._materialsAt(at).concat(st.logs ? [{ kind: 'logs', count: st.logs }] : [], st.wool ? [{ kind: 'wool', count: st.wool }] : []));
         if (!chk.ok && g.config?.mode !== 'creative') return chk.message; // (creative: no materials needed)
         const yaw = g.character.group.rotation.y;
         if (!this.auth) {
-            g.sync?.bed?.({ a: 'create', p: [r2(at.x), r2(at.y), r2(at.z)], ry: r3(yaw) });
+            g.sync?.bed?.({ a: 'create', p: [r2(at.x), r2(at.y), r2(at.z)], ry: r3(yaw), inv: { logs: st.logs, wool: st.wool } });
             return true;
         }
-        const res = this._hostCreate(at, yaw);
+        const res = this._hostCreate(at, yaw, st, g.localId);
         if (res !== true) return res;
         g.hud.setVoice('🛏️ Кровать готова! Запрыгните на неё — и герой ляжет. «Change a color …» — перекрасить', true);
         return true;
     }
 
     /** (host) Use up the things around `at` and put a white bed there. */
-    _hostCreate(at, yaw) {
+    _hostCreate(at, yaw, inv = null, by = null) {
         const g = this.game;
         const near = this._materialsAt(at);
-        const chk = checkRecipe(near);
-        const plan = chk.ok ? planConsumption(near) : null;
+        // (the ground first; what is short comes from what the hero carries — Stock.js)
+        const have = countMaterials(near), carried = cleanClaim(inv);
+        const fromMe = { logs: Math.max(0, BED_RECIPE.logs - have.logs), wool: Math.max(0, BED_RECIPE.wool - have.wool) };
+        const enough = carried.logs >= fromMe.logs && carried.wool >= fromMe.wool;
+        const chk = checkRecipe(near.concat(fromMe.logs ? [{ kind: 'logs', count: carried.logs }] : [], fromMe.wool ? [{ kind: 'wool', count: carried.wool }] : []));
+        const plan = chk.ok && enough ? planConsumption(near, { logs: Math.min(BED_RECIPE.logs, have.logs), wool: Math.min(BED_RECIPE.wool, have.wool) }) : null;
+        if (plan && (fromMe.logs || fromMe.wool)) {
+            if (by === g.localId) stockTake(g, fromMe);
+            else g.sync?.bed?.({ a: 'spend', ...fromMe }, by);
+        }
         if (!plan) {
             // creative: a bed out of nothing, where the hand points
             if (g.config?.mode !== 'creative') return chk.ok ? '🛏️ Не хватает материалов' : chk.message;
@@ -625,11 +635,12 @@ export class Beds {
             case 'set': if (!host && m.d) { const b = this._place(m.d); if (m.poof) this._poof(b); } break;
             case 'create': {
                 if (!host || !Array.isArray(m.p)) break;
-                const res = this._hostCreate(new THREE.Vector3(m.p[0], m.p[1], m.p[2]), m.ry || 0);
+                const res = this._hostCreate(new THREE.Vector3(m.p[0], m.p[1], m.p[2]), m.ry || 0, m.inv, m.from);
                 g.sync?.bed?.({ a: 'msg', text: res === true ? '🛏️ Кровать готова! Запрыгните на неё — и герой ляжет' : res }, m.from);
                 break;
             }
             case 'color': if (host && BED_COLORS[m.color]) this.setColor(m.id, m.color); break;
+            case 'spend': stockTake(g, cleanClaim(m)); break; // (the host used what I carry)
             case 'msg': if (m.text) g.hud.setVoice(m.text, true); break;
             case 'lie': if (m.from) { if (m.bed) this.others.set(m.from, { bed: m.bed, ready: !!m.ready }); else this.others.delete(m.from); } break;
             case 'sleep': if (!host && m.dayStart) this._beginSleep(m.dayStart); break;

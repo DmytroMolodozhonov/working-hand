@@ -187,7 +187,7 @@ export function matchSpell(text) {
     // Building (before the short tokens of other spells)
     if (has('stand', 'стэнд', 'стенд', 'стоп', 'stop')) return 'Stand'; // («стоп» also stops every spell still going)
     // («Assemble» too: «Gather» is not always heard right)
-    if (has('gather', 'гезер', 'гэзер', 'гатер', 'газер', 'гаазер', 'собери', 'собрать', 'assembl', 'ассембл', 'асембл', 'эссембл', 'эсембл', 'ассэмбл', 'асэмбл')) return 'Gather';
+    if (has('gather', 'гезер', 'гэзер', 'гэзэр', 'гезэр', 'гэзар', 'гезар', 'гэдер', 'гедер', 'гадер', 'гатер', 'газер', 'гаазер', 'гэзе ', 'гезе ', 'собери', 'собрать', 'assembl', 'ассембл', 'асембл', 'эссембл', 'эсембл', 'ассэмбл', 'асэмбл')) return 'Gather';
     // (a Russian noun alone is everyday talk — «где стена замка», «покажи дорогу», «на крыше» — it
     // builds only with «создай / построй / крейт…» in the same phrase)
     const make = () => has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'постро', 'build', 'билд');

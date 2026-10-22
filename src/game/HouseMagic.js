@@ -1,9 +1,9 @@
 /**
  * HouseMagic.js — «Create a House» and «Improve a House»: a house made by magic.
  *
- *   «Create a House»   Throw at least 3 wool and 10 sand (a heap of sand flies out of the hand like
- *                      the logs: hold the sand of a slot in the right hand and throw; «Gather» takes
- *                      sand from a beach or a river bank) so that they lie together, stand where some
+ *   «Create a House»   Have at least 3 wool and 10 sand: in the slots / the hands (nothing has to be
+ *                      thrown out — Stock.js) or lying together on the ground («Gather» takes
+ *                      sand from a beach or a river bank), stand where some
  *                      trees grow round (at least 3 within ~26 m), take the wand, point it at the heap
  *                      and say the words. −20 mana, then 0.5 a second for the 10 seconds the magic
  *                      lasts: flashes of light, the resources and the trees whirl into the place, dust —
@@ -47,6 +47,7 @@
  */
 
 import * as THREE from 'three';
+import { stockOf, stockTake, cleanClaim } from './Stock.js';
 import { BLOCK, TREE_KINDS, isLeaves, isCastleBlock, isSolid } from '../world/Terrain.js';
 import { housePlan, faceTowards, HOUSE_LEVELS, MAX_LEVEL, MAGIC_TIME, TREE_RADIUS, HOUSE_REACH } from '../world/MagicHouse.js';
 import { Chest } from '../entities/Chest.js';
@@ -179,14 +180,14 @@ export class HouseMagic {
         if (now - this._lastCast < 1500) return null;
         const say = (t) => { if (isFinal && t) g.hud.setVoice(t, true); return null; };
         if (this.magic) return say('🏠 Магия дома уже идёт — держите палочку');
-        if (!g.items?.heldOf?.('wand') && !this.testAim && !this.free) return say('🪄 Возьмите палочку в руку и направьте её на шерсть и песок, лежащие на земле');
+        if (!g.items?.heldOf?.('wand') && !this.testAim && !this.free) return say('🪄 Возьмите палочку в руку и направьте её на землю, где поставить дом (шерсть и песок — в ячейках или рядом на земле)');
         const at = this._aimPoint();
-        if (!at) return say(this.free ? '🏠 Покажите рукой на землю, где поставить дом' : '🏠 Направьте палочку на брошенные шерсть и песок');
+        if (!at) return say(this.free ? '🏠 Покажите рукой на землю, где поставить дом' : '🏠 Направьте палочку на землю, где поставить дом');
         const me = g.character.group.position;
         let level = 1, hid = null;
         if (name === 'ImproveHouse') {
             const rec = this.houseNear(at, HOUSE_MAGIC.NEAR_HOUSE);
-            if (!rec) return say('🏠 Рядом нет дома, созданного магией. Бросьте ресурсы рядом с ним и направьте на них палочку');
+            if (!rec) return say('🏠 Рядом нет дома, созданного магией. Держите ресурсы в ячейках (или положите рядом) и направьте палочку на дом');
             if (rec.level >= MAX_LEVEL) return say('🏰 Этот дом уже самого высокого, пятого уровня');
             const p = this.plan(rec);
             if (me.x > p.rect.x0 && me.x < p.rect.x1 && me.z > p.rect.z0 && me.z < p.rect.z1) return say('🏠 Выйдите из дома — улучшают его снаружи');
@@ -194,7 +195,8 @@ export class HouseMagic {
         }
         const cost = HouseMagic.cost(level);
         if (g.combat?.enabled && g.combat.fatigue < cost.mana) return say(`😮‍💨 Не хватает маны: нужно ${cost.mana}, есть ${Math.floor(g.combat.fatigue)}`);
-        const ask = { kind: name, at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.z)], hid, level };
+        const st = stockOf(g); // (what the hero carries in the slots and the hands counts too: nothing has to be thrown out)
+        const ask = { kind: name, at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.z)], hid, level, inv: { wool: st.wool, sand: st.sand } };
         if (!this.auth) {
             g.sync?.net?.send({ t: this.netType, a: 'ask', ...ask });
             say('🏠 …');
@@ -375,10 +377,13 @@ export class HouseMagic {
         }
         const need = HOUSE_LEVELS[level];
         const pile = this._pileAt(at);
-        const has = countPile(pile.map((L) => L.item));
+        const onGround = countPile(pile.map((L) => L.item));
+        // (the wool and sand carried in the slots / the hands add to the heap: the ground is used first)
+        const carried = cleanClaim(ask.inv);
+        const has = { wool: onGround.wool + carried.wool, sand: onGround.sand + carried.sand };
         const trees = this._treesNear(rec.x, rec.z);
         const miss = missingFor(level, has, trees.length);
-        if (miss && !creative) return `🏠 Не хватает: ${miss.join(', ')}. ${level === 1 ? 'Нужно: 3 шерсти и 10 песка рядом друг с другом, 3 дерева неподалёку' : `Для уровня ${level}: шерсти ${need.wool}, песка ${need.sand}, деревьев рядом ${need.trees}`}`;
+        if (miss && !creative) return `🏠 Не хватает: ${miss.join(', ')}. ${level === 1 ? 'Нужно: 3 шерсти и 10 песка (в ячейках, в руках или рядом на земле) и 3 дерева неподалёку' : `Для уровня ${level}: шерсти ${need.wool}, песка ${need.sand}, деревьев рядом ${need.trees}`}`;
         // the wood the walls are made of: the trees it takes, the most of a kind first
         const take = trees.slice(0, need.trees);
         const count = new Map();
@@ -388,7 +393,13 @@ export class HouseMagic {
         const why = this._siteProblem(next, level);
         if (why) return why;
         // the heap is used up (what is more than needed stays where it lay)
-        const piles = this._useUp(pile, creative ? Math.min(need.wool, has.wool) : need.wool, creative ? Math.min(need.sand, has.sand) : need.sand);
+        const useWool = creative ? Math.min(need.wool, has.wool) : need.wool, useSand = creative ? Math.min(need.sand, has.sand) : need.sand;
+        const piles = this._useUp(pile, Math.min(useWool, onGround.wool), Math.min(useSand, onGround.sand));
+        const fromMe = { wool: Math.max(0, useWool - onGround.wool), sand: Math.max(0, useSand - onGround.sand) };
+        if (fromMe.wool || fromMe.sand) {
+            if (by === g.localId) stockTake(g, fromMe);
+            else g.sync?.net?.send({ t: this.netType, a: 'spend', to: by, ...fromMe });
+        }
         // the chests' things floating over them go back in (they move with the house)
         if (this.list.has(rec.id)) for (const c of this._chestsOf(rec.id)) this._sweep(c, true);
         const old = this.list.has(rec.id) ? this.plan(rec) : null;
@@ -1029,10 +1040,11 @@ export class HouseMagic {
         switch (m.a) {
             case 'ask': {
                 if (!isHost) break;
-                const res = this._hostStart({ kind: m.kind === 'ImproveHouse' ? 'ImproveHouse' : 'CreateHouse', at: m.at || [0, 0, 0], c: m.c, hid: m.hid }, m.from);
+                const res = this._hostStart({ kind: m.kind === 'ImproveHouse' ? 'ImproveHouse' : 'CreateHouse', at: m.at || [0, 0, 0], c: m.c, hid: m.hid, inv: m.inv }, m.from);
                 if (res !== true) g.sync?.net?.send({ t: this.netType, a: 'no', to: m.from, msg: String(res).slice(0, 200) });
                 break;
             }
+            case 'spend': if (m.to === g.localId) stockTake(g, cleanClaim(m)); break; // (the host used what I carry)
             case 'no': if (m.to === g.localId) g.hud?.setVoice?.(m.msg, true); break;
             case 'go': {
                 if (isHost) break;

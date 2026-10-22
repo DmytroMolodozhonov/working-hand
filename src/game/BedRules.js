@@ -87,8 +87,8 @@ export function checkRecipe(items, recipe = BED_RECIPE) {
     if (wool < recipe.wool) { const n = recipe.wool - wool; lacks.push(`${n} ${plural(n, 'клубок', 'клубка', 'клубков')} шерсти`); }
     if (!lacks.length) return { ok: true, logs, wool, message: null };
     let message;
-    if (!logs && !wool) message = `🛏️ Здесь нет материалов: бросьте рядом ${recipe.logs} бревна (дерево из руки) и ${recipe.wool} клубка шерсти (с баранов) и покажите на них`;
-    else message = `🛏️ Нужно ещё: ${lacks.join(' и ')} (лежит брёвен ${logs} из ${recipe.logs}, шерсти ${wool} из ${recipe.wool})`;
+    if (!logs && !wool) message = `🛏️ Нет материалов: нужно ${recipe.logs} бревна (дерево) и ${recipe.wool} клубка шерсти (с баранов) — держите их в ячейках или положите рядом на землю`;
+    else message = `🛏️ Нужно ещё: ${lacks.join(' и ')} (есть брёвен ${logs} из ${recipe.logs}, шерсти ${wool} из ${recipe.wool})`;
     return { ok: false, logs, wool, message };
 }
 

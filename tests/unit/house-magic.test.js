@@ -177,3 +177,33 @@ test('created → saved → loaded: the house stands block for block as it was s
     assert.equal(g2.chests.length, 1);
     assert.ok(g2.doors.list.has(rec.id + 'd'));
 });
+
+test('the wool and sand in the pockets are enough: nothing is thrown out, they are used up from the slots', async () => {
+    const { stockOf, stockTake } = await import('../../src/game/Stock.js');
+    const { g, G, drop } = world();
+    g.inventory = { slots: [{ kind: 'wool', count: 5 }, { kind: 'res', block: BLOCK.SAND, count: 14 }, null, null, null], _render() {} };
+    g.items.held = { right: null, left: null };
+    const st = stockOf(g);
+    assert.deepEqual(st, { wool: 5, sand: 14, logs: 0 });
+    const a = { ...ask('CreateHouse', [0, G, 0]), inv: { wool: st.wool, sand: st.sand } };
+    assert.equal(g.houseMagic._hostStart(a, 'local'), true);
+    assert.equal(g.inventory.slots[0].count, 2, '3 wool used up');
+    assert.equal(g.inventory.slots[1].count, 4, '10 sand used up');
+    // not enough in total (pockets + the ground): a hint with what is missing
+    const w2 = world();
+    w2.g.inventory = { slots: [{ kind: 'wool', count: 1 }, null, null, null, null], _render() {} };
+    w2.g.items.held = { right: null, left: null };
+    w2.drop('wool', 1, 0, 0);
+    const r = w2.g.houseMagic._hostStart({ ...ask('CreateHouse', [0, w2.G, 0]), inv: { wool: 1, sand: 0 } }, 'local');
+    assert.match(r, /Не хватает: шерсти 1, песка 10/);
+    assert.equal(w2.g.inventory.slots[0].count, 1, 'a refused spell takes nothing');
+    // the ground and the pockets together
+    const w3 = world();
+    w3.g.inventory = { slots: [{ kind: 'wool', count: 1 }, { kind: 'res', block: BLOCK.SAND, count: 4 }, null, null, null], _render() {} };
+    w3.g.items.held = { right: null, left: null };
+    w3.drop('wool', 2, 0, 0); w3.drop('blocks', 6, 0.5, 0.5);
+    assert.equal(w3.g.houseMagic._hostStart({ ...ask('CreateHouse', [0, w3.G, 0]), inv: { wool: 1, sand: 4 } }, 'local'), true);
+    assert.equal(w3.g.items.loose.size, 0);
+    assert.equal(w3.g.inventory.slots[0], null);
+    assert.equal(w3.g.inventory.slots[1], null);
+});

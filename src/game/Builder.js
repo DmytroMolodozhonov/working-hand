@@ -2,7 +2,7 @@
  * Builder.js — gathering resources and building with magic.
  *
  *   «Gather»            point a raised hand at a tree / stone / earth / leaves
- *                       (≤ 10 m): it comes apart and flies into a slot. A whole
+ *                       (≤ 20 m): it comes apart and flies into a slot. A whole
  *                       tree gives 20 wood of its kind.
  *   «Create a Floor»    a block of the chosen resource appears where the hand
  *   «Create a Wall»     points; then reach with the hand and the floor / wall /
@@ -36,6 +36,7 @@ const MAX_SPAN = 6; // cells from the first block in each direction
 const BUILD_TIME = 14; // s at most per spell
 const ICE_LIFE = 24 * 60; // s: ice buildings melt within a game day
 const WOOD_PER_TREE = 20;
+const GATHER_RANGE = 20; // m: how far the hand may be from the tree / stone it gathers
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -85,9 +86,18 @@ export class Builder {
         const g = this.game;
         const h = this._hand();
         if (!h) return '🪄 Поднимите руку и направьте её на дерево, камень или землю — и скажите «Gather»';
-        // A spawn-area tree (drawn separately from the blocks)?
-        const tree = this._treeOnRay(h.o, h.d, 10);
-        if (tree) {
+        // Any tree (every kind, big and small): a spawn-area tree (drawn separately from the blocks) or a tree of
+        // blocks — a trunk or a crown just beside the line of the hand counts too (a hand never points exactly)
+        let cell = this._hitCell(h.o, h.d, GATHER_RANGE);
+        const isTreeBlock = (t) => TREE_KINDS.some((k) => k.wood === t || k.leaves === t);
+        const cellDist = cell ? cell.point.distanceTo(h.o) : Infinity;
+        if (!cell || !isTreeBlock(cell.type)) {
+            const near = g.livingTrees?._treeNearRay(h.o, h.d, Math.min(GATHER_RANGE, cellDist + 2));
+            if (near) cell = { x: near.x, L: near.L, z: near.z, type: near.type, point: new THREE.Vector3(near.x, near.L - 1, near.z) };
+        }
+        const tree = this._treeOnRay(h.o, h.d, GATHER_RANGE);
+        if (tree && (!cell || !isTreeBlock(cell.type) || Math.hypot(tree.x - h.o.x, tree.z - h.o.z) <= cell.point.distanceTo(h.o) + 1)
+            && Math.hypot(tree.x - h.o.x, tree.z - h.o.z) <= cellDist + 2) {
             const kind = TREE_KINDS[tree.kind || 0];
             const n = Math.min(WOOD_PER_TREE, this._room(kind.wood));
             if (n <= 0) return '🎒 Ячейки полны';
@@ -98,20 +108,19 @@ export class Builder {
             g.hud.toast?.(`🪵 +${n} ${kind.name}`);
             return null;
         }
-        const cell = this._hitCell(h.o, h.d, 10);
         if (!cell || cell.type === BLOCK.AIR || cell.type === BLOCK.BEDROCK || cell.type === BLOCK.WATER || cell.type === BLOCK.ICE_SHAPE) {
-            return '🪄 Направьте руку на дерево, камень, землю или листву (не дальше 10 м)';
+            return `🪄 Направьте руку на дерево, камень, землю или листву (не дальше ${GATHER_RANGE} м)`;
         }
         const data = this.data;
         if (isEnchanted(cell.type)) return '✨ Заколдованный камень — его не взять'; // (EnchantedStone.js: no spell takes it)
         // (a house's sphere of protection: only its owner and the ones let in take its blocks — HouseWards.js)
         if (g.wards?.forbids(h.o, _v1.set(cell.x, cell.L - 1, cell.z))) return '🛡️ Этот дом под защитой — разобрать его нельзя';
         let cells, res, amount;
-        const treeKind = TREE_KINDS.find((k) => k.wood === cell.type);
+        const treeKind = TREE_KINDS.find((k) => k.wood === cell.type || k.leaves === cell.type); // (a crown too: the whole tree)
         if (treeKind) {
             // the whole tree: its trunk and its crown
             const kind = treeKind;
-            cells = this._flood(cell, (t) => t === kind.wood || t === kind.leaves, 6, 500);
+            cells = this._flood(cell, (t) => t === kind.wood || t === kind.leaves, 8, 800);
             res = kind.wood;
             amount = WOOD_PER_TREE;
         } else {
@@ -170,17 +179,19 @@ export class Builder {
         return out;
     }
 
+    /** A spawn-area tree near the line of the hand (the closer the tree, the tighter; far ones get ~7° of slack). */
     _treeOnRay(o, d, max) {
         let best = null, bestT = max;
+        const flat = Math.hypot(d.x, d.z) || 1;
         for (const t of this.game.world.trees || []) {
             if (!t.alive) continue;
             const tx = t.x - o.x, tz = t.z - o.z;
-            const along = tx * d.x + tz * d.z;
-            const flat = Math.hypot(d.x, d.z) || 1;
-            const tt = along / (flat * flat);
+            const tt = (tx * d.x + tz * d.z) / (flat * flat);
             if (tt < 0 || tt > bestT) continue;
             const px = o.x + d.x * tt, pz = o.z + d.z * tt, py = o.y + d.y * tt;
-            if (Math.hypot(px - t.x, pz - t.z) > 2.2 || py < -1 || py > 12) continue;
+            const y0 = (t.y ?? -0.5) - 1, y1 = y0 + 13; // the trunk and the crown
+            const dy = py < y0 ? y0 - py : py > y1 ? py - y1 : 0;
+            if (Math.hypot(px - t.x, pz - t.z, dy) > Math.max(2.2, tt * 0.12)) continue;
             bestT = tt;
             best = t;
         }
