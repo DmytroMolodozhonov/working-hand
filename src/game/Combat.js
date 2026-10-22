@@ -107,6 +107,7 @@ export const SPELL_COST = {
     ProtectionHouse: 20, // a house's sphere of protection (HouseWards.js)
     WardGrow: 3, // … each metre its dome grows while the hand is on it (1 m a second; «Maxima»: 2)
     ProtectionInvisible: 15, // the protected house is not seen from far
+    WardDispel: 5, // takes down my own sphere (twice said)
     ProtectionHouseGrant: 5, // a friend may come into the house
     StrengthenHouse: 5, // «Strengthen House»: the least to begin — then 5 a second while the beam feeds the sphere (nothing at once; HouseWards.js)
     AvadaKedavra: 25,
@@ -586,7 +587,7 @@ export class Combat {
     costOf(name, extra = 0) {
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name, extra = 0) {

@@ -38,6 +38,12 @@
  *                             Table «who/what × how» (CLAUDE.md): it acts on NO creature and NO thing — only on the
  *                             sphere of its owner or of a granted player; off the Earth (space, planets) there are no
  *                             spheres: «нечего усиливать» (Space.spaceSpellBlock).
+ *   «Dispel Ward»            the hand on your own sphere (or the house under it), −5 mana: said once it only warns (the
+ *                             strength put in would be lost); said again within 6 s (the hand still on it) the sphere
+ *                             falls apart in shards, the house is seen again, the granted and «Invisible» are gone.
+ *                             Acts only on the sphere of its own owner (the granted, strangers, NPC wards: refused);
+ *                             creatures / items / the world are untouched; in space and on planets there is none
+ *                             (Space.spaceSpellBlock: «нечего снимать»). Instant (no concentration).
  *
  * What the sphere does — for EVERY kind (CLAUDE.md «на кого и на что»):
  *   - while it is set the caster's beam goes on from the wand: it strikes the house (the house fills with the
@@ -105,6 +111,7 @@ export const WARD = {
     FEED_HP: 5, // …and strength a second (and the maximum grows by the same)
     FEED_SEND: 0.25, // s between the portions a guest sends the host
     FEED_PORTION: 4, // the most strength the host takes from one message
+    DISPEL_T: 6, // s: «Dispel Ward» must be said again within this
     BREAK: { Bombardo: 34, BombardoMaxima: 100, TotalDestruction: 100, TotalDestructionMaxima: 100, Inspirius: 100, Boom: 100, Pilbidrio: 80 }, // strength taken (nothing else breaks it)
     ACC_DPS: 5, // «Акцентрик» sitting on it: strength a second…
     ACC_TOTAL: 40, // …until this much is taken, then its haze goes out by itself
@@ -124,8 +131,8 @@ export const WARD = {
 };
 
 /** The spells of the book of protection. */
-export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'StrengthenHouse'];
-export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House' };
+export const WARD_SPELLS = ['ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'StrengthenHouse', 'WardDispel'];
+export const WARD_NAMES = { ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House', WardDispel: 'Dispel Ward' };
 export const isWardSpell = (n) => WARD_SPELLS.includes(n);
 
 /** Mana of a dome grown to radius `r` (the charge + every metre it grew). */
@@ -465,7 +472,38 @@ export class HouseWards {
         if (name === 'ProtectionInvisible') return this._castInvisible(isFinal);
         if (name === 'ProtectionHouseGrant') return this._castGrant(isFinal);
         if (name === 'StrengthenHouse') return this._castStrengthen(isFinal);
+        if (name === 'WardDispel') return this._castDispel();
         return null;
+    }
+
+    /** What a sphere is worth: the strength put into it (100 for a plain one; «Strengthen» raises `max`). */
+    strengthOf(w) { return Math.round(Math.max(WARD.HP, w.max || 0)); }
+
+    /**
+     * «Dispel Ward»: only on my own sphere, and twice (a sphere may cost a lot): the first word warns, the
+     * second — 1.5…6 s later, the hand still on it — takes it down. (Sooner: the recognizer repeating the same phrase.)
+     */
+    _castDispel() {
+        const g = this.game;
+        const h = this._hand();
+        if (!h) return this._no('wardNoHand', { name: 'Dispel Ward' });
+        const on = this._wardOnRay(h.o, h.d);
+        if (!on) return this._no('wardDispelNone');
+        const w = on.w;
+        if (w.owner !== this.myKey) return this._no('wardDispelNotYours');
+        const now = performance.now(), p = this._dispel;
+        if (!p || p.id !== w.id || now - p.at > WARD.DISPEL_T * 1000) {
+            this._dispel = { id: w.id, at: now };
+            g.hud?.setVoice?.(refusal('wardDispelAsk', { s: this.strengthOf(w), t: WARD.DISPEL_T }), true);
+            this.log.push({ ev: 'dispelAsk', id: w.id });
+            return null;
+        }
+        if (now - p.at < 1500) return null; // (the same phrase heard again)
+        if (!this._pay('WardDispel')) return null;
+        this._dispel = null;
+        this._op({ op: 'dispel', id: w.id });
+        this.log.push({ ev: 'dispel', id: w.id });
+        return 'WardDispel';
     }
 
     _castHouse(isFinal = true, fast = false) {
@@ -853,6 +891,12 @@ export class HouseWards {
             if (d > 0) { w.hp += d; w.max = wardMax(w) + d; }
             if (op.on) { w.feedKey = key; w.feedAt = this._t; } else if (w.feedKey === key) w.feedKey = '';
         }
+        else if (op.op === 'dispel') {
+            if (w.owner !== key) return;
+            this._broken(w.id, from, true);
+            this._changed([{ id: w.id, by: from, dp: 1 }]);
+            return;
+        }
         else if (op.op === 'inv') { if (w.owner === key) w.inv = true; }
         else if (op.op === 'vis') { if (w.owner === key) w.inv = false; }
         else if (op.op === 'grant') {
@@ -931,7 +975,7 @@ export class HouseWards {
 
     /** (guests) The host's list (gone: the spheres just broken, [{id, by}]). */
     applyNet(list, gone = null) {
-        for (const b of gone || []) if (this.list.has(b?.id)) this._broken(b.id, b.by);
+        for (const b of gone || []) if (this.list.has(b?.id)) this._broken(b.id, b.by, !!b.dp);
         const seen = new Set();
         const meBefore = new Set([...this.list.values()].filter((w) => this.mine(w) && w.owner !== this.myKey).map((w) => w.id));
         for (const o of list || []) {
@@ -1143,7 +1187,7 @@ export class HouseWards {
     }
 
     /** The sphere is broken: it falls apart in shards; the owner and the one who broke it are told. */
-    _broken(id, by = null) {
+    _broken(id, by = null, dispelled = false) {
         const w = this.list.get(id);
         if (!w) return;
         const g = this.game;
@@ -1151,13 +1195,13 @@ export class HouseWards {
         for (let i = 0; i < 160; i++) {
             const a = Math.random() * Math.PI * 2, b = Math.acos(2 * Math.random() - 1);
             const dir = _v2.set(Math.sin(b) * Math.cos(a), Math.max(0, Math.cos(b)), Math.sin(b) * Math.sin(a));
-            g.fx?.spark?.(_v3.copy(c).addScaledVector(dir, w.r), i % 3 ? 0x8fc8ff : 0xffffff, 0.16, dir.multiplyScalar(2 + Math.random() * 3).setY(-1 - Math.random() * 3), 1.4);
+            g.fx?.spark?.(_v3.copy(c).addScaledVector(dir, w.r), i % 3 ? (dispelled ? 0xdfe8f2 : 0x8fc8ff) : 0xffffff, 0.16, dir.multiplyScalar(2 + Math.random() * 3).setY(-1 - Math.random() * 3), 1.4);
         }
         g.fx?.lightFlash?.(c, 0x8fc8ff, 3, 0.4, w.r * 3);
         g.sound?.playFrozenHit?.();
-        g.sound?.playExplosion?.(c, g.character?.group.position || c, 0.4);
-        if (w.owner === this.myKey || (by != null && (by === g.localId || by === 'local'))) g.hud?.setVoice?.(refusal('wardBroken'), true);
-        this.log.push({ ev: 'broken', id, by });
+        if (!dispelled) g.sound?.playExplosion?.(c, g.character?.group.position || c, 0.4);
+        if (w.owner === this.myKey || (!dispelled && by != null && (by === g.localId || by === 'local'))) g.hud?.setVoice?.(refusal(dispelled ? 'wardDispelled' : 'wardBroken'), true);
+        this.log.push({ ev: dispelled ? 'dispelled' : 'broken', id, by });
         this._remove(id);
     }
 

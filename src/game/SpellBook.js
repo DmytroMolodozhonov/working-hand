@@ -39,7 +39,7 @@ export const TAUGHT_BY = {
 
 /** Learned from the book-birds' books (BookBirds.BOOK_POOL; the book of protection; the swift book — «Флайн»). */
 export const BOOK_SPELLS = new Set(['CreateFloor', 'CreateWall', 'CreateCeiling', 'BuildRoof', 'CreateDoor', 'CreateBoard',
-    'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'StrengthenHouse', 'Flight']);
+    'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'StrengthenHouse', 'WardDispel', 'Flight']);
 
 /** Learned otherwise: «Flying Maxima», a spell of the gods, is their gift at 1000 cells of mana (Space.checkUnlock) — never a scroll, never sold. */
 export const MANA_SPELLS = new Set(['FlyingMaxima']);

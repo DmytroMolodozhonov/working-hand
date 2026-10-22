@@ -47,7 +47,7 @@ export const HELD = {
     House: { ru: 'Магия дома', icon: '🏠', own: ['CreateHouse', 'ImproveHouse'] },
     Castle: { ru: 'Магия замка', icon: '🏰', own: ['CreateCastle'] },
     IceMagic: { ru: 'Ледяная магия', icon: '❄️', own: ['IceCastle', 'IceBridge'] },
-    Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant'] },
+    Ward: { ru: 'Защита дома', icon: '🛡️', own: ['WardGrow', 'Maxima', 'ProtectionHouse', 'ProtectionInvisible', 'ProtectionHouseGrant', 'WardDispel'] },
     WardBeam: { ru: 'Усиление дома', icon: '🛡️', own: ['StrengthenHouse'] }, // (the beam feeding a sphere with mana: HouseWards.js)
     Build: { ru: 'Стройка', icon: '🧱', own: [] },
     Duel: { ru: 'Дуэль', icon: '⚡', own: ['Maxima'] }, // (the beams' clash, while it goes: only «Максима» — and the shield)

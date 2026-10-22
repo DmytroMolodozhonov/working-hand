@@ -94,6 +94,10 @@ export function refusal(code, d = {}) {
         case 'wardVisible': return '👁️ Дом снова виден издалека';
         case 'wardBarrier': return '🛡️ Дом защищён — вас не пускает барьер';
         case 'wardBroken': return '🛡️ Защита дома разрушена!';
+        case 'wardDispelNone': return '🛡️ Наведите руку на свою защиту дома';
+        case 'wardDispelNotYours': return '🛡️ Это не ваша защита';
+        case 'wardDispelAsk': return `🛡️ Скажите ещё раз в течение ${d.t || 6} секунд — защита дома и вся вложенная сила пропадут (сила: ${d.s}). Держите руку на защите`;
+        case 'wardDispelled': return '🛡️ Защита дома снята';
         case 'wardGrantFar': return '🛡️ «Protection House Grant»: встаньте у своего защищённого дома (или внутри него)';
         case 'wardGrantAim': return '🛡️ «Protection House Grant»: направьте руку на игрока, которого пускаете в дом';
         case 'wardGrantDone': return `🛡️ ${d.who || 'Этот игрок'} уже может входить в ваш дом`;

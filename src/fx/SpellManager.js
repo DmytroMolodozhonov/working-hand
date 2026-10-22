@@ -281,7 +281,11 @@ const PROTECT_W = /(протек|протэк|протект|protect|проте�
 const HOUSE_W = /(хаус|хауз|хаос|хаусе|хауc|house|haus|хоус|хаўс|хаус)/;
 const INVIS_W = /(инвиз|инвис|энвиз|invis|невидим|инвизиб)/;
 const GRANT_W = /(грант|гранд|grant|грэнт|грант)/;
+// «Dispel Ward» («диспел вард», «диспэл уорд»…): a word of dispelling AND «ward» — never one alone, never «Protection …».
+const DISPEL_W = /(диспел|диспэл|диспл|диспелл|dispel|dispell|дисбел)/;
+const WARD_W = /(вард|уорд|уард|ворд|ward|вэрд)/;
 export function wardWords(s) {
+    if (DISPEL_W.test(s) && WARD_W.test(s) && !PROTECT_W.test(s)) return 'WardDispel';
     if (!PROTECT_W.test(s)) return null;
     if (INVIS_W.test(s)) return 'ProtectionInvisible';
     if (HOUSE_W.test(s)) return GRANT_W.test(s) ? 'ProtectionHouseGrant' : 'ProtectionHouse';

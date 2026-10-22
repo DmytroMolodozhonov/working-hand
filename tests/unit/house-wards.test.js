@@ -755,3 +755,65 @@ test('«Strengthen House» in space and on the planets: nothing to feed; the wor
     assert.notEqual(matchSpell('сильный дом'), 'StrengthenHouse');
     assert.notEqual(matchSpell('красивый дом'), 'StrengthenHouse');
 });
+
+test('«Dispel Ward»: the owner says it twice (the hand on the sphere) → it falls apart; once only warns; free of the recognizer echo', () => {
+    assert.equal(matchSpell('Dispel Ward'), 'WardDispel');
+    for (const w of ['диспел вард', 'диспэл уорд', 'диспел ворд']) assert.equal(matchSpell(w), 'WardDispel', w);
+    assert.equal(matchSpell('вард'), null);
+    assert.equal(matchSpell('протекшн хаус'), 'ProtectionHouse');
+    assert.equal(SPELL_COST.WardDispel, 5);
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    W.cast('ProtectionHouse'); W.fix();
+    const w = [...W.list.values()][0];
+    w.grant.push('pid-P2'); w.inv = true;
+    g.character.getHandDirection = (s, out) => out.set(w.c.x - 0, w.c.y - 2, w.c.z - 2).normalize();
+    const m0 = g.combat.fatigue;
+    assert.equal(W.cast('WardDispel'), null, 'the first word only warns');
+    assert.ok(g.voice.some((t) => /ещё раз/.test(t) && /сила: 100/.test(t)));
+    assert.equal(W.list.size, 1);
+    assert.equal(g.combat.fatigue, m0);
+    assert.equal(W.cast('WardDispel'), null, 'the same phrase heard again at once is no second word');
+    assert.equal(W.list.size, 1);
+    W._dispel.at -= 2000;
+    assert.equal(W.cast('WardDispel'), 'WardDispel');
+    assert.equal(W.list.size, 0, 'the sphere is gone — the house is seen, nobody is granted');
+    assert.equal(g.combat.fatigue, m0 - 5);
+    assert.ok(g.voice.some((t) => /Защита дома снята/.test(t)));
+    // the owner sets a new one
+    assert.equal(W.cast('ProtectionHouse'), 'ProtectionHouse');
+    const n = [...W.list.values()][0];
+    assert.deepEqual(n.grant, []);
+    assert.equal(n.inv, false);
+});
+
+test('«Dispel Ward»: the second word after 6 s starts over; nothing under the hand — a hint; not mine (the granted, a stranger, an NPC) — refused', () => {
+    const g = fakeGame();
+    const W = new HouseWards(g);
+    W.cast('ProtectionHouse'); W.fix();
+    const w = [...W.list.values()][0];
+    g.character.getHandDirection = (s, out) => out.set(w.c.x - 0, w.c.y - 2, w.c.z - 2).normalize();
+    W.cast('WardDispel');
+    W._dispel.at -= 7000;
+    assert.equal(W.cast('WardDispel'), null, 'too late: only a new warning');
+    assert.equal(W.list.size, 1);
+    // away from it
+    g.character.getHandDirection = (s, out) => out.set(0, 1, 0);
+    g.voice.length = 0;
+    assert.equal(W.cast('WardDispel'), null);
+    assert.ok(g.voice.some((t) => /Наведите руку на свою защиту/.test(t)));
+    // somebody else's: the granted friend and a stranger
+    g.character.getHandDirection = (s, out) => out.set(w.c.x - 0, w.c.y - 2, w.c.z - 2).normalize();
+    for (const owner of ['pid-P2', 'npc-1']) {
+        w.owner = owner; w.grant = ['pid-H'];
+        W._gate = new Map(); g.voice.length = 0;
+        assert.equal(W.cast('WardDispel'), null);
+        assert.ok(g.voice.some((t) => /Это не ваша защита/.test(t)), owner);
+        assert.equal(W.cast('WardDispel'), null);
+        assert.equal(W.list.size, 1, 'a granted friend or a stranger cannot take it down');
+    }
+    // the host refuses a forged request from a stranger
+    w.owner = 'pid-P3';
+    W.apply({ op: 'dispel', id: w.id }, 'H');
+    assert.equal(W.list.size, 1);
+});

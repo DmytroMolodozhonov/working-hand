@@ -541,6 +541,7 @@ export const SPELL_SOUND = {
     ProtectionHouse: { own: ['wardHum', 'wardChime'], theme: 'thWard' }, ProtectionInvisible: { own: ['wardHum', 'wardChime'], theme: 'thWard', rate: 0.94 },
     ProtectionHouseGrant: { own: ['wardChime'], cast: 'fxShield' },
     StrengthenHouse: { own: ['wardChime'], theme: 'thStrengthen' },
+    WardDispel: { own: ['wardClick', 'wardChime'], theme: 'thWard', rate: 0.8 },
     TotalDestruction: { own: ['rumble', 'explosion'], theme: 'thDestroy' }, TotalDestructionMaxima: { own: ['rumble', 'explosion'], theme: 'thDestroy', rate: 0.9 },
     FlyingMaxima: { own: ['spaceRise'], theme: 'thOrbit' },
     CreatePlanet: { own: ['spaceRise', 'spaceGift'], theme: 'thPlanet' },
