@@ -33,7 +33,10 @@ export function isUpWord(text) {
 
 /** The leap: up speed and the most sideways speed (hero m/s). AGAIN_MS: the same «Up» heard again that soon
  * (the voice gives a phrase while it is said, then once more when it is over) is the same «Up». */
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOWN: 0.85, LIFT_UP: 1.3, AGAIN_MS: 2500 }; // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
+// (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
+// (the hand (the author): not high up — only not lowered; a little above level is enough. Held straight out
+//  level counts only lying down (LIFT_DOWN), standing it must be a little above it: ARM_UP ≈ 9°, LIFT_UP 1.1)
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.15, LIFT_DOWN: 0.85, LIFT_UP: 1.1, AGAIN_MS: 2500 };
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
@@ -42,7 +45,7 @@ export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.35, LIFT_DOW
 export function upAction({ down, swimming, armUp, standing = false, stunned = false, frozen = false }) {
     if (stunned || frozen) return null;
     if (!down && !swimming && !standing) return '⬆️ «Up» не работает в воздухе — нужно стоять, лежать или плавать';
-    if (!armUp) return down ? '⬆️ Вытяните руку вперёд или поднимите её и скажите «Up»' : '⬆️ Поднимите руку вверх и скажите «Up»';
+    if (!armUp) return down ? '⬆️ Вытяните руку вперёд или поднимите её и скажите «Up»' : '⬆️ Поднимите руку чуть выше плеча (не опускайте её) и скажите «Up»';
     return down ? 'rise' : 'leap';
 }
 
