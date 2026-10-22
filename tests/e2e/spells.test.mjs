@@ -79,7 +79,7 @@ test('a plain wooden wand from the start; Левиоса holds a book-bird and a
     await page.close();
 });
 
-test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it leaves the tip, flies, bounces off the ground, hangs low and fades; «стоп» puts out all of it', async () => {
+test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it leaves the tip, flies, bounces off the ground, hangs low and fades; «Нокс» puts out all of it', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -110,8 +110,8 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
         g.castLocalSpell('Люмос', true);
         await frames(3);
         const relit = { on: !!W.light, scale: W.light ? W.light.glow.scale.x / glow.scale0 : 0 };
-        // «стоп» puts out all of it: the tip and the thrown light
-        g.castLocalSpell('стоп', true);
+        // «Нокс» puts out all of it: the tip and the thrown light («стоп» does not)
+        g.castLocalSpell('Нокс', true);
         await frames(2);
         const stopped = { tip: !!W.light, thrown: W.thrown.filter((x) => x.mine).length };
         // a thrown light goes out by itself (about 15 s after the throw)
@@ -132,7 +132,7 @@ test('Люмос: a glow at the tip (no ball) that lights the place; thrown, it 
     assert.ok(r.landed.lit, 'and lights the place');
     assert.ok(r.tipDark, 'the light has left the wand');
     assert.ok(r.relit.on && r.relit.scale > 0.85, '«Люмос» again: the tip shines in full at once ' + JSON.stringify(r.relit));
-    assert.deepEqual(r.stopped, { tip: false, thrown: 0 }, '«стоп» puts out the tip and the thrown light');
+    assert.deepEqual(r.stopped, { tip: false, thrown: 0 }, '«Нокс» puts out the tip and the thrown light');
     assert.ok(r.gone, 'a thrown light goes out by itself');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
@@ -171,7 +171,7 @@ test('the wand is held like a pen: its back in the web of the thumb, pinched by 
     await page.close();
 });
 
-test('«стоп» ends every spell still going: the held shield goes out, Lumos too; with nothing going it is not a spell', async () => {
+test('«стоп» ends every spell still going: the held shield goes out — not Lumos (only «Нокс» puts it out); with nothing going it is not a spell', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
@@ -190,14 +190,16 @@ test('«стоп» ends every spell still going: the held shield goes out, Lumos
         await frames(2);
         const after = { shield: !!g.combat.shield, light: !!g.wandMagic.light };
         const again = g.castLocalSpell('стоп', true);
-        return { shield, lumos, holding, stop, after, again };
+        const nox = g.castLocalSpell('Нокс', true);
+        return { shield, lumos, holding, stop, after, again, nox, dark: !g.wandMagic.light };
     });
     assert.equal(r.shield, 'Protection');
     assert.equal(r.lumos, 'Lumos');
     assert.deepEqual(r.holding, { shield: true, light: true }, 'both still going');
     assert.equal(r.stop, 'Stop');
-    assert.deepEqual(r.after, { shield: false, light: false }, '«стоп» ended them');
+    assert.deepEqual(r.after, { shield: false, light: true }, '«стоп» ended the shield, the Lumos shines on');
     assert.equal(r.again, null, 'nothing left to stop');
+    assert.ok(r.nox && r.dark, '«Нокс» puts the Lumos out');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

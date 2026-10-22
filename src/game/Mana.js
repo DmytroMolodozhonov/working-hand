@@ -47,12 +47,12 @@ export const DUEL_MASTERY = { NEW: 5, KNOWN: 3, KILL: 10, MAX_BEATEN: 400 };
 
 export const FIRST_SPELL = {
     // simple: +1
-    Lumos: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
+    Lumos: 1, LumosFlashlight: 1, LumosAhead: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
     CreateFloor: 1, CreateCeiling: 1, CreateWall: 1, CreateDoor: 1, BuildRoof: 1, CreateBed: 1, CreateBoard: 1,
     ChangeColor: 1, Unfurl: 1, Furl: 1, Alohomora: 1, Lock: 1, Waterball: 1, WaterForming: 1, AirBubble: 1, VortexBubble: 1,
     Protection: 1, Rescue: 1, Brainrot: 1, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1,
     // medium: +2…+5
-    LumosMaxima: 2, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
+    LumosMaxima: 2, LumosFollowing: 3, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
     Flight: 2, LetItRain: 2, ToTheSun: 2, Frozen: 2, RodFrozen: 3, RodIce: 1, Sapira: 2, Sands: 2, Ice: 2, Jolt: 2,
     Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2, WindImpulse: 2, Liquidation: 2,
     WindMaxima: 3, Inferno: 3, Stupefy: 3, Expelliarmus: 3, Disarmor: 3, SuitUp: 1, ProtectionInvisible: 3,

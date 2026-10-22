@@ -161,6 +161,10 @@ export function matchSpell(text) {
         (has('board', 'борд', 'bord', 'bored', 'доск') && has('creat', 'крейт', 'криейт', 'криэйт', 'креит', 'созда', 'сдела', 'make', 'мейк')))) return 'CreateBoard';
     // Wand spells
     if (has('раскрой', 'раскрои', 'секрет', 'тайны', 'reveal', 'secret', 'ревил', 'ривил', 'равиал', 'ревиал')) return 'Reveal';
+    // the Lumos' modes and «Lumos Following» (before the plain Lumos: its word is in them)
+    if (has('фоловинг', 'фолловинг', 'фоллоуинг', 'фолоуинг', 'фоловин', 'фолловин', 'following', 'folowing', 'followin')) return 'LumosFollowing';
+    if (has('flashlight', 'flash light', 'флешлайт', 'флэшлайт', 'флеш лайт', 'флэш лайт', 'флешлай', 'фонарик')) return 'LumosFlashlight';
+    if (has('ahead', 'эхед', 'эхэд', 'ахед', 'ахэд', 'ехед', 'э хед')) return 'LumosAhead';
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
     if (has('нокс', 'nox', 'нокса', 'knox', 'knocks', 'nocks')) return 'Nox';
     // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)

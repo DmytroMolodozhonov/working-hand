@@ -124,6 +124,9 @@ export const SPELL_COST = {
     BreakthroughMaxima: 20,
     Lumos: 2,
     LumosMaxima: 4,
+    LumosFlashlight: 3, // (the Lumos' modes: once)
+    LumosAhead: 3,
+    LumosFollowing: 15, // (then 0.1 a second: WandMagic.FOLLOW)
     CreateBed: 6,
     CreateHouse: 20, // a house by magic: then 0.5 a second for its 10 s (HouseMagic.js; each level of «Improve a House» twice as much)
     CreateCastle: 500, // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)

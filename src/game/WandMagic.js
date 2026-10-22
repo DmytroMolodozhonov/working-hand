@@ -16,6 +16,14 @@
  *    ceiling, then hangs in the air where it stopped — and fades out about 15 s
  *    after the throw. «Нокс» or «стоп» puts out all of it (the tip
  *    and the thrown light). Everybody sees (and is lit by) everybody's Lumos.
+ *    Its modes, said while it shines (known from the start): «Flashlight» — the light becomes a narrow
+ *    bright beam where the wand points (one spot light of the system's own; Максима: stronger, farther;
+ *    said again — the plain light again); «Ahead» — the light leaves the wand and flies where it points
+ *    (the throw, by the voice).
+ *  - «Lumos Following» (only from a scroll): a ball of light leaves the wand and floats beside me
+ *    wherever I go, lighting the way — smoothly, a little ahead when I run (a spring, never stuck on);
+ *    15 mana, then 0.1 a second. Only «Нокс» puts the Lumos out (the tip, the thrown light, the
+ *    following one) — «стоп» does not (the author).
  *  - «Lightning Writing» (drawing): the tip leaves glowing lines in the air while
  *    you move the wand; they fade in about 10 seconds.
  *
@@ -46,6 +54,9 @@ export const LUMOS = {
     LIFE: 15, // s from the throw: then it is gone (time to see where it went — down a cave tunnel)
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
+    BEAM_ANGLE: 0.2, // rad: the flashlight's narrow beam
+    BEAM_REACH: 26, // m (+ BEAM_PER_LEVEL a level: Максима farther)
+    BEAM_PER_LEVEL: 6,
     STILL: 1200, // ms standing still before a throw counts (walking swings the arms: never a throw)
     OTHER_MS: 1500, // ms after another spell was cast (its gesture is no throw)
 };
@@ -84,6 +95,44 @@ export function lumosGone(t, hasWand, dt) {
     return t > LUMOS.LOSS_GRACE ? { t: 0, out: true } : { t, out: false };
 }
 
+/** «Lumos Following»: its ball of light — how bright, where beside me it floats (my space: right, up, ahead), how it follows. */
+export const FOLLOW = {
+    LEVEL: 3,
+    DRAIN: 0.1, // mana a second
+    SIDE: 0.9, UP: 0.9, AHEAD: 0.9, // m from the body's middle (a little over the right shoulder, ahead)
+    RUN_AHEAD: 0.3, // s of my speed it goes further ahead when I run (it lights the way)
+    K: 7, // the spring (1/s²) …
+    DAMP: 0.85, // … damped (1: critically) — smooth, a little lag, no wobble
+    MAX_SPEED: 22, // m/s
+    TELEPORT: 30, // m: further (a teleport, a respawn): it comes along at once
+};
+
+/**
+ * One step of the following light (pure, tests): a damped spring to `target` (moving at `tv`: my own speed —
+ * so it keeps by me when I run, not trailing behind), never faster than MAX_SPEED.
+ * `p`, `v`, `target`, `tv`: {x,y,z} (p and v are changed).
+ */
+export function followStep(p, v, target, dt, tv = null) {
+    const dx = target.x - p.x, dy = target.y - p.y, dz = target.z - p.z;
+    if (dx * dx + dy * dy + dz * dz > FOLLOW.TELEPORT * FOLLOW.TELEPORT) { p.x = target.x; p.y = target.y; p.z = target.z; v.x = v.y = v.z = 0; return; }
+    const c = 2 * Math.sqrt(FOLLOW.K) * FOLLOW.DAMP;
+    const tx = tv?.x || 0, ty = tv?.y || 0, tz = tv?.z || 0;
+    v.x += (dx * FOLLOW.K + (tx - v.x) * c) * dt; v.y += (dy * FOLLOW.K + (ty - v.y) * c) * dt; v.z += (dz * FOLLOW.K + (tz - v.z) * c) * dt;
+    const sp = Math.hypot(v.x, v.y, v.z);
+    if (sp > FOLLOW.MAX_SPEED) { const k = FOLLOW.MAX_SPEED / sp; v.x *= k; v.y *= k; v.z *= k; }
+    p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
+}
+
+/** The flashlight's beam seen in the air: a faint cone, its apex at the origin, along −Y (one shared form). */
+function makeBeamCone() {
+    const geo = new THREE.ConeGeometry(1, 1, 18, 1, true);
+    geo.translate(0, -0.5, 0);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xfff1c8, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    m.renderOrder = 4;
+    m.frustumCulled = false;
+    return m;
+}
+
 /** How big the tip's glow is for a Lumos level (1 Люмос … 5 Максима again and again). */
 const glowSize = (level) => 0.22 + level * 0.1;
 /** The light's strength and reach for a level. */
@@ -118,6 +167,14 @@ export class WandMagic {
         // brightest / nearest Lumos lights of all players get them)
         this.lights = [new THREE.PointLight(0xfff6d8, 0, 14, 2), new THREE.PointLight(0xfff6d8, 0, 14, 2)];
         for (const l of this.lights) game.scene.add(l);
+        // «Flashlight»: the system's one spot light, from the start too (intensity 0), and its faint cone
+        this.beam = new THREE.SpotLight(0xfff6d8, 0, LUMOS.BEAM_REACH, LUMOS.BEAM_ANGLE, 0.45, 1.5);
+        game.scene.add(this.beam); game.scene.add(this.beam.target);
+        this.beamCone = makeBeamCone();
+        this.beamCone.visible = false;
+        game.scene.add(this.beamCone);
+        this.follow = null; // «Lumos Following»: {glow, pos, vel, level}
+        this.remoteFollow = new Map(); // playerId -> the glow of their following light
     }
 
     get wand() { return this.game.items?.wand || null; }
@@ -177,6 +234,8 @@ export class WandMagic {
             this._lumos(name === 'LumosMaxima');
             return name;
         }
+        if (name === 'LumosFlashlight' || name === 'LumosAhead') return this._lumosMode(name, isFinal);
+        if (name === 'LumosFollowing') return this._startFollow(isFinal);
         if (name === 'Nox') { this._nox(); return name; }
         if (name === 'Draw') {
             this.drawing = { until: performance.now() + 12000, lines: this.drawing?.lines || [], last: null, color: new THREE.Color(this.wand?.color ?? 0xffffff).lerp(new THREE.Color(0xffffff), 0.3) };
@@ -196,19 +255,126 @@ export class WandMagic {
         }
         this.light.level = max ? Math.min(5, Math.max(2, this.light.level + 1)) : Math.max(1, this.light.level);
         const L = this.light.level;
-        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; резкий взмах палочкой — бросить свет)', true);
+        g.hud.setVoice(max ? `💡 Люмос Максима — свет ×${L} (скажите ещё раз — ярче; «Нокс» — погасить)` : '💡 Люмос — кончик палочки светится («Нокс» — погасить; замах и бросок — бросить свет; «Flashlight» — фонарик, «Ahead» — свет вперёд)', true);
     }
 
-    /** «Нокс» / «стоп»: all my Lumos goes out — the tip and the thrown light. True if something did. */
-    _nox(say = true) {
+    /**
+     * «Нокс»: all my Lumos goes out — the tip, the thrown light, the following one. True if something did.
+     * `tipOnly`: only the wand's tip (the wand put away or dropped — the following light is not on the wand).
+     */
+    _nox(say = true, tipOnly = false) {
         const l = this.light;
         if (l) { this.game.scene.remove(l.glow); l.glow.material.dispose(); this.light = null; }
+        if (tipOnly) return !!l;
         const mine = this.thrown.filter((t) => t.mine);
         for (const t of mine) { this.game.scene.remove(t.glow); t.glow.material.dispose(); }
         if (mine.length) { this.thrown = this.thrown.filter((t) => !t.mine); this.game.sync?.lumosOut?.(); }
-        if (!l && !mine.length) return false;
+        const f = this._endFollow();
+        if (!l && !mine.length && !f) return false;
         if (say) this.game.hud.setVoice('🌑 Нокс — свет погас', true);
         return true;
+    }
+
+    /** «Flashlight» / «Ahead»: a mode of the Lumos that shines now (none shining: the hint). */
+    _lumosMode(name, isFinal) {
+        const g = this.game, l = this.light, now = performance.now();
+        if (!l) { if (isFinal) g.hud.setVoice(name === 'LumosAhead' ? '💡 Сначала зажгите «Люмос» — потом «Ahead» пошлёт свет вперёд' : '💡 Сначала зажгите «Люмос» — потом «Flashlight» сделает из него фонарик', true); return null; }
+        if (now - (this._said?.[name] || -1e9) < LUMOS.AGAIN) return null;
+        (this._said || (this._said = {}))[name] = now;
+        if (name === 'LumosFlashlight' && l.beam) { l.beam = false; g.hud.setVoice('💡 Люмос — снова обычный свет', true); return name; }
+        const tired = g.combat.check(name);
+        if (tired) { g.hud.setVoice(tired, true); return null; }
+        g.combat.pay(name);
+        if (name === 'LumosFlashlight') {
+            l.beam = true;
+            g.hud.setVoice(l.level >= 2 ? '🔦 Flashlight — яркий дальний луч из палочки (ещё раз «Flashlight» — обычный свет)' : '🔦 Flashlight — луч света туда, куда смотрит палочка (ещё раз «Flashlight» — обычный свет)', true);
+            return name;
+        }
+        const d = new THREE.Vector3();
+        if (!this.tip(_v3, d)) return null;
+        this._throwLight(d.normalize(), 1);
+        g.hud.setVoice('💫 Ahead — свет летит туда, куда смотрит палочка; «Люмос» — зажечь снова', true);
+        return name;
+    }
+
+    /** «Lumos Following»: a ball of light leaves the wand and floats beside me. */
+    _startFollow(isFinal) {
+        const g = this.game;
+        if (this.follow) { if (isFinal) g.hud.setVoice('✨ Светлячок уже летает рядом («Нокс» — погасить)', true); return null; }
+        const now = performance.now();
+        if (now - (this._said?.LumosFollowing || -1e9) < LUMOS.AGAIN) return null;
+        (this._said || (this._said = {})).LumosFollowing = now;
+        const tired = g.combat.check('LumosFollowing');
+        if (tired) { g.hud.setVoice(tired, true); return null; }
+        g.combat.pay('LumosFollowing');
+        const d = new THREE.Vector3(0, 0, -1);
+        const p = this.tip(new THREE.Vector3(), d) || g.character.group.position.clone().setY(g.character.group.position.y + 0.5);
+        const glow = makeGlow(glowSize(FOLLOW.LEVEL));
+        glow.position.copy(p);
+        g.scene.add(glow);
+        // (it drifts off the tip first, along the wand — then the spring takes it to its place by me)
+        this.follow = { glow, pos: p.clone(), vel: d.normalize().multiplyScalar(2.5), level: FOLLOW.LEVEL, t: 0 };
+        g.hud.setVoice('✨ Lumos Following — шарик света летит рядом и освещает путь («Нокс» — погасить)', true);
+        return 'LumosFollowing';
+    }
+
+    /** The following light goes out. True if there was one. */
+    _endFollow() {
+        const f = this.follow;
+        if (!f) return false;
+        this.game.scene.remove(f.glow); f.glow.material.dispose();
+        this.follow = null;
+        return true;
+    }
+
+    /** Where the following light floats now: beside me, a little ahead (more when I run), bobbing gently; never in the rock. */
+    _followTarget(out) {
+        const ch = this.game.character, p = ch.group.position, yaw = ch.group.rotation.y;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+        const run = ch._planar || { x: 0, z: 0 }, f = this.follow;
+        const bob = Math.sin(f.t * 1.6) * 0.12, sway = Math.sin(f.t * 0.7) * 0.15;
+        out.set(p.x + rx * (FOLLOW.SIDE + sway) + fx * FOLLOW.AHEAD + run.x * FOLLOW.RUN_AHEAD, p.y + FOLLOW.UP + bob, p.z + rz * (FOLLOW.SIDE + sway) + fz * FOLLOW.AHEAD + run.z * FOLLOW.RUN_AHEAD);
+        // (a wall or a low roof there: it keeps close over the head instead)
+        const col = this.game.collision;
+        if (col?.pointBlocked?.(out.x, out.y, out.z)) out.set(p.x, p.y + 0.9, p.z);
+        return out;
+    }
+
+    _updateFollow(dt) {
+        const f = this.follow, g = this.game;
+        if (!f) return;
+        if (g.combat?.dead || g.isDeadLocal) { this._endFollow(); return; }
+        const c = g.combat;
+        if (c?.enabled && g.config?.mode !== 'creative') {
+            c.fatigue = Math.max(0, c.fatigue - FOLLOW.DRAIN * dt);
+            if (c.fatigue <= 0) { this._endFollow(); g.hud.setVoice('✨ Мана кончилась — светлячок погас', true); return; }
+        }
+        f.t += dt;
+        const target = this._followTarget(_v4);
+        const before = _v3.copy(f.pos);
+        const run = g.character._planar;
+        followStep(f.pos, f.vel, target, Math.min(dt, 0.05), run ? _v.set(run.x, 0, run.z) : null);
+        // (it flies round the rock, never through it: blocked — it stays where it was and slows down)
+        if (g.collision?.pointBlocked?.(f.pos.x, f.pos.y, f.pos.z) && !g.collision.pointBlocked(target.x, target.y, target.z)) { f.pos.copy(before); f.vel.multiplyScalar(0.3); }
+        f.glow.position.copy(f.pos);
+        f.glow.scale.setScalar(glowSize(f.level) * (1 + Math.sin(this._flick * 2.1) * 0.06));
+    }
+
+    /** The flashlight: the system's spot light and its cone at my wand's tip, along the wand (or off). */
+    _updateBeam(tip, dir) {
+        const l = this.light, on = !!(l && l.beam && tip && dir);
+        if (!on) { if (this.beam.intensity) this.beam.intensity = 0; this.beamCone.visible = false; return; }
+        const reach = LUMOS.BEAM_REACH + LUMOS.BEAM_PER_LEVEL * (l.level - 1);
+        this.beam.position.copy(tip);
+        this.beam.target.position.copy(tip).addScaledVector(dir, 10);
+        this.beam.target.updateMatrixWorld();
+        this.beam.distance = reach;
+        this.beam.intensity = 2.2 + l.level * 1.1 + (this.game.world?.cave || 0) * 0.8;
+        const len = Math.min(reach * 0.45, 12);
+        this.beamCone.position.copy(tip);
+        this.beamCone.quaternion.setFromUnitVectors(_v.set(0, -1, 0), dir);
+        this.beamCone.scale.set(Math.tan(LUMOS.BEAM_ANGLE) * len, len, Math.tan(LUMOS.BEAM_ANGLE) * len);
+        this.beamCone.visible = true;
     }
 
     /** Another player put out their thrown light. */
@@ -316,13 +482,32 @@ export class WandMagic {
             e.glow.scale.setScalar(glowSize(level) * (1 + Math.sin(this._flick * 2.3 + id.length) * 0.05));
         }
         for (const [id, e] of this.remote) if (!seen.has(id)) { g.scene.remove(e.glow); e.glow.material.dispose(); this.remote.delete(id); }
+        // their «Lumos Following» lights (where they are: NetSync sends it with the pose)
+        const fseen = new Set();
+        for (const [id, r] of g.remotes || []) {
+            const lf = r.target?.lf;
+            if (!Array.isArray(lf) || !lf.every(Number.isFinite)) continue;
+            fseen.add(id);
+            let e = this.remoteFollow.get(id);
+            if (!e) { e = { glow: makeGlow(glowSize(FOLLOW.LEVEL)), level: FOLLOW.LEVEL }; e.glow.position.set(lf[0], lf[1], lf[2]); g.scene.add(e.glow); this.remoteFollow.set(id, e); }
+            e.glow.position.lerp(_v.set(lf[0], lf[1], lf[2]), 0.25);
+        }
+        for (const [id, e] of this.remoteFollow) if (!fseen.has(id)) { g.scene.remove(e.glow); e.glow.material.dispose(); this.remoteFollow.delete(id); }
+    }
+
+    /** My following light for the others: [x, y, z] (or undefined). */
+    netFollow() {
+        const f = this.follow;
+        return f ? [Math.round(f.pos.x * 100) / 100, Math.round(f.pos.y * 100) / 100, Math.round(f.pos.z * 100) / 100] : undefined;
     }
 
     /** The two lights go to the two nearest shining things (my tip, thrown lights, others' tips). */
     _placeLights() {
         const cam = this.game.camera?.position;
         const src = [];
-        if (this.light) src.push({ p: this.light.glow.position, level: this.light.level });
+        if (this.light) src.push({ p: this.light.glow.position, level: this.light.beam ? Math.max(0.5, this.light.level * 0.35) : this.light.level }); // (a flashlight: the glow round the tip is small — the beam does the lighting)
+        if (this.follow) src.push({ p: this.follow.pos, level: this.follow.level });
+        for (const e of this.remoteFollow.values()) src.push({ p: e.glow.position, level: e.level });
         for (const t of this.thrown) src.push({ p: t.pos, level: t.level * this._fade(t) });
         for (const e of this.remote.values()) src.push({ p: e.glow.position, level: e.level });
         if (cam) src.sort((a, b) => a.p.distanceToSquared(cam) - b.p.distanceToSquared(cam));
@@ -518,11 +703,12 @@ export class WandMagic {
         // (No mana is spent on it, so running out of mana never puts it out.)
         const gone = lumosGone(this._noWand || 0, hasWand, dt);
         this._noWand = gone.t;
-        if (this.light && gone.out) this._nox(false);
+        if (this.light && gone.out) this._nox(false, true);
         this._flick = (this._flick || 0) + dt;
         // Lumos at the tip (a little strength over time); a real throw of the hand throws it
         if (this.light && hasWand) { // (a wand lost for a blink: the glow just stays where it was)
             const tip = this.tip(new THREE.Vector3(), _v2);
+            this._updateBeam(tip, _v2);
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
@@ -541,6 +727,8 @@ export class WandMagic {
                 if (thr) this._throwLight(this._throwDir(thr.dir, _v2), Math.min(1.6, Math.max(0.7, thr.speed / 7)));
             }
         }
+        if (!this.light || !hasWand) this._updateBeam(null, null);
+        this._updateFollow(dt);
         for (let i = this.thrown.length - 1; i >= 0; i--) {
             const t = this.thrown[i];
             if (this._flyThrown(t, dt)) continue;
@@ -635,6 +823,8 @@ export class WandMagic {
         for (const t of this.thrown) this.game.scene.remove(t.glow);
         for (const e of this.remote.values()) this.game.scene.remove(e.glow);
         for (const l of this.lights) this.game.scene.remove(l);
+        this.game.scene.remove(this.beam); this.game.scene.remove(this.beam.target); this.game.scene.remove(this.beamCone);
+        for (const e of this.remoteFollow.values()) this.game.scene.remove(e.glow);
         if (this.drawing) for (const s of this.drawing.lines) this.game.scene.remove(s.mesh);
         for (const e of this.remoteDrawings.values()) for (const s of e.lines) this.game.scene.remove(s.mesh);
     }

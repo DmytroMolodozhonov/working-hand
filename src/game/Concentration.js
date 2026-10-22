@@ -59,7 +59,7 @@ export const HELD = {
 };
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
-export const FREE = new Set(['Lumos', 'LumosMaxima', 'Nox', 'Stand', 'Stop', 'Protection', 'ProtectionMaxima', 'Up', 'Pause']);
+export const FREE = new Set(['Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAhead', 'LumosFollowing', 'Nox', 'Stand', 'Stop', 'Protection', 'ProtectionMaxima', 'Up', 'Pause']);
 
 /**
  * May `name` be cast while `held` (a HELD key, or null) is held? Pure (tests).

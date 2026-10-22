@@ -15,7 +15,7 @@
 /** Known from the start outside Creative (the author's list; a Maxima is a spell of its own here). */
 export const START_SPELLS = new Set([
     // light, things, moving
-    'Lumos', 'LumosMaxima', 'Nox', 'Reveal', 'Draw', 'Accio', 'Up', 'Levitation', 'Wind', 'WindMaxima',
+    'Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAhead', 'Nox', 'Reveal', 'Draw', 'Accio', 'Up', 'Levitation', 'Wind', 'WindMaxima',
     'Alohomora', 'Lock', 'Attack', 'Rescue', 'SuitUp', 'Stand', 'Stop', 'Pause',
     // duel («Айс» = «Frozen»: one spell; «Максима» in a clash of charges)
     'Sands', 'Sapira', 'Stupefy', 'Expelliarmus', 'Disarmor', 'Ice', 'Frozen', 'Jolt', 'Maxima',

@@ -269,6 +269,7 @@ export class NetSync {
                 c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
+                lf: g.wandMagic?.netFollow?.(), // (my «Lumos Following» light: where it floats)
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
                 bd: g.boards?.netMine(), // (the surfboard I carry or ride)
                 bw: g.gear?.netBow(), // (an arrow on my bow's string, and how far it is drawn)

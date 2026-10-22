@@ -1300,7 +1300,7 @@ export class Game {
             this._voiceMeta = null;
         }
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
-        if (name && !/^Protection(Gods)?(Maxima)?$/.test(name) && name !== 'Lumos' && name !== 'LumosMaxima' && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
+        if (name && !/^Protection(Gods)?(Maxima)?$/.test(name) && !/^Lumos/.test(name) && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
         if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
@@ -1467,7 +1467,7 @@ export class Game {
             return name;
         }
         if (name === 'WaveAttack' || name === 'WaveAttackMaxima') return this._castWave(name, isFinal);
-        if (name === 'Lumos' || name === 'LumosMaxima' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
+        if (name === 'Lumos' || name === 'LumosMaxima' || name === 'LumosFlashlight' || name === 'LumosAhead' || name === 'LumosFollowing' || name === 'Nox' || name === 'Draw' || name === 'Reveal') return this.wandMagic.cast(name, isFinal);
         if (name === 'Rescue') return this.bleeding.rescue(isFinal);
         if (name === 'Breakthrough' || name === 'BreakthroughMaxima') return this._castBreakthrough(name, isFinal);
         if (name === 'Attack') {
@@ -1712,7 +1712,7 @@ export class Game {
         if (ws === true) done.push('водяная буря');
         if (this.swim?.bubble) { this.swim._popBubble(); done.push('пузырь'); }
         if (this.waves?.stop()) done.push('волна');
-        if (W?._nox(false)) done.push('Люмос'); // (the tip and the thrown light)
+        // (the Lumos is not stopped by «стоп» — only «Нокс» puts it out: the author)
         if (W?.drawing && W.drawing.until > performance.now()) { W.drawing.until = 0; done.push('рисование'); }
         if (W?.holo) { W._closeHolo(); done.push('тайны'); }
         if (this.accio?.stop()) done.push('Акцио');
@@ -2731,6 +2731,7 @@ export class Game {
         this.knockback.set(0, 0, 0);
         this.knock.reset();
         this.up?.reset();
+        this.wandMagic?._nox(false); // (died: the Lumos went out — the tip, the thrown light, the following one)
         this.impact.reset();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();

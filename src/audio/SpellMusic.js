@@ -368,6 +368,10 @@ const FX = {
     fxLumos(sr) { const o = buf(sr, 0.8); glide(o, sr, 0, 0.8, 0.3, (u) => 900 + 1500 * u, (u) => Math.min(1, u * 8) * (1 - u), 2); bell(o, sr, 2637, 0.12, 0.15, 0.6); return finish(o, sr, { peak: 0.6 }); },
     /** «Люмос Максима»: a big light — a chord of shimmers swelling. */
     fxLumosMax(sr) { const o = buf(sr, 1.4); for (const f of [660, 990, 1320]) glide(o, sr, 0, 1.4, 0.2, (u) => f * (1 + u), (u) => Math.min(1, u * 5) * (1 - u), 2); for (let k = 0; k < 5; k++) bell(o, sr, 1760 * (1 + k * 0.25), 0.2 + k * 0.08, 0.1, 0.9); return finish(o, sr, { peak: 0.65 }); },
+    /** «Flashlight»: the light gathered into a beam — a quick bright sweep up and a clear click of light. */
+    fxFlashlight(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.35, 0.25, (u) => 600 + 2600 * u * u, (u) => Math.min(1, u * 10) * (1 - u), 2); bell(o, sr, 3136, 0.28, 0.2, 0.3); bell(o, sr, 2093, 0.3, 0.12, 0.35); return finish(o, sr, { peak: 0.55 }); },
+    /** «Lumos Following»: a little light set free — a floating shimmer, three soft bells drifting up and away. */
+    fxLumosFollow(sr) { const o = buf(sr, 1.6); glide(o, sr, 0, 1.6, 0.18, (u) => 1100 + 500 * Math.sin(u * 7) * (1 - u) + 700 * u, (u) => Math.min(1, u * 6) * (1 - u), 2); for (let k = 0; k < 3; k++) bell(o, sr, 1568 * (1 + k * 0.5), 0.25 + k * 0.35, 0.13, 0.7); return finish(o, sr, { peak: 0.6 }); },
     /** «Нокс»: the light blown out — a soft falling puff. */
     fxNox(sr) { const o = buf(sr, 0.5), r = rng(3); noise(o, sr, 0, 0.5, 0.3, (u) => 0.3 * (1 - u) + 0.02, swell(0.1, 0.6), r); glide(o, sr, 0, 0.5, 0.2, (u) => 1200 - 900 * u, swell(0.05, 0.8)); return finish(o, sr, { peak: 0.5 }); },
     /** «Раскрой секреты»: a mysterious whole-tone sparkle over a low hum. */
@@ -553,7 +557,7 @@ export const SPELL_SOUND = {
     Unfurl: { own: ['sand'] }, Furl: { own: ['sand'] }, Up: { own: ['splash', 'sand'] },
     Accio: { own: ['fxAccio'] }, SuitUp: { own: ['fxSuitUp'] },
     // the everyday spells: a short sound when they work (added here)
-    Lumos: { cast: 'fxLumos' }, LumosMaxima: { cast: 'fxLumosMax' }, Nox: { cast: 'fxNox' }, Reveal: { cast: 'fxReveal' },
+    Lumos: { cast: 'fxLumos' }, LumosMaxima: { cast: 'fxLumosMax' }, Nox: { cast: 'fxNox' }, LumosFlashlight: { cast: 'fxFlashlight' }, LumosAhead: { cast: 'fxLumos', rate: 1.3 }, LumosFollowing: { cast: 'fxLumosFollow' }, Reveal: { cast: 'fxReveal' },
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
