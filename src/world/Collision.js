@@ -114,6 +114,27 @@ export class CollisionWorld {
         return this.movers.length ? this._moverFloor(x, z, reachY, y) : y;
     }
 
+    /** Is the point inside the world's rock (not a box, not open air in a cave)? */
+    inRock(x, y, z) {
+        return !!this.terrain?.blockAt && y < this.surfaceY(x, z) && this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0;
+    }
+
+    /**
+     * A point that got into rock (a thing dropped against a cave wall, a body that died against it) goes to the
+     * nearest free place beside it at its own height — sideways, never up to the surface. Mutates pos.
+     * Returns false when nothing free is near (it then stays where it is).
+     */
+    pushOutOfRock(pos) {
+        if (!this.inRock(pos.x, pos.y, pos.z)) return true;
+        for (let r = 0.5; r <= 3; r += 0.5) {
+            for (let k = 0; k < 12; k++) {
+                const a = (k / 12) * Math.PI * 2, x = pos.x + Math.cos(a) * r, z = pos.z + Math.sin(a) * r;
+                if (!this.inRock(x, pos.y, z)) { pos.x = x; pos.z = z; return true; }
+            }
+        }
+        return false;
+    }
+
     /**
      * The underside of the rock (a cave roof, a ceiling) above a body over x,z whose head is at
      * `headY` or above it — the head may rise to it, never into it. Infinity: the open sky.

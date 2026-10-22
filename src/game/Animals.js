@@ -347,7 +347,9 @@ export class Animals {
         a.group.rotation.z = Math.PI / 2;
         a.group.rotation.x = 0;
         if (a.model.userData.wings) animateWings(a.model, 0);
-        const gy = this.game.collision.groundY(a.group.position.x, a.group.position.z);
+        const col = this.game.collision, pos = a.group.position;
+        col.pushOutOfRock?.(pos); // (died against a cave wall: beside it, not up through the rock)
+        const gy = col.groundAt ? col.groundAt(pos.x, pos.z, pos.y + 1) : col.groundY(pos.x, pos.z); // (the cave's floor under it, not the ground above)
         // (killed in the air: it falls — the body physics brings it down)
         if (a.group.position.y > gy + 2.5) a.airborne = true;
         else a.group.position.y = gy + (a.model.userData.minotaur?.visible ? 0.9 : 0.35 * a.group.scale.y); // (its own size: a big bull, the minotaur on its side)
@@ -468,7 +470,7 @@ export class Animals {
         a.model.visible = false;
         if (!a.bones) {
             a.bones = bonesModel();
-            a.bones.position.copy(a.group.position).setY(g.collision.groundY(a.group.position.x, a.group.position.z));
+            a.bones.position.copy(a.group.position).setY(g.collision.groundAt ? g.collision.groundAt(a.group.position.x, a.group.position.z, a.group.position.y + 1) : g.collision.groundY(a.group.position.x, a.group.position.z));
             a.bones.rotation.y = a.group.rotation.y;
             a.bones.scale.setScalar(SPECIES[a.type].size);
             g.scene.add(a.bones);

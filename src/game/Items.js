@@ -590,6 +590,17 @@ export class ItemSystem {
     }
 
     /**
+     * The floor under a loose thing. In a cave it is the cave's floor below it; a thing pressed into the rock
+     * is moved out sideways first and never lifted more than a step — never taken up to the surface above.
+     */
+    _floorUnder(p) {
+        const col = this.game.collision;
+        col.pushOutOfRock?.(p);
+        const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
+        return col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
+    }
+
+    /**
      * A thing let go of inside a counter, a table, a step (the hand or a hanging pouch reached into
      * it): it comes out on top of it — it lies on the counter, never falls through it to the floor.
      */
@@ -618,7 +629,7 @@ export class ItemSystem {
         if (!col) return;
         const y0 = p.y;
         this._outOfSolid(p);
-        const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
+        const gy = this._floorUnder(p);
         if (p.y < gy + 0.1) p.y = gy + 0.12;
         else if (p.y > gy + 0.45) L.rest = false; // (nothing under it now: it falls — _physics)
         if (p.y !== y0 || !L.rest) L.sentRest = false; // (its new place goes to the others)
@@ -868,7 +879,7 @@ export class ItemSystem {
             }
             m.position.copy(_v);
         }
-        const ground = col.groundAt ? col.groundAt(m.position.x, m.position.z, m.position.y + 0.5) : col.groundY(m.position.x, m.position.z);
+        const ground = this._floorUnder(m.position);
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
             if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }
