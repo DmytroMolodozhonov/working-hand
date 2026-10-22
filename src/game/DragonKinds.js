@@ -210,12 +210,10 @@ export function rollHoard(rng) {
     const bags = [];
     let left = inBags;
     while (left > 0) {
-        const n = Math.min(left, 35 + Math.floor(rng() * 50)); // (35–84: never a full pouch)
+        const n = Math.min(left, 35 + Math.floor(rng() * 50)); // (35–84)
         bags.push(n);
         left -= n;
     }
-    // a few empty pouches too (to gather the loose gold into)
-    for (let i = 0, m = 3 + Math.floor(rng() * 3); i < m; i++) bags.push(0);
     return { total, loose: total - inBags, bags };
 }
 

@@ -611,7 +611,6 @@ export class Game {
                     { kind: 'scroll', uid: 'cr2', stat: 'spell', spell: 'Thunderwave' },
                     { kind: 'scroll', uid: 'cr3', stat: 'hp', amount: 3 },
                     { kind: 'crystal', uid: 'cmc0', count: 1 }, // a mana crystal (take it in the hand and squeeze: +1 cell of mana)
-                    { kind: 'coins', uid: 'cmp0', magic: true, count: 50 }, // the magic coin pouch (no end of coins in it: CoinBelt)
                 ];
                 magic.forEach((it, i) => {
                     const x = -12.5 + i * 5, z = -18;
@@ -3023,16 +3022,11 @@ export class Game {
         this.active = true;
         this.lastTime = performance.now();
         this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
-        // Creative: the magic pouch with 100 coins on the belt to start with (once; a world played before keeps its own coins)
-        // (also after coming back to the world: a save without the pouch — or one whose coins came as plain pouches — gets it back, with the coins it had)
+        // Creative: 100 coins in the pouch to start with (once; a world played before keeps its own coins). The pouch itself
+        // every hero has from the start (Inventory.ensureStarterWand → CoinBelt.ensure), in every mode.
         if (this.config.mode === 'creative' && !this._startCoins && this.inventory?.purse) {
-            const inv = this.inventory, held = ['right', 'left'].map((s) => this.items?.held[s]?.item);
-            const has = inv.purse.magic || inv.slots.some((s) => s?.kind === 'coins' && s.magic) || held.some((it) => it?.kind === 'coins' && it.magic);
-            if (!has) {
-                this._startCoins = true;
-                inv.purse.tieMagic({ kind: 'coins', magic: true, uid: 'cmp-start', count: inv.coins() === 0 ? 100 : 0 });
-                inv._render?.();
-            }
+            this._startCoins = true;
+            if (!this._playerRestored && this.inventory.coins() === 0) { this.inventory.purse.add(100); this.inventory._render?.(); }
         }
         this.prewarm();
         this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)

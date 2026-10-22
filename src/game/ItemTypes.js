@@ -427,8 +427,7 @@ export function rollKeyItem(r = Math.random) {
     if (x < 0.66) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: true, bonus: randInt(r, 1, 60), uid: newUid() };
     if (x < 0.76) { const t = randInt(r, 0, 2); return { kind: 'shield', uid: newUid(), type: t, magic: true, max: randInt(r, 20, 50) }; }
     if (x < 0.86) return { kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) };
-    if (x < 0.96) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
-    if (x < 0.975) return { kind: 'coins', uid: newUid(), magic: true, count: randInt(r, 0, 40) }; // (the magic pouch: no end of coins in it — CoinBelt)
+    if (x < 0.975) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: true, bonus: randInt(r, 1, 60), arrows: 10 };
     return { kind: 'hammer', uid: newUid(), charges: 0 };
 }
 
@@ -462,7 +461,7 @@ export function rollPlainItem(r = Math.random, deep = false) {
  * happen now and then — the shares are the author's, thing by thing.)
  */
 export const CAVE_LOOT = [
-    ['spellScroll', 48.5], ['armor', 10], ['shield', 8], ['weapon', 7], ['magicPouch', 5], ['wand', 4.5], ['hpScroll', 4.1],
+    ['spellScroll', 53.5], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5], ['hpScroll', 4.1],
     ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['hammer', 0.3],
 ]; // (no mana scroll: the author — «useless»; its share went to the spell scrolls)
 const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
@@ -474,7 +473,6 @@ const CAVE_MAKE = {
     weapon: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; },
     bow: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; },
     arrows: (r) => ({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) }),
-    magicPouch: (r) => ({ kind: 'coins', uid: newUid(), magic: true, count: randInt(r, 0, 40) }), // (the bottomless pouch — CoinBelt)
     wand: (r) => rollWand(r),
     hpScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }),
     robe: (r) => makeRobe(false, r),
@@ -570,8 +568,7 @@ export function describeItem(it) {
         case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
         case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
         case 'wool': return { title: '🧶 Шерсть', color: 0xf6f4ee, lines: [`Клубков: <b>${it.count || 1}</b>`, 'Для кровати: 3 шерсти + 4 бревна (в ячейках или рядом) и «Create a Bed»'] };
-        case 'coins': if (it.magic) return { title: '✨ Магический мешочек', color: 0xd4243a, lines: [`Монет: <b>${it.count || 0}</b> — влезает сколько угодно (незримое расширение)`, 'Привяжите к поясу, как обычный: монеты из обычных мешочков пересыпаются в него', 'Платите им на рынке замка — сам мешочек остаётся вашим'] };
-            return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу: глядя вниз, левой рукой с мешочком к правому боку (левша — наоборот)', 'Платите ими на рынке замка'] };
+        case 'coins': return { title: '✨ Мешочек с монетами', color: 0xd4243a, lines: [`Монет: <b>${it.count || 0}</b> — влезает сколько угодно (незримое расширение)`, 'Привяжите к поясу: глядя вниз, левой рукой к правому боку (левша — наоборот); чужой мешочек сам высыпается в ваш', 'Платите им на рынке замка — торговец берёт только цену, сам мешочек остаётся вашим'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
         case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмите в руку и <b>сожмите</b> — он расколется, его сила уйдёт в вас: <b>+1</b> ячейка маны'] };
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };

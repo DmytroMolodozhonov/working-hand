@@ -34,7 +34,7 @@ import * as THREE from 'three';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
-import { MAGIC_POUCH_PRICE, makeMagicPouch } from './CoinBelt.js';
+import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor, TOOLS } from '../ai/TalkActions.js';
@@ -53,8 +53,8 @@ const VOICE = 35; // m: a villager's voice carries this far
 const SHOUT_RANGE = 60; // m: a battle cry / a call for help carries much farther
 /** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
 const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', price: 35 }, { kind: 'crystal', price: 70 }];
-/** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes), a magic coin pouch (CoinBelt). */
-const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }, { kind: 'magicPouch', price: MAGIC_POUCH_PRICE, fixed: true }];
+/** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes) (no coin pouch: it is nobody's good — CoinBelt). */
+const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }];
 const _v = new THREE.Vector3();
 /** A villager's short line when something in a talk went wrong (the reason goes to the journal). */
 const TALK_SORRY = ['Хм… прости, мысль убежала.', 'Ох, о чём это я… Давай потом.', 'Погоди-ка, сбилась мысль.', 'Повтори-ка потом, путник.'];
@@ -694,8 +694,7 @@ export class CastleTalk {
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
                     const item = wiz ? { ...wiz.item, shop: { stall: key, price } }
-                        : pick.kind === 'magicPouch' ? { ...makeMagicPouch(newUid()), shop: { stall: key, price } }
-                        : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
+                                        : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
                         : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (wiz && item.kind === 'book') item.spells = bookSpells(item.id);
@@ -898,14 +897,8 @@ export class CastleTalk {
         if (uid && g.items.loose.has(uid)) g.items.pickUp(uid, '#merchant', 'right');
         else if (wid) { const w = g.weapons.byId.get(wid); if (w) { g.weapons.remove(w); g.sync?.weaponGone?.(w); } }
         else return;
-        // (a pouch holds 500 at most: a bigger sum is several pouches)
-        let left = Math.max(1, Math.round(price)), k = 0;
-        while (left > 0) {
-            const n = Math.min(500, left);
-            left -= n;
-            g.items.spawnLoose({ kind: 'coins', uid: newUid(), count: n }, new THREE.Vector3(p.x + (k % 2) * 0.35, p.y + 0.3 + Math.floor(k / 2) * 0.3, p.z + (k % 2 ? 0.2 : 0)));
-            k++;
-        }
+        // (one pouch with the whole sum: the pouch has no limit; picked up, its coins go into mine)
+        g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(p.x, p.y + 0.3, p.z));
     }
 
     /** A thing of mine in my hands or slots, by uid. */

@@ -87,7 +87,7 @@ export function wizardGood(trade, k, n = 0) {
             if (k === 0) return { item: { kind: 'crystal', uid: newUid(), count: 1 }, price: 70 };
             const x = r();
             if (k === 1) {
-                if (x < 0.5) return { item: { kind: 'coins', uid: newUid(), count: 0, magic: true }, price: 750 }; // (CoinBelt.MAGIC_POUCH_PRICE)
+                // (no coin pouch for sale: every hero has the one bottomless pouch — CoinBelt)
                 const max = randInt(r, 20, 40);
                 return { item: { kind: 'shield', uid: newUid(), type: 2, magic: true, max }, price: Math.round((90 + max) * 1.4) };
             }

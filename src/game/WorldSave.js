@@ -121,8 +121,8 @@ export function playerSnapshot(game) {
     return {
         slots,
         extraSlots: inv ? Math.max(0, inv.slots.length - 5) : 0,
-        purse: inv?.purse?.count || 0, // the coins in the pouches on the belt (CoinBelt)
-        purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the magic pouch is on the belt (all the coins in it)
+        purse: inv?.purse?.count || 0, // the coins in the pouch on the belt (CoinBelt)
+        purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the pouch is on the belt (all the coins in it)
         ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
@@ -146,6 +146,7 @@ export function applyPlayerSnapshot(game, s) {
     if (!s) return;
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     const inv = game.inventory;
+    let owed = 0; // coins of an old save that wait for the pouch
     if (inv && Array.isArray(s.slots)) {
         if (s.extraSlots && inv.setExtraSlots) inv.setExtraSlots(s.extraSlots);
         for (let i = 0; i < inv.slots.length; i++) inv.slots[i] = s.slots[i] ? { ...s.slots[i] } : null;
@@ -153,7 +154,9 @@ export function applyPlayerSnapshot(game, s) {
         if (typeof s.ownWand === 'string') inv.ownWand = s.ownWand;
         if (inv.purse) { inv.purse.count = 0; inv.purse.magic = false; inv.purse.magicUid = null; }
         if (inv.purse && s.purseMagic) inv.purse.tieMagic({ kind: 'coins', magic: true, uid: typeof s.purseMagic === 'string' ? s.purseMagic : undefined, count: 0 });
-        if (inv.purse && Number.isFinite(s.purse) && s.purse > 0) { const rest = inv.purse.add(s.purse); if (rest > 0) inv.storeItem({ kind: 'coins', uid: 'c' + Date.now().toString(36), count: rest }); }
+        // (an old save: the plain pouches in the slots and the coins of the belt's pouches go into the one bottomless pouch — nothing is lost)
+        owed = Number.isFinite(s.purse) && s.purse > 0 ? s.purse : 0;
+        for (let i = 0; i < inv.slots.length; i++) { const it = inv.slots[i]; if (it?.kind === 'coins' && !it.magic && !it.shop) { owed += it.count || 0; inv.slots[i] = null; } }
         inv._render?.();
     }
     if (game.books && Array.isArray(s.learned)) for (const k of s.learned) game.books.learned.add(k);
@@ -168,6 +171,14 @@ export function applyPlayerSnapshot(game, s) {
         if (s.bonus.fatigue) game.combat.addMaxFatigue?.(s.bonus.fatigue);
     }
     if (s.gear) game.items?.restore(s.gear);
+    if (inv?.purse) { // (every hero has the pouch: a save without it gets a new one; the coins owed go into it)
+        inv.purse.ensure();
+        if (owed > 0) {
+            if (inv.purse.magic) inv.purse.add(owed);
+            else { const mine = [inv.slots.find((x) => x?.kind === 'coins'), game.items?.held.right?.item, game.items?.held.left?.item].find((x) => x?.kind === 'coins'); if (mine) mine.count = (mine.count || 0) + owed; }
+        }
+        inv._render?.();
+    }
     if (s.mana) game.mana?.restore(s.mana);
     if (s.ach) game.achievements?.restore(s.ach);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);

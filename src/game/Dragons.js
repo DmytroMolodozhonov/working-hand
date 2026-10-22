@@ -47,7 +47,6 @@ const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
 const TAU = Math.PI * 2;
 /** m from the heap's middle: a dead knight's bones, his named armour and sword (just beyond the fullest heap). */
 const BONES_R = 5.2;
-const POUCH = 500; // (CoinBelt.POUCH_MAX)
 /** Wandering dragons: checked this often (s) by the host; this chance a check brings one. */
 const WANDER = { EVERY: 60, CHANCE: 0.02, FIRST: 600, /* (rare: about one in 50 minutes of play, none in the first 10 — «dragons fly too often», the author) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */
@@ -425,7 +424,7 @@ export class Dragons {
             st.spawned = true;
             const rng = createRng(L.seed ^ 0xb4c5);
             const at = (a, r, up = 0.4) => new THREE.Vector3(hx + Math.cos(a) * r, fy + up, hz + Math.sin(a) * r);
-            // pouches: on the heap's slope and round it (none full; some empty, to gather into)
+            // pouches of coins: on the heap's slope and round it (picked up, their coins go into the hero's pouch)
             e.hoard.bags.forEach((n) => {
                 const it = { kind: 'coins', uid: newUid(), count: n };
                 g.items.spawnLoose(it, at(rng() * TAU, R * (0.6 + rng() * 0.7), 0.6));
@@ -617,13 +616,12 @@ export class Dragons {
         const near = (p) => p && hp.distanceTo(p) < 0.4;
         let put = 0, where = '';
         if (pouch?.kind === 'coins' && near(g.character.getHandWorldPosition(other, _v2))) {
-            const k = pouch.magic ? n : Math.max(0, Math.min(n, POUCH - (pouch.count || 0))); // (the magic pouch: no end to it)
-            pouch.count = (pouch.count || 0) + k;
-            put = k; where = `в ${pouch.magic ? 'магический ' : ''}мешочек (в нём ${pouch.count})`;
+            pouch.count = (pouch.count || 0) + n; // (the pouch has no end)
+            put = n; where = `в мешочек (в нём ${pouch.count})`;
             inv?._render?.();
         } else if (inv?.purse && inv.purse.any && g.currentPose?.purse?.off === true && inv.headDown && side !== (g.dom || 'right')) { // (the pouches are the other hand's: CoinBelt)
             const rest = inv.purse.add(n);
-            put = n - rest; where = inv.purse.magic ? `в магический мешочек на поясе (${inv.purse.count})` : `в мешочки на поясе (${inv.purse.count})`;
+            put = n - rest; where = `в мешочек на поясе (${inv.purse.count})`;
             inv._render?.();
         }
         n -= put;

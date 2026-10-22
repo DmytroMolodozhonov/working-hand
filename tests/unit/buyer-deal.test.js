@@ -36,12 +36,12 @@ test('deal: forgotten after ~10 minutes and when the player walks far; weapons k
     assert.equal(dealKey({ wid: 5 }), 'w5');
 });
 
-test('deal: a sum above 500 is several pouches', () => {
+test('deal: a big sum is one pouch (it has no limit)', () => {
     const spawned = [];
     const t = Object.create(CastleTalk.prototype);
     t.game = { items: { loose: new Map([['u', {}]]), pickUp() {}, spawnLoose: (it) => spawned.push(it) }, weapons: { byId: new Map() } };
     t.sellNow('u', null, 1234, { x: 0, y: 0, z: 0 });
-    assert.deepEqual(spawned.map((c) => c.count), [500, 500, 234]);
+    assert.deepEqual(spawned.map((c) => c.count), [1234]);
 });
 
 test('the off hand: the right-hander puts with the left, the left-hander with the right', () => {

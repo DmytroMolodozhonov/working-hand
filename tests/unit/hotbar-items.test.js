@@ -79,7 +79,8 @@ test('a full pocket: a pouch, a wand, a scroll stay in the hand — they never v
     const pouch = { kind: 'coins', uid: 'c9', count: 40 };
     g.items.held.left = { item: pouch };
     inv.pocketRight('left');
-    assert.equal(g.items.held.left?.item, pouch, 'the pouch is still in the hand');
+    assert.equal(g.items.held.left, null, 'the second pouch is emptied into the belt\'s one: a hero has one pouch');
+    assert.equal(inv.purse.count, 340, 'its coins are in it: nothing lost');
     const wand = { kind: 'wand', uid: 'w1', model: 2, color: 0x123456 };
     g.items.held.right = { item: wand };
     assert.equal(inv.wandPocket('right'), false);

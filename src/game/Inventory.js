@@ -29,7 +29,7 @@ import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { ITEM_INFO, starterWand } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
-import { CoinBelt, purseBags } from './CoinBelt.js';
+import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
 import { accioCatcher } from './Accio.js';
@@ -122,14 +122,14 @@ export function sameLook(a, b) {
 }
 const LOOK_KEYS = ['color', 'rec', 'cooked', 'stat', 'spell', 'model', 'type', 'from'];
 
-/** The little pouch by the coin counter: red velvet with a golden ribbon and ∞ (the magic one), or brown leather with a cord. */
-export function pouchIcon(magic) {
-    const [body, edge, tie] = magic ? ['#b3202a', '#5e0c13', '#f2c14e'] : ['#8b5a2b', '#3f2612', '#d8b67a'];
+/** The little pouch of the pouch cell: red velvet with a golden ribbon and ∞ (the only pouch there is). */
+export function pouchIcon() {
+    const [body, edge, tie] = ['#b3202a', '#5e0c13', '#f2c14e'];
     return '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">' +
         `<path d="M8.6 7.4C3.4 10.6 3 21 12 21s8.6-10.4 3.4-13.6z" fill="${body}" stroke="${edge}" stroke-width="1.2"/>` +
         `<path d="M8.9 7.6 7.2 3.6Q12 5.2 16.8 3.6l-1.7 4z" fill="${body}" stroke="${edge}" stroke-width="1.1"/>` +
         `<rect x="7.4" y="6.6" width="9.2" height="2" rx="1" fill="${tie}" stroke="${edge}" stroke-width="0.5"/>` +
-        (magic ? `<text x="12" y="17.8" font-size="9" font-weight="bold" text-anchor="middle" fill="${tie}" font-family="sans-serif">∞</text>` : '') +
+        `<text x="12" y="17.8" font-size="9" font-weight="bold" text-anchor="middle" fill="${tie}" font-family="sans-serif">∞</text>` +
         '</svg>';
 }
 
@@ -219,7 +219,7 @@ export class Inventory {
             if (!h || h.item.kind !== 'coins' || left <= 0) continue;
             const k = Math.min(left, h.item.count || 0);
             h.item.count -= k; left -= k;
-            if (h.item.count <= 0 && !h.item.magic) this.game.items.releaseHand(side); // (the magic pouch stays, empty: a thing of its own)
+            if (h.item.count <= 0 && !h.item.magic) this.game.items.releaseHand(side); // (the pouch stays, empty: a thing of its own)
         }
         for (let i = 0; i < this.slots.length && left > 0; i++) {
             const s = this.slots[i];
@@ -239,6 +239,7 @@ export class Inventory {
      */
     ensureStarterWand() {
         const g = this.game;
+        this.purse?.ensure(); // (every hero has the one bottomless pouch: a new game, a guest, after death…)
         const has = this.slots.some((s) => s?.kind === 'wand') || ['left', 'right'].some((side) => g.items?.held[side]?.item.kind === 'wand');
         if (has) return false;
         const i = this.slots.findIndex((s) => !s);
@@ -289,7 +290,7 @@ export class Inventory {
     canStore(item) {
         if (!item) return false;
         if (this.slots.some((x) => !x)) return true;
-        const max = item.magic && item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack;
+        const max = item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack;
         if (!max) return false;
         let room = 0;
         for (const x of this.slots) if (x && x.kind === item.kind && !x.magic && sameLook(x, item)) room += Math.max(0, max - (x.count || 1));
@@ -298,7 +299,7 @@ export class Inventory {
 
     /** A found thing into a slot (food stacks up to 10, coins up to 500). */
     storeItem(item) {
-        const max = item.magic && item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack; // (the magic pouch: a thing of its own, never stacked)
+        const max = item.kind === 'coins' ? 0 : ITEM_INFO[item.kind]?.stack; // (the magic pouch: a thing of its own, never stacked)
         if (max) {
             for (const s of this.slots) {
                 if (s && s !== item && s.kind === item.kind && !s.magic && sameLook(s, item) && (s.count || 1) < max) {
@@ -878,29 +879,24 @@ export class Inventory {
         this._render();
     }
 
-    /** The pouch cell: redrawn only when something changed. */
+    /** The pouch cell: redrawn only when something changed (the coins on hover; no count of pouches: it is one). */
     _renderPouch() {
         const c = this.pouchCell;
         if (!c) return;
         const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
-        const key = o.count + '|' + o.magic + '|' + o.coins + '|' + sel;
+        const key = o.have + '|' + o.coins + '|' + sel;
         if (key === this._pouchKey) return;
         this._pouchKey = key;
         c.classList.toggle('sel', sel);
-        c.classList.toggle('empty', o.count === 0);
-        c.querySelector('.hb-icon').innerHTML = pouchIcon(o.magic);
-        c.querySelector('.hb-count').textContent = o.count > 0 ? o.count : '';
-        c.title = o.count === 0 ? 'Мешочков нет' : (o.magic ? 'Бездонный мешочек, монет: ' : 'Мешочков: ' + o.count + ', монет: ') + o.coins;
+        c.classList.toggle('empty', !o.have);
+        c.querySelector('.hb-icon').innerHTML = pouchIcon();
+        c.querySelector('.hb-count').textContent = '';
+        c.title = 'Бездонный мешочек, монет: ' + o.coins;
     }
 
-    /** My pouches: how many (the magic one counts as one), is there a magic one, all the coins. */
+    /** My pouch: have I it (on the belt, in a slot or in a hand), and all the coins. */
     pouchInfo() {
-        const g = this.game, p = this.purse;
-        let count = p ? (p.magic ? 1 : purseBags(p.count).length) : 0;
-        const mine = (it) => !!it && it.kind === 'coins' && !it.shop;
-        for (const s of this.slots) if (mine(s)) count++;
-        for (const side of ['right', 'left']) if (mine(g.items?.held[side]?.item)) count++;
-        return { count, magic: this.hasMagicPouch(), coins: this.coins() };
+        return { have: this.hasMagicPouch(), coins: this.coins() };
     }
 
     /** A click on the pouch cell: a pouch in a hand goes back onto the belt, else the best pouch of the belt comes into a free hand. */
@@ -920,29 +916,25 @@ export class Inventory {
         this._render();
     }
 
-    /** Have I a magic pouch (on the belt, in a slot or in a hand)? One is enough: coins without end. */
+    /** Have I my pouch (on the belt, in a slot or in a hand)? It is the only one: coins without end. */
     hasMagicPouch() {
         if (this.purse?.magic) return true;
-        const mine = (it) => !!it && it.kind === 'coins' && it.magic && !it.shop; // (one for sale, not paid for: not mine)
+        const mine = (it) => !!it && it.kind === 'coins' && !it.shop; // (one for sale, not paid for: not mine)
         if (this.slots.some(mine)) return true;
         for (const side of ['right', 'left']) if (mine(this.game.items?.held[side]?.item)) return true;
         return false;
     }
 
-    /** The coin counter at the top right of the screen: my pouch (red — the magic one, brown — plain), 🪙 and all my coins. */
+    /** The coin counter at the top right of the screen: 🪙 and all my coins. */
     _renderCoins() {
         if (typeof document === 'undefined') return;
         this._renderPouch();
-        const n = this.coins(), magic = this.hasMagicPouch();
-        if (n === this._coinsShown && magic === this._pouchShown) return;
+        const n = this.coins();
+        if (n === this._coinsShown) return;
         const el = document.getElementById('coin-count');
         if (!el) return;
         this._coinsShown = n;
         el.textContent = n;
-        if (magic === this._pouchShown) return;
-        this._pouchShown = magic;
-        const ic = document.getElementById('coin-pouch');
-        if (ic) { ic.innerHTML = pouchIcon(magic); ic.title = magic ? 'Бездонный мешочек: монет — сколько угодно' : 'Обычный мешочек: до 500 монет (на поясе — до трёх, 1500)'; }
     }
 
     show(on) {

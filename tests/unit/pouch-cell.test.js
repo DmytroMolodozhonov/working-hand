@@ -26,14 +26,14 @@ test('pouch cell: circle is [slots…, pouch], the pouch goes back onto the belt
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' };
     inv.slots[0] = a; inv.slots[1] = b;
-    inv.purse.count = 700; // two pouches: 500 + 200
+    inv.purse.count = 700;
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, a);
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, b);
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item.kind, 'coins', 'the last of the circle is the pouch');
-    assert.equal(g.items.held.left.item.count, 500);
+    assert.equal(g.items.held.left.item.count, 700, 'the pouch is one: all the coins');
     assert.equal(inv.coins(), 700);
     inv.pocketTouch('left');
     assert.equal(inv.purse.count, 700, 'back onto the belt: no coin lost');
@@ -41,8 +41,9 @@ test('pouch cell: circle is [slots…, pouch], the pouch goes back onto the belt
     assert.equal(g.items.held.left.item, a, 'the circle goes on from the start');
 });
 
-test('pouch cell: no pouches — no pouch in the circle', () => {
+test('pouch cell: the pouch is off the belt (lost) — no pouch in the circle', () => {
     const g = fakeGame(), inv = g.inventory;
+    inv.purse.takeAll();
     const a = { kind: 'meat', uid: 'a', count: 1 };
     inv.slots[0] = a;
     inv.pocketTouch('left');
@@ -50,19 +51,16 @@ test('pouch cell: no pouches — no pouch in the circle', () => {
     assert.equal(g.items.held.left.item, a);
 });
 
-test('pouch cell: red picture with a magic pouch, the number of pouches', () => {
+test('pouch cell: the red picture, no number of pouches, the coins on hover; one pouch only', () => {
     const g = fakeGame(), inv = g.inventory;
-    assert.deepEqual(inv.pouchInfo(), { count: 0, magic: false, coins: 0 });
-    inv.purse.count = 1200; // 500 + 500 + 200
-    inv.slots[3] = { kind: 'coins', uid: 'c', count: 40 };
-    assert.equal(inv.pouchInfo().count, 4);
-    assert.equal(inv.pouchInfo().magic, false);
-    inv.slots[4] = { kind: 'coins', uid: 'm', count: 5, magic: true };
-    const o = inv.pouchInfo();
-    assert.equal(o.count, 5);
-    assert.equal(o.magic, true);
-    assert.notEqual(pouchIcon(true), pouchIcon(false));
-    assert.ok(pouchIcon(o.magic).includes('#b3202a'));
+    assert.deepEqual(inv.pouchInfo(), { have: true, coins: 0 }, 'a new hero has the pouch');
+    inv.purse.count = 1200;
+    assert.deepEqual(inv.pouchInfo(), { have: true, coins: 1200 });
+    assert.ok(pouchIcon().includes('#b3202a'));
+    inv.purse.takeAll();
+    assert.equal(inv.pouchInfo().have, false);
+    inv.purse.ensure();
+    assert.equal(inv.pouchInfo().have, true, 'given again');
 });
 
 test('pouch cell: a click takes the pouch and puts it back', () => {

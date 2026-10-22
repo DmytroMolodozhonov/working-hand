@@ -994,18 +994,17 @@ export class ItemSystem {
             if (left > 0) { item.count = left; this._noRoom(item); }
             return;
         }
-        // a pouch of money: into the hand (to be tied on the belt's right side: CoinBelt); «Gather»
-        // or both hands busy — straight onto the belt (what does not fit — into a slot)
-        if (item.kind === 'coins' && !item.shop) { // (a magic pouch for sale on a counter: a good, not money)
-            const g = this.game, purse = g.inventory.purse;
+        // a pouch of money (every pouch is the bottomless one): its coins go straight into mine on the belt and it is
+        // gone — a hero has one pouch (the author). Mine is not on the belt (in a hand / a slot): into that one; none at all: this one is mine.
+        if (item.kind === 'coins' && !item.shop) { // (a pouch for sale on a counter: a good, not money)
+            const g = this.game, inv = g.inventory, purse = inv.purse;
             const n = item.count || 0;
-            const busy = (s) => !!(this.held[s] || g.weapons?.hands?.[s]?.held);
-            if (purse && (side === 'slot' || (busy('right') && busy('left')))) {
-                if (item.magic && purse.tieMagic(item)) { g.hud.setVoice?.(`✨ Магический мешочек на поясе (всего ${g.inventory.coins()} монет)`, true); return; }
-                item.count = purse.add(n);
-                if ((item.count <= 0 && !item.magic) || g.inventory.storeItem(item)) { g.hud.setVoice?.(`💰 +${n} монет (всего ${g.inventory.coins()})`, true); return; } // (a second magic pouch, emptied: into a slot)
-            } else if (this.takeIntoHand(item, side) || this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
-                g.hud.setVoice?.(`💰 Мешочек: ${n} монет — приложите руку с ним к поясу справа, чтобы привязать`, true);
+            item.magic = true;
+            if (purse?.magic) { purse.add(n); inv._render?.(); if (n > 0) g.hud.setVoice?.(`💰 +${n} монет (всего ${inv.coins()})`, true); return; }
+            const mine = [inv.slots.find((s) => s && s.kind === 'coins' && !s.shop), g.items.held.right?.item, g.items.held.left?.item].find((it) => it && it.kind === 'coins' && !it.shop);
+            if (mine) { mine.count = (mine.count || 0) + n; inv._render?.(); if (n > 0) g.hud.setVoice?.(`💰 +${n} монет (всего ${inv.coins()})`, true); return; }
+            if (this.takeIntoHand(item, side) || this.takeIntoHand(item, side === 'right' ? 'left' : 'right') || inv.storeItem(item)) {
+                g.hud.setVoice?.('✨ Мешочек в руке — приложите его к поясу справа, чтобы привязать', true);
                 return;
             }
         }
@@ -1247,7 +1246,7 @@ export class ItemSystem {
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
         if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
-        if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left, !!item.magic); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body; the magic pouch — one)
+        if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body; the magic pouch — one)
         else if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
     }

@@ -214,8 +214,7 @@ export class DeathSystem {
         const held = [];
         // (everything — the High Mage's suit too: the author, «умер — всё»; it lies by the body for the taking)
         if (it) for (const side of ['right', 'left']) if (it.held[side]) held.push(it.releaseHand(side));
-        // the coin pouches on the belt drop too, each as it was (CoinBelt)
-        // (the magic pouch drops whole, with all its coins in it)
+        // the pouch on the belt drops too: whole, with all its coins in it (CoinBelt); the reborn hero gets a new empty one
         if (inv?.purse?.any) held.push(...inv.purse.takeAll());
         const slots = inv ? [...inv.slots] : [];
         held.push(...(g.armor?.takeOffAll({ suit: true }) || [])); // (the armour, the robe and the suit worn drop too)

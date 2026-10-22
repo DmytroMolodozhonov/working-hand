@@ -67,6 +67,7 @@ test('loot balance: a deep cave chest gives the author\'s shares (no food; spell
             : it.kind === 'coins' ? 'magicPouch' : it.kind;
         c[k] = (c[k] || 0) + 1; tot++;
     }
+    assert.ok(!c.magicPouch, 'no coin pouch among a chest\'s things');
     assert.ok(!['bread', 'cheese', 'steak', 'pie', 'apple'].some((k) => c[k]), `no food in a cave chest ${JSON.stringify(c)}`);
     for (const [k, w] of Object.entries(want)) assert.ok(Math.abs(100 * (c[k] || 0) / tot - w) < 0.6, `${k}: ${(100 * (c[k] || 0) / tot).toFixed(2)} % vs ${w} %`);
 });

@@ -310,7 +310,7 @@ function magicPouch() {
 
 /** A coin pouch's model (kind 'coins'): the magic one for `it.magic`. */
 export function pouchModel(it) {
-    return it?.magic ? magicPouch() : plainPouch();
+    return magicPouch(); // (all the pouches are the bottomless one now: the plain leather one is gone from the game)
 }
 
 /**
