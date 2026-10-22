@@ -34,6 +34,7 @@
 
 import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
+import { pickRevealTarget } from './RevealTarget.js';
 import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
 
 const _v = new THREE.Vector3();
@@ -520,78 +521,32 @@ export class WandMagic {
             ch.getHandDirection(side, _v2);
         }
         const dir = _v2.clone();
-        let target = null, at = null;
-        // a thing lying / hovering where the wand points (the cone wider for a near thing — it is a big
-        // target, and the camera's hand trembles: the author pointed at the things by him and got nothing)
-        // — scored by the angle beyond what its distance allows
-        let best = 0;
-        const cone = (d) => 0.3 + Math.atan2(0.7, Math.max(0.5, d));
-        const score = (ang, d) => cone(d) - ang;
+        let target = null, at = null, info = null;
+        // every thing that can be revealed (never the casting wand): the choice is RevealTarget's
+        const things = [];
         for (const L of g.items.loose.values()) {
-            const to = _v.subVectors(L.model.position, tip);
-            const d = to.length();
-            if (d > 10) continue;
-            const sc = score(dir.angleTo(to.normalize()), d);
-            if (sc > best) { best = sc; target = L.item; at = L.model.position.clone(); }
+            if (L.item === this.wand) continue;
+            things.push({ pos: L.model.position, item: L.item });
         }
-        for (const w of g.weapons.weapons) {
-            const to = _v.subVectors(w.position, tip);
-            const d = to.length();
-            if (d > 10) continue;
-            const sc = score(dir.angleTo(to.normalize()), d);
-            if (sc > best) { best = sc; target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); }
-        }
-        // a running book (a creature and a book at once): its secret
-        // (small and running: where the wand OR the arm points, a wide cone, up to 30 m — and it
-        // wins over the things about: that is what the hand is after)
-        let info = null;
-        const arm = side ? g.character.getForearmDirection?.(side, new THREE.Vector3()) : null;
-        let rbBest = Infinity;
-        for (const { pos } of g.runner?.accioTargets?.() || []) {
-            const to = _v.subVectors(pos, tip);
-            const d = to.length();
-            if (d > 30) continue;
-            to.normalize();
-            const ang = Math.min(dir.angleTo(to), arm ? arm.angleTo(to) : Infinity);
-            if (ang < 0.45 + Math.atan2(1.5, d) && ang < rbBest) { rbBest = ang; best = Infinity; info = g.runner.secret(); target = { kind: 'book', runbook: true }; at = pos.clone(); }
-        }
-        // a book-bird's book lying on the ground or on a pedestal
+        for (const w of g.weapons.weapons) things.push({ pos: w.position, item: { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus } });
         for (const bk of g.books?.books?.values() || []) {
-            const to = _v.subVectors(bk.model.position, tip);
-            const d = to.length();
-            if (d > 10) continue;
-            const sc = score(dir.angleTo(to.normalize()), d);
-            if (sc > best) { best = sc; info = null; target = { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) }; at = bk.model.position.clone(); }
+            things.push({ pos: bk.model.position, item: { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) } });
         }
-        // nothing in the narrow cone: the nearest thing in a wider one (a stall's wares, a book on a shelf) —
-        // the wand in my own hand is described only when there is really nothing else by the line
-        if (!target) {
-            let wide = Infinity;
-            for (const L of g.items.loose.values()) {
-                if (L.item === this.wand || L.item.kind === 'coins' && !L.item.magic) continue;
-                const to = _v.subVectors(L.model.position, tip);
-                const d = to.length();
-                if (d > 6) continue;
-                const ang = dir.angleTo(to.normalize());
-                if (ang < 0.9 && ang + d * 0.05 < wide) { wide = ang + d * 0.05; target = L.item; at = L.model.position.clone(); }
-            }
+        for (const { pos } of g.runner?.accioTargets?.() || []) things.push({ pos, run: true, item: { kind: 'book', runbook: true } });
+        // the things in the hands (a second wand or a staff in the other hand counts; only the casting wand does not)
+        for (const s of ['left', 'right']) {
+            const it = g.items.held[s], w = g.weapons.hands[s].held;
+            if (it && it.item !== this.wand) things.push({ pos: it.model.position, item: it.item });
+            else if (w) things.push({ pos: w.position, item: { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus } });
         }
-        // the thing in the other hand (or in this bare hand), else the wand itself
-        if (!target) {
-            for (const s of [side === 'right' ? 'left' : 'right', side]) {
-                const it = g.items.held[s], w = g.weapons.hands[s].held;
-                // (a second wand or a staff in the other hand is a target too; only the casting wand is not)
-                if (it && it.item !== this.wand) { target = it.item; at = it.model.position.clone(); break; }
-                if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
-            }
-            // (a running book far off but the wand pointed straight at it: say so; a book elsewhere is not mentioned)
-            const rb = (g.runner?.accioTargets?.() || []).filter((r) => dir.angleTo(_v.subVectors(r.pos, tip).normalize()) < 0.2);
-            if (!target && rb.length) {
-                const near = Math.min(...rb.map((r) => r.pos.distanceTo(tip)));
-                if (near > 30) { g.hud.setVoice(`🔮 Бегущая книга слишком далеко (${Math.round(near)} м) — подойдите ближе`, true); return false; }
-            }
-            if (!target && this.wand) { target = this.wand; at = tip.clone(); }
-        }
+        const pick = pickRevealTarget(tip, dir, things);
+        if (pick.thing) {
+            target = pick.thing.item; at = pick.thing.pos.clone();
+            if (pick.thing.run) info = g.runner.secret();
+        } else if (pick.far) {
+            g.hud.setVoice(`🔮 Бегущая книга слишком далеко (${Math.round(pick.far)} м) — подойдите ближе`, true);
+            return false;
+        } else if (this.wand) { target = this.wand; at = tip.clone(); } // nothing near at all: the wand's own secrets
         if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
         this._showHologram(info || describeItem(target), at);
         return true;
