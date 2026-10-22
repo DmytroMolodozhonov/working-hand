@@ -7,11 +7,11 @@ import { Liquidation, thingVerdict } from '../../src/game/Liquidation.js';
 import { CollisionWorld } from '../../src/world/Collision.js';
 
 test('what crumbles by which splash (and what never does)', () => {
-    for (const k of ['cauldron', 'chest', 'bed', 'door', 'crystal']) {
+    for (const k of ['cauldron', 'chest', 'bed', 'door']) {
         assert.equal(thingVerdict(k, false), 'maxima', k);
         assert.equal(thingVerdict(k, true), 'dust', k);
     }
-    for (const k of ['board', 'campfire']) assert.equal(thingVerdict(k, false), 'dust', k);
+    for (const k of ['board', 'campfire', 'crystal']) assert.equal(thingVerdict(k, false), 'dust', k);
     assert.ok(thingVerdict('door', true, { gate: true }).none);
     assert.ok(thingVerdict('chest', true, { ship: true }).none);
     assert.ok(thingVerdict('chest', true, { id: 'cart:7' }).none);

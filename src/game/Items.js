@@ -76,6 +76,7 @@ const GRIPPED = {
     flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
     potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     web: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a skein in the cupped hand)
+    crystal: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (a mana crystal in the cupped fingers, its tip out of the hand — squeeze it: ManaCrystals._crush)
     glass: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     phoenixFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (by its quill, the vane up out of the fist)
     owlFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (the same: by its quill)
@@ -111,7 +112,7 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
-export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {

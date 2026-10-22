@@ -9,7 +9,7 @@
  * wall can't be taken through it. The hand's speed (a throw, a punch) stays the player's own.
  *
  * Soft things a hand goes into are not blocks for it: leaves, wheat, flowers, vegetable beds,
- * water. Static furniture boxes (tables, beds) stop it too, and a shut chest (the hand lies on its
+ * water. Mana crystals in a cave (ManaCrystals.solidAt) stop it. Static furniture boxes (tables, beds) stop it too, and a shut chest (the hand lies on its
  * lid, the fingers find its front edge — Alohomora._chestHands; an open one is reached into); doors
  * and cauldrons have their own hand work (a handle, a rim) and are not touched here.
  * The same for other players' heroes, as this computer draws them.
@@ -86,6 +86,7 @@ export class HandBlocks {
         const g = this.game;
         const data = g.world?.terrain?.data;
         if (data?.get && handBlocked(data.get(Math.round(x), Math.floor(y + 1.5), Math.round(z)))) return true;
+        if (g.crystals?.solidAt(x, y, z)) return true; // (a mana crystal growing out of the rock: the hand lies on it)
         const col = g.collision;
         const W = col?.walls;
         if (W && y < W.height && W.set.has(Math.round(x / W.cellSize) + ',' + Math.round(z / W.cellSize))) return true;

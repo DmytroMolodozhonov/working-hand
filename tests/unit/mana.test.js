@@ -57,7 +57,7 @@ test('mana: the table — every spell matchSpell / SPELL_COST knows has its bonu
     assert.ok(firstSpellGain('BombardoMaxima') > firstSpellGain('Bombardo'));
 });
 
-test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1; a magical creature once per kind; a crystal +5', () => {
+test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1; a magical creature once per kind; a crystal +1 cell', () => {
     assert.equal(duelGain(30), 1);
     assert.equal(duelGain(20), 1);
     assert.equal(duelGain(35), 2, '1.5 → 2');
@@ -72,7 +72,7 @@ test('mana: a duel won — 30% of (the opponent\'s maximum − 30), at least +1;
     assert.ok(toasts.some((t) => t.includes('Пегас: +8')));
     assert.equal(g.mana.magicKill('cow'), 0, 'an ordinary animal');
     g.mana.crystal();
-    assert.equal(g.mana.max, 30 + 3 + 20 + 8 + 5);
+    assert.equal(g.mana.max, 30 + 3 + 20 + 8 + 1);
     assert.equal(g.combat.fatigue, g.mana.max, 'the mana in it grows too');
 });
 

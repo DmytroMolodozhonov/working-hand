@@ -358,6 +358,7 @@ export class Inspirius {
         }
         g.ships?.shock?.(p, by); // (every computer: rocked, the wood torn out; the host — holes, masts, sails)
         g.books?.hitAt?.(p, INSP.RUIN_R, by);
+        g.crystals?.hitAt?.(p, INSP.RUIN_R, by, INSP.NAME); // (mana crystals crack: their power to the caster — the host decides)
         g.houses?.hitAt?.(p, INSP.RUIN_R);
         g.boards?.blast?.(p, INSP.RUIN_R * 0.5, 9);
         g.cauldrons?.blast?.(p, INSP.RUIN_R * 0.5, 9);

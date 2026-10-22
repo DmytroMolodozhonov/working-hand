@@ -136,7 +136,7 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { bk, side: catcher, score };
             }
-            // a mana crystal growing in a cave (one by one)
+            // a mana crystal growing in a cave: torn out of the rock it cracks — its power to me (ManaCrystals.accio)
             for (const c of g.crystals?.growing() || []) {
                 const to = _v1.subVectors(c.center, hand);
                 const d = to.length();
@@ -279,7 +279,7 @@ export class Accio {
         const s = this.state;
         if (!s) return;
         if (s.L) { this._updateItem(dt); return; }
-        if (s.mc) { if (s.mc.done) this.state = null; return; } // (ManaCrystals flies it)
+        if (s.mc) { if (s.mc.done) this.state = null; return; } // (ManaCrystals: it cracked, its power flies to me)
         if (s.bk) { this._updateBook(dt); return; }
         const g = this.game;
         if (s.board) {

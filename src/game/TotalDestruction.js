@@ -307,6 +307,7 @@ export class TotalDestruction {
         g.phoenixes?.hitAt(at, R, 10 * P, d.name, by);
         g.owls?.hitAt(at, R, 10 * P, d.name, by); // (a scroll's spell: it kills an owl)
         g.castleLife?.hitAt(at, R, 8 * P, by);
+        g.crystals?.hitAt?.(at, R, by, d.name); // (mana crystals in it crack: their power to the caster)
         g.livingTrees?.hitAt(at, R, 8 * P, d.name); // (the mightiest spells break a living tree too, not only fire)
         g.ships?.blast?.(at, R, P, by);
         g.ships?.crew?.hitAt(at, R, 8 * P, by, d.name);

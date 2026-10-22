@@ -126,7 +126,7 @@ export const ITEM_INFO = {
     logs: { name: 'Брёвна', icon: '🪵', weight: 1.2 },
     // blocks dropped at a body (Death.js): picked up, they go back into a resource stack
     blocks: { name: 'Блоки', icon: '🧱', weight: 1 },
-    // deep in caves (ManaCrystals.js): break one with both hands — the mana maximum +5
+    // deep in caves (ManaCrystals.js): only «Gather» takes them whole; squeezed in the hand it cracks — +1 cell of mana
     crystal: { name: 'Кристалл маны', icon: '💎', weight: 0.3, stack: 10 },
     // ships (Cannons.js): a ball from the shot rack, put into a gun's muzzle by hand
     cannonball: { name: 'Пушечное ядро', icon: '⚫', weight: 3 },
@@ -539,7 +539,7 @@ export function describeItem(it) {
         case 'coins': if (it.magic) return { title: '✨ Магический мешочек', color: 0xd4243a, lines: [`Монет: <b>${it.count || 0}</b> — влезает сколько угодно (незримое расширение)`, 'Привяжите к поясу, как обычный: монеты из обычных мешочков пересыпаются в него', 'Платите им на рынке замка — сам мешочек остаётся вашим'] };
             return { title: '💰 Монеты', color: 0xffd700, lines: [`Монет: <b>${it.count || 0}</b>`, 'Привяжите к поясу: глядя вниз, левой рукой с мешочком к правому боку (левша — наоборот)', 'Платите ими на рынке замка'] };
         case 'bread': case 'cheese': case 'pie': return { title: `${ITEM_INFO[it.kind].icon} ${ITEM_INFO[it.kind].name}`, color: 0xd9b46c, lines: [`Поднесите ко рту: +${ITEM_INFO[it.kind].heal} HP`] };
-        case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмитесь за него <b>обеими руками</b> и разломите (разведите руки или поверните) — мана +<b>5</b> к максимуму'] };
+        case 'crystal': return { title: '💎 Кристалл маны', color: 0x5cb8ff, lines: [`Кристаллов: <b>${it.count || 1}</b>`, 'Возьмите в руку и <b>сожмите</b> — он расколется, его сила уйдёт в вас: <b>+1</b> ячейка маны'] };
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };
         case 'potion': {
             const r = recipeById(it.rec);
@@ -882,7 +882,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);

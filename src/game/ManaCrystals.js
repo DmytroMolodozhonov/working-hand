@@ -7,19 +7,30 @@
  *          blue light around them. The same cave always has the same crystals
  *          (from the world's seed); the ones taken are gone for everybody (synced,
  *          and kept in the world save). In Creative one lies on a pedestal too.
- *   Take:  - by hand: reach out to a crystal with an open hand and close the fingers on it —
- *            it breaks off into the hand (a fist bumping into it takes nothing);
- *          - «Gather» pointed at the cluster: all its crystals go into the slots;
- *          - «Акцио» pointed at a crystal: it breaks off and flies to the hand (one by one).
- *   Use:   hold it in one hand, take hold of it with the other hand too (fingers
- *          closed on it), then pull the hands apart or twist them — it shatters into
- *          sparkles and the mana maximum grows by +5 (Mana.js).
+ *   Break (the author: «раскалываю прямо где он находится — сжимаю его прямо в скале»):
+ *          - by hand, right in the rock: reach out with an open hand (the hand lies on the crystal —
+ *            it never goes through it: HandBlocks asks `solidAt`) and squeeze the fingers on it — it
+ *            cracks where it grows: shards, a ring, a flash, and its power flies as sparkles into
+ *            the one who broke it: +1 cell of mana (Mana.crystal — cells are the MAXIMUM). It never
+ *            goes into the slots that way. A fist bumping into it breaks nothing.
+ *          - by ANYTHING that breaks it: «Бомбардо» (Game.applyExplosion), «Liquidation», «Инспириус»,
+ *            Total Destruction, lightning, an earthquake under it, a blade swung into it, «Акцио»
+ *            tearing it out, the rock under its foot gone — the same burst, the power to whoever broke
+ *            it (`burst`). The host decides who that was (a guest asks it: 'mcq'), everybody sees the
+ *            burst and the sparkles fly to that player ('mcb'). Creatures and NPC (wizards, monsters,
+ *            villagers…) get nothing: the power has nobody to go into — it scatters.
+ *   Keep:  only «Gather» pointed at the cluster takes them whole — into the slots. A crystal taken
+ *          from a slot is in the hand (seen: Items GRIPPED); squeeze the hand — it cracks: +1 cell.
+ *          (Chests, the wizards' shop and Creative's pedestal give them as things too.)
+ *   Broken ones are gone for everybody (synced, kept in the world save: `taken`, a set of short ids;
+ *   a cave's cluster far behind is put away and made again with them still gone).
  */
 
 import * as THREE from 'three';
-import { crystalMesh, crystalItemModel } from './CrystalModel.js';
-import { newUid, disposeModel } from './ItemTypes.js';
+import { crystalMesh } from './CrystalModel.js';
+import { newUid } from './ItemTypes.js';
 import { CappedLog } from '../core/CappedLog.js';
+import { BLOCK, CHUNK } from '../world/Terrain.js';
 
 export const CRYSTAL = {
     CHANCE: 0.4, // share of caves with a cluster (rare)
@@ -29,18 +40,17 @@ export const CRYSTAL = {
     FAR: 260, // m (x or z): a cluster this far is put away
     // (the camera guesses how far forward a hand is only roughly: a hand closing on a crystal
     // the eye sees it at is taken — it was 0.16 m, and the fingers mostly closed on air)
-    TOUCH: 0.3, // m from a crystal's surface: the fingers close on it
+    TOUCH: 0.35, // m from a crystal's surface: the fingers close on it
     LIGHT_RANGE: 18, // m: the soft light shines at the nearest cluster this close
     OPEN: 0.42, // finger curl below this: an open hand
-    CLOSED: 0.55, // …above this: the fingers closed on it
-    OPEN_MS: 1.5, // s: the hand was open this lately (reaching out open, then closing) — a fist bumping into it takes nothing
-    LET_GO: 0.3, // s: a hand breaking it may look open for a moment (the camera blurs a fast pull)
-    BOTH: 0.45, // m between the palms: the other hand on the held crystal (two palms round a small gem)
-    PULL: 0.22, // m the hands move apart (both still holding it): it breaks
-    TWIST: 0.9, // rad the hands turn against each other: it breaks
+    CLOSED: 0.55, // …above this: the fingers closed on it (squeezed)
+    OPEN_MS: 2.5, // s: the hand was open this lately (reaching out open, then squeezing) — a fist bumping into it breaks nothing
     GATHER_RANGE: 10, // m
     GATHER_CONE: 0.45, // rad (as «Акцио»)
-    ACCIO_SPEED: 18, // m/s
+    BLADE_SPEED: 1.5, // m/s: a blade's tip moving this fast into a crystal cracks it
+    POWER_SPEED: 9, // m/s: the power flying to the one who broke it (faster as it goes)
+    BLAME_S: 5, // s: rock gone under a crystal this soon after a blast near it — that blast broke it
+    SKIN: 0.02, // m: the hand lies on its surface
 };
 
 /** A small seeded random generator from a string (same string + seed → same numbers). */
@@ -125,7 +135,7 @@ export function crystalCluster(cv, seed = 0, heightAt = null) {
     return { id: 'mc' + cv.id, cave: cv.id, x, y, z, floor, crystals };
 }
 
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _p = new THREE.Vector3();
 const _Y = new THREE.Vector3(0, 1, 0);
 
 /** Distance from p to the segment a–b. */
@@ -135,17 +145,42 @@ function segDist(p, a, b) {
     return _v.copy(a).addScaledVector(ab, t).distanceTo(p);
 }
 
+/** Closest distance between the segments p1–q1 and p2–q2 (a blade and a crystal). */
+export function segSegDist(p1, q1, p2, q2) {
+    const d1x = q1.x - p1.x, d1y = q1.y - p1.y, d1z = q1.z - p1.z;
+    const d2x = q2.x - p2.x, d2y = q2.y - p2.y, d2z = q2.z - p2.z;
+    const rx = p1.x - p2.x, ry = p1.y - p2.y, rz = p1.z - p2.z;
+    const a = d1x * d1x + d1y * d1y + d1z * d1z, e = d2x * d2x + d2y * d2y + d2z * d2z;
+    const f = d2x * rx + d2y * ry + d2z * rz;
+    let s = 0, t = 0;
+    if (a < 1e-9) t = e < 1e-9 ? 0 : Math.max(0, Math.min(1, f / e));
+    else {
+        const c = d1x * rx + d1y * ry + d1z * rz;
+        if (e < 1e-9) s = Math.max(0, Math.min(1, -c / a));
+        else {
+            const b = d1x * d2x + d1y * d2y + d1z * d2z, den = a * e - b * b;
+            s = den > 1e-9 ? Math.max(0, Math.min(1, (b * f - c * e) / den)) : 0;
+            t = (b * s + f) / e;
+            if (t < 0) { t = 0; s = Math.max(0, Math.min(1, -c / a)); } else if (t > 1) { t = 1; s = Math.max(0, Math.min(1, (b - c) / a)); }
+        }
+    }
+    return Math.hypot(rx + d1x * s - d2x * t, ry + d1y * s - d2y * t, rz + d1z * s - d2z * t);
+}
+
 export class ManaCrystals {
     constructor(game) {
         this.game = game;
         this.enabled = !game.config?.map && game.config?.mode !== 'test';
         this.clusters = new Map(); // cave id -> {data, group, list:[{id, mesh, base, tip, center, r}]} | null
-        this.taken = new Set(); // crystal ids broken off (everybody's)
-        this.flying = []; // crystals flying to my hand («Акцио»)
+        this.taken = new Set(); // crystal ids broken (everybody's)
+        this.powers = []; // the power of a broken crystal flying to the one who broke it
+        this.near = []; // the growing crystals by me (hands lie on them: solidAt)
+        this._recent = []; // the last blasts near crystals (who broke the rock under one): {p, r, by, t}
         this._t = 0;
         this._time = 0;
         this._open = { right: -1e9, left: -1e9 }; // when each hand was last seen open
-        this._break = null; // both hands on a held crystal: {side, d0, ang0}
+        this._hold = { right: null, left: null }; // a crystal held from a slot: {uid, open} — squeezed after the hand opened
+        this._tip = { right: null, left: null }; // a held blade's tip last frame (its speed)
         this.log = new CappedLog(); // (tests) what happened
         // ONE soft light for the nearest cluster: made now, before the shaders are compiled
         if (game.scene) {
@@ -165,11 +200,13 @@ export class ManaCrystals {
         this._time += dt;
         this._dt = dt;
         this._t -= dt;
-        if (this._t <= 0) { this._t = 1; this._ensureNear(); }
+        if (this._t <= 0) { this._t = 1; this._ensureNear(); this._unsupported(); }
+        this._nearMe();
         this._light();
         if (this.game.currentPose && !this.game.combat?.dead) {
             this._hands();
-            this._twoHands();
+            this._crush();
+            this._blades(dt);
         }
         this._fly(dt);
     }
@@ -179,7 +216,7 @@ export class ManaCrystals {
         if (!t?.cavesNear) return;
         const p = this.game.character.group.position;
         // (a cave's cluster far behind is put away — made again from the same seed when one comes back;
-        // the broken-off ones stay broken: `taken`. A long flight otherwise left every cave's crystals.)
+        // the broken ones stay broken: `taken`. A long flight otherwise left every cave's crystals.)
         for (const [id, cl] of this.clusters) {
             const far = cl ? Math.abs(cl.data.x - p.x) > CRYSTAL.FAR || Math.abs(cl.data.z - p.z) > CRYSTAL.FAR : this.clusters.size > 400;
             if (!far) continue;
@@ -207,7 +244,7 @@ export class ManaCrystals {
             group.add(mesh);
             const base = new THREE.Vector3(c.x, c.y, c.z);
             const tip = base.clone().addScaledVector(axis, c.h);
-            list.push({ id: c.id, mesh, base, tip, center: base.clone().lerp(tip, 0.5), r: c.r, cluster: caveId });
+            list.push({ id: c.id, mesh, base, tip, center: base.clone().lerp(tip, 0.5), r: c.r, h: c.h, cluster: caveId, rock: false });
         }
         this.game.scene?.add(group);
         const cl = { data, group, list };
@@ -215,11 +252,37 @@ export class ManaCrystals {
         return cl;
     }
 
-    /** Crystals still growing (not broken off). */
+    /** Crystals still growing (not broken). */
     growing() {
         const out = [];
         for (const cl of this.clusters.values()) if (cl) for (const c of cl.list) if (!this.taken.has(c.id)) out.push(c);
         return out;
+    }
+
+    /** The growing crystals within a few metres of me (a short list: the hands' collision asks it often). */
+    _nearMe() {
+        const p = this.game.character?.group?.position;
+        this.near.length = 0;
+        if (!p) return;
+        for (const cl of this.clusters.values()) {
+            if (!cl || Math.abs(cl.data.x - p.x) > 8 || Math.abs(cl.data.z - p.z) > 8) continue;
+            for (const c of cl.list) if (!this.taken.has(c.id)) this.near.push(c);
+        }
+    }
+
+    /**
+     * Is this point inside a growing crystal by me? (HandBlocks: the palm and the fingertips never go
+     * into it — the hand lies on it; what the hand holds neither.)
+     */
+    solidAt(x, y, z) {
+        const L = this.near;
+        if (!L.length) return false;
+        for (let i = 0; i < L.length; i++) {
+            const c = L[i];
+            if (Math.abs(x - c.center.x) > c.h || Math.abs(y - c.center.y) > c.h || Math.abs(z - c.center.z) > c.h) continue;
+            if (segDist(_p.set(x, y, z), c.base, c.tip) < c.r + CRYSTAL.SKIN) return true;
+        }
+        return false;
     }
 
     _light() {
@@ -239,7 +302,7 @@ export class ManaCrystals {
     }
 
     // ======================================================== taken / sync
-    /** Crystals are broken off (here; told to the others). */
+    /** Crystals are taken whole («Gather»: into the slots — here; told to the others). */
     take(ids, broadcast = true) {
         const now = ids.filter((id) => !this.taken.has(id));
         if (!now.length) return [];
@@ -252,8 +315,16 @@ export class ManaCrystals {
     applyGone(ids) {
         for (const id of ids || []) {
             this.taken.add(String(id));
-            for (const cl of this.clusters.values()) if (cl) for (const c of cl.list) if (c.id === id) c.mesh.visible = false;
+            const c = this._byId(String(id));
+            if (c) c.mesh.visible = false;
         }
+    }
+
+    _byId(id) {
+        const cl = this.clusters.get(id.slice(0, id.lastIndexOf(':')));
+        if (cl) for (const c of cl.list) if (c.id === id) return c;
+        for (const k of this.clusters.values()) if (k) for (const c of k.list) if (c.id === id) return c;
+        return null;
     }
 
     snapshot() {
@@ -264,49 +335,132 @@ export class ManaCrystals {
         if (Array.isArray(list)) this.applyGone(list.map(String));
     }
 
-    // ============================================================== taking
-    /** A crystal into my hand (or the slots when the hand is busy). */
-    _give(side, n = 1) {
+    // ============================================================ breaking
+    /**
+     * These growing crystals are broken by `by` (a player's id; anything else — a creature, nobody —
+     * gets nothing). The HOST decides: a guest asks it for its own breaking ('mcq'); the host
+     * bursts them for everybody ('mcb'). True: done (or asked).
+     */
+    burst(ids, by = null, kind = null) {
         const g = this.game;
-        const h = g.items?.held[side];
-        if (h && h.item.kind === 'crystal') { h.item.count = (h.item.count || 1) + n; return; }
-        const item = { kind: 'crystal', uid: newUid(), count: n };
-        if (!h && !g.weapons?.hands?.[side]?.held && g.items?.takeIntoHand(item, side)) return;
-        g.inventory?.storeItem?.(item);
-    }
-
-    /** Break this crystal off into the hand. */
-    breakOff(c, side) {
-        if (!this.take([c.id]).length) return false;
-        this._give(side);
-        this._sparks(c.center, 18);
-        if (this.game.sound) this.game.sound.playIce?.();
-        this.game.hud?.setVoice?.('💎 Кристалл маны в руке — возьмитесь за него <b>второй рукой</b> и разломите', true);
-        this.log.push({ ev: 'hand', id: c.id, side });
+        if (by === 'local') by = g.localId;
+        const now = ids.filter((id) => !this.taken.has(id));
+        if (!now.length) return false;
+        if (!g.authority) {
+            if (by === g.localId) g.sync?.crystalAsk?.(now, kind);
+            return by === g.localId;
+        }
+        const pts = now.map((id) => { const c = this._byId(id); return c ? c.center.clone() : null; });
+        this.onBurst(now, by, pts, kind);
+        g.sync?.crystalBurst?.(now, by, pts);
         return true;
     }
 
+    /** (every computer) the crystals crack where they grow: shards, a ring, a flash — the power flies to `by`. */
+    onBurst(ids, by, pts = [], kind = null) {
+        const g = this.game;
+        const fresh = ids.filter((id) => !this.taken.has(String(id)));
+        const cs = ids.map((id) => this._byId(String(id)));
+        this.applyGone(ids);
+        ids.forEach((id, i) => {
+            const p = cs[i]?.center || (pts[i] ? _v2.set(pts[i].x, pts[i].y, pts[i].z) : null);
+            if (!p) return;
+            this.shatterFx(p);
+            this._power(p, by, by === g.localId && fresh.includes(id));
+        });
+        this.log.push({ ev: 'burst', n: ids.length, by, kind });
+    }
+
     /**
-     * The fingers close on a crystal: a hand that was open a moment ago (reaching out open, as for
-     * anything) closes at a crystal — it breaks off into it. A fist bumping into it takes nothing.
+     * Anything that breaks things in an area (blasts, Inspirius, Total Destruction, lightning, an
+     * earthquake) — on the host: the crystals in it crack, their power to `by` (a player) or to nobody.
+     * `flat`: an earthquake shakes the rock under it this deep too (only the horizontal distance counts).
+     */
+    hitAt(p, r, by = null, kind = null, flat = 0) {
+        const g = this.game;
+        if (!this.enabled || !g.authority || !p) return 0;
+        if (g.temple?.wards?.(p, r)) return 0; // (the gods' ward: nothing in it breaks)
+        if (by === 'local') by = g.localId;
+        let any = false; // (no crystals about — the usual case: nothing to remember, no garbage)
+        for (const cl of this.clusters.values()) if (cl && Math.abs(cl.data.x - p.x) < r + 20 && Math.abs(cl.data.z - p.z) < r + 20) { any = true; break; }
+        if (!any) return 0;
+        this._recent.push({ p: new THREE.Vector3(p.x, p.y, p.z), r, by, t: this._time, flat });
+        if (this._recent.length > 8) this._recent.shift();
+        const ids = [];
+        for (const cl of this.clusters.values()) {
+            if (!cl || Math.abs(cl.data.x - p.x) > r + 3 || Math.abs(cl.data.z - p.z) > r + 3) continue;
+            for (const c of cl.list) {
+                if (this.taken.has(c.id)) continue;
+                const d = flat ? (Math.abs(c.center.y - p.y) < flat ? Math.hypot(c.center.x - p.x, c.center.z - p.z) : Infinity) : segDist(p, c.base, c.tip) - c.r;
+                if (d < r) ids.push(c.id);
+            }
+        }
+        if (ids.length) this.burst(ids, by, kind);
+        return ids.length;
+    }
+
+    /**
+     * (the host, once a second) a crystal whose rock is gone under its foot (dug, melted, washed away,
+     * blown up) cracks — nothing hangs in the air. Whose doing: the last blast near it, else nobody.
+     * (Only once its rock was seen there, in a chunk this computer has: a part of the world not yet built
+     * here is not "gone".)
+     */
+    _unsupported() {
+        const g = this.game, data = g.terrain?.data;
+        if (!g.authority || !data?.get) return;
+        let lost = null;
+        for (const cl of this.clusters.values()) {
+            if (!cl) continue;
+            for (const c of cl.list) {
+                if (this.taken.has(c.id)) continue;
+                const ix = Math.round(c.base.x), iz = Math.round(c.base.z);
+                if (data.hasChunk && !data.hasChunk(Math.floor(ix / CHUNK), Math.floor(iz / CHUNK))) continue; // (never made here: never a chunk built in the frame)
+                const t = data.get(ix, Math.floor(c.base.y + 1.5), iz);
+                const gone = t === BLOCK.AIR || t === BLOCK.WATER;
+                if (!gone) { c.rock = true; continue; }
+                if (c.rock) (lost || (lost = [])).push(c);
+            }
+        }
+        if (!lost) return;
+        for (const c of lost) this.burst([c.id], this._blame(c.center), 'rock');
+    }
+
+    _blame(p) {
+        for (let i = this._recent.length - 1; i >= 0; i--) {
+            const b = this._recent[i];
+            if (this._time - b.t > CRYSTAL.BLAME_S) break;
+            const d = b.flat ? Math.hypot(b.p.x - p.x, b.p.z - p.z) : b.p.distanceTo(p);
+            if (d < b.r + 4) return b.by;
+        }
+        return null;
+    }
+
+    /**
+     * Squeezed right in the rock: a hand that was open a moment ago (reaching out open) closes on a
+     * crystal — it cracks there and then. A fist bumping into it breaks nothing.
      */
     _hands() {
         const g = this.game, ch = g.character;
         const now = this._time;
         for (const side of ['right', 'left']) {
-            const held = g.items?.held[side];
-            if ((held && held.item.kind !== 'crystal') || g.weapons?.hands?.[side]?.held) continue;
+            if (g.items?.held[side] || g.weapons?.hands?.[side]?.held) continue; // (a crystal in the hand: _crush)
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
             if (curl < CRYSTAL.OPEN) { this._open[side] = now; continue; }
             if (curl < CRYSTAL.CLOSED || now - this._open[side] > CRYSTAL.OPEN_MS) continue;
             const hand = ch.getGripObject ? ch.getGripObject(side).getWorldPosition(_v2) : ch.getHandWorldPosition(side, _v2); // (the palm)
             const near = this.nearest(hand);
             if (!near) continue;
-            const other = g.items?.held[side === 'right' ? 'left' : 'right'];
-            if (other?.item.kind === 'crystal' && other.model.position.distanceTo(hand) < CRYSTAL.BOTH * 0.6) continue; // (closing on the crystal in the other hand: to break it)
-            this._open[side] = -1e9; // (one closing — one crystal)
-            this.breakOff(near, side);
+            this._open[side] = -1e9; // (one squeeze — one crystal)
+            this.squeeze(near, side);
         }
+    }
+
+    /** My hand squeezed this growing crystal: it cracks, its power into me. */
+    squeeze(c, side = 'right') {
+        if (this.taken.has(c.id)) return false;
+        if (!this.burst([c.id], this.game.localId, 'hand')) return false;
+        this.log.push({ ev: 'squeeze', id: c.id, side });
+        return true;
     }
 
     /** The growing crystal a hand at `hand` closes on (within TOUCH of its surface), or null. */
@@ -321,6 +475,80 @@ export class ManaCrystals {
             }
         }
         return near;
+    }
+
+    /**
+     * A crystal held in a hand (from a slot: «Gather», a chest, the shop): the hand opens on it, then
+     * squeezes — it cracks in the fist, its power into me. (Held in an open palm it is carried — to a
+     * cauldron, say.)
+     */
+    _crush() {
+        const g = this.game, ch = g.character;
+        for (const side of ['right', 'left']) {
+            const h = g.items?.held[side];
+            if (!h || h.item.kind !== 'crystal') { this._hold[side] = null; continue; }
+            let k = this._hold[side];
+            if (!k || k.uid !== h.item.uid) k = this._hold[side] = { uid: h.item.uid, open: false };
+            const curl = ch.getGripCurl ? ch.getGripCurl(side) : 0;
+            if (curl < CRYSTAL.OPEN) k.open = true;
+            else if (k.open && curl > CRYSTAL.CLOSED) { k.open = false; this.crushHeld(side); }
+        }
+    }
+
+    /** The held crystal cracks in the fist: +1 cell of mana. (My own thing: no host needed.) */
+    crushHeld(side) {
+        const g = this.game;
+        const h = g.items?.held[side];
+        if (!h || h.item.kind !== 'crystal') return false;
+        const p = h.model.position.clone();
+        h.item.count = (h.item.count || 1) - 1;
+        if (h.item.count <= 0) g.items.releaseHand(side);
+        else g.sync?.itemHold?.(side, h.item);
+        this.shatterFx(p);
+        this._power(p, g.localId, true);
+        g.sync?.crystalFx?.(p, g.localId);
+        this.log.push({ ev: 'crush', side });
+        return true;
+    }
+
+    /**
+     * (host) crystals that were things (lying about, `n` of them) broken by `by` — a splash of
+     * «Liquidation»: they crack, their power to `by` (told to everybody, `by` credited on his computer).
+     */
+    thingBurst(p, n = 1, by = null) {
+        const g = this.game;
+        if (by === 'local') by = g.localId;
+        this.shatterFx(p);
+        for (let i = 0; i < n; i++) this._power(p, by, by === g.localId);
+        g.sync?.crystalFx?.(p, by, n);
+        this.log.push({ ev: 'thing', n, by });
+    }
+
+    /** (network) a crystal cracked in somebody's fist (or a thing broken by the host's say — `n` cells to `by`). */
+    remoteFx(p, by, n = 0) {
+        const g = this.game;
+        this.shatterFx(p);
+        if (!by) return;
+        if (by !== g.localId) this._power(p, by, false);
+        else for (let i = 0; i < Math.min(10, n); i++) this._power(p, by, true); // (mine: the host says so)
+    }
+
+    /** A blade in my hand swung into a growing crystal: it cracks. */
+    _blades(dt) {
+        const g = this.game;
+        for (const side of ['right', 'left']) {
+            const w = g.weapons?.hands?.[side]?.held;
+            if (!w?.getBladeSegment || !this.near.length) { this._tip[side] = null; continue; }
+            const [a, b] = w.getBladeSegment(_v2.set(0, 0, 0), _p.set(0, 0, 0));
+            const last = this._tip[side] || (this._tip[side] = b.clone());
+            const speed = last.distanceTo(b) / Math.max(1e-3, dt);
+            last.copy(b);
+            if (speed < CRYSTAL.BLADE_SPEED) continue;
+            for (const c of this.near) {
+                if (this.taken.has(c.id)) continue;
+                if (segSegDist(a, b, c.base, c.tip) < c.r + 0.04) { this.burst([c.id], g.localId, 'blade'); this.log.push({ ev: 'blade', id: c.id }); break; }
+            }
+        }
     }
 
     /** «Gather» at a cluster: all its crystals into the slots. A message, or null if none was pointed at. */
@@ -344,7 +572,7 @@ export class ManaCrystals {
         this.game.builder?._flyToHand?.(best.c.center.clone(), 0x5cb8ff, 24, side);
         this._sparks(best.c.center, 24);
         this.log.push({ ev: 'gather', n: ids.length });
-        return `💎 +${ids.length} ${ids.length === 1 ? 'кристалл' : ids.length < 5 ? 'кристалла' : 'кристаллов'} маны в ячейке`;
+        return `💎 +${ids.length} ${ids.length === 1 ? 'кристалл' : ids.length < 5 ? 'кристалла' : 'кристаллов'} маны в ячейке — возьмите в руку и сожмите`;
     }
 
     /** Rock between the hand and the crystal? */
@@ -354,100 +582,64 @@ export class ManaCrystals {
         return !!hit && Math.hypot(hit.x - o.x, hit.y - o.y, hit.z - o.z) < dist - 0.6;
     }
 
-    /** «Акцио» at a crystal: it breaks off and flies to the hand. */
+    /**
+     * «Акцио» at a growing crystal: it is torn out of the rock — and a mana crystal torn out cracks
+     * (only «Gather» takes them whole): its power flies to me. ({done} for Accio's state.)
+     */
     accio(c, side) {
-        if (!this.take([c.id]).length) return null;
-        const model = crystalItemModel();
-        model.position.copy(c.center);
-        this.game.scene?.add(model);
-        const f = { model, side, t: 0, done: false };
-        this.flying.push(f);
-        this._sparks(c.center, 12);
-        return f;
+        if (!this.burst([c.id], this.game.localId, 'accio')) return null;
+        this.log.push({ ev: 'accio', side });
+        return { done: true };
+    }
+
+    // ============================================================ the power
+    /**
+     * The power of a broken crystal flies as blue sparkles into the player `by` (me or another
+     * player as this computer sees him); `credit`: it is mine — +1 cell when it reaches me.
+     * Nobody (a creature broke it, a falling rock): it scatters where it was.
+     */
+    _power(p, by, credit) {
+        const g = this.game;
+        if (credit && !g.scene) { g.mana?.crystal(); return; } // (no picture: at once)
+        if (!by || (by !== g.localId && !g.remotes?.get?.(by))) { this._sparks(p, 20, 1.5); return; }
+        if (this.powers.length > 12) { const f = this.powers.shift(); if (f.credit) g.mana?.crystal(); }
+        this.powers.push({ p: new THREE.Vector3().copy(p), by, credit, t: 0, v: 2 });
+    }
+
+    _target(by, out) {
+        const g = this.game;
+        if (by === g.localId) return g.combat?.center ? g.combat.center(out) : out.copy(g.character.group.position).setY(out.y + 0.6);
+        const r = g.remotes?.get?.(by);
+        return r?.character?.group ? out.copy(r.character.group.position).setY(out.y + 0.6) : null;
     }
 
     _fly(dt) {
-        if (!this.flying.length) return;
+        if (!this.powers.length) return;
         const g = this.game;
-        for (const f of [...this.flying]) {
+        for (let i = this.powers.length - 1; i >= 0; i--) {
+            const f = this.powers[i];
             f.t += dt;
-            const hand = g.character.getGripObject(f.side).getWorldPosition(_v2);
-            const to = _v.subVectors(hand, f.model.position);
-            const d = to.length();
-            if (d > 1e-3) f.model.position.addScaledVector(to, Math.min(1, (CRYSTAL.ACCIO_SPEED * dt) / d));
-            f.model.rotation.y += dt * 6;
-            if (Math.random() < 0.5) g.fx?.spark(f.model.position, 0x9fd8ff, 0.07, _v3.set(0, 0.4, 0), 0.3);
-            if (d < 0.8 || f.t > 4) {
-                f.done = true;
-                this.flying.splice(this.flying.indexOf(f), 1);
-                g.scene?.remove(f.model);
-                disposeModel(f.model);
-                this._give(f.side);
-                g.mana?.success('Accio'); // (it came to the hand)
-                this.log.push({ ev: 'accio', side: f.side });
+            const to = this._target(f.by, _v2);
+            let done = !to || f.t > 3;
+            if (to) {
+                f.v = Math.min(CRYSTAL.POWER_SPEED * 2.5, f.v + CRYSTAL.POWER_SPEED * dt * 2);
+                const d = _v.subVectors(to, f.p).length();
+                if (d > 1e-3) f.p.addScaledVector(_v, Math.min(1, (f.v * dt) / d));
+                for (let k = 0; k < 2; k++) g.fx?.spark(f.p, k ? 0xdff4ff : 0x5cb8ff, 0.07 + Math.random() * 0.06, _v3.set((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), 0.35);
+                if (d < 0.5) done = true;
             }
+            if (!done) continue;
+            this.powers.splice(i, 1);
+            if (to) { this._sparks(to, 14, 2); g.fx?.lightFlash?.(to, 0x4fa8ff, 1.5, 0.25, 6); }
+            if (f.credit) { g.mana?.crystal(); this.log.push({ ev: 'power' }); }
         }
-    }
-
-    // ============================================================ breaking
-    /**
-     * A crystal in one hand, the other hand takes hold of it too (fingers closed on it),
-     * then the hands pull apart or twist: it shatters — the mana maximum +5.
-     */
-    _twoHands() {
-        const g = this.game, ch = g.character;
-        let A = null;
-        for (const s of ['right', 'left']) if (g.items?.held[s]?.item.kind === 'crystal') { A = s; break; }
-        if (!A) { this._break = null; return; }
-        const B = A === 'right' ? 'left' : 'right';
-        const heldB = g.items.held[B];
-        if ((heldB && heldB.item.kind !== 'crystal') || g.weapons?.hands?.[B]?.held) { this._break = null; return; }
-        const crystal = g.items.held[A].model.position;
-        // (the palms, where the fingers close — not the wrists)
-        const palm = (sd) => (ch.getGripObject ? ch.getGripObject(sd).getWorldPosition(new THREE.Vector3()) : ch.getHandWorldPosition(sd, new THREE.Vector3()));
-        const hA = palm(A), hB = palm(B);
-        const curlA = ch.getGripCurl ? ch.getGripCurl(A) : 1;
-        const curlB = ch.getGripCurl ? ch.getGripCurl(B) : 0;
-        const dirA = ch.getHandDirection(A, new THREE.Vector3()), dirB = ch.getHandDirection(B, new THREE.Vector3());
-        const ang = dirA.angleTo(dirB);
-        const d = hA.distanceTo(hB);
-        const onIt = hB.distanceTo(crystal) < CRYSTAL.BOTH && curlB > 0.45 && curlA > 0.3;
-        const K = this._break;
-        if (!K) {
-            if (onIt) this._break = { side: A, d0: d, ang0: ang, at: this._time, loose: 0 };
-            return;
-        }
-        if (K.side !== A) { this._break = null; return; }
-        // (the hands, closed on it, came closer still: the pull is counted from there)
-        if (onIt && d < K.d0) K.d0 = d;
-        const pulled = d - K.d0 > CRYSTAL.PULL;
-        const twisted = Math.abs(ang - K.ang0) > CRYSTAL.TWIST;
-        if (pulled || twisted) { this._break = null; this.shatter(A, pulled ? 'pull' : 'twist'); return; }
-        // a hand let go of it (not just a blurred moment of a fast pull)
-        if (curlB < 0.3 || curlA < 0.2) { K.loose += this._dt || 0; if (K.loose > CRYSTAL.LET_GO) this._break = null; } else K.loose = 0;
-    }
-
-    /** The held crystal breaks into sparkles: +5 to the mana maximum. */
-    shatter(side, how = 'pull') {
-        const g = this.game;
-        const h = g.items?.held[side];
-        if (!h || h.item.kind !== 'crystal') return false;
-        const p = h.model.position.clone();
-        h.item.count = (h.item.count || 1) - 1;
-        if (h.item.count <= 0) g.items.releaseHand(side);
-        else g.sync?.itemHold?.(side, h.item);
-        this.shatterFx(p);
-        g.sync?.crystalFx?.(p);
-        g.mana?.crystal();
-        this.log.push({ ev: 'shatter', how });
-        return true;
     }
 
     shatterFx(p) {
         const g = this.game;
         this._sparks(p, 60, 6);
         g.fx?.lightFlash?.(p, 0x4fa8ff, 3, 0.4, 12);
-        if (g.sound) g.sound.playFrozenHit?.();
+        if (g.sound) { g.sound.playFrozenHit?.(); g.sound.playIce?.(); }
     }
 
     _sparks(p, n, speed = 3) {
@@ -458,7 +650,6 @@ export class ManaCrystals {
 
     dispose() {
         for (const cl of this.clusters.values()) if (cl) this.game.scene?.remove(cl.group);
-        for (const f of this.flying) this.game.scene?.remove(f.model);
         this.light?.parent?.remove(this.light);
     }
 }

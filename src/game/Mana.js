@@ -12,7 +12,7 @@
  *     • the first kill of each MAGICAL creature kind, to whoever struck the last blow
  *       (MAGIC_KILL: the winged pig +3 … the giant spider, a dragon +20). Ordinary creatures —
  *       horses, cows, sheep, villagers, knights, zombies, sailors — nothing.
- *     • +5 for every mana crystal broken with both hands
+ *     • +1 for every mana crystal I broke (squeezed, blown up, cut… — ManaCrystals: its power flies into me)
  *   A burnt strength scroll still adds its points for good. On death all the growth is lost:
  *   the maximum is 30 again (plus the scrolls) — and the lists of spells / creatures already
  *   counted are cleared with it, so what death took can be earned back (never more than once
@@ -28,7 +28,7 @@ import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
 
 export const MANA = {
     BASE: 30,
-    CRYSTAL: 5,
+    CRYSTAL: 1, // (the author: «одна ячейка маны за один кристалл»)
     DUEL_K: 0.3, // a duel won: this share of (the opponent's maximum − BASE)
     DUEL_MIN: 1,
 };
@@ -273,10 +273,10 @@ export class Mana {
     /** (old name) The giant spider killed by me. */
     spiderKilled() { return this.magicKill('spider'); }
 
-    /** A mana crystal broken with both hands. */
+    /** A mana crystal I broke: its power came into me. */
     crystal() {
         this.grow(MANA.CRYSTAL, 'crystal');
-        this._say(`💎 Кристалл маны! Мана +${MANA.CRYSTAL} к максимуму`);
+        this._say(`💎 Сила кристалла в вас: +${MANA.CRYSTAL} ячейка маны`);
     }
 
     /** The maximum grows (and the mana in it with it). */

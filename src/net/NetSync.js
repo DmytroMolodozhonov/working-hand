@@ -345,13 +345,25 @@ export class NetSync {
         this.net.send({ t: 'tree', i: index }, true);
     }
 
-    /** Mana crystals broken off in a cave (gone for everybody) / one shattered in my hands. */
+    /** Mana crystals taken whole by «Gather» (gone for everybody) / one cracked in my fist (seen, its power into me). */
     crystalsGone(ids) {
         this.net.send({ t: 'mcg', l: ids }, true);
     }
 
-    crystalFx(p) {
-        this.net.send({ t: 'mcfx', p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
+    crystalFx(p, by = null, n = 0) {
+        // (n: crystals the host broke for `by` — he gets their cells; 0: it was his own, already counted)
+        this.net.send({ t: 'mcfx', p: [r3(p.x), r3(p.y), r3(p.z)], by: by === 'local' ? this.me : by, ...(n && this.net.isHost ? { n } : {}) }, true);
+    }
+
+    /** A guest broke growing crystals (squeezed, a blade, «Акцио»): the host decides. */
+    crystalAsk(ids, kind = null) {
+        this.net.send({ t: 'mcq', l: ids, k: kind, by: this.me }, true);
+    }
+
+    /** (host) crystals cracked in the rock: everybody sees it, their power flies to `by`. */
+    crystalBurst(ids, by, pts) {
+        if (!this.net.isHost) return;
+        this.net.send({ t: 'mcb', l: ids, by: by === 'local' ? this.me : by, p: pts.map((p) => (p ? [r3(p.x), r3(p.y), r3(p.z)] : null)) }, true);
     }
 
     /** A weapon went into my inventory (gone from the world) / came out of it. */
@@ -825,7 +837,9 @@ export class NetSync {
             }
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
             case 'mcg': g.crystals?.applyGone((m.l || []).slice(0, 50)); break;
-            case 'mcfx': if (Array.isArray(m.p)) g.crystals?.shatterFx(vec(m.p)); break;
+            case 'mcfx': if (Array.isArray(m.p)) g.crystals?.remoteFx(vec(m.p), m.by || m.from || null, m.n | 0); break;
+            case 'mcq': if (this.net.isHost && Array.isArray(m.l)) g.crystals?.burst(m.l.slice(0, 8).map(String), m.from || m.by, m.k || null); break; // (who broke it: the sender himself)
+            case 'mcb': if (!this.net.isHost && Array.isArray(m.l)) { const l = m.l.slice(0, 50).map(String); g.crystals?.onBurst(l, m.by || null, l.map((_, i) => (Array.isArray(m.p?.[i]) ? vec(m.p[i]) : null)), null); } break;
             case 'tree': { const t = g.world.trees?.find((x) => x.index === m.i); if (t && t.alive) g.world.removeTree(t); break; }
             case 'wgone': {
                 const w = g.weapons.byId.get(m.w);

@@ -82,19 +82,21 @@ test('stoop (camera): bending down lowers it; a walk\'s bob and looking down at 
     assert.equal(v, 0, 'up again');
 });
 
-test('mana crystal: reach out with an open hand and close it near the crystal — it is in the hand (a fist bumping takes nothing)', () => {
+test('mana crystal: reach out with an open hand and squeeze it right in the rock — it cracks there, its power flies into me: +1 cell (a fist bumping breaks nothing)', () => {
     const grip = { right: new THREE.Vector3(), left: new THREE.Vector3(9, 9, 9) }, curl = { right: 0, left: 0 };
     const held = { right: null, left: null };
+    let cells = 0;
     const g = {
-        config: { mode: 'survival' }, fx: null, currentPose: {}, combat: { dead: false },
+        config: { mode: 'survival' }, fx: null, currentPose: {}, combat: { dead: false }, authority: true, localId: 'local',
         character: {
             group: { position: new THREE.Vector3() },
             getGripObject: (s) => ({ getWorldPosition: (v) => v.copy(grip[s]) }),
             getGripCurl: (s) => curl[s],
             getHandDirection: (s, v) => v.set(0, 0, -1),
         },
-        items: { held, takeIntoHand: (item, s) => { held[s] = { item, model: { position: grip[s] } }; return true; } },
+        items: { held, takeIntoHand: (item, s) => { held[s] = { item, model: { position: grip[s] } }; return true; }, releaseHand: (s) => { held[s] = null; } },
         weapons: { hands: { right: {}, left: {} } },
+        mana: { crystal: () => cells++ },
     };
     const mc = new ManaCrystals(g);
     const cv = { id: 'cvW', kx: 0, kz: 0, ex: 20, ez: 0, F: 10, r: 7 };
@@ -106,25 +108,25 @@ test('mana crystal: reach out with an open hand and close it near the crystal �
     // a fist bumping into it: nothing
     grip.right.copy(c.center); curl.right = 0.9;
     for (let i = 0; i < 20; i++) mc.update(1 / 30);
-    assert.equal(mc.growing().length, n, 'a fist takes nothing');
-    // the open hand comes, roughly where the eye sees it (0.25 m off — the camera's depth is rough)…
-    curl.right = 0.1; grip.right.copy(c.center).add(new THREE.Vector3(0, 0, 0.25 + c.r));
+    assert.equal(mc.growing().length, n, 'a fist breaks nothing');
+    // the open hand comes, roughly where the eye sees it (0.3 m off — the camera's depth is rough)…
+    curl.right = 0.1; grip.right.copy(c.center).add(new THREE.Vector3(0, 0, 0.3 + c.r));
     for (let i = 0; i < 10; i++) mc.update(1 / 30);
-    // …and closes: the crystal breaks off into it
+    // …and squeezes: it cracks right there — never into the hand or the slots
     for (const k of [0.3, 0.45, 0.6, 0.8]) { curl.right = k; mc.update(1 / 30); }
     assert.equal(mc.growing().length, n - 1);
-    assert.equal(held.right?.item.kind, 'crystal');
-    assert.equal(mc.log.at(-1).ev, 'hand');
-    // the other hand takes hold of it too, then the hands pull apart (a blurred open moment on the way): it breaks
-    let mana = 0;
-    g.mana = { crystal: () => mana++ };
-    g.items.releaseHand = (s) => { held[s] = null; };
-    grip.right.set(0, 1.5, 0); grip.left.set(0.3, 1.5, 0); curl.left = 0.8; curl.right = 0.8;
-    held.right.model.position = grip.right;
-    for (let i = 0; i < 5; i++) mc.update(1 / 30);
-    grip.left.x = 0.2; mc.update(1 / 30); // (closer still)
-    curl.left = 0.2; grip.left.x = 0.3; mc.update(1 / 30); // (a blur)
-    curl.left = 0.8; grip.left.x = 0.5; mc.update(1 / 30);
-    assert.equal(mana, 1, 'shattered: the mana maximum grows');
-    assert.equal(held.right, null);
+    assert.equal(held.right, null, 'not in the hand');
+    assert.ok(mc.log.some((e) => e.ev === 'squeeze'));
+    assert.equal(cells, 1, '+1 cell of mana');
+    // a crystal from a slot («Gather») held in the hand: the hand opens on it, then squeezes — it cracks: +1
+    held.left = { item: { kind: 'crystal', uid: 'k1', count: 2 }, model: { position: new THREE.Vector3(0, 1, 0) } };
+    curl.left = 0.8; mc.update(1 / 30);
+    assert.equal(cells, 1, 'taken into a closed hand: nothing until it opens and squeezes');
+    curl.left = 0.2; mc.update(1 / 30);
+    curl.left = 0.8; mc.update(1 / 30);
+    assert.equal(cells, 2);
+    assert.equal(held.left.item.count, 1, 'one of the two');
+    curl.left = 0.2; mc.update(1 / 30); curl.left = 0.8; mc.update(1 / 30);
+    assert.equal(cells, 3);
+    assert.equal(held.left, null, 'the last one: the hand is empty');
 });

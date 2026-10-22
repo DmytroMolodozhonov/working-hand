@@ -894,7 +894,7 @@ export class SpellManager {
                         if (this.hooks.quakeMe(casterId, origin, reached, power, dir)) hit.add('me');
                     }
                     // the ground shakes under whoever is near the running wave
-                    this.hooks.quakeShake?.(_c.copy(origin).addScaledVector(dir, Math.min(front, length)), power);
+                    this.hooks.quakeShake?.(_c.copy(origin).addScaledVector(dir, Math.min(front, length)), power, casterId);
                 }
                 // the crack fades away after a while
                 const fade = t - length / SPEED - 5;

@@ -51,7 +51,7 @@ test('mana crystal item: a slim hexagonal prism with a pointed tip (not a cube),
     let lathe = 0;
     m.traverse((o) => { if (o.isMesh && o.geometry.type === 'LatheGeometry') { lathe++; assert.equal(o.geometry.parameters.segments, 6, 'six faces'); } });
     assert.ok(lathe >= 1);
-    assert.match(describeItem({ kind: 'crystal', count: 2 }).lines.join(' '), /обеими руками/);
+    assert.match(describeItem({ kind: 'crystal', count: 2 }).lines.join(' '), /сожмите/);
 });
 
 test('mana crystals: Gather takes the whole cluster into the slots; taken ones are gone and saved', () => {
@@ -80,4 +80,75 @@ test('mana crystals: Gather takes the whole cluster into the slots; taken ones a
     mc2.restore(mc.snapshot());
     mc2.addCluster(cv.id, cl);
     assert.equal(mc2.growing().length, 0, 'a loaded world remembers');
+});
+
+function crystalGame(over = {}) {
+    let cells = 0;
+    const sent = [];
+    const g = {
+        config: { mode: 'survival' }, scene: null, fx: null, authority: true, localId: 'me',
+        character: { group: { position: new THREE.Vector3() } },
+        remotes: new Map([['friend', { character: { group: { position: new THREE.Vector3(3, 0, 0) } } }]]),
+        mana: { crystal: () => cells++ },
+        sync: { crystalBurst: (l, by) => sent.push({ t: 'mcb', l, by }), crystalAsk: (l) => sent.push({ t: 'mcq', l }) },
+        ...over,
+    };
+    const mc = new ManaCrystals(g);
+    const cv = { id: 'cvB', kx: 0, kz: 0, ex: 20, ez: 0, F: 10, r: 7 };
+    let cl = null;
+    for (let s = 0; s < 50 && !cl; s++) cl = crystalCluster(cv, s);
+    mc.addCluster(cv.id, cl);
+    return { g, mc, sent, cells: () => cells };
+}
+
+test('mana crystals: anything that breaks one (a blast) — the host decides, its power goes to the one who broke it; creatures get nothing', () => {
+    const { mc, sent, cells } = crystalGame();
+    const c = mc.growing()[0], n = mc.growing().length;
+    const k = mc.hitAt(c.center, 0.01, 'local', 'Bombardo');
+    assert.ok(k >= 1 && mc.taken.has(c.id), 'a small blast at it: it cracks');
+    assert.equal(mc.growing().length, n - k);
+    assert.equal(cells(), k, 'mine: +1 cell for each');
+    assert.equal(sent.at(-1).by, 'me', 'everybody sees it');
+    assert.ok(sent.at(-1).l.includes(c.id));
+    if (mc.growing().length) {
+        mc.hitAt(mc.growing()[0].center, 0.01, 'friend', 'Bombardo');
+        assert.equal(cells(), k, "another player's blast: his cell, not mine");
+        assert.equal(sent.at(-1).by, 'friend');
+    }
+    if (mc.growing().length) {
+        mc.hitAt(mc.growing()[0].center, 0.01, 'wizard:3', 'Stupefy');
+        assert.equal(cells(), k, 'a wizard (an NPC) gets nothing — the power scatters');
+    }
+    assert.equal(mc.hitAt(new THREE.Vector3(100, 0, 100), 3, 'me'), 0, 'far away: nothing');
+    // a broken one is remembered (the save)
+    const mc2 = new ManaCrystals({ config: { mode: 'survival' }, character: { group: { position: new THREE.Vector3() } } });
+    mc2.restore(mc.snapshot());
+    assert.equal(mc2.snapshot().length, mc.snapshot().length);
+});
+
+test('mana crystals: a guest asks the host; what the host says is seen on the guest and credited to him', () => {
+    const { mc, sent, cells } = crystalGame({ authority: false });
+    const c = mc.growing()[0];
+    assert.ok(mc.squeeze(c, 'right'));
+    assert.deepEqual(sent.at(-1), { t: 'mcq', l: [c.id] }, 'asked the host');
+    assert.equal(mc.growing().length, mc.growing().length, 'nothing broken yet here');
+    assert.equal(cells(), 0);
+    mc.onBurst([c.id], 'me', [c.center.clone()], 'hand'); // (the host's 'mcb')
+    assert.ok(mc.taken.has(c.id));
+    assert.equal(cells(), 1);
+    mc.onBurst([c.id], 'me', [c.center.clone()], 'hand');
+    assert.equal(cells(), 1, 'the same crystal twice: once');
+    assert.equal(mc.hitAt(mc.growing()[0].center, 1, 'me'), 0, 'a guest never decides a blast');
+});
+
+test('mana crystals: the hand lies on a crystal (never through it); a crystal held in a hand is seen (sized, in the fingers)', async () => {
+    const { mc } = crystalGame();
+    mc.update(1 / 30); // (the crystals by me)
+    const c = mc.growing()[0];
+    assert.ok(mc.solidAt(c.center.x, c.center.y, c.center.z), 'inside it: solid');
+    assert.ok(!mc.solidAt(c.center.x + 1, c.center.y + 1, c.center.z + 1), 'beside it: free');
+    const { ITEM_SCALE } = await import('../../src/game/ItemTypes.js');
+    assert.ok(ITEM_SCALE.crystal >= 1.5, 'as big next to the hero as an apple — not hidden inside the fist');
+    const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Items.js', import.meta.url), 'utf8');
+    assert.match(src, /\n\s+crystal: \{ axis: 'body'/, 'held in the fingers (GRIPPED), its tip out of the hand');
 });

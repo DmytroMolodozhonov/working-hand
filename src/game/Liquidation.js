@@ -107,7 +107,7 @@ export const THINGS = {
     door: { need: 'maxima', why: 'дверь: только «Максима»' },
     board: { need: 'dust', why: 'доска для волн — просто доска' },
     campfire: { need: 'dust', why: 'костёр: дрова рассыпаются, огонь гаснет' },
-    crystal: { need: 'maxima', why: 'кристалл маны — волшебный' },
+    crystal: { need: 'dust', why: 'кристалл маны раскалывается — его сила летит к тому, кто его разрушил (ManaCrystals.burst)' },
 };
 /** What the splash does to such a thing: 'dust' | 'maxima' | {none: why}. `o`: the thing itself (its own exceptions). */
 export function thingVerdict(k, max, o = null) {
@@ -361,6 +361,11 @@ export class Liquidation {
             const L = g.items?.loose.get(h.uid);
             if (!L) { this._burst(h.at, max, 10); return; }
             if (isGodGift(L.item)) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; }
+            if (L.item.kind === 'crystal') { // (a mana crystal lying about cracks to ANY splash: its power to the caster — ManaCrystals)
+                if (auth) { const p = L.model.position.clone(), n = L.item.count || 1; g.items.removeLoose(h.uid); g.sync?.itemGone?.(h.uid, null, null); g.crystals?.thingBurst(p, n, casterId); }
+                if (mine) g.mana?.success(name);
+                return;
+            }
             if (liquidationNeedsMaxima(L.item) && !max) { this._burst(h.at, max, 12); say('✨ Эта вещь волшебная — её возьмёт только «Liquidation Максима»'); return; }
             this._dust(L.model.position, 0xb9a77f);
             if (auth) { g.items.removeLoose(h.uid); g.sync?.itemGone?.(h.uid, null, null); }
@@ -378,12 +383,12 @@ export class Liquidation {
         if (h.kind === 'box') { const th = this._thingOf(h.box); if (th) h = { ...h, kind: 'thing', th }; else if (h.box.godGift) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; } }
         if (h.kind === 'thing') {
             const th = h.th, v = thingVerdict(th.k, max, th.o);
-            if (v === 'maxima') { this._burst(h.at, max, 12); say(th.k === 'crystal' ? '✨ Кристалл маны волшебный — его возьмёт только «Liquidation Максима»' : '🫧 Эта вещь слишком большая — её рассыплет только «Liquidation Максима»'); return; }
+            if (v === 'maxima') { this._burst(h.at, max, 12); say('🫧 Эта вещь слишком большая — её рассыплет только «Liquidation Максима»'); return; }
             if (v !== 'dust') { this._burst(h.at, max, 12); if (v.none) say(v.none); return; }
-            this._dust(th.p, THING_DUST[th.k] || 0x9c8f80);
+            if (th.k !== 'crystal') this._dust(th.p, THING_DUST[th.k] || 0x9c8f80); // (a crystal cracks: ManaCrystals shows it)
             if (auth) {
                 if (th.k === 'campfire') g.campfires._out(th.o); // (put out for everybody: Campfires sends it)
-                else if (th.k === 'crystal') g.crystals.take([th.id]); // (gone for everybody, saved: ManaCrystals)
+                else if (th.k === 'crystal') g.crystals.burst([th.id], casterId, name); // (cracks for everybody, saved; its power to the caster: ManaCrystals)
                 else if (this._destroy(th.k, th.id, true)) { this._gone(th.k, th.id); g.sync?.liquidated?.(th.k, th.id); }
             }
             // (somebody's cauldron, chest, bed, door in a castle / a village: a crime there — whoever sees it calls the guard)
