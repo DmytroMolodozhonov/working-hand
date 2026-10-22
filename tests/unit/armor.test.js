@@ -43,6 +43,8 @@ test('the magic set turns the simplest magic away, the robe all of it — strong
     const robe = wornEffects({ robe: makeRobe(true, rng(3)) });
     for (const s of ['Inferno', 'Stupefy', 'LevitateDuel', 'IceDuel', 'SapiraDuel', 'Disarmor', 'cold']) assert.equal(spellGuard(robe, s).block, true, s);
     assert.equal(spellGuard(robe, 'AvadaKedavra').block, false);
+    assert.equal(spellGuard(robe, 'Expelliarmus').block, false, '«Экспеллиармус» acts on the wand in the hand: a robe never turns it away');
+    assert.equal(spellGuard(wornEffects(set), 'Expelliarmus').block, false, '… nor the magic set');
     assert.equal(spellGuard(wornEffects({ robe: makeRobe(false) }), 'Stupefy').block, false, 'a plain robe is only clothes');
     // a robe with «Авада» softened: half
     const soft = wornEffects({ robe: { kind: 'robe', magic: true, strong: ['AvadaKedavra', 'Hellfire'] } });

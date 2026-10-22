@@ -59,7 +59,8 @@ const FIRE = new Set(['Inferno', 'Fire', 'Hellfire', 'fire']);
 /** The whole magic set: these simplest spells do nothing (they bounce off). */
 export const MAGIC_SET_BLOCKS = new Set(['LevitateDuel', 'Levitation', 'Stupefy', 'IceDuel', 'Ice', 'Frozen', 'chill', 'Jolt']);
 /** A magic robe: every simplest spell on its wearer does nothing — and no cold. */
-export const ROBE_BLOCKS = new Set([...MAGIC_SET_BLOCKS, 'SapiraDuel', 'Sapira', 'SandsDuel', 'Sands', 'Expelliarmus', 'Inferno', 'Fire', 'IceBall', 'cold', 'Disarmor']);
+// («Экспеллиармус» is not here: it acts on the WAND in the hand, not on the body or the robe — the author. The robe never turned it away.)
+export const ROBE_BLOCKS = new Set([...MAGIC_SET_BLOCKS, 'SapiraDuel', 'Sapira', 'SandsDuel', 'Sands', 'Inferno', 'Fire', 'IceBall', 'cold', 'Disarmor']);
 /** Strong spells a magic robe may soften (−50 %, only these): spell → the damage kind it does. */
 export const ROBE_STRONG = { AvadaKedavra: 'AvadaKedavra', LightningStrike: 'Lightning', Thunderwave: 'Thunderwave', BombardoMaxima: 'Bombardo', Hellfire: 'Hellfire', TotalDestruction: 'collapse' };
 export const STRONG_RU = { AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', Thunderwave: 'Thunderwave', BombardoMaxima: 'Бомбардо Максима', Hellfire: 'Let the Hellfire Come', TotalDestruction: 'Total Destruction' };
