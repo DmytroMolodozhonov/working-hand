@@ -580,6 +580,19 @@ export class WandMagic {
             const sc = score(dir.angleTo(to.normalize()), d);
             if (sc > best) { best = sc; info = null; target = { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) }; at = bk.model.position.clone(); }
         }
+        // nothing in the narrow cone: the nearest thing in a wider one (a stall's wares, a book on a shelf) —
+        // the wand in my own hand is described only when there is really nothing else by the line
+        if (!target) {
+            let wide = Infinity;
+            for (const L of g.items.loose.values()) {
+                if (L.item === this.wand || L.item.kind === 'coins' && !L.item.magic) continue;
+                const to = _v.subVectors(L.model.position, tip);
+                const d = to.length();
+                if (d > 6) continue;
+                const ang = dir.angleTo(to.normalize());
+                if (ang < 0.9 && ang + d * 0.05 < wide) { wide = ang + d * 0.05; target = L.item; at = L.model.position.clone(); }
+            }
+        }
         // the thing in the other hand (or in this bare hand), else the wand itself
         if (!target) {
             for (const s of [side === 'right' ? 'left' : 'right', side]) {

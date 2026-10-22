@@ -20,7 +20,7 @@
  * A good: {item, price} — the price is for the whole lot on the counter (three flasks: one price).
  */
 
-import { newUid, itemValue, isMagicItem, rollWand, spellScroll } from './ItemTypes.js';
+import { newUid, itemValue, isMagicItem, rollWand, spellScroll, WAND_DIRS } from './ItemTypes.js';
 import { makePiece, makeRobe, armorValue, PIECES } from './ArmorTypes.js';
 import { scrollShopPrice } from './WizardShop.js';
 import { createRng } from '../core/math.js';
@@ -74,6 +74,8 @@ export function wizardGood(trade, k, n = 0) {
             const [a, b] = k === 2 ? WAND_POWER.middle : r() < 0.4 ? WAND_POWER.middle : WAND_POWER.small;
             const it = rollWand(r);
             it.power = randInt(r, a, b);
+            if (!it.dir) it.dir = pick(r, Object.keys(WAND_DIRS)); // (the shop sells only wands with properties: a direction, a favourite, a power)
+            delete it.plain;
             return { item: it, price: wandPrice(it.power) };
         }
         case 'scrolls': {
