@@ -5,7 +5,7 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { START_SPELLS } from '../../src/game/SpellBook.js';
 import { BLOCK } from '../../src/world/Terrain.js';
-import { bridgePlan, bridgeWords } from '../../src/game/Bridge.js';
+import { bridgePlan, bridgeWords, bridgeMaterial } from '../../src/game/Bridge.js';
 
 test('«Create a Bridge»: its words (never «Ice Bridge», never «мост» in talk), 10 mana, no scroll', () => {
     for (const t of ['Create a Bridge', 'криейт э бридж', 'крейт э бридж', 'бридж', 'создай мост', 'построй мост']) assert.equal(matchSpell(t), 'CreateBridge', t);
@@ -29,26 +29,50 @@ function world(gapEnd, farL = 10) {
     return { get, top };
 }
 
-test('the plan: a deck three wide over the river, beams and a railing only over the gap, nothing on the banks', () => {
+test('the plan: a strip three wide of the banks\' material over the river, nothing on the banks, no wood', () => {
     const { get, top } = world(8);
     const p = bridgePlan(get, top, { x: 0, z: -1, L: 10 }, { x: 0, z: 9, L: 10 });
     assert.ok(p.cells, p.why);
     for (const [x, L, z, b] of p.cells) {
         assert.ok(z > 0 && z < 8, 'only over the gap: ' + z);
-        if (L === 10) assert.ok(Math.abs(x) <= 2);
-        if (Math.abs(x) <= 1) assert.equal(L, 10, 'level deck');
-        if (L === 11) assert.ok(Math.abs(x) === 2 && (b === BLOCK.FENCE || b === BLOCK.PLANKS_DARK), 'railing at the sides');
+        assert.ok(Math.abs(x) <= 1 && L === 10, 'level, three wide, no railing');
+        assert.equal(b, BLOCK.GRASS, 'grass banks → grass');
     }
-    const deck = p.cells.filter((c) => c[3] === BLOCK.PLANKS);
-    assert.equal(deck.length, 3 * 7);
+    assert.equal(p.cells.length, 3 * 7);
     for (let i = 1; i < p.cells.length; i++) assert.ok(p.cells[i][4] >= p.cells[i - 1][4], 'grows from the near bank');
+});
+
+/** A ravine between two banks of the given blocks. */
+function ravine(nearB, farB) {
+    const top = (x, z) => (z <= 0 || z >= 6 ? 10 : 2);
+    const get = (x, L, z) => (L <= top(x, z) ? (L === top(x, z) ? (z <= 0 ? nearB : farB) : BLOCK.STONE) : BLOCK.AIR);
+    return { get, top };
+}
+const mats = (p) => new Set(p.cells.map((c) => c[3]));
+
+test('the material is the banks\': stone, sand, earth, grass, snow, ice, a castle block; different banks → each its own half', () => {
+    for (const b of [BLOCK.STONE, BLOCK.SAND, BLOCK.GRASS, BLOCK.DIRT, BLOCK.SNOW, BLOCK.ICE, BLOCK.CS_GREY]) {
+        const w = ravine(b, b);
+        const p = bridgePlan(w.get, w.top, { x: 0, z: 0, L: 10 }, { x: 0, z: 6, L: 10 });
+        assert.deepEqual([...mats(p)], [b], 'block ' + b);
+    }
+    const w = ravine(BLOCK.STONE, BLOCK.SAND);
+    const p = bridgePlan(w.get, w.top, { x: 0, z: 0, L: 10 }, { x: 0, z: 6, L: 10 });
+    assert.ok(p.cells.filter((c) => c[4] < 0.5).every((c) => c[3] === BLOCK.STONE));
+    assert.ok(p.cells.filter((c) => c[4] >= 0.5).every((c) => c[3] === BLOCK.SAND));
+});
+
+test('no wood: trees, planks and fences at the edge give earth; never a wooden block', () => {
+    for (const b of [BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANKS, BLOCK.PLANKS_DARK, BLOCK.FENCE, BLOCK.BIRCH, BLOCK.DARK_LEAVES]) assert.equal(bridgeMaterial(b), BLOCK.DIRT);
+    for (let b = 0; b <= 72; b++) { const m = bridgeMaterial(b); assert.ok(![BLOCK.PLANKS, BLOCK.PLANKS_DARK, BLOCK.FENCE, BLOCK.WOOD, BLOCK.LEAVES].includes(m)); }
+    assert.equal(bridgeMaterial(BLOCK.ENCHANTED), BLOCK.STONE);
 });
 
 test('the plan: a gentle slope up to a higher bank; too steep, too far, too near, no gap — a reason', () => {
     let w = world(8, 12);
     let p = bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 9, L: 12 });
     assert.ok(p.cells);
-    const mid = p.cells.filter((c) => c[0] === 0 && c[3] === BLOCK.PLANKS).map((c) => c[1]);
+    const mid = p.cells.filter((c) => c[0] === 0).map((c) => c[1]);
     assert.ok(Math.min(...mid) >= 10 && Math.max(...mid) <= 12 && new Set(mid).size >= 2);
     w = world(4, 16);
     assert.equal(bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 5, L: 16 }).why, 'steep');
@@ -57,8 +81,4 @@ test('the plan: a gentle slope up to a higher bank; too steep, too far, too near
     assert.equal(bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 0, L: 10 }).why, 'near');
     const flat = { get: (x, L) => (L <= 10 ? BLOCK.GRASS : BLOCK.AIR), top: () => 10 };
     assert.equal(bridgePlan(flat.get, flat.top, { x: 0, z: 0, L: 10 }, { x: 8, z: 0, L: 10 }).why, 'nogap');
-    // over a stone ravine: a bridge of stone
-    const stone = { get: (x, L, z) => (L <= (z <= 0 || z >= 6 ? 10 : 2) ? BLOCK.STONE : BLOCK.AIR), top: (x, z) => (z <= 0 || z >= 6 ? 10 : 2) };
-    p = bridgePlan(stone.get, stone.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 7, L: 10 });
-    assert.ok(p.stone && p.cells.some((c) => c[3] === BLOCK.COBBLE));
 });

@@ -1,16 +1,18 @@
 /**
- * Bridge.js — «Create a Bridge» (10 mana, no scroll — the author: «доступно без свитка»): a simple bridge
- * over a river or a small ravine, where one would have to jump.
+ * Bridge.js — «Create a Bridge» (10 mana, no scroll — the author: «доступно без свитка»): a path of blocks
+ * laid over a river or a small ravine, where one would have to jump.
  *
- * Standing at the edge, the raised hand (the wand) points at the other bank (3–16 m away): a bridge of
- * planks grows from under the feet to that point in ~1.5 s — a deck three wide, a dark beam along each
- * side, a railing with posts where it hangs over the gap (on the banks it is open: one walks on and off).
- * The deck runs level from bank to bank, or with a gentle slope when one bank is higher (at most 2 in 5).
- * Over rock (stone, gravel, a castle's stones) it is a bridge of stone instead.
+ * It is not really a bridge, just a filling so that one can walk across (the author: «из какого материала
+ * края — из такого и создаётся мост… Не надо думать про деревья»). Standing at the edge, the raised hand (the
+ * wand) points at the other bank (3–16 m away): from under the feet to that point a strip three wide grows in
+ * ~1.5 s, level with the banks (or a gentle slope when one bank is higher, at most 2 in 5). No planks, no
+ * railings, no beams, no wood at all: the strip is made of what the banks are made of — the near half of the
+ * near bank's top block (stone → stone, earth/grass → grass, sand → sand, snow → snow, ice → ice, a castle's
+ * block → the same block), the far half of the far bank's (`bridgeMaterial`).
  *
  * What it lays is ordinary blocks of the world (Builder._sendEdits): solid at once — the players and
- * every creature walk on it (Crowd / the terrain), nobody goes through its railing; «Бомбардо», a blast,
- * fire (the planks burn) break it like any wall; saved with the world, everybody gets the blocks.
+ * every creature walk on it (Crowd / the terrain); «Бомбардо», a blast break it like any wall (it burns only
+ * if its blocks do, e.g. thatch); saved with the world, everybody gets the blocks.
  * Instant (not held: Concentration — nothing to hold after the words).
  *
  * Who decides: the caster's computer finds the place and lays the blocks; the spell goes to everybody
@@ -19,7 +21,8 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK } from '../world/Terrain.js';
+import { BLOCK, isLeaves, isWood, isPlanetBlock } from '../world/Terrain.js';
+import { isEnchanted } from '../world/EnchantedStone.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 
@@ -32,7 +35,7 @@ export const BRIDGE = {
     SEND: 0.12, // s: the blocks laid go out together
 };
 
-/** ON WHOM AND ON WHAT (CLAUDE.md). The bridge lays planks; it never strikes. */
+/** ON WHOM AND ON WHAT (CLAUDE.md). The bridge lays a strip of blocks; it never strikes. */
 export const BRIDGE_TARGETS = {
     me: { does: 'none', why: 'колдующего не задевает: мост начинается из-под ног, на берегу блоки не кладутся' },
     players: { does: 'wait', why: 'блок не кладётся в игрока: ждёт, пока он отойдёт (2 с — иначе это место остаётся пустым); по мосту все ходят' },
@@ -45,25 +48,41 @@ export const BRIDGE_TARGETS = {
     bookBirds: { does: 'none', why: 'летают — их не касается' },
     iceCastle: { does: 'wait', why: 'Королеву, снеговиков, ледяных монстров не задевает; блок ждёт, пока уйдут' },
     blackship: { does: 'none', why: 'капитан и скелеты на корабле в море — мост строится только между берегами' },
-    dragon: { does: 'wait', why: 'в дракона блок не кладётся; его огонь сжигает деревянный мост' },
+    dragon: { does: 'wait', why: 'в дракона блок не кладётся; его огонь не страшен каменному и земляному настилу' },
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
-    blocks: { does: 'build', why: 'кладёт доски (над камнем — камень) только в пустоту и воду; землю, стены, чужие блоки не трогает' },
+    blocks: { does: 'build', why: 'кладёт блоки того же материала, что и края (камень, земля, песок, снег, лёд, блок замка), только в пустоту и воду; землю, стены, чужие блоки не трогает' },
     gap: { does: 'build', why: 'нужен провал между краями (река, ущелье, яма); на ровном месте мост не строится — подсказка говорит почему' },
     water: { does: 'build', why: 'над рекой мост идёт на уровне берега; если берег вровень с водой — настил ложится на воду' },
-    trees: { does: 'none', why: 'деревья не трогает: блок там, где ствол или листва, просто не кладётся' },
+    trees: { does: 'none', why: 'деревья не трогает и из дерева не строит: ствол или листва с края — это просто земля; блок там, где дерево, не кладётся' },
     houses: { does: 'none', why: 'стены домов и замков не ломает — упирается в них' },
     ships: { does: 'none', why: 'корабль — не блоки мира (его палубы двигаются)' },
     ward: { does: 'none', why: 'в чужой сфере защиты дома не строит (HouseWards.forbids)' },
     godGift: { does: 'none', why: 'мост ничего не разрушает, поэтому дары богов (храм, пьедесталы) он не задевает' },
-    fire: { does: 'burned', why: 'деревянный мост горит, как любые доски; каменный — нет' },
+    fire: { does: 'burned', why: 'горит только если края горючие (солома, сено); камень, земля, песок, лёд огнём не берутся (лёд тает, как любой лёд)' },
     blast: { does: 'broken', why: 'взрывы, «Бомбардо», Total Destruction ломают его, как любые блоки; строители замков его не восстанавливают' },
 };
 
-const STONY = new Set([BLOCK.STONE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.COBBLE, BLOCK.CS_GREY, BLOCK.CS_SAND, BLOCK.CS_DARK, BLOCK.CS_WHITE, BLOCK.CS_MOSSY,
-    BLOCK.BRICK, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_DARK]);
-const WOOD = { deck: BLOCK.PLANKS, beam: BLOCK.PLANKS_DARK, rail: BLOCK.FENCE, post: BLOCK.PLANKS_DARK };
-const STONE = { deck: BLOCK.COBBLE, beam: BLOCK.CS_GREY, rail: BLOCK.CS_GREY, post: BLOCK.CS_DARK };
+/**
+ * What the strip is made of for a bank whose top block is `b` — the same material. Exceptions, each with its reason:
+ * trees (a trunk / leaves / planks at the edge: no wood is used — the ground under it is earth), tilled land and
+ * paths (just earth), the enchanted stone (no spell makes it — plain stone, as Stitching does), glowing / decor
+ * and unknown blocks (stone). Sand and gravel stay sand and gravel: no block of this world falls, so a strip of
+ * them hangs as any filling does.
+ */
+export function bridgeMaterial(b) {
+    if (isEnchanted(b)) return BLOCK.STONE;
+    if (isWood(b) || isLeaves(b) || b === BLOCK.THATCH || b === BLOCK.HAY || b === BLOCK.FENCE) return BLOCK.DIRT;
+    if (b === BLOCK.FARMLAND || b === BLOCK.PATH || b === BLOCK.WHEAT || b === BLOCK.VEG || b === BLOCK.FLOWERS) return BLOCK.DIRT;
+    if (b === BLOCK.ICE_SHAPE) return BLOCK.ICE;
+    if (b === BLOCK.AIR || b === BLOCK.WATER || b === BLOCK.BEDROCK) return BLOCK.STONE;
+    if (b === BLOCK.GRASS || b === BLOCK.DIRT || b === BLOCK.STONE || b === BLOCK.SNOW || b === BLOCK.SAND || b === BLOCK.ICE || b === BLOCK.GRAVEL || b === BLOCK.DEEPSTONE) return b;
+    if ((b >= BLOCK.CS_GREY && b <= BLOCK.BRICK) || b === BLOCK.PLASTER || isPlanetBlock(b)) return b;
+    if (b >= BLOCK.ICE_WALL && b <= BLOCK.ICE_DARK) return b;
+    return BLOCK.STONE;
+}
+/** The colour of the magic's sparks over a material. */
+const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.ICE || (b >= BLOCK.ICE_WALL && b <= BLOCK.ICE_DARK) ? 0xa8dcff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x9a7448 : 0xb8b4aa);
 const free = (t) => t === BLOCK.AIR || t === BLOCK.WATER;
 
 /** The phrase: «Create a Bridge» («криейт э бридж», «бридж»), «создай / построй мост» → 'CreateBridge' | null. */
@@ -82,6 +101,7 @@ export function bridgeWords(text) {
  * The bridge between A (the caster's feet: the bank's top layer aL) and the far end B (bx, bz, bL):
  * {cells: [[x, L, z, block, t]…] sorted from A to B, len} — or {why} when it cannot be built there.
  * get(x, L, z) → block; top(x, z) → the highest solid layer of a column.
+ * The strip is three wide, made of the banks' material: the near half of the near bank's, the far half of the far one's.
  */
 export function bridgePlan(get, top, A, B) {
     const dx = B.x - A.x, dz = B.z - A.z;
@@ -92,35 +112,31 @@ export function bridgePlan(get, top, A, B) {
     const fx = dx / len, fz = dz / len, sx = -fz, sz = fx; // (along, across)
     const deckAt = (t) => Math.round(A.L + (B.L - A.L) * t);
     // the columns of the deck (three wide) and of its edges, sampled finely so a slanting bridge has no holes
-    const cols = new Map(); // "x,z" → {x, z, t, edge}
+    const cols = new Map(); // "x,z" → {x, z, t}
     for (let s = 0; s <= len + 0.01; s += 0.25) {
         const t = s / len;
-        for (let w = -1.75; w <= 1.8; w += 0.5) { // (off the halves: Math.round would lean to one side)
+        for (let w = -1.25; w <= 1.3; w += 0.5) { // (three wide; off the halves: Math.round would lean to one side)
             const x = Math.round(A.x + fx * s + sx * w), z = Math.round(A.z + fz * s + sz * w);
-            const k = x + ',' + z, edge = Math.abs(w) > 1.5;
-            const was = cols.get(k);
-            if (!was || (was.edge && !edge)) cols.set(k, { x, z, t, edge });
+            const k = x + ',' + z;
+            if (!cols.has(k)) cols.set(k, { x, z, t });
         }
     }
     // a gap to bridge: somewhere along the middle the ground is 2+ below the deck, or there is water
-    let gap = 0, stone = STONY.has(get(A.x, A.L, A.z)) || STONY.has(get(B.x, B.L, B.z));
+    let gap = 0;
     for (let s = 1; s < len; s += 0.5) {
         const t = s / len, x = Math.round(A.x + fx * s), z = Math.round(A.z + fz * s), L = deckAt(t);
         if (free(get(x, L, z)) && (top(x, z) <= L - 2 || get(x, L, z) === BLOCK.WATER || get(x, L - 1, z) === BLOCK.WATER)) gap++;
     }
     if (gap < 2) return { why: 'nogap' };
-    const M = stone ? STONE : WOOD;
+    const near = bridgeMaterial(get(A.x, A.L, A.z)), far = bridgeMaterial(get(B.x, B.L, B.z));
     const cells = [];
     for (const c of cols.values()) {
         const L = deckAt(c.t);
         if (!free(get(c.x, L, c.z))) continue; // (the banks, a wall, a tree: left as they are)
-        if (!c.edge) { cells.push([c.x, L, c.z, M.deck, c.t]); continue; }
-        // the side: a beam at the deck's level, a railing (a post every 3 m) over it
-        cells.push([c.x, L, c.z, M.beam, c.t]);
-        if (get(c.x, L + 1, c.z) === BLOCK.AIR) cells.push([c.x, L + 1, c.z, Math.round(c.t * len) % 3 === 0 ? M.post : M.rail, c.t]);
+        cells.push([c.x, L, c.z, c.t < 0.5 ? near : far, c.t]);
     }
     cells.sort((a, b) => a[4] - b[4] || a[1] - b[1]);
-    return { cells, len, stone };
+    return { cells, len, near, far };
 }
 
 /** Why it cannot be built — the hint for the player. */
@@ -128,7 +144,7 @@ export function bridgeHint(why) {
     if (why === 'near') return '🌉 Слишком близко — направьте палочку на другой берег (от 3 м)';
     if (why === 'far') return `🌉 Слишком далеко — мост достаёт до ${BRIDGE.MAX} м`;
     if (why === 'steep') return '🌉 Тот край намного выше или ниже — мост был бы слишком крутым';
-    if (why === 'nogap') return '🌉 Здесь нечего перекрывать — мост строится через реку, ущелье или яму';
+    if (why === 'nogap') return '🌉 Здесь нечего перекрывать — настил строится через реку, ущелье или яму';
     if (why === 'water') return '🌉 Там вода — направьте палочку на другой берег';
     return '🌉 Направьте палочку на другой берег реки или край ущелья — и скажите «Create a Bridge»';
 }
@@ -184,7 +200,7 @@ export class Bridge {
     }
 
     /**
-     * (every computer) the bridge grows from the near bank to the far one: plank after plank appears in a
+     * (every computer) the bridge grows from the near bank to the far one: block after block appears in a
      * puff of golden sparks, the front of the magic running ahead. o: A (x, L, z); d: to B. The caster's
      * computer lays the blocks.
      */
@@ -198,7 +214,7 @@ export class Bridge {
         if (!plan.cells) return;
         const mine = casterId === g.localId || casterId === 'local';
         const cells = plan.cells.map((c) => ({ c, wait: 0 }));
-        const color = plan.stone ? 0xb8b4aa : 0xd9a066;
+        const color = sparkColor(plan.near);
         g.sound?.playWhoosh?.();
         let t = 0, i = 0, sendT = 0, done = false;
         const out = [];
