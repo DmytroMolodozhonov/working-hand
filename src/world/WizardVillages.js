@@ -6,7 +6,7 @@
  * ~100 wizards' houses on two square ring roads and four spokes, and in the middle:
  *  - the round plaza with the CENTRAL FIRE (a stone ring; the game keeps a campfire burning in it —
  *    src/game/WizVillages.js) and the STATUE of Coprus the Clever: a wizard of stone, his wand up
- *    (the plaque on the pedestal is drawn by the game);
+ *    (the figure and the plaque on the pedestal are drawn by the game: CopruStatue.js);
  *  - the TOWN HALL (north, «Ратуша»): a great hall with the Elder's chair, a clock tower;
  *  - the CAULDRON HALL («Зельеварня»): a big cauldron where a wizard brews;
  *  - the small LIBRARY: shelves, a reading table with 2–5 scrolls of simple spells (different from
@@ -75,23 +75,12 @@ function buildCore(p, rng, out) {
     p.cyl(0, 0, 2.6, 0, 0, B.CS_DARK, 1.7);
     out.fire = p.pt(0, 0, 0);
     // ---- the statue of Coprus the Clever: a wizard of stone on a pedestal, his wand raised high, facing the fire
-    const S = B.CS_GREY;
-    p.box(-3, 3, 0, 2, 11, 17, B.CS_WHITE); // the pedestal
+    p.box(-3, 3, 0, 2, 11, 17, B.CS_WHITE); // the pedestal (the figure on it is a model, not blocks: WizVillages / CopruStatue.js)
     p.box(-3, 3, 3, 3, 11, 17, B.ARCANE_DARK);
-    p.box(-2, 2, 4, 6, 12, 16, S); // the robe, wide at the hem
-    p.box(-2, 2, 7, 9, 13, 15, S);
-    p.box(-1, 1, 10, 11, 13, 15, S); // the chest
-    p.box(-2, 2, 11, 11, 13, 15, S); // the shoulders
-    p.box(-3, -3, 7, 10, 14, 14, S); p.box(-3, -3, 6, 6, 14, 14, B.CS_WHITE); // the left arm down, the hand
-    p.box(3, 3, 11, 14, 14, 14, S); p.box(3, 3, 15, 15, 14, 14, B.CS_WHITE); // the right arm up, the hand
-    p.box(3, 3, 16, 17, 14, 14, B.PLANKS_DARK); // the wand
-    p.box(3, 3, 18, 18, 14, 14, B.ARCANE_LAMP); // its glowing tip
-    p.box(-1, 1, 12, 13, 13, 15, S); // the head
-    p.box(0, 0, 10, 12, 12, 12, B.CS_WHITE); // the long beard
-    p.box(-2, 2, 14, 14, 12, 16, S); // the hat's brim
-    p.box(-1, 1, 15, 16, 13, 15, S); p.box(0, 0, 17, 18, 14, 14, S); p.box(0, 0, 19, 19, 15, 15, S); // the hat, its tip bent back
     const sp = p.pt(0, 10.45, 1);
-    out.statue = { x: sp.x, y: p.L(1) - 1, z: sp.z, ry: p.yaw(0) + Math.PI, name: STATUE_NAME };
+    const sry = p.yaw(0) + Math.PI, top = p.pt(0, 14, 1);
+    // x, y, z: the plaque on the pedestal's face; cx, cz, topY: the figure's place (the middle of the pedestal's top)
+    out.statue = { x: sp.x, y: p.L(1) - 1, z: sp.z, ry: sry, name: STATUE_NAME, cx: top.x, cz: top.z, topY: p.L(3) };
     // ---- the roads (3 wide): two square rings, the spokes to the gates; the north spoke goes round the hall
     const road = (u0, u1, v0, v1, t = B.PATH) => p.box(u0, u1, -1, -1, v0, v1, t);
     for (const R of [R1, R2]) {

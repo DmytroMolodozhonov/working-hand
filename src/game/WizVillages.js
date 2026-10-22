@@ -12,7 +12,8 @@
  *
  * The place (every computer; the host makes what is shared):
  *  - the central fire never goes out: the host keeps a campfire burning in its ring (Campfires.js);
- *  - the plaque on the statue's pedestal: «Coprus the Clever» (one shared texture);
+ *  - the figure of Coprus the Clever on his pedestal (a model: CopruStatue.js, with a collision box) and
+ *    the plaque on the pedestal: «Coprus the Clever» (one shared texture);
  *  - the library's table: 2–5 scrolls of simple spells; taken — gone for good (remembered as an opened
  *    chest: `_openedChests`, saved with the world); the books of the world's history lie on its desk
  *    (`def.lore` — LoreLibrary.js lays them when the place wakes).
@@ -22,6 +23,7 @@ import * as THREE from 'three';
 import { CAMPFIRE } from './Campfires.js';
 import { spellScroll, makeItemModel } from './ItemTypes.js';
 import { CHUNK, chunkKey } from '../world/Terrain.js';
+import { makeStatue, STATUE_BOX } from './CopruStatue.js';
 
 const SCROLL_TAKEN = 1.2; // m: a library scroll moved this far from its place (or picked up) is taken
 
@@ -183,6 +185,7 @@ export class WizVillages {
     constructor(game) {
         this.game = game;
         this.plaques = new Map(); // site id -> mesh
+        this.statues = new Map(); // site id -> {mesh, box} (the figure on the pedestal and its collision box)
         this.scrolls = new Map(); // site id -> [{id, uid, x, y, z}]
         this.fires = new Map(); // site id -> its campfire (the host's)
         this._t = 0;
@@ -198,7 +201,7 @@ export class WizVillages {
             { kind: 'web', count: 1 }, { kind: 'glass', count: 3 }, { kind: 'minotaurHorn' }, { kind: 'phoenixFeather', count: 1 }, { kind: 'owlFeather', count: 1 },
             { kind: 'book', id: 123456, spells: [] }, { kind: 'robe', magic: false, color: 0x2c3e7a }, { kind: 'armor', piece: 'legs', magic: true }, { kind: 'shield', type: 2, magic: true, max: 30 },
             { kind: 'wand', model: 7, color: 0x33aa66, power: 20 }, { kind: 'scroll', stat: 'spell', spell: 'Thunderwave' }];
-        return [new THREE.Mesh(P.geo, P.mat), ...goods.map((it) => makeItemModel(it))];
+        return [new THREE.Mesh(P.geo, P.mat), makeStatue(0, 0, 0, 0), ...goods.map((it) => makeItemModel(it))];
     }
 
     update(dt) {
@@ -213,9 +216,11 @@ export class WizVillages {
             const def = cs.def;
             seen.add(def.id);
             this._plaque(def);
+            this._statue(def);
             if (this.auth && landReady(life, def.fire.x, def.fire.z)) { this._fire(def); this._library(def); } // (the middle's land made here first)
         }
         for (const [id, m] of [...this.plaques]) if (!seen.has(id)) { g.scene.remove(m); this.plaques.delete(id); }
+        for (const id of [...this.statues.keys()]) if (!seen.has(id)) this._dropStatue(id);
         for (const id of [...this.scrolls.keys()]) if (!seen.has(id)) this._putAway(id);
         for (const [id, f] of [...this.fires]) if (!seen.has(id)) { this.fires.delete(id); if (this.auth && g.campfires?.list.get(f.id) === f) g.campfires._out(f); } // (nobody near: the wizards' fire is not left burning on)
     }
@@ -230,6 +235,25 @@ export class WizVillages {
         m.updateMatrix();
         this.game.scene.add(m);
         this.plaques.set(def.id, m);
+    }
+
+    /** The figure of Coprus the Clever on his pedestal (a model, not blocks) and a box round it: nobody walks through it. */
+    _statue(def) {
+        const S = def.statue;
+        if (this.statues.has(def.id) || !S?.cx) return;
+        const mesh = makeStatue(S.cx, S.topY, S.cz, S.ry);
+        this.game.scene.add(mesh);
+        const h = STATUE_BOX.half; // (the hem's width, the arms are in it)
+        const box = this.game.collision?.addBox?.({ minX: S.cx - h, maxX: S.cx + h, minZ: S.cz - h, maxZ: S.cz + h, minY: S.topY, maxY: S.topY + STATUE_BOX.h, kind: 'statue' });
+        this.statues.set(def.id, { mesh, box });
+    }
+
+    _dropStatue(id) {
+        const r = this.statues.get(id);
+        if (!r) return;
+        this.game.scene.remove(r.mesh);
+        if (r.box != null) this.game.collision?.removeBox?.(r.box);
+        this.statues.delete(id);
     }
 
     /** (host) The central fire: a campfire kept burning in its ring of stones. */
@@ -287,6 +311,7 @@ export class WizVillages {
     dispose() {
         for (const m of this.plaques.values()) this.game.scene.remove(m);
         this.plaques.clear();
+        for (const id of [...this.statues.keys()]) this._dropStatue(id);
     }
 }
 

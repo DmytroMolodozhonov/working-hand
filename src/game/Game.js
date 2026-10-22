@@ -325,7 +325,10 @@ export class Game {
                 if (this.authority) this.phoenixes?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (fire and ice: no harm to a phoenix — Phoenixes.TARGETS)
                 if (this.authority) this.owls?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (an owl: only a scroll's ray hurts it — «Тандервейв»; the rest it darts away from — Owls.TARGETS)
                 if (this.authority) this.iceCastle?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the Ice Castle: by IceQueen.iceDamage — fire melts, the plain spells nothing on the queen)
-                if (this.authority) this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
+                if (this.authority) { // («Вайнд» is a harmless gust: it pushes the people — CreatureImpact — and never hurts or alarms them: CastleLife.windRay)
+                    if (name === 'Wind' || name === 'WindMaxima') this.castleLife?.windRay(o, d, len, width, this.localId);
+                    else this.castleLife?.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId);
+                }
                 if (this.authority) this.ships?.crew.hitRay(o, d, len, width, name === 'Inferno' ? 6 : 4, this.localId, name); // (the ships' crews; a black ship's skeleton — by the kind: Sailors.pirateBoneDamage)
                 if (this.authority) this.carriages?.hitRay(o, d, len, width, name === 'Thunderwave' ? 6 : 3, this.localId, name === 'Inferno'); // (the carts on the roads: wood — chipped, fire sets them burning)
             },

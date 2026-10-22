@@ -110,6 +110,8 @@ const SHOUT = {
     swear: ['Получай, сволочь!', 'Ах ты ж гад!', 'Чтоб тебя!', 'Вот тебе, зараза!', 'Чёрт тебя дери!', 'Да чтоб ты провалился!', 'На, получи, мерзавец!'],
     thief: ['Ах ты ж ворюга!', 'Положи на место, зараза!', 'Ах ты, сволочь, в мой сундук полез?!', 'Чёрт бы тебя побрал, вор!', 'Ну всё, гад, получишь!', 'Вон из моего дома, паскуда!'],
     thiefSeen: ['Вор! Держи вора!', 'Грабят!', 'Вор в доме!'],
+    winded: ['Эй, поосторожнее с ветром!', 'Ты чего дуешь?!', 'Что за сквозняк?!', 'Перестань, мне же в лицо!'],
+    windedWiz: ['Прекратите! Это невежливо.', 'Молодой человек, не дуйте на старших!', 'Не здесь, прошу вас — прекратите!', 'Хм, ветер? Прекратите, или я отвечу.'],
     offended: ['Ну знаешь ли!', 'Я тебе это припомню!', 'Совсем обнаглел?!', 'Ещё раз тронешь — получишь!'],
     fightBack: ['Ах так?! Ну держись!', 'Сам напросился!', 'Ну всё, получишь!', 'Сейчас я тебе покажу!'],
     fightBackKnight: ['Ты за это ответишь!', 'Ну держись, наглец!', 'Сам напросился, странник.'],
@@ -3032,6 +3034,26 @@ export class CastleLife {
             else if (near && off < width + 1.2 + STARTLE.RAY_R) this.startle(v, by, o); // (the ray went right by him)
         }
         return any;
+    }
+
+    /**
+     * (host) «Вайнд» blew along the ray: a harmless gust — nobody is hurt, no alarm, the town does not stir (the push itself:
+     * CreatureImpact). The ones it hit only protest now and then; a wizard now and then takes it as a challenge (one fighter
+     * against the one who blew — nobody else joins, nobody is called).
+     */
+    windRay(o, d, len, width, by) {
+        if (!this.auth || !this._isPlayer(by)) return;
+        const now = Date.now();
+        for (const v of this.byId.values()) {
+            if (v.dead || v.sleep || v.servantOf != null || now - (v.windAt || 0) < 5000) continue;
+            const to = _v.set(v.x - o.x, v.y + 2 - o.y, v.z - o.z);
+            const along = to.dot(d);
+            if (along < 0 || along > len || to.addScaledVector(d, -along).length() > width + 1.2) continue;
+            v.windAt = now;
+            if (this.game.arenaDuels?.calm(v, by) || v.foe || by === this.state(v.cs.def.id).owner) continue;
+            if (Math.random() < 0.6) this._say(v, pick(v.wizard ? SHOUT.windedWiz : SHOUT.winded), 3);
+            if (v.wizard && this._fights(v) && Math.random() < 0.12) { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; } // (a duel — maybe)
+        }
     }
 
     // ------------------------------------------------------------ speech

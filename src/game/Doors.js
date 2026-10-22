@@ -181,6 +181,9 @@ export const DOOR_PUSH = {
     REST: 0.05, // rad/s: slower — it stands
     RATTLE: 0.35, // rad/s: a push this strong on a locked door rattles it
     REACH: 40, // m: doors further than this from a push are not looked at
+    GUST_MIN: 0.3, // rad/s: a gust at least this strong (a real push, not a breath) opens the leaf all the way …
+    GUST_SPIN: 2.3, // … it takes the leaf from the gust with at least this speed (it then swings ~70°, no less)
+    AJAR: 0.5, // rad: a gusted leaf that comes to rest narrower than this falls back shut — it never stands ajar in the way
 };
 /** How hard each pushing spell blows on a leaf (m/s across it, before falling off with distance). */
 export const DOOR_SPELLS = { Wind: 13, WindMaxima: 39, Overgrown: 16, OvergrownMaxima: 32, Jolt: 20, JoltMaxima: 60 };
@@ -520,7 +523,9 @@ export class Doors {
         const dw = DOOR_PUSH.K * v.dot(this._leafNormal(door, _n)) * (k / 0.5) / (door.w || W);
         if (Math.abs(dw) < 0.02) return false;
         if (this.game.locks?.doorLocked?.(door)) { if (Math.abs(dw) > DOOR_PUSH.RATTLE) this._rattle(door, true); return false; }
-        door.spin = (door.spin || 0) + dw;
+        // (a real gust throws the leaf open properly: a door that opened half way and stood in the doorway was the trouble)
+        door.spin = (door.spin || 0) + (Math.abs(dw) >= DOOR_PUSH.GUST_MIN ? Math.sign(dw) * Math.max(Math.abs(dw), DOOR_PUSH.GUST_SPIN) : dw);
+        door.gust = true;
         return true;
     }
 
@@ -585,6 +590,10 @@ export class Doors {
             if (stop != null) { r.a = stop; r.w = -r.w * 0.2; r.hit = 'body'; if (Math.abs(r.w) < DOOR_PUSH.REST * 4) r.w = 0; }
             this._setAngle(door, r.a);
             door.spin = r.w;
+            if (!door.spin && door.gust) { // (came to rest after a gust: ajar — it falls back shut)
+                door.gust = false;
+                if (Math.abs(door.a) > 0 && Math.abs(door.a) < DOOR_PUSH.AJAR) door.spin = -Math.sign(door.a) * 0.8;
+            }
             if (r.hit === 'slam') g.sound?.playClang?.(Math.min(0.5, 0.15 + Math.abs(r.w) * 0.1));
             else if (r.hit === 'open' && Math.abs(r.w) > 0.4) g.sound?.playClang?.(0.12);
             if (!door.spin && g.authority) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); } // (where it came to rest)
