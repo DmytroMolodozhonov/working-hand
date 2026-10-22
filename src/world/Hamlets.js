@@ -33,7 +33,7 @@ export const HAMLET = {
     WEIGHTS: { magehut: 0.3, hermit: 0.3, village: 0.25, magevillage: 0.15 },
     BLEND: 14, // m of slope from the levelled land into the wild
     MIN_SPAWN: 130, // m from the world's start
-    MAP_R: 320, // m: on the minimap only this near
+    MAP_R: 800, // m: on the minimap (a pointer on the edge when beyond it) only villages this near; the lone houses are never shown
     HI: 16, SPREAD: 5, // the ground: not higher, not rougher
 };
 const ZONE = { magehut: 17, hermit: 15, village: 38, magevillage: 38 };
@@ -362,7 +362,7 @@ export class HamletIndex {
         const now = Math.floor(p.x / 40) + ',' + Math.floor(p.z / 40);
         if (this._mapKey !== now) {
             this._mapKey = now;
-            this._mapList = this.near(p.x, p.z, r).filter((c) => Math.hypot(c.x - p.x, c.z - p.z) <= r)
+            this._mapList = this.near(p.x, p.z, r).filter((c) => (c.type === 'village' || c.type === 'magevillage') && Math.hypot(c.x - p.x, c.z - p.z) <= r)
                 .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, 4);
         }
         return this._mapList;

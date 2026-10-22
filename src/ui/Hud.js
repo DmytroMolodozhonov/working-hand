@@ -804,13 +804,13 @@ export class Hud {
             if (!inside(gx, gz, 10)) {
                 // beyond the edge: a small pointer on the edge of the map with the distance
                 const d = Math.hypot(gx, gz) / scale;
-                if (d > 450 || small !== 'grave') continue; // (a hamlet: only when it is on the map)
+                if (small === 'grave' ? d > 450 : d > 800) continue; // (a graveyard: close by; a village: up to 800 m)
                 const a = Math.atan2(gz, gx), m = 16;
                 const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
                 const bx = Math.cos(a) * k, by = Math.sin(a) * k;
                 ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.arc(bx, by, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, 'grave', 14); ctx.restore();
+                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, small, 14); ctx.restore();
                 label(distText(d), bx - Math.cos(a) * 24, by - Math.sin(a) * 14 + 4);
                 continue;
             }
@@ -820,8 +820,9 @@ export class Hud {
             label(small === 'grave' ? 'Кладбище' : c.name, gx, Math.max(-hh + 12, gz - 13));
         }
         // (the Ice Castle — once seen — always among them, however many castles are nearer)
-        const shown = castles.filter((q) => !SMALL[q.icon] && q.icon !== '❄').slice(0, 3);
-        for (const q of castles) if (q.icon === '❄') shown.push(q);
+        const shown = castles.filter((q) => !SMALL[q.icon] && q.icon !== '❄' && !q.always).slice(0, 3);
+        // (the nearest settlement of wizards ✨ and the wizards' tower 🧙 — always, however many castles are nearer)
+        for (const q of castles) if (q.icon === '❄' || q.always) shown.push(q);
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)

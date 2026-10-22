@@ -2990,6 +2990,8 @@ export class Game {
         } catch (e) { console.warn('[Game] ships warm-up', e); }
         // (the Ice Castle's place and plan in this computer's world: a search over the land, made on first look —
         // the first frames of play froze on it)
+        // (the world's one tower and the settlement by the start: found now — the minimap always shows them)
+        try { const st = this.world?.terrain?.data; st?.towers?.only?.(); st?.villages?.spawnVillage?.(); } catch (e) { /* (only a head start) */ }
         try { void this.world?.terrain?.data?.iceCastle?.plan; } catch (e) { /* (only a head start) */ }
         try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
@@ -3234,7 +3236,13 @@ export class Game {
         // (the sounds made on first use: made ahead, one every half second, after the first seconds of play)
         if (!this._soundsWarm && this.frameCount > 240 && this.frameCount % 30 === 0) this._soundsWarm = !(this.sound?.prewarmStep?.() ?? false);
         // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
-        if (this.frameCount % 3 === 1) this.world.terrain?.warmSites?.(this.character.group.position.x, this.character.group.position.z, 900 + CASTLE_CELL, CASTLE_CELL);
+        if (this.frameCount % 3 === 1) {
+            const wp = this.character.group.position, vil = this.world.terrain?.data?.villages;
+            this.world.terrain?.warmSites?.(wp.x, wp.z, 900 + CASTLE_CELL, CASTLE_CELL);
+            // (a wizards' settlement may be further: look as far as the nearest known one — the workers make the cells)
+            const reach = vil ? Math.min(2200, vil.mapReach(wp)) : 0;
+            if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
+        }
         if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
         else if (this.frameCount % 5 === 0) {
             const cp = this.character.group.position;

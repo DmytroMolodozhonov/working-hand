@@ -716,12 +716,29 @@ export class VillageIndex {
         return out;
     }
 
-    nearestForMap(p, r = 900) {
-        const now = Math.floor(p.x / 40) + ',' + Math.floor(p.z / 40);
+    /**
+     * The nearest settlement for the minimap, however far: among the ones already made (the workers make
+     * the cells ahead — TerrainView.warmSites) and the one always found near the spawn. Never builds
+     * a settlement here. Cached per 40 m.
+     */
+    nearestForMap(p) {
+        const now = Math.floor(p.x / 40) + ',' + Math.floor(p.z / 40) + ',' + this.cells.size;
         if (this._mapKey !== now) {
             this._mapKey = now;
-            this._mapList = this.near(p.x, p.z, r).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, 1);
+            let best = null, bd = Infinity;
+            for (const c of this.cells.values()) {
+                if (!c) continue;
+                const d = Math.hypot(c.x - p.x, c.z - p.z);
+                if (d < bd) { bd = d; best = c; }
+            }
+            this._mapList = best ? [best] : [];
         }
         return this._mapList;
+    }
+
+    /** How far the minimap has to look (m) to be sure of the nearest settlement: the nearest known one. */
+    mapReach(p) {
+        const c = this.nearestForMap(p)[0];
+        return c ? Math.hypot(c.x - p.x, c.z - p.z) : 0;
     }
 }

@@ -67,16 +67,17 @@ export class SiteIndex {
 
     /** Castles and towers for the minimap, nearest first ({x, z, name, icon, def}); cached while they don't change. */
     nearestForMap(p) {
-        const a = this.castles.nearestForMap(p), b = this.towers.nearestForMap(p), v = this.villages ? this.villages.nearestForMap(p) : [];
+        const a = this.castles.nearestForMap(p), v = this.villages ? this.villages.nearestForMap(p) : [];
+        const t1 = this.towers.only(), b = this._tw && this._tw[0] === t1 ? this._tw : (this._tw = t1 ? [t1] : []); // (the world's one tower: always on the map)
         const h = this.hamlets ? this.hamlets.nearestForMap(p) : [];
         if (a !== this._ma || b !== this._mb || v !== this._mv || h !== this._mh) {
             this._ma = a; this._mb = b; this._mv = v; this._mh = h;
-            const out = [...a.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🏰', def: c })), ...b.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🧙', def: c })), ...v.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '✨', def: c }))];
+            const out = [...a.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🏰', def: c })), ...b.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '🧙', def: c, always: true })), ...v.map((c) => ({ x: c.x, z: c.z, name: c.name, icon: '✨', def: c, always: true }))];
             out.sort((u, v) => Math.hypot(u.x - p.x, u.z - p.z) - Math.hypot(v.x - p.x, v.z - p.z));
             // (the village graveyards: small crosses on the map, only the ones close by)
             for (const c of a) for (const g of c.graveyards || []) out.push({ x: g.x, z: g.z, name: 'Кладбище', icon: '✝', def: c });
-            // (the hamlets: small house badges, only the ones close by — HAMLET.MAP_R)
-            for (const c of h) out.push({ x: c.x, z: c.z, name: c.type === 'magehut' || c.type === 'hermit' ? c.name : c.name.replace(/^[^«]*«|»$/g, ''), icon: c.mage ? '✦' : '⌂', def: c });
+            // (the hamlets — villages of folk and of wizards, not the lone houses: small badges, up to HAMLET.MAP_R; the far ones as pointers on the edge)
+            for (const c of h) out.push({ x: c.x, z: c.z, name: c.name.replace(/^[^«]*«|»$/g, ''), icon: c.mage ? '✦' : '⌂', def: c });
             this._list = out;
         }
         return this._list;
