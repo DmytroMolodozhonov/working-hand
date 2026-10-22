@@ -44,21 +44,27 @@ test('the arena: fans, a bots\' duel to its end ≤ 5 min, a player\'s duel with
     // a bots' duel from its start to its end
     const bots = await page.evaluate(async () => {
         const g = window.__zns.game, AD = g.arenaDuels;
-        let started = null, ended = null, fans = 0, seated = 0, longest = 0;
+        let started = null, ended = null, fans = 0, seated = 0, longest = 0, unseatedAtEnter = 0, onFloorInFight = 0, wasEnter = false;
         for (let k = 0; k < 400 && !ended; k++) {
             window.__ff(120);
             const A = window.__A();
             if (!A) continue;
             fans = Math.max(fans, A.fans.size); seated = Math.max(seated, [...A.fans].filter((v) => v.seated).length);
+            const D0 = A.duel;
+            if (D0 && D0.phase === 'enter' && !wasEnter) { wasEnter = true; unseatedAtEnter = [...A.fans].filter((v) => !v.seated).length; }
+            if (D0?.phase === 'fight') for (const v of g.castleLife.byId.values()) if (v.arena?.id === A.id && v !== D0.a && v !== D0.b && Math.hypot(v.x - A.def.centre.x, v.z - A.def.centre.z) < 12) onFloorInFight++;
             if (A.duel?.phase === 'fight') { started = started || true; longest = Math.max(longest, A.duel.go); }
             const end = [...AD.log].find((l) => l.startsWith('end:'));
             if (started && end) ended = end;
             await new Promise((r) => setTimeout(r, 0));
         }
-        return { fans, seated, started: !!started, ended, longest };
+        return { fans, seated, started: !!started, ended, longest, unseatedAtEnter, onFloorInFight };
     });
     assert.ok(bots.seated >= 5, 'fans on the stands: ' + JSON.stringify(bots));
     assert.ok(bots.started && bots.ended, 'a duel run to its end: ' + JSON.stringify(bots));
+    assert.ok(/:wand:|:time:/.test(bots.ended), 'ended by a taken wand (or time): ' + bots.ended);
+    assert.equal(bots.unseatedAtEnter, 0, 'everybody sat before the duellists came out: ' + JSON.stringify(bots));
+    assert.equal(bots.onFloorInFight, 0, 'nobody on the floor during the fight: ' + JSON.stringify(bots));
     assert.ok(bots.longest <= 300.5, 'never longer than 5 minutes');
     // a player signs up (a wand in his hand), is called out, comes to his mark: «3-2-1» and the duel
     const call = await page.evaluate(async () => {

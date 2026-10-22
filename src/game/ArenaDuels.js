@@ -188,13 +188,14 @@ export class ArenaDuels {
         if (live && !A.def.practice) {
             if (!A.want) A.want = ARENA_DUEL.FANS[0] + Math.floor(Math.random() * (ARENA_DUEL.FANS[1] - ARENA_DUEL.FANS[0] + 1));
             A.spawnT -= dt;
-            if (A.fans.size < A.want && A.spawnT <= 0) { A.spawnT = 1.2 + Math.random() * 1.8; this._recruit(A, cs, 'fan'); }
-        } else if (A.fans.size) { for (const v of [...A.fans]) this._release(v); A.fans.clear(); A.want = 0; }
+            if (!A.duel && A.fans.size < A.want && A.spawnT <= 0) { // (the people come while the field is empty — never during a duel)
+                A.spawnT = 1.2 + Math.random() * 1.8; this._recruit(A, cs, 'fan'); }
+        } else if (A.fans.size && !A.duel) { for (const v of [...A.fans]) this._release(v); A.fans.clear(); A.want = 0; } // (they leave when the field is free)
         // the duels: one after another
         const D = A.duel;
         if (!D) {
             A.restT -= dt;
-            if (live && A.restT <= 0) this._nextDuel(A, cs);
+            if (live && A.restT <= 0 && this._ready(A, dt)) this._nextDuel(A, cs);
         } else this._referee(A, D, dt);
         // the reward: the winner at the lectern
         if (A.owed) {
@@ -209,6 +210,31 @@ export class ArenaDuels {
             } else if (!p) A.owed = null;
         }
         A.sayT -= dt;
+    }
+
+    /**
+     * (host) The order of the show: first everybody comes and sits (the fans are all in their seats, nobody walks
+     * on the floor), only then the duellists come out. The wait for slow ones is limited.
+     */
+    _ready(A, dt) {
+        A.readyT = (A.readyT || 0) + dt;
+        const L = this.life;
+        let busy = false;
+        for (const v of L.byId.values()) if (v.arena?.id === A.id && !v.dead && (v.arena.kind === 'leave' || (v.arena.kind === 'fan' && !v.seated)) && onArenaFloor(A.def, v.x, v.z, -1)) busy = true;
+        if (busy) return false;
+        if (!A.def.practice && A.fans.size < A.want && A.readyT < 90) return false;
+        for (const v of A.fans) if (!v.seated && A.readyT < 90) return false;
+        A.readyT = 0;
+        return true;
+    }
+
+    /** A point on the floor's edge by the stands on the seat's side (a walk to the seat goes round the floor, never across). */
+    _edge(A, seat) {
+        const { a, b } = A.def.axis, dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz);
+        if (l < 1) return null;
+        const nx = -dz / l, nz = dx / l, sgn = (seat.x - a.x) * nx + (seat.z - a.z) * nz >= 0 ? 1 : -1;
+        const r = A.def.axis.r - 0.7;
+        return { x: a.x + nx * sgn * r, y: a.y ?? A.def.floorY, z: a.z + nz * sgn * r };
     }
 
     /** How long a duel here may go (s): an arena's 5 minutes, a training fight's 2. */
@@ -242,10 +268,10 @@ export class ArenaDuels {
         if (!v || !v.arena) return;
         const A = this.list.get(v.arena.id);
         if (A) this._freeSeat(A, v);
-        v.seated = false; v.arenaFight = false; v.fx = (v.fx | 0) & ~FX.SHIELD;
+        const fromSeat = !!v.seated; v.seated = false; v.arenaFight = false; v.fx = (v.fx | 0) & ~FX.SHIELD;
         if (v.noWand) { v.noWand = false; v.lostWand = null; v.model?.setHeldTool?.('wand'); } // (the duel is over: the wand given back)
         if (now || v.dead || !A) { v.arena = null; if (!v.dead && L.byId.has(v.id)) L._deactivate(v); return; }
-        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad };
+        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat };
     }
 
     _freeSeat(A, v) { for (const [i, w] of A.taken) if (w === v) A.taken.delete(i); }
@@ -439,8 +465,11 @@ export class ArenaDuels {
         if (!v.arena.seat) { v.arena.seat = this._seat(A, v); if (!v.arena.seat) { this._release(v); return true; } }
         const s = v.arena.seat;
         if (!v.seated) {
+            if (v.arena.edge === undefined) v.arena.edge = this._edge(A, s);
+            if (v.arena.edge && !v.arena.edged) { if (this._go(v, v.arena.edge, WALK, dt, 0.8)) v.arena.edged = true; return true; }
             if (!this._go(v, s, WALK, dt, 0.35)) { v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t > 60) { v.x = s.x; v.z = s.z; } else return true; }
             v.seated = true;
+            v.arena.edged = false;
         }
         // sitting: facing the floor, the head after the duel; up with the arms at a good moment
         v.x = s.x; v.z = s.z; v.y = s.y; v.speed = 0;
@@ -461,7 +490,8 @@ export class ArenaDuels {
     _leave(A, v, dt) {
         const L = this.life, G = A.def.gates[0];
         v.seated = false;
-        const legs = [A.def.gates[0].in, G.out, A.home];
+        const seat = v.arena.seat, e = v.arena.fromSeat ? this._edge(A, seat) : null;
+        const legs = e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home];
         const leg = v.arena.leg || 0;
         if (leg < legs.length) { if (this._go(v, legs[leg], WALK * (v.arena.sad ? 0.75 : 1), dt, 1.2)) v.arena.leg = leg + 1; v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t < 120) return true; }
         v.arena = null;
@@ -631,7 +661,7 @@ export class ArenaDuels {
         }
         // between: his efforts (shield up, breathless, reeling from a blow, a flourish at the other)
         const hurt = Date.now() - (v.hurtAt || 0) < 900;
-        v.mode = (v.fx & FX.SHIELD) ? 'guard' : hurt ? 'stagger' : moving ? 'walk' : v.mana < v.maxMana * 0.18 ? 'winded' : ((D.go + v.idx) % 9) < 1.4 ? 'flourish' : 'guard';
+        v.mode = (v.fx & FX.SHIELD) ? 'guard' : hurt ? 'stagger' : moving ? 'walk' : v.mana < v.maxMana * 0.18 ? 'winded' : 'guard';
         if (v.mode === 'guard' || v.mode === 'flourish') v.aimPitch = Math.atan2(fp.y + 0.3 - (v.y + 3.4), d || 1);
         L._ground(v);
         return true;

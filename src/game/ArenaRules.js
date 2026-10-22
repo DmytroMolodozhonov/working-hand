@@ -28,7 +28,7 @@ export const ARENA_DUEL = {
     OFF_FLOOR: 12, // s: a duellist off the floor that long — gave the duel up
     FAR_FLOOR: 2.5, // m a duellist may step out over the floor's edge
     FALL_COST: 0.18, // a duellist knocked down loses this share of his mana (rounds: worn down fall by fall)
-    FINISH_FRESH: 0.45, // only one this worn out (or down the 4th time) is disarmed while down; a fresher one is let up
+    FINISH_FRESH: 0.75, // only one this worn out (or down the 4th time) is disarmed while down; a fresher one is let up
     PRACTICE_T: 120, // s: a training fight on the field by a tower (not to the end — a training)
     PRACTICE_REST: [180, 480], // s between two trainings («иногда»)
 };
@@ -101,7 +101,7 @@ export function arenaSpell({ role = 'student', foeHp = 20, finish = false, playe
     // (against a player: never the hurting ones — the wizard keeps the rules better than anyone)
     const table = [
         // (the disarm mostly when the other is down — `finish`: a duel is fought first, won after)
-        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.1 : 0.04], ['LevitateDuel', 0.12],
+        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.1 : 0.16], ['LevitateDuel', 0.12],
         ['IceDuel', strong ? 0.1 : 0.05], ['SapiraDuel', foeHp > 15 && !player ? 0.06 : 0],
     ];
     let sum = 0;
