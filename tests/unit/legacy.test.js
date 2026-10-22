@@ -1,5 +1,5 @@
 // Death takes everything (the author: «умер — всё»); all of it lies in the body (Legacy.js) and only
-// its owner takes it back — added to what they have grown since.
+// its owner takes it back — and it REPLACES what they have grown since (nothing is added up).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Mana } from '../../src/game/Mana.js';
@@ -56,10 +56,10 @@ test('death takes all: scrolls, spells, flight, practice mana, achievements — 
     assert.equal(g.achievements.done.size, 0);
     assert.ok(!g.bonus.flight && !g.bonus.spells && g.books.learned.size === 0, 'nothing learnt any more');
     assert.equal(lg.owner, 'me');
-    // grown a little again, then the body found: all of it back, added
+    // grown a little again, then the body found: the old power back, the new growth given up
     g.mana.grow(3, 'crystal');
     absorbLegacy(g, JSON.parse(JSON.stringify(lg))); // (as it comes from the save / the network)
-    assert.equal(g.combat.maxFatigue, 30 + 3 + 7 + 12 + 50);
+    assert.equal(g.combat.maxFatigue, 30 + 7 + 12 + 50);
     assert.equal(g.combat.maxHp, 24);
     assert.ok(g.achievements.done.has('king') && g.bonus.flight && g.bonus.spells.LightningStrike && g.books.learned.has('Flight'));
     assert.ok(g.mana.spellsUsed.has('Lumos'), 'Lumos\'s first time is not counted twice');
@@ -83,4 +83,37 @@ test('a fresh hero who dies leaves no legacy; a legacy taken is never doubled by
     const lg2 = die(g);
     assert.equal(lg2.fatigue, 5, 'the second body holds the same, once');
     assert.equal(g.combat.maxFatigue, 30);
+});
+
+test('the power taken back replaces the new life: more grown since is given up too; the things stay', () => {
+    const g = hero();
+    g.mana.grow(10, 'crystal'); g.mana.spellsUsed.add('Lumos');
+    const lg = die(g);
+    // the second life: more than before — new firsts, an achievement, a scroll, a book's spell
+    g.mana.grow(200, 'crystal'); g.mana.spellsUsed.add('Inferno');
+    g.achievements.gain('king', { quiet: true });
+    burn(g, 'hp', 3); g.bonus.spells = { GiveMyPower: true, Bombardo: true };
+    g.books.learned.add('Flight');
+    g.inventory.slots[0] = { kind: 'coins', count: 5 };
+    absorbLegacy(g, lg);
+    assert.equal(g.combat.maxFatigue, 30 + 10, 'exactly as in that life');
+    assert.equal(g.mana.growth, 10);
+    assert.ok(g.mana.spellsUsed.has('Lumos') && !g.mana.spellsUsed.has('Inferno'), 'the new firsts are given up');
+    assert.equal(g.achievements.done.size, 0);
+    assert.equal(g.combat.maxHp, 20);
+    assert.deepEqual(g.bonus.spells, { GiveMyPower: true }, 'only «Give Me My Power» stays');
+    assert.equal(g.books.learned.size, 0);
+    assert.deepEqual(g.inventory.slots[0], { kind: 'coins', count: 5 }, 'the things stay');
+});
+
+test('two bodies: the one taken last is what the hero has', () => {
+    const g = hero();
+    burn(g, 'fatigue', 5);
+    const lg1 = die(g);
+    burn(g, 'fatigue', 9);
+    const lg2 = die(g);
+    absorbLegacy(g, lg2);
+    assert.equal(g.combat.maxFatigue, 39);
+    absorbLegacy(g, lg1);
+    assert.equal(g.combat.maxFatigue, 35, 'the first body replaces the second, not added');
 });

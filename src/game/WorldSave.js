@@ -106,7 +106,8 @@ export function playerSnapshot(game) {
         purseMagic: inv?.purse?.magic ? inv.purse.magicUid || true : undefined, // the magic pouch is on the belt (all the coins in it)
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
-        hp: game.playerHP,
+        hp: game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
+        mp: game.combat?.enabled ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
@@ -153,6 +154,13 @@ export function applyPlayerSnapshot(game, s) {
     if (s.ship) game.ships?.applyPlayerSnap(s.ship); // (back on the ship's deck, wherever it sailed)
     if (s.space) game.space?.restore(s.space); // (still in space)
     if (s.caves) game.caveMap?.restore(s.caves);
+    // («Выживание»: as it was when they left — not full health / mana; after the scrolls and the mana grown above)
+    const c = game.combat;
+    if (c?.enabled && !c.dead) {
+        if (Number.isFinite(s.hp) && s.hp > 0) { c.hp = Math.min(c.maxHp || game.maxHP, s.hp); game.playerHP = c.hp; }
+        if (Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp);
+        c._hudKey = '';
+    }
 }
 
 /**

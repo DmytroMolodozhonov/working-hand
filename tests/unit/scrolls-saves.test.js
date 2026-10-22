@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { WorldKeeper, worldVersionLabel, setGameVersion, GAME_VERSION } from '../../src/game/WorldSave.js';
+import { WorldKeeper, worldVersionLabel, setGameVersion, GAME_VERSION, playerSnapshot, applyPlayerSnapshot } from '../../src/game/WorldSave.js';
 import { uniqueName } from '../../src/net/Network.js';
 import { Combat, PVP } from '../../src/game/Combat.js';
 import { ItemSystem } from '../../src/game/Items.js';
@@ -83,4 +83,15 @@ test('free world: a burnt health scroll raises health for good and heals that mu
     g.combat.hp = 0; g.combat.dead = true;
     g.combat.revive();
     assert.equal(g.combat.hp, 23, 'back to life with the bigger health');
+});
+
+test('«Выживание»: health and mana are as they were when the player left, not full again', () => {
+    const g = combatGame();
+    g.combat.hp = 13; g.combat.fatigue = 12.5;
+    const snap = JSON.parse(JSON.stringify(playerSnapshot(g)));
+    const g2 = combatGame();
+    applyPlayerSnapshot(g2, snap);
+    assert.equal(g2.combat.hp, 13);
+    assert.equal(g2.playerHP, 13);
+    assert.equal(g2.combat.fatigue, 12.5);
 });

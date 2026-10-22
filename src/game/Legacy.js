@@ -13,9 +13,15 @@
  *    (until then they can be earned again).
  *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — the spell
  *    «Give Me My Power» (the author: 50 mana, learned only from its scroll — the dark-gold ribbon)
- *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again, added to what
- *    they have grown since (two deaths: two bodies, each gives back its own). That one spell is
- *    never lost on death — else nobody could ever take their power back.
+ *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again — and it REPLACES
+ *    what they have grown since (the author: «Ты возвращаешь свою силу — и у тебя столько, сколько было
+ *    при той силе… Забираешь свою силу — и от второй итерации отказываешься. А то так можно обойти игру»):
+ *    the mana cells, the firsts, the achievements, the scrolls' health / strength / flight / spells, the
+ *    books' spells, the cave map of the new life are dropped, nothing is added up. The things in the hands
+ *    and the bag stay. Two deaths, two bodies: each holds the state of its own life (the second one —
+ *    what the hero had then, the first body's power too if it was taken back before); whichever body is
+ *    taken LAST is what the hero has (taking one replaces the other). That one spell is never lost on
+ *    death — else nobody could ever take their power back.
  *  - A body with its owner's legacy never crumbles to dust (it stays as bones) and never goes for
  *    the bodies' limit; golden sparks rise over it near its owner.
  *
@@ -85,9 +91,15 @@ export function wipeHero(g) {
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }
 
-/** The hero takes their legacy back: all of it added to what they have now. */
+/**
+ * The hero takes their legacy back: it REPLACES what they grew since the death (nothing is added up —
+ * the new life's growth is given up, as on a death; the things stay), then the body's state is put on.
+ */
 export function absorbLegacy(g, rec) {
     if (!rec) return;
+    g.mana?.onDeath();
+    g.achievements?.onDeath();
+    wipeHero(g); // («Give Me My Power» itself stays)
     const B = (g.bonus = g.bonus || { hp: 0, fatigue: 0 });
     B.hp = B.hp || 0; B.fatigue = B.fatigue || 0;
     if (rec.hp > 0) {

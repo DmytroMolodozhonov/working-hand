@@ -579,8 +579,9 @@ export class SpellManager {
                     if (this.hooks.burn && this.hooks.burn(o, d, flame.len, casterId)) hit = true;
                     else if (!this.hooks.burn && this.hooks.ignite) this.hooks.ignite(o, d, flame.len);
                 }
-                // mana: the flame really burnt something
-                if (hit && !flame.worked) { flame.worked = true; this.hooks.success?.(casterId, 'Inferno'); }
+                // mana: the flame really burnt something — or simply came out and burnt a while (the author: the first
+                // Inferno counts even into the air / at stone; only one cut off at once — no mana — does not)
+                if ((hit || flame.t >= INFERNO.COUNT_AFTER) && !flame.worked) { flame.worked = true; this.hooks.success?.(casterId, 'Inferno'); }
             },
             onEnd: () => { if (flame.noMana) this.hooks.flameOut?.(casterId); }, // (it went out everywhere)
         });

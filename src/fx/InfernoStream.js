@@ -31,6 +31,7 @@ export const INFERNO = {
     SPREAD: 0.06, // …and how much wider it gets per metre
     STEP: 0.5, // m between the checks for water / walls along the stream
     BURN_TICK: 0.25, // s between burns of the things in the stream (trees, animals, villagers…)
+    COUNT_AFTER: 0.6, // s: a stream held this long is a real «Инферно» — its first time counts for the mana (Mana.success)
 };
 
 /** The stream's length after `t` seconds (it grows out, quickly at first). */
