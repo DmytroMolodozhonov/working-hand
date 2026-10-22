@@ -563,7 +563,15 @@ export class Inventory {
         const g = this.game, c = this._cyc;
         if (c && c.side === side) {
             const h = g.items?.held[side];
-            if (h && h.item === c.item) {
+            if (c.weapon && g.weapons.hands[side].held === c.weapon) {
+                this._cyc = null;
+                this.inHand = null;
+                this.selected = -1;
+                this._next = c.slot;
+                if (this._storeWeapon(c.weapon, c.slot)) return this.takeNext(side);
+                return false;
+            }
+            if (h && c.item && h.item === c.item) {
                 const it = g.items.releaseHand(side);
                 this.slots[c.slot] = it; // (back into its own slot: it fits, it came from there)
                 if (this.inHand?.item === it) this.inHand = null;
@@ -591,11 +599,16 @@ export class Inventory {
         for (let k = 1; k <= n; k++) {
             const i = (start + k) % n;
             const it = this.slots[i];
-            if (!it || it.kind === 'wand' || BACK_KINDS.has(it.kind)) continue;
+            if (!it) continue; // (everything in the circle, in order: wands, weapons, shields too — the author: the wand never came)
             this._next = i;
             this.select(i, side);
-            this._cyc = { side, slot: i, item: this.inHand?.kind === 'item' ? this.inHand.item : null, res: it.kind === 'res' };
-            if (!this._cyc.item && !this._cyc.res) this._cyc = null; // (a weapon: it goes by its own rules)
+            const ih = this.inHand;
+            if (!ih || ih.side !== side && ih.kind !== 'res') {
+                this._cyc = null;
+                this.game.hud.toast?.('🎒 Руки заняты — достать нечем'); // (never skipped silently)
+                return false;
+            }
+            this._cyc = { side, slot: i, item: ih.kind === 'item' ? ih.item : null, weapon: ih.kind === 'weapon' ? ih.weapon : null, res: it.kind === 'res' };
             this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
             return true;
         }

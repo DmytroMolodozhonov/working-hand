@@ -85,3 +85,22 @@ test('wand swap: wands crossing touch, wands apart do not; the swap changes the 
     assert.equal(items.held.right, L);
     assert.deepEqual(sent, [['left', 'r'], ['right', 'l']]);
 });
+
+test('pocket: sand, wand, earth — three touches give sand, wand, earth (the wand is in the circle)', () => {
+    const g = fakeGame(), inv = g.inventory;
+    const wand = { kind: 'wand', uid: 'w', model: 1, color: 0x123456 };
+    inv.slots[0] = { kind: 'res', block: 1, count: 5 };
+    inv.slots[1] = wand;
+    inv.slots[2] = { kind: 'res', block: 2, count: 5 };
+    inv.pocketTouch('left');
+    assert.equal(inv.selected, 0);
+    inv.pocketTouch('left');
+    assert.equal(g.items.held.left.item, wand);
+    assert.equal(inv.selected, 1);
+    inv.pocketTouch('left');
+    assert.equal(inv.selected, 2);
+    assert.equal(g.items.held.left, null);
+    assert.equal(inv.slots[1], wand, 'the wand is back in its slot');
+    inv.pocketTouch('left');
+    assert.equal(inv.selected, 0, 'and round again');
+});
