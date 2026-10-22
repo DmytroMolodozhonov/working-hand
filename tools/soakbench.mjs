@@ -38,6 +38,7 @@ const OUT = opt('out', null);
 const CHECK = args.includes('--check');
 const SPACE = args.includes('--space');
 const BOOM = args.includes('--boom');
+const ULTRA = args.includes('--ultra'); // «Ультра качество» on (Settings → Графика)
 const [W, H] = opt('size', '480x270').split('x').map(Number);
 /** Draw the picture only every N-th frame: here the processor draws it (seconds a frame), so without
  *  this the game itself would go 2–3 frames a second and 15 minutes would be 3 minutes of play. */
@@ -254,11 +255,11 @@ try {
     const page = o.page;
     errors = o.errors;
     await page.evaluate(() => { let s = 0x2545F491; Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; });
-    await page.evaluate(({ SEED }) => {
-        for (const [id, v] of [['graphics-quality', '3'], ['view-distance', 'high']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
+    await page.evaluate(({ SEED, ULTRA }) => {
+        for (const [id, v] of [['graphics-quality', '3'], ['view-distance', 'high'], ['ultra-quality', ULTRA ? 'on' : 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: '3', viewDistance: 'high' });
-    }, { SEED });
+        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: '3', viewDistance: 'high', ultra: ULTRA });
+    }, { SEED, ULTRA });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(3000);

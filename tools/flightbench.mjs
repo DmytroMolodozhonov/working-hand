@@ -40,6 +40,7 @@ const OUT = opt('out', null);
 const PROFILE = args.includes('--profile');
 const CHECK = args.includes('--check');
 const SPACE_ROUTE = args.includes('--space');
+const ALLOC = args.includes('--alloc'); // who makes the garbage in flight (sampling heap profiler: the biggest makers of short-lived objects)
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
 const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
@@ -129,6 +130,9 @@ async function flyRoute() {
     const t = g.terrain;
     wrap(t, 'update', 'земля:всего');
     wrap(t.data, '_generateChunk', 'земля:генерация');
+    // (who asked for a chunk to be made on THIS thread — the world is meant to come from the workers)
+    window.__genCallers = {};
+    { const o = t.data._generateChunk; t.data._generateChunk = function (...a) { const t0 = performance.now(); try { return o.apply(this, a); } finally { const ms = performance.now() - t0; if (ms > 2) { const st = (new Error().stack || '').split('\n').slice(2, 7).map((l) => l.trim().replace(/^at /, '').replace(/\(?https?:\/\/[^/]+\/(src\/)?/, '(').replace(/\)$/, '')).join(' < '); const e = window.__genCallers[st] || (window.__genCallers[st] = { n: 0, ms: 0, max: 0 }); e.n++; e.ms += ms; e.max = Math.max(e.max, ms); } } }; }
     wrap(t, '_build', 'земля:меш');
     wrap(t.flora, 'update', 'трава');
     wrap(g.ultra, 'update', 'ультра');
@@ -149,6 +153,17 @@ async function flyRoute() {
     wrap(g.circleAttack, 'update', 'circleAttack');
     wrap(g.inspirius, 'update', 'inspirius');
     for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'iceCastle', 'ships', 'fx', 'livingTrees', 'phoenixes', 'owls', 'spiders', 'houses', 'wizVillages', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
+    // (and every other system of the game that has an update: the heavy thing in «магия и оружие» is found by name)
+    const named = new Set(['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'iceCastle', 'ships', 'fx', 'livingTrees', 'phoenixes', 'owls', 'spiders', 'houses', 'wizVillages', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun', 'circleAttack', 'inspirius', 'ultra', 'seaSurface', 'handBlocks', 'falling', 'destruction']);
+    const seenObj = new Set();
+    for (const k of Object.keys(g)) { const o = g[k]; if (named.has(k) || !o || typeof o !== 'object' || seenObj.has(o) || typeof o.update !== 'function' || o === g.terrain || o === g.world) continue; seenObj.add(o); wrap(o, 'update', 'с:' + k); }
+    // (inside the people's system: where its heavy frames go)
+    const cl = g.castleLife;
+    for (const fn of ['_activate', '_deactivate', '_scan', '_wake', '_sleep', '_think', '_separate', '_squads', '_assignSlots', '_healWays', '_makeChests', '_updateBar', '_chatter', '_netSend', '_crowd']) wrap(cl, fn, 'людиЖ:' + fn);
+    wrap(cl?.wizards, 'crowd', 'людиЖ:wiz.crowd'); wrap(cl?.hamlets, 'update', 'людиЖ:hamlets'); wrap(cl?.night, 'update', 'людиЖ:night'); wrap(cl?.night, 'visuals', 'людиЖ:night.vis');
+    wrap(cl?.fright, 'update', 'людиЖ:fright'); wrap(cl?.rebuild, 'update', 'людиЖ:rebuild'); wrap(cl?.talk, 'update', 'людиЖ:talk'); wrap(cl?.wizards, 'update', 'людиЖ:wiz.update');
+    try { const { VillagerModel } = await import('/src/entities/VillagerModel.js'); const VM = VillagerModel.prototype; for (const fn of ['update', 'setFar', '_refreshLod', 'setHeldTool']) wrap(VM, fn, 'модель:' + fn); } catch (e) { /* (no model class) */ }
+    wrap(g.scene, 'add', 'сцена:add');
     // record frames
     const origFrame = g.frame.bind(g);
     let prev = null;
@@ -219,7 +234,7 @@ async function flyRoute() {
     for (const u of undo) u();
     const info = g.renderer.info;
     return {
-        frames, segs, newProgs, warmAtTakeoff, prewarmed: g.prewarmedPrograms, castle: { x: castle.x, z: castle.z }, peak,
+        frames, segs, newProgs, warmAtTakeoff, genCallers: window.__genCallers, prewarmed: g.prewarmedPrograms, castle: { x: castle.x, z: castle.z }, peak,
         terrain: { ...g.terrain.stats, meshes: g.terrain.meshes.size, chunks: data.chunks.size, queue: g.terrain._queue.length },
         render: { calls: info.render.calls, triangles: info.render.triangles, programs: info.programs.length, geometries: info.memory.geometries, textures: info.memory.textures },
     };
@@ -350,7 +365,24 @@ async function runLevel(browser, url, level) {
         await cdp.send('Profiler.setSamplingInterval', { interval: 500 });
         await cdp.send('Profiler.start');
     }
+    let heap = null;
+    if (ALLOC && level === LEVELS[LEVELS.length - 1]) {
+        heap = await page.context().newCDPSession(page);
+        await heap.send('HeapProfiler.enable');
+        await heap.send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
+    }
     const r = await page.evaluate(flyRoute);
+    if (heap) {
+        const { profile } = await heap.send('HeapProfiler.stopSampling');
+        const by = new Map();
+        const fr = (f) => `${f.functionName || '(anon)'} ${f.url.replace(/^.*\/(src|vendor)\//, '$1/')}:${f.lineNumber + 1}`;
+        // (a maker without a file — next, push, hypot… — is named with the game's function that called it)
+        const walk = (n, up) => { const f = n.callFrame; const k = f.url ? fr(f) : `${fr(f)}  ← ${up}`; by.set(k, (by.get(k) || 0) + n.selfSize); for (const c of n.children) walk(c, f.url ? fr(f) : up); };
+        walk(profile.head, '');
+        const tot = [...by.values()].reduce((a, b) => a + b, 0);
+        console.log(`\nмусор за полёт (выборка): всего ${(tot / 1048576).toFixed(0)} МБ; больше всего:`);
+        for (const [k, v] of [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 40)) console.log(`  ${(v / 1048576).toFixed(1).padStart(7)} МБ  ${k}`);
+    }
     if (SPACE_ROUTE) {
         await page.evaluate(async () => { const m = await import('/src/world/Planets.js'); window.__planetPos = m.planetPosition; });
         const sr = await page.evaluate(flySpaceRoute);
@@ -363,7 +395,7 @@ async function runLevel(browser, url, level) {
         fs.writeFileSync(out, JSON.stringify(profile));
         console.log('profile:', out);
     }
-    const res = { level, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
+    const res = { level, genCallers: r.genCallers, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
     res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), game: metrics(r.frames, 'game'), parts: partsAvg(r.frames) };
     for (const s of ['прямой', 'разворот', 'замок', 'горы', 'поселение', ...(SPACE_ROUTE ? ['выход', 'космос', 'посадка', 'марс', 'домой'] : [])]) {
         const f = r.frames.filter((x) => x.seg === s);
@@ -395,6 +427,8 @@ function table(results) {
         console.log('  части кадра (сред/макс мс):', JSON.stringify(r.total.parts));
         console.log('  самые долгие кадры:\n    ' + r.spikes.join('\n    '));
         console.log(`  шейдеры: прогрето ${r.prewarmed}, при взлёте ${JSON.stringify(r.warmAtTakeoff)}, в полёте новых ${r.newProgs.length}: ` + r.newProgs.slice(0, 12).join('; '));
+        const gc = Object.entries(r.genCallers || {}).sort((a, b) => b[1].ms - a[1].ms).slice(0, 8);
+        if (gc.length) { console.log('  земля, сделанная в кадре (>2 мс; кто попросил):'); for (const [k, v] of gc) console.log(`    ${v.n}× всего ${v.ms.toFixed(0)} мс, самая долгая ${v.max.toFixed(0)}: ${k}`); }
         console.log('  кто виноват в кадрах >33мс:', JSON.stringify(r.culprits));
         console.log('  мир:', JSON.stringify(r.terrain), ' графика:', JSON.stringify(r.render));
         if (r.errors.length) console.log('  ошибки:', r.errors);

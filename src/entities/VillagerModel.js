@@ -1007,6 +1007,14 @@ const _one = new THREE.Vector3(1, 1, 1);
 const _qShieldIdle = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
 const _qIdent = new THREE.Quaternion();
 
+/** How many far copies may be built in one frame's time (each is a new geometry: a crowd at once was a 15 ms frame). */
+const LOD_BUILD = { t: 0, n: 0, MAX: 3, WINDOW: 12 };
+function lodBuildAllowed() {
+    const now = performance.now();
+    if (now - LOD_BUILD.t > LOD_BUILD.WINDOW) { LOD_BUILD.t = now; LOD_BUILD.n = 0; }
+    return LOD_BUILD.n++ < LOD_BUILD.MAX;
+}
+
 export class VillagerModel {
     /**
      * @param {object} look  from villagerLook()
@@ -1252,6 +1260,9 @@ export class VillagerModel {
             if (this._far) { this._far = false; this.root.visible = true; if (this._lod) this._lod.visible = false; }
             return;
         }
+        // (a crowd going far at once — a settlement woken, a flight over a town: its one-shape copies are made a few
+        // a frame, the rest stay as they are a moment longer — the next look of CastleLife asks again)
+        if (!this._lod && !lodBuildAllowed()) return;
         this._far = true;
         this._refreshLod();
     }

@@ -395,17 +395,23 @@ export class CastleLife {
         if (!idx) return;
         const players = this._players();
         const seen = new Set();
+        // (one place wakes per look — its people are made at once, 15–40 ms: the next one a moment later)
+        let woke = false;
+        const wake = (cs) => {
+            if (cs.awake) return;
+            if (woke) { this._scanT = 0.1; return; }
+            woke = true;
+            this._wake(cs);
+        };
         for (const pl of players) {
             for (const def of this.extra.values()) {
                 if (Math.max(Math.abs(pl.p.x - def.x), Math.abs(pl.p.z - def.z)) > def.zone + WAKE) continue;
                 seen.add(def.id);
-                const cs = this._runtime(def);
-                if (!cs.awake) this._wake(cs);
+                wake(this._runtime(def));
             }
             for (const def of idx.near(pl.p.x, pl.p.z, WAKE)) {
                 seen.add(def.id);
-                const cs = this._runtime(def);
-                if (!cs.awake) this._wake(cs);
+                wake(this._runtime(def));
             }
         }
         for (const cs of this.castles.values()) {
@@ -3144,8 +3150,11 @@ export class CastleLife {
             this._assignSlots();
             this._healWays(dt);
             this._clock = (this._clock || 0) + dt;
+            const land = this.game.world?.terrain?.data;
             for (const v of [...this.byId.values()]) {
                 if (v.handLink) continue; // (held by the hand: HandHold leads them)
+                // (its land is not made yet — the workers bring it: it waits, instead of making the ground here in the middle of a frame)
+                if (land?.landMade && !land.landMade(v.x, v.z)) { v.speed = 0; if (!v.dead) v.mode = 'idle'; continue; }
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
                 this._think(v, dt);
             }

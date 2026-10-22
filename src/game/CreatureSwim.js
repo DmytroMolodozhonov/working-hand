@@ -57,6 +57,9 @@ export const SWIMMERS = {
 
 const solid = (b) => b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHAPE && b != null;
 
+/** Is the land here made already? (Not yet: the workers bring it — asking would make it on this thread, in the middle of a frame.) */
+const landMade = (t, ix, iz) => !t.landMade || t.landMade(ix, iz);
+
 /**
  * The water at (x, z) for a body whose feet are at `y`: {surface, bottom, depth (layers), floor}
  * or null (no water over the floor there). A bridge / a deck over the water is a floor, the
@@ -65,6 +68,7 @@ const solid = (b) => b !== BLOCK.AIR && b !== BLOCK.WATER && b !== BLOCK.ICE_SHA
 export function waterAt(t, x, z, y) {
     if (!t) return null;
     const ix = Math.round(x), iz = Math.round(z);
+    if (!landMade(t, ix, iz)) return null;
     const f = t.floorBelow(ix, iz, Math.floor(y + 1.5) + 1);
     if (t.get(ix, f + 1, iz) !== BLOCK.WATER) return null;
     let n = 1;
@@ -76,6 +80,7 @@ export function waterAt(t, x, z, y) {
 export function deepAt(t, x, z, y, deep = CSWIM.DEEP) {
     if (!t) return false;
     const ix = Math.round(x), iz = Math.round(z);
+    if (!landMade(t, ix, iz)) return false;
     const f = t.floorBelow(ix, iz, Math.floor(y + 1.5) + 1);
     for (let k = 1; k <= deep; k++) if (t.get(ix, f + k, iz) !== BLOCK.WATER) return false;
     return true;

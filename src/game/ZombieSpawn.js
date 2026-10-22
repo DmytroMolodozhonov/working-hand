@@ -187,7 +187,7 @@ export class ZombieSpawn {
     trySpawn(P, ps = this._players(), lights = worldLights(this.game), force = false) {
         const t = this.game.terrain?.data;
         if (!t) return null;
-        const caves = t.cavesNear ? t.cavesNear(P.x, P.z, ZSPAWN.CAVE_NEAR) : [];
+        const caves = t.cavesNear ? t.cavesNear(P.x, P.z, ZSPAWN.CAVE_NEAR, true) : [];
         if (caves.length) {
             const first = caves.find((s) => !this._seenCaves.has(s.id));
             for (const s of caves) this._seenCaves.add(s.id);

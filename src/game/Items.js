@@ -864,6 +864,9 @@ export class ItemSystem {
         if (L.remote) { m.position.lerp(L.remote, Math.min(1, dt * 8)); return; }
         // (in space — above everything, Space.js: no weight, no air — it floats on as it was let go)
         const space = m.position.y > 30000;
+        // (its land is not made yet — the workers bring it: it waits where it is, instead of making the ground here in a frame)
+        const land = this.game.world?.terrain?.data;
+        if (!space && land?.landMade && !land.landMade(m.position.x, m.position.z)) return;
         if (!space) {
             L.vel.y -= 14 * dt;
             // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on)

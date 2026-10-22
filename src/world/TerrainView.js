@@ -180,6 +180,7 @@ export class Terrain {
                 ws.push(w);
             }
             this._workers = ws;
+            this.data.workersOn = true; // (the ground comes from them: TerrainData.landMade)
         } catch (e) {
             this._workers = null;
         }
@@ -240,6 +241,7 @@ export class Terrain {
         if (!this._workers) return;
         for (const w of this._workers) w.terminate();
         this._workers = null;
+        this.data.workersOn = false;
         this._inFlight.clear();
         this._done.length = 0;
         this._floraAsked.clear();

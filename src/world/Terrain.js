@@ -20,6 +20,7 @@
  * TerrainData has no DOM dependencies (unit-testable in Node).
  */
 
+import '../core/FastMath.js'; // (Math.hypot without the garbage: the main thread and the workers alike)
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
@@ -624,6 +625,16 @@ export class TerrainData {
         return this.chunks.has(chunkKey(cx, cz));
     }
 
+    /**
+     * Is the land at the world point (x, z) there to look at without making it? With the workers on (TerrainView), the
+     * ground comes from them; asking for a chunk that is not here yet makes it on this thread, in the middle of a frame
+     * (20–35 ms). Whatever is far from the hero (a villager in a settlement just woken, a lost item, a lamp) waits for the
+     * workers instead. Always true without workers (tests, no Worker): everything is made on demand there.
+     */
+    landMade(x, z) {
+        return !this.workersOn || this.chunks.has(chunkKey(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
+    }
+
     /** The planet whose surface a chunk is on (or null: the Earth). */
     planetOfChunk(cx, cz) {
         const x = cx * CHUNK;
@@ -1153,12 +1164,13 @@ export class TerrainData {
     }
 
     /** The dragons' lairs whose hall or mouth is within `r` of a point (their systems; `.lair` is the lair). */
-    lairsNear(x, z, r) {
+    lairsNear(x, z, r, lazy = false) {
         const out = [];
         if (!this.deepCaves || offEarth(x + r)) return out;
         const C = LAIR.CELL;
         for (let gz = Math.floor((z - r) / C); gz <= Math.floor((z + r) / C); gz++) {
             for (let gx = Math.floor((x - r) / C); gx <= Math.floor((x + r) / C); gx++) {
+                if (lazy && this._cellLater(this._lairs?.has(gx * 100003 + gz))) continue;
                 const s = this.lairOf(gx, gz);
                 if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
             }
@@ -1166,14 +1178,31 @@ export class TerrainData {
         return out;
     }
 
-    /** Caves whose chamber (generation 4: any part of the system) is within `r` of a point. */
-    cavesNear(x, z, r) {
+    /**
+     * A cell not made yet, for a caller that looks again soon (`lazy`): with the workers on, one new cell per ~30 ms at most
+     * (growing a cave system takes 1–25 ms: several at once in one frame were a stutter in flight) — the others read as
+     * «none yet» and come with the next look. Never for what must not depend on timing (a lair's place, a world's recipe).
+     */
+    _cellLater(has) {
+        if (!this.workersOn || has) return false;
+        const now = performance.now();
+        if (now < (this._cellAt || 0)) return true;
+        this._cellAt = now + 30;
+        return false;
+    }
+
+    /**
+     * Caves whose chamber (generation 4: any part of the system) is within `r` of a point.
+     * `lazy`: a caller that asks again every second or so (crystals, chests, cauldrons) — see _cellLater.
+     */
+    cavesNear(x, z, r, lazy = false) {
         const out = [];
         if (offEarth(x + r)) return out;
         if (this.deepCaves) {
             const R = r + CAVES.REACH;
             for (let gz = Math.floor((z - R) / CAVE_CELL); gz <= Math.floor((z + R) / CAVE_CELL); gz++) {
                 for (let gx = Math.floor((x - R) / CAVE_CELL); gx <= Math.floor((x + R) / CAVE_CELL); gx++) {
+                    if (lazy && this._cellLater(this._caves?.has(gx + ',' + gz))) continue;
                     const s = this.caveOf(gx, gz);
                     if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
                 }

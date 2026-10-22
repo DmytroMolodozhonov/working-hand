@@ -96,7 +96,7 @@ export function createLandscape(seed) {
     const nSnow = createNoise2D(s ^ 0x5a0f5a0f), nPk = createNoise2D(s ^ 0x1ce4e5b9);
 
     // the octaves of the ridges are turned against each other (the noise's grid never shows)
-    const ROT = [0, 0.71, 1.93, 2.6, 4.1].map((a) => [Math.cos(a), Math.sin(a)]);
+    const ROT_C = [0, 0.71, 1.93, 2.6, 4.1].map((a) => Math.cos(a)), ROT_S = [0, 0.71, 1.93, 2.6, 4.1].map((a) => Math.sin(a)); // (two plain lists: a pair destructured in the loop made garbage on every call)
 
     const L = {
         /** Last height(): the kind of land (KIND), the fantastic lands' weights, the wonder share. */
@@ -129,7 +129,7 @@ export function createLandscape(seed) {
     const ridged = (x, z) => {
         let sum = 0, amp = 1, w = 1, f = 1 / 230;
         for (let o = 0; o < 4; o++) {
-            const [c, si] = ROT[o];
+            const c = ROT_C[o], si = ROT_S[o];
             const u = (x * c - z * si) * f, v = (x * si + z * c) * f;
             let n = 1 - Math.abs(nM[o](u + o * 17.3, v - o * 9.1) * 1.55);
             if (n < 0) n = 0;

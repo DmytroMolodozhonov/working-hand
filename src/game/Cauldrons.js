@@ -563,6 +563,8 @@ export class Cauldrons {
                 if (now < (this.restockAt[key] || 0)) return;
                 for (const c of this.list.values()) if (Math.hypot(c.x - s.cauldron.x, c.z - s.cauldron.z) < 3.6) return; // (its place taken)
                 const col = this.game.collision;
+                const land = this.game.world?.terrain?.data;
+                if (land?.landMade && !land.landMade(s.cauldron.x, s.cauldron.z)) return; // (its land is not made yet: the next look)
                 const y = col.groundAt ? col.groundAt(s.cauldron.x, s.cauldron.z, s.cauldron.y + 1.5) : col.groundY(s.cauldron.x, s.cauldron.z);
                 const c = this.spawn({ id: `shop:${key}:${this.sold[key] || 0}`, x: s.cauldron.x, y, z: s.cauldron.z, yaw: s.cauldron.yaw || 0, tilt: 0, tdir: 0, shop: { stall: key, price: CAULDRON.PRICE }, home: { x: s.cauldron.x, z: s.cauldron.z } });
                 this._send(c);
@@ -576,7 +578,7 @@ export class Cauldrons {
         const g = this.game, t = g.terrain?.data;
         if (!t?.cavesNear || g.config?.map || g.config?.mode === 'test') return;
         const p = g.character.group.position;
-        for (const cv of t.cavesNear(p.x, p.z, 90)) {
+        for (const cv of t.cavesNear(p.x, p.z, 90, true)) {
             if (this.caves.has(cv.id)) continue;
             this.caves.add(cv.id);
             const id = 'cave:' + cv.id;

@@ -1136,9 +1136,12 @@ export class Game {
             this._caveT = 1;
             this._caveChests = this._caveChests || new Set();
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
-            for (const cv of t.cavesNear(p.x, p.z, 90).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90) : [])) {
+            let built = false;
+            for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [])) {
                 if (cv.x0 != null ? p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
+                if (built) { this._caveT = 0.1; continue; } // (one cave's chests a frame: the next one at the next look)
+                built = true;
                 this._caveChests.add(cv.id);
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
                 const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
@@ -3736,6 +3739,8 @@ export class Game {
             }
             // held up by «Вингардиум Левиоса»: Levitation carries it (it can't walk or bite)
             if (z.lev) { z._spinHalo?.(dt); continue; }
+            const zland = this.terrain?.data; // (its land is not made yet — the workers bring it: it waits, instead of making the ground here in a frame)
+            if (zland?.landMade && !zland.landMade(z.group.position.x, z.group.position.z)) continue;
             const target = z.dummy ? null : this._zombieTarget(z);
             if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => this._zombieStep(me, p, ux, uz, d, speed, sdt);
             if (this._zombieSwim(z, dt)) continue; // (in deep water: up at the top, paddling to the bank — not along the bottom)

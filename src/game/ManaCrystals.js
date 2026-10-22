@@ -223,9 +223,11 @@ export class ManaCrystals {
             if (cl) this.game.scene?.remove(cl.group);
             this.clusters.delete(id);
         }
-        for (const cv of t.cavesNear(p.x, p.z, CRYSTAL.NEAR)) {
+        for (const cv of t.cavesNear(p.x, p.z, CRYSTAL.NEAR, true)) {
             if (this.clusters.has(cv.id)) continue;
             this.addCluster(cv.id, crystalCluster(cv, t.seed, t.heightAt));
+            this._t = 0.1; // (one cave's crystals a frame: the next one at the next look)
+            break;
         }
     }
 

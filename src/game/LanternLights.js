@@ -28,12 +28,13 @@ const LAMPS = new Map([
 export function nearestLamps(data, x, L, z, { n = LIGHTS, reach = REACH, up = UP, down = DOWN, apart = APART } = {}) {
     const found = [];
     const x0 = Math.floor(x - reach), x1 = Math.ceil(x + reach), z0 = Math.floor(z - reach), z1 = Math.ceil(z + reach);
-    const fast = typeof data.chunk === 'function' && !!data.chunk(0, 0)?.blocks;
+    const fast = typeof data.chunk === 'function' && typeof data.hasChunk === 'function'; // (the real world's blocks; a plain lookup otherwise — not by asking for a chunk: far from the start it was made again on every look)
     if (fast) {
         // straight through the chunks' blocks (no lookup per cell)
         const S = CHUNK, M = MIN_LAYER;
         const L0 = Math.max(M, L - down), L1 = Math.min(MAX_LAYER, L + up);
         for (let cx = Math.floor(x0 / S); cx <= Math.floor(x1 / S); cx++) for (let cz = Math.floor(z0 / S); cz <= Math.floor(z1 / S); cz++) {
+            if (data.landMade && !data.landMade(cx * S, cz * S)) continue; // (not made yet: the workers bring it — not made here in a frame)
             const c = data.chunk(cx, cz), b = c.blocks;
             if (c.maxTop != null && c.maxTop < L0) continue;
             const ax = Math.max(x0, cx * S), bx = Math.min(x1, cx * S + S - 1), az = Math.max(z0, cz * S), bz = Math.min(z1, cz * S + S - 1);
