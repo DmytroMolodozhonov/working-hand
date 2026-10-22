@@ -43,19 +43,25 @@ test('Lumos throw: the hand by the head (or behind the shoulder), a fast swing f
     assert.ok(hard.out.speed > r.out.speed, 'harder');
 });
 
-test('Lumos throw: never without a wind-up, never a wave while talking, a swing down or back, a slow move, the arm just held', () => {
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: 0, z: -7 } }).out, null, 'a jab from the chest: no wind-up');
+test('Lumos throw: never a wave while talking, a swing down or back, a slow move, the arm just held', () => {
+    // (soft: no wind-up needed — a sharp jab forward from the chest, or a slow-ish flick seen by a smoothing camera, throws)
+    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: 0, z: -7 } }).out, 'a jab from the chest');
+    assert.ok(swing(new LumosThrow(), { start: { x: 0.8, y: 1.2, z: -0.6 }, v: { x: 0, y: -1, z: -3.4 }, n: 4 }).out, 'a modest flick');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 7, y: 0, z: -1 } }).out, null, 'a wave aside');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -9, z: -1 }, n: 6 }).out, null, 'a swing down to the ground');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.0, z: -0.5 }, v: { x: 0, y: 7, z: -1 } }).out, null, 'a swing up');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: -0.5 }, v: { x: 0, y: 0, z: 6 } }).out, null, 'back');
-    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -1, z: -3 }, n: 6 }).out, null, 'slow');
+    assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: -0.5, z: -1.5 }, n: 6 }).out, null, 'slow');
     assert.equal(swing(new LumosThrow(), { start: { x: 0.8, y: 1.7, z: 0 }, v: { x: 0, y: 0, z: 0 }, hold: 3000 }).out, null, 'held up');
     // talking: the hands move about at the chest, quick little moves every way
     const d = new LumosThrow();
     let any = null;
     for (let t = 0; t < 5000; t += 50) any = any || d.update({ now: t, hand: { x: 0.6 + 0.1 * Math.sin(t / 90), y: 1.0 + 0.1 * Math.cos(t / 70), z: -0.5 }, shoulder: SH, vRel: { x: 3 * Math.cos(t / 90), y: -2 * Math.sin(t / 70), z: 1.5 * Math.sin(t / 50) } });
     assert.equal(any, null, 'talking');
+    // the diary: why a move was no throw
+    const dw = new LumosThrow();
+    dw.update({ now: 0, hand: { x: 0.8, y: 1.2, z: -0.6 }, shoulder: SH, vRel: { x: 5, y: 0, z: 0 } });
+    assert.match(dw.why, /не вперёд/, 'the reason is written');
     assert.ok(LUMOS.STILL >= 1000, 'walking / running: a moment standing still first');
 });
 

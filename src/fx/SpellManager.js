@@ -164,7 +164,7 @@ export function matchSpell(text) {
     // the Lumos' modes and «Lumos Following» (before the plain Lumos: its word is in them)
     if (has('фоловинг', 'фолловинг', 'фоллоуинг', 'фолоуинг', 'фоловин', 'фолловин', 'following', 'folowing', 'followin')) return 'LumosFollowing';
     if (has('flashlight', 'flash light', 'флешлайт', 'флэшлайт', 'флеш лайт', 'флэш лайт', 'флешлай', 'фонарик')) return 'LumosFlashlight';
-    if (has('ahead', 'эхед', 'эхэд', 'ахед', 'ахэд', 'ехед', 'э хед')) return 'LumosAhead';
+    if (has('ahead', 'эхед', 'эхэд', 'ахед', 'ахэд', 'ехед', 'э хед', 'ехэд', 'э хэд', 'ahed', 'aheed', 'ахэт', 'эхет', 'эхэт', 'ахет', 'ahet', 'ahat')) return 'LumosAhead';
     if (has('люмос', 'лумос', 'люмус', 'lumos', 'lumus', 'люмаз')) return has('макс', 'max', 'мах') ? 'LumosMaxima' : 'Lumos';
     if (has('нокс', 'nox', 'нокса', 'knox', 'knocks', 'nocks')) return 'Nox';
     // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)

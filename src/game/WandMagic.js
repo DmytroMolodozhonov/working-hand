@@ -735,11 +735,17 @@ export class WandMagic {
             if (ch.isRunning || ch.stepping > 0 || ch.flying || ch.knockedDown || ch.swimming) this._movedAt = now;
             const det = this._lumosThr || (this._lumosThr = new LumosThrow());
             const other = g._castName && g._castName !== 'Lumos' && g._castName !== 'LumosMaxima' && now - (g._castAt || -1e9) < LUMOS.OTHER_MS;
-            if (!side || !ch.armState || now - (this._movedAt || 0) < LUMOS.STILL || other) det.reset();
-            else {
+            if (!side || !ch.armState || now - (this._movedAt || 0) < LUMOS.STILL || other) {
+                det.reset();
+                // (the diary: why the throw cannot even be seen now — written when the hand does move; 1 in 1.5 s)
+                const why = !side ? 'нет руки с палочкой' : !ch.armState ? 'нет позы руки' : other ? 'только что было другое заклинание' : 'вы идёте/бежите/падаете (нужно постоять секунду)';
+                if (side && ch.armState && now - (this._noteAt || -1e9) > 1500 && g.currentPose && now - (this._movedAt || 0) < LUMOS.STILL + 4000) { this._noteAt = now; g.perf?.note(`бросок Люмоса не засчитан: ${why}`); }
+            } else {
                 const arm = ch.armState(side, this._arm || (this._arm = {}));
                 const tracked = ch.isHandTracked ? ch.isHandTracked(side) : true;
                 const thr = det.update({ now, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, behind: poseBehind(g.currentPose, side), tracked });
+                if (det.why && now - (this._noteAt || -1e9) > 400) { this._noteAt = now; g.perf?.note(`бросок Люмоса не засчитан: ${det.why}`); }
+                if (thr) g.perf?.note(`бросок Люмоса засчитан: скорость ${thr.speed.toFixed(1)} м/с`);
                 if (thr) this._throwLight(this._throwDir(thr.dir, _v2), Math.min(1.6, Math.max(0.7, thr.speed / 7)));
             }
         }
