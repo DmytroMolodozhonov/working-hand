@@ -274,7 +274,7 @@ test('«Disarmor» decides every creature and thing (ArmorTypes.DISARMOR_TARGETS
 
 test('a skeleton raised from a grave («Alive» at a graveyard) is one of the living trees: every place that finds them finds it', () => {
     const lt = src('src/game/LivingTrees.js');
-    assert.match(body(lt, '    spawn(d, owner, id = null) {'), /skeletonModel\(\)/, 'LivingTrees.spawn makes skeletons');
+    assert.match(body(lt, '    spawn(d, owner, id = null) {'), /skeletonModel\(/, 'LivingTrees.spawn makes skeletons');
     assert.match(body(lt, '    hit(t, dmg, kind = null, by = null) {'), /_hitSkel/, 'its own damage rules');
     const sk = src('src/game/Skeletons.js');
     assert.match(sk, /SKEL_DUEL_IMMUNE/, '«Авада» and the duel charges: written down why not');

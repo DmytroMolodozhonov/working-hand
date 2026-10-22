@@ -570,7 +570,7 @@ export class SoundManager {
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
-            ['seal', () => this._synthKnock(90, 0.5)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
+            ['seal', () => this._synthKnock(90, 0.5)], ['boneClack', () => this._synthKnock(820, 0.09)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
             ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
             // («Create an Ice Castle», «Ice Bridge» — IceMagic.js)
             ['iceBell', () => this._synthIceBell()], ['iceFloor', () => this._synthIceFloor(2.6)],
@@ -1373,6 +1373,13 @@ export class SoundManager {
             d[i] = Math.max(-1, Math.min(1, s * Math.min(1, t * 3000)));
         }
         return buf;
+    }
+
+    /** A bone knocking into its place / onto the ground (the risen dead — Skeletons.js): a dry, light clack. */
+    playBoneClack(position, volume = 1) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        if (!this.sounds.boneClack) this.sounds.boneClack = this._synthKnock(820, 0.09);
+        this._playAt(this.sounds.boneClack, position, 0.7 * volume, 8, 0.85 + Math.random() * 0.35);
     }
 
     /** Landing after a jump / a drop: a dull thud of the feet (made ahead: prewarmStep). */

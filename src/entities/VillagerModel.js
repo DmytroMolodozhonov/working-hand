@@ -311,16 +311,45 @@ function wizardLook(L, r, pick) {
 /** A skeleton's bones (Blackbeard.js: the black ship's crew) — pale bone and older, yellowed bone. */
 export const BONE = 0xe2d9bf, BONE_OLD = 0xb3a682, BONE_HOLE = 0x0a0806;
 
+/**
+ * A skeleton's bones, each its own box list, in the frames of the person's joints: the skull (head pivot —
+ * the jaw apart), the torso's bones (spine, five ribs, the breastbone, the shoulders; torso frame), the pelvis
+ * (torso frame), an arm (shoulder frame: upper arm, forearm, hand), a thigh (hip frame), a shin with its foot
+ * (knee frame). The black ship's crew is made of them (Blackbeard.js), and so are the dead «Alive» raises out
+ * of a grave (Skeletons.js) — bone by bone, they come together one after another.
+ */
+export function skeletonBoneBoxes() {
+    const L = (f) => { const B = []; f(B); return B; };
+    return {
+        skull: L((B) => {
+            b(B, 1.08, 0.72, 1.14, 0, 0.78, 0.02, BONE);
+            b(B, 0.96, 0.42, 1.0, 0, 0.34, -0.03, BONE);
+            for (const sx of [-1, 1]) b(B, 0.3, 0.28, 0.05, sx * 0.24, 0.6, -0.55, BONE_HOLE);
+            b(B, 0.12, 0.18, 0.05, 0, 0.36, -0.54, BONE_HOLE); // the nose
+            b(B, 0.62, 0.11, 0.05, 0, 0.17, -0.53, 0xeee6cf);
+            for (let i = 0; i < 4; i++) b(B, 0.025, 0.11, 0.055, -0.21 + i * 0.14, 0.17, -0.535, BONE_HOLE);
+            b(B, 0.08, 0.3, 0.08, 0, -0.12, 0.08, BONE_OLD); // the neck's bones
+        }),
+        jaw: L((B) => b(B, 0.72, 0.2, 0.84, 0, 0.04, -0.06, BONE_OLD)),
+        spine: L((B) => b(B, 0.18, 1.5, 0.18, 0, 0, 0.24, BONE_OLD)),
+        ribs: [0, 1, 2, 3, 4].map((k) => L((B) => b(B, 1.0 - Math.abs(k - 1.5) * 0.08, 0.09, 0.72, 0, 0.52 - k * 0.18, 0, BONE))),
+        breast: L((B) => b(B, 0.14, 0.8, 0.06, 0, 0.2, -0.37, BONE)),
+        shoulders: L((B) => b(B, 1.36, 0.14, 0.3, 0, 0.66, 0.02, BONE)),
+        pelvis: L((B) => b(B, 0.9, 0.3, 0.52, 0, -0.62, 0, BONE_OLD)),
+        upperArm: L((B) => { b(B, 0.3, 0.26, 0.3, 0, 0.06, 0, BONE); b(B, 0.15, 0.6, 0.15, 0, -0.22, 0, BONE); b(B, 0.22, 0.16, 0.22, 0, -0.55, 0, BONE_OLD); }),
+        forearm: L((B) => { b(B, 0.07, 0.56, 0.07, -0.05, -0.86, 0, BONE); b(B, 0.07, 0.56, 0.07, 0.05, -0.86, 0, BONE); }),
+        hand: L((B) => { b(B, 0.26, 0.2, 0.18, 0, -1.16, 0, BONE); for (let i = 0; i < 4; i++) b(B, 0.045, 0.2, 0.045, -0.09 + i * 0.06, -1.34, -0.03, BONE_OLD); }),
+        thigh: L((B) => b(B, 0.16, LEG_UP, 0.16, 0, -LEG_UP / 2, 0, BONE)),
+        shin: L((B) => { b(B, 0.24, 0.18, 0.24, 0, -0.04, 0, BONE_OLD); b(B, 0.13, 0.66, 0.13, 0, -0.42, 0, BONE); b(B, 0.28, 0.12, 0.5, 0, -0.84, -0.08, BONE); }),
+    };
+}
+const SKB = skeletonBoneBoxes();
+/** One geometry (position, normal, vertex colour) of a box list — not cached here: the caller keeps it. */
+export const boxesGeometry = (L) => buildPart(L);
+
 /** A skull: the cranium, the cheekbones, a jaw, dark sockets (their green fire is its own mesh), the teeth. */
 function skullBoxes(L, B) {
-    b(B, 1.08, 0.72, 1.14, 0, 0.78, 0.02, BONE);
-    b(B, 0.96, 0.42, 1.0, 0, 0.34, -0.03, BONE);
-    b(B, 0.72, 0.2, 0.84, 0, 0.04, -0.06, BONE_OLD); // the jaw
-    for (const sx of [-1, 1]) b(B, 0.3, 0.28, 0.05, sx * 0.24, 0.6, -0.55, BONE_HOLE);
-    b(B, 0.12, 0.18, 0.05, 0, 0.36, -0.54, BONE_HOLE); // the nose
-    b(B, 0.62, 0.11, 0.05, 0, 0.17, -0.53, 0xeee6cf);
-    for (let i = 0; i < 4; i++) b(B, 0.025, 0.11, 0.055, -0.21 + i * 0.14, 0.17, -0.535, BONE_HOLE);
-    b(B, 0.08, 0.3, 0.08, 0, -0.12, 0.08, BONE_OLD); // the neck's bones
+    B.push(...SKB.skull, ...SKB.jaw);
 }
 
 function headBoxes(L) {
@@ -550,11 +579,7 @@ function bodyBoxes(L) {
     };
     if (L.skeleton) {
         // the spine, the ribs, the breastbone, the shoulders, the pelvis; rags of what he once wore
-        b(B, 0.18, 1.5, 0.18, 0, 0, 0.24, BONE_OLD);
-        for (let k = 0; k < 5; k++) b(B, 1.0 - Math.abs(k - 1.5) * 0.08, 0.09, 0.72, 0, 0.52 - k * 0.18, 0, BONE);
-        b(B, 0.14, 0.8, 0.06, 0, 0.2, -0.37, BONE);
-        b(B, 1.36, 0.14, 0.3, 0, 0.66, 0.02, BONE);
-        b(B, 0.9, 0.3, 0.52, 0, -0.62, 0, BONE_OLD);
+        B.push(...SKB.spine, ...SKB.ribs.flat(), ...SKB.breast, ...SKB.shoulders, ...SKB.pelvis);
         if (L.rags) {
             b(B, 1.12, 0.32, 0.8, 0, -0.42, 0, L.rags);
             b(B, 0.3, 0.9, 0.06, -0.38, 0.25, -0.4, L.rags, 0, 0, 0.35); // a torn strip over the ribs
@@ -669,12 +694,7 @@ function bodyBoxes(L) {
 function armBoxes(L, side) {
     const B = [];
     if (L.skeleton) {
-        b(B, 0.3, 0.26, 0.3, 0, 0.06, 0, BONE);
-        b(B, 0.15, 0.6, 0.15, 0, -0.22, 0, BONE);
-        b(B, 0.22, 0.16, 0.22, 0, -0.55, 0, BONE_OLD);
-        b(B, 0.07, 0.56, 0.07, -0.05, -0.86, 0, BONE); b(B, 0.07, 0.56, 0.07, 0.05, -0.86, 0, BONE);
-        b(B, 0.26, 0.2, 0.18, 0, -1.16, 0, BONE);
-        for (let i = 0; i < 4; i++) b(B, 0.045, 0.2, 0.045, -0.09 + i * 0.06, -1.34, -0.03, BONE_OLD);
+        B.push(...SKB.upperArm, ...SKB.forearm, ...SKB.hand);
         if (L.rags && side > 0) b(B, 0.38, 0.3, 0.38, 0, -0.05, 0, L.rags); // a torn sleeve
         return B;
     }
@@ -717,7 +737,7 @@ function armBoxes(L, side) {
 function thighBoxes(L) {
     const B = [];
     if (L.skeleton) {
-        b(B, 0.16, LEG_UP, 0.16, 0, -LEG_UP / 2, 0, BONE);
+        B.push(...SKB.thigh);
         if (L.rags) b(B, 0.46, 0.38, 0.46, 0, -0.18, 0, L.rags);
         return B;
     }
@@ -734,9 +754,7 @@ function thighBoxes(L) {
 function shinBoxes(L) {
     const B = [];
     if (L.skeleton) {
-        b(B, 0.24, 0.18, 0.24, 0, -0.04, 0, BONE_OLD);
-        b(B, 0.13, 0.66, 0.13, 0, -0.42, 0, BONE);
-        b(B, 0.28, 0.12, 0.5, 0, -0.84, -0.08, BONE);
+        B.push(...SKB.shin);
         return B;
     }
     if (L.coat) { // (tall black boots with wide tops)

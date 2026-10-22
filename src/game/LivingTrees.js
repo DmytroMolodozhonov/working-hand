@@ -19,8 +19,9 @@
  *    blackens and collapses.
  *  - A golden apple tree doesn't come alive.
  *  - Said at a grave of a village graveyard, «Alive» raises its dead: a skeleton (Skeletons.js) —
- *    a living tree in principle (`t.skel`, the same servant, concentration, mana, 15 HP), but it
- *    rises out of the grave, and blades and fists break its bones too («Авада» still doesn't).
+ *    a living tree in principle (`t.skel`, the same servant, concentration, mana, 15 HP), but its
+ *    bones rise out of the grave and come together, and blades and fists break them too («Авада» still
+ *    doesn't). A body or bones lying about (Death.js) never rise — a hero's legacy in them stays theirs.
  *
  * Multiplayer: the host moves the trees and decides; the caster's own computer
  * counts their mana and asks the host to end the tree when it runs out.
@@ -32,7 +33,7 @@ import { creditKill } from './Mana.js';
 import { avoidStep } from './Avoid.js';
 import { crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget } from './FaceTarget.js';
-import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL } from './Skeletons.js';
+import { skeletonModel, skeletonDamage, graveOnRay, graveClosed, SKEL, layInGrave, assembleSkeleton, wholeSkeleton, scatterSkeleton, straighten } from './Skeletons.js';
 
 export const ALIVE = {
     COST: 25, // mana at once
@@ -104,10 +105,13 @@ const PHASES = ['rise', 'alive', 'stiff', 'fall', 'burn'];
 const WHY = ['', 'mana', 'far', 'stop', 'focus'];
 const LEG = 2.6; // m: the root legs (s = 1)
 const CHAR = new THREE.Color(0x2a2420);
+const GLOW_C = new THREE.Color(0x2aff6a); // (the bones in the air glow green)
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _c = new THREE.Color();
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** A grave's id as a number (its dead's bones lie the same way on every computer). */
+const hashId = (s) => { let h = 2166136261; for (const c of String(s || '')) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 
 /** The monster made of a tree's own colours: trunk body, branch arms, root legs, a crown for a head. */
 export function livingTreeModel({ trunk = 0x8b4513, leaf = 0x228b22, h = 10 } = {}) {
@@ -432,8 +436,14 @@ export class LivingTrees {
     spawn(d, owner, id = null) {
         const g = this.game;
         const skel = !!d.skel;
-        const model = skel ? skeletonModel() : livingTreeModel(d);
+        const model = skel ? skeletonModel(hashId(d.gid)) : livingTreeModel(d);
         model.position.set(d.x, d.y, d.z);
+        if (skel) {
+            // it stands up at the grave's foot, its back to it; its bones lie on the floor of the grave (a metre down)
+            const ex = d.ex ?? d.x, ez = d.ez ?? d.z;
+            model.position.set(ex, d.y, ez);
+            layInGrave(model, Math.hypot(d.x - ex, d.z - ez), -1);
+        }
         model.rotation.y = d.ry || 0;
         g.scene.add(model);
         const t = {
@@ -459,8 +469,14 @@ export class LivingTrees {
         const g = this.game;
         t.gone = true;
         g.scene.remove(t.model);
-        t.model.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); } });
+        t.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.shared) o.geometry.dispose(); }); // (a skeleton's shapes are everybody's)
         for (const m of t.model.userData.mats) m.dispose();
+        for (const m of t.model.userData.own || []) m.dispose();
+        if (t.skel && this.game.fx) {
+            // the bones crumble to dust
+            const p = t.model.position;
+            for (let i = 0; i < 16; i++) this.game.fx.spark(_v.set(p.x + (Math.random() - 0.5) * 2, p.y + 0.2, p.z + (Math.random() - 0.5) * 2), 0xd8d0bc, 0.12, _v2.set((Math.random() - 0.5) * 1.2, Math.random() * 1.2, (Math.random() - 0.5) * 1.2), 1.0);
+        }
         this.list.splice(this.list.indexOf(t), 1);
         this.byId.delete(t.id);
     }
@@ -529,7 +545,7 @@ export class LivingTrees {
         t.form = 0;
         t.swing = null;
         t.phase = 'fall'; t.pt = 0; t.theta = 0.12; t.omega = 0.6;
-        if (t.skel) { t.theta = 0.35; t.broken = true; } // (a skeleton: knocked apart — it falls into its bones)
+        if (t.skel) { t.theta = 0; t.broken = true; } // (a skeleton: knocked apart — its bones fly apart)
         if (t.owner === this.game.localId) this.game.hud?.setVoice?.(t.skel ? '💥 Ваш скелет разбит на кости' : '💥 Ваше живое дерево разорвало', true);
     }
 
@@ -708,18 +724,16 @@ export class LivingTrees {
             if (t.hp <= 0) this._burnDown(t);
         }
         if (t.phase === 'rise' && t.skel) {
-            // out of the grave: shaking, a hand, the earth bursts (the grave is dug), it climbs out
+            // out of the grave: shaking, the earth bursts (the grave is dug), its bones come together at the grave's foot
             t.form = Math.min(1, t.form + dt / SKEL.RISE);
             if (t.form >= SKEL.OPEN && !t.dug) this._digGrave(t);
-            const k = smooth(SKEL.CLIMB + 0.15, 1, t.form);
-            p.x = t.d.x + (t.d.ex - t.d.x) * k; p.z = t.d.z + (t.d.ez - t.d.z) * k;
-            p.y = t.d.y;
+            p.set(t.d.ex, t.d.y, t.d.ez);
             if (t.form >= 1) { t.phase = 'alive'; t.pt = 0; }
         } else if (t.phase === 'rise') {
             t.form = Math.min(1, t.form + dt / ALIVE.GROW);
             if (t.form >= 1) { t.phase = 'alive'; t.pt = 0; }
         } else if (t.phase === 'fall' && t.skel) {
-            // it falls into a heap of bones, and the bones lie a while and are gone
+            // it falls apart into a heap of bones, and the bones lie a moment and are gone
             t.theta = Math.min(1, t.theta + dt / SKEL.COLLAPSE);
             if (t.theta >= 1) this._remove(t);
             return;
@@ -914,7 +928,10 @@ export class LivingTrees {
         return null;
     }
 
-    /** A skeleton's body as the phase and the moment say (every computer): out of the grave, walking, striking, falling apart. */
+    /**
+     * A skeleton's body as the phase and the moment say (every computer): its bones coming together out
+     * of the grave, walking, striking, letting go (stiff), falling apart into its bones.
+     */
     _poseSkel(t, dt) {
         const g = this.game;
         const u = t.model.userData;
@@ -922,90 +939,85 @@ export class LivingTrees {
         const now = performance.now();
         const p = t.model.position;
         const R = t.phase === 'rise';
-        // ---- out of the grave
-        const hand = smooth(SKEL.HAND, SKEL.OPEN, k); // a hand comes up
-        const climb = smooth(SKEL.CLIMB, 1, k); // it climbs out
-        let y = 0, lean = 0;
-        if (R) {
-            y = k < SKEL.CLIMB ? -2.25 + 0.7 * hand : -1.55 + 1.55 * climb;
-            lean = k < SKEL.CLIMB ? 0 : Math.sin(climb * Math.PI) * 0.6; // (bent over the edge, then up)
+        const build = R ? Math.min(1, Math.max(0, (k - SKEL.BUILD) / (SKEL.BUILT - SKEL.BUILD))) : 1; // (0…1: the bones on their way)
+        const ready = R ? smooth(SKEL.BUILT, 1, k) : 1; // (all in place: it wakes)
+        u.rig.visible = !R || k >= SKEL.OPEN; // (in the closed grave: under the earth, not seen)
+        u.rig.position.set(0, 0, 0);
+        u.rig.rotation.set(0, 0, 0);
+        u.fall.rotation.set(0, 0, 0);
+        // ---- the bones come together (the joints straight: they fly to a body standing straight)
+        if (R && ready <= 0) {
+            straighten(u);
+            assembleSkeleton(u, build, (bone) => this._boneClack(t, bone));
+            // a green glow on the bones in the air; magic flies with each
+            u.mats[0].emissive.copy(GLOW_C).multiplyScalar(0.55);
+            if (g.fx?.spark) for (const bone of u.pieces) {
+                if (!bone.flying || bone.placed || Math.random() > 0.45) continue;
+                bone.obj.getWorldPosition(_v);
+                g.fx.spark(_v, Math.random() < 0.7 ? 0x7dff9a : 0xb06bff, 0.07, _v2.set((Math.random() - 0.5) * 0.6, 0.3 + Math.random() * 0.6, (Math.random() - 0.5) * 0.6), 0.6);
+            }
+            u.eyeMat.color.set(0x1a1a14);
+            u.glow.opacity = 0;
+            u.mouth.rotation.x = 0;
+            this._graveMagic(t, k, now);
+            return;
         }
-        // the grave shakes before (the ground over it — the model is still down there)
-        const shake = R && k < SKEL.OPEN ? Math.sin(now / 35) * 0.03 * (1 - hand * 0.5) : 0;
-        u.rig.position.y = y;
-        u.rig.position.x = shake;
-        u.body.rotation.x = -lean;
-        u.head.rotation.x = -lean * 0.4;
+        if (t.phase === 'fall') {
+            // ---- falling apart into its bones (the legs give way first, the skull comes down last)
+            if (!t._apart) { t._apart = true; straighten(u); }
+            scatterSkeleton(u, t.theta, !!t.broken);
+            u.eyeMat.color.set(0x1a1a14); u.glow.opacity = 0; u.mouth.rotation.x = -0.4;
+            u.mats[0].emissive.setHex(0x000000);
+            if (!t._bones && (t.theta > 0.45 || t.broken)) {
+                t._bones = true;
+                g.sound?.playBoneClack?.(p, 1.2);
+                for (let i = 0; i < (t.broken ? 22 : 8); i++) g.fx?.debris?.spawn(p.x + (Math.random() - 0.5) * 0.5, p.y + 0.3 + Math.random() * (t.broken ? 2.4 : 0.8), p.z + (Math.random() - 0.5) * 0.5,
+                    (Math.random() - 0.5) * (t.broken ? 6 : 2), 0.5 + Math.random() * (t.broken ? 4 : 1.5), (Math.random() - 0.5) * (t.broken ? 6 : 2), i % 4 ? SKEL.BONE : 0xb3a682, 0.05 + Math.random() * 0.08, 6, { shrink: 0.05, fade: false, spin: 8 });
+            }
+            return;
+        }
+        if (!t._whole) { t._whole = true; if (R) assembleSkeleton(u, 1, (bone) => this._boneClack(t, bone)); wholeSkeleton(u); }
+        // ---- standing: it wakes (a shiver, the head comes up, the jaw clacks), walks, strikes
+        const wake = R ? ready : 1;
+        if (R && !t._woke && ready > 0.05) { t._woke = true; g.sound?.playMagic?.(p, 0.7); }
+        const shiver = R ? Math.sin(now / 40) * 0.05 * (1 - wake) : 0;
+        u.rig.rotation.z = shiver;
+        u.body.rotation.x = R ? 0.35 * (1 - wake) : 0; // (bowed while the bones settle, then it straightens)
+        u.head.rotation.x = R ? 0.5 * (1 - wake) : 0;
+        u.head.position.y = u.headY;
         const walk = t.speed > 0.1 ? Math.min(1, t.speed / 2.5) : 0;
-        t.walkT += dt * t.speed * 3.2;
+        t.walkT += dt * t.speed * 1.6;
         u.arms.forEach((a, i) => {
             const swingIt = t.swing && (a.side > 0 ? 1 : 0) === t.swingSide ? t.swing.t : -1;
-            let rx = Math.sin(t.walkT + (i ? Math.PI : 0)) * 0.5 * walk, rz = a.side * 0.12, el = -0.3;
-            if (R) {
-                // the right hand first (straight up, fingers clawing), then both, then they grip the edge
-                const up = i === 1 ? 1 : smooth(SKEL.OPEN - 0.05, SKEL.CLIMB, k);
-                rx = -Math.PI * up * (1 - climb) - 1.3 * climb;
-                el = -0.2 - 0.5 * climb;
-                a.hand.rotation.x = Math.sin(now / 90 + i) * 0.4 * (1 - climb);
-            }
+            let rx = Math.sin(t.walkT + (i ? Math.PI : 0)) * 0.5 * walk, rz = a.side * 0.08, el = -0.25;
+            if (R) { rx = 0; el = -0.15 * wake; }
             if (swingIt >= 0) { rx = swingIt < 0.4 ? -2.6 * smooth(0, 0.4, swingIt) : swingIt < 0.6 ? -2.6 + 2.2 * smooth(0.4, 0.6, swingIt) : -0.4 * (1 - smooth(0.6, 1, swingIt)); el = -0.6; }
-            if (t.phase === 'stiff') { rx *= k; rz = a.side * (0.12 + 0.3 * (1 - k)); }
+            if (t.phase === 'stiff') { rx *= k; rz = a.side * (0.08 + 0.3 * (1 - k)); }
             a.sh.rotation.x = rx;
             a.sh.rotation.z = rz;
             a.elbow.rotation.x = el;
+            a.hand.rotation.x = 0;
         });
         u.legs.forEach((l, i) => {
             const sw = Math.sin(t.walkT + i * Math.PI);
-            l.rotation.x = R ? -0.5 * Math.sin(climb * Math.PI) * (i ? 1 : 0.3) : sw * 0.55 * walk;
-            u.knees[i].rotation.x = R ? 0.9 * Math.sin(climb * Math.PI) : Math.max(0, -sw) * 0.7 * walk;
+            l.rotation.x = sw * 0.55 * walk;
+            u.knees[i].rotation.x = Math.max(0, -sw) * 0.7 * walk;
         });
         // the jaw chatters; it opens wide on a blow
-        u.mouth.rotation.x = t.swing ? 0.5 : (0.05 + 0.08 * (0.5 + 0.5 * Math.sin(now / 80))) * (R ? climb : 1);
-        // the eyes: a green fire in the sockets
-        const eye = R ? smooth(SKEL.CLIMB, 0.8, k) : t.phase === 'stiff' ? k : t.phase === 'alive' ? 1 : 0;
+        u.mouth.rotation.x = -(t.swing ? 0.45 : (0.04 + 0.08 * (0.5 + 0.5 * Math.sin(now / 80))) * wake);
+        // the eyes: a green fire in the sockets; the bones' glow fades
+        const eye = R ? ready : t.phase === 'stiff' ? k : t.phase === 'alive' ? 1 : 0;
         u.eyeMat.color.set(0x1a1a14).lerp(_c.set(0x9bffb0), eye);
         u.glow.opacity = 0.8 * eye * (0.75 + 0.25 * Math.sin(now / 120));
-        if (t.phase === 'stiff') { u.rig.rotation.z = Math.sin(now / 60) * 0.04 * (1 - k); u.body.rotation.x = -0.25 * (1 - k); }
-        // ---- falling into its bones
-        if (t.phase === 'fall') {
-            const c = t.theta;
-            u.legs.forEach((l, i) => { l.rotation.x = -1.4 * c * (i ? 1 : 0.8); u.knees[i].rotation.x = 2.2 * c; });
-            u.rig.position.y = -0.85 * smooth(0, 0.8, c);
-            u.body.rotation.x = 0.9 * c;
-            u.head.position.y = 1.55 - 1.2 * smooth(0.3, 1, c);
-            u.head.rotation.z = 1.2 * c;
-            u.arms.forEach((a) => { a.sh.rotation.x = 0.6 * c; a.sh.rotation.z = a.side * 1.4 * c; });
-            u.eyeMat.color.set(0x1a1a14); u.glow.opacity = 0;
-            if (!t._bones && (c > 0.6 || t.broken)) {
-                t._bones = true;
-                for (let i = 0; i < (t.broken ? 22 : 12); i++) g.fx?.debris?.spawn(p.x + (Math.random() - 0.5) * 0.5, p.y + 0.3 + Math.random() * (t.broken ? 1.4 : 0.6), p.z + (Math.random() - 0.5) * 0.5,
-                    (Math.random() - 0.5) * (t.broken ? 6 : 2), 0.5 + Math.random() * (t.broken ? 4 : 1.5), (Math.random() - 0.5) * (t.broken ? 6 : 2), i % 4 ? SKEL.BONE : 0xb3a682, 0.05 + Math.random() * 0.08, 6, { shrink: 0.05, fade: false, spin: 8 });
-            }
-        }
-        // ---- the magic: clods and green / violet light out of the grave while it rises
-        if (R && g.fx) {
-            const q0 = t.d;
-            if (k < SKEL.CLIMB + 0.1 && Math.random() < (k < SKEL.HAND ? 0.5 : 0.9)) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 0.9, q0.y + 0.05, q0.z + (Math.random() - 0.5) * 0.9,
-                (Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 1.5, Math.random() < 0.7 ? 0x5a3f28 : 0x3e2b1a, 0.06 + Math.random() * 0.1, 1.5, { shrink: 0.2, fade: false, spin: 6 });
-            if (!t._burst && k >= SKEL.OPEN) {
-                // the earth bursts open
-                t._burst = true;
-                for (let i = 0; i < 40; i++) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 1.2, q0.y + 0.1, q0.z + (Math.random() - 0.5) * 1.6,
-                    (Math.random() - 0.5) * 6, 3 + Math.random() * 5, (Math.random() - 0.5) * 6, Math.random() < 0.75 ? 0x5a3f28 : 0x3e2b1a, 0.1 + Math.random() * 0.18, 2.5, { shrink: 0.15, fade: false, spin: 8 });
-                for (let i = 0; i < 30; i++) g.fx.spark?.(_v.set(q0.x, q0.y + 0.2, q0.z), i % 2 ? 0x7dff9a : 0xb06bff, 0.14, _v2.set((Math.random() - 0.5) * 5, 2 + Math.random() * 4, (Math.random() - 0.5) * 5), 1.0);
-            }
-            const a = now / 300;
-            for (let n = 0; n < 2; n++) {
-                const ang = a + n * Math.PI + Math.random() * 0.3, r = 0.9 + 0.3 * Math.sin(now / 500);
-                g.fx.spark?.(_v.set(q0.x + Math.cos(ang) * r, q0.y + 0.1 + Math.random() * 1.6 * k, q0.z + Math.sin(ang) * r), n ? 0xb06bff : 0x7dff9a, 0.07, _v2.set(-Math.sin(ang) * 1.2, 0.8 + Math.random(), Math.cos(ang) * 1.2), 0.7);
-            }
-        }
+        if (t.phase === 'stiff') { u.rig.rotation.z = Math.sin(now / 60) * 0.04 * (1 - k); u.body.rotation.x = 0.25 * (1 - k); }
+        if (R) this._graveMagic(t, k, now);
         // ---- fire: it blackens and its bones crumble
         const burning = t.burnT > 0 || t.phase === 'burn';
         const black = t.phase === 'burn' ? smooth(0, 0.6, t.pt / ALIVE.COLLAPSE) : 0;
         u.mats.forEach((m, i) => {
             m.color.copy(u.base[i]).lerp(CHAR, black);
-            if (m.emissive) m.emissive.setHex(burning ? (Math.random() < 0.5 ? 0x3a1000 : 0x5a1800) : 0x000000);
+            if (burning) m.emissive.setHex(Math.random() < 0.5 ? 0x3a1000 : 0x5a1800);
+            else m.emissive.copy(GLOW_C).multiplyScalar(R ? 0.55 * (1 - ready) : 0);
         });
         if (t.phase === 'burn') {
             const c = smooth(0.3, 1, t.pt / ALIVE.COLLAPSE);
@@ -1014,9 +1026,39 @@ export class LivingTrees {
         }
         if (burning && g.fx?.glow) {
             for (let n = 0; n < 2; n++) {
-                g.fx.glow.spawn(p.x + (Math.random() - 0.5) * 0.6, p.y + Math.random() * 1.8 * (t.phase === 'burn' ? 0.5 : 1), p.z + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.5, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 0.5,
-                    [0xffe08a, 0xffa020, 0xff5a00, 0xd02000][(Math.random() * 4) | 0], 0.25 + Math.random() * 0.3, 0.5 + Math.random() * 0.3, { shrink: 1.2 });
+                g.fx.glow.spawn(p.x + (Math.random() - 0.5) * 0.9, p.y + Math.random() * 4.4 * (t.phase === 'burn' ? 0.5 : 1), p.z + (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 0.5, 1.5 + Math.random() * 2, (Math.random() - 0.5) * 0.5,
+                    [0xffe08a, 0xffa020, 0xff5a00, 0xd02000][(Math.random() * 4) | 0], 0.3 + Math.random() * 0.35, 0.5 + Math.random() * 0.3, { shrink: 1.2 });
             }
+        }
+    }
+
+    /** A bone knocks into its place: a dry clack and a puff of green light where it went in. */
+    _boneClack(t, bone) {
+        const g = this.game;
+        bone.obj.getWorldPosition(_v);
+        if (performance.now() - (this._clackAt || 0) > 70) { this._clackAt = performance.now(); // (a whole graveyard rising: not every clack)
+            g.sound?.playBoneClack?.(_v, 0.8); }
+        if (g.fx?.spark) for (let i = 0; i < 6; i++) g.fx.spark(_v, i % 2 ? 0x7dff9a : 0xd8ffe0, 0.06, _v2.set((Math.random() - 0.5) * 1.6, Math.random() * 1.2, (Math.random() - 0.5) * 1.6), 0.4);
+    }
+
+    /** While the dead rises: clods over the shaking grave, the earth bursting open, green and violet light round it. */
+    _graveMagic(t, k, now) {
+        const g = this.game;
+        if (!g.fx) return;
+        const q0 = t.d;
+        if (k < SKEL.OPEN && Math.random() < 0.6) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 2, q0.y + 0.05, q0.z + (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 1.5, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 1.5, Math.random() < 0.7 ? 0x5a3f28 : 0x3e2b1a, 0.06 + Math.random() * 0.1, 1.5, { shrink: 0.2, fade: false, spin: 6 });
+        if (!t._burst && k >= SKEL.OPEN) {
+            // the earth bursts open
+            t._burst = true;
+            for (let i = 0; i < 40; i++) g.fx.debris?.spawn(q0.x + (Math.random() - 0.5) * 2.4, q0.y + 0.1, q0.z + (Math.random() - 0.5) * 5,
+                (Math.random() - 0.5) * 6, 3 + Math.random() * 5, (Math.random() - 0.5) * 6, Math.random() < 0.75 ? 0x5a3f28 : 0x3e2b1a, 0.1 + Math.random() * 0.18, 2.5, { shrink: 0.15, fade: false, spin: 8 });
+            for (let i = 0; i < 30; i++) g.fx.spark?.(_v.set(q0.x, q0.y + 0.2, q0.z), i % 2 ? 0x7dff9a : 0xb06bff, 0.14, _v2.set((Math.random() - 0.5) * 5, 2 + Math.random() * 4, (Math.random() - 0.5) * 5), 1.0);
+        }
+        const a = now / 300;
+        for (let n = 0; n < 2; n++) {
+            const ang = a + n * Math.PI + Math.random() * 0.3, r = 1.6 + 0.3 * Math.sin(now / 500);
+            g.fx.spark?.(_v.set(q0.x + Math.cos(ang) * r, q0.y + 0.1 + Math.random() * 1.6, q0.z + Math.sin(ang) * r), n ? 0xb06bff : 0x7dff9a, 0.07, _v2.set(-Math.sin(ang) * 1.2, 0.8 + Math.random(), Math.cos(ang) * 1.2), 0.7);
         }
     }
 

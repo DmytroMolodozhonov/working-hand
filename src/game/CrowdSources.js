@@ -40,7 +40,7 @@ export function crowdOf(g) {
         for (const t of g.livingTrees?.list || []) {
             if (!t.alive || !t.model) continue;
             const p = t.model.position, s = t.model.userData?.s || 1;
-            push({ x: p.x, y: p.y, z: p.z, r: (t.skel ? BODY_R.skeleton : BODY_R.tree) * s, ref: t, id: t.id, kind: t.skel ? 'skeleton' : 'tree' });
+            push({ x: p.x, y: p.y, z: p.z, r: t.skel ? BODY_R.skeleton : BODY_R.tree * s, ref: t, id: t.id, kind: t.skel ? 'skeleton' : 'tree' }); // (a skeleton: a man's size)
         }
         // dragons on their feet (flying ones are above everybody)
         for (const d of g.dragons?.list || []) {

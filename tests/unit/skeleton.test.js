@@ -34,7 +34,7 @@ function fakeGame({ mode = 'creative', mana = 30 } = {}) {
 }
 const run = (g, s, dt = 0.05) => { for (let t = 0; t < s; t += dt) g.livingTrees.update(dt); };
 
-test('«Alive» at a grave: it shakes, a hand comes up, the earth bursts open (dug), the skeleton climbs out', () => {
+test('«Alive» at a grave: it shakes, the earth bursts open (dug), its bones come together one by one at the grave\'s foot', () => {
     const g = fakeGame();
     assert.ok(graveOnRay(g.castleLife.index, new THREE.Vector3(0, 1.5, 0.5), new THREE.Vector3(6, -1.5, 0).normalize()), 'the hand finds the grave');
     // a hand raised to cast (forward and 30° up), from 20 m: still that grave (the author had to stand too close)
@@ -48,21 +48,40 @@ test('«Alive» at a grave: it shakes, a hand comes up, the earth bursts open (d
     assert.equal(t.hp, ALIVE.HP);
     assert.deepEqual(g.alarms[0], ['undead', 'me'], 'the village takes fright');
     assert.ok(DANGERS.undead?.ru);
+    const u = t.model.userData;
     run(g, SKEL.RISE * SKEL.OPEN - 0.3);
     assert.equal(t.phase, 'rise');
-    assert.ok(t.model.userData.rig.position.y < -1, 'still under the earth (a hand at most)');
+    assert.equal(u.rig.visible, false, 'still under the earth');
     assert.equal(g.blocks.get('6,1,0'), BLOCK.DIRT, 'not open yet');
     run(g, 0.6);
     assert.equal(g.blocks.get('6,1,0'), BLOCK.AIR, 'the earth bursts open: the grave is dug');
     assert.ok(g.edits.length >= 2, 'sent to everyone (and saved with the world)');
-    run(g, SKEL.RISE);
+    assert.ok(Math.abs(t.model.position.z - GRAVE.exit.z) < 0.01, 'it stands up at the foot of the grave');
+    // the bones: none ever in the earth (the grave's floor a metre down; the ground round it), each in turn
+    const box = new THREE.Box3(), placedAt = new Map();
+    let lowest = Infinity, steps = 0;
+    while (t.phase === 'rise' && steps++ < 400) {
+        run(g, 0.05, 0.05);
+        t.model.updateMatrixWorld(true);
+        for (const p of u.pieces) {
+            box.setFromObject(p.obj);
+            const overGrave = Math.abs(box.getCenter(new THREE.Vector3()).z - GRAVE.z) < 3.4; // (the open hole: down to its floor)
+            lowest = Math.min(lowest, box.min.y - (overGrave ? -1 : 0));
+            if (p.placed && !placedAt.has(p)) placedAt.set(p, steps);
+        }
+    }
     assert.equal(t.phase, 'alive');
-    assert.ok(Math.abs(t.model.position.z - GRAVE.exit.z) < 0.6, 'climbed out to the foot of the grave');
-    assert.ok(Math.abs(t.model.userData.rig.position.y) < 0.05, 'standing on the ground');
+    assert.ok(lowest > -0.05, `no bone goes into the earth (${lowest.toFixed(2)})`);
+    const at = (name) => Math.min(...u.pieces.filter((p) => p.name === name).map((p) => placedAt.get(p)));
+    assert.ok(at('spine') < at('rib') && at('rib') < at('head') && at('head') < at('hand') && at('hand') < at('shin'), 'spine, ribs, skull, arms, legs — in turn');
+    t.model.updateMatrixWorld(true);
+    box.setFromObject(t.model);
+    assert.ok(Math.abs(box.min.y) < 0.08, `standing on the ground (${box.min.y.toFixed(2)})`);
+    assert.ok(box.max.y > 4.2 && box.max.y < 5, `as tall as a player (${box.max.y.toFixed(2)} m)`);
     // the grave is empty now
     g.livingTrees._last = 0;
     assert.equal(g.livingTrees.stopMine(), true);
-    run(g, 6);
+    run(g, 7);
     assert.equal(g.livingTrees.list.length, 0, 'the magic left: it fell into its bones');
     g.livingTrees._last = 0;
     assert.equal(g.livingTrees.cast(true), null);
