@@ -646,6 +646,20 @@ export class CastleLife {
         return homes.length ? homes[Math.abs(v.entry.home) % homes.length] : v.cs.graph.nearest(v.x, v.y, v.z);
     }
 
+    /** Back on a way it left a while: on from the node nearest it ahead, not back to one it already passed. */
+    _resyncPath(v) {
+        const N = v.cs.graph.nodes;
+        let bi = v.pathI, bd = Infinity;
+        for (let i = v.pathI; i < Math.min(v.path.length, v.pathI + 8); i++) {
+            const n = N[v.path[i]], d = Math.hypot(n.x - v.x, n.z - v.z) + Math.abs(n.y - v.y) * 2;
+            if (d < bd) { bd = d; bi = i; }
+        }
+        // (that nearest one is already about passed when the next is nearer than it is to the next)
+        const a = N[v.path[bi]], b = N[v.path[bi + 1]];
+        if (b && Math.hypot(b.x - v.x, b.z - v.z) < Math.hypot(b.x - a.x, b.z - a.z)) bi++;
+        v.pathI = bi;
+    }
+
     /** One step along the path; true when the end is reached. */
     _followPath(v, dt, speed) {
         speed *= v.legK ?? 1; // (a leg cut off: hopping / crawling — Dismember.js)
@@ -1856,13 +1870,18 @@ export class CastleLife {
         if (d <= stop && !floor) { v.speed = 0; v.path = null; return true; }
         const cs = v.cs, c = this.game.collision;
         v.chaseT = (v.chaseT || 0) - dt;
-        // (the paths only lead in and out of the walls; out in the open — straight)
-        if (cs.graph.nodes.length && (floor || (d > 9 && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v)) && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)))) {
+        // (the paths only lead in and out of the walls; out in the open — straight. Once on the paths it
+        // keeps to them a while: a wall's edge seen and lost step by step is no reason to turn every frame)
+        const walls = d > 9 && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v));
+        if (walls && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)) v.byPathT = 1.5;
+        else v.byPathT = (v.byPathT || 0) - dt;
+        if (cs.graph.nodes.length && (floor || (walls && v.byPathT > 0))) {
             if (!v.path || v.chaseT <= 0) {
                 v.chaseT = 2.5;
                 // (the same place to go: the way it is on stays — no turning back and forth as the place shifts a little)
                 const to = cs.graph.nearest(x, floor ? y : v.y, z, floor ? 3 : 6);
                 if (!(v.path && to === v.goal && v.pathI < v.path.length)) this._goTo(v, to);
+                else this._resyncPath(v);
             }
             if (v.path && !this._followPath(v, dt, speed)) return false;
         }

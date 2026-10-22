@@ -561,7 +561,7 @@ export class WizardFight {
             if (o === v || o.dead) continue;
             const ox = o.x - v.x, oz = o.z - v.z;
             const f = ox * ux + oz * uz;
-            if (f < 0.6 || f > L - 0.8) continue;
+            if (f < 0.6 || f > L + 1.5) continue; // (one right by the foe too: a charge that misses him by a hand finds the friend)
             const y = v.y + (fy - v.y) * (f / L); // (the line's height there)
             if (Math.abs(o.y - y) > 2.2) continue;
             if (Math.abs(ox * -uz + oz * ux) < 1.3) return true; // (a body and a little room: one may step into it)

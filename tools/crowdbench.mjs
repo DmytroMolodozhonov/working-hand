@@ -134,7 +134,18 @@ async function scene({ site, seconds, extra, side }) {
         await frames(1);
         const t = clock() - t0;
         if (t >= next) { look(t); next += 0.25; }
-        if (window.__crowdDebug && !scanned && t > seconds / 2) { scanned = true; whyStuck(); }
+        if (window.__crowdDebug && !scanned && t > seconds / 2) {
+            scanned = true; whyStuck();
+            const pv = window.__probe;
+            if (pv) {
+                const log = [];
+                const wrap = (name) => { const f = L[name]; L[name] = function (v, ...a) { if (v === pv) log.push(name + ' ' + a.slice(0, 3).map((q) => typeof q === 'number' ? q.toFixed(2) : q).join(',') + ' @' + v.x.toFixed(2) + ',' + v.z.toFixed(2) + ' pI' + v.pathI); return f.call(this, v, ...a); }; return () => { L[name] = f; }; };
+                const un = ['_followPath', '_steer', '_goTo', '_goSpot', '_investigate', '_fight', '_tacStep'].map(wrap);
+                for (let k = 0; k < 12; k++) { await frames(1); log.push('--- ' + pv.x.toFixed(2) + ',' + pv.z.toFixed(2) + ' ' + pv.mode); }
+                un.forEach((u) => u());
+                debug.push({ probe: pv.id, log });
+            }
+        }
     }
     // (--debug: why the fleeing ones go where they go)
     if (window.__crowdDebug) {
@@ -159,7 +170,8 @@ async function scene({ site, seconds, extra, side }) {
             const g2 = cs.graph, n = g2.nodes[v.path[v.pathI]], pn = v.pathI > 0 ? g2.nodes[v.path[v.pathI - 1]] : null;
             const d = Math.hypot(n.x - v.x, n.z - v.z), ux = (n.x - v.x) / d, uz = (n.z - v.z) / d;
             const near = L.game.crowd?.near(v.x, v.z, v.y, 3, v, 2.5, []).map((o) => ({ kind: o.kind, id: o.id, d: +Math.hypot(o.x - v.x, o.z - v.z).toFixed(2), v: +Math.hypot(o.vx, o.vz).toFixed(2) }));
-            debug.push({ stuck: v.id, role: v.role, mode: v.mode, at: [v.x, v.y, v.z].map((q) => +q.toFixed(2)), node: [n.x, n.y, n.z], d: +d.toFixed(2), probe: L._walkable(v.x + ux * 0.5, v.z + uz * 0.5, v.y), probe2: L._walkable(v.x + ux * 1, v.z + uz * 1, v.y), edge: pn ? L._edgeWalkable(pn, n) : null, toNode: L._edgeWalkable(v, n), avoid: v._avoid, near, blockT: v.blockT, inv: !!v.investigate, fear: v.fear?.state });
+            if (v.role === 'knight' && !window.__probe) window.__probe = v; // (one stuck knight: what moves it, frame by frame)
+            debug.push({ order: v.order?.kind, foe: v.foe ?? null, tac: v.tac?.role, job: v.job, fleeT: v.fleeT, speed: v.speed, goal: v.goal, pathI: v.pathI, plen: v.path?.length, stuck: v.id, role: v.role, mode: v.mode, at: [v.x, v.y, v.z].map((q) => +q.toFixed(2)), node: [n.x, n.y, n.z], d: +d.toFixed(2), probe: L._walkable(v.x + ux * 0.5, v.z + uz * 0.5, v.y), probe2: L._walkable(v.x + ux * 1, v.z + uz * 1, v.y), edge: pn ? L._edgeWalkable(pn, n) : null, toNode: L._edgeWalkable(v, n), avoid: v._avoid, near, blockT: v.blockT, inv: !!v.investigate, fear: v.fear?.state });
         }
     }
     const strikes = {};
@@ -199,14 +211,14 @@ function judge(res) {
                 if (!p.dead && p.y - q.y > 2.5) row.fall++;
                 if (q.flee && !r.brave && dist(q) < 30 && dist(q) < dist(p) - 0.4 && q.sp > 1) row.toward += 0.25; // (far off, a way round a house is no running at him)
             }
-            if (q.t > 0.5 && q.flee && !r.brave) row.minD = Math.min(row.minD, dist(q));
+            if (q.t > 2 && q.flee && !r.brave) row.minD = Math.min(row.minD, dist(q)); // (after the first moments: one standing right by him when it went off needs a moment to get away)
         }
         // a step through a wall: the straight line between two looks crosses solid where both ends are free
         row.through = s.filter((q, i) => i > 0 && q.thru).length;
         // indifferent: near (≤ 60 m from the player or the blast) and never reacted
         const near = Math.min(dist(s[0]), Math.hypot(s[0].x - res.blast.x, s[0].z - res.blast.z)) < 60;
         const reacted = s.some((q) => q.t > 0 && (q.foe || q.flee || q.inv || q.m === 'flee' || q.m === 'cast' || q.m === 'shield' || q.fear));
-        if (near && !reacted && !s[0].dead && !(r.knight && false)) row.indiff = true;
+        if (near && !reacted && !s.slice(0, 9).some((q) => q.dead)) row.indiff = true; // (killed by it at once: no time to react)
         // circling: 10 s windows
         for (let i = 40; i < s.length; i += 4) {
             let path = 0;
