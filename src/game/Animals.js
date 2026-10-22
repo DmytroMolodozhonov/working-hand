@@ -46,6 +46,7 @@ import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
+import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 
 export { animalModel };
 
@@ -133,15 +134,8 @@ function bx(g, w, h, d, c, x, y, z) {
     return m;
 }
 
-export function bonesModel() {
-    const g = new THREE.Group();
-    const m = lam(0xefe9da);
-    for (let i = 0; i < 5; i++) { const b = new THREE.Mesh(box(0.08, 0.08, 0.7), m); b.position.set((i - 2) * 0.14, 0.05, 0); b.rotation.y = (i - 2) * 0.2; g.add(b); }
-    const skull = new THREE.Mesh(box(0.3, 0.25, 0.35), m);
-    skull.position.set(0, 0.12, -0.55);
-    g.add(skull);
-    return g;
-}
+/** (the old five-stick bones are gone: each kind has its own skeleton — AnimalBones.js) */
+export { sampleBones as bonesModels } from './AnimalBones.js';
 
 /** The odds of an apple tree in a 110 m cell: golden (rare), an ordinary apple tree with red apples (common). */
 export const APPLE_TREES = { CELL: 110, GOLDEN: 0.15, RED: 0.65 };
@@ -478,11 +472,14 @@ export class Animals {
     _toBones(a) {
         const g = this.game;
         a.model.visible = false;
-        if (!a.bones) {
-            a.bones = bonesModel();
-            a.bones.position.copy(a.group.position).setY(g.collision.groundAt ? g.collision.groundAt(a.group.position.x, a.group.position.z, a.group.position.y + 1) : g.collision.groundY(a.group.position.x, a.group.position.z));
-            a.bones.rotation.y = a.group.rotation.y;
-            a.bones.scale.setScalar(SPECIES[a.type].size);
+        // (owls, birds and the running book leave no bones — see AnimalBones.js — and just vanish)
+        if (!a.bones && hasSkeleton(a.type)) {
+            // the skeleton lies exactly as the carcass lay: the same turn, the same size, on the ground
+            a.bones = animalBonesModel(a.type);
+            const p = a.group.position, sy = a.group.scale.y;
+            a.bones.position.set(p.x, (g.collision.groundAt ? g.collision.groundAt(p.x, p.z, p.y + 1) : g.collision.groundY(p.x, p.z)) + 0.35 * sy, p.z);
+            a.bones.rotation.copy(a.group.rotation);
+            a.bones.scale.copy(a.group.scale);
             g.scene.add(a.bones);
         }
         a.bonesAt = performance.now();

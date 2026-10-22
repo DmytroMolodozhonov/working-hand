@@ -46,7 +46,7 @@ import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
-import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
+import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -2907,7 +2907,7 @@ export class Game {
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
-        zoo.add(goldenTreeModel(), bonesModel(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
+        zoo.add(goldenTreeModel(), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
