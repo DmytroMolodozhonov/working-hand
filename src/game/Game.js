@@ -6,6 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { marketDef, buildMarketStall } from './CreativeMarket.js';
 import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
@@ -620,6 +621,10 @@ export class Game {
                 chest.boxId = this.collision.addBox(chest.getCollisionBox());
                 chest.refill = true;
                 this.chests.push(chest);
+                // a city merchant's stall to try buying and selling (CreativeMarket.js; the same place everywhere)
+                const mdef = marketDef(this.collision.groundY(0, 13));
+                buildMarketStall(this, mdef);
+                this.castleLife.addSite(mdef);
                 // a training dummy: a plain zombie that only stands (see _updateDummy)
                 if (this.authority) this.dummyHome = { x: 0, z: -10 };
             }
@@ -3193,7 +3198,9 @@ export class Game {
             if (this.space?.offEarth) castles = this.space.mapMarks(); // (on another planet: its own marks — the Gods' temple on Venus)
             // (in a cave: the cave as far as the hero has seen it — CaveMap.js)
             const cave = this._inCave ? { mem: this.caveMap, L: Math.floor(cp.y + 1.51), data: this.terrain.data, chests: this.chests.filter((c) => c.cave != null), crystals: this.crystals?.clusters } : null;
-            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave);
+            const hm = this.houseMagic, me = hm && !this.space?.offEarth ? hm._key('local') : null;
+            const houses = me ? [...hm.list.values()].map((h) => ({ x: h.x, z: h.z, mine: h.owner === me })) : [];
+            this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave, houses);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);
         }
 

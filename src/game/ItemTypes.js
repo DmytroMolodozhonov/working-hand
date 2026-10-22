@@ -354,9 +354,9 @@ export function rollShipLoot(r = Math.random, captain = false, count = 0) {
 export const CHEST_THINGS = 3;
 
 /** Make a chest's things exactly `n`: too many — random ones are left out; too few — plain things are added. */
-export function fitThings(out, n = CHEST_THINGS, r = Math.random) {
+export function fitThings(out, n = CHEST_THINGS, r = Math.random, deep = false) {
     while (out.length > n) out.splice(Math.floor(r() * out.length) % out.length, 1);
-    while (out.length < n) out.push(rollPlainItem(r));
+    while (out.length < n) out.push(rollPlainItem(r, deep));
     return out;
 }
 
@@ -438,9 +438,18 @@ export function rollKeyItem(r = Math.random) {
  * apple 1 %), scroll 18 %, bow-and-arrows 19 %, weapon 18 %, shield 18 %. Mostly plain; a magic one now and then. Wands, backpacks, Thor's hammer, the magic
  * pouch stay rare: only `rollKeyItem` (the chest's 25 % precious thing) gives them.
  */
-export function rollPlainItem(r = Math.random) {
+export function rollPlainItem(r = Math.random, deep = false) {
     const x = r() * 100;
     const mg = () => r() < 0.12;
+    // (a cave chest: no food — it would not have kept; shields 20 % rarer, scrolls take their share and the food's)
+    if (deep) {
+        if (x < 38.6) return rollScroll(r, true);
+        if (x < 50.6) { const m = mg(); return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; }
+        if (x < 62.6) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+        if (x < 85.6) { const m = mg(); return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; }
+        const m = mg();
+        return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 };
+    }
     if (x < 6.5) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
     if (x < 13) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
     if (x < 19.5) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
@@ -459,12 +468,12 @@ export function rollPlainItem(r = Math.random) {
  * now and then (`key`: 25%) ONE precious thing (a wand, a scroll, a magic weapon…), never more.
  * (Coins come apart, in their pouch: Game.openChest.)
  */
-export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false, count = 0 } = {}) {
-    const out = _rollLoot(r, { cave, key, royal });
-    return count > 0 ? fitThings(out, count, r) : out;
+export function rollLoot(r = Math.random, { cave = true, key = KEY_CHANCE, royal = false, count = 0, deep = false } = {}) {
+    const out = _rollLoot(r, { cave, key, royal, deep });
+    return count > 0 ? fitThings(out, count, r, deep) : out;
 }
 
-function _rollLoot(r, { cave, key, royal }) {
+function _rollLoot(r, { cave, key, royal, deep }) {
     const out = [];
     if (r() < key) out.push(rollKeyItem(r));
     // (a royal chest in the keep: many times more fine things than plain ones — a second precious thing too)
@@ -478,7 +487,7 @@ function _rollLoot(r, { cave, key, royal }) {
     if (arm && out.length && arm.magic) { arm.magic = false; delete arm.strong; if (arm.kind === 'armor') arm.hp = Math.round(arm.hp / 2); }
     if (arm) out.push(arm);
     const n = randInt(r, 1, cave ? 2 : 1) - (arm ? 1 : 0);
-    for (let i = 0; i < n; i++) out.push(rollPlainItem(r));
+    for (let i = 0; i < n; i++) out.push(rollPlainItem(r, deep));
     return out;
 }
 

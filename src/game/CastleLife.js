@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { isStallSite } from './CreativeMarket.js';
 import { confusedMiss } from './StrongSpells.js';
 import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
@@ -225,6 +226,7 @@ class Graph {
 export class CastleLife {
     constructor(game) {
         this.game = game;
+        this.extra = new Map(); // id -> def: sites made by the game itself, not by the terrain (the Creative market stall — CreativeMarket.js)
         this.castles = new Map(); // id -> runtime {def, graph, awake, active: Map(idx -> v), state, chests}
         this.byId = new Map(); // villager id -> v
         this.states = new Map(); // castle id -> saved state {owner, ownerName, kingDead, killed:Set}
@@ -254,6 +256,9 @@ export class CastleLife {
         if (!s) { s = { owner: null, ownerName: null, kingDead: false, killed: new Set() }; this.states.set(id, s); }
         return s;
     }
+
+    /** A site the game makes itself (not in the terrain's index): found by `_scan` and `_runtimeById`. */
+    addSite(def) { this.extra.set(def.id, def); }
 
     _runtime(def) {
         let cs = this.castles.get(def.id);
@@ -350,6 +355,12 @@ export class CastleLife {
         const players = this._players();
         const seen = new Set();
         for (const pl of players) {
+            for (const def of this.extra.values()) {
+                if (Math.max(Math.abs(pl.p.x - def.x), Math.abs(pl.p.z - def.z)) > def.zone + WAKE) continue;
+                seen.add(def.id);
+                const cs = this._runtime(def);
+                if (!cs.awake) this._wake(cs);
+            }
             for (const def of idx.near(pl.p.x, pl.p.z, WAKE)) {
                 seen.add(def.id);
                 const cs = this._runtime(def);
@@ -368,6 +379,7 @@ export class CastleLife {
         this._makeChests(cs);
         if (!this.auth) return;
         const def = cs.def;
+        if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
         if (this.night?.staffNight(cs)) return; // (at night: only the watch is out — NightLife.js)
         this._staffDay(cs);
@@ -2707,7 +2719,7 @@ export class CastleLife {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
-            for (const cs of this.castles.values()) if (cs.awake) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def)) { if (isWizSite(cs.def)) this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.fright.update(dt);
             this.rebuild.update(dt);
             this.night?.update(dt);
@@ -2853,6 +2865,7 @@ export class CastleLife {
     _runtimeById(cid) {
         const idx = this.index;
         if (!idx) return null;
+        if (this.extra.has(cid)) return this._runtime(this.extra.get(cid));
         let def = null;
         if (idx.byId) def = idx.byId(cid); // (castles, towers, wanderers)
         else { const m = /^cs(-?\d+)_(-?\d+)$/.exec(cid); if (m) def = idx.cellOf(+m[1], +m[2]); }

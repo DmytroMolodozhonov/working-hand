@@ -58,6 +58,14 @@ function placeIcon(ctx, kind, s) {
         ctx.fillStyle = '#d8d8e0'; ctx.strokeStyle = '#111';
         ctx.beginPath(); ctx.rect(-8, -8, 3, 16); ctx.rect(-12, -4, 11, 3); ctx.fill();
         ctx.beginPath(); ctx.moveTo(1, 9); ctx.lineTo(1, -2); ctx.arc(5.5, -2, 4.5, Math.PI, 0); ctx.lineTo(10, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (kind === 'house') {
+        // a player's house: a little house with a red roof, a door and a window
+        ctx.fillStyle = '#e8d3a8'; ctx.strokeStyle = '#3a2a18';
+        ctx.beginPath(); ctx.rect(-7, -1, 14, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath(); ctx.moveTo(-10, -1); ctx.lineTo(0, -10); ctx.lineTo(10, -1); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#5a3a1c'; ctx.fillRect(-2, 3, 4, 6);
+        ctx.fillStyle = '#9fd8ff'; ctx.fillRect(3.5, 1.5, 2.5, 2.5);
     } else if (kind === 'ice') {
         // the Ice Castle: a glowing six-armed snowflake
         ctx.strokeStyle = '#dff7ff'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
@@ -667,7 +675,7 @@ export class Hud {
         if (dirty) ci.ctx.putImageData(ci.img, 0, 0);
     }
 
-    drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = [], cave = null) {
+    drawMinimap(charPos, rotY, world, zombies, others = [], server = null, castles = [], cave = null, houses = []) {
         const ctx = this.mmCtx;
         if (!ctx) return;
         const cvs = this.el.minimap;
@@ -791,6 +799,30 @@ export class Hud {
                 // the distance: next to the badge, towards the middle of the map
                 const up = by > 0 ? -BADGE - 6 : BADGE + 19;
                 bigLabel(distText(Math.hypot(cx, cz) / scale), bx - Math.cos(a) * 30, by + up);
+            }
+        }
+        // Houses made by «Create a House»: a small house badge (mine — bigger, gold ring); my far house — a pointer on the edge with the distance
+        for (const h of houses) {
+            const hx = (h.x - charPos.x) * scale, hz = (h.z - charPos.z) * scale;
+            const R = h.mine ? 11 : 8, ring = h.mine ? '#ffd76a' : '#d9c7a0';
+            if (inside(hx, hz, R)) {
+                ctx.fillStyle = 'rgba(30, 24, 18, 0.9)'; ctx.strokeStyle = ring; ctx.lineWidth = h.mine ? 2 : 1.5;
+                ctx.beginPath(); ctx.arc(hx, hz, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.save(); ctx.translate(hx, hz + 1); placeIcon(ctx, 'house', h.mine ? 16 : 12); ctx.restore();
+                if (h.mine) label('Мой дом', hx, Math.max(-hh + 12, hz - R - 3));
+            } else if (h.mine) {
+                const a = Math.atan2(hz, hx), m = R + 9;
+                const k = Math.min((hw - m) / Math.max(1e-6, Math.abs(Math.cos(a))), (hh - m) / Math.max(1e-6, Math.abs(Math.sin(a))));
+                const bx = Math.cos(a) * k, by = Math.sin(a) * k;
+                ctx.save(); ctx.translate(bx, by); ctx.rotate(a);
+                ctx.fillStyle = ring; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.moveTo(R + 7, 0); ctx.lineTo(R - 1, -6); ctx.lineTo(R - 1, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = 'rgba(30, 24, 18, 0.9)'; ctx.strokeStyle = ring; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.save(); ctx.translate(bx, by + 1); placeIcon(ctx, 'house', 16); ctx.restore();
+                const up = by > 0 ? -R - 6 : R + 19;
+                bigLabel(distText(Math.hypot(hx, hz) / scale), bx - Math.cos(a) * 30, by + up);
             }
         }
         // The server: a flag at its start point (an arrow on the edge when far)

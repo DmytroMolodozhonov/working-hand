@@ -134,7 +134,7 @@ export class NightLife {
         if (this._tickT <= 0) {
             this._tickT = 1;
             for (const cs of this.life.castles.values()) {
-                if (!cs.awake || cs.def.kind === 'wander') continue;
+                if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'stall') continue; // (the Creative stall's merchant works all night)
                 if (isWizSite(cs.def)) this._tower(cs, part);
                 else this._castle(cs, part);
             }
@@ -612,7 +612,7 @@ export class NightLife {
         }
         // the watch sees trouble: «Тревога!» — the sleeping knights jump up and come
         for (const cs of L.castles.values()) {
-            if (!cs.awake || !sleepTime(cs.nightPart || part) || isWizSite(cs.def)) continue;
+            if (!cs.awake || cs.def.kind === 'stall' || !sleepTime(cs.nightPart || part) || isWizSite(cs.def)) continue;
             let w = null;
             for (const v of cs.active.values()) if (v.watch && !v.dead && (v.foe || v.investigate)) { w = v; break; }
             if (!w || (cs.alarmAt != null && this._t - cs.alarmAt < 40)) continue;

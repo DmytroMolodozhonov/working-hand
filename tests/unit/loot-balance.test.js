@@ -54,3 +54,11 @@ test('an ordinary chest holds exactly three things (a coin pouch counts as one)'
     }
     assert.equal(fitThings([1, 2, 3, 4, 5].map((k) => ({ kind: 'bread', k })), 3, r).length, 3);
 });
+
+test('loot balance: a deep cave chest has no food; shields 20 % rarer, scrolls the commonest', () => {
+    const s = shares((r => () => rollLoot(r, { cave: true, deep: true, count: 3 }))(rng(9)));
+    assert.ok(!s.food && !s.cheese, `no food in a cave chest ${JSON.stringify(s)}`);
+    const base = shares((r => () => rollLoot(r, { cave: true, count: 3 }))(rng(9)));
+    assert.ok(s.shield < base.shield * 0.9, `shields fewer ${s.shield} vs ${base.shield}`);
+    assert.ok(s.scroll > base.scroll * 1.5 && s.scroll > s.weapon && s.scroll > s.shield, `scrolls more ${JSON.stringify(s)}`);
+});

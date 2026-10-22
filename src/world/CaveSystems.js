@@ -32,7 +32,7 @@ export const CAVES = {
     HALL: 1.35, // its middle: this much higher than it was (c.h)
     ROOM: 4, // layers of air always over a chamber's mounds (was 3: lower than the hero)
     REACH: 150, // m a system may reach from its cell
-    MAIN_CHEST: 0.45, CHAMBER_CHEST: 0.06, // chances of a chest (4 times fewer than there were)
+    MAIN_CHEST: 0.585, CHAMBER_CHEST: 0.078, // chances of a chest (30 % more often than before)
 };
 
 const TAU = Math.PI * 2;
