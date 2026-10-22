@@ -12,7 +12,7 @@ import { animalModel, animateWings } from '../../src/game/AnimalModels.js';
 function fakeGame(ground = () => 0) {
     const scene = new THREE.Scene();
     const g = {
-        config: { mode: 'survival' }, authority: true, localId: 'me', scene,
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', scene,
         character: { group: new THREE.Group(), isCrouching: false },
         collision: { groundY: ground, resolveCylinder() {} },
         remotes: new Map(), fx: { spark() {} }, hud: { setVoice() {} },

@@ -100,12 +100,12 @@ test('a zombie turned away does not strike (face to the target first)', () => {
     assert.equal(z.reaches(new THREE.Vector3(0, GROUND + 2, 1.5)), true);
 });
 
-test('«Хардкор» bites too; «Творческий»: it swings but nobody is hurt', () => {
-    const h = fakeGame({ mode: 'survival' });
+test('«Выживание»: the zombie bites; «Творческий»: it swings but nobody is hurt', () => {
+    const h = fakeGame({ mode: 'freeworld' });
     h.character.group.position.set(0, GROUND + 2, 4);
     h._createZombie(new THREE.Vector3(0, GROUND + 1, 0));
     h.run(4);
-    assert.ok(h.playerHP < 10, `Хардкор: ${h.playerHP}`);
+    assert.ok(h.hits.length > 0, 'Выживание: the bite goes to combat');
     const c = fakeGame({ mode: 'creative' });
     c.character.group.position.set(0, GROUND + 2, 4);
     const z = c._createZombie(new THREE.Vector3(0, GROUND + 1, 0));

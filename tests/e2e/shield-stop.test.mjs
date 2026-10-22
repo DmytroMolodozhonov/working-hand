@@ -12,9 +12,9 @@ let srv, browser;
 test.before(async () => { srv = await startServer(PORT); browser = await launch({}); });
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
-test('survival: «стоп» removes a shield on the left hand (plain, gods, with a wand in either hand) and on the right', async () => {
+test('freeworld: «стоп» removes a shield on the left hand (plain, gods, with a wand in either hand) and on the right', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'survival');
+    await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
     await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 6, 30);
     const cases = [['left', false, null], ['right', false, null], ['left', true, null], ['left', false, 'left'], ['left', false, 'right'], ['right', false, 'left']];

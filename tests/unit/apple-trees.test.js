@@ -21,7 +21,7 @@ test('the red apple tree: the same tree with red apples; the apple is ordinary f
     assert.equal(ITEM_INFO.redApple.heal, 3); // (the author: an apple +3, a golden one +10)
     assert.ok(makeItemModel({ kind: 'redApple' }).children.length);
     // a horse eats an ordinary apple just like a golden one
-    const g = { config: { mode: 'survival' }, authority: true, localId: 'me', scene: new THREE.Scene(), character: { group: new THREE.Group() }, collision: { groundY: () => 0, resolveCylinder() {} }, remotes: new Map(), fx: { spark() {} }, hud: { setVoice() {} } };
+    const g = { config: { mode: 'freeworld' }, authority: true, localId: 'me', scene: new THREE.Scene(), character: { group: new THREE.Group() }, collision: { groundY: () => 0, resolveCylinder() {} }, remotes: new Map(), fx: { spark() {} }, hud: { setVoice() {} } };
     const A = new Animals(g);
     const horse = A._spawn('horse', new THREE.Vector3(0, 0.5, 0), { color: 0x4a3022 });
     const head = horse.group.position.clone().add(new THREE.Vector3(0, 1, -1.2));

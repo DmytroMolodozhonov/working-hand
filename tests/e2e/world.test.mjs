@@ -480,7 +480,7 @@ test('saved worlds menu: each world shows its game version; deleting asks in the
         for (const w of await m.listWorlds()) await m.deleteWorld(w.id);
         const now = Date.now();
         await m.putWorld({ id: 'wA', name: 'Первый', mode: 'creative', seed: 1, created: now, updated: now, version: { date: ver.date, sha: ver.sha }, players: {} });
-        await m.putWorld({ id: 'wB', name: 'Второй', mode: 'survival', seed: 2, created: now - 5, updated: now - 5, players: {} }); // (saved before versions were kept)
+        await m.putWorld({ id: 'wB', name: 'Второй', mode: 'survival' /* old «Хардкор» world */, seed: 2, created: now - 5, updated: now - 5, players: {} }); // (saved before versions were kept)
     }, ver);
     await page.reload();
     await page.waitForFunction(() => !!window.__zns);
@@ -752,7 +752,7 @@ test('«Левиоса» + «Атак»: the floating sword flies into a zombie 
         for (let i = 0; i < 80 && !z.isDead && z.health >= hp1; i++) await frames(1); // (game time: slow test machines)
         const hp2 = z.isDead ? -1 : z.health;
         // my own bleeding (in creative nobody bleeds): switch to a survival-like check
-        g.config.mode = 'survival';
+        g.config.mode = 'freeworld';
         g.playerHP = 20;
         g.bleeding.start(1);
         for (let i = 0; i < 200 && g.playerHP > 18; i++) await frames(1);
@@ -1006,7 +1006,7 @@ test('Lightning Strike: the bolt strikes into raised hands at once, a level hand
         const zHit = z.isDead || z.hp < hp0;
         delete g._handLevel;
         // outside Creative it needs the scroll
-        g.config.mode = 'survival';
+        g.config.mode = 'freeworld';
         g.lastSpellCastTime = 0;
         const locked = g.castLocalSpell('lightning strike', true);
         const lockedTw = g.knowsSpell('Thunderwave');
@@ -1032,7 +1032,7 @@ test('Lightning Strike: the bolt strikes into raised hands at once, a level hand
 
 test('Авада Кедавра in Survival: refused with the hint about its scroll; burn the scroll in the hand («Инферно») — then it kills the zombie the raised hand points at', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'survival');
+    await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
     // both arms lifted in front, pointing a little down ahead (a synthetic pose), kept coming like a camera would
     const raw = frame({ arms: 'forward', wristOffset: [0, 0.05] });

@@ -76,12 +76,12 @@ export async function openPage(browser, url, { noCamera = false, viewport = { wi
     return { page, errors, logs };
 }
 
-/** Start a mode from the menu: 'creative' | 'survival' | map name */
+/** Start a mode from the menu: 'creative' | 'freeworld' | map name */
 export async function startFromMenu(page, mode = 'creative', { zombies = 0 } = {}) {
     // «Одиночная игра»: my worlds first; «Создать мир» opens the choice (open by itself while there are none)
     await page.waitForFunction(() => document.getElementById('saved-worlds')?.children.length > 0 && document.querySelector('.mode-row .mode-card'));
     if (await page.isHidden('#create-world')) await page.click('#create-world-btn');
-    if (['creative', 'survival', 'freeworld'].includes(mode)) await page.click(`.mode-card[data-mode="${mode}"]`);
+    if (['creative', 'freeworld'].includes(mode)) await page.click(`.mode-card[data-mode="${mode}"]`);
     else {
         await page.click('.mode-card[data-mode="maps"]');
         await page.click(`.map-card[data-name="${mode}"]`);

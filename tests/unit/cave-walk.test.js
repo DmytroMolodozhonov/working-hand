@@ -87,7 +87,7 @@ test('mana crystal: reach out with an open hand and squeeze it right in the rock
     const held = { right: null, left: null };
     let cells = 0;
     const g = {
-        config: { mode: 'survival' }, fx: null, currentPose: {}, combat: { dead: false }, authority: true, localId: 'local',
+        config: { mode: 'freeworld' }, fx: null, currentPose: {}, combat: { dead: false }, authority: true, localId: 'local',
         character: {
             group: { position: new THREE.Vector3() },
             getGripObject: (s) => ({ getWorldPosition: (v) => v.copy(grip[s]) }),

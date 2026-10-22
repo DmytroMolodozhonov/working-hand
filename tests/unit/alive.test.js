@@ -33,7 +33,7 @@ test('«Alive» outside Creative only after burning its scroll; the scroll is in
     assert.ok(SCROLL_SPELL_COLOR.Alive && SCROLL_RIBBON_RU.Alive);
     const g = (mode, spells = {}) => { const o = Object.create(Game.prototype); o.config = { mode }; o.bonus = { spells }; return o; };
     assert.equal(g('creative').knowsSpell('Alive'), true);
-    for (const m of ['survival', 'freeworld']) {
+    for (const m of ['freeworld']) {
         assert.equal(g(m).knowsSpell('Alive'), false, m);
         assert.equal(g(m, { Alive: true }).knowsSpell('Alive'), true, m);
     }

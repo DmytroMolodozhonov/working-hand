@@ -28,7 +28,7 @@ test('look: the new name, the logo, «Мои миры» first, «Создать 
     // the new fonts are vendored and load (no CDN)
     assert.ok(await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check('700 20px Philosopher', 'Волшебство'); }));
     const modes = await page.$$eval('.mode-row .mode-card', (els) => els.map((e) => [e.dataset.mode, e.querySelector('.map-name').textContent]));
-    assert.deepEqual(modes, [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание'], ['maps', 'Карты']]);
+    assert.deepEqual(modes, [['creative', 'Творческий'], ['freeworld', 'Выживание'], ['maps', 'Карты']]);
     assert.match(await page.textContent('.sp-head'), /Мои миры/);
     assert.match(await page.textContent('#saved-worlds'), /нет ни одного мира/, 'no worlds yet: it says so');
     // «Отмена» closes the choice, «Создать мир» opens it again
@@ -46,7 +46,7 @@ test('look: the new name, the logo, «Мои миры» first, «Создать 
     const tabs = await page.$$eval('.tab-btn', (els) => els.map((e) => e.textContent.trim()));
     assert.ok(tabs.includes('🎮 Одиночная игра') && tabs.includes('⚙️ Настройки'), tabs.join(','));
     const opts = await page.$$eval('#mp-mode option', (els) => els.map((o) => [o.value, o.textContent.replace(/^\S+\s/, '')]));
-    assert.deepEqual(opts, [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание']]);
+    assert.deepEqual(opts, [['creative', 'Творческий'], ['freeworld', 'Выживание']]);
     const body = await page.evaluate(() => document.body.innerText);
     assert.doesNotMatch(body, /ЗОМБИ НЕ СПЯТ|Свободный мир|СВОБОДНЫЙ МИР|ТВОРЧЕСТВО|Творчество/);
     // the main sections are a list on the left of the chosen section
@@ -66,7 +66,7 @@ test('look: the new name, the logo, «Мои миры» first, «Создать 
     await page.close();
 });
 
-for (const [mode, label] of [['creative', 'Творческий'], ['survival', 'Хардкор'], ['freeworld', 'Выживание']]) {
+for (const [mode, label] of [['creative', 'Творческий'], ['freeworld', 'Выживание']]) {
     test(`look: the «${label}» button starts the internal mode '${mode}'`, async () => {
         const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
         await page.waitForSelector('.mode-row .mode-card');

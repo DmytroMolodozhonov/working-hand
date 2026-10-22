@@ -19,6 +19,7 @@
 import { onSpot } from './LoreLibrary.js'; // (a library's book still on its desk is not kept: the library lays it again)
 import { breaking } from '../world/EnchantedStone.js';
 import { keepIn } from './HouseWards.js';
+import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 
 const DB_NAME = 'zns-worlds';
@@ -67,13 +68,13 @@ function tx(mode, fn) {
 export async function listWorlds() {
     try {
         const all = await tx('readonly', (st) => st.getAll());
-        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: w.mode, seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
+        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
             .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b.updated - a.updated); // (favourites first, then newest)
     } catch (e) { return []; }
 }
 
 export async function loadWorld(id) {
-    try { return await tx('readonly', (st) => st.get(id)); } catch (e) { return null; }
+    try { const w = await tx('readonly', (st) => st.get(id)); if (w) w.mode = legacyMode(w.mode); return w; } catch (e) { return null; }
 }
 
 export async function deleteWorld(id) {

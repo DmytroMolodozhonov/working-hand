@@ -24,7 +24,7 @@ function game(mode, spells = {}) {
 }
 
 test('Авада Кедавра: outside Creative only a burnt scroll teaches it', () => {
-    for (const mode of ['survival', 'freeworld', 'labyrinth']) {
+    for (const mode of ['freeworld', 'labyrinth']) {
         assert.equal(game(mode).knowsSpell('AvadaKedavra'), false, `${mode}: not without the scroll`);
         assert.equal(game(mode, { AvadaKedavra: true }).knowsSpell('AvadaKedavra'), true, `${mode}: known after the scroll burns`);
         // another spell's scroll doesn't teach it
@@ -38,7 +38,7 @@ test('Авада Кедавра: outside Creative only a burnt scroll teaches it
 });
 
 test('Авада Кедавра said without the scroll: refused, and the hint names its scroll and ribbon', () => {
-    const g = game('survival');
+    const g = game('freeworld');
     const said = [];
     g.active = true;
     g.combat = { dead: false };

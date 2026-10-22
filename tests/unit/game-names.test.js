@@ -6,15 +6,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle } from '../../src/ui/GameNames.js';
+import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from '../../src/ui/GameNames.js';
 
 const read = (p) => fs.readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 
 test('branding: the name and the mode labels; internal mode values unchanged', () => {
     assert.equal(GAME_NAME, 'Волшебство только начинается');
-    assert.deepEqual(MODE_ORDER, ['creative', 'survival', 'freeworld']);
+    assert.deepEqual(MODE_ORDER, ['creative', 'freeworld']);
     assert.equal(modeLabel('creative'), 'Творческий');
-    assert.equal(modeLabel('survival'), 'Хардкор');
+    assert.equal(modeLabel('survival'), 'Выживание', 'an old Хардкор world opens as Выживание');
+    assert.equal(legacyMode('survival'), 'freeworld');
+    assert.equal(legacyMode('survival', 'mapName'), 'survival', 'a map keeps its internal mode');
     assert.equal(modeLabel('freeworld'), 'Выживание');
     assert.equal(modeLabel('nope'), '');
     assert.match(modeTitle('freeworld'), /^\S+ Выживание$/);
@@ -36,7 +38,7 @@ test('branding: the old name and the old mode names are gone from what the playe
     const html = read('index.html');
     assert.match(html, /<title>Волшебство только начинается<\/title>/);
     assert.match(html, /<option value="creative">[^<]*Творческий<\/option>/);
-    assert.match(html, /<option value="survival">[^<]*Хардкор<\/option>/);
+    assert.doesNotMatch(html, /Хардкор/);
     assert.match(html, /<option value="freeworld" selected>[^<]*Выживание<\/option>/);
     assert.match(read('README.md'), /^# Волшебство только начинается/);
 });

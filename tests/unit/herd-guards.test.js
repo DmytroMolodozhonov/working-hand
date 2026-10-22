@@ -8,7 +8,7 @@ import { GUARD, rollGuard } from '../../src/game/HerdGuards.js';
 function fakeGame() {
     const scene = new THREE.Scene();
     const g = {
-        config: { mode: 'survival' }, authority: true, localId: 'me', scene,
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', scene,
         character: { group: new THREE.Group(), isCrouching: false },
         collision: { groundY: () => 0, resolveCylinder() {} },
         remotes: new Map(), fx: { spark() {}, lightFlash() {} }, hud: { setVoice() {} },

@@ -96,7 +96,7 @@ test('bow and shields: big enough, held through a shaky camera, shooting (creati
     const noArrows = await page.evaluate(async () => {
         const g = window.__zns.game, T = window.__zns.THREE, ch = g.character;
         const frames = async (n) => { const f = g.frameCount; while (g.frameCount < f + n) await new Promise((res) => setTimeout(res, 30)); };
-        g.config.mode = 'survival';
+        g.config.mode = 'freeworld';
         const bowM = g.items.held.left.model;
         const orig = ch.getHandWorldPosition.bind(ch);
         ch.getHandWorldPosition = (side, out = new T.Vector3()) => (side === 'right' ? out.copy(bowM.position) : orig(side, out));
@@ -595,7 +595,7 @@ test('coin pouches on the belt\'s right side: the LEFT hand across, looking down
 
 test('eating with the camera hands: the apple brought to the mouth is eaten (+HP); held out in front it is not', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'survival');
+    await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
     await page.evaluate(() => {
         const g = window.__zns.game;

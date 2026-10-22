@@ -183,7 +183,7 @@ test('mana: a duel charge that hits counts (the first time); a clash won + the o
 });
 
 test('mana: the giant spider gives +20 to whoever killed it — the first one only', () => {
-    const { g } = fakeGame('survival');
+    const { g } = fakeGame('freeworld');
     g.authority = true;
     g.scene = new THREE.Scene();
     g.items = { spawnLoose() {} };

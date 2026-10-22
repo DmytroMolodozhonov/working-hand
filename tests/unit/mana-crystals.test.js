@@ -57,7 +57,7 @@ test('mana crystal item: a slim hexagonal prism with a pointed tip (not a cube),
 test('mana crystals: Gather takes the whole cluster into the slots; taken ones are gone and saved', () => {
     const stored = [];
     const g = {
-        config: { mode: 'survival' }, scene: new THREE.Scene(), fx: null,
+        config: { mode: 'freeworld' }, scene: new THREE.Scene(), fx: null,
         character: { group: { position: new THREE.Vector3() } },
         inventory: { storeItem: (it) => { stored.push(it); return true; } },
         terrain: null,
@@ -86,7 +86,7 @@ function crystalGame(over = {}) {
     let cells = 0;
     const sent = [];
     const g = {
-        config: { mode: 'survival' }, scene: null, fx: null, authority: true, localId: 'me',
+        config: { mode: 'freeworld' }, scene: null, fx: null, authority: true, localId: 'me',
         character: { group: { position: new THREE.Vector3() } },
         remotes: new Map([['friend', { character: { group: { position: new THREE.Vector3(3, 0, 0) } } }]]),
         mana: { crystal: () => cells++ },
@@ -121,7 +121,7 @@ test('mana crystals: anything that breaks one (a blast) — the host decides, it
     }
     assert.equal(mc.hitAt(new THREE.Vector3(100, 0, 100), 3, 'me'), 0, 'far away: nothing');
     // a broken one is remembered (the save)
-    const mc2 = new ManaCrystals({ config: { mode: 'survival' }, character: { group: { position: new THREE.Vector3() } } });
+    const mc2 = new ManaCrystals({ config: { mode: 'freeworld' }, character: { group: { position: new THREE.Vector3() } } });
     mc2.restore(mc.snapshot());
     assert.equal(mc2.snapshot().length, mc.snapshot().length);
 });

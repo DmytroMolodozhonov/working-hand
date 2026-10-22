@@ -52,7 +52,7 @@ test('Творческий: in a duel a player is as strong in mana as his oppon
     me._npcWizard = Duel.prototype._npcWizard; me._playerMana = Duel.prototype._playerMana; me._mastery = Duel.prototype._mastery;
     const s = Duel.prototype._strength.call(me, 'me', 0, 5);
     assert.equal(s, duelPower(480, 1, 0));
-    me.game.config.mode = 'survival';
+    me.game.config.mode = 'freeworld';
     assert.equal(Duel.prototype._strength.call(me, 'me', 0, 5), duelPower(30, 1, 0), 'Хардкор: his own store');
 });
 

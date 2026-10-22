@@ -485,11 +485,12 @@ test('stress: 40 zombies + Inferno + explosions — game logic stays fast', asyn
     await page.close();
 });
 
-test('survival: zombies spawn in waves and bite; HP reaches 0 → game over screen', async () => {
+test('freeworld: zombies spawn in waves and bite; HP reaches 0 → game over screen', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'survival');
+    await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
-    await waitFor(page, () => window.__zns.game.zombies.length >= 1, null, 20000);
+    await page.evaluate(() => { const g = window.__zns.game; g.dayStart = Date.now() - 24 * 60 * 1000 * 0.87; }); // (deep night: zombies come out of the dark)
+    await waitFor(page, () => window.__zns.game.zombies.length >= 1, null, 40000);
     await page.evaluate(() => {
         const g = window.__zns.game;
         g.playerHP = 2;

@@ -48,9 +48,9 @@ test('the weather\'s storm: the clouds gather first (no rain), only then it rain
 
 test('«Let it rain» is learnt from a burnt scroll only (Creative knows it)', () => {
     const game = (mode, spells = {}) => Object.assign(Object.create(Game.prototype), { config: { mode }, bonus: { spells } });
-    assert.equal(game('survival').knowsSpell('LetItRain'), false);
     assert.equal(game('freeworld').knowsSpell('LetItRain'), false);
-    assert.equal(game('survival', { LetItRain: true }).knowsSpell('LetItRain'), true);
+    assert.equal(game('freeworld').knowsSpell('LetItRain'), false);
+    assert.equal(game('freeworld', { LetItRain: true }).knowsSpell('LetItRain'), true);
     assert.equal(game('creative').knowsSpell('LetItRain'), true);
     assert.ok(SCROLL_SPELL_COLOR.LetItRain && SCROLL_RIBBON_RU.LetItRain);
     // chests hold its scroll now and then

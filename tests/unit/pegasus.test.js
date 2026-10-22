@@ -9,7 +9,7 @@ function fakeGame() {
     const scene = new THREE.Scene();
     const look = new THREE.Vector3(0, 0, -1);
     const g = {
-        config: { mode: 'survival' }, authority: true, localId: 'me', scene,
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', scene,
         character: { group: new THREE.Group(), isCrouching: false, isRunning: false, runIntensity: 0, hands: null, getHandWorldPosition(s, out) { return out.copy(this.hands?.[s] || this.group.position); } },
         camera: { getWorldDirection: (out) => out.copy(look) }, look,
         collision: { groundY: () => 0, resolveCylinder() {} },

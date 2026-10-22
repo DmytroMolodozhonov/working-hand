@@ -50,7 +50,7 @@ test('the Ice Castle: its queen, snowmen, monsters; the Ice Rod', async () => {
         for (let i = I.shots.length - 1; i >= 0; i--) I._dropShot(i);
         I.fxs.length = 0;
         const mode = g.config.mode;
-        g.config.mode = 'survival';
+        g.config.mode = 'freeworld';
         const hp0 = g.playerHP;
         const me = g.combat.center(new THREE.Vector3());
         I._fire('snow', me.clone().add(new THREE.Vector3(6, 1, 0)), me, { to: { k: 'p', id: g.localId } });

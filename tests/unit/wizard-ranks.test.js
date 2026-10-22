@@ -98,7 +98,7 @@ test('a duel counts the mana LEFT and the health now — «Выживание» 
         game: { config: { mode }, combat: { enabled: mode === 'freeworld', fatigue, maxFatigue, hp, maxHp: 20 }, playerHP: hp, maxHP: 20, remotes: new Map() },
     }, 'me', 0, 5);
     assert.equal(strength('freeworld', 40, 120), duelPower(40, 1));
-    assert.equal(strength('survival', 40, 120), strength('freeworld', 40, 120), 'Хардкор = Выживание');
+    assert.equal(strength('survival', 40, 120), strength('freeworld', 40, 120), 'a map game (internal survival) = Выживание');
     assert.equal(strength('survival', 40, 120, 10), strength('freeworld', 40, 120, 10));
     assert.equal(strength('creative', 30, 30), duelPower(200, 1), 'Creative: as much mana as the wizard');
 });

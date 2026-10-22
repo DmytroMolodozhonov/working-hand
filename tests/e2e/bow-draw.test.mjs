@@ -110,7 +110,7 @@ test('a bow through a noisy camera, either hand: fingers close on the string, it
         assert.equal(s.arrows, 0, `${side}: creative — no arrows needed`);
     }
     // outside creative every shot takes an arrow
-    await page.evaluate(() => { const g = window.__zns.game; g.config.mode = 'survival'; g.gear._dropNock(); g.items.heldOf('bow').item.arrows = 3; });
+    await page.evaluate(() => { const g = window.__zns.game; g.config.mode = 'freeworld'; g.gear._dropNock(); g.items.heldOf('bow').item.arrows = 3; });
     const P = (draw, curl) => ({ archer: 'right', draw, rightCurl: 0.9, rightTilt: 1.3, rightRot: -1.57, leftCurl: curl });
     await show(page, P(null, null), 8);
     await show(page, P(0, 0.85), 10);
@@ -118,7 +118,7 @@ test('a bow through a noisy camera, either hand: fingers close on the string, it
     await show(page, P(1, 0.05), 10);
     const sv = await state(page);
     await page.evaluate(() => { window.__zns.game.config.mode = 'creative'; });
-    assert.equal(sv.arrows, 2, 'survival: one arrow fewer ' + JSON.stringify(sv));
+    assert.equal(sv.arrows, 2, 'freeworld: one arrow fewer ' + JSON.stringify(sv));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 });

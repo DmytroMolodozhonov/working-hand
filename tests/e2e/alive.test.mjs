@@ -94,9 +94,9 @@ test('creative: «Alive» at a tree — its blocks are gone, a tree monster stan
     await page.close();
 });
 
-test('survival: «Alive» is learnt from its scroll; the tree lives on the mana and, the mana gone, falls over as a fallen tree', async () => {
+test('freeworld: «Alive» is learnt from its scroll; the tree lives on the mana and, the mana gone, falls over as a fallen tree', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'survival');
+    await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
     await page.addScriptTag({ content: SETUP });
     await feed(page, { arms: 'forward', rightCurl: 0, leftCurl: 0 }, 12, 40);

@@ -82,7 +82,7 @@ test('never too many round a player; far ones go back into the dark; the modes',
     assert.ok(fakeGame(inCave, { mode: 'freeworld' }).zombieSpawn.enabled);
     assert.ok(fakeGame(inCave, { mode: 'creative', zombieCount: 3 }).zombieSpawn.enabled);
     assert.ok(!fakeGame(inCave, { mode: 'creative', zombieCount: 0 }).zombieSpawn.enabled, 'Creative without zombies');
-    assert.ok(!fakeGame(inCave, { mode: 'survival' }).zombieSpawn.enabled, 'Хардкор: its own hordes');
+    assert.ok(!fakeGame(inCave, { mode: 'survival' }).zombieSpawn.enabled, 'a map game (internal survival): its own hordes');
 });
 
 test('phoenixes: rare, and they never pile up as a player walks on', () => {

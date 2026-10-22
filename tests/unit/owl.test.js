@@ -56,7 +56,7 @@ function world() {
     const notes = [];
     const loose = new Map();
     const g = {
-        config: { mode: 'survival' }, authority: true, localId: 'me', remotes: new Map(),
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', remotes: new Map(),
         character: { group: new THREE.Group() },
         collision: { groundY: () => 0 },
         hud: { setVoice: (t) => notes.push(t) },

@@ -13,7 +13,7 @@ import { solidGap, pairRoom, measureBody, ROOM } from '../../src/game/AnimalHerd
 function fakeGame(me = [80, 0]) {
     const scene = new THREE.Scene();
     const g = {
-        config: { mode: 'survival' }, authority: true, localId: 'me', scene,
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', scene,
         character: { group: new THREE.Group(), isCrouching: false },
         collision: { groundY: () => 0, resolveCylinder() {} },
         remotes: new Map(), fx: { spark() {} }, hud: { setVoice() {} },
