@@ -18,6 +18,7 @@
  *    all tools / shields of a colour) share the same BufferGeometry objects.
  */
 
+import { ARENA_MODES, arenaPose } from './ArenaPoses.js';
 import * as THREE from 'three';
 import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
@@ -28,9 +29,10 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride'];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
+const ARENA_SET = new Set(ARENA_MODES);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
 export const SLEEP_HALF = 2.05;
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
@@ -1373,7 +1375,7 @@ export class VillagerModel {
         let breathe = 0.015;
 
         // ---- legs: walk / run cycle
-        const loco = mode !== 'sit' && mode !== 'ride' && mode !== 'bow' && speed > 0.05;
+        const loco = mode !== 'sit' && mode !== 'ride' && mode !== 'bow' && mode !== 'sitCheer' && speed > 0.05;
         if (loco) {
             const G = GAITS[this.style.gait] || GAITS.plain;
             const gk = clamp01(1 - (speed - 2.5) / 2.5); // (the own walk shows at a walk; a run is a run for anybody)
@@ -1621,7 +1623,14 @@ export class VillagerModel {
                 T.wrist = -0.7;
                 rate = 8;
                 break;
-            default: break;
+            default:
+                // the duel arena: a duellist's efforts, the crowd on the stands (ArenaPoses.js)
+                if (ARENA_SET.has(mode)) {
+                    if (this.castNow) { this.castNow = false; this._flickT = 0.12; }
+                    rate = arenaPose(T, mode, t, this.aimPitch, this._flickT > 0);
+                    if (mode === 'sitCheer' || mode === 'winded' || mode === 'stagger' || mode === 'triumph' || mode === 'flourish') breathe = 0;
+                }
+                break;
         }
         if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
         if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail' && mode !== 'chore') T.headY = this._lookYaw;
@@ -1640,7 +1649,7 @@ export class VillagerModel {
         const kh = 1 - Math.exp(-8 * dt); // the head turns at its own pace
         for (const key of POSE_KEYS) P[key] += (T[key] - P[key]) * (key === 'headY' ? kh : k);
         const choreSit = mode === 'chore' && SIT_CHORES.has(this.chore);
-        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || choreSit);
+        this._apply(t, breathe, mode === 'sit' || mode === 'situp' || mode === 'ride' || mode === 'sitCheer' || choreSit);
         if (this.chore) this._choreAfter(t, dt, mode === 'chore');
     }
 

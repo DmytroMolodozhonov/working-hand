@@ -17,6 +17,7 @@
  */
 
 import { onSpot } from './LoreLibrary.js'; // (a library's book still on its desk is not kept: the library lays it again)
+import { breaking } from '../world/EnchantedStone.js';
 import { keepIn } from './HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 
@@ -303,8 +304,10 @@ export function restoreWorld(game, save, THREE) {
     for (const e of save.explosions || []) {
         // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
         if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater — BoomCarve.js)
-        else if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave)
-        else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
+        else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
+            if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave)
+            else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
+        });
         g.explosions.push(e);
     }
     if (save.rebuild) g.castleLife?.rebuild.restore(save.rebuild); // (after the blasts: what the builders put back since)

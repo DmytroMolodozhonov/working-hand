@@ -13,6 +13,7 @@
  * Who decides: the host hurts and pushes the creatures; every computer hurts its own player.
  */
 
+import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { keepIn } from './HouseWards.js';
 import { isCastleBlock } from '../world/Terrain.js';
@@ -81,8 +82,10 @@ export function throwBody(g, kind, c, v, toss, spell, by, from) {
 export function ruinBand(g, p, r0, r1, full, by, kind = 'ruin') {
     if (!g.world?.destructible || !g.world.terrain) return null;
     const keep = g.wards?.keepFor(p, r1) || []; // (a house's sphere of protection holds what is inside)
-    const out = g.world.ruin(p, r1, keepIn(keep), { inner: r0, full });
-    g.explosions?.push({ p: [p.x, p.y, p.z], r: r1, ruin: 1, ri: r0, rf: full, ...(keep.length ? { k: keep } : {}) }); // (saves, late joiners)
+    // (the enchanted stone: only «Инспириус» breaks it, near its middle; «Circle Attack» never — EnchantedStone.js)
+    const en = kind === 'inspirius' ? 'Inspirius' : null;
+    const out = breaking(en && g.world.terrain?.data, en, p.x, p.z, () => g.world.ruin(p, r1, keepIn(keep), { inner: r0, full }));
+    g.explosions?.push({ p: [p.x, p.y, p.z], r: r1, ruin: 1, ri: r0, rf: full, ...(en ? { en } : {}), ...(keep.length ? { k: keep } : {}) }); // (saves, late joiners)
     for (const f of out.falls || []) g.falling?.add(f);
     g.wreck?.afterBlast?.(p, r1, 99);
     if (g.authority) {

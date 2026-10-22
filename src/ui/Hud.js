@@ -344,6 +344,26 @@ export class Hud {
         this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
     }
 
+    /** The big count in the middle of the screen (the duel arena's «3 — 2 — 1 — Бой!»): grows and fades by itself. */
+    bigCount(text) {
+        let el = this._bigEl;
+        if (!el) {
+            el = this._bigEl = document.createElement('div');
+            el.style.cssText = 'position:fixed;left:50%;top:38%;transform:translate(-50%,-50%) scale(1);z-index:61;pointer-events:none;'
+                + 'font:900 96px/1 Georgia,serif;color:#ffe9a8;text-shadow:0 0 18px rgba(255,190,60,.9),0 4px 10px rgba(0,0,0,.7);'
+                + 'transition:opacity .7s, transform .7s;opacity:0';
+            document.body.appendChild(el);
+        }
+        el.textContent = text;
+        el.style.transition = 'none';
+        el.style.opacity = '1';
+        el.style.transform = 'translate(-50%,-50%) scale(1.25)';
+        void el.offsetWidth;
+        el.style.transition = 'opacity .8s, transform .8s';
+        el.style.opacity = '0';
+        el.style.transform = 'translate(-50%,-50%) scale(0.9)';
+    }
+
     /**
      * The duel's balance at the top of the screen: my colour against theirs, my
      * share of the beam (0…1; more than half — I am winning). null hides it.

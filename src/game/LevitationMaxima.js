@@ -41,6 +41,7 @@
  * «На кого и на что» (CLAUDE.md): MAXIMA_TARGETS below.
  */
 
+import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS, WATER_LEVEL_Y, patternOf } from '../world/Terrain.js';
 import { applyVoxelDetail } from '../world/VoxelShading.js';
@@ -202,6 +203,7 @@ export function houseCells(data, h, max = 6000) {
         for (let L = Lf; L <= Lf + 22; L++) {
             const t = data.get(x, L, z);
             if (!t || GROUND.has(t) || YARD.has(t) || isTreeBlock(t)) continue;
+            if (isEnchanted(t)) return []; // (the wizards' tower: its walls of enchanted stone — no spell tears it off: EnchantedStone.js)
             out.push([x, L, z, t]);
             if (out.length >= max) return out;
         }
@@ -266,7 +268,7 @@ export const FRAG = { WALL_R: 1.6, WALL_MAX: 60, EARTH_R: 1.8, EARTH_DEEP: 3, EA
 const EARTH = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.GRAVEL, BLOCK.PATH, BLOCK.FARMLAND, BLOCK.WHEAT, BLOCK.VEG, BLOCK.FLOWERS]);
 export const isEarth = (t) => EARTH.has(t);
 /** Built (a wall, a tower, a fence…): not the ground, the yard, a tree, water or bedrock. */
-const isBuilt = (t) => !!t && !GROUND.has(t) && !YARD.has(t) && !TREE_KINDS.some((k) => k.leaves === t); // (logs too: a wall of them)
+const isBuilt = (t) => !!t && !GROUND.has(t) && !YARD.has(t) && !TREE_KINDS.some((k) => k.leaves === t) && !isEnchanted(t); // (logs too: a wall of them; never the enchanted stone — EnchantedStone.js)
 
 /**
  * A piece of a wall: the built blocks joined to the one pointed at, within FRAG.WALL_R of it

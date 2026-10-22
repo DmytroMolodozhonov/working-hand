@@ -26,6 +26,7 @@
  * so a house, a cave, a beach coming near again never makes it anew.
  */
 
+import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
 import { isMagicItem, isGodGift, ITEM_SCALE } from './ItemTypes.js';
@@ -400,6 +401,7 @@ export class Liquidation {
             const v = blockVerdict(h.type, max);
             const at = _a.set(h.x, h.L - 1, h.z);
             if (g.terrain?.data?.godGiftAt?.(h.x, h.L, h.z)) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; }
+            if (isEnchanted(h.type)) { this._burst(h.at, max, 12); say('✨ Заколдованный камень — «Liquidation» его не берёт'); return; } // (EnchantedStone.js)
             if (v === 'maxima') { this._burst(h.at, max, 12); say('✨ Это волшебный камень — его рассыпет только «Liquidation Максима»'); return; }
             if (v !== 'dust') { this._burst(h.at, max, 12); if (v === 'alive') say('🌳 Это живое — «Liquidation» рассыпает только неживое'); return; }
             if (mine && g.wards?.forbids?.(origin, at)) { this._burst(h.at, max, 12); say('🛡️ Этот дом под защитой'); return; }

@@ -48,6 +48,7 @@ import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModel } from './Animals.js';
 import { CastleLife } from './CastleLife.js';
+import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
 import { sailorModels } from './Sailors.js';
 import { DeathSystem } from './Death.js';
@@ -415,6 +416,7 @@ export class Game {
         this.dismember = new Dismemberment(this); // a blade's edge cuts off arms, legs, heads (any creature)
         this.animals = new Animals(this); // cows, pigs, sheep, horses; golden apple trees
         this.castleLife = new CastleLife(this); // the people of the castles
+        this.arenaDuels = new ArenaDuels(this); // the duel arenas: the fans, the duels, the sign-up (ArenaDuels.js)
         this.carriages = new Carriages(this); // carts and the wizards' carriages on the roads (Carriages.js)
         this.travelers = new Travelers(this); // the people of the roads: wanderers, knights errant, carts (Travelers.js)
         this.ships = new Ships(this); // the ships of the sea castles: decks, sails, the wheel, crews, cannons
@@ -3138,6 +3140,7 @@ export class Game {
         if (earth) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
         if (earth) this.carriages?.update(dt);
         if (earth) this.castleLife.update(dt);
+        if (earth) this.arenaDuels?.update(dt); // (the duel arenas: after the people moved)
         if (earth) this.doors.update(dt);
         if (earth) this.locks.update(dt);
         if (earth) this.campfires.update(dt);

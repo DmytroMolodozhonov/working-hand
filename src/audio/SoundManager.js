@@ -11,6 +11,7 @@
  *   - a missing or broken file no longer disables all sound.
  */
 
+import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
@@ -582,6 +583,8 @@ export class SoundManager {
             // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
             ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
             ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
+            // (the duel arena — ArenaDuels.js: the stands' roar and groan, the gong, «3-2-1», the fanfare, applause)
+            ...ARENA_SOUNDS.map((k) => ['arena_' + k, () => synthArena(this.context, k)]),
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -1629,6 +1632,15 @@ export class SoundManager {
         const key = 'owl_' + kind;
         if (!this.sounds[key]) { if (!OWL_SOUNDS.includes(kind)) return; this.sounds[key] = synthOwl(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
+    }
+
+    /** The duel arena (ArenaDuels.js): 'cheer' | 'groan' | 'gong' | 'beep' | 'fanfare' | 'clap' at a place — made ahead (prewarmStep). */
+    playArena(position, kind, volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'arena_' + kind;
+        if (!this.sounds[key]) { if (!ARENA_SOUNDS.includes(kind)) return; this.sounds[key] = synthArena(this.context, kind); }
+        const far = kind === 'cheer' || kind === 'groan' || kind === 'clap' ? 26 : kind === 'gong' ? 30 : 14; // (the whole stands: heard round the arena)
+        this._playAt(this.sounds[key], position, volume, far, rate * (kind === 'cheer' || kind === 'clap' ? 0.94 + Math.random() * 0.12 : 1));
     }
 
     /** The phoenix's soft healing song (a few warm, clear notes rising) at a place. */

@@ -465,7 +465,10 @@ export class Rebuild {
         const cur = t.get(o.x, o.L, o.z);
         if (cur === o.t) return;
         if (o.t !== BLOCK.AIR && this._occupied(o)) { const n = (o.skips || 0) + 1; if (n < 6) s.plan.ops.push({ ...o, done: false, by: null, skips: n }); return; }
+        const pv = t.enchantFree;
+        t.enchantFree = true; // (the builders put back what the world had — its enchanted stone too: EnchantedStone.js)
         t.set(o.x, o.L, o.z, o.t);
+        t.enchantFree = pv;
         this._edits.push([o.x, o.L, o.z, o.t]);
         const k = o.x + ',' + o.L + ',' + o.z;
         this.log.delete(k);
@@ -596,7 +599,7 @@ export class Rebuild {
         const t = this.data;
         const log = Array.isArray(data.log) ? data.log.filter((e) => Array.isArray(e) && e.length >= 5) : [];
         const keep = stillStanding(log, this.game.explosions || []);
-        if (t) for (const [x, L, z, type] of keep) if (t.get(x, L, z) !== type) t.set(x, L, z, type);
+        if (t) { const pv = t.enchantFree; t.enchantFree = true; for (const [x, L, z, type] of keep) if (t.get(x, L, z) !== type) t.set(x, L, z, type); t.enchantFree = pv; }
         this.log = new Map(keep.map((e) => [e[0] + ',' + e[1] + ',' + e[2], e]));
         for (const [id, box, quiet] of data.sites || []) {
             const cs = this.life._runtimeById?.(id);

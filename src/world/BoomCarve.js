@@ -29,6 +29,7 @@
  *   runBoom(data, e) → job (done)                          boomFloor(d, base, R)
  */
 
+import { breaking } from './EnchantedStone.js';
 import { BLOCK, MIN_LAYER } from './Terrain.js';
 import { hangingSearch, dropPiece } from './Collapse.js';
 
@@ -149,6 +150,11 @@ const RUBBLE = [BLOCK.GRAVEL, BLOCK.STONE, BLOCK.GRAVEL, BLOCK.DIRT];
  */
 export function boomStep(job, ms = 3, flow = Infinity) {
     if (job.done) return true;
+    // (the enchanted stone breaks only near the crater's middle — EnchantedStone.ENCHANT_BREAKERS.Boom)
+    return breaking(job.data, 'Boom', job.cx, job.cz, () => carveStep(job, ms, flow));
+}
+
+function carveStep(job, ms, flow) {
     const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const over = () => ms !== Infinity && now() - t0 > ms;

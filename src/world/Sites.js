@@ -8,7 +8,10 @@
 import { offEarth } from './Planets.js';
 
 export class SiteIndex {
-    constructor(castles, towers, ice = null, villages = null, hamlets = null) { this.castles = castles; this.towers = towers; this.ice = ice; this.villages = villages; this.hamlets = hamlets; }
+    constructor(castles, towers, ice = null, villages = null, hamlets = null, arenas = null) { this.castles = castles; this.towers = towers; this.ice = ice; this.villages = villages; this.hamlets = hamlets; this.arenas = arenas; }
+
+    /** The duel arenas (DuelArenas.js) whose land reaches within `r` of a point. */
+    arenasNear(x, z, r = 0) { return this.arenas && !offEarth(x - r) ? this.arenas.near(x, z, r) : []; }
 
     /** The indexes of the places people live in (castles, towers, settlements, hamlets). */
     get lived() { return this._lived || (this._lived = [this.castles, this.towers, this.villages, this.hamlets].filter(Boolean)); }
@@ -41,14 +44,15 @@ export class SiteIndex {
 
     // (the Ice Castle — IceCastle.js — levels its summit and is built into the chunks like a castle;
     //  it is not one of `near`'s: nobody lives there but the Ice Queen and her creatures, IceQueen.js)
-    landAt(ix, iz) { return this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || (this.villages ? this.villages.landAt(ix, iz) : null) || (this.ice ? this.ice.landAt(ix, iz) : null) || (this.hamlets ? this.hamlets.landAt(ix, iz) : null); }
+    landAt(ix, iz) { return this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || (this.villages ? this.villages.landAt(ix, iz) : null) || (this.arenas ? this.arenas.landAt(ix, iz) : null) || (this.ice ? this.ice.landAt(ix, iz) : null) || (this.hamlets ? this.hamlets.landAt(ix, iz) : null); }
 
     partsForChunk(cx, cz, C) {
         const a = this.castles.partsForChunk(cx, cz, C), b = this.towers.partsForChunk(cx, cz, C);
         const v = this.villages ? this.villages.partsForChunk(cx, cz, C) : [];
         const c = this.ice ? this.ice.partsForChunk(cx, cz, C) : [];
         const h = this.hamlets ? this.hamlets.partsForChunk(cx, cz, C) : [];
-        return b.length || c.length || v.length || h.length ? a.concat(b, v, c, h) : a;
+        const d = this.arenas ? this.arenas.partsForChunk(cx, cz, C) : []; // (the duel arenas: DuelArenas.js)
+        return b.length || c.length || v.length || h.length || d.length ? a.concat(b, v, c, h, d) : a;
     }
 
     /** The site of an id: castles «cs…», towers «wt…», settlements «wv…», hamlets «hm…», the people of the roads: wandering wizards «ww…», knights errant «wk…», travelling folk «wc…» (riders too). */

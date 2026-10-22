@@ -102,7 +102,7 @@ function buildTower(p, rng, out) {
     const pol = (r, a) => [r * Math.cos(a), r * Math.sin(a)];
     const ipol = (r, a) => [Math.round(r * Math.cos(a)), Math.round(r * Math.sin(a))];
     // ---- the shell
-    p.cyl(0, 0, R_OUT, -8, ROOF_L, B.ARCANE);
+    p.cyl(0, 0, R_OUT, -8, ROOF_L, B.ARCANE_WARD); // (its walls: the enchanted stone, as the duel arenas' — EnchantedStone.js)
     p.cyl(0, 0, R_IN, -7, ROOF_L - 1, B.AIR);
     for (const l of LEVELS.slice(1)) {
         p.cyl(0, 0, R_IN, l - 1, l - 1, B.ARCANE_DARK);

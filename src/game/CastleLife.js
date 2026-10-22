@@ -925,6 +925,7 @@ export class CastleLife {
         if (v.fireT > 0 && this._fireStep(v, dt)) return;
         // «Брейнрот»: a servant follows its master and fights for them
         if (v.servantOf != null && this._serve(v, dt)) return;
+        if (v.arena && g.arenaDuels?.step(v, dt)) return; // (at the duel arena: a fan on the stands, a duellist — ArenaDuels.js)
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         // a hostile player in sight: knights go for them
         if (this._fights(v) && !v.foe) {
@@ -1981,6 +1982,8 @@ export class CastleLife {
                 for (let i = 0; i < 5; i++) this.game.fx.spark(_v.set(v.x - Math.sin(v.yaw) * 0.8, v.y + 2.6, v.z - Math.cos(v.yaw) * 0.8), 0xffe9a0, 0.08, _v2.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.4);
             }
         }
+        // (two wizards of the duel arena: a friendly duel — the blow never kills: ArenaDuels.soften)
+        if (v.arena && this.game.arenaDuels) dmg = this.game.arenaDuels.soften(v, by, dmg);
         // armour takes most of the blow: the hearts go down many times slower
         if (opts.pierce) v.hp = 0; // («Авада Кедавра»: no armour stops it)
         else if (v.armor > 0 && opts.fire) {
@@ -2000,6 +2003,7 @@ export class CastleLife {
         const killed = v.hp <= 0;
         const pos = { x: v.x, y: v.y, z: v.z };
         if (killed) this._die(v, by);
+        if (by != null && this.game.arenaDuels?.onHit(v, by, killed, opts)) return; // (a legal duel at the arena — nobody minds it; a foul is the arena's: ArenaDuels.js)
         // the hidden wanted level: a kill, or a real blow (not a bump in a crowd) — only what somebody saw (Blame.js)
         const real = killed || opts.spell || opts.weapon || opts.magic || opts.pierce || opts.fire || dmg > 1;
         const deed = () => { if (by && real) this.deed(by, killed ? (v.role === 'king' || v.role === 'master' ? 'killChief' : 'kill') : 'hurt'); };
@@ -2079,6 +2083,7 @@ export class CastleLife {
         if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by)) return false;
         const cs = v.cs, now = Date.now();
         if (!cs || v.foe || by === this.state(cs.def.id).owner) return false; // (fighting already; the king may do as he likes)
+        if (this.game.arenaDuels?.calm(v, by)) return false; // (the arena's legal duel: spells flying there are the show — ArenaDuels.js)
         if (now - (v.startleAt || 0) < (hit ? 300 : STARTLE.AGAIN_MS)) return false; // (a volley: one threat; a hit told once)
         v.startleAt = now;
         if (v.sleep) this.night?.wake?.(v, 'alarm');
@@ -2315,7 +2320,7 @@ export class CastleLife {
         // a wizard's «Protection» / the Master's dome: any charge — «Авада Кедавра» too — for half its mana (WizardFight.shieldPays)
         if (v.wizard && (v.fx & FX.DOME)) return this.wizards.fight.shieldPays(v, spell, true);
         const front = !!from && (from.x - v.x) * -Math.sin(v.yaw) + (from.z - v.z) * -Math.cos(v.yaw) > 0;
-        if (!front || !v.foe || !this._shieldUp(v)) return false;
+        if (!front || !(v.foe || v.arenaFight) || !this._shieldUp(v)) return false; // (arenaFight: an arena duellist's shield — ArenaDuels.js)
         if (v.wizard) return this.wizards.fight.shieldPays(v, spell, false);
         return spell !== 'AvadaKedavra' && spell !== 'SapiraDuel'; // (a knight's shield of wood and iron)
     }

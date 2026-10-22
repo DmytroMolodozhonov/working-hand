@@ -13,6 +13,7 @@
 
 import { BLOCK, MIN_LAYER, isSolid, isLeaves } from './Terrain.js';
 import { collapseAfter } from './Collapse.js';
+import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 
 export const RUIN = {
     DEEP: 28, // blocks: how deep under the place the caves cave in
@@ -47,6 +48,13 @@ function groundTop(data, x, z, from, floor) {
         if (isGround(t)) return L;
     }
     return null;
+}
+
+/** A column with enchanted stone the breaker may not break here (EnchantedStone.js): it stands whole. */
+function enchantedHolds(data, x, z, top, base) {
+    if (enchantMayBreak(data, x, z)) return false;
+    for (let L = top; L > base - 3; L--) if (isEnchanted(data.get(x, L, z))) return true;
+    return false;
 }
 
 /** Water in this column or within 2 columns of it, at the ground's level or just above it. */
@@ -148,6 +156,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
         const top = data.topLayer(x, z);
         const g = groundTop(data, x, z, top, floor);
         const base = g ?? floor - 1;
+        if (enchantedHolds(data, x, z, top, base)) continue; // (the enchanted stone holds the whole column — EnchantedStone.js)
         // a stub of a wall may stand: low in the middle, taller towards the edge
         const h1 = hash01(x, 1, z, 11), h2 = hash01(x, 2, z, 12);
         const keep = (h1 < 0.45 ? 1 : 0) + (h1 < 0.15 ? 1 : 0) + (e > 0.6 ? Math.floor(h2 * 5 * (e - 0.6) / 0.4) : 0);
@@ -158,7 +167,7 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
             if (L <= base + keep && !light(t)) continue; // (the stub)
             data.set(x, L, z, BLOCK.AIR);
             removed.push([x, L, z, t]);
-            if (!light(t)) { n++; heavy.push(t); }
+            if (!light(t)) { n++; heavy.push(isEnchanted(t) ? BLOCK.COBBLE : t); } // (broken enchanted stone lies as plain rubble)
         }
         // the ground sinks a little (not under water, never down to the bedrock; a river's or a
         // lake's bank holds: the water keeps its shape instead of spilling over the sunk grass)

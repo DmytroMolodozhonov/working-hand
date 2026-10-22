@@ -19,6 +19,7 @@
  *     creatures, everyone hurts himself.
  */
 
+import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { RUIN, ruinSample, hash01 } from '../world/Ruin.js';
 import { keepIn } from './HouseWards.js';
@@ -169,8 +170,10 @@ export class TotalDestruction {
         const authoritative = !!g.authority;
         // (a house's sphere of protection holds: what is inside stays — the sphere wears down instead)
         const keep = g.wards?.keepFor(p, R) || [];
-        const out = g.world.ruin(p, R, keepIn(keep));
-        g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
+        // (the enchanted stone: the plain one never breaks it, the Maxima only near its middle — EnchantedStone.js)
+        const en = d.max ? 'TotalDestructionMaxima' : null;
+        const out = breaking(en && g.world.terrain?.data, en, p.x, p.z, () => g.world.ruin(p, R, keepIn(keep)));
+        g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(en ? { en } : {}), ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
         g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction', d.by); // (it breaks a house's sphere at once)
         for (const f of out.falls || []) g.falling?.add(f);
         g.wreck?.afterBlast(p, R, 99); // (nothing holds: the gates of a throne room break too)

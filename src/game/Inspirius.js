@@ -19,6 +19,7 @@
  *   frame, the falling blocks and particles are capped (Total Destruction's machinery).
  */
 
+import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { keepIn } from './HouseWards.js';
 import { isCastleBlock, BLOCK, BASE_COLORS } from '../world/Terrain.js';
@@ -330,8 +331,9 @@ export class Inspirius {
             const S = craterSphere(p);
             const c = new THREE.Vector3(S.x, S.y, S.z);
             const keep = g.wards?.keepFor(c, S.r) || [];
-            const out = g.world.explode(c, S.r, keepIn(keep));
-            g.explosions?.push({ p: [r3(c.x), r3(c.y), r3(c.z)], r: S.r, ...(keep.length ? { k: keep } : {}) }); // (saves, late joiners)
+            // (the enchanted stone breaks only near the middle — EnchantedStone.ENCHANT_BREAKERS.Inspirius)
+            const out = breaking(g.world.terrain?.data, 'Inspirius', c.x, c.z, () => g.world.explode(c, S.r, keepIn(keep)));
+            g.explosions?.push({ p: [r3(c.x), r3(c.y), r3(c.z)], r: S.r, en: 'Inspirius', ...(keep.length ? { k: keep } : {}) }); // (saves, late joiners)
             for (const f of out.falls || []) g.falling?.add(f);
             g.wreck?.afterBlast?.(p, INSP.CRATER_R, 99);
             blocks = out.blocks || [];

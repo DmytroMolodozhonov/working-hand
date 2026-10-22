@@ -26,12 +26,14 @@ import { TowerIndex } from './WizardTowers.js';
 import { VillageIndex } from './WizardVillages.js';
 import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
+import { ArenaIndex } from './DuelArenas.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
+import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
 
 export const BLOCK = {
@@ -58,6 +60,9 @@ export const BLOCK = {
     // a terraformed planet's own life (PlanetSurface.js, «Terraform Planet»): its moss / grass, the trunks and
     // the crowns of its trees — coloured by that planet's palette (never the Earth's green)
     PLANET_GRASS: 67, PLANET_WOOD: 68, PLANET_LEAF: 69,
+    // the enchanted stone (EnchantedStone.js — no spell breaks or deforms it but three, and those only near
+    // their middle): the duel arenas' floor and stands (DuelArenas.js), the wizards' towers' walls
+    ENCHANTED: 70, ENCHANTED_SEAT: 71, ARCANE_WARD: 72,
 };
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
@@ -192,6 +197,9 @@ export const BASE_COLORS = {
     [BLOCK.PLANET_GRASS]: 0x3fa08a,
     [BLOCK.PLANET_WOOD]: 0x5a3a5a,
     [BLOCK.PLANET_LEAF]: 0x9a5ad0,
+    [BLOCK.ENCHANTED]: 0xd9d0bb,
+    [BLOCK.ENCHANTED_SEAT]: 0xb4a78c,
+    [BLOCK.ARCANE_WARD]: 0x56597f,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -205,6 +213,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.ARCANE_LAMP]: PATTERN.CRYSTAL, [BLOCK.ARCANE_LAMP_VIOLET]: PATTERN.CRYSTAL, [BLOCK.CARPET_PURPLE]: PATTERN.CLOTH,
     [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
     [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE, [BLOCK.SNOW]: PATTERN.SNOW,
+    [BLOCK.ENCHANTED]: PATTERN.ASHLAR, [BLOCK.ENCHANTED_SEAT]: PATTERN.ASHLAR, [BLOCK.ARCANE_WARD]: PATTERN.ASHLAR,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -526,10 +535,11 @@ export class TerrainData {
             const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * (this.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
-            const near = (x, z, r) => this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages); // (the duel arenas: DuelArenas.js)
+            const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
             this.hamlets = new HamletIndex(seed, raw, near);
-            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets);
+            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas);
             this.iceCastle = ice;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)
@@ -1428,6 +1438,8 @@ export class TerrainData {
         if (L < MIN_LAYER || L > MAX_LAYER) return;
         // (a gift of the gods — the Temple of the Gods' ground: no spell breaks or changes a block of it)
         if (this.godGiftAt && this.godGiftAt(ix, L, iz) && this.get(ix, L, iz) !== BLOCK.AIR) return;
+        // (the enchanted stone — EnchantedStone.js: never broken, changed, moved or made by a spell, but in a breaker's circle)
+        if (!this.enchantFree) { const was = this.get(ix, L, iz); if ((isEnchanted(type) || isEnchanted(was)) && was !== type && !enchantMayBreak(this, ix, iz)) return; }
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return; // (nothing is built in the empty zone between the planets)
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = type;
@@ -1628,6 +1640,7 @@ export class TerrainData {
                     if (dense && dd > d2 && isPalaceIce(type) && inIcePalace(dense, ix, iz)) continue;
                     if (keep && keep(ix, by, iz)) continue; // (inside a house's sphere of protection)
                     if (this.godGiftAt && this.godGiftAt(ix, by, iz)) continue; // (a gift of the gods: the temple's ground)
+                    if (isEnchanted(type) && !enchantMayBreak(this, ix, iz)) continue; // (the enchanted stone: the blast is, the stone stays)
                     c.blocks[idx] = BLOCK.AIR;
                     if (L < c.minOpen) c.minOpen = L;
                     hollowAt(c, lz * CHUNK + lx, L);
@@ -1661,6 +1674,7 @@ export class TerrainData {
             const t = c.blocks[idx];
             if (t === BLOCK.AIR || t === BLOCK.BEDROCK || (t === BLOCK.WATER && L <= 0)) continue; // (the sea's water stays: it pours in)
             if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
+            if (isEnchanted(t) && !enchantMayBreak(this, ix, iz)) break; // (the enchanted stone: only near the middle of «Бум»; it holds the ground under it — nothing left hanging)
             c.blocks[idx] = BLOCK.AIR; // (a river's or a lake's water over the sea's level goes with the ground under it — none left hanging)
             if (L < c.minOpen) c.minOpen = L;
             if (wet && L <= 0) wet.push(ix, L, iz);

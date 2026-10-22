@@ -41,6 +41,7 @@
  *   dmcut / dmlimb / dmst / dmresc   a blade cut off a limb / the head (see Dismember.js)
  */
 
+import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
@@ -217,8 +218,10 @@ export class NetSync {
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
         for (const e of msg.explosions || []) {
             if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater)
-            else if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
-            else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
+            else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
+                if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
+                else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
+            });
             g.explosions.push(e);
         }
         if (msg.rebuild) g.castleLife?.rebuild.restore(msg.rebuild); // (after the blasts: what was put back since)
@@ -673,6 +676,8 @@ export class NetSync {
     bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
     /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
     dragon(m) { this.net.send({ t: 'drg', ...m }); }
+    /** The duel arenas (ArenaDuels.js): the sign-up, the phase, a player's own news, the sounds. */
+    arena(m) { this.net.send({ t: 'arn', ...m }); }
     /** The Ice Castle (IceQueen.js): its creatures' state, shots, the queen's magic, the Ice Rod. */
     ice(m) { this.net.send({ t: 'ice', ...m }); }
 
@@ -931,6 +936,7 @@ export class NetSync {
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'drg': g.dragons?.onNet(m, m.from); break;
+            case 'arn': g.arenaDuels?.onNet(m, m.from); break; // (the duel arenas: ArenaDuels.js)
             case 'ice': g.iceCastle?.onNet(m, m.from); break; // (the Ice Castle: IceQueen.js)
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)
             case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)

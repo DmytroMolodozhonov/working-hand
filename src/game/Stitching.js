@@ -18,6 +18,7 @@
  * they don't move away.
  */
 
+import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, BASE_COLORS, isLeaves } from '../world/Terrain.js';
 import { castingHand } from './WandAim.js';
@@ -435,6 +436,7 @@ export class Stitching {
         if (!mine) return;
         const data = g.terrain?.data;
         if (!data || data.get(s.c.x, s.c.L, s.c.z) !== BLOCK.AIR) return;
+        if (isEnchanted(block)) block = BLOCK.STONE; // (no spell makes the enchanted stone: a hole in it is stitched with plain stone — EnchantedStone.js)
         data.set(s.c.x, s.c.L, s.c.z, block);
         g.builder?._sendEdits([[s.c.x, s.c.L, s.c.z, block]]);
     }

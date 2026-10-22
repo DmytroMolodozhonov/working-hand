@@ -16,6 +16,7 @@
  * from the book-birds' books or scrolls (SpellBook.js).
  */
 
+import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, isWood, isLeaves, isCastleBlock } from '../world/Terrain.js';
 import { RESOURCE, STACK, resourceOf } from './Inventory.js';
@@ -102,6 +103,7 @@ export class Builder {
             return '🪄 Направьте руку на дерево, камень, землю или листву (не дальше 10 м)';
         }
         const data = this.data;
+        if (isEnchanted(cell.type)) return '✨ Заколдованный камень — его не взять'; // (EnchantedStone.js: no spell takes it)
         // (a house's sphere of protection: only its owner and the ones let in take its blocks — HouseWards.js)
         if (g.wards?.forbids(h.o, _v1.set(cell.x, cell.L - 1, cell.z))) return '🛡️ Этот дом под защитой — разобрать его нельзя';
         let cells, res, amount;
@@ -358,6 +360,9 @@ export class Builder {
     }
 
     _sendEdits(list) {
+        // (an edit the enchanted stone refused here never goes out: everybody else applies edits as done — EnchantedStone.js)
+        const d = this.data;
+        if (d && list.some((e) => isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2])))) list = list.filter((e) => d.get(e[0], e[1], e[2]) === e[3] || !(isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2]))));
         if (!list.length) return;
         this.game.castleLife?.rebuild?.forget(list); // (a cell the castle's builders put back is the player's now)
         this.game.blockEdits = this.game.blockEdits || [];
@@ -370,11 +375,15 @@ export class Builder {
     applyEdits(list) {
         const data = this.data;
         if (!data) return;
+        // (done already where they came from — the enchanted stone obeys them: EnchantedStone.applyingDone)
+        const prev = data.enchantFree;
+        data.enchantFree = true;
         for (const e of list) {
             if (!Array.isArray(e) || e.length < 4) continue;
             data.set(e[0] | 0, e[1] | 0, e[2] | 0, e[3] | 0);
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }
+        data.enchantFree = prev;
         this.game.blockEdits = (this.game.blockEdits || []).concat(list);
         if (this.game.authority) this.game.castleLife?.rebuild?.forget(list);
     }

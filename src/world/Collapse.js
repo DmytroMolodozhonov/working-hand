@@ -18,6 +18,7 @@
  */
 
 import { BLOCK, MIN_LAYER, isSolid } from './Terrain.js';
+import { isEnchanted } from './EnchantedStone.js';
 
 export const COLLAPSE = {
     LIMIT: 12000, // blocks: a bigger group counts as standing (a castle, a mountain)
@@ -30,7 +31,7 @@ export const COLLAPSE = {
 const GROUND = new Set();
 function isGround(t) {
     if (!GROUND.size) for (const k of ['GRASS', 'DIRT', 'STONE', 'SNOW', 'SAND', 'ICE', 'BEDROCK', 'FARMLAND', 'PATH']) if (BLOCK[k] != null) GROUND.add(BLOCK[k]);
-    return GROUND.has(t);
+    return GROUND.has(t) || isEnchanted(t); // (the enchanted stone holds like rock — EnchantedStone.js)
 }
 const movable = (t) => isSolid(t) && t !== BLOCK.ICE_SHAPE && t !== BLOCK.BEDROCK;
 
