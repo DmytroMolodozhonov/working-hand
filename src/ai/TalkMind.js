@@ -19,7 +19,7 @@
  */
 
 import { normalize, sanitizeReply, isMostlyRussian } from '../game/VillagerBrain.js';
-import { toolsFor, parseToolCalls, validateCall, detectOrder, ARMY, ORDER_LINES } from './TalkActions.js';
+import { TOOLS, toolsFor, parseToolCalls, validateCall, detectOrder, ARMY, ORDER_LINES } from './TalkActions.js';
 import { WIZ_ROLE_RU } from '../game/WizardAI.js';
 
 /** Who each role is (the system prompt, in Russian). */
@@ -62,6 +62,7 @@ const RULES_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'hagg
  * (Before, the rules answered almost every usual phrase with a canned line and the net was not even asked:
  * the author did not notice the new net at all.)
  */
+const QUICK_MS = 1500; // (the net's first words sooner than this: it may answer every talk itself)
 const MARKET_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle']);
 /** The net said no, while the rules had agreed to do it: the rules' line (the villager does what he says). */
 const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не буду|ни за что|отстань|no\b|i can'?t|i won'?t)|(не пойду|не могу пойти|не стану)/i;
@@ -166,9 +167,34 @@ export class TalkMind {
     get smart() { return !!this.llm?.ready; }
     /** A big net: it answers every talk (see MARKET_ONLY). */
     get strong() { return !!(this.llm?.ready && this.llm.strong); }
+    /** The net says its first words quickly on this computer (≤ 1.5 s; not known yet — trusted). */
+    get quickNet() { return this.speedMs == null || this.speedMs <= QUICK_MS; }
 
-    /** The Russian system prompt for this villager now. */
+    /** How long the net took to its first words (a running mean: one slow answer does not decide). */
+    _speed(ms) { this.speedMs = this.speedMs == null ? ms : this.speedMs * 0.6 + ms * 0.4; }
+
+    /**
+     * The words that are the same for every villager and every turn (the system turn). The program on this
+     * computer reads them — and the game actions after them — once and keeps them: a question then costs it only
+     * the villager's own lines and the words said (on the processor a long prompt read anew took 10–20 s).
+     */
+    basePrompt() {
+        return [
+            'Это игра: ты житель средневекового мира, живой человек, и никогда не говоришь, что ты программа. Кто ты, где ты и что сейчас — сказано перед словами собеседника.',
+            'Что ты знаешь: в замке есть король, его советник у трона, рыцари стражи, рынок у ворот с хлебом, сыром, мясом, яблоками и стрелами, дома жителей. По ночам из-под земли лезут зомби. В пещерах живёт гигантский паук. В Башне волшебников учатся маги. У моря есть порт с кораблями и моряками.',
+            'Отвечай ПО СУТИ того, что спросил собеседник, и не меняй тему. Если не знаешь ответа — так и скажи просто, по-своему, и подскажи, у кого спросить (маги в башне, советник короля, торговцы на рынке, стражники у ворот).',
+            'Если собеседник просит или приказывает что-то сделать и ты согласен — вызови подходящую функцию. Если не согласен — не вызывай, просто откажи словами. Приказы войску (собрать войско, атаковать, защищать замок) выполняют только по приказу короля замка.',
+            'Говори как живой человек своего времени: просто, тепло или резко — по характеру, с живыми словечками, без канцелярита и без перечислений. Можешь в ответ спросить что-то короткое.',
+        ].join('\n');
+    }
+
+    /** The whole prompt for this villager now (the common words + his own). */
     systemPrompt(brain, ctx = {}) {
+        return `${this.basePrompt()}\n${this.persona(brain, ctx)}`;
+    }
+
+    /** This villager now: who, where, his mood, what he knows of the one talking (said with the question). */
+    persona(brain, ctx = {}) {
         const v = brain.villager || {};
         const w = brain.world || {};
         const role = brain.role;
@@ -180,8 +206,8 @@ export class TalkMind {
         // (the wizards of the towers talk through the same brain: their own role and words)
         const wiz = WIZ_ROLE_RU[v.role];
         const lines = [
-            wiz ? `Ты — ${v.name || 'волшебник'}, ${wiz[v.female ? 1 : 0].toLowerCase()} в Башне волшебников. Это игра; ты живой человек этого мира и никогда не говоришь, что ты программа.`
-                : `Ты — ${v.name || 'житель'}, ${brain.roleName}, ${v.female ? 'женщина' : 'мужчина'}, в средневековом замке «${w.castleName || v.castleName || 'Каменный Утёс'}». Это игра; ты живой человек этого мира и никогда не говоришь, что ты программа.`,
+            wiz ? `Ты — ${v.name || 'волшебник'}, ${wiz[v.female ? 1 : 0].toLowerCase()} в Башне волшебников.`
+                : `Ты — ${v.name || 'житель'}, ${brain.roleName}, ${v.female ? 'женщина' : 'мужчина'}, в средневековом замке «${w.castleName || v.castleName || 'Каменный Утёс'}».`,
             wiz ? ROLE_PROMPTS.wizard : ROLE_PROMPTS[role] || ROLE_PROMPTS.farmer,
             role === 'king' || wiz ? '' : `Правитель замка — ${king ? 'твой собеседник' : `${w.kingFemale ? 'королева' : 'король'} ${w.kingName || v.kingName || ''}`.trim()}.`,
             `Настроение: ${brain.mood > 0.3 ? 'хорошее, ты дружелюбен' : brain.mood < -0.3 ? 'плохое, ты раздражён и груб' : 'обычное'}.`,
@@ -203,11 +229,6 @@ export class TalkMind {
             ctx.recent ? `Недавно: ${ctx.recent}.` : '',
             v.female ? 'О себе говори в женском роде («я рада», «я видела»).' : 'О себе говори в мужском роде («я рад», «я видел»).',
             `Твой характер: ${t.smart > 0.7 ? 'умный, рассудительный' : t.smart < 0.45 ? 'простоватый' : 'здравомыслящий'}, ${t.talkative > 0.7 ? 'разговорчивый' : t.talkative < 0.45 ? 'немногословный' : 'в меру общительный'}, ${t.brave > 0.7 ? 'смелый' : t.brave < 0.35 ? 'боязливый' : 'осторожный'}.`,
-            // what this villager knows of the world: answers come from it, not from nowhere
-            'Что ты знаешь: в замке есть король, его советник у трона, рыцари стражи, рынок у ворот с хлебом, сыром, мясом, яблоками и стрелами, дома жителей. По ночам из-под земли лезут зомби. В пещерах живёт гигантский паук. В Башне волшебников учатся маги. У моря есть порт с кораблями и моряками.',
-            'Отвечай ПО СУТИ того, что спросил собеседник, и не меняй тему. Если не знаешь ответа — так и скажи просто, по-своему, и подскажи, у кого спросить (маги в башне, советник короля, торговцы на рынке, стражники у ворот).',
-            'Если собеседник просит или приказывает что-то сделать и ты согласен — вызови подходящую функцию. Если не согласен — не вызывай, просто откажи словами.',
-            'Говори как живой человек своего времени: просто, тепло или резко — по характеру, с живыми словечками, без канцелярита и без перечислений. Можешь в ответ спросить что-то короткое.',
             // (a big net answers what the rules understood too: their answer holds the facts — the way, the name, the action)
             ctx.hint ? `Суть твоего ответа сейчас (скажи это своими словами, живо и по-своему, сохрани смысл и факты, ничего не выдумывай сверх): «${ctx.hint}»` : '',
             en ? 'Собеседник говорит по-английски: отвечай ТОЛЬКО по-английски (простыми словами), одной-двумя короткими фразами, от первого лица, без кавычек, без чисел и без пояснений.'
@@ -266,7 +287,9 @@ export class TalkMind {
         // is the net's: a canned line about the king would not answer it)
         const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
         const complex = words >= 6 && !RULES_ONLY.has(res.intent) && !res.intent.startsWith('where_');
-        const quick = this.strong ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex;
+        // (a big net answers everything only while it is quick here: on a slow computer the rules answer what they
+        // understood at once, and the net only what they did not — the author: «очень медленно отвечают»)
+        const quick = this.strong && this.quickNet ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex;
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
     }
@@ -309,24 +332,41 @@ export class TalkMind {
         // (what the rules understood well is given to a big net as the meaning of its answer — not for open talk)
         const hint = this.strong && res.reply && !OPEN_TOPICS.has(res.intent) && !en ? res.reply : null;
         ctx = { ...ctx, lang: en ? 'en' : 'ru', hint };
+        const t0 = Date.now();
+        let firstAt = 0;
+        const said0 = onPartial ? (piece) => { onPartial(piece); if (!firstAt && n) firstAt = Date.now(); } : null;
+        this.lastError = null;
         try {
             opts.onThinking?.();
             let timer;
             raw = await Promise.race([
                 this.llm.chat({
-                    system: this.systemPrompt(brain, ctx),
+                    // (the same words for everybody first — the program keeps them read; this villager's own with the question)
+                    system: this.basePrompt(),
+                    context: this.persona(brain, ctx),
                     history: this._history(brain),
                     // (the words as said, with their «?» and «!» — the net reads a question better than a bare string)
                     user: String(text || '').replace(/\s+/g, ' ').trim().slice(0, 300) || '...',
-                    tools: toolsFor(brain.role, ctx),
+                    // (a big net gets every action — always the same list, read once; the game still checks each call)
+                    tools: this.strong ? TOOLS : toolsFor(brain.role, ctx),
                     maxTokens: 60,
-                    ...(onPartial ? { onPartial } : {}),
+                    ...(said0 ? { onPartial: said0 } : {}),
                 }),
-                // (a big net reads a longer prompt; its first sentence is said as soon as it is written anyway)
-                new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs ?? (this.strong ? 12000 : 9000)); }),
+                // (nothing said by then: the rules answer — a talk must not wait; the first sentence is said as soon as written)
+                new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs ?? (this.strong ? 8000 : 9000)); }),
             ]);
             clearTimeout(timer);
-        } catch (e) { this.lastTimedOut = false; return res; }
+        } catch (e) {
+            // (the net failed — the program stopped, the graphics card lost it…: the rules answer, the reason to the journal)
+            stopped = true;
+            this.lastTimedOut = false;
+            this.lastError = String(e?.message || e || 'ошибка').slice(0, 200);
+            this._speed(Date.now() - t0 + 4000);
+            if (spoken) res.spoken = spoken;
+            return res;
+        }
+        if (!raw) stopped = true; // (too late: its later words are not said over the rules' answer)
+        this._speed((firstAt || Date.now()) - t0 + (raw ? 0 : 4000));
         this.lastTimedOut = !raw; // (the net said nothing in time: the rules answered)
         if (spoken) res.spoken = spoken; // (already said: CastleTalk says only the rest)
         if (!raw && res.spoken) { this._setReply(brain, res, res.spoken); res.smart = true; return res; }

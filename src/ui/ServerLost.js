@@ -6,20 +6,31 @@
  */
 
 const CHECK_MS = 2000;
-const LOST_AFTER = 2; // failed checks in a row
+const LOST_AFTER = 2; // refused checks in a row (nothing listens on the address any more)
+const SILENT_MS = 20000; // or no answer at all for this long (a busy program still answers within that)
 
-/** (pure) The server is lost after so many failed checks in a row. */
-export function lostAfter(fails) { return fails >= LOST_AFTER; }
+/**
+ * (pure) The server is lost: refused twice in a row, or silent for SILENT_MS. A check that only waited too
+ * long is not «lost»: while a villager thinks and speaks the window has many requests open to the game's
+ * program and the browser queues the check behind them — the window once said «Игра закрылась» then and
+ * reloaded the game in the middle of the talk.
+ */
+export function lostAfter(fails, silentMs = 0) { return fails >= LOST_AFTER || silentMs >= SILENT_MS; }
 
+/** (pure) Back after being lost: reload only if it is another start of the program (or not known). */
+export function shouldReload(bootBefore, bootNow) { return !bootBefore || !bootNow || bootBefore !== bootNow; }
+
+/** {ok, boot} — ok: the game answered; refused: nothing answered at once (not a mere wait). */
 async function alive() {
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = setTimeout(() => ctl?.abort(), 6000);
     try {
-        const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const t = setTimeout(() => ctl?.abort(), 1500);
         const r = await fetch('/api/ping', { cache: 'no-store', signal: ctl?.signal });
-        clearTimeout(t);
         const j = await r.json();
-        return j?.zns === 'zns-game';
-    } catch (e) { return false; }
+        return { ok: j?.zns === 'zns-game', boot: j?.boot || '' };
+    } catch (e) {
+        return { ok: false, refused: e?.name !== 'AbortError' };
+    } finally { clearTimeout(t); }
 }
 
 function overlay(doc) {
@@ -38,18 +49,23 @@ function overlay(doc) {
 
 export function watchServer(doc = document) {
     if (!/^https?:$/.test(location.protocol)) return;
-    let fails = 0;
+    let fails = 0, okAt = Date.now(), boot = '';
     let lost = false;
     const tick = async () => {
-        const ok = await alive();
-        fails = ok ? 0 : fails + 1;
-        if (!lost && lostAfter(fails)) {
+        const a = await alive();
+        if (a.ok) { fails = 0; okAt = Date.now(); } else if (a.refused) fails++;
+        if (!lost && !a.ok && lostAfter(fails, Date.now() - okAt)) {
             lost = true;
             console.warn('[server] the game\'s program on this computer does not answer');
             overlay(doc).style.display = 'grid';
-        } else if (lost && ok) {
-            location.reload(); // (started again on this address: the game comes back)
-            return;
+        } else if (a.ok) {
+            if (lost) {
+                if (shouldReload(boot, a.boot)) { location.reload(); return; } // (started again on this address: the game comes back)
+                lost = false; // (the same program, only busy for a while: the game goes on as it was)
+                overlay(doc).style.display = 'none';
+                console.warn('[server] the game\'s program answers again (it was only busy)');
+            }
+            boot = a.boot || boot;
         }
         setTimeout(tick, CHECK_MS);
     };

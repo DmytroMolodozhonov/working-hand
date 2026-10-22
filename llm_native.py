@@ -208,7 +208,7 @@ class NativeLLM:
             os.makedirs(cache, exist_ok=True)
             threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
             args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
-                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "8192", "-t", str(threads),
+                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
                     "--no-ui", "-np", "1", "--api-key", self._key]
             env = {**os.environ, "LLAMA_CACHE": cache}
             kw = {}
@@ -345,12 +345,16 @@ class NativeLLM:
         return strip_think(text)
 
     def interrupt(self, jid):
+        """Stops an answer at once: its connection to llama-server is cut (llama-server then drops the work and
+        is free for the next question). Never waits — closing the stream itself waited for the reading thread
+        (up to the next word, or the whole reading of a long prompt) and held the page's request that long."""
         r = self._current.pop(jid, None)
-        if r is not None:
-            try:
-                r.close()
-            except Exception:  # noqa: BLE001
-                pass
+        if r is None:
+            return
+        try:
+            r.fp.raw._sock.shutdown(socket.SHUT_RDWR)  # (the reading thread wakes at once; it closes the stream itself)
+        except Exception:  # noqa: BLE001
+            threading.Thread(target=r.close, daemon=True).start()
 
 
 LLM = NativeLLM()

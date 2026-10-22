@@ -176,7 +176,7 @@ test('the net understands free words: its tool call is carried out (the king)', 
     // the net was given the tools and a Russian prompt
     const req = llm.asked[0];
     assert.ok(req.tools.some((t) => t.function.name === 'defend_castle'));
-    assert.match(req.system, /советник/);
+    assert.match(req.context, /советник/);
     assert.equal(req.user, 'пусть мои люди не пустят врага за стены');
 });
 
@@ -222,7 +222,8 @@ test('memory per villager: the net is given the earlier lines', async () => {
     await mind.hear(b, 'а что ты обо мне знаешь', {});
     const last = llm.asked[llm.asked.length - 1];
     assert.ok(last.history.some((h) => h.role === 'user' && /дима/.test(h.content)));
-    assert.match(last.system, /Дима/);
+    assert.match(last.context, /Дима/);
+    assert.doesNotMatch(last.system, /Дима/, 'the common words are the same for everybody (read once by the program)');
 });
 
 test('«почему» is not «почём»; a question with no answer gets an honest «не знаю», not a line about something else', async () => {
@@ -340,8 +341,9 @@ test('a big net (Gemma 4) answers the usual phrases itself — with the rules\' 
         await mind.hear(brain('farmer', { seed: 11 }), p, {});
         assert.equal(llm.asked.length, n + 1, `the net hears «${p}»`);
     }
-    assert.match(llm.asked[1].system, /Суть твоего ответа/);
-    assert.match(llm.asked[1].system, /рын/i);
+    assert.match(llm.asked[1].context, /Суть твоего ответа/);
+    assert.match(llm.asked[1].context, /рын/i);
+    assert.equal(llm.asked[1].system, llm.asked[2].system, 'the same system words for every question');
     // the market's numbers: the rules only
     const n = llm.asked.length;
     const m = new VillagerBrain({ id: 'm1', name: 'Фома', role: 'merchant', seed: 3 }, { timeOfDay: 'day' }, { rng: createRng(3) });
@@ -368,4 +370,24 @@ test('a big net keeps the rules\' action; its words never refuse what the villag
     r = await new TalkMind({ llm: no, rng: createRng(13) }).hear(brain('knight', { king: true, seed: 15 }), 'пойдём со мной', ctx);
     assert.equal(r.action, 'follow');
     assert.doesNotMatch(r.reply, /не пойду/);
+});
+
+test('a big net that is slow on this computer: the rules answer what they understood at once, the net only the rest; an error — the rules, the reason kept', async () => {
+    const llm = fakeLLM('Ну, слушай, расскажу.', { delay: 60 });
+    llm.strong = true;
+    const mind = new TalkMind({ llm, rng: createRng(21) });
+    mind.speedMs = 6000; // (its first words took seconds here)
+    const n = llm.asked.length;
+    const r = await mind.hear(brain('farmer', { seed: 21 }), 'где рынок', {});
+    assert.equal(llm.asked.length, n, 'the way: the rules, at once');
+    assert.ok(r.reply.length > 0);
+    await mind.hear(brain('farmer', { seed: 22 }), 'а почему маги не любят рыцарей короля скажи честно', {});
+    assert.equal(llm.asked.length, n + 1, 'what the rules do not know: the net');
+    assert.ok(mind.speedMs < 6000, 'its speed is measured again');
+    // the net fails: the rules' answer, the reason kept for the journal
+    const bad = { ready: true, strong: true, chat: () => Promise.reject(new Error('the program stopped')) };
+    const m2 = new TalkMind({ llm: bad, rng: createRng(23) });
+    const r2 = await m2.hear(brain('farmer', { seed: 23 }), 'расскажи что нибудь интересное', {});
+    assert.ok(r2.reply.length > 0);
+    assert.match(m2.lastError, /stopped/);
 });

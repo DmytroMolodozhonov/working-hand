@@ -60,6 +60,7 @@ os.chdir(ROOT)
 PORT = int(os.environ.get("ZNS_PORT", "8000"))
 MAPS_DIR = "maps"
 RIG_FILE = "hand_rig.json"
+BOOT = "%x" % int(time.time() * 1000)  # (this start of the server: the window reloads only when it changed — ServerLost.js)
 RECORD_DIR = "recordings"  # hand recordings (F9 in the game): sent to the developer
 RECORD_MAX = 30 * 1024 * 1024
 PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
@@ -544,7 +545,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             return self._json(200, game_version())
         if path == "/api/ping":
             # (cheap: the open window asks every 2 s whether the game's program is still here — ServerLost.js)
-            return self._json(200, {"zns": "zns-game"})
+            return self._json(200, {"zns": "zns-game", "boot": BOOT})
         if path == "/api/update":
             fresh = "fresh" in parse_qs(urlparse(self.path).query)
             return self._json(200, {"have": game_version()["sha"], "latest": latest_version(fresh)})

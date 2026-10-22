@@ -62,6 +62,15 @@ export class NativeLLMPort {
     }
 
     async _generate(msg) {
+        // (one answer at a time: the program has one place for a talk — an older one, the warm-up, a question
+        // that timed out, would only make this one wait; and every open request holds one of the browser's few
+        // connections to the game's program — once they ran out, the window thought the game had closed)
+        for (const [id, c] of this._streams) {
+            c.abort();
+            this._streams.delete(id);
+            this._post({ type: 'result', id, text: '' });
+            this._api('interrupt', { id }).catch(() => {});
+        }
         const ctl = new AbortController();
         this._streams.set(msg.id, ctl);
         try {

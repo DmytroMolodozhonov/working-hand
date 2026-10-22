@@ -149,7 +149,7 @@ test('talk: the neural net (a fake one) understands free words — «Хм…» f
         window.__standBy(k);
         T.hear('как там наши стены');
         await new Promise((res) => setTimeout(res, 800));
-        return { thinking, strangerDefends, defenders, said, plain: T.brain(k).memory.lastReply || '', tools: asked[0]?.tools?.map((t) => t.function.name) || [], system: asked[1]?.system || '' };
+        return { thinking, strangerDefends, defenders, said, plain: T.brain(k).memory.lastReply || '', tools: asked[0]?.tools?.map((t) => t.function.name) || [], system: (asked[1]?.system || '') + (asked[1]?.context || '') };
     });
     assert.match(r.thinking, /…$/, `his own thinking words first: ${r.thinking}`);
     assert.equal(r.strangerDefends, 0, 'the game refuses a stranger');

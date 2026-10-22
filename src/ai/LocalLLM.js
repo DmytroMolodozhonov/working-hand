@@ -191,6 +191,9 @@ export class LocalLLM {
                                 console.warn('[LocalLLM] the program on this computer failed, the browser takes over:', m.message);
                                 native = false;
                                 this.nativeWhy = m.message || '';
+                                // (never the big Gemma 4 in the game's own page then: ~2,6 GB on the game's graphics card
+                                // next to the world — the page could run out of memory and close in the middle of a talk)
+                                if (this.model.gpuOnly) { this.modelKey = 'qwen35'; this.model = LocalLLM.MODELS.qwen35; }
                                 try { worker.terminate(); } catch (_) { /* ignore */ }
                                 try { worker = start(); } catch (e) { fail(e); break; }
                                 this._worker = worker;
@@ -245,19 +248,21 @@ export class LocalLLM {
 
     /**
      * A conversation turn with game actions: the raw answer, tool calls included.
-     * @param {{system?:string, history?:Array, user:string, tools?:Array, maxTokens?:number, temperature?:number, timeoutMs?:number}} p
+     * @param {{system?:string, context?:string, history?:Array, user:string, tools?:Array, maxTokens?:number, temperature?:number, timeoutMs?:number}} p
+     *   context: who the villager is now — said with the user's words (the system turn stays the same: read once)
      * @returns {Promise<string>} '' on timeout
      */
-    chat({ system = '', history = [], user = '', tools = [], maxTokens = 90, temperature = 0.4, timeoutMs, onPartial = null } = {}) {
+    chat({ system = '', context = '', history = [], user = '', tools = [], maxTokens = 90, temperature = 0.4, timeoutMs, onPartial = null } = {}) {
         if (!this._ready || !this._worker) return Promise.reject(new Error('LocalLLM is not ready'));
         const messages = [];
         if (system) messages.push({ role: 'system', content: system });
         for (const h of history || []) if (h?.content) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.content) });
-        messages.push({ role: 'user', content: String(user || '...') });
+        // (who the villager is now goes with the words said: the system turn stays the same, read once and kept)
+        messages.push({ role: 'user', content: context ? `[${context}]\n\nСобеседник говорит тебе: ${String(user || '...')}` : String(user || '...') });
         const id = this._nextId++;
         // (a big net reads the long villager prompt longer; the answer is said while it writes, so the wait is short)
         // (the program on this computer reads a villager's long rules once — then it keeps them — on the processor)
-        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'native' ? 25000 : this._device === 'webgpu' ? (this.model.strong ? 12000 : 8000) : 14000);
+        const limit = timeoutMs ?? this.timeoutMs ?? (this._device === 'native' ? 15000 : this._device === 'webgpu' ? (this.model.strong ? 12000 : 8000) : 14000);
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 if (!this._jobs.has(id)) return;

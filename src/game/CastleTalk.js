@@ -37,7 +37,7 @@ import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { MAGIC_POUCH_PRICE, makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
-import { detectOrder, toolsFor } from '../ai/TalkActions.js';
+import { detectOrder, toolsFor, TOOLS } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
@@ -51,6 +51,9 @@ const POTION_GOODS = [{ kind: 'flask', price: 15, count: 3 }, { kind: 'apple', p
 /** … its third place: a crystal, or (now and then) a magic robe for 1000 coins, a piece of magic armour (ArmorTypes), a magic coin pouch (CoinBelt). */
 const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMOR.ROBE_PRICE, fixed: true }, { kind: 'armor', price: ARMOR.PIECE_PRICE }, { kind: 'magicPouch', price: MAGIC_POUCH_PRICE, fixed: true }];
 const _v = new THREE.Vector3();
+/** A villager's short line when something in a talk went wrong (the reason goes to the journal). */
+const TALK_SORRY = ['Хм… прости, мысль убежала.', 'Ох, о чём это я… Давай потом.', 'Погоди-ка, сбилась мысль.', 'Повтори-ка потом, путник.'];
+const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length) % arr.length];
 
 /**
  * A line about the villagers' net for the game's journal (settings → «Журнал», via server.py) and the
@@ -333,8 +336,26 @@ export class CastleTalk {
         else if (st.state === 'ready') console.info('[CastleTalk]', st.text);
     }
 
-    /** The microphone heard a sentence (not a spell). Returns true if a villager heard it. */
+    /**
+     * The microphone heard a sentence (not a spell). Returns true if a villager heard it.
+     * A talk never breaks the game: any error in it — the villager says a short line, the reason goes to the journal.
+     */
     hear(text) {
+        try { return this._hear(text); } catch (e) {
+            this._talkFailed(e);
+            return true;
+        }
+    }
+
+    /** Something in a talk went wrong: a short line from the villager I talk to, the reason in the journal. */
+    _talkFailed(e, v = this._partner) {
+        const why = String(e?.message || e || 'ошибка').slice(0, 200);
+        console.warn('[CastleTalk] a talk failed:', e);
+        if ((this._failLogged = (this._failLogged || 0) + 1) <= 20) journal(`ошибка в разговоре (житель ответил заготовленной фразой): ${why}`);
+        try { if (v && !v.dead) this._sayReply(v, pickLine(TALK_SORRY)); } catch (_) { /* (nothing more to do) */ }
+    }
+
+    _hear(text) {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
@@ -349,7 +370,7 @@ export class CastleTalk {
         v.talking = 4;
         v.talkTo = g.localId;
         if (!g.authority) g.sync?.villagerTalk?.(v.id); // (the host stops them for the talk)
-        const done = (res) => this._apply(v, res);
+        const done = (res) => { try { this._apply(v, res); } catch (e) { this._talkFailed(e, v); } };
         // a guest without a net of their own: the host's net answers (not the market — that is mine)
         if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
             const ask = { t0: performance.now(), got: false };
@@ -369,6 +390,8 @@ export class CastleTalk {
         // (the first sentence of the net's answer is said as soon as it is written)
         const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line));
         this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence }).then((res) => {
+            // (the net failed: the rules answered — the reason in the journal, not too often)
+            if (this.mind.lastError && (this._netErrLogged = (this._netErrLogged || 0) + 1) <= 20) journal(`нейросеть не ответила: ${this.mind.lastError} — ответили готовые фразы`);
             // (too slow on this computer: say so now and then — the answer came from the rules)
             if (this.mind.lastTimedOut) {
                 this._slow = (this._slow || 0) + 1;
@@ -376,7 +399,7 @@ export class CastleTalk {
             } else this._slow = 0;
             this._talkLog(text, res, res.smart ? 'нейросеть' : this.mind.lastTimedOut ? 'правила (нейросеть не успела)' : 'правила (ответ нейросети не подошёл)', performance.now() - t0);
             done(res);
-        }, () => done(first.res));
+        }, (e) => { journal(`ошибка в ответе нейросети: ${String(e?.message || e).slice(0, 200)}`); done(first.res); }).catch((e) => this._talkFailed(e, v));
         return true;
     }
 
@@ -1098,11 +1121,13 @@ export class CastleTalk {
         const b = v ? this.brain(v) : null;
         const ctx = v ? this._ctx(v) : {};
         const t0 = performance.now();
+        // (the same common words and actions every question begins with: the program reads them now and keeps them)
         llm.chat({
-            system: b ? this.mind.systemPrompt(b, ctx) : 'Ты житель средневекового замка. Отвечай по-русски, коротко.',
+            system: this.mind.basePrompt(),
+            context: b ? this.mind.persona(b, ctx) : '',
             history: [],
             user: 'Привет, как дела?',
-            tools: toolsFor(b?.role || 'farmer', ctx),
+            tools: llm.strong ? TOOLS : toolsFor(b?.role || 'farmer', ctx),
             maxTokens: 3,
         }).then(() => console.info(`[CastleTalk] the net warmed up in ${Math.round(performance.now() - t0)} ms`), () => {});
     }
