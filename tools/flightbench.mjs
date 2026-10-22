@@ -17,6 +17,7 @@
  * The route (the same every run, real flight speed 26 m/s, the player's own flight):
  *   1. «прямой»   — straight fast flight away from spawn;
  *   2. «разворот» — a U-turn (the world behind loads again);
+ *   3. «поселение» — to the wizards' settlement near the spawn (WizardVillages.js: ~100 houses), a circle over it;
  *   3. «замок»    — to the nearest castle with its village, and a circle round it;
  *   4. «горы»     — to the highest mountain about and over it.
  *
@@ -57,6 +58,10 @@ async function flyRoute() {
     const castles = (data.castles?.near?.(p0.x, p0.z, 1500) || []).filter((c) => Math.hypot(c.x - p0.x, c.z - p0.z) > 250)
         .sort((a, b) => Math.hypot(a.x - p0.x, a.z - p0.z) - Math.hypot(b.x - p0.x, b.z - p0.z));
     const castle = castles[0] || { x: p0.x - 600, z: p0.z + 300 };
+    // the wizards' settlement near the spawn (its cell found by the world's own rule: no measuring yet)
+    const vk = data.villages?.spawnKey?.() ?? -1;
+    const vgz = ((vk % 65536) + 65536 + 32768) % 65536 - 32768, vgx = Math.round((vk - vgz) / 65536);
+    const village = vk !== -1 ? data.villages.cellOf(vgx, vgz) : null;
     let peak = { x: p0.x, z: p0.z + 800, h: -1 };
     for (let z = -1200; z <= 1200; z += 40) for (let x = -1200; x <= 1200; x += 40) {
         const h = data.heightAt(Math.round(p0.x + x), Math.round(p0.z + z)); // (the height alone: no chunk is made)
@@ -71,6 +76,7 @@ async function flyRoute() {
     const plan = [
         { name: 'прямой', time: 22 },
         { name: 'разворот', time: 7 },
+        ...(village ? [{ name: 'поселение', time: Math.min(110, Math.hypot(village.x - p0.x, village.z - p0.z) / SPEED + 30) }] : []),
         { name: 'замок', time: 32 },
         { name: 'горы', time: 30 },
     ];
@@ -92,7 +98,11 @@ async function flyRoute() {
         phaseT += step;
         if (P.name === 'прямой') { /* keep yaw */ }
         else if (P.name === 'разворот') yaw = startYaw + Math.PI * Math.min(1, phaseT / P.time);
-        else if (P.name === 'замок') {
+        else if (P.name === 'поселение') {
+            const d = Math.hypot(village.x - p.x, village.z - p.z);
+            if (d > 85 && circleA === 0) turnTo(face(village.x, village.z), 1.2, step);
+            else { circleA += step; yaw += step * SPEED / 85; } // round its middle at 85 m
+        } else if (P.name === 'замок') {
             const d = Math.hypot(castle.x - p.x, castle.z - p.z);
             if (d > 70 && circleA === 0) turnTo(face(castle.x, castle.z), 1.2, step);
             else { circleA += step; yaw += step * SPEED / 70; } // round the castle at 70 m
@@ -139,7 +149,7 @@ async function flyRoute() {
     wrap(g.destruction, 'update', 'разрушение');
     wrap(g.circleAttack, 'update', 'circleAttack');
     wrap(g.inspirius, 'update', 'inspirius');
-    for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'iceCastle', 'ships', 'fx', 'livingTrees', 'phoenixes', 'owls', 'spiders', 'houses', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
+    for (const k of ['castleLife', 'travelers', 'carriages', 'animals', 'dragons', 'iceCastle', 'ships', 'fx', 'livingTrees', 'phoenixes', 'owls', 'spiders', 'houses', 'wizVillages', 'campfires', 'fire', 'items', 'weapons', 'duel', 'storm', 'sun']) wrap(g[k], 'update', k);
     // record frames
     const origFrame = g.frame.bind(g);
     let prev = null;

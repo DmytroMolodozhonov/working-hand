@@ -14,7 +14,7 @@
 
 import { createRng } from '../core/math.js';
 
-export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer'];
+export const WIZARD_ROLES = ['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz'];
 
 /**
  * hp, ward (magic armour: takes spells and magic blows), mana and its regen per s,
@@ -34,6 +34,7 @@ export const WIZ = {
 WIZ.adept = { hp: 14, ward: 5, mana: 100, regen: 1.0, skill: 0.9, cast: 2.7, react: 0.48, reactT: 0.55, stunK: 0.85, range: [7, 15], spells: { Stupefy: 0.4, SapiraDuel: 0.4, IceDuel: 0.1, Jolt: 0.1 } };
 WIZ.seller = WIZ.teacher;
 WIZ.wanderer = { ...WIZ.teacher, mana: 50, range: [8, 18] }; // (a wanderer has seen more: a duel won against him is worth more)
+WIZ.townwiz = { ...WIZ.teacher }; // (a wizard of a settlement — WizardVillages.js: his rank decides how he fights)
 
 /**
  * A wizard's RANK (the author's rules): how much mana he has — and with it how strong he is in a
@@ -52,10 +53,12 @@ export const WIZ_RANKS = {
     adept: { mana: 100, spread: 0.15, as: 'adept' },
     teacher: { mana: 200, spread: 0.15, as: 'teacher' },
     master: { mana: 500, spread: 0.10, as: 'master' },
+    elder: { mana: 400, spread: 0.10, as: 'teacher' }, // (a settlement's strong wizard: ~400 — only the Master of a tower is stronger)
 };
 export const WIZ_RANK_RU = {
     novice: ['начинающий волшебник', 'начинающая волшебница'], adept: ['продвинутый волшебник', 'продвинутая волшебница'],
     teacher: ['преподаватель', 'преподавательница'], master: ['главный мастер башни', 'главный мастер башни'],
+    elder: ['сильный волшебник', 'сильная волшебница'],
 };
 
 /** The rank of a tower's / a wandering wizard by his job (rng 0..1; the Master is always the master). */
@@ -151,7 +154,7 @@ export const NPC_COST = { Stupefy: 12, SapiraDuel: 20, IceDuel: 10, LevitateDuel
 
 export const WIZ_ROLE_RU = {
     student: ['Ученик', 'Ученица'], teacher: ['Наставник', 'Наставница'], seller: ['Торговец свитками', 'Торговка свитками'],
-    master: ['Мастер', 'Мастер'], wanderer: ['Странник', 'Странница'],
+    master: ['Мастер', 'Мастер'], wanderer: ['Странник', 'Странница'], townwiz: ['Волшебник', 'Волшебница'],
 };
 
 const MALE = ['Альберт', 'Бенедикт', 'Валентин', 'Гаспар', 'Дориан', 'Евстафий', 'Игнатий', 'Леонард', 'Максимилиан', 'Натаниэль', 'Освальд', 'Персиваль', 'Руфус', 'Себастьян', 'Теодор', 'Феликс', 'Финеас', 'Эразм', 'Юлиан', 'Ярополк', 'Мирослав', 'Велимир', 'Светозар', 'Остромир'];
@@ -171,6 +174,7 @@ function strHash(s) {
 export function wizardRoster(def, idx) {
     const seed = (strHash(def.id) ^ Math.imul(idx + 1, 2654435761)) >>> 0;
     const rng = createRng(seed);
+    if (def.kind === 'wizvillage') return villageRoster(def, idx, seed, rng);
     const S = def.stalls.length, T = def.teachers || 0;
     const cottages = def.houses.length ? def.houses.length - 1 : 0; // (the last «house» is the tower itself)
     let role;
@@ -197,6 +201,31 @@ export function wizardRoster(def, idx) {
     const rank = rollRank(role, rr);
     const mana = rollMana(rank, rr);
     return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana };
+}
+
+/**
+ * The wizards of a settlement (WizardVillages.js), the author's rule: 60 % weak (beginners, ≈50 —
+ * every seller is one of them), 35 % middling (adepts, ≈100), 5 % strong (≈400; the Master of a
+ * tower, ≈500, stays the strongest of all). Number 0 is the Elder (in the town hall by day, a strong
+ * one), then the sellers (one per counter), then the townsfolk, each at home in one of the houses.
+ */
+export const VILLAGE_RANKS = { weak: 0.6, middle: 0.35, strong: 0.05 };
+export function villageRank(x) { return x < VILLAGE_RANKS.weak ? 'novice' : x < VILLAGE_RANKS.weak + VILLAGE_RANKS.middle ? 'adept' : 'elder'; }
+function villageRoster(def, idx, seed, rng) {
+    const S = def.stalls.length;
+    const role = idx === 0 ? 'townwiz' : idx <= S ? 'seller' : 'townwiz';
+    const elder = idx === 0;
+    const female = elder ? false : rng() < 0.5;
+    const name = elder ? def.elder || def.king : (female ? FEMALE : MALE)[Math.floor(rng() * (female ? FEMALE : MALE).length)];
+    const homes = def.dwellings ?? def.houses.length;
+    const home = homes > 0 ? Math.floor(rng() * homes) : -1;
+    const stall = role === 'seller' ? idx - 1 : -1;
+    const brave = rng();
+    const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
+    const rank = elder ? 'elder' : role === 'seller' ? 'novice' : villageRank(rr());
+    const mana = rollMana(rank, rr);
+    const robe = rank === 'elder' || rng() < 0.15;
+    return { idx, role, female, name, home, stall, seed, brave, wizard: true, robe, rank, mana, elder, town: true };
 }
 
 /**

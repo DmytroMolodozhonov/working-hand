@@ -307,6 +307,7 @@ export class CastleLife {
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
         if (e.rank) look.rank = e.rank; // (his rank: the robe's trim and cuffs — VillagerModel)
+        if (e.elder) { look.female = false; look.hairColor = 0xd8d8d8; look.beard = 'long'; look.hat = 'wizardTall'; } // (a settlement's Elder: an old man — WizVillages.js)
         if (this.game.armor?.wasStripped(def.id + ':' + idx)) look = strippedLook(look); // («Disarmor» took the steel / the plain robe off)
         const model = new VillagerModel(look, { castleColor: def.color });
         this.game.scene.add(model.group);
@@ -2191,6 +2192,11 @@ export class CastleLife {
         this._comradeDown(v, by);
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
+        else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
+            st.kingDead = true;
+            for (const c of v.cs.chests) c.locked = false;
+            this._announceCapture(v.cs, st);
+        }
         this._achDied(v, by);
         this._sendState(v.cs);
     }
@@ -2383,6 +2389,7 @@ export class CastleLife {
 
     _announceCapture(cs, st) {
         const g = this.game;
+        if (cs.def.kind === 'wizvillage') { g.hud.notify?.(`✨ Старейшина поселения «${cs.def.name}» повержен — сундуки ратуши открыты`); return; }
         if (cs.def.kind === 'tower') { g.hud.notify?.(`🧙 Мастер академии «${cs.def.name.replace(/^Академия «|»$/g, '')}» повержен — хранилище открыто`); return; } // (a tower is never «captured»)
         if (st.owner === g.localId) g.hud.notify?.(`👑 Вы победили короля! ${cs.def.name} теперь ваш — сундуки открыты`);
         else g.hud.notify?.(`👑 ${st.ownerName || 'Кто-то'} захватил ${cs.def.name}`);

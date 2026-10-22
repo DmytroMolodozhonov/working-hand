@@ -21,9 +21,12 @@ import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
 import { WizardFight } from './WizardFight.js';
 import { DANGERS } from './Danger.js';
+import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
 
 export { FX };
-export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander');
+export const isWizSite = (def) => !!def && (def.kind === 'tower' || def.kind === 'wander' || def.kind === 'wizvillage');
+/** A wizards' place that keeps a day and a night (a tower, a settlement — not the wanderers of the roads). */
+export const isWizHome = (def) => !!def && (def.kind === 'tower' || def.kind === 'wizvillage');
 
 const WALK = 2.3;
 const PRACTICE_NEAR = 40; // m: practice only where a player can see it
@@ -76,18 +79,18 @@ export class WizardLife {
         const W = wizardStats(v.role, rank, max);
         v.wizard = true;
         v.rank = rank;
-        v.skillRole = { novice: 'student', adept: 'adept', teacher: 'teacher', master: 'master' }[rank] || v.role;
+        v.skillRole = { novice: 'student', adept: 'adept', teacher: 'teacher', master: 'master', elder: 'teacher' }[rank] || v.role;
         v.W = W;
         v.mana = max; v.maxMana = max;
         v.castCd = 1 + Math.random(); v.domeCd = 0; v.windCd = 0; v.blinkCd = 0;
         v.fx = 0; v.aimPitch = 0;
-        v.title = WIZ_ROLE_RU[v.role][v.entry.female ? 1 : 0];
+        v.title = e.elder ? 'Старейшина' : WIZ_ROLE_RU[v.role][v.entry.female ? 1 : 0]; // (a settlement's Elder: WizVillages.js)
     }
 
     // ---------------------------------------------------------- who is where
     /** (host) The tower's people at their places for the day / the night. */
     wake(cs) {
-        if (cs.def.kind !== 'tower') return;
+        if (!isWizHome(cs.def)) return;
         cs.wizNight = this.game.isNight;
         this._staff(cs);
     }
@@ -95,6 +98,7 @@ export class WizardLife {
     _spots(def, kind) { return (def.spots || []).filter((s) => s.kind === kind); }
 
     _staff(cs) {
+        if (cs.def.kind === 'wizvillage') { staffVillage(this.life, cs); return; } // (a settlement: WizVillages.js)
         const L = this.life, def = cs.def;
         const st = L.state(def.id);
         const night = cs.wizNight;
@@ -144,6 +148,7 @@ export class WizardLife {
     /** (host) Keep a few students and teachers about near the players (fewer at night). */
     crowd(cs, dt) {
         const L = this.life, def = cs.def;
+        if (def.kind === 'wizvillage') { crowdVillage(L, cs, dt); return; }
         if (def.kind !== 'tower') return;
         cs.spawnT -= dt;
         if (cs.spawnT > 0) return;
@@ -184,6 +189,7 @@ export class WizardLife {
     /** A wandering wizard picks where to go (rooms of the tower, the shop, home, the plaza). */
     nextTrip(v) {
         if (v.trips <= 0) return false; // (home: the usual way)
+        if (v.cs.def.kind === 'wizvillage') return villageTrip(this.life, v);
         const L = this.life, g = v.cs.graph;
         v.trips--;
         const choose = (tag) => { const l = g.tagged(tag); return l.length ? l[Math.floor(Math.random() * l.length)] : -1; };
@@ -229,7 +235,7 @@ export class WizardLife {
                 }
             }
             if (seen) L._catch(cs, by, pos);
-            if (isPlayer && cs.def.kind === 'tower') cs.wizAlarmUntil = Math.max(cs.wizAlarmUntil || 0, now + 60000); // (no going to bed in the middle of it)
+            if (isPlayer && isWizHome(cs.def)) cs.wizAlarmUntil = Math.max(cs.wizAlarmUntil || 0, now + 60000); // (no going to bed in the middle of it)
         }
     }
 
@@ -313,7 +319,7 @@ export class WizardLife {
             this._dayT -= dt;
             if (this._dayT <= 0) {
                 this._dayT = 5;
-                for (const cs of L.castles.values()) if (cs.awake && cs.def.kind === 'tower' && cs.wizNight !== g.isNight && !(cs.wizAlarmUntil > Date.now())) { cs.wizNight = g.isNight; this._staff(cs); }
+                for (const cs of L.castles.values()) if (cs.awake && isWizHome(cs.def) && cs.wizNight !== g.isNight && !(cs.wizAlarmUntil > Date.now())) { cs.wizNight = g.isNight; this._staff(cs); }
             }
             this._practice(dt, wizards);
             this.fight.update(dt); // (the circles after a foe: plans and roles)

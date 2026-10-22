@@ -60,6 +60,14 @@ const ROLE_TOPICS = {
 const WIZARD_RANK_RU = {
     novice: ['начинающий волшебник', 'начинающая волшебница'], adept: ['продвинутый волшебник', 'продвинутая волшебница'],
     teacher: ['преподаватель', 'преподавательница'], master: ['главный мастер башни', 'главный мастер башни'],
+    elder: ['сильный волшебник', 'сильная волшебница'],
+};
+/** A wizard of a settlement (WizardVillages.js): who he is by his rank; the Elder of the town. */
+const WIZARD_TOWN_WHO = {
+    novice: ['Я {name}, живу здесь, в поселении. Волшебни{к|ца} я пока слаб{ый|ая} — маны немного.', '{Name}. Колдую понемногу, больше по хозяйству.'],
+    adept: ['Я {name}. Волшебни{к|ца} не из последних — кое-что умею.', '{Name}, здешн{ий|яя}. Магия мне послушна, не сомневайся.'],
+    elder: ['Я {name}. Силы у меня много — в поселении мало кто со мной сравнится.', '{Name}. Не советую испытывать мою палочку.'],
+    chief: ['Я {name}, старейшина этого поселения. Слежу, чтобы здесь был порядок.'],
 };
 const WIZARD_WHO = {
     novice: ['Я {name}, начинающ{ий волшебник|ая волшебница}. Учусь недавно — маны у меня пока немного.', '{Name}. Я только начал{|а} учиться магии.'],
@@ -853,7 +861,7 @@ export class VillagerBrain {
 
     _pool(key, band = this.band) {
         const rank = this.villager.wizardRank;
-        if (key === 'who' && rank) { const w = (this.villager.wanderer ? WIZARD_WANDER_WHO : WIZARD_WHO)[rank] || WIZARD_WHO[rank]; if (w) return w; }
+        if (key === 'who' && rank) { const w = (this.villager.elder ? WIZARD_TOWN_WHO.chief : this.villager.town ? WIZARD_TOWN_WHO[rank] : (this.villager.wanderer ? WIZARD_WANDER_WHO : WIZARD_WHO)[rank]) || WIZARD_WHO[rank]; if (w) return w; }
         for (const src of [P[this.role]?.[key], P.common[key]]) {
             if (!src) continue;
             if (Array.isArray(src)) { if (src.length) return src; continue; }
@@ -1616,7 +1624,7 @@ export class VillagerBrain {
         const kingName = w.kingName || v.kingName || DEFAULT_KING;
         if (v.wizardRank) {
             return [
-                `Ты — ${v.name || 'волшебник'}, ${this.roleName}${v.wanderer ? ', странствуешь по дорогам' : ' в башне волшебников'}.`,
+                `Ты — ${v.name || 'волшебник'}, ${v.elder ? 'старейшина' : this.roleName}${v.wanderer ? ', странствуешь по дорогам' : v.town ? ` в поселении волшебников «${castle}»` : ' в башне волшебников'}.`,
                 `Характер: ${character}. Настроение: ${moodWord}.`,
                 `Ты говоришь только о своей жизни: ${WIZARD_TOPICS}.`,
                 this._memory.playerName ? `Собеседника зовут ${this._memory.playerName}.` : 'Собеседник — путник, ты не знаешь его имени.',

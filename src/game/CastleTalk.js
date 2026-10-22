@@ -41,6 +41,8 @@ import { detectOrder, toolsFor, TOOLS } from '../ai/TalkActions.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
+import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
+import { bookSpells } from './BookBirds.js';
 import { pushOutOfRect } from '../world/Collision.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -102,7 +104,7 @@ export function restAfter(reply, head) {
 }
 
 /** Words a good is called by (its name's words, and what people say for it). */
-const ALIAS = { magicPouch: ['мешоч', 'магич', 'кошел', 'кошел'], steak: ['мяс', 'стейк', 'жарен'], meat: ['сыро'], redApple: ['яблок', 'красн'], wool: ['шерст', 'пряж'], glass: ['стекл', 'осколк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок', 'золот'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
+const ALIAS = { armor: ['шлем', 'нагруд', 'понож', 'доспех', 'брон'], magicPouch: ['мешоч', 'магич', 'кошел', 'кошел'], steak: ['мяс', 'стейк', 'жарен'], meat: ['сыро'], redApple: ['яблок', 'красн'], wool: ['шерст', 'пряж'], glass: ['стекл', 'осколк'], flask: ['колб', 'фляг', 'бутыл', 'склян'], crystal: ['кристал'], apple: ['яблок', 'золот'], arrows: ['стрел'], bow: ['лук'], shield: ['щит'], cheese: ['сыр'], bread: ['хлеб'], pie: ['пирог', 'пирож'] };
 const normWords = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
 /** How well this text names this good: the letters of its words matched (0 — not named). */
 export function nameScore(text, item) {
@@ -159,7 +161,7 @@ export class CastleTalk {
             const def = v.cs.def;
             const life = this.life;
             b = new VillagerBrain(
-                { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed, wizardRank: v.wizard ? v.entry.rank : undefined, wanderer: v.role === 'wanderer' },
+                { id: v.id, name: v.name, role: this._trader(v) ? 'merchant' : v.role, female: v.entry.female, castleName: def.name, kingName: def.king, seed: v.entry.seed, wizardRank: v.wizard ? v.entry.rank : undefined, wanderer: v.role === 'wanderer', town: !!v.entry?.town, elder: !!v.entry?.elder },
                 () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, kingDead: !!life.state(def.id).kingDead, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
                 { memory: this.memories.get(v.id) },
             );
@@ -621,9 +623,10 @@ export class CastleTalk {
         return null;
     }
 
-    /** Sells and buys at a stall: a market merchant, or the wizards' master of cauldrons and potions. */
+    /** Sells and buys at a stall: a market merchant, the wizards' master of cauldrons and potions, a settlement's seller (WizardMarket.js). */
     _trader(v) {
-        return v.role === 'merchant' || (v.role === 'seller' && !!v.cs?.def?.stalls?.[v.entry?.stall]?.potions);
+        const st = v.role === 'seller' ? v.cs?.def?.stalls?.[v.entry?.stall] : null;
+        return v.role === 'merchant' || (!!st && (!!st.potions || !!st.trade));
     }
 
     /** (host) keep goods on the counters of the markets near players. */
@@ -633,7 +636,7 @@ export class CastleTalk {
         for (const cs of this.life.castles.values()) {
             if (!cs.awake) continue;
             cs.def.stalls.forEach((stall, i) => {
-                if (!this._merchantOf(cs.def, i)) return;
+                if (stall.fence || stall.pawn || !this._merchantOf(cs.def, i)) return; // (the shady buyer and the pawnshop only buy)
                 const key = this._stallKey(cs.def, i);
                 let s = this.stalls.get(key);
                 if (!s) { s = { goods: [], restockAt: 0 }; this.stalls.set(key, s); }
@@ -644,16 +647,19 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
+                    const wiz = stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
-                    const pick = stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
+                    const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
-                    const item = pick.kind === 'magicPouch' ? { ...makeMagicPouch(newUid()), shop: { stall: key, price } }
+                    const item = wiz ? { ...wiz.item, shop: { stall: key, price } }
+                        : pick.kind === 'magicPouch' ? { ...makeMagicPouch(newUid()), shop: { stall: key, price } }
                         : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
                         : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
-                    if (pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }
-                    if (pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
+                    if (wiz && item.kind === 'book') item.spells = bookSpells(item.id);
+                    if (!wiz && pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }
+                    if (!wiz && pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
                     const f = (k + 0.5) / 3;
                     // (by the buyer's edge of the counter, not in its middle: a hand reaches it from the front)
                     const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : frontEdge(stall, GOOD_IN);
@@ -909,7 +915,16 @@ export class CastleTalk {
                 }
                 if (!found) return;
                 if (this.offer && (this.offer.uid ? this.offer.uid === found.uid : this.offer.wid === found.wid)) return;
-                const price = Math.max(1, itemValue(found.item));
+                // (a settlement's sellers only sell — its pawnshop buys anything 40 % under; a town's shady buyer — only plain things: WizardMarket.js)
+                if (stall.trade && !stall.pawn) return;
+                if (stall.fence && !fenceTakes(found.item)) {
+                    if (this._refused === (found.uid || found.wid)) return;
+                    this._refused = found.uid || found.wid;
+                    v.talking = 4;
+                    this._sayReply(v, 'Не-не, магическое не беру. Неси такое волшебникам — у них в поселении есть скупка.', 6);
+                    return;
+                }
+                const price = stall.pawn || stall.fence ? pawnPrice(found.item) : Math.max(1, itemValue(found.item));
                 this.offer = { v, kind: 'sell', price, ...found, stall: key };
                 const line = this.brain(v).priceLine({ name: nameOf(found.item), magic: isMagicItem(found.item) }, price, 'sell', this._ctx(v));
                 v.talking = 4;

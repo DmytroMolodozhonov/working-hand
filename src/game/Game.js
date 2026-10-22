@@ -62,6 +62,7 @@ import { FireLights } from './FireLights.js';
 import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
+import { WizVillages } from './WizVillages.js';
 import { Wreck } from './Wreck.js';
 import { BurnWreck, burnsInFire } from './BurnWreck.js';
 import { WaveAttacks } from './WaveAttack.js';
@@ -431,6 +432,7 @@ export class Game {
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
+        this.wizVillages = new WizVillages(this); // the wizards' settlements: the central fire, the statue's plaque, the library's scrolls (WizVillages.js)
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
         this.castleMagic = new CastleMagic(this); // «Create a Castle» (CastleMagic.js)
@@ -2878,6 +2880,7 @@ export class Game {
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
+        for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
@@ -3132,6 +3135,7 @@ export class Game {
         if (earth) this.crystals?.update(dt);
         if (earth) this.beds.update(dt);
         if (earth) this.houses.update(dt);
+        if (earth) this.wizVillages?.update(dt);
         if (earth) this.spiders.update(dt);
         if (earth) this.dragons.update(dt);
         if (earth) this.iceCastle.update(dt);

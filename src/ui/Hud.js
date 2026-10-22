@@ -75,6 +75,15 @@ function placeIcon(ctx, kind, s) {
             const bx = Math.cos(a) * 5.5, by = Math.sin(a) * 5.5;
             for (const s of [-0.8, 0.8]) { ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + Math.cos(a + s) * 3, by + Math.sin(a + s) * 3); ctx.stroke(); }
         }
+    } else if (kind === 'wizvillage') {
+        // a wizards' settlement: two little houses with pointed roofs and a violet spark over them
+        ctx.fillStyle = '#d9e8e4'; ctx.strokeStyle = '#163a3c';
+        ctx.beginPath(); ctx.rect(-9, 0, 7, 8); ctx.rect(2, -2, 7, 10); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4fb3a8';
+        ctx.beginPath(); ctx.moveTo(-10.5, 0.5); ctx.lineTo(-5.5, -6); ctx.lineTo(-0.5, 0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0.5, -1.5); ctx.lineTo(5.5, -9); ctx.lineTo(10.5, -1.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#d9a8ff';
+        ctx.beginPath(); for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2, rr = k % 2 ? 1.2 : 3; ctx.lineTo(-5 + Math.cos(a) * rr, -10 + Math.sin(a) * rr); } ctx.closePath(); ctx.fill();
     } else if (kind === 'tower') {
         // a slim stone tower with a pointed violet roof and a gold star on top
         ctx.fillStyle = '#cfc6e6'; ctx.strokeStyle = '#2a1f45';
@@ -744,7 +753,7 @@ export class Hud {
             ctx.font = 'bold 12px sans-serif';
         };
         const badge = (x, y, kind, a = null) => {
-            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : '#ffd76a';
+            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : '#ffd76a';
             if (a != null) {
                 // the pointer: which way the place is
                 ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -785,7 +794,7 @@ export class Hud {
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
-            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : 'castle';
+            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);

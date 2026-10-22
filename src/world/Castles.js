@@ -1312,6 +1312,34 @@ function buildVillage(p, s, rng, out) {
         const at = spots.find(([u, v]) => free(u, v, GRAVEYARD_R + 2) && !used.some((o) => Math.abs(o.u - u) < 26 && Math.abs(o.v - v) < 26));
         if (at) buildGraveyard(p, at[0], at[1], at[2], s, out);
     }
+    buildFence(p, out);
+}
+
+/**
+ * The shady buyer of a town (src/game/WizardMarket.js — the author: «особый покупатель, не на основном
+ * рынке, а в отдельном скрытном месте, будто не совсем легально»): a dark shack of planks out of the way,
+ * past the outer ring's front corner, a counter of crates in its one opening, a dim lantern. He buys plain
+ * things 40 % under their price and never magic ones. (No rng drawn: the rest of the castle stays as it was.)
+ */
+function buildFence(p, out) {
+    const B = BLOCK, { R2, R2z } = out.roads;
+    const cu = R2 + 11, cv = -R2z - 10;
+    p.box(cu - 3, cu + 3, -1, -1, cv - 3, cv + 3, B.PLANKS_DARK);
+    p.walls(cu - 3, cu + 3, cv - 3, cv + 3, 0, 4, B.PLANKS_DARK);
+    p.box(cu - 2, cu + 2, 0, 4, cv - 2, cv + 2, 0);
+    p.box(cu - 4, cu + 4, 5, 5, cv - 4, cv + 4, B.THATCH);
+    // the one opening (towards the road's corner), a counter of crates in it
+    p.box(cu - 3, cu - 3, 0, 4, cv - 1, cv + 1, 0);
+    p.box(cu - 3, cu - 2, 0, 1, cv - 1, cv + 1, B.PLANKS); // (2 deep: things lie on it)
+    p.box(cu + 2, cu + 2, 0, 1, cv + 1, cv + 2, B.HAY);
+    p.box(cu, cu, 4, 4, cv + 1, cv + 1, B.LANTERN);
+    const fn = p.node(cu - 6, cv, 0, 'fence');
+    p.link(fn, p.node(R2, -R2z, 0));
+    out.stalls.push({
+        fence: true, front: p.pt(cu - 5.5, cv, 0), back: p.pt(cu - 0.5, cv, 0), frontNode: fn,
+        counter: { ...p.rect(cu - 3, cu - 2, cv - 1, cv + 1), top: p.L(1) - 0.5 },
+        yaw: p.yaw(Math.PI / 2), // (he looks out of the opening)
+    });
 }
 
 // --------------------------------------------------------- sea castles

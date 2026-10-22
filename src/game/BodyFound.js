@@ -62,12 +62,12 @@ export class BodyFound {
     /** `w` found a body at `at`: the alarm. */
     _found(cs, w, at) {
         const L = this.life, now = Date.now();
-        const wiz = cs.def.kind === 'tower' || cs.def.kind === 'wander';
+        const wiz = cs.def.kind === 'tower' || cs.def.kind === 'wander' || cs.def.kind === 'wizvillage';
         cs.alertUntil = now + ALERT_MS;
         cs.alertAt = at;
         L._say(w, pick(wiz ? BODY_LINES.foundWiz : BODY_LINES.found), 4);
         // a tower at night: everybody up (as the night watch does on trouble — NightLife._tower)
-        if (cs.def.kind === 'tower' && this.game.isNight && !(cs.wizAlarmUntil > now)) {
+        if ((cs.def.kind === 'tower' || cs.def.kind === 'wizvillage') && this.game.isNight && !(cs.wizAlarmUntil > now)) {
             cs.wizAlarmUntil = now + 180000;
             for (const v of cs.active.values()) if (v.sleep) L.night?.wake?.(v, 'alarm');
             cs.wizNight = false;

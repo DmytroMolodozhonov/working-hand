@@ -555,7 +555,7 @@ export class Cauldrons {
         if (!life?.castles) return;
         const now = performance.now();
         for (const cs of life.castles.values()) {
-            if (!cs.awake || cs.def.kind !== 'tower') continue;
+            if (!cs.awake || (cs.def.kind !== 'tower' && cs.def.kind !== 'wizvillage')) continue; // (a tower's / a settlement's master of cauldrons)
             cs.def.stalls.forEach((s, i) => {
                 if (!s.potions || !s.cauldron) return;
                 const key = cs.def.id + ':s' + i;

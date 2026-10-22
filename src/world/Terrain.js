@@ -23,6 +23,7 @@
 import { createNoise2D, createRng, smoothstep } from '../core/math.js';
 import { CastleIndex, testSeaCastleSpot } from './Castles.js';
 import { TowerIndex } from './WizardTowers.js';
+import { VillageIndex } from './WizardVillages.js';
 import { SiteIndex } from './Sites.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
@@ -512,15 +513,17 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.sites = this.iceCastle = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
             this.castles = new CastleIndex(seed, raw, this.seas, this.test);
             this.towers = new TowerIndex(seed, raw, this.castles);
+            // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
+            this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
-            const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz)); };
+            const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
-            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice);
+            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages);
             this.iceCastle = ice;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach; // (read before landAt: finding a site re-samples raw)

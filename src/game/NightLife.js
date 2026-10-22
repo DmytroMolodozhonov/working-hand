@@ -253,7 +253,7 @@ export class NightLife {
             if (Math.random() < 0.3) this.life._say(v, pick(LINES.home), 3);
             return;
         }
-        if (isWizSite(def) || v.role === 'king' || v.role === 'advisor') {
+        if ((isWizSite(def) && def.kind !== 'wizvillage') || v.role === 'king' || v.role === 'advisor') {
             const n = g.tagged('keepIn')[0] ?? g.tagged('home')[0] ?? g.nearest(v.x, v.y, v.z);
             v.sleep = { phase: 'go', node: n, place: null };
             v.path = null; v.seated = false;
@@ -351,7 +351,7 @@ export class NightLife {
             this._lieNow(v);
             out.push(v);
         };
-        if (isWizSite(def)) {
+        if (isWizSite(def) && def.kind !== 'wizvillage') { // (a settlement sleeps as a castle's village does: every house its own people)
             if (!st.kingDead && !cs.active.has(0)) take(0);
             for (let n = 0; n < 4 && out.length < places.length; n++) take(L._freeCommoner(cs, 'student'));
             return out;
@@ -632,6 +632,7 @@ export class NightLife {
         const v = cs.active.get(idx);
         if (!v || v.dead || v.foe || v.sleep) return;
         if (cs.def.kind === 'tower') v.house = cs.def.houses.findIndex((h) => h.bedSpots?.length);
+        else if (cs.def.kind === 'wizvillage') v.house = v.entry?.home ?? -1; // (a settlement's people sleep at home)
         if (v.house < 0) v.house = null;
         this._goRest(v);
     }

@@ -23,8 +23,8 @@ import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
-export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer'];
-export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer']);
+export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz'];
+export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
@@ -276,8 +276,8 @@ export function strippedLook(L) {
  * A wizard's rank (WizardAI.WIZ_RANKS) on his robe: the colour of its trim, stripes on the cuffs
  * (none — a beginner, 1 — an adept, 2 — a teacher, 3 — the Master), stars on the chest, the hat's band.
  */
-export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD };
-const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3 };
+export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD, elder: 0x7fe0c8 };
+const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3, elder: 2 };
 
 /** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer: a staff), the Master — a long beard. */
 function wizardLook(L, r, pick) {
@@ -290,6 +290,7 @@ function wizardLook(L, r, pick) {
         seller: [0x6a2c91, 0x2b5f8e, 0x7a3b1f],
         master: [0x3a1d5e],
         wanderer: [0x6d6a62, 0x6b5640, 0x55584f],
+        townwiz: [0x2f7f86, 0x3b4f8a, 0x5b3a7a, 0x6a4a2a, 0x2f5a3a, 0x7a2f4a], // (the settlements' folk: all colours)
     }[role];
     L.dressColor = pick(robes);
     L.shirt = L.dressColor; // (the sleeves are the robe's)

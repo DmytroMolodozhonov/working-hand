@@ -203,8 +203,8 @@ export class Alohomora {
     /** A house's door locks (the host): some houses do, at night or with nobody of the family at home. */
     _houseLocked(rec) {
         const g = this.game;
-        if (rec.def?.kind === 'tower') {
-            if (rec.h.kind === 'tower') return !!g.isNight; // (the academy's great door: locked for the night)
+        if (rec.def?.kind === 'tower' || rec.def?.kind === 'wizvillage') {
+            if (rec.h.kind === 'tower' || rec.h.civic) return !!g.isNight; // (the academy's great door, a settlement's hall / library / cauldron hall: locked for the night)
             if (hash01(rec.h.id) >= ALOHOMORA.WIZ_LOCK_SHARE) return false;
             if (g.isNight || hash01(rec.h.id + 'd') < 0.6) return true; // (a wizard locks his door — most even when at home)
         } else if (hash01(rec.h.id) >= ALOHOMORA.LOCK_SHARE) return false;
