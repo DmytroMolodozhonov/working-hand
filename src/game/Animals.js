@@ -46,6 +46,7 @@ import { slowFactor, tickSlow } from './Slow.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
+import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 
 export { animalModel };
@@ -70,17 +71,18 @@ export const PEGASUS = {
     SLAP_V: 2.5, // m/s: the hand's speed into his head for a slap
     FLY_SPEED: 1.7, // × his riding speed in the air
 };
-/** New herds: rare, small, far away and never in sight (they must not pop up next to the player). */
+/**
+ * Herds live in places fixed by the world's seed (HerdSites.js: by area, nothing to do with other animals). A place wakes when any
+ * player comes closer than WAKE — but never in plain sight — and goes to sleep when every player is farther than GONE.
+ */
 export const HERDS = {
-    // (the author: sheep twice as often, pigs +30 %, cows +20 %, horses as they were — the tries come
-    //  more often and the cap is higher by the same share as the kinds' weights grew: 5.5 against 4)
-    MAX_NEAR: 11, // animals within NEAR m: no new herd while there are this many (was 8)
-    NEAR: 120,
-    EVERY: 47.8, // s between tries (± a third; was 75, then 55, 51 — the horses 40 % more often: their weight 1 → 1.4, the tries come more often by the share the total grew, the others as they were)
-    MIN_D: 75, // m away (the player is ~4.6 m tall: closer is in plain sight)
-    MAX_D: 115,
+    WAKE: 170, // m: a player this near wakes a place
+    SEE_D: 110, // m: nearer than this to a player a herd appears only out of the host's sight (guests: not at all)
     BEHIND: 1.9, // rad from where the player looks (~110°): only behind them
-    GONE: 200, // m: farther than this a herd is gone (only when not in sight)
+    GONE: 200, // m: farther than this (from every player) a herd is put away (only when not in sight)
+    REFILL_D: 250, // m: while a player is this near an emptied place stays empty
+    REFILL_T: 600, // s of game time without a player near: an emptied place is full again
+    SCAN: 0.5, // s between looks at the places around the players
 };
 /** How often each kind makes a new herd (relative): sheep ×2, pigs +30 %, cows +20 % of the first equal shares. */
 export const HERD_KINDS = { cow: 1.2, pig: 1.3, sheep: 2.4, horse: 1.4 };
@@ -178,7 +180,11 @@ export class Animals {
         if (!game.animals) game.animals = this; // (the crowd finds the beasts there — CrowdSources.js; a test's game too)
         this.byId = new Map();
         this.trees = new Map(); // golden trees: key -> {x, z, y, model, apples: [{until}]}
-        this._spawnT = 3;
+        this._spawnT = 3; // (s to the next look at the herd places)
+        this.sites = new Map(); // herd place key -> {x, z, type, n, awake, members, lost, ok} (HerdSites.js)
+        this.emptied = new Map(); // place key -> game time it was last emptied / had a player near
+        this.clock = 0; // s of game time (for emptied places)
+        this._todo = [];
         this._netT = 0;
         this._treeT = 0;
         this.riding = null; // the horse I ride
@@ -224,29 +230,6 @@ export class Animals {
         return a;
     }
 
-    _spawnHerd() {
-        const g = this.game;
-        const me = g.character.group.position;
-        const type = herdKind(Math.random());
-        const n = 2 + Math.floor(Math.random() * 4);
-        // far away, behind the player (where they don't look) — never popping up in sight
-        const look = this._look(new THREE.Vector3());
-        let cx = 0, cz = 0, ok = false;
-        for (let k = 0; k < 8 && !ok; k++) {
-            const a = Math.random() * Math.PI * 2, d = HERDS.MIN_D + Math.random() * (HERDS.MAX_D - HERDS.MIN_D);
-            cx = me.x + Math.cos(a) * d; cz = me.z + Math.sin(a) * d;
-            ok = outOfSight(me, look, cx, cz) && this._unseenByOthers(cx, cz);
-        }
-        if (!ok) return;
-        const t = g.terrain?.data;
-        if (!t) return;
-        const top = t.topLayer(Math.round(cx), Math.round(cz));
-        if (t.get(Math.round(cx), top, Math.round(cz)) !== BLOCK.GRASS || t.get(Math.round(cx), top + 1, Math.round(cz)) === BLOCK.WATER) return; // only on grass
-        if ((t.sites || t.castles)?.landAt(Math.round(cx), Math.round(cz))) return; // (not in castles, villages, wizards' towers)
-        if (t.isIsland?.(Math.round(cx), Math.round(cz))) return; // (not up on a floating island: they would walk off its edge)
-        this.spawnHerdAt(type, n, cx, cz);
-    }
-
     /** Where the player looks (flat). */
     _look(out) {
         const cam = this.game.camera;
@@ -257,8 +240,87 @@ export class Animals {
 
     /** (host) No other player stands near enough to see a herd appear there. */
     _unseenByOthers(x, z) {
-        for (const r of this.game.remotes?.values() || []) if (r.position && Math.hypot(r.position.x - x, r.position.z - z) < HERDS.MIN_D) return false;
+        for (const r of this.game.remotes?.values() || []) if (r.position && Math.hypot(r.position.x - x, r.position.z - z) < HERDS.SEE_D) return false;
         return true;
+    }
+
+    /** (host) Everybody whose position counts for herds: me and the guests (not the dead). */
+    _herdPeople(out) {
+        out.length = 0;
+        const g = this.game;
+        out.push(g.character.group.position);
+        for (const r of g.remotes?.values() || []) if (r.position && !r.dead) out.push(r.position);
+        return out;
+    }
+
+    /** (host) No guest is nearer than GONE to the point. */
+    _farFromGuests(p) {
+        for (const r of this.game.remotes?.values() || []) if (r.position && !r.dead && Math.hypot(r.position.x - p.x, r.position.z - p.z) <= HERDS.GONE) return false;
+        return true;
+    }
+
+    /** The herd place `s` as a record (made once; emptied/asleep/awake state lives here). */
+    _site(s) {
+        let r = this.sites.get(s.key);
+        if (!r) { r = { ...s, awake: false, members: new Set(), lost: 0, ok: null }; this.sites.set(s.key, r); }
+        return r;
+    }
+
+    /** (host) Land fit for a herd: grass, not in castles/villages/towers, not on a floating island, and made already. */
+    _siteLand(r) {
+        const t = this.game.terrain?.data;
+        if (!t) return false;
+        if (t.landMade && !t.landMade(r.x, r.z)) return null; // (not yet: ask later)
+        const x = Math.round(r.x), z = Math.round(r.z);
+        const top = t.topLayer(x, z);
+        if (t.get(x, top, z) !== BLOCK.GRASS || t.get(x, top + 1, z) === BLOCK.WATER) return false;
+        if ((t.sites || t.castles)?.landAt(x, z)) return false;
+        if (t.isIsland?.(x, z)) return false;
+        return true;
+    }
+
+    /** (host) Look at the herd places around every player: wake the near ones, tidy the awake ones. Nothing about other animals. */
+    _scanSites(dt) {
+        const g = this.game, seed = g.seed || 1, H = HERDS;
+        this.clock += dt;
+        const people = this._herdPeople(this._ppl || (this._ppl = []));
+        const me = people[0];
+        if (!earthly(me)) return;
+        // awake places: who of the herd is still there; an empty one is sleeping (put away) or emptied (killed, eaten, tamed)
+        for (const r of this.sites.values()) {
+            if (!r.awake) continue;
+            for (const id of r.members) { const a = this.byId.get(id); if (!a || a.dead || a.tamed) { r.members.delete(id); r.lost++; } }
+            if (!r.members.size) { r.awake = false; if (r.lost) this.emptied.set(r.key, this.clock); }
+        }
+        // emptied places: while a player is near they stay empty; after a quiet while they are full again
+        for (const [k, t] of this.emptied) {
+            const [gx, gz] = k.split(',').map(Number), r = this.sites.get(k) || siteAt(gx, gz, seed);
+            if (r && people.some((p) => Math.hypot(p.x - r.x, p.z - r.z) < H.REFILL_D)) this.emptied.set(k, this.clock);
+            else if (this.clock - t >= H.REFILL_T) this.emptied.delete(k);
+        }
+        // places to wake: any player near, nobody seeing them; the nearest first
+        const look = this._look(this._lookV || (this._lookV = new THREE.Vector3()));
+        const todo = this._todo; todo.length = 0;
+        for (const p of people) sitesNear(p.x, p.z, H.WAKE, seed, (s) => {
+            if (this.emptied.has(s.key)) return;
+            const r = this._site(s);
+            if (r.awake || r.ok === false) return;
+            let d = 1e9, seen = false;
+            for (let i = 0; i < people.length; i++) {
+                const q = people[i], dd = Math.hypot(q.x - s.x, q.z - s.z);
+                if (dd < d) d = dd;
+                if (dd < H.SEE_D && (i > 0 || !outOfSight(q, look, s.x, s.z))) seen = true;
+            }
+            if (!seen && !todo.some((o) => o.key === r.key)) { r.d = d; todo.push(r); }
+        });
+        if (!todo.length) return;
+        todo.sort((a, b) => a.d - b.d);
+        for (const r of todo) { // (one herd per look: the nearest first)
+            if (r.ok == null) { const ok = this._siteLand(r); if (ok === null) continue; r.ok = ok; if (!ok) continue; }
+            r.awake = true; r.lost = 0; r.members.clear();
+            for (const a of this.spawnHerdAt(r.type, r.n, r.x, r.z)) { a.site = r; r.members.add(a.id); }
+            break;
+        }
     }
 
     /** (host) A herd of n spread loosely around (cx, cz): nobody on top of another. */
@@ -1596,11 +1658,7 @@ export class Animals {
             this._tick = (this._tick || 0) + 1;
             this._seePeople(dt);
             this._spawnT -= dt;
-            if (this._spawnT <= 0) {
-                this._spawnT = HERDS.EVERY * (0.67 + Math.random() * 0.67);
-                const near = this.list.filter((a) => !a.dead && a.group.position.distanceTo(me) < HERDS.NEAR).length;
-                if (near < HERDS.MAX_NEAR && earthly(me)) this._spawnHerd(); // (no herds off the Earth: Planets.earthly)
-            }
+            if (this._spawnT <= 0) { this._spawnT = HERDS.SCAN; this._scanSites(HERDS.SCAN); } // (herds by area: HerdSites.js)
             // now and then pigs migrate (a rare sight: a flock flying over)
             this._migT = (this._migT ?? rr(...FLY.MIG_EVERY)) - dt;
             if (this._migT <= 0) { this._migT = rr(...FLY.MIG_EVERY); if (earthly(me)) this.migrate(); }
@@ -1608,7 +1666,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)
                 const ap = a.group.position;
-                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && outOfSight(me, look, ap.x, ap.z, 1.2)) { this._remove(a); continue; }
+                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
@@ -1734,6 +1792,17 @@ export class Animals {
             if (herdPig(a)) { s.herd = a.herd.id; if (a.fly) s.p = [a.fly.tx, null, a.fly.tz]; }
             return s;
         });
+    }
+
+    /** Herd places emptied lately (killed, eaten, tamed): key -> seconds since a player was last near. A world without it: all places full. */
+    sitesSnapshot() {
+        const o = {};
+        for (const [k, t] of this.emptied) o[k] = Math.round(this.clock - t);
+        return o;
+    }
+
+    sitesRestore(o) {
+        for (const [k, ago] of Object.entries(o || {})) this.emptied.set(k, this.clock - (+ago || 0));
     }
 
     restore(list) {

@@ -279,6 +279,7 @@ export class WorldKeeper {
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
+            animalSites: g.animals?.sitesSnapshot() || {}, // (herd places emptied lately; an older save has none: all full)
             doors: g.doors?.snapshot() || [],
             locks: g.locks?.snapshot() || null, // («Алохомора»: what was unlocked, the gates)
             boards: g.boards?.snapshot() || null,
@@ -349,6 +350,7 @@ export function restoreWorld(game, save, THREE) {
     for (const e of save.items || []) if (!(e.item?.shop && !e.item.shop.paid)) g.items?.spawnLoose( // (an older save's goods for sale: left out — see the snapshot)
         e.item, new THREE.Vector3(e.p[0], e.p[1], e.p[2]), { hover: !!e.h, broadcast: false });
     if (save.animals) g.animals?.restore(save.animals);
+    if (save.animalSites) g.animals?.sitesRestore(save.animalSites);
     if (save.doors) g.doors?.restore(save.doors);
     if (save.locks) g.locks?.restore(save.locks);
     if (save.boards) g.boards?.restore(save.boards);
