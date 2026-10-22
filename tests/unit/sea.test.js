@@ -99,10 +99,10 @@ test('old worlds are exactly the same (generation 1), and far land of new worlds
     nu.generate({ seed: 12345, mountains: true, seas: true });
     let same = 0;
     fixture.forEach(([x, z, top, at0], i) => {
-        if (old.towers?.landAt(x, z)) return; // (a wizards' tower stands here now: src/world/WizardTowers.js)
+        if (old.towers?.landAt(x, z) || old.villages?.landAt(x, z)) return; // (a wizards' tower / settlement stands here now: src/world/WizardTowers.js, WizardVillages.js)
         assert.equal(old.topLayer(x, z), top, `old world column ${x},${z}`);
         assert.equal(old.get(x, 0, z), at0);
-        if (nu.seas.signedDist(x, z) < -SEA.TAPER && !nu.castles.landAt(x, z) && !old.castles.landAt(x, z) && !nu.towers?.landAt(x, z)) {
+        if (nu.seas.signedDist(x, z) < -SEA.TAPER && !nu.castles.landAt(x, z) && !old.castles.landAt(x, z) && !nu.towers?.landAt(x, z) && !nu.villages?.landAt(x, z)) {
             assert.equal(nu.topLayer(x, z), top, `new world far from the sea ${x},${z}`);
             same++;
         }

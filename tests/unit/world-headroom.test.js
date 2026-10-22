@@ -34,7 +34,7 @@ test('higher world: wild heights, mountains and castles of old worlds are unchan
             if (land && !(land.w < 1 && wet)) { ow = 0; const F = land.castle.F; oh = land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w)); }
             hS.push(oh + ':' + ow);
             // the real ground of the new world is the same wherever no tower stands
-            if (d.towers && d.towers.landAt(x, z)) continue;
+            if ((d.towers && d.towers.landAt(x, z)) || d.villages?.landAt(x, z)) continue; // (a tower's / a wizards' settlement's land)
             assert.equal(d.heightAt(x, z), oh, `height at ${x},${z} (seed ${seed})`);
             assert.equal(d.heightAt.water, ow, `water at ${x},${z} (seed ${seed})`);
             checked++;
