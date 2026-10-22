@@ -47,7 +47,9 @@ export const ARMOR = {
 };
 
 /** Damage kinds steel takes (a blow, an arrow, a blast, a spell's charge, fire…); the others go through. */
-const SOAKED = new Set(['melee', 'knight', 'arrow', 'bite', 'animal', 'Cannon', 'Bombardo', 'collapse', 'Sapira', 'Sands', 'IceBall', 'Thunderwave', 'Lightning', 'Inferno', 'Fire', 'Hellfire', 'fire']);
+// (the blows of the body and of things: a zombie's blow on the host is 'zombie', on a guest 'bite' — both; a thing flung by Leviosa,
+// a house thrown by Leviosa Maxima, a pirate's pistol ball — the steel takes them too. Poison, cold, a fall — no blow on the steel.)
+const SOAKED = new Set(['melee', 'knight', 'arrow', 'bite', 'zombie', 'thrown', 'crush', 'Pistol', 'animal', 'Cannon', 'Bombardo', 'collapse', 'Sapira', 'Sands', 'IceBall', 'Thunderwave', 'Lightning', 'Inferno', 'Fire', 'Hellfire', 'fire']);
 const FIRE = new Set(['Inferno', 'Fire', 'Hellfire', 'fire']);
 
 /** The whole magic set: these simplest spells do nothing (they bounce off). */

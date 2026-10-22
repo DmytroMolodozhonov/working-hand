@@ -60,6 +60,7 @@ test('the steel takes its share of a blow (fire less), magic twice the points; n
     const f = soakBlow({ chest }, wornEffects({ chest }), 10, 'Inferno', onChest);
     assert.equal(f.wear.chest, 10 * ARMOR.FIRE_SOAK);
     assert.equal(soakBlow({ chest }, wornEffects({ chest }), 5, 'poison', onChest).hp, 5, 'poison is no blow');
+    for (const k of ['zombie', 'bite', 'thrown', 'crush', 'Pistol']) assert.ok(Math.abs(soakBlow({ chest }, wornEffects({ chest }), 2, k, onChest).hp - 2 * (1 - ARMOR.SOAK)) < 1e-9, `the steel takes a ${k} blow`);
     assert.equal(soakBlow({}, wornEffects({}), 5, 'melee', onChest).hp, 5, 'bare');
 });
 
