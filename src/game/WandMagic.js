@@ -597,7 +597,8 @@ export class WandMagic {
         if (!target) {
             for (const s of [side === 'right' ? 'left' : 'right', side]) {
                 const it = g.items.held[s], w = g.weapons.hands[s].held;
-                if (it && it.item !== this.wand) { // (a second wand or a staff in the other hand is a target too; only the casting wand is not) target = it.item; at = it.model.position.clone(); break; }
+                // (a second wand or a staff in the other hand is a target too; only the casting wand is not)
+                if (it && it.item !== this.wand) { target = it.item; at = it.model.position.clone(); break; }
                 if (w) { target = { kind: 'weapon', type: w.type, magic: w.magic, bonus: w.bonus }; at = w.position.clone(); break; }
             }
             // (a running book about but the wand not on it: say so — not the wand's own secrets)
