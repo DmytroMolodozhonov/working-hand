@@ -1344,6 +1344,29 @@ export class Game {
     }
 
     /**
+     * The hands and the game at this moment, for the spell journal when a spell was refused (SpellLog.castContextLine).
+     */
+    castContext() {
+        const ch = this.character, ps = this.poseSmoother, now = performance.now();
+        const lift = this.currentPose?.armLift;
+        const raised = ch ? ['left', 'right'].filter((s) => { try { return ch.isArmRaised(s); } catch (e) { return false; } }) : [];
+        const aim = this.campfires?.lastAim;
+        return {
+            lift: lift ? { left: lift.left, right: lift.right } : null,
+            raised: raised.map((s) => (s === 'left' ? 'левая' : 'правая')),
+            magic: !!this.isMagicActive,
+            hand: this.magicHand ? (this.magicHand === 'left' ? 'левая' : 'правая') : null,
+            poseAge: ps?.lastPushAt ? now - ps.lastPushAt : null,
+            poseGap: ps?.lastPushAt ? ps.interval : null,
+            fps: this.fpsNow ?? null,
+            frameMs: this.stats?.frameMs ?? null,
+            aim: aim && now - aim.at < 4000 ? { ...aim, age: now - aim.at } : null,
+            mana: this.combat?.enabled ? this.combat.fatigue : null,
+            held: this.focus?.held?.() || null,
+        };
+    }
+
+    /**
      * The spell's advice («поднимите руку…», «скажите «…»») reaches the screen only when the player was
      * really casting (CastHints): talk where a spell's word slipped in gives none — that goes to the journal.
      * The advice is held back while the phrase is worked out; a spell that went off shows its own lines.
@@ -1632,7 +1655,11 @@ export class Game {
         if (name === 'Maxima') { if (isFinal) this._why('maximaAlone'); return null; }
         const recent = this.isMagicActive || Date.now() - this.lastMagicTime < 1500;
         // Flight has its own gesture (both arms up) — checked in startFlight
-        if (!recent && name !== 'Flight') { if (isFinal) this._why('handDown', name); return null; }
+        if (!recent && name !== 'Flight') {
+            this.lastCastWhy = `рука не поднята: жест не виден уже ${Math.round(Date.now() - this.lastMagicTime)} мс (нужно не дольше 1500 мс)`;
+            if (isFinal) this._why('handDown', name);
+            return null;
+        }
         const now = Date.now();
         // «Бомбардо…» heard while the phrase is still going: wait a moment,
         // the player may be saying «Бомбардо Максима».
@@ -1647,10 +1674,10 @@ export class Game {
         // from its unfinished version: don't cast it a second time.
         const early = this._interimCast;
         if (isFinal && early && now - early.at < 3000) {
-            if (early.name === name) { this._interimCast = null; return null; }
+            if (early.name === name) { this.lastCastWhy = 'эта фраза уже сработала (промежуточная версия)'; this._interimCast = null; return null; }
         }
         if (name === 'Bombardo' || name === 'BombardoMaxima') this._pendingBombardo = null;
-        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) { if (isFinal && !early) this._why('cooldown'); return null; }
+        if (now - this.lastSpellCastTime < SPELL_COOLDOWN) { this.lastCastWhy = `пауза между заклинаниями: прошло ${now - this.lastSpellCastTime} мс из ${SPELL_COOLDOWN}`; if (isFinal && !early) this._why('cooldown'); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
         if (name === 'Flight' && !this.startFlight()) return null;
@@ -1672,8 +1699,10 @@ export class Game {
      */
     _why(code, name = null, extra = null) {
         const gate = this._hintGate || (this._hintGate = new HintGate(2000));
-        if (!gate.pass(code + (name || ''))) return;
         const text = refusal(code, { ...extra, name: name ? SPELL_RU[baseSpell(name)] || name : null });
+        // (the journal gets the reason every time — the screen's hint is held back by the gate, the journal's line is not)
+        if (text && !this.lastCastWhy) this.lastCastWhy = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        if (!gate.pass(code + (name || ''))) return;
         if (text) this.hud.setVoice(text, true);
     }
 
@@ -3108,6 +3137,7 @@ export class Game {
             const aiFps = ps.lastPushAt && t0 - ps.lastPushAt < 1000 ? Math.round(1000 / ps.interval) : 0;
             const sp = this.stats.spike;
             const fps = Math.round(this.fpsFrames / this.fpsAccum);
+            this.fpsNow = fps; // (the spell journal: how smooth the game was when a spell was refused)
             if (this.poseService) this.poseService.gameFps = fps; // (the camera network eases off when the game is slow)
             // what takes the frame's time (shown when it is slow): the heaviest part, the network (camera AI), draw calls
             let slow = '';

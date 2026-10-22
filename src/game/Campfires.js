@@ -221,25 +221,26 @@ export class Campfires {
         const g = this.game;
         const ch = g.character;
         const now = performance.now();
-        if (now - this._lastCast < 2500) return null; // (the final version of an already cast phrase)
+        if (now - this._lastCast < 2500) { g.lastCastWhy = 'костёр только что зажжён (повтор той же фразы)'; return null; } // (the final version of an already cast phrase)
         const pref = g.magicHand || g.lastMagicHand || 'right';
         let side = null;
         if (force) side = 'right';
         else if (ch.isArmRaised(pref) || g.isMagicActive || Date.now() - (g.lastMagicTime || 0) < 1500) side = pref;
         else side = g.wandSide?.() || ['right', 'left'].find((s) => ch.isArmRaised(s)) || null; // (a wand: its hand only)
-        const say = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (!side) return say('🔥 Поднимите руку, покажите на землю и скажите «Fire»');
+        // (the screen's hint only for the final phrase; the journal always gets the reason: Game.lastCastWhy)
+        const say = (t, why) => { if (why) g.lastCastWhy = why; if (isFinal) g.hud.setVoice(t, true); return null; };
+        if (!side) return say('🔥 Поднимите руку, покажите на землю и скажите «Fire»', 'рука не поднята');
         const tired = g.combat.check('Fire');
-        if (tired) { g.hud.setVoice(tired, true); return null; }
+        if (tired) { g.hud.setVoice(tired, true); return null; } // (Combat.check writes the reason itself: lastCastWhy)
         const spot = this.aim(side);
         // a ship's gun (its fuse is lit — no campfire needed) or a ship's deck (it burns): Ships.js
         const onShip = g.ships?.fireSpell(side, spot?.wall ? null : spot, isFinal);
         if (onShip !== undefined) { if (onShip) this._lastCast = now; return onShip; }
-        if (!spot) return say('🔥 Покажите рукой на землю (не дальше 25 м)');
-        if (spot.wall) return say('🔥 Огонь горит только на земле — покажите вниз, на пол или землю');
-        if (spot.water) return say('🔥 На воде костёр не загорится — покажите на сушу');
+        if (!spot) return say('🔥 Покажите рукой на землю (не дальше 25 м)', 'нет точки на земле: рука направлена в небо или слишком далеко (больше 25 м)');
+        if (spot.wall) return say('🔥 Огонь горит только на земле — покажите вниз, на пол или землю', 'нет точки на земле: рука направлена на стену или потолок (пол ниже чем на 2,5 м не найден)');
+        if (spot.water) return say('🔥 На воде костёр не загорится — покажите на сушу', 'нет точки на земле: рука направлена на воду');
         for (const f of this.list.values()) {
-            if (Math.hypot(f.x - spot.x, f.z - spot.z) < 2.2 && Math.abs(f.y - spot.y) < 2) return say('🔥 Здесь уже есть костёр — подбросьте в него дров');
+            if (Math.hypot(f.x - spot.x, f.z - spot.z) < 2.2 && Math.abs(f.y - spot.y) < 2) return say('🔥 Здесь уже есть костёр — подбросьте в него дров', 'здесь уже горит костёр (ближе 2,2 м)');
         }
         g.combat.pay('Fire');
         this._lastCast = now;
@@ -287,7 +288,7 @@ export class Campfires {
                 // a wall (its side) or a ceiling (from below): the floor at its foot, just in front of it
                 const fx = prev.x - dir.x * 0.3, fz = prev.z - dir.z * 0.3;
                 const gy = g.collision.groundAt(fx, fz, prev.y);
-                if (prev.y - gy > CAMPFIRE.WALL_DROP || solid(fx, gy + 0.3, fz)) return { wall: true };
+                if (prev.y - gy > CAMPFIRE.WALL_DROP || solid(fx, gy + 0.3, fz)) { this._noteAim('wall', dir, hand, p); return { wall: true }; }
                 hit = { x: fx, y: gy, z: fz };
                 break;
             }
@@ -297,15 +298,22 @@ export class Campfires {
         }
         if (!hit) {
             // pointing far ahead (not at the sky): the fire lights a few steps in front
-            if (dir.y > 0.35) return null;
+            if (dir.y > 0.35) { this._noteAim('sky', dir, hand, null); return null; }
             const fl = _v2.set(dir.x, 0, dir.z);
-            if (fl.lengthSq() < 1e-4) return null;
+            if (fl.lengthSq() < 1e-4) { this._noteAim('sky', dir, hand, null); return null; }
             fl.normalize();
             const x = hand.x + fl.x * 5, z = hand.z + fl.z * 5;
             hit = { x, y: g.collision.groundAt(x, z, ch.group.position.y + 1), z };
         }
         hit.water = !!g.swim?.waterAt?.(hit.x, hit.z);
+        this._noteAim('floor', dir, hand, hit);
         return hit;
+    }
+
+    /** (the spell journal) where the hand pointed the last time: what it found and how steep the hand was. */
+    _noteAim(k, dir, hand, at) {
+        const a = this.lastAim || (this.lastAim = {});
+        a.k = k; a.dy = dir.y; a.dist = at ? hand.distanceTo(at) : null; a.at = performance.now();
     }
 
     // ---------------------------------------------------------- fires (host)

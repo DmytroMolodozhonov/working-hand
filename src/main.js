@@ -30,6 +30,7 @@ import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { watchServer } from './ui/ServerLost.js';
+import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
 
 const $ = (id) => document.getElementById(id);
@@ -469,9 +470,15 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
     if (!m.native) { const pk = voice.recentPeak?.(2500); if (Number.isFinite(pk)) { m.peak = pk; m.snr = pk - voice.noiseFloor; } }
     // (how fast: from the start of the spell's words and from their last letter to the cast)
     if (ok && Number.isFinite(m.to)) { m.lag = now - m.to; if (Number.isFinite(m.from)) m.fromStart = now - (m.from + 200); }
+    // (a spell the game refused: the same delay, and where the hands were — the journal only, no hint on the screen)
+    let note;
+    if (!ok && spell && !/^отсеян|меню паузы/.test(why || '')) {
+        if (Number.isFinite(m.to) && now - m.to >= 0 && now - m.to < 8000) m.lag = now - m.to;
+        try { note = castContextLine(game.castContext()); } catch (e) { /* the journal never breaks a cast */ }
+    }
     const line = soundingLine(m.from ?? now - 2500, m.to ?? now);
     if (line) m.gameLine = line;
-    log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why });
+    log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why, note });
 }
 
 function earlyTalk(command) {

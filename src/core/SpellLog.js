@@ -48,9 +48,31 @@ export function formatEntry(e) {
     const src = e.source ? ` [${e.source}]` : '';
     const fast = e.ok && Number.isFinite(m.lag) ? ` за ${Math.round(m.lag)} мс после последней буквы${Number.isFinite(m.fromStart) ? ` (${Math.round(m.fromStart)} мс от начала слова)` : ''}` : '';
     const spell = e.spell ? ` → ${e.spell}` : ' → заклинания нет';
-    const out = e.ok ? ` → ✅ сработало${fast}` : e.why ? ` → ❌ ${e.why}` : '';
+    // (a spell that did not work: how long after the word it was tried — a late look at the hand is a gesture that is gone)
+    const late = !e.ok && e.spell && Number.isFinite(m.lag) ? ` [слово → проверка: ${Math.round(m.lag)} мс]` : '';
+    const out = e.ok ? ` → ✅ сработало${fast}` : e.why ? ` → ❌ ${e.why}${late}` : '';
     const note = e.note ? ` (${e.note})` : '';
     return `${clock(e.at || new Date())} 🎙️ «${String(e.text ?? '').slice(0, 120)}» (${parts.join(', ')})${src}${spell}${out}${note}`;
+}
+
+/**
+ * The state of the hands and of the game at the moment a spell was refused (pure: tests) → one short line.
+ * @param {{lift?: {left?: number, right?: number}|null, raised?: string[], magic?: boolean, hand?: string|null,
+ *          poseAge?: number|null, poseGap?: number|null, fps?: number|null, frameMs?: number|null,
+ *          aim?: {k?: string, dy?: number, dist?: number, age?: number}|null, mana?: number|null, held?: string|null}} c
+ */
+export function castContextLine(c = {}) {
+    const p = [];
+    if (c.lift) p.push(`подъём рук: левая ${num(c.lift.left, 2) ?? '—'}, правая ${num(c.lift.right, 2) ?? '—'}`);
+    else p.push('поза рук не видна');
+    p.push(c.raised?.length ? `подняты: ${c.raised.join('+')}` : 'руки опущены');
+    p.push(c.magic ? `«ждёт команду»${c.hand ? ' (' + c.hand + ')' : ''}` : 'жест не активен');
+    if (Number.isFinite(c.poseAge)) p.push(`последняя поза ${Math.round(c.poseAge)} мс назад${Number.isFinite(c.poseGap) ? `, камера шлёт раз в ${Math.round(c.poseGap)} мс` : ''}`);
+    if (Number.isFinite(c.fps)) p.push(`${Math.round(c.fps)} кадр/с${Number.isFinite(c.frameMs) ? `, кадр игры ${num(c.frameMs, 1)} мс` : ''}`);
+    if (c.aim) p.push(`прицел «${c.aim.k}»: рука ${c.aim.dy >= 0 ? 'вверх' : 'вниз'} ${num(Math.abs(c.aim.dy) * 90, 0)}°${Number.isFinite(c.aim.dist) ? `, точка в ${num(c.aim.dist, 1)} м` : ''}${Number.isFinite(c.aim.age) ? ` (${Math.round(c.aim.age)} мс назад)` : ''}`);
+    if (Number.isFinite(c.mana)) p.push(`мана ${Math.floor(c.mana)}`);
+    if (c.held) p.push(`держите: ${c.held}`);
+    return p.join('; ');
 }
 
 export class SpellLog {
