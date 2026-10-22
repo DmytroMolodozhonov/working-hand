@@ -260,6 +260,16 @@ export class WizardFight {
         let spot = this._spot(v, fp, d, sq);
         // ready to cast and a clear shot: he stops to turn to the foe and aim (no casting on the walk, sideways)
         const shot = this._castReady(v, d) && this.clearShot(v, fp);
+        // (ready, but one of his own in the line: a step to the side for a clear one)
+        if (!shot && this._castReady(v, d) && this._friendInLine(v, fp)) {
+            v.lineT = (v.lineT || 0) + dt;
+            if (v.lineT > 1) {
+                v.lineT = 0; v.spotTurn = ((v.spotTurn || 0) + (v.idx % 2 ? 0.45 : -0.45)) % (Math.PI * 2);
+                const box = v.wt || v;
+                if (box.spot?.node != null) v.badFire = { id: box.spot.node, until: this.clock + 6 }; // (that window is no good now: another)
+                box.fire = null; box.spot = null; v.spot = null;
+            }
+        } else v.lineT = 0;
         if (shot && spot && !spot.run && !(v.unstickT > 0)) spot = null;
         // just cast: he stands in his pose a moment (and while his charge flies), only then moves on
         if (this.holding(v, dt, d)) { spot = null; v.unstickT = 0; }
@@ -270,7 +280,7 @@ export class WizardFight {
             if (L._followPath(v, dt, RUN)) { v.unstickT = 0; v.path = null; }
             moving = true;
         } else if (spot) {
-            const there = L._goSpot(v, spot.x, spot.z, spot.run ? RUN : WALK * 1.3, dt, 0.7);
+            const there = L._goSpot(v, spot.x, spot.z, spot.run ? RUN : WALK * 1.3, dt, 0.7, spot.y);
             moving = !there && v.speed > 0;
             if (!there) this._stuck(v, spot, dt); else v.stk = null;
         }
@@ -332,7 +342,14 @@ export class WizardFight {
             const s = box.spot;
             if (s && Math.abs(s.a - a) < 0.08 && Math.abs(s.R - R) < 0.6 && Math.hypot(s.fx - fp.x, s.fz - fp.z) < 1.5) return s;
             const p = this._goodSpot(v, fp, a, R);
-            return (box.spot = { x: p.x, z: p.z, a, R, fx: fp.x, fz: fp.z, run: Math.hypot(p.x - v.x, p.z - v.z) > 6 });
+            // inside the tower / on another floor than that place: a window, a gallery, the hole the blast
+            // made — a place of the tower he can get to with a clear shot at the foe; none — down the stairs
+            // and out to that place on the ground
+            if (Math.abs(p.y - v.y) > 2.5 || L._roofed(v)) {
+                const n = this._fireNode(v, fp, R, hi);
+                if (n) return (box.spot = { x: n.x, y: n.y, z: n.z, a, R, fx: fp.x, fz: fp.z, run: Math.hypot(n.x - v.x, n.z - v.z) > 6 || Math.abs(n.y - v.y) > 2.5, node: n.id });
+            }
+            return (box.spot = { x: p.x, y: p.y, z: p.z, a, R, fx: fp.x, fz: fp.z, run: Math.hypot(p.x - v.x, p.z - v.z) > 6 || Math.abs(p.y - v.y) > 2.5 });
         };
         if (!wt) return ground(mine, keep);
         switch (wt.role) {
@@ -348,7 +365,7 @@ export class WizardFight {
                     wt.node = best;
                 }
                 const n = gr.nodes[wt.node];
-                return n ? { x: n.x, z: n.z, run: true } : ground(mine, r1 * 1.4);
+                return n ? { x: n.x, y: n.y, z: n.z, run: true } : ground(mine, r1 * 1.4);
             }
             case 'guard': {
                 const m = v.cs.active.get(0);
@@ -360,7 +377,7 @@ export class WizardFight {
             case 'snipe': {
                 const id = sq.upNodes[wt.k % Math.max(1, sq.upNodes.length)];
                 const n = id != null ? v.cs.graph.nodes[id] : null;
-                if (n) return { x: n.x, z: n.z, run: true };
+                if (n) return { x: n.x, y: n.y, z: n.z, run: true };
                 return ground(mine + strafe, keep);
             }
             case 'binder': return ground(mine + strafe, lo);
@@ -374,6 +391,48 @@ export class WizardFight {
             case 'ground': return ground(spread(wt.k, wt.of), lo);
             default: return ground(mine + strafe, keep);
         }
+    }
+
+    /**
+     * A place of the building (a path node he can get to — not through a way the blast broke) with a
+     * clear shot at the foe, about `keep` from him: the nearest such, others' places counting a little
+     * against (two don't crowd one window). Looked for again every 1.5 s. → node or null.
+     */
+    _fireNode(v, fp, keep, hi) {
+        const cs = v.cs, gr = cs.graph, c = this.game.collision;
+        if (!gr.nodes.length) return null;
+        const box = v.wt || v;
+        const f = box.fire;
+        if (f && this.clock - f.t < 1.5 && Math.hypot(f.fx - fp.x, f.fz - fp.z) < 3) return f.n;
+        const from = v.node != null && v.node >= 0 && Math.hypot(gr.nodes[v.node].x - v.x, gr.nodes[v.node].z - v.z) < 3 ? v.node : gr.nearest(v.x, v.y, v.z);
+        const can = gr.reach(from, cs.cut);
+        // (the places the others chose — and just round them: two don't stand in one window, one behind another)
+        const taken = [];
+        for (const o of cs.active.values()) if (o !== v && !o.dead && o.foe === v.foe) { const s = (o.wt || o).spot; if (s?.node != null) taken.push(s); }
+        const bad = v.badFire && v.badFire.until > this.clock ? v.badFire.id : -1;
+        const list = [];
+        for (const id of can) {
+            if (id === bad) continue;
+            const n = gr.nodes[id];
+            const dF = Math.hypot(n.x - fp.x, n.z - fp.z);
+            if (dF > hi * 1.15 || dF < 3) continue;
+            const run = Math.hypot(n.x - v.x, n.z - v.z) + Math.abs(n.y - v.y) * 1.5;
+            const near = taken.some((s) => Math.abs(s.y - n.y) < 2.5 && Math.hypot(s.x - n.x, s.z - n.z) < 2.5);
+            list.push({ n, s: run + Math.abs(dF - keep) * 0.8 + (near ? 30 : 0) });
+        }
+        list.sort((a, b) => a.s - b.s);
+        let pick = null;
+        const L = this.life;
+        for (let i = 0; i < Math.min(24, list.length); i++) {
+            const n = list[i].n;
+            // (never a doorway: one standing there shuts the way out for all the others — room round it)
+            let room = 0;
+            for (let k = 0; k < 8; k++) if (L._walkable(n.x + Math.cos(k * Math.PI / 4) * 1.6, n.z + Math.sin(k * Math.PI / 4) * 1.6, n.y)) room++;
+            if (room < 6) continue;
+            if (!c?.lineOfSight || c.lineOfSight(n.x, n.y + 3.4, n.z, fp.x, fp.y + 0.3, fp.z, 0.45)) { pick = n; break; }
+        }
+        box.fire = { t: this.clock, fx: fp.x, fz: fp.z, n: pick };
+        return pick;
     }
 
     /** Does this foe hold a «Protection» now (his hand shield or dome)? */
@@ -485,8 +544,29 @@ export class WizardFight {
      */
     clearShot(v, fp) {
         const c = this.game.collision;
+        if (this._friendInLine(v, fp)) return false;
         if (!c?.lineOfSight) return true;
         return c.lineOfSight(v.x, v.y + 3.4, v.z, fp.x, fp.y + 0.3, fp.z, 0.35);
+    }
+
+    /**
+     * One of his own between his wand and the foe (a charge hits whatever it touches first — Duel.js):
+     * he doesn't cast through a friend's back; he waits or steps aside for a clear line.
+     */
+    _friendInLine(v, fp) {
+        const dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz);
+        if (L < 1.5) return false;
+        const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;
+        for (const o of v.cs.active.values()) {
+            if (o === v || o.dead) continue;
+            const ox = o.x - v.x, oz = o.z - v.z;
+            const f = ox * ux + oz * uz;
+            if (f < 0.6 || f > L - 0.8) continue;
+            const y = v.y + (fy - v.y) * (f / L); // (the line's height there)
+            if (Math.abs(o.y - y) > 2.2) continue;
+            if (Math.abs(ox * -uz + oz * ux) < 1.3) return true; // (a body and a little room: one may step into it)
+        }
+        return false;
     }
 
     /**
@@ -520,7 +600,7 @@ export class WizardFight {
         v.spot = null;
         const gr = v.cs.graph;
         if (gr.nodes.length) {
-            const n = gr.nearest(spot.x, v.y, spot.z, 6);
+            const n = gr.nearest(spot.x, spot.y ?? v.y, spot.z, 6);
             if (n >= 0 && this.life._goTo(v, n) && v.path?.length > 1) v.unstickT = 4;
             else v.path = null;
         }

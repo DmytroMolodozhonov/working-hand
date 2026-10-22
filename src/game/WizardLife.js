@@ -217,7 +217,7 @@ export class WizardLife {
         for (const cs of L.castles.values()) {
             if (!cs.awake || !isWizSite(cs.def) || !L._inLand(cs.def, pos, D.hear * 0.5)) continue;
             if (isPlayer && by === L.state(cs.def.id).owner) continue;
-            let seen = false, said = false, comers = 0;
+            let seen = false, said = false;
             for (const v of cs.active.values()) {
                 if (v.dead || v.sleep || v.lev || v.servantOf != null || v.foe) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
@@ -226,13 +226,17 @@ export class WizardLife {
                 if (bp && !seen && L._knows(v, by, pos, via)) seen = true; // (only who saw him do it knows: no mind-reading — Blame.js)
                 if (L._fights(v)) {
                     // (the Master keeps his place unless it is close; the others come — a tower has paths)
-                    if ((v.role === 'master' && d > 30) || !cs.graph.nodes.length || (v.investigate && v.investigate.t > 10) || comers >= 5) { v.yaw = Math.atan2(-(pos.x - v.x), -(pos.z - v.z)); continue; }
+                    if ((v.role === 'master' && d > 30) || !cs.graph.nodes.length || (v.investigate && v.investigate.t > 10)) { v.yaw = Math.atan2(-(pos.x - v.x), -(pos.z - v.z)); v.seated = false; continue; }
+                    if (WIZ_JOBS.has(v.job) && v.job !== 'sit') { v.job = 'wander'; v.post = null; v.trips = 0; } // (the lectern, the cauldron left: nobody goes on as if nothing happened)
                     v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: isPlayer && !via ? by : null, t: 45 };
-                    v.path = null; v.lookT = 0; v.seated = false; comers++;
+                    v.path = null; v.lookT = 0; v.seated = false;
                     if (!said) { said = true; L._say(v, pick(DANGER_LINES.brave), 3); }
-                } else if (d < (r ?? D.r) + D.near + 8) {
-                    v.fleeAt = { x: pos.x, z: pos.z }; v.fleeFrom = null; v.fleeT = 8; v.fleeing = false; v.seated = false;
-                    if (Math.random() < 0.4) L._say(v, pick(DANGER_LINES.timid), 2.5);
+                } else {
+                    // the timid: away from it (and from the hole it left — dreadful too), whoever heard it;
+                    // the near ones longer. Never towards it, never past the one who did it (CastleLife._fleeStep)
+                    const near = d < (r ?? D.r) + D.near + 8;
+                    v.fleeAt = { x: pos.x, z: pos.z, r: (r ?? D.r) + 6 }; v.fleeFrom = null; v.fleeT = near ? 12 : 7; v.fleeing = false; v.seated = false; v.flee = null; v.path = null;
+                    if (near && Math.random() < 0.4) L._say(v, pick(DANGER_LINES.timid), 2.5);
                 }
             }
             if (seen) L._catch(cs, by, pos);

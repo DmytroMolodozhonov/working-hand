@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { DANGERS, levelOf, worst, safeFrom, pickShelter, pickEscape, calmNeeded } from './Danger.js';
+import { threatCost, pathPasses, openWay } from './FleePlan.js';
 import { isWizSite } from './WizardLife.js';
 import { GREY_HAIR } from '../entities/VillagerModel.js';
 
@@ -265,11 +266,14 @@ export class VillagerFear {
             }
             if (best >= 0 && level < 3) { F.state = 'keep'; life._goTo(v, best); if (shout && v.role === 'king') life._say(v, 'Стража! Ко мне!'); return; }
         }
+        // what it runs from: the dangers, and the enemy of the castle about (never towards him, never past him)
+        const T = this._threats(v, here);
+        const cost = (n) => threatCost(n, T);
         // right on it: straight away first (a few seconds), then a place to be
         if (level >= 3 && !house) {
             F.state = 'run';
             F.t = 1.5 + Math.random() * 1.5;
-            F.to = pickEscape(v, [], here, 14);
+            F.to = pickEscape(v, [], T, 14);
             if (shout) life._say(v, pick(LINES[d.kind] || LINES.run));
             return;
         }
@@ -286,9 +290,23 @@ export class VillagerFear {
             }
             hi = pickShelter(v, opts, here, { maxDist: v.elder ? 40 : 55 });
         }
+        // (the way to it must not pass the danger: a house beyond the blast, the way round it by the
+        // fire — another house; none — away out of the village)
+        for (let k = 0; k < 4 && hi != null && hi >= 0 && house == null; k++) {
+            if (H[hi]?.homeNode != null && life._goTo(v, H[hi].homeNode, cost) && !pathPasses(v.path, cs.graph.nodes, v, T)) break;
+            F.bad.add(hi); v.path = null;
+            const opts = [];
+            for (let i = 0; i < H.length; i++) {
+                const h = H[i];
+                if (!h.inside || F.bad.has(i) || Math.abs(h.inside.x - v.x) > 70 || Math.abs(h.inside.z - v.z) > 70) continue;
+                opts.push({ i, x: h.inside.x, z: h.inside.z, own: i === v.entry.home, broken: this._broken(h), burning: this._burning(h) });
+            }
+            hi = pickShelter(v, opts, here, { maxDist: v.elder ? 40 : 55 });
+        }
         if (hi != null && hi >= 0 && H[hi]?.homeNode != null) {
             F.state = 'shelter'; F.house = hi;
-            life._goTo(v, H[hi].homeNode);
+            if (!v.path) life._goTo(v, H[hi].homeNode, cost);
+            v.pathCost = cost;
             if (shout) this._shout(v, d, 'hide');
             this._family(v, hi, d, here);
             return;
@@ -299,12 +317,31 @@ export class VillagerFear {
         for (const t of ['gateOut', 'gateIn', 'field', 'pier', 'quay']) for (const id of g2.tagged(t)) places.push({ ...g2.nodes[id], node: id });
         const Z = def.zone + 18;
         for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) places.push({ x: def.x + sx * Z, z: def.z + sz * Z, node: -1 });
-        const to = pickEscape(v, places, here, 40);
+        const to = pickEscape(v, places, T, 40);
         F.to = to;
         const q = to.i >= 0 ? places[to.i] : null;
-        if (q && q.node >= 0) life._goTo(v, q.node);
-        else { const n = g2.nearest(to.x, v.y, to.z, 8); if (n >= 0 && Math.hypot(g2.nodes[n].x - to.x, g2.nodes[n].z - to.z) < 15) life._goTo(v, n); }
+        if (q && q.node >= 0) life._goTo(v, q.node, cost);
+        else { const n = g2.nearest(to.x, v.y, to.z, 8); if (n >= 0 && Math.hypot(g2.nodes[n].x - to.x, g2.nodes[n].z - to.z) < 15) life._goTo(v, n, cost); }
+        // (that way passes the danger: across the land instead, straight away from it — FleePlan.openWay)
+        if (v.path && pathPasses(v.path, g2.nodes, v, T)) {
+            v.path = null;
+            const o = openWay(v, T, (x, z) => life._walkable(x, z, v.y), 30);
+            if (o) F.to = { x: o.x, z: o.z, i: -1 };
+        }
+        v.pathCost = cost;
         if (shout) this._shout(v, d, 'flee');
+    }
+
+    /** The dangers about as things to run from (FleePlan), and the castle's known enemies near. */
+    _threats(v, here) {
+        const T = here.map((z) => ({ x: z.x, z: z.z, r: (z.r ?? DANGERS[z.kind]?.r ?? 3) + 4 }));
+        const now = Date.now();
+        for (const [pid, until] of v.cs.hostile) {
+            if (until < now) continue;
+            const p = this.life._playerPos(pid);
+            if (p && Math.hypot(p.x - v.x, p.z - v.z) < 70) T.push({ x: p.x, z: p.z, r: 14 });
+        }
+        return T;
     }
 
     _shout(v, d, how) {
@@ -379,7 +416,20 @@ export class VillagerFear {
                 F.t -= dt;
                 life._steer(v, F.to.x, F.to.z, run, dt, 0.5);
                 v.mode = 'flee';
-                if (F.t <= 0) this._decide(v, 2, F.danger, this.near(v.cs.def.x, v.cs.def.z, v.cs.def.zone + 40));
+                // (walls all round — in a house: it hides where it is, away from the danger, not pressing at a wall)
+                const pr = F.prog || (F.prog = { x: v.x, z: v.z, t: 0 });
+                pr.t += dt;
+                if (pr.t > 1) {
+                    const held = Math.hypot(v.x - pr.x, v.z - pr.z) < 0.5;
+                    pr.x = v.x; pr.z = v.z; pr.t = 0;
+                    if (held && life._roofed(v)) { F.state = 'hidden'; v.speed = 0; v.path = null; break; }
+                    if (held) F.t = 0;
+                }
+                if (F.t <= 0) {
+                    // a place to be now — never back to running straight from it again (it is still right by it)
+                    this._decide(v, 2, F.danger, this.near(v.cs.def.x, v.cs.def.z, v.cs.def.zone + 40));
+                    if (v.fear) v.fear.level = Math.max(v.fear.level, 3);
+                }
                 break;
             }
             case 'keep':
@@ -437,7 +487,17 @@ export class VillagerFear {
                 if (v.path && v.pathI < v.path.length) life._followPath(v, dt, run);
                 else {
                     const d = life._steer(v, F.to.x, F.to.z, run, dt, 1);
-                    if (d < 1.5 || v.speed === 0) { F.state = 'hidden'; v.path = null; }
+                    // (there — or held up, standing or pressing at a wall: another way away; it hides only where it is safe)
+                    const pr = F.prog || (F.prog = { x: v.x, z: v.z, t: 0 });
+                    pr.t += dt;
+                    let held = false;
+                    if (pr.t > 1) { held = Math.hypot(v.x - pr.x, v.z - pr.z) < 0.5; pr.x = v.x; pr.z = v.z; pr.t = 0; }
+                    if (d < 1.5 || held) {
+                        const here = this.near(v.x, v.z, 80), T = this._threats(v, here);
+                        const o = safeFrom(v, here, 20) ? null : openWay(v, T, (x, z) => life._walkable(x, z, v.y), 30);
+                        if (o && Math.hypot(o.x - F.to.x, o.z - F.to.z) > 2) F.to = { x: o.x, z: o.z, i: -1 };
+                        else { F.state = 'hidden'; v.path = null; }
+                    }
                 }
                 v.mode = 'flee';
                 if (F.checkT <= 0) {

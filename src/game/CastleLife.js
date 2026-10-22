@@ -29,6 +29,7 @@ import { shareFoes } from './CrewTactics.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
+import { FLEE, threatDist, threatCost, pathPasses, openWay, fleeSearch } from './FleePlan.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
 import * as THREE from 'three';
@@ -169,6 +170,9 @@ export function roleTitle(e) {
 }
 
 // --------------------------------------------------------------- graph
+/** One key for the way between two nodes (either direction). */
+export const edgeKey = (a, b) => (a < b ? a * 65536 + b : b * 65536 + a);
+
 class Graph {
     constructor(def) {
         this.nodes = def.nodes;
@@ -185,6 +189,22 @@ class Graph {
 
     tagged(tag) { return this.byTag.get(tag) || []; }
 
+    /** Every node one can get to from node a (not through a cut way) → Set of ids. */
+    reach(a, cut = null) {
+        const seen = new Set();
+        if (a < 0) return seen;
+        const st = [a];
+        seen.add(a);
+        while (st.length) {
+            const c = st.pop();
+            for (const nb of this.adj[c]) {
+                if (seen.has(nb) || (cut?.size && cut.has(edgeKey(c, nb)))) continue;
+                seen.add(nb); st.push(nb);
+            }
+        }
+        return seen;
+    }
+
     /** The node nearest to a point (on about the same floor). */
     nearest(x, y, z, maxDy = 2.5) {
         let best = -1, bd = Infinity;
@@ -196,8 +216,12 @@ class Graph {
         return best;
     }
 
-    /** A* from node a to node b → list of node ids (or null). */
-    path(a, b) {
+    /**
+     * A* from node a to node b → list of node ids (or null). opts: {cut (Set of edgeKey — ways the
+     * world broke: a hole, a fallen wall — never taken), cost(node) → extra m (a fleeing one: near
+     * a threat costs a lot — FleePlan.threatCost)}.
+     */
+    path(a, b, { cut = null, cost = null } = {}) {
         if (a < 0 || b < 0) return null;
         if (a === b) return [a];
         const N = this.nodes;
@@ -219,7 +243,8 @@ class Graph {
             if (closed.has(cur)) continue;
             closed.add(cur);
             for (const nb of this.adj[cur]) {
-                const ng = g.get(cur) + Math.hypot(N[cur].x - N[nb].x, N[cur].y - N[nb].y, N[cur].z - N[nb].z);
+                if (cut?.size && cut.has(edgeKey(cur, nb))) continue;
+                const ng = g.get(cur) + Math.hypot(N[cur].x - N[nb].x, N[cur].y - N[nb].y, N[cur].z - N[nb].z) + (cost ? cost(N[nb]) : 0);
                 if (ng < (g.get(nb) ?? Infinity)) { g.set(nb, ng); from.set(nb, cur); open.push([ng + h(nb), nb]); }
             }
         }
@@ -557,12 +582,27 @@ export class CastleLife {
     }
 
     // ------------------------------------------------------------ moving
-    _goTo(v, node) {
+    _goTo(v, node, cost = null) {
         const g = v.cs.graph;
         const from = v.node != null && v.node >= 0 && Math.hypot(g.nodes[v.node].x - v.x, g.nodes[v.node].z - v.z) < 3 ? v.node : g.nearest(v.x, v.y, v.z);
-        const path = g.path(from, node);
+        const cut = v.cs.cut;
+        let path = g.path(from, node, { cut, cost }); // (never through a way the world broke — breakWays)
+        // the place cut off (every way there broken): as near to it as one can get
+        if (!path && node >= 0 && from >= 0 && cut?.size) {
+            const t = g.nodes[node];
+            let best = -1, bd = Infinity;
+            for (const id of g.reach(from, cut)) { const n = g.nodes[id], d = Math.hypot(n.x - t.x, (n.y - t.y) * 2, n.z - t.z); if (d < bd) { bd = d; best = id; } }
+            if (best >= 0) path = g.path(from, best, { cut, cost });
+        }
+        // (already between the first node and the next: no stepping back to the first — the back-and-forth
+        // of a walker whose way is looked for again every few seconds)
+        let i = 0;
+        if (path && path.length > 1) {
+            const a = g.nodes[path[0]], b = g.nodes[path[1]];
+            if (Math.abs(a.y - b.y) < 1.5 && Math.hypot(b.x - v.x, b.z - v.z) < Math.hypot(b.x - a.x, b.z - a.z) && this._edgeWalkable(v, b)) i = 1;
+        }
         v.path = path;
-        v.pathI = 0;
+        v.pathI = i;
         v.goal = node;
         return !!path;
     }
@@ -612,6 +652,17 @@ export class CastleLife {
         const g = v.cs.graph;
         if (!v.path || v.pathI >= v.path.length) return true;
         const n = g.nodes[v.path[v.pathI]];
+        // off the ways, walls between it and them (up some steps, in a corner of a house, behind rubble):
+        // the way to the path found block by block first (gridWay), then on along the path
+        if (v.gridWay) {
+            const w = v.gridWay[0];
+            if (!w || v.gridWay.goal !== v.path[v.pathI]) v.gridWay = null;
+            else {
+                const d = this._steer(v, w.x, w.z, speed, dt, 0.25);
+                if (d < 0.45) { v.gridWay.shift(); if (!v.gridWay.length) v.gridWay = null; }
+                return false;
+            }
+        }
         // outdoors everybody keeps to their own side of the road (no walking in single file);
         // in the castle, doors and rooms — right along the path
         let tx = n.x, tz = n.z;
@@ -634,11 +685,38 @@ export class CastleLife {
             // (off the path only where one can walk; else the path's own way — but never into a player's shield)
             if (a.x !== ux || a.z !== uz) {
                 if (this._walkable(v.x + a.x * (s + BODY_R), v.z + a.z * (s + BODY_R), v.y)) { ux = a.x; uz = a.z; } else if (a.ward) { v.speed = 0; return false; }
+                // (no room to step round him — a gate, a narrow street: never on into his back; a moment behind him)
+                else if (a.by && Math.hypot(a.by.vx || 0, a.by.vz || 0) > 0.5 && Math.hypot(a.by.x - v.x, a.by.z - v.z) < this._bodyR(v) + (a.by.r ?? 0.5) + 0.35 && (a.by.x - v.x) * ux + (a.by.z - v.z) * uz > 0) { v.speed = 0; return false; }
             }
         }
         // a door shut by «Lock» on the way: knock, wait a little — then go some other way (never through it)
         if (this.game.locks?.spelled?.size && this.game.locks.blocksAt(v.x + ux * (s + BODY_R), v.z + uz * (s + BODY_R), v.y)) return this._lockedOut(v, dt);
         v.knockT = 0;
+        // the way ahead is not there any more (a hole the blast left, a wall or stones fallen across):
+        // never over the edge, never through it — along it towards the node; if this way itself is
+        // broken, it is cut and another way is taken (the changed world is understood: breakWays)
+        if (!this._walkable(v.x + ux * (s + BODY_R), v.z + uz * (s + BODY_R), v.y)) {
+            v.blockT = (v.blockT || 0) + dt;
+            if (v.blockT > 0.8) {
+                v.blockT = 0;
+                const a = v.pathI > 0 ? v.path[v.pathI - 1] : g.nearest(v.x, v.y, v.z), b = v.path[v.pathI];
+                // (cut only where the world was broken: a way as it was built is never given up for good)
+                if (a >= 0 && a !== b && this._nearBreak(v.cs, g.nodes[a], n) && !this._edgeWalkable(g.nodes[a], n)) {
+                    (v.cs.cut || (v.cs.cut = new Set())).add(edgeKey(a, b));
+                    if (!this._goTo(v, v.path[v.path.length - 1], v.pathCost)) { v.path = null; v.speed = 0; return true; }
+                    return false;
+                }
+                // (the way itself is whole — it's where it stands: round the walls to it, block by block)
+                if (!(v.gridT > (this._clock || 0))) {
+                    v.gridT = (this._clock || 0) + 3;
+                    const w = this._gridWay(v, n);
+                    if (w) { w.goal = b; v.gridWay = w; return false; }
+                }
+            }
+            this._steer(v, tx, tz, speed, dt);
+            return false;
+        }
+        v.blockT = 0;
         v.x += ux * s; v.z += uz * s;
         v.yaw = turn(v.yaw, Math.atan2(-ux, -uz), dt * 8);
         v.speed = speed;
@@ -658,6 +736,116 @@ export class CastleLife {
         v.knockT = 0;
         v.path = null; // (they go elsewhere: their day picks a new place)
         return true;
+    }
+
+    /**
+     * The way on foot from where it stands to a point `to` {x, y, z} (≤ ~20 m off), block by block:
+     * round walls, up and down steps one can walk (a search over the blocks one can stand on — the
+     * same `_walkable` as every step). → [{x, z}…] (the corners only) or null.
+     */
+    _gridWay(v, to, maxCells = 1800) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return null;
+        const sx = Math.round(v.x), sz = Math.round(v.z), gx = Math.round(to.x), gz = Math.round(to.z);
+        if (Math.abs(gx - sx) > 22 || Math.abs(gz - sz) > 22) return null;
+        const key = (x, z) => (x - sx + 64) * 256 + (z - sz + 64);
+        const open = [[Math.hypot(gx - sx, gz - sz), 0, sx, sz, v.y]];
+        const seen = new Map([[key(sx, sz), null]]);
+        let found = null, n = 0;
+        while (open.length && n++ < maxCells) {
+            let bi = 0;
+            for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+            const [, c, x, z, y] = open[bi];
+            open[bi] = open[open.length - 1]; open.pop();
+            if (Math.abs(x - gx) <= 1 && Math.abs(z - gz) <= 1 && Math.abs(y - to.y) < 2) { found = key(x, z); break; }
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+                const nx = x + dx, nz = z + dz, k = key(nx, nz);
+                if (seen.has(k) || Math.abs(nx - sx) > 24 || Math.abs(nz - sz) > 24) continue;
+                if (!this._walkable(nx, nz, y)) continue;
+                if (dx && dz && (!this._walkable(x + dx, z, y) || !this._walkable(x, z + dz, y))) continue; // (no cutting a corner)
+                const ny = t.floorBelow(nx, nz, Math.round(y + 1.5) + 1) - 0.5;
+                seen.set(k, key(x, z));
+                const nc = c + (dx && dz ? 1.414 : 1);
+                open.push([nc + Math.hypot(gx - nx, gz - nz), nc, nx, nz, ny]);
+            }
+        }
+        if (found == null) return null;
+        const cells = [];
+        for (let k = found; k != null; k = seen.get(k)) cells.push({ x: Math.floor(k / 256) - 64 + sx, z: (k % 256) - 64 + sz });
+        cells.reverse();
+        // (only where it turns: a straight run is one step)
+        const out = [];
+        for (let i = 1; i < cells.length; i++) {
+            const a = cells[i - 1], b = cells[i], c = cells[i + 1];
+            if (!c || (b.x - a.x) !== (c.x - b.x) || (b.z - a.z) !== (c.z - b.z)) out.push(b);
+        }
+        out.push({ x: to.x, z: to.z });
+        return out;
+    }
+
+    /** Can one walk the straight way between two path nodes (the floor there, no wall across)? */
+    _edgeWalkable(a, b) {
+        const d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.ceil(d / 0.6));
+        for (let i = 0; i <= n; i++) {
+            const k = i / n, x = a.x + (b.x - a.x) * k, z = a.z + (b.z - a.z) * k, y = a.y + (b.y - a.y) * k;
+            // (a stair is not a straight slope: a step a block above or below the line is still the way)
+            if (!this._walkable(x, z, y) && !this._walkable(x, z, y + 1) && !this._walkable(x, z, y - 1)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * (host) The world broke at `pos` (a blast, «Gather», a wall come down): the ways of the castle /
+     * tower through that place which one can't walk any more are cut — nobody's path goes over the
+     * hole or through the rubble, and whoever was on such a way looks for another at once. (A cut
+     * way is looked at again now and then: the builders put it back — Rebuild.js.)
+     */
+    breakWays(pos, r) {
+        for (const cs of this.castles.values()) {
+            if (!cs.graph.nodes.length || !this._inLand(cs.def, pos, r + 12)) continue;
+            const br = cs.breaks || (cs.breaks = []);
+            br.push({ x: pos.x, y: pos.y ?? 0, z: pos.z, r });
+            if (br.length > 24) br.shift();
+            const N = cs.graph.nodes, py = pos.y ?? 0;
+            let any = false;
+            for (const [a, b] of cs.def.edges) {
+                const A = N[a], B = N[b];
+                if (Math.min(A.y, B.y) > py + r + 3 || Math.max(A.y, B.y) < py - r - 4) continue;
+                if (segDist2(A.x, 0, A.z, B.x, 0, B.z, pos.x, 0, pos.z) > (r + 2) * (r + 2)) continue;
+                const k = edgeKey(a, b);
+                if (this._edgeWalkable(A, B)) { cs.cut?.delete(k); continue; }
+                (cs.cut || (cs.cut = new Set())).add(k);
+                any = true;
+            }
+            if (!any) continue;
+            for (const v of cs.active.values()) {
+                if (!v.path || v.dead || v.pathI >= v.path.length) continue;
+                let hit = false;
+                for (let i = Math.max(1, v.pathI); i < v.path.length && !hit; i++) hit = cs.cut.has(edgeKey(v.path[i - 1], v.path[i]));
+                if (hit && !this._goTo(v, v.path[v.path.length - 1], v.pathCost)) v.path = null;
+            }
+        }
+    }
+
+    /** Does the way a→b pass a place where the world was broken (a blast, rubble — breakWays)? */
+    _nearBreak(cs, a, b) {
+        for (const p of cs.breaks || []) {
+            if (Math.min(a.y, b.y) > p.y + p.r + 6 || Math.max(a.y, b.y) < p.y - p.r - 6) continue;
+            if (segDist2(a.x, 0, a.z, b.x, 0, b.z, p.x, 0, p.z) < (p.r + 4) * (p.r + 4)) return true;
+        }
+        return false;
+    }
+
+    /** (host) Now and then: a cut way that one can walk again (put back) is open again. */
+    _healWays(dt) {
+        this._healT = (this._healT || 0) - dt;
+        if (this._healT > 0) return;
+        this._healT = 5;
+        for (const cs of this.castles.values()) {
+            if (!cs.cut?.size) continue;
+            const N = cs.graph.nodes;
+            for (const k of [...cs.cut]) { const a = Math.floor(k / 65536), b = k % 65536; if (N[a] && N[b] && this._edgeWalkable(N[a], N[b])) cs.cut.delete(k); }
+        }
     }
 
     /** How wide one is (m): others keep this clear of it. */
@@ -696,12 +884,15 @@ export class CastleLife {
         else if (Math.abs(uz) > 0.05 && this._walkable(v.x, nz, v.y) && this._walkable(v.x, nz + Math.sign(uz) * B, v.y)) { v.z = nz; v.speed = speed; }
         else if (this._tryClimb(v, dx / d, dz / d)) v.speed = 0;
         else {
-            // a wall ahead too high to climb: try round it (along the wall, either way)
+            // a wall ahead too high to climb: try round it (along the wall, either way — the side it
+            // already went first, for a while: no jittering left-right on the spot against a wall)
             v.speed = 0;
             const a0 = Math.atan2(dz, dx);
-            for (const da of [0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
+            const sd = v.slide && v.slide.until > (this._clock || 0) ? v.slide.sign : 1;
+            for (const k of [0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
+                const da = k * sd;
                 const ax = Math.cos(a0 + da), az = Math.sin(a0 + da);
-                if (this._walkable(v.x + ax * s, v.z + az * s, v.y) && this._walkable(v.x + ax * (s + B), v.z + az * (s + B), v.y)) { v.x += ax * s; v.z += az * s; v.speed = speed; break; }
+                if (this._walkable(v.x + ax * s, v.z + az * s, v.y) && this._walkable(v.x + ax * (s + B), v.z + az * (s + B), v.y)) { v.x += ax * s; v.z += az * s; v.speed = speed; v.slide = { sign: Math.sign(da), until: (this._clock || 0) + 1.5 }; break; }
                 if (Math.abs(da) <= 1.6 && this._tryClimb(v, ax, az)) break;
             }
         }
@@ -981,31 +1172,7 @@ export class CastleLife {
         if (this.fright.step(v, dt)) return; // (danger near: hiding, running away, looking out, buckets)
         if (v.job === 'rebuild' && this.rebuild.work(v, dt)) return; // (a builder at the repairs)
         if ((v.pack > 0 || v.rounds) && this.night?.duty(v, dt)) return; // (a merchant packing up, the watch's rounds)
-        if (v.fleeT > 0) {
-            v.fleeT -= dt;
-            const fp = v.fleeFrom ? this._playerPos(v.fleeFrom) : v.fleeAt || null; // (from a player — or from a place: a blast)
-            // run away along the paths: to a place far from the attacker (home, the gate, the market…)
-            if (!v.fleeing && fp) {
-                v.fleeing = true;
-                const g2 = cs.graph;
-                let best = -1, bs = -Infinity;
-                for (let k = 0; k < 16; k++) {
-                    const n = g2.nodes[Math.floor(Math.random() * g2.nodes.length)];
-                    if (!n || Math.abs(n.y - v.y) > 6) continue; // (a wanderer on the road: no paths)
-                    const away = Math.hypot(n.x - fp.x, n.z - fp.z), mine = Math.hypot(n.x - v.x, n.z - v.z);
-                    const s = away - 0.4 * mine + (n.tag === 'home' ? 15 : 0);
-                    if (away > 25 && s > bs) { bs = s; best = n.id; }
-                }
-                if (best >= 0) this._goTo(v, best);
-            }
-            if (v.path && v.pathI < (v.path?.length || 0)) this._followPath(v, dt, RUN);
-            else if (fp && (Math.hypot(fp.x - v.x, fp.z - v.z) < 10 || !cs.graph.nodes.length)) this._steer(v, v.x + (v.x - fp.x), v.z + (v.z - fp.z), RUN, dt);
-            else v.speed = 0;
-            v.mode = v.speed > 0 ? 'flee' : 'idle';
-            this._ground(v);
-            if (v.fleeT <= 0) { v.fleeFrom = null; v.fleeAt = null; v.fleeing = false; v.path = null; if (v.job === 'wander') this._nextTrip(v); }
-            return;
-        }
+        if (v.fleeT > 0) { this._fleeStep(v, dt); return; }
         // the new king comes by: bow
         const st = this.state(cs.def.id);
         if (st.owner && v.bowT <= 0) {
@@ -1151,6 +1318,95 @@ export class CastleLife {
             }
         }
         this._ground(v);
+    }
+
+    /**
+     * What a frightened one runs from now: the place it was scared by (a blast, the hole it left),
+     * the player it runs from, and every known enemy of its castle / tower about (seen — Blame.js).
+     */
+    _threats(v) {
+        const T = [];
+        if (v.fleeAt) T.push({ x: v.fleeAt.x, z: v.fleeAt.z, r: v.fleeAt.r ?? 10 });
+        const now = Date.now();
+        const add = (pid) => {
+            const p = this._playerPos(pid);
+            if (p && Math.hypot(p.x - v.x, p.z - v.z) < 70 && !T.some((t) => t.pid === pid)) T.push({ x: p.x, z: p.z, r: 14, pid });
+        };
+        if (v.fleeFrom != null) add(v.fleeFrom);
+        for (const [pid, until] of v.cs.hostile) if (until > now) add(pid);
+        return T;
+    }
+
+    /**
+     * (host) Running away (a timid wizard, anybody told to flee, frightened by a blast or a player):
+     * away from every threat and never past one (FleePlan.js). In a building or a tower — by its ways
+     * to the farthest place it can reach without going near them (the stairs up, the back rooms, out
+     * of a door on the far side); out in the open — straight away across the land, not along the road
+     * that passes the attacker. Far enough: it stops and watches, and keeps away while the threat is
+     * there (no walking back to the enemy when the time is up).
+     */
+    _fleeStep(v, dt) {
+        const cs = v.cs;
+        v.fleeT -= dt;
+        v.seated = false;
+        if (WIZ_JOBS.has(v.job)) { v.job = 'wander'; v.post = null; v.trips = 0; } // (the desk, the lectern: left behind)
+        const F = v.flee || (v.flee = { t: 0, plan: null });
+        F.t -= dt;
+        if (F.t <= 0 || !F.T) { F.T = this._threats(v); }
+        const T = F.T;
+        const d = T.length ? threatDist(v, T) : Infinity;
+        // the enemy still about: it goes on keeping away (a place it was scared at is feared only its own while)
+        if (v.fleeT < 1.5 && T.some((t) => t.pid != null && threatDist(v, [t]) < FLEE.SAFE + 15)) v.fleeT = 1.5;
+        if (v.fleeT <= 0 || !T.length) {
+            v.fleeFrom = null; v.fleeAt = null; v.fleeing = false; v.path = null; v.flee = null; v.pathCost = null;
+            if (v.job === 'wander') this._nextTrip(v);
+            return;
+        }
+        if (F.t <= 0) {
+            F.t = FLEE.REPLAN;
+            const indoors = this._roofed(v);
+            if (d >= FLEE.SAFE && !indoors) F.plan = { watch: true };
+            else if (cs.graph.nodes.length && (indoors || this._inWalls(cs.def, v) || !F.plan?.open)) {
+                // by the ways of the building — one search over the ways it can take (not through a broken one — a doorway gone into a
+                // crater —, not into a threat): the farthest place for the least running, and the way there
+                const g2 = cs.graph;
+                if (!(F.plan?.node != null && v.path && v.pathI < v.path.length && !pathPasses(v.path.slice(v.pathI), g2.nodes, v, T))) {
+                    const from = v.node != null && v.node >= 0 && Math.hypot(g2.nodes[v.node].x - v.x, g2.nodes[v.node].z - v.z) < 3 ? v.node : g2.nearest(v.x, v.y, v.z);
+                    const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90 });
+                    if (r) { v.path = r.path; v.pathI = 0; v.goal = r.goal; F.plan = { node: r.goal }; v.pathCost = (n) => threatCost(n, T); } else { F.plan = null; v.path = null; }
+                }
+                if (!F.plan && !indoors) { const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)); F.plan = q ? { open: q } : { watch: true }; v.path = null; }
+                if (!F.plan) F.plan = { watch: true }; // (cornered inside: it cowers where it is, away from the windows it can't reach)
+            } else {
+                const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y));
+                F.plan = q ? { open: q } : { watch: true };
+                v.path = null;
+            }
+        }
+        const P = F.plan;
+        if (P?.node != null && v.path && v.pathI < v.path.length) {
+            if (this._followPath(v, dt, RUN)) { v.path = null; F.t = 0; }
+        } else if (P?.open) {
+            const left = this._steer(v, P.open.x, P.open.z, RUN, dt, 1);
+            if (left < 1.5 || v.speed === 0) F.t = Math.min(F.t, 0.2);
+        } else {
+            // far enough (or nowhere to go): stands and watches the danger, ready to run on
+            v.speed = 0; v.path = null;
+            const t = T.reduce((a, b) => (Math.hypot(b.x - v.x, b.z - v.z) < Math.hypot(a.x - v.x, a.z - v.z) ? b : a), T[0]);
+            v.yaw = turn(v.yaw, Math.atan2(-(t.x - v.x), -(t.z - v.z)), dt * 5);
+            if (d < FLEE.SAFE - 10) F.t = Math.min(F.t, 1); // (it came nearer: on again)
+        }
+        // (standing near it, nowhere farther to go: cowering — ducked, the arms over the head)
+        v.mode = v.speed > 0 ? 'flee' : d < FLEE.SAFE * 0.6 ? 'flinch' : 'idle';
+        this._ground(v);
+    }
+
+    /** A roof over it (inside a house, the tower, a gate): the ways of the building lead out. */
+    _roofed(v) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return false;
+        const L = Math.round(v.y + 1.5);
+        return t.solidIn(Math.round(v.x), Math.round(v.z), L + 4, L + 14);
     }
 
     /** A servant of «Брейнрот»: after its master, at the master's enemies. */
@@ -1593,14 +1849,21 @@ export class CastleLife {
     _wet(x, z, y) { const w = this.game.swim?.waterAt?.(x, z, y + 0.3); return !!w && w.depth > 1 && y < w.surface; }
 
     /** To a place: straight, or along the castle's paths when walls are between. True when there. */
-    _goSpot(v, x, z, speed, dt, stop = 0.5) {
+    _goSpot(v, x, z, speed, dt, stop = 0.5, y = null) {
         const d = Math.hypot(x - v.x, z - v.z);
-        if (d <= stop) { v.speed = 0; v.path = null; return true; }
+        // (a place on another floor — down the tower's stair to the foe, up to a gallery: there only by the stairs)
+        const floor = y != null && Math.abs(y - v.y) > 2.5;
+        if (d <= stop && !floor) { v.speed = 0; v.path = null; return true; }
         const cs = v.cs, c = this.game.collision;
         v.chaseT = (v.chaseT || 0) - dt;
         // (the paths only lead in and out of the walls; out in the open — straight)
-        if (d > 9 && cs.graph.nodes.length && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v)) && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)) {
-            if (!v.path || v.chaseT <= 0) { v.chaseT = 2.5; this._goTo(v, cs.graph.nearest(x, v.y, z, 6)); }
+        if (cs.graph.nodes.length && (floor || (d > 9 && (this._inWalls(cs.def, { x, z }) || this._inWalls(cs.def, v)) && c.lineOfSight && !c.lineOfSight(v.x, v.y + 2.5, v.z, x, v.y + 2.5, z, 1.5)))) {
+            if (!v.path || v.chaseT <= 0) {
+                v.chaseT = 2.5;
+                // (the same place to go: the way it is on stays — no turning back and forth as the place shifts a little)
+                const to = cs.graph.nearest(x, floor ? y : v.y, z, floor ? 3 : 6);
+                if (!(v.path && to === v.goal && v.pathI < v.path.length)) this._goTo(v, to);
+            }
             if (v.path && !this._followPath(v, dt, speed)) return false;
         }
         this._steer(v, x, z, speed, dt, stop);
@@ -2460,6 +2723,7 @@ export class CastleLife {
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
         if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4, by }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4, via); }
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
+        this.breakWays(pos, r ?? (loud ? 6 : 2)); // (no path over the hole any more: everybody's ways round it)
         const isPlayer = !!by && (by === g.localId || g.remotes.has(by));
         let counted = false;
         for (const def of this.index.near(pos.x, pos.z, 0)) {
@@ -2570,16 +2834,20 @@ export class CastleLife {
         // (never into a fire or a castle coming down: they look from its edge)
         const keep = this.fright.keepOut(I);
         if (keep && d < keep + 5) { v.speed = 0; v.path = null; v.yaw = turn(v.yaw, Math.atan2(-(I.x - v.x), -(I.z - v.z)), dt * 4); v.mode = 'idle'; this._ground(v); return true; }
-        if (d > 6) {
+        if (d > 6 && !I.blocked) {
             v.chaseT = (v.chaseT || 0) - dt;
             if (!v.path || v.chaseT <= 0) { v.chaseT = 3; this._goTo(v, v.cs.graph.nearest(I.x, I.y, I.z, 8)); }
             const end = this._followPath(v, dt, RUN);
             if (end) this._steer(v, I.x, I.z, RUN * 0.6, dt, 5);
             v.mode = v.speed > 0 ? 'run' : 'idle';
+            // (no way nearer — a wall, the rubble, everybody in the gate: he looks from where he is, not running on the spot)
+            const pr = I.prog || (I.prog = { x: v.x, z: v.z, t: 0 });
+            pr.t += dt;
+            if (pr.t > 3) { if (Math.hypot(v.x - pr.x, v.z - pr.z) < 1.2) { I.blocked = true; v.path = null; } pr.x = v.x; pr.z = v.z; pr.t = 0; }
         } else {
-            // there: looking round
+            // there: looking round (kept off it: looking at it)
             v.speed = 0; v.path = null;
-            v.yaw = turn(v.yaw, v.yaw + 1, dt * 0.8);
+            v.yaw = I.blocked ? turn(v.yaw, Math.atan2(-(I.x - v.x), -(I.z - v.z)), dt * 4) : turn(v.yaw, v.yaw + 1, dt * 0.8);
             v.mode = 'idle';
             if (I.t > 12) I.t = 12;
         }
@@ -2777,6 +3045,8 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this._squads(dt);
             this._assignSlots();
+            this._healWays(dt);
+            this._clock = (this._clock || 0) + dt;
             for (const v of [...this.byId.values()]) {
                 if (v.handLink) continue; // (held by the hand: HandHold leads them)
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
