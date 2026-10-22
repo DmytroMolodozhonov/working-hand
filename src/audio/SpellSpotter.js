@@ -207,10 +207,10 @@ export function prepare(lp, T) {
     return { lp, T, mx, am, quiet };
 }
 
-/** The words as written: the best letter of each 40 ms, repeats and «nothing new» left out. */
-export function greedy(P) {
+/** The words as written: the best letter of each 40 ms, repeats and «nothing new» left out (from…to: a part). */
+export function greedy(P, from = 0, to = P.T) {
     let s = '', prev = -1;
-    for (let t = 0; t < P.T; t++) {
+    for (let t = Math.max(0, from); t < Math.min(P.T, to); t++) {
         const a = P.am[t];
         if (a !== BLANK && a !== prev) s += LETTERS[a];
         prev = a;
@@ -385,6 +385,18 @@ export function lettersOutside(P, a, b, pause = Infinity) {
  *   text: the spell's own words when one was heard well enough, else the words as written;
  *   echo: that spell is in the speakers' sound too — a friend's voice (or the game's), not mine.
  */
+/** A spell's span without the quiet at its ends (its first and last sound). */
+export function trimQuiet(P, sp) {
+    let a = Math.max(0, sp.a), b = Math.min(P.T - 1, sp.b);
+    while (a < b && (P.am[a] === BLANK || P.am[a] === SPACE)) a++;
+    while (b > a && (P.am[b] === BLANK || P.am[b] === SPACE)) b--;
+    sp.a = a; sp.b = b;
+    return sp;
+}
+
+/** 40 ms steps round a spell whose letters count as the spell's own (near). */
+export const NEAR = 5;
+
 export function hear(lp, T, o = {}) {
     const P = prepare(lp, T);
     const written = greedy(P);
@@ -392,6 +404,9 @@ export function hear(lp, T, o = {}) {
     const snr = Number.isFinite(o.snr) ? o.snr : Infinity;
     const open = { openStart: !o.cut, openEnd: o.final !== false };
     const best = bestSpell(P, far, open, VOCAB, snr);
+    // (the spell's span may begin in the quiet before it — «nothing new» costs it nothing there: «так… (pause)
+    // Инферно» then counted «так» as letters round it, a sentence. Its own letters start at its first sound.)
+    if (best) trimQuiet(P, best);
     const need = best ? threshold(best.len, far, snr) : 0;
     if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best };
     // (a phrase still being said: the spell must be over — nothing heard after it. «Бомбардо…» may yet
@@ -413,6 +428,9 @@ export function hear(lp, T, o = {}) {
         }
     }
     const text = WORDY.has(best.spell) ? written : best.canonical;
+    // near: the letters written where the spell was said (and a little round it) — not the whole phrase: a word
+    // before it in the same breath must not make the spell's own letters look unlike it (SpellPhrase.soundTrust)
+    const near = greedy(P, best.a - NEAR, best.b + 1 + NEAR);
     // tail: ms heard after the spell (a look at a phrase still being said: nothing but quiet there)
-    return { text, written, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40 };
+    return { text, written, near, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40 };
 }

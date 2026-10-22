@@ -7,6 +7,7 @@
   "scripts": {
     "start": "python server.py",
     "test": "node --test \"tests/unit/*.test.js\"",
+    "test:voice": "node --test tests/unit/voice-quality.test.js tests/unit/voice-spotter.test.js tests/unit/spell-phrase.test.js tests/unit/game-voices.test.js",
     "test:e2e": "node --test --test-concurrency=1 \"tests/e2e/*.test.mjs\"",
     "test:py": "python -m unittest discover -s tests/python"
   },

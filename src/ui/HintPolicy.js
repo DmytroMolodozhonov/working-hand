@@ -19,7 +19,7 @@ const plain = (html) => String(html ?? '').replace(/<[^>]*>/g, '').replace(/&nbs
 // a word telling the player what to do: «поднимите», «направьте», «скажите», «присядьте», «встаньте»…
 const IMPERATIVE = /(?:^|[^А-Яа-яЁё])[А-Яа-яЁё]{2,}(?:ите|ьте|йте)(?:сь)?(?![А-Яа-яЁё])/;
 // what happened / a danger: never a hint, whatever its words
-const NEWS = /−\s?\d|\bHP\b|ачивк|погиб|умер|убил|смерт|взорв|Стража|заметил|Горячо|опасн|ДУЭЛЬ|Не хватает маны|горит!|Укус|кровь|Молния в ваших руках|крикнул/i;
+const NEWS = /−\s?\d|\bHP\b|ещё не знаете|еще не знаете|откроется, когда|ачивк|погиб|умер|убил|смерт|взорв|Стража|заметил|Горячо|опасн|ДУЭЛЬ|Не хватает маны|горит!|Укус|кровь|Молния в ваших руках|крикнул/i;
 
 /** Is this line a «how to do it» hint (and not news, a warning or a result)? */
 export function isHowTo(html) {
