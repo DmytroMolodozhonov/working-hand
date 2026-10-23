@@ -39,8 +39,11 @@ export const TREE_SIZES = [
     { name: 'Яблоня', H: [7.5, 9], W: [8, 10], D: [0.45, 0.6], clear: 3.9 },
     { name: 'Золотая яблоня', H: [8.5, 10], W: [9, 11], D: [0.6, 0.75], clear: 3.9 },
 ];
-/** The cells of the leaf atlas (TreeLeaves.js): one per kind, the apple trees' two too. */
-export const ATLAS_CELLS = 7;
+/** The cells of the leaf atlas (TreeLeaves.js): one per kind, the apple trees' two, and a plain one for the bark. */
+export const ATLAS_CELLS = 8;
+/** The atlas's plain cell: the bark (one material for the whole tree — one draw). */
+export const BARK_CELL = 7;
+const BARK_U = (BARK_CELL + 0.5) / ATLAS_CELLS;
 
 const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
 const BARK = [hex(0x5e4632), hex(0xe9e6de), hex(0x4f3a2b), hex(0x5b3330), hex(0x3a2c22), hex(0x5a4030), hex(0x9a6a2a)];
@@ -171,7 +174,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
     const dens = 0.9 + 0.3 * rnd() + (age === 2 ? 0.1 : 0);
     const lopA = rnd() * Math.PI * 2;
     const H = range(rnd, S.H) * fH, W = range(rnd, S.W) * fW, R0 = range(rnd, S.D) / 2 * girth;
-    const wood = new Part(), leaf = new Part(true);
+    const wood = new Part(true), leaf = new Part(true);
     const joints = [], spheres = [];
     const barkC = BARK[kind];
     const sway = (y) => { const t = Math.max(0, y - 2) / H; return Math.min(1, t * t * 1.4); };
@@ -279,7 +282,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
                 const flare = level === 0 ? 1 + (P.gnarl ? 1.0 : 0.7) * Math.exp(-Math.max(0, y) / 0.8) * (0.5 + 0.5 * Math.cos(lobes * a + lph)) : 1;
                 const n = add(mul(N, Math.cos(a)), mul(B, Math.sin(a)));
                 const q = add(pts[r], mul(n, radii[r] * flare));
-                wood.vert(q[0], q[1], q[2], n, barkAt(level, r, s, q[1]), sway(q[1]));
+                wood.vert(q[0], q[1], q[2], n, barkAt(level, r, s, q[1]), sway(q[1]), BARK_U, 0.5);
             }
             if (r > 0) {
                 const a0 = first + (r - 1) * sides, b0 = first + r * sides;
@@ -288,7 +291,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
         }
         // the tip closed with a point
         const e = pts[pts.length - 1], T = unit(sub(e, pts[pts.length - 2])), tip = add(e, mul(T, radii[radii.length - 1] * 1.5));
-        const c = wood.vert(tip[0], tip[1], tip[2], T, barkAt(level, pts.length, 0, tip[1]), sway(tip[1]));
+        const c = wood.vert(tip[0], tip[1], tip[2], T, barkAt(level, pts.length, 0, tip[1]), sway(tip[1]), BARK_U, 0.5);
         const b0 = first + (pts.length - 1) * sides;
         for (let s = 0; s < sides; s++) wood.tri(b0 + s, c, b0 + (s + 1) % sides);
     }

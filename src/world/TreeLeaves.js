@@ -7,7 +7,7 @@
  *  dark oak — the oak's lobed leaves, darker and denser.
  * Drawn on any 2D context (a page's canvas or an OffscreenCanvas in a worker); the gaps stay clear (alpha).
  */
-import { treeRandom, ATLAS_CELLS } from './TreeBuild.js';
+import { treeRandom, ATLAS_CELLS, BARK_CELL } from './TreeBuild.js';
 
 export const LEAF_ATLAS = { CELL: 256, KINDS: ATLAS_CELLS };
 
@@ -187,7 +187,10 @@ function sprig(ctx, kind, ox, S) {
 /** The whole atlas: every kind's sprig, side by side (CELL × KINDS by CELL), on a clear background. */
 export function drawLeafAtlas(ctx, S = LEAF_ATLAS.CELL) {
     ctx.clearRect(0, 0, S * LEAF_ATLAS.KINDS, S);
-    for (let k = 0; k < LEAF_ATLAS.KINDS; k++) sprig(ctx, k, k * S, S);
+    for (let k = 0; k < LEAF_ATLAS.KINDS; k++) {
+        if (k === BARK_CELL) { ctx.fillStyle = '#ffffff'; ctx.fillRect(k * S, 0, S, S); continue; } // (the bark: its colour is in the tree's points)
+        sprig(ctx, k, k * S, S);
+    }
 }
 
 /**

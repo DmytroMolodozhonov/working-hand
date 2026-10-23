@@ -61,14 +61,6 @@ function addSway(shader) {
         .replace('#include <begin_vertex>', '#include <begin_vertex>' + SWAY_VERT);
 }
 
-/** Bark: vertex colours, lit as usual, swaying with the crown. */
-export function barkMaterial() {
-    const m = new THREE.MeshLambertMaterial({ vertexColors: true });
-    m.onBeforeCompile = (shader) => addSway(shader);
-    m.customProgramCacheKey = () => 'tree-bark';
-    return m;
-}
-
 /**
  * Leaves: the atlas, cut out by its alpha, both sides lit alike, swaying. glow: the golden apple tree's — its leaves
  * shine with their own colour (GOLD_GLOW), day and night.
@@ -94,12 +86,10 @@ export function leafMaterial({ glow = false } = {}) {
 let _shared = null;
 /** The trees' materials, made once and shared by every tree (the world's, the apple trees, a tree come alive). */
 export function sharedTreeMaterials() {
-    return _shared || (_shared = {
-        bark: applySkyComp(barkMaterial()),
-        leaves: applySkyComp(leafMaterial()),
-        gold: applySkyComp(leafMaterial({ glow: true })),
-        depth: leafDepthMaterial(),
-    });
+    if (_shared) return _shared;
+    const leaves = applySkyComp(leafMaterial());
+    // (the bark is drawn with the leaves' material too — its points take the atlas's plain cell: one shader for a tree)
+    return (_shared = { leaves, bark: leaves, gold: applySkyComp(leafMaterial({ glow: true })), depth: leafDepthMaterial() });
 }
 
 /** The shadow of the leaves: cut out like them (not square cards), swaying the same. */
@@ -124,13 +114,24 @@ function toGeometry(a) {
     return g;
 }
 
+/** Two parts' arrays as one (the second's points after the first's). */
+function joinParts(a, b) {
+    const cat = (x, y, T) => { const o = new T(x.length + y.length); o.set(x); o.set(y, x.length); return o; };
+    const n = a.count + b.count;
+    const index = n > 65535 ? new Uint32Array(a.index.length + b.index.length) : new Uint16Array(a.index.length + b.index.length);
+    index.set(a.index);
+    for (let i = 0; i < b.index.length; i++) index[a.index.length + i] = b.index[i] + a.count;
+    return { pos: cat(a.pos, b.pos, Float32Array), nor: cat(a.nor, b.nor, Float32Array), col: cat(a.col, b.col, Float32Array), sway: cat(a.sway, b.sway, Float32Array), uv: cat(a.uv, b.uv, Float32Array), index, count: n };
+}
+
 /** A shape's geometries (made once, kept: 5 kinds × VARIANTS × 2 — a fixed number). */
 export function treeGeometry(kind, variant, far = false) {
     const key = kind * 1000 + variant * 2 + (far ? 1 : 0);
     let e = _geo.get(key);
     if (!e) {
         const t = buildTree(kind, variant, { far });
-        e = { wood: toGeometry(t.wood), leaf: toGeometry(t.leaf), info: t.info };
+        // full: the bark and the leaves in one shape (one material, the atlas's plain cell for the bark) — one draw a shape
+        e = { wood: toGeometry(t.wood), leaf: toGeometry(t.leaf), full: toGeometry(joinParts(t.wood, t.leaf)), info: t.info };
         _geo.set(key, e);
     }
     return e;

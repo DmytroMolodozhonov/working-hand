@@ -38,7 +38,7 @@ try {
             scene.add(sun);
             const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x5f9a45 }));
             ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-            const bark = TM.barkMaterial(), leaves = TM.leafMaterial(), depth = TM.leafDepthMaterial();
+            const { bark, leaves, depth } = TM.sharedTreeMaterials();
             const ac = document.createElement('canvas');
             const { drawLeafAtlas, LEAF_ATLAS } = await import('/src/world/TreeLeaves.js');
             ac.width = LEAF_ATLAS.CELL * LEAF_ATLAS.KINDS; ac.height = LEAF_ATLAS.CELL;

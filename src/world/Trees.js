@@ -7,7 +7,7 @@
  * and tinted for each tree. A chunk's trees join `world.trees` when its land is drawn and leave when it goes; what
  * happened to a tree (taken, burnt, carried) is kept by its id, so it is the same when its land comes back.
  *
- * Drawing: one instanced mesh per shape for the bark and one for the leaves, shared by every tree of that shape —
+ * Drawing: one instanced mesh per shape (its bark and leaves in one shape, one material), shared by every tree of it —
  * the detailed shape near (NEAR m), a light one far away (the same tree, fewer branches and leaves); the lists are
  * remade only when the player has moved or turned, or a tree changed — not every frame. Shadows near only.
  * Collision: the trunk is solid (a box round it, up to where the branches begin — walk under the crown); the
@@ -18,8 +18,8 @@ import { TREE_GEN } from './TreeBuild.js';
 import { sharedTreeMaterials, treeGeometry } from './TreeMaterials.js';
 
 export const TREES = {
-    NEAR: 64, // m: the detailed shape within this
-    FAR_SHAPES: 6, // far shapes per kind (a far tree takes the one of its variant % FAR_SHAPES)
+    NEAR: 52, // m: the detailed shape within this
+    FAR_SHAPES: 3, // far shapes per kind (a far tree takes the one of its variant % FAR_SHAPES)
     REGISTER_MS: 1.2, // ms a frame for taking new chunks' trees in
     MOVE: 2.5, // m the player moves before the lists are remade
     TURN: 0.06, // rad the view turns before the lists are remade
@@ -207,7 +207,7 @@ export class WorldTrees {
     parts(t, matrix = t.matrix) {
         const g = treeGeometry(t.kind, t.v, false);
         const tint = _c.setScalar(t.tint).clone();
-        const out = [{ geometry: g.wood, material: this.bark, matrix: matrix.clone(), color: t.burnt ? new THREE.Color(TREES.CHAR) : null }];
+        const out = [{ geometry: g.wood, material: this.bark, matrix: matrix.clone(), color: t.burnt ? new THREE.Color(TREES.CHAR) : new THREE.Color(1, 1, 1), depth: this.depth }];
         if (!t.burnt) out.push({ geometry: g.leaf, material: this.leaves, matrix: matrix.clone(), color: tint, depth: this.depth });
         return out;
     }
@@ -264,32 +264,35 @@ export class WorldTrees {
         this.stats.registered = this.byId.size;
     }
 
-    /** One shape's instanced meshes (made when first needed; grown ×2 when full). */
-    _shape(kind, v, far, need) {
-        const key = kind * 1000 + v * 2 + (far ? 1 : 0);
+    /**
+     * One shape's instanced mesh (made when first needed; grown ×2 when full): its bark and leaves in one shape and one
+     * material — one draw (and one for the shadow, near). `bare`: the bark alone — the burnt trees of that shape.
+     */
+    _shape(kind, v, far, bare, need) {
+        const key = this._key(kind, v, far, bare);
         let e = this.meshes.get(key);
         if (e && e.cap >= need) return e;
-        const cap = Math.max(16, e ? e.cap * 2 : 16, need);
-        if (e) { this.group.remove(e.wood, e.leaf); e.wood.dispose(); e.leaf.dispose(); }
+        const cap = Math.max(8, e ? e.cap * 2 : 8, need);
+        if (e) { this.group.remove(e.mesh); e.mesh.dispose(); }
         const g = treeGeometry(kind, v, far);
-        const wood = new THREE.InstancedMesh(g.wood, this.bark, cap);
-        const leaf = new THREE.InstancedMesh(g.leaf, this.leaves, cap);
-        for (const m of [wood, leaf]) {
-            m.frustumCulled = false; // (culled here, tree by tree)
-            m.castShadow = !far;
-            m.receiveShadow = m === wood;
-            m.count = 0;
-            m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-            m.setColorAt(0, _c.setScalar(1)); // (instanceColor made: the tint, the char)
-            m.userData.shared = true;
-            m.raycast = () => {};
-            this.group.add(m);
-        }
-        leaf.customDepthMaterial = this.depth;
-        e = { wood, leaf, cap, key };
+        const mesh = new THREE.InstancedMesh(bare ? g.wood : g.full, this.leaves, cap);
+        mesh.frustumCulled = false; // (culled here, tree by tree)
+        mesh.castShadow = !far;
+        mesh.receiveShadow = false; // (no speckled self-shadow on the leaves: their own shade is in their colours)
+        mesh.count = 0;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3); // (the tint, the char — made for the whole capacity)
+        mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        mesh.customDepthMaterial = this.depth;
+        mesh.userData.shared = true;
+        mesh.raycast = () => {};
+        this.group.add(mesh);
+        e = { mesh, cap, key };
         this.meshes.set(key, e);
         return e;
     }
+
+    _key(kind, v, far, bare) { return ((kind * 16 + v) * 2 + (far ? 1 : 0)) * 2 + (bare ? 1 : 0); }
 
     _draw(camera) {
         _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -308,35 +311,27 @@ export class WorldTrees {
             if (!_fr.intersectsSphere(_sph)) continue;
             const isFar = d2 > TREES.NEAR * TREES.NEAR;
             const v = isFar ? t.v % TREES.FAR_SHAPES : t.v;
-            const key = t.kind * 1000 + v * 2 + (isFar ? 1 : 0);
+            const key = this._key(t.kind, v, isFar, !!t.burnt);
             let l = lists.get(key);
             if (!l) lists.set(key, (l = []));
             l.push(t);
             drawn++;
             if (!isFar) near++;
         }
-        for (const [key, e] of this.meshes) if (!(lists.get(key)?.length)) { e.wood.count = 0; e.leaf.count = 0; }
+        for (const [key, e] of this.meshes) if (!(lists.get(key)?.length)) e.mesh.count = 0;
         for (const [key, l] of lists) {
             if (!l.length) continue;
-            const kind = Math.floor(key / 1000), v = (key % 1000) >> 1, isFar = (key & 1) === 1;
-            const e = this._shape(kind, v, isFar, l.length);
-            let nl = 0;
+            const t0 = l[0], isFar = (TREES.NEAR * TREES.NEAR) < ((t0.x - cx) ** 2 + (t0.z - cz) ** 2);
+            const e = this._shape(t0.kind, isFar ? t0.v % TREES.FAR_SHAPES : t0.v, isFar, !!t0.burnt, l.length);
+            const m = e.mesh;
             for (let i = 0; i < l.length; i++) {
                 const t = l[i];
-                e.wood.setMatrixAt(i, t.matrix);
-                e.wood.setColorAt(i, t.burnt ? _c.setHex(TREES.CHAR) : _c.setScalar(1));
-                if (!t.burnt) {
-                    e.leaf.setMatrixAt(nl, t.matrix);
-                    e.leaf.setColorAt(nl, _c.setScalar(t.tint));
-                    nl++;
-                }
+                m.setMatrixAt(i, t.matrix);
+                m.setColorAt(i, t.burnt ? _c.setHex(TREES.CHAR) : _c.setScalar(t.tint));
             }
-            e.wood.count = l.length;
-            e.leaf.count = nl;
-            for (const m of [e.wood, e.leaf]) {
-                m.instanceMatrix.needsUpdate = true;
-                if (m.instanceColor) m.instanceColor.needsUpdate = true;
-            }
+            m.count = l.length;
+            m.instanceMatrix.needsUpdate = true;
+            if (m.instanceColor) m.instanceColor.needsUpdate = true;
         }
         this.stats.drawn = drawn;
         this.stats.near = near;
@@ -347,9 +342,17 @@ export class WorldTrees {
     sampleModels() {
         const out = [];
         const g = treeGeometry(0, 0, false);
-        const w = new THREE.InstancedMesh(g.wood, this.bark, 1), l = new THREE.InstancedMesh(g.leaf, this.leaves, 1);
-        l.customDepthMaterial = this.depth;
-        for (const m of [w, l]) { m.setMatrixAt(0, _m.makeTranslation(0, -1000, 0)); m.castShadow = true; m.frustumCulled = false; m.userData.shared = true; out.push(m); }
+        const w = new THREE.InstancedMesh(g.full, this.leaves, 1), l = new THREE.Mesh(g.leaf, this.leaves); // (instanced in the world; a plain mesh: an apple tree, a tree come alive)
+        w.setMatrixAt(0, _m.makeTranslation(0, -1000, 0));
+        w.setColorAt(0, _c.setScalar(1)); // (as in the world: tinted trees)
+        l.position.y = -1000;
+        for (const m of [w, l]) {
+            m.customDepthMaterial = this.depth;
+            m.castShadow = true;
+            m.frustumCulled = false;
+            m.userData.shared = true;
+            out.push(m);
+        }
         return out;
     }
 
@@ -364,7 +367,7 @@ export class WorldTrees {
     }
 
     dispose() {
-        for (const e of this.meshes.values()) { e.wood.dispose(); e.leaf.dispose(); }
+        for (const e of this.meshes.values()) e.mesh.dispose();
         this.meshes.clear();
         this.scene.remove(this.group);
     }
