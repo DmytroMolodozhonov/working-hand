@@ -303,7 +303,7 @@ test('the Ice Castle\'s creatures: every place that finds targets knows them; th
     const has = (f, re, why) => assert.match(src(f), re, `${f}: ${why}`);
     const g = src('src/game/Game.js');
     has('src/game/Game.js', /z\.isIce\) \{ this\.iceCastle\.hit/, 'swords, axes, fists');
-    has('src/game/Game.js', /this\.iceCastle\.targets\(\)\), dt\)/, 'blades look for them');
+    has('src/game/Game.js', /this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?\), dt\)/, 'blades look for them');
     has('src/game/Gear.js', /iceCastle\?\.targets\(\)/, 'arrows');
     has('src/game/BodyStrikes.js', /iceCastle/, 'fists and pushes');
     has('src/game/Levitation.js', /iceCreature/, '«Левиоса» says no');
@@ -343,7 +343,7 @@ test('the clever owl: every place blows, arrows, spells, water, fire and «Бр�
         assert.ok(TARGETS[k]?.why, `Owls.TARGETS forgets: ${k}`);
     }
     const g = src('src/game/Game.js');
-    assert.match(g, /this\.owls\.targets\(\), this\.iceCastle\.targets\(\)\), dt\)/, 'swords and axes (Weapons.checkHits)');
+    assert.match(g, /this\.owls\.targets\(\), this\.iceCastle\.targets\(\)(, this\.gargoyles\.targets\(\))?\), dt\)/, 'swords and axes (Weapons.checkHits)');
     assert.match(body(g, '    onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {'), /isOwl/, 'a blow lands on it');
     assert.match(body(g, '    _castBrainrot(isFinal) {'), /owls/, '«Брейнрот» says it does not act');
     assert.match(src('src/game/Gear.js'), /owls\?\.targets\(\)/, 'arrows');

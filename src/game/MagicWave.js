@@ -20,10 +20,11 @@ import { isCastleBlock } from '../world/Terrain.js';
 import { dragonCenter } from './Dragons.js';
 import { phoenixCenter } from './Phoenixes.js';
 import { owlCenter } from './Owls.js';
+import { gargoyleCenter } from './GargoyleModel.js';
 
 /**
  * Every creature there is, as fn(kind, creature, position) — kind: 'zombie', 'villager',
- * 'animal', 'sailor', 'spider', 'dragon', 'phoenix', 'owl', 'tree', 'book'.
+ * 'animal', 'sailor', 'spider', 'dragon', 'phoenix', 'owl', 'gargoyle', 'tree', 'book'.
  */
 export function eachBody(g, fn) {
     for (const z of g.zombies || []) if (!z.isDead && z.group) fn('zombie', z, z.group.position);
@@ -34,6 +35,7 @@ export function eachBody(g, fn) {
     for (const d of g.dragons?.list || []) if (!d.dead) fn('dragon', d, dragonCenter(d));
     for (const f of g.phoenixes?.list || []) if (!f.dead && f.group) fn('phoenix', f, phoenixCenter(f));
     for (const o of g.owls?.list || []) if (!o.dead && o.group) fn('owl', o, owlCenter(o));
+    for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o)); // (the infernal gargoyles: GargoyleRules.TARGETS)
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
@@ -54,6 +56,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'spider': g.spiders?.hit(c, dmg, spell, by); break;
         case 'dragon': g.dragons?.hit(c, dmg, spell, by); break;
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;
+        case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break; // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
         case 'owl': g.owls?.hit(c, dmg, spell, by); break; // (Inspirius — a scroll's — kills it; Circle Attack it darts away from: Owls.TARGETS)
         case 'tree': if (treeKind) g.livingTrees?.hit(c, dmg, treeKind, by); break;
         case 'book': g.books?.hitAt(pos, 0.3, by, null); break;

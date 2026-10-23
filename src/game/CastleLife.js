@@ -1332,6 +1332,8 @@ export class CastleLife {
         if (v.fireT > 0 && this._fireStep(v, dt)) return;
         // «Брейнрот»: a servant follows its master and fights for them
         if (v.servantOf != null && this._serve(v, dt)) return;
+        // the infernal gargoyles (Gargoyles.js): a knight near one runs under it and strikes when it is low
+        if (g.gargoyles?.list.length && g.gargoyles.knightStep(v, dt)) return;
         if (v.arena && g.arenaDuels?.step(v, dt)) return; // (at the duel arena: a fan on the stands, a duellist — ArenaDuels.js)
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         if (v.role === 'king') this._kingNerve(v, dt); // (the king hides by default; he fights only when most of his guard is dead or he is cornered: KingNerve.js)

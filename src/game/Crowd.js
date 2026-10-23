@@ -31,6 +31,7 @@ export const BODY_R = {
     pig: 0.6, sheep: 0.7, cow: 1.0, horse: 1.1, carriage: 2.0, spider: 2.4, dragon: 3.5, tree: 1.0,
     snowman: 0.85, iceQueen: 1.0, iceMonster: 1.6, // (the Ice Castle: IceQueen.js)
     owl: 0.3, // (a clever owl hopping on the ground: Owls.js)
+    gargoyle: 0.9, // (an infernal gargoyle hunting low: Gargoyles.js — the body's width, the wings are above heads)
 };
 
 export class Crowd {

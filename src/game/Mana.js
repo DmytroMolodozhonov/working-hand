@@ -130,6 +130,7 @@ export const MAGIC_KILL = {
     iceMonster: { n: 12, name: 'Ледяной монстр' },
     iceQueen: { n: 30, name: 'Ледяная Королева' },
     dragon: { n: 20, name: 'Дракон' },
+    gargoyle: { n: 4, name: 'Адская горгулья' }, // (the pentagram's: only the first kill of the kind counts — Gargoyles.js)
 };
 
 /** An animal's magical kind (null: an ordinary animal — nothing for it). */

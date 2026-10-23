@@ -150,6 +150,7 @@ const dragons = {
 
 // ============================================================ a bird of the game's kind: the owl, the phoenix
 function birdAdapter(sys, list, P, opts) {
+    const mm = (m) => (opts.modeMap && opts.modeMap[m]) || m; // (a creature of another look names its poses its own way)
     return {
         sys,
         list(g, fn) { for (const o of list(g)) if (!o.dead && o.model && !o.localHeld && !o.lev) fn(o, o.model.position.x, o.model.position.y, o.model.position.z, opts.up); },
@@ -178,7 +179,7 @@ function birdAdapter(sys, list, P, opts) {
             o.yaw = wrap(yaw + Math.PI); o.model.rotation.y = o.yaw;
             o.vel?.set?.(-Math.sin(yaw) * st.vf, st.vy, -Math.cos(yaw) * st.vf);
             const a = o.a || (o.a = {});
-            a.mode = st.air ? (I.stroke || st.vy > 0.8 || st.vf < 2 ? 'flap' : 'glide') : (ground > 0 ? opts.walkMode : 'stand');
+            a.mode = mm(st.air ? (I.stroke || st.vy > 0.8 || st.vf < 2 ? 'flap' : 'glide') : (ground > 0 ? opts.walkMode : 'stand'));
             a.roll = Math.max(-0.6, Math.min(0.6, -wrap(I.yaw - yaw) * 0.8)) * (st.air ? 1 : 0);
             a.pitch = st.air ? Math.max(-0.5, Math.min(0.5, -Math.atan2(st.vy, Math.max(st.vf, 1)) * 0.8)) : 0;
             a.head = 0; a.cock = 0;
@@ -191,15 +192,17 @@ function birdAdapter(sys, list, P, opts) {
             o.yaw = wrap(n.ry + Math.PI); o.model.rotation.y = o.yaw;
             o.state = 'imp';
             const a = o.a || (o.a = {});
-            a.mode = n.air ? 'flap' : n.w > 0 ? opts.walkMode : 'stand';
+            a.mode = mm(n.air ? 'flap' : n.w > 0 ? opts.walkMode : 'stand');
         },
         struck(g, o, I) { return I?.strikeNow ? { reach: opts.reach, dmg: opts.dmg } : null; },
-        release(g, o) { o.state = o._impAir ? 'fly' : 'perch'; o.t = 0; if (o.a) o.a.mode = o._impAir ? 'glide' : 'stand'; },
+        release(g, o) { o.state = o._impAir ? 'fly' : 'perch'; o.t = 0; if (o.a) o.a.mode = mm(o._impAir ? 'glide' : 'stand'); if (opts.onRelease) opts.onRelease(g, o); },
         net(o) { const p = o.model.position; return [p.x, p.y, p.z, wrap((o.yaw ?? 0) + Math.PI), o._impWalk || 0, 0, o._impAir || 0]; },
     };
 }
 
 const owls = birdAdapter('o', (g) => g.owls?.list || [], FLYERS.owl, { up: 0.8, size: 1.3, walk: 1.3, walkMode: 'hop', r: 0.35, reach: 1.4, dmg: 2 });
+// (an infernal gargoyle — Gargoyles.js: «Максима» only; flaps are 'fly', the ground is a hover; released it goes back to its hunt: its mind and its pentagram's leash)
+const gargoyles = birdAdapter('g', (g) => g.gargoyles?.list || [], FLYERS.gargoyle, { up: 1.4, size: 2.4, walk: 3.5, walkMode: 'walk', r: 0.8, reach: 2.6, dmg: 4, modeMap: { flap: 'fly', stand: 'hover', walk: 'hover', hop: 'hover' }, onRelease: (g, o) => { o.mode = 'roam'; o.goal = null; o.target = null; } });
 const phoenixes = birdAdapter('f', (g) => g.phoenixes?.list || [], FLYERS.phoenix, { up: 1.1, size: 1.8, walk: 1.3, walkMode: 'walk', r: 0.45, reach: 1.8, dmg: 4 });
 
 // ============================================================ the book-birds (a book has no legs: on the ground it lies)
@@ -239,6 +242,7 @@ const books = {
 
 BODIES.D = dragons;
 BODIES.o = owls;
+BODIES.g = gargoyles;
 BODIES.f = phoenixes;
 BODIES.b = books;
 
@@ -266,5 +270,5 @@ export function animalWings(g, a, I, dt) {
 }
 
 /** (tests) the bodies of the Maxima. */
-export const FLYER_SYSTEMS = ['D', 'o', 'f', 'b'];
+export const FLYER_SYSTEMS = ['D', 'o', 'f', 'b', 'g'];
 export { BODY_R };

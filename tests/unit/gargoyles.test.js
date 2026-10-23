@@ -1,0 +1,375 @@
+// The infernal gargoyles of the pentagram: the rules and numbers, the ritual's timeline, the 20-second grace, the radius,
+// life and the limit, who-and-what (CLAUDE.md «На кого и на что»), the model's size, and that every place the spells look for
+// creatures knows them.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import * as THREE from 'three';
+import {
+    GARGOYLE, PHASE, phaseAt, fireStrength, ringAngle, skyStrength, skyReach, canStart, sparesSummoner, releasePlan, boltPlan, mayHunt, biteDamage, harmOf,
+    TARGETS, roomFor, outOfLeash, atLimit, FIRE_KINDS, ENEMIES, IGNORED,
+} from '../../src/game/GargoyleRules.js';
+import { DIVINE_SPELLS } from '../../src/game/ProtectionGods.js';
+
+const src = (f) => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
+
+test('the numbers of the author: 40 HP, 30 of them, 150 mana, 5 s of fire, 20 s of grace, 120 m, 5–10 min, at most 60', () => {
+    assert.equal(GARGOYLE.HP, 40);
+    assert.equal(GARGOYLE.COUNT, 30);
+    assert.equal(GARGOYLE.MANA, 150);
+    assert.equal(GARGOYLE.FIRE_T, 5);
+    assert.equal(GARGOYLE.GRACE, 20);
+    assert.equal(GARGOYLE.LEASH, 120);
+    assert.deepEqual(GARGOYLE.LIFE, [300, 600]);
+    assert.equal(GARGOYLE.MAX, 60);
+    assert.ok(GARGOYLE.SKY_R >= 80 && GARGOYLE.SKY_R <= 120, 'the clouds: 80–120 m');
+    assert.ok(GARGOYLE.BITE[0] === 3 && GARGOYLE.BITE[1] === 5, 'a bite 3–5');
+    assert.ok(GARGOYLE.SPEED > 10 && GARGOYLE.DIVE > GARGOYLE.SPEED, 'quick, quicker in a dive');
+});
+
+test('the price: 150 mana at once — under that nothing is taken and nothing starts; Creative is free', () => {
+    assert.equal(canStart(149).ok, false);
+    assert.equal(canStart(150).ok, true);
+    assert.equal(canStart(0).need, 150);
+    assert.equal(canStart(0, true).ok, true);
+});
+
+test('the ritual: 5 s of fire growing (the flame runs faster and faster), then 30 burst out in 2.4 s, then the storm', () => {
+    assert.equal(phaseAt(0), PHASE.FIRE);
+    assert.equal(phaseAt(4.99), PHASE.FIRE);
+    assert.equal(phaseAt(5.01), PHASE.RELEASE);
+    assert.equal(phaseAt(5 + GARGOYLE.RELEASE_T + 0.1), PHASE.STORM);
+    assert.equal(phaseAt(GARGOYLE.STORM_T + 1), PHASE.DONE);
+    let last = -1;
+    for (let t = 0; t <= 5; t += 0.25) { const f = fireStrength(t); assert.ok(f >= last, 'the fire only grows'); last = f; }
+    assert.ok(fireStrength(5) > 0.99 && fireStrength(0.1) < 0.05);
+    assert.ok(ringAngle(5) - ringAngle(4) > ringAngle(1) - ringAngle(0), 'the running flame speeds up');
+    assert.equal(skyStrength(0), 0);
+    assert.ok(skyStrength(8) > 0.99, 'the clouds have closed');
+    assert.equal(skyStrength(GARGOYLE.STORM_T), 0);
+    assert.ok(skyReach(0) === 1 && skyReach(GARGOYLE.SKY_R) === 1 && skyReach(GARGOYLE.SKY_R + GARGOYLE.SKY_FADE) === 0, 'the sky is closed only in its radius: run out of it');
+});
+
+test('the release: 30, one after another, first straight up then every way round (the same on every computer for a seed)', () => {
+    const a = releasePlan(1234), b = releasePlan(1234), c = releasePlan(99);
+    assert.equal(a.length, 30);
+    assert.deepEqual(a, b);
+    assert.notDeepEqual(a, c);
+    for (const p of a) { assert.ok(p.delay >= 0 && p.delay <= GARGOYLE.RELEASE_T + 0.1); assert.ok(p.climb >= 1 && p.climb <= 2.1, 'a climb up first'); assert.ok(p.life >= 300 && p.life <= 600); }
+    const sorted = a.map((p) => ((p.bearing % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)).sort((x, y) => x - y);
+    let big = 0;
+    for (let i = 0; i < sorted.length; i++) big = Math.max(big, (sorted[(i + 1) % sorted.length] - sorted[i] + Math.PI * 2) % (Math.PI * 2));
+    assert.ok(big < 1.2, 'they scatter round the whole compass, no empty side');
+    assert.ok(new Set(a.map((p) => p.scale.toFixed(2))).size > 12, "each a little different in size");
+    assert.equal(roomFor(0), 30);
+    assert.equal(roomFor(45), 15);
+    assert.equal(roomFor(60), 0);
+    assert.ok(atLimit(60) && !atLimit(59));
+});
+
+test('the storm: at most 12 real strikes, none before the fire is over, spread out', () => {
+    const plan = boltPlan(7);
+    assert.ok(plan.length > 0 && plan.length <= GARGOYLE.BOLTS);
+    for (const b of plan) assert.ok(b.t >= GARGOYLE.FIRE_T + GARGOYLE.BOLT_FIRST - 1e-9 && b.t < GARGOYLE.STORM_T);
+    for (let i = 1; i < plan.length; i++) assert.ok(plan[i].t - plan[i - 1].t >= GARGOYLE.BOLT_GAP[0] - 1e-9);
+    assert.deepEqual(boltPlan(7), plan);
+});
+
+test('20 seconds: they do not touch the summoner, then he is prey too; everybody else at once', () => {
+    assert.equal(sparesSummoner(0), true);
+    assert.equal(sparesSummoner(19.9), true);
+    assert.equal(sparesSummoner(20), false);
+    assert.equal(mayHunt('player', { isSummoner: true, age: 5 }), false);
+    assert.equal(mayHunt('player', { isSummoner: true, age: 25 }), true);
+    assert.equal(mayHunt('player', { isSummoner: false, age: 1 }), true, 'another player — at once');
+    for (const k of ['villager', 'animal', 'zombie', 'sailor']) assert.equal(mayHunt(k, { age: 0 }), true, k);
+    for (const k of ['dragon', 'spider', 'ice', 'tree', 'book', 'owl', 'phoenix']) assert.equal(mayHunt(k), false, k + ' is left alone');
+    assert.ok(ENEMIES.length === 5 && IGNORED.includes('dragon'));
+});
+
+test('the radius: farther than 120 m from the pentagram it turns back', () => {
+    assert.equal(outOfLeash(119), false);
+    assert.equal(outOfLeash(121), true);
+});
+
+test('a bite 3–5 on people, ×1.4 on beasts', () => {
+    assert.equal(biteDamage('p', 0), 3);
+    assert.equal(biteDamage('p', 1), 5);
+    assert.equal(biteDamage('animal', 0), 4.2);
+    assert.equal(biteDamage('zombie', 1), 7);
+});
+
+test('who and what hurts a gargoyle (GargoyleRules.TARGETS, harmOf): fire never, cold slows, Avada no, the gods kill, stone takes blows less', () => {
+    for (const k of ['Inferno', 'Hellfire', 'FireMaxima', 'fire']) assert.equal(harmOf(k, 30).does, 'immune', k);
+    assert.equal(harmOf('Ice', 9).does, 'slow');
+    assert.equal(harmOf('Ice', 9).dmg, 0, 'no damage and no freezing');
+    assert.equal(harmOf('AvadaKedavra', 25).does, 'none', 'not alive: a decision, written down');
+    assert.equal(harmOf('Boom', 5).does, 'kill');
+    assert.equal(harmOf('Die', 5).does, 'kill');
+    for (const k of DIVINE_SPELLS) assert.equal(harmOf(k, 1).does, 'kill', 'a spell of the gods: ' + k);
+    assert.equal(harmOf('arrow', 5).dmg, 3);
+    assert.equal(harmOf('melee', 5).dmg, 5);
+    assert.equal(harmOf('fist', 5).dmg, 4);
+    assert.equal(harmOf('Lightning', 20).does, 'hit');
+    assert.equal(harmOf('Bombardo', 10).dmg, 10);
+    assert.equal(harmOf('Brainrot', 10).does, 'none');
+    assert.equal(harmOf('Wind', 10).does, 'push');
+    assert.ok(FIRE_KINDS.has('Inferno'));
+    const need = ['blade', 'fist', 'arrow', 'plainSpells', 'scrollSpells', 'AvadaKedavra', 'Stupefy', 'Inferno', 'Hellfire', 'FireMaxima', 'Bombardo', 'BombardoMaxima', 'Lightning', 'Wind', 'WindImpulse',
+        'Levitation', 'LevitationMaxima', 'WaterVortex', 'WaterStorm', 'Brainrot', 'Alohomora', 'Accio', 'ProtectionHouse', 'Protection', 'Inspirius', 'CircleAttack', 'TotalDestruction', 'Boom', 'divine', 'Die', 'Imperius', 'Ice',
+        'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'creatures', 'world', 'ships', 'space'];
+    for (const k of need) assert.ok(TARGETS[k]?.why, `GargoyleRules.TARGETS forgets: ${k}`);
+});
+
+test('the model: ~2.8 m to the horns, 4–5 m across the wings, a little smaller than the hero (3.5), bigger than the owl and the phoenix', async () => {
+    const M = await import('../../src/game/GargoyleModel.js');
+    const z = M.gargoyleSize();
+    assert.ok(z.height > 2.6 && z.height < 3.1, `height ${z.height}`);
+    assert.ok(z.span > 4.0 && z.span < 5.2, `span ${z.span}`);
+    assert.ok(z.height < 3.5 && z.height > 2.4, 'between the phoenix (2.4) and the hero (3.5)');
+    const st = M.gargoyleStats();
+    assert.equal(st.draws, 3, 'stone, glow, membrane: three draws a gargoyle');
+    assert.ok(st.near < 7500 && st.far < st.near, `triangles ${st.near} / ${st.far}`);
+    assert.equal(st.bones, 46);
+});
+
+test('the model: every part is on a bone, the materials are skinned, the shapes are shared between gargoyles, the pose moves the bones', async () => {
+    const M = await import('../../src/game/GargoyleModel.js');
+    const a = M.gargoyleModel(0), b = M.gargoyleModel(1);
+    assert.equal(a.userData.body.geometry, b.userData.body.geometry, 'the same shape — one geometry for all');
+    assert.equal(a.userData.mem.material, b.userData.mem.material);
+    for (const m of [a.userData.body, a.userData.glow, a.userData.mem]) { assert.equal(m.material.skinning, true, 'r128: the material\'s own switch'); assert.ok(m.isSkinnedMesh); }
+    assert.notEqual(a.userData.skel, b.userData.skel, 'its own bones');
+    const wasW = a.userData.B.wrootL.rotation.z;
+    const st = { mode: 'fly', seed: 1 };
+    for (let i = 0; i < 30; i++) M.poseGargoyle(a, st, 0.016);
+    assert.notEqual(a.userData.B.wrootL.rotation.z, wasW, 'the wings beat');
+    const pos = a.userData.body.geometry.attributes.skinWeight;
+    for (let i = 0; i < pos.count; i += 37) { const s = pos.getX(i) + pos.getY(i) + pos.getZ(i) + pos.getW(i); assert.ok(Math.abs(s - 1) < 1e-3, 'weights sum to 1'); }
+    const mw = a.userData.mem.geometry.attributes.skinWeight;
+    for (let i = 0; i < mw.count; i += 11) { const s = mw.getX(i) + mw.getY(i) + mw.getZ(i) + mw.getW(i); assert.ok(Math.abs(s - 1) < 1e-3, 'membrane weights sum to 1'); }
+    a.userData.setLod(true);
+    assert.notEqual(a.userData.body.geometry, b.userData.body.geometry, 'far: a lighter shape');
+    a.userData.setLod(false);
+    assert.equal(a.userData.body.geometry, b.userData.body.geometry);
+});
+
+// ---------------------------------------------------------------- the manager on a bare game
+async function bareGame(over = {}) {
+    const { Gargoyles } = await import('../../src/game/Gargoyles.js');
+    const g = {
+        config: { mode: 'survival' }, scene: new THREE.Scene(), localId: 'me', authority: true, remotes: new Map(), said: [],
+        combat: { enabled: true, fatigue: 200, dead: false }, character: { group: new THREE.Group() }, zombies: [], animals: { list: [] }, camera: { position: new THREE.Vector3(0, 5, 0) },
+        hud: { setVoice(t) { g.said.push(t); } }, dark: { level: 0 }, ...over,
+    };
+    g.gargoyles = new Gargoyles(g);
+    return g;
+}
+
+test('the ritual on a bare game: 149 mana — nothing taken, nothing starts; 150 — taken, +1 to the black level, 5 s of fire, then 30', async () => {
+    const g = await bareGame({ combat: { enabled: true, fatigue: 149, dead: false } });
+    const G = g.gargoyles;
+    const c = new THREE.Vector3(10, 0, 10);
+    const r0 = G.startRitual(c);
+    assert.equal(r0.ok, false);
+    assert.equal(r0.why, 'mana');
+    assert.equal(g.combat.fatigue, 149, 'nothing is taken without a ritual');
+    assert.equal(G.rituals.length, 0);
+    assert.equal(g.dark.level, 0);
+    assert.match(g.said.at(-1), /150/, 'the hint: «Нужно 150 маны»');
+    g.combat.fatigue = 260;
+    const r1 = G.startRitual(c);
+    assert.equal(r1.ok, true);
+    assert.equal(g.combat.fatigue, 110, '150 taken at once');
+    assert.equal(g.dark.level, 1, '+1 to the black level (addDark ritual)');
+    assert.equal(G.rituals.length, 1);
+    for (let t = 0; t < 4.9; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 0, 'five seconds of fire first: nobody yet');
+    for (let t = 0; t < 0.4; t += 0.05) G.update(0.05);
+    assert.ok(G.list.length > 0, 'the first have burst out');
+    for (let t = 0; t < 3; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 30, 'thirty in all');
+    assert.ok(G.list.every((o) => o.by === 'me' && o.hp === 40 && o.isGargoyle && o.ck === 'G'));
+    assert.ok(new Set(G.list.map((o) => o.id)).size === 30);
+    // a second ritual on the same place at once is refused (busy), mana kept
+    g.combat.fatigue = 300;
+    assert.equal(G.startRitual(c).ok, false);
+    assert.equal(g.combat.fatigue, 300);
+});
+
+test('Creative: free (no mana rules)', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false }, config: { mode: 'creative' } });
+    assert.equal(g.gargoyles.startRitual(new THREE.Vector3(0, 0, 0)).ok, true);
+    assert.equal(g.gargoyles.rituals.length, 1);
+});
+
+test('never more than 60 in the world: a ritual brings only what there is room for', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 30);
+    G.startRitual(new THREE.Vector3(500, 0, 500));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 60);
+    G.startRitual(new THREE.Vector3(-500, 0, -500));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    assert.ok(G.list.filter((o) => !o.dead).length <= 60, 'the limit holds');
+});
+
+test('they live 5–10 minutes, then crumble into stone and nothing is kept', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 30);
+    for (const o of G.list) assert.ok(o.life >= 300 && o.life <= 600);
+    for (let t = 0; t < 290; t += 0.5) G.update(0.5);
+    assert.ok(G.list.some((o) => o.mode !== 'crumble') || G.list.length > 0);
+    for (let t = 0; t < 330; t += 0.1) G.update(0.1);
+    for (let i = 0; i < 200; i++) G.update(0.1);
+    assert.equal(G.list.filter((o) => !o.dead).length, 0, 'all crumbled');
+    await new Promise((r) => setTimeout(r, 120));
+    assert.equal(G.list.length, 0, 'nothing is left in the list');
+    assert.equal(G.rituals.length, 0, 'the ritual is over and let go');
+    assert.equal(G.fx.rings.every((r) => !r.used), true, 'the ring went back to the pool');
+});
+
+test('the summoner is spared 20 s, then hunted; another player at once (target choice)', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    g.character.group.position.set(5, 2, 5); // (the summoner stands at the pentagram)
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    const o = G.list[0];
+    G._scan(true);
+    assert.ok(G.victims.some((v) => v.k === 'p' && v.id === 'me'), 'the summoner is in the list of prey');
+    o.age = 5;
+    assert.equal(G._pick(o), null, 'in the first 20 s: not him');
+    o.age = 25;
+    assert.equal(G._pick(o)?.id, 'me', 'after 20 s: him too');
+    // another player: at once
+    g.remotes.set('other', { position: new THREE.Vector3(8, 2, 8), dead: false, character: { group: new THREE.Group() } });
+    G._scan(true);
+    o.age = 3;
+    assert.equal(G._pick(o)?.id, 'other');
+});
+
+test('a hit: fire does not hurt, an arrow takes 3 of 5, the gods\' spell shatters it; killed it leaves nothing but a pool of chunks', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    const a = G.list[0], b = G.list[1], c = G.list[2];
+    G.hit(a, 50, 'Inferno', 'me');
+    assert.equal(a.hp, 40, 'hellish: fire does not touch it');
+    G.hit(a, 5, 'arrow', 'me');
+    assert.equal(a.hp, 37);
+    G.hit(a, 10, 'AvadaKedavra', 'me');
+    assert.equal(a.hp, 37, '«Авада» does not act');
+    G.hit(a, 10, 'Ice', 'me');
+    assert.ok(a.slowT > 0 && a.hp === 37, 'cold slows it');
+    G.hit(b, 5, 'Boom', 'me');
+    assert.equal(b.dead, true, 'a spell of the gods shatters it');
+    G.hit(c, 40, 'melee', 'me');
+    assert.equal(c.dead, true, '40 HP: 40 of a blade');
+    assert.ok(G._debris.n > 0, 'stone chunks fly');
+    await new Promise((r) => setTimeout(r, 120));
+    assert.equal(G.list.length, 28);
+});
+
+test('the ritual\'s own lightning never hurts a gargoyle (they are its own), another\'s does', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    const a = G.list[0];
+    G._boltOn = true; G.hit(a, 20, 'Lightning', 'x'); G.hitAt(a.model.position, 5, 20, 'Lightning', 'x'); G._boltOn = false;
+    assert.equal(a.hp, 40);
+    G.hit(a, 20, 'Lightning', 'x');
+    assert.equal(a.hp, 20, 'a scroll\'s lightning: −20');
+});
+
+test('the leash: a gargoyle that got out of 120 m turns back to the pentagram', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    const o = G.list[0];
+    o.mode = 'roam';
+    o.model.position.set(200, 30, 0);
+    for (let i = 0; i < 40; i++) G.update(0.05);
+    assert.equal(o.mode, 'return');
+    const d0 = Math.hypot(o.model.position.x, o.model.position.z);
+    for (let i = 0; i < 80; i++) G.update(0.05);
+    assert.ok(Math.hypot(o.model.position.x, o.model.position.z) < d0, 'coming back');
+});
+
+test('every place that looks for creatures knows the gargoyles', () => {
+    const g = src('src/game/Game.js');
+    assert.match(g, /this\.gargoyles\.targets\(\)\), dt\)/, 'swords and axes (Weapons.checkHits)');
+    assert.match(g, /z\.isGargoyle\) \{ this\.gargoyles\.hit/, 'a blow lands on it');
+    assert.match(g, /lightningAt: .*this\.gargoyles\?\.hitAt/, 'lightning');
+    assert.match(g, /this\.gargoyles\?\.hitAt\(pos, radius, BLAST \* power/, 'blasts');
+    assert.match(g, /this\.gargoyles\?\.hitRay/, 'rays and the Inferno stream');
+    assert.match(g, /this\.gargoyles\.update\(dt\)/);
+    assert.match(g, /this\.gargoyles\?\.dispose\(\)/, 'nothing is kept');
+    assert.match(g, /this\.gargoyles\?\.sampleModels/, 'the shaders are compiled at the start (prewarm)');
+    const duel = src('src/game/Duel.js');
+    assert.match(duel, /gargoyleBody\(o, put\('g', o\.id\)\)/, 'a charge meets its body');
+    assert.match(duel, /kind === 'g'/);
+    assert.match(duel, /c\.isGargoyle\) \{ g\.gargoyles\?\.boltHit/, 'a charge hits it as the table says');
+    assert.match(src('src/game/Gear.js'), /gargoyles\?\.targets\(\)/, 'arrows');
+    assert.match(src('src/game/BodyStrikes.js'), /g\.gargoyles\?\.list/, 'fists');
+    assert.match(src('src/game/Levitation.js'), /gargoyles\?\.targets\(\)/, '«Левиоса»');
+    assert.match(src('src/game/LevitationMaxima.js'), /gargoyles\?\.hitAt/, 'a falling house');
+    assert.match(src('src/game/TotalDestruction.js'), /gargoyles\?\.hitAt/);
+    assert.match(src('src/game/Cauldrons.js'), /gargoyles\?\.hitAt/);
+    assert.match(src('src/game/HouseWards.js'), /gargoyles\?\.shooed/);
+    assert.match(src('src/game/MagicWave.js'), /case 'gargoyle'/, 'Circle Attack, Inspirius, Boom');
+    assert.match(src('src/game/MagicWave.js'), /fn\('gargoyle'/);
+    assert.match(src('src/game/ThunderWave.js'), /case 'g'/);
+    assert.match(src('src/game/StrongMagic.js'), /case 'g'/);
+    assert.match(src('src/game/Liquidation.js'), /bk === 'g'/);
+    assert.match(src('src/game/Hellfire.js'), /kind === 'g'/);
+    assert.match(src('src/game/Firefighting.js'), /kind === 'g'/);
+    assert.match(src('src/game/WaterVortex.js'), /tk === 'g'/);
+    assert.match(src('src/game/IceQueen.js'), /k === 'g'/);
+    assert.match(src('src/game/CrowdSources.js'), /gargoyles/, 'the crowd: walkers go round a low one');
+    assert.match(src('src/net/NetSync.js'), /case 'garg'/, 'the network');
+    assert.match(src('src/game/VillagerFear.js'), /gargoyles/, 'the people are afraid of them');
+    assert.match(src('src/game/CastleLife.js'), /gargoyles\.knightStep/, 'the knights fight them');
+    assert.match(src('src/fx/Storm.js'), /gargoyles\?\.skyDark/, 'the sky over the place goes dark');
+    assert.match(src('src/audio/SoundManager.js'), /playGargoyle/);
+});
+
+test('the other tables: Imperius (Maxima only, flies), steadiness, impact, the danger, blame, first-kill, the body\'s mass', async () => {
+    const { IMPERIUS_TARGETS, canTake } = await import('../../src/game/Imperius.js');
+    assert.equal(IMPERIUS_TARGETS.gargoyle.magic, true);
+    assert.equal(IMPERIUS_TARGETS.gargoyle.plain, undefined);
+    assert.equal(canTake('gargoyle', false).ok, false, 'the plain «Империус» cannot take it');
+    assert.equal(canTake('gargoyle', true).ok, true);
+    const { kindOfCreature } = await import('../../src/game/Imperius.js').catch(() => ({}));
+    void kindOfCreature;
+    const F = await import('../../src/game/ImperiusFlyers.js');
+    assert.ok(F.FLYER_SYSTEMS.includes('g'));
+    const { BODIES } = await import('../../src/game/ImperiusBodies.js');
+    assert.ok(BODIES.g, 'a body adapter for the Maxima');
+    const { FLYERS } = await import('../../src/game/ImperiusFlight.js');
+    assert.ok(FLYERS.gargoyle);
+    const { steadyKind, NPC_STEADY } = await import('../../src/game/Steadiness.js');
+    assert.equal(steadyKind('G', { id: 1 }), 'gargoyle');
+    assert.deepEqual(NPC_STEADY.gargoyle, [20, 30]);
+    const { DANGERS } = await import('../../src/game/Danger.js');
+    assert.ok(DANGERS.monster && DANGERS.monster.r > 0);
+    const { OBVIOUS } = await import('../../src/game/Blame.js');
+    assert.ok(OBVIOUS.ritual.people > 0);
+    const { MAGIC_KILL } = await import('../../src/game/Mana.js');
+    assert.ok(MAGIC_KILL.gargoyle.n > 0);
+    const { bodyOf } = await import('../../src/game/Impact.js');
+    assert.ok(bodyOf('gargoyle').mass > 1);
+    const { KINDS } = await import('../../src/game/CreatureImpact.js');
+    await import('../../src/game/Gargoyles.js');
+    assert.ok(KINDS.G, 'pushes: a stone flier reels, never falls');
+    assert.equal(KINDS.G.noKnock(), true);
+});

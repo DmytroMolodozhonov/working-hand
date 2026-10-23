@@ -13,6 +13,7 @@
 
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
+import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
@@ -581,6 +582,8 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
+            ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
             ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
             ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
@@ -1716,6 +1719,15 @@ export class SoundManager {
         const key = 'owl_' + kind;
         if (!this.sounds[key]) { if (!OWL_SOUNDS.includes(kind)) return; this.sounds[key] = synthOwl(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
+    }
+
+    /** The infernal gargoyles (Gargoyles.js): 'roar' | 'screech' | 'wings' | 'bite' | 'crumble' | 'shatter' | 'ignite' | 'burst' — made ahead (prewarmStep). */
+    playGargoyle(position, kind = 'roar', volume = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'garg_' + kind;
+        if (!this.sounds[key]) { if (!GARGOYLE_SOUNDS.includes(kind)) return; this.sounds[key] = synthGargoyle(this.context, kind); }
+        const far = kind === 'ignite' || kind === 'burst' ? 60 : kind === 'screech' || kind === 'roar' ? 22 : kind === 'crumble' ? 16 : 10;
+        this._playAt(this.sounds[key], position, volume, far, 0.94 + Math.random() * 0.12);
     }
 
     /** The duel arena (ArenaDuels.js): 'cheer' | 'groan' | 'gong' | 'beep' | 'fanfare' | 'clap' at a place — made ahead (prewarmStep). */

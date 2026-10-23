@@ -53,7 +53,7 @@ export async function launch({ video = null, extraArgs = [] } = {}) {
     ];
     if (video) args.push(`--use-file-for-fake-video-capture=${video}`);
     args.push(...extraArgs);
-    const executablePath = fs.existsSync('/opt/pw-browsers/chromium') ? undefined : undefined;
+    const executablePath = process.env.ZNS_CHROME || undefined; // (a Chromium of another build than the Playwright one: ZNS_CHROME=/path/to/chrome)
     return chromium.launch({ args, executablePath });
 }
 

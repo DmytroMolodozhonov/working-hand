@@ -147,6 +147,8 @@ export class BodyStrikes {
         for (const f of g.phoenixes?.list || []) if (!f.dead && near(f.model.position)) out.push({ key: 'F:' + f.id, creature: f, owner: f, parts: creatureParts(f), centre: f.model.position, vel: f.vel });
         // a clever owl within reach: a fist never lands — it dodges and flies off; a calm hand may rest on it
         for (const o of g.owls?.list || []) if (!o.dead && near(o.model.position)) out.push({ key: 'O:' + o.id, creature: o, owner: o, parts: creatureParts(o), centre: o.model.position, vel: o.vel });
+        // an infernal gargoyle within reach (Gargoyles.js): a fist hurts it (×0.8: stone); a shove moves it a little
+        for (const o of g.gargoyles?.list || []) if (!o.dead && o.mode !== 'crumble' && near(o.model.position)) out.push({ key: 'G:' + o.id, creature: o, owner: o, parts: creatureParts(o), centre: o.model.position, vel: o.vel });
         // the Ice Castle's creatures: a fist breaks a snowman, barely scratches the queen's ice (IceQueen.iceDamage)
         for (const c of g.iceCastle?.list || []) if (!c.dead && near(c.model.position)) out.push({ key: 'I:' + c.id, creature: c, owner: c, parts: creatureParts(c), centre: c.model.position });
         return out;

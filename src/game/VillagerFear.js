@@ -139,6 +139,8 @@ export class VillagerFear {
         }
         // the giant spider, zombies (at night they come out)
         for (const s of g.spiders?.list || []) if (!s.dead && s.model) this.add('spider', s.model.position, { key: 'spider:' + s.id, ttl: 3 });
+        // the infernal gargoyles (Gargoyles.js): each one a moving danger — people hide in houses and run from them; the knights go out to fight them (Gargoyles.knightStep)
+        for (const o of g.gargoyles?.list || []) if (!o.dead && o.model && o.mode !== 'crumble') this.add('monster', o.model.position, { key: 'garg:' + o.id, ttl: 3, by: o.by });
         for (const z of g.zombies || []) if (!z.isDead && !z.isDying && z.group) this.add('zombie', z.group.position, { key: 'zombie:' + (z.id ?? (z._fid || (z._fid = ++this._seq))), ttl: 3 });
         // a player who attacks the people (the castle is after them), and fights going on
         for (const cs of this.life.castles.values()) {

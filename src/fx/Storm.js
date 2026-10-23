@@ -131,14 +131,15 @@ export class Storm {
         const now = performance.now();
         const want = this.raining ? 1 : 0;
         const cloud = this.gathering;
-        if (want === 0 && this.k <= 0 && cloud <= 0 && !(this._dark > 0)) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
+        const garg = this.game.gargoyles?.skyDark?.() || 0; // (the infernal gargoyles' ritual: black-crimson clouds over its place — GargoyleRitual; no rain, only the dark)
+        if (want === 0 && this.k <= 0 && cloud <= 0 && garg <= 0 && !(this._dark > 0)) { if (this._sound) { this._sound = false; this.game.sound?.setRain?.(0); } return; }
         // darkens over ~5 s (a spell's storm) or slowly — the weather's rain grows from a drizzle
         // over ~40 s after the clouds have gathered; clears over ~3 s
         const slow = this.slowRain && now >= this.gatherTo && now < this.until && now >= this.rainUntil;
         if (!slow && now >= this.until) this.slowRain = false;
         this.k = this.k < want ? Math.min(want, this.k + dt / (slow ? 40 : 5)) : Math.max(want, this.k - dt / 3);
         // the sky: the gathering clouds darken it (up to an overcast grey) before a drop falls
-        const dark = cloud > 0 ? Math.max(this.k, 0.55 * cloud) : this.k;
+        const dark = Math.max(garg, cloud > 0 ? Math.max(this.k, 0.55 * cloud) : this.k);
         this._dark = dark;
         this.game.world.setStorm(dark);
         // under a roof / deep in a cave no rain falls on you (it is heard, more softly)

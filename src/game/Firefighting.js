@@ -74,6 +74,7 @@ export const FIREFIGHT_TARGETS = {
     dragon: { does: 'гасит огонь, которым дракон дышит (конус на пламени или на пасти): пламя обрывается, дракон 2 с не может дохнуть снова и злится на того, кто колдовал; сам дракон не ранен и не сдвинут', why: 'без воздуха огонь гаснет, а такого великана не сдвинуть' },
     phoenix: { does: 'лёгкий толчок; пылающий феникс гаснет и бросает свою огненную атаку (улетает); без урона', why: 'без воздуха его огонь гаснет (Phoenixes.watered)' },
     owl: { does: 'не действует (не со свитка): сова чует, как уходит воздух, увёртывается и улетает', why: 'на умную сову действуют только заклинания со свитка (Owls.TARGETS)' },
+    gargoyle: { does: 'none', why: 'вода и ветер только отталкивают горгулью, урона нет' },
     // ---- things and the world
     campfires: { does: 'костёр («Fire») гаснет совсем', why: 'без воздуха огонь не горит' },
     trees: { does: 'горящие деревья гаснут (что сгорело — сгорело)', why: 'без воздуха огонь не горит' },
@@ -297,6 +298,7 @@ export class Firefighting {
             v.normalize().multiplyScalar(sp.max ? FIREFIGHT.MAX_PUSH : FIREFIGHT.PUSH);
             g.creatureImpact.apply(body, { v: v.clone(), by: sp.by, spell: 'Firefighting', kind: 'Firefighting', from: sp.o.clone() });
             if (b.kind === 'f') g.phoenixes?.watered?.(body, null, sp.by); // (a phoenix: its fire goes out — it gives up its attack)
+            if (b.kind === 'g') g.gargoyles?.watered?.(body, null, sp.by); // (an infernal gargoyle: water only pushes it)
             if (b.kind === 'o') g.owls?.watered?.(body, null, sp.by); // (an owl: not a scroll's — it darts away)
         }
         if (this._pushed.size > 200) this._pushed.clear();

@@ -25,7 +25,8 @@ export const GUARD_REACT = {
     pig: 'small', sheep: 'small', runbook: 'small', owl: 'small', bookbird: 'small', phoenix: 'small',
     cow: 'big', horse: 'big', pegasus: 'big',
     // (the castle's own fight with these — never a guard's «уходи»)
-    zombie: null, dragon: null, spider: null, tree: null, skeleton: null, snowman: null, iceMonster: null, iceQueen: null, guardBeast: null,
+    zombie: null, dragon: null, spider: null, tree: null, gargoyle: null, // (a gargoyle: the knights fight it with the sword — Gargoyles.knightStep)
+    skeleton: null, snowman: null, iceMonster: null, iceQueen: null, guardBeast: null,
     king: null, towerHead: null, blackbeard: null, pirateSkeleton: null, player: null,
 };
 

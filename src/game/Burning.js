@@ -57,6 +57,7 @@ export const BURN_TARGETS = {
     blackship: { does: 'burn', why: 'капитан Чёрные Усы и скелеты горят как моряки; сам корабль заклинаниями не повреждается (Ships.isCursed)' },
     phoenix: { does: 'none', why: 'феникс рождён из огня' },
     owl: { does: 'none', why: 'сова чует огонь и улетает от него (Owls.TARGETS)' },
+    gargoyle: { does: 'none', why: 'горгулья адская: огонь её не берёт и не поджигает (GargoyleRules.FIRE_KINDS)' },
     items: { does: 'none', why: 'свитки и книги в огне горят уже своим способом (Game.burnHeldBook/Items); горение на теле их не трогает' },
     ships: { does: 'none', why: 'горящий корабль и повозка сами поджигают тех, кто стоит в их огне (stand), но не горят «на теле»' },
     water: { does: 'out', why: 'вход в воду, плавание, водяной шар/вихрь/волна гасят сразу; в воде загореться нельзя' },

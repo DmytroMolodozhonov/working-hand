@@ -65,6 +65,13 @@ export function crowdOf(g) {
             if (p.y - (g.collision?.groundY?.(p.x, p.z) ?? p.y) > 0.5) continue;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.owl, ref: o, id: o.id, kind: 'owl' });
         }
+        // infernal gargoyles flying low (a hunt at the people's height: nobody walks through one — Gargoyles.js; high up they are above everybody)
+        for (const o of g.gargoyles?.list || []) {
+            if (o.dead || !o.model) continue;
+            const p = o.model.position;
+            if (p.y - (g.collision?.groundY?.(p.x, p.z) ?? p.y) > 5.5) continue;
+            push({ x: p.x, y: p.y, z: p.z, r: BODY_R.gargoyle, ref: o, id: o.id, kind: 'gargoyle' });
+        }
         // the players' «Protection» (the hand shield, the dome — the gods' too): solid, a wall for all (ShieldWalls.js)
         for (const w of wardsOf(g)) push({ x: w.x, y: w.y, z: w.z, r: w.r, ref: w, id: 'ward:' + w.owner, kind: 'ward', still: true, vx: 0, vz: 0 });
         // carts on the roads

@@ -276,6 +276,7 @@ export class StrongMagic {
             case 'I': g.iceCastle?.hit?.(c, dmg, spell, by); return;
             case 'f': g.phoenixes?.hit?.(c, dmg, spell, by); return;
             case 'o': g.owls?.hit?.(c, dmg, spell, by); return;
+            case 'g': g.gargoyles?.hit?.(c, dmg, spell, by); return; // (an infernal gargoyle: «Дай» shatters it, the strong charges hurt, «Авада» does not act — GargoyleRules.harmOf)
             case 'b': g.books?.hitBird?.(c, 99); return;
         }
     }

@@ -33,6 +33,7 @@ export const OBVIOUS = {
     fire: { people: 0, wizard: 0 }, // (a fire that spread: who lit it — only who saw the cast)
     quake: { people: 6, wizard: 18 }, // (the ground torn under a man's pressing hand)
     wind: { people: 12, wizard: 25 }, // (a gust from his hand)
+    ritual: { people: 18, wizard: 40 }, // (the pentagram of the gargoyles: the one standing at its circle is plainly the summoner; run away — only a seen ritual names him)
 };
 
 /** The family of a spell for the witnesses' memory (a seen «Inferno» explains a fire later). */

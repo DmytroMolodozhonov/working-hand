@@ -36,6 +36,7 @@ import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
 import { owlDist } from './Owls.js';
+import { gargoyleDist } from './GargoyleModel.js';
 import { iceBody } from './IceQueen.js';
 import { segmentSegmentDistSq } from '../core/math.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
@@ -509,6 +510,12 @@ export class Gear {
                     if (a.hit.has(o) || owlDist(o, p) > 0.2) continue;
                     a.hit.add(o);
                     g.owls.hit(o, a.dmg, 'arrow', a.by);
+                }
+                // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
+                if (g.authority) for (const o of g.gargoyles?.targets() || []) {
+                    if (a.hit.has(o) || gargoyleDist(o, p) > 0.2) continue;
+                    a.hit.add(o);
+                    g.gargoyles.hit(o, a.dmg, 'arrow', a.by);
                 }
                 if (g.authority) for (const bd of g.books?.birds?.values() || []) {
                     if (bd.state === 'fall' || a.hit.has(bd) || bd.model.position.distanceTo(p) > 1.2) continue;

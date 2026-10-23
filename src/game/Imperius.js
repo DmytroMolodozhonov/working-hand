@@ -62,7 +62,7 @@ export const imperiusOf = (name) => (name === 'ImperiusMaxima' ? IMPERIUS_MAXIMA
  * Who may be taken (the author's rule «кто/что × как»): kind → {ru, plain, magic, boss, fly, why}.
  * plain: the plain «Империус» takes it; else only «Максима». `why`: said when the plain one cannot.
  * Kinds (ImperiusControl's adapters): z zombie, v castle / village person (by role), w a wizard of the game,
- * a animal (by type), s sailor, D dragon, sp the giant spider, b book-bird, o owl, f phoenix, t living tree /
+ * a animal (by type), s sailor, D dragon, sp the giant spider, b book-bird, o owl, g infernal gargoyle, f phoenix, t living tree /
  * risen skeleton, I the Ice Castle's creatures, pl a player.
  */
 export const IMPERIUS_TARGETS = {
@@ -83,6 +83,7 @@ export const IMPERIUS_TARGETS = {
     spider: { ru: 'гигантская паучиха', magic: true, boss: true },
     bookbird: { ru: 'книга-птица', magic: true, fly: true },
     owl: { ru: 'сова', magic: true, fly: true },
+    gargoyle: { ru: 'адская горгулья', magic: true, fly: true }, // (a creature of the pentagram — only «Максима» takes it; its summoner's 20 s grace does not matter to the mind in it — Gargoyles.js)
     phoenix: { ru: 'феникс', magic: true, fly: true },
     tree: { ru: 'ожившее дерево', magic: true },
     skeleton: { ru: 'скелет', magic: true },
@@ -173,6 +174,7 @@ export function kindOf(sys, c = {}) {
         case 'sp': return 'spider';
         case 'b': return 'bookbird';
         case 'o': return 'owl';
+        case 'g': return 'gargoyle';
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';
         case 'I': return c.type === 'queen' ? 'iceQueen' : c.type === 'monster' ? 'iceMonster' : 'snowman';

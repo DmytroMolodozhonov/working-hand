@@ -91,6 +91,7 @@ function strike(game, kind, id, at, o, by) {
         case 'D': { const d = game.dragons?.byId(id); if (d) { game.dragons.hit(d, dmg, K, by); game.dragons.noise?.(o); } break; }
         case 'f': { const f = game.phoenixes?.byId(id); if (f) game.phoenixes.hit(f, dmg, K, by); break; }
         case 'o': { const w = game.owls?.byId(id); if (w) game.owls.hit(w, dmg, K, by); break; }
+        case 'g': { const w = game.gargoyles?.byId(id); if (w) game.gargoyles.hit(w, dmg, K, by); break; } // (an infernal gargoyle: stone — hurt by it, GargoyleRules.TARGETS.Thunderwave)
         case 'I': { const c = game.iceCastle?.byId(id); if (c) game.iceCastle.hit(c, dmg, K, by); break; }
         default: break;
     }

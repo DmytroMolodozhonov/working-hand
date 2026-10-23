@@ -34,6 +34,7 @@ export const FLYERS = {
     pegasus: { lift: 4.5, thrust: 3.5, maxUp: 9, maxFwd: 18, gravity: 9, sink: 2.2, drag: 0.12, takeoff: 3.6, turn: 1.1 },
     bookbird: { lift: 3.4, thrust: 2.2, maxUp: 7, maxFwd: 11, gravity: 6, sink: 1.5, drag: 0.35, takeoff: 0, turn: 1.6 },
     owl: { lift: 3.8, thrust: 3.0, maxUp: 8, maxFwd: 16, gravity: 7, sink: 1.3, drag: 0.2, takeoff: 0, turn: 1.5 },
+    gargoyle: { lift: 5.0, thrust: 4.0, maxUp: 11, maxFwd: 24, gravity: 8, sink: 1.0, drag: 0.14, takeoff: 0, turn: 1.8 }, // (an infernal gargoyle: strong, quick — Gargoyles.js)
     phoenix: { lift: 4.0, thrust: 3.6, maxUp: 9, maxFwd: 22, gravity: 7, sink: 1.2, drag: 0.16, takeoff: 0, turn: 1.4 },
     pig: { lift: 3.4, thrust: 2.4, maxUp: 7, maxFwd: 11, gravity: 8, sink: 2.2, drag: 0.3, takeoff: 0, turn: 1.3 },
 };
