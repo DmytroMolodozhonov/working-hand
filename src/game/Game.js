@@ -98,6 +98,7 @@ import { captureLegacy, wipeHero } from './Legacy.js';
 import { Steadiness } from './Steadiness.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
+import { darkSamples } from '../entities/DarkSkin.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
@@ -3196,6 +3197,7 @@ export class Game {
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
         zoo.add(goldenTreeModel(), goldenTreeModel(true), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
+        for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
@@ -3669,6 +3671,7 @@ export class Game {
         this._jumpStep(pose);
         this.steady.step(dt);
         this.darkExile.update(dt);
+        if (this.dark.level !== this._darkShown) { this._darkShown = this.dark.level; this.character?.setDarkLevel?.(this.dark.level); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)

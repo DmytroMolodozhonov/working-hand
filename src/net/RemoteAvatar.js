@@ -88,6 +88,8 @@ export class RemoteAvatar {
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.imperius = !!s.im; // («Империус»: their mind is in another body — their eyes burn white)
         if (this.imperius !== !!this._impShown) { this._impShown = this.imperius; this.character.setImperiusEyes(this.imperius); }
+        this.dark = Math.max(0, Math.min(100, Number(s.dk) || 0)); // (их уровень тьмы: метки на теле — DarkSkin.js; волшебники читают его как данные)
+        if (this.dark !== this._darkShown) { this._darkShown = this.dark; this.character.setDarkLevel(this.dark); }
         this.dragonWand = !!s.dw; // (the dragon's wand in their hand: their fire spells are 60% stronger)
         this.mastery = Math.max(0, Number(s.dms) || 0); // (their «дуэльное мастерство»: a duel counts it)
         this.wand = s.wd ? { dir: s.wd[0] || null, fav: s.wd[1] || null, power: s.wd[2] || 0 } : null; // (their wand: a duel counts it — Duel._wandK)

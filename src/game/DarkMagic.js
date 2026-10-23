@@ -171,6 +171,15 @@ export function darkMageLevel(id, kind) {
 }
 
 /** Малое поселение магов: 1–2 чёрных мага иногда (по id поселения и номеру мага). */
+/** Волшебники: у кого из жителей мира может быть уровень тьмы (не глава башни, не старейшина). */
+const WIZ = new Set(['student', 'teacher', 'seller', 'wanderer', 'townwiz', 'mage']);
+/** Уровень тьмы жителя-мага места `def` (0 — не чёрный): странник, дом одиночки, малое поселение, город. По id — одинаково у всех. */
+export function darkOfEntry(def, e, id) {
+    if (!e || !WIZ.has(e.role) || e.elder || def?.kind === 'tower') return 0;
+    const kind = def?.kind === 'wander' || e.role === 'wanderer' ? 'wanderer' : def?.kind === 'hamlet' ? (e.role === 'seller' ? 'merchant' : def.people?.length === 1 ? 'lone' : 'small') : def?.kind === 'wizvillage' ? 'small' : e.town ? 'town' : null;
+    return kind ? darkMageLevel(id, kind) : 0;
+}
+
 export function settlementDarkMages(siteId, count) {
     const out = [];
     for (let i = 0; i < count; i++) { const l = darkMageLevel(siteId + '#' + i, 'small'); if (l) out.push([i, l]); }
@@ -193,10 +202,10 @@ export function darkLook(level) {
     const f = s / DARK.MAX;
     l = Object.freeze({
         step: s,
-        spots: s <= 10 ? s * 0.012 : Math.min(1, 0.12 + (s - 10) * 0.016),
+        spots: s <= 10 ? s * 0.004 : Math.min(1, 0.04 + (s - 10) * 0.0105),
         veins: s < 20 ? 0 : clamp((s - 20) / 60, 0, 1),
         black: s < 60 ? 0 : clamp((s - 60) / 40, 0, 1),
-        smoke: s < 10 ? 0 : clamp(f * f * 1.2, 0, 1),
+        smoke: s < 20 ? 0 : clamp(f * f * 1.2, 0, 1),
         cloth: clamp(f * 0.95, 0, 0.95),
         crack: s < 15 ? 0 : clamp((s - 10) / 90, 0, 1),
         magicCrack: s < 15 ? 0 : clamp((s - 10) / 90, 0, 1) * 0.5,

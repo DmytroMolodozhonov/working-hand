@@ -51,7 +51,8 @@ import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
-import { teaches, placeOf } from './DarkMagic.js';
+import { teaches, placeOf, darkOfEntry } from './DarkMagic.js';
+import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { Bodyguard, isLord } from './Bodyguard.js';
@@ -390,6 +391,8 @@ export class CastleLife {
             bubble: null, bar: null, net: null,
         };
         if (e.robe) v.robe = true;
+        v.dark = darkOfEntry(def, e, v.id); // (чёрный маг мира: метки на теле — DarkSkin.js; волшебники своих не презирают)
+        if (v.dark > 0) setDarkVillager(model, v.dark);
         if (e.role === 'king') v.magicPieces = ['helmet', 'chest', 'legs'];
         else if (e.role === 'advisor') v.magicPieces = ['chest', 'legs'];
         if (v.magicPieces) { v.magicSet = v.magicPieces.length === 3; v.magicMend = 0; }

@@ -31,6 +31,7 @@ import { KD } from '../game/Impact.js';
 import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
 import { setEyes } from './ImperiusEyes.js';
+import { setDark, tickDark, refreshArmor } from './DarkSkin.js';
 
 const _v3k = new THREE.Vector3();
 const _v1 = new THREE.Vector3();
@@ -714,6 +715,7 @@ export class VoxelCharacter {
      * @param {boolean} move  false for remote avatars (position comes from network)
      */
     update(dt, collision = null, move = true) {
+        if (this._darkSmoke) tickDark(this, dt); // (чёрная магия: дымок от тела)
         this.restoreArms(); // (a frame without a pose too: the hand's speed is the player's own)
         // Hand world velocity (for throwing / swing strength)
         for (const side of ['left', 'right']) {
@@ -939,6 +941,10 @@ export class VoxelCharacter {
      */
     /** «Империус»: the mind is out of this body — its eyes burn white (ImperiusEyes.js; every computer sees them). */
     setImperiusEyes(on) { setEyes(this, on); }
+
+    /** Чёрная магия: метки тьмы на теле, одежде и доспехах по уровню 0…100 (DarkSkin.js; видят все компьютеры). */
+    setDarkLevel(level) { setDark(this, level); }
+    refreshDarkArmor() { if (this._darkStep > 0) refreshArmor(this); }
 
     setFirstPerson(isFPV) {
         this._fpv = isFPV;

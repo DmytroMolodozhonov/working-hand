@@ -173,6 +173,7 @@ export function dressArmor(ch, code) {
     // torso it is seen looking down, as the torso is: Character.setFirstPerson)
     const layer = ch._fpv ? 1 : 0;
     for (const m of list) if (m.parent === ch.head) m.layers.set(layer);
+    ch.refreshDarkArmor?.(); // (чёрная магия: трещины на новых доспехах)
 }
 
 // ------------------------------------------------------------------ as things
