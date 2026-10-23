@@ -1317,6 +1317,8 @@ export class CastleLife {
         }
         // in deep water: swims (never walks the bottom) — to the bank, and out
         if (this._swim(v, dt)) return;
+        // a knight on duty: a creature with a «Империус» mind walks about his castle — told to go, shooed, beaten (ImperiusGuards.js)
+        if (v.impDuty && g.imperius?.guards?.guardStep(v, dt)) return;
         // riding on a cart: on its seat (the cart's people get down when trouble comes — Travelers.js)
         if (v.seated && v.job === 'cart' && !v.foe && !v.fear && !(v.fleeT > 0) && g.travelers?.step(v, dt)) return;
         if (v.seated && v.job === 'ride' && g.travelers?.step(v, dt)) return; // (in the saddle: Riders.js leads the horse — and gets down to fight)
@@ -3512,6 +3514,7 @@ export class CastleLife {
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }
                 if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('v', v); // (my mind's blow: at the sword's own moment)
+                else if (this.auth && v.model.strikeNow && v.impDuty) g.imperius?.guards?.guardStrike(v); // (a knight on duty: the blow / the shove)
                 else if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
                 else if (this.auth && v.model.strikeNow && (v.order || v.guardOrder)) this.orders.strike(v);
             }

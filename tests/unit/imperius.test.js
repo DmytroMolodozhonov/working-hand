@@ -134,3 +134,15 @@ test('the sound: «империя», «император», «империал�
     for (const w of ['империя', 'империи', 'империю', 'империей', 'империал', 'имперский', 'император', 'великая империя']) assert.ok(everydayHeard(w, 'империус'), w);
     for (const w of ['империус', 'империюс', 'империос', 'империус максима']) assert.equal(everydayHeard(w, 'империус'), null, w);
 });
+
+test('a castle\'s guard and a taken creature: a person told to go, then beaten, killed only when it attacks people; animals shooed, never killed', async () => {
+    const { guardMode, GUARD, GUARD_REACT } = await import('../../src/game/ImperiusGuards.js');
+    const { IMPERIUS_TARGETS } = await import('../../src/game/Imperius.js');
+    for (const k of Object.keys(IMPERIUS_TARGETS)) assert.ok(k in GUARD_REACT, `GUARD_REACT decides ${k}`);
+    assert.equal(guardMode('villager', 0, 0), 'warn');
+    assert.equal(guardMode('knight', GUARD.WARN_FOR + 1, 0), 'beat');
+    assert.equal(guardMode('villager', 0, GUARD.MAD), 'kill', 'attacking people: killed');
+    for (const k of ['pig', 'sheep', 'owl']) assert.equal(guardMode(k, 999, 999), 'shoo', k + ': shooed, whatever it does');
+    for (const k of ['cow', 'horse', 'pegasus']) assert.equal(guardMode(k, 999, 999), 'lead', k + ': led out, never killed');
+    for (const k of ['zombie', 'dragon', 'spider', 'player']) assert.equal(guardMode(k, 999, 999), null, k + ': the castle\'s own fight');
+});

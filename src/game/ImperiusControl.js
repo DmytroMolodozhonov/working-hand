@@ -27,6 +27,7 @@ import './ImperiusWalkers.js'; // (… the spider, the living trees, the Ice Cas
 import { IMPERIUS_MAXIMA } from './Imperius.js';
 import { FlapReader, armsOf } from './ImperiusFlight.js';
 import { HowlReader } from './DragonHowl.js';
+import { ImperiusGuards } from './ImperiusGuards.js';
 import { flies } from './Imperius.js';
 import { castingHand } from './WandAim.js';
 import { CurvedBeam } from '../fx/Particles.js';
@@ -85,6 +86,7 @@ export class ImperiusControl {
         this.flaps = new FlapReader(); // (the arms' strokes: flying a winged creature in the Maxima — ImperiusFlight.js)
         this.howl = new HowlReader(); // (the dragon's fire: the long «У» — DragonHowl.js)
         this._armsDownT = 0;
+        this.guards = new ImperiusGuards(game); // (a castle's guard and a taken creature walking about it — ImperiusGuards.js)
         this.dark = 0; // the screen's darkness (the link fading)
         this.hosted = new Map(); // (host) 'sys:id' → {sys, id, by, n: the last place the guest sent}
         this._beams = null;
@@ -158,7 +160,12 @@ export class ImperiusControl {
         const head = g.character.head.getWorldPosition(_v3);
         const lines = [];
         if (hand) lines.push({ o: hand.origin.clone(), d: hand.dir.clone().normalize() });
-        lines.push({ o: head.clone(), d: _look.set(0, 0, -1).applyQuaternion(g.camera.quaternion).clone() });
+        // the eyes: the head's own look (the camera behind the hero looks at the hero, not ahead), and the camera's in first person
+        lines.push({ o: head.clone(), d: _look.set(0, 0, -1).applyQuaternion(g.character.getHeadQuaternion ? g.character.getHeadQuaternion(_q) : g.camera.quaternion).clone() });
+        if (g.cameraMode === 'fpv') lines.push({ o: head.clone(), d: _look.set(0, 0, -1).applyQuaternion(g.camera.quaternion).clone() });
+        // the body's facing, level: close by, «in front of me» is enough (the tracked hand / head wander)
+        const by = g.character.group.rotation.y;
+        lines.push({ o: head.clone(), d: new THREE.Vector3(-Math.sin(by), -0.25, -Math.cos(by)).normalize(), loose: true });
         let best = null;
         this._far = null; // (in the line but too far: told with its distance — never silence)
         this._hidden = null; // (in the line but behind a wall: told so)
@@ -178,7 +185,7 @@ export class ImperiusControl {
                     const d = Math.max(0.3, dc - r);
                     if (dc < 0.3) continue;
                     const ang = Math.max(0, L.d.angleTo(_a.divideScalar(dc)) - Math.atan2(r, dc));
-                    if (ang > IMPERIUS.AIM_ANG && !(d < 10 && ang < 1.0)) continue; // (close by: roughly in front is enough)
+                    if (L.loose ? !(d < 14 && ang < 0.9) : ang > IMPERIUS.AIM_ANG && !(d < 10 && ang < 1.0)) continue; // (close by: roughly in front is enough)
                     if (d > IMPERIUS.CAST_R) { if (ang < IMPERIUS.AIM_ANG && d < IMPERIUS.CAST_R * 4 && (!this._far || d < this._far.d)) this._far = { d, kind }; continue; }
                     const score = ang * 3 + d * 0.03;
                     if (best && score >= best.score) continue;
@@ -351,7 +358,7 @@ export class ImperiusControl {
     update(dt) {
         const g = this.game;
         if (this._pending && Date.now() - this._pending.at > 4000) { this._pending = null; }
-        if (g.authority) this._hostStep();
+        if (g.authority) { this._hostStep(); this.guards.update(dt); }
         this._fade(dt);
         if (!this.name) { this._beamsOff(); return; }
         // on the way back: only the passage (the creature is its own already — or gone: the mind is home at once)
@@ -458,13 +465,14 @@ export class ImperiusControl {
         for (const [id, r] of g.remotes || []) if (!r.dead && r.position) consider('p', id, r.position.x, r.position.y - 1.95, r.position.z);
         if (!best) return;
         const dir = [r2(best.x - p.x), r2(best.z - p.z)];
-        if (g.authority) this.land(best.k, best.id, hit.dmg, dir, this.me, { x: p.x, z: p.z });
+        if (g.authority) this.land(best.k, best.id, hit.dmg, dir, this.me, { x: p.x, z: p.z }, c);
         else g.sync?.imperius?.({ e: 'hit', k: sys, id: c.id, tk: best.k, tid: best.id, dmg: hit.dmg, d: dir });
     }
 
     /** (authority) A blow of a creature with a mind in it lands — as a servant's (whose it is: only who saw the cast knows — Blame.js). */
-    land(tk, tid, dmg, dir, by, src) {
+    land(tk, tid, dmg, dir, by, src, attacker = null) {
         const g = this.game;
+        if (attacker && (tk === 'v' || tk === 'p' || tk === 'sl')) attacker._impOffence = (attacker._impOffence || 0) + 1; // (it struck a person: a castle's guard sees a madman — ImperiusGuards)
         const d = new THREE.Vector3(dir[0] || 0, 0, dir[1] || 1);
         if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
         d.normalize();
@@ -619,7 +627,7 @@ export class ImperiusControl {
             if (m.e === 'pos' && Array.isArray(m.p)) H.n = { x: +m.p[0] || 0, y: +m.p[1] || 0, z: +m.p[2] || 0, ry: +m.ry || 0, w: Math.max(0, Math.min(1, +m.w || 0)), atk: !!m.atk, air: !!m.air, fire: Array.isArray(m.fire) && m.fire.length === 4 ? m.fire.map((x) => Math.max(-2, Math.min(2, +x || 0))) : null };
             else if (m.e === 'hit') {
                 const c = BODIES[m.k]?.find(g, m.id);
-                if (c) { const p = BODIES[m.k].pos(c, _a); this.land(m.tk, m.tid, m.dmg, Array.isArray(m.d) ? m.d : [0, 1], from, { x: p.x, z: p.z }); }
+                if (c) { const p = BODIES[m.k].pos(c, _a); this.land(m.tk, m.tid, m.dmg, Array.isArray(m.d) ? m.d : [0, 1], from, { x: p.x, z: p.z }, c); }
             } else if (m.e === 'end') this.unclaim(m.k, m.id);
             return;
         }
