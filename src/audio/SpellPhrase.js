@@ -236,6 +236,10 @@ export const AFTER_CAST_FIT = 0.6;
 export function afterCast(last, spell, meta, now) {
     if (!last || !spell || !(now - last.at < 4000)) return null;
     const fit = meta?.fit;
+    // («Бомбардо Максима» → «Айс Максима» twice: a look at the phrase's end starting inside «бомбардо» fits «лёд максима» well —
+    // one phrase says one «… Максима»; in the next 1.5 s another «X Максима» is that same end, however clearly it was made out)
+    if (/Maxima$/.test(spell) && /Maxima$/.test(last.spell) && spell !== last.spell && !last.spell.startsWith(spell)
+        && (meta?.seg != null && meta.seg === last.seg || now - last.at < AFTER_CAST_MS)) return `конец той же фразы «${last.spell}» прочитан как «${spell}»`;
     if (meta?.seg != null && meta.seg === last.seg) {
         // (the same spell or a piece of it again: no; its longer form after a long pause — no second blast; only
         // «Джолт» → «Джолт Максима»: the game makes the charge already flying grow)

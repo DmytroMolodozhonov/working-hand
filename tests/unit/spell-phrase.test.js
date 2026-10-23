@@ -75,6 +75,17 @@ test('«Бомбардо Максима» is that one spell, once: no «Джол
     assert.equal(afterCast({ spell: 'Jolt', at: 1000, seg: 3 }, 'JoltMaxima', { native: true, seg: 3, fit: 0.1 }, 1300), null); // (it grows)
 });
 
+test('«Бомбардо Максима» is no «Айс Максима» twice: the end «…максима» of the same phrase is never another «X Максима» (the author\'s case)', async () => {
+    const { afterCast } = await import('../../src/audio/SpellPhrase.js');
+    const last = { spell: 'BombardoMaxima', at: 1000, seg: 7 };
+    // (the look at the phrase's end starts inside «бомбардо»: «…до максима» fits «лёд максима» WELL — fit 1.9 on the recordings)
+    assert.ok(afterCast(last, 'IceMaxima', { native: true, seg: 7, fit: 1.9 }, 1400));
+    assert.ok(afterCast(last, 'IceMaxima', { native: true, seg: 8, fit: 1.9 }, 1600)); // (the next «phrase» of the same breath)
+    assert.ok(afterCast(last, 'IceMaxima', null, 1600)); // (the browser's voice tells no segment, no fit)
+    assert.equal(afterCast(last, 'IceMaxima', { native: true, seg: 9, fit: 1.9 }, 3600), null); // (a new phrase, a moment later: mine)
+    assert.equal(afterCast(last, 'Ice', { native: true, seg: 8, fit: 1.9 }, 1800), null); // (plain «Айс» is not a «Максима» tail)
+});
+
 test('running with no word said: breathing and steps read as «Даст» / «Джолт» never cast (the author\'s case)', async () => {
     const { bodyNoise } = await import('../../src/audio/SpellPhrase.js');
     assert.ok(bodyNoise({ spell: 'Sands', text: 'даст', native: true, fit: 0.2, len: 4, running: true, lips: null })); // (only just made out, on the run)
