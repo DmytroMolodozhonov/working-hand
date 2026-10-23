@@ -3,13 +3,13 @@
  * It belongs to the Protection group (the author: «сэкономить на Protection»): another wizard's spell hits the wall.
  *
  * The wand points at the ground a few steps ahead (2.5–9 m, downwards). From that spot a wall grows across the way
- * «from me to the spot»: 7 blocks wide, 2 thick, 5 high — the hero is ~3.5 m, so «чуть выше твоего роста» is 5 m.
+ * «from me to the spot»: 7 blocks wide, 2 thick, 6 high — the hero is ~3.5 m (first 5, then the author wanted one more).
  * Each column of the wall is made of what the ground is under that very column (`wallMaterial`): stone → stone,
  * sand → sand, grass / earth → earth under a cap of grass, snow → snow, gravel → gravel, a planet's rock → its rock;
  * a column over wood, leaves, ice, a castle's block takes the earthy block under it. So on the seam of sand and
  * rock the wall is honestly patched.
  *
- * The top is not a board: every column is 5 high ±1 at the edges and now and then a block short inside (a toothed
+ * The top is not a board: every column is 6 high ±1 at the edges and now and then a block short inside (a toothed
  * crest, drawn from the cast's seed — the same on every computer), and a little scree of single blocks lies at the
  * foot. It grows from the middle to the edges and from the bottom up in `GROW` = 2 s: not at once, not slowly.
  *
@@ -32,11 +32,12 @@ import { BLOCK, isLeaves, isWood, isPlanetBlock } from '../world/Terrain.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
+import { voxelGeometry, voxelMaterial } from './LevitationMaxima.js';
 
 export const GROUNDPRUD = {
     REACH: 28, // m along the hand when looking for the ground
     NEAR: 2, FAR: 18, // m from the caster to the spot (the author: twice as far as first)
-    W: 7, T: 2, H: 5, // blocks: width, thickness, height (the hero is ~3.5 m: «чуть выше роста»)
+    W: 7, T: 2, H: 6, // blocks: width, thickness, height (the hero is ~3.5 m; the author: one block higher than 5)
     GROW: 1, // s from the first block to the last (the author: twice as fast; the earth is seen to rise smoothly meanwhile)
     WAIT: 1.5, // s a block waits for a body to step aside
     SEND: 0.12, // s: the blocks laid go out together
@@ -197,18 +198,54 @@ export function groundprudAim(data, origin, dir, me, known = null, gift = null) 
     return plan.cells ? { A, f, plan, seed } : plan;
 }
 
-/** The earth rising out of the ground (every computer): one shared box, one material, two instanced meshes — a draw call each. */
-const RISE_GEO = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-RISE_GEO.userData.shared = true;
-let _riseMat = null;
-const riseMat = () => _riseMat || (_riseMat = new THREE.MeshLambertMaterial({ color: 0xffffff }));
-const RISE_COLOR = new Map([[BLOCK.STONE, 0x8d8b86], [BLOCK.DEEPSTONE, 0x6d6b68], [BLOCK.DIRT, 0x7a5a38], [BLOCK.GRASS, 0x7a5a38], [BLOCK.SAND, 0xdcc98f], [BLOCK.SNOW, 0xf0f4f8], [BLOCK.GRAVEL, 0x8a8782]]);
-const riseColor = (b, x, z, cap) => {
-    const base = cap && b === BLOCK.GRASS ? 0x5a9a3a : (RISE_COLOR.get(b) ?? 0x9a8a7a);
-    const v = 0.88 + hash(x, z, cap ? 5 : 3) * 0.2;
-    return new THREE.Color(base).multiplyScalar(cap && b !== BLOCK.GRASS ? v * 1.08 : v);
-};
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
+/**
+ * The earth rising out of the ground (every computer): the wall's own blocks, drawn with the world's block material
+ * (VoxelShading — the same stone / earth / sand / grass textures as the blocks laid; the patterns stay on the blocks as
+ * they move, LevitationMaxima.voxelMaterial), pushed up out of the ground by a vertex shift: one mesh, one draw call.
+ * The shift of each column: its delay and depth are vertex attributes, the time one uniform of the material.
+ */
+function riseMaterial() {
+    const mat = voxelMaterial(new THREE.Vector3(0, -1.5, 0));
+    const base = mat.onBeforeCompile;
+    const T = { value: 0 }, DUR = { value: 1 };
+    mat.onBeforeCompile = (shader, r) => {
+        base(shader, r);
+        shader.uniforms.uRiseT = T;
+        shader.uniforms.uRiseDur = DUR;
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform float uRiseT;\nuniform float uRiseDur;\nattribute float riseDelay;\nattribute float riseDepth;')
+            .replace('#include <project_vertex>', 'float rp = clamp((uRiseT - riseDelay) / uRiseDur, 0.0, 1.0);\ntransformed.y -= (1.0 - (1.0 - (1.0 - rp) * (1.0 - rp))) * riseDepth;\n#include <project_vertex>');
+    };
+    mat.customProgramCacheKey = () => 'groundprud-rise';
+    mat.userData.rise = { T, DUR };
+    return mat;
+}
+/** The geometry of the columns [[col, cells]…] (cells: [x, L, z, block]); col.delay / col.h give the shift. */
+function riseGeometry(cols, data) {
+    const pos = [], nor = [], colr = [], pat = [], sky = [], dl = [], dp = [], idx = [];
+    for (const [c, cells] of cols) {
+        const g = voxelGeometry(cells.map((a) => [a[0], a[1], a[2], a[3]]), 0, 0, 0, data);
+        const P = g.getAttribute('position'), N = g.getAttribute('normal'), C = g.getAttribute('color'), V = g.getAttribute('voxPat'), K = g.getAttribute('voxSky'), I = g.index;
+        const o = pos.length / 3;
+        for (let i = 0; i < P.count; i++) {
+            pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i)); colr.push(C.getX(i), C.getY(i), C.getZ(i));
+            pat.push(V.getX(i)); sky.push(K.getX(i)); dl.push(c.delay || 0); dp.push((c.h || 1) + 0.8);
+        }
+        for (let i = 0; i < I.count; i++) idx.push(I.getX(i) + o);
+        g.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+    geo.setAttribute('voxPat', new THREE.Float32BufferAttribute(pat, 1));
+    geo.setAttribute('voxSky', new THREE.Float32BufferAttribute(sky, 1));
+    geo.setAttribute('riseDelay', new THREE.Float32BufferAttribute(dl, 1));
+    geo.setAttribute('riseDepth', new THREE.Float32BufferAttribute(dp, 1));
+    geo.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e5);
+    return geo;
+}
 const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x8a6a44 : 0xb8b4aa);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
@@ -268,31 +305,22 @@ export class Groundprud {
             g.builder?._sendEdits(out.splice(0));
             g.castleLife?.breakWays?.({ x: A.x, y: A.L, z: A.z }, 6); // (the ways of the people round it are worked out again)
         };
-        // the earth itself rises, smoothly, out of the ground — the blocks are laid under it (and show when it goes)
+        // the earth itself rises, smoothly, out of the ground: the wall's own blocks with the world's textures (the blocks laid under it show when it goes)
         const cs = plan.cols, n = cs.length;
-        let body = null, cap = null;
-        if (g.scene && n) {
-            body = new THREE.InstancedMesh(RISE_GEO, riseMat(), n);
-            cap = new THREE.InstancedMesh(RISE_GEO, riseMat(), n);
-            for (const im of [body, cap]) { im.frustumCulled = false; im.castShadow = false; im.receiveShadow = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.scene.add(im); }
-            cs.forEach((c, i) => { body.setColorAt(i, riseColor(c.mat, c.x, c.z, false)); cap.setColorAt(i, riseColor(c.mat, c.x, c.z, true)); });
-        }
         const rise = GROUNDPRUD.GROW * 0.62, HOLD = 1.2;
-        const drawRise = () => {
-            for (let i = 0; i < n; i++) {
-                const c = cs[i], pr = Math.max(0, Math.min(1, (t - c.delay) / rise));
-                const e = 1 - (1 - pr) * (1 - pr), top = c.h * e; // (fast out of the ground, slowing at the top)
-                const sh = pr > 0 && pr < 1 ? 0.035 * Math.sin(t * 60 + i * 2.1) : 0;
-                _p.set(c.x + sh, c.g - 0.62, c.z - sh);
-                _sc.set(1.04, pr > 0 ? top + 0.12 : 0.0001, 1.04);
-                body.setMatrixAt(i, _m.compose(_p, _q, _sc));
-                _p.set(c.x + sh, c.g - 0.5 + top - 0.2, c.z - sh);
-                _sc.set(1.07, pr > 0.02 ? 0.24 : 0.0001, 1.07);
-                cap.setMatrixAt(i, _m.compose(_p, _q, _sc));
-            }
-            body.instanceMatrix.needsUpdate = true; cap.instanceMatrix.needsUpdate = true;
-        };
-        const dust = (dt) => {
+        let mesh = null, mat = null;
+        if (g.scene && n) {
+            const byCol = new Map();
+            for (const c of plan.cells) { if (!byCol.has(c[5])) byCol.set(c[5], []); byCol.get(c[5]).push(c); }
+            for (const [c] of byCol) if (c.delay == null) c.delay = GROUNDPRUD.GROW * 0.35; // (the foot's lumps of rubble)
+            mat = riseMaterial();
+            mat.userData.rise.DUR.value = rise;
+            mesh = new THREE.Mesh(riseGeometry(byCol, data), mat);
+            mesh.position.y = -1.5;
+            mesh.frustumCulled = false; mesh.castShadow = false; mesh.receiveShadow = true;
+            g.scene.add(mesh);
+        }
+        const dust = () => {
             for (let k = 0; k < 4; k++) {
                 const c = cs[(Math.random() * n) | 0];
                 if (!c || t < c.delay || t > c.delay + rise + 0.15) continue;
@@ -301,7 +329,7 @@ export class Groundprud {
                 g.fx.spark(_v.set(c.x + (Math.random() - 0.5), c.g - 0.5 + c.h * (1 - (1 - pr) * (1 - pr)), c.z + (Math.random() - 0.5)), col, 0.13, _w.set((Math.random() - 0.5) * 2.4, 1.5 + Math.random() * 2.4, (Math.random() - 0.5) * 2.4), 0.6);
             }
         };
-        const dropRise = () => { if (!body) return; g.scene.remove(body); g.scene.remove(cap); body.dispose?.(); cap.dispose?.(); body = cap = null; };
+        const dropRise = () => { if (!mesh) return; g.scene.remove(mesh); mesh.geometry.dispose(); mat.dispose(); mesh = null; };
         let t = 0, sendT = 0, finished = false, first = true, doneAt = 0;
         g.spells.spells.push({
             life: GROUNDPRUD.GROW + GROUNDPRUD.WAIT + HOLD + 1.5,
@@ -328,7 +356,7 @@ export class Groundprud {
                 }
                 sendT += dt;
                 if (sendT >= GROUNDPRUD.SEND) { sendT = 0; flush(); }
-                if (body) { drawRise(); dust(dt); }
+                if (mesh) { mat.userData.rise.T.value = t; dust(); }
                 if (!left && t >= GROUNDPRUD.GROW && !finished) {
                     finished = true; doneAt = t;
                     flush();
@@ -342,11 +370,8 @@ export class Groundprud {
 
     /** One sample of the rising earth for Game.prewarm: its shader (instanced + per-instance colour) is compiled on loading. */
     sampleModels() {
-        const im = new THREE.InstancedMesh(RISE_GEO, riseMat(), 1);
-        im.setMatrixAt(0, new THREE.Matrix4());
-        im.setColorAt(0, new THREE.Color(0x8d8b86));
-        im.frustumCulled = false;
-        return [im];
+        const c = { delay: 0, h: 1 };
+        return [new THREE.Mesh(riseGeometry(new Map([[c, [[0, 0, 0, BLOCK.STONE], [0, 1, 0, BLOCK.GRASS]]]]), null), riseMaterial())];
     }
 
     /** (the caster's computer, who owns the things) Things lying in the cell come up on the top of the wall. */

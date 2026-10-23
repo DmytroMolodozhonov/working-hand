@@ -36,7 +36,7 @@ function world(kind = () => BLOCK.GRASS, water = () => false) {
 }
 const A = { x: 0, z: 10, L: 10 }, F = { x: 0, z: 1 };
 
-test('the plan: 7 wide, 2 thick, 5 high ±1 at the edges, standing on the ground (no column hangs)', () => {
+test('the plan: 7 wide, 2 thick, 6 high ±1 at the edges, standing on the ground (no column hangs)', () => {
     const { get, top } = world();
     const p = groundprudPlan(get, top, A, F, 12345);
     assert.ok(p.cells, p.why);
@@ -44,7 +44,7 @@ test('the plan: 7 wide, 2 thick, 5 high ±1 at the edges, standing on the ground
     const xs = new Set(wall.map((c) => c[0])), zs = new Set(wall.map((c) => c[2]));
     assert.equal(xs.size, 7, 'seven across');
     assert.equal(zs.size, 2, 'two thick');
-    for (const c of p.cols) assert.ok(c.h >= 4 && c.h <= 6, 'five ±1: ' + c.h);
+    for (const c of p.cols) assert.ok(c.h >= 5 && c.h <= 7, 'six ±1: ' + c.h);
     assert.ok(Math.max(...p.cols.map((c) => c.h)) <= GROUNDPRUD.H + 1);
     // every cell stands right on the ground or on the cell under it
     const have = new Set(p.cells.map((c) => c[0] + ',' + c[1] + ',' + c[2]));
@@ -124,10 +124,10 @@ test('the aim: the ground ahead only; not forward, not too near, not too far', (
     assert.ok(ok.A.z > GROUNDPRUD.NEAR && ok.A.z <= GROUNDPRUD.FAR);
 });
 
-test('the height of a column: five, ±1 at the edges only', () => {
+test('the height of a column: six, ±1 at the edges only', () => {
     for (let i = 0; i < 200; i++) {
-        assert.ok([4, 5].includes(columnHeight(i, i * 3, i * 7, 0)));
-        assert.ok([4, 5, 6].includes(columnHeight(i, i * 3, i * 7, 3)));
+        assert.ok([5, 6].includes(columnHeight(i, i * 3, i * 7, 0)));
+        assert.ok([5, 6, 7].includes(columnHeight(i, i * 3, i * 7, 3)));
     }
 });
 
@@ -162,12 +162,12 @@ test('grow(): the caster lays the blocks in about a second, a body in a cell hol
     new Groundprud(c.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'other');
     run(c.spells, 6);
     assert.equal(c.sent.length, 0, 'the others lay nothing: the blocks come from the caster');
-    // the earth seen rising: two instanced meshes while it grows, gone after
+    // the earth seen rising: one mesh of the wall's own blocks while it grows, gone after
     const d = make();
     d.g.scene = new THREE.Scene();
     new Groundprud(d.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
     run(d.spells, 0.4);
-    assert.equal(d.g.scene.children.length, 2, 'the rising earth is in the scene');
+    assert.equal(d.g.scene.children.length, 1, 'the rising earth (one mesh, the world\'s block material) is in the scene');
     run(d.spells, 6);
     assert.equal(d.g.scene.children.length, 0, 'and out of it at the end');
 });
