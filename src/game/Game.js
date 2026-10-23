@@ -96,6 +96,7 @@ import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
 import { Steadiness } from './Steadiness.js';
+import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
@@ -436,6 +437,7 @@ export class Game {
         this.waterStorm = new WaterStorm(this); // «Water Vortex Super Maxima»: a great storm of water held and steered by the wand
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
+        this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -2487,6 +2489,7 @@ export class Game {
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('GiveMyPower');
         this.death.takeLegacy(b);
+        onDarkCast(this, 'GiveMyPower'); // (чёрная магия: всегда +1)
         return 'GiveMyPower';
     }
 

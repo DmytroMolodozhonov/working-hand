@@ -27,6 +27,7 @@
 
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
 import { IMPERIUS, IMPERIUS_MAXIMA } from './Imperius.js';
+import { isDark, onDarkCast } from './DarkMagic.js';
 
 const _fp = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 const _fv = { x: 0, y: 0, z: 0 };
@@ -197,6 +198,7 @@ export class Mana {
      * @returns {number} how much the maximum grew
      */
     success(name) {
+        if (isDark(name)) onDarkCast(this.game, name); // (чёрная магия: +1 к тьме с шансом 50 %)
         const n = firstSpellGain(name);
         const key = SAME_SPELL[name] || name;
         if (!n || this.spellsUsed.has(key)) return 0;
