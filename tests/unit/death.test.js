@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { villagerLook } from '../../src/entities/VillagerModel.js';
 import { DEATH, bodyStage, lootOfPlayer, lootOfVillager, dropSpot, skeletonModel, layDown, DeathSystem } from '../../src/game/Death.js';
 
 test('death: the body lies, then bones for 20 minutes, then nothing', () => {
@@ -100,4 +101,25 @@ test('death: bodies age into bones and crumble; the list is saved and restored w
     d.update(DEATH.BONES_S);
     assert.equal(d.bodies.size, 0, 'crumbled');
     assert.ok(!b.bones.parent, 'gone from the world');
+});
+
+test('death: a killed wizard drops a pouch of coins by his rank (a wanderer by his own rank), no sword', () => {
+    for (const [rank, role] of [['novice', 'student'], ['adept', 'student'], ['teacher', 'teacher'], ['elder', 'townwiz'], ['master', 'master'], ['adept', 'wanderer'], ['teacher', 'wanderer']]) {
+        const [a, b] = DEATH.WIZ_COINS[rank];
+        for (const r of [0, 0.5, 0.999]) {
+            const out = lootOfVillager(role, { rank }, () => r);
+            assert.deepEqual(out.map((d) => d.kind), ['coins'], `${role}/${rank}`);
+            assert.ok(out[0].count >= a && out[0].count <= b, `${role}/${rank}: ${out[0].count} in ${a}..${b}`);
+        }
+    }
+    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0)[0].count, 150);
+    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0.9999)[0].count, 400);
+});
+
+test('death: the body of a killed wizard is made from his own look (robe, hat), not from a castle farmer', () => {
+    const look = { ...villagerLook(12345, 'wanderer', false), magicRobe: true, rank: 'teacher' };
+    const ds = new DeathSystem({ scene: new THREE.Scene(), castleLife: { castles: new Map(), _roster: () => ({ seed: 1, role: 'farmer', female: false }) } });
+    const body = ds._villagerBody({ id: 'ww0_0:1', who: 'ww0_0:1', role: 'wanderer', look, st: 0 });
+    assert.ok(body.pivot, 'a body is made');
+    assert.equal(look.role, 'wanderer');
 });

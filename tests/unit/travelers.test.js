@@ -197,3 +197,28 @@ test('the wizards\' carriage: its hood arches up over the chest, the stars lie o
     const top = CART.FLOOR + CART.SIDE + CART.WID / 2 + 0.2;
     m.traverse((o) => { if (o.isMesh) { const b = new THREE.Box3().setFromObject(o); assert.ok(b.max.y <= top + 0.6, `${o.geometry.type} at ${b.max.y.toFixed(2)}`); } });
 });
+
+test('wandering wizards out of sight: wounded and angry ones are remembered by number; the same come back, never a stranger', () => {
+    const { g, L, T } = fakeGame();
+    g.character.group.position.set(40, 0, 0);
+    const P = T.spawnNear('wizards', { at: { x: 0, z: 0 }, dest: { x: 0, z: -400, r: 10, into: null } });
+    assert.ok(P);
+    const first = P.members[0];
+    first.maxHp = 20; first.hp = 7; first.foe = 'me';
+    const id = first.id, def = P.cs.def.id, idx = first.idx;
+    T._remove(P); // (too far: they are put to sleep)
+    assert.ok(!L.byId.has(id));
+    assert.equal(T.sleepers.get(id).hp, 7);
+    // (the same place and number later: the same wizard, as wounded, still against the player)
+    const cs = L._runtime({ id: def, kind: 'wander' });
+    const v = L._activate(cs, idx, { x: 0, y: 0, z: 0, yaw: 0 }, 'road');
+    v.maxHp = 20; v.hp = 20;
+    T._wakeNote(v);
+    assert.equal(v.role, 'wanderer');
+    assert.equal(v.hp, 7);
+    assert.equal(v.foe, 'me');
+    assert.ok(!T.sleepers.has(id));
+    // (a killed one stays killed: the place never gives his number again)
+    L.state(def).killed.add(idx);
+    assert.equal(L._activate(cs, idx, { x: 0, y: 0, z: 0 }, 'road') && null, null);
+});

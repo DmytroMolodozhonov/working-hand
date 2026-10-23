@@ -43,6 +43,7 @@ export const ROAD = {
     DEST: [220, 1500], // m to where they go
     CALM: 12, // s with nobody fighting / afraid: back on the way
     HOSTILE_MS: 90000,
+    MEMORY_MS: 20 * 60000, MEMORY_MAX: 64, // wounded / angry travellers out of sight are remembered this long (and this many)
     BRAVE: 0.62, // a road's folk this brave (0…1, their own nature) stand and fight — with a pitchfork or bare fists — the rest run (about a third)
     // what goes on the roads (weights): by day, at night
     DAY: { folkCart: 0.32, wizCart: 0.2, wizards: 0.24, knights: 0.24, knightRider: 0.16, folkRider: 0.14, wizRider: 0.1 },
@@ -97,6 +98,7 @@ export class Travelers {
         this._checkT = 0;
         this._n = 0;
         this.log = new CappedLog();
+        this.sleepers = new Map(); // traveller id → { hp, armor, foe, until }: remembered while out of sight (_sleepNote)
         this.riders = new Riders(this); // (the riders right on their horses)
     }
 
@@ -189,6 +191,31 @@ export class Travelers {
         return { x: x + Math.cos(dir) * far - Math.sin(dir) * side, z: z + Math.sin(dir) * far + Math.cos(dir) * side, r: 12, into: null };
     }
 
+    /**
+     * A traveller who went out of sight (the party is taken away far off: nothing piles up) is remembered in a small
+     * note by his place and number (`killed` keeps the dead): wounded and angry at a player he stays so — the same
+     * wizard (the roster is fixed by the place's id and number: kind, name, rank, look, staff), never a stranger.
+     */
+    _sleepNote(v) {
+        const hurt = v.hp < (v.maxHp ?? v.hp) || v.armor < (v.maxArmor ?? v.armor);
+        const foe = v.foe || v.grudge?.id || null;
+        if (!hurt && !foe) { this.sleepers.delete(v.id); return; }
+        this.sleepers.delete(v.id);
+        this.sleepers.set(v.id, { hp: v.hp, armor: v.armor, foe, until: Date.now() + ROAD.MEMORY_MS });
+        while (this.sleepers.size > ROAD.MEMORY_MAX) this.sleepers.delete(this.sleepers.keys().next().value);
+    }
+
+    /** The same traveller comes back to the road: his health and his anger at the player are as they were. */
+    _wakeNote(v) {
+        const n = this.sleepers.get(v.id);
+        if (!n) return;
+        this.sleepers.delete(v.id);
+        if (n.until < Date.now()) return;
+        v.hp = Math.min(n.hp, v.maxHp ?? n.hp);
+        if (n.armor != null) v.armor = Math.min(n.armor, v.maxArmor ?? n.armor);
+        if (n.foe) v.foe = n.foe;
+    }
+
     /** A party on the road. */
     _make(kind, x, z, yaw, dest) {
         const g = this.game, L = this.life, idx = L.index;
@@ -223,6 +250,7 @@ export class Travelers {
             const v = L._activate(cs, i, { x: at.x, y: at.y, z: at.z, yaw: at.yaw ?? yaw }, P.cart ? 'cart' : 'road');
             if (!v) return;
             v.party = P;
+            this._wakeNote(v);
             // (the author: «кто-то, даже если у него ничего нет, даже с кулаками, всё равно пойдёт и попытается что-то сделать»)
             if (!L._fights(v)) v.roadBrave = roadBrave(v);
             if (P.riders) this.riders.mount(v, P, at.x, at.z, yaw);
@@ -442,6 +470,7 @@ export class Travelers {
 
     _remove(P) {
         const L = this.life;
+        for (const v of P.members) if (!v.dead && !v.removable) this._sleepNote(v);
         for (const v of P.members) if (!v.dead && !v.removable) L._deactivate(v);
         for (const v of P.members) v.party = null;
         if (P.cart) { P.cart.party = null; if (!P.cart.wreck) this.game.carriages.remove(P.cart); }

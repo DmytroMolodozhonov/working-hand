@@ -47,6 +47,7 @@ export const DEATH = {
     GATHER_CONE: 0.45, // rad (as «Акцио»)
     GATHER_NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
     KNIGHT_COINS: [5, 300], // (the author: «у людей — от 5 монет до 300, рандомно»; was 4–15)
+    WIZ_COINS: { novice: [5, 60], adept: [20, 120], teacher: [50, 200], elder: [100, 300], master: [150, 400] }, // (a killed wizard's pouch by rank)
     KING_COINS: [60, 180], // (a king without a known fortune: ~12 % of 500…1500; the castle's king drops his own part — CastleTreasure.kingPurse)
 };
 
@@ -76,8 +77,21 @@ export function lootOfPlayer({ slots = [], held = [], backpack = null } = {}) {
     return out;
 }
 
+/** A wizard's pouch by his rank (the author: novice 5–60 … elder 100–300; the Master of a tower carries 150–400), or null (not a wizard). */
+export function wizardPurse(role, rank = null) {
+    const W = DEATH.WIZ_COINS;
+    if (role === 'master' || rank === 'master') return W.master;
+    if (rank && W[rank]) return W[rank];
+    if (role === 'wanderer' || role === 'teacher') return W.teacher;
+    if (role === 'student') return W.novice;
+    if (role === 'seller' || role === 'townwiz') return W.adept;
+    return null;
+}
+
 /** What an armed villager drops: a knight / the king — the sword, the shield, coins. Others — nothing. */
-export function lootOfVillager(role, { shield = false, coins = null } = {}, rng = Math.random) {
+export function lootOfVillager(role, { shield = false, coins = null, rank = null } = {}, rng = Math.random) {
+    const wr = wizardPurse(role, rank);
+    if (wr) return [{ kind: 'coins', uid: newUid(), count: coins != null ? coins : wr[0] + Math.floor(rng() * (wr[1] - wr[0] + 1)) }]; // (a wizard's pouch; the wand falls from his hand — dropHeld)
     if (role !== 'knight' && role !== 'king') return [];
     const [a, b] = role === 'king' ? DEATH.KING_COINS : DEATH.KNIGHT_COINS;
     const out = [{ kind: 'weapon', type: 'sword', magic: role === 'king', bonus: role === 'king' ? 25 : 0 }];
@@ -300,17 +314,18 @@ export class DeathSystem {
         // «Дай»: nothing of them is left — no body, no things (the gods' gifts only); «Пилбидрио»: no body, the things fall (StrongMagic)
         if (v.annihilated) return;
         const y = this._ground(v.x, v.z, v.y + 1.5);
+        const lived = v.model?.look ? { ...v.model.look } : null; // (how he looked alive: the body keeps it — a wizard stays a wizard)
         // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
         const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...steel);
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
         if (v.burst) return;
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0 };
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived };
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -382,12 +397,19 @@ export class DeathSystem {
 
     _villagerBody(b) {
         const g = this.game;
-        let look = null;
-        const [cid, n] = String(b.who || '').split(':');
-        const cl = g.castleLife;
-        const cs = cl && ([...(cl.castles?.values() || [])].find((c) => c.def.id === cid) || cl._runtimeById?.(cid));
-        if (cs) { const e = rosterEntry(cs.def, +n); look = villagerLook(e.seed, e.role, e.female, { castleColor: cs.def.color }); }
-        else look = villagerLook(Math.abs(hashStr(b.id)), b.role || 'farmer');
+        let look = b.look ? { ...b.look } : null; // (as he was alive: kept in the body)
+        if (!look) {
+            const [cid, n] = String(b.who || '').split(':');
+            const cl = g.castleLife;
+            const cs = cl && ([...(cl.castles?.values() || [])].find((c) => c.def.id === cid) || cl._runtimeById?.(cid));
+            if (cs) {
+                const e = cl._roster ? cl._roster(cs.def, +n) : rosterEntry(cs.def, +n); // (a wizard's place has its own roster: WizardAI.wizardRoster)
+                look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: cs.def.color });
+                if (e.robe) look.magicRobe = true;
+                if (e.rank) look.rank = e.rank;
+                if (e.elder) { look.female = false; look.hairColor = 0xd8d8d8; look.beard = 'long'; look.hat = 'wizardTall'; }
+            } else look = villagerLook(Math.abs(hashStr(b.id)), b.role || 'farmer');
+        }
         if (b.st) look = strippedLook(look); // (its plates / robe lie beside it: Armor.js)
         const m = new VillagerModel({ ...look, tool: 'none' }, { shield: false });
         for (let i = 0; i < 10 && !m.isDeadDone; i++) m.update(0.1, { mode: 'dead' });
