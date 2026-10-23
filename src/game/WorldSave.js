@@ -131,6 +131,7 @@ export function playerSnapshot(game) {
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         dark: game.dark?.snapshot() || null, // чёрная магия: уровень тьмы
+        bw: game.breakward?.snapshot() || null, // метка «слом защиты» и выученный рисунок пентаграммы
         steady: game.steady?.snapshot() || null, // «Устойчивость»: the skill and the run towards the next +1
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
         ach: game.achievements?.snapshot() || null, // the achievements (and «Высший маг»): kept for good
@@ -182,6 +183,7 @@ export function applyPlayerSnapshot(game, s) {
         inv._render?.();
     }
     if (s.dark) game.dark?.restore(s.dark);
+    if (s.bw) game.breakward?.restore(s.bw);
     if (s.steady) game.steady?.restore(s.steady);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.ach) game.achievements?.restore(s.ach);

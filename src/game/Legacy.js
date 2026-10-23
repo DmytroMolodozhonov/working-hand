@@ -91,6 +91,7 @@ export function wipeHero(g) {
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
     g.dark?.onDeath(); // (тьма уходит в тело)
+    g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
     g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }

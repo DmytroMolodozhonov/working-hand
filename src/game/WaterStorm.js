@@ -218,11 +218,12 @@ export class WaterStorm {
         const w = data ? waterInReach(data, src) : { list: [], count: 0 };
         if (!enoughWater(w.count)) return this._hint(`🌊 Здесь мало воды (${w.count} м³) — нужно не меньше ${STORM.MIN_WATER}: большая река, озеро или море`, isFinal);
         const c = g.combat;
-        const why = stormBlock({ enabled: !!c?.enabled, max: c?.maxFatigue || 30, mana: c?.fatigue ?? 0 });
+        const why = stormBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(STORM.NAME, STORM.MIN_MAX_MANA, c?.maxFatigue || 30) ?? (c?.maxFatigue || 30), mana: c?.fatigue ?? 0 });
         if (why === 'max') return this._hint(`🌊 Такая буря подвластна только сильным магам: нужен <b>максимум маны ${STORM.MIN_MAX_MANA}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`, isFinal);
         const tired = c?.check(STORM.NAME);
         if (tired || why) return this._hint(tired || `😮‍💨 Не хватает маны: нужно ${STORM.COST}`, true);
         c?.pay(STORM.NAME);
+        if (g.breakward?.afterPay(STORM.NAME, STORM.MIN_MAX_MANA, src)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         g._manaLater = true; // (mana: it counts when it really does something)
         const ch = g.character;
         const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
@@ -294,7 +295,7 @@ export class WaterStorm {
         if (!this._castSide()) { this.stop('wand'); return; }
         const w = g.items?.heldOf?.('wand');
         if (w && w.side !== s.side) s.side = w.side;
-        if (c && (c.drain(stormDrain(dt), dt) === false || (c.enabled && c.fatigue <= 1e-6))) { this.stop('mana'); return; }
+        if (c && (c.drain(stormDrain(dt), dt) === false || c.manaOut())) { this.stop('mana'); return; }
         s.t += dt;
         if (s.t > STORM.MAX_LIFE) { this.stop('time'); return; }
         const side = s.side;

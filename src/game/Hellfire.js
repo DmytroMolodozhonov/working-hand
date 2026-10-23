@@ -239,11 +239,12 @@ export class Hellfire {
         const side = this._castSide();
         if (!side) return this._hint('🪄 «Let the Hellfire Come» вызывается только <b>волшебной палочкой в руке</b>', isFinal);
         const c = g.combat;
-        const why = hellfireBlock({ enabled: !!c?.enabled, max: c?.maxFatigue || 30, mana: c?.fatigue ?? 0 });
+        const why = hellfireBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, c?.maxFatigue || 30) ?? (c?.maxFatigue || 30), mana: c?.fatigue ?? 0 });
         if (why === 'max') return this._hint(`🔥 Адский огонь подвластен только сильным магам: нужен <b>максимум маны ${HELLFIRE.MIN_MAX_MANA}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`, isFinal);
         const tired = c?.check(HELLFIRE.NAME);
         if (tired || why) return this._hint(tired || `😮‍💨 Не хватает маны: нужно ${HELLFIRE.COST}`, true);
         c?.pay(HELLFIRE.NAME);
+        if (g.breakward?.afterPay(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         g._manaLater = true; // (mana: it counts as working when it really burns something)
         const ch = g.character;
         const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
@@ -349,7 +350,7 @@ export class Hellfire {
         const w = g.items?.heldOf?.('wand');
         if (w && w.side !== s.side) s.side = w.side;
         // the caster pays while holding it (the free world)
-        if (c && (c.drain(hellfireDrain(dt), dt) === false || (c.enabled && c.fatigue <= 1e-6))) { this.stop('mana'); return; }
+        if (c && (c.drain(hellfireDrain(dt), dt) === false || c.manaOut())) { this.stop('mana'); return; }
         s.t += dt;
         if (s.t > HELLFIRE.MAX_LIFE) { this.stop('time'); return; }
         // the wand: where it is, where it points, how far the arm is stretched

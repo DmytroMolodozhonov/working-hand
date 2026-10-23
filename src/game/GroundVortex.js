@@ -272,7 +272,7 @@ export class GroundVortex {
         const side = this._castSide();
         if (!side) { this.stop('wand'); return; }
         s.side = side;
-        if (c && !freeMode(g) && (c.drain(GV.DRAIN * dt, dt) === false || (c.enabled && c.fatigue <= 1e-6))) { this.stop('mana'); return; }
+        if (c && !freeMode(g) && (c.drain(GV.DRAIN * dt, dt) === false || c.manaOut())) { this.stop('mana'); return; }
         s.life += dt; s.t = this._t;
         if (s.life > GV.MAX_LIFE) { this.stop('time'); return; }
         const body = ch.group.position;

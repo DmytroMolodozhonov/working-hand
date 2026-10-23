@@ -83,7 +83,7 @@ export class TotalDestruction {
         if (this.busy) return null;
         if (!max && !isFinal) return null; // (wait: maybe «…Максима»)
         const c = g.combat;
-        if (c?.enabled && (c.maxFatigue || 30) < f.minMax) {
+        if (c?.enabled && (g.breakward?.cellMax(f.name, f.minMax, c.maxFatigue || 30) ?? (c.maxFatigue || 30)) < f.minMax) {
             return hint(`🔷 «${f.label}» подвластно только сильным магам: нужен <b>максимум маны ${f.minMax}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`);
         }
         const terrain = g.world?.terrain;
@@ -98,6 +98,7 @@ export class TotalDestruction {
         if (tired) { g.hud.setVoice(tired, true); return null; }
         c?.pay(f.name);
         const p = new THREE.Vector3(hit.x, hit.y, hit.z);
+        if (g.breakward?.afterPay(f.name, f.minMax, p)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         this.start(p, g.localId, true, max);
         g.sync?.ruin?.(p, max);
         return f.name;

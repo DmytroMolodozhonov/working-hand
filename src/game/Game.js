@@ -95,6 +95,7 @@ import { buildWeapon } from '../entities/WeaponModels.js';
 import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
+import { BreakwardMark } from './BreakwardMark.js';
 import { Steadiness } from './Steadiness.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
@@ -444,6 +445,7 @@ export class Game {
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
+        this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)

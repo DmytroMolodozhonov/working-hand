@@ -907,8 +907,8 @@ export class Levitation {
         if (this._jerked(s, ch)) { this.release(false); return; }
         const c = g.combat;
         if (c.enabled) {
-            c.fatigue -= HOLD_FATIGUE[s.weight || 'light'] * dt;
-            if (c.fatigue > 0) return;
+            if (c.drain && c.manaOut) { c.drain(HOLD_FATIGUE[s.weight || 'light'] * dt, 0); if (!c.manaOut()) return; } // (метка «слом защиты»: мана кончилась — держится на чёрной силе)
+            else { c.fatigue -= HOLD_FATIGUE[s.weight || 'light'] * dt; if (c.fatigue > 0) return; }
             c.fatigue = 0;
             g.hud.setVoice('😮‍💨 Нет сил держать — отпустили', true);
         } else if (s.kind !== 'player' || s.age < LEVITATE.WIZARD_T) return;

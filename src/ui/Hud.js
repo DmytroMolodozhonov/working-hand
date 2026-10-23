@@ -214,6 +214,7 @@ export class Hud {
         const el = this.el;
         if (!el.fatigue) return;
         el.fatigue.classList.remove('hidden');
+        if (this._blackPct != null) return; // (метка «слом защиты»: полоса чёрная — риск, а не мана; setBreakward)
         el.fatigueFill.style.width = `${Math.max(0, (value / max) * 100)}%`;
         el.fatigueFill.classList.toggle('low', value < max * 0.3);
         el.fatigue.style.setProperty?.('--mana-marks', String(Math.max(1, max / 5))); // (a mark every 5 mana, whatever the maximum)
@@ -223,6 +224,24 @@ export class Hud {
             el.manaCur.textContent = String(Math.max(0, Math.floor(value)));
             el.manaMax.textContent = String(Math.floor(max));
             el.manaNum.classList.toggle('low', value < max * 0.3);
+        }
+    }
+
+    /**
+     * Метка «слом защиты» (Breakward.js): `marked` — красный ободок и знак у полосы маны; `pct` (0…100 или null) — полоса ЧЁРНАЯ и
+     * показывает риск: мана кончилась, удерживаемое заклинание держится на чёрной силе. Вызывается только при смене (дёшево: классы и ширина).
+     */
+    setBreakward(marked, pct) {
+        const el = this.el;
+        if (!el.fatigue) return;
+        el.fatigue.classList.toggle('marked', !!marked);
+        const black = pct != null;
+        this._blackPct = black ? pct : null;
+        el.fatigue.classList.toggle('black', black);
+        if (black) {
+            el.fatigueFill.style.width = `${Math.max(2, Math.min(100, pct))}%`;
+            el.fatigueText.textContent = `⚫ Риск: ${Math.floor(pct)}%`;
+            if (el.manaNum) el.manaNum.classList.add('low');
         }
     }
 

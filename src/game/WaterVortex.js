@@ -489,7 +489,7 @@ export class WaterVortex {
         let mine = !!this.state;
         if (!mine) for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { mine = true; break; }
         if (!mine) return;
-        if (c.drain(VORTEX.MANA_DRAIN * dt, 0) !== false && c.fatigue > 1e-6) return;
+        if (c.drain(VORTEX.MANA_DRAIN * dt, 0) !== false && !c.manaOut()) return;
         // out of mana: the water lets go and falls
         for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { this._collapse(this._srcOf(f), f.res); f.res = 0; }
         if (this.state) { this._note({ ev: 'collapse' }); this.stop(); }

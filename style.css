@@ -1756,3 +1756,8 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hotbar-slot .hb-icon.ench2 .hb-spark { color: #ffd36e; text-shadow: 0 0 6px #ffd36e; }
 .hotbar-slot .hb-icon.ench3 .hb-spark { color: #fff6dc; text-shadow: 0 0 7px #ffd36e, 0 0 3px #fff; }
 @keyframes ench-twinkle { 0%, 100% { opacity: 0.55; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+/* метка «слом защиты» (Breakward.js): тёмно-багровый ободок; чёрная полоса — риск вместо маны */
+#fatigue-container.marked { box-shadow: 0 0 0 1px #8a0f24, 0 0 10px rgba(138, 15, 36, 0.8); }
+#fatigue-container.marked #fatigue-text::before { content: '\1F70F '; color: #c4283f; }
+#fatigue-container.black #fatigue-fill { background: linear-gradient(90deg, #07000a, #2a0614 60%, #5a0c22); box-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 0 6px rgba(138, 15, 36, 0.9); transition: width 1s linear; animation: none; }
+#fatigue-container.black #fatigue-fill::after { display: none; }

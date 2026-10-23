@@ -189,12 +189,13 @@ export class Inspirius {
         if (this.busy || !isFinal) return null; // (500 mana: only the whole, final phrase)
         const c = g.combat;
         const side = this._castSide();
-        const why = inspiriusBlock({ enabled: !!c?.enabled, max: c?.maxFatigue, mana: c?.fatigue, wand: !!side, creative: this._creative() });
+        const why = inspiriusBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(INSP.NAME, INSP.MIN_MAX_MANA, c?.maxFatigue) ?? c?.maxFatigue, mana: c?.fatigue, wand: !!side, creative: this._creative() });
         if (why === 'wand') return hint('🪄 «Inspirius» вызывается только <b>волшебной палочкой в руке</b> — направьте на неё всю силу');
         if (why === 'max') return hint(`⚡ «Inspirius» подвластен только величайшим магам: нужен <b>максимум маны ${INSP.MIN_MAX_MANA}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`);
         const tired = c?.check(INSP.NAME);
         if (tired) { g.hud?.setVoice(tired, true); return null; }
         c?.pay(INSP.NAME);
+        if (g.breakward?.afterPay(INSP.NAME, INSP.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
         const d = (ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side)).clone().normalize();
         const orb = this._launch(o, d, g.localId, true, side);

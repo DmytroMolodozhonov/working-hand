@@ -147,12 +147,13 @@ export class CircleAttack {
         if (this.busy) return null;
         if (!max && !isFinal) return null; // (wait: maybe «…Максима»)
         const c = g.combat;
-        const why = circleBlock({ enabled: !!c?.enabled, max: c?.maxFatigue, mana: c?.fatigue }, f);
+        const why = circleBlock({ enabled: !!c?.enabled, max: g.breakward?.cellMax(f.name, f.minMax, c?.maxFatigue) ?? c?.maxFatigue, mana: c?.fatigue }, f);
         if (why === 'max') return hint(`🔷 «${f.label}» подвластно только сильным магам: нужен <b>максимум маны ${f.minMax}</b> (у вас ${Math.floor(c.maxFatigue || 30)})`);
         if (!ch.isTPose?.()) return hint(`✋ Разведите руки в стороны, <b>как буква T</b> (как для «Protection Maxima»), и скажите «${f.label}»`);
         const tired = c?.check(f.name);
         if (tired) { g.hud?.setVoice(tired, true); return null; }
         c?.pay(f.name);
+        if (g.breakward?.afterPay(f.name, f.minMax, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         const me = ch.group.position;
         const p = new THREE.Vector3(me.x, me.y - PLAYER_GROUND_OFFSET, me.z);
         const rays = this._pickRays(p, f);
