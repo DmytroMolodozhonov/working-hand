@@ -1642,7 +1642,7 @@ export class Game {
         // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
         if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
         // «Shield» / «Щит» with a swarm of things up: the things close into a wall (ItemSwarm.shield) — not the hand shield
-        if (name === 'Protection' && this.levMax?.swarm?.active) { const r = this.levMax.swarm.shield(isFinal); if (r !== undefined) return r; }
+        if ((name === 'Protection' || name === 'GroundShield') && this.levMax?.swarm?.active) { const r = this.levMax.swarm.shield(isFinal); if (r !== undefined) return r; }
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             if (isFinal) this.hud.setVoice(this._unknownHint(name), true); // (no mana spent)

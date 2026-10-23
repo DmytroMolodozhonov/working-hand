@@ -200,7 +200,7 @@ test('wiring: the Maxima starts the conductor on a thing, charges the mana, Comb
     assert.match(cb, /levMax\?\.swarm\?\.faces/);
     assert.match(cb, /swarm\.took\(from, kind\)/);
     const g = fs.readFileSync('src/game/Game.js', 'utf8');
-    assert.match(g, /name === 'Protection' && this\.levMax\?\.swarm\?\.active/);
+    assert.match(g, /name === 'GroundShield'\) && this\.levMax\?\.swarm\?\.active/);
     assert.match(g, /this\.levMax\?\.swarm\?\.active\) \{ const r = this\.levMax\.swarm\.attack/);
     // the plain «Левиоса» and «Акцио» leave the swarm's things alone
     assert.match(fs.readFileSync('src/game/Levitation.js', 'utf8'), /!L\.accio && !L\.asked && !L\.swarm/);
