@@ -30,6 +30,7 @@ import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { rotLot } from './MagicHouse.js';
 import { inwardRy } from './Castles.js';
+import { cellShapes } from './PlanSlopes.js';
 
 /** What the spell takes. */
 export const CASTLE = {
@@ -155,7 +156,7 @@ export const PART = { AIR: 0, RISE: 1, TOP: 2 };
 
 /**
  * The blocks of the castle.
- * @returns {{cells:Int32Array, fill:Int32Array, n:number}}  cells: [x, L, z, block, part] × n, in the order the
+ * @returns {{cells:Int32Array, shapes:Uint8Array, fill:Int32Array, n:number}}  cells: [x, L, z, block, part] × n, in the order the
  *   magic puts them (the air first, from the top; the risen walls layer by layer from the ground; then the
  *   battlements, the roofs and the spires — each piece bottom-up); fill: [x, L, z, block] — the foundation's
  *   stone, laid only where nothing solid is.
@@ -327,5 +328,11 @@ export function castleCells(o) {
     const all = [...air, ...rise, ...top];
     const cells = new Int32Array(all.length * 5);
     all.forEach((c, i) => { cells[i * 5] = c[0]; cells[i * 5 + 1] = c[1]; cells[i * 5 + 2] = c[2]; cells[i * 5 + 3] = c[3]; cells[i * 5 + 4] = c[4]; });
-    return { cells, fill: Int32Array.from(fill), n: all.length, nAir: air.length, nRise: rise.length };
+    // the roofs' and the spires' slopes where they are 45° — ramps (BlockShapes.js; a steeper roof keeps its steps):
+    // shapes[i] for the cell i (0: whole)
+    const tmp = all.map((c) => [c[0], c[1], c[2], c[3]]);
+    cellShapes(tmp, [st.roof]);
+    const shapes = new Uint8Array(all.length);
+    tmp.forEach((c, i) => { if (c[4]) shapes[i] = c[4]; });
+    return { cells, shapes, fill: Int32Array.from(fill), n: all.length, nAir: air.length, nRise: rise.length };
 }

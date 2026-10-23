@@ -17,6 +17,7 @@
  */
 
 import { isEnchanted } from '../world/EnchantedStone.js';
+import { SHAPE } from '../world/BlockShapes.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, isWood, isLeaves, isCastleBlock } from '../world/Terrain.js';
 import { RESOURCE, STACK, resourceOf } from './Inventory.js';
@@ -275,18 +276,21 @@ export class Builder {
         const za = Math.max(b.az - MAX_SPAN, Math.min(b.az, z1)), zb = Math.min(b.az + MAX_SPAN, Math.max(b.az, z1));
         const w = xb - xa + 1, d = zb - za + 1;
         for (let z = za; z <= zb; z++) for (let x = xa; x <= xb; x++) {
-            let L = b.L0;
+            let L = b.L0, s = 0;
             if (b.kind === 'BuildRoof') {
-                // a gable roof: steps rise from both long edges to the ridge
+                // a gable roof: it rises from both long edges to the ridge — each step a ramp (BlockShapes.js),
+                // the ridge whole: a smooth slope, not a stair
                 const off = w >= d ? Math.min(z - za, zb - z) : Math.min(x - xa, xb - x);
                 L = b.L0 + off;
+                if (w >= d) s = z - za < zb - z ? SHAPE.RAMP_PZ : z - za > zb - z ? SHAPE.RAMP_NZ : 0;
+                else s = x - xa < xb - x ? SHAPE.RAMP_PX : x - xa > xb - x ? SHAPE.RAMP_NX : 0;
             }
-            out.push([x, L, z]);
+            out.push(s ? [x, L, z, s] : [x, L, z]);
         }
         return out;
     }
 
-    _place(x, L, z) {
+    _place(x, L, z, shape = 0) {
         const b = this.build;
         const data = this.data;
         const key = x + ',' + L + ',' + z;
@@ -304,12 +308,13 @@ export class Builder {
             s.volume -= 0.25;
             if (s.volume < 0.12) b.water._end();
         } else if (!this.game.inventory.take(b.stack, 1)) return false;
-        data.set(x, L, z, b.block);
+        data.set(x, L, z, b.block, shape);
         b.placed.add(key);
         b.count++;
         if (b.block === BLOCK.ICE) this.ice.push({ x, L, z, until: performance.now() + ICE_LIFE * 1000 * (0.85 + Math.random() * 0.15) });
         this._pending = this._pending || [];
-        this._pending.push([x, L, z, b.block]);
+        const sh = data.shapeAt ? data.shapeAt(x, L, z) : 0; // (the material may take no shape: whole)
+        this._pending.push(sh ? [x, L, z, b.block, sh] : [x, L, z, b.block]);
         // the block flows out of the hand
         const hand = this.game.character.getHandWorldPosition(b.side, _v1);
         const target = _v2.set(x, L - 1, z);
@@ -331,10 +336,10 @@ export class Builder {
                     // nearest first, a few per frame (it grows, block by block)
                     cells.sort((p, q) => Math.abs(p[0] - b.ax) + Math.abs(p[2] - b.az) + Math.abs(p[1] - b.L0) - (Math.abs(q[0] - b.ax) + Math.abs(q[2] - b.az) + Math.abs(q[1] - b.L0)));
                     let n = 0;
-                    for (const [x, L, z] of cells) {
+                    for (const [x, L, z, sh] of cells) {
                         if (n >= 4) break;
                         if (b.placed.has(x + ',' + L + ',' + z)) continue;
-                        if (!this._place(x, L, z)) { this.game.hud.toast?.('🧱 Ресурс кончился'); this.finish(); break; }
+                        if (!this._place(x, L, z, sh)) { this.game.hud.toast?.('🧱 Ресурс кончился'); this.finish(); break; }
                         n++;
                     }
                 }

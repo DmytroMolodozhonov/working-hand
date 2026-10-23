@@ -127,3 +127,29 @@ export function cellShapes(cells, mats) {
     }
     return cells;
 }
+
+/**
+ * Ramps laid ON a stepped surface (a bridge's deck, a stair): for every column of `top` (key "x,z" → its top layer)
+ * that has a neighbour exactly one higher, a ramp on top of it rising towards that neighbour (two perpendicular higher:
+ * an inner corner; only a diagonal one higher: an outer corner) — the step is walked up, not climbed. Returns
+ * [[x, L, z, shape]…] (L: the new block's layer, one over the column's top).
+ */
+export function stepRamps(top) {
+    const T = (x, z) => { const v = top.get(x + ',' + z); return v === undefined ? -1e9 : v; };
+    const out = [];
+    for (const [k, l] of top) {
+        const [x, z] = k.split(',').map(Number);
+        const e = T(x + 1, z) - l, w = T(x - 1, z) - l, s = T(x, z + 1) - l, n = T(x, z - 1) - l;
+        const ue = e === 1, uw = w === 1, us = s === 1, un = n === 1, ups = ue + uw + us + un;
+        if (e > 1 || w > 1 || s > 1 || n > 1) continue; // (a wall beside: no ramp against it)
+        let shape = 0;
+        if (ups === 1) shape = ue ? SHAPE.RAMP_PX : uw ? SHAPE.RAMP_NX : us ? SHAPE.RAMP_PZ : SHAPE.RAMP_NZ;
+        else if (ups === 2 && (ue || uw) && (us || un)) shape = ue ? (us ? SHAPE.IN_00 : SHAPE.IN_01) : (us ? SHAPE.IN_10 : SHAPE.IN_11);
+        else if (ups === 0) {
+            const pp = T(x + 1, z + 1) - l === 1, pn = T(x + 1, z - 1) - l === 1, np = T(x - 1, z + 1) - l === 1, nn = T(x - 1, z - 1) - l === 1;
+            if (pp + pn + np + nn === 1) shape = pp ? SHAPE.OUT_11 : pn ? SHAPE.OUT_10 : np ? SHAPE.OUT_01 : SHAPE.OUT_00;
+        }
+        if (shape) out.push([x, l + 1, z, shape]);
+    }
+    return out;
+}

@@ -426,10 +426,10 @@ export class CastleMagic extends HouseMagic {
         const from = m.bi ?? (m.bi = nA);
         const bodies = from < goB ? this._bodies() : null;
         for (; m.bi < goB && !busy(); m.bi++) {
-            const i = m.bi * 5, x = C[i], L = C[i + 1], z = C[i + 2], t = C[i + 3];
-            if (data.get(x, L, z) === t) continue;
-            if (t !== BLOCK.AIR && this._occupied(x, L, z, bodies)) { m.wait.push([x, L, z, t]); continue; }
-            data.set(x, L, z, t); edits.push([x, L, z, t]);
+            const i = m.bi * 5, x = C[i], L = C[i + 1], z = C[i + 2], t = C[i + 3], sh = P.shapes?.[m.bi] | 0; // (a ramp of a roof: BlockShapes.js)
+            if (data.get(x, L, z) === t && (data.shapeAt?.(x, L, z) | 0) === sh) continue;
+            if (t !== BLOCK.AIR && this._occupied(x, L, z, bodies)) { m.wait.push(sh ? [x, L, z, t, sh] : [x, L, z, t]); continue; }
+            data.set(x, L, z, t, sh); edits.push(sh ? [x, L, z, t, sh] : [x, L, z, t]);
         }
         // the bare stones round it: taken one by one while the walls rise
         const goS = Math.floor(Math.min(1, f / CASTLE.RISE_END) * m.stones.length);
@@ -662,9 +662,9 @@ export class CastleMagic extends HouseMagic {
         for (; q.i < P.n && performance.now() - t0 < 2; q.i++) {
             const i = q.i * 5, t = C[i + 3];
             if (t === BLOCK.AIR) continue;
-            const x = C[i], L = C[i + 1], z = C[i + 2];
-            if (data.get(x, L, z) === t || q.miss.has(x + ',' + L + ',' + z)) continue;
-            data.set(x, L, z, t); edits.push([x, L, z, t]);
+            const x = C[i], L = C[i + 1], z = C[i + 2], sh = P.shapes?.[q.i] | 0;
+            if ((data.get(x, L, z) === t && (!data.shapeAt || (data.shapeAt(x, L, z) | 0) === sh)) || q.miss.has(x + ',' + L + ',' + z)) continue;
+            data.set(x, L, z, t, sh); edits.push(sh ? [x, L, z, t, sh] : [x, L, z, t]);
         }
         if (edits.length) { if (this.auth) this.game.builder?._sendEdits(edits); else this.game.blockEdits?.push?.(...edits); }
         if (q.i >= P.n) { this._repairQ.shift(); this._relight(q.rec); }

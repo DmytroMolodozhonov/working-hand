@@ -25,6 +25,7 @@ import { BLOCK, isLeaves, isWood, isPlanetBlock } from '../world/Terrain.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
+import { stepRamps } from '../world/PlanSlopes.js';
 
 export const BRIDGE = {
     REACH: 20, // m along the hand: where it points
@@ -99,7 +100,8 @@ export function bridgeWords(text) {
 
 /**
  * The bridge between A (the caster's feet: the bank's top layer aL) and the far end B (bx, bz, bL):
- * {cells: [[x, L, z, block, t]…] sorted from A to B, len} — or {why} when it cannot be built there.
+ * {cells: [[x, L, z, block, t, shape?]…] sorted from A to B, len} — or {why} when it cannot be built there
+ * (shape: a ramp on a step of a slanting deck — BlockShapes.js).
  * get(x, L, z) → block; top(x, z) → the highest solid layer of a column.
  * The strip is three wide, made of the banks' material: the near half of the near bank's, the far half of the far one's.
  */
@@ -134,6 +136,13 @@ export function bridgePlan(get, top, A, B) {
         const L = deckAt(c.t);
         if (!free(get(c.x, L, c.z))) continue; // (the banks, a wall, a tree: left as they are)
         cells.push([c.x, L, c.z, c.t < 0.5 ? near : far, c.t]);
+    }
+    // where the deck goes up a block (a slanting bridge): a ramp on the lower step — walked up, not climbed (BlockShapes.js)
+    const tops = new Map();
+    for (const c of cols.values()) tops.set(c.x + ',' + c.z, deckAt(c.t));
+    for (const [x, L, z, shape] of stepRamps(tops)) {
+        const c = cols.get(x + ',' + z);
+        if (c && free(get(x, L, z))) cells.push([x, L, z, c.t < 0.5 ? near : far, c.t, shape]);
     }
     cells.sort((a, b) => a[4] - b[4] || a[1] - b[1]);
     return { cells, len, near, far };
@@ -232,13 +241,14 @@ export class Bridge {
                     const e = cells[j];
                     if (e.done) continue;
                     if (e.c[4] > front) { left++; continue; }
-                    const [x, L, z, block] = e.c;
+                    const [x, L, z, block, , shape = 0] = e.c;
                     if (occupied(g, { x, L, z })) { e.wait += dt; if (e.wait < BRIDGE.WAIT) { left++; continue; } e.done = true; continue; }
                     e.done = true;
                     if (Math.random() < 0.5) g.fx.spark(_v.set(x, L - 1, z), color, 0.12, _w.set(0, 1.5, 0), 0.4);
                     if (!mine || !free(data.get(x, L, z))) continue;
-                    data.set(x, L, z, block);
-                    out.push([x, L, z, block]);
+                    data.set(x, L, z, block, shape);
+                    const sh = shape && data.shapeAt ? data.shapeAt(x, L, z) : 0; // (a material that takes no shape: whole)
+                    out.push(sh ? [x, L, z, block, sh] : [x, L, z, block]);
                 }
                 while (i < cells.length && cells[i].done) i++;
                 sendT += dt;
