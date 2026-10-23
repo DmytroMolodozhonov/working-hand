@@ -262,7 +262,7 @@ export class MonsterLook {
         this.head = mk(P.head, M.fur, this.headPivot, 'monster-skull');
         this.head.visible = true;
         this.jawPivot = new THREE.Group();
-        this.jawPivot.position.set(0, -0.2, -0.22);
+        this.jawPivot.position.set(0, -0.17, -0.12);
         this.headPivot.add(this.jawPivot);
         this.jaw = mk(P.jaw, M.fur, this.jawPivot, 'monster-jaw');
         this.jaw.visible = true;
@@ -359,7 +359,7 @@ export class MonsterLook {
         this.headPivot.position.copy(ch.head.position);
         this.headPivot.quaternion.copy(ch.head.quaternion);
         this._jawOpen += (Math.max(roar, 0.06) - this._jawOpen) * Math.min(1, dt * 10);
-        this.jawPivot.rotation.x = -this._jawOpen * 0.75; // (вниз: перед челюсти опускается)
+        this.jawPivot.rotation.x = -this._jawOpen * 0.55; // (вниз: перед челюсти опускается)
         this.beast = beast;
         const t = performance.now() / 1000;
         const breath = 1 + 0.025 * Math.sin(t * 1.6);
