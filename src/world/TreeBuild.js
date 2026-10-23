@@ -36,8 +36,8 @@ export const TREE_SIZES = [
     { name: 'Тёмный дуб', H: [15, 19], W: [14, 18], D: [1.1, 1.4], clear: 5.2 },
     // the apple trees (Animals.js: not of the forest — kinds 5 and 6 never come out of the world's recipe): low and wide,
     // as a real apple tree is, the apples hanging within a raised hand's reach (2.9–4.4 m), the leaves a little higher
-    { name: 'Яблоня', H: [7.5, 9], W: [8, 10], D: [0.45, 0.6], clear: 3.9 },
-    { name: 'Золотая яблоня', H: [8.5, 10], W: [9, 11], D: [0.6, 0.75], clear: 3.9 },
+    { name: 'Яблоня', H: [7.5, 9], W: [8, 10], D: [0.45, 0.6], clear: 3.6 },
+    { name: 'Золотая яблоня', H: [8.5, 10], W: [9, 11], D: [0.6, 0.75], clear: 3.6 },
 ];
 /** The cells of the leaf atlas (TreeLeaves.js): one per kind, the apple trees' two, and a plain one for the bark. */
 export const ATLAS_CELLS = 8;
@@ -130,12 +130,12 @@ const SPEC = [
     // apple tree: a short crooked trunk forking low into spreading limbs, a round dome of leaves, the branch ends drooping with fruit
     { split: [0.28, 0.32], shape: 'round', leafSize: 1.15, leafPer: 10, leaves1: 6, gnarl: 0.5, low: 1.6,
         L: [{ seg: 10, sides: 9, curveV: 0.35 },
-            { n: [5, 6], from: 0.7, down: [0.7, 1.0], rotate: 2.4, ratio: 0.9, curve: -0.4, curveV: 0.45, trop: 0.01, seg: 8, sides: 6, rr: 0.66 },
+            { n: [5, 6], from: 0.7, down: [0.45, 0.75], rotate: 2.4, ratio: 0.9, curve: -0.35, curveV: 0.4, trop: 0.02, seg: 8, sides: 6, rr: 0.66 },
             { n: [8, 10], from: 0.2, down: [0.6, 1.0], rotate: 2.4, ratio: 0.5, curve: 0.2, curveV: 0.45, trop: -0.02, seg: 5, sides: 4, rr: 0.55 }] },
     // the golden apple tree: the same, mightier and more twisted
     { split: [0.27, 0.31], shape: 'round', leafSize: 1.25, leafPer: 11, leaves1: 6, gnarl: 0.9, low: 1.6,
         L: [{ seg: 11, sides: 10, curveV: 0.4 },
-            { n: [6, 7], from: 0.7, down: [0.7, 1.0], rotate: 2.4, ratio: 0.9, curve: -0.45, curveV: 0.5, trop: 0.01, seg: 8, sides: 7, rr: 0.66 },
+            { n: [6, 7], from: 0.7, down: [0.45, 0.75], rotate: 2.4, ratio: 0.9, curve: -0.4, curveV: 0.45, trop: 0.02, seg: 8, sides: 7, rr: 0.66 },
             { n: [8, 10], from: 0.2, down: [0.6, 1.0], rotate: 2.4, ratio: 0.5, curve: 0.2, curveV: 0.5, trop: -0.02, seg: 5, sides: 4, rr: 0.55 }] },
 ];
 
@@ -202,6 +202,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
             if (level === 0) d = unit(add(d, [0, 0.35 + (P.gnarl ? 0 : 0.25), 0])); // (a trunk keeps upright overall)
             // light pulls branches up, weight pulls thin twigs down
             if (spec.trop) d = unit(add(d, [0, spec.trop * (length / seg) * (level === 2 ? 1 + 2 * t : 1), 0]));
+            if (P.low && level > 0 && d[1] < -0.35) d = unit([d[0], -0.35, d[2]]); // (an apple tree's branches droop, never hang straight down)
             p = add(p, mul(d, length / seg));
             // nothing but the trunk comes down into the walking space
             if (level > 0 && k > 1 && p[1] < clear + 0.2 && p[1] < start[1] + 0.3) { p[1] = clear + 0.2; d = unit([d[0], Math.max(d[1], 0.15), d[2]]); }
@@ -230,6 +231,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
                 // the child's direction: off the parent by `down`, turned round it by `turn`
                 let cd = rot(at.d, rot(perp(at.d), at.d, turn), down);
                 if (level === 0 && P.shape === 'vase') cd = unit(add(cd, [0, 0.55, 0]));
+                if (P.low && cd[1] < -0.2) cd = unit([cd[0], -0.2, cd[2]]);
                 let L = length * next.ratio * (level === 0 ? shapeRatio(P.shape, (at.p[1] - clear) / Math.max(1, H - clear)) : (1 - along * 0.55));
                 if (level === 0) L *= (P.shape === 'cone' ? W / 2 : P.shape === 'vase' ? W / 2 * 0.95 : P.shape === 'flame' ? W / 2 * 1.3 : W / 2 * 1.0) / (length * next.ratio) * (0.85 + rnd() * 0.3);
                 if (kind === 2 && level === 0) cd = unit([cd[0], -0.05 - 0.25 * (1 - (at.p[1] - clear) / (H - clear)) + rnd() * 0.08, cd[2]]); // (spruce boughs: level, the low ones sagging)
