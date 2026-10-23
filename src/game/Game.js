@@ -1801,7 +1801,7 @@ export class Game {
         if (pm) done.push('Левиоса Супер Максима');
         if (this.water?.active) { this.water.drop(); done.push('водяной шар'); }
         if (this.vortex?.stop()) done.push('водоворот');
-        const hf = this.hellfire?.sayStop(); // («стоп» costs 50 mana for it)
+        const hf = this.hellfire?.sayStop(); // («стоп» is free for it)
         if (hf === true) done.push('адский огонь');
         const ws = this.waterStorm?.sayStop(); // (and 50 for the water storm)
         if (ws === true) done.push('водяная буря');

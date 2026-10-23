@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { HELLFIRE, Hellfire, hellfireBlock, hellfireCanStop, leftStrength, hellfireDrain, blazeReach, blazeRadius, inBlaze, inRing, ringRadius, ringSize } from '../../src/game/Hellfire.js';
+import { HELLFIRE, Hellfire, hellfireBlock, leftStrength, hellfireDrain, blazeReach, blazeRadius, inBlaze, inRing, ringRadius, ringSize } from '../../src/game/Hellfire.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
 import { Mana } from '../../src/game/Mana.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -159,22 +159,17 @@ test('Hellfire: the caster is not immune — the blaze on him burns him (a shiel
     assert.ok(g.hellfire.log.some((e) => e.ev === 'hurtMe' && e.dmg === HELLFIRE.CREATURE_DMG * HELLFIRE.SHIELD), 'a shield only halves it');
 });
 
-test('Hellfire: «стоп» costs 50 mana; without 50 it burns on until the mana runs out', () => {
-    assert.equal(HELLFIRE.STOP_COST, 50);
-    assert.equal(hellfireCanStop({ enabled: true, mana: 49 }), false);
-    assert.equal(hellfireCanStop({ enabled: true, mana: 50 }), true);
-    assert.equal(hellfireCanStop({ enabled: false, mana: 0 }), true, 'Creative: free');
+test('Hellfire: «стоп» is free — it can always be put out, even with no mana', () => {
+    assert.equal(HELLFIRE.STOP_COST, undefined);
     const g = fakeGame();
     const c = g.combat;
     c.maxFatigue = 200; c.fatigue = 200;
     g.hellfire.cast(true);
     run(g, 0.5);
-    c.fatigue = 40;
-    assert.equal(g.hellfire.sayStop(), 'mana', 'not enough mana to stop it');
-    assert.ok(g.hellfire.busy, 'it burns on');
-    c.fatigue = 100;
-    assert.equal(g.hellfire.sayStop(), true);
-    assert.equal(c.fatigue, 50, '50 mana for «стоп»');
+    c.fatigue = 3;
+    const left = c.fatigue;
+    assert.equal(g.hellfire.sayStop(), true, 'stopped with almost no mana');
+    assert.equal(c.fatigue, left, 'no mana taken for «стоп»');
     assert.equal(g.hellfire.busy, false);
 });
 

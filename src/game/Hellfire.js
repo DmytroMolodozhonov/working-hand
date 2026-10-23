@@ -27,8 +27,8 @@
  *                shield. Water fights it: water balls, the vortex's water, a river or the sea —
  *                the blaze hisses into steam and shrinks there (and goes out if it is drowned);
  *                whoever stands in water magic is not burnt.
- *   «Стоп»       costs 50 mana (free world): without 50 it can't be stopped by voice — it burns
- *                on until the mana runs out. Stopped (or out of mana), it no longer grows, follows
+ *   «Стоп»       free (the author: no mana for putting it out): it can always be stopped by voice.
+ *                Stopped (or out of mana), it no longer grows, follows
  *                the hand or circles: it breaks into fires left on the ground where it was (the
  *                blaze, the ring's wall) that burn on for 30 s more, then die down — still
  *                burning anyone who walks in (the caster too). What caught fire (trees, plants,
@@ -81,7 +81,6 @@ export const HELLFIRE = {
     SHIELD: 0.5, // what a shield lets through
     QUENCH: 2.2, // m a second of the blaze's radius lost in water
     MAX_LIFE: 90, // s at most (the mana runs out much sooner in the free world)
-    STOP_COST: 50, // mana «стоп» takes to put it out (without it: it burns on until the mana runs out)
     LEFT_LIFE: 30, // s the fires left on the ground (after «стоп» / no mana) burn at full strength…
     LEFT_FADE: 6, // …then die down over this long
     LEFT_MAX: 18, // fires left at once (all wizards)
@@ -106,11 +105,6 @@ export function hellfireBlock({ enabled, max, mana }) {
     if (!((max ?? 0) >= HELLFIRE.MIN_MAX_MANA)) return 'max';
     if (!((mana ?? 0) >= HELLFIRE.COST)) return 'mana';
     return null;
-}
-
-/** May «стоп» put it out now? (free world: it costs 50 mana) */
-export function hellfireCanStop({ enabled, mana }) {
-    return !enabled || (mana ?? 0) >= HELLFIRE.STOP_COST;
 }
 
 /** How strong a fire left on the ground is `t` s after it was left (1 … 0; 0: gone). */
@@ -271,18 +265,11 @@ export class Hellfire {
     }
 
     /**
-     * «Стоп» said: 50 mana (free world) puts it out — fires stay where it was.
-     * @returns true: stopped; 'mana': not enough mana to stop it (it burns on); false: no fire
+     * «Стоп» said: puts it out, for free — fires stay where it was.
+     * @returns true: stopped; false: no fire
      */
     sayStop() {
         if (!this.state) return false;
-        const c = this.game.combat;
-        if (!hellfireCanStop({ enabled: !!c?.enabled, mana: c?.fatigue })) {
-            this._note({ ev: 'cantStop', mana: c.fatigue });
-            this.game.hud?.setVoice?.(`🔥 Погасить адский огонь словом «стоп» стоит <b>${HELLFIRE.STOP_COST} маны</b> — у вас ${Math.floor(c.fatigue)}. Огонь горит, пока не кончится мана`, true);
-            return 'mana';
-        }
-        if (c?.enabled) c.fatigue = Math.max(0, c.fatigue - HELLFIRE.STOP_COST);
         return this.stop('stop');
     }
 
@@ -299,7 +286,7 @@ export class Hellfire {
         if (why === 'mana') this.game.hud?.setVoice?.('🔥 Адский огонь вышел из-под власти — мана кончилась. Брошенный огонь догорает ещё полминуты', true);
         else if (why === 'water') this.game.hud?.setVoice?.('💨 Вода погасила адский огонь', true);
         else if (why === 'wand') this.game.hud?.setVoice?.('🔥 Палочка не в руке — огонь больше не слушается и догорает', true);
-        else if (why === 'stop') this.game.hud?.setVoice?.(`🛑 Адский огонь остановлен (−${HELLFIRE.STOP_COST} маны), но брошенный огонь догорает ещё полминуты — не входите в него`, true);
+        else if (why === 'stop') this.game.hud?.setVoice?.(`🛑 Адский огонь остановлен но брошенный огонь догорает ещё полминуты — не входите в него`, true);
         return true;
     }
 
