@@ -21,14 +21,27 @@
 
 import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
-import { PENT, RITE, RECOG, figureOf, figureIds, Seen, recognizeAny, recognizeHint, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
+import { PENT, RITE, RECOG, figureOf, figureIds, Seen, recognize, bestOf, recognizeHint, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
 import { PENTAGRAMS as TABLE } from './Pentagrams.js';
+import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
+import { pieceMax } from './ArmorTypes.js';
+import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { PentagramFx } from '../fx/PentagramFx.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
+
+const PIECE_NAME = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
+
+/** What to do on each pentagram (the line after it is lit). */
+const USE_TEXT = {
+    devil: 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы (нужно 50 маны)',
+    teleport: 'Нарисуйте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
+    life: 'Встаньте на неё (50 маны) — здоровье восстановится целиком',
+    mend: 'Встаньте на неё — надетая броня будет починена (у каждой части своя цена)',
+};
 
 export class Pentagranium {
     constructor(game) {
@@ -42,6 +55,8 @@ export class Pentagranium {
         this._groundT = 0;
         this._riteT = 0;
         this.aim = null; // (tests) {origin, dir}
+        this._pending = []; // permanent pentagrams of the save not made yet (their land is not here)
+        this._use = new Map(); // mark id → what standing on it does now {in, t, cd, hinted, from}
     }
 
     get on() { return !!this.draw; }
@@ -65,6 +80,13 @@ export class Pentagranium {
 
     snapshot() { return this.seen.set.size ? this.seen.snapshot() : null; }
     restore(list) { this.seen.restore(list); }
+
+    /** The permanent pentagrams (good ones, drawn once): saved with the world; made again when their land is there (nothing is built in the frame the world loads in). */
+    marksSnapshot() {
+        const out = [...this.marks.values()].filter((m) => m.perm && (m.mine || this.game.authority)).map((m) => ({ id: m.id, by: m.by, pent: m.pent, x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, pair: m.pair || null }));
+        return out.length ? out.concat(this._pending.filter((p) => !out.some((o) => o.id === p.id))) : this._pending.length ? this._pending.slice() : null;
+    }
+    marksRestore(list) { this._pending = (Array.isArray(list) ? list : []).filter((m) => m && figureOf(m.pent) && TABLE[m.pent]?.permanent).slice(0, USE.PERM_MAX); }
 
     // ------------------------------------------------------------ the cast
     /** Voice on my computer. `aim` ({origin, dir}) is for tests. */
@@ -134,7 +156,8 @@ export class Pentagranium {
         this._t += dt;
         this.fx.trailPulse(this._t);
         if (this.draw) this._drawStep(dt);
-        for (const m of this.marks.values()) this._markStep(m, dt);
+        this._pendingStep(dt);
+        for (const m of this.marks.values()) { this._markStep(m, dt); if (m.perm && this.marks.has(m.id)) this._useStep(m, dt); }
         if (this.marks.size) {
             this._riteT -= dt;
             if (this._riteT <= 0) { this._riteT = 0.25; this._findRites(); }
@@ -167,11 +190,19 @@ export class Pentagranium {
         D.nextCheck -= dt;
         if (D.pts.length >= RECOG.MIN_PTS && D.nextCheck <= 0 && D.pts.length - D.lastN >= PENT.CHECK_MIN_NEW) {
             D.nextCheck = PENT.CHECK_EVERY; D.lastN = D.pts.length;
-            const known = this.known();
-            const r = recognizeAny(D.pts, new Set(known)); // (told apart from the other figures: the best fit, the known one first when drawings are alike; it counts only if the hero knows THIS drawing)
-            if (r.ok && known.includes(r.id)) { this._counted(r.id, r); return; }
-            const refusal = r.ok ? null : r.why === 'small' || r.why === 'large' || r.why === 'order' ? r.why : null;
-            if (refusal && D.t - D.lastHint > 5) { D.lastHint = D.t; const h = recognizeHint(refusal); if (h) g.hud.setVoice(h, true); }
+            D.pend = { ids: figureIds(), i: 0, res: [], pts: D.pts.slice() }; // (one figure a frame: no stall)
+        }
+        if (D.pend) {
+            const q = D.pend, id = q.ids[q.i++];
+            q.res.push([id, recognize(q.pts, id)]);
+            if (q.i >= q.ids.length) {
+                D.pend = null;
+                const known = this.known();
+                const r = bestOf(q.res, new Set(known)); // (told apart from the other figures: the best fit, the known one first when drawings are alike; it counts only if the hero knows THIS drawing)
+                if (r.ok && known.includes(r.id)) { this._counted(r.id, r); return; }
+                const refusal = r.ok ? null : r.why === 'small' || r.why === 'large' || r.why === 'order' ? r.why : null;
+                if (refusal && D.t - D.lastHint > 5) { D.lastHint = D.t; const h = recognizeHint(refusal); if (h) g.hud.setVoice(h, true); }
+            }
         }
     }
 
@@ -186,15 +217,16 @@ export class Pentagranium {
         const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, cx, y, cz, r.r, r.rot);
         if (!mark) return;
         mark.mine = true;
+        this._permanent(mark);
         this._others(mark);
-        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: cx, y, z: cz, r: r.r, rot: r.rot });
+        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: cx, y, z: cz, r: r.r, rot: r.rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
         g.mana?.success('Pentagranium'); // (the mark is made: the first success's cells; drawing a pentagram is no black magic — only the devil one's rite adds darkness)
         if (TABLE[id]?.dark) g.castleLife?.alarm?.({ x: cx, y, z: cz }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
-        g.hud.setVoice(`🩸 «${figureOf(id).ru}» горит на земле! ${id === 'devil' ? 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы' : ''}`, true);
+        g.hud.setVoice(`✨ «${figureOf(id).ru}» засветилась на земле! ${USE_TEXT[id] || ''}`, true);
         g.sound?.playSpellFxAt?.('fxPentagram', origin, 1, 1, 14);
         for (let i = 0; i < 70; i++) {
             const a = (i / 70) * Math.PI * 2;
-            g.fx?.spark(_o.set(cx + Math.cos(a) * mark.r, y + 0.2, cz + Math.sin(a) * mark.r), i % 2 ? 0xff2a44 : 0x8a0a1c, 0.18, _d.set(Math.cos(a) * 0.6, 1.6 + Math.random() * 1.5, Math.sin(a) * 0.6), 1.3);
+            g.fx?.spark(_o.set(cx + Math.cos(a) * mark.r, y + 0.2, cz + Math.sin(a) * mark.r), mark.dark ? (i % 2 ? 0xff2a44 : 0x8a0a1c) : (i % 2 ? 0xfff0b8 : TABLE[id]?.glow ?? 0xffd98a), 0.18, _d.set(Math.cos(a) * 0.6, 1.6 + Math.random() * 1.5, Math.sin(a) * 0.6), 1.3);
         }
     }
 
@@ -210,6 +242,117 @@ export class Pentagranium {
         if (typeof def.use === 'function') { def.use(g, { center: c, by: g.localId }); if (def.once) m.life = Math.min(m.life, 6); }
     }
 
+    /** A good pentagram (`permanent` in the table) stays for good: the oldest permanent one goes when there are too many; teleport ones are paired. */
+    _permanent(m) {
+        if (!TABLE[m.pent]?.permanent) return;
+        m.perm = true; m.life = Infinity;
+        const perms = () => [...this.marks.values()].filter((o) => o.perm);
+        while (perms().length > USE.PERM_MAX) this._remove(perms()[0].id, 'old');
+        if (m.pent === 'teleport') {
+            const mate = pairUp([...this.marks.values()], m);
+            if (m.mine) this.game.hud.setVoice?.(mate ? '🌀 Две пентаграммы телепортации связаны: встаньте на любую и простойте 3 секунды (50 маны)' : '🌀 Это первая точка. Нарисуйте вторую пентаграмму телепортации где угодно — они свяжутся', true);
+        }
+    }
+
+    /** The save's permanent pentagrams come back when their land is there (once a second; a few at a time). */
+    _pendingStep(dt) {
+        if (!this._pending.length) return;
+        this._pendT = (this._pendT || 0) - dt;
+        if (this._pendT > 0) return;
+        this._pendT = 1;
+        const g = this.game, data = this.data, me = g.character.group.position;
+        if (!data) return;
+        for (const p of this._pending.slice()) {
+            if (Math.hypot(me.x - p.x, me.z - p.z) > PENT.FAR || !data.landMade?.(Math.round(p.x), Math.round(p.z))) continue;
+            this._pending.splice(this._pending.indexOf(p), 1);
+            const m = this._place(p.id, p.by, p.pent, p.x, p.y, p.z, p.r, p.rot);
+            if (!m) continue;
+            m.mine = p.by === g.localId; m.perm = true; m.life = Infinity; m.t = 5; m.pair = p.pair || null;
+            return; // (one a second: nothing heavy at once)
+        }
+    }
+
+    // ------------------------------------------------------------ standing on a good pentagram
+    _useStep(m, dt) {
+        const g = this.game, me = g.character.group.position;
+        let s = this._use.get(m.id);
+        if (!s) this._use.set(m.id, (s = { in: false, t: 0, cd: 0, hinted: false, locked: false, from: null }));
+        s.cd = Math.max(0, s.cd - dt);
+        const inside = m.fade > 0.9 && Math.hypot(me.x - m.x, me.z - m.z) <= m.r * USE.INSIDE_K && Math.abs(me.y - PLAYER_GROUND_OFFSET - m.y) < 3;
+        if (!inside) { if (s.in && m.pent === 'teleport' && s.t > 0) g.hud.setVoice?.('🌀 ' + USE_HINT.stepped, true); s.in = false; s.t = 0; s.locked = false; return; }
+        if (!s.in) { s.in = true; s.hinted = false; s.t = 0; s.from = { x: me.x, z: me.z }; }
+        if (s.locked) return;
+        const c = g.combat, pays = !!c?.enabled;
+        const hint = (t) => { if (!s.hinted) { s.hinted = true; g.hud.setVoice?.(t, true); } };
+        const mana = pays ? c.fatigue : Infinity;
+        if (m.pent === 'life') {
+            if (s.cd > 0) return;
+            if (!pays || c.hp >= (c.maxHp || 0) - 1e-6) return hint('💚 ' + USE_HINT.full);
+            if (mana < USE.COST) return hint('💚 ' + USE_HINT.noMana);
+            c.fatigue -= USE.COST; c.hp = c.maxHp; c._hudKey = ''; g.playerHP = c.hp;
+            g.bleeding?.stop?.();
+            s.cd = USE.LIFE_CD; s.hinted = false;
+            g.hud.setVoice?.('💚 Пентаграмма жизни: здоровье восстановлено', true);
+            this._useFx('life', m, true);
+        } else if (m.pent === 'mend') {
+            if (s.cd > 0) return;
+            const worn = g.armor?.worn || {};
+            const plan = mendPlan(worn, mana, pieceMax, !pays);
+            if (!plan.fix.length && !plan.short.length) return hint('🛡️ ' + USE_HINT.whole);
+            if (!plan.fix.length) return hint(`🛡️ Не хватило маны на: ${plan.short.map((k) => PIECE_NAME[k] || k).join(', ')}`);
+            if (pays) c.fatigue -= plan.cost;
+            if (pays) c._hudKey = '';
+            for (const k of plan.fix) worn[k].hp = pieceMax(worn[k]);
+            g.armor?._renderCells?.();
+            s.cd = USE.MEND_CD; s.hinted = false;
+            g.hud.setVoice?.(`🛡️ Броня починена: ${plan.fix.map((k) => PIECE_NAME[k] || k).join(', ')}${plan.short.length ? `. Не хватило маны на: ${plan.short.map((k) => PIECE_NAME[k] || k).join(', ')}` : ''}${pays ? ` (−${plan.cost} маны)` : ''}`, true);
+            this._useFx('mend', m, true);
+        } else if (m.pent === 'teleport') {
+            const to = m.pair && this.marks.get(m.pair);
+            if (!to) return hint('🌀 ' + USE_HINT.noPair);
+            if (mana < USE.COST) return hint('🌀 ' + USE_HINT.noMana);
+            if (Math.hypot(me.x - s.from.x, me.z - s.from.z) > USE.STILL) { s.from = { x: me.x, z: me.z }; s.t = 0; }
+            if (s.t === 0) g.hud.setVoice?.('🌀 Стойте на месте — через 3 секунды вы окажетесь на другой пентаграмме', true);
+            s.t += dt;
+            if (Math.random() < dt * 30) this._ring(m, s.t / USE.TELEPORT_HOLD);
+            if (s.t < USE.TELEPORT_HOLD) return;
+            if (!this.data?.landMade?.(Math.round(to.x), Math.round(to.z))) { s.t = USE.TELEPORT_HOLD - 0.5; return hint('🌀 ' + USE_HINT.noLand); }
+            if (pays) { c.fatigue -= USE.COST; c._hudKey = ''; }
+            this._useFx('teleport', m, true);
+            me.set(to.x, to.y + PLAYER_GROUND_OFFSET + 0.1, to.z);
+            g.character.verticalVelocity = 0;
+            g.knockback?.set?.(0, 0, 0);
+            this._useFx('teleport', to, true);
+            s.t = 0; s.in = false;
+            const ts = this._use.get(to.id) || { in: false, t: 0, cd: 0, hinted: false, locked: false, from: null };
+            ts.in = true; ts.locked = true; ts.t = 0; this._use.set(to.id, ts); // (arrived: it does not jump back until the hero steps off)
+            g.hud.setVoice?.('🌀 Вы перенеслись на парную пентаграмму', true);
+        }
+    }
+
+    /** Rings of light rising round a pentagram while the teleport gathers (cheap: the shared spark pool). */
+    _ring(m, k) {
+        const fx = this.game.fx;
+        if (!fx) return;
+        const a = Math.random() * Math.PI * 2, r = m.r * (0.5 + 0.5 * Math.random());
+        fx.spark(_o.set(m.x + Math.cos(a) * r, m.y + 0.15, m.z + Math.sin(a) * r), Math.random() < 0.5 ? 0xe8f4ff : 0xb8d8ff, 0.12 + 0.06 * k, _d.set(0, 1.5 + 4 * k, 0), 0.9);
+    }
+
+    /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
+    _useFx(kind, m, send = false) {
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e] }[kind] || [0xffffff, 0xffe9a8];
+        if (fx) {
+            for (let i = 0; i < 60; i++) {
+                const a = (i / 60) * Math.PI * 2;
+                fx.spark(_o.set(m.x + Math.cos(a) * m.r * 0.9, m.y + 0.2, m.z + Math.sin(a) * m.r * 0.9), col[i % 2], 0.16, _d.set(-Math.cos(a) * 1.2, 2 + Math.random() * 3, -Math.sin(a) * 1.2), 1.3);
+            }
+            for (let i = 0; i < 40; i++) fx.spark(_o.set(m.x + (Math.random() - 0.5) * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * 1.6), col[i % 2], 0.2, _d.set((Math.random() - 0.5) * 0.6, 4 + Math.random() * 6, (Math.random() - 0.5) * 0.6), 1.6);
+            fx.lightFlash?.(_o.set(m.x, m.y + 1.5, m.z), col[1], 3, 0.5, m.r * 4 + 10);
+        }
+        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
+        if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
+    }
+
     _height(x, z) {
         const d = this.data;
         return d ? d.topLayer(Math.round(x), Math.round(z)) - 0.5 : 0;
@@ -218,7 +361,8 @@ export class Pentagranium {
     /** (every computer) A pentagram is lit. */
     _place(id, by, pent, x, y, z, r, rot) {
         if (this.marks.has(id) || !figureOf(pent)) return null;
-        while (this.marks.size >= PENT.MAX_ALIVE) this._remove(this.marks.keys().next().value, 'old');
+        const temp = () => [...this.marks.values()].filter((o) => !o.perm);
+        while (temp().length >= PENT.MAX_ALIVE) this._remove(temp()[0].id, 'old'); // (the lit ones of a rite: the oldest goes; the permanent ones are counted apart)
         const data = this.data;
         const R = Math.max(PENT.R_MIN * 0.9, Math.min(PENT.R_MAX * 1.05, r));
         const floor = [];
@@ -228,7 +372,7 @@ export class Pentagranium {
         }
         const cl = data ? data.topLayer(Math.round(x), Math.round(z)) : 0;
         floor.push([Math.round(x), Math.round(z), cl]);
-        const m = { id, by, pent, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0 };
+        const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0 };
         this.marks.set(id, m);
         this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? data.topLayer(Math.round(px), Math.round(pz)) - 0.5 : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
         return m;
@@ -239,6 +383,8 @@ export class Pentagranium {
         if (!m) return;
         this.marks.delete(id);
         this.fx.remove(id);
+        if (m.pair) { const o = this.marks.get(m.pair); if (o) o.pair = null; }
+        this._use.delete(id);
         for (const r of m.rites) if (r.b && !r.done) this._riteEnd(m, r, true);
         const g = this.game;
         if (why === 'ground' && m.mine) g.hud.setVoice('🩸 Земля под рисунком изменилась — пентаграмма погасла', true);
@@ -289,6 +435,9 @@ export class Pentagranium {
                     if (!b._pgHint && (b.model || b.bones)) { b._pgHint = true; g.hud.setVoice(RITE_HINT[ok.why] || RITE_HINT['no-power'], true); }
                     continue;
                 }
+                const cost = TABLE.devil?.rite?.cost || 0;
+                if (g.combat?.enabled && g.combat.fatigue < cost) { if (!b._pgMana) { b._pgMana = true; g.hud.setVoice(`🩸 Нужно ${cost} маны — тело лежит, пока её не хватает`, true); } continue; }
+                if (g.combat?.enabled) { g.combat.fatigue -= cost; g.combat._hudKey = ''; }
                 this._riteBegin(m, b, true);
                 return;
             }
@@ -368,7 +517,12 @@ export class Pentagranium {
         if (m.k === 'mark') {
             if (typeof m.id !== 'string' || !figureOf(m.pent)) return;
             const mk = this._place(m.id, by, m.pent, +m.x || 0, +m.y || 0, +m.z || 0, Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || 3.5)), +m.rot || 0);
-            if (mk) mk.mine = false;
+            if (mk) {
+                mk.mine = false;
+                if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
+            }
+        } else if (m.k === 'fx') {
+            if (['teleport', 'life', 'mend'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
         } else if (m.k === 'rite') {
             const mk = this.marks.get(m.id), b = this.game.death?.bodies.get(m.body);
             if (mk && b && !mk.rites.some((r) => r.id === b.id)) this._riteBegin(mk, b, false);

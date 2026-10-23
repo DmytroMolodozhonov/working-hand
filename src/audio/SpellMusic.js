@@ -496,6 +496,31 @@ const FX = {
         bell(o, sr, hz('E5'), 0.6, 0.14, 1.2, 0.3); bell(o, sr, hz('Bb5'), 0.85, 0.1, 1.0, 0.3);
         return finish(o, sr, { peak: 0.7 });
     },
+    /** A teleport: a rising shimmer, a bright flash of bells, a soft whoosh away. */
+    fxTeleport(sr) {
+        const o = buf(sr, 1.9), r = rng(331);
+        glide(o, sr, 0, 0.9, 0.14, (u) => 220 + 1400 * u * u, swell(0.2, 0.5), 2);
+        noise(o, sr, 0.5, 0.9, 0.1, (u) => 0.1 + 0.6 * (1 - u), swell(0.2, 0.6), r);
+        ['E6', 'B6', 'G#6', 'E7'].forEach((n, k) => bell(o, sr, hz(n), 0.7 + k * 0.14, 0.14, 1.1, 0.3));
+        pad(o, sr, ['E4', 'B4', 'E5'], 0.7, 1.7, 0.14, { att: 0.1, rel: 0.5, harm: 2 });
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** A life pentagram: a warm swell and a rising, hopeful little tune of bells (C – E – G – C). */
+    fxLife(sr) {
+        const o = buf(sr, 1.9), r = rng(333);
+        pad(o, sr, ['C4', 'G4', 'E5'], 0, 1.7, 0.2, { att: 0.15, rel: 0.5, harm: 2, vib: 0.005 });
+        ['C6', 'E6', 'G6', 'C7'].forEach((n, k) => bell(o, sr, hz(n), 0.1 + k * 0.2, 0.16, 1.2, 0.25));
+        noise(o, sr, 0, 1.2, 0.04, () => 0.7, swell(0.3, 0.5), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** A mend: ringing hammer taps on steel, then a silver chime. */
+    fxMend(sr) {
+        const o = buf(sr, 1.7), r = rng(335);
+        for (const t of [0, 0.22, 0.44]) { bell(o, sr, hz('A5'), t, 0.22, 0.5, 0.9); drum(o, sr, t, 0.2, 200, 0.2, r); }
+        ['D6', 'A6', 'D7'].forEach((n, k) => bell(o, sr, hz(n), 0.75 + k * 0.15, 0.13, 1.1, 0.3));
+        pad(o, sr, ['D4', 'A4', 'D5'], 0.75, 1.6, 0.1, { att: 0.1, rel: 0.4, harm: 2 });
+        return finish(o, sr, { peak: 0.7 });
+    },
     fxSeeing(sr) {
         const o = buf(sr, 1.9), r = rng(23);
         noise(o, sr, 0, 0.9, 0.22, (u) => 0.08 + 0.4 * u, swell(0.35, 0.5), r); // (the breath, brightening)

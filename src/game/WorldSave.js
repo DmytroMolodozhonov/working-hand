@@ -132,6 +132,7 @@ export function playerSnapshot(game) {
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         dark: game.dark?.snapshot() || null, // чёрная магия: уровень тьмы
         bw: game.breakward?.snapshot() || null, // метка «слом защиты» и выученный рисунок пентаграммы
+        pentMarks: game.pentagranium?.marksSnapshot() || null, // the good pentagrams on the ground (permanent: teleport, life, mend…)
         pentSeen: game.pentagranium?.snapshot() || null, // the pentagrams' drawings the hero has looked at (Pentagrams.js: without it nothing is counted)
         steady: game.steady?.snapshot() || null, // «Устойчивость»: the skill and the run towards the next +1
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
@@ -187,6 +188,7 @@ export function applyPlayerSnapshot(game, s) {
     if (s.bw) game.breakward?.restore(s.bw);
     if (s.steady) game.steady?.restore(s.steady);
     if (s.pentSeen) game.pentagranium?.restore(s.pentSeen);
+    if (s.pentMarks) game.pentagranium?.marksRestore(s.pentMarks);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.ach) game.achievements?.restore(s.ach);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);

@@ -23,6 +23,7 @@
  */
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
+import { ENCHANT_PENTAGRAM } from './Enchant.js';
 
 export const PENT = {
     COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
@@ -92,7 +93,8 @@ function linesOf(def) {
         const corner = (i) => { const a = rot + Math.PI / 2 + i * (TAU / n); return [Math.cos(a), Math.sin(a)]; };
         return Array.from({ length: k }, (_, o) => Array.from({ length: per }, (_, j) => corner((o + j * skip) % n)));
     }
-    const polys = (def.draw || []).filter((d) => d.t === 'poly').map((d) => d.pts.map(([x, z]) => [x, -z]));
+    // a `draw` list (circle / poly): the inner circles are sampled as polygons, the polygons as they are
+    const polys = (def.draw || []).filter((d) => d.t === 'poly' || (d.t === 'circle' && d.r < 0.99)).map((d) => (d.t === 'poly' ? d.pts.map(([x, z]) => [x, -z]) : Array.from({ length: 28 }, (_, i) => [Math.cos((i / 28) * TAU) * d.r, Math.sin((i / 28) * TAU) * d.r])));
     return polys.length ? polys : null;
 }
 
@@ -106,7 +108,7 @@ export function figureOf(id) {
     const lines = linesOf(def);
     if (!lines) return null;
     const star = def.shape?.star;
-    const sym = star ? TAU / star : TAU / 2;
+    const sym = def.sym || (star ? TAU / star : TAU);
     f = {
         def, id, lines, sym,
         ru: def.title || def.ru || id,
@@ -135,10 +137,30 @@ function sampleFigure(polys, n) {
     return polys.flatMap((q) => along(q, Math.max(8, Math.round(n * len(q) / total)), true));
 }
 
+// The good pentagrams the author asked for (PentagramUse.js: what standing on them does). `permanent`: drawn once, they stay on the ground for good (saved, at most USE.PERM_MAX).
+const sq = Math.SQRT1_2;
+registerPentagram({
+    id: 'teleport', title: 'Пентаграмма телепортации', dark: false, glow: 0xcfe8ff, cost: 50, permanent: true, scroll: 'PentagramTeleport', sym: TAU / 4,
+    draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([x, z]) => [x * 0.999, z * 0.999]) }, { t: 'circle', r: 0.3 }], // (a square set in the circle by its corners, a small circle inside it that touches nothing)
+    effect: 'Встаньте на неё, постойте 3 секунды и заплатите 50 маны — вы окажетесь на парной пентаграмме телепортации, где бы она ни была. Нужны две такие пентаграммы.',
+});
+registerPentagram({
+    id: 'life', title: 'Пентаграмма жизни', dark: false, glow: 0x9be88a, cost: 50, permanent: true, scroll: 'PentagramLife',
+    draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[0, 0.7], [0, -0.7]] }, { t: 'poly', pts: [[0, 0.05], [-0.6, -0.5], [-0.5, 0.2]] }, { t: 'poly', pts: [[0, -0.2], [0.6, 0.35], [0.5, -0.4]] }], // (a sprout: a stem and two leaves)
+    effect: 'Встаньте на неё и заплатите 50 маны — здоровье вернётся целиком, кровь перестанет течь. Пользоваться можно сколько угодно раз.',
+});
+registerPentagram({
+    id: 'mend', title: 'Пентаграмма починки брони', dark: false, glow: 0xdfe6f0, cost: 'MEND_COST', permanent: true, scroll: 'PentagramMend',
+    draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[-0.55, 0.6], [0.55, 0.6], [0.55, -0.05], [0, -0.75], [-0.55, -0.05]] }], // (a shield)
+    effect: 'Встаньте на неё — броня, которая на вас, будет починена. Плата за каждую часть своя; на что не хватило маны, то останется как было.',
+});
+
+registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its drawing is recognised here, its circle is laid by EnchantCircles — Pentagranium._others)
+
 // «Пентаграмма дьявольской силы» — the one this module owns (its rite is below); the others' entries come from their own modules (Breakward, Gargoyles, Enchant…).
 registerPentagram({
     id: 'devil', title: 'Пентаграмма дьявольской силы', dark: true, glow: 0xc01830, cost: 0, once: false, scroll: 'PentagramDevil',
-    shape: { ring: 1, star: 5, skip: 2 },
+    shape: { ring: 1, star: 5, skip: 2 }, rite: { cost: 50 }, // (the rite takes 50 mana: laid on the pentagram, nothing is said)
     effect: 'Положите на горящую пентаграмму тело убитого вами волшебника (силу его вы уже забрали) — и получите ещё 25% его силы. Одно тело — один раз.',
 });
 
@@ -170,7 +192,7 @@ export const RECOG = {
     ROTATIONS: 12, // the star turned in steps of 72° / 12
     SCALES: [0.86, 1, 1.14],
     SHIFT: 0.07, // of the radius
-    MAX_USE: 110, // stitches kept for the comparison (resampled)
+    MAX_USE: 90, // stitches kept for the comparison (resampled)
 };
 
 /** Resample the stitches evenly along the way (keeps the order). */
@@ -249,12 +271,17 @@ export function recognize(pts, pent = 'devil') {
  * is never taken for a pentagram while the hexagram fits better)? `{id, ...recognize}` of the best fit, ok or not.
  */
 export function recognizeAny(pts, prefer = null) {
+    return bestOf(figureIds().map((id) => [id, recognize(pts, id)]), prefer);
+}
+
+/** The best of the results `[[id, recognize()]…]` (a figure not refused beats one that is; alike drawings: the one in `prefer`). */
+export function bestOf(results, prefer = null) {
     let best = null;
-    for (const id of figureIds()) {
-        const r = recognize(pts, id);
-        const sc = (r.ok ? 1 + r.score : r.score || 0) + (prefer?.has(id) ? 0.003 : 0); // (alike drawings: the one the hero knows) // (a figure that is not refused beats one that is)
+    for (const [id, r] of results) {
+        const sc = (r.ok ? 1 + r.score : r.score || 0) + (prefer?.has(id) ? 0.003 : 0);
         if (!best || sc > best.sc) best = { sc, id, ...r };
     }
+    if (!best) return { ok: false, why: 'few' };
     delete best.sc;
     return best;
 }
