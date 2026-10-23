@@ -1216,7 +1216,10 @@ export class Game {
         // (castles and wizards' towers; the houses made by magic — HouseMagic._hookLight)
         // (a hall made by magic may be very high — «Create a Castle»'s throne hall: its roof ~30 m up)
         const magicRoom = !!t.litLand?.(Math.round(p.x), Math.round(p.z)) && (covered || t.solidIn(Math.round(p.x), Math.round(p.z), head, head + 40));
-        const built = magicRoom || (covered && !!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z)));
+        // (held a moment after the last frame it was true: a jump to the ceiling, a step over a doorway, an edge of the roof
+        // must not switch the room's light off and on)
+        this._builtT = magicRoom || (covered && !!(t.sites || t.castles)?.landAt(Math.round(p.x), Math.round(p.z))) ? 0.4 : Math.max(0, (this._builtT || 0) - dt);
+        const built = this._builtT > 0;
         // in a cave: as dark as the daylight reaching the head (the mouth lit, deeper in dark — the
         // same light as the rock round it, Terrain._skyLight); elsewhere under a roof: dark
         const sky = t.skyAt ? t.skyAt(p.x, p.y + 1.2, p.z) : 1;

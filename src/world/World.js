@@ -188,7 +188,9 @@ export class VoxelWorld {
             fog: this.scene.fog ? this.scene.fog.color.clone() : new THREE.Color(0x87ceeb),
             far: this.fogFar ?? 90, night,
         };
-        if ((this.storm || 0) > 0 || (this.cave || 0) > 0) this.setStorm(this.storm || 0);
+        // (every change of day and night writes the base light again: the storm's, the cave's and the rooms' light go on it
+        // at once — else the room's light is wiped every ~0.7 s by the day's tick and shows again: a blink)
+        if ((this.storm || 0) > 0 || (this.cave || 0) > 0 || (this.indoor || 0) > 0) this.setStorm(this.storm || 0);
     }
 
     /** Inside a cave it is dark (0 = outside, 1 = deep inside). */
@@ -218,12 +220,13 @@ export class VoxelWorld {
         const cv = this.cave || 0, dim = 1 - 0.8 * cv;
         SKY_LIGHT.comp.value = 1 / dim;
         const ind = this.indoor || 0;
-        // indoors: the sun is outside, the rooms are lit (brighter at night than the dark outside)
-        // (by day the walls away from the sun as lit as the others: the light of the windows fills the rooms)
-        const lamp = 1 + ind * (b.night > 0.5 ? 2.6 : 1.6);
+        // indoors: the sun is outside; by day the light of the windows and the door fills the rooms (the walls away from
+        // the sun as lit as the others), by night only a faint glow: the rooms are as dark as the night, what lights them
+        // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
+        const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
         this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp;
         this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * (1 + ind * 1.0);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * fill;
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
