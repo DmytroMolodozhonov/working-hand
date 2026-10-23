@@ -110,3 +110,26 @@ test('«Suit Up» and «Disarmor»: said, priced; the crown is not for heroes', 
     assert.ok(HAT_HIDDEN.has(5));
     for (let i = 0; i < 300; i++) { const L = randomLook(); assert.ok(!HAT_HIDDEN.has(L.hat) && L.hat !== 9 && L.top !== 2 && L.top !== 5 && L.bottom !== 8 && L.shoes !== 6, 'the editor: the look only, no things with powers'); }
 });
+
+test('wearing another piece in a worn slot: the old one comes off into the hand the new one came from', async () => {
+    const { ArmorSystem } = await import('../../src/game/Armor.js');
+    const { makePiece } = await import('../../src/game/ArmorTypes.js');
+    for (const slot of ['helmet', 'chest', 'legs']) {
+        const inHand = [], stowed = [], said = [];
+        const g = { localId: 'me', character: {}, hud: { setVoice: (t) => said.push(t) }, items: { takeIntoHand: (it, side) => { inHand.push([it, side]); return true; } }, inventory: { storeItem: (it) => { stowed.push(it); return true; } } };
+        const a = new ArmorSystem(g);
+        const oldP = makePiece(slot); oldP.hp = 3; oldP.magic = true;
+        const newP = makePiece(slot);
+        a.worn[slot] = oldP;
+        assert.equal(a.wear(oldP), false, 'the same piece is already on');
+        assert.ok(a.wear(newP, { side: 'left' }));
+        assert.equal(a.worn[slot], newP);
+        assert.deepEqual(inHand, [[oldP, 'left']]);
+        assert.equal(oldP.hp, 3, 'the wear stays on the old piece'); assert.ok(oldP.magic);
+        assert.match(said.at(-1), /сняли.*надели/);
+        // the hand refuses → a slot
+        g.items.takeIntoHand = () => false;
+        a.wear(oldP, { side: 'left' });
+        assert.deepEqual(stowed, [newP]);
+    }
+});

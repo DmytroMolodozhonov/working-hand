@@ -70,9 +70,9 @@ export class ArmorSystem {
 
     // ------------------------------------------------------------ what is worn
     /** Put a thing on (from the hand, a slot, «Suit Up»). The piece worn there before → a slot (or the ground). */
-    wear(item, { quiet = false } = {}) {
+    wear(item, { quiet = false, side = null } = {}) {
         const slot = slotOf(item);
-        if (!slot) return false;
+        if (!slot || this.worn[slot] === item) return false; // (the very thing already on me)
         const g = this.game;
         // (the High Mage's suit: only a High Mage wears it — Achievements.js)
         if (item.archmage && g.achievements && !g.achievements.high) {
@@ -82,9 +82,12 @@ export class ArmorSystem {
         if (item.kind === 'armor' && item.hp == null) item.hp = pieceMax(item);
         const old = this.worn[slot];
         this.worn[slot] = item;
-        if (old) this._stow(old);
+        // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
+        let inHand = false;
+        if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side)); if (!inHand) this._stow(old); }
         this._changed();
-        if (!quiet) {
+        if (!quiet && old) g.hud?.setVoice?.(`🪖 Вы сняли <b>${armorName(old)}</b> и надели <b>${armorName(item)}</b>`, true);
+        else if (!quiet) {
             g.hud?.setVoice?.(`${item.archmage ? '🌟' : slot === 'robe' ? '🧥' : '🪖'} Надето: <b>${armorName(item)}</b>${item.magic ? ' ✨' : ''}`, true);
             if (!(performance.now() - (this._clinkAt || -1e9) < 1200)) { this._clinkAt = performance.now(); g.sound?.playSpellFx?.('fxSuitUp'); } // (the plates clinking on: once for a whole «Suit Up»)
             if (item.archmage) this._suitGlow();
@@ -256,9 +259,11 @@ export class ArmorSystem {
             this._edge[side].lostT = 0;
             this._wearT[side] = 0;
             const inv = g.inventory;
+            // (the High Mage's suit does not come off by hand; a plain thing does not push it out)
+            if (this.worn[slot]?.archmage && !h.item.archmage) { g.hud?.setVoice?.('🌟 Костюм Высшего мага не снять — он на вас', true); continue; }
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
-            this.wear(item);
+            if (!this.wear(item, { side })) items.takeIntoHand?.(item, side); // (not put on: it stays in the hand, never lost)
         }
     }
 
