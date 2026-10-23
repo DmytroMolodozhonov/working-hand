@@ -2313,7 +2313,20 @@ export class Game {
     _commandAttack(isFinal) {
         const aim = this.duel.pickSide(false);
         const t = aim?.t;
-        if (!t || t.kind === 'b') { if (isFinal) this.hud.setVoice('✋ Направьте руку на того, кого атаковать, и скажите «Атак»', true); return null; }
+        if (!t || t.kind === 'b') {
+            // (no creature: the hand at the ground sends the living trees there)
+            const o = new THREE.Vector3(), d = new THREE.Vector3();
+            this.duel._myRay(aim?.side || this.magicHand || this.lastMagicHand || this.dom || 'right', o, d);
+            const cell = this.builder?._hitCell?.(o, d, 60);
+            if (cell?.point && this.livingTrees?.mine().length) {
+                if (this.authority) this.servants.commandPoint(this.localId, cell.point.x, cell.point.z);
+                else this.sync?.servantAttack?.(null, null, cell.point.x, cell.point.z);
+                this.hud.setVoice('🌳 Деревья идут туда, куда вы показали', true);
+                return 'Attack';
+            }
+            if (isFinal) this.hud.setVoice('✋ Направьте руку на того, кого атаковать, и скажите «Атак»', true);
+            return null;
+        }
         const target = { k: t.kind, id: t.id };
         if (this.authority) this.servants.command(this.localId, target);
         else this.sync?.servantAttack?.(target.k, target.id);

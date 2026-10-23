@@ -905,7 +905,7 @@ export class LivingTrees {
         let plan = g.servants?.plan('t', t, p, reach) || { mode: 'stay', x: p.x, z: p.z };
         // (no enemy: a big tree keeps a comfortable distance from its master — never comes up close)
         const mp = g.servants?._masterPos?.(t.master);
-        if (!plan.enemy && mp) plan = treeFollowPlan(p, mp, s, t.skel ? SKEL.KEEP : undefined);
+        if (!plan.enemy && mp && !plan.point) plan = treeFollowPlan(p, mp, s, t.skel ? SKEL.KEEP : undefined);
         t.nextSwing -= dt;
         let speed = 0, face = null;
         if (plan.mode === 'strike') {

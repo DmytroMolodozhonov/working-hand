@@ -269,3 +269,29 @@ test('«Alive»: a trunk just beside the line of the hand still counts (a hand n
     assert.ok(near && near.cell && near.kind === 0, JSON.stringify(near));
     assert.equal(g.livingTrees.aimAt(o, new THREE.Vector3(10, 0, 4).normalize()), null); // (~22° off)
 });
+
+test('the living tree does not hunt: a zombie 15 m away is left alone; pointed at — it goes; a spot — it goes there', () => {
+    const g = fakeGame();
+    const t = g.livingTrees.spawn(D, 'me');
+    run(g, 3.5);
+    const z = { id: 9, isDead: false, group: { position: new THREE.Vector3(15, 0, 4) } };
+    g.zombies.push(z); g.zombieById.set(9, z);
+    const p = t.model.position;
+    assert.equal(g.servants.enemyFor({ k: 't', id: t.id }, 'me', p), null, 'no order: no enemy');
+    assert.ok(!g.servants.plan('t', t, p, 3.4).enemy);
+    // a zombie at the master's very body: self-defence
+    z.group.position.set(2, 0, 0);
+    assert.equal(g.servants.enemyFor({ k: 't', id: t.id }, 'me', p)?.k, 'z');
+    z.group.position.set(15, 0, 4);
+    // the hand at the zombie
+    g.servants.command('me', { k: 'z', id: 9 });
+    assert.equal(g.servants.enemyFor({ k: 't', id: t.id }, 'me', p)?.id, 9);
+    // the hand at a spot (30 m off, a tree ~10 m tall)
+    g.servants.orders.clear();
+    g.servants.commandPoint('me', 30, -20);
+    const plan = g.servants.plan('t', t, p, 3.4);
+    assert.ok(!plan.enemy && plan.mode === 'chase' && plan.point);
+    assert.equal(Math.round(plan.x), 30);
+    // having come, it is with its master again
+    assert.equal(g.servants.pointFor('me', { x: 30, z: -19 }), null);
+});

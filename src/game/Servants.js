@@ -23,6 +23,8 @@ export const SERVANT = {
     SEEK: 22, // m: enemies this near (to it or to its master) are fought
     ORDER: 70, // m: an «Атак» target farther than this is given up
     ORDER_TIME: 60000, // ms an «Атак» order stands
+    GUARD_R: 4, // m: a living tree answers only what is at its master's very body (self-defence), never hunts
+    POINT_R: 1.5, // m: it has come to the point the hand showed
 };
 
 const _v = new THREE.Vector3();
@@ -154,6 +156,20 @@ export class Servants {
         return true;
     }
 
+    /** «Атак» with the hand at the ground (no creature): the master's living trees go to that point and stand. */
+    commandPoint(master, x, z) {
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+        this.orders.set(master, { k: null, id: null, x, z, until: performance.now() + SERVANT.ORDER_TIME });
+        return true;
+    }
+
+    /** The point `master` showed, if their order is one and `self` has not come there yet: {x, z} | null. */
+    pointFor(master, me) {
+        const o = this.orders.get(master);
+        if (!o || o.k != null || performance.now() >= o.until) return null;
+        return Math.hypot(o.x - me.x, o.z - me.z) > SERVANT.POINT_R ? { x: o.x, z: o.z } : null;
+    }
+
     // ------------------------------------------------------------- enemies
     /**
      * Whom a servant fights: its master's «Атак» target, else the nearest enemy
@@ -163,7 +179,7 @@ export class Servants {
     enemyFor(self, master, me, seek = SERVANT.SEEK) {
         const g = this.game;
         const o = this.orders.get(master);
-        if (o) {
+        if (o && o.k != null) {
             const p = performance.now() < o.until && !(o.k === self.k && o.id === self.id) ? this.pos(o.k, o.id) : null;
             const ally = p && this.masterOf(o.k, this.find(o.k, o.id)) === master;
             if (p && !ally && Math.hypot(p.x - me.x, p.z - me.z) < SERVANT.ORDER) return { k: o.k, id: o.id, x: p.x, z: p.z };
@@ -171,11 +187,13 @@ export class Servants {
         }
         const mp = this._masterPos(master);
         let best = null, bd = Infinity;
+        // (a living tree never hunts: it fights what its master points at; otherwise only what is at its master's body)
+        const guard = self.k === 't';
         const consider = (k, id, p) => {
             if (k === self.k && id === self.id) return;
             const d = Math.hypot(p.x - me.x, p.z - me.z);
             const dm = mp ? Math.hypot(p.x - mp.x, p.z - mp.z) : Infinity;
-            if (Math.min(d, dm) > seek) return;
+            if (guard ? dm > SERVANT.GUARD_R : Math.min(d, dm) > seek) return;
             if (d < bd) { bd = d; best = { k, id, x: p.x, z: p.z }; }
         };
         for (const z of g.zombies || []) {
@@ -207,7 +225,10 @@ export class Servants {
         if (until && performance.now() > until) { this._free(k, c); if (k !== 't') return null; return this.plan(k, c, me, reach, seek); }
         const enemy = this.enemyFor({ k, id: c.id }, master, me, seek);
         const mp = this._masterPos(master);
-        const plan = servantPlan(me, mp, enemy, reach);
+        let plan = servantPlan(me, mp, enemy, reach);
+        // (the hand showed a spot, not a creature: a tree goes there)
+        const pt = !enemy && k === 't' ? this.pointFor(master, me) : null;
+        if (pt) plan = { mode: 'chase', point: true, x: pt.x, z: pt.z, d: Math.hypot(pt.x - me.x, pt.z - me.z) };
         plan.enemy = enemy;
         plan.master = master;
         return plan;
