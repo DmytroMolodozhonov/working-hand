@@ -288,3 +288,34 @@ export const expired = (age, life) => age >= life;
 
 /** A gargoyle too far from its pentagram turns back. */
 export const outOfLeash = (d) => d > GARGOYLE.LEASH;
+
+// ----------------------------------------------------------------- пентаграмма
+const starPts = (() => { // a five-point star drawn in one stroke, a point DOWN (inverted), radius 0.78
+    const out = [];
+    for (let k = 0; k < 5; k++) { const a = Math.PI / 2 + k * 4 * Math.PI / 5; out.push([+(Math.cos(a) * 0.78).toFixed(3), +(-Math.sin(a) * 0.78).toFixed(3)]); }
+    out.push(out[0]);
+    return out;
+})();
+
+/**
+ * The drawing for the table PENTAGRAMS (figures in units of the radius R, the centre 0,0): a circle, an INVERTED five-point star
+ * in it (a point down), two horns curving up out of the top of the circle and a wing's notch each side — unlike the devil-power star
+ * (upright), the teleport, life, armour, enchant and the other pentagrams.
+ */
+export const GARGOYLE_DRAW = [
+    { t: 'circle', r: 1 },
+    { t: 'poly', pts: starPts },
+    { t: 'poly', pts: [[-0.42, -0.9], [-0.62, -1.22], [-0.9, -1.38], [-0.8, -1.14], [-0.66, -0.98]] }, // the left horn
+    { t: 'poly', pts: [[0.42, -0.9], [0.62, -1.22], [0.9, -1.38], [0.8, -1.14], [0.66, -0.98]] }, // the right horn
+    { t: 'poly', pts: [[-1.0, 0.1], [-1.28, 0.28], [-1.12, 0.46], [-1.0, 0.36]] }, // a wing's tip, left
+    { t: 'poly', pts: [[1.0, 0.1], [1.28, 0.28], [1.12, 0.46], [1.0, 0.36]] },
+];
+
+/** The entry for the table `PENTAGRAMS` (`Pentagram*.js` picks it up by id): a black mage's, hell-red; the use starts the ritual. */
+export const GARGOYLE_PENTAGRAM = {
+    id: 'gargoyles', dark: true, glow: 0xff2a10, gold: 0xff7a2a,
+    ru: 'Пентаграмма адских горгулий', radius: GARGOYLE.CIRCLE_R, draw: GARGOYLE_DRAW,
+    cost: GARGOYLE.MANA, permanent: false, scroll: 'GargoylePentagram',
+    /** Called on the drawer's computer when the picture is good: pays and begins (not enough mana: nothing happens, the picture stays). */
+    use(game, { center, by } = {}) { return game.gargoyles?.startRitual(center, { by }); },
+};
