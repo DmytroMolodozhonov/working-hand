@@ -229,7 +229,7 @@ export class WizardLife {
                     // (the Master keeps his place unless it is close; the others come — a tower has paths)
                     if ((v.role === 'master' && d > 30) || !cs.graph.nodes.length || (v.investigate && v.investigate.t > 10)) { v.yaw = Math.atan2(-(pos.x - v.x), -(pos.z - v.z)); v.seated = false; continue; }
                     if (WIZ_JOBS.has(v.job) && v.job !== 'sit') { v.job = 'wander'; v.post = null; v.trips = 0; } // (the lectern, the cauldron left: nobody goes on as if nothing happened)
-                    v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: isPlayer && !via ? by : null, t: 45 };
+                    v.investigate = { x: pos.x, y: pos.y ?? v.y, z: pos.z, by: null, t: 45 };
                     v.path = null; v.lookT = 0; v.seated = false;
                     if (!said) { said = true; L._say(v, pick(DANGER_LINES.brave), 3); }
                 } else {

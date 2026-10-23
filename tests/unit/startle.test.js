@@ -24,7 +24,7 @@ test('a charge flying close past a knight: he flinches, turns to it and goes to 
     const far = add('c1:2', 'knight', 0, 60); // (far from the charge: nothing)
     L.passBy(new THREE.Vector3(-5, 2.5, 1.5), new THREE.Vector3(5, 2.5, 1.5), 'me', { x: 0, y: 0, z: -80 });
     assert.ok(k.flinchT > 0, 'he flinches');
-    assert.ok(k.investigate && k.investigate.z === -80 && k.investigate.by === 'me', 'he goes to look where it came from');
+    assert.ok(k.investigate && k.investigate.z === -80 && k.investigate.by == null, 'he goes to look where it came from (no culprit named: nobody saw)');
     assert.ok(!far.flinchT && !far.investigate);
     assert.equal(k.foe, undefined, 'not seen: no fight yet');
 });

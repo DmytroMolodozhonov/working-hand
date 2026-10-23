@@ -11,6 +11,12 @@
  *     (OBVIOUS: how near; a wizard understands magic a little better, nobody guesses from afar).
  * Who doesn't know defends himself from the thing itself (the tree, the fire, the flying thing) — and
  * the hidden wanted level (Wanted.js) grows only for what somebody saw.
+ *
+ * An UNSEEN blast (e.g. «Бомбардо» thrown from a mountain 200 m away, even if it breaks walls): the
+ * people panic, the knights go to LOOK AT THE PLACE (`investigate.by` is null — no culprit named, none
+ * hunted by position), nobody is wanted, nobody attacks. Builders put the walls back (Rebuild). Suspicion
+ * is born only when a knight on the way actually SEES a player near the place (CastleLife._investigate,
+ * by sightRange). `by` goes on only to those who `_knows` it (witnesses). Tests: blame-unseen.test.js.
  */
 
 /** Sight (m): how far a person makes out who is there. */

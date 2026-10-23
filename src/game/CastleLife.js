@@ -2571,7 +2571,7 @@ export class CastleLife {
             if (r === 'fight') { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : v.role === 'king' ? SHOUT.king : SHOUT.knight), 3); }
             else { const bp = this._playerPos(by); this.fright?.scare?.(v, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : from, by); this._say(v, pick(SHOUT.help), 3); }
         } else if (r === 'search') {
-            v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by, t: STARTLE.SEARCH_S };
+            v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; // (nobody saw whose: he looks at the place, not for a man — Blame.js)
             v.path = null; v.lookT = 0;
             this._say(v, pick(v.wizard ? SHOUT.startledWiz : SHOUT.startled), 3);
         } else {
@@ -2589,7 +2589,7 @@ export class CastleLife {
             if (Math.abs(o.x - v.x) > STARTLE.CALL_R || Math.abs(o.z - v.z) > STARTLE.CALL_R || Math.hypot(o.x - v.x, o.z - v.z) > STARTLE.CALL_R) continue;
             o.readyUntil = Date.now() + STARTLE.READY_MS;
             if (known) { o.foe = known; o.path = null; }
-            else { o.investigate = { x: from.x, y: from.y ?? o.y, z: from.z, by, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
+            else { o.investigate = { x: from.x, y: from.y ?? o.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; o.path = null; o.lookT = 0; }
         }
     }
 
@@ -2924,7 +2924,7 @@ export class CastleLife {
     alarm(pos, kind, by = null, r = null) {
         if (!this.enabled || !pos) return;
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
-        this.fright.add(kind, pos, { by, r });
+        this.fright.add(kind, pos, { r });
         this.wizards.danger(pos, kind, by, r); // (the wizards of a tower: the brave go to see, the timid run)
         // (something dreadful cast among the people: a little on the wanted level — once in a while, if somebody saw whose)
         if (by && this._isPlayer(by) && this.index?.near(pos.x, pos.z, 0).some((def) => this._inLand(def, pos, 20) && this._anyKnows(def, by, pos, viaOfKind(kind)))) {
@@ -2948,7 +2948,8 @@ export class CastleLife {
         if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0, r); return; }
         this.night?.noise(pos, loud ? 40 : 14); // (a pane breaking, a wall coming down: the sleepers near wake)
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
-        if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4, by }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4, via); }
+        // (no culprit given to the frightened: they run from the thing itself)
+        if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4 }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4, via); }
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
         this.breakWays(pos, r ?? (loud ? 6 : 2)); // (no path over the hole any more: everybody's ways round it)
         const isPlayer = !!by && (by === g.localId || g.remotes.has(by));
@@ -2974,14 +2975,15 @@ export class CastleLife {
                 if (bp && blocks > 0 && !seen && this._knows(v, by, pos, via)) seen = true;
                 if (v.role === 'knight') {
                     // (a blast from a charge: one seen about with a wand is suspect; a fire, the ground — nobody to look for)
-                    if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: isPlayer && !via ? by : null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
+                    // (nobody is named: he goes to look at the place; only what he SEES decides — _investigate)
+                    if (!v.foe) { v.investigate = { x: pos.x, y: pos.y, z: pos.z, by: null, t: 45 }; v.path = null; v.lookT = 0; comers++; }
                 }
             }
             if (!isPlayer || blocks <= 0) continue;
             if (!counted && seen) { counted = true; this.deed(by, wreckPoints(blocks)); }
             st.wrecked = (st.wrecked || 0) + blocks;
             // a big blast: more knights run out of the barracks and the gate to see
-            if (loud && comers < 4) this._sendGuards(cs, pos, via ? null : by, 4 - comers);
+            if (loud && comers < 4) this._sendGuards(cs, pos, seen ? by : null, 4 - comers);
             if (seen) this._catch(cs, by, pos);
         }
     }
@@ -3051,9 +3053,15 @@ export class CastleLife {
         v.lookT = (v.lookT || 0) - dt;
         if (v.lookT <= 0) {
             v.lookT = 0.5;
-            const p = I.by ? this._playerPos(I.by) : null;
-            if (p && Math.hypot(p.x - I.x, p.z - I.z) < 40 && Math.hypot(p.x - v.x, p.z - v.z) < 32 && this._sees(v, p)) {
-                this._catch(v.cs, I.by, I);
+            // (he looks for no one by name: a player he really SEES near the place — by his own sight, day or night — is the suspect)
+            const g = this.game, night = !!g.isNight, R = sightRange(!!v.wizard, night);
+            const seeIt = (id) => {
+                const p = this._playerPos(id);
+                return p && Math.hypot(p.x - I.x, p.z - I.z) < 40 && Math.hypot(p.x - v.x, p.z - v.z) < R && this._sees(v, p);
+            };
+            const who = I.by && seeIt(I.by) ? I.by : seeIt(g.localId) ? g.localId : [...g.remotes.keys()].find(seeIt);
+            if (who && who !== this.state(v.cs.def.id).owner) {
+                this._catch(v.cs, who, I);
                 return false;
             }
         }
