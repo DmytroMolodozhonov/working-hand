@@ -29,7 +29,9 @@ const PROFILE = args.includes('--profile');
 const ALLOC = args.includes('--alloc');
 const KEYS = args.includes('--keys'); // the full keys of the shaders compiled after the start (and of all prewarmed ones like them)
 const OWNERS = args.includes('--owners'); // the scene's top things: how many, their parts, materials, a sample of names
-const SCAN = args.includes('--scan'); // at the start: 16 directions — draws, triangles and who is drawn in each
+const SCAN = args.includes('--scan');
+const MODE = opt('mode', 'creative'); // creative | freeworld (Свободный мир — to compare)
+const AFTER = parseFloat(opt('after', '0')); // s of play before measuring (the world filled: herds, people, things) // at the start: 16 directions — draws, triangles and who is drawn in each
 const ABLATE = opt('ablate', null); // e.g. trees,villagers,animals,terrain: standing, each hidden in turn — its cost of drawing
 /** --check: what the Creative start scene must keep (only tighten). */
 const LIMITS = { gameMeanMs: 11, gameP95Ms: 20, calls: 650, triangles: 480000, newShaders: 0 }; // (23.10: 8.9 / 16.3 ms, ~600 calls, 425k triangles — before the fixes 11.6 ms and ~700 calls)
@@ -262,13 +264,13 @@ try {
         Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     });
     const P = PRESETS[LEVEL];
-    await page.evaluate(({ P, SEED }) => {
+    await page.evaluate(({ P, SEED, MODE }) => {
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
         const seen = window.__compiled = []; // (each material's first compile: who needed a shader after the start)
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
-    }, { P, SEED });
+        z.startGame({ ...z.readConfig(), mode: MODE, map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
+    }, { P, SEED, MODE });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     // the start's land and its people: wait until the land around is made (the workers) and things settle
@@ -283,6 +285,13 @@ try {
         await sleep(500);
     }
     await sleep(3000);
+    if (AFTER > 0) {
+        // (played on for a while, the game's own pace: a minute or two of the world going on round the start)
+        const f0 = await page.evaluate(() => window.__zns.game.frameCount);
+        const t0 = Date.now();
+        while (Date.now() - t0 < AFTER * 1000 * 3) { const f = await page.evaluate(() => window.__zns.game.frameCount); if (f - f0 >= AFTER * 20) break; await sleep(2000); }
+        console.log(`(сыграно ${(await page.evaluate(() => window.__zns.game.frameCount)) - f0} кадров перед замером)`);
+    }
     let cdp = null, heap = null;
     if (PROFILE) { cdp = await page.context().newCDPSession(page); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
     if (ALLOC) { heap = await page.context().newCDPSession(page); await heap.send('HeapProfiler.enable'); await heap.send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true }); }
@@ -401,7 +410,7 @@ try {
     srv.stop();
 }
 const f = (s) => s ? `${String(s.mean).padStart(7)} ${String(s.p95).padStart(7)} ${String(s.max).padStart(7)}` : '—';
-console.log(`\n=== Творческий, старт (${res.pos.x},${res.pos.y},${res.pos.z}), графика ${res.level}`);
+console.log(`\n=== ${MODE === 'creative' ? 'Творческий' : MODE}, старт (${res.pos.x},${res.pos.y},${res.pos.z}), графика ${res.level}`);
 console.log(`  ${'часть'.padEnd(14)} ${'игра: сред'.padStart(10)} ${'p95'.padStart(7)} ${'макс'.padStart(7)} | ${'процессор'.padStart(9)} ${'p95'.padStart(7)} ${'макс'.padStart(7)} | вызовов  треугольников`);
 const row = (name, s) => console.log(`  ${name.padEnd(14)} ${f(s.game).padStart(25)} | ${f(s.cpu)} | ${String(Math.round(s.calls.mean)).padStart(7)} ${String(Math.round(s.tris.mean)).padStart(12)}`);
 row('всё', res.total);

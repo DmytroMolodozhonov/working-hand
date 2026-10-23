@@ -465,7 +465,22 @@ export class IceCastleLife {
         }
         if (this.auth) {
             if (this._friendsToLoad) this._loadFriends();
-            for (const c of [...this.list]) if (!c.dead && !(c.imp && g.imperius?.step('I', c, dt)) && (c.type !== 'friend' || this._awake(c))) this._think(c, dt); // («Империус Максима»: a mind in it — ImperiusControl.step)
+            // (a snowman or a monster far from every player, with nobody to fight: thinks every few frames, the time added up —
+            // the castle's guards on their rounds cost ~0.5 ms a frame seen from Creative's start)
+            this._tick = (this._tick || 0) + 1;
+            const every = Math.max(1, Math.min(8, Math.round(0.1 / Math.max(1e-3, dt))));
+            for (const c of [...this.list]) {
+                if (c.dead || (c.imp && g.imperius?.step('I', c, dt)) || !(c.type !== 'friend' || this._awake(c))) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
+                if (every > 1 && (c.type === 'snowman' || c.type === 'monster') && !c.target && !c.act && !(c.stunT > 0) && !(c.frozenT > 0) && !c.vy && this._noneNear(c.model.position, 70)) {
+                    c.thinkAcc = (c.thinkAcc || 0) + dt;
+                    if ((this._tick + (c.slot || 0)) % every !== 0) continue;
+                    const t = Math.min(0.1, c.thinkAcc); c.thinkAcc = 0;
+                    this._think(c, t);
+                    continue;
+                }
+                c.thinkAcc = 0;
+                this._think(c, dt);
+            }
         } else {
             for (const c of this.list) if (c.imp?.mine && !c.dead && g.imperius?.step('I', c, dt)) { /* (my mind in it) */ } else if (c.net && !c.dead) {
                 c.model.position.lerp(c.net, Math.min(1, dt * 8));
@@ -491,6 +506,14 @@ export class IceCastleLife {
         this._updateRod(dt);
         this._hudBar();
         this._netSend(dt);
+    }
+
+    /** No player within r m of p (me and the others on the server). */
+    _noneNear(p, r) {
+        const g = this.game, r2 = r * r, me = g.character?.group?.position;
+        if (me && (me.x - p.x) ** 2 + (me.z - p.z) ** 2 < r2) return false;
+        for (const rm of g.remotes?.values?.() || []) { const q = rm.position; if (q && (q.x - p.x) ** 2 + (q.z - p.z) ** 2 < r2) return false; }
+        return true;
     }
 
     /** (host) Is this player (or anybody, id omitted) the one who attacked the castle lately? */

@@ -42,6 +42,8 @@ import { STARTLE, segDist2 } from './Startle.js';
 
 /** A sailor doing these is moved every frame, however far (its blows land on the frame they come). */
 const BUSY = new Set(['attack', 'block', 'shoot', 'brace', 'cast', 'shield', 'climb', 'flail']);
+/** A crew far from every player (m) thinks every THINK s (Sailors.update). */
+export const CREW_FAR = { R: 140, THINK: 0.1 };
 const SAILOR_TURN = 7; // rad/s — a sailor turning to his foe on deck (FaceTarget: «лицом к цели»)
 
 /** Damage of a drop from `h` m onto a deck (as Levitation.fallDamage). */
@@ -997,6 +999,15 @@ export class Sailors {
     }
 
     // ---------------------------------------------------------- frame
+    /** No player within r m of the ship (me and the others on the server). */
+    _farFromAll(s, r) {
+        const g = this.game, x = s.pose.x, z = s.pose.z, r2 = r * r;
+        const me = g.character?.group?.position;
+        if (me && (me.x - x) ** 2 + (me.z - z) ** 2 < r2) return false;
+        for (const rm of g.remotes?.values?.() || []) { const p = rm.position; if (p && (p.x - x) ** 2 + (p.z - z) ** 2 < r2) return false; }
+        return true;
+    }
+
     update(dt) {
         const g = this.game;
         for (const [sid, list] of this.crews) {
@@ -1005,11 +1016,19 @@ export class Sailors {
             // (the black ship's boarders on another deck — Blackbeard.js thinks for them there)
             let home = list;
             for (const v of list) if (v.ship !== s) { home = this._homeBuf || (this._homeBuf = []); home.length = 0; for (const o of list) if (o.ship === s) home.push(o); break; }
+            // (a ship far from every player — a harbour seen from afar: its calm crew thinks every few frames, the time added up;
+            // anyone fighting, stunned, in the water, in the air — every frame. A port by Creative's start was ~1 ms a frame)
+            const farCrew = this.auth && this._farFromAll(s, CREW_FAR.R);
+            const every = farCrew ? Math.max(1, Math.min(8, Math.round(CREW_FAR.THINK / Math.max(1e-3, dt)))) : 1;
+            this._tick = (this._tick || 0) + 1;
             for (const v of list) {
                 if (v.damageCooldown > 0) v.damageCooldown -= dt;
                 if (v.imp && (this.auth || v.imp.mine) && !v.dead && g.imperius?.step('s', v, dt)) { /* («Империус»: a mind in him — ImperiusControl.step) */ }
                 else if (!this.auth) this._follow(v, dt);
-                else if (v.ship === s) this._think(v, s, dt);
+                else if (v.ship === s && every > 1 && !v.foe && !v.rescue && !v.overboard && !v.dead && !v.lev && !(v.stunT > 0) && !v.vy && !(v.braceT > 0) && !BUSY.has(v.mode)) {
+                    v.thinkAcc = (v.thinkAcc || 0) + dt;
+                    if ((this._tick + (v.idx ?? 0)) % every === 0) { const t = Math.min(0.1, v.thinkAcc); v.thinkAcc = 0; this._think(v, s, t); }
+                } else if (v.ship === s) { v.thinkAcc = 0; this._think(v, s, dt); }
                 else if (!g.fleet?.thinkAway(v, dt) && !g.blackbeard?.thinkAway(v, dt)) { v.ship = s; v.fleetBoard = v.fleetHome = null; this._toNode(v, s); } // (nobody to think for him there: back home)
             }
             if (this.auth) {
