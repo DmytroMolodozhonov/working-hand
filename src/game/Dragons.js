@@ -41,6 +41,7 @@ import { FACE, facesTarget, facingError } from './FaceTarget.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { earthly } from '../world/Planets.js';
 import { confusedMiss } from './StrongSpells.js';
+import { TAME, tameVerdict, LOWER_ANGER, attackVerdict, angryAt } from './DragonTame.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -51,7 +52,7 @@ const BONES_R = 5.2;
 const WANDER = { EVERY: 60, CHANCE: 0.02, FIRST: 600, /* (rare: about one in 50 minutes of play, none in the first 10 — «dragons fly too often», the author) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */
 const LAIR_NEAR = 170, LAIR_FAR = 320;
-const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead'];
+const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead', 'ride']; // ('ride': under a rider — «Brain Rot Maxima», DragonTame.js; only ever appended: the index goes over the net)
 
 /** A dragon's body as a capsule {a, b, r} in the world. */
 export function dragonBody(d, out = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }) {
@@ -138,6 +139,7 @@ export class Dragons {
             t: Math.random() * 10, fly: mode === 'air' ? 1 : 0, sleep: mode === 'sleep' ? 1 : 0, walk: 0, mouth: 0, look: 0, lower: 0, sweep: 0, spread: 0,
             vel: new THREE.Vector3(), target: null, aggro: null, wakeT: 0, calmT: 0, breath: null, breathCd: 2, blowCd: 0, stun: 0, blind: 0, slow: 0,
             path: null, purpose: null, home: null, dest: null, landAt: null, restT: 0, damageCooldown: 0, burnT: 0, meT: 0,
+            grudge: {}, tame: null, order: null, rideWalk: 0, // (grudge: who struck / robbed it, when; tame: {by, rider} — «Brain Rot Maxima»; order: «Атак» at one it is already angry at)
         };
         this.list.push(d);
         return d;
@@ -169,6 +171,11 @@ export class Dragons {
             // (fire: nothing — a few sparks off its scales, and the one who burnt it is told once)
             if (who === this.me && !this._fireSaid) { this._fireSaid = true; g.hud?.setVoice?.('🐉 Огонь дракону не страшен — жгите хоть адским пламенем', true); }
             this.log.push('fire:' + kind);
+            // (but a fire AIMED at it by a player is an attack on it: the calmed one is let go — «Brain Rot Maxima»; a fire with no one behind it is not)
+            if (by !== undefined && who && who !== 'dragon' && d.tame) {
+                if (this.auth) this._offend(d, who);
+                else if (this._t - (this._fireTold || -9) > 1) { this._fireTold = this._t; g.sync?.dragon?.({ e: 'hit', id: d.id, dmg: 0, kind, by: who }); }
+            }
             return 0;
         }
         if (!this.auth) { g.sync?.dragon?.({ e: 'hit', id: d.id, dmg: Math.round(dmg * 10) / 10, kind, by: who }); return n; }
@@ -176,7 +183,7 @@ export class Dragons {
         if (rule?.blind) { d.blind = Math.max(d.blind, rule.blind); d.breath = null; }
         if (rule?.slow) d.slow = Math.max(d.slow, rule.slow);
         // it turns on whoever struck it (a player) — even a blow that did not hurt it
-        if (who && who !== 'dragon' && this._playerPos(who)) this._anger(d, who);
+        if (who && who !== 'dragon' && this._playerPos(who)) this._anger(d, who, true);
         g.achievements?.hit('dragon', d.id, who); // (taking part: the achievement — even a blow that did not hurt it)
         if (n <= 0) return 0;
         d.hp = Math.max(0, d.hp - n);
@@ -231,7 +238,7 @@ export class Dragons {
         if (spell === 'Jolt' || spell === 'JoltMaxima') {
             d.sweep = (Math.random() < 0.5 ? -1 : 1);
             const who = by === undefined || by === 'local' ? this.me : by;
-            if (this.auth && who && this._playerPos(who)) this._anger(d, who);
+            if (this.auth && who && this._playerPos(who)) this._anger(d, who, true);
             else if (!this.auth) this.game.sync?.dragon?.({ e: 'hit', id: d.id, dmg: 0, kind: 'Jolt', by: who });
             return;
         }
@@ -251,7 +258,7 @@ export class Dragons {
             d.model.position.addScaledVector(_v.copy(v).setY(0), 0.08);
             d.sweep = Math.max(-1, Math.min(1, d.sweep + (Math.random() - 0.5)));
             if (name === 'Earthquake' || name === 'EarthquakeMaxima') this.hit(d, 0, 'Earthquake', casterId);
-            if (casterId && this._playerPos(casterId)) this._anger(d, casterId);
+            if (casterId && this._playerPos(casterId)) this._anger(d, casterId, true);
             n++;
         }
         return n;
@@ -265,13 +272,31 @@ export class Dragons {
         }
     }
 
-    _anger(d, who) {
+    /**
+     * It turns on `who`. `offended`: they struck / hurt / robbed it — the grudge is written (the calming
+     * spell will not take on them for a while: DragonTame.offence); `thief`: it was its hoard.
+     * Its calmed one's (Brain Rot Maxima) own spell breaks the moment the calmed one's offended.
+     * Without an offence, the one it is calmed to is never turned on.
+     */
+    _anger(d, who, offended = false, thief = false) {
+        if (offended) this._offend(d, who, thief, false);
+        else if (d.tame && d.tame.by === who) return;
         d.aggro = who;
         d.target = who;
         if (d.mode === 'sleep' || d.mode === 'watch') { d.mode = 'watch'; d.sleepGoal = 0; d.wakeT = Math.min(d.wakeT || 9, 0.4); }
         else if (d.mode === 'landed') this._takeOff(d, 'chase');
         else if (d.mode === 'air') d.purpose = 'chase';
         if (!d.chaseFrom) d.chaseFrom = d.home ? new THREE.Vector3(d.home.x, 0, d.home.z) : d.model.position.clone();
+    }
+
+    /** (host) `who` offended the dragon: remembered; if they hold the calming spell on it — it breaks (they are dropped, the dragon is after them). */
+    _offend(d, who, thief = false, anger = true) {
+        if (!who || who === 'dragon') return;
+        const g = (d.grudge[who] = d.grudge[who] || { at: 0, thief: false });
+        g.at = this._t;
+        if (thief) g.thief = true;
+        if (d.tame && d.tame.by === who) this.breakTame(d, 'attacked', who);
+        if (anger && this._playerPos(who)) this._anger(d, who);
     }
 
     _wake(d, who, thief) {
@@ -289,6 +314,7 @@ export class Dragons {
 
     _die(d, killer = d.lastBy) {
         if (d.dead) return;
+        if (d.tame) this.breakTame(d, 'dead'); // (its rider comes down gently — DragonRide.onBroken)
         d.dead = true;
         d.mode = 'dead';
         d.breath = null;
@@ -308,6 +334,131 @@ export class Dragons {
         }
         d.fly = 0;
         d.deadT = 0;
+    }
+
+    // ================================================================ «Brain Rot Maxima» (the host decides; DragonTame.js, DragonRide.js)
+    /**
+     * (host) `who` casts the calming spell on dragon `d`. → the verdict (DragonTame.tameVerdict). Taken: the dragon
+     * stops being after them, lets them near; flying, it comes down near them to be got on. Refused: it is angry at
+     * them / they offended it / robbed it — the spell does not take; at best it lowers the anger a little.
+     */
+    tame(d, who) {
+        const v = tameVerdict(d, who, this._t);
+        if (!v.ok) {
+            if (v.code === 'aggro' || d?.target === who) this.lowerAnger(d);
+            this.log.push('tame-no:' + v.code);
+            return v;
+        }
+        d.tame = { by: who, rider: null, at: this._t };
+        if (d.target === who) { // (a neutral stare — an intruder, not a quarrel: it settles)
+            d.target = null; d.breath = null;
+            if (d.mode === 'chase' || d.mode === 'exit') { d.mode = 'watch'; d.wakeT = 0; d.calmT = 0; } else if (d.mode === 'air' && d.purpose === 'chase') d.purpose = d.lair ? 'home' : 'cruise';
+        }
+        // flying past (or high over it): it comes down near them, to be got on
+        if (d.mode === 'air' && d.purpose === 'cruise') {
+            const tp = this._playerPos(who), p = d.model.position;
+            if (tp) {
+                const k = Math.max(1, Math.hypot(p.x - tp.x, p.z - tp.z));
+                d.landAt = new THREE.Vector3(tp.x + (p.x - tp.x) / k * 12 * d.size, 0, tp.z + (p.z - tp.z) / k * 12 * d.size);
+                d.dest = d.dest || p.clone();
+            }
+        }
+        this.log.push('tame');
+        this._sendSoon = true;
+        return v;
+    }
+
+    /** (host) It is angry at the caster and the spell failed: at best the anger is lowered — its fire and blows wait, it slows (it still attacks). */
+    lowerAnger(d) {
+        if (!d || d.dead) return;
+        d.breathCd = Math.max(d.breathCd, 0) + LOWER_ANGER.BREATH_WAIT;
+        d.blowCd = Math.max(d.blowCd, 0) + LOWER_ANGER.BLOW_WAIT;
+        d.slow = Math.max(d.slow, LOWER_ANGER.SLOW_T);
+        d.mouthT = 0.8; // (it roars, bristles)
+        this.log.push('lowered');
+    }
+
+    /** (host) `who` gets onto the dragon they calmed. → { ok, say? }. */
+    mount(d, who) {
+        if (!d || d.dead) return { ok: false, say: '🐉 Дракон мёртв' };
+        if (!d.tame || d.tame.by !== who) return { ok: false, say: '🐉 Дракон не под вашим заклинанием' };
+        if (d.tame.rider) return { ok: false, say: '🐉 На нём уже сидят' };
+        const v = tameVerdict(d, who, this._t);
+        if (!v.ok) return { ok: false, say: v.say };
+        d.tame.rider = who;
+        d.mode = 'ride'; d.target = null; d.breath = null; d.order = null; d.stun = 0;
+        d.rideWalk = 0;
+        this._sendSoon = true;
+        this.log.push('mount');
+        return { ok: true };
+    }
+
+    /** (host) The rider is down (landed, got off). The dragon stays where it is, calm while the spell is held. */
+    dismounted(d, who) {
+        if (!d?.tame || d.tame.rider !== who) return;
+        d.tame.rider = null; d.order = null; d.rideWalk = 0;
+        if (d.fly > 0.3) { d.mode = 'air'; d.purpose = 'cruise'; d.dest = null; }
+        else { d.fly = 0; d.mode = d.lair && this.lairs.get(d.lair) && this.lairAt(d.model.position, 4) ? 'watch' : 'landed'; d.restT = 12; d.wakeT = 0; d.calmT = 0; d.vel.set(0, 0, 0); }
+        this._sendSoon = true;
+        this.log.push('dismount');
+    }
+
+    /** (host) The spell is let go (the caster, or by itself): the dragon is its own master again. */
+    release(d, who) {
+        if (!d?.tame || d.tame.by !== who) return;
+        if (d.tame.rider) this.dismounted(d, d.tame.rider);
+        d.tame = null; d.order = null;
+        this.log.push('release');
+    }
+
+    /** (host) The spell is torn (the caster struck the dragon, …): the caster's computer is told; a rider is dropped. */
+    breakTame(d, why, offender = null) {
+        const t = d?.tame;
+        if (!t) return;
+        d.tame = null; d.order = null;
+        if (t.rider) { d.rideWalk = 0; d.mode = d.fly > 0.3 ? 'air' : 'watch'; d.purpose = 'cruise'; d.dest = null; d.wakeT = 0; d.calmT = 0; }
+        if (t.by === this.me) this.game.dragonRide?.onBroken?.(d, why);
+        else this.game.sync?.dragon?.({ e: 'untame', id: d.id, to: t.by, why });
+        this._sendSoon = true;
+        this.log.push('break:' + why);
+    }
+
+    /** (host) «Атак» from the rider: send the dragon at `target` — but only one it is ALREADY angry at. → { ok, why?, say? }. */
+    order(d, who, target) {
+        const v = attackVerdict(d, who, target, this._t);
+        if (!v.ok) { this.log.push('order-no'); return v; }
+        d.order = { target, until: this._t + TAME.ATTACK_T };
+        this.log.push('order');
+        return v;
+    }
+
+    /** The ids it is angry at now (not counting its rider): who «Атак» may name. */
+    angryAt(d, rider = d.tame?.by) { return angryAt(d, rider, this._t); }
+
+    /** (host) A ridden dragon on its rider's order: the fire at the one named — never at anything else, and it burns nothing else (no villagers, no trees). */
+    _rideCombat(d, dt) {
+        const o = d.order;
+        if (!o) return;
+        const tp = this._playerPos(o.target);
+        if (!tp || this._t > o.until || !angryAt(d, d.tame.rider, this._t).includes(o.target)) { d.order = null; return; }
+        if (d.breath || d.breathCd > 0 || d.blind > 0 || d.iceHeadT > 0) return;
+        const p = d.model.position, dist = p.distanceTo(tp);
+        if (dist >= flameReach(d.flame) || !facesTarget(d.model.rotation.y, p.x, p.z, tp.x, tp.z, FACE.BREATH)) return;
+        const mouth = this._mouth(d, _v3), centre = _v2.copy(tp).add(_q.set(0, 0.6, 0));
+        if (this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, centre.x, centre.y, centre.z, 1.5) === false) return;
+        d.breath = { t: 0, dir: new THREE.Vector3().subVectors(centre, mouth).normalize(), aim: o.target, ride: true };
+        d.breathCd = DRAGON.FLAME_REST + DRAGON.FLAME_TIME;
+        this.log.push('breath:ordered');
+    }
+
+    /** (host) The rider's computer says where the dragon is under them (10 times a second). */
+    _rideMsg(d, m, from) {
+        if (!d?.tame || d.tame.rider !== from || !Array.isArray(m.p)) return;
+        d.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0);
+        d.model.rotation.y = +m.ry || 0;
+        d.fly = Math.max(0, Math.min(1, +m.fly || 0));
+        d.rideWalk = Math.max(0, Math.min(1, +m.walk || 0));
+        d.vel.y = +m.vy || 0;
     }
 
     // ================================================================ players
@@ -580,7 +731,7 @@ export class Dragons {
             if (d.lair !== lairId || d.dead) continue;
             const asleep = d.mode === 'sleep';
             this._wake(d, who, true);
-            if (who) this._anger(d, who);
+            if (who) this._anger(d, who, true, true);
             if (asleep) d.wakeT = DRAGON.WAKE / d.react; // (it needs a moment to rise: how quick its kind is)
         }
         this.log.push('thief:' + lairId);
@@ -710,6 +861,12 @@ export class Dragons {
         const quick = d.react * (d.slow > 0 ? 0.55 : 1) * (d.iceSlowT > 0 ? d.iceSlowK || 0.5 : 1) * (d.accT > 0 ? 0.6 : 1);
         const lair = d.lair ? this.lairs.get(d.lair) : null;
         const L = lair?.L || null;
+        // under a rider («Brain Rot Maxima»): the rider's computer flies it; here only the ordered fire
+        if (d.tame?.rider) {
+            if (!this._playerPos(d.tame.rider)) this.release(d, d.tame.by); // (the rider left / died)
+            else { d.mode = 'ride'; d.target = null; this._rideCombat(d, dt); this._animate(d, dt, d.rideWalk); return; }
+        }
+        const calm = d.tame ? ((q) => q.id !== d.tame.by) : null; // (the one it is calmed to is no intruder, nobody to wake for)
         if (d.stun > 0) { d.breath = null; this._animate(d, dt, 0); return; }
         const tp = d.target ? this._playerPos(d.target) : null;
         if (d.target && !tp) { d.target = null; d.aggro = null; }
@@ -720,6 +877,7 @@ export class Dragons {
                 if (d.checkT <= 0) {
                     d.checkT = 0.3;
                     for (const q of this._players()) {
+                        if (calm && !calm(q)) continue;
                         const dd = q.p.distanceTo(p);
                         if (dd < DRAGON.SLEEP_SEE || (q.light && dd < DRAGON.SLEEP_SEE_LIGHT) || (q.run && dd < DRAGON.SLEEP_SEE_RUN)) { d.wasAsleep = true; this._wake(d, q.id, false); break; }
                     }
@@ -730,16 +888,16 @@ export class Dragons {
             case 'watch': {
                 d.wakeT -= dt;
                 // it rises, looks round at the nearest intruder
-                const near = this._nearest(p);
+                const near = this._nearest(p, calm);
                 if (near) this._lookAt(d, near.p, dt * 0.5);
                 if (d.wakeT > 0) { this._animate(d, dt, 0); return; }
-                const intr = this._intruder(d, L);
+                const intr = this._intruder(d, L, calm);
                 if (d.aggro && tp) { d.target = d.aggro; d.mode = 'chase'; d.calmT = 0; }
                 else if (intr) { d.target = intr.id; d.mode = 'chase'; d.calmT = 0; d.chaseFrom = null; }
                 else {
                     d.calmT += dt;
-                    if (d.calmT > DRAGON.CALM && L) { d.mode = 'sleep'; d.calmT = 0; d.wasAsleep = false; }
-                    if (!L) this._takeOff(d, 'cruise');
+                    if (d.calmT > DRAGON.CALM && L && !d.tame) { d.mode = 'sleep'; d.calmT = 0; d.wasAsleep = false; }
+                    if (!L && !d.tame) this._takeOff(d, 'cruise'); // (calmed: it waits for its rider)
                 }
                 this._animate(d, dt, 0);
                 return;
@@ -800,8 +958,8 @@ export class Dragons {
                 return;
             }
             case 'landed': {
-                d.restT -= dt;
-                const near = this._nearest(p);
+                if (!d.tame) d.restT -= dt; // (calmed: it waits for its rider)
+                const near = this._nearest(p, calm);
                 if (near && near.d < WANDER.SEE) { this._wake(d, near.id, false); this._anger(d, near.id); return; }
                 if (near) this._lookAt(d, near.p, dt * 0.3);
                 if (d.restT <= 0) this._takeOff(d, 'cruise');
@@ -813,9 +971,9 @@ export class Dragons {
     }
 
     /** The intruder of its lair (nearest player in or near its hall, or at its mouth). */
-    _intruder(d, L) {
+    _intruder(d, L, calm = null) {
         if (!L) return null;
-        return this._nearest(d.model.position, (q) => !!this.lairAt(q.p, DRAGON.GUARD) || Math.hypot(q.p.x - L.mouth.x, q.p.z - L.mouth.z) < 25);
+        return this._nearest(d.model.position, (q) => (!calm || calm(q)) && (!!this.lairAt(q.p, DRAGON.GUARD) || Math.hypot(q.p.x - L.mouth.x, q.p.z - L.mouth.z) < 25));
     }
 
     _goHome(d, L) {
@@ -1075,7 +1233,7 @@ export class Dragons {
         // my player in it (every computer: its own)
         const c = g.combat;
         d.meT -= dt;
-        if (c && !c.dead && !g.isDeadLocal && d.meT <= 0) {
+        if (c && !c.dead && !g.isDeadLocal && d.meT <= 0 && g.dragonRide?.riding?.id !== d.id) { // (a rider on its back is never in its flame)
             const me = c.center ? c.center(_v) : _v.copy(g.character.group.position);
             if (inFlame(o, dir, b.len, me, 0.45)) {
                 d.meT = DRAGON.FLAME_TICK;
@@ -1085,7 +1243,7 @@ export class Dragons {
         }
         // (host) the creatures and the world: what any fire burns (Game._burnRay: trees, people,
         // animals, ships, paper, living trees, book-birds…); zombies; other dragons — not at all
-        if (this.auth) {
+        if (this.auth && !b.ride) { // (an ordered fire burns only the one named, whoever stands in it — no villagers, trees, ships: the dragon is no weapon)
             d.burnT -= dt;
             if (d.burnT <= 0) {
                 d.burnT = 0.25 / Math.max(0.5, d.flame);
@@ -1183,6 +1341,7 @@ export class Dragons {
             }
         } else {
             for (const d of this.list) {
+                if (g.dragonRide?.riding === d) { d.t += dt; this._animate(d, dt, d.rideWalk); continue; } // (I fly it: my computer says where it is)
                 if (d.net) { d.model.position.lerp(d.net, Math.min(1, dt * 6)); d.model.rotation.y += wrap(d.netYaw - d.model.rotation.y) * Math.min(1, dt * 6); }
                 d.t += dt;
                 if (d.dead) { d.model.rotation.z += (Math.PI / 2 - d.model.rotation.z) * Math.min(1, dt * 2); continue; }
@@ -1201,7 +1360,7 @@ export class Dragons {
         const g = this.game, p = g.character?.group.position;
         if (!p) return;
         for (const d of this.list) {
-            if (d.dead || d.fly > 0.5) continue;
+            if (d.dead || d.fly > 0.5 || g.dragonRide?.riding === d) continue;
             const b = dragonBody(d, _c);
             const ab = _v2.subVectors(b.b, b.a);
             const t = Math.max(0, Math.min(1, _v.subVectors(p, b.a).dot(ab) / ab.lengthSq()));
@@ -1247,6 +1406,16 @@ export class Dragons {
         switch (m.e) {
             case 's': if (!this.auth) this._applyState(m); break;
             case 'hit': if (this.auth) { const d = this.byId(m.id); if (d) this.hit(d, Math.min(200, +m.dmg || 0), m.kind, m.by || from); } break;
+            case 'tame': if (this.auth) { const d = this.byId(m.id); if (d) { const v = this.tame(d, from); g.sync?.dragon?.({ e: 'tamed', id: m.id, to: from, ok: v.ok ? 1 : 0, say: v.say || '', code: v.code || '' }); } } break;
+            case 'tamed': if (m.to === this.me) g.dragonRide?.onTamed?.(this.byId(m.id), { ok: !!m.ok, say: m.say, code: m.code }); break;
+            case 'mount': if (this.auth) { const d = this.byId(m.id); const r = d ? this.mount(d, from) : { ok: false }; g.sync?.dragon?.({ e: 'mounted', id: m.id, to: from, ok: r.ok ? 1 : 0, say: r.say || '' }); } break;
+            case 'mounted': if (m.to === this.me) g.dragonRide?.onMounted?.(this.byId(m.id), { ok: !!m.ok, say: m.say }); break;
+            case 'dismount': if (this.auth) { const d = this.byId(m.id); if (d) this.dismounted(d, from); } break;
+            case 'release': if (this.auth) { const d = this.byId(m.id); if (d) this.release(d, from); } break;
+            case 'order': if (this.auth) { const d = this.byId(m.id); if (d) { const r = this.order(d, from, m.target); g.sync?.dragon?.({ e: 'ordered', id: m.id, to: from, ok: r.ok ? 1 : 0, say: r.say || '' }); } } break;
+            case 'ordered': if (m.to === this.me) g.dragonRide?.onOrdered?.({ ok: !!m.ok, say: m.say }); break;
+            case 'untame': if (m.to === this.me) g.dragonRide?.onBroken?.(this.byId(m.id), m.why); break;
+            case 'ride': if (this.auth) this._rideMsg(this.byId(m.id), m, from); break;
             case 'hurt': if (m.to === this.me) this._hurtMe(Math.min(40, +m.dmg || 0), m.kind, vec(m.f), m.v ? vec(m.v) : null); break;
             case 'scoop': if (this.auth) { const n = this._take(m.lair, Math.min(HANDFUL.MAX, +m.n || 0), from); g.sync?.dragon?.({ e: 'got', to: from, side: m.side, n }); } break;
             case 'got': if (m.to === this.me && (m.side === 'right' || m.side === 'left')) this._handful(m.side, +m.n || 0); break;
@@ -1264,10 +1433,11 @@ export class Dragons {
             let d = this.list.find((q) => q.id === id);
             const kind = KIND_IDS[ki] || 'emerald';
             if (!d) d = this.spawn({ id, kind, react, flame, hp, lair: lair || null, slot, pos: new THREE.Vector3(x, y, z), yaw: ry, mode: STATES[si] || 'sleep' });
-            (d.net || (d.net = new THREE.Vector3())).set(x, y, z);
-            d.netYaw = ry;
             d.hp = hp;
             d.mode = STATES[si] || d.mode;
+            if (this.game.dragonRide?.riding === d) { seen.add(id); continue; } // (I fly it)
+            (d.net || (d.net = new THREE.Vector3())).set(x, y, z);
+            d.netYaw = ry;
             d.fly = fly / 100;
             d.netWalk = (walk || 0) / 10;
             if (d.mode === 'dead' && !d.dead) this._die(d, null);

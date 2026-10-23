@@ -112,7 +112,7 @@ export class HandHold {
     _free() {
         const g = this.game;
         return !(g.combat?.dead || g.isDeadLocal || g.levitation?.lifted || g.flight?.busy || g.beds?.lying
-            || g.animals?.riding || g.spiders?.held || g.combat?.immobile);
+            || g.animals?.riding || g.dragonRide?.busy || g.spiders?.held || g.combat?.immobile);
     }
 
     _villagers() { const L = this.game.castleLife; return L && L.byId ? L.byId : null; }

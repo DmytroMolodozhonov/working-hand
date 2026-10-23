@@ -232,7 +232,7 @@ export function matchSpell(text) {
     if (has('рескью', 'рескю', 'рэскью', 'rescue', 'рескьу', 'спасен', 'спаси')) return 'Rescue';
     if (has('атак', 'attack', 'аттак', 'атэк', 'этак', 'атака', 'в атаку', 'атек', 'аттек', 'эттек', 'этек', 'аттэк', 'эттэк', 'атык', 'attac', 'atack')) return 'Attack';
     if (has('earthquake', 'earth quake', 'earthcake', 'эрсквейк', 'эртквейк', 'ерсквейк', 'эрскейк', 'эрткейк', 'эрс квейк', 'квейк', 'quake', 'землетряс', 'эрскейп', 'escape', 'эскейп', 'искейп', 'ескейп', 'скейп', 'эскейт', 'skype', 'скайп')) return has('макс', 'max', 'мах') ? 'EarthquakeMaxima' : 'Earthquake';
-    if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return 'Brainrot';
+    if (has('брейнрот', 'брейн рот', 'брейнрод', 'брэйнрот', 'brainrot', 'brain rot', 'брейн', 'брэйн', 'brain')) return has('максим', 'maxim', 'макс', 'max', 'мах') ? 'BrainrotMaxima' : 'Brainrot'; // («Brain Rot Maxima»: the dragons — DragonTame.js)
     if (has('вайнд', 'вайнт', 'ваинт', 'винд', 'вайн', 'уинд', 'уайнд', 'wind', 'wine', 'whined', 'ветер', 'ветр', 'ваинд')) return has('макс', 'max', 'мах') ? 'WindMaxima' : 'Wind';
     if (has('акцио', 'акцыо', 'акцие', 'акция', 'акций', 'аксио', 'акчо', 'акио', 'accio', 'acio', 'akio', 'akcio', 'aksio', 'axio', 'эксио')) return 'Accio';
     // «Fire Maxima» (before the lone «Максима» and the campfire «Fire»)
@@ -470,6 +470,7 @@ export class SpellManager {
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
             case 'Wind': this.castWind(o, d, casterId, 1); break;
             case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
+            case 'BrainrotMaxima': this.castBrainrot(o, direction.clone(), true); break; // (the same rings, golden and wider: at a dragon)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o); break;
             case 'LetItRain': this.castLetItRain(o, casterId); break;
@@ -943,12 +944,12 @@ export class SpellManager {
      * «Брейнрот»: hypnotic rings roll out from a glowing spot above the
      * wizard's head towards the zombie (the length of `direction` = distance).
      */
-    castBrainrot(origin, direction) {
-        this._fx('fxBrainrot', origin, 1, 'playSapira');
+    castBrainrot(origin, direction, maxima = false) {
+        this._fx(maxima ? 'fxBrainrotMaxima' : 'fxBrainrot', origin, 1, 'playSapira');
         const dist = Math.max(2, direction.length());
         const dir = direction.clone().normalize();
         if (!this._ringGeo) this._ringGeo = new THREE.TorusGeometry(1, 0.09, 8, 40);
-        const cols = [0xd65bff, 0xff5bd6, 0x8f5bff, 0x5bffd0];
+        const cols = maxima ? [0xffd84a, 0xff9ad9, 0xffb347, 0xfff1b0] : [0xd65bff, 0xff5bd6, 0x8f5bff, 0x5bffd0];
         const rings = [];
         for (let i = 0; i < 9; i++) {
             const m = new THREE.Mesh(this._ringGeo, new THREE.MeshBasicMaterial({ color: cols[i % cols.length], transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));

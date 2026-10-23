@@ -69,7 +69,7 @@ export class LedgeClimb {
         const g = this.game, ch = g.character;
         if (!g.currentPose && !this.input) return false;
         if (g.isDeadLocal || g.combat?.dead || g.combat?.immobile) return false;
-        if (g.flight?.busy || g.flight?.active || g.animals?.riding || g.beds?.lying || g.levitation?.lifted) return false; // (afloat — yes: onto the bank)
+        if (g.flight?.busy || g.flight?.active || g.animals?.riding || g.dragonRide?.busy || g.beds?.lying || g.levitation?.lifted) return false; // (afloat — yes: onto the bank)
         if (g.boards?.mounted || g.ships?.rigging?.climbing || g.spiders?.held || g.knock?.down) return false;
         return true;
     }

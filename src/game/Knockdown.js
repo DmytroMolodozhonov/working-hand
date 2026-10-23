@@ -124,6 +124,7 @@ export class Knockdown {
         }
         if (g.beds?.lying) g.beds.standUp?.();
         if (g.animals?.riding) g.animals.dismount?.();
+        if (g.dragonRide?.riding) g.dragonRide.stop('thrown'); // (knocked off a dragon: set down gently, the spell torn)
         if (g.flight?.busy) g.flight.land?.('knocked');
         g.handHold?.breakAll?.('knocked');
         this.state = 'falling'; this.dir = dir || 'back'; this.t = 0; this.minDown = down; this.by = by; this.kind = kind; this.cause = cause || kind;

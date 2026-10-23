@@ -88,6 +88,7 @@ export const SPELL_COST = {
     AlohomoraMaxima: 25, // … a strong lock: the gates of a throne room
     Wind: 8,
     Brainrot: 15,
+    BrainrotMaxima: 30, // «Brain Rot Maxima» (the dragons — DragonTame.js): once to cast, then 0,5 a second to hold it
     LightningStrike: 25,
     ToTheSun: 12,
     GiveMyPower: 50, // your power back from your own skeleton (Legacy.js; the author: 50)

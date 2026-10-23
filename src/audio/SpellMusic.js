@@ -213,6 +213,16 @@ const TUNES = {
         pad(o, sr, ['D4', 'F4', 'A4'], 5.6, 7.4, 0.14, { att: 1.4, vib: 0.006, harm: 1 }); // (a far choir)
         return finish(o, sr, { rms: 0.07 });
     },
+    /** «Brain Rot Maxima»: a slow, wide, dragon-sized lullaby — low strings, a rising horn, a soft far roar settling into calm. */
+    thDragonCalm(sr) {
+        const o = buf(sr, 9), r = rng(313);
+        pad(o, sr, ['A2', 'E3'], 0, 8, 0.5, { att: 1.4, rel: 1.2, harm: 4, det: 0.005 });
+        melody([[0, 'A3', 2], [2, 'C4', 1], [3, 'E4', 2], [5, 'D4', 1], [6, 'C4', 1], [7, 'A3', 2]], 0.9, 0.5, (f, t, l) => brass(o, sr, f, t, l, 0.2));
+        noise(o, sr, 0.2, 1.6, 0.3, (u) => 0.04 + 0.1 * (1 - u), swell(0.3, 0.6), r); glide(o, sr, 0.2, 1.6, 0.14, (u) => 130 - 60 * u + 8 * Math.sin(u * 40), swell(0.2, 0.6), 5); // (the far roar settling)
+        for (const [t, n] of [[3.2, 'E6'], [4.4, 'A6'], [5.6, 'C7']]) bell(o, sr, hz(n), t, 0.03, 0.8, 0.1);
+        pad(o, sr, ['C4', 'E4', 'A4'], 4.5, 8.2, 0.16, { att: 1.5, vib: 0.006, harm: 1 });
+        return finish(o, sr, { rms: 0.07 });
+    },
     /** «Give Me My Power»: solemn and dark — an organ in D minor, timpani, a ghostly choir, then the power back: D major. */
     thPower(sr) {
         const o = buf(sr, 10), r = rng(41);
@@ -458,6 +468,8 @@ const FX = {
     fxStone(sr) { const o = buf(sr, 1.4), r = rng(43); noise(o, sr, 0, 1.2, 0.4, () => 0.06, swell(0.2, 0.2), r); glide(o, sr, 0, 1.2, 0.2, (u) => 45 + 30 * u + 6 * Math.sin(u * 90), swell(0.2, 0.2), 5); drum(o, sr, 1.15, 0.5, 70, 0.25, r); return finish(o, sr, { peak: 0.7 }); },
     /** «Брейнрот»: a goofy wobbling boing. */
     fxBrainrot(sr) { const o = buf(sr, 0.9); glide(o, sr, 0, 0.9, 0.35, (u) => 220 + 260 * Math.sin(u * Math.PI) + 60 * Math.sin(u * 50), swell(0.03, 0.4), 3); return finish(o, sr, { peak: 0.6 }); },
+    /** «Brain Rot Maxima»: the boing, low and slow — a golden wobble that settles. */
+    fxBrainrotMaxima(sr) { const o = buf(sr, 1.2); glide(o, sr, 0, 1.2, 0.35, (u) => 150 + 200 * Math.sin(u * Math.PI) + 40 * Math.sin(u * 30), swell(0.05, 0.5), 3); glide(o, sr, 0.1, 1, 0.12, (u) => 300 + 200 * u, swell(0.2, 0.5), 2); return finish(o, sr, { peak: 0.6 }); },
     /** «Акцио»: air pulled in (a whoosh rising toward you) and a soft pop as it comes. */
     fxAccio(sr) { const o = buf(sr, 0.55), r = rng(47); noise(o, sr, 0, 0.45, 0.4, (u) => 0.03 + 0.4 * u, (u) => u * u, r); glide(o, sr, 0.42, 0.12, 0.3, (u) => 500 + 300 * u, (u) => 1 - u); return finish(o, sr, { peak: 0.6 }); },
     /** «Suit Up»: plates clinking on one after another, a last bright «shing». */
@@ -488,6 +500,8 @@ const FX = {
 const LOOPS = {
     /** «Левиоса» held: a soft airy hum with a slow tremble. */
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
+    /** «Brain Rot Maxima» held: a calm low breathing hum (A and E) with a slow warm swell — a big sleeper breathing. */
+    loopDragonCalm(sr) { const o = buf(sr, 3.3), r = rng(317); pad(o, sr, [110, 165], 0, 3.3, 0.3, { att: 0.01, rel: 0, harm: 3, vib: 0.003 }); noise(o, sr, 0.2, 2.6, 0.06, (u) => 0.1 + 0.05 * Math.sin(u * Math.PI), swell(0.5, 0.5), r); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** A living tree: the wood's slow creak over a low drone. */
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** «Strengthen House» held: a bright steady hum (E and B) with a quick shimmer of silver bells climbing. */
@@ -564,7 +578,7 @@ export const SPELL_SOUND = {
     WaveAttack: { own: ['waterRise', 'splash'] }, WaveAttackMaxima: { own: ['waterRise', 'splash'] },
     Wind: { own: ['fxWind'] }, WindMaxima: { own: ['fxWind'] }, WindImpulse: { own: ['fxWind'] }, WindImpulseMaxima: { own: ['fxWind'] },
     Overgrown: { own: ['fxGrow'] }, OvergrownMaxima: { own: ['fxGrow'] },
-    Brainrot: { own: ['fxBrainrot'] }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
+    Brainrot: { own: ['fxBrainrot'] }, BrainrotMaxima: { cast: 'fxBrainrotMaxima', theme: 'thDragonCalm' }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
     Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' },
     Alohomora: { own: ['clang'] }, AlohomoraMaxima: { own: ['clang'] }, Lock: { own: ['clang'] },
@@ -595,6 +609,7 @@ export const HELD_SOUND = {
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
+    DragonTame: { loop: 'loopDragonCalm', end: 'fxStop' }, // («Brain Rot Maxima» held: the dragon calmed — DragonRide.js)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },
     Waterball: { loop: 'loopWater', end: null },

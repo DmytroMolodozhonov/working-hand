@@ -94,6 +94,7 @@ import { LoreLibrary } from './LoreLibrary.js';
 import { Blackbeard } from './Blackbeard.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
+import { DragonRide } from './DragonRide.js';
 import { Carriages, cartModel } from './Carriages.js';
 import { CASTLE_CELL } from '../world/Castles.js';
 import { ShipModel, barrierParts } from '../entities/ShipModel.js';
@@ -164,7 +165,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -477,6 +478,7 @@ export class Game {
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
+        this.dragonRide = new DragonRide(this); // «Brain Rot Maxima»: the calmed dragon, riding it (DragonRide.js)
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
         this.loreLibrary = new LoreLibrary(this); // the books of the world's history in the libraries (LoreBooks.js)
@@ -1561,6 +1563,8 @@ export class Game {
         if (name === 'Attack') {
             // the Ice Rod: the snowmen go for whom it points at (IceQueen.rodAttack)
             if (this.iceCastle?.myRod() && this.iceCastle.rodAttack(isFinal)) return 'Attack';
+            // the calmed dragon: sent only at one it is already angry at (DragonRide.attack)
+            if (this.dragonRide?.active) { const dr = this.dragonRide.attack(isFinal); if (dr !== undefined) return dr; }
             // my servants (a living tree, «Брейнрот») go for the one the hand points at
             if (this.levitation.state?.kind !== 'weapon' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
             const hint = this.levitation.attack();
@@ -1626,6 +1630,7 @@ export class Game {
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
+        if (name === 'BrainrotMaxima') return this.dragonRide.cast(isFinal); // (a dragon calmed, ridden — DragonRide.js; every other creature: «Брейнрот»)
         if (name === 'Snowman') return this.iceCastle.castSnowman(isFinal); // (a friendly snowman out of the snow pointed at — IceQueen.js)
         if (name === 'Alive' || name === 'AliveMaxima') return isFinal ? this.livingTrees.cast(isFinal, name === 'AliveMaxima') : null; // (unfinished «Alive…»: it may be «Alive Maxima»)
         if (name === 'LightningStrike') return this._castLightning(isFinal);
@@ -1820,6 +1825,7 @@ export class Game {
         if (this.lightning) { if (this.lightning.hammer) this.gear?.hammerResult(false); this.lightning = null; this.hud.setTimer?.(null); done.push('молния'); }
         if (this.spells.stopBy(this.localId)) done.push('огонь / луч');
         if (this.strong?.stopElectrum('stop')) done.push('Электром');
+        if (this.dragonRide?.stop('stop')) done.push('дракон'); // («Брейнрот Максима»: let go — in the air it lands gently)
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
@@ -2092,7 +2098,7 @@ export class Game {
         for (const t of this.livingTrees?.targets() || []) if (t.master !== this.localId) consider('t', t.id, t.model.position, 5);
         // a dragon: «Брейнрот» does not work on it (its mind is far too strong — DragonKinds.ON_DRAGON)
         for (const d of this.dragons?.targets() || []) consider('D', d.id, d.model.position, 3 * d.size);
-        if (best?.k === 'D') { if (isFinal) this.hud.setVoice('🐉 Разум дракона слишком силён — «Брейнрот» на него не действует', true); return null; }
+        if (best?.k === 'D') { if (isFinal) this.hud.setVoice('🐉 Разум дракона слишком силён для «Брейнрот» — его успокаивает только «Брейнрот Максима»', true); return null; }
         // (a phoenix obeys nobody: «Брейнрот» does not act on it — Phoenixes.TARGETS)
         for (const f of this.phoenixes?.targets() || []) consider('f', f.id, f.model.position, 1.2);
         if (best?.k === 'f') { if (isFinal) this.hud.setVoice('🔥 Феникс никому не подчиняется — «Брейнрот» на него не действует', true); return null; }
@@ -3248,6 +3254,7 @@ export class Game {
         if (earth) this.wizVillages?.update(dt);
         if (earth) this.spiders.update(dt);
         if (earth) this.dragons.update(dt);
+        this.dragonRide.update(dt, earth);
         if (earth) this.iceCastle.update(dt);
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth) this.phoenixes.update(dt);
@@ -3415,7 +3422,7 @@ export class Game {
             ch.updateArmsLookAt(pose, dt);
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
-            ch.setStoop(flying || down || this.animals?.riding || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
+            ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)
             ch.setRunning(flying || down ? false : pose.isRunning, pose.runIntensity);
         }
         // the head: the tracked turn + a blow's jolt (lying face down: the cheek on the ground, the eyes along it)
@@ -3433,7 +3440,7 @@ export class Game {
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)
@@ -4035,7 +4042,7 @@ export class Game {
             const first = this._jumpSeen == null;
             this._jumpSeen = J.jumps;
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
-                || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.()
+                || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
                 || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active
                 || (this.config.mode === 'test' && this.testState === 'setup');
             if (!first && !busy && ch.onGround && ch.jump(J.strength)) { this._jumpAt = J.at; this._jumpOnto(); }

@@ -85,6 +85,8 @@ export function spaceSpellBlock(name, where, air, def = null) {
     // («Planet Liquidation» — only from space: from the ground one cannot aim at a whole planet — PlanetDestroy.js)
     if (name === 'PlanetLiquidation' && where !== 'space') return where === 'earth' ? '🌌 «Planet Liquidation» — только в космосе: взлетите «Flying Maxima» и наведите руку на планету' : '🌌 «Planet Liquidation» — только из космоса: стоя на планете, её не взорвать (взлетите «Flying Maxima» и наведите руку на неё)';
     if (where === 'earth') return null;
+    // («Brain Rot Maxima»: the dragons live on the Earth alone — Planets.earthly; off it there is nobody to calm — DragonTame.js)
+    if (name === 'BrainrotMaxima') return '🐉 Драконы живут только на Земле — здесь «Брейнрот Максима» некого успокоить';
     // («Strengthen House»: the spheres of houses are the Earth's — in space and on every planet there is none to feed; HouseWards.js)
     if (name === 'StrengthenHouse') return '🛡️ Здесь нет защиты дома — нечего усиливать';
     if (name === 'WardDispel') return '🌌 Здесь нет защиты дома — нечего снимать';
@@ -202,6 +204,7 @@ export class Space {
         if (this.state !== 'off') return null;
         if (!g.flight.active || g.flight.state !== 'cruise') return say('🦸 «Flying Maxima» — только в полёте: сначала взлетите («Флайн»), потом скажите «Flying Maxima»');
         if (g.animals?.riding) return say('🐴 Звери не летают выше неба — сначала спешьтесь');
+        if (g.dragonRide?.busy) return say('🐉 На драконе выше неба не взлететь — сначала слезьте');
         const p = g.character.group.position;
         if (g.collision?.ceilingAt && g.collision.ceilingAt(p.x, p.z, p.y + 1) !== Infinity) return say('🧱 Над вами крыша — вылетите под открытое небо');
         this.state = 'ascend';

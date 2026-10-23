@@ -62,6 +62,7 @@ export const FIRST_SPELL = {
     Bombardo: 2, Earthquake: 2, Overgrown: 2, Breakthrough: 2, WaveAttack: 2, WindImpulse: 2, Liquidation: 2,
     WindMaxima: 3, Inferno: 3, Stupefy: 3, Expelliarmus: 3, Disarmor: 3, SuitUp: 1, ProtectionInvisible: 3,
     DrawdownMaxima: 3, Invisibility: 4, LiquidationMaxima: 4,
+    BrainrotMaxima: 8, // (a dragon calmed: the first time — +8 cells)
     OvergrownMaxima: 4, WaveAttackMaxima: 4, BreakthroughMaxima: 4, ProtectionMaxima: 4, ProtectionHouse: 4, StrengthenHouse: 4, Thunderwave: 4,
     EarthquakeMaxima: 5, WindImpulseMaxima: 5, BombardoMaxima: 5, JoltMaxima: 5, FireMaxima: 5, FirefightingMaxima: 5,
     // strong: up to +20
@@ -394,7 +395,7 @@ const TITLES = {
     Lumos: 'Люмос', Draw: 'Lightning Writing', Accio: 'Акцио', Gather: 'Gather', Levitation: 'Вингардиум Левиоса', LevitationMaxima: 'Вингардиум Левиоса Максима', Up: 'Up', Fire: 'Fire', Wind: 'Вайнд',
     CreateFloor: 'Create a Floor', CreateCeiling: 'Create a Ceiling', CreateWall: 'Create a Wall', CreateDoor: 'Create a Door', BuildRoof: 'Build a Roof', CreateBed: 'Create a Bed', CreateBoard: 'Create a Board',
     ChangeColor: 'Change a color', Unfurl: 'Анфёрл', Furl: 'Фёрл', Alohomora: 'Алохомора', Lock: 'Lock', Waterball: 'Waterbollow', WaterForming: 'Water forming', AirBubble: 'Air Bubble', VortexBubble: 'Бабл',
-    Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', Maxima: 'Максима в дуэли',
+    Protection: 'Protection', Rescue: 'Rescue', Brainrot: 'Брейнрот', BrainrotMaxima: 'Брейнрот Максима', Maxima: 'Максима в дуэли',
     Flight: 'Флайн', LetItRain: 'Let it rain', ToTheSun: 'To the Sun', GiveMyPower: 'Give Me My Power', Frozen: 'Frozen', RodFrozen: 'Frozen (Ледяной Жезл)', RodIce: 'Лёд Ледяного Жезла', Sapira: 'Сапира', Sands: 'Даст', Ice: 'Айс', Jolt: 'Джолт',
     Bombardo: 'Бомбардо', Earthquake: 'Earthquake', Overgrown: 'Overgrown', Breakthrough: 'Breakthrough', WaveAttack: 'Wave Attack',
     Inferno: 'Инферно', Stupefy: 'Остолбеней', Expelliarmus: 'Экспеллиармус', Disarmor: 'Disarmor', SuitUp: 'Suit Up', ProtectionInvisible: 'Protection Invisible', WardDispel: 'Dispel Ward', ProtectionHouse: 'Protection House', StrengthenHouse: 'Strengthen House', Thunderwave: 'Тандервейв',

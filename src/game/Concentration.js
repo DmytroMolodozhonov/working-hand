@@ -56,6 +56,7 @@ export const HELD = {
     SailWind: { ru: 'Ветер в паруса', icon: '⛵', own: ['Wind', 'WindMaxima', 'Unfurl', 'Furl'] },
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
     GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'] }, // (the gods' shield: held — ProtectionGods.js)
+    DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
 };
 
@@ -103,6 +104,7 @@ export class Concentration {
         if (g.waves?.busy) return 'Wave';
         if (g.lightning) return 'Lightning';
         if (g.strong?.electrum) return 'Electrum';
+        if (g.dragonRide?.active) return 'DragonTame';
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
         if (sp) return sp.kind === 'Inferno' ? 'Inferno' : /^Drawdown/.test(sp.kind || '') ? 'Drawdown' : 'Beam';
@@ -157,6 +159,7 @@ export class Concentration {
         if (g.lightning) { if (g.lightning.hammer) g.gear?.hammerResult?.(false); g.lightning = null; g.hud?.setTimer?.(null); done.push('молния'); }
         if (g.spells?.stopBy?.(g.localId)) done.push('огонь / луч');
         if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
+        if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');
         if (g.ships?.stopWind?.()) done.push('ветер в паруса');
         if (g.wards?.feeding) { g.wards.stopFeed?.(); done.push('усиление дома'); }
