@@ -955,6 +955,7 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
+    cfg.smooth = !!$('smooth-world')?.checked; // («Гладкий мир»: ramps — only when a world is made)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
 });
@@ -1331,6 +1332,9 @@ async function joinRoom(code) {
     }
 }
 
+/** A new multiplayer world's choices: «Гладкий мир» (ramps) and «Божественные заклинания на Земле» (both off by default). */
+const mpWorldOpts = () => ({ smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked });
+
 // Create a server: it takes a free place in the list and the game starts at once
 $('mp-host-btn').addEventListener('click', async () => {
     net.stopProbe();
@@ -1348,7 +1352,7 @@ $('mp-host-btn').addEventListener('click', async () => {
         selectedMode = mode;
         selectedMap = null;
         pickingMap = false;
-        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName });
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName, ...mpWorldOpts() });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
     }
@@ -1369,7 +1373,7 @@ $('mp-private-btn').addEventListener('click', async () => {
         selectedMode = mode;
         selectedMap = null;
         pickingMap = false;
-        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code });
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code, ...mpWorldOpts() });
         showCodeInGame(code);
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
@@ -1456,7 +1460,7 @@ net.on('message', (msg) => {
     if ((game && game.active) || starting) return;
     pendingWelcome = msg;
     const local = readConfig();
-    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1 }, msg);
+    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth }, msg);
 });
 
 function escapeHtml(s) {

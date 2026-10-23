@@ -1187,6 +1187,7 @@ function sanitizeConfig(c) {
         zombieCount: c.zombieCount || 0,
         seed: c.seed,
         gen: c.gen ?? 1, // world generation (an old host sends none: 1)
+        godsOnEarth: !!c.godsOnEarth, // (the host's world: the gods' spells allowed on the Earth — Game._godsBanned)
     };
 }
 

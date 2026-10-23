@@ -28,6 +28,7 @@ import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
+import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
@@ -239,6 +240,15 @@ export class Game {
     get gravityK() { return this.character?.gravityK ?? 1; }
     set gravityK(k) { if (this.character) this.character.gravityK = Math.max(0.05, +k || 1); }
 
+    /**
+     * A spell of the gods (ProtectionGods.isDivine) said on the Earth in a multiplayer game whose world was made without
+     * «Божественные заклинания на Земле»: forbidden. «Flying Maxima» is not — it is the way off the Earth, into space.
+     */
+    _godsBanned(name) {
+        if (!this.sync || this.config?.godsOnEarth || name === 'FlyingMaxima' || !isDivine(name)) return false;
+        return (this.space?.realm ?? 'earth') === 'earth';
+    }
+
     get authority() {
         return !this.net || !this.net.active || this.net.isHost;
     }
@@ -262,7 +272,10 @@ export class Game {
         this.seed = config.seed ?? (config.map ? hashString(config.map.name || 'map') : (Math.random() * 1e9) >>> 0);
         this.config.seed = this.seed;
         // world generation: a new world is the newest kind; a saved world and a guest keep theirs
-        this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : WORLD_GEN);
+        // («Гладкий мир» ticked when the world is made: generation 6 — ramps and slabs, BlockShapes.js; else generation 5, as before)
+        this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : config.smooth ? WORLD_GEN : 5);
+        // (multiplayer: the gods' spells on the Earth — the host's choice when the world was made, kept with it; off by default)
+        this.config.godsOnEarth = !!(config.godsOnEarth ?? config.saved?.godsOnEarth);
 
         progress(62, 'Создание мира...');
         this.scene = new THREE.Scene();
@@ -1518,6 +1531,8 @@ export class Game {
             return null;
         }
         if (name === 'Flight' && this.flight.hovering) { this.flight.resume(); return 'Flight'; }
+        // multiplayer without «Божественные заклинания на Земле»: on the Earth the gods forbid their spells
+        if (this._godsBanned(name)) { if (isFinal) this.hud.setVoice('⚡ Боги наложили запрет на использование божественных заклинаний на Земле', true); return null; }
         // «Flying Maxima»: out of the air, into space (Space.js) — only in flight
         if (name === 'FlyingMaxima') {
             const tired = this.combat.check(name);

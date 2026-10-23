@@ -1732,3 +1732,8 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hotbar-slot .hb-icon.two .hb-pic { width: 50%; }
 .hotbar-slot .hb-icon.magic .hb-pic { filter: drop-shadow(0 0 4px #6fb8ff) drop-shadow(0 0 2px #fff); }
 .hotbar-slot .hb-icon.magic { text-shadow: 0 0 8px #6fb8ff, 0 0 3px #fff; }
+
+/* «Гладкий мир», «Божественные заклинания на Земле»: the choices made with a new world */
+.world-opt { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
+.world-opt input { width: 18px; height: 18px; }
+.world-opt .mp-hint { opacity: 0.75; font-size: 0.9em; }

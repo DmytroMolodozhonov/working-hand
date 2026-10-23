@@ -207,6 +207,7 @@ export class WorldKeeper {
         this.mode = mode || game.config.mode;
         this.seed = seed ?? game.seed;
         this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
+        this.godsOnEarth = !!game.config?.godsOnEarth; // (multiplayer: the gods' spells allowed on the Earth — chosen when made)
         this.created = created || Date.now();
         this.createdVersion = createdVersion || { ...GAME_VERSION };
         this.players = players || {}; // 'id:'+lasting id (or an old name) -> snapshot (guests and the host)
@@ -261,6 +262,7 @@ export class WorldKeeper {
             mode: this.mode,
             seed: this.seed,
             gen: this.gen,
+            godsOnEarth: this.godsOnEarth || undefined,
             created: this.created,
             updated: Date.now(),
             version: { ...GAME_VERSION }, // the game that wrote it last
