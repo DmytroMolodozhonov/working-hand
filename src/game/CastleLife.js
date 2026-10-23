@@ -321,11 +321,17 @@ export class CastleLife {
     }
 
     // ---------------------------------------------------------- players
-    _players() {
+    /**
+     * Where the players really ARE (wake / sleep of places, who is near, who sees the beds…): an invisible player is
+     * here too — the castle must not fall asleep and its people vanish round them (the author: knights blinked in and
+     * out under «Invisible»). `perceived` = what the people can SEE (an invisible player: only where they were last
+     * noticed, for a few seconds — Invisibility.aiPos): for suspicion, greetings and the like.
+     */
+    _players(perceived = false) {
         const g = this.game;
         const out = [];
-        const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p) : p); // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
-        const push = (id, p) => { const q = seen(id, p); if (q) out.push({ id, p: q }); };
+        const at = (id, p) => (perceived && g.invis ? g.invis.aiPos(id, p) : p);
+        const push = (id, p) => { const q = at(id, p); if (q) out.push({ id, p: q }); };
         if (!g.isDeadLocal && !g.combat?.dead) push(g.localId, g.character.group.position);
         for (const [id, r] of g.remotes) if (!r.dead) push(id, r.position);
         return out;

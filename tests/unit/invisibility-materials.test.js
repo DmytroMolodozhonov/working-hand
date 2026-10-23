@@ -43,3 +43,16 @@ describe('Invisibility: own materials only', () => {
         assert.equal(own.material.opacity, 1);
     });
 });
+
+// A castle must not fall asleep (its people vanish) round an invisible hero: «Invisible» only blinds the minds.
+import { CastleLife } from '../../src/game/CastleLife.js';
+describe('Invisibility: the castle stays awake', () => {
+    it('_players() has the invisible hero, perceived list does not', () => {
+        const pos = { x: 5, y: 2, z: 7 };
+        const game = { localId: 'me', isDeadLocal: false, combat: {}, character: { group: { position: pos } }, remotes: new Map(),
+            invis: { aiPos: () => null } };
+        const L = Object.create(CastleLife.prototype); L.game = game;
+        assert.equal(L._players().length, 1);
+        assert.equal(L._players(true).length, 0);
+    });
+});

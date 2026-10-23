@@ -97,7 +97,7 @@ export class BodyFound {
         const L = this.life, cs = v.cs, now = Date.now();
         if (!(cs?.alertUntil > now) || v.servantOf != null) return false;
         const owner = L.state(cs.def.id).owner;
-        for (const pl of L._players()) {
+        for (const pl of L._players(true)) {
             if (pl.id === owner) continue;
             const p = pl.p;
             if (Math.hypot(p.x - v.x, p.z - v.z) > SUSPECT_R || Math.abs(p.y - 1.95 - v.y) > 8 || !L._sees(v, p)) continue;

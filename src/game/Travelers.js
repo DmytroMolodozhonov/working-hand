@@ -339,7 +339,7 @@ export class Travelers {
         // greeting a player who comes near
         P.greetT -= dt;
         if (P.state === 'go' && P.greetT <= 0 && alive.length) {
-            for (const pl of L._players()) {
+            for (const pl of L._players(true)) {
                 const v = alive.find((m) => Math.hypot(m.x - pl.p.x, m.z - pl.p.z) < 11);
                 if (v) { P.greetT = 45; L._say(v, pick(GREET[P.kind])); break; }
             }
