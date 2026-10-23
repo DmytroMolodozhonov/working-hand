@@ -148,7 +148,7 @@ test('Creative, the author\'s case: the test dragon by the mountain is taken by 
         I._lastCast = 0;
         out.far = g.castLocalSpell('империус максима', true);
         out.farWhy = g.lastCastWhy;
-        lookFrom(28);
+        lookFrom(18);
         I._lastCast = 0;
         out.near = g.castLocalSpell('империус максима', true);
         out.nearWhy = g.lastCastWhy; out.said = [...I._said.keys()].slice(-3);
@@ -161,7 +161,7 @@ test('Creative, the author\'s case: the test dragon by the mountain is taken by 
         return out;
     });
     assert.ok(r.has, 'the Creative test dragon is there');
-    assert.ok(r.dragonAboveGround < 3, 'on the ground by the mountain, where one can walk up: ' + r.dragonAboveGround);
+    assert.ok(r.dragonAboveGround < 3, 'lying on the ground of its peak: ' + r.dragonAboveGround);
     assert.equal(r.far, null);
     assert.match(r.farWhy || '', /далеко/, 'too far: told so — ' + r.farWhy);
     assert.equal(r.near, 'ImperiusMaxima', JSON.stringify(r));
