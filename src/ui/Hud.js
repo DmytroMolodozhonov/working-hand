@@ -41,6 +41,24 @@ export function setMinimapSize(pct) {
 
 if (typeof window !== 'undefined') window.addEventListener?.('resize', () => { if (setMinimapSize.pct) setMinimapSize(); });
 
+/**
+ * The slots' size at the bottom (the hotbar: hand, slots, pouch), % of the usual (settings / Escape → «Размер панели
+ * предметов»): the whole panel scales from its bottom middle, the bars above it (mana, air) rise with it. Never wider than
+ * the window (the hotbar has up to 7+ slots). 100% by default.
+ */
+export function setHotbarSize(pct) {
+    if (pct != null) setHotbarSize.pct = pct;
+    const bar = document.getElementById('hotbar');
+    const w = bar ? bar.offsetWidth : 0; // (not changed by the scale: a transform)
+    const fit = w > 0 ? (window.innerWidth || 1280) * 0.96 / w : 3;
+    const k = Math.max(0.6, Math.min(2.5, fit, (+setHotbarSize.pct || 100) / 100));
+    document.documentElement.style.setProperty('--hotbar-k', String(Math.round(k * 100) / 100));
+}
+if (typeof window !== 'undefined') {
+    window.addEventListener?.('resize', () => { if (setHotbarSize.pct) setHotbarSize(); });
+    document.addEventListener?.('zns-hotbar-built', () => { if (setHotbarSize.pct) setHotbarSize(); }); // (the slots changed: a backpack worn — Inventory._buildBar)
+}
+
 /** «640 м» / «1,2 км». */
 function distText(m) {
     return m < 1000 ? `${Math.round(m)} м` : `${(m / 1000).toFixed(1).replace('.', ',')} км`;

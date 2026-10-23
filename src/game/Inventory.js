@@ -877,6 +877,7 @@ export class Inventory {
         this._pouchKey = null;
         this.bar = bar;
         this._render();
+        document.dispatchEvent(new Event('zns-hotbar-built')); // (the panel's width changed: Hud.setHotbarSize fits it to the window)
     }
 
     /** The pouch cell: redrawn only when something changed (the coins on hover; no count of pouches: it is one). */
@@ -939,6 +940,7 @@ export class Inventory {
 
     show(on) {
         if (this.bar) this.bar.style.display = on ? 'flex' : 'none';
+        if (on && typeof document !== 'undefined') document.dispatchEvent(new Event('zns-hotbar-built')); // (shown: its width is known now — fitted to the window)
     }
 
     _render() {

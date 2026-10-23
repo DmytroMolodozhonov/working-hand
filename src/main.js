@@ -9,7 +9,7 @@ import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
-import { Hud, setMinimapSize, lastWords } from './ui/Hud.js';
+import { Hud, setMinimapSize, setHotbarSize, lastWords } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
@@ -261,6 +261,14 @@ minimapSize?.addEventListener('input', (e) => {
     if (v) v.textContent = e.target.value + '%';
 });
 setMinimapSize(minimapSize?.value || 120);
+// The slots' size at the bottom (settings / Escape → «Размер панели предметов»)
+const hotbarSize = $('hotbar-size');
+hotbarSize?.addEventListener('input', (e) => {
+    setHotbarSize(e.target.value);
+    const v = $('hotbar-size-val');
+    if (v) v.textContent = e.target.value + '%';
+});
+setHotbarSize(hotbarSize?.value || 100);
 
 function readConfig() {
     return {
@@ -1462,7 +1470,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'v5-gpu'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size', 'v5-gpu'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
