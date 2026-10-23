@@ -213,7 +213,7 @@ export function matchSpell(text) {
     // «Invisible» / «Invisibility» (after the house's «Protection Invisible»: there «protection» is said too)
     if (!PROTECT_W.test(s) && has('инвизиб', 'инвизаб', 'инвизеб', 'инвисиб', 'энвизиб', 'инвизибл', 'invisib', 'невидим')) return 'Invisibility';
     // Shield first: «Protection Maxima» must not become Bombardo/water «максима»
-    if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
+    if (has('протекш', 'протэкш', 'протекш', 'протекц', 'protect', 'протект', 'щит', 'shield', 'шилд')) return has('максим', 'maxim', 'макс', 'max') ? 'ProtectionMaxima' : 'Protection';
     // Building (before the short tokens of other spells)
     if (has('stand', 'стэнд', 'стенд', 'стоп', 'stop')) return 'Stand'; // («стоп» also stops every spell still going)
     // («Assemble» too: «Gather» is not always heard right)

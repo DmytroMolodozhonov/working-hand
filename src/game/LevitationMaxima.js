@@ -51,6 +51,8 @@ import { aimOffset, applyAimOffset, steadyDir, fallDamage, levBlocked } from './
 import { spiderCenter } from './Spider.js';
 import { keelY } from './ShipLayout.js';
 import { isCursed } from './Ships.js';
+import { ItemSwarm } from './ItemSwarm.js';
+import { swarmDrain, SWARM, SWARM_TARGETS } from './ItemSwarmRules.js';
 
 export const LEV_MAX = {
     NAME: 'LevitationMaxima',
@@ -179,7 +181,8 @@ export const MAXIMA_TARGETS = {
     houses: { why: 'дом шатается, трещит и отрывается от земли целиком (без корней) — те же блоки, дверь, окна, кровати, сундуки; замахом руки его бросают; упав или ударившись о стену, дом, существо — разлетается на блоки в груду, сундуки выпадают, кто под ним — ранен; поставленный — стоит целый с мебелью на новом месте' },
     trees: { why: 'дерево раскачивается, игрок тянет вверх — вырывается с корнями и комом земли (остаётся яма); брошенное — лежит поваленным, поставленное — растёт стоя' },
     castleWalls: { why: 'кусок стены, башни, забора (то, во что упёрлась палочка, ~3×3 блока): расшатывается палочкой и выламывается, дальше несётся как дом; брошенный — груда камней; поставленный — встаёт куском. Жители пугаются, строители замка потом закладывают дыру (Rebuild). Под сферой защиты чужого дома — нет. Стена самого дома — это дом: он вырывается целиком' },
-    looseThings: { why: 'не поднимаются Максимой (её дело — существа и большое); вещи на палубе едут с кораблём; вещи — обычной «Левиосой»' },
+    looseThings: { why: 'вещи на земле: Максима, направленная на вещь, делает «дирижёра предметов» — слова один раз, дальше палочка указывает на новые вещи (до 32); вещи висят в воздухе и идут за палочкой цепочкой, крутятся вихрем вокруг героя (рука кругами), «Shield» — щит из вещей, «Атак» — залп в цель (ItemSwarm.js, ItemSwarmRules.SWARM_TARGETS). Вещи на палубе едут с кораблём; оружие и книги берёт обычная «Левиоса»' },
+    swarm: { why: 'рой вещей: кто/что — в ItemSwarmRules.SWARM_TARGETS (залп ранит и толкает существ, щит принимает чужие заклинания, дары богов не берутся)' },
     water: { why: 'не действует: воду поднимают водяные заклинания' },
     ground: { why: 'глыба земли (дёрн, земля, камень, песок — чашей ~3 м): расшатывается и выдирается палочкой, остаётся яма; что стоит на ней (дом, стена, дерево) — не берёт: тогда вырывается то, что стоит. Коренная порода и лёд не выдираются. Брошенная — рассыпается грудой; в замке строители засыпают яму' },
 };
@@ -508,6 +511,7 @@ export class LevitationMaxima {
         this.game = game;
         this.mine = null; // (my computer) my spell: {id, side, players: [], t}
         this.lifts = new Map(); // id -> lift (host: everything; others: what they draw — houses, trees)
+        this.swarm = new ItemSwarm(game); // «дирижёр предметов»: things lying about (ItemSwarm.js)
         this._seq = 0;
         this._last = 0;
         this._netT = 0;
@@ -544,6 +548,16 @@ export class LevitationMaxima {
         if (aim.no) return say(aim.no);
         const tired = g.combat?.check?.(LEV_MAX.NAME);
         if (tired) return say(tired);
+        // a thing lying about: the first one obeys; the wand points at the others (ItemSwarm.js)
+        if (aim.desc.k === 'swarm') {
+            if (!this.swarm.start(h.side, aim.desc.u, g.localId)) return say('🪶 Эту вещь сейчас не поднять');
+            g.combat?.pay?.(LEV_MAX.NAME);
+            this._last = now;
+            g._interimCast = isFinal ? null : { name: LEV_MAX.NAME, at: now };
+            this.mine = { id: (g.localId || 'h') + ':m' + (++this._seq), side: h.side, players: [], t: 0, kind: 'swarm', emptyT: 0 };
+            g.hud?.setVoice?.(`🪶 <b>Левиоса Максима!</b> Вещь послушна. Не говорите заклинание снова — просто указывайте палочкой на другие вещи (до ${SWARM.MAX_ITEMS}), и они пойдут за палочкой. Рукой кругами — вихрь, «Shield» — щит, «Атак» — залп; «стоп» — вещи упадут`, true);
+            return LEV_MAX.NAME;
+        }
         g.combat?.pay?.(LEV_MAX.NAME);
         this._last = now;
         g._interimCast = isFinal ? null : { name: LEV_MAX.NAME, at: now };
@@ -581,6 +595,7 @@ export class LevitationMaxima {
         if (!M) return;
         this.mine = null;
         const g = this.game;
+        if (M.kind === 'swarm') { this.swarm.release(gentle); return; }
         for (const pid of M.players) this._liftPlayer(pid, M.side, false, gentle);
         if (this.auth) this.end(M.id, gentle);
         else g.sync?.levMax?.({ a: 'off', id: M.id, g: gentle ? 1 : 0 });
@@ -635,6 +650,10 @@ export class LevitationMaxima {
             if (dist < R && d.angleTo(_v1.subVectors(p, o).normalize()) < Math.atan2(3 * dr.size, dist) + 0.1 && (!cr || dist < cr.dist)) return { no: '🐉 Дракона не поднимет даже «Левиоса Максима» — он вырывается из любой магии' };
         }
         if (cr) best = { kind: 'group', dist: cr.dist, cr };
+        // a thing lying about: the conductor of things (a creature pointed at more truly wins; a thing nearer than a house or the ground behind it)
+        const th = this.swarm.pickThing(o, d);
+        if (th && !th.no && (!best || th.d < best.dist)) best = { kind: 'thing', dist: th.d, uid: th.uid };
+        else if (th?.no && !best) return { no: '🪶 ' + th.no[0].toUpperCase() + th.no.slice(1) + ' — эту вещь не поднять' };
         // a ship (along the line, metre by metre)
         if (g.ships?.awake?.size) {
             for (let t = 2; t <= R && (!best || t < best.dist); t += 1) {
@@ -660,6 +679,10 @@ export class LevitationMaxima {
         const inst = g.builder?._treeOnRay?.(o, d, R);
         if (inst && (!best || Math.hypot(inst.x - o.x, inst.z - o.z) < best.dist)) best = { kind: 'inst', dist: Math.hypot(inst.x - o.x, inst.z - o.z), inst };
         if (!best) return null;
+        if (best.kind === 'thing') {
+            const L = g.items?.loose?.get(best.uid);
+            return { desc: { k: 'swarm', u: best.uid }, at: L ? L.model.position.clone() : o.clone(), players: [], n: 1 };
+        }
         if (best.kind === 'group') {
             const c0 = best.cr.pos;
             const members = [], players = [];
@@ -1016,7 +1039,7 @@ export class LevitationMaxima {
 
     /** For Game.prewarm: the carried blocks' material (a lifted house / rock, a living tree of its own blocks). */
     sampleModels() {
-        return [new THREE.Mesh(voxelGeometry([[0, 0, 0, BLOCK.STONE]], 0, 0, 0), voxelMaterial(new THREE.Vector3()))];
+        return [new THREE.Mesh(voxelGeometry([[0, 0, 0, BLOCK.STONE]], 0, 0, 0), voxelMaterial(new THREE.Vector3())), ...this.swarm.sampleModels()];
     }
 
     /** Roots under a torn-out tree's lump of earth (hidden in the ground until it comes out). */
@@ -1693,11 +1716,19 @@ export class LevitationMaxima {
             if (edits.length) g.builder?._sendEdits?.(edits);
         }
         // my mana: 2 a second while it holds (nothing comes back meanwhile)
+        this.swarm.update(dt);
         const M = this.mine;
-        if (M) {
+        if (M && M.kind === 'swarm') {
+            // the conductor lost its things (taken by hands…) or the swarm ended on its own: the spell ends
+            if (!this.swarm.active) this.mine = null;
+            else if (this.swarm.n === 0) { M.emptyT += dt; if (M.emptyT > 8) { g.hud?.setVoice?.('🪶 Вещей не осталось — заклинание отпущено', true); this.release(true); } }
+            else M.emptyT = 0;
+        }
+        if (this.mine && this.mine === M) {
             M.t += dt;
             const c = g.combat;
-            if (c && !this.creative && c.drain(LEV_MAX.DRAIN * dt, dt) === false) {
+            const need = (LEV_MAX.DRAIN + (M.kind === 'swarm' ? this.swarm.extraDrain : 0)) * dt; // (2 a second, and a little for each thing after the first — SWARM.PER_ITEM, capped)
+            if (c && !this.creative && c.drain(need, dt) === false) {
                 g.hud?.setVoice?.('😮‍💨 Мана кончилась — «Левиоса Максима» отпускает', true);
                 this.release(false);
             }
@@ -1821,6 +1852,7 @@ export class LevitationMaxima {
     }
 
     dispose() {
+        this.swarm.dispose();
         for (const L of this.lifts.values()) this._dropVisual(L);
         this.lifts.clear();
     }

@@ -1641,6 +1641,8 @@ export class Game {
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
         // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
         if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
+        // «Shield» / «Щит» with a swarm of things up: the things close into a wall (ItemSwarm.shield) — not the hand shield
+        if (name === 'Protection' && this.levMax?.swarm?.active) { const r = this.levMax.swarm.shield(isFinal); if (r !== undefined) return r; }
         if (!this.knowsSpell(name)) {
             if (isWardSpell(name)) { if (isFinal) this._why('wardUnknown', name); return null; }
             if (isFinal) this.hud.setVoice(this._unknownHint(name), true); // (no mana spent)
@@ -1729,6 +1731,8 @@ export class Game {
             if (this.iceCastle?.myRod() && this.iceCastle.rodAttack(isFinal)) return 'Attack';
             // the calmed dragon: sent only at one it is already angry at (DragonRide.attack)
             if (this.dragonRide?.active) { const dr = this.dragonRide.attack(isFinal); if (dr !== undefined) return dr; }
+            // the swarm of things («Левиоса Максима»): a volley at the one the wand points at
+            if (this.levMax?.swarm?.active) { const r = this.levMax.swarm.attack(isFinal); if (r) return r; return null; }
             // my servants (a living tree, «Брейнрот») go for the one the hand points at
             if (this.levitation.state?.kind !== 'weapon' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
             const hint = this.levitation.attack();
@@ -3408,6 +3412,7 @@ export class Game {
 
         this.levitation.update(dt);
         if (earth) this.levMax?.update(dt);
+        else if (this.levMax?.swarm?.active) { this.levMax.swarm.release(false); this.levMax.mine = null; } // (off the Earth the things are let go)
         this.accio.update(dt);
         this.inventory.update(dt);
         this.itemIcons?.update(1.5); // (a new look's picture: one by one, ~1.5 ms a frame at most)

@@ -158,7 +158,7 @@ export class Levitation {
         // a big cauldron (heavy: it floats slowly; tilted in the air it pours out) — the host's, like things
         if (g.cauldrons && (g.authority || !g.sync)) for (const c of g.cauldrons.list.values()) if (!c.lev) out.push({ kind: 'cauldron', obj: c, pos: c.pos, r: 1.6 });
         // (things and books are the host's: a guest's hand can't carry them yet)
-        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked) out.push({ kind: 'item', obj: L, pos: L.model.position });
+        if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)

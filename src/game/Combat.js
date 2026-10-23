@@ -890,6 +890,7 @@ export class Combat {
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
     shieldFactor(from) {
         if (this.game.groundVortex?.covers?.(from)) return 1; // (the earth vortex's shield: the blocks facing the blow — GroundVortex.js)
+        if (this.game.levMax?.swarm?.faces?.(from)) return 1; // (the wall of things from «Левиоса Максима»: ItemSwarm.js)
         const s = this.shield;
         if (!s || s.left <= 0) return this.game.gear?.shieldFaces(from) ? 1 : 0; // a shield in the hand
         if (s.type === 1 && this.game.gear?.shieldFaces(from)) return 1;
@@ -909,6 +910,8 @@ export class Combat {
     _blocked(from, kind = null) {
         const gv = this.game.groundVortex;
         if (gv?.covers?.(from)) return gv.take(from, kind); // (the blocks take it: no mana, they break; the gods' spells sweep them away and go on)
+        const swarm = this.game.levMax?.swarm;
+        if (swarm?.faces?.(from)) return swarm.took(from, kind); // (the blow lands in the things, not in me)
         if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return true; }
         if (!this.shield) return false;
         if (!this._payHit(kind)) return false;

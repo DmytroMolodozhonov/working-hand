@@ -458,3 +458,17 @@ test('«Империус» / «… Максима» (Imperius.js): every kind of
     assert.match(src('src/game/Concentration.js'), /Imperius: \{/, 'a held spell (concentration)');
     assert.match(src('src/game/Space.js'), /name === 'Imperius'/, 'space says why not');
 });
+
+test('the conductor of things («Левиоса Максима» на вещь): answers for every creature, and the wall is asked by Combat', () => {
+    const sw = src('src/game/ItemSwarm.js'), os = src('src/game/ObjectSwarm.js'), cb = src('src/game/Combat.js');
+    // a flying thing looks for creatures in the duel's list of bodies and hurts every kind that can be hurt
+    assert.match(sw, /duel\?\._bodies/);
+    for (const kind of ["'z'", "'v'", "'a'", "'c'", "'p'"]) assert.ok(sw.includes(kind), `the volley forgets the kind ${kind}`);
+    assert.match(sw, /creatureImpact\?\.apply/);
+    assert.match(sw, /levitation\?\._hurt/);
+    // each kind of creature has its answer in the table
+    for (const k of ['zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'dragon', 'iceCastle', 'players', 'owl', 'phoenix', 'bookBirds']) assert.match(os, new RegExp('    ' + k + ': \\{ why'), k);
+    // the wall: asked by every spell's shield question
+    assert.match(body(cb, '    shieldFactor(from) {'), /swarm\?\.faces/);
+    assert.match(body(cb, '    _blocked(from, kind = null) {'), /swarm\.took/);
+});

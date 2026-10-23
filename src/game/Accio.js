@@ -134,7 +134,7 @@ export class Accio {
             if (!catcher) { dg.noHand = true; continue; }
             for (const L of g.items?.loose.values() || []) {
                 dg.loose++;
-                if (L.asked || L.accio) continue;
+                if (L.asked || L.accio || L.swarm) continue;
                 const to = _v1.subVectors(L.model.position, hand);
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;

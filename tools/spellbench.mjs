@@ -11,6 +11,7 @@
  *   «замок»      — «Create a Castle» (30 s of magic);
  *   «ледяной»    — «Ice Castle»;
  *   «бомбардо»   — «Bombardo Maxima» ×3; «землетрясение» — «Earthquake Maxima»; «разрушение» — «Total Destruction»;
+ *   «рой вещей»  — «Левиоса Максима» на вещь: 32 вещи цепочкой, вихрем, щитом и залпом (ItemSwarm.js);
  *   «полёт»      — a straight fast flight (new land loaded) and back over the changed places.
  * For each: the game's own work in a frame («игра», without drawing the picture — here the processor draws
  * it, far slower than a video card), its average, the 95 % and the worst frame, how many frames took more
@@ -142,6 +143,37 @@ const scenarios = {
     },
     async 'землетрясение'(page) { await page.evaluate(() => { window.__sb.rec = true; window.__zns.game.castDebug('EarthquakeMaxima'); }); await sleep(8000); },
     async 'разрушение'(page) { await page.evaluate(() => { window.__sb.rec = true; window.__zns.game.destruction.cast(true, 'TotalDestruction'); }); await sleep(10000); },
+    async 'рой вещей'(page) {
+        const ok = await page.evaluate(() => {
+            const g = window.__zns.game, me = g.character.group.position;
+            const kinds = ['redApple', 'apple', 'scroll', 'wand', 'bow', 'shield', 'hammer', 'backpack'];
+            const uids = [];
+            for (let i = 0; i < 32; i++) {
+                const a = i * 0.7, r = 5 + (i % 5);
+                const uid = 'swb' + i;
+                g.items.spawnLoose({ kind: kinds[i % kinds.length], uid }, { x: me.x + Math.cos(a) * r, y: g.collision.groundY(me.x + Math.cos(a) * r, me.z + Math.sin(a) * r) + 0.3, z: me.z + Math.sin(a) * r }, { broadcast: false });
+                uids.push(uid);
+            }
+            const sw = g.levMax.swarm;
+            if (!sw.start('right', uids[0], g.localId)) return false;
+            g.levMax.mine = { id: 'sb', side: 'right', players: [], t: 0, kind: 'swarm', emptyT: 0 };
+            for (const u of uids.slice(1)) sw._take(g.items.loose.get(u));
+            sw.keeper.next = (m) => m; // (the hand does not really circle here: the mode is chosen by the bench)
+            window.__sb.rec = true;
+            return true;
+        });
+        if (!ok) return 'не поднялось';
+        await sleep(5000);
+        await page.evaluate(() => { window.__zns.game.levMax.swarm.sim.mode = 'orbit'; });
+        await sleep(4000);
+        await page.evaluate(() => { window.__zns.game.levMax.swarm.sim.mode = 'train'; window.__zns.game.levMax.swarm.shield(true); });
+        await sleep(3000);
+        await page.evaluate(() => { window.__zns.game.levMax.swarm._shT = 0; window.__zns.game.levMax.swarm.attack(true); });
+        await sleep(4000);
+        const left = await page.evaluate(() => { const g = window.__zns.game; const n = g.levMax.swarm.n; g.levMax.stop(); return [n, [...g.items.loose.values()].filter((L) => L.lev).length]; });
+        await sleep(1500);
+        return left[1] ? `зависли вещи: ${left[1]}` : null;
+    },
     async 'полёт'(page) {
         await page.evaluate(() => {
             const g = window.__zns.game, ch = g.character, home = ch.group.position.clone();
