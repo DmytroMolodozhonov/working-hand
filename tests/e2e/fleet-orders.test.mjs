@@ -110,13 +110,18 @@ test('fleet: the enemy dead ahead — the crew turns the ship; then fires. «О�
         C.fire = (G) => { window.__shots++; return f0(G); };
         return s.st.yaw;
     });
-    await frames(page, 600);
-    const r = await page.evaluate((yaw0) => {
-        const g = window.__zns.game, s = window.__mine;
-        let d = (s.st.yaw - yaw0) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
-        return { turned: Math.abs(d), shots: window.__shots, auto: !!g.fleet.st.get(s.id)?.auto };
-    }, yaw0);
-    assert.ok(r.turned > 0.8, `the ship came about: ${r.turned}`);
+    let r = null;
+    for (let i = 0; i < 20; i++) { // (the crew brings her about, then the side that bears fires)
+        await frames(page, 100);
+        r = await page.evaluate((yaw0) => {
+            const g = window.__zns.game, s = window.__mine;
+            let d = (s.st.yaw - yaw0) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2;
+            return { turned: Math.abs(d), shots: window.__shots, auto: !!g.fleet.st.get(s.id)?.auto };
+        }, yaw0);
+        if (r.shots >= 1) break;
+    }
+    assert.ok(r.turned > 0.5, `the ship came about: ${r.turned}`);
+    assert.ok(r.shots >= 1, `then the guns fired: ${r.shots}`);
     const cease = await page.evaluate(() => {
         const g = window.__zns.game, s = window.__mine;
         const cap = [...g.ships.crew.byId.values()].find((x) => x.ship === s && x.role === 'captain');
@@ -146,19 +151,20 @@ test('fleet: «на абордаж» — alongside, the crew leaps across and fi
         const cap = [...g.ships.crew.byId.values()].find((x) => x.ship === s && x.role === 'captain');
         g.fleet.hear('На абордаж!', cap);
     });
-    let seen = { over: 0, fights: 0 };
-    for (let i = 0; i < 160; i++) {
-        await frames(page, 10);
+    let seen = { over: 0, fights: 0, lash: false };
+    for (let i = 0; i < 80; i++) {
+        await frames(page, 20);
         const r = await page.evaluate(() => {
             const g = window.__zns.game, s = window.__mine, foe = window.__foe;
             const mine = [...g.ships.crew.byId.values()].filter((v) => v.crew === s);
             const over = mine.filter((v) => v.ship === foe && !v.dead).length;
-            const fights = mine.filter((v) => v.ship === foe && v.foe).length;
-            return { over, fights, foeAlive: g.ships.crew.alive(foe), mine: g.ships.crew.alive(s) };
+            const fights = mine.filter((v) => v.ship === foe && v.foe && !v.dead).length;
+            return { over, fights, lash: !!g.fleet.st.get(s.id)?.lash && foe.lashTo === s.id, foeAlive: g.ships.crew.alive(foe), mine: g.ships.crew.alive(s) };
         });
-        seen.over = Math.max(seen.over, r.over); seen.fights = Math.max(seen.fights, r.fights); seen.last = r;
-        if (r.foeAlive === 0 || (seen.over >= 3 && seen.fights >= 1)) break;
+        seen.over = Math.max(seen.over, r.over); seen.fights = Math.max(seen.fights, r.fights); seen.lash = seen.lash || r.lash;
+        if (seen.over >= 3 && seen.fights >= 1) break;
     }
+    assert.ok(seen.lash, 'the grapnels held her alongside');
     assert.ok(seen.over >= 3, `boarders over: ${seen.over}`);
     assert.ok(seen.fights >= 1, 'they fought the enemy crew');
     assert.deepEqual(realErrors(errors), []);

@@ -531,7 +531,7 @@ export class Ships {
         const st = s.st;
         const g = this.game;
         if (s.state === 'wreck' || s.lifted) { st.u = st.v = st.r = 0; return; } // (in the air: «Левиоса Максима» carries it)
-        if (s.lashTo && g.blackbeard?.lashStep(s, dt)) { this._damageStep(s, dt); return; } // (held alongside the black ship by its grapnels)
+        if (s.lashTo && (g.fleet?.lashStep(s, dt) || g.blackbeard?.lashStep(s, dt))) { this._damageStep(s, dt); return; } // (held alongside the black ship by its grapnels)
         const open = this._openFrac(s);
         const data = g.terrain?.data;
         const env = {
@@ -1801,7 +1801,7 @@ export class Ships {
                 return;
             }
             case 'shipev': if (!isHost) this._applyEvent(m); return;
-            case 'screw': if (m.ord || m.def) { if (isHost) this.game.fleet?.remote(m); } else if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
+            case 'screw': if (m.gr) { if (!isHost) this.game.fleet?.applyGr(m); } else if (m.ord || m.def) { if (isHost) this.game.fleet?.remote(m); } else if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
             case 'shelm': if (isHost) this.helm.applyRemote(m); return;
             case 'smoor': if (isHost) this.rigging.applyRemote(m); return;
             case 'sblow': {

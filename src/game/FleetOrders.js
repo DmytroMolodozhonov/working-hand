@@ -19,7 +19,8 @@
 
 import * as THREE from 'three';
 import { FLEET, broadside, gunsBear, beamTurn, yawFacing, angleDiff, lineOfFire, parseCrewOrder, orderNeedsAim, REPLY } from './FleetMath.js';
-import { gunPitch } from './Blackbeard.js';
+import { gunPitch, BB } from './Blackbeard.js';
+import { Grapple } from './Grapple.js';
 import { HELM_LOCK } from './ShipTypes.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { floorAt, hullHalfWidth } from './ShipLayout.js';
@@ -30,10 +31,14 @@ const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
 const _vel = { x: 0, z: 0 };
 const NONE = Object.freeze([]);
+const _l2 = { x: 0, y: 0, z: 0 };
 const LOAD_T = 1.6; // s: a gunner puts a ball in the barrel
 const SPOT = 2.6; // m: a gunner stands this far inboard of his gun (Blackbeard._gunSpot)
 const GUARDS = 2; // stay on the ship when the rest board
 const HOLD_MS = 6000; // a turn order lasts this long
+const QUIET_MS = 30000; // no blow struck for this long while our men are over there: she gives up
+const SURRENDER_MS = 15000; // the deck is ours and the rest are below: they give up after this long
+const BOARD_STATION = 4.5; // m: hull to hull, where the ship keeps alongside the enemy
 const KEEP_OFF = 45; // m: the autopilot does not run nearer the shore than this
 
 export class FleetOrders {
@@ -41,6 +46,8 @@ export class FleetOrders {
         this.game = game;
         this.st = new Map(); // ship id → {mode, target, reload, gun, auto, board, say…}
         this._away = new Map(); // deck → [our boarders there] (fought as a group: Sailors._tactics)
+        this._load = new Map(); // creature foe id → how many men are after him
+        this._lower = new Map(); // ship id → how many of her men are after a foe on another deck
     }
 
     get S() { return this.game.ships; }
@@ -230,6 +237,14 @@ export class FleetOrders {
         f.mode = 'idle'; f.target = null; f.board = null; f.auto = null;
         for (const v of this.C.crews.get(s.id) || []) { v.gun = null; v.fleetBoard = null; }
         this._stopWind(s);
+        if (!this._holdsBoarders(s)) this._unlash(f); // (with men still over there the plank stays till they are back: update)
+    }
+
+    _unlash(f) {
+        if (!f.lash) return;
+        f.lash.release();
+        f.lash = null;
+        this._netT = 0;
     }
 
     _orderFire(s, f, ord, by, aim) {
@@ -259,14 +274,18 @@ export class FleetOrders {
 
     // ============================================================== the frame (host)
     update(dt) {
-        if (!this.auth) { this._drawAway?.(); return; }
+        if (!this.auth) { this._viewNet(); return; }
+        for (const f of this.st.values()) f.lash?.draw();
+        this._netT = (this._netT || 0) - dt;
         for (const [id, f] of this.st) {
             const s = this.S.list.get(id);
             if (!s || !s.awake || s.state === 'sinking' || s.state === 'wreck' || !this._alive(s)) {
                 if (s) { this._cease(s, f); }
+                f.lash?.release(); f.lash = null; // (the ship is gone: the lines are cast off whoever is where)
                 this.st.delete(id);
                 continue;
             }
+            if (f.lash && !f.board && (!this._holdsBoarders(s) || f.lash.t > 90)) this._unlash(f); // (everybody is back aboard: the lines off)
             if (f.mode === 'idle' && !f.auto) continue;
             f.t += dt;
             if (!this.S.loyalTo(s, f.by)) { this._cease(s, f); continue; }
@@ -275,6 +294,7 @@ export class FleetOrders {
             else if (f.target) this._firing(s, f, dt);
             this._drive(s, f, dt);
         }
+        this._netGr(dt);
         for (const [T, list] of this._away) {
             if (list.length && T.awake) { this.C._tactics(T, list, dt); this.C._separate(T, list, dt); }
             list.length = 0;
@@ -422,7 +442,7 @@ export class FleetOrders {
             if (bear.why === 'angle') {
                 if (!steer) { this._say(s, block, f, 10000); return; }
                 const psi = yawFacing(s.st.x, s.st.z, w.x, w.z);
-                f.auto = { yaw: beamTurn(s.st.yaw, psi).yaw, gain: b.dist > 120 ? 8 : 5, until: performance.now() + 4000 };
+                f.auto = { yaw: beamTurn(s.st.yaw, psi).yaw, gain: 8, until: performance.now() + 4000 };
                 this._say(s, 'maneuver', f, 9000);
             } else if (bear.why === 'far') {
                 if (!steer) { this._say(s, block === 'moored' ? 'moored' : 'far', f, 12000); return; }
@@ -480,43 +500,151 @@ export class FleetOrders {
     }
 
     // ------------------------------------------------------------ boarding
-    /** (host) Alongside the enemy: the crew leaps across. */
+    /** (host) Alongside the enemy: the grapnels fly, she is hauled in, the plank is laid, the crew leaps across. */
     _boarding(s, f, dt) {
         const T = this.S.list.get(f.board);
-        if (!T || !T.awake || T.state === 'sinking' || T.state === 'wreck' || this.sameSide(s, T)) { this._recall(s, f); f.board = null; f.auto = null; this._stopWind(s); this._say(s, 'boardBack', f); return; }
-        if (this._enemyAlive(T) <= 0) { this._recall(s, f); f.board = null; f.auto = null; this._stopWind(s); this._say(s, 'boardBack', f); return; } // (her crew is beaten: back aboard — she is ours)
-        T.pose.toLocal(s.st.x, T.pose.y, s.st.z, _l); // (our place in her frame)
-        const sT = _l.x >= 0 ? 1 : -1;
-        const lat = Math.abs(_l.x), lon = Math.abs(_l.z);
-        const gap = lat - (s.layout.B + T.layout.B) / 2;
-        const overlap = (s.layout.L + T.layout.L) / 2;
-        const near = gap <= FLEET.BOARD_GAP && lon < overlap - 4;
-        if (near) {
-            f.phase = 'leap';
-            if (f.auto && !f.auto.free) f.auto = { yaw: T.st.yaw, gain: 2, until: performance.now() + 2000, hold: true }; // (keep station)
-            const list = (this.C.crews.get(s.id) || []).filter((v) => !v.dead && !v.overboard && v.ship === s && v.role !== 'captain' && !(v.stunT > 0));
-            const guards = Math.min(GUARDS, Math.max(0, list.length - 2));
-            const boarders = list.filter((v) => !v.gun || f.mode === 'battle').slice(guards);
-            for (const v of boarders) if (!v.fleetBoard) { v.fleetBoard = T.id; v.gun = null; v.path = null; }
-            const cap = this._voice(s);
-            if (cap && cap.role === 'captain' && !cap.fleetBoard && f.t > 4 && this._enemyAlive(T) <= 2) { /* (the captain stays at his wheel) */ }
+        const done = !T || !T.awake || T.state === 'sinking' || T.state === 'wreck' || this.sameSide(s, T) || this._enemyAlive(T) <= 0; // (her crew is beaten: she is ours)
+        if (done || (f.lash && f.lash.T !== T)) {
+            this._recall(s, f); f.board = null; f.auto = null; this._stopWind(s);
+            if (!T || !this._holdsBoarders(s)) this._unlash(f);
+            this._say(s, 'boardBack', f);
             return;
         }
-        // not yet: run alongside (parallel to her, her side towards ours)
+        // the boarding party gets ready at the rail at once (all but the captain and the guards)
+        const list = (this.C.crews.get(s.id) || []).filter((v) => !v.dead && !v.overboard && v.ship === s && v.role !== 'captain' && !(v.stunT > 0));
+        const guards = Math.min(GUARDS, Math.max(0, list.length - 2));
+        for (const v of list.slice(guards)) if (!v.fleetBoard) { v.fleetBoard = T.id; v.gun = null; v.path = null; }
+        // the party is dead (or never was): the captain does not send the guards — the attack is called off
+        if (list.length <= guards && !this._holdsBoarders(s) && f.lash) { f.board = null; f.auto = null; this._say(s, 'boardBack', f); return; }
+        if (f.lash) { f.phase = f.lash.planks ? 'leap' : 'lash'; s.blow = null; this._surrender(s, f, T); return; } // (held alongside: her own wind is off)
+        T.pose.toLocal(s.st.x, T.pose.y, s.st.z, _l); // (our place in her frame)
+        const sB = _l.x >= 0 ? 1 : -1;
+        const gapNow = Math.abs(_l.x) - (s.layout.B + T.layout.B) / 2;
+        if (gapNow < BB.GRAPPLE && Math.abs(_l.z) < (s.layout.L + T.layout.L) / 2 && !T.lashTo) { this._grapple(s, f, T); return; }
+        // not yet: run up abreast of her, parallel (or the other way round if that is nearer), her side towards ours
+        f.phase = 'approach';
         const block = this._steerBlock(s);
         if (block) { this._say(s, block, f, 10000); return; }
-        f.phase = 'approach';
         const par = Math.abs(angleDiff(T.st.yaw, s.st.yaw)) < Math.PI / 2 || Math.abs(T.st.u) > 1.5;
         const yaw = par ? T.st.yaw : T.st.yaw + Math.PI;
-        const lx = -sT * ((s.layout.B + T.layout.B) / 2 + FLEET.BOARD_GAP * 0.6);
-        // (we come up on the side we are on: she is to the other side of us)
-        T.pose.toWorld(-lx, 0, 0, _o);
+        T.pose.toWorld(sB * ((s.layout.B + T.layout.B) / 2 + BB.GAP + 4), 0, 0, _o);
         const far = Math.hypot(_o.x - s.st.x, _o.z - s.st.z);
         const lead = Math.min(40, far * 0.5);
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-        const gx = _o.x + fx * lead, gz = _o.z + fz * lead;
-        f.auto = { yaw: far > 60 ? yawFacing(s.st.x, s.st.z, gx, gz) : yaw, gain: far > 60 ? 10 : 6 + Math.abs(T.st.u) * 1.2, until: performance.now() + 3000 };
+        f.auto = { yaw: far > 60 ? yawFacing(s.st.x, s.st.z, _o.x + fx * lead, _o.z + fz * lead) : yaw, gain: far > 60 ? 13 : 7 + Math.abs(T.st.u) * 1.4, until: performance.now() + 3000 };
         void dt;
+    }
+
+    /**
+     * The fight is over without the last of her crew falling: either the deck is ours and those left are below in the hold
+     * (SURRENDER_MS), or nobody has struck a blow for QUIET_MS while our men are over there (the rest cannot be got at /
+     * will not fight) — they throw their blades down and the ship is taken (the same as when the last of her crew falls:
+     * Sailors.capture).
+     */
+    _surrender(s, f, T) {
+        if (!f.lash?.planks) return;
+        const now = performance.now();
+        if (f.planksAt == null) f.planksAt = now;
+        const deck = T.layout.deck;
+        let up = 0, low = null, any = null;
+        for (const o of this.C.crews.get(T.id) || []) {
+            if (o.dead || o.overboard || o.ship !== T) continue;
+            any = o;
+            if (o.l.y >= deck - 2.5) up++;
+            else low = low || o;
+        }
+        if (!any) return;
+        const clear = up === 0 && !!low;
+        if (!clear) f.clearAt = null;
+        else if (f.clearAt == null) f.clearAt = now;
+        const deckOurs = clear && now - f.clearAt >= SURRENDER_MS;
+        const quiet = this._holdsBoarders(s) && now - Math.max(this.blowAt || 0, f.planksAt) >= QUIET_MS;
+        if (!deckOurs && !quiet) return;
+        f.clearAt = null; f.planksAt = null;
+        this.C._say(low || any, pick(['Сдаёмся! Не убивайте!', 'Хватит! Корабль ваш, ваше величество!', 'Пощады! Мы сдаёмся!']), 5);
+        for (const o of this.C.crews.get(T.id) || []) { o.foe = null; o.fp = null; o.fs = null; o.busy = false; o.tac = null; o.fpath = null; }
+        this.C.capture(T, f.by);
+    }
+
+    _grapple(s, f, T) {
+        f.lash = new Grapple(this.game, s, T);
+        f.auto = null; this._stopWind(s);
+        s.blow = null; s.st.tau = 6; // (her own wind off: the two drift together)
+        f.phase = 'lash'; f.lashAt = performance.now();
+        this._netT = 0;
+        this.game.sound?.playWhoosh?.();
+        this._say(s, 'board', f);
+    }
+
+    _holdsBoarders(s) { return (this.C.crews.get(s.id) || []).some((v) => !v.dead && v.ship !== s && !v.overboard); }
+
+    /** (host, Ships._simulate) The ship held by our grapnels: alongside. true — she is held. */
+    lashStep(T, dt) {
+        for (const f of this.st.values()) {
+            if (!f.lash || f.lash.T !== T) continue;
+            if (f.lash.step(dt)) return true;
+            this._unlash(f); T.lashTo = null;
+            return false;
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------ the lines on the other computers
+    /** (host) Tell the guests where the grapnels are (a few times a second, and at once when they change). */
+    _netGr(dt) {
+        const g = this.game;
+        if (!g.sync) return;
+        if ((this._netT -= dt) > 0) return;
+        this._netT = 0.35;
+        for (const [id, f] of this.st) {
+            if (f.lash) g.sync.net.send({ t: 'screw', gr: [id, f.lash.T.id, f.lash.side, f.lash.flip ? 1 : 0, f.lash.planks ? 1 : 0] });
+            else if (f.grSent) g.sync.net.send({ t: 'screw', gr: [id, 0] });
+            f.grSent = !!f.lash;
+        }
+    }
+
+    /** (guest) The host's grapnels: drawn from the numbers. */
+    applyGr(m) {
+        const a = m.gr;
+        if (!Array.isArray(a)) return;
+        const net = this.net || (this.net = new Map());
+        const B = this.S.list.get(a[0]), T = a[1] ? this.S.list.get(a[1]) : null;
+        const old = net.get(a[0]);
+        if (!B || !T) { if (old) { old.g.drop(); net.delete(a[0]); } return; }
+        if (old && old.g.T === T) { old.g.side = a[2]; old.g.flip = !!a[3]; old.g.planks = !!a[4]; old.seen = performance.now(); return; }
+        old?.g.drop();
+        net.set(a[0], { g: new Grapple(this.game, B, T, { side: a[2], flip: !!a[3], planks: !!a[4] }), seen: performance.now() });
+    }
+
+    _viewNet() {
+        if (!this.net) return;
+        const now = performance.now();
+        for (const [id, e] of this.net) {
+            if (now - e.seen > 2000) { e.g.drop(); this.net.delete(id); continue; }
+            e.g.draw();
+        }
+    }
+
+    /**
+     * Can the boarders of `s` leap to `T` from `s`'s gangway: hull to hull within BOARD_GAP, her deck abreast of it.
+     * → {ok, gap (m), z (her frame, where our gangway is along her), sT (her side that looks at us)}.
+     */
+    _reach(s, T) {
+        const gw = this._gangways(s, T, this._gw || (this._gw = {}));
+        s.pose.toWorld(gw.a.x, gw.a.y, gw.a.z, _o);
+        T.pose.toLocal(_o.x, _o.y, _o.z, _l2);
+        const L = T.layout;
+        const z = Math.max(-L.L / 2 + 3, Math.min(L.L / 2 - 3, _l2.z));
+        const gap = Math.abs(_l2.x) - hullHalfWidth(L, z, L.deck);
+        return { ok: gap <= FLEET.BOARD_GAP && Math.abs(_l2.z) < L.L / 2 - 3, gap, z: _l2.z, sT: _l2.x >= 0 ? 1 : -1 };
+    }
+
+    /** A place to land on deck `T`, `sT` its side: near `z` along her, a little inboard of the rail (her frame). */
+    _landing(T, sT, z) {
+        const L = T.layout;
+        const zz = Math.max(-L.L / 2 + 3, Math.min(L.L / 2 - 3, z + (Math.random() - 0.5) * 6));
+        const x = sT * Math.max(0.5, hullHalfWidth(L, zz, L.deck) - 2.2 - Math.random() * 2);
+        return { x, y: floorAt(L, x, zz, L.deck + 1) ?? L.deck, z: zz };
     }
 
     _enemyAlive(T) { return this.C.alive(T); }
@@ -524,7 +652,7 @@ export class FleetOrders {
     /** Everybody back to his own ship. */
     _recall(s, f) {
         void f;
-        for (const v of this.C.crews.get(s.id) || []) v.fleetBoard = null;
+        for (const v of this.C.crews.get(s.id) || []) { v.fleetBoard = null; if (v.ship !== s && !v.dead && !v.overboard) v.fleetHome = true; } // (those over there walk back to her gangway and leap home: thinkAway)
     }
 
     // ============================================================== the sailors' minds
@@ -539,9 +667,9 @@ export class FleetOrders {
             const gw = this._gangways(s, T, this._gw || (this._gw = {}));
             const tx = gw.a.x - Math.sign(gw.a.x) * 0.6, tz = gw.a.z + ((v.idx % 3) - 1) * 1.2;
             if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) { C._steer(v, s, tx, tz, 5.2, dt); v.mode = 'run'; return true; }
-            const to = { x: gw.b.x - Math.sign(gw.b.x) * (1.4 + Math.random() * 2.5), y: T.layout.deck, z: gw.b.z + (Math.random() - 0.5) * 8 };
-            to.y = floorAt(T.layout, to.x, to.z, T.layout.deck + 1) ?? T.layout.deck;
-            this.game.blackbeard._leap(v, s, T, to);
+            const R = this._reach(s, T);
+            if (!R.ok || (f.lash && !f.lash.planks)) { v.mode = 'idle'; v.speed = 0; v.lyaw = gw.a.x > 0 ? -Math.PI / 2 : Math.PI / 2; return true; } // (not alongside yet: waits at the rail)
+            this.game.blackbeard._leap(v, s, T, this._landing(T, R.sT, R.z));
             v.mode = 'run';
             return true;
         }
@@ -590,6 +718,8 @@ export class FleetOrders {
         if (v.fleetBoard) {
             const foe = this.sailorFoe(v, T);
             if (foe) { v.foe = foe.id; v.fp = foe; v.path = null; this._addAway(T, v); return true; }
+            // nobody for him just now but her crew is not beaten (they are below, two of ours already after each): he waits on deck, blade up
+            if (this._enemyAlive(T) > 0 && this.st.get(v.crew.id)?.board === T.id) { v.mode = 'block'; v.speed = 0; v.foe = null; v.fp = null; return true; }
         }
         if (v.foe) { v.foe = null; v.fp = null; v.fs = null; v.busy = false; v.tac = null; v.fpath = null; }
         // done (or recalled): back to her gangway, over the gap
@@ -599,11 +729,9 @@ export class FleetOrders {
         const gb = { x: sT * (hullHalfWidth(T.layout, T.layout.gangZ, T.layout.deck) - 1.0), z: T.layout.gangZ };
         const tx = gb.x - Math.sign(gb.x) * 0.6, tz = gb.z + ((v.idx % 3) - 1) * 1.2;
         if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) { C._steer(v, T, tx, tz, 5.2, dt); v.mode = 'run'; return true; }
-        B.pose.toLocal(T.st.x, B.pose.y, T.st.z, _o);
-        const sB = _o.x >= 0 ? 1 : -1;
-        const ga = { x: sB * (hullHalfWidth(B.layout, B.layout.gangZ, B.layout.deck) - 1.0), z: B.layout.gangZ };
-        const to = { x: ga.x - Math.sign(ga.x) * (1.5 + Math.random() * 3), y: B.layout.deck, z: ga.z + (Math.random() - 0.5) * 8 };
-        to.y = floorAt(B.layout, to.x, to.z, B.layout.deck + 1) ?? B.layout.deck;
+        const Rb = this._reach(T, B);
+        if (!Rb.ok) { v.mode = 'idle'; v.speed = 0; return true; } // (waits at her rail for the ships to come together)
+        const to = this._landing(B, Rb.sT, Rb.z);
         v.fleetHome = false;
         this.game.blackbeard._leap(v, T, B, to);
         return true;
@@ -629,15 +757,26 @@ export class FleetOrders {
         const intr = this._intruders(T);
         const own = v.crew === T;
         if (own && !intr.length) return null; // (the usual: nobody of another ship on her deck)
+        const load = this._load;
         let best = null, bd = Infinity;
         const look = (o) => {
             if (o.ship !== T || !this._enemies(v, o)) return;
-            const d = Math.hypot(o.l.x - v.l.x, o.l.z - v.l.z) + Math.abs(o.l.y - v.l.y) * 2 - (('c:' + o.id) === v.foe ? 1e3 : 0);
+            const id = 'c:' + o.id;
+            // (the nearest on this level first; another deck costs; the men spread over the foes — not all on one)
+            const crowd = (load.get(id) || 0) - (id === v.foe ? 1 : 0);
+            if (own && Math.abs(o.l.y - v.l.y) > 2) return; // (the defenders hold their level; the boarders come down to them — two sides meeting on one stair block each other)
+            const otherDeck = Math.abs(o.l.y - v.l.y) > 2, down = o.l.y < v.l.y - 2;
+            if (otherDeck && crowd >= 2) return;
+            if (down && (this._lower.get(v.crew?.id) || 0) - (v.fp && v.fp.y < v.l.y - 2 ? 1 : 0) >= 2) return; // (two at a time down the stair: nine in one stairwell block each other)
+            const d = Math.hypot(o.l.x - v.l.x, o.l.z - v.l.z) + Math.abs(o.l.y - v.l.y) * 6 + crowd * 8 - (id === v.foe ? 12 : 0);
             if (d < bd) { bd = d; best = o; }
         };
         for (const o of intr) look(o);
         if (!own) for (const o of this.C.crews.get(T.id) || []) look(o);
-        return best ? { id: 'c:' + best.id, x: best.l.x, y: best.l.y, z: best.l.z } : null;
+        if (!best) return null;
+        const id = 'c:' + best.id;
+        if (id !== v.foe) { load.set(id, (load.get(id) || 0) + 1); if (v.foe) load.set(v.foe, Math.max(0, (load.get(v.foe) || 0) - 1)); }
+        return { id, x: best.l.x, y: best.l.y, z: best.l.z };
     }
 
     /** The sailors standing on deck `T` who belong to another ship (boarders), rebuilt once a frame. */
@@ -645,6 +784,15 @@ export class FleetOrders {
         const now = performance.now();
         if (now - (this._intrAt || 0) > 30) {
             this._intrAt = now;
+            const load = this._load;
+            load.clear();
+            const lower = this._lower;
+            lower.clear();
+            for (const o of this.C.byId.values()) {
+                if (typeof o.foe !== 'string' || !o.foe.startsWith('c:')) continue;
+                load.set(o.foe, (load.get(o.foe) || 0) + 1); // (how many men are after each foe)
+                if (o.fp && o.fp.y < o.l.y - 2 && o.crew) lower.set(o.crew.id, (lower.get(o.crew.id) || 0) + 1); // (…and how many of a crew are going down / up after one)
+            }
             const m = this._intr || (this._intr = new Map());
             for (const a of m.values()) a.length = 0;
             for (const list of this.C.crews.values()) {
@@ -715,6 +863,7 @@ export class FleetOrders {
     /** (Sailors._strike) The blade of sailor `v` came down on creature foe `id`. */
     strike(v, s, id) {
         const g = this.game;
+        this.blowAt = performance.now();
         const by = this.S.ownerOf(v.crew || s); // (the king's name goes on it: kills count for him, the balls spare him)
         if (id.startsWith('c:z:')) {
             const z = g.zombieById?.get(+id.slice(4)) ?? g.zombieById?.get(id.slice(4));
@@ -730,5 +879,9 @@ export class FleetOrders {
         this.C.hit(o, v.dmg, new THREE.Vector3(dx / d, 0, dz / d), by, { weapon: true });
     }
 
-    dispose() { this.st.clear(); this._away.clear(); }
+    dispose() {
+        for (const f of this.st.values()) f.lash?.release();
+        for (const e of this.net?.values() || []) e.g.drop();
+        this.st.clear(); this._away.clear(); this.net?.clear();
+    }
 }

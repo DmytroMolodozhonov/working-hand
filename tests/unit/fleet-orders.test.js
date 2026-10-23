@@ -181,7 +181,7 @@ function world() {
         pointVel: (s, x, z, out) => { out.x = 0; out.z = 0; return out; },
         setSails() { return 0; },
     };
-    const game = { localId: 'king', authority: true, ships: S, terrain: null, zombies: [], castleLife: { state: (id) => castles[id], alarm() {}, night: { crewAlarm() {} } }, sound: null, remotes: new Map(), sync: null };
+    const game = { localId: 'king', authority: true, ships: S, terrain: null, zombies: [], castleLife: { state: (id) => castles[id], alarm() {}, night: { crewAlarm() {} } }, sound: null, remotes: new Map(), sync: null, scene: { add() {}, remove() {} }, collision: { addMover() {}, removeMover() {} } };
     S.game = game;
     const fleet = new FleetOrders(game);
     return { game, S, C, fleet, mine, foe, spoken, lights, addCrew, mk, list, crews };
@@ -277,30 +277,50 @@ test('the line of fire: our own ship or the pier across the way stops the salvo'
     assert.equal(W2.lights.length, 0, 'no shots into the pier');
 });
 
-test('«отбой» and «на абордаж» change the crew\'s state; the captain does not leave the ship', () => {
+test('«на абордаж» and «отбой»: the party stands ready at the rail, the grapnels fly alongside, the enemy is hauled in, the captain stays', () => {
     const W = world();
     const crew = W.addCrew(W.mine, 10);
     W.addCrew(W.foe, 6);
     W.fleet.execute(W.mine, { kind: 'board' }, 'king', null);
     const f = W.fleet.state(W.mine);
     assert.equal(f.board, 'foe');
-    // not alongside yet (90 m): the helm runs her up; nobody leaps
+    // not alongside yet (90 m): the helm runs her up; the boarding party is ready, nobody has leapt
     f.t = 10;
     W.fleet._boarding(W.mine, f, 0.1);
     assert.equal(f.phase, 'approach');
-    assert.ok(f.auto, 'the helm brings her alongside');
-    assert.ok(crew.every((v) => !v.fleetBoard));
-    // alongside (a few metres): the boarders go, the captain and the guards stay
-    W.foe.st.x = 28; W.foe.pose.set(28, 0, 0, 0);
+    assert.ok(f.auto && f.auto.gain > 5, 'the helm brings her alongside');
+    const ready = crew.filter((v) => v.fleetBoard);
+    assert.ok(ready.length >= 5, `boarders ready: ${ready.length}`);
+    assert.ok(!crew[0].fleetBoard, 'the captain stays at his wheel');
+    assert.ok(crew.length - ready.length >= 3, 'the captain and two guards stay');
+    // within a leap of the grapnels: the lines fly, she is hauled in alongside, then the plank lies
+    W.foe.st.x = 36; W.foe.pose.set(36, 0, 0, 0);
     W.fleet._boarding(W.mine, f, 0.1);
-    const going = crew.filter((v) => v.fleetBoard);
-    assert.ok(going.length >= 5, `boarders: ${going.length}`);
-    assert.ok(!crew[0].fleetBoard, 'the captain stays');
-    assert.ok(crew.length - going.length >= 3, 'the captain and two guards stay');
-    // «отбой»: everybody is called back
+    assert.ok(f.lash, 'the grapnels');
+    assert.equal(W.foe.lashTo, 'mine');
+    assert.equal(f.lash.planks, false);
+    for (let i = 0; i < 400 && f.lash.planks === false; i++) W.fleet.lashStep(W.foe, 0.1);
+    assert.equal(f.lash.planks, true, 'hauled in: the plank');
+    W.foe.pose.set(W.foe.st.x, 0, W.foe.st.z, W.foe.st.yaw); // (Ships._simulate then the pose)
+    const gap = Math.abs(W.foe.st.x) - (W.mine.layout.B + W.foe.layout.B) / 2;
+    assert.ok(Math.abs(gap - 1.6) < 0.6, `hull to hull: ${gap}`);
+    assert.equal(W.fleet._reach(W.mine, W.foe).ok, true, 'a leap away');
+    // «отбой»: everybody is called back, the lines are cast off at once (nobody is over there)
     W.fleet.execute(W.mine, { kind: 'cease' }, 'king');
     assert.equal(f.mode, 'idle'); assert.equal(f.board, null);
     assert.ok(crew.every((v) => !v.fleetBoard && !v.gun));
+    assert.equal(f.lash, null); assert.equal(W.foe.lashTo, null, 'the enemy is let go');
+    // …but not while some of the men are still over there
+    W.fleet.execute(W.mine, { kind: 'board' }, 'king', null);
+    W.foe.st.x = 36; W.foe.pose.set(36, 0, 0, 0);
+    W.fleet._boarding(W.mine, f, 0.1);
+    assert.ok(f.lash);
+    crew[3].ship = W.foe; // (one of ours on her deck)
+    W.fleet.execute(W.mine, { kind: 'cease' }, 'king');
+    assert.ok(f.lash, 'the plank stays till he is back');
+    crew[3].ship = W.mine;
+    W.fleet.update(0.1);
+    assert.equal(f.lash, null, 'all aboard: the lines are off');
 });
 
 test('the crew\'s foes: an enemy sailor on the deck — never the master, never a mate', () => {

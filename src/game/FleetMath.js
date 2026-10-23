@@ -62,9 +62,6 @@ export function beamTurn(yaw, psi) {
 /** The yaw that faces a world point from (x, z). */
 export const yawFacing = (x, z, tx, tz) => Math.atan2(-(tx - x), -(tz - z));
 
-/** The yaw that brings an enemy alongside at `gap` m for boarding (the same sides logic: abeam). */
-export function boardingTurn(yaw, psi) { return beamTurn(yaw, psi); }
-
 /**
  * Fly a ball from `from` along the unit direction (dx, dz) raised by `pitch`, as Cannons._fly does (speed, gravity,
  * the first 0.25 s the firing ship is skipped). `probe(x, y, z, t)` says what is there: null / 'target' / 'ship' / 'land' /
