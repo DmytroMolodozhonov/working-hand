@@ -460,7 +460,7 @@ test('«Империус» / «… Максима» (Imperius.js): every kind of
 });
 
 test('the conductor of things («Левиоса Максима» на вещь): answers for every creature, and the wall is asked by Combat', () => {
-    const sw = src('src/game/ItemSwarm.js'), os = src('src/game/ObjectSwarm.js'), cb = src('src/game/Combat.js');
+    const sw = src('src/game/ItemSwarm.js'), os = src('src/game/ItemSwarmRules.js'), cb = src('src/game/Combat.js');
     // a flying thing looks for creatures in the duel's list of bodies and hurts every kind that can be hurt
     assert.match(sw, /duel\?\._bodies/);
     for (const kind of ["'z'", "'v'", "'a'", "'c'", "'p'"]) assert.ok(sw.includes(kind), `the volley forgets the kind ${kind}`);
