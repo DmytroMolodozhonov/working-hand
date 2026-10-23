@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b2a1d"/><stop offset="1" stop-color="#1d1510"/></linearGradient>
+    <linearGradient id="earth" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a6a44"/><stop offset="1" stop-color="#5b3f24"/></linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7a49d"/><stop offset="1" stop-color="#6f6c66"/></linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#78b94a"/><stop offset="1" stop-color="#4f8a30"/></linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#bg)"/>
+  <ellipse cx="32" cy="55" rx="16" ry="3.5" fill="#000" opacity=".35"/>
+  <path d="M32 50c-8-1-14-3-17-6 6 1 12 1 17 0 5 1 11 1 17 0-3 3-9 5-17 6z" fill="#fff" opacity=".07"/>
+  <g stroke="#1d1510" stroke-width="1" stroke-linejoin="round">
+    <rect x="29" y="46" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-8 32 49)"/>
+    <rect x="22" y="42" width="7" height="7" rx="1" fill="url(#stone)" transform="rotate(14 25 45)"/>
+    <rect x="37" y="41" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-18 40 44)"/>
+    <rect x="17" y="34" width="7" height="7" rx="1" fill="url(#grass)" transform="rotate(10 20 37)"/>
+    <rect x="41" y="33" width="7" height="7" rx="1" fill="url(#stone)" transform="rotate(22 44 36)"/>
+    <rect x="28" y="35" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-6 31 38)"/>
+    <rect x="13" y="25" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-20 16 28)"/>
+    <rect x="45" y="24" width="7" height="7" rx="1" fill="url(#grass)" transform="rotate(16 48 27)"/>
+    <rect x="24" y="26" width="7" height="7" rx="1" fill="url(#stone)" transform="rotate(12 27 29)"/>
+    <rect x="35" y="24" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-14 38 27)"/>
+    <rect x="17" y="15" width="7" height="7" rx="1" fill="url(#stone)" transform="rotate(8 20 18)"/>
+    <rect x="41" y="14" width="7" height="7" rx="1" fill="url(#earth)" transform="rotate(-24 44 17)"/>
+    <rect x="29" y="14" width="7" height="7" rx="1" fill="url(#grass)" transform="rotate(20 32 17)"/>
+    <rect x="9" y="8" width="6" height="6" rx="1" fill="url(#earth)" transform="rotate(-12 12 11)"/>
+    <rect x="49" y="7" width="6" height="6" rx="1" fill="url(#stone)" transform="rotate(18 52 10)"/>
+  </g>
+  <path d="M10 22c10-4 28-4 44 0M14 32c8-4 24-4 36 0M20 42c6-3 18-3 24 0" fill="none" stroke="#f1dfbc" stroke-width="1.2" stroke-linecap="round" opacity=".45"/>
+</svg>

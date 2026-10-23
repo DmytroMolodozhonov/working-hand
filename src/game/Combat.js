@@ -162,6 +162,7 @@ export const SPELL_COST = {
     Groundprud: 10, // «Groundprud»: the ground rises into a wall 7×2×5 where the wand points (Groundprud.js; a scroll)
     Fireworks: 15, // once, at the start (the author: «снимается 15 маны»); the 10 s that follow cost nothing (Fireworks.js; no scroll)
     Invisibility: 20, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
+    GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 0.5 a second while held (a scroll — GroundVortex.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)
@@ -888,6 +889,7 @@ export class Combat {
 
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
     shieldFactor(from) {
+        if (this.game.groundVortex?.covers?.(from)) return 1; // (the earth vortex's shield: the blocks facing the blow — GroundVortex.js)
         const s = this.shield;
         if (!s || s.left <= 0) return this.game.gear?.shieldFaces(from) ? 1 : 0; // a shield in the hand
         if (s.type === 1 && this.game.gear?.shieldFaces(from)) return 1;
@@ -905,6 +907,8 @@ export class Combat {
      * @returns {boolean} true: it held; false: it shattered now (out of mana) — the spell goes on to me
      */
     _blocked(from, kind = null) {
+        const gv = this.game.groundVortex;
+        if (gv?.covers?.(from)) return gv.take(from, kind); // (the blocks take it: no mana, they break; the gods' spells sweep them away and go on)
         if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return true; }
         if (!this.shield) return false;
         if (!this._payHit(kind)) return false;
@@ -995,6 +999,8 @@ export class Combat {
         const d = this.center(_v1).distanceTo(pos);
         let dmg = bombardoDamage(d, radius, power);
         if (dmg <= 0) return;
+        const gvx = this.game.groundVortex;
+        if (gvx?.covers?.(pos)) { const held = gvx.take(pos, power < 1 ? 'Cannon' : power > 1 ? 'BombardoMaxima' : 'Bombardo'); if (held) { dmg *= 0.2; if (Math.round(dmg) <= 0) return; } }
         const s = this.shield;
         const kind = power < 1 ? 'Cannon' : power > 1 ? 'BombardoMaxima' : 'Bombardo'; // (a cannonball's blast is no spell)
         if (s?.gods && s.left > 0 && isMagicKind(kind)) { this.godsHit(kind, null); return; } // (the gods' shield: a blast all round — held, no mana)

@@ -28,6 +28,7 @@ import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
 import { groundprudWords } from '../game/GroundprudWords.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
+import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 
 const _a = new THREE.Vector3();
@@ -195,6 +196,9 @@ export function matchSpell(text) {
     if (has('нокс', 'nox', 'нокса', 'knox', 'knocks', 'nocks')) return 'Nox';
     // «Lightning Writing»: drawing in the air (before «Lightning Strike»: the same first word)
     if (has('райтинг', 'райтин', 'врайтин', 'райдинг', 'writing', 'writin', 'righting', 'латин', 'вратин', 'latin', 'vratin', 'братин', 'ратин')) return 'Draw';
+    // «Ground Vortex» (both words) and its «Shield»: before the water's «vortex» (GroundVortexWords.js)
+    if (groundVortexWords(s)) return 'GroundVortex';
+    if (shieldWords(s)) return 'GroundShield';
     // «Water Vortex» («вотер вортекс»): before everything that shares its sounds (water ball, Maxima…)
     if (has('vortex', 'vortec', 'vortx', 'вортекс', 'вортэкс', 'вортикс', 'вортекз', 'вортес', 'вотекс', 'вортакс', 'водоворот', 'ворт экс')) return has('супер', 'super', 'сюпер', 'суппер', 'супр') ? 'WaterVortexSuperMaxima' : 'WaterVortex'; // («Super Maxima»: the great water storm, WaterStorm.js)
     // «Total Destruction» («Тотал Дестракшн»): before Stand («st…») and every short token

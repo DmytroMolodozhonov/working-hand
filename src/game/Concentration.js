@@ -57,6 +57,7 @@ export const HELD = {
     Beam: { ru: 'Луч', icon: '❄️', own: [] },
     GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'] }, // (the gods' shield: held — ProtectionGods.js)
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
+    GroundVortex: { ru: 'Вихрь земли', icon: '🌪️', own: ['GroundVortex', 'GroundShield', 'Attack'] }, // (blocks circling the hero: 0,5 mana a second — GroundVortex.js)
     VisibleGodi: { ru: 'Visible Godi', icon: '👁️', own: [] }, // (the cloud on the screen: 1 mana a second — VisibleGodi.js; «стоп» closes it)
     Fireworks: { ru: 'Салют', icon: '🎆', own: [] }, // (10 s of salvos over the wand: Fireworks.js — «стоп» ends it)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
@@ -113,6 +114,7 @@ export class Concentration {
         if (g.fireworks?.on) return 'Fireworks';
         if (g.imperius?.puppet) return 'Puppet';
         if (g.imperius?.active) return 'Imperius';
+        if (g.groundVortex?.busy) return 'GroundVortex';
         if (g.visibleGodi?.on) return 'VisibleGodi';
         if (g.dragonRide?.active) return 'DragonTame';
         if (g.ships?.blowing) return 'SailWind';
@@ -172,6 +174,7 @@ export class Concentration {
         if (g.spells?.stopBy?.(g.localId)) done.push('огонь / луч');
         if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
         if (g.fireworks?.stop?.('focus')) done.push('салют');
+        if (g.groundVortex?.stop?.('down')) done.push('Ground Vortex');
         if (g.visibleGodi?.stop?.('focus')) done.push('Visible Godi');
         if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');
         if (g.imperius?.stop?.(why === 'dead' ? 'dead' : 'hurt')) done.push('Империус');

@@ -170,6 +170,7 @@ export const SPELL_PHYSICS = {
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
+    GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     VisibleGodi: null, // («Visible Godi»: a look through a wall — pushes nobody, VisibleGodi.js)
     Fireworks: null, // («Fireworks»: sparks high up — they push and hurt nobody, Fireworks.js)
     Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)

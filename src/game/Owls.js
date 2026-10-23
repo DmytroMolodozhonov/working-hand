@@ -111,6 +111,7 @@ export const TARGETS = {
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
     CreateBridge: { does: 'none', why: '«Create a Bridge»: не касается' },
     Groundprud: { does: 'none', why: '«Groundprud»: не касается' },
+    GroundVortex: { does: 'dodge', why: '«Ground Vortex»: летящие блоки — сова улетает, не касается' },
     VisibleGodi: { does: 'none', why: '«Visible Godi»: тучка только на моём экране — сова ничего не замечает' },
     Fireworks: { does: 'none', why: '«Fireworks»: искры высоко над головой — сова не обращает внимания' },
     Invisibility: { does: 'none', why: 'невидимого игрока не видит: не смотрит на него и не слышит просьбу' },

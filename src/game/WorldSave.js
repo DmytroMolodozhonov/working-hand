@@ -314,6 +314,7 @@ export class WorldKeeper {
 
     async save() {
         if (this._saving || !this.game.active) return;
+        if (this.game.groundVortex?.busy) return; // («Ground Vortex» holds blocks out of the ground: saved when it ends or, leaving, returnAll lays them back first)
         this._saving = true;
         try { await putWorld(this.snapshot()); this.lastSaved = Date.now(); } catch (e) { console.warn('[WorldSave] not saved', e); }
         this._saving = false;

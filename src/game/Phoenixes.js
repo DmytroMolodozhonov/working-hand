@@ -129,6 +129,7 @@ export const TARGETS = {
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
     CreateBridge: { does: 'none', why: '«Create a Bridge»: не касается' },
     Groundprud: { does: 'none', why: '«Groundprud»: земля поднимается вдалеке от птицы — не касается' },
+    GroundVortex: { does: 'none', why: '«Ground Vortex»: феникс уворачивается от блоков — не касается' },
     VisibleGodi: { does: 'none', why: '«Visible Godi»: тучка только на экране колдующего — феникс ничего не замечает' },
     Fireworks: { does: 'none', why: '«Fireworks»: искры высоко и гаснут в воздухе — феникс не обращает внимания' },
     Invisibility: { does: 'none', why: 'невидимого игрока не видит: не лечит и не нападает' },

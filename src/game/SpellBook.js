@@ -36,7 +36,7 @@ export const TAUGHT_BY = {
     WindImpulseMaxima: 'WindImpulse', AliveMaxima: 'Alive', TotalDestructionMaxima: 'TotalDestruction',
     CircleAttackMaxima: 'CircleAttack', DrawdownMaxima: 'Drawdown', AirBubbleMaxima: 'AirBubble', WaveAttackMaxima: 'WaveAttack',
     WaterForming: 'Waterball', VortexBubble: 'WaterVortex', Furl: 'Unfurl', BreakthroughMaxima: 'Breakthrough',
-    WallRise: 'Breakthrough', WallRiseMaxima: 'Breakthrough', WardGrow: 'ProtectionHouse',
+    WallRise: 'Breakthrough', WallRiseMaxima: 'Breakthrough', WardGrow: 'ProtectionHouse', GroundShield: 'GroundVortex',
 };
 
 /** Learned from the book-birds' books (BookBirds.BOOK_POOL; the book of protection; the swift book — «Флайн»). */

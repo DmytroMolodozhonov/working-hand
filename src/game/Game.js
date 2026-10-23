@@ -165,6 +165,7 @@ import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
+import { GroundVortex } from './GroundVortex.js';
 import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { SteamBodies } from '../fx/SteamFx.js';
 import { Fireworks } from './Fireworks.js';
@@ -182,7 +183,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -455,6 +456,7 @@ export class Game {
         this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
+        this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -1652,6 +1654,8 @@ export class Game {
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
         // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)
+        const gvx = this.groundVortex.voice(name, text, isFinal);
+        if (gvx !== undefined) return gvx;
         const vx = this.vortex.voice(name, text, isFinal);
         if (vx !== undefined) return vx;
         if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
@@ -1999,6 +2003,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
+        if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
@@ -3179,6 +3184,7 @@ export class Game {
         for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
         for (const m of this.ultra?.sampleModels?.() || []) zoo.add(m); // («Ультра качество»: the soft lawn)
         if (this.world.terrain?.flora) zoo.add(this.world.terrain.flora.sampleModel()); // (the meadows' tall grass and flowers)
+        for (const m of this.groundVortex?.sampleModels?.() || []) zoo.add(m); // (the blocks of «Ground Vortex»)
         for (const m of this.groundprud?.sampleModels?.() || []) zoo.add(m); // (the earth of «Groundprud» rising out of the ground)
         for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
@@ -3459,6 +3465,7 @@ export class Game {
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
+        this.groundVortex?.update(dt);
         this.visibleGodi?.update(dt);
         this.steam?.update(dt);
         this.fireworks?.update(dt);
@@ -4367,6 +4374,7 @@ export class Game {
         this.swim?.dispose();
         this.seaSurface?.dispose();
         this.steam?.dispose();
+        this.groundVortex?.dispose();
         this.seeFx?.dispose();
         this.ultra?.dispose();
         this.items?.dispose();

@@ -157,6 +157,7 @@ export const ON_DRAGON = {
     Stitching: { dmg: 0, why: '«Stitching»: камни в дракона не кладутся' },
     CreateBridge: { dmg: 0, why: '«Create a Bridge»: доски в дракона не кладутся' },
     Groundprud: { dmg: 0, why: '«Groundprud»: блок в дракона не кладётся — стена вырастает рядом, когда он отойдёт' },
+    GroundVortex: { dmg: 0, why: '«Ground Vortex»: блок отскакивает от дракона, урона нет; но удар по нему — нападение, обида запоминается' },
     VisibleGodi: { dmg: 0, why: '«Visible Godi»: взгляд сквозь стену — дракон не знает и не злится, обиды не копит' },
     Fireworks: { dmg: 0, why: '«Fireworks»: никого не ранит и не злит — дракон может поглядеть, обиды не копит' },
     Invisibility: { dmg: 0, why: 'невидимого игрока дракон не видит — теряет его' },

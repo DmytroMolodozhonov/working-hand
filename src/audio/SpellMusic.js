@@ -413,6 +413,19 @@ const TUNES = {
         noise(o, sr, 0, 8, 0.05, () => 0.05, swell(0.3, 0.3), r); // (the roar under it)
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Ground Vortex»: low strings in C minor, stone thuds of the drums, brass over the grinding of earth. */
+    thEarth(sr) {
+        const o = buf(sr, 7), r = rng(139);
+        const ch = [['C2', 'G2', 'C3', 'Eb3'], ['Ab2', 'Eb3', 'Ab3', 'C4'], ['Bb2', 'F3', 'Bb3', 'D4'], ['G2', 'D3', 'G3', 'Bb3']];
+        ch.forEach((c, k) => {
+            pad(o, sr, c, k * 1.7, k * 1.7 + 1.9, 0.42, { att: 0.35, rel: 0.8, harm: 3, vib: 0.004 });
+            drum(o, sr, k * 1.7, 0.5, 48, 1.1, r);
+            drum(o, sr, k * 1.7 + 0.85, 0.35, 60, 0.7, r);
+            noise(o, sr, k * 1.7, 1.7, 0.06, (u) => 0.04 + 0.08 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI), r); // (the grinding)
+        });
+        melody([[0, 'C4', 1], [1, 'Eb4', 1], [2, 'G4', 2], [4, 'F4', 1], [5, 'Eb4', 1], [6, 'D4', 2], [8, 'C4', 3]], 0.5, 0.4, (f, t, l) => brass(o, sr, f, t, l, 0.12));
+        return finish(o, sr, { rms: 0.075 });
+    },
     /** «Water Vortex Super Maxima» (the storm): rolling D minor, harp runs like waves, the drums of the swell. */
     thStorm(sr) {
         const o = buf(sr, 8.5), r = rng(113);
@@ -594,6 +607,8 @@ const LOOPS = {
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** «Strengthen House» held: a bright steady hum (E and B) with a quick shimmer of silver bells climbing. */
     loopStrengthen(sr) { const o = buf(sr, 2.3); pad(o, sr, [164.8, 246.9, 329.6], 0, 2.3, 0.26, { att: 0.01, rel: 0, harm: 2, vib: 0.005 }); glide(o, sr, 0, 2.3, 0.05, (u) => 600 + 400 * u, () => 1, 1); for (const [t, n] of [[0.2, 'B5'], [0.9, 'E6'], [1.6, 'G#6']]) bell(o, sr, hz(n), t, 0.04, 0.7, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
+    /** «Ground Vortex» held: a low turning hum of earth, a far stone thud. */
+    loopEarth(sr) { const o = buf(sr, 3.6), r = rng(151); pad(o, sr, [65.4, 98], 0, 3.6, 0.25, { att: 0.01, rel: 0, harm: 3, vib: 0.003 }); noise(o, sr, 0, 3.5, 0.06, (u) => 0.08 + 0.05 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.4, 50, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.34 }); },
     /** «Visible Godi» held: a quiet veiled hum (A and E) breathing slowly, one far bell now and then. */
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
@@ -654,6 +669,7 @@ export const SPELL_SOUND = {
     PlanetLiquidation: { own: ['doomBeam', 'doomRumble', 'doomBlast'], theme: 'thDoom' }, // (the beam, the cracking, the blast — SpaceSounds, everybody who sees it; the tune from the caster)
     Hellfire: { own: ['inferno', 'rumble'], theme: 'thHell' },
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
+    GroundVortex: { theme: 'thEarth' }, GroundShield: { cast: 'fxShield' }, // («Ground Vortex»: its tune; the shield word — a short shield chime)
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)
     Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
@@ -700,6 +716,7 @@ export const HELD_SOUND = {
     Build: { loop: 'loopBuild', end: 'fxStop' },
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
+    GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

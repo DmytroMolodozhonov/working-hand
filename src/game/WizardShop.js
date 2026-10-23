@@ -68,7 +68,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
 }
 
 /** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */
-export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'VisibleGodi', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
+export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'VisibleGodi', 'GroundVortex', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
     'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack', 'Imperius'];
 
 /** The price of a scroll in a tower's shop (coins). */

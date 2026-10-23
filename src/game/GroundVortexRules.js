@@ -1,0 +1,430 @@
+/**
+ * GroundVortexRules.js — «Ground Vortex» («Граунд Вортекс», a scroll): the rules, pure (no THREE) and node-testable.
+ * The spell itself is GroundVortex.js, the picture is src/fx/GroundVortexFx.js.
+ *
+ * The author: похоже на Water Vortex, но с землёй. Направляешь палочку на землю — поднимаешь блоки (материал земли, что
+ * там есть), они кружатся вокруг героя, когда рука делает круги. Чем больше показываешь на землю — тем больше блоков, можно
+ * загрести больше и сделать вихрь больше. Атака — в
+ * других (игроков, существ). Перестал кружить и просто направляешь палочку — вихрь следует за ней «паровозиком» (хвостом).
+ * «Shield» — блоки сжимаются в заслон, чужое заклинание попадает В БЛОКИ, а не в героя.
+ *
+ * Numbers (main session's decisions; the hero is ~3.5 m, a block is 1 m):
+ *   cost       20 mana at once, then 0.5 mana a second while held; +8 cells of the mana maximum at the first real lift;
+ *              held (Concentration): «стоп» ends it, as do death, a stun, the ice, a fall, no mana, the wand put away.
+ *   gather     the wand on the ground (within REACH, not nearer than NEAR): BASE blocks a second even with a still hand, and every
+ *              full turn of the hand brings TURN blocks more (a faster hand: more, up to ×1.6). MAX_BLOCKS = 160 in all
+ *              (a funnel ~7 m tall above the feet and ~9 m wide at the top), rings of the funnel hold 9, 11, 13, … blocks.
+ *   what       any block of the world (the author: земля, камень, дерево и другие): earth, grass, stone, sand, snow, wood, leaves, bricks,
+ *              a planet's rock… Never: water, bedrock, thin plants, the enchanted / arcane stone, the Queen's ice, the gods' gifts, a ship's deck,
+ *              inside another's house sphere. Loose THINGS (a sword, a coin) are not blocks: not taken (the author).
+ *   dig        round the spot the wand shows (DIG_R = 6 m), the top block (a tree: crown first) of the nearest column, down to DIG_DEPTH = 5 layers below
+ *              the spot's level, never within NEAR_ME = 2.2 m of the hero's feet (no hole under him).
+ *   train      the hand stops going round (calm for TRAIN_CALM s) and points: the vortex leaves the hero and follows the wand as a
+ *              snake — a helix of blocks along the wand's trail (TRAIN_STEP s a block, ≤ 3 s of tail); a hand going round again — back round the hero.
+ *   attack     «Атака» (or a sharp throw of the wand hand: a salvo of SALVO blocks): the blocks fly at what the wand shows, SPEED m/s,
+ *              VOLLEY blocks a second, steered by the wand a little; each block that hits hurts (BLOCK_DMG, a wizard/player 2) and
+ *              pushes (a few in a row knock down). One that misses or hits a wall is laid back as a block where it stopped
+ *              (the caster's computer; if the cell is not free or not allowed it crumbles); one that hits a creature crumbles.
+ *   shield     «Shield» (SHIELD_MIN = 12 blocks): the blocks close into 4 rings of 12 (48 blocks) at SHIELD_R = 2.3 m, a second shell at
+ *              3.2 m for the 49th-96th; the rest circle outside. A spell that would hit the hero hits the blocks facing it: each
+ *              blow takes blocks away (HIT_BLOCKS, near the blow) and the hero is not touched while the blocks facing it hold (≥ 2
+ *              within 25° of the blow). Fewer than SHIELD_MIN left → it opens. The gods' spells break it all (the blocks fly apart).
+ *              It does not cover from above (Thunderwave), nor from a blow in melee (a creature standing next to him), nor arrows
+ *              of other things — only what Protection stops by the same rules (Combat.shieldFactor / _blocked).
+ *   the end    every block falls from where it is (flung out of the ring a little) and, landing, is laid back as a block in the nearest free
+ *              cell (the caster's computer; stacking up to 3 high); the ones that find no place crumble. Saving the world / leaving
+ *              the game lays all of them at once round the hero (returnAll) — nothing is lost for good except what the blows crumbled.
+ */
+
+import { BLOCK, isPlanetBlock } from '../world/Terrain.js';
+import { isEnchanted } from '../world/EnchantedStone.js';
+
+export const GV = {
+    NAME: 'GroundVortex',
+    SHIELD_NAME: 'GroundShield',
+    COST: 20,
+    DRAIN: 0.5, // mana a second while it is held
+    FIRST: 8, // cells of the mana maximum at the first real lift (Mana.FIRST_SPELL)
+    MAX_BLOCKS: 160,
+    REACH: 16, // m: the wand shows ground this far
+    NEAR: 1.5, // m: the spot must be this far from the hero
+    NEAR_ME: 2.2, // m: no block is taken within this of the hero's feet
+    DIG_R: 6,
+    DIG_DEPTH: 5,
+    BASE: 2.5, // blocks a second while the wand shows ground
+    TURN: 10, // blocks one full turn of the hand brings (at a calm speed)
+    TURN_FAST: 1.6, // × at a fast hand
+    TAKE_PER_FRAME: 6,
+    SEND_EDITS: 0.12, // s: the taken blocks go out together
+    IDLE_END: 14, // s with no block lifted: the vortex falls apart (nothing to hold)
+    MAX_LIFE: 240,
+    // the funnel
+    LAYER_R0: 1.9, // m: the lowest ring
+    LAYER_DR: 0.3, // m wider each ring up
+    LAYER_DY: 0.7, // m higher each ring up
+    LAYER_Y0: -1.5, // m below the hip (the hero's feet are 2 m under it)
+    CAP0: 9, // blocks in the lowest ring
+    CAP_DC: 2,
+    SPIN_MIN: 1.4, // rad/s
+    // the train
+    TRAIN_CALM: 0.55, // s of a calm pointing hand before it goes
+    TRAIN_IN: 1.5, // 1/s: how fast ring → train
+    TRAIN_STEP: 0.018, // s of the wand's trail between two blocks
+    TRAIN_REACH: 8, // m: the head ahead of the wand (shorter when something is in the way)
+    TRAIN_R: 0.9, // m: the helix round the trail
+    HIST_HZ: 40,
+    HIST_N: 160,
+    // the attack
+    SPEED: 30, // m/s
+    GRAV: 9, // m/s² (a thrown rock, not a bullet)
+    VOLLEY: 36, // blocks a second
+    SALVO: 12,
+    STEER: 0.5, // rad/s the wand may bend a flying block
+    FLIGHT_LIFE: 3.2,
+    BLOCK_DMG: 3, // HP a block to a creature (a wizard / villager / animal / zombie)
+    PLAYER_DMG: 2,
+    HIT_EVERY: 0.3, // s between two hits on the same victim
+    PUSH: 6, // m³ of «vortex volume» a block pushes with (WaterVortex.pushOf); a victim hit again within KNOCK_WINDOW gets more
+    KNOCK_WINDOW: 0.9,
+    BODY_R: 0.5, // m: the block's reach
+    // the shield
+    SHIELD_MIN: 12,
+    SHIELD_R: 2.3,
+    SHIELD_R2: 3.2,
+    SHIELD_RINGS: 4,
+    SHIELD_COLS: 12,
+    SHIELD_CAP: 96,
+    SHIELD_IN: 2.2, // 1/s
+    SHIELD_SPIN: 0.55,
+    COVER_ARC: 0.44, // rad (25°): a block within this of the blow's bearing stands in its way
+    COVER_NEED: 2,
+    STALE: 1.6, // s without news and a far vortex is forgotten
+    SEND: 0.1,
+    // the end
+    FALL_G: 22,
+};
+
+/** Never lifted: water, bedrock, thin plants, the magic stone (enchanted / arcane / the Queen's ice). Everything else solid goes: earth, stone, wood, leaves, bricks… */
+const NEVER = new Set(['AIR', 'WATER', 'BEDROCK', 'WHEAT', 'FLOWERS', 'VEG', 'ARCANE', 'ARCANE_DARK', 'ARCANE_LAMP', 'ARCANE_LAMP_VIOLET', 'RUNE', 'ICE_WALL', 'ICE_GLOW', 'ICE_FLOOR', 'ICE_DARK'].map((n) => BLOCK[n]).filter((x) => x != null));
+
+/** Can this block be lifted? (the author: земля, камень, дерево и другие блоки — всё, что связано с блоками) */
+export function liftable(b) {
+    if (b == null || NEVER.has(b)) return false;
+    return !isEnchanted(b);
+}
+
+/** What a lifted block is drawn (and laid back) as: farmland and path are earth. */
+export const lifted = (b) => (b === BLOCK.FARMLAND || b === BLOCK.PATH ? BLOCK.DIRT : b);
+
+/**
+ * ON WHOM AND ON WHAT (CLAUDE.md). A vortex of earth: lifts the ground, circles, hits with blocks, shields with blocks.
+ * `does` — what it does there; `why` — the reason (« не действует » is written too).
+ */
+export const GROUND_VORTEX_TARGETS = {
+    me: { does: 'shield', why: 'колдующий в центре: вихрь его не задевает; «Shield» ставит блоки между ним и ударом (Combat.shieldFactor/_blocked); сам он может бросить блоки в себя, повернув палочку на себя — ушиб как от чужого' },
+    players: { does: 'hit', why: 'блок бьёт игрока: −2 HP, толчок, несколько подряд сбивают с ног; свой «Protection» лицом к блоку держит (hitBySpell); решает компьютер того игрока, который знает свой щит' },
+    zombies: { does: 'hit', why: 'блок бьёт зомби: −3 HP и толчок (host: damageZombie + _push); кружащиеся блоки без атаки зомби не задевают' },
+    castlePeople: { does: 'hit', why: 'жителей, рыцарей, короля, волшебников, торговцев бьёт летящий блок (−3 HP, толчок; host); рыцари и волшебники не колдуют это (заклинание без свитка NPC); страх и тревога: castleLife.alarm' },
+    animals: { does: 'hit', why: 'животных бьёт летящий блок (−3 HP, толчок; host: animals.hit); кружащие блоки их не задевают' },
+    sailors: { does: 'hit', why: 'моряки и скелеты (ships.crew): летящий блок −3 HP и толчок, как по жителю; в море земли нет — вихрь копает только на суше' },
+    spider: { does: 'hit', why: 'гигантская паучиха: блок −3 HP (толстая шкура: толчка нет)' },
+    livingTrees: { does: 'none', why: 'ожившее дерево: блок отскакивает, дерево не ранит — не действует' },
+    bookBirds: { does: 'none', why: 'книги-птицы быстрые и летают — блок их не настигает (как и водяной вихрь), не касается' },
+    iceCastle: { does: 'hit', why: 'снеговики и ледяные монстры: блок −3 HP и толчок; Ледяная Королева: простые заклинания на неё не действуют, но каменный блок — предмет, ранит как удар (−3 HP), к холоду это отношения не имеет' },
+    blackship: { does: 'hit', why: 'капитан Чёрные Усы отбивает летящий блок шпагой (parryBolt не нужен — блок, а не заряд), скелеты рассыпаются как от удара по костям (Sailors.pirateBoneDamage, kind GroundVortex); корпус проклятого корабля блок не повреждает — барьер вспыхивает' },
+    dragon: { does: 'none', why: 'дракон слишком большой и прочный — блок отскакивает; но каждый удар по нему — нападение на него: Dragons.hit(...offended) запоминает обиду' },
+    phoenix: { does: 'none', why: 'феникс уворачивается — не касается (Phoenixes.js)' },
+    owl: { does: 'none', why: 'сова улетает — не касается (Owls.js)' },
+    servants: { does: 'hit', why: 'слуги волшебника: блок как по жителю; хозяин не ранит своих' },
+    bosses: { does: 'hit', why: 'король, глава башни, паучиха, пират: бьёт как обычное существо (по таблице выше); сундуки у них прежние' },
+    blocks: { does: 'lift', why: 'любые блоки мира: земля, трава (с шапкой), камень, песок, снег, гравий, дерево, листва, кирпич…; снятые правкой builder._sendEdits(settle): здание, потерявшее опору, рушится по правилам Structure/Collapse' },
+    items: { does: 'none', why: 'вещи на земле вихрь не берёт (решение автора: вихрь только из земли); блок, упавший на вещь, ложится рядом, вещь не давит' },
+    water: { does: 'none', why: 'воду не берёт; блоки в воду не кладутся — упавший в воду блок крошится' },
+    ground: { does: 'lift', why: 'цель — блоки (земля, стена, дерево), куда показывает палочка (до 16 м, не ближе 1,5 м): в небо, в воду, в дом — подсказка «покажите на землю»' },
+    trees: { does: 'lift', why: 'деревья — блоки (ствол, листва): берутся сверху вниз как любые; дерево, потерявшее ствол, — по правилам Structure; ожившее дерево (существо) — не блок, см. livingTrees' },
+    houses: { does: 'lift', why: 'блоки домов и замков берутся сверху вниз (по одному, не ближе 2,2 м от героя); что потеряло опору, рушится (Structure/Collapse); жители пугаются (castleLife.alarm uproot); чужая сфера защиты дома и заколдованный камень — нет' },
+    ships: { does: 'none', why: 'палуба — не земля; блок, упавший на палубу, крошится; в чужие корабли летящий блок не ломает, а отскакивает' },
+    ward: { does: 'none', why: 'в чужой сфере защиты дома блоки не берутся (HouseWards.forbids); влетевший блок не ломает защиту' },
+    godGift: { does: 'none', why: 'дары богов (храм, пьедесталы, Ледяной Жезл) не берутся и не ломаются блоками' },
+    enchanted: { does: 'none', why: 'заколдованный камень (арены, башни волшебников) не слушается: не берётся и не ломается летящим блоком (ENCHANTED_VS.GroundVortex)' },
+    space: { does: 'none', why: 'в открытом космосе под ногами нет земли (spaceSpellBlock); на планетах работает из породы планеты, кроме Солнца' },
+    spells: { does: 'shield', why: 'заряды дуэли, лучи, взрывы: «Shield» принимает их на блоки (−HIT_BLOCKS блоков за удар); заклинания богов сметают заслон целиком и идут дальше' },
+    concentration: { does: 'held', why: 'удерживаемое: пока вихрь жив, другое заклинание не сработает (Concentration.HELD.GroundVortex: свои слова «Shield», «Атака»); сброс — смерть, оглушение, лёд, падение' },
+};
+
+/**
+ * Blocks a blow takes off the shield (the nearest to it). kind: the spell's name as Combat knows it.
+ * A blast is bigger the stronger its power; the beams (Inferno…) take one a tick.
+ */
+export const HIT_BLOCKS = {
+    Sapira: 2, Sands: 2, Stupefy: 3, IceBall: 3, Ice: 1, Inferno: 1, Wind: 0, WindMaxima: 0, Thunderwave: 4, Electrum: 1, Jolt: 3, JoltMaxima: 7, Disarmor: 2,
+    Expelliarmus: 2, Bombardo: 10, BombardoMaxima: 24, Cannon: 6, Frozen: 3, Die: 12, Accentric: 4, Pilbidrio: 5, WaterVortex: 3, GroundVortex: 3, Bounce: 1,
+};
+export const hitBlocks = (kind) => HIT_BLOCKS[kind] ?? 4;
+
+/** The gods' spells (and the ones that break any wall) sweep the shield away. */
+export const sweepsShield = (kind) => /^(AvadaKedavra|Die|TotalDestruction|TotalDestructionMaxima|Inspirius|Boom|Hellfire|PlanetLiquidation|WaterVortexSuperMaxima|LightningStrike|CircleAttackMaxima)$/.test(kind || '');
+
+// ------------------------------------------------------------------ small maths
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const TAU = Math.PI * 2;
+/** A stable pseudo-random number 0…1 from two integers. */
+export function hash2(a, b) {
+    let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+// ------------------------------------------------------------------ the funnel
+/** The ring (layer) of block i, its index in the ring and the ring's size. */
+export function layerOf(i) {
+    let k = 0, left = i;
+    for (;;) {
+        const cap = GV.CAP0 + GV.CAP_DC * k;
+        if (left < cap) return { k, j: left, cap };
+        left -= cap;
+        k++;
+    }
+}
+
+/** Blocks the funnel holds in its first `k` rings. */
+export const blocksInRings = (k) => k * GV.CAP0 + GV.CAP_DC * (k * (k - 1)) / 2;
+
+/** The funnel slot of block i: {r (m from the axis), y (m above the hip), ph (the phase round the axis)}. */
+export function funnelSlot(i, out = {}) {
+    const { k, j, cap } = layerOf(i);
+    out.k = k;
+    out.r = GV.LAYER_R0 + GV.LAYER_DR * k + 0.18 * (hash2(i, 5) - 0.5);
+    out.y = GV.LAYER_Y0 + GV.LAYER_DY * k + 0.22 * (hash2(i, 7) - 0.5);
+    out.ph = (j / cap) * TAU + k * 0.7 + 0.25 * (hash2(i, 3) - 0.5);
+    return out;
+}
+
+/** A block's own tumble: an axis (unit) and a speed (rad/s), a scale. */
+export function tumbleOf(i, out = {}) {
+    const a = hash2(i, 11) * TAU, z = hash2(i, 13) * 2 - 1, s = Math.sqrt(1 - z * z);
+    out.ax = s * Math.cos(a); out.ay = z; out.az = s * Math.sin(a);
+    out.w = (hash2(i, 17) - 0.5) * 5 + (hash2(i, 17) < 0.5 ? -0.8 : 0.8);
+    out.s = 0.86 + 0.12 * hash2(i, 19);
+    return out;
+}
+
+/** Where block i is in the ring formation round the body (`angle` — the vortex's turn, `t` — time for the bobbing). → {x, y, z} offsets. */
+export function ringOffset(i, angle, t, out = {}, f = funnelSlot(i, _fs)) {
+    const th = f.ph + angle * (1 + 0.04 * (f.k % 3)) - f.k * 0.13;
+    out.x = Math.cos(th) * f.r;
+    out.y = f.y + 0.14 * Math.sin(t * 2.3 + i * 1.7);
+    out.z = Math.sin(th) * f.r;
+    return out;
+}
+const _fs = {};
+
+// ------------------------------------------------------------------ the shield
+/** The shield slot of block i (the first SHIELD_CAP): {ring 0…3, col 0…11, shell 0|1, r, y, ph}. null: it circles outside. */
+export function shieldSlot(i, out = {}) {
+    if (i >= GV.SHIELD_CAP) return null;
+    const per = GV.SHIELD_RINGS * GV.SHIELD_COLS;
+    const shell = i >= per ? 1 : 0;
+    const s = ((shell ? i - per : i) * 5) % per;
+    out.shell = shell;
+    out.ring = s % GV.SHIELD_RINGS;
+    out.col = Math.floor(s / GV.SHIELD_RINGS);
+    out.r = shell ? GV.SHIELD_R2 : GV.SHIELD_R;
+    out.y = -1.35 + out.ring * 1.2 + (shell ? 0.5 : 0);
+    out.ph = (out.col + out.ring * 0.5 + (shell ? 0.25 : 0)) * (TAU / GV.SHIELD_COLS);
+    return out;
+}
+
+/** Block i in the shield, round the body, the shield turned by `angle`: {x, y, z} or null. */
+export function shieldOffset(i, angle, out = {}, s = shieldSlot(i, _ss)) {
+    if (!s) return null;
+    out.x = Math.cos(s.ph + angle) * s.r;
+    out.y = s.y;
+    out.z = Math.sin(s.ph + angle) * s.r;
+    return out;
+}
+const _ss = {};
+
+/** Blocks standing in the way of a blow coming from bearing `bearing` (rad, atan2(dz, dx) from the hero): indices. `alive(i)` → bool. */
+export function blocksFacing(n, alive, angle, bearing, arc = GV.COVER_ARC, out = []) {
+    out.length = 0;
+    for (let i = 0; i < Math.min(n, GV.SHIELD_CAP); i++) {
+        if (!alive(i)) continue;
+        const s = shieldSlot(i, _ss);
+        let d = Math.abs(((s.ph + angle - bearing) % TAU + TAU + Math.PI) % TAU - Math.PI);
+        if (d <= arc + (s.shell ? 0.05 : 0)) out.push(i);
+    }
+    return out;
+}
+
+/** Does the shield stop a blow from this bearing (≥ COVER_NEED blocks of at least two rings facing it)? */
+export function shieldCovers(n, alive, angle, bearing) {
+    const f = blocksFacing(n, alive, angle, bearing, GV.COVER_ARC, []);
+    if (f.length < GV.COVER_NEED) return false;
+    const rings = new Set();
+    for (const i of f) rings.add(shieldSlot(i, _ss).ring);
+    return rings.size >= 2;
+}
+
+/** The blocks a blow takes: the ones facing it, the outer shell first, then the nearest in angle. `want` of them. */
+export function blocksToBreak(n, alive, angle, bearing, want) {
+    const f = blocksFacing(n, alive, angle, bearing, GV.COVER_ARC * 2.2, []);
+    f.sort((a, b) => (shieldSlot(b, _ss).shell - shieldSlot(a, _ss).shell) || a - b);
+    return f.slice(0, want);
+}
+
+// ------------------------------------------------------------------ gathering
+/** Blocks one full turn of the hand brings at a hand speed (m/s). */
+export function turnBlocks(handSpeed) {
+    return GV.TURN * (0.6 + 0.4 * clamp(handSpeed / 1.5, 0, 2.5)); // (a calm hand 1×, a fast one up to 1.6×)
+}
+
+/**
+ * The cells to take round the spot A ({x, z, L: the ground layer there}): `n` of them, the nearest columns first, the top block of
+ * each; get(x, L, z) → block; top(x, z) → the highest solid layer; `skip(x, L, z)` → true for a cell not to touch (a gift, a ward,
+ * a body's, a ship's); me: the hero's feet {x, z} (nothing taken within NEAR_ME). Taken cells are not offered again (they are AIR now).
+ * @returns {Array<[x, L, z, block]>}
+ */
+export function digCells(get, top, A, me, n, skip = null) {
+    const R = GV.DIG_R, out = [];
+    const cols = [];
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+        const d2 = dx * dx + dz * dz;
+        if (d2 > R * R) continue;
+        const x = A.x + dx, z = A.z + dz;
+        if (me && Math.hypot(x - me.x, z - me.z) < GV.NEAR_ME) continue;
+        cols.push([d2 + 0.01 * hash2(x, z), x, z]);
+    }
+    cols.sort((a, b) => a[0] - b[0]);
+    for (const [, x, z] of cols) {
+        const g = top(x, z);
+        if (g < A.L - GV.DIG_DEPTH) continue;
+        const b = get(x, g, z);
+        if (!liftable(b)) continue;
+        // (nothing may stand on it that is not air: a tree, a wall, a roof on this column)
+        const above = get(x, g + 1, z);
+        if (above !== BLOCK.AIR && above !== undefined) continue;
+        if (skip && skip(x, g, z)) continue;
+        out.push([x, g, z, b]);
+        if (out.length >= n) break;
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------ the end: where a block lands
+/**
+ * The free cell for a block that fell at (x, z): from the ground layer up to 3 layers: the first AIR cell with a solid one under it.
+ * get / top as above. → [x, L, z] | null
+ */
+export function landingCell(get, top, x, z, skip = null) {
+    const bx = Math.round(x), bz = Math.round(z);
+    // (the cell it fell in, then the four beside it)
+    for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const cx = bx + dx, cz = bz + dz, g = top(cx, cz);
+        for (let k = 1; k <= 3; k++) {
+            const L = g + k;
+            if (get(cx, L, cz) !== BLOCK.AIR) continue;
+            const under = get(cx, L - 1, cz);
+            if (under === BLOCK.AIR || under === BLOCK.WATER) continue;
+            if (skip && skip(cx, L, cz)) continue;
+            return [cx, L, cz];
+        }
+    }
+    return null;
+}
+
+/** The first n free cells in a spiral round (x, z) for returnAll. */
+export function spiralCells(get, top, x, z, n, skip = null) {
+    const out = [], used = new Set();
+    for (let r = 0; r <= 14 && out.length < n; r++) {
+        for (let dx = -r; dx <= r && out.length < n; dx++) for (let dz = -r; dz <= r && out.length < n; dz++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+            const cx = Math.round(x) + dx, cz = Math.round(z) + dz;
+            if (Math.hypot(dx, dz) < 1.4) continue;
+            const g = top(cx, cz);
+            for (let k = 1; k <= 6 && out.length < n; k++) {
+                const L = g + k, key = cx + ',' + L + ',' + cz;
+                if (used.has(key)) continue;
+                if (get(cx, L, cz) !== BLOCK.AIR || get(cx, L - 1, cz) === BLOCK.AIR || get(cx, L - 1, cz) === BLOCK.WATER) continue;
+                if (skip && skip(cx, L, cz)) continue;
+                used.add(key);
+                out.push([cx, L, cz]);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------ the wand's trail
+/** Where the trail was `tau` s ago: the history is [{t, x, y, z}…] oldest first. Writes into out. */
+export function trailAt(hist, now, tau, out = {}) {
+    const n = hist.length;
+    if (!n) { out.x = out.y = out.z = 0; return out; }
+    const t = now - tau;
+    if (t <= hist[0].t) { out.x = hist[0].x; out.y = hist[0].y; out.z = hist[0].z; return out; }
+    for (let i = n - 1; i > 0; i--) {
+        const a = hist[i - 1], b = hist[i];
+        if (t >= a.t) {
+            const u = b.t > a.t ? (t - a.t) / (b.t - a.t) : 1;
+            out.x = a.x + (b.x - a.x) * u; out.y = a.y + (b.y - a.y) * u; out.z = a.z + (b.z - a.z) * u;
+            return out;
+        }
+    }
+    const l = hist[n - 1];
+    out.x = l.x; out.y = l.y; out.z = l.z;
+    return out;
+}
+
+/** Adds a point to the trail (at most HIST_HZ a second, HIST_N long). */
+export function trailPush(hist, now, x, y, z) {
+    const l = hist[hist.length - 1];
+    if (l && now - l.t < 1 / GV.HIST_HZ) { l.x = x; l.y = y; l.z = z; return; }
+    hist.push({ t: now, x, y, z });
+    if (hist.length > GV.HIST_N) hist.shift();
+}
+
+// ------------------------------------------------------------------ the flight of a block
+/** One step of a flying block: p, v are {x, y, z}; gravity GV.GRAV. */
+export function flyStep(p, v, dt) {
+    v.y -= GV.GRAV * dt;
+    p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
+}
+
+/** The velocity of the j-th block of a salvo aimed along unit d: a little spread, the same on every computer (seed). */
+export function salvoVelocity(d, seed, j, out = {}) {
+    const a = hash2(seed, j * 3 + 1) * TAU, r = 0.045 * Math.sqrt(hash2(seed, j * 3 + 2));
+    // (a vector perpendicular to d)
+    let px = -d.z, pz = d.x;
+    const pl = Math.hypot(px, pz) || 1; px /= pl; pz /= pl;
+    const qx = d.y * pz * -1, qy = d.z * px - d.x * pz, qz = d.y * px; // d × p (unnormalised: |d × p| ≈ 1 for unit d ⟂ p)
+    out.x = (d.x + (px * Math.cos(a) + qx * Math.sin(a)) * r) * GV.SPEED;
+    out.y = (d.y + (qy * Math.sin(a)) * r) * GV.SPEED;
+    out.z = (d.z + (pz * Math.cos(a) + qz * Math.sin(a)) * r) * GV.SPEED;
+    return out;
+}
+
+// ------------------------------------------------------------------ can it be cast here
+/** Why not: null = may; else a short reason key for the hint. */
+export function castBlock({ side, spot, dist, ward, ship }) {
+    if (!side) return 'wand';
+    if (!spot) return 'ground';
+    if (ward) return 'ward';
+    if (ship) return 'ship';
+    if (dist != null && dist > GV.REACH) return 'far';
+    return null;
+}
+
+export function hintFor(why) {
+    switch (why) {
+        case 'wand': return '🪄 «Ground Vortex» работает только с волшебной палочкой в руке';
+        case 'ground': return '🌪️ Покажите палочкой на землю — тогда скажите «Ground Vortex»';
+        case 'ward': return '🛡️ Здесь чужая защита дома — землю не поднять';
+        case 'ship': return '⚓ Палуба — не земля: вихрь здесь не поднять';
+        case 'far': return '🌪️ Слишком далеко — покажите поближе';
+        case 'holy': return '🧱 Заколдованный камень и дары богов не слушаются — «Ground Vortex» здесь ничего не поднимет';
+        case 'nothing': return '🌪️ Здесь нечего поднять — покажите на землю, где она не занята';
+        case 'busy': return '🌪️ Вихрь уже кружит — «стоп», чтобы закончить';
+        default: return '🌪️ Покажите палочкой на землю';
+    }
+}

@@ -111,6 +111,24 @@ const scenarios = {
         await page.waitForFunction(() => !window.__zns.game.castleMagic.magic, null, { timeout: 240000, polling: 200 });
         await sleep(4000);
     },
+    async 'вихрь земли'(page) {
+        // (the wand's aim is faked: a spot 4 m ahead; the lift is fed by hand — 160 blocks in 3 s, then the shield, a blow, the volley, the end)
+        await page.evaluate(() => {
+            const g = window.__zns.game, v = g.groundVortex, p = g.character.group.position;
+            const x = Math.round(p.x) + 4, z = Math.round(p.z), L = g.terrain.data.topLayer(x, z);
+            v._aimSpot = (side, out = {}) => Object.assign(out, { x, y: L - 0.5, z, L, dist: 4 });
+            window.__sb.rec = true;
+            v.cast(true);
+        });
+        for (let i = 0; i < 10; i++) { await page.evaluate(() => { const v = window.__zns.game.groundVortex; if (v.state) v.state.acc += 20; }); await sleep(300); }
+        await sleep(1500);
+        await page.evaluate(() => { const g = window.__zns.game, v = g.groundVortex; v.sayShield(true); });
+        await sleep(2500);
+        await page.evaluate(() => { const g = window.__zns.game, v = g.groundVortex, p = g.character.group.position; v.take({ x: p.x + 8, y: p.y, z: p.z }, 'Bombardo'); v.sayShield(true); v.attack(true); });
+        await sleep(3500);
+        await page.evaluate(() => { window.__zns.game.groundVortex.stop('stop'); });
+        await sleep(4000);
+    },
     async 'бомбардо'(page) {
         for (let i = 0; i < 3; i++) {
             await page.evaluate((i) => {
