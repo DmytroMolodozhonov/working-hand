@@ -194,3 +194,16 @@ test('talking to oneself: a lone «с», «айс» or «фроз…» inside wo
     // the written words (the browser's voice): words inside talk never cast
     for (const t of ['я сам с собой разговариваю', 'найс получилось', 'он заморозил реку', 'сэндвич съел']) assert.equal(spellPhrase(t).ok, false, t);
 });
+
+test('«интересно» said to oneself is no Inferno (the author: ran, said it, the fire came); the spell itself still is', async () => {
+    const { soundTrust, everydayHeard } = await import('../../src/audio/SpellPhrase.js');
+    // the sound only just like «инферно» (7 letters, fit +0.9), the letters the network wrote are the everyday word
+    for (const w of ['интересно', 'интересный', 'интересно как', 'нтересно', 'интерьесно', 'интернет', 'информация', 'инфекция']) {
+        assert.ok(everydayHeard(w, 'инферно'), `«${w}» is talk`);
+        assert.ok(soundTrust({ spell: 'Inferno', canonical: 'инферно', written: w, fit: 0.9, lips: null }), `«${w}» → no Inferno`);
+    }
+    for (const w of ['инферно', 'инфёрно', 'инферна', 'так инферно']) {
+        assert.equal(everydayHeard(w, 'инферно'), null, `«${w}» is the spell`);
+        assert.equal(soundTrust({ spell: 'Inferno', canonical: 'инферно', written: w, fit: 0.9, lips: null }), null, `«${w}» → Inferno`);
+    }
+});

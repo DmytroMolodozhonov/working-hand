@@ -74,6 +74,24 @@ export const WHOLE_WORD = new Set(['Jolt', 'JoltMaxima', 'Ice', 'Lock', 'Up', 'E
 export const EVERYDAY = new Set(['спасибо', 'акция', 'акции', 'акций', 'максим', 'максимум', 'максимально', 'сатурн', 'сапоги', 'сапог', 'санта',
     'сапер', 'скайп', 'сам', 'сама', 'сами', 'само']);
 
+/**
+ * Stems of long everyday words that the sound spotter takes for a spell («интересно» — «Инферно»: the author ran and said it
+ * to himself, and the fire came). A word of the sound's letters that begins with one of these (a letter off is allowed) and
+ * is not the spell's own word is talk. Raise the list when the journal shows another such word.
+ */
+export const SOUNDALIKE_STEMS = ['интерес', 'интерфейс', 'интернет', 'информац', 'инфекц', 'инфляц', 'инфаркт', 'инфракрас'];
+
+/** The everyday stem a word of what was heard begins with (not the spell's own word), or null. */
+export function everydayHeard(written, canonical = '') {
+    const own = letters(canonical);
+    for (const w of norm(written).split(' ')) {
+        if (w.length < 6) continue;
+        if (own && edits(w, own) <= 1) continue; // (it is the spell itself)
+        for (const s of SOUNDALIKE_STEMS) if (w.length >= s.length - 1 && [s.length - 1, s.length, s.length + 1].some((n) => edits(w.slice(0, n), s) <= 1)) return s; // (a letter lost, added or changed)
+    }
+    return null;
+}
+
 /** Fewest letter changes from a to b. */
 export function edits(a, b) {
     const n = a.length, m = b.length;
@@ -300,6 +318,7 @@ export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
     const like = lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
+    if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical)) return 'обычное слово («интересно» и т.п.), а не заклинание';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
     const short = len <= SHORT_LEN;
     if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;
