@@ -5,6 +5,11 @@
  * «Авада Кедавра», «Империус» (обычный; «Империус Максима» — божественное, исключение), «Give Me My Power» и
  * ритуал дьявольской силы (пентаграмма чёрной магии с телом убитого волшебника; сама пентаграмма и «Пентаграниум» — не чёрные: вызывающий код сам даёт `addDark(hero, 1, 'ritual')`).
  *
+ *  - ДВА счётчика (слова автора: «определить чёрного мага может любой волшебник» — по чёрным пятнам):
+ *    `level` — настоящий уровень чёрного мага 0…100 (зельем не снижается), `skin` — потемнение кожи 0…100 (то, что видно на теле).
+ *    Обычно skin == level. «Зелье светлого ума» (`cleanSkin`) убирает 30 с skin, level не трогает. Пока skin < level, удавшийся
+ *    чёрный каст чернит кожу на +10 (а не +1) до выравнивания; level растёт как всегда. Стадии, обнаружение магами, лавки,
+ *    изгнание и вид на теле (в т. ч. у других игроков) считаются по skin (`skinOf`); level решает лишь, сколько кастов вернут кожу.
  *  - Уровень тьмы героя 0 … 100. Каждый каст чёрного заклинания даёт +1 с шансом 50 % (`onDarkCast`);
  *    «Give Me My Power» и ритуал — всегда +1. Хранится у героя (WorldSave `dark`), у каждого игрока свой;
  *    смерть забирает как прочие прокачки, тело хранит (Legacy: captureLegacy / wipeHero / absorbLegacy).
@@ -33,6 +38,8 @@ export const DARK = {
     DARK_MAGE_CHANCE: { lone: 0.2, wanderer: 0.15, small: 0.1, merchant: 0.08, tower: 0, town: 0.03 }, // у кого уровень задан заранее
     DARK_MAGE_MIN: 8, DARK_MAGE_MAX: 95,
     CACHE_MAX: 32,
+    CLEAR_STEP: 30, // «Зелье светлого ума»: одна колба убирает столько с потемнения кожи (не с уровня)
+    SKIN_CAST: 10, // пока кожа светлее уровня, каждый удавшийся чёрный каст чернит её на столько
 };
 
 /** Виды заклинаний чёрной магии (имена как в Mana / SpellBook). «ImperiusMaxima» — НЕ тут (божественное). */
@@ -62,17 +69,39 @@ export function darkLevel(hero) {
     return clampDark(hero.level);
 }
 
+/** Потемнение кожи героя (то, что видят и обнаруживают волшебники): `skin`, а у старого вида без него — `level`. */
+export function skinOf(hero) {
+    if (hero == null) return 0;
+    if (typeof hero === 'number') return clampDark(hero);
+    if (hero.dark != null) return skinOf(hero.dark);
+    return clampDark(hero.skin ?? hero.level);
+}
+
 /**
  * Прибавить `n` к уровню героя (`hero` — DarkHero или объект `{level}`); `why`: 'cast' | 'ritual' | 'legacy' | …
- * @returns {number} на сколько выросло
+ * Кожа следует за уровнем: была вровень — растёт вместе с ним; была светлее (после зелья) — за каждое прибавление
+ * темнеет на `n × SKIN_CAST`, но не выше уровня (даже если сам уровень уже 100 и не вырос).
+ * @returns {number} на сколько вырос уровень
  */
 export function addDark(hero, n = 1, why = 'cast') {
     const h = hero?.dark && typeof hero.dark === 'object' ? hero.dark : hero;
     if (!h) return 0;
-    const was = clampDark(h.level), now = clampDark(was + n);
+    const was = clampDark(h.level), now = clampDark(was + n), skinWas = skinOf(h);
     h.level = now;
-    if (now !== was) h.onGrow?.(was, now, why);
+    const skinNow = skinWas >= was ? now : Math.min(now, skinWas + n * DARK.SKIN_CAST);
+    h.skin = clampDark(skinNow);
+    if (h.skin !== skinWas || now !== was) h.onGrow?.(skinWas, h.skin, why, was, now);
     return now - was;
+}
+
+/** «Зелье светлого ума»: кожа светлеет на `n` (по умолчанию 30), не ниже 0; уровень чёрного мага не меняется. @returns {number} на сколько посветлела */
+export function cleanSkin(hero, n = DARK.CLEAR_STEP) {
+    const h = hero?.dark && typeof hero.dark === 'object' ? hero.dark : hero;
+    if (!h) return 0;
+    const was = skinOf(h), now = clampDark(was - Math.max(0, n));
+    h.skin = now;
+    if (now !== was) h.onClean?.(was, now);
+    return was - now;
 }
 
 /** Каст чёрного заклинания героем игры `game`: +1 с шансом 50 % (всегда у GiveMyPower / ритуала). */
@@ -93,16 +122,17 @@ export function darkNotice(was, now) {
 
 /** Герой с уровнем тьмы на игре: хранение, смерть, сохранение. */
 export class DarkHero {
-    constructor(game) { this.game = game; this.level = 0; }
-    get stage() { return darkStage(this.level); }
-    onGrow(was, now) {
+    constructor(game) { this.game = game; this.level = 0; this.skin = 0; }
+    get stage() { return darkStage(this.skin); } // (по коже: её видят волшебники)
+    onGrow(was, now) { // (was/now — кожа; слово на порогах только по ней)
         const text = darkNotice(was, now);
         if (text) this.game?.hud?.setVoice?.(`🜏 <span style="color:#9a6bd1">${text}</span>`, true);
-        this.game?.net?.sendDark?.(now); // (виден другим игрокам)
+        this.game?.net?.sendDark?.(this.skin); // (виден другим игрокам)
     }
-    onDeath() { this.level = 0; }
-    snapshot() { return this.level > 0 ? { level: this.level } : null; }
-    restore(s) { this.level = clampDark(s?.level); this.game?.net?.sendDark?.(this.level); }
+    onClean() { this.game?.net?.sendDark?.(this.skin); }
+    onDeath() { this.level = 0; this.skin = 0; }
+    snapshot() { return this.level > 0 || this.skin > 0 ? { level: this.level, skin: this.skin } : null; }
+    restore(s) { this.level = clampDark(s?.level); this.skin = s?.skin == null ? this.level : Math.min(this.level, clampDark(s.skin)); this.game?.net?.sendDark?.(this.skin); }
 }
 
 // ------------------------------------------------------------------ как к этому относятся

@@ -3677,7 +3677,7 @@ export class Game {
         this._jumpStep(pose);
         this.steady.step(dt);
         this.darkExile.update(dt);
-        if (this.dark.level !== this._darkShown) { this._darkShown = this.dark.level; this.character?.setDarkLevel?.(this.dark.level); } // (метки тьмы на моём теле)
+        if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)

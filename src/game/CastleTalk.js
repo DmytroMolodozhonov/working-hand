@@ -410,7 +410,7 @@ export class CastleTalk {
      * — у кого какая терпимость); изгой в башне и городе — «Уходи». Ответ: true — слова приняты, дальше не идёт.
      */
     _darkGate(v, tradeOnly = false) {
-        const g = this.game, lvl = g.dark?.level || 0;
+        const g = this.game, lvl = g.dark?.skin || 0; // (по чёрным пятнам на теле, не по настоящему уровню)
         if (!v.wizard || !wizardDetects(lvl)) return false;
         const place = placeOf(v.cs?.def, v.entry), now = performance.now();
         const memo = (this._dark = this._dark || new Map());

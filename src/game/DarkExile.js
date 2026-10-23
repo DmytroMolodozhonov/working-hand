@@ -14,7 +14,7 @@ export class DarkExile {
 
     update(dt) {
         const g = this.game, L = g.castleLife;
-        const lvl = g.dark?.level || 0;
+        const lvl = g.dark?.skin || 0; // (по пятнам на теле: DarkMagic.js)
         if (lvl <= 80 || !L?.castles) { this.inside = 0; return; }
         this._t -= dt;
         if (this._t > 0) return;

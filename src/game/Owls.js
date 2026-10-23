@@ -57,6 +57,7 @@ import { irMaterial, IR } from '../fx/Iridescent.js';
 import { mergeInto } from '../core/MergeGeometry.js';
 
 export const OWL = {
+    SHED_CHANCE: 0.06, // a startled owl loses a feather (a dead one always leaves one)
     HP: 12, // (a scroll's lightning −20, «Авада» −25: one is enough; «Тандервейв» −8 two)
     HEIGHT: 1.2, // m standing: a quarter of a hero
     // twice as often as phoenixes: the same checks, twice the chance; the first sooner
@@ -623,6 +624,11 @@ export class Owls {
         this._note({ ev: 'dodge', id: o.id, by, kind });
         this._puff(o, 5);
         this._sound(o, 'wings');
+        // (rarely a startled owl loses a feather in its dart: an ingredient of «Зелье светлого ума», Potions.js)
+        if (this.auth && !o.annihilated && Math.random() < OWL.SHED_CHANCE) {
+            const p = owlCenter(o, new THREE.Vector3());
+            this.game.items?.spawnLoose?.({ kind: 'owlFeather', uid: newUid(), count: 1 }, p, { vel: _v.set((Math.random() - 0.5) * 1.5, 0.8, (Math.random() - 0.5) * 1.5) });
+        }
         this._flee(o, by != null ? this._player(by)?.pos : null);
     }
 

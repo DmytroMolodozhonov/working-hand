@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
+import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
@@ -1137,6 +1138,11 @@ export class ItemSystem {
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
         const said = [];
+        if (fx.skin) { // «Зелье светлого ума»: пятна на теле светлеют; сам уровень чёрного мага остаётся (DarkMagic.cleanSkin)
+            if (!(skinOf(g.dark) > 0)) { g.hud.setVoice?.('🧪 Тело и так чистое — зелье не нужно', true); return; }
+            const got = cleanSkin(g.dark, fx.skin);
+            said.push(skinOf(g.dark) > 0 ? `чёрные пятна светлеют (−${got})` : 'чёрные пятна сошли с тела');
+        }
         if (fx.hp) {
             g.playerHP = Math.min(g.maxHP, g.playerHP + fx.hp);
             if (g.combat?.enabled && !g.combat.dead) {

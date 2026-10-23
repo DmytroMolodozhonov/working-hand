@@ -640,8 +640,8 @@ export function describeItem(it) {
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
-        case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами'] };
-        case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Пригодится для зелий (позже)'] };
+        case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами. Остаётся от убитой совы, реже — слетает с испуганной', 'Ингредиент зелья светлого ума'] };
+        case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелья светлого ума'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     }
 }

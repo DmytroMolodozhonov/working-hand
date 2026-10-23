@@ -3372,7 +3372,7 @@ export class CastleLife {
     /** A wizard teaches `by` a lesson: he alone, Expelliarmus / Stupefy only, then he leaves it (see `_fight`). */
     _lesson(v, by) {
         const now = Date.now();
-        if (by === this.game.localId && this.game.dark?.level > 80 && !teaches(this.game.dark.level, placeOf(v.cs?.def, v.entry), v.id)) return false; // (чёрный маг: не учат)
+        if (by === this.game.localId && this.game.dark?.skin > 80 && !teaches(this.game.dark.skin, placeOf(v.cs?.def, v.entry), v.id)) return false; // (чёрный маг: не учат)
         if (!this._fights(v) || v.foe || v.lesson || now - (v.lessonEnd || 0) < LESSON.AGAIN_MS) return false;
         v.lesson = { by, until: now + LESSON.MS, casts: 0 };
         v.grudge = { id: by, until: now + LESSON.MS };

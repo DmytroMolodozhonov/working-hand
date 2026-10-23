@@ -54,6 +54,12 @@ export const RECIPES = [
         id: 'invis', name: 'Зелье невидимости', ingredients: { web: 1, minotaurHorn: 1, glass: 1 }, window: 30,
         effect: null, desc: 'Что оно делает — автор скоро расскажет (пока его не выпить)',
     },
+    {
+        // (the author: the owl's feather → the phoenix's feather → the golden apple; the body's dark marks go, the dark LEVEL stays — DarkMagic.js)
+        // brew: it stews longer than the others (2–3 minutes); skin: how much of the body's darkness one flask takes away (DARK.CLEAR_STEP)
+        id: 'clearmind', name: 'Зелье светлого ума', ingredients: { owlFeather: 1, phoenixFeather: 1, apple: 1 }, window: 30, brew: [120, 180],
+        effect: { skin: 30 }, desc: 'Выпейте: чёрные пятна на теле светлеют (до 30 за колбу). Уровень чёрного мага не снижается',
+    },
 ];
 
 /** Things that never dissolve: they sink to the bottom and lie there (a hand can fish them out). */
@@ -63,7 +69,7 @@ export const DURABLE = new Set(['wand', 'bow', 'shield', 'backpack', 'hammer', '
 export const INGREDIENT_RU = {
     apple: 'золотое яблоко', crystal: 'кристалл маны', wool: 'шерсть', meat: 'сырое мясо', steak: 'стейк',
     bread: 'хлеб', cheese: 'сыр', pie: 'пирог', scroll: 'свиток', fish: 'рыба',
-    web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла',
+    web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;
@@ -173,9 +179,11 @@ export function stepBrew(st, dt, rng = Math.random, fire = false) {
     if (st.phase === 'water') {
         if (ingCount(st)) {
             if (!boils) { toSludge(st); return 'out'; }
-            if (matchRecipe(st.ings)) {
+            const rc = matchRecipe(st.ings);
+            if (rc) {
                 st.phase = 'brewing'; st.t = 0; st.win = 0;
-                st.dur = CAULDRON.BREW_MIN + rng() * (CAULDRON.BREW_MAX - CAULDRON.BREW_MIN);
+                const [b0, b1] = rc.brew || [CAULDRON.BREW_MIN, CAULDRON.BREW_MAX];
+                st.dur = b0 + rng() * (b1 - b0);
                 return 'brew';
             }
             st.win -= dt;

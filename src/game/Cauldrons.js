@@ -39,7 +39,7 @@
 import * as THREE from 'three';
 import { makeCauldronModel } from './CauldronModel.js';
 import { disposeModel, newUid, ITEM_INFO, makeItemModel } from './ItemTypes.js';
-import { CAULDRON, boiling, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, rollCaveCauldron, SLUDGE, INGREDIENT_RU } from './Potions.js';
+import { CAULDRON, boiling, newBrew, addWater, addIngredient, stepBrew, takePortion, spill, fullness, ingCount, surfaceY, innerRadius, wallRadius, recipeById, matchRecipe, rollCaveCauldron, SLUDGE, INGREDIENT_RU } from './Potions.js';
 import { createRng, hashString } from '../core/math.js';
 
 const H = CAULDRON.H;
@@ -894,9 +894,10 @@ export class Cauldrons {
             const k = Math.min(1, st.t / 4);
             _col.setHSL((c.seed + c.churn * 0.12) % 1, 0.85, 0.5);
             _col.lerp(_col2.setHex(WATER_COLOR), 1 - k);
-            bubbles = 10 + Math.round(12 * k);
-            glow = 0.45 * k + 0.15 * Math.sin(c.churn * 5);
-            if (Math.random() < dt * 14) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.6, this.fy(c) + sy + 0.2, c.z + (Math.random() - 0.5) * r * 1.6), Math.random() < 0.6 ? 0xeeeeee : _col.getHex(), 0.12, _v2.set((Math.random() - 0.5) * 0.6, 1.4 + Math.random(), (Math.random() - 0.5) * 0.6), 1.2);
+            const pr = st.dur > 0 ? Math.min(1, st.t / st.dur) : 0; // (a long brew builds up: more bubbles and steam towards its end)
+            bubbles = Math.min(24, 10 + Math.round(10 * k + 4 * pr));
+            glow = 0.45 * k + 0.15 * Math.sin(c.churn * 5) + 0.15 * pr;
+            if (Math.random() < dt * (14 + 10 * pr)) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.6, this.fy(c) + sy + 0.2, c.z + (Math.random() - 0.5) * r * 1.6), Math.random() < 0.6 ? 0xeeeeee : _col.getHex(), 0.12, _v2.set((Math.random() - 0.5) * 0.6, 1.4 + Math.random(), (Math.random() - 0.5) * 0.6), 1.2);
             if (Math.random() < dt * 2) g.fx?.spark(_v.set(c.x, this.fy(c) + sy + 0.3, c.z), _col2.setHSL(Math.random(), 1, 0.6).getHex(), 0.08, _v2.set((Math.random() - 0.5) * 3, 3 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.9);
             if (me && c.pos.distanceTo(me) < 22 && (c._bubT = (c._bubT || 0) - dt) <= 0) { c._bubT = 2.2 + Math.random() * 1.5; g.sound?.playWaterRise?.(); }
         } else if (st.phase === 'ready') {
@@ -956,7 +957,11 @@ export class Cauldrons {
                 this._hint(c, `🫕 ${name} в котле (всего: ${ingCount(st)})`, 'ing', 300);
                 break;
             }
-            case 'brew': g.hud?.notify?.('🫧 Котёл закипает — зелье варится (подождите, от 30 секунд до минуты)'); break;
+            case 'brew': {
+                const [b0, b1] = matchRecipe(st.ings)?.brew || [CAULDRON.BREW_MIN, CAULDRON.BREW_MAX];
+                g.hud?.notify?.(`🫧 Котёл бурлит — зелье варится (подождите, от ${b0 >= 60 ? Math.round(b0 / 60) + ' до ' + Math.round(b1 / 60) + ' минут' : b0 + ' секунд до ' + (b1 >= 60 ? 'минуты' : b1 + ' секунд')})`);
+                break;
+            }
             case 'ready': {
                 const r = recipeById(st.rec);
                 g.hud?.notify?.(`🧪 Зелье готово! (${r ? r.name : 'зелье'}) — окуните пустую колбу в котёл`);

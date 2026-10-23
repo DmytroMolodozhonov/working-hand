@@ -288,7 +288,7 @@ export class NetSync {
                 wd: netWand(g.items?.wand), // (my wand: it counts in a duel as everywhere — Duel._wandK)
                 dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
-                dk: g.dark?.level || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
+                dk: g.dark?.skin || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
             }, true);
         }
