@@ -41,6 +41,14 @@ export const LEVITATE = {
 // (aiming at what is held — shared with the «Bubble» of «Water Vortex»: AimHold.js)
 export { aimOffset, steadyDir, applyAimOffset };
 
+/**
+ * The floor under a point at height `y`: the one it stands over — not the top of the column (indoors that is the
+ * roof, and a thing «let down» onto it shot up through the ceiling like in a lift: the throne hall).
+ */
+export function floorUnder(collision, x, z, y) {
+    return collision.groundAt ? collision.groundAt(x, z, y) : collision.surfaceY(x, z);
+}
+
 /** Magic armour stops the plain «Левиоса», never «Левиоса Максима» (`maxima`). */
 export function levBlocked(o, maxima = false) {
     return !maxima && !!(o && (o.magicArmor || o.armor?.magic));
@@ -334,7 +342,7 @@ export class Levitation {
         if (s.off) s.off.dp *= Math.exp(-dt * LEVITATE.RISE);
         const dir = applyAimOffset(steadyDir(s.steady || (s.steady = {}), ch.getHandDirection(s.side, _v2), dt), s.off, _v2);
         const want = _v3.copy(hand).addScaledVector(dir, s.hold);
-        want.y = Math.max(want.y + 0.3, this.game.collision.surfaceY(want.x, want.z) + 0.6);
+        want.y = Math.max(want.y + 0.3, floorUnder(this.game.collision, want.x, want.z, Math.max(want.y, s.target.y)) + 0.6);
         s.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
 
         if (this._jerked(s, ch)) { this.release(false); return; }
@@ -562,10 +570,11 @@ export class Levitation {
             if (!r || r.dead || performance.now() - (r.lastUpdate || 0) > LEVITATE.STALE * 1000) return null;
         }
         if (!g.duel?._handOf(by, side, out, _h4)) return null;
+        const handY = out.y;
         if (steady) steadyDir(steady, _h4, dt);
         if (off) applyAimOffset(_h4, off, _h4);
         out.addScaledVector(_h4, hold);
-        out.y = Math.max(out.y + 0.3, g.collision.surfaceY(out.x, out.z) + up + 0.2);
+        out.y = Math.max(out.y + 0.3, floorUnder(g.collision, out.x, out.z, Math.max(out.y, handY)) + up + 0.2);
         return out;
     }
 
@@ -607,7 +616,7 @@ export class Levitation {
         L.age += dt;
         const centre = _h1;
         const up = this._centre(ck, c, centre);
-        const ground = g.collision.surfaceY(centre.x, centre.z);
+        const ground = floorUnder(g.collision, centre.x, centre.z, centre.y);
         if (L.lower) {
             // set down gently: straight down to its feet
             L.target.set(centre.x, Math.max(ground + up, L.target.y - 2.5 * dt), centre.z);
@@ -708,7 +717,7 @@ export class Levitation {
             vel.y -= 25 * dt;
             vel.x *= 0.98; vel.z *= 0.98;
             p.addScaledVector(vel, dt);
-            const rest = g.collision.surfaceY(p.x, p.z) + 0.8;
+            const rest = floorUnder(g.collision, p.x, p.z, p.y) + 0.8;
             if (p.y <= rest) { p.y = rest; this.bodyDrops.splice(i, 1); }
         }
     }
