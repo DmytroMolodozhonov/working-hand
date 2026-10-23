@@ -36,7 +36,7 @@ try {
             const { TerrainData, mergeBuffers, CHUNK } = await import('/src/world/Terrain.js');
             const { applyVoxelDetail } = await import('/src/world/VoxelShading.js');
             const d = new TerrainData();
-            d.generate({ seed, mountains: true, seas: true, test: testGround, deepCaves: true, lush: true, slopes: gen >= 6 });
+            d.generate({ seed, mountains: true, seas: true, test: testGround, deepCaves: true, lush: true, slopes: gen >= 6, wizHuts: gen >= 7 });
             if (site) {
                 const idx = { castle: d.castles, village: d.villages, tower: d.towers, hamlet: d.hamlets }[site];
                 let best = null;

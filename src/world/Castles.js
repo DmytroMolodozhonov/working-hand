@@ -1025,6 +1025,193 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     return door;
 }
 
+/**
+ * The houses of the lone wizards (generation 7; the author: «они такие маленькие, ужатые, что нормально в них находиться
+ * нельзя… небольшими, но чтобы плюс-минус нормально ходить»). Sizes from the hero (3.5 m tall, ~2 blocks across with the
+ * arms, a pointed hat — a door 6 high and 3 wide): a room to walk in with the furniture (a way 3 wide between things),
+ * a floor 7 m high. w, d: half-sizes (outside 2w+1 × 2d+1), h: wall height.
+ *  - 'wizcottage': one room, 11 × 9 inside (the old cottage: 9 × 7), 7 m under the eaves;
+ *  - 'wiztower': a ground floor 9 × 9 inside (the old tower house: 7 × 7) and a study above it, a stair 3 wide between them.
+ */
+export const WIZ_HUTS = {
+    wizcottage: { w: 6, d: 5, h: 7, rich: false },
+    wiztower: { w: 5, d: 5, h: 15, rich: true, up: 8 }, // up: the layer the upper floor is walked on (its slab is up − 1)
+};
+// (the tower's stair: 3 wide, 8 steps rising towards +b; the slab over it is open from the step whose head would touch it)
+export const WIZ_STAIR = { a0: -4, a1: -2, b0: -3, n: 8, hole: 3 };
+
+export function buildWizHut(p, kind, rng, s, out) {
+    const T = WIZ_HUTS[kind];
+    const { w, d, h, rich } = T;
+    const tower = kind === 'wiztower';
+    const B = BLOCK;
+    const filled = new Set(); // (what stands on the ground floor — placeChests)
+    const P = {
+        box: floorCells((a0, a1, l0, l1, b0, b1, t) => p.box(a0, a1, l0, l1, b0, b1, t), 0, filled),
+        pt: (a, b, l = 0) => p.pt(a, b, l),
+        node: (a, b, l, tag) => p.node(a, b, l, tag),
+        yaw: (a, b) => { const o = p.pt(0, 0), q = p.pt(a, b); return Math.atan2(-(q.x - o.x), -(q.z - o.z)); },
+        along: (a, b) => { const o = p.pt(0, 0), q = p.pt(a, b); return Math.atan2(-(q.z - o.z), q.x - o.x); },
+    };
+    const wall = tower ? s.houseStone : s.poorWall;
+    const base = s.houseStone;
+    const roof = tower ? s.roof : s.poorRoof;
+    const timber = B.PLANKS_DARK;
+    const L = (l) => p.L(l);
+    const house = {
+        kind, rich, id: null, door: null, inside: null, doorNode: null, homeNode: null, beds: 0,
+        doorRec: null, windows: [], chests: [], bedSpots: [], c: P.pt(0, 0), r: Math.max(w, d) + 1,
+    };
+    // ---- the shell: floor, walls, a stone course below, corner posts
+    P.box(-w, w, -1, -1, -d, d, B.PLANKS);
+    P.box(-w, w, 0, h - 1, -d, -d, wall); P.box(-w, w, 0, h - 1, d, d, wall);
+    P.box(-w, -w, 0, h - 1, -d, d, wall); P.box(w, w, 0, h - 1, -d, d, wall);
+    P.box(-w, w, 0, 0, -d, -d, base); P.box(-w, w, 0, 0, d, d, base);
+    P.box(-w, -w, 0, 0, -d, d, base); P.box(w, w, 0, 0, -d, d, base);
+    P.box(-w + 1, w - 1, 0, h - 1, -d + 1, d - 1, 0);
+    for (const [a, b] of [[-w, -d], [w, -d], [-w, d], [w, d]]) P.box(a, a, 0, h - 1, b, b, tower ? s.houseStone : timber);
+    if (!tower) { P.box(-w, w, h - 1, h - 1, -d, -d, timber); P.box(-w, w, h - 1, h - 1, d, d, timber); } // (a beam under the eaves)
+    // ---- the door (3 wide, 6 high for the pointed hats)
+    const doorTop = s.doorTop ?? 5;
+    P.box(-1, 1, 0, doorTop, -d, -d, 0);
+    P.box(-2, 2, doorTop + 1, doorTop + 1, -d, -d, timber); // the lintel
+    P.box(-1, 1, -1, -1, -d - 2, -d - 1, B.PATH); // the doorstep
+    { const dp = P.pt(0, -d), di = P.pt(0, -d + 1); house.doorRec = { x: dp.x, y: dp.y, z: dp.z, ry: inwardRy(P.along(1, 0), di.x - dp.x, di.z - dp.z), w: 3, h: doorTop + 1 }; }
+    // ---- windows (holes the game glazes)
+    const win = (a0, a1, b0, b1, l0, l1) => {
+        P.box(a0, a1, l0, l1, b0, b1, 0);
+        const q0 = P.pt(a0, b0), q1 = P.pt(a1, b1);
+        const alongA = b0 === b1;
+        house.windows.push({
+            x: (q0.x + q1.x) / 2, z: (q0.z + q1.z) / 2, y: (L(l0) + L(l1)) / 2 - 1,
+            ry: alongA ? P.along(1, 0) : P.along(0, 1),
+            w: (alongA ? a1 - a0 : b1 - b0) + 1, h: l1 - l0 + 1,
+        });
+    };
+    // ---- the roof (a gable along a; the tower house: a pyramid)
+    let top;
+    const roofMark = p.parts.length;
+    if (tower) {
+        P.box(-w, w, h, h, -d, d, wall);
+        for (let k = 0; k <= w + 1; k++) P.box(-w - 1 + k, w + 1 - k, h + 1 + k, h + 1 + k, -d - 1 + k, d + 1 - k, roof);
+        top = h + w + 2;
+    } else {
+        for (let k = 0; k <= d + 1; k++) {
+            P.box(-w - 1, w + 1, h + k, h + k, -d - 1 + k, d + 1 - k, roof);
+            if (k <= d) P.box(-w + 1, w - 1, h + k, h + k, -d + k, d - k, 0);
+            if (k >= 1 && k <= d) { P.box(-w, -w, h + k, h + k, -d + k, d - k, wall); P.box(w, w, h + k, h + k, -d + k, d - k, wall); }
+        }
+        top = h + d + 1;
+    }
+    p.slopeTop(roofMark, roof);
+    // ---- inside
+    const lantern = (a, b, l) => P.box(a, a, l, l, b, b, B.LANTERN);
+    const wants = [], beds = [], keep = [];
+    const bed = (a) => { // a bed against the back wall, pillow to the wall (Beds: 2.5 × 5.5 m)
+        const q = P.pt(a, d - 0.5 - 2.85, 0);
+        house.bedSpots.push({ ...q, yaw: P.yaw(0, 1) });
+        beds.push([a - BED_W / 2, a + BED_W / 2, d - 0.5 - 2.85 - BED_L / 2, d - 0.5 - 2.85 + BED_L / 2]);
+    };
+    // a fireplace in a wall: the fire a lantern in a niche between two stone posts, a lintel, a flue through the roof
+    const fireplace = (a, b, alongA, flue = 0) => {
+        const [da, db] = alongA ? [1, 0] : [0, 1];
+        P.box(a - da, a - da, 0, 3, b - db, b - db, B.COBBLE); P.box(a + da, a + da, 0, 3, b + db, b + db, B.COBBLE);
+        P.box(a, a, 3, 3, b, b, B.COBBLE);
+        P.box(a, a, 0, 0, b, b, B.LANTERN);
+        P.box(a + flue * (alongA ? 1 : 0), a + flue * (alongA ? 1 : 0), 4, top + 2, b + flue * (alongA ? 0 : 1), b + flue * (alongA ? 0 : 1), B.COBBLE);
+    };
+    let table = null, cauldron;
+    const nodes = [];
+    if (!tower) {
+        // the cottage, 11 × 9 inside (a −5…5, b −4…4): everything stands by the walls, the middle is free — the fire in the
+        // left wall, the books and the desk at the back, a counter of potions and the cauldron in the front left corner,
+        // the bed in the back right corner; the way from the door to each of them is 3 wide
+        fireplace(-5, 0, false);
+        cauldron = [-5, -4];
+        P.box(-5, 0, 0, 4, 4, 4, B.BOOKS); P.box(-5, 0, 5, 5, 4, 4, timber); // the bookshelves, 6 wide, 5 high
+        P.box(-5, -5, 0, 1, -3, -2, B.PLANKS_DARK); P.box(-5, -5, 2, 2, -3, -2, B.POTION); // a counter with the potions
+        P.box(1, 2, 0, 0, 4, 4, timber); P.box(1, 2, 1, 1, 4, 4, B.PLANKS); // the writing desk (a lamp on it: decorate), the books
+        P.box(2, 2, 2, 2, 4, 4, B.BOOKS); P.box(1, 1, 5, 5, 4, 4, B.BOOKS);
+        table = [1, 4];
+        P.box(-3, 1, -1, -1, -3, 2, s.carpet); // the rug
+        P.box(-5, 5, h - 1, h - 1, 0, 0, timber); P.box(-5, 5, h - 1, h - 1, -3, -3, timber); // beams across, lanterns hung under them
+        lantern(-3, 0, h - 2); lantern(1, 0, h - 2); lantern(-3, -3, h - 2); lantern(3, -3, h - 2);
+        lantern(5, -3, 4);
+        bed(w - 1.85);
+        wants.push([5, -4]);
+        // windows: the front, the sides (not behind the fire), the back over the bed
+        win(-4, -4, -d, -d, 2, 4); win(4, 4, -d, -d, 2, 4);
+        win(-w, -w, 3, 3, 2, 4); win(w, w, -2, -2, 2, 4);
+        win(-3, -3, d, d, 2, 4);
+        for (const a of [-4, 4]) P.box(a, a, 1, 1, -d - 1, -d - 1, B.FLOWERS); // flower boxes
+        const inside = P.node(0, -1, 0, 'home');
+        nodes.push(inside, P.node(-3, -1, 0), P.node(0, 2, 0));
+        p.link(nodes[0], nodes[1]); p.link(nodes[0], nodes[2]);
+    } else {
+        // the tower house, 9 × 9 inside (a, b −4…4): the stair along the left wall to the study (the slab is the layer up − 1),
+        // below it the bedroom with the fire at the back, the cauldron before it, the bed in the back right corner
+        const { a0, a1, b0, n, hole } = WIZ_STAIR, slab = T.up - 1;
+        P.box(-w + 1, w - 1, slab, slab, -d + 1, d - 1, B.PLANKS); // the slab, then the hole over the stair
+        P.box(a0, a1, slab, slab, b0 + hole, b0 + n - 2, 0);
+        const mark = p.parts.length;
+        for (let i = 0; i < n; i++) P.box(a0, a1, 0, i, b0 + i, b0 + i, B.PLANKS_DARK);
+        p.slopeTop(mark, B.PLANKS_DARK); // (generation 6: each step a ramp)
+        fireplace(0, 4, true, 1); // (the flue over the right post: the way up from the stair stays free)
+        cauldron = [0, 3];
+        P.box(-1, 0, 4, 4, 4, 4, B.POTION); // flasks on the mantel
+        P.box(-1, 1, -1, -1, -3, 2, s.carpet);
+        lantern(4, -3, 4); lantern(-1, -4, 4);
+        bed(w - 1.85);
+        wants.push([3, -4]); // (a chest by the door, right of it)
+        win(-3, -3, -d, -d, 2, 4); win(3, 3, -d, -d, 2, 4);
+        win(-w, -w, 0, 0, 4, 6); win(w, w, -2, -2, 2, 4); win(3, 3, d, d, 2, 4);
+        win(0, 0, -d, -d, 10, 12); win(3, 3, -d, -d, 10, 12); win(-w, -w, -1, -1, 10, 12); win(-w, -w, 2, 2, 10, 12);
+        win(-3, -3, d, d, 10, 12); win(3, 3, d, d, 10, 12); win(w, w, -3, -3, 10, 12);
+        // ---- the study upstairs (a floor at layer up, 7 m high): books, a desk under a window, a crystal on a stand, a rug
+        const up = T.up, filledUp = new Set();
+        const U = (a0_, a1_, l0, l1, b0_, b1_, t) => {
+            p.box(a0_, a1_, l0, l1, b0_, b1_, t);
+            if (t) for (let a = Math.min(a0_, a1_); a <= Math.max(a0_, a1_); a++) for (let b = Math.min(b0_, b1_); b <= Math.max(b0_, b1_); b++) filledUp.add(a + ',' + b);
+        };
+        for (let a = a0; a <= a1; a++) for (let b = b0 + hole; b <= b0 + n - 2; b++) filledUp.add(a + ',' + b); // (the hole)
+        U(1, 3, up + 1, up + 1, -4, -4, B.PLANKS); for (const a of [1, 3]) P.box(a, a, up, up, -4, -4, timber); // the desk, its legs
+        P.box(2, 2, up + 2, up + 2, -4, -4, B.ARCANE_LAMP); P.box(3, 3, up + 2, up + 2, -4, -4, B.BOOKS); P.box(1, 1, up + 2, up + 2, -4, -4, B.ARCANE_LAMP_VIOLET); // (a crystal, a lamp, books)
+        P.box(2, 2, up, up, -3, -3, timber); // the stool
+        U(4, 4, up, up + 3, -1, 3, B.BOOKS); P.box(4, 4, up + 4, up + 4, -1, 3, timber); // the bookshelves on the right
+        U(3, 4, up, up + 2, 4, 4, B.BOOKS); // the scrolls at the back
+        P.box(0, 3, slab, slab, -2, 2, s.carpet);
+        for (let b = 0; b <= 1; b++) U(-1, -1, up, up + 1, b, b, B.FENCE); // the rails round the hole (where the fall is high)
+        for (let a = a0; a <= a1; a++) U(a, a, up, up + 1, b0 + hole - 1, b0 + hole - 1, B.FENCE);
+        U(-4, -4, up, up + 3, -4, -2, B.BOOKS); P.box(-4, -4, up + 4, up + 4, -4, -2, timber); // a reading nook: shelves on the left wall
+        P.box(-3, -2, up, up, -4, -4, timber); P.box(-3, -2, up + 1, up + 1, -4, -4, s.carpet); // a bench with cushions
+        P.box(-4, 4, up + 6, up + 6, 0, 0, timber); // a beam with lanterns
+        lantern(-2, 0, up + 5); lantern(1, 0, up + 5); lantern(3, 0, up + 5);
+        lantern(-3, 4, up + 4); lantern(4, 4, up + 4);
+        const wantsUp = [[4, -3]], keepUp = [];
+        placeChests({ a0: -w + 0.5, a1: w - 0.5, b0: -d + 0.5, b1: d - 0.5, filled: filledUp, beds: [], keep: keepUp, wants: wantsUp, inner: [], scales: [HOUSE_CHEST_SCALE] },
+            (a, b, fa, fb) => house.chests.push({ ...P.pt(a, b, up), yaw: P.yaw(fa, fb), gap: CHEST_GAP, scale: HOUSE_CHEST_SCALE }));
+        const inside = P.node(0, -1, 0, 'home');
+        const foot = P.node(-1, -3, 0), step0 = P.node(-3, -3, 1), head = P.node(-3, 4, up), study = P.node(0, 3, up), desk = P.node(0, -2, up);
+        p.link(inside, foot); p.link(foot, step0); p.link(step0, head); p.link(head, study); p.link(study, desk); // (up the stair column, 3 wide)
+        nodes.push(inside);
+        p.link(inside, P.node(0, 1, 0));
+    }
+    // the way in stays free: the door's swing and the walk to the middle
+    keep.push([-1.5, 1.5, -d + 0.5, -0.5]);
+    house.beds = 2;
+    const door = P.node(0, -d - 3, 0);
+    p.link(door, nodes[0]);
+    house.door = P.pt(0, -d - 3, 0);
+    house.inside = P.pt(0, -1, 0);
+    house.doorNode = door; house.homeNode = nodes[0];
+    house.bedColour = s.bedRich;
+    s.decorate?.(P, { kind, w, d, h, rich, da: 0, top, house, table, cauldron });
+    placeChests({ a0: -w + 0.5, a1: w - 0.5, b0: -d + 0.5, b1: d - 0.5, filled, beds, keep, wants, inner: [], scales: [HOUSE_CHEST_SCALE] },
+        (a, b, fa, fb) => house.chests.push({ ...P.pt(a, b, 0), yaw: P.yaw(fa, fb), gap: CHEST_GAP, scale: HOUSE_CHEST_SCALE }));
+    out.houses.push(house);
+    return door;
+}
+
 /** The bed's footprint (src/game/Beds.js): across, along. */
 const BED_W = 2.5, BED_L = 5.5;
 /**

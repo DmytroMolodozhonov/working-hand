@@ -24,7 +24,7 @@
 
 import { pawnStall } from './PawnStall.js';
 import { BLOCK } from './Terrain.js';
-import { CASTLE_CELL, hash01, Plan, buildHouse, rotLot, POOR_HOUSES } from './Castles.js';
+import { CASTLE_CELL, hash01, Plan, buildHouse, buildWizHut, rotLot, POOR_HOUSES } from './Castles.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 
@@ -99,10 +99,11 @@ function field(p, u, v, half, crop, out, link) {
 
 // ------------------------------------------------------------- lone houses
 /** A lone wizard's house (door to −v) with its garden; returns the walking nodes made. */
-function buildMageHut(p, rng, out) {
+function buildMageHut(p, rng, out, roomy = false) {
     const B = BLOCK;
-    const kind = rng() < 0.45 ? 'towerhouse' : 'cottage';
-    const door = buildHouse(p, kind, 0, 0, 0, rng, wizardStyle(rng), out);
+    // (generation 7: roomy houses a wizard can walk about in — Castles.buildWizHut; older worlds keep the small ones)
+    const kind = rng() < 0.45 ? (roomy ? 'wiztower' : 'towerhouse') : (roomy ? 'wizcottage' : 'cottage');
+    const door = roomy ? buildWizHut(p, kind, rng, wizardStyle(rng), out) : buildHouse(p, kind, 0, 0, 0, rng, wizardStyle(rng), out);
     const h = out.houses[0];
     // a rune circle before the door with lamp posts, a path to it
     p.cyl(0, -12, 3.2, -1, -1, B.RUNE, 2.2);
@@ -220,12 +221,12 @@ function magicStall(p, face, ringNear) {
 
 // ------------------------------------------------------------- the site
 /** One hamlet of `type` at (X, Z), floor layer F. Returns the castle-shaped record. */
-export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng) {
+export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], fields: [], stalls: [], posts: [] };
     const mage = type === 'magehut' || type === 'magevillage';
-    if (type === 'magehut') buildMageHut(p, rng, out);
+    if (type === 'magehut') buildMageHut(p, rng, out, wizHuts);
     else if (type === 'hermit') buildHermitHut(p, rng, out);
     else buildVillage(p, rng, out, mage, type === 'magevillage');
     p.joinRoads();
@@ -283,8 +284,8 @@ export function pickType(x) {
 /** Finds and remembers the hamlets (the same shape of answers as CastleIndex / TowerIndex). */
 export class HamletIndex {
     /** `busy(x, z, r)`: another site (a castle, a tower, the Ice Castle) is within `r` of a point. */
-    constructor(seed, raw, busy) {
-        this.seed = seed; this.raw = raw; this.busy = busy;
+    constructor(seed, raw, busy, wizHuts = false) {
+        this.seed = seed; this.raw = raw; this.busy = busy; this.wizHuts = wizHuts; // (generation 7: the lone wizards' houses roomy)
         this.cells = new Map(); // cell key → [defs]
         this._lastCell = null;
     }
@@ -311,7 +312,7 @@ export class HamletIndex {
                 if (this.busy(X, Z, zone + HAMLET.BLEND + 12)) continue;
                 const F = hamletGround(this.raw, X, Z, zone);
                 if (F == null) continue;
-                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng));
+                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng, this.wizHuts));
                 break;
             }
         };
