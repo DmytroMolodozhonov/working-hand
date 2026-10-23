@@ -516,7 +516,13 @@ export class Inventory {
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
-            if (this._cyc?.side === side && st.outT > POCKET_PICK) { if (!g.items?.held[side] && !g.weapons.hands[side].held) this._lost(this._cyc); this._cyc = null; } // (the hand went away and did not come back: what it holds is its choice)
+            if (this._cyc?.side === side && st.outT > POCKET_PICK) { // (the hand went away and did not come back: what it holds is its choice)
+                // (blocks are never in g.items.held — the stack stays in its cell and is drawn in the hand: resSide;
+                // asking g.items.held took the sand out of the hand a second after the pocket, still in the cell)
+                const gone = this._cyc.res ? this.resSide() !== side : !g.items?.held[side] && !g.weapons.hands[side].held;
+                if (gone) this._lost(this._cyc);
+                this._cyc = null;
+            }
             const putIn = st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
             if (putIn && now - st.out > 700) {
                 st.armed = false;
