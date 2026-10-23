@@ -246,7 +246,8 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 6;
+export const WORLD_GEN = 7;
+// 7: a buyer's stall (a pawnbroker) outside the wizards' tower and in each small wizard village (WizardTowers.pawnStall, Hamlets.pawnStall).
 // 6: ramps and slabs (BlockShapes.js): the land's one-block steps are smoothed into slopes (Terrain._slopeLand), the
 //    caves' vaults rounded (_vaultCaves), roofs and stairs of the buildings made of ramps (Castles.Plan.ramp/slab).
 // 5: the new landscape (src/world/Landscape.js): big mountain ranges with sharp snowy peaks, no flat
@@ -518,11 +519,12 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, buyers = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
+        this.buyers = !!(this.lush && buyers); // (generation 7: a buyer's stall by the tower and in the small wizard villages)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
@@ -537,7 +539,7 @@ export class TerrainData {
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
             this.castles = new CastleIndex(seed, raw, this.seas, this.test);
-            this.towers = new TowerIndex(seed, raw, this.castles);
+            this.towers = new TowerIndex(seed, raw, this.castles, this.buyers);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
@@ -548,7 +550,7 @@ export class TerrainData {
             const arenas = new ArenaIndex(seed, raw, this.towers, this.villages); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
-            this.hamlets = new HamletIndex(seed, raw, near);
+            this.hamlets = new HamletIndex(seed, raw, near, this.buyers);
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas);
             this.iceCastle = ice;
             const fn = (ix, iz) => {

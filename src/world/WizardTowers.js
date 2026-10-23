@@ -21,6 +21,7 @@
  * (Imports Terrain.js for BLOCK: never read BLOCK at the top level here.)
  */
 
+import { pawnStall } from './PawnStall.js';
 import { BLOCK } from './Terrain.js';
 import { CASTLE_CELL, BLEND, hash01, Plan, buildHouse, rotLot, inwardRy } from './Castles.js';
 import { createRng } from '../core/math.js';
@@ -620,13 +621,14 @@ function potionStall(p, lot, road) {
 }
 
 /** The whole site: tower, grounds, houses. Returns the castle-shaped record. */
-export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
+export function buildTowerSite(seed, gx, gz, X, Z, F, rng, buyers = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], pens: [], chests: [] };
     buildGrounds(p, rng, out);
     buildWizardHouses(p, rng, out);
     buildTower(p, rng, out);
+    if (buyers) out.pawnStall = pawnStall(p, 0, 0, (u, v) => p.node(0, v, 0)); // (outside, east of the road to the great door) // (generation 7; takes no rng: the tower and its houses stay the same)
     p.joinRoads();
     // link the tower gate to the road
     p.link(out.gateNode, p.node(0, -33, 0));
@@ -653,7 +655,7 @@ export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
         population, knights: 0, teachers, wseed: seed, // (the world's seed: the wizards' ranks — WizardAI.wizardRoster)
         throne: out.throne, throneFront: out.throneFront, posts: out.posts,
         rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: id + '_ch' + i })),
-        houses, stalls: [out.stall, out.potionStall].filter(Boolean), fields: [], pens: [], market: null, wallWalk: [],
+        houses, stalls: [out.stall, out.potionStall, out.pawnStall].filter(Boolean), fields: [], pens: [], market: null, wallWalk: [],
         dummies: out.dummies, spots: out.spots,
         lore: out.lore, // (the desk of the library: where the books of the world's history lie — LoreLibrary.js)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
@@ -683,7 +685,8 @@ export function flatDryGround(raw, X, Z) {
 
 /** Finds and remembers the towers (the same shape of answers as CastleIndex). */
 export class TowerIndex {
-    constructor(seed, raw, castles) {
+    constructor(seed, raw, castles, buyers = false) {
+        this.buyers = buyers;
         this.seed = seed; this.raw = raw; this.castles = castles;
         this.cells = new Map();
         this._lastCell = null;
@@ -753,7 +756,7 @@ export class TowerIndex {
         if (!c || c.gx !== gx || c.gz !== gz) return null; // (the one tower of the world)
         const at = this._place(gx, gz);
         if (!at) return null;
-        return buildTowerSite(this.seed, gx, gz, at.X, at.Z, 0, at.rng);
+        return buildTowerSite(this.seed, gx, gz, at.X, at.Z, 0, at.rng, this.buyers);
     }
 
     /**
