@@ -24,7 +24,7 @@ const ease = (t) => t * t * (3 - 2 * t);
 let _decalTex = null, _colTex = null, _decalGeo = null, _colGeo = null, _discGeo = null;
 
 /** The circle on the ground: gold double ring, rune band, the rhombus-crystal with its spark, glow (drawn once, 512²). */
-function decalTexture() {
+export function decalTexture() {
     if (_decalTex) return _decalTex;
     const S = 512, c = document.createElement('canvas');
     c.width = c.height = S;
