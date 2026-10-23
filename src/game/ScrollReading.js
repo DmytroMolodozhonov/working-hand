@@ -77,7 +77,7 @@ function drawPentagramParchment(item) {
     x.fillStyle = css(P.seal); x.beginPath(); x.arc(170, 340, 38, 0, Math.PI * 2); x.fill();
     x.strokeStyle = '#e6a0a0'; x.lineWidth = 3; x.beginPath(); x.arc(170, 340, 28, 0, Math.PI * 2); x.stroke();
     x.fillStyle = '#e6a0a0'; x.font = 'bold 30px serif'; x.textAlign = 'center'; x.fillText('★', 170, 352);
-    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Свиток не горит — его только смотрят.', 512, 410);
+    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Рисунок выучит тот, кто сожжёт свиток.', 512, 410);
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = THREE.ClampToEdgeWrapping;
     return tex;
@@ -180,7 +180,6 @@ export class ScrollReading {
         if (R.letT > LET_T || R.slipT > 0.15 || R.closeT > 0.4) { this._letGo(R); this._rollBack(R, hs, dt); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
-        if (R.open > 0.6 && R.item?.stat === 'pentagram') g.pentagranium?.seeFigure?.(R.item.pent); // (looked at the drawing: the figure is known now)
         this._place(R, hs, hoG, dt);
     }
 

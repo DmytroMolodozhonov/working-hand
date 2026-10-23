@@ -26,9 +26,7 @@ import { PENTAGRAMS as TABLE } from './Pentagrams.js';
 import { PentagramFx } from '../fx/PentagramFx.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
-import { addDark, registerDark } from './DarkMagic.js';
-
-registerDark('Pentagranium', true); // (black magic: the mark of a counted pentagram is always +1 — Mana.success → DarkMagic.onDarkCast)
+import { addDark } from './DarkMagic.js';
 
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
@@ -51,11 +49,11 @@ export class Pentagranium {
     get creative() { return this.game.config?.mode === 'creative' || this.game.config?.mode === 'test'; }
 
     // ------------------------------------------------------------ the figures the hero knows
-    /** Looked at the drawing of figure `id` (ScrollReading): remembered for good. */
-    seeFigure(id) {
-        if (!this.seen.add(id)) return false;
+    /** The drawing-scroll of figure `id` is burnt (Items.applyScroll): the figure is learnt for good (the author: looking at the scroll teaches nothing). */
+    learnFigure(id) {
+        if (!this.seen.add(id)) { this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: рисунок «${figureOf(id)?.ru || id}» вы уже знали`, true); return false; }
         if (id === 'breakward') this.game.breakward?.learn?.(); // (their mark's own «known» flag: the drawing is learnt)
-        this.game.hud.setVoice?.(`🩸 Вы запомнили рисунок: «${figureOf(id).ru}» — теперь вы можете нарисовать её палочкой: скажите «Пентаграниум»`, true);
+        this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете рисунок «${figureOf(id).ru}» — нарисуйте его палочкой: скажите «Пентаграниум»`, true);
         return true;
     }
 
@@ -78,7 +76,7 @@ export class Pentagranium {
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
         if (!hand) return hint('🩸 Поднимите палочку (руку), направьте на землю и скажите «Пентаграниум»');
         if (g.swim?.underwater) return hint('🩸 Под водой рисунок не держится');
-        if (!this.known().length) return hint('🩸 Вы не знаете, как выглядит ни одна пентаграмма — найдите свиток с рисунком и посмотрите на него');
+        if (!this.known().length) return hint('🩸 Вы не знаете ни одной пентаграммы — найдите свиток с рисунком и сожгите его («Инферно»): так вы выучите рисунок');
         const tired = g.combat.check('Pentagranium');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('Pentagranium');
@@ -190,8 +188,8 @@ export class Pentagranium {
         mark.mine = true;
         this._others(mark);
         g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: cx, y, z: cz, r: r.r, rot: r.rot });
-        g.mana?.success('Pentagranium'); // (the mark is made: the first success's cells, and +1 to the black mage's level — DarkMagic)
-        g.castleLife?.alarm?.({ x: cx, y, z: cz }, 'dark', g.localId, 6);
+        g.mana?.success('Pentagranium'); // (the mark is made: the first success's cells; drawing a pentagram is no black magic — only the devil one's rite adds darkness)
+        if (TABLE[id]?.dark) g.castleLife?.alarm?.({ x: cx, y, z: cz }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
         g.hud.setVoice(`🩸 «${figureOf(id).ru}» горит на земле! ${id === 'devil' ? 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы' : ''}`, true);
         g.sound?.playSpellFxAt?.('fxPentagram', origin, 1, 1, 14);
         for (let i = 0; i < 70; i++) {
@@ -230,9 +228,9 @@ export class Pentagranium {
         }
         const cl = data ? data.topLayer(Math.round(x), Math.round(z)) : 0;
         floor.push([Math.round(x), Math.round(z), cl]);
-        const m = { id, by, pent, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0 };
+        const m = { id, by, pent, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0 };
         this.marks.set(id, m);
-        this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? data.topLayer(Math.round(px), Math.round(pz)) - 0.5 : y), pent);
+        this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? data.topLayer(Math.round(px), Math.round(pz)) - 0.5 : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
         return m;
     }
 

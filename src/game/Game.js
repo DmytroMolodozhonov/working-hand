@@ -2857,7 +2857,7 @@ export class Game {
         const items = this.items;
         if (!items) return false;
         const mine = casterId === this.localId || casterId === 'local';
-        const paper = (it) => it && ((it.kind === 'scroll' && it.stat !== 'pentagram') || it.kind === 'book'); // (a pentagram's drawing does not burn)
+        const paper = (it) => it && (it.kind === 'scroll' || it.kind === 'book');
         let hit = false;
         const burnt = (p, it, mineToo) => { hit = true; this._paperBurnt(p, it, mineToo); };
         for (const side of ['left', 'right']) {
@@ -2933,7 +2933,7 @@ export class Game {
         for (const side of ['left', 'right']) {
             const h = items.held[side];
             const it = h?.item;
-            const p = h?.model && ((it?.kind === 'scroll' && it.stat !== 'pentagram') || it?.kind === 'book') ? h.model.getWorldPosition(_v1) : null;
+            const p = h?.model && (it?.kind === 'scroll' || it?.kind === 'book') ? h.model.getWorldPosition(_v1) : null;
             const hot = p && (this.campfires?._fireAt?.(p, 1.4, 2.6, true) || this.fire?.burningAt?.(p, 1.2));
             if (!hot) { this._paperFireT[side] = 0; continue; }
             this._paperFireT[side] += dt;

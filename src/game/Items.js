@@ -1207,7 +1207,6 @@ export class ItemSystem {
     burnHeldScroll() {
         const s = this.heldOf('scroll');
         if (!s) return false;
-        if (s.item?.stat === 'pentagram') { this.game.hud.setVoice?.('📜🩸 Свиток с рисунком не горит и ничего не даёт — разверните его и посмотрите на рисунок', true); return true; } // (Pentagrams.js: a drawing only)
         const item = this.releaseHand(s.side);
         this.applyScroll(item);
         return true;
@@ -1215,7 +1214,7 @@ export class ItemSystem {
 
     applyScroll(item) {
         const g = this.game;
-        if (item?.stat === 'pentagram') return; // (a drawing-scroll teaches nothing and gives nothing — Pentagrams.js)
+        if (item?.stat === 'pentagram') { g.pentagranium?.learnFigure(item.pent); return; } // (a drawing-scroll burnt: the figure is learnt — PentagramRules.js)
         g.bonus = g.bonus || { hp: 0, fatigue: 0 };
         if (item.stat === 'flight') {
             g.bonus.flight = true;

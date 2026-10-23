@@ -36,6 +36,8 @@ uniform float uTime;
 uniform float uHell;
 uniform float uFade;
 uniform float uRadius;
+uniform float uDark;
+uniform vec3 uTone;
 void main() {
     float across = abs(vUv.y * 2.0 - 1.0);
     float core = pow(1.0 - across, 2.5);
@@ -43,9 +45,9 @@ void main() {
     float edge = smoothstep(1.0, 0.45, across);
     float run = 0.5 + 0.5 * sin(vAlong * 1.7 - uTime * (2.2 + uHell * 5.0));
     float flick = 0.9 + 0.1 * sin(uTime * 9.0 + vAlong * 0.9);
-    vec3 scorch = vec3(0.12, 0.0, 0.025);
-    vec3 crimson = mix(vec3(0.78, 0.04, 0.14), vec3(1.0, 0.38, 0.06), uHell);
-    vec3 hotcore = mix(vec3(1.0, 0.45, 0.5), vec3(1.0, 0.92, 0.6), uHell);
+    vec3 scorch = mix(uTone * 0.32, vec3(0.12, 0.0, 0.025), uDark);
+    vec3 crimson = mix(uTone, mix(vec3(0.78, 0.04, 0.14), vec3(1.0, 0.38, 0.06), uHell), uDark);
+    vec3 hotcore = mix(mix(uTone, vec3(1.0), 0.75), mix(vec3(1.0, 0.45, 0.5), vec3(1.0, 0.92, 0.6), uHell), uDark);
     vec3 col = mix(scorch, crimson, band) + hotcore * core * (0.45 + 0.35 * run);
     float a = edge * (0.82 + 0.18 * run) * flick * uFade;
     gl_FragColor = vec4(col, a);
@@ -60,12 +62,15 @@ uniform float uTime;
 uniform float uHell;
 uniform float uFade;
 uniform float uRadius;
+uniform float uDark;
+uniform vec3 uTone;
 void main() {
     float u = clamp(vRad / (uRadius * 1.3), 0.0, 1.0);
     float disc = pow(1.0 - u, 1.4);
     float smoke = 0.5 + 0.5 * sin(vRad * 2.3 - uTime * 1.6) * sin(vRad * 0.9 + uTime * 0.7);
-    vec3 col = mix(vec3(0.05, 0.0, 0.012), vec3(0.55, 0.1, 0.0) * (0.4 + 0.6 * smoke), uHell * 0.9);
-    float a = disc * (0.66 + 0.2 * uHell) * uFade;
+    vec3 charred = mix(vec3(0.05, 0.0, 0.012), vec3(0.55, 0.1, 0.0) * (0.4 + 0.6 * smoke), uHell * 0.9);
+    vec3 col = mix(mix(uTone, vec3(1.0), 0.5) * (0.7 + 0.3 * smoke), charred, uDark);
+    float a = disc * mix(0.34 + 0.1 * smoke, 0.66 + 0.2 * uHell, uDark) * uFade;
     gl_FragColor = vec4(col, a);
 }`;
 
@@ -95,12 +100,12 @@ function trailMaterials() {
         map: _tex, color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide, fog: false,
         toneMapped: false,
     });
-    _trailMats = { glow: mk(0x3a0410, 0.7), core: mk(0xff2a44, 1) };
+    _trailMats = { glow: mk(0x8a5a10, 0.55), core: mk(0xfff0b8, 1) }; // (a warm gold-white glow: the drawing itself is beautiful — only a black pentagram looks grim)
     return _trailMats;
 }
 
 function figureUniforms() {
-    return { uTime: { value: 0 }, uHell: { value: 0 }, uFade: { value: 1 }, uRadius: { value: 4 }, uCenter: { value: new THREE.Vector3() } };
+    return { uTime: { value: 0 }, uHell: { value: 0 }, uFade: { value: 1 }, uRadius: { value: 4 }, uDark: { value: 0 }, uTone: { value: new THREE.Color(1, 0.9, 0.6) }, uCenter: { value: new THREE.Vector3() } };
 }
 function figureMaterial() {
     if (_figMat) return _figMat;
@@ -289,14 +294,14 @@ export class PentagramFx {
 
     // ------------------------------------------------------------ a lit pentagram
     /** A pentagram appears: the figure and the disc. `h(x, z)` → the ground's height there. */
-    add(id, cx, cy, cz, R, rot, h, pent = 'devil') {
+    add(id, cx, cy, cz, R, rot, h, pent = 'devil', dark = false, glow = 0xffd98a) {
         if (!this.scene || this.figs.has(id)) return;
-        const uni = { uTime: { value: 0 }, uHell: { value: 0 }, uFade: { value: 0 }, uRadius: { value: R }, uCenter: { value: new THREE.Vector3(cx, cy, cz) } };
+        const uni = { uTime: { value: 0 }, uHell: { value: 0 }, uFade: { value: 0 }, uRadius: { value: R }, uDark: { value: dark ? 1 : 0 }, uTone: { value: new THREE.Color(glow) }, uCenter: { value: new THREE.Vector3(cx, cy, cz) } };
         const set = (mesh) => { mesh.onBeforeRender = (r, s, c, g, mat) => { for (const k of Object.keys(uni)) mat.uniforms[k].value = uni[k].value; mat.uniformsNeedUpdate = true; }; };
         const fig = new THREE.Mesh(figureGeometry(cx, cz, R, pent, rot, h), figureMaterial());
         const disc = new THREE.Mesh(discGeometry(cx, cz, R, h), discMaterial());
         for (const [m, o] of [[fig, 7], [disc, 5]]) { m.frustumCulled = true; m.renderOrder = o; m.userData.keep = true; set(m); this.scene.add(m); }
-        this.figs.set(id, { fig, disc, uni, cx, cy, cz, R });
+        this.figs.set(id, { fig, disc, uni, cx, cy, cz, R, dark, glow });
     }
 
     /** Per frame: `t` seconds, the strength `fade` 0…1, the hell flare `hell` 0…1. */
@@ -341,7 +346,7 @@ export class PentagramFx {
         const fx = this.game.fx;
         if (!fx) return;
         _p.set(x + (Math.random() - 0.5) * 0.3, y + 0.15, z + (Math.random() - 0.5) * 0.3);
-        fx.spark(_p, Math.random() < 0.6 ? 0x3a0710 : 0xb01a2c, 0.2 + Math.random() * 0.12, _v.set((Math.random() - 0.5) * 0.5, 0.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.5), 1.1 + Math.random() * 0.5);
+        fx.spark(_p, Math.random() < 0.6 ? 0xfff0b8 : 0xffc860, 0.1 + Math.random() * 0.08, _v.set((Math.random() - 0.5) * 0.5, 0.6 + Math.random() * 0.8, (Math.random() - 0.5) * 0.5), 0.8 + Math.random() * 0.5);
     }
 
     /** The lit pentagram lives: a thin smoke over the ring and the star. */
@@ -355,7 +360,7 @@ export class PentagramFx {
             const r = onStar ? f.R * Math.random() * 0.95 : f.R * (0.98 + Math.random() * 0.06);
             _p.set(f.cx + Math.cos(a) * r, f.cy + 0.15, f.cz + Math.sin(a) * r);
             const up = 0.8 + Math.random() * (1.2 + hell * 4);
-            fx.spark(_p, hell > 0.3 ? (Math.random() < 0.5 ? 0xff6a1a : 0xffc060) : (Math.random() < 0.6 ? 0x4a0a14 : 0xc0203a), 0.16 + Math.random() * 0.14, _v.set((Math.random() - 0.5) * 0.8, up, (Math.random() - 0.5) * 0.8), 0.9 + Math.random() * 0.8);
+            fx.spark(_p, !f.dark ? (Math.random() < 0.5 ? 0xfff0b8 : f.glow) : hell > 0.3 ? (Math.random() < 0.5 ? 0xff6a1a : 0xffc060) : (Math.random() < 0.6 ? 0x4a0a14 : 0xc0203a), 0.16 + Math.random() * 0.14, _v.set((Math.random() - 0.5) * 0.8, up, (Math.random() - 0.5) * 0.8), 0.9 + Math.random() * 0.8);
         }
     }
 }

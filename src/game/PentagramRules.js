@@ -45,8 +45,7 @@ export const PENT = {
 /** The rite: the share of the killed wizard's power given once more (the author: 25 %), the time of the burning. */
 export const RITE = { K: 0.25, BURN: 5, EMBERS: 8, REACH_K: 0.85, SETTLE: 0.6, DARK: 1 };
 
-/** The mark and the rite are black magic: +1 to the level of the black mage each (DarkMagic.addDark). */
-export const DARK_FOR = { mark: 1, rite: 1, why: { mark: 'pentagram', rite: 'ritual' } };
+/** Only the rite of the black (devil) pentagram darkens the hero (+1, DarkMagic.addDark); drawing a pentagram is no sin: there are good ones too (the author). */
 
 const TAU = Math.PI * 2;
 
@@ -144,7 +143,7 @@ registerPentagram({
 });
 
 /** A drawing-scroll with this figure. */
-export const pentagramScroll = (id, uid) => ({ kind: 'scroll', uid, stat: 'pentagram', pent: figureOf(id) ? id : 'devil' });
+export const pentagramScroll = (id, uid) => ({ kind: 'scroll', uid, stat: 'pentagram', pent: figureOf(id) ? id : 'devil', dark: !!TABLE[figureOf(id) ? id : 'devil']?.dark });
 export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat === 'pentagram';
 
 // ---------------------------------------------------------------- the drawing

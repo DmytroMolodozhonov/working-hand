@@ -56,7 +56,7 @@ function run(p, pts, dt = 0.05) {
 test('the spell: black magic, 20 mana at once, 1 a second while drawing, only from its scroll (own key)', () => {
     assert.equal(SPELL_COST.Pentagranium, 20);
     assert.equal(PENT.DRAIN, 1);
-    assert.ok(isDark('Pentagranium'));
+    assert.ok(!isDark('Pentagranium'), 'drawing a pentagram is no black magic: there are good pentagrams too');
     assert.ok(!knows('Pentagranium', { mode: 'freeworld', spells: {}, learned: new Set() }));
     assert.ok(knows('Pentagranium', { mode: 'freeworld', spells: { Pentagranium: true }, learned: new Set() }));
     assert.ok(knows('Pentagranium', { mode: 'creative' }));
@@ -72,7 +72,7 @@ test('without a figure seen nothing starts and nothing is paid', () => {
 
 test('with the figure seen: 20 mana, a drawing of a circle and a star inside is counted — the pentagram is lit, the black level grows, the spell ends', () => {
     const { p, g, sent } = stub();
-    p.seeFigure('devil');
+    p.learnFigure('devil');
     p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
     assert.equal(p.cast(true), 'Pentagranium');
     assert.deepEqual(g.combat.paid, ['Pentagranium']);
@@ -91,11 +91,11 @@ test('with the figure seen: 20 mana, a drawing of a circle and a star inside is 
 
 test('a scribble, one circle, or a figure drawn star-first is not counted; the drawing goes on draining until «стоп» / the mana ends', () => {
     for (const o of [{ order: 'star-first' }]) {
-        const { p } = stub(); p.seeFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
+        const { p } = stub(); p.learnFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
         p.cast(true); run(p, drawing(o));
         assert.equal(p.marks.size, 0, JSON.stringify(o));
     }
-    const { p, g } = stub(); p.seeFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
+    const { p, g } = stub(); p.learnFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
     p.cast(true);
     let s = 7; const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
     run(p, Array.from({ length: 160 }, () => [(rnd() - 0.5) * 7, 8 + (rnd() - 0.5) * 7]));
@@ -104,7 +104,7 @@ test('a scribble, one circle, or a figure drawn star-first is not counted; the d
     assert.ok(p.stop('stop'));
     assert.ok(!p.on);
     // the mana ends
-    const t = stub({ fatigue: 20.4 }); t.p.seeFigure('devil'); t.p.aim = p.aim;
+    const t = stub({ fatigue: 20.4 }); t.p.learnFigure('devil'); t.p.aim = p.aim;
     t.p.cast(true);
     assert.ok(t.p.on);
     t.p.update(1); t.p.update(1);
@@ -113,7 +113,7 @@ test('a scribble, one circle, or a figure drawn star-first is not counted; the d
 
 test('an unseen figure is never counted: the hero has seen only another drawing', () => {
     const { p } = stub();
-    p.seeFigure('sigil'); // (the hexagram)
+    p.learnFigure('sigil'); // (the hexagram)
     p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
     p.cast(true);
     run(p, drawing());
@@ -122,7 +122,7 @@ test('an unseen figure is never counted: the hero has seen only another drawing'
 
 test('the seen figures are saved and come back', () => {
     const a = stub().p, b = stub().p;
-    a.seeFigure('devil');
+    a.learnFigure('devil');
     b.restore(a.snapshot());
     assert.deepEqual(b.known(), ['devil']);
     assert.equal(stub().p.snapshot(), null);
@@ -136,7 +136,7 @@ test('Creative knows every figure', () => {
 function lit(over = {}) {
     const t = stub(over);
     const { p, g } = t;
-    p.seeFigure('devil');
+    p.learnFigure('devil');
     const m = p._place('m1', 'me', 'devil', 0, 0.5, 8, 3.5, 0);
     m.mine = true; m.t = 5; m.fade = 1;
     const body = { id: 'b1', k: 'v', who: 'w1', role: 'adept', wz: 1, mm: 230, x: 0.5, y: 0.5, z: 8.5, age: 0, model: new THREE.Group() };
