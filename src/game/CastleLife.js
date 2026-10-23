@@ -54,6 +54,8 @@ import { EXPELLIARMUS } from './Expelliarmus.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { Bodyguard, isLord } from './Bodyguard.js';
+import { CastleWatch } from './CastleWatch.js';
+import { kingFights, guardRadius, guardsKilled } from './KingNerve.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { creditKill } from './Mana.js';
 import { VillagerFear } from './VillagerFear.js';
@@ -297,6 +299,7 @@ export class CastleLife {
             log: (text, v) => { const t = `${v.role || '?'} #${v.id} (${v.cs?.def?.kind || '?'}) ${Math.round(v.x)},${Math.round(v.z)}: ${text}`; console.warn('[stuck]', t); this.game.perf?.note?.('стоит: ' + t); },
         });
         this.wanted = new Wanted(); // (host) each player's hidden «wanted level»: how hard the knights and wizards fight them (Wanted.js)
+        this.watch = new CastleWatch(this); // (inside the walls one knight not of the main guard keeps an eye on a stranger: CastleWatch.js)
         this.guard = new Bodyguard(this); // (host) the king's bodyguards: the formation, whoever goes at him first (Bodyguard.js)
         this.found = new BodyFound(this); // (host) a body found: the alarm, the search for strangers (BodyFound.js)
         this.brainLine = (v) => this.talk.ambientLine(v);
@@ -1325,6 +1328,7 @@ export class CastleLife {
         if (v.servantOf != null && this._serve(v, dt)) return;
         if (v.arena && g.arenaDuels?.step(v, dt)) return; // (at the duel arena: a fan on the stands, a duellist — ArenaDuels.js)
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
+        if (v.role === 'king') this._kingNerve(v, dt); // (the king hides by default; he fights only when most of his guard is dead or he is cornered: KingNerve.js)
         // a hostile player in sight: knights go for them
         if (this._fights(v) && !v.foe) {
             v.lookT = (v.lookT || 0) - dt;
@@ -1364,6 +1368,7 @@ export class CastleLife {
         if (v.job === 'rebuild' && this.rebuild.work(v, dt)) return; // (a builder at the repairs)
         if ((v.pack > 0 || v.rounds) && this.night?.duty(v, dt)) return; // (a merchant packing up, the watch's rounds)
         if (v.fleeT > 0) { this._fleeStep(v, dt); return; }
+        if (v.watch && this.watch.step(v, dt)) return; // (a stranger inside the walls: one knight keeps an eye on him)
         // the new king comes by: bow
         const st = this.state(cs.def.id);
         if (st.owner && v.bowT <= 0 && !v.follow && !v.order) { // (a bow once, not on the march and not at every step)
@@ -2833,7 +2838,7 @@ export class CastleLife {
     }
 
     /** Does this one fight (knights, the king; the tower's wizards but a timid student)? */
-    _fights(v) { return v.role === 'knight' || v.role === 'king' || (!!v.wizard && WizardFight.fights(v)) || !!v.roadBrave; } // (a brave one of the road's folk too: Travelers.roadBrave)
+    _fights(v) { return v.role === 'knight' || (v.role === 'king' && !!v.kingFight) || (!!v.wizard && WizardFight.fights(v)) || !!v.roadBrave; } // (a brave one of the road's folk too: Travelers.roadBrave)
 
     /** A shield up: a knight's in the shield wall / holding a place, a wizard's hand shield. */
     /**
@@ -2870,6 +2875,46 @@ export class CastleLife {
         this._ground(v);
         if (v.fireT <= 0) { v.fireAt = null; v.firePanic = false; v.shieldHeat = Math.max(0, (v.shieldHeat || 0) - 1); }
         return true;
+    }
+
+    /**
+     * (host) The king: fight or hide (KingNerve.js). Fights when many of the castle's knights are dead, or when no live guard is
+     * near and the enemy is on him; otherwise he drops the fight, calls the guard and goes deeper into the castle (VillagerFear).
+     */
+    _kingNerve(v, dt) {
+        if ((v.nerveT = (v.nerveT || 0) - dt) > 0 && !(v.foe != null && !v.kingFight)) return; // (a fight he has no business in: dropped at once)
+        v.nerveT = 0.4;
+        const cs = v.cs, def = cs.def, now = Date.now(), st = this.state(def.id);
+        const ids = new Set(cs.hostile.keys());
+        if (v.foe != null) ids.add(v.foe);
+        let hero = null, hp = null, hd = Infinity;
+        for (const pid of ids) {
+            if (isLord(v, pid, st.owner) || !(cs.hostile.get(pid) > now || v.foe === pid)) continue;
+            const p = this._playerPos(pid);
+            const d = p ? Math.hypot(p.x - v.x, p.z - v.z) : Infinity;
+            if (d < hd) { hd = d; hero = pid; hp = p; }
+        }
+        const R = guardRadius(def.walls);
+        let near = 0;
+        for (const k of cs.active.values()) {
+            if (k.role !== 'knight' || k.dead || k.sleep || k.stunT > 0 || k.lev || Math.abs(k.y - v.y) > 10) continue;
+            if (Math.hypot(k.x - v.x, k.z - v.z) <= R) near++;
+        }
+        const r = kingFights({ killed: guardsKilled(st.killed, def.knights), knights: def.knights, guardNear: near, heroDist: hd, fighting: !!v.kingFight });
+        v.kingFight = r.fight;
+        if (r.fight) {
+            if (hero != null && v.foe == null && cs.hostile.get(hero) > now) { v.foe = hero; v.path = null; v.seated = false; this._say(v, pick(SHOUT.king), 3); }
+        } else if (v.foe != null) {
+            // not his fight: away from him, the guard called
+            const foe = v.foe;
+            v.foe = null; v.grudge = null; v.lesson = null; v.path = null;
+            const fp = this._playerPos(foe) || hp;
+            if (fp) {
+                this.fright?.scare?.(v, 'attacker', { x: fp.x, y: fp.y - 1.95, z: fp.z }, foe);
+                this._callNear(v, foe, fp, foe);
+            }
+            this._say(v, 'Стража! Ко мне!', 3);
+        }
     }
 
     _shieldUp(v) { return (!!v.model.shield && (v.mode === 'block' || v.tac?.role === 'shield')) || (!!v.wizard && !!(v.fx & FX.SHIELD)); }
@@ -3399,6 +3444,7 @@ export class CastleLife {
             this.night?.update(dt);
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
+            for (const cs of this.castles.values()) if (cs.awake && (cs.watchT = (cs.watchT || 0) - dt) <= 0) { cs.watchT = 0.7; this.watch.assign(cs, dt); }
             this._squads(dt);
             this._assignSlots();
             this._healWays(dt);
