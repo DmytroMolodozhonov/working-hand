@@ -1,0 +1,92 @@
+// «Империус Максима»: flying a winged creature with the arms (ImperiusFlight.js) and the dragon's fire at a long «У»
+// (DragonHowl.js) — the author's rules: strokes of the arms, the dragon must run first, the fire once in 7 s, louder — bigger.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { FLAP, FLYERS, FlapReader, flyStep, strokeStrength } from '../../src/game/ImperiusFlight.js';
+import { HOWL, HowlReader, isHowl, flameSize } from '../../src/game/DragonHowl.js';
+
+const DT = 1 / 60;
+/** n frames of both hands at these speeds (y: up m/s against the body). */
+const hands = (R, n, yL, yR = yL) => { let s = 0; for (let i = 0; i < n; i++) s = Math.max(s, R.update(DT, { y: yL }, { y: yR })); return s; };
+
+test('a stroke: both arms down together, fast; one arm, a slow drift, a raise — none', () => {
+    const R = new FlapReader();
+    assert.equal(hands(R, 20, 0), 0, 'still arms');
+    assert.equal(hands(R, 10, -5, 0), 0, 'one arm alone');
+    hands(R, 20, 0);
+    assert.equal(hands(R, 10, -1.2), 0, 'too slow');
+    hands(R, 20, 3); // (up)
+    assert.equal(hands(R, 6, -6) + 0, 0, 'still going down: counted when it ends');
+    const s = hands(R, 3, 0);
+    assert.ok(s > 0.5 && s <= 1, 'a fast stroke: strong ' + s);
+    hands(R, 20, 3);
+    hands(R, 6, -2.5);
+    const w = hands(R, 3, 0);
+    assert.ok(w >= 0.3 && w < s, 'a gentler one: weaker ' + w);
+    assert.equal(strokeStrength(FLAP.FULL * 2), 1);
+});
+
+test('the flight: strokes lift and push it; between them it glides down; arms down — it drops; low and slow — it lands', () => {
+    const P = FLYERS.owl;
+    const st = { air: false, vf: 0, vy: 0 };
+    flyStep(st, P, { stroke: 0.8, ground: 0, alt: 0 }, DT);
+    assert.ok(st.air && st.took && st.vy > 0, 'an owl takes off from the spot');
+    let alt = 0;
+    // a stroke every 0.5 s: it climbs
+    for (let i = 0; i < 180; i++) { flyStep(st, P, { stroke: i % 30 === 0 ? 0.8 : 0, alt: alt + 5 }, DT); alt += st.vy * DT; }
+    assert.ok(alt > 3, 'flapping, it climbed: ' + alt.toFixed(1));
+    const vf = st.vf;
+    assert.ok(vf > 3, 'and flies forward: ' + vf.toFixed(1));
+    // no strokes: it glides down slowly; arms down: much faster
+    const g = { ...st }; let glide = 0; for (let i = 0; i < 60; i++) { flyStep(g, P, { stroke: 0, arms: 'spread', alt: 50 }, DT); glide += g.vy * DT; }
+    const d = { ...st }; let drop = 0; for (let i = 0; i < 60; i++) { flyStep(d, P, { stroke: 0, arms: 'down', alt: 50 }, DT); drop += d.vy * DT; }
+    assert.ok(glide < 0 && drop < glide * 1.5, `glide ${glide.toFixed(2)} m, folded ${drop.toFixed(2)} m in 1 s`);
+    // low over the ground and coming down: it lands
+    flyStep(d, P, { stroke: 0, arms: 'down', alt: 0.2 }, DT);
+    assert.ok(!d.air && d.landed, 'landed');
+});
+
+test('the dragon must run to take off; the book, the owl, the phoenix from the spot', () => {
+    const D = FLYERS.dragon;
+    assert.ok(D.takeoff > 0 && FLYERS.bookbird.takeoff === 0 && FLYERS.owl.takeoff === 0 && FLYERS.phoenix.takeoff === 0);
+    const st = { air: false, vf: 0, vy: 0 };
+    flyStep(st, D, { stroke: 1, ground: 0, alt: 0 }, DT);
+    assert.ok(!st.air, 'standing: a stroke does not lift it');
+    flyStep(st, D, { stroke: 1, ground: D.takeoff * 0.6, alt: 0 }, DT);
+    assert.ok(!st.air, 'walking: not yet');
+    flyStep(st, D, { stroke: 1, ground: D.takeoff + 0.5, alt: 0 }, DT);
+    assert.ok(st.air && st.vf >= D.takeoff, 'running: it takes off');
+    // heavier: a dragon climbs less per stroke than an owl climbs relative to its size, but flies far faster
+    assert.ok(D.maxFwd > FLYERS.owl.maxFwd && D.maxFwd > FLYERS.bookbird.maxFwd);
+});
+
+test('the dragon\'s fire: a long «У» — after a moment; as big as the voice; once in 7 s', () => {
+    assert.equal(HOWL.EVERY, 7);
+    for (const w of ['у', 'ууу', 'у-у-у', 'Ууу!', 'u', 'ую']) assert.ok(isHowl(w), w);
+    for (const w of ['', 'да', 'уходи', 'ну', 'империус', 'у меня']) assert.ok(!isHowl(w), w);
+    assert.ok(flameSize(-20, -60) > flameSize(-45, -60), 'louder — bigger');
+    assert.ok(flameSize(-59, -60) >= 0.3 && flameSize(0, -60) <= 1.7);
+    const H = new HowlReader();
+    for (let i = 0; i < 60; i++) { H.level(-62); H.update(DT); } // (the room's quiet)
+    let started = 0, on = 0;
+    const howl = (sec, db) => { for (let i = 0; i < sec * 60; i++) { H.level(db); if (i % 9 === 0) H.letters('ууу'); const r = H.update(DT); if (r.start) started++; if (r.on) on++; } };
+    howl(0.2, -30);
+    assert.equal(started, 0, 'not at once: the «У» must go on a moment');
+    howl(1.5, -30);
+    assert.equal(started, 1, 'the fire came');
+    assert.ok(on > 30, 'and burns while the «У» goes on');
+    const size = H.size;
+    for (let i = 0; i < 40; i++) { H.level(-62); H.update(DT); } // (quiet: it stops)
+    assert.ok(!H.update(DT).on, 'quiet: the fire is out');
+    howl(2, -30);
+    assert.equal(started, 1, 'not again before 7 s');
+    for (let i = 0; i < 4 * 60; i++) { H.level(-62); H.update(DT); }
+    howl(1, -12); // (shouted)
+    assert.equal(started, 2, 'after 7 s — again');
+    assert.ok(H.size > size, `shouted — bigger: ${H.size.toFixed(2)} > ${size.toFixed(2)}`);
+    // the browser's recognizer: a phrase «у»
+    const B = new HowlReader();
+    B.t = 100;
+    assert.ok(B.phrase('ууу') && B.update(DT).start);
+    assert.ok(!B.phrase('ууу'), 'not twice in 7 s');
+});

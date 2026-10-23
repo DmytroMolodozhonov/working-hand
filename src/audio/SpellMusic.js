@@ -688,6 +688,7 @@ export const HELD_SOUND = {
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
     Imperius: { loop: 'loopImperius', end: 'endImperius' }, // (the mind in another body; the end — the mind back home)
+    Puppet: { loop: 'loopImperius', rate: 0.8, end: 'endImperius' }, // (my body held by another's mind — «Империус Максима» on me)
     DragonTame: { loop: 'loopDragonCalm', end: 'fxStop' }, // («Brain Rot Maxima» held: the dragon calmed — DragonRide.js)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },

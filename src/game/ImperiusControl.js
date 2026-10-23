@@ -22,6 +22,12 @@
 import * as THREE from 'three';
 import { IMPERIUS, imperiusOf, canTake, imperiusBlock, blockSay, upkeep, linkAt, kindOf, NET_SPELL } from './Imperius.js';
 import { BODIES, eyeOffset } from './ImperiusBodies.js';
+import { animalWings } from './ImperiusFlyers.js'; // (also adds the Maxima's creatures to BODIES: the dragon, the owl, the phoenix, the book-bird)
+import './ImperiusWalkers.js'; // (… the spider, the living trees, the Ice Castle's creatures, the sailors)
+import { IMPERIUS_MAXIMA } from './Imperius.js';
+import { FlapReader, armsOf } from './ImperiusFlight.js';
+import { HowlReader } from './DragonHowl.js';
+import { flies } from './Imperius.js';
 import { castingHand } from './WandAim.js';
 import { CurvedBeam } from '../fx/Particles.js';
 
@@ -30,6 +36,26 @@ const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ');
 const _p0 = new THREE.Vector3(), _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+
+/**
+ * Another PLAYER («Империус Максима» only): their own computer moves their hero — this one sends it what to do (the walk,
+ * the turn, a jump), as a mind would; my eyes are in their head (the network's place of it).
+ */
+BODIES.pl = {
+    sys: 'pl',
+    list(g, fn) { for (const [id, r] of g.remotes || []) if (!r.dead && r.position && !g.invis?.hidden?.(id)) fn(r, r.position.x, r.position.y - 1.95, r.position.z, 3.6); },
+    find(g, id) {
+        if (id === g.localId) return g.isDeadLocal ? null : (g._impSelf || (g._impSelf = { id, local: true, get position() { return g.character.group.position; }, character: g.character, dead: false }));
+        return g.remotes?.get(id) || null;
+    },
+    dead(r) { return !!r.dead || (r.local && !!r.character?.game?.isDeadLocal); },
+    pos(r, out) { return out.set(r.position.x, r.position.y - 1.95, r.position.z); },
+    face(r) { return r.character?.group?.rotation?.y || 0; },
+    head(r) { return r.character?.head || null; },
+    size() { return 3.6; },
+    drive() {}, follow() {}, release() {}, net() { return [0, 0, 0, 0, 0, 0]; },
+    struck(g, r, I) { return I?.strikeNow ? { reach: 3, dmg: 1 } : null; }, // (a fist of theirs)
+};
 
 /** A hand pushed forward this fast (m/s against the body) is the creature's blow. */
 export const STRIKE_V = 4.2;
@@ -55,7 +81,10 @@ export class ImperiusControl {
         this._lastCast = 0;
         this._sendT = 0;
         this._said = new Map();
-        this.I = { yaw: 0, walk: 0, run: false, jump: false, strike: false };
+        this.I = { yaw: 0, walk: 0, run: false, jump: false, strike: false, strikeNow: false, stroke: 0, arms: '', maxima: false, fly: null, look: new THREE.Vector3(0, 0, -1), fire: null, wings: animalWings, say: (t, key) => this._say(t, key || t, 4000) };
+        this.flaps = new FlapReader(); // (the arms' strokes: flying a winged creature in the Maxima — ImperiusFlight.js)
+        this.howl = new HowlReader(); // (the dragon's fire: the long «У» — DragonHowl.js)
+        this._armsDownT = 0;
         this.dark = 0; // the screen's darkness (the link fading)
         this.hosted = new Map(); // (host) 'sys:id' → {sys, id, by, n: the last place the guest sent}
         this._beams = null;
@@ -132,7 +161,7 @@ export class ImperiusControl {
                     const d = _a.length();
                     if (d > IMPERIUS.CAST_R || d < 0.3) continue;
                     const ang = L.d.angleTo(_a.divideScalar(d));
-                    if (ang > IMPERIUS.AIM_ANG && !(d < 6 && ang < 0.8)) continue;
+                    if (ang > IMPERIUS.AIM_ANG && !(d < 10 && ang < 1.0)) continue; // (close by: roughly in front is enough)
                     const score = ang * 3 + d * 0.03;
                     if (best && score >= best.score) continue;
                     if (col?.lineOfSight && !col.lineOfSight(L.o.x, L.o.y, L.o.z, x, y + up * 0.6, z, 0.5)) continue; // (behind a wall: not seen, not taken)
@@ -154,11 +183,16 @@ export class ImperiusControl {
         if (!c || B.dead(c)) return { ok: false, say: '🌀 Существа уже нет' };
         if (c.imp && c.imp.by !== by) return { ok: false, say: '🌀 В нём уже чужой разум' };
         const kind = kindOf(sys, c);
-        const ok = canTake(kind, name === 'ImperiusMaxima');
+        // (a player behind «Protection Maxima» or the gods' shield: the foreign mind meets it)
+        const shield = sys === 'pl' && (c.local ? !!(g.combat?.shield && (g.combat.shield.type === 2 || g.combat.shield.gods)) : !!(c.combat?.shield === 2 || c.combat?.gods));
+        const ok = canTake(kind, name === 'ImperiusMaxima', { shield });
         if (!ok.ok) return ok;
+        if (sys === 'pl' && c.imp) return { ok: false, say: '🌀 Этим игроком уже управляют' };
+        if (sys === 'D' && c.tame) return { ok: false, say: '🐉 Дракона держит «Брейнрот Максима» — сначала его отпустят' };
         if (g.servants?.masterOf?.(sys, c) != null) g.servants._free?.(sys, c);
         c.imp = { by, mine: by === this.me, sys, name };
         this.hosted.set(sys + ':' + id, { sys, id, by, n: null });
+        if (sys === 'pl') this._tellPuppet(id, { e: 'grab', to: id, ctl: by, who: this._nameOf(by) }); // (their computer gives their body over)
         return { ok: true };
     }
 
@@ -167,6 +201,7 @@ export class ImperiusControl {
         const g = this.game, B = BODIES[sys];
         this.hosted.delete(sys + ':' + id);
         const c = B?.find(g, id);
+        if (sys === 'pl') this._tellPuppet(id, { e: 'released', to: id });
         if (!c) return;
         c.imp = null;
         B.release(g, c);
@@ -191,6 +226,9 @@ export class ImperiusControl {
         this._heroYaw = ch.group.rotation.y;
         this._yaw0 = B.face(c);
         this.I.yaw = this._yaw0;
+        this.I.fly = null; this.I.maxima = name === 'ImperiusMaxima'; this.I.fire = null;
+        this.flaps.reset();
+        this._flier = flies(this.kind, this.I.maxima);
         this._hp = this._hpNow();
         this._jumpSeen = g.currentPose?.jump?.jumps ?? null;
         this._strikeT = 0;
@@ -209,13 +247,18 @@ export class ImperiusControl {
         g.noteCaster?.(name, this.me);
         if (!g.authority && g.sound?.spellHasCastSound?.(name)) { g.sound.spellCast(name, origin); g.sync?.castSound?.(name, origin); } // (a guest: the host said yes later — its sound now)
         const ru = this.maxima ? 'Империус Максима' : 'Империус';
-        g.hud?.setVoice?.(`🌀 «${ru}» — вы в теле: ${kindRu(this.kind)}. Шагайте на месте — оно идёт, поворот тела — поворот, взмах руки вперёд — его удар. «Стоп» — вернуться`, true);
+        const how = this.sys === 'pl' ? 'Шагайте на месте — он идёт, поворот тела — поворот. Он смотрит своими глазами, но тело слушается вас'
+            : this.kind === 'dragon' ? 'Бегите на месте — он бежит; разбежавшись, машите обеими руками сверху вниз — взлетит. Долгое «У-у-у» — огонь (громче — больше)'
+            : this._flier ? 'Машите обеими руками сверху вниз — летит (чаще и сильнее — выше и быстрее), руки в стороны — парит, руки вниз — снижается'
+            : 'Шагайте на месте — оно идёт, поворот тела — поворот, взмах руки вперёд — его удар';
+        g.hud?.setVoice?.(`🌀 «${ru}» — вы в теле: ${kindRu(this.kind)}. ${how}. «Стоп» — вернуться`, true);
         g.perf?.note?.(`империус: в ${this.kind} (${sys}:${id})`);
     }
 
     // ============================================================ every frame: my body, my input
     /** Before the hero's legs move (Game._updatePlayer): what the body asks for goes to the creature; its legs stop. */
     input(dt) {
+        this.puppetStep(); // (my body walked by another's mind: «Империус Максима» on me)
         if (!this.name) return;
         const g = this.game, ch = g.character, pose = g.currentPose;
         const I = this.I;
@@ -234,7 +277,30 @@ export class ImperiusControl {
                 if (v && -v.z > STRIKE_V && -v.z > Math.abs(v.x)) { I.strike = true; this._strikeT = 0.6; break; }
             }
         }
+        // the Maxima's wings: the arms' strokes, the arms down / spread (a moment of arms down between strokes is no dive)
+        I.stroke = 0; I.arms = '';
+        if (this._flier && this.phase === 'on') {
+            I.stroke = this.flaps.update(dt, ch.handLost?.('left') ? null : ch.handRelVelocity?.left, ch.handLost?.('right') ? null : ch.handRelVelocity?.right);
+            const arms = armsOf(ch);
+            this._armsDownT = arms === 'down' && !this.flaps.on ? this._armsDownT + dt : 0;
+            I.arms = arms === 'down' ? (this._armsDownT > 0.8 ? 'down' : '') : arms;
+            if (I.stroke) I.strike = false; // (a stroke of the wings is no blow)
+        }
+        I.strikeNow = I.strike;
+        g.camera && I.look.set(0, 0, -1).applyQuaternion(g.camera.quaternion);
+        // the dragon's fire: the long «У»
+        I.fire = this.kind === 'dragon' && this.phase === 'on' ? this.howl.update(dt) : null;
+        if (I.fire?.start) this._say(`🔥 Огонь! (громче «У» — больше пламя; снова — через ${7} с)`, 'fire', 6000);
         ch.setRunning?.(false);
+    }
+
+    /** What the voice program heard of a phrase (its letters) and the microphone's level — for the dragon's «У». */
+    voiceLetters(written) { if (this.name) this.howl.letters(written); }
+    voiceLevel(db) { this.howl.level(db); }
+    /** A whole phrase heard: «у-у-у» in a dragon is its fire (the browser's recognizer — no letters there). → true: it was. */
+    heardPhrase(text) {
+        if (this.kind !== 'dragon' || this.phase !== 'on') return false;
+        return this.howl.phrase(text) || /^[\sуюu\-.!…]+$/i.test(String(text || ''));
     }
 
     /** After the hero's own frame: the body where it was, as it was — the arms down, «asleep standing» (it may fall, as a body does). */
@@ -294,13 +360,14 @@ export class ImperiusControl {
             if (this.t >= 1) { this.phase = 'on'; this._beamsOff(); this._arrive(c); }
         }
         this._sparkEyes(dt);
+        if (this.sys === 'pl') { this._sendCtl(dt); this.step('pl', c, dt); return; } // (another player: their computer moves them)
         // the creature's place to the host (I am a guest)
         if (!g.authority) {
             this._sendT -= dt;
             if (this._sendT <= 0) {
                 this._sendT = 0.1;
                 const n = B.net(c);
-                g.sync?.imperius?.({ e: 'pos', k: this.sys, id: this.id, p: [r2(n[0]), r2(n[1]), r2(n[2])], ry: r2(n[3]), w: r2(n[4]), atk: n[5] });
+                g.sync?.imperius?.({ e: 'pos', k: this.sys, id: this.id, p: [r2(n[0]), r2(n[1]), r2(n[2])], ry: r2(n[3]), w: r2(n[4]), atk: n[5], air: n[6] ? 1 : 0, fire: n[7] ? n[7].map(r2) : undefined });
             }
         }
     }
@@ -314,9 +381,13 @@ export class ImperiusControl {
         if (!B || !c.imp) return false;
         if (c.imp.mine) {
             if (this.sys !== sys || this.id !== c.id || !this.name) { if (g.authority) this.unclaim(sys, c.id); else c.imp = null; return false; }
-            const I = this.phase === 'on' ? this.I : STILL;
-            B.drive(g, c, { ...I, yaw: this.phase === 'on' ? I.yaw : B.face(c) }, dt);
-            const hit = B.struck(g, c);
+            // (on the way in / out it stands as it is: no walk, no strokes — its flight's state kept)
+            let I = this.I;
+            if (this.phase !== 'on') { I = Object.assign(this._still || (this._still = {}), STILL, { yaw: B.face(c), fly: this.I.fly, maxima: this.I.maxima, wings: this.I.wings, say: this.I.say }); }
+            B.drive(g, c, I, dt);
+            if (I !== this.I) this.I.fly = I.fly;
+            const hit = B.struck(g, c, this.I);
+            this.I.strikeNow = false;
             if (hit) this._blow(sys, c, hit);
             const h = B.head(c);
             if (h) h.visible = !(this.phase === 'on' && g.cameraMode === 'fpv'); // (my eyes are in it: its head not in my view)
@@ -341,7 +412,7 @@ export class ImperiusControl {
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
         let best = null;
         const consider = (k, id, x, y, z) => {
-            if (k === sys && id === c.id) return;
+            if (id === c.id && (k === sys || (k === 's' && sys === 'sp') || (k === 'sl' && sys === 's') || (k === 'p' && sys === 'pl'))) return; // (not itself)
             const dx = x - p.x, dz = z - p.z, d = Math.hypot(dx, dz);
             if (d > hit.reach || Math.abs(y - p.y) > 3) return;
             if (d > 0.4 && (dx * fx + dz * fz) / d < 0.5) return; // (in front of it: «лицом к цели»)
@@ -350,6 +421,11 @@ export class ImperiusControl {
         for (const z of g.zombies || []) if (!z.isDead && !z.isDying) consider('z', z.id, z.group.position.x, z.group.position.y - (z.gOff || 0), z.group.position.z);
         for (const a of g.animals?.list || []) if (!a.dead) consider('a', a.id, a.group.position.x, a.group.position.y - 0.5, a.group.position.z);
         for (const v of g.castleLife?.byId?.values?.() || []) if (!v.dead) consider('v', v.id, v.x, v.y, v.z);
+        for (const d of g.dragons?.list || []) if (!d.dead) consider('D', d.id, d.model.position.x, d.model.position.y, d.model.position.z);
+        for (const sp of g.spiders?.list || []) if (!sp.dead) consider('s', sp.id, sp.model.position.x, sp.model.position.y, sp.model.position.z); // (the spider: a servant's key)
+        for (const t of g.livingTrees?.list || []) if (!t.isDead) consider('t', t.id, t.model.position.x, t.model.position.y, t.model.position.z);
+        for (const ic of g.iceCastle?.list || []) if (!ic.dead) consider('I', ic.id, ic.model.position.x, ic.model.position.y, ic.model.position.z);
+        for (const sv of g.ships?.crew?.byId?.values?.() || []) if (!sv.dead) consider('sl', sv.id, sv.x, sv.y, sv.z);
         if (!g.isDeadLocal) consider('p', g.localId, g.character.group.position.x, g.character.group.position.y - 1.95, g.character.group.position.z); // (my own body too: hurt, the mind comes back)
         for (const [id, r] of g.remotes || []) if (!r.dead && r.position) consider('p', id, r.position.x, r.position.y - 1.95, r.position.z);
         if (!best) return;
@@ -364,7 +440,9 @@ export class ImperiusControl {
         const d = new THREE.Vector3(dir[0] || 0, 0, dir[1] || 1);
         if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
         d.normalize();
-        g.servants?.damage?.({ k: tk, id: tid }, Math.max(1, Math.min(10, dmg | 0)), d, by, 'servant', src);
+        const n = Math.max(1, Math.min(20, dmg | 0)); // (a dragon's bite 14 at most — DRAGON.BITE)
+        if (tk === 'sl') { const v = g.ships?.crew?.byId?.get(tid); if (v && !v.dead) g.ships.crew.hit(v, n, d, by, { via: 'servant' }); return; } // (a sailor)
+        g.servants?.damage?.({ k: tk, id: tid }, n, d, by, 'servant', src);
     }
 
     // ============================================================ the camera
@@ -463,6 +541,7 @@ export class ImperiusControl {
         if (!this._released) this._release();
         this._released = false;
         this.name = null; this.sys = null; this.id = null; this.kind = null; this.phase = ''; this.t = 0;
+        this.I.fly = null; this.I.fire = null; this._flier = false;
         this.dark = 0;
         this._beamsOff();
         ch.setImperiusEyes?.(false);
@@ -480,10 +559,24 @@ export class ImperiusControl {
         }
     }
 
-    /** The network: {e: take | took | pos | hit | end, …}. */
-    onNet(m, isHost) {
+    /** (host) a word for a controlled player — to their computer (or to mine, if it is me). */
+    _tellPuppet(id, m) {
+        if (id === this.me) this.onNet({ ...m, from: this.me }, false, true);
+        else this.game.sync?.imperius?.(m);
+    }
+
+    _nameOf(id) { return id === this.me ? (this.game.net?.name || 'Игрок') : (this.game.remotes?.get(id)?.name || 'Игрок'); }
+
+    /** The network: {e: take | took | pos | hit | end | grab | released | ctl | free, …}. */
+    onNet(m, isHost, self = false) {
         const g = this.game;
         const from = m.from || m.by;
+        // a controlled player: what their body is told, the grab and the release (sent to all; for one) — and the host passes them on
+        if (m.e === 'grab' || m.e === 'released' || m.e === 'ctl' || m.e === 'free') {
+            if (m.to === this.me) { this._puppetNet(m, from); return; }
+            if (isHost && !self && from !== this.me) g.sync?.imperius?.({ ...m, by: undefined }); // (from a guest to another: through the host)
+            return;
+        }
         if (isHost) {
             if (m.e === 'take') {
                 const name = m.mx ? 'ImperiusMaxima' : 'Imperius';
@@ -494,7 +587,8 @@ export class ImperiusControl {
             }
             const H = this.hosted.get(m.k + ':' + m.id);
             if (!H || H.by !== from) return;
-            if (m.e === 'pos' && Array.isArray(m.p)) H.n = { x: +m.p[0] || 0, y: +m.p[1] || 0, z: +m.p[2] || 0, ry: +m.ry || 0, w: Math.max(0, Math.min(1, +m.w || 0)), atk: !!m.atk };
+            if (m.e === 'pos' && m.k === 'pl') return;
+            if (m.e === 'pos' && Array.isArray(m.p)) H.n = { x: +m.p[0] || 0, y: +m.p[1] || 0, z: +m.p[2] || 0, ry: +m.ry || 0, w: Math.max(0, Math.min(1, +m.w || 0)), atk: !!m.atk, air: !!m.air, fire: Array.isArray(m.fire) && m.fire.length === 4 ? m.fire.map((x) => Math.max(-2, Math.min(2, +x || 0))) : null };
             else if (m.e === 'hit') {
                 const c = BODIES[m.k]?.find(g, m.id);
                 if (c) { const p = BODIES[m.k].pos(c, _a); this.land(m.tk, m.tid, m.dmg, Array.isArray(m.d) ? m.d : [0, 1], from, { x: p.x, z: p.z }); }
@@ -504,6 +598,64 @@ export class ImperiusControl {
         if (m.e === 'took' && m.to === this.me && this._pending && this._pending.sys === m.k && this._pending.id === m.id) {
             this.onTaken(m.k, m.id, this._pending.name, { ok: !!m.ok, say: m.say });
         }
+    }
+
+    // ============================================================ a player controlled (the Maxima): their side
+    /** The words for MY body when another's mind holds it: grab | ctl | released (from the host / the controller). */
+    _puppetNet(m, from) {
+        const g = this.game;
+        if (m.e === 'grab') {
+            this.puppet = { by: m.ctl ?? from, at: performance.now(), I: { yaw: g.character.group.rotation.y, w: 0, r: 0, j: 0 }, jumps: null, hp: this._hpNow() };
+            this.stop('focus'); // (my own mind out somewhere: back first)
+            g.focus?.lose?.('stun'); // (what I held falls: my hands are not mine)
+            g.hud?.setVoice?.(`🌀 «Империус Максима»: вашим телом управляет ${m.who || 'другой игрок'}! Вы видите своими глазами, но тело не слушается. Сильный удар (больше ${IMPERIUS_MAXIMA.PLAYER_BREAK}) вырвет вас`, true);
+            g.perf?.note?.('империус: моим телом управляет ' + (m.who || '?'));
+        } else if (m.e === 'released') {
+            if (this.puppet) g.hud?.setVoice?.('🌀 Вы снова владеете своим телом', true);
+            this.puppet = null;
+        } else if (m.e === 'free') {
+            // (I am the controller: the player tore free / went quiet / died)
+            if (this.sys === 'pl' && this.name) { this._say(m.why === 'blow' ? '🌀 Удар вырвал игрока из-под вашей власти' : '🌀 Связь с игроком потеряна', 'pfree', 1500); this.stop('lost'); }
+        } else if (m.e === 'ctl' && this.puppet) {
+            this.puppet.at = performance.now();
+            const I = this.puppet.I;
+            I.yaw = +m.y || 0; I.w = Math.max(0, Math.min(1, +m.w || 0)); I.r = m.r ? 1 : 0; I.j = m.j | 0;
+        }
+    }
+
+    /** (Game._updatePlayer, before the legs move) my body walked by the other's mind. */
+    puppetStep() {
+        const P = this.puppet;
+        if (!P) return;
+        const g = this.game, ch = g.character;
+        // the controller gone quiet, my body dead, a hard blow: I tear free
+        const hp = this._hpNow();
+        const torn = performance.now() - P.at > 2500 ? 'quiet' : g.isDeadLocal || g.combat?.dead ? 'dead' : P.hp - hp >= IMPERIUS_MAXIMA.PLAYER_BREAK ? 'blow' : null;
+        P.hp = Math.max(hp, P.hp - 0.5 * (P.hp - hp)); // (a blow counts at once; little ones over time don't add up to one)
+        if (torn) {
+            this.puppet = null;
+            g.sync?.imperius?.({ e: 'free', to: P.by, why: torn });
+            if (torn === 'blow') g.hud?.setVoice?.('🌀 Удар вырвал вас из-под «Империуса» — тело снова ваше!', true);
+            else if (torn === 'quiet') g.hud?.setVoice?.('🌀 Чужой разум отпустил вас', true);
+            return;
+        }
+        const I = P.I;
+        ch.setRunning?.(I.w > 0.02, I.w);
+        ch.setBodyRotation?.(I.yaw);
+        g.smoothBody = I.yaw; g.cameraBaseRotation = I.yaw;
+        if (P.jumps == null) P.jumps = I.j;
+        if (I.j !== P.jumps) { P.jumps = I.j; if (ch.onGround) ch.jump?.(0.8); }
+    }
+
+    /** (the controller) what the other player's body is told, 15 times a second. */
+    _sendCtl(dt) {
+        const g = this.game, I = this.I;
+        this._ctlT = (this._ctlT || 0) - dt;
+        if (I.jump) this._jumps = (this._jumps || 0) + 1;
+        if (this._ctlT > 0) return;
+        this._ctlT = 1 / 15;
+        const m = { e: 'ctl', to: this.id, y: r2(I.yaw), w: r2(this.phase === 'on' ? I.walk : 0), r: I.run ? 1 : 0, j: this._jumps || 0 };
+        if (g.authority) this._tellPuppet(this.id, m); else g.sync?.imperius?.(m);
     }
 
     /** For my 'p' packet: the eyes of my body burn white. */
@@ -589,6 +741,8 @@ const STILL = { yaw: 0, walk: 0, run: false, jump: false, strike: false };
 
 /** The creature's name for the line «вы в теле: …». */
 export function kindRu(kind) {
-    const RU = { zombie: 'зомби', villager: 'житель', knight: 'рыцарь', wizard: 'волшебник', cow: 'корова', sheep: 'баран', horse: 'конь', pig: 'свинья', sailor: 'моряк', king: 'король', towerHead: 'глава башни' };
+    const RU = { zombie: 'зомби', villager: 'житель', knight: 'рыцарь', wizard: 'волшебник', cow: 'корова', sheep: 'баран', horse: 'конь', pig: 'свинья', sailor: 'моряк', king: 'король', towerHead: 'глава башни',
+        dragon: 'дракон', owl: 'сова', phoenix: 'феникс', bookbird: 'книга-птица', pegasus: 'Пегас', runbook: 'бегущая книга', guardBeast: 'страж стада', spider: 'гигантская паучиха', tree: 'ожившее дерево', skeleton: 'скелет',
+        snowman: 'снеговик', iceMonster: 'ледяной монстр', iceQueen: 'Ледяная Королева', blackbeard: 'капитан Чёрные Усы', pirateSkeleton: 'скелет-пират', player: 'игрок' };
     return RU[kind] || kind;
 }

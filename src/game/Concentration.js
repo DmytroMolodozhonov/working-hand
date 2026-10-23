@@ -60,6 +60,7 @@ export const HELD = {
     Fireworks: { ru: 'Салют', icon: '🎆', own: [] }, // (10 s of salvos over the wand: Fireworks.js — «стоп» ends it)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
     Imperius: { ru: 'Империус', icon: '🌀', own: [], only: true }, // (the mind in another body: nothing of the hero's — not even Lumos or the shield; only «стоп» — ImperiusControl.js)
+    Puppet: { ru: 'Под Империусом', icon: '🌀', own: [], only: true, none: true }, // (another's mind holds my body: no spell at all, not even «стоп» — a blow tears me free)
 };
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -71,6 +72,7 @@ export const FREE = new Set(['Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAh
  */
 export function mayCast(held, name, ctx = {}) {
     if (!held || !name) return true;
+    if (HELD[held]?.none) return false;
     if (HELD[held]?.only) return name === 'Stand' || name === 'Stop'; // («Империус»: you play the creature — no spell of yours but «стоп»)
     if (FREE.has(name)) return true;
     if (name === 'Flight' && ctx.hovering) return true;
@@ -108,6 +110,7 @@ export class Concentration {
         if (g.lightning) return 'Lightning';
         if (g.strong?.electrum) return 'Electrum';
         if (g.fireworks?.on) return 'Fireworks';
+        if (g.imperius?.puppet) return 'Puppet';
         if (g.imperius?.active) return 'Imperius';
         if (g.dragonRide?.active) return 'DragonTame';
         if (g.ships?.blowing) return 'SailWind';
@@ -127,7 +130,8 @@ export class Concentration {
         if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild })) return null;
         const ru = HELD[held]?.ru || held;
         const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)'
-            : held === 'Imperius' ? '🌀 Вы в чужом теле — колдовать нельзя. «Стоп» — вернуться в своё' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
+            : held === 'Imperius' ? '🌀 Вы в чужом теле — колдовать нельзя. «Стоп» — вернуться в своё'
+            : held === 'Puppet' ? '🌀 Вашим телом управляет чужой разум — колдовать нельзя' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
         this.game.lastCastWhy = held === 'Duel' ? 'занято: идёт дуэль' : `занято: вы держите «${ru}» — сначала «стоп» (концентрация)`; // (the spell journal)
         if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(say, true);
         return held;

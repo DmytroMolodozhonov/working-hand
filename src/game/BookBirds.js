@@ -180,7 +180,7 @@ export function makeWardBookModel() {
     return g;
 }
 
-function flap(model, t, amp) {
+export function flap(model, t, amp) {
     const { left, right, pages } = model.userData;
     const a = 0.25 + Math.sin(t) * amp;
     left.rotation.z = a;
@@ -646,6 +646,7 @@ export class BookBirds {
             if (this._spawnT <= 0 && this.birds.size < BIRDS) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
         }
         for (const b of [...this.birds.values()]) {
+            if (b.imp && b.state !== 'fall' && (this.auth || b.imp.mine) && g.imperius?.step('b', b, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
             if (this.auth || b.state === 'fall') this._updateBird(b, dt);
             else if (b.localHeld) { b.flapT += dt * 16; flap(b.model, b.flapT, 0.7); } // (my «Левиоса» holds it here)
             else this._followNet(b, dt);

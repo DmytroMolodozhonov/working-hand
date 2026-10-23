@@ -1003,7 +1003,8 @@ export class Sailors {
             for (const v of list) if (v.ship !== s) { home = this._homeBuf || (this._homeBuf = []); home.length = 0; for (const o of list) if (o.ship === s) home.push(o); break; }
             for (const v of list) {
                 if (v.damageCooldown > 0) v.damageCooldown -= dt;
-                if (!this.auth) this._follow(v, dt);
+                if (v.imp && (this.auth || v.imp.mine) && !v.dead && g.imperius?.step('s', v, dt)) { /* («Империус»: a mind in him — ImperiusControl.step) */ }
+                else if (!this.auth) this._follow(v, dt);
                 else if (v.ship === s) this._think(v, s, dt);
                 else if (!g.blackbeard?.thinkAway(v, dt)) { v.ship = s; this._toNode(v, s); } // (nobody to think for him there: back home)
             }
@@ -1026,6 +1027,7 @@ export class Sailors {
                     v.animT = 0;
                     if (far) v.model.setFar(true);
                 }
+                if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('s', v); // (my mind's blow: at the cutlass' own moment)
                 if (v.sayT > 0) v.sayT -= dt;
                 if (v.bubble) v.bubble.update(dt, _w.set(v.x, v.y + 4.4, v.z), g.camera);
             }

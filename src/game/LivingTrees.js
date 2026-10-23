@@ -808,9 +808,9 @@ export class LivingTrees {
             this._fireT -= dt;
             const campfire = this._fireT <= 0;
             if (campfire) this._fireT = 0.5;
-            for (const t of [...this.list]) this._step(t, dt, campfire);
+            for (const t of [...this.list]) if (!(t.imp && !t.isDead && g.imperius?.step('t', t, dt))) this._step(t, dt, campfire); // («Империус Максима»: a mind in it — ImperiusControl.step)
         } else {
-            for (const t of this.list) if (t.net) {
+            for (const t of this.list) if (t.imp?.mine && !t.isDead && g.imperius?.step('t', t, dt)) { /* (my mind in it) */ } else if (t.net) {
                 t.model.position.lerp(t.net, Math.min(1, dt * 8));
                 t.walkT += dt * t.speed * 1.6;
             }

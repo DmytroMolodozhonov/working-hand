@@ -256,6 +256,7 @@ export class NativeVoice {
         d.duel = !!this.duelHot;
         d.knows = this.knows; // (spell → does the hero know it: set by the game)
         const r = lookAt(d, this.segs.get(d.id));
+        this.onLetters?.(r.heard?.written || '', d); // (what was written so far — the dragon's «У» of «Империус Максима»: DragonHowl)
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
         const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, near: r.heard.near, ...this._when(d, r.heard),

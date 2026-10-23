@@ -447,7 +447,7 @@ test('«Империус» / «… Максима» (Imperius.js): every kind of
         for (const r of rows[k]) assert.ok(IMPERIUS_TARGETS[r], `IMPERIUS_TARGETS forgets ${r} (${k})`);
     }
     assert.ok(IMPERIUS_TARGETS.player?.player, 'another player: only the Maxima');
-    for (const s of ['z', 'v', 'a', 's', 'D', 'sp', 'b', 'o', 'p', 't', 'I', 'pl']) assert.ok(kindOf(s, {}), `kindOf knows the system «${s}»`);
+    for (const s of ['z', 'v', 'a', 's', 'D', 'sp', 'b', 'o', 'f', 't', 'I', 'pl']) assert.ok(kindOf(s, {}), `kindOf knows the system «${s}»`);
     const g = src('src/game/Game.js');
     assert.match(g, /name === 'Imperius' \|\| name === 'ImperiusMaxima'\) return this\.imperius\.cast/, 'the cast goes to ImperiusControl');
     assert.match(g, /z\.imp && .*this\.imperius\?\.step\('z'/, 'the zombies\' loop gives a taken zombie to the mind in it');

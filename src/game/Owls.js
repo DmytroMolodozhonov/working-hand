@@ -1081,11 +1081,12 @@ export class Owls {
             for (const o of [...this.list]) {
                 if (o.dead) continue;
                 // streamed out: far from everybody (a calm owl only — not one leading the way)
+                if (o.imp && g.imperius?.step('o', o, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
                 if (!o.guide && !o.search && !players.some((P) => hdist(P.pos, o.model.position) < OWL.FORGET)) { this._remove(o); continue; }
                 this._think(o, dt);
             }
         } else {
-            for (const o of this.list) if (o.net && !o.dead) this._follow2(o, dt);
+            for (const o of this.list) if (o.imp?.mine && !o.dead && g.imperius?.step('o', o, dt)) { /* (my mind in it: my computer flies it) */ } else if (o.net && !o.dead) this._follow2(o, dt);
         }
         const me = g.character?.group?.position;
         for (const o of this.list) {

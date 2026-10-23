@@ -122,7 +122,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -179,6 +179,8 @@ const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'Cre
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
+/** The Creative test dragon: on the test mountain's highest peak (Terrain.TEST_CAVE + its first peak), facing the pedestals. */
+const TEST_DRAGON = { id: 'ctest-dragon', x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4, yaw: -Math.PI / 2 };
 /** A zombie in deep water: floats like a person (its chest at the top), slow, any bank of a step it climbs; no air to run out. */
 const ZOMBIE_SWIM = { ...SWIMMERS.person, speed: 0.9, float: 2.1, air: Infinity }; // (float: the feet this far under the top — the water at its chest)
 /** What a zombie notices: hears a player this near (m), sees him this far with nothing between, follows him this far. */
@@ -704,6 +706,33 @@ export class Game {
                 if (this.authority) this.dummyHome = { x: 0, z: -10 };
             }
         }
+    }
+
+    /**
+     * Creative (the author's exception, for trying things — «Империус Максима», «Брейнрот Максима», fights): a dragon asleep
+     * on the highest peak of the test mountain left of the pedestals (Terrain.TEST_CAVE). A real dragon (it wakes, fights,
+     * flies); gone — killed, flown off far, taken away — another lies there again a while later.
+     */
+    _updateTestDragon(dt) {
+        const D = this.dragons;
+        if (!D?.enabled || this.config.mode !== 'creative' || !this.world?.terrain?.data?.test) return; // (a world with the test ground: generation 3+)
+        this._tdT = (this._tdT ?? 3) - dt;
+        if (this._tdT > 0) return;
+        this._tdT = 5;
+        const at = TEST_DRAGON;
+        const land = this.terrain?.data;
+        if (land?.landMade && !land.landMade(at.x, at.z)) return; // (its mountain not made yet: wait for the workers)
+        const d = D.list.find((q) => q.id === TEST_DRAGON.id);
+        if (d && !d.dead && Math.hypot(d.model.position.x - at.x, d.model.position.z - at.z) < 260) { this._tdGone = 0; return; }
+        if (d && !d.dead && (d.imp || d.tame)) return; // (a mind in it / it is ridden: it is where it is)
+        this._tdGone = (this._tdGone || 0) + 5;
+        if (d && !d.dead && this._tdGone < 60) return; // (flown off: a minute for it to come back by itself)
+        if (d && d.dead && this._tdGone < 30) return; // (killed: another in half a minute)
+        if (d) D._remove?.(d);
+        this._tdGone = 0;
+        const y = this.collision.groundAt ? this.collision.groundAt(at.x, at.z, 1e4) : this.collision.groundY(at.x, at.z);
+        const nd = D.spawn({ id: TEST_DRAGON.id, kind: KIND_IDS[Math.floor(Math.random() * KIND_IDS.length)], react: 1, flame: 1, pos: new THREE.Vector3(at.x, y, at.z), yaw: at.yaw, mode: 'sleep' });
+        nd.restT = 999; // (asleep on its peak until somebody wakes it)
     }
 
     /** Creative training dummy: a normal zombie (same hits, same cuts) that never walks, bites or leaves; a new whole one stands up a few seconds after it falls. */
@@ -1581,6 +1610,8 @@ export class Game {
 
     _castLocalSpell(text, isFinal = true) {
         if (!this.active) return null;
+        // («у-у-у» in a dragon of «Империус Максима»: its fire — not a spell, not talk: DragonHowl)
+        if (this.imperius?.heardPhrase(text)) return null;
         // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
         if (this.planetMagic?._naming && this.planetMagic.tryName(text, isFinal)) return null;
         let name = matchSpell(text);
@@ -3416,7 +3447,7 @@ export class Game {
         this.fire.update(dt);
         this.fireLights?.update(dt); // (after every fire asked for its light this frame)
         if (earth) this.burnWreck?.update(dt);
-        this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal) }); // (the dead don't take things)
+        this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal || this.imperius?.busy || this.imperius?.puppet) }); // (the dead don't take things; nor a body whose mind is elsewhere / held by another's — «Империус»)
         this.water.update(dt);
         this.combat.update(dt);
         this.vortex.update(dt);
@@ -4047,6 +4078,7 @@ export class Game {
     _spawnWaves(dt) {
         if (!this.authority || this.config.map) return;
         this._updateDummy(dt);
+        this._updateTestDragon(dt);
         this.zombieSpawn?.update(dt); // (zombies out of the dark: caves, the night — ZombieSpawn.js)
         if (this.config.mode === 'creative') {
             const desired = this.config.zombieCount || 0;
@@ -4186,7 +4218,7 @@ export class Game {
             this._jumpSeen = J.jumps;
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
-                || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy
+                || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
                 || (this.config.mode === 'test' && this.testState === 'setup');
             if (!first && !busy && ch.onGround && ch.jump(J.strength)) { this._jumpAt = J.at; this._jumpOnto(); }
         } else if (J && J.air && ch.jumpAir && J.at === this._jumpAt) ch.jumpBoost(J.strength); // (it went up higher)

@@ -1213,7 +1213,7 @@ export class Dragons {
         }
         const dir = b.dir;
         // how far it reaches: water stops it (steam), stone and walls stop it, a house's sphere too
-        const reach = flameReach(d.flame);
+        const reach = flameReach(d.flame) * (b.k ?? 1); // («Империус Максима»: as big as the caster's «У» — DragonHowl.flameSize)
         b.stopT = (b.stopT || 0) - dt;
         if (b.stopT <= 0 || b.len == null) {
             b.stopT = 0.1;
@@ -1229,7 +1229,7 @@ export class Dragons {
             len = g.wards?.clipRay?.(o, dir, len) ?? len;
             b.len = len; b.by = by;
         }
-        this._drawFlame(d, o, dir, b.len, dt);
+        this._drawFlame(d, o, dir, b.len, dt, b.k ?? 1);
         if (b.by === 'water' && Math.random() < dt * 20) g.fx?.spark(_v.copy(o).addScaledVector(dir, b.len), 0xe8eef2, 0.3, _v2.set((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.9);
         // my player in it (every computer: its own)
         const c = g.combat;
@@ -1258,7 +1258,7 @@ export class Dragons {
         }
     }
 
-    _drawFlame(d, o, dir, len, dt) {
+    _drawFlame(d, o, dir, len, dt, k = 1) {
         const fx = this.game.fx;
         if (!fx?.glow) return;
         const cols = DRAGON_KINDS[d.kind].fire;
@@ -1272,13 +1272,13 @@ export class Dragons {
         d.fAcc -= n;
         for (; n > 0; n--) {
             const a = Math.random() * TAU, k = Math.random();
-            const lat = 0.17 * V * (0.4 + Math.random() * 0.8);
+            const lat = 0.17 * V * (0.4 + Math.random() * 0.8) * Math.sqrt(k); // (a bigger «У»: a wider flame)
             const ca = Math.cos(a), sa = Math.sin(a);
             const sp = V * (0.9 + Math.random() * 0.2);
             const col = k < 0.15 ? cols[0] : k < 0.6 ? cols[1] : cols[2];
             fx.glow.spawn(o.x, o.y, o.z,
                 dir.x * sp + (right.x * ca + up.x * sa) * lat, dir.y * sp + (right.y * ca + up.y * sa) * lat + 0.8, dir.z * sp + (right.z * ca + up.z * sa) * lat,
-                col, (0.45 + Math.random() * 0.5) * d.size, life * (0.7 + Math.random() * 0.3), { shrink: -1.8, spin: 6 });
+                col, (0.45 + Math.random() * 0.5) * d.size * Math.sqrt(k), life * (0.7 + Math.random() * 0.3), { shrink: -1.8, spin: 6 });
         }
     }
 
@@ -1334,6 +1334,7 @@ export class Dragons {
                     if (d.deadT > 40) this._remove(d);
                     continue;
                 }
+                if (d.imp && g.imperius?.step('D', d, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
                 this._think(d, dt);
                 if (d.gone) { this._remove(d); continue; }
                 // a wanderer far from everybody is gone
@@ -1343,6 +1344,7 @@ export class Dragons {
         } else {
             for (const d of this.list) {
                 if (g.dragonRide?.riding === d) { d.t += dt; this._animate(d, dt, d.rideWalk); continue; } // (I fly it: my computer says where it is)
+                if (d.imp?.mine && !d.dead && g.imperius?.step('D', d, dt)) continue; // (my mind is in it: my computer flies it)
                 if (d.net) { d.model.position.lerp(d.net, Math.min(1, dt * 6)); d.model.rotation.y += wrap(d.netYaw - d.model.rotation.y) * Math.min(1, dt * 6); }
                 d.t += dt;
                 if (d.dead) { d.model.rotation.z += (Math.PI / 2 - d.model.rotation.z) * Math.min(1, dt * 2); continue; }
@@ -1436,7 +1438,7 @@ export class Dragons {
             if (!d) d = this.spawn({ id, kind, react, flame, hp, lair: lair || null, slot, pos: new THREE.Vector3(x, y, z), yaw: ry, mode: STATES[si] || 'sleep' });
             d.hp = hp;
             d.mode = STATES[si] || d.mode;
-            if (this.game.dragonRide?.riding === d) { seen.add(id); continue; } // (I fly it)
+            if (this.game.dragonRide?.riding === d || d.imp?.mine) { seen.add(id); continue; } // (I fly it — on its back, or my mind in it)
             (d.net || (d.net = new THREE.Vector3())).set(x, y, z);
             d.netYaw = ry;
             d.fly = fly / 100;

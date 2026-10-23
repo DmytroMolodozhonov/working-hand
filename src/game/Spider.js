@@ -506,12 +506,12 @@ export class Spiders {
                 this._lairT -= dt;
                 if (this._lairT <= 0) { this._lairT = 1; this._visitLairs(); } // (once a second is plenty)
             } else {
-                for (const s of [...this.list]) if (!s.dead) this._remove(s); // hides at dawn
+                for (const s of [...this.list]) if (!s.dead && !s.imp) this._remove(s); // hides at dawn (not while a mind is in her: «Империус Максима»)
                 this._left.clear();
             }
-            for (const s of this.list) if (!s.dead && !s.lev) this._think(s, dt); // (held up by «Левиоса Максима»: it carries her)
+            for (const s of this.list) if (!s.dead && !s.lev && !(s.imp && g.imperius?.step('sp', s, dt))) this._think(s, dt); // (held up by «Левиоса Максима»: it carries her; a mind in her — ImperiusControl.step)
         } else {
-            for (const s of this.list) if (s.net) { s.model.position.lerp(s.net, Math.min(1, dt * 6)); this._animate(s, s.netMoving ? 1 : 0, dt); }
+            for (const s of this.list) if (s.imp?.mine && !s.dead && g.imperius?.step('sp', s, dt)) { /* (my mind in her) */ } else if (s.net) { s.model.position.lerp(s.net, Math.min(1, dt * 6)); this._animate(s, s.netMoving ? 1 : 0, dt); }
         }
         this._updateShots(dt);
         // me: webbed / held

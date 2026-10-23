@@ -458,9 +458,9 @@ export class IceCastleLife {
         }
         if (this.auth) {
             if (this._friendsToLoad) this._loadFriends();
-            for (const c of [...this.list]) if (!c.dead && (c.type !== 'friend' || this._awake(c))) this._think(c, dt);
+            for (const c of [...this.list]) if (!c.dead && !(c.imp && g.imperius?.step('I', c, dt)) && (c.type !== 'friend' || this._awake(c))) this._think(c, dt); // («Империус Максима»: a mind in it — ImperiusControl.step)
         } else {
-            for (const c of this.list) if (c.net && !c.dead) {
+            for (const c of this.list) if (c.imp?.mine && !c.dead && g.imperius?.step('I', c, dt)) { /* (my mind in it) */ } else if (c.net && !c.dead) {
                 c.model.position.lerp(c.net, Math.min(1, dt * 8));
                 c.model.rotation.y = turnToward(c.model.rotation.y, c.netYaw ?? c.model.rotation.y, 6 * dt);
             }

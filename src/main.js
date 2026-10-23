@@ -515,6 +515,9 @@ function talkNow(command, info = {}) {
 
 const talkFlow = new TalkFlow({ fire: (text, info) => talkNow(text, info), players: () => game?.castleLife?.talk?._players?.() || [] });
 voice.onQuiet = (q) => talkFlow.quiet(q);
+// («Империус Максима» in a dragon: its fire is the caster's long «У» — the letters heard and the microphone's level: DragonHowl)
+voice.native.onLetters = (written) => game?.imperius?.voiceLetters(written);
+{ const lv = voice.native.onLevel; voice.native.onLevel = (d) => { lv?.(d); if (game?.imperius?.active) for (const db of d.db || []) game.imperius.voiceLevel(db); }; }
 
 /** (the browser's recognizer) the words stood still long enough for their kind: answered. */
 // (the same words again — the native voice looks at the phrase every ~0.15 s while it is quiet — keep the wait going)

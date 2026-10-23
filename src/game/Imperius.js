@@ -36,7 +36,7 @@ export const IMPERIUS = {
     RANGE: 60, // m from the body: the link holds this far (the game's decision: «радиус большой, но не бесконечный»)
     FIRST: 15, // +cells the first time it works (Mana.FIRST_SPELL)
     CAST_R: 30, // m: as far as one can reach a creature with the cast (the hand / the wand / the eyes on it)
-    AIM_ANG: 0.38, // rad: how close to the hand's / the eyes' line the creature must be
+    AIM_ANG: 0.5, // rad: how close to the hand's / the eyes' line the creature must be (forgiving: the camera's hand wavers)
     FADE_FROM: 0.5, // of RANGE: from here the screen starts to darken
     FADE_SAY: 0.3, // darkness at which «Связь слабеет» is said (once)
     PASS_T: 1.0, // s: the mind's passage (into the creature and back) — the camera flies along the light
@@ -62,7 +62,7 @@ export const imperiusOf = (name) => (name === 'ImperiusMaxima' ? IMPERIUS_MAXIMA
  * Who may be taken (the author's rule «кто/что × как»): kind → {ru, plain, magic, boss, fly, why}.
  * plain: the plain «Империус» takes it; else only «Максима». `why`: said when the plain one cannot.
  * Kinds (ImperiusControl's adapters): z zombie, v castle / village person (by role), w a wizard of the game,
- * a animal (by type), s sailor, D dragon, sp the giant spider, b book-bird, o owl, p phoenix, t living tree /
+ * a animal (by type), s sailor, D dragon, sp the giant spider, b book-bird, o owl, f phoenix, t living tree /
  * risen skeleton, I the Ice Castle's creatures, pl a player.
  */
 export const IMPERIUS_TARGETS = {
@@ -173,7 +173,7 @@ export function kindOf(sys, c = {}) {
         case 'sp': return 'spider';
         case 'b': return 'bookbird';
         case 'o': return 'owl';
-        case 'p': return 'phoenix';
+        case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';
         case 'I': return c.type === 'queen' ? 'iceQueen' : c.type === 'monster' ? 'iceMonster' : 'snowman';
         case 'pl': return 'player';

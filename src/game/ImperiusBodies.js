@@ -41,7 +41,7 @@ const TURN_ONLY = 0.3;
 const ZOMBIE_R = 0.88; // (Game.ZOMBIE_RADIUS)
 const zombies = {
     sys: 'z',
-    list(g, fn) { for (const z of g.zombies || []) if (!z.isDead && !z.isDying && z.group?.visible !== false && !z.dummy) fn(z, z.group.position.x, z.group.position.y - (z.gOff || 0), z.group.position.z, 3.2 * (z.sizeK || 1)); },
+    list(g, fn) { for (const z of g.zombies || []) if (!z.isDead && !z.isDying && z.group?.visible !== false) fn(z, z.group.position.x, z.group.position.y - (z.gOff || 0), z.group.position.z, 3.2 * (z.sizeK || 1)); },
     find(g, id) { return g.zombieById?.get(id) || null; },
     dead(c) { return !!(c.isDead || c.isDying || c.removable); },
     pos(c, out) { return out.set(c.group.position.x, c.group.position.y - (c.gOff || 0), c.group.position.z); },
@@ -134,6 +134,7 @@ const animals = {
     drive(g, a, I, dt) {
         const A = g.animals, S = SPECIES[a.type] || SPECIES.cow, p = a.group.position;
         if (!A) return;
+        if (I.wings?.(g, a, I, dt)) return; // («Империус Максима»: a pig / the Pegasus in the air — by the arms, ImperiusFlyers.animalWings)
         a.state = 'graze'; a.attacker = null; a.idle = 'stand'; a.lie = 0;
         if (a.fly) { a.fly = null; a.airborne = true; a.flyCode = 4; } // (a pig in the air when taken: the plain spell does not hold its wings — it falls, and walks)
         a.t = (a.t || 0) + dt;
@@ -152,7 +153,8 @@ const animals = {
         if (a._impAtkT > 0) { const was = a._impAtkT; a._impAtkT -= dt; if (was > 0.22 && a._impAtkT <= 0.22) a._impLand = true; }
         a._impWalk = Math.min(1, (a.spd || 0) / Math.max(1, S.run));
         A._body(a, dt);
-        A._animate(a, Math.min(1, (a.spd || 0) / 5), dt);
+        if (a.type === 'runbook') g.runner?.animateRemote?.(a, dt); // (a running book's own little legs — RunningBook.js)
+        else A._animate(a, Math.min(1, (a.spd || 0) / 5), dt);
     },
     follow(g, a, n, dt) {
         const p = a.group.position, k = Math.min(1, dt * 10);
@@ -161,7 +163,8 @@ const animals = {
         a.group.rotation.y = turn(a.group.rotation.y, n.ry, dt * 10);
         a.walkT = (a.walkT || 0) + step * 2.2;
         a.spd = step / Math.max(1e-3, dt);
-        g.animals?._animate?.(a, Math.min(1, n.w * 1.5), dt);
+        if (a.type === 'runbook') g.runner?.animateRemote?.(a, dt);
+        else g.animals?._animate?.(a, Math.min(1, n.w * 1.5), dt);
     },
     struck(g, a) {
         if (!a._impLand) return null;

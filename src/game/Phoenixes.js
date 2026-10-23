@@ -1294,11 +1294,12 @@ export class Phoenixes {
             for (const f of [...this.list]) {
                 if (f.dead) continue;
                 // streamed out: far from everybody (a calm bird only)
+                if (f.imp && g.imperius?.step('f', f, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
                 if (['soar', 'perch', 'leave'].includes(f.state) && !this._players().some((P) => hdist(P.pos, f.model.position) < PHOENIX.FORGET)) { this._remove(f); continue; }
                 this._think(f, dt);
             }
         } else {
-            for (const f of this.list) if (f.net && !f.dead && !f.localHeld) this._follow(f, dt);
+            for (const f of this.list) if (f.imp?.mine && !f.dead && g.imperius?.step('f', f, dt)) { /* (my mind in it: my computer flies it) */ } else if (f.net && !f.dead && !f.localHeld) this._follow(f, dt);
         }
         const night = g.isNight ? 1 : 0;
         let nearest = null;
