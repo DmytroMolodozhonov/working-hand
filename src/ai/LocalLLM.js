@@ -275,6 +275,20 @@ export class LocalLLM {
         });
     }
 
+    /**
+     * Reads a villager's words ahead (the program on this computer keeps them read): the next chat() with the
+     * same system / context / history costs only the words said. Never cuts an answer being written.
+     */
+    warm({ system = '', context = '', history = [], tools = [] } = {}) {
+        if (!this._ready || !this._worker || this._device !== 'native' || this._jobs.size) return false;
+        const messages = [];
+        if (system) messages.push({ role: 'system', content: system });
+        for (const h of history || []) if (h?.content) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.content) });
+        messages.push({ role: 'user', content: context ? `[${context}]\n\nСобеседник говорит тебе: ` : '' });
+        this._worker.postMessage({ type: 'warm', id: this._nextId++, messages, maxTokens: 1, temperature: 0.4, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true });
+        return true;
+    }
+
     _finish(id, text, err) {
         const job = this._jobs.get(id);
         if (!job) return;

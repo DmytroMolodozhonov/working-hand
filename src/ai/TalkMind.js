@@ -64,6 +64,18 @@ const RULES_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'hagg
  */
 const QUICK_MS = 1500; // (the net's first words sooner than this: it may answer every talk itself)
 const MARKET_ONLY = new Set(['yes', 'no', 'buy', 'price', 'browse', 'sell', 'haggle']);
+/**
+ * What a person answers without thinking — a greeting, «спасибо», «пока», «да/нет», an insult, a threat, «иди за
+ * мной», «стой» — the rules say at once even with a big net (the author: «отвечать моментально, как человек»;
+ * measured: the net's answer comes 2–6 s later on a processor, the rules' in 1 ms). The net answers what needs
+ * thinking: a question, a request, the way, open talk.
+ */
+const AT_ONCE = new Set(['greet', 'how_are_you', 'name_ask', 'bye', 'thanks', 'insult', 'threat', 'follow', 'stop_follow', 'bow', 'claim_king', 'compliment', 'tell_name', 'ask_my_name', 'yes', 'no',
+    'where_market', 'where_throne', 'where_king', 'where_gate']); // (the way: he knows it — a person points at once)
+/** In danger (a fight, zombies at the gate, a fire) only what the rules don't know goes to the net — and it is given little time. */
+const DANGER_FIRST_MS = 1500;
+/** The net's first sentence later than this (ms): the rules answer (it was 8–9 s for the whole answer). */
+const FIRST_MS = 3500;
 /** The net said no, while the rules had agreed to do it: the rules' line (the villager does what he says). */
 const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не буду|ни за что|отстань|no\b|i can'?t|i won'?t)|(не пойду|не могу пойти|не стану)/i;
 
@@ -237,6 +249,25 @@ export class TalkMind {
         return lines.filter(Boolean).join('\n');
     }
 
+    /**
+     * What the net will read when I speak to this villager — read NOW, while I come near (the program keeps it
+     * read: then a question costs it only my words — on a processor the villager's description read anew took
+     * 3–7 s). The same words the next question will begin with: his talk counted one more (the rules count it
+     * before the net is asked), the history as it will be then, no hint (it goes last).
+     */
+    warmRequest(brain, ctx = {}) {
+        const m = brain.memory || {};
+        const ahead = Object.create(brain);
+        Object.defineProperty(ahead, 'memory', { value: { ...m, talks: (m.talks || 0) + 1 } });
+        const c = { ...ctx, lang: 'ru', hint: null };
+        return {
+            system: this.basePrompt(),
+            context: this.persona(ahead, c),
+            history: (m.log || []).slice(-6).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text })),
+            tools: this.strong ? TOOLS : toolsFor(brain.role, c),
+        };
+    }
+
     _history(brain) {
         const log = brain.memory?.log || [];
         // (the last line pair is the one being answered: the rules logged it already;
@@ -289,7 +320,9 @@ export class TalkMind {
         const complex = words >= 6 && !RULES_ONLY.has(res.intent) && !res.intent.startsWith('where_');
         // (a big net answers everything only while it is quick here: on a slow computer the rules answer what they
         // understood at once, and the net only what they did not — the author: «очень медленно отвечают»)
-        const quick = this.strong && this.quickNet ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex;
+        const quick = (this.strong && this.quickNet ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex)
+            || (AT_ONCE.has(res.intent) && words <= 6) // (a greeting, the way, an insult, «за мной»: at once, like a person)
+            || (!!(ctx.danger || brain.world?.danger) && res.intent !== 'unknown' && !complex); // (in danger: no thinking aloud)
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
     }
@@ -334,11 +367,12 @@ export class TalkMind {
         ctx = { ...ctx, lang: en ? 'en' : 'ru', hint };
         const t0 = Date.now();
         let firstAt = 0;
-        const said0 = onPartial ? (piece) => { onPartial(piece); if (!firstAt && n) firstAt = Date.now(); } : null;
+        const said0 = onPartial ? (piece) => { if (!tokAt) { tokAt = Date.now(); try { opts.onToken?.(); } catch (_) { /* ignore */ } } onPartial(piece); if (!firstAt && n) firstAt = Date.now(); } : null;
+        let tokAt = 0;
         this.lastError = null;
         try {
             opts.onThinking?.();
-            let timer;
+            let timer, first;
             raw = await Promise.race([
                 this.llm.chat({
                     // (the same words for everybody first — the program keeps them read; this villager's own with the question)
@@ -354,8 +388,11 @@ export class TalkMind {
                 }),
                 // (nothing said by then: the rules answer — a talk must not wait; the first sentence is said as soon as written)
                 new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs ?? (this.strong ? 8000 : 9000)); }),
+                // (no first sentence soon — FIRST_MS, in danger DANGER_FIRST_MS: the rules answer now, not after a long «Хм…»)
+                new Promise((resolve) => { first = setTimeout(() => { if (!n) resolve(''); }, this.firstMs ?? (ctx.danger || brain.world?.danger ? DANGER_FIRST_MS : FIRST_MS)); }),
             ]);
             clearTimeout(timer);
+            clearTimeout(first);
         } catch (e) {
             // (the net failed — the program stopped, the graphics card lost it…: the rules answer, the reason to the journal)
             stopped = true;

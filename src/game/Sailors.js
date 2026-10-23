@@ -1693,11 +1693,12 @@ export class Sailors {
     }
 
     /** Words said near a sailor: he stops, turns to you and answers (like the people of the castles). */
-    hear(text, by = null) {
+    hear(text, by = null, info = null) {
         const g = this.game;
         const talk = g.castleLife?.talk;
         if (by || talk?._echo?.(text)) return false; // (a sailor's own words from my speakers, heard by my microphone)
         const v = this._listener();
+        if (v && talk?._traceTurn) { const tr = talk._traceTurn(v, text, info || {}); talk.trace.mark(tr, 'rules'); talk.trace.mark(tr, 'act'); } // (the talk's stopwatch)
         // «привет, моряки!» — the crew round me answers together
         if (greetsCrew(text) && this._greetAll(v, talk)) return true;
         if (!v) return false;
@@ -1716,8 +1717,10 @@ export class Sailors {
         if (!this.auth) g.sync?.net.send({ t: 'screw', talk: 1, id: v.id });
         // the answer is said at once — never cut by his mates' chatter (only the one I talk with is heard)
         v.talkedAt = performance.now();
-        if (talk) { talk._partner = v; talk._urgent = true; }
-        try { this._say(v, res?.reply || 'Некогда мне, работать надо.', 6); } finally { if (talk) talk._urgent = false; }
+        // (an order to the crew — «поднять паруса!», «на абордаж!»: his «Есть!» made in advance is heard at once, his answer follows it)
+        const quick = !!talk?._quickWord?.(v, { reply: res?.reply, intent: res?.intent }, text, ctx);
+        if (talk) { talk._partner = v; if (quick) talk._more = true; else talk._urgent = true; }
+        try { this._say(v, res?.reply || 'Некогда мне, работать надо.', 6); } finally { if (talk) { talk._urgent = false; talk._more = false; } }
         if (res?.action === 'hostile' || res?.action === 'call_guards') this.provoke(s, g.localId, '🏴 Вы разозлили матросов!');
         return true;
     }

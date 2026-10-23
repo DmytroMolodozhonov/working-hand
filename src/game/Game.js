@@ -7,6 +7,7 @@
  */
 
 import { marketDef, buildMarketStall } from './CreativeMarket.js';
+import { guestDef } from './CreativeGuest.js';
 import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
 import { crowdStep } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
@@ -683,6 +684,8 @@ export class Game {
                 const mdef = marketDef(this.collision.groundY(0, 13));
                 buildMarketStall(this, mdef);
                 this.castleLife.addSite(mdef);
+                // a plain villager to talk to near the start: the quick talk, orders, the net (CreativeGuest.js)
+                this.castleLife.addSite(guestDef(this.collision.groundY(-8, 6)));
                 // a training dummy: a plain zombie that only stands (see _updateDummy)
                 if (this.authority) this.dummyHome = { x: 0, z: -10 };
             }
@@ -1519,7 +1522,11 @@ export class Game {
         // villagers' and the wizards' voices filled the quiet after my word, and the spell came 2–3 s late)
         if (this.isMagicActive) this._speakingAt = now;
         const at = Math.max(this._speakingAt || -1e9, this.voice?.speakingAt || -1e9);
-        sp.duck(now - at < 900);
+        // (a villager answers my words — said after I stopped: no quiet for it; I speak again — quiet again)
+        // (my voice heard by the cleaned microphone tells the moment I stopped; the lips' window only tells «lately»)
+        const spoke = this.voice?.aec ? this.voice.speakingAt || -1e9 : at - 700;
+        const answering = (this.castleLife?.talk?.replyAt || -1e9) > spoke;
+        sp.duck(now - at < 900 && !(answering && !this.isMagicActive));
         if (sp._ducked) this._duckedAt = now;
     }
 

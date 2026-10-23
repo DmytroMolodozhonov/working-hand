@@ -38,6 +38,7 @@ export class NativeLLMPort {
         if (this._closed || !msg) return;
         if (msg.type === 'load') this._load(msg);
         else if (msg.type === 'generate') this._generate(msg);
+        else if (msg.type === 'warm') { if (!this._streams.size) this._generate({ ...msg, type: 'generate', warm: true }); } // (never over an answer)
         else if (msg.type === 'interrupt') { this._streams.get(msg.id)?.abort(); this._api('interrupt', { id: msg.id }).catch(() => {}); }
         else if (msg.type === 'dispose') this.terminate();
     }

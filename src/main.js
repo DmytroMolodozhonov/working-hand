@@ -22,6 +22,7 @@ import { fromGame, soundingLine } from './audio/GameVoices.js';
 import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
+import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
 import { hintPolicy } from './ui/HintPolicy.js';
@@ -453,10 +454,11 @@ function holdSpell(command, isFinal) {
     setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true); }, GATE.HOLD);
 }
 
-// Talking to a villager: the browser marks the words «final» only a good while after you stop. When the
-// words being caught stop changing for a moment (no spell's sound in them), the villager answers now;
-// the browser's own final of the same words later is not a second question.
-const TALK_STILL = 700; // ms
+// Talking to a villager (the author: «отвечать МОМЕНТАЛЬНО, как человек»): the words go to the villagers as
+// soon as they are surely over — not when the voice program closes the phrase (0.85 s of quiet: it waits for a
+// spell's «… Хаус»). The native voice tells the quiet after the words (TalkFlow: an order after 0.12 s, a finished
+// phrase after 0.25 s, one left hanging after 0.6 s); the browser's recognizer only the words, then they must stand
+// still a moment (STILL). The phrase's end later is no second question (TalkFlow.final / talkEarly).
 let talkWait = null, talkEarly = null;
 const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^а-яa-z0-9]+/g, ' ').trim();
 // The spell journal (Settings → Журнал → «Заклинания», zns-spells.log): every phrase and what came of it.
@@ -489,17 +491,28 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
     log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why, note });
 }
 
+/** The words go to the villager (or the sailor) who hears me now — before the phrase's end. */
+function talkNow(command, info = {}) {
+    const T = game?.castleLife?.talk, crew = game?.ships?.crew;
+    if (!game?.active || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || (matchSpell(command) && spellPhrase(command).ok)) return false;
+    if (!$('pause-menu')?.classList.contains('hidden')) return false; // (the pause menu opened meanwhile)
+    if (game.owls?.claims?.(command)) return false; // (an owl's words: at the phrase's end, as before)
+    const castle = () => !!T?._listener?.(command) && T.hear(command, info);
+    const ship = () => !!crew?._listener?.() && crew.hear(command, null, info);
+    const ok = crew?.heardFirst?.(T) ? ship() || castle() : castle() || ship();
+    if (!ok) return false;
+    talkEarly = { key: talkKey(command), at: performance.now() };
+    hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
+    return true;
+}
+
+const talkFlow = new TalkFlow({ fire: (text, info) => talkNow(text, info), players: () => game?.castleLife?.talk?._players?.() || [] });
+voice.onQuiet = (q) => talkFlow.quiet(q);
+
+/** (the browser's recognizer) the words stood still long enough for their kind: answered. */
 function earlyTalk(command) {
     clearTimeout(talkWait);
-    talkWait = setTimeout(() => {
-        talkWait = null;
-        const T = game?.castleLife?.talk;
-        if (!game?.active || !T || game.isMagicActive || Date.now() - game.lastMagicTime < 1500 || (matchSpell(command) && spellPhrase(command).ok)) return;
-        if (!$('pause-menu')?.classList.contains('hidden')) return; // (the pause menu opened meanwhile)
-        if (!T._listener?.() || !T.hear(command)) return;
-        talkEarly = { key: talkKey(command), at: performance.now() };
-        hud.setVoice(`🗣️ Вы: «${escapeHtml(command)}»`);
-    }, TALK_STILL);
+    talkWait = setTimeout(() => { talkWait = null; talkNow(command); }, STILL[readiness(command)]);
 }
 
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
@@ -508,6 +521,13 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait) { clearTimeout(talkWait); talkWait = null; }
+    // (the native voice: the phrase answered as soon as I stopped — its end is no second question; a different
+    // order after it — «в атаку… нет, отбой» — or more words are: answered again, the older answer cut)
+    if (isFinal && meta?.native && game?.active) {
+        const st = talkFlow.final(command, meta.seg);
+        if (st === 'handled') { talkEarly = null; journal(command, true, meta, null, false, 'житель уже ответил — как только вы замолчали'); return; }
+        if (st === 'changed' && !matchSpell(command) && talkNow(command, { end: meta.end, seg: meta.seg, refine: true })) { talkEarly = null; journal(command, true, meta, null, false, 'фраза продолжилась — житель ответил на всю'); return; }
+    }
     if (talkEarly && performance.now() - talkEarly.at < 5000) {
         const k = talkKey(command);
         if (k === talkEarly.key || talkEarly.key.startsWith(k)) { if (isFinal) talkEarly = null; return; }
@@ -520,7 +540,10 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     const loose = !!phrase.name && !phrase.ok && !game?.planetMagic?._naming && !game?.vortex?.bubbleOpen?.();
     const talkOnly = !!meta?.talkOnly || loose;
     const talkWhy = loose ? PHRASE_WHY_RU[phrase.why] || 'обычная речь' : 'слово заклинания внутри обычной фразы — это разговор';
-    if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && game.castleLife?.talk?._listener?.() && !game.owls?.claims?.(command)) earlyTalk(command);
+    if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && (game.castleLife?.talk?._listener?.(command) || game.ships?.crew?._listener?.()) && !game.owls?.claims?.(command)) {
+        if (!meta?.native) earlyTalk(command);
+        else if (!meta.cut) talkFlow.offer(command, { seg: meta.seg, q: meta.q || 0, end: meta.end }); // (a look missing the phrase's start: its end decides)
+    }
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
         voiceTestText.style.color = '#55efc4';

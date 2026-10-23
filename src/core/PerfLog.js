@@ -41,6 +41,11 @@ export class PerfLog {
         if (this.events.length > 20) this.events.shift();
     }
 
+    /** A talk turn's stopwatch line («разговор: …», TalkTrace): into the diary at once. */
+    talk(line) {
+        this._push(`${((performance.now() - this._t0) / 1000).toFixed(0)}с | ${line}`);
+    }
+
     /** Every frame: the gap since the last one and the parts of this frame. */
     frame(gapMs, parts) {
         this.gaps.push(gapMs);

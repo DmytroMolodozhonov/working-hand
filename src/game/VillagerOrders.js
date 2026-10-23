@@ -69,7 +69,7 @@ export class VillagerOrders {
             case 'gather_army': {
                 const army = this._muster(cs, by);
                 for (const k of army) { k.follow = by; k.followT = 600; k.followFar = true; k.order = null; k.path = null; k.foe = null; k.investigate = null; }
-                this._shout(army, ['За короля!', 'Строимся!', 'Идём, Ваше Величество!', 'К бою готовы!']);
+                this._shout(army, ['За короля!', 'Строимся!', 'Идём, Ваше Величество!', 'К бою готовы!'], v);
                 break;
             }
             case 'attack': {
@@ -84,14 +84,14 @@ export class VillagerOrders {
                     const what = ['zombies', 'spider', 'animals', 'enemies'].includes(args.target) ? args.target : 'enemies';
                     for (const k of army) { k.order = { kind: 'hunt', what, by, t: 180 }; k.follow = null; k.path = null; k.investigate = null; }
                 }
-                this._shout(army, ['В атаку!', 'Бей их!', 'За короля!', 'Вперёд!']);
+                this._shout(army, ['В атаку!', 'Бей их!', 'За короля!', 'Вперёд!'], v);
                 break;
             }
             case 'defend_castle': {
                 const army = this._muster(cs, by);
                 const posts = this._posts(cs);
                 army.forEach((k, i) => { k.order = { kind: 'defend', by, t: 900, post: posts.length ? posts[i % posts.length] : null }; k.follow = null; k.path = null; });
-                this._shout(army, ['Все на стены!', 'Держать ворота!', 'Защищать замок!']);
+                this._shout(army, ['Все на стены!', 'Держать ворота!', 'Защищать замок!'], v);
                 break;
             }
             case 'dismiss': this._dismiss(v, by); break;
@@ -103,6 +103,8 @@ export class VillagerOrders {
                 break;
         }
         if (me && !v.foe && name !== 'flee' && v.job !== 'king') v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z));
+        // (he sets off at once and answers on the way — a talk does not hold him where he stood: CastleLife «talking»)
+        if (['follow_me', 'follow', 'gather_army', 'go_to', 'flee'].includes(name) || name.startsWith('guide:')) v.talking = 0;
     }
 
     /** (host) May `by` give this order? (a guest's order is checked again here) */
@@ -114,7 +116,7 @@ export class VillagerOrders {
         }
         if ((name === 'follow_me' || name === 'follow') && v.role === 'king') return false;
         // (a plain «иди за мной» to a busy villager: only wanderers leave their work, unless the king asks)
-        if ((name === 'follow_me' || name === 'follow') && !king && v.job !== 'wander') return false;
+        if ((name === 'follow_me' || name === 'follow') && !king && v.job !== 'wander' && !v.guest) return false; // (the Creative guest is here to try it all)
         return true;
     }
 
@@ -225,9 +227,21 @@ export class VillagerOrders {
         v.follow = null; v.followFar = false; v.order = null; v.path = null;
     }
 
-    _shout(army, lines) {
-        const few = army.slice(0, 3);
-        few.forEach((k, i) => { if (i === 0 || Math.random() < 0.5) this.life._say(k, lines[Math.floor(Math.random() * lines.length)], 2.5); });
+    /**
+     * The army answers an order: not a choir all at once (one voice would cut the other, and the one I spoke to
+     * answers already — CastleTalk): two more at most, one after another, 0.35–1 s apart; while a voice still
+     * speaks, the others' words are only seen over their heads (CastleTalk.voice).
+     */
+    _shout(army, lines, skip = null) {
+        const few = army.filter((k) => k !== skip && !k.dead).slice(0, 2);
+        const used = new Set();
+        few.forEach((k, i) => {
+            if (i > 0 && Math.random() < 0.4) return;
+            const fresh = lines.filter((l) => !used.has(l));
+            const line = fresh[Math.floor(Math.random() * fresh.length)] || lines[0];
+            used.add(line);
+            setTimeout(() => { if (!k.dead && !(k.stunT > 0)) this.life._say(k, line, 2.5); }, 350 + i * 450 + Math.random() * 200);
+        });
     }
 
     /** Places to defend: the gate, the wall walk, the posts. */

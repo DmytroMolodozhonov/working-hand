@@ -1,0 +1,18 @@
+[
+  { "id": "greet", "say": "Привет! Как у тебя дела?", "to": "farmer", "kind": "talk", "ru": "приветствие" },
+  { "id": "way", "say": "Как пройти к тронному залу?", "to": "farmer", "kind": "talk", "ru": "как пройти" },
+  { "id": "price", "say": "Сколько стоит хлеб?", "to": "merchant", "kind": "talk", "ru": "сколько стоит хлеб" },
+  { "id": "gather", "say": "Собери войско!", "to": "knight", "king": true, "kind": "order", "order": "gather_army", "ru": "собери войско" },
+  { "id": "all_attack", "say": "Все в атаку!", "to": "knight", "king": true, "kind": "order", "order": "attack", "group": true, "ru": "все в атаку" },
+  { "id": "guard_me", "say": "Рыцари, защищайте меня!", "to": "knight", "king": true, "kind": "order", "group": true, "ru": "рыцари, защищайте меня" },
+  { "id": "zombies_gate", "say": "Зомби у ворот, к оружию!", "to": "knight", "king": true, "kind": "order", "order": "gather_army", "danger": true, "group": true, "ru": "зомби у ворот, к оружию" },
+  { "id": "sails", "say": "Поднять паруса!", "to": "sailor", "kind": "crew", "ru": "поднять паруса" },
+  { "id": "cannons", "say": "Огонь из пушек!", "to": "sailor", "kind": "crew", "ru": "огонь из пушек" },
+  { "id": "board", "say": "На абордаж!", "to": "sailor", "kind": "crew", "ru": "на абордаж" },
+  { "id": "insult", "say": "Ты глупый болван.", "to": "farmer", "kind": "talk", "ru": "оскорбление" },
+  { "id": "threat", "say": "Я тебя сейчас убью!", "to": "merchant", "kind": "talk", "ru": "угроза" },
+  { "id": "complex", "say": "Расскажи, почему король не любит волшебников из башни?", "to": "advisor", "kind": "net", "ru": "сложный вопрос про замок" },
+  { "id": "mumble", "say": "Э-э… ну это самое…", "to": "farmer", "kind": "talk", "ru": "невнятная речь" },
+  { "id": "stand_down", "say": "Отбой!", "to": "knight", "king": true, "kind": "order", "order": "stay", "group": true, "ru": "отбой" },
+  { "id": "follow_one", "say": "Рыцарь, иди за мной.", "to": "knight", "king": true, "kind": "order", "order": "follow", "ru": "рыцарь, за мной (одному)" }
+]

@@ -178,7 +178,7 @@ export class VillagerFear {
         for (const [k, d] of this.list) if (d.until < this._t) this.list.delete(k);
         if (!this.list.size) return;
         for (const cs of this.life.castles.values()) {
-            if (!cs.awake || isWizSite(cs.def) || cs.def.kind === 'stall') continue;
+            if (!cs.awake || isWizSite(cs.def) || cs.def.kind === 'stall' || cs.def.kind === 'guest') continue;
             const def = cs.def;
             const here = this.near(def.x, def.z, def.zone + 40);
             if (!here.length) continue;

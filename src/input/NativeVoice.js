@@ -155,6 +155,7 @@ export class NativeVoice {
         this.onEcho = null;   // (spell words) a spell heard only from the speakers
         this.onFail = null;   // () the native voice stopped working (the browser's takes over)
         this.onMiss = null;   // (written, meta) a finished phrase that gave the game nothing (the spell journal)
+        this.onQuiet = null;  // (s) the quiet after the words of the open phrase now (−1: none open) — TalkFlow
         this.knows = null;    // (spell) → does the hero know it (the game sets it: a longer spell nobody knows is not waited for)
         this.segs = new Map();
         this.errors = 0;
@@ -245,7 +246,7 @@ export class NativeVoice {
 
     _event(d) {
         if (d.type === 'status') { this.status = { ...(this.status || {}), ...d }; if (d.state === 'error') { this.stop(); this.onFail?.(); } return; }
-        if (d.type === 'lv') { this._clock(d.t); this.onLevel?.(d); return; }
+        if (d.type === 'lv') { this._clock(d.t); this.onLevel?.(d); if (Number.isFinite(d.q)) this.onQuiet?.(d.q); return; }
         if (d.type !== 'seg') return;
         this._clock(d.t1);
         // (the network's time per look at a phrase: the journal shows it — zns-perf.log «голос»)
@@ -258,8 +259,12 @@ export class NativeVoice {
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
         const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, near: r.heard.near, ...this._when(d, r.heard),
-            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id, src: d.src };
+            peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id, src: d.src,
+            // (q: s of quiet already after the words; cut: the look missed the phrase's start — TalkFlow waits for its end)
+            q: Number.isFinite(d.q) ? d.q : null, cut: !!d.cut };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
+        // (when the speech itself ended — the quiet heard after it taken off: the talk's stopwatch starts there)
+        if (Number.isFinite(d.q) && Number.isFinite(meta.to) && !r.heard.spell) meta.end = meta.to - d.q * 1000;
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }

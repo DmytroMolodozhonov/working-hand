@@ -201,6 +201,9 @@ export class Speech {
         if (volume < 0.03) return false; // too far away (or the sound is off)
         const key = opts.voiceKey ?? 'default';
         const o = { ...opts, volume, voiceKey: key, female: isFemale(opts) };
+        // (an answer to the player's own words — opts.reply: he has stopped speaking, the game knows it (TalkFlow) —
+        // is said now and at full loudness; before, it waited for the «player speaks» 0.9 s to run out)
+        if (opts.reply && this._ducked) this.duck(false);
         // (the player speaks / casts: a new line waits — its sound would cover the spell, and its making takes the
         // processor the voice's network needs; it is said as soon as the player is done — duck(false))
         if (this._ducked && !this._current && !opts.append) {
@@ -212,7 +215,7 @@ export class Speech {
             if (this._current.voiceKey === key) {
                 // the next piece of the same answer (opts.append): made at once and played right after,
                 // in the same voice — nothing dropped, no wait for the line before to end
-                if (opts.append && this._current.add) { this._current.add(clean); return true; }
+                if (opts.append && this._current.add) { this._current.add(clean, o.onStart); return true; }
                 if (opts.append && this._pending) { this._pending.text += ' ' + clean; return true; }
                 // same villager: wait for the current line, keep only the newest pending one
                 if (this._pending?.opts.onEnd) this._safeCall(this._pending.opts.onEnd, false);
@@ -315,7 +318,7 @@ export class Speech {
         let pause = 0.15; // (after a clause ending with a comma: a shorter breath)
         const maybeDone = () => { if (playing <= 0 && open <= 0) this._finish(entry, !!entry.started); };
         const ended = () => { playing--; maybeDone(); };
-        const play = (pcm, sampleRate, piece) => {
+        const play = (pcm, sampleRate, piece, onStart = null) => {
             const ctx = this._audio();
             if (!ctx || !pcm?.length) return;
             const buf = ctx.createBuffer(1, pcm.length, sampleRate);
@@ -351,14 +354,17 @@ export class Speech {
             // (when it sounds — the microphone hears it too: its spell words are not mine, GameVoices.js)
             const from = clock() + (at - now + (ctx.outputLatency || ctx.baseLatency || 0)) * 1000;
             aired(piece, from, from + dur * 1000);
+            if (onStart) this._safeCall(onStart, from); // (when this piece is first heard: the talk's stopwatch, TalkTrace)
             entry.sources.push(src);
             entry.started = true;
             playing++;
             src.start(at);
         };
         // one piece of the answer: each sentence plays as soon as it is ready, right after the one before
-        entry.add = (piece) => {
+        entry.add = (piece, onStart = null) => {
             if (this._current !== entry) return;
+            let started = false;
+            const first = onStart ? (at) => { if (!started) { started = true; onStart(at); } } : null;
             if (opts.live && this._live(opts).volume < 0.03) { maybeDone(); return; } // (cannot be heard: not even made)
             open++;
             let closed = false;
@@ -368,16 +374,17 @@ export class Speech {
             const ck = this._ckey(cast, piece);
             const hit = ck && this._cache.get(ck);
             if (hit) { this._cache.delete(ck); this._cache.set(ck, hit); } // (said often: kept longest)
-            if (hit) { Promise.resolve().then(() => { if (this._current !== entry) return; close(); play(hit.pcm, hit.sr, piece); maybeDone(); }); return; }
+            if (hit) { Promise.resolve().then(() => { if (this._current !== entry) return; close(); play(hit.pcm, hit.sr, piece, first); maybeDone(); }); return; }
             const onChunk = (pcm, sampleRate, last) => {
                 if (this._current !== entry) return;
                 if (last) close();
                 if (ck && last && pcm?.length) this._store(ck, { pcm, sr: sampleRate });
-                play(pcm, sampleRate, piece);
+                play(pcm, sampleRate, piece, first);
                 maybeDone();
             };
             // …so it is synthesized that much slower: the pace stays `speed`
-            this.neural.synth(piece, { voice: cast.voice, speed: cast.speed / cast.pitch, onChunk }).catch(() => {
+            // (steps: a live answer may be made in fewer steps of the voice network — sooner heard; tools/talkbench.mjs)
+            this.neural.synth(piece, { voice: cast.voice, speed: cast.speed / cast.pitch, onChunk, ...(opts.steps ? { steps: opts.steps } : {}) }).catch(() => {
                 // the neural voice failed on this line: the system voice says it (if nothing was heard yet)
                 if (this._current !== entry) return;
                 close();
@@ -389,7 +396,7 @@ export class Speech {
                 if (next) this._speak(next.text, next.opts);
             });
         };
-        entry.add(text);
+        entry.add(text, opts.onStart);
         return true;
     }
 
@@ -408,7 +415,7 @@ export class Speech {
         this._remember({ engine: 'system', voice: voice.name, female: opts.female, pitch, speed: rate, text });
         // (when it sounds, as best the browser tells: its spell words are not mine, GameVoices.js)
         const said = aired(text, clock(), clock() + 600 + text.length * 90 / Math.max(0.5, rate));
-        u.onstart = () => { const d = said.to - said.from; said.from = clock(); said.to = said.from + d; };
+        u.onstart = () => { const d = said.to - said.from; said.from = clock(); said.to = said.from + d; if (opts.onStart) this._safeCall(opts.onStart, said.from); };
         u.onend = () => { said.to = clock(); this._finish(entry, true); };
         u.onerror = () => { said.to = clock(); this._finish(entry, false); };
         this._current = entry;

@@ -23,6 +23,7 @@
  */
 
 import { isStallSite } from './CreativeMarket.js';
+import { isGuestSite } from './CreativeGuest.js';
 import { confusedMiss } from './StrongSpells.js';
 import { treeAt } from './Carriages.js';
 import { shareFoes } from './CrewTactics.js';
@@ -300,7 +301,7 @@ export class CastleLife {
     get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
 
     /** Who is person number `idx` of a site (a castle's villager or a wizard). */
-    _roster(def, idx) { return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
+    _roster(def, idx) { const own = def.people?.find((p) => p.idx === idx); if (own) return own; return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
 
     state(id) {
         let s = this.states.get(id);
@@ -466,6 +467,7 @@ export class CastleLife {
         this.game.loreLibrary?.wake(cs.def); // (its library's reading stands with the books of the world's history — LoreLibrary.js; on every computer)
         if (!this.auth) return;
         const def = cs.def;
+        if (isGuestSite(def)) { const v = this._activate(cs, 1, def.spot, 'stall', { post: def.spot }); if (v) v.guest = true; return; } // (the Creative guest: just him — CreativeGuest.js)
         if (isStallSite(def)) { const st = def.stalls[0]; this._activate(cs, 1, { ...st.back, yaw: st.yaw }, 'stall', { post: { ...st.back, yaw: st.yaw } }); return; } // (the Creative stall: just its merchant)
         if (def.kind === 'hamlet') { this.hamlets.wake(cs); return; } // (the lone houses and the small villages: HamletLife.js)
         if (isWizSite(def)) { this.wizards.wake(cs); return; } // (no knights: the wizards have their own places)
@@ -3322,9 +3324,11 @@ export class CastleLife {
         const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.fear?.level >= 2 || v.role === 'knight' || v.role === 'king');
         if (shout && !v.sleep && this.auth) this.night?.noise(v, 16); // (a shout wakes the sleepers near)
         // (heard aloud → no words over the head: the talk is by voice; the words only when there is no voice)
-        if (this.talk.voiceCarries?.(v, shout)) v.bubble.hide?.();
+        // (a voice that would cut the answer I am hearing is not said — false: then its words show)
+        const voiced = this.talk.voiceCarries?.(v, shout) && this.talk.voice(v, text, shout) !== false;
+        if (voiced) v.bubble.hide?.();
         else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
-        this.talk.voice(v, text, shout);
+        if (!this.talk.voiceCarries?.(v, shout)) this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
 
@@ -3359,7 +3363,7 @@ export class CastleLife {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.auth) {
-            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
+            for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def) && !isGuestSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.hamlets.update(dt);
             this.fright.update(dt);
             this.rebuild.update(dt);

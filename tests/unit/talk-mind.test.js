@@ -335,15 +335,22 @@ test('a big net (Gemma 4) answers the usual phrases itself — with the rules\' 
     const llm = fakeLLM('Здорово, добрый человек! Заходи, не стесняйся.');
     llm.strong = true;
     const mind = new TalkMind({ llm, rng: createRng(11) });
-    // a greeting, the way, «who are you»: the net is asked, the rules' answer is its hint
-    for (const p of ['привет', 'где рынок', 'кто ты такой']) {
+    // the way asked at length, «who are you»: the net is asked, the rules' answer is its hint («где рынок» alone: at once)
+    for (const p of ['слушай, подскажи мне, а где тут у вас рынок находится', 'кто ты такой']) {
         const n = llm.asked.length;
         await mind.hear(brain('farmer', { seed: 11 }), p, {});
         assert.equal(llm.asked.length, n + 1, `the net hears «${p}»`);
     }
-    assert.match(llm.asked[1].context, /Суть твоего ответа/);
-    assert.match(llm.asked[1].context, /рын/i);
-    assert.equal(llm.asked[1].system, llm.asked[2].system, 'the same system words for every question');
+    assert.match(llm.asked[0].context, /Суть твоего ответа/);
+    assert.match(llm.asked[0].context, /рын/i);
+    assert.equal(llm.asked[0].system, llm.asked[1].system, 'the same system words for every question');
+    // a greeting is answered at once, like a person does (the author: «моментально») — not after the net
+    const g = llm.asked.length;
+    const hi = await mind.hear(brain('farmer', { seed: 11 }), 'привет', {});
+    assert.equal(llm.asked.length, g, 'a greeting: the rules at once');
+    await mind.hear(brain('farmer', { seed: 11 }), 'где рынок', {});
+    assert.equal(llm.asked.length, g, 'the way, asked shortly: at once');
+    assert.ok(hi.reply);
     // the market's numbers: the rules only
     const n = llm.asked.length;
     const m = new VillagerBrain({ id: 'm1', name: 'Фома', role: 'merchant', seed: 3 }, { timeOfDay: 'day' }, { rng: createRng(3) });
@@ -360,9 +367,15 @@ test('a big net keeps the rules\' action; its words never refuse what the villag
     const ctx = { playerIsKing: true, players: PLAYERS };
     const rules = b.hear('пойдём со мной', ctx);
     assert.equal(rules.action, 'follow', 'the king\'s knight follows by the rules');
+    // («пойдём со мной» is done at once by the rules — a person doesn't think about it; the net is not asked)
     const yes = fakeLLM('Слушаюсь, Ваше Величество, иду следом.');
     yes.strong = true;
     let r = await new TalkMind({ llm: yes, rng: createRng(13) }).hear(brain('knight', { king: true, seed: 14 }), 'пойдём со мной', ctx);
+    assert.equal(r.action, 'follow');
+    assert.equal(yes.asked.length, 0);
+    assert.doesNotMatch(r.reply, /не пойду/);
+    // (a longer request with the same meaning is the net's: its words, the rules' action)
+    r = await new TalkMind({ llm: yes, rng: createRng(13) }).hear(brain('knight', { king: true, seed: 16 }), 'пойдём со мной, мне нужна твоя помощь в одном деле', ctx);
     assert.equal(r.action, 'follow');
     assert.equal(r.reply, 'Слушаюсь, Ваше Величество, иду следом.');
     const no = fakeLLM('Нет, не пойду я никуда.');

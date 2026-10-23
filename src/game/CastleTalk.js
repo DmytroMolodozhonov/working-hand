@@ -38,7 +38,10 @@ import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
-import { detectOrder, toolsFor, TOOLS } from '../ai/TalkActions.js';
+import { detectOrder, toolsFor, TOOLS, ORDER_LINES } from '../ai/TalkActions.js';
+import { TalkTrace } from '../ai/TalkTrace.js';
+import { quickOrder } from '../ai/TalkFlow.js';
+import { ackFor, ackPool } from '../ai/TalkAcks.js';
 import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
@@ -52,6 +55,13 @@ import { pushOutOfRect } from '../world/Collision.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
+/** m: an order to the army is shouted — a knight of my castle hears it this far (a word to one: HEAR). */
+export const SHOUT_HEAR = 35;
+/** «рыцари!», «стража!», «все!», «войско!»: words to many. */
+const GROUP_CALL = /(^| )(рыцари|стража|стражники|войско|армия|солдаты|воины|дружина|отряд|все|всем|братья)( |$)/;
+/** Called by role at the start of the words: the one of that role answers. */
+const ROLE_CALL = [[/^(эй )?(рыцарь|стражник|страж|воин|солдат)( |$)/, 'knight'], [/^(эй )?(торговец|торговка|купец)( |$)/, 'merchant'], [/^(эй )?(советник|визирь)( |$)/, 'advisor'], [/^(эй )?(строитель|каменщик)( |$)/, 'builder'], [/^(эй )?(фермер|крестьянин)( |$)/, 'farmer']];
+const normalizeText = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 const VOICE = 35; // m: a villager's voice carries this far
 const SHOUT_RANGE = 60; // m: a battle cry / a call for help carries much farther
 /** The master of cauldrons and potions (a wizards' house's stall): flasks and ingredients (the cauldron stands beside: Cauldrons.js). */
@@ -140,6 +150,10 @@ export class CastleTalk {
         this.hostSmart = false; // (a guest) the host's net answers for me
         this._asks = new Map(); // villager id -> time I asked the host (a guest)
         this.prepaid = new Set(); // goods paid by word, on their way to my hand
+        // the talk's stopwatch: one «разговор: …» line per turn in the performance diary (zns-perf.log)
+        this.trace = new TalkTrace({ sink: (line) => { game.perf?.talk?.(line); console.info('[Жители]', line); } });
+        this._turn = 0; // (a newer turn of my talk: the older one's late answer is not said)
+        this.replyAt = -1e9; // when a villager last began answering my words (Game._duckVoices: no quiet for it)
     }
 
     get voiceOn() { return this.game.config.villagerVoice !== false; }
@@ -216,6 +230,9 @@ export class CastleTalk {
         // in a talk with me only my partner is heard: others' chatter never cuts the answer
         const P = this._partner;
         if (P && P !== v && !shout && !this._urgent && performance.now() - (P.talkedAt || -1e9) < 15000) return;
+        // (nor a shout of another — the army's «За короля!» after my order: one voice would cut the other; while my
+        // partner's answer is heard, the others' words show over their heads — false: CastleLife shows the bubble)
+        if (P && P !== v && !this._urgent && this.speech.speaking && performance.now() - (P.talkedAt || -1e9) < 4000) return false;
         this._lastSpoken = text;
         // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
         // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
@@ -227,7 +244,34 @@ export class CastleTalk {
         this._spoken = (this._spoken || []).filter((l) => now - l.at < 12000);
         this._spoken.push({ text, at: now });
         // (× the game's sound volume inside Speech; a woman always with a female voice, a man with a male one)
-        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout, append: !!this._more, live: () => this._loud(v, shout) });
+        const tr = this.trace.current, mine = !!tr && tr.v === v && (this._urgent || this._more);
+        const reply = !!(this._urgent || this._more);
+        if (reply) this.replyAt = now;
+        this.speech.say(text, { voiceKey: v.id, role: v.role, female: !!v.entry.female, volume, shout, append: !!this._more, live: () => this._loud(v, shout),
+            // (an answer to my words: said now, not held while «I speak»; in danger made in fewer steps — heard sooner)
+            reply, ...(reply && this._danger(v) ? { steps: 3 } : {}),
+            ...(mine ? { onStart: (at) => this._voiceHeard(tr, text, at) } : {}) });
+    }
+
+    /** Danger round this villager now (a fight, zombies, a blast): short, quick words. */
+    _danger(v) { return !!(v?.cs?.hostile?.size > 0 || v?.fear?.danger || v?.foe); }
+
+    /** The stopwatch: a line of this turn is heard (a quick word / the answer itself). */
+    _voiceHeard(tr, text, at) {
+        this.trace.mark(tr, 'ack', at);
+        if (tr.quick === text) return; // (only the quick word: the answer is still to come)
+        this.trace.mark(tr, 'voice', at);
+        if (tr.kind !== 'net' || tr.at.done != null) this.trace.done(tr);
+    }
+
+    /** A talk turn starts: the stopwatch (from the speech's end, if the voice program told it). */
+    _traceTurn(v, text, info = {}) {
+        const kind = quickOrder(text, this._players()) ? (v.ship ? 'crew' : 'order') : 'talk';
+        const tr = this.trace.begin(text, { end: info.end, kind, who: `${v.ship ? 'моряк' : v.role || 'житель'} ${v.name || ''}`.trim() });
+        tr.v = v;
+        // (nothing heard of him within 15 s — voices off, too far: the line is written anyway)
+        setTimeout(() => this.trace.done(tr), 15000);
+        return tr;
     }
 
     /** How loud the villager is for me right now: by distance from where he stands, dull through a wall, from his side. */
@@ -297,6 +341,8 @@ export class CastleTalk {
         const line = fillerLine({ role: v.role, female: vo.female, wizard: !!v.wizard, text, intent, last: v.lastFiller || this._lastFiller, ready: (l) => this.speech.isReady?.(l, vo) }, Math.random);
         v.lastFiller = line; this._lastFiller = line;
         this._filler = { v, at: performance.now() };
+        const tr = this.trace.current;
+        if (tr && tr.v === v) tr.quick = line;
         this._urgent = true; // (said at once, cutting other talk; the answer follows it)
         try { this.life._say(v, line, 3); } finally { this._urgent = false; }
     }
@@ -310,18 +356,37 @@ export class CastleTalk {
      */
     _prepareFillers() {
         const sp = this.speech;
-        if (!this.voiceOn || !sp?.prepare || !sp.neural?.ready || !this.llm?.ready) return;
-        const me = this.game.character.group.position;
+        if (!this.voiceOn || !sp?.prepare || !sp.neural?.ready) return;
+        const g = this.game, me = g.character.group.position;
         const lang = this._en ? 'en' : 'ru';
-        const near = this.life.targets().filter((v) => !v.dead && Math.hypot(v.x - me.x, v.z - me.z) < 12)
-            .sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z)).slice(0, 2);
-        for (const v of near) {
-            if (v._fillersMade === lang) continue;
-            v._fillersMade = lang;
+        const net = !!this.llm?.ready;
+        const d = (v) => Math.hypot(v.x - me.x, v.z - me.z);
+        const alive = this.life.targets().filter((v) => !v.dead);
+        // the two nearest (whoever I may speak to) and — when I am the king — the two nearest knights within a shout
+        // (a call to the army is answered by one of them: «Есть! Строимся!» must be heard at once)
+        const near = alive.filter((v) => d(v) < 12).sort((a, b) => d(a) - d(b)).slice(0, 2);
+        const knights = alive.filter((v) => (v.role === 'knight' || v.role === 'advisor') && d(v) < 40 && this.life.state(v.cs.def.id).owner === g.localId)
+            .sort((a, b) => d(a) - d(b)).slice(0, 2);
+        for (const v of new Set([...near, ...knights])) {
+            const king = this.life.state(v.cs.def.id).owner === g.localId;
+            const key = `${lang}|${king ? 'k' : ''}|${net ? 'n' : ''}`;
+            if (v._fillersMade === key) continue;
+            v._fillersMade = key;
             const vo = this._voiceOpts(v);
             const base = { role: v.role, female: vo.female, wizard: !!v.wizard, lang };
             const take = (kind, n) => fillerPool({ ...base, kind }).sort(() => Math.random() - 0.5).slice(0, n);
-            sp.prepare([...take(null, 4), ...take('question', 3), ...take('request', 3), ...take(v.role === 'merchant' ? 'trade' : 'greet', 2)], vo);
+            // his quick words (orders, alarm) and his answers to orders — said the moment he hears (TalkAcks)
+            const lines = lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [];
+            if (lang === 'ru' && (v.role === 'knight' || v.role === 'advisor')) lines.push(...(king ? ORDER_LINES.obey : ORDER_LINES.refuse)[v.role === 'advisor' ? 'advisor' : 'knight'].slice(0, 2));
+            // his thinking words, by the kind of question (the net thinks; a rules' answer not made yet follows them)
+            lines.push(...take(null, net ? 4 : 2), ...take('question', net ? 3 : 1), ...take('request', 2), ...take(v.role === 'merchant' ? 'trade' : 'greet', 2));
+            sp.prepare(lines, vo);
+        }
+        // the sailor I would speak to: his «Есть!», «Есть поднять паруса!», «На абордаж!» (TalkAcks.CREW_ACKS)
+        const s = g.ships?.crew?._listener?.();
+        if (s && lang === 'ru' && s._acksMade !== 'ru' && s.role !== 'blackbeard') {
+            s._acksMade = 'ru';
+            sp.prepare([...ackPool({ role: 'sailor' }), ...fillerPool({ role: 'knight', lang }).slice(0, 2)], this._voiceOpts(s));
         }
     }
 
@@ -365,8 +430,8 @@ export class CastleTalk {
      * The microphone heard a sentence (not a spell). Returns true if a villager heard it.
      * A talk never breaks the game: any error in it — the villager says a short line, the reason goes to the journal.
      */
-    hear(text) {
-        try { return this._hear(text); } catch (e) {
+    hear(text, info = {}) {
+        try { return this._hear(text, info || {}); } catch (e) {
             this._talkFailed(e);
             return true;
         }
@@ -380,12 +445,12 @@ export class CastleTalk {
         try { if (v && !v.dead) this._sayReply(v, pickLine(TALK_SORRY)); } catch (_) { /* (nothing more to do) */ }
     }
 
-    _hear(text) {
+    _hear(text, info = {}) {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
         if (isApology(text) && this.life.forgive?.(g.localId)) return true; // («извините» to the one I knocked: calmed)
-        const v = this._listener();
+        const v = this._listener(text);
         if (!v) return false;
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
@@ -393,10 +458,19 @@ export class CastleTalk {
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
         const b = this.brain(v);
         const ctx = this._ctx(v);
+        // (the same villager, my words went on after he began to answer — «рыцарь… иди за мной»: he stops
+        // what he was saying and answers the whole phrase; his older answer, still being thought, is dropped)
+        if (info.refine && this._partner === v) this.speech.cancelKey?.(v.id);
+        const turn = ++this._turn;
+        const tr = this._traceTurn(v, text, info);
         v.talking = 4;
         v.talkTo = g.localId;
+        // (he turns to me at once — the moment he hears, not after his answer is thought of)
+        const me = g.character.group.position;
+        if (!v.foe) v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z));
+        this.trace.mark(tr, 'act');
         if (!g.authority) g.sync?.villagerTalk?.(v.id); // (the host stops them for the talk)
-        const done = (res) => { try { this._apply(v, res); } catch (e) { this._talkFailed(e, v); } };
+        const done = (res) => { if (turn !== this._turn) return; try { this._apply(v, res); } catch (e) { this._talkFailed(e, v); } };
         // a guest without a net of their own: the host's net answers (not the market — that is mine)
         if (!g.authority && this.hostSmart && !this.llm?.ready && g.sync?.villagerAsk && this.offer?.v !== v) {
             const ask = { t0: performance.now(), got: false };
@@ -410,12 +484,29 @@ export class CastleTalk {
         this.mind.llm = this.llm?.ready ? this.llm : null;
         if (!this.mind.llm) this._whyNoNet();
         const first = this.mind.first(b, text, ctx);
-        if (first.done) { this._talkLog(text, first.res, 'правила', 0); done(first.res); return true; } // (the rules: at once)
-        const thinking = () => this._sayThinking(v, text, first.res?.intent);
+        this.trace.mark(tr, 'rules');
+        if (first.done) {
+            this._talkLog(text, first.res, 'правила', 0);
+            this._quickWord(v, first.res, text, ctx); // (his answer not ready in his voice yet: a short word of his first)
+            done(first.res);
+            return true;
+        } // (the rules: at once)
+        this.trace.kind(tr, 'net');
+        const thinking = () => { if (turn === this._turn) this._sayThinking(v, text, first.res?.intent); };
         const t0 = performance.now();
         // (the first sentence of the net's answer is said as soon as it is written)
-        const onSentence = (line, i) => (i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line));
-        this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence }).then((res) => {
+        const onSentence = (line, i) => {
+            if (turn !== this._turn) return;
+            if (i === 0) this.trace.mark(tr, 'sent');
+            return i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line);
+        };
+        this.trace.mark(tr, 'net');
+        this._asking = true;
+        this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence, onToken: () => this.trace.mark(tr, 'tok') }).then((res) => {
+            this._asking = false;
+            this.trace.mark(tr, 'done');
+            if (tr.at.voice != null) this.trace.done(tr); else setTimeout(() => this.trace.done(tr), 4000);
+            if (turn !== this._turn) return; // (a newer word of mine: this answer is not said)
             // (the net failed: the rules answered — the reason in the journal, not too often)
             if (this.mind.lastError && (this._netErrLogged = (this._netErrLogged || 0) + 1) <= 20) journal(`нейросеть не ответила: ${this.mind.lastError} — ответили готовые фразы`);
             // (too slow on this computer: say so now and then — the answer came from the rules)
@@ -425,7 +516,36 @@ export class CastleTalk {
             } else this._slow = 0;
             this._talkLog(text, res, res.smart ? 'нейросеть' : this.mind.lastTimedOut ? 'правила (нейросеть не успела)' : 'правила (ответ нейросети не подошёл)', performance.now() - t0);
             done(res);
-        }, (e) => { journal(`ошибка в ответе нейросети: ${String(e?.message || e).slice(0, 200)}`); done(first.res); }).catch((e) => this._talkFailed(e, v));
+        }, (e) => { this._asking = false; journal(`ошибка в ответе нейросети: ${String(e?.message || e).slice(0, 200)}`); done(first.res); }).catch((e) => this._talkFailed(e, v));
+        return true;
+    }
+
+    /**
+     * A person answers an order with a word at once («Слушаюсь!», «Иду!»), a question with «Хм…»: when the answer
+     * itself is not yet made in his voice (made: heard at once — then nothing before it), a short word of his,
+     * made in advance, is said first, and the answer follows it without a gap (tools/talkbench.mjs: the first
+     * sound 0.4 s after my words, not 1–2 s).
+     */
+    _quickWord(v, res, text, ctx) {
+        const sp = this.speech;
+        if (!res?.reply || !this.voiceOn || !sp?.neural?.ready || !sp.isReady) return false;
+        const vo = this._voiceOpts(v);
+        if (sp.isReady(res.reply, vo) || (res.action === 'trade_yes')) return false;
+        const order = quickOrder(text, this._players());
+        let line = null;
+        if (order || res.order) {
+            line = ackFor({ order: order || res.action, role: v.role, king: !!ctx.playerIsKing, danger: this._danger(v), female: vo.female }, Math.random, (l) => sp.isReady(l, vo));
+            if (res.refused || /^(нет|не )/i.test(res.reply)) line = null; // (a refusal: his own words only)
+        } else {
+            line = fillerLine({ role: v.role, female: vo.female, wizard: !!v.wizard, text, intent: res.intent, last: v.lastFiller || this._lastFiller, ready: (l) => sp.isReady(l, vo) });
+        }
+        if (!line || !sp.isReady(line, vo) || line === res.reply) return false;
+        v.lastFiller = line; this._lastFiller = line;
+        this._filler = { v, at: performance.now() };
+        const tr = this.trace.current;
+        if (tr && tr.v === v) tr.quick = line;
+        this._urgent = true;
+        try { if (v.ship) this.game.ships?.crew?._say?.(v, line, 2); else this.life._say(v, line, 2); } finally { this._urgent = false; }
         return true;
     }
 
@@ -493,7 +613,7 @@ export class CastleTalk {
 
     /** A villager hears me and these are words of a talk (an order, a greeting, a question…), not a spell. */
     claims(text) {
-        const L = this.life.enabled ? this._listener() : null;
+        const L = this.life.enabled ? this._listener(text) : null;
         if (!L) return false;
         const spell = matchSpell(text);
         if (spell === 'Stand') return false; // («стоп» stops my spells first; with nothing to stop the villager hears it)
@@ -540,8 +660,32 @@ export class CastleTalk {
         return false;
     }
 
-    /** Who hears me: the nearest villager within earshot, the one in front first. */
-    _listener() {
+    /**
+     * Who hears me: the nearest villager within earshot, the one in front first — or, by the words (`text`):
+     *  - called by role («рыцарь, …», «торговец, …», «советник…»): the nearest of that role a little farther too;
+     *  - an order to the army / a call to all («рыцари!», «стража, к оружию!», «все в атаку!»): it is SHOUTED — a
+     *    knight of my castle within a shout hears it (the order goes to the whole army: VillagerOrders).
+     */
+    _listener(text = null) {
+        const best = this._nearest();
+        if (!text) return best;
+        const t = normalizeText(text);
+        const role = ROLE_CALL.find(([re]) => re.test(t))?.[1];
+        if (role) {
+            const r = this._nearest((v) => (role === 'knight' ? v.role === 'knight' : v.role === role || (role === 'merchant' && this._trader(v))), HEAR * 2);
+            if (r) return r;
+        }
+        const army = detectOrder(t, this._players());
+        if ((army && army.name !== 'dismiss') || GROUP_CALL.test(t)) {
+            if (best && (best.role === 'knight' || best.role === 'advisor')) return best;
+            const k = this._nearest((v) => (v.role === 'knight' || v.role === 'advisor') && this.life.state(v.cs.def.id).owner === this.game.localId, SHOUT_HEAR);
+            if (k) return k;
+        }
+        return best;
+    }
+
+    /** The nearest villager within `range` (the one in front first) that `ok` accepts. */
+    _nearest(ok = null, range = HEAR) {
         const g = this.game;
         const me = g.character.group.position;
         const yaw = g.character.group.rotation.y;
@@ -551,7 +695,8 @@ export class CastleTalk {
             if (v.dead) continue;
             const dx = v.x - me.x, dz = v.z - me.z;
             const d = Math.hypot(dx, dz);
-            if ((d > HEAR && !(v.order?.kind === 'door' && inHall(v.cs.def, me, 0))) || Math.abs(v.y - (me.y - 1.95)) > 3) continue; // (the vizier at the doors hears the king anywhere in the throne room)
+            if (ok && !ok(v)) continue;
+            if ((d > range && !(v.order?.kind === 'door' && inHall(v.cs.def, me, 0))) || Math.abs(v.y - (me.y - 1.95)) > (range > HEAR ? 8 : 3)) continue; // (the vizier at the doors hears the king anywhere in the throne room)
             const facing = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
             let s = d - 2.5 * facing;
             if (this.offer && this.offer.v === v) s -= 3; // (the merchant we are bargaining with)
@@ -1276,13 +1421,16 @@ export class CastleTalk {
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
             if (this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
             this._prepareFillers();
+            this._prewarm(now);
             // (always on — loaded in the background soon after the start; meanwhile the rules answer)
             if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
         this._tags();
         // (my partner stays with me for the whole talk — also while the net thinks — not only 4 s)
-        if (this.inTalk() && this._partner.talking < 1 && !this._partner.foe) { this._partner.talking = 1; this._partner.talkTo = g.localId; }
+        // (not one who is doing what I asked — following me, showing the way, carrying out an order: he answers on the way)
+        const P = this._partner;
+        if (this.inTalk() && P.talking < 1 && !P.foe && !P.follow && !(P.guiding > 0) && !P.order && !(P.fleeT > 0)) { P.talking = 1; P.talkTo = g.localId; }
         for (const [id] of this.brains) if (!this.life.byId.has(id)) this.forget({ id });
     }
 
@@ -1379,6 +1527,23 @@ export class CastleTalk {
             tools: llm.strong ? TOOLS : toolsFor(b?.role || 'farmer', ctx),
             maxTokens: 3,
         }).then(() => console.info(`[CastleTalk] the net warmed up in ${Math.round(performance.now() - t0)} ms`), () => {});
+    }
+
+    /**
+     * The villager I would speak to now: the net reads his description while I come near (TalkMind.warmRequest),
+     * so my question costs it only my words — the answer starts ~1 s after them, not 3–7 s. Once per villager and
+     * state (a talk more, another mood, the crown), never while it answers.
+     */
+    _prewarm(now) {
+        const L = this.llm;
+        if (!L?.ready || !L.warm || L.device !== 'native' || this._asking || now - (this._warmAt || -1e9) < 1500) return;
+        const v = this._listener();
+        if (!v || v.dead || v.ship) return;
+        const b = this.brain(v), ctx = this._ctx(v);
+        const key = `${v.id}|${b.memory?.talks || 0}|${Math.round((b.mood || 0) * 3)}|${ctx.playerIsKing ? 1 : 0}|${ctx.danger ? 1 : 0}|${(b.memory?.log || []).length}`;
+        if (key === this._warmKey) return;
+        this.mind.llm = L;
+        if (L.warm(this.mind.warmRequest(b, ctx))) { this._warmKey = key; this._warmAt = now; }
     }
 
     /** I talk to a villager without the net (still loading): the rules answer — nothing is written about it. */

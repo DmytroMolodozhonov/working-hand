@@ -30,6 +30,7 @@ export class VoiceService {
         this.onMiss = null; // (written, meta) a finished phrase that gave nothing (native: the spell journal)
         this.native.onMiss = (written, meta) => this.onMiss?.(written, meta);
         this.native.onLevel = (d) => this._nativeLevel(d);
+        this.native.onQuiet = (q) => this.onQuiet?.(q); // (the quiet after my words: a villager answers by it — TalkFlow)
         this.native.onFail = () => {
             if (this.engine !== 'native') return;
             console.warn('[Voice] the native voice stopped — the browser\'s recognizer takes over');

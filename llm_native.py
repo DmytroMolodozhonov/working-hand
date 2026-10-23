@@ -209,7 +209,12 @@ class NativeLLM:
             threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
             args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
                     "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
-                    "--no-ui", "-np", "1", "--api-key", self._key]
+                    "--no-ui", "-np", "1", "--api-key", self._key,
+                    # (Gemma's sliding-window layers kept whole: a question that shares its start with the words read
+                    # before reuses them — without it a changed end made the program read the villager anew, 3–7 s)
+                    "--swa-full",
+                    # (reading the words uses the cores the game leaves free for a moment; writing stays on half of them)
+                    "-tb", str(max(threads, (os.cpu_count() or 4) - 2))]
             env = {**os.environ, "LLAMA_CACHE": cache}
             kw = {}
             if platform_key() == "win":
@@ -288,7 +293,8 @@ class NativeLLM:
         temp = float(job.get("temperature", 0.7))
         body = {
             "messages": job.get("messages") or [],
-            "max_tokens": max(4, min(200, int(job.get("maxTokens") or 60))),
+            "max_tokens": max(1, min(200, int(job.get("maxTokens") or 60))),
+            "cache_prompt": True,  # (the words read before are kept: a warm-up while the player comes near — TalkMind.warmRequest)
             "temperature": max(0.05, temp) if temp > 0 else 0.0,
             "top_k": 40, "top_p": 0.9,
             "repeat_penalty": 1.05 if job.get("raw") else 1.15,

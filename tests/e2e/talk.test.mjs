@@ -179,9 +179,9 @@ test('talk: the villager answers as soon as my words stop changing (not after th
         V.onResult('как тебя', false);
         await new Promise((res) => setTimeout(res, 300));
         V.onResult('как тебя зовут', false);
-        await new Promise((res) => setTimeout(res, 500));
-        const early = asked.length; // (0.5 s after the last change: not yet)
-        await new Promise((res) => setTimeout(res, 500));
+        await new Promise((res) => setTimeout(res, 300));
+        const early = asked.length; // (0.3 s after the last change: not yet — TalkFlow.STILL.talk 450 ms)
+        await new Promise((res) => setTimeout(res, 700));
         const after = asked.map((a) => a[1]);
         const ms = asked.length ? asked[0][0] - t0 - 300 : null;
         V.onResult('как тебя зовут', true); // (the browser's final, late)
@@ -193,7 +193,7 @@ test('talk: the villager answers as soon as my words stop changing (not after th
     });
     assert.equal(r.early, 0, 'not while I may still be saying it');
     assert.deepEqual(r.after, ['как тебя зовут'], 'answered after the words stopped changing');
-    assert.ok(r.ms < 1000, `${r.ms} ms after my last word`);
+    assert.ok(r.ms < 700, `${r.ms} ms after my last word`);
     assert.equal(r.finalAgain, 1, 'the late final of the same words is not asked again');
     assert.equal(r.total, 2, 'a new question is heard');
     assert.deepEqual(realErrors(errors), []);
