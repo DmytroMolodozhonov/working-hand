@@ -189,9 +189,11 @@ class NativeTTS:
             self.state = "loading"
             kw = {}
             if sys.platform.startswith("win"):
-                kw["creationflags"] = 0x00004000 | 0x08000000  # BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW
+                # NORMAL priority: a line is made in a short burst (~0.5 s of one core) and the talk waits for it — below
+                # normal it was starved by the game, the camera and the villagers' net (5–7 s a line in the author's journal)
+                kw["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
             else:
-                kw["preexec_fn"] = lambda: os.nice(10)
+                kw["preexec_fn"] = lambda: os.nice(2)
             env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
             p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1, env=env, **kw)

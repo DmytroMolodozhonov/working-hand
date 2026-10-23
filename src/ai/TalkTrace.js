@@ -53,10 +53,10 @@ export class TalkTrace {
      * A turn starts (the words reached the talk). `end`: page time the speech itself ended (null: unknown —
      * then the time the words came is the start). The turn before it, if open, is closed.
      */
-    begin(text, { end = null, kind = 'talk', who = '', heard = null } = {}) {
+    begin(text, { end = null, kind = 'talk', who = '', heard = null, how = '' } = {}) {
         if (this.current) this.done(this.current);
         const t = this.now();
-        const tr = { text: String(text || '').slice(0, 60), kind, who, t0: Number.isFinite(end) && end <= t ? end : t, known: Number.isFinite(end) && end <= t, at: {} };
+        const tr = { text: String(text || '').slice(0, 60), kind, who, how, t0: Number.isFinite(end) && end <= t ? end : t, known: Number.isFinite(end) && end <= t, at: {} };
         tr.at.heard = Number.isFinite(heard) ? heard : t;
         this.current = tr;
         return tr;
@@ -87,7 +87,7 @@ export class TalkTrace {
         this.turns.set(tr.kind, list);
         const KIND_RU = { order: 'приказ', crew: 'приказ экипажу', talk: 'разговор (правила)', net: 'разговор (нейросеть)' };
         const parts = MARKS.filter(([k]) => row[k] != null).map(([k, ru]) => `${ru} ${row[k]}`);
-        const line = `разговор: «${tr.text}»${tr.who ? ` → ${tr.who}` : ''} [${KIND_RU[tr.kind] || tr.kind}] мс после конца речи${tr.known ? '' : ' (≈ от прихода слов)'}: ${parts.join(', ')}`;
+        const line = `разговор: «${tr.text}»${tr.who ? ` → ${tr.who}` : ''} [${KIND_RU[tr.kind] || tr.kind}]${tr.how ? ` {${tr.how}}` : ''} мс после конца речи${tr.known ? '' : ' (≈ от прихода слов)'}: ${parts.join(', ')}`;
         this.lines.push(line);
         if (this.lines.length > 40) this.lines.shift();
         try { this.sink?.(line); } catch (_) { /* the diary never breaks a talk */ }

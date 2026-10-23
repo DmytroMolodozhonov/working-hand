@@ -85,7 +85,7 @@ test('TalkFlow: an order after 0.12 s of quiet, a finished phrase after 0.25 s, 
 
 test('TalkFlow: the phrase\'s end after an early answer — the same words are no second question; another order is', () => {
     let t = 0;
-    const flow = new TalkFlow({ now: () => t, fire: () => {} });
+    const flow = new TalkFlow({ now: () => t, fire: () => true });
     flow.offer('все в атаку', { seg: 1, q: 0.064 });
     flow.quiet(0.2);
     assert.equal(flow.final('все в атаку', 1), 'handled');
@@ -99,6 +99,12 @@ test('TalkFlow: the phrase\'s end after an early answer — the same words are n
     flow.quiet(0.3);
     assert.equal(flow.final('привет а где тут рынок у вас', 4), 'changed', 'more words: a new question');
     assert.equal(flow.final('что-то', 9), 'new');
+    // words nobody took (a spell's «джолт» by a villager — the game refused it as talk): their end is NOT «answered» —
+    // it goes the spell's way (the author: «Джолт стал плохо узнаваться» — its end was dropped as a repeat)
+    const spellFlow = new TalkFlow({ now: () => t, fire: () => false });
+    spellFlow.offer('джолт', { seg: 7, q: 0.064 });
+    spellFlow.quiet(0.3);
+    assert.equal(spellFlow.final('джолт', 7), 'new');
 });
 
 test('the quick words: orders, the crew, the alarm — by role, the king\'s or a stranger\'s; few enough to be made in advance', () => {

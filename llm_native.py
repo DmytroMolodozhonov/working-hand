@@ -212,9 +212,9 @@ class NativeLLM:
                     "--no-ui", "-np", "1", "--api-key", self._key,
                     # (Gemma's sliding-window layers kept whole: a question that shares its start with the words read
                     # before reuses them — without it a changed end made the program read the villager anew, 3–7 s)
-                    "--swa-full",
-                    # (reading the words uses the cores the game leaves free for a moment; writing stays on half of them)
-                    "-tb", str(max(threads, (os.cpu_count() or 4) - 2))]
+                    "--swa-full"]
+            # (no more threads for reading than for writing: with all the cores it starved the villagers' voice program —
+            # the author's journal: a line heard 5.7 s after the words while the net was warming up)
             env = {**os.environ, "LLAMA_CACHE": cache}
             kw = {}
             if platform_key() == "win":

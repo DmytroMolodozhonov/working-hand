@@ -285,8 +285,16 @@ export class LocalLLM {
         if (system) messages.push({ role: 'system', content: system });
         for (const h of history || []) if (h?.content) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.content) });
         messages.push({ role: 'user', content: context ? `[${context}]\n\nСобеседник говорит тебе: ` : '' });
-        this._worker.postMessage({ type: 'warm', id: this._nextId++, messages, maxTokens: 1, temperature: 0.4, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true });
+        this._warmId = this._nextId++;
+        this._worker.postMessage({ type: 'warm', id: this._warmId, messages, maxTokens: 1, temperature: 0.4, noThink: this.model.noThink, tools: this.model.tools ? tools : null, raw: true });
         return true;
+    }
+
+    /** The warm-up is not wanted now (the player speaks, a villager answers): it stops at once and frees the processor. */
+    stopWarm() {
+        if (!this._warmId || !this._worker) return;
+        try { this._worker.postMessage({ type: 'interrupt', id: this._warmId }); } catch (_) { /* ignore */ }
+        this._warmId = null;
     }
 
     _finish(id, text, err) {

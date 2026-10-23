@@ -268,7 +268,7 @@ export class CastleTalk {
     /** A talk turn starts: the stopwatch (from the speech's end, if the voice program told it). */
     _traceTurn(v, text, info = {}) {
         const kind = quickOrder(text, this._players()) ? (v.ship ? 'crew' : 'order') : 'talk';
-        const tr = this.trace.begin(text, { end: info.end, kind, who: `${v.ship ? 'моряк' : v.role || 'житель'} ${v.name || ''}`.trim() });
+        const tr = this.trace.begin(text, { end: info.end, kind, who: `${v.ship ? 'моряк' : v.role || 'житель'} ${v.name || ''}`.trim(), how: info.early ? `по тишине ${info.why === 'stable' ? '(приказ)' : ''}`.trim() : info.how || '' });
         tr.v = v;
         // (nothing heard of him within 15 s — voices off, too far: the line is written anyway)
         setTimeout(() => this.trace.done(tr), 15000);
@@ -462,6 +462,7 @@ export class CastleTalk {
         // (the same villager, my words went on after he began to answer — «рыцарь… иди за мной»: he stops
         // what he was saying and answers the whole phrase; his older answer, still being thought, is dropped)
         if (info.refine && this._partner === v) this.speech.cancelKey?.(v.id);
+        this.llm?.stopWarm?.(); // (the processor is the answer's now: its voice must not wait for a warm-up)
         const turn = ++this._turn;
         const tr = this._traceTurn(v, text, info);
         v.talking = 4;
@@ -1538,6 +1539,9 @@ export class CastleTalk {
     _prewarm(now) {
         const L = this.llm;
         if (!L?.ready || !L.warm || L.device !== 'native' || this._asking || now - (this._warmAt || -1e9) < 1500) return;
+        // (never while a voice is being made or heard, nor while I speak — the warm-up takes the processor the voice needs)
+        const sp = this.speech;
+        if (sp?.speaking || sp?._prepBusy || now - (this.game.voice?.speakingAt || -1e9) < 2000 || now - (this.replyAt || -1e9) < 4000) return;
         const v = this._listener();
         if (!v || v.dead || v.ship) return;
         const b = this.brain(v), ctx = this._ctx(v);

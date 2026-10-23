@@ -491,6 +491,13 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
     log.add({ text: command, isFinal: isFinal || !!m.settled, meta: m, source, spell: spellRu(spell), ok, why, note });
 }
 
+/** How words heard at the phrase's end came (the talk's stopwatch line tells why they were not answered sooner). */
+function finalInfo(meta) {
+    if (!meta?.native) return { how: 'браузер, конец фразы' };
+    const why = !Number.isFinite(meta.q) ? 'старая программа голоса — перезапустите игру' : (meta.far || 0) >= 0.25 ? 'в колонках звучала речь' : meta.cut ? 'длинная фраза' : 'раньше не вышло';
+    return { end: meta.end, how: `конец фразы (${why})` };
+}
+
 /** The words go to the villager (or the sailor) who hears me now — before the phrase's end. */
 function talkNow(command, info = {}) {
     const T = game?.castleLife?.talk, crew = game?.ships?.crew;
@@ -528,7 +535,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (talkWait && (isFinal || talkKey(command) !== talkWaitKey)) { clearTimeout(talkWait); talkWait = null; talkWaitKey = null; }
     // (the native voice: the phrase answered as soon as I stopped — its end is no second question; a different
     // order after it — «в атаку… нет, отбой» — or more words are: answered again, the older answer cut)
-    if (isFinal && meta?.native && game?.active) {
+    // (never a spell: its words go the spell's way whatever was said to a villager before — «Джолт» by Тихон)
+    if (isFinal && meta?.native && game?.active && !(matchSpell(command) && spellPhrase(command, { final: true }).ok)) {
         const st = talkFlow.final(command, meta.seg);
         if (st === 'handled') { talkEarly = null; journal(command, true, meta, null, false, 'житель уже ответил — как только вы замолчали'); return; }
         if (st === 'changed' && !matchSpell(command) && talkNow(command, { end: meta.end, seg: meta.seg, refine: true })) { talkEarly = null; journal(command, true, meta, null, false, 'фраза продолжилась — житель ответил на всю'); return; }
@@ -548,7 +556,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && (game.castleLife?.talk?._listener?.(command) || game.ships?.crew?._listener?.()) && !game.owls?.claims?.(command)) {
         // (the browser's recognizer — or a voice program from before this update, which tells no quiet: the words standing still)
         if (!meta?.native || !Number.isFinite(meta.q)) earlyTalk(command);
-        else if (!meta.cut) talkFlow.offer(command, { seg: meta.seg, q: meta.q || 0, end: meta.end }); // (a look missing the phrase's start: its end decides)
+        else if (!meta.cut && !(matchSpell(command) && spellPhrase(command).ok)) talkFlow.offer(command, { seg: meta.seg, q: meta.q || 0, end: meta.end }); // (a look missing the phrase's start, a spell said alone: its end decides)
     }
     if (isMenuVoiceActive && voiceTestText) {
         voiceTestText.innerText = `"${command.toUpperCase()}"`;
@@ -575,17 +583,17 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             return;
         }
         const sailorFirst = !!game.ships?.crew.heardFirst?.(game.castleLife?.talk);
-        if (isFinal && !sailorFirst && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command)) {
+        if (isFinal && !sailorFirst && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.castleLife?.talk?.claims?.(command) && game.castleLife.talk.hear(command, finalInfo(meta))) {
             journal(command, isFinal, meta, null, false, 'это разговор с жителем (рука не поднята)');
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         // (the same with a ship's sailor near me)
-        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command)) {
+        if (isFinal && !game.isMagicActive && Date.now() - game.lastMagicTime > 1500 && game.ships?.crew.claims(command) && game.ships.crew.hear(command, null, finalInfo(meta))) {
             journal(command, isFinal, meta, null, false, 'это разговор с моряком (рука не поднята)');
             return;
         }
         if (talkOnly) {
-            if (isFinal) game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command);
+            if (isFinal) game.castleLife?.talk?.hear(command, finalInfo(meta)) || game.ships?.crew.hear(command, null, finalInfo(meta));
             journal(command, isFinal, meta, phrase.name, false, phrase.name ? `не заклинание: ${talkWhy}` : 'обычная речь');
             return;
         }
@@ -646,8 +654,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
                 if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
             } else if (isFinal && (!said || said === 'Stand')) {
-                if (sailorFirst) game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command);
-                else game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command);
+                if (sailorFirst) game.ships.crew.hear(command, null, finalInfo(meta)) || game.castleLife?.talk?.hear(command, finalInfo(meta));
+                else game.castleLife?.talk?.hear(command, finalInfo(meta)) || game.ships?.crew.hear(command, null, finalInfo(meta));
             }
             return;
         }
@@ -684,7 +692,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)
         // («стоп» with nothing to stop is still words to a villager: «стой» / «стоп» = stop following me)
-        if (!name && isFinal && (!heard || heard === 'Stand') && (sailorFirst ? game.ships.crew.hear(command) || game.castleLife?.talk?.hear(command) : game.castleLife?.talk?.hear(command) || game.ships?.crew.hear(command))) {
+        if (!name && isFinal && (!heard || heard === 'Stand') && (sailorFirst ? game.ships.crew.hear(command, null, finalInfo(meta)) || game.castleLife?.talk?.hear(command, finalInfo(meta)) : game.castleLife?.talk?.hear(command, finalInfo(meta)) || game.ships?.crew.hear(command, null, finalInfo(meta)))) {
             return; // (your words are in the «heard» line in Creative; the villager answers in its bubble)
         }
         if (name) {

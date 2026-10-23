@@ -156,9 +156,11 @@ export class TalkFlow {
 
     _fire(p, why) {
         this.pending = null;
-        const order = orderKey(p.text, this.players());
-        this.fired = { seg: p.seg, text: p.text, key: normalize(p.text), order, at: this.now() };
-        try { this.fire?.(p.text, { seg: p.seg, end: p.end, kind: p.kind, why, early: true }); } catch (e) { console.warn('[TalkFlow]', e); }
+        let took = false;
+        try { took = !!this.fire?.(p.text, { seg: p.seg, end: p.end, kind: p.kind, why, early: true }); } catch (e) { console.warn('[TalkFlow]', e); }
+        // (only words a villager really took are «answered»: words nobody took — a spell's «джолт», no one near — stay
+        // the phrase's own, and its end goes the usual way: before, its end was dropped as «answered» and the spell lost)
+        if (took) this.fired = { seg: p.seg, text: p.text, key: normalize(p.text), order: orderKey(p.text, this.players()), at: this.now() };
     }
 
     /**
