@@ -24,6 +24,7 @@
  *   hammer  — Thor's hammer: catches lightning in a storm (3 strikes).
  */
 
+import { scrollKindLabel } from './DarkMagic.js';
 import { irMaterial } from '../fx/Iridescent.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
@@ -577,6 +578,9 @@ function _rollLoot(r, { cave, key, royal, deep }) {
     return out;
 }
 
+/** The small line under a scroll's name in the hologram: its kind (DarkMagic.scrollKindLabel). */
+const kindLine = (it) => { const k = scrollKindLabel(it); return k ? `<small style="color:${k.color}">${k.text}</small>` : ''; };
+
 /** «Раскрой свои секреты»: what the hologram says about an item. */
 export function describeItem(it) {
     if (!it) return null;
@@ -602,7 +606,7 @@ export function describeItem(it) {
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b>'] };
-            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [`Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
+            if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), `Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b>` : `Сожгите его: мана +<b>${it.amount}</b>`] };
         case 'book':
             if (it.lore && LORE_BY_ID.has(it.lore)) return { title: `📗 «${LORE_BY_ID.get(it.lore).title}»`, color: LORE_BY_ID.get(it.lore).trim, lines: ['Книга из летописи мира: ' + LORE_BY_ID.get(it.lore).sub.toLowerCase(), 'Раскройте двумя руками и листайте пальцем', 'Это не книга заклинаний — её просто читают'] };

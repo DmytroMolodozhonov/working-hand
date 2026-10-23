@@ -3,7 +3,7 @@
  *
  * Слова автора: магия, которую магическое сообщество презирает как опасную. Сюда входят «Alive», «Alive Maxima»,
  * «Авада Кедавра», «Империус» (обычный; «Империус Максима» — божественное, исключение), «Give Me My Power» и
- * ритуал метки / пентаграммы («Пентаграниум» — его вызывающий код сам даёт `addDark(hero, 1, 'ritual')`).
+ * ритуал дьявольской силы (пентаграмма чёрной магии с телом убитого волшебника; сама пентаграмма и «Пентаграниум» — не чёрные: вызывающий код сам даёт `addDark(hero, 1, 'ritual')`).
  *
  *  - Уровень тьмы героя 0 … 100. Каждый каст чёрного заклинания даёт +1 с шансом 50 % (`onDarkCast`);
  *    «Give Me My Power» и ритуал — всегда +1. Хранится у героя (WorldSave `dark`), у каждого игрока свой;
@@ -36,9 +36,10 @@ export const DARK = {
 };
 
 /** Виды заклинаний чёрной магии (имена как в Mana / SpellBook). «ImperiusMaxima» — НЕ тут (божественное). */
-export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Pentagranium']);
+/** («Пентаграниум» и сама пентаграмма сюда НЕ входят — бывают и хорошие; +1 даёт только РИТУАЛ дьявольской силы: вызывающий код сам делает addDark(hero, 1, 'ritual').) */
+export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric']);
 /** Эти всегда дают +1 (не 50 %). */
-export const DARK_ALWAYS = new Set(['GiveMyPower', 'Pentagranium']);
+export const DARK_ALWAYS = new Set(['GiveMyPower']);
 /** Вторая сессия (пентаграммы) может добавить свой вид. */
 export const registerDark = (kind, always = false) => { DARK_SPELLS.add(kind); if (always) DARK_ALWAYS.add(kind); };
 
@@ -184,6 +185,17 @@ export function settlementDarkMages(siteId, count) {
     const out = [];
     for (let i = 0; i < count; i++) { const l = darkMageLevel(siteId + '#' + i, 'small'); if (l) out.push([i, l]); }
     return out.slice(0, 2);
+}
+
+/**
+ * Мелкая строка голограммы свитка («Раскрой свои секреты»): { text, color } — «Заклинание» / «Чёрная магия» (багрово-тёмная) /
+ * «Пентаграмма» / «Чёрная пентаграмма» (свиток-рисунок: `stat === 'pentagram'` или `pentagram`, `dark: true`). null — не свиток.
+ */
+export function scrollKindLabel(item) {
+    if (!item || item.kind !== 'scroll') return null;
+    if (item.stat === 'pentagram' || item.pentagram) return item.dark ? { text: 'Чёрная пентаграмма', color: '#8a1030' } : { text: 'Пентаграмма', color: '#b9b2a6' };
+    if (item.stat === 'spell') return isDark(item.spell) ? { text: 'Чёрная магия', color: '#8a1030' } : { text: 'Заклинание', color: '#b9b2a6' };
+    return null;
 }
 
 // ------------------------------------------------------------------ вид

@@ -7,8 +7,9 @@ import { DARK, isDark, darkStage, darkLevel, addDark, onDarkCast, darkNotice, Da
 
 {
     test('which spells are dark (Imperius Maxima is not)', () => {
-        for (const k of ['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower']) assert.equal(isDark(k), true);
+        for (const k of ['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric']) assert.equal(isDark(k), true);
         assert.equal(isDark('ImperiusMaxima'), false);
+        assert.equal(isDark('Pentagranium'), false);
         assert.equal(isDark('Lumos'), false);
     });
     test('stages', () => {
@@ -76,7 +77,7 @@ import { DARK, isDark, darkStage, darkLevel, addDark, onDarkCast, darkNotice, Da
 test('Codex: «Чёрная магия» tab holds Alive, Alive Maxima, Avada, Imperius — not Imperius Maxima', () => {
     assert.ok(SPELL_CATEGORIES.some((c) => c.id === 'dark'));
     const names = SPELLS.filter((x) => x.cat === 'dark').map((x) => x.name);
-    for (const n of ['Alive', 'Alive Максима', 'Авада Кедавра', 'Империус', 'Give Me My Power']) assert.ok(names.includes(n), n);
+    for (const n of ['Alive', 'Alive Максима', 'Авада Кедавра', 'Акцентрик', 'Империус', 'Give Me My Power']) assert.ok(names.includes(n), n);
     assert.ok(!names.includes('Империус Максима'));
 });
 
@@ -100,4 +101,13 @@ test('world dark mages: lone / wanderer yes sometimes, the tower master never', 
     assert.equal(darkOfEntry({ kind: 'tower' }, { role: 'teacher' }, 'x'), 0);
     assert.equal(darkOfEntry(defH, { role: 'master' }, 'x'), 0);
     assert.equal(darkOfEntry(defH, { role: 'farmer' }, 'x'), 0);
+});
+
+test('scroll hologram label: spell / dark magic / pentagram', async () => {
+    const { scrollKindLabel } = await import('../../src/game/DarkMagic.js');
+    assert.equal(scrollKindLabel({ kind: 'scroll', stat: 'spell', spell: 'Lumos' }).text, 'Заклинание');
+    assert.equal(scrollKindLabel({ kind: 'scroll', stat: 'spell', spell: 'AvadaKedavra' }).text, 'Чёрная магия');
+    assert.equal(scrollKindLabel({ kind: 'scroll', stat: 'pentagram', dark: true }).text, 'Чёрная пентаграмма');
+    assert.equal(scrollKindLabel({ kind: 'scroll', stat: 'pentagram' }).text, 'Пентаграмма');
+    assert.equal(scrollKindLabel({ kind: 'apple' }), null);
 });
