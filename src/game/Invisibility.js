@@ -83,7 +83,8 @@ export class Invisibility {
         this.on = false;
         this.others = new Map(); // playerId → true (invisible)
         this.clues = new Map(); // playerId → {pos, until}
-        this._faded = []; // [{m, transparent, opacity, depthWrite}]
+        this._body = null; // faint clones of my body's materials (+ the originals to give back)
+        this._heldFaded = null; // {left, right}: the same for what the hands hold
     }
 
     /** Is this player invisible now? */
@@ -199,44 +200,62 @@ export class Invisibility {
         }
     }
 
-    /** I see myself a little: the body (and what my hands hold) faint. */
+    /**
+     * I see myself a little: the body (and what my hands hold) faint. Every faded mesh gets its OWN clone of
+     * the material: the originals are shared with other creatures (knights, villagers, same swords, same armour)
+     * and must never turn see-through for them.
+     */
     _fade(on) {
         const g = this.game;
         if (!on) {
-            for (const f of this._faded) { f.m.transparent = f.transparent; f.m.opacity = f.opacity; f.m.depthWrite = f.depthWrite; f.m.needsUpdate = true; }
-            this._faded = [];
-            this._seen = null;
+            this._unfade(this._body);
+            this._body = null;
+            for (const s of ['left', 'right']) { this._unfade(this._heldFaded?.[s]?.taken); }
+            this._heldFaded = null;
             return;
         }
-        const seen = new Set();
-        const take = (root) => root?.traverse?.((o) => {
-            const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-            for (const m of mats) {
-                if (seen.has(m)) continue;
-                seen.add(m);
-                this._faded.push({ m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
-                m.transparent = true; m.opacity = (m.opacity ?? 1) * INVIS.SELF_OPACITY; m.depthWrite = false; m.needsUpdate = true;
-            }
-        });
-        take(g.character?.group);
-        this._seen = seen;
+        this._body = this._takeFaded(g.character?.group);
+        this._heldFaded = { left: null, right: null };
         this._fadeHeld();
     }
 
-    /** (a thing taken into the hand while invisible fades too) */
-    _fadeHeld() {
-        const g = this.game, seen = this._seen;
-        if (!seen) return;
-        for (const s of ['left', 'right']) {
-            g.items?.held?.[s]?.model?.traverse?.((o) => {
-                const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-                for (const m of mats) {
-                    if (seen.has(m)) continue;
-                    seen.add(m);
-                    this._faded.push({ m, transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite });
-                    m.transparent = true; m.opacity = (m.opacity ?? 1) * INVIS.SELF_OPACITY; m.depthWrite = false; m.needsUpdate = true;
+    /** Swap the materials of `root`'s meshes for faint clones; returns what to give back. */
+    _takeFaded(root) {
+        const list = [], clones = new Map();
+        root?.traverse?.((o) => {
+            if (!o.material) return;
+            const one = (m) => {
+                let c = clones.get(m);
+                if (!c) {
+                    c = m.clone();
+                    c.transparent = true; c.opacity = (m.opacity ?? 1) * INVIS.SELF_OPACITY; c.depthWrite = false;
+                    clones.set(m, c);
                 }
-            });
+                return c;
+            };
+            const orig = o.material;
+            o.material = Array.isArray(orig) ? orig.map(one) : one(orig);
+            list.push({ o, orig });
+        });
+        return { list, clones };
+    }
+
+    /** Give the original materials back and throw the clones away. */
+    _unfade(taken) {
+        if (!taken) return;
+        for (const f of taken.list) f.o.material = f.orig;
+        for (const c of taken.clones.values()) c.dispose();
+    }
+
+    /** (a thing taken into the hand while invisible fades too; a thing let go gets its own look back) */
+    _fadeHeld() {
+        const g = this.game, st = this._heldFaded;
+        if (!st) return;
+        for (const s of ['left', 'right']) {
+            const model = g.items?.held?.[s]?.model || null, cur = st[s];
+            if (cur && cur.root === model) continue;
+            if (cur) this._unfade(cur.taken);
+            st[s] = model ? { root: model, taken: this._takeFaded(model) } : null;
         }
     }
 }
