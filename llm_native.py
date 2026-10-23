@@ -107,6 +107,7 @@ class NativeLLM:
         self.ms = 0
         self._lock = threading.Lock()
         self._log = []
+        self._seen = []  # (its lines about the graphics card: LLM.device)
         self._current = {}  # job id → the open answer stream (closed to interrupt it)
         self._key = ""
         self._checking = False
@@ -223,6 +224,7 @@ class NativeLLM:
                 kw["creationflags"] = 0x00004000 | 0x08000000  # BELOW_NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW
             else:
                 kw["preexec_fn"] = lambda: os.nice(10)
+            self._seen = []
             self.proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=os.path.dirname(self.binary()), **kw)
             threading.Thread(target=self._read_log, args=(self.proc,), daemon=True).start()
             # ready when its /health says so (the model downloaded and loaded)
@@ -250,12 +252,24 @@ class NativeLLM:
             self.progress = 1.0
             self.detail = "готова"
             self.state = "ready"
-            print(f"  [Нейросеть жителей] {MODELS[model]} готова: отдельная программа llama.cpp ({BUILD}), процессор, {self.ms} мс")
+            print(f"  [Нейросеть жителей] {MODELS[model]} готова: отдельная программа llama.cpp ({BUILD}), {self.device()}, {self.ms} мс")
         except Exception as e:  # noqa: BLE001
             self.error = str(e) or type(e).__name__
             self.state = "error"
             print(f"  [Нейросеть жителей] не запустилась (работает браузерная): {self.error}")
             self.stop(keep_state=True)
+
+    def device(self):
+        """Where the net really runs, from llama-server's own words: the graphics card's name and how many of the
+        model's layers are on it (the author's journal: answers 2–3.5 s late — on the card it must be well under 1 s)."""
+        import re
+        cards = [m.group(1).strip() for l in self._seen for m in [re.search(r"ggml_vulkan: \d+ = (.+?)(?: \(|\||$)", l) or re.search(r"(?:using device|found device|Metal device:?)\s*(.+)$", l, re.I)] if m]
+        off = next((m for l in self._seen for m in [re.search(r"offloaded (\d+)/(\d+) layers to GPU", l)] if m), None)
+        if off and int(off.group(1)) > 0:
+            return f"видеокарта{' ' + cards[0] if cards else ''}: {off.group(1)} из {off.group(2)} слоёв"
+        if off:
+            return "ПРОЦЕССОР (видеокарта не подошла: 0 слоёв на ней)"
+        return "видеокарта" + (f" {cards[0]}" if cards else " (не видно в журнале программы)")
 
     def _read_log(self, proc):
         """Its output: the model's download progress (for the page), the last lines (for an error)."""
@@ -265,6 +279,8 @@ class NativeLLM:
             if not line:
                 continue
             self._log = (self._log + [line])[-40:]
+            if len(self._seen) < 60 and ("vulkan" in line.lower() or "offloaded" in line or "device" in line.lower() or "metal" in line.lower()):
+                self._seen.append(line)  # (where it runs: LLM.device)
             m = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", line)
             if m and self.state == "loading":
                 self.progress = 0.1 + 0.85 * min(100.0, float(m.group(1))) / 100
@@ -308,6 +324,7 @@ class NativeLLM:
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode("utf-8"),
                                      headers={"Content-Type": "application/json", "Authorization": "Bearer " + self._key})
         text, calls = "", {}
+        tm, first, t0 = None, 0.0, time.perf_counter()
         r = urllib.request.urlopen(req, timeout=60)
         self._current[jid] = r
         try:
@@ -322,6 +339,10 @@ class NativeLLM:
                     d = json.loads(data)
                 except ValueError:
                     continue
+                if d.get("timings"):
+                    tm = d["timings"]
+                if not first and any((ch.get("delta") or {}).get("content") for ch in d.get("choices") or []):
+                    first = time.perf_counter()
                 for ch in d.get("choices") or []:
                     delta = ch.get("delta") or {}
                     piece = delta.get("content")
@@ -344,6 +365,12 @@ class NativeLLM:
                 r.close()
             except Exception:  # noqa: BLE001
                 pass
+        if tm and jid != "check":
+            # (one line per answer in the game's console: how long it read, its first word, words a second —
+            # the author's journal showed answers 2–3.5 s late, and nothing told why)
+            print("  [Нейросеть жителей] ответ: прочла %d слов за %d мс (%d уже были прочитаны), первое слово через %d мс, написала %d слов (%.0f в секунду)%s" % (
+                tm.get("prompt_n", 0), tm.get("prompt_ms", 0), tm.get("cache_n", 0), (first - t0) * 1000 if first else -1,
+                tm.get("predicted_n", 0), tm.get("predicted_per_second", 0), ", действие" if calls else ""))
         for _, c in sorted(calls.items()):
             try:
                 args = json.loads(c["args"]) if c["args"] else {}

@@ -294,6 +294,23 @@ export class Speech {
         } catch (e) { g.gain.value = on ? DUCK_LEVEL : 1; }
     }
 
+    /**
+     * How much louder a piece of a speaker's line is played. Every piece evened by itself made one answer
+     * louder and quieter by turns (the author: «звук начал колебаться») — a short «Хм…» or a sentence's tail
+     * got up to 4×: a speaker's level now moves only a little from piece to piece.
+     */
+    _level(key, pcm) {
+        const k = loudness(pcm);
+        if (key == null) return k;
+        if (!this._levels) this._levels = new Map();
+        const prev = this._levels.get(key);
+        const out = prev ? Math.max(prev / 1.15, Math.min(prev * 1.15, k)) : k;
+        this._levels.delete(key);
+        this._levels.set(key, prev ? prev * 0.7 + out * 0.3 : out);
+        if (this._levels.size > 64) this._levels.delete(this._levels.keys().next().value);
+        return out;
+    }
+
     _live(opts) {
         try { return opts.live() || { volume: 0 }; } catch (e) { return { volume: 0 }; }
     }
@@ -331,7 +348,7 @@ export class Speech {
             const live = opts.live ? this._live(opts) : null;
             if (live && live.volume < 0.03) { maybeDone(); return; }
             const gain = ctx.createGain();
-            gain.gain.value = (live ? live.volume * Math.max(0, Math.min(1, Number(this.master()) || 0)) : opts.volume) * loudness(pcm); // (every voice equally loud: a soft woman's voice too)
+            gain.gain.value = (live ? live.volume * Math.max(0, Math.min(1, Number(this.master()) || 0)) : opts.volume) * this._level(opts.voiceKey, pcm); // (every voice equally loud: a soft woman's voice too)
             src.connect(gain);
             let tail = gain;
             if (live && live.muffled && ctx.createBiquadFilter) { // (through a wall: dull)

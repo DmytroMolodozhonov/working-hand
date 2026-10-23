@@ -1536,6 +1536,13 @@ export class Game {
         // (my voice heard by the cleaned microphone tells the moment I stopped; the lips' window only tells «lately»)
         const spoke = this.voice?.aec ? this.voice.speakingAt || -1e9 : at - 700;
         const answering = (this.castleLife?.talk?.replyAt || -1e9) > spoke;
+        // (his answer is playing: a little of his own voice gets past the echo canceller and «I speak» flickered —
+        // he went quieter and louder by turns. While he answers only my mouth really moving with a loud voice stops him)
+        if (sp._current?.opts?.reply && !this.isMagicActive) {
+            const barge = this.voiceGate.lipsMoved(now, 500) === true && now - (this.voice?.speakingAt || -1e9) < 300;
+            if (!barge) { sp.duck(false); return; }
+            this._speakingAt = now;
+        }
         sp.duck(now - at < 900 && !(answering && !this.isMagicActive));
         if (sp._ducked) this._duckedAt = now;
     }

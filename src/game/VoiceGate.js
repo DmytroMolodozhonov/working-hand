@@ -23,6 +23,9 @@ export const GATE = {
     CAM_LAG: 100, // ms a camera picture comes after the moment it shows
 };
 
+/** Spells that are everyday words («Дай»): the echo of a villager's line is never cast — only my mouth moving with the voice casts it. */
+const STRICT = new Set(['Die']);
+
 /** How open the mouth is (inner lips apart / mouth width), from the face network's points. */
 export function mouthOpenness(face) {
     if (!face || face.length < 292) return null;
@@ -124,7 +127,7 @@ export class VoiceGate {
         const recent = lips && this.lipsMoved(t, GATE.RECENT) === true;
         const echo = this.echoes(name, t);
         // (my lips moved right then: it's mine, even if a friend said the same just now)
-        if (echo && !recent) return { ok: false, why: 'echo' };
+        if (echo && (!recent || STRICT.has(baseOf(name)))) return { ok: false, why: 'echo' };
         return { ok: true, sure: !!recent };
     }
 }

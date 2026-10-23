@@ -76,6 +76,12 @@ const AT_ONCE = new Set(['greet', 'how_are_you', 'name_ask', 'bye', 'thanks', 'i
 const DANGER_FIRST_MS = 1500;
 /** The net's first sentence later than this (ms): the rules answer (it was 8–9 s for the whole answer). */
 const FIRST_MS = 2000; // (the author's journal: 3.5 s of «Хм…» and then a canned line felt like no answer at all)
+/**
+ * …but where the rules have nothing real to say (open talk, a long or a «complex» phrase) their line is empty —
+ * «Интересно говоришь.», «Мудрёно говоришь.» — and the author: «сложные предложения — сразу тупеет». There the
+ * villager has said his «Хм…» and thinks longer, as a person would: the net's own answer up to this (ms).
+ */
+const THINK_MS = 6000;
 /** The net said no, while the rules had agreed to do it: the rules' line (the villager does what he says). */
 const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не буду|ни за что|отстань|no\b|i can'?t|i won'?t)|(не пойду|не могу пойти|не стану)/i;
 
@@ -88,12 +94,12 @@ const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не бу
  */
 const FILLERS = {
     ru: {
-        common: ['Хм…', 'Так-так…', 'Ага…', 'Ну-у…', 'Сейчас…', 'Погоди…', 'Дай подумать…', 'Хм, сейчас…', 'Так…', 'Ммм…', 'Э-э…', 'Ну смотри…', 'Хм, ну…', 'Сейчас скажу…', 'Так, погоди…', 'Ага, сейчас…'],
-        question: ['Хороший вопрос…', 'Хм, как бы сказать…', 'Дай-ка подумать…', 'Дай вспомнить…', 'Ох, вопрос…', 'Хм, интересно…', 'Как тебе сказать…', 'Сейчас вспомню…', 'Ммм, ну смотри…', 'Хм, дай соображу…'],
+        common: ['Хм…', 'Так-так…', 'Ага…', 'Ну-у…', 'Сейчас…', 'Погоди…', 'Так, подумаю…', 'Хм, сейчас…', 'Так…', 'Ммм…', 'Э-э…', 'Ну смотри…', 'Хм, ну…', 'Сейчас скажу…', 'Так, погоди…', 'Ага, сейчас…'],
+        question: ['Хороший вопрос…', 'Хм, как бы сказать…', 'Надо подумать…', 'Вспомнить бы…', 'Ох, вопрос…', 'Хм, интересно…', 'Как тебе сказать…', 'Сейчас вспомню…', 'Ммм, ну смотри…', 'Хм, соображу…'],
         request: [['Я понял…', 'Я поняла…'], ['Понял, понял…', 'Поняла, поняла…'], 'Ага, ясно…', 'Так, ясно…', ['Понял тебя…', 'Поняла тебя…'], 'Хм, ладно…', 'Ага, слышу…', 'Так-так, ясно…'],
-        trade: ['Так-так, дай прикину…', 'Хм, прикинем…', 'Ммм, посмотрим…', 'Сейчас прикину…', 'Ну, смотри…', 'Хм, товар…', 'Так, погоди-ка…'],
+        trade: ['Так-так, прикину…', 'Хм, прикинем…', 'Ммм, посмотрим…', 'Сейчас прикину…', 'Ну, смотри…', 'Хм, товар…', 'Так, погоди-ка…'],
         greet: ['О!', 'А, это ты…', 'О, здравствуй…', 'Ага…', 'Хм, гость…', 'О, путник…'],
-        female: ['Ой, сейчас…', 'Ой, погоди-ка…', 'Ох, дай подумать…', 'Ой, дай вспомнить…', 'Ох, ну…'],
+        female: ['Ой, сейчас…', 'Ой, погоди-ка…', 'Ох, подумать надо…', 'Ой, вспомнить бы…', 'Ох, ну…'],
         knight: ['Так…', 'Хм. Слушай…', 'Значит, так…', 'Так точно…', 'Скажу так…', 'Хм. Ясно…'],
         king: ['Гм…', 'Что ж…', 'Хм… Изволь…', 'Гм, слушай же…', 'Хм, так…'],
         advisor: ['Позвольте… минутку…', 'Хм… если позволите…', 'Видите ли…', 'Минутку…', 'Хм, извольте…'],
@@ -327,6 +333,12 @@ export class TalkMind {
         return { res, perm, done };
     }
 
+    /** The rules' answer is only a word to fill the quiet (they did not understand, or it is long talk): the net is worth waiting for. */
+    _weak(res, text) {
+        const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+        return OPEN_TOPICS.has(res.intent) || (words >= 6 && !RULES_ONLY.has(res.intent));
+    }
+
     /** The net's part: «Хм…», then its answer and its game action (checked). */
     async ask(brain, text, ctx, { res, perm }, opts = {}) {
         let raw = '';
@@ -389,7 +401,7 @@ export class TalkMind {
                 // (nothing said by then: the rules answer — a talk must not wait; the first sentence is said as soon as written)
                 new Promise((resolve) => { timer = setTimeout(() => resolve(''), this.timeoutMs ?? (this.strong ? 8000 : 9000)); }),
                 // (no first sentence soon — FIRST_MS, in danger DANGER_FIRST_MS: the rules answer now, not after a long «Хм…»)
-                new Promise((resolve) => { first = setTimeout(() => { if (!n) resolve(''); }, this.firstMs ?? (ctx.danger || brain.world?.danger ? DANGER_FIRST_MS : FIRST_MS)); }),
+                new Promise((resolve) => { first = setTimeout(() => { if (!n) resolve(''); }, this.firstMs ?? (ctx.danger || brain.world?.danger ? DANGER_FIRST_MS : this._weak(res, text) ? THINK_MS : FIRST_MS)); }),
             ]);
             clearTimeout(timer);
             clearTimeout(first);

@@ -71,6 +71,20 @@ const WIZARD_RARE = [{ kind: 'crystal', price: 70 }, { kind: 'robe', price: ARMO
 const _v = new THREE.Vector3();
 /** A villager's short line when something in a talk went wrong (the reason goes to the journal). */
 const TALK_SORRY = ['Хм… прости, мысль убежала.', 'Ох, о чём это я… Давай потом.', 'Погоди-ка, сбилась мысль.', 'Повтори-ка потом, путник.'];
+/** The spells in a villager's line: the whole line, and each word / pair of words of it (a one-word spell said in a sentence). */
+export function spellsIn(text) {
+    const out = new Set();
+    const whole = matchSpell(text);
+    if (whole) out.add(whole);
+    const w = normalizeText(text).split(' ').filter(Boolean);
+    for (let i = 0; i < w.length; i++) {
+        const one = matchSpell(w[i]);
+        if (one) out.add(one);
+        const two = i + 1 < w.length && matchSpell(w[i] + ' ' + w[i + 1]);
+        if (two) out.add(two);
+    }
+    return out;
+}
 const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length) % arr.length];
 
 /**
@@ -237,8 +251,9 @@ export class CastleTalk {
         this._lastSpoken = text;
         // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
         // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
-        const sp = matchSpell(text);
-        if (sp) this.game.voiceGate?.noteRemote(sp, performance.now() + Math.min(8000, 400 + text.length * 70));
+        // (and a spell that is one word of the line: «Дай подумать…» — the microphone may catch only «дай», and «Дай» kills)
+        const until = performance.now() + Math.min(8000, 400 + text.length * 70);
+        for (const sp of spellsIn(text)) this.game.voiceGate?.noteRemote(sp, until);
         // an answer in a talk: what is written over the head is what you hear — now, not after older lines
         if (this._urgent) this.speech.cancel();
         const now = performance.now();
@@ -455,6 +470,8 @@ export class CastleTalk {
         const g = this.game;
         if (!text || !this.life.enabled) return false;
         if (this._echo(text)) return false; // (a villager's own voice from the speakers in the microphone)
+        text = this._unecho(text); // (and his words caught with mine in one phrase: «я человек простой… а ты можешь со мной пойти»)
+        if (!text) return false;
         if (isApology(text) && this.life.forgive?.(g.localId)) return true; // («извините» to the one I knocked: calmed)
         const v = this._listener(text);
         if (!v) return false;
@@ -508,6 +525,8 @@ export class CastleTalk {
             return i > 0 ? this._sayMore(v, line) : this._sayAnswer(v, line);
         };
         this.trace.mark(tr, 'net');
+        // (a long think — open talk, a complex phrase — gets a second «сейчас скажу…» if the answer is still not there)
+        if (this.mind._weak?.(first.res, text)) setTimeout(() => { if (turn === this._turn && this._asking && tr.at.sent == null) thinking(); }, 2800);
         this._asking = true;
         this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence, onToken: () => this.trace.mark(tr, 'tok') }).then((res) => {
             this._asking = false;
@@ -633,6 +652,32 @@ export class CastleTalk {
         // («Бомбардо», «Инферно» said alone are spells, even if villagers like to talk about magic)
         if (spell && (intent === 'magic' || intent === 'unknown')) return false;
         return intent !== 'unknown';
+    }
+
+    /**
+     * My words without the villagers' words caught with them. A little of his voice gets past the echo canceller
+     * and the phrase heard was half his («я человек простойдел свое а ты можешь со мной пойти» — «Я человек простой»
+     * was his): two or more words in a row the same, in the same order, as a line said in the last seconds are his.
+     */
+    _unecho(text) {
+        const now = performance.now();
+        const lines = (this._spoken || []).filter((l) => now - l.at < 12000).map((l) => normalizeText(l.text).split(' ').filter(Boolean));
+        if (!lines.length) return text;
+        const hw = normalizeText(text).split(' ').filter(Boolean);
+        // (a heard word is his word: the same, or his word glued to the next — «простойдел»)
+        const same = (h, w) => h === w || (w.length >= 4 && h.startsWith(w) && h.length - w.length <= 5);
+        const his = new Array(hw.length).fill(false);
+        for (const sw of lines) {
+            for (let i = 0; i < hw.length; i++) {
+                for (let j = 0; j < sw.length; j++) {
+                    let n = 0;
+                    while (i + n < hw.length && j + n < sw.length && same(hw[i + n], sw[j + n])) n++;
+                    if (n >= 2) for (let k = 0; k < n; k++) his[i + k] = true;
+                }
+            }
+        }
+        if (!his.some(Boolean)) return text;
+        return hw.filter((_, i) => !his[i]).join(' ');
     }
 
     /** Is what the microphone heard just the villager's own words from the speakers? */
