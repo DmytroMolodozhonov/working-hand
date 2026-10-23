@@ -416,7 +416,18 @@ export class Travelers {
             if (left < P.dest.r) { this._arrive(P); v.speed = 0; v.mode = 'idle'; L._ground(v); return true; }
             v.roadT = (v.roadT || 0) - dt;
             if (v.roadT <= 0 || v.roadAim == null) { v.roadT = 0.8; v.roadAim = this._footHeading(v, P); }
-            if (v.roadAim == null || lag) { v.speed = 0; v.mode = 'idle'; L._ground(v); return true; }
+            // (waiting for the lagging / no free heading: not for ever — «стоит без причины»: a line in the log, then on)
+            const why = v.roadAim == null ? 'нет свободного направления (путь пуст)' : lag ? 'ждёт отставших' : null;
+            P.footWaitT = why ? (P.footWaitT || 0) + dt : 0;
+            if (P.footWaitT > 30 && !(v.talking > 0)) {
+                P.footWaitT = 0;
+                const t = `странник ${v.role}#${v.id} (${P.kind}) ${Math.round(v.x)},${Math.round(v.z)}: стоит без причины 30 с: ${why}`;
+                console.warn('[stuck]', t); this.game.perf?.note?.('стоит: ' + t);
+                const seen = L._players().some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 45);
+                for (const m of walkers) if (m !== v && Math.hypot(m.x - v.x, m.z - v.z) > 12) { m.path = null; m.wallW = null; if (!seen) { m.x = v.x + 2; m.z = v.z + 2; m.y = v.y; } } // (the lagging ones: a new way, or out of sight — beside the leader)
+                if (v.roadAim == null) { v.roadT = 0; v.wallW = null; if (!seen) { const q = L._nearestFree(v); if (q) { v.x = q.x; v.y = q.y; v.z = q.z; } } }
+            }
+            if (v.roadAim == null || (lag && P.footWaitT < 12)) { v.speed = 0; v.mode = 'idle'; L._ground(v); return true; }
             const tx = v.x - Math.sin(v.roadAim) * 6, tz = v.z - Math.cos(v.roadAim) * 6;
             L._steer(v, tx, tz, (v.walk || 2.3) * 0.85, dt);
             v.mode = v.speed > 0 ? 'walk' : 'idle';
