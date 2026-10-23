@@ -1228,17 +1228,6 @@ export class ItemSystem {
             }
             return;
         }
-        if (item.stat === 'pentagram' && item.pentagram === 'monster') {
-            // (выученный рисунок — как выученное заклинание: смерть забирает, Legacy возвращает — PentagramMonster.js)
-            g.bonus.spells = { ...(g.bonus.spells || {}), PentagramMonster: true };
-            g.hud.setVoice?.('📜🔥 Свиток сгорел: теперь вы знаете <span style="color:#ff5a4a">пентаграмму страшного монстра</span> — круг концом палочки по земле, поперёк зубчатая пасть; встаньте в него', true);
-            const c = g.character.group.position;
-            for (let i = 0; i < 60; i++) {
-                const a = (i / 60) * Math.PI * 6;
-                g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), i % 3 ? 0xb3121e : 0x1a0404, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
-            }
-            return;
-        }
         if (item.stat === 'spell') {
             g.bonus.spells = { ...(g.bonus.spells || {}), [item.spell]: true };
             const ru = SPELL_RU[item.spell] || item.spell;

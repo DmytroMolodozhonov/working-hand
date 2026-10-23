@@ -980,7 +980,6 @@ export class NetSync {
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
-            case 'mpen': if (m.by !== this.me) g.monsterCircle?.onNet(m); break; // (a drawn «Пентаграмма страшного монстра» glows / burns out: MonsterCircle.js)
             case 'tdes': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)

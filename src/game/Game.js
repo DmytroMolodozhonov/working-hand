@@ -98,7 +98,6 @@ import { captureLegacy, wipeHero } from './Legacy.js';
 import { BreakwardMark } from './BreakwardMark.js';
 import { Steadiness } from './Steadiness.js';
 import { MonsterTransform } from './MonsterTransform.js';
-import { MonsterCircle } from './MonsterCircle.js';
 import { monsterSamples } from '../entities/MonsterBody.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
@@ -459,7 +458,6 @@ export class Game {
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
         this.monster = new MonsterTransform(this); // «Пентаграмма страшного монстра»: ×7, 10 минут (MonsterForm.js)
-        this.monsterCircle = new MonsterCircle(this); // … её рисуют концом палочки по земле и встают в круг (MonsterCircle.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -3241,7 +3239,7 @@ export class Game {
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
-        zoo.add(monsterSamples(), ...MonsterCircle.samples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js; черты на земле)
+        zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)
         for (const m of glowSamples()) zoo.add(m); // (the rune shell of an enchanted thing)
@@ -4453,7 +4451,6 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
-        this.monsterCircle?.dispose();
         this.monster?.dispose(); // (leaving: the form taken off first — the man's place and health are saved)
         this.ships?.dispose();
         this.inventory?.dispose();

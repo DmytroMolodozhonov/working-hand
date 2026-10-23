@@ -6,7 +6,11 @@
  * `skip` (через сколько вершин соединять), `gaps` (разорванные линии звезды — индексы), `crack` (зигзаг-трещина через центр, точки в долях радиуса).
  */
 
+import { MONSTER_PENTAGRAM } from './PentagramMonster.js';
+
 export const PENTAGRAMS = {
+    // «Пентаграмма страшного монстра»: круг и оскаленная пасть (четыре клыка, челюсть дугой); встал в круг — 200 маны — ×7 на 10 минут (PentagramMonster.js, MonsterTransform.js)
+    monster: MONSTER_PENTAGRAM,
     breakward: {
         id: 'breakward',
         title: 'Слом магической защиты',

@@ -41,6 +41,7 @@ const USE_TEXT = {
     teleport: 'Нарисуйте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
     life: 'Встаньте на неё (50 маны) — здоровье восстановится целиком',
     mend: 'Встаньте на неё — надетая броня будет починена (у каждой части своя цена)',
+    monster: 'Встаньте в круг (200 маны) — и на 10 минут вы огромный монстр',
 };
 
 export class Pentagranium {
@@ -405,6 +406,13 @@ export class Pentagranium {
         if (near) this.fx.ambient(m, dt, m.hell);
         if (m.hell > 0.2 && near && (m._flashT = (m._flashT || 0) - dt) <= 0) { m._flashT = 0.12; g.fx?.lightFlash?.(_o.set(m.x, m.y + 1.2, m.z), 0xff3a12, 3.2 * m.hell * (0.7 + 0.3 * Math.random()), 0.25, m.r * 4 + 10); }
         for (const r of m.rites) if (!r.done) this._riteStep(m, r, dt);
+        // (a pentagram that works when its drawer stands in it — the monster one: PentagramMonster.stand)
+        const stand = TABLE[m.pent]?.stand;
+        if (m.mine && typeof stand === 'function' && m.fade > 0.9) {
+            const me = g.character.group.position, S = g.character.size || 1;
+            const inCircle = Math.hypot(me.x - m.x, me.z - m.z) <= m.r * USE.INSIDE_K && Math.abs(me.y - PLAYER_GROUND_OFFSET * S - m.y) < 3 && !!g.character.onGround;
+            if (stand(g, m, dt, inCircle)) { this._remove(m.id, 'old'); return; }
+        }
         if (m.mine && m.pent === 'breakward' && g.breakward && Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < m.r) {
             const why = g.breakward.activate(); // (stepped on: the mark is put on once, the drawing goes out; no mana — a hint — leaves it)
             if (why === null || why === 'защита уже сломана') { this._remove(m.id, 'old'); return; }

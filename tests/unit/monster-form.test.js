@@ -1,19 +1,20 @@
-// «Пентаграмма страшного монстра»: the rules (MonsterForm.js), the drawing (PentagramMonster.js), the form in a game
+// «Пентаграмма страшного монстра»: the rules (MonsterForm.js), the drawing (PentagramMonster.js in the shared table of Pentagrams.js), the form in a game
 // (MonsterTransform.js on a real VoxelCharacter and a small stand-in game), the hooks in Game / Combat / Knockdown.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as THREE from 'three';
 import { MONSTER, MONSTER_VS, FIST_TARGETS, STOMP, fmtLeft, growAt, hpAfterFall, spellOnMonster, knocksMonster, fistPower, bodyBreaks, fistBreaks, softGround, footprint, crater, freeSpot } from '../../src/game/MonsterForm.js';
-import { MONSTER_PENTAGRAM, recognize, figureAt, TEMPLATES, registerPentagram } from '../../src/game/PentagramMonster.js';
+import { MONSTER_PENTAGRAM } from '../../src/game/PentagramMonster.js';
+import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
+import { figureIds, figureLines, recognizeAny, pentagramScroll } from '../../src/game/PentagramRules.js';
 import { MonsterTransform, applyRemoteMonster } from '../../src/game/MonsterTransform.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../../src/entities/Character.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 import { DANGERS } from '../../src/game/Danger.js';
 import { SPELL_SOUND, SPELL_GEN } from '../../src/audio/SpellMusic.js';
 import { scrollKindLabel, DarkHero } from '../../src/game/DarkMagic.js';
-import { describeItem, rollScroll } from '../../src/game/ItemTypes.js';
-import { captureLegacy, wipeHero } from '../../src/game/Legacy.js';
+import { describeItem } from '../../src/game/ItemTypes.js';
 
 const src = (p) => fs.readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 
@@ -123,51 +124,53 @@ test('its sounds: the roar and the tune of the change (SPELL_SOUND), short and l
 
 // ------------------------------------------------------------------ the pentagram
 
-test('the pentagram row: dark, learned from a scroll, blood-red; it fits the other sessions\' table', () => {
+test('the pentagram row in the shared table: dark, one use, blood-red; a drawing-scroll teaches it', () => {
+    assert.equal(PENTAGRAMS.monster, MONSTER_PENTAGRAM);
     assert.equal(MONSTER_PENTAGRAM.id, 'monster');
     assert.equal(MONSTER_PENTAGRAM.dark, true);
-    assert.equal(MONSTER_PENTAGRAM.cost, 200);
-    assert.equal(MONSTER_PENTAGRAM.learn, 'scroll');
-    assert.deepEqual(registerPentagram([]).map((p) => p.id), ['monster']);
-    assert.equal(registerPentagram({}).monster, MONSTER_PENTAGRAM);
-    assert.deepEqual(scrollKindLabel(MONSTER_PENTAGRAM.scroll)?.text, 'Чёрная пентаграмма');
-    assert.match(describeItem({ ...MONSTER_PENTAGRAM.scroll }).title, /монстра/);
+    assert.equal(MONSTER_PENTAGRAM.once, true);
+    assert.equal(MONSTER_PENTAGRAM.cost, MONSTER.COST);
+    assert.ok(figureIds().includes('monster'));
+    const sc = pentagramScroll('monster', 'u1');
+    assert.equal(sc.pent, 'monster');
+    assert.equal(sc.dark, true);
+    assert.deepEqual(scrollKindLabel(sc)?.text, 'Чёрная пентаграмма');
+    assert.match(describeItem(sc).title, /монстра/);
 });
 
-test('its scroll turns up in chests (rare)', () => {
-    let s = 7, found = 0;
-    const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-    for (let i = 0; i < 4000; i++) if (rollScroll(r).pentagram === 'monster') found++;
-    assert.ok(found > 0 && found < 200, String(found));
-});
-
-test('the drawing is told from the other figures, drawn any way round, any size; other figures are not it', () => {
-    let s = 3;
-    const j = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5) * 0.2;
-    for (const [turn, r] of [[0, 1.5], [1.3, 2.5], [2.9, 4]]) {
-        const res = recognize(figureAt('monster', 40, -12, r, turn, j));
-        assert.equal(res?.id, 'monster', `turn ${turn} r ${r}`);
-        assert.ok(Math.abs(res.centre.x - 40) < 0.5 && Math.abs(res.centre.z + 12) < 0.5);
-        assert.ok(Math.abs(res.r - r) < 0.3 * r);
+test('the drawing (a circle, a fanged maw) is told from the others, drawn any way round', () => {
+    let s = 5;
+    const j = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5) * 0.15;
+    const drawing = (id, cx, cz, R, rot) => {
+        const pts = [];
+        for (let i = 0; i <= 72; i++) { const a = (i / 72) * Math.PI * 2; pts.push([cx + Math.cos(a) * R + j(), cz + Math.sin(a) * R + j()]); }
+        for (const poly of figureLines(id, rot)) { const P = [...poly, poly[0]]; for (let i = 0; i < P.length - 1; i++) for (let k = 0; k < 6; k++) { const u = k / 6; pts.push([cx + (P[i][0] + (P[i + 1][0] - P[i][0]) * u) * R + j(), cz + (P[i][1] + (P[i + 1][1] - P[i][1]) * u) * R + j()]); } }
+        return pts;
+    };
+    for (const rot of [0, 1.7, 3.6, 5.2]) {
+        const r = recognizeAny(drawing('monster', 5, -3, 3, rot));
+        assert.equal(r.id, 'monster', 'turned ' + rot);
+        assert.ok(r.ok);
     }
-    for (const id of Object.keys(TEMPLATES)) {
-        if (id === 'monster') continue;
-        for (const turn of [0, 0.9, 2.2]) assert.notEqual(recognize(figureAt(id, 0, 0, 2.5, turn, j))?.id, 'monster', `${id} ${turn}`);
-    }
-    // the strokes drawn in another order, a stroke backwards: the same
-    const f = figureAt('monster', 0, 0, 2, 0.4, j).reverse().map((st) => st.slice().reverse());
-    assert.equal(recognize(f)?.id, 'monster');
-    // a scribble, a tiny or a huge one: nothing
-    assert.equal(recognize([[[0, 0], [0.1, 0.1], [0.2, 0]]]), null);
-    assert.equal(recognize(figureAt('monster', 0, 0, 0.4)), null);
+    for (const id of ['teleport', 'life', 'mend', 'breakward']) assert.notEqual(recognizeAny(drawing(id, 0, 0, 3, 0.4)).id, 'monster', id);
 });
 
-test('learned like a spell: death takes it, the body keeps it (Legacy)', () => {
-    const g = { bonus: { hp: 0, fatigue: 0, spells: { [MONSTER_PENTAGRAM.key]: true } }, dark: new DarkHero(null), maxHP: 20, playerHP: 20 };
-    const rec = captureLegacy(g);
-    assert.ok(rec.spells.includes(MONSTER_PENTAGRAM.key));
-    wipeHero(g);
-    assert.equal(g.bonus.spells?.[MONSTER_PENTAGRAM.key], undefined);
+test('standing in my lit monster pentagram 0.8 s: the form begins and the drawing burns out; no mana — a hint, it stays', () => {
+    const stand = MONSTER_PENTAGRAM.stand;
+    const a = fakeGame();
+    const m = {};
+    assert.equal(stand(a.g, m, 0.5, true), false);
+    assert.equal(stand(a.g, m, 0.4, true), true);
+    assert.equal(a.g.monster.active, true);
+    const b = fakeGame({ mana: 50 });
+    const said = []; b.g.hud.setVoice = (t) => said.push(t);
+    const m2 = {};
+    stand(b.g, m2, 1, true);
+    assert.equal(stand(b.g, m2, 1, true), false);
+    assert.equal(b.g.monster.active, false);
+    assert.ok(said.some((t) => /маны/.test(t)));
+    assert.equal(stand(b.g, m2, 1, false), false); // (out of the circle: the next try)
+    assert.match(src('src/game/Pentagranium.js'), /TABLE\[m\.pent\]\?\.stand/);
 });
 
 // ------------------------------------------------------------------ the form in a game
@@ -353,45 +356,6 @@ test('the hooks: no spell but «стоп» as a monster; hits, stuns, falls, pus
     assert.match(src('src/game/Steadiness.js'), /monster\?\.active \? STEADY\.MAX/);
     assert.match(src('src/net/NetSync.js'), /mo: g\.monster\?\.netFlag\(\)/);
     assert.match(game, /monsterSamples\(\)/); // (its shaders on the loading screen)
-});
-
-test('drawing it with the wand\'s tip on the ground, standing in it: the form begins (and not before it is learned)', async () => {
-    const { MonsterCircle } = await import('../../src/game/MonsterCircle.js');
-    const draw = (known) => {
-        const { g, ch } = fakeGame();
-        const said = [];
-        g.hud.setVoice = (t) => said.push(t);
-        g.knowsSpell = (k) => known && k === MONSTER_PENTAGRAM.key;
-        g.terrain.data.floorAt = () => 0;
-        const c = new MonsterCircle(g);
-        let tip = null;
-        c._tip = (out) => (tip ? out.set(tip[0], tip[1], tip[2]) : null);
-        // the figure, stroke by stroke: the tip on the ground (0.1 m over it) along each, lifted between them
-        for (const st of figureAt('monster', 6, 0, 2.2, 0.5)) {
-            for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < 4; k++) {
-                const u = k / 4, a = st[i], b = st[i + 1];
-                tip = [a[0] + (b[0] - a[0]) * u, 0.1, a[1] + (b[1] - a[1]) * u];
-                c.update(1 / 60);
-            }
-            tip = [0, 3, 0];
-            for (let i = 0; i < 60; i++) c.update(1 / 60);
-        }
-        for (let i = 0; i < 400 && c._job; i++) c.update(1 / 60);
-        return { g, ch, c, said };
-    };
-    const a = draw(false);
-    assert.equal(a.c.armed, null);
-    assert.ok(a.said.some((t) => /не знаете/.test(t)));
-    const b = draw(true);
-    assert.ok(b.c.armed, 'it glows');
-    assert.ok(Math.abs(b.c.armed.x - 6) < 0.6 && Math.abs(b.c.armed.z) < 0.6);
-    // standing in it (feet on the ground in the circle)
-    b.ch.group.position.set(6, PLAYER_GROUND_OFFSET, 0);
-    b.ch.onGround = true;
-    for (let i = 0; i < 60; i++) b.c.update(1 / 60);
-    assert.equal(b.g.monster.active, true);
-    assert.equal(b.g.combat.fatigue, 100);
-    assert.equal(b.c.armed, null, 'burnt out');
 });
 
 test('a paw closed at a wall takes a piece of it; opened — the piece flies and lies where it fell', () => {

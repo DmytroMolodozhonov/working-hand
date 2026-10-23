@@ -233,7 +233,7 @@ export function recognize(pts, pent = 'devil') {
             for (const s of ring) if (near(s, q) <= RECOG.TOL) cc++;
             cc /= ring.length;
             if (cc < RECOG.CIRCLE_COVER * 0.7) continue; // (no use turning the star)
-            for (let t = 0; t < RECOG.ROTATIONS; t++) {
+            for (let t = 0; t < ROTS; t++) { // (every turn of the figure's own symmetry: an asymmetric one — the whole round)
                 const a = (t / ROTS) * P.sym, ca = Math.cos(a), sa = Math.sin(a);
                 const star = P.samples.map((s) => [s[0] * ca - s[1] * sa, s[0] * sa + s[1] * ca]);
                 let sc = 0, kc = 0, kn = 0;
