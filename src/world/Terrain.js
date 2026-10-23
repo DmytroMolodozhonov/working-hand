@@ -36,7 +36,7 @@ import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MES
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
-import { canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
+import { SHAPE, canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -246,7 +246,9 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 5;
+export const WORLD_GEN = 6;
+// 6: ramps and slabs (BlockShapes.js): the land's one-block steps are smoothed into slopes (Terrain._slopeLand), the
+//    caves' vaults rounded (_vaultCaves), roofs and stairs of the buildings made of ramps (Castles.Plan.ramp/slab).
 // 5: the new landscape (src/world/Landscape.js): big mountain ranges with sharp snowy peaks, no flat
 //    tops (the world is 120 layers high), kinds of land with their own grass and leaves, scarlet
 //    canyons, emerald hills, moonlit groves, floating islands; flowers and tall grass (Flora.js).
@@ -487,6 +489,8 @@ const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced)
 /** Generation 5's floating islands: at most one (with its small ones) per CELL×CELL m. */
 export const ISLE = { CELL: 112, R_MIN: 6, R_MAX: 15 };
 const ZONE_CX = Math.floor(SPACE.ZONE_X / CHUNK);
+/** The land's own top stuff generation 6 smooths with ramps (Terrain._slopeLand) — and the rock of the caves' vaults. */
+const SLOPED_LAND = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.SAND, BLOCK.SNOW, BLOCK.STONE, BLOCK.GRAVEL]);
 let _empty = null;
 /** The one chunk of the empty far zone: bedrock at the bottom, air above. */
 function emptyChunk() {
@@ -514,10 +518,11 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
+        this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
@@ -714,6 +719,7 @@ export class TerrainData {
         const bedrock = this.bedrockTop ?? OLD_BEDROCK;
         const P = CHUNK + 2;
         const hh = _lush.hh || (_lush.hh = new Int16Array(P * P));
+        const wp = _lush.wp || (_lush.wp = new Int16Array(P * P));
         const cols = CHUNK * CHUNK;
         const grass = new Int32Array(cols), leaf = new Int32Array(cols), leafK = new Uint8Array(cols), mesa = new Uint8Array(cols), bio = new Uint8Array(cols);
         const snowL = new Int16Array(cols); // (the snow line of each column: the snowy crowns and the frost, faceColor)
@@ -728,6 +734,7 @@ export class TerrainData {
                 const x = x0 + px - 1, z = z0 + pz - 1;
                 const h = H(x, z);
                 hh[pz * P + px] = h;
+                wp[pz * P + px] = H.water ? h + H.water : -32768; // (the water's top layer there: generation 6's ramps keep out of its way)
                 if (px === 0 || pz === 0 || px === P - 1 || pz === P - 1) continue;
                 const col = (pz - 1) * CHUNK + (px - 1);
                 water[col] = H.water;
@@ -788,9 +795,94 @@ export class TerrainData {
         let minOpen = MAX_LAYER;
         for (let i = 0; i < top.length; i++) if (top[i] + 1 < minOpen) minOpen = top[i] + 1;
         const c = { cx, cz, blocks, top, maxTop, modified: false, minOpen, sea: seaMask, grass, leaf, leafK, mesa, bio, snowL, wet: flags };
+        // (generation 6: the heights round the chunk kept for the ramps — the shared buffers are used again by whatever
+        // the caves, the castles and the trees look at meanwhile)
+        const hk = this.slopes ? hh.slice() : null, wk = this.slopes ? wp.slice() : null;
         this._carveCaves(c); this._buildCastles(c); this._plantLush(c); this._floatIslands(c);
+        if (hk) { this._slopeLand(c, hk, wk); if (c.caved) this._vaultCaves(c); }
         c.wet = undefined;
         return c;
+    }
+
+    /**
+     * Generation 6: the land's one-block steps smoothed (BlockShapes.js) — on the lower column a ramp of its own top's
+     * stuff (grass, earth, sand, snow, rock, gravel) rising to the higher one, so a hill is walked up, not climbed
+     * stair by stair: where two rises meet an inner corner, under a lone higher corner an outer one (a hill's round
+     * shoulder), in a gully a block wide a slab; at the foot of a higher cliff now and then a wedge of scree. Never
+     * where the water is (its empty half would show dry under the water's level), in a building, under a tree, on a
+     * cave's mouth: only on a column whose top is the land's own. By the height field round the chunk (`hh`, `wp`:
+     * the recipe's heights and waters, a row past each side) — the same whichever chunk is made first.
+     */
+    _slopeLand(c, hh, wp) {
+        const P = CHUNK + 2, B = c.blocks, A = CHUNK * CHUNK;
+        let sh = c.shape;
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+            const col = lz * CHUNK + lx, i0 = (lz + 1) * P + lx + 1, h = hh[i0];
+            if (c.top[col] !== h || h + 1 > MAX_LAYER || h <= this.bedrockTop || wp[i0] > -32768) continue;
+            const ti = (h - MIN_LAYER) * A + col, t = B[ti];
+            if (!SLOPED_LAND.has(t) || B[ti + A] !== BLOCK.AIR) continue;
+            // (the water beside the cell at its height: none)
+            if (wp[i0 + 1] > h || wp[i0 - 1] > h || wp[i0 + P] > h || wp[i0 - P] > h) continue;
+            // (…nor the water a cave or a castle let in: the chunk's own cells round it)
+            const ai = ti + A, W = BLOCK.WATER;
+            if ((lx < MASK && B[ai + 1] === W) || (lx > 0 && B[ai - 1] === W) || (lz < MASK && B[ai + CHUNK] === W) || (lz > 0 && B[ai - CHUNK] === W)) continue;
+            const e = hh[i0 + 1] - h, w = hh[i0 - 1] - h, so = hh[i0 + P] - h, n = hh[i0 - P] - h;
+            const ue = e >= 1, uw = w >= 1, us = so >= 1, un = n >= 1, up = ue + uw + us + un;
+            let shape = 0;
+            if (up === 1) {
+                const d = ue ? e : uw ? w : us ? so : n;
+                // (a one-block step: always; at the foot of a higher wall: a wedge now and then)
+                if (d === 1 || (d <= 4 && hashLand(c.cx * CHUNK + lx, c.cz * CHUNK + lz, this.seed + 601) < 0.3)) shape = ue ? SHAPE.RAMP_PX : uw ? SHAPE.RAMP_NX : us ? SHAPE.RAMP_PZ : SHAPE.RAMP_NZ;
+            } else if (up === 2) {
+                if ((ue || uw) && (us || un)) {
+                    if (Math.max(e, w, so, n) === 1) shape = ue ? (us ? SHAPE.IN_00 : SHAPE.IN_01) : (us ? SHAPE.IN_10 : SHAPE.IN_11);
+                } else if (Math.max(e, w, so, n) === 1) shape = SHAPE.SLAB; // (a gully a block wide)
+            } else if (up >= 3) {
+                if (Math.max(e, w, so, n) === 1) shape = SHAPE.SLAB;
+            } else {
+                // a lone higher corner: its outer corner (the round shoulder of a hill)
+                const dpp = hh[i0 + P + 1] - h, dpn = hh[i0 - P + 1] - h, dnp = hh[i0 + P - 1] - h, dnn = hh[i0 - P - 1] - h;
+                const k = (dpp >= 1) + (dpn >= 1) + (dnp >= 1) + (dnn >= 1);
+                if (k === 1 && Math.max(dpp, dpn, dnp, dnn) === 1) shape = dpp >= 1 ? SHAPE.OUT_11 : dpn >= 1 ? SHAPE.OUT_10 : dnp >= 1 ? SHAPE.OUT_01 : SHAPE.OUT_00;
+            }
+            if (!shape) continue;
+            B[ti + A] = t;
+            (sh || (sh = c.shape = new Uint8Array(B.length)))[ti + A] = shape;
+            c.top[col] = h + 1;
+            if (h + 1 > c.maxTop) c.maxTop = h + 1;
+        }
+    }
+
+    /**
+     * Generation 6: the caves' vaults rounded — where the roof meets a wall, an upside-down ramp of the roof's rock in
+     * the corner (a vault, not a stair of blocks); where two walls meet under it, its inner corner. Only in the chunk's
+     * own cells off its rim (the neighbours' caves are not looked at: the same whichever chunk is made first), never in a
+     * passage a block high.
+     */
+    _vaultCaves(c) {
+        const B = c.blocks, A = CHUNK * CHUNK;
+        const rock = (t) => SLOPED_LAND.has(t) || t === BLOCK.DEEPSTONE;
+        let sh = c.shape;
+        const L0 = Math.max(MIN_LAYER + 2, c.minOpen ?? MIN_LAYER + 2);
+        for (let lz = 1; lz < CHUNK - 1; lz++) for (let lx = 1; lx < CHUNK - 1; lx++) {
+            const col = lz * CHUNK + lx, hi = Math.min(c.top[col] - 1, MAX_LAYER - 1);
+            for (let L = L0; L <= hi; L++) {
+                const i = (L - MIN_LAYER) * A + col;
+                if (B[i] !== BLOCK.AIR || B[i - A] !== BLOCK.AIR) continue;
+                const roof = B[i + A];
+                if (!rock(roof)) continue;
+                const W = BLOCK.WATER;
+                if (B[i + 1] === W || B[i - 1] === W || B[i + CHUNK] === W || B[i - CHUNK] === W) continue; // (a lake beside: no vault against its water)
+                const re = rock(B[i + 1]), rw = rock(B[i - 1]), rs = rock(B[i + CHUNK]), rn = rock(B[i - CHUNK]);
+                const k = re + rw + rs + rn;
+                let shape = 0;
+                if (k === 1) shape = re ? SHAPE.CEIL_PX : rw ? SHAPE.CEIL_NX : rs ? SHAPE.CEIL_PZ : SHAPE.CEIL_NZ;
+                else if (k === 2 && (re || rw) && (rs || rn)) shape = re ? (rs ? SHAPE.CIN_00 : SHAPE.CIN_01) : (rs ? SHAPE.CIN_10 : SHAPE.CIN_11);
+                if (!shape) continue;
+                B[i] = roof;
+                (sh || (sh = c.shape = new Uint8Array(B.length)))[i] = shape;
+            }
+        }
     }
 
     /**
@@ -2347,7 +2439,9 @@ export class TerrainData {
                     if (hb > 0) put(bx, Y0 + 1 - hb, bz);
                     put(bx, Y0 + 1, bz);
                 }
-                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, false), pat, lit(wx + dx, L, wz + dz));
+                // (a grass ramp's triangle side is the hill's own turf going on, green — not the earth of a cut bank)
+                const turf = t === BLOCK.GRASS && (ha === 0 || hb === 0);
+                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, lit(wx + dx, L, wz + dz));
             }
         }
     }

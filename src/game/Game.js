@@ -277,6 +277,7 @@ export class Game {
             testGround: this.gen >= 3 && config.mode === 'creative' && !config.map, // (a river by the pedestals, a castle close by)
             deepCaves: this.gen >= 4, // (caves as in Minecraft: winding, branching, deep)
             lush: this.gen >= 5, // (the new landscape: big mountains, kinds of land, colours — Landscape.js)
+            slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)

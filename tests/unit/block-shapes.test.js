@@ -173,3 +173,40 @@ test('an explosion takes shaped blocks with their shape; a block put back is who
     d.set(3, 1, 3, BLOCK.STONE);
     assert.equal(d.shapeAt(3, 1, 3), 0);
 });
+
+test('generation 6: the same ramps whatever chunks were made before, the old generations without any', async () => {
+    const { chunkKey } = await import('../../src/world/Terrain.js');
+    const OPTS = { seed: 20261015, mountains: true, seas: true, test: true, deepCaves: true, lush: true, slopes: true };
+    const a = new TerrainData(); a.generate(OPTS);
+    const b = new TerrainData(); b.generate(OPTS);
+    for (const [x, z] of [[9, -4], [3, 3], [-6, 8], [5, 1]]) b.chunk(x, z);
+    b.evictFar(0, 0, 1);
+    let shapes = 0;
+    for (const [cx, cz] of [[4, 3], [-2, -7], [7, -1], [-11, 10]]) {
+        const ca = a.chunk(cx, cz), cb = b.chunk(cx, cz);
+        assert.deepEqual(ca.blocks, cb.blocks);
+        assert.deepEqual(ca.top, cb.top);
+        assert.deepEqual(ca.shape, cb.shape);
+        if (ca.shape) for (const v of ca.shape) if (v) shapes++;
+        void chunkKey;
+    }
+    assert.ok(shapes > 100, 'ramps in the land: ' + shapes);
+    // generation 5 (no `slopes`): no shape anywhere
+    const old = new TerrainData(); old.generate({ ...OPTS, slopes: false });
+    for (const [cx, cz] of [[4, 3], [-2, -7]]) assert.equal(old.chunk(cx, cz).shape, undefined);
+});
+
+test('generation 6: no ramp beside the water at its height, every ramp on the land it smooths', () => {
+    const OPTS = { seed: 20261015, mountains: true, seas: true, test: false, deepCaves: true, lush: true, slopes: true };
+    const d = new TerrainData(); d.generate(OPTS);
+    for (const [cx, cz] of [[2, 6], [3, 7], [-11, 10]]) {
+        const c = d.chunk(cx, cz);
+        if (!c.shape) continue;
+        for (let i = 0; i < c.shape.length; i++) {
+            if (!c.shape[i]) continue;
+            const lx = i % CHUNK, lz = Math.floor(i / CHUNK) % CHUNK, L = Math.floor(i / (CHUNK * CHUNK)) - 17;
+            const x = cx * CHUNK + lx, z = cz * CHUNK + lz;
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) assert.notEqual(d.get(x + dx, L, z + dz), BLOCK.WATER, `ramp at ${x},${L},${z} by the water`);
+        }
+    }
+});

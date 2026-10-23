@@ -9,7 +9,7 @@ const world = (seed) => { const d = new TerrainData(); d.generate({ seed, mounta
 const digest = (c) => { let h = 0x811c9dc5; for (let i = 0; i < c.blocks.length; i++) h = Math.imul(h ^ c.blocks[i], 16777619); return h >>> 0; };
 
 test('generation 5: the same world on every computer, whatever order its chunks are made in', () => {
-    assert.equal(WORLD_GEN, 5);
+    assert.ok(WORLD_GEN >= 5); // (6: the same land with ramps — block-shapes.test.js)
     const a = world(4242), b = world(4242);
     const cs = [[14, 3], [15, 3], [14, 4], [-20, 9], [-21, 9], [30, -30]];
     for (const [cx, cz] of cs) a.chunk(cx, cz);

@@ -4,6 +4,7 @@
  */
 import { BLOCK, CHUNK, MIN_LAYER, chunkKey } from './Terrain.js';
 import { BIOMES, hashLand } from './Landscape.js';
+import { shapeTop } from './BlockShapes.js';
 
 const _buf = { pos: null, nor: null, col: null, sway: null, glow: null };
 
@@ -41,7 +42,9 @@ export function buildFlora(data, c) {
             const bio = BIOMES[c.bio ? c.bio[col] : 0];
             const r = hashLand(x, z, seed + 501);
             const fl = bio.flowers, tall = bio.tall;
-            const y = L - 0.5; // (the block's top face)
+            const sh = c.shape ? c.shape[i] : 0; // (a slab, a ramp — BlockShapes.js: the grass grows on its slope)
+            const rootY = (px, pz) => (sh ? L - 1.58 + shapeTop(sh, px - x + 0.5, pz - z + 0.5) : L - 0.5);
+            let y = L - 0.5; // (the block's top face)
             const g = c.grass ? c.grass[col] : 0x4caf50;
             const gr = ((g >> 16) & 255) / 255, gg = ((g >> 8) & 255) / 255, gb = (g & 255) / 255;
             if (r < fl[0] * (0.3 + 1.5 * patch(x - 77, z + 41, seed))) { // (flowers grow in drifts)
@@ -49,6 +52,7 @@ export function buildFlora(data, c) {
                 const k = 1 + Math.floor(hashLand(x, z, seed + 502) * (fl.length - 1));
                 const fc = fl[k], fr = ((fc >> 16) & 255) / 255, fg = ((fc >> 8) & 255) / 255, fb = (fc & 255) / 255;
                 const ox = x + (hashLand(z, x, seed + 503) - 0.5) * 0.6, oz = z + (hashLand(x + 3, z - 5, seed + 504) - 0.5) * 0.6;
+                y = rootY(ox, oz);
                 const h = 0.32 + 0.35 * hashLand(x - 7, z + 2, seed + 505);
                 const a = hashLand(x + 11, z, seed + 506) * Math.PI;
                 const ca = Math.cos(a) * 0.035, sa = Math.sin(a) * 0.035;
@@ -78,6 +82,7 @@ export function buildFlora(data, c) {
                     const k = hashLand(x + t * 7, z, seed + 511);
                     const H = (tall[1] + (tall[2] - tall[1]) * k * k) * (0.65 + 0.7 * patch(x + 50, z - 50, seed));
                     const ox = x + (hashLand(z, x + t, seed + 512) - 0.5) * 0.7, oz = z + (hashLand(x - 3, z + 5 + t, seed + 513) - 0.5) * 0.7;
+                    y = rootY(ox, oz);
                     const tone = 0.88 + 0.28 * hashLand(x + 1, z + 1 + t, seed + 514);
                     const nb = 4 + (k > 0.5 ? 1 : 0);
                     for (let q = 0; q < nb; q++) {
