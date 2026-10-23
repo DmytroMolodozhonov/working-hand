@@ -20,6 +20,7 @@
 
 import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
+import { parseCrewOrder } from './FleetMath.js';
 import * as THREE from 'three';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { floorAt, hullHalfWidth, stairUnder } from './ShipLayout.js';
@@ -126,6 +127,7 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
+const _w2 = { x: 0, y: 0, z: 0 };
 const _set = function (x, y, z) { this.x = x; this.y = y; this.z = z; return this; };
 const _m1 = { x: 0, y: 0, z: 0, set: _set }, _m2 = { x: 0, y: 0, z: 0, set: _set };
 
@@ -1006,7 +1008,7 @@ export class Sailors {
                 if (v.imp && (this.auth || v.imp.mine) && !v.dead && g.imperius?.step('s', v, dt)) { /* («Империус»: a mind in him — ImperiusControl.step) */ }
                 else if (!this.auth) this._follow(v, dt);
                 else if (v.ship === s) this._think(v, s, dt);
-                else if (!g.blackbeard?.thinkAway(v, dt)) { v.ship = s; this._toNode(v, s); } // (nobody to think for him there: back home)
+                else if (!g.fleet?.thinkAway(v, dt) && !g.blackbeard?.thinkAway(v, dt)) { v.ship = s; v.fleetBoard = v.fleetHome = null; this._toNode(v, s); } // (nobody to think for him there: back home)
             }
             if (this.auth) {
                 this._tactics(s, home, dt); this._separate(s, home, dt); this._chatter(s, home, dt);
@@ -1056,7 +1058,7 @@ export class Sailors {
         const g = this.game;
         if (v.dead) { v.mode = 'dead'; v.speed = 0; if (!v.overboard && !v.lev) { this._fall(v, s, dt); this._offStair(v, s, dt); } return; } // (a dead body falls to the deck / floor below — never left in the air, never left lying on a stair)
         if (v.lev) { v.mode = 'idle'; v.speed = 0; return; } // (held up in the air by «Левиоса Максима»: it carries him)
-        if (v.overboard) { if (!(v.pirate && this.game.blackbeard?.overboard(v, s, dt))) this._swim(v, s, dt); return; } // (a skeleton sinks: Blackbeard.js)
+        if (v.overboard) { if (!((v.pirate || v.overboard.leap) && this.game.blackbeard?.overboard(v, s, dt))) this._swim(v, s, dt); return; } // (a skeleton sinks: Blackbeard.js)
         if (s.flooded) { this._overboard(v, Math.random() < 0.5 ? -1 : 1); return; }
         if (v.braceT > 0) { this._braced(v, dt); return; } // (a pirate braced against a push: BRACE)
         if (v.pirate && this.game.blackbeard?.thinkHome(v, s, dt)) return; // (the black ship's own business: going over to board, the guns)
@@ -1085,7 +1087,7 @@ export class Sailors {
         }
         let foe = null, fd = Infinity, onPier = false, far = null, farD = Infinity;
         for (const [id, until] of s.hostile) {
-            if (until < now) { s.hostile.delete(id); continue; }
+            if (until < now || this.ships.loyalTo(s, id)) { s.hostile.delete(id); continue; } // (the master of the ship is nobody's foe: he took the castle of her port, say)
             const p = this._playerLocal(s, id, _l);
             if (!p) continue;
             const aboard = this._aboard(s, id);
@@ -1096,6 +1098,7 @@ export class Sailors {
             else if (!aboard && !foe && Math.hypot(p.x, p.z - s.layout.gangZ) < 30 + s.layout.B) onPier = true;
             if (!aboard && d < farD && Math.hypot(p.x, p.z) < 90) { farD = d; far = { id, x: p.x, y: p.y, z: p.z }; }
         }
+        if (!foe && !v.pirate && !v.nsleep) { const cf = g.fleet?.foeFor(v, s); if (cf) { foe = cf; onPier = false; } } // (no player foe: an enemy of the crew on her deck — FleetOrders.foeFor)
         if (foe) {
             // (where he goes and when he swings: the crew's tactics, all of them together — _tactics)
             v.nsleep = null; // (asleep: up at once)
@@ -1106,6 +1109,7 @@ export class Sailors {
         }
         if (v.foe) { v.fp = null; v.fs = null; v.busy = false; v.tac = null; v.fpath = null; v.node = this._nearestNode(s, v.l); }
         v.foe = null;
+        if (g.fleet?.think(v, s, dt)) return; // (the king's orders: the gunners at their guns, the boarders to the rail)
         if (onPier && !isCaptain(v)) {
             // they line up at the gangway and shout
             const gw = s.layout.nodes.find((n) => n.tag === 'gangway:' + ((s.berth?.side || 1) > 0 ? '+1' : '-1')) || s.layout.nodes[0];
@@ -1334,7 +1338,7 @@ export class Sailors {
      * the captain keeps an eye on the nearest.
      */
     _share(s, list) {
-        const men = list.filter((v) => !v.dead && !v.overboard && v.foe && v.fp && v.role !== 'captain'); // (Captain Black Moustache fights as his men do)
+        const men = list.filter((v) => !v.dead && !v.overboard && v.foe && v.fp && v.role !== 'captain' && !(typeof v.foe === 'string' && v.foe.startsWith('c:'))); // (Captain Black Moustache fights as his men do)
         if (men.length < 2) return;
         const foes = [];
         const now = performance.now();
@@ -1488,6 +1492,7 @@ export class Sailors {
 
     _strike(v, s, foeId) {
         const g = this.game;
+        if (typeof foeId === 'string' && foeId.charCodeAt(0) === 99 && foeId.charCodeAt(1) === 58) { g.fleet?.strike(v, s, foeId); return; } // (a creature foe: FleetOrders.strike)
         if (confusedMiss(v)) return; // (lost in Accentric's haze: the blow goes wide — StrongSpells)
         if (foeId === g.localId) g.castleLife?.struck?.(v.dmg, v.x, v.z, v.title);
         else g.sync?.villagerStrike?.(foeId, v.dmg, Math.round(v.x * 10) / 10, Math.round(v.z * 10) / 10, v.title);
@@ -1580,6 +1585,7 @@ export class Sailors {
 
     _playerLocal(s, id, out) {
         const g = this.game;
+        if (typeof id === 'string' && id.charCodeAt(0) === 99 && id.charCodeAt(1) === 58) return g.fleet?.localOf(s, id, out) || null; // ('c:…': a creature foe, not a player)
         const p0 = id === g.localId ? (g.isDeadLocal ? null : g.character.group.position) : g.remotes.get(id)?.position;
         const p = p0 && g.invis ? g.invis.aiPos(id, p0) : p0; // (an invisible player: only where they were last noticed, for a few seconds — Invisibility.aiPos)
         if (!p) return null;
@@ -1588,6 +1594,7 @@ export class Sailors {
 
     _aboard(s, id) {
         const g = this.game;
+        if (typeof id === 'string' && id.charCodeAt(0) === 99 && id.charCodeAt(1) === 58) return !!g.fleet?.localOf(s, id, _w2);
         if (id === g.localId) return this.ships.me?.ship === s;
         const r = g.remotes.get(id);
         return !!r && r.ship === s.id;
@@ -1628,9 +1635,28 @@ export class Sailors {
         return best;
     }
 
+    /**
+     * The king's order is shouted across the deck: the nearest living sailor of HIS ship within 22 m hears it
+     * (the captain first). null: not a king of any ship near, or nobody near.
+     */
+    _orderListener(text) {
+        const g = this.game;
+        if (!g.fleet || !parseCrewOrder(text)) return null;
+        const me = g.character.group.position;
+        let best = null, bd = 22;
+        for (const v of this.byId.values()) {
+            if (v.dead || v.overboard || v.pirate || v.ship !== v.crew || !this.ships.loyalTo(v.crew, g.localId)) continue;
+            if (Math.abs(v.y - (me.y - 1.95)) > 8) continue;
+            const d = Math.hypot(v.x - me.x, v.z - me.z) - (v.role === 'captain' ? 4 : 0);
+            if (d < bd) { bd = d; best = v; }
+        }
+        return best;
+    }
+
     /** A sailor hears me and these are words of a talk (a greeting, a question…), not a spell. */
     claims(text) {
         if (this.game.castleLife?.talk?._echo?.(text)) return false;
+        if (this._orderListener(text)) return true; // (the king's order to the crew of his ship)
         if (greetsCrew(text) && this._crewNear().length) return true; // («привет, моряки»: the crew hears it further)
         if (!this._listener()) return false;
         if (crewOrder(text) && !matchSpell(text)) return true; // («на абордаж», «право на борт»: words to the crew; a spell's word — «огонь», «поднять паруса» (Unfurl) — goes the usual way)
@@ -1689,7 +1715,7 @@ export class Sailors {
             // (a captain talks like a commander, a sailor like a working man)
             b = new VillagerBrain(
                 { id: v.id, name: v.name, role: v.role === 'sailor' ? 'builder' : 'knight', female: false, castleName: `корабль «${s.name}»`, kingName: capt ? capt.name : 'капитан', seed: v.entry.seed },
-                () => ({ castleName: `корабль «${s.name}»`, kingName: capt ? capt.name : 'капитан', playerIsKing: s.owner === this.game.localId, timeOfDay: this.game.isNight ? 'night' : 'day', danger: s.hostile.size > 0 }),
+                () => ({ castleName: `корабль «${s.name}»`, kingName: capt ? capt.name : 'капитан', playerIsKing: this.ships.loyalTo(s, this.game.localId), timeOfDay: this.game.isNight ? 'night' : 'day', danger: s.hostile.size > 0 }),
             );
             this.brains.set(v.id, b);
         }
@@ -1705,13 +1731,18 @@ export class Sailors {
         if (v && talk?._traceTurn) { const tr = talk._traceTurn(v, text, info || {}); talk.trace.mark(tr, 'rules'); talk.trace.mark(tr, 'act'); } // (the talk's stopwatch)
         // «привет, моряки!» — the crew round me answers together
         if (greetsCrew(text) && this._greetAll(v, talk)) return true;
+        const ov = this._orderListener(text);
+        if (ov && g.fleet.hear(text, ov)) { // the king gives an order to the crew of his ship: the captain answers it (FleetOrders.execute)
+            ov.talking = 2; ov.talkTo = g.localId; ov.path = null;
+            return true;
+        }
         if (!v) return false;
         // asleep: a mumble first (a second word wakes him) — NightLife.js
         if (v.mode === 'sleepMat' || v.nsleep) { if (this.auth) g.castleLife?.night?.rouseSailor(v, g.localId); else g.sync?.net.send({ t: 'screw', talk: 1, id: v.id }); return true; }
         const s = v.ship;
         if (v.role === 'blackbeard') { v.talkedAt = performance.now(); this._say(v, pick(PIRATE.taunt), 5); return true; } // (he talks with his rapier)
         const ctx = {
-            playerName: g.net?.active ? g.net.name : null, playerIsKing: s.owner === g.localId,
+            playerName: g.net?.active ? g.net.name : null, playerIsKing: this.ships.loyalTo(s, g.localId),
             hostile: (s.hostile.get(g.localId) || 0) > performance.now(), coins: g.inventory?.coins?.() ?? 0,
             nearbyGoods: [], heldItem: null, players: [], selfId: g.localId, following: false, danger: s.hostile.size > 0,
         };

@@ -99,6 +99,7 @@ import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
 import { Blackbeard } from './Blackbeard.js';
+import { FleetOrders } from './FleetOrders.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
@@ -525,6 +526,7 @@ export class Game {
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.dragonRide = new DragonRide(this); // «Brain Rot Maxima»: the calmed dragon, riding it (DragonRide.js)
         this.imperius = new ImperiusControl(this); // «Империус» / «… Максима»: the mind in another body (ImperiusControl.js)
+        this.fleet = new FleetOrders(this); // the king commands the crew of his own ship: guns, boarding, sails (FleetOrders.js)
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
         this.loreLibrary = new LoreLibrary(this); // the books of the world's history in the libraries (LoreBooks.js)
@@ -3374,6 +3376,7 @@ export class Game {
         const earth = !this.space?.offEarth || this._earthNeeded();
         if (earth) {
             this.ships?.update(dt); // ships move first and carry everyone standing on them
+            this.fleet?.update(dt);
             this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
         }
         this._updatePlayer(dt);
@@ -4374,6 +4377,7 @@ export class Game {
         this.dragons?.dispose();
         this.iceCastle?.dispose();
         this.temple?.dispose();
+        this.fleet?.dispose();
         this.blackbeard?.dispose();
         this.travelers?.dispose();
         this.carriages?.dispose();

@@ -635,6 +635,9 @@ export class Blackbeard {
             if (d < fd) { fd = d; foe = { id: p.id, x: _l.x, y: _l.y, z: _l.z }; }
         }
         if (foe && v.board) { v.foe = foe.id; v.fp = foe; v.path = null; this._addAway(T, v); return true; }
+        // the crew of her ship (a king's men on it too) fights back: skeletons answer the sailors who cut at them (FleetOrders)
+        const sf = v.board && this.game.fleet?.sailorFoe(v, T);
+        if (sf) { v.foe = sf.id; v.fp = sf; v.path = null; this._addAway(T, v); return true; }
         if (v.foe) { v.foe = null; v.fp = null; v.fs = null; v.busy = false; v.tac = null; v.fpath = null; }
         // back: to her gangway, over the gap
         const gw = this._gangways(L, this._gw || (this._gw = {}));
@@ -669,7 +672,7 @@ export class Blackbeard {
         v.leapYaw = Math.atan2(-(_l.x - _o.x), -(_l.z - _o.z));
         v.ship = v.crew; // (in the air: his own crew's, until he lands)
         v.mode = 'run'; v.fs = null; v.busy = false; v.tac = null; v.foe = null; v.fp = null; v.path = null; v.fpath = null;
-        if (Math.random() < 0.3) this.crew._say(v, 'Кх-х-ха!');
+        if (v.pirate && Math.random() < 0.3) this.crew._say(v, 'Кх-х-ха!');
     }
 
     /**

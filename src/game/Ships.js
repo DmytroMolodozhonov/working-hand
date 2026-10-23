@@ -430,7 +430,7 @@ export class Ships {
             const chest = new Chest(g.scene, new THREE.Vector3(), 'loot', 0, id, { style: 'pirate' }); // (a ship's chest: sea-worn)
             chest.ship = s;
             chest.local = c;
-            chest.locked = c.locked === 'captain' && !s.owner && this.crew.captainAlive(s);
+            chest.locked = c.locked === 'captain' && !s.owner && !this.loyalTo(s, 'local') && this.crew.captainAlive(s); // (the master of the ship / of her port has the key)
             chest.lockedBy = c.locked;
             if (g._openedChests?.has(id)) chest.setOpenInstant();
             s.chests.push(chest);
@@ -445,7 +445,7 @@ export class Ships {
             s.pose.toWorld(c.x, c.y, c.z, _o);
             ch.mesh.position.set(_o.x, _o.y, _o.z);
             ch.mesh.rotation.set(s.pose.pitch, s.st.yaw + c.yaw, s.pose.roll, 'YXZ');
-            if (c.locked === 'captain') ch.locked = !s.owner && this.crew.captainAlive(s);
+            if (c.locked === 'captain') ch.locked = !s.owner && !this.loyalTo(s, 'local') && this.crew.captainAlive(s);
         }
     }
 
@@ -862,11 +862,17 @@ export class Ships {
 
     floorLocal(s, lx, lz, reach) { return layoutFloorAt(s.layout, lx, lz, reach); }
 
+    /** Whose the ship is: the one who took her, or the king of the castle whose port she belongs to (null: nobody's). */
+    ownerOf(s) {
+        if (s.owner) return s.owner;
+        return (s.castleId ? this.game.castleLife?.state?.(s.castleId)?.owner : null) || null;
+    }
+
+    /** Is `id` her master — took her, or holds the castle of her port: the crew never turns on him, serves and defends him (FleetOrders.js). */
     loyalTo(s, id) {
         if (!id) return false;
-        if (s.owner && (s.owner === id || (id === 'local' && s.owner === this.game.localId))) return true;
-        const owner = s.castleId ? this.game.castleLife?.state?.(s.castleId)?.owner : null;
-        return !!owner && (owner === id || (id === 'local' && owner === this.game.localId));
+        const me = (o) => !!o && (o === id || (id === 'local' && o === this.game.localId) || (o === 'local' && id === this.game.localId));
+        return me(s.owner) || me(s.castleId ? this.game.castleLife?.state?.(s.castleId)?.owner : null);
     }
 
     // ====================================================================== sails
@@ -1795,7 +1801,7 @@ export class Ships {
                 return;
             }
             case 'shipev': if (!isHost) this._applyEvent(m); return;
-            case 'screw': if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
+            case 'screw': if (m.ord || m.def) { if (isHost) this.game.fleet?.remote(m); } else if (m.talk) { if (isHost) this.crew.remoteTalk(m); } else if (!isHost) this.crew.applyNet(m); return;
             case 'shelm': if (isHost) this.helm.applyRemote(m); return;
             case 'smoor': if (isHost) this.rigging.applyRemote(m); return;
             case 'sblow': {
