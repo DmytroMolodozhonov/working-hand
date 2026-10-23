@@ -9,7 +9,7 @@
 import { marketDef, buildMarketStall } from './CreativeMarket.js';
 import { guestDef } from './CreativeGuest.js';
 import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
-import { crowdStep } from './CrowdSources.js';
+import { crowdStep, spotTaken } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
@@ -126,7 +126,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -186,8 +186,8 @@ const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'Cre
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
-/** The Creative test dragon: on the test mountain's highest peak (Terrain.TEST_CAVE + its first peak), facing the pedestals. */
-const TEST_DRAGON = { id: 'ctest-dragon', x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4, yaw: -Math.PI / 2 };
+/** The Creative test dragon: on its own peak of the test mountain, away from the queen's ice castle (Terrain.TEST_DRAGON_SPOT). */
+const TEST_DRAGON = { id: 'ctest-dragon', ...TEST_DRAGON_SPOT };
 /** A zombie in deep water: floats like a person (its chest at the top), slow, any bank of a step it climbs; no air to run out. */
 const ZOMBIE_SWIM = { ...SWIMMERS.person, speed: 0.9, float: 2.1, air: Infinity }; // (float: the feet this far under the top — the water at its chest)
 /** What a zombie notices: hears a player this near (m), sees him this far with nothing between, follows him this far. */
@@ -722,7 +722,7 @@ export class Game {
 
     /**
      * Creative (the author's exception, for trying things — «Империус Максима», «Брейнрот Максима», fights): a dragon asleep
-     * on the highest peak of the test mountain left of the pedestals (Terrain.TEST_CAVE). A real dragon (it wakes, fights,
+     * on its own peak of the test mountain left of the pedestals (Terrain.TEST_DRAGON_SPOT, away from the ice castle). A real dragon (it wakes, fights,
      * flies); gone — killed, flown off far, taken away — another lies there again a while later.
      */
     _updateTestDragon(dt) {
@@ -740,6 +740,7 @@ export class Game {
         this._tdGone = (this._tdGone || 0) + 5;
         if (d && !d.dead && this._tdGone < 60) return; // (flown off: a minute for it to come back by itself)
         if (d && d.dead && this._tdGone < 30) return; // (killed: another in half a minute)
+        if (spotTaken(this, at.x, at.z, at.r, d)) return; // (somebody stands on its peak: no two creatures in one place — try again)
         if (d) D._remove?.(d);
         this._tdGone = 0;
         const y = this.collision.groundAt ? this.collision.groundAt(at.x, at.z, 1e4) : this.collision.groundY(at.x, at.z);

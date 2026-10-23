@@ -277,6 +277,13 @@ export const TEST_RIVER = { Z: -34, HALF: 3.5, WIND: 4 };
  */
 export const TEST_CAVE = { X: -88, Z: 22, R: 44, H: 34, r: 8 };
 
+/**
+ * Where the Creative test dragon sleeps: a separate peak of the test mountain, north of the ice castle (the queen's
+ * palace stands on the main peak, at TEST_CAVE.X − 6, Z − 4, R 26) — ~54 m from it, ~80 m from the pedestals.
+ * `yaw` turns it towards the pedestals. `r`: the clear ground it needs (its body ~19 m long, wings ~33 m across).
+ */
+export const TEST_DRAGON_SPOT = { x: TEST_CAVE.X - 8, z: TEST_CAVE.Z + 50, yaw: -0.93, r: 14 };
+
 /** The rim of the test mountain in direction `a` (radians from +x). */
 const testRim = (a) => TEST_CAVE.R * (1 + 0.1 * Math.sin(3 * a + 1.3) + 0.07 * Math.sin(5 * a + 0.4) + 0.04 * Math.sin(11 * a + 2.1));
 const hillNoise = createNoise2D(0x7e57);

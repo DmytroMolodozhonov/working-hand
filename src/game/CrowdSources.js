@@ -110,3 +110,17 @@ export function crowdStep(g, me, p, ux, uz, d, opts = {}) {
     if (c.x !== a.x || c.z !== a.z) return { ...a, x: c.x, z: c.z, ward: true };
     return a;
 }
+
+/**
+ * Is somebody already standing where a new creature is about to appear (x, z, radius r)? Returns that body or null —
+ * a spawner waits for another try instead of putting two creatures in one place (the Creative dragon on the queen).
+ */
+export function spotTaken(g, x, z, r, self = null) {
+    const c = crowdOf(g), bodies = [];
+    for (const src of c.sources) { try { src((b) => { if (b && Number.isFinite(b.x) && Number.isFinite(b.z)) bodies.push(b); }); } catch { /* a source mid-teardown */ } }
+    for (const b of bodies) {
+        if (self && (b.ref === self || b.id === self.id)) continue;
+        if (Math.hypot(b.x - x, b.z - z) < r + (b.r ?? BODY_R.man)) return b;
+    }
+    return null;
+}
