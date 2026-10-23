@@ -158,12 +158,12 @@ export class IceMagic {
         if (now - this._lastCast < 1500) return null;
         const say = (t) => { if (isFinal && t) g.hud?.setVoice?.(t, true); return null; };
         if (this.magic || this.pending) return say('❄️ Ледяная магия уже идёт — доведите её до конца или скажите «стоп»');
-        if (g.flight?.active || g.swim?.swimming) return say('❄️ Встаньте на землю');
+        if (!this.free && (g.flight?.active || g.swim?.swimming)) return say('❄️ Встаньте на землю'); // (Creative: no conditions — the author: only the stamp)
         const tired = g.combat?.check?.(name);
         if (tired) return say(tired);
         const me = g.character.group.position;
         const need = name === 'IceCastle' ? ICE_SPELL.NEED_CASTLE : ICE_SPELL.NEED_BRIDGE;
-        if (!waterOrSnowNear(this.data, me.x, me.z, need)) return say(`❄️ Рядом нет ни воды, ни снега — льду не из чего родиться. Подойдите к реке, озеру, морю или снегу (до ${need} м)`);
+        if (!this.free && !waterOrSnowNear(this.data, me.x, me.z, need)) return say(`❄️ Рядом нет ни воды, ни снега — льду не из чего родиться. Подойдите к реке, озеру, морю или снегу (до ${need} м)`);
         if (name === 'IceCastle') {
             this.pending = { at: performance.now(), stomp0: g.currentPose?.stompAt || 0 };
             this._slam.hi = 0;
@@ -284,7 +284,7 @@ export class IceMagic {
         let rec;
         if (ask.k === 'castle') {
             const x = Math.round(+ask.c?.[0] || 0), z = Math.round(+ask.c?.[1] || 0);
-            if (!waterOrSnowNear(data, x, z, ICE_SPELL.NEED_CASTLE + 2)) return '❄️ Рядом нет ни воды, ни снега';
+            if (!this.free && !waterOrSnowNear(data, x, z, ICE_SPELL.NEED_CASTLE + 2)) return '❄️ Рядом нет ни воды, ни снега';
             // (no level ground needed — the author: «колонны всё равно поднимут пол вверх и скомпенсируют»: the floor
             // lies at the foot, then columns of ice lift it, level, over the higher ground round it — at most LIFT_MAX)
             const G0 = this._surface(x, z).L;
@@ -297,11 +297,12 @@ export class IceMagic {
             }
             hs.sort((a, b) => a - b);
             const G = Math.max(G0, Math.min(G0 + ICE_MAGIC.LIFT_MAX, hs[Math.floor(hs.length * 0.9)]));
-            const why = this._blocked(cols, G0 - 1, G + 26, false, true);
+            // (Creative: the place is never refused — the author: «должен работать без условий», only the stamp is needed)
+            const why = this.free ? null : this._blocked(cols, G0 - 1, G + 26, false, true);
             if (why) return why;
-            if (g.houseMagic?.houseNear?.({ x, z }, R + 2)) return '🏠 Здесь стоит дом — найдите свободное место';
-            for (const o of this.list.values()) if (o.k === 'castle' && Math.hypot(o.x - x, o.z - z) < 2 * R + 6) return '❄️ Слишком близко к другому ледяному замку';
-            if (g.wards?.list?.size && g.wards.forbids?.(g.character.group.position, _v.set(x, G + 1, z))) return '🛡️ Здесь чужая защита дома';
+            if (!this.free && g.houseMagic?.houseNear?.({ x, z }, R + 2)) return '🏠 Здесь стоит дом — найдите свободное место';
+            if (!this.free) for (const o of this.list.values()) if (o.k === 'castle' && Math.hypot(o.x - x, o.z - z) < 2 * R + 6) return '❄️ Слишком близко к другому ледяному замку';
+            if (!this.free && g.wards?.list?.size && g.wards.forbids?.(g.character.group.position, _v.set(x, G + 1, z))) return '🛡️ Здесь чужая защита дома';
             rec = { id, k: 'castle', x, z, G, G0, rot: (ask.rot | 0) & 3, f: 0, pil: this._pillarFeet(x, z, G) };
         } else {
             const ax = +ask.p0?.[0] || 0, az = +ask.p0?.[1] || 0, bx = +ask.p1?.[0] || 0, bz = +ask.p1?.[1] || 0;
@@ -434,8 +435,13 @@ export class IceMagic {
         const g = this.game, P = this.pending, now = performance.now();
         if (g.combat?.dead || (now - P.at) / 1000 > ICE_SPELL.STOMP_WAIT) {
             this.pending = null;
-            g.hud?.setVoice?.('❄️ Магия льда рассеялась — не было топота', true);
+            g.hud?.setVoice?.('❄️ Магия льда рассеялась — не было топота. Скажите «Create an Ice Castle» ещё раз и сразу топните ногой', true);
             return;
+        }
+        // (a reminder every 7 s while the stamp is awaited — the author: more hints)
+        if (now - (P.hintAt ?? P.at) > 7000) {
+            P.hintAt = now;
+            g.hud?.setVoice?.(`❄️ Жду топота: ${this._legsSeen() ? '<b>топните ногой</b> (ступня резко вниз)' : '<b>резко опустите обе руки вниз</b> (с уровня плеч до бёдер)'} — осталось ${Math.max(1, Math.round(ICE_SPELL.STOMP_WAIT - (now - P.at) / 1000))} с. «Стоп» — отменить`, true);
         }
         const pose = g.currentPose;
         let stomp = !!(pose?.stompAt && pose.stompAt > P.stomp0 && pose.stompAt > P.at - 300);
