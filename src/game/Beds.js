@@ -48,7 +48,7 @@ import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
 import { stockOf, stockTake, cleanClaim } from './Stock.js';
 import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, countMaterials, BED_RECIPE, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
-import { DropGate, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { DropGate, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
 
 const DAY_MS = 24 * 60 * 1000; // (Game.DAY_CYCLE_MS)
 const LIE_AFTER = 1.5; // s of crouching at a bed
@@ -388,10 +388,21 @@ export class Beds {
         const item = { kind: 'logs', uid: newUid(), count: n, block: s.block, color: RESOURCE[s.block]?.color ?? 0x8b5a2b };
         const pos = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
         const v = (vel ? vel.clone() : g.character.getHandDirection(side, new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
-        if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; }
+        if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; this._vanishGuard(item); }
         else g.sync?.itemThrow?.(item, pos, v);
         g.hud.setVoice(`🪵 Брёвна брошены (${n})${s.count > 0 ? `, осталось ${s.count}` : ''}`, true);
         return item;
+    }
+
+    /**
+     * Whatever left the stack must be in the world (a handful that got lost on the way goes back into the slots:
+     * never a ghost — gone from the hand AND the cell).
+     */
+    _vanishGuard(item) {
+        const g = this.game;
+        if (g.items.loose.has(item.uid)) return;
+        const left = g.inventory.addResource(item.block, item.count);
+        handLog(`вещь ${item.kind} (${item.count}) исчезла из руки и не появилась в мире — вернул в ячейки (не влезло: ${left})`);
     }
 
     /** A heap (up to SAND_PER_THROW of the chosen stack: sand, earth, stone…) leaves the hand. */
@@ -404,7 +415,7 @@ export class Beds {
         const item = { kind: 'blocks', uid: newUid(), count: n, block, color: RESOURCE[block]?.color ?? 0x999999 };
         const pos = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
         const v = (vel ? vel.clone() : g.character.getHandDirection(side, new THREE.Vector3()).multiplyScalar(5)).clampLength(0, 14);
-        if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; }
+        if (this.auth) { const L = g.items.spawnLoose(item, pos, { vel: v }); L.thrower = g.localId; this._vanishGuard(item); }
         else g.sync?.itemThrow?.(item, pos, v);
         const name = block === BLOCK.SAND ? '🏖️ Песок' : `🧱 ${RESOURCE[block]?.name || 'Блоки'}`;
         g.hud.setVoice(`${name}: ${n} из руки${s.count > 0 ? `, осталось ${s.count}` : ''}`, true);

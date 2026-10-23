@@ -221,3 +221,40 @@ test('sources are summed: wool lying 9 m from the aim, sand in the slots, standi
     assert.equal(g.houseMagic._hostStart({ ...ask('CreateHouse', [0, G, 0]), inv: { wool: 0, sand: 10 } }, 'local'), true, 'ground wool + pocket sand + trees');
     assert.equal(g.inventory.slots[0], null, 'the sand came out of the slot');
 });
+
+test('the hand over my own chest: only a magic house of mine (or a granted ward), and lid up or shut is told', () => {
+    const { g, G, drop, run } = world({ trees: 4 });
+    drop('wool', 3, 0, 0); drop('blocks', 10, 0, 1);
+    g.houseMagic._hostStart(ask('CreateHouse', [0, G, 0]), 'local');
+    run(MAGIC_TIME + 0.5);
+    const rec = [...g.houseMagic.list.values()][0];
+    const chest = g.chests[0];
+    const over = (dy, dx = 0) => chest.mesh.position.clone().add(new THREE.Vector3(dx, dy, 0));
+    const top = chest.mesh.position.y + 0.7 * (chest.scale || 2);
+    // shut: found, but not open (lies on the lid)
+    let hit = g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5));
+    assert.ok(hit); assert.equal(hit.open, false);
+    // too high / beside it: nothing
+    assert.equal(g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 1.6)), null);
+    assert.equal(g.houseMagic.chestUnderHand(over(1, 3)), null);
+    // open: goes in, once, and is kept in the record with the hand's thing gone from the world
+    g.houseMagic.chestOpened(chest); chest.isOpen = true; chest.animating = false;
+    hit = g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5));
+    assert.equal(hit.open, true);
+    g.items.spawnLoose({ kind: 'apple', uid: 'hand1', count: 1 }, over(top - chest.mesh.position.y + 0.2));
+    g.houseMagic.sweepNow(chest);
+    assert.equal(g.items.loose.has('hand1'), false, 'out of the world');
+    assert.equal(rec.store[0].filter((i) => i.uid === 'hand1').length, 1, 'exactly one in the chest');
+    // saved with the world
+    const snap = JSON.parse(JSON.stringify(g.houseMagic.snapshot()));
+    assert.ok(JSON.stringify(snap).includes('hand1'));
+    // not mine (another owner): refused
+    rec.owner = 'n:someone';
+    assert.equal(g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5)), null);
+    // a ward of that owner that lets me in: allowed
+    g.wards = { list: new Map([['w', { owner: 'n:someone', grant: [g.houseMagic._key('local')], c: { x: rec.x, z: rec.z }, r: 50 }]]) };
+    assert.ok(g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5)));
+    // a castle's chest is theft, never a store
+    chest.store = { castle: 'c1', k: 0 };
+    assert.equal(g.houseMagic.chestUnderHand(over(top - chest.mesh.position.y + 0.5)), null);
+});

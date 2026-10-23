@@ -814,6 +814,41 @@ export class HouseMagic {
         return Math.abs(l.x) < 0.7 && Math.abs(l.z) < 0.5 && p.y > chest.mesh.position.y - 0.2 && p.y < chest.mesh.position.y + up * (s / 2) + 0.6 * s;
     }
 
+    /** May I keep things in this house's chest: my own house, or one whose ward I am let into («Protection House Grant»)? */
+    mayStore(rec) {
+        const g = this.game;
+        if (!rec) return false;
+        const key = this._key(g.localId);
+        if (rec.owner === key) return true;
+        for (const w of g.wards?.list?.values?.() || []) {
+            if (w.owner !== rec.owner || !(w.grant || []).includes(key)) continue;
+            if (Math.hypot(w.c.x - rec.x, w.c.z - rec.z) <= w.r) return true;
+        }
+        return false;
+    }
+
+    /**
+     * The hand's point over my chest of a magic house (not a villager's / a castle's — that is theft, and
+     * a cave's / a ship's chest is no store): inside its box ±0.3 m, up to 1.2 m over its top.
+     * @returns {{chest, open: boolean}|null} open — the lid is up (it goes in); shut — it lies on the lid.
+     */
+    chestUnderHand(p) {
+        for (const c of this.chests.values()) {
+            if (!c.store || c.store.castle) continue;
+            const rec = this.list.get(c.store.house);
+            if (!rec || !this.mayStore(rec)) continue;
+            c.mesh.updateMatrixWorld(true);
+            const s = c.scale || 2, l = c.mesh.worldToLocal(_v.copy(p));
+            const top = c.mesh.position.y + 0.7 * s;
+            if (Math.abs(l.x) > 0.625 + 0.3 / s || Math.abs(l.z) > 0.425 + 0.3 / s || p.y < c.mesh.position.y || p.y > top + 1.2) continue;
+            return { chest: c, open: !!c.isOpen && !c.animating, top };
+        }
+        return null;
+    }
+
+    /** (host) A thing laid into an open chest by the hand: kept in its record at once (the sweep would do it a moment later). */
+    sweepNow(chest) { return this._sweep(chest, false); }
+
     /** (host) Things put into (or left floating over) a chest go into it. */
     _sweep(chest, hovering = false) {
         const g = this.game;

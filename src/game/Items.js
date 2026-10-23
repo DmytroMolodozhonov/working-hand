@@ -128,6 +128,7 @@ export class ItemSystem {
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
         this._drop = { right: new DropGate(), left: new DropGate() };
+        this._dropChest = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over my own chest: HouseMagic.chestUnderHand)
         this._dropBuy = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
         this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
@@ -268,6 +269,7 @@ export class ItemSystem {
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
         this._drop[side].reset(closed);
         this._dropBuy[side].reset();
+        this._dropChest[side].reset();
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
@@ -797,7 +799,7 @@ export class ItemSystem {
             // (never while swimming — the strokes are no throw; never a bow with an arrow on the string, a book / scroll being read, or the other hand taking it)
             // (nor a wand while a spell is going — swinging it to cast never throws it)
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
-            if (side === g.off && ch.armState && !holdsFast(ch) && this._buyerPut(side, h, gt, ch)) continue;
+            if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch))) continue;
             if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
@@ -841,6 +843,28 @@ export class ItemSystem {
         const at = h.model.position.clone(), item = h.item;
         this._throw(side, _v.set(0, 0, 0), { why: 'вещь положена на прилавок скупщика (нерабочая рука разжата над ним)' });
         this.game.castleLife.talk.laid(st, { uid: item.uid, item, pos: at });
+        return true;
+    }
+
+    /**
+     * The off hand held out over MY chest (my house's, or one I am let into) and opened — the same way as at a
+     * buyer's counter: the thing goes into the chest when its lid is up (kept in the house's record, seen when it
+     * is opened again), else it lies on the shut lid. Only the hand that is not the leading one; nothing else
+     * lets a thing go into a chest by hand. true — it did.
+     */
+    _chestPut(side, h, gt, ch) {
+        const gate = this._dropChest[side];
+        const hm = this.game.houseMagic;
+        const hit = hm?.chests?.size && ch.getHandWorldPosition(side, _f) && hm.chestUnderHand(_f);
+        if (!hit) { gate.reset(); return false; }
+        const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
+        const arm = ch.armState(side, this._arm[side]);
+        if (!gate.update({ now: gt, curl, tracked, reach: arm.reach, forward: arm.forward, speed: arm.speed, heldMs: performance.now() - h.since })) return false;
+        const { chest, open, top } = hit;
+        h.model.position.set(chest.mesh.position.x, top + (open ? 0.2 : 0.3), chest.mesh.position.z);
+        handLog(`сундук: рука ${side === 'right' ? 'правая' : 'левая'} над своим сундуком (${open ? 'открыт' : 'закрыт'}), пальцы ${curl.toFixed(2)}, кладу`);
+        this._throw(side, _v.set(0, 0, 0), { why: open ? 'вещь положена в свой сундук (нерабочая рука разжата над ним)' : 'вещь положена на крышку своего сундука' });
+        if (open && this.auth) hm.sweepNow(chest);
         return true;
     }
 
