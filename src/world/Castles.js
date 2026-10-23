@@ -25,6 +25,7 @@
 import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
+import { roofShapes } from './PlanSlopes.js';
 
 export const CASTLE_CELL = 480;
 /** A cell holds a castle this often (before its land is checked): the giant spider's lairs are rarer by it (SpiderLairs.js). */
@@ -134,6 +135,15 @@ export class Plan {
 
     link(a, b) { if (a !== b) this.edges.push([a, b]); }
 
+    /**
+     * The roof built since part `mark` (layer by layer, a stair of whole blocks of `mats`) gets its ramps (PlanSlopes.js):
+     * its top cells marked as ramps, hips and valleys — used by a world of generation 6, the blocks the same in every world.
+     */
+    slopeTop(mark, ...mats) {
+        const s = roofShapes(this.parts.slice(mark), mats);
+        if (s) this.parts.push(s);
+    }
+
     /** A straight road (centre line); every node later found on it is linked to its neighbours. */
     roadLine(axis, fixed, from, to, l = 0) { (this.roads || (this.roads = [])).push({ axis, fixed, from: Math.min(from, to), to: Math.max(from, to), l }); }
 
@@ -185,7 +195,9 @@ function squareTower(p, u, v, half, top, stone, roof, opts) {
     p.crenels(u - half, u + half, v - half, v + half, top + 1, stone);
     if (opts.cone) {
         // a pointed roof
+        const m = p.parts.length;
         for (let k = 0; k <= half; k++) p.box(u - half + k, u + half - k, top + 1 + k, top + 1 + k, v - half + k, v + half - k, roof);
+        p.slopeTop(m, roof); // (its four faces ramps, its corners hips — generation 6)
     }
     // slit windows (through the walls only)
     for (let l = 6; l < top - 2; l += 7) {
@@ -207,12 +219,13 @@ function roundTower(p, u, v, r, top, stone, roof, opts) {
     }
     if (opts.cone) {
         // a tall cone
-        const h = Math.round(r * 1.6);
+        const h = Math.round(r * 1.6), m = p.parts.length;
         for (let k = 0; k <= h; k++) {
             const rr = (r + 0.5) * (1 - k / (h + 1));
             if (rr < 0.4) break;
             p.cyl(u, v, rr, top + 1 + k, top + 1 + k, roof);
         }
+        p.slopeTop(m, roof);
         p.box(u, u, top + h + 1, top + h + 3, v, v, BLOCK.PLANKS_DARK); // flagpole
     }
     for (let l = 6; l < top - 2; l += 7) {
@@ -418,11 +431,13 @@ function buildKeep(p, s, rng, out) {
         if (s.roundTowers) {
             p.cyl(cu, cv, 3.2, -1, top + 6, st);
             p.cyl(cu, cv, 3.2, top + 7, top + 7, st, 2.2);
+            const m = p.parts.length;
             for (let k = 0; k <= 5; k++) { const rr = 3.7 * (1 - k / 6); if (rr > 0.4) p.cyl(cu, cv, rr, top + 7 + k, top + 7 + k, s.roof); }
+            p.slopeTop(m, s.roof);
         } else {
             p.box(cu - 3, cu + 3, -1, top + 6, cv - 3, cv + 3, st);
             p.crenels(cu - 3, cu + 3, cv - 3, cv + 3, top + 7, st);
-            if (s.cones) for (let k = 0; k <= 3; k++) p.box(cu - 3 + k, cu + 3 - k, top + 7 + k, top + 7 + k, cv - 3 + k, cv + 3 - k, s.roof);
+            if (s.cones) { const m = p.parts.length; for (let k = 0; k <= 3; k++) p.box(cu - 3 + k, cu + 3 - k, top + 7 + k, top + 7 + k, cv - 3 + k, cv + 3 - k, s.roof); p.slopeTop(m, s.roof); }
         }
     }
     // windows high up
@@ -610,7 +625,9 @@ function buildKeep(p, s, rng, out) {
         p.box(tu - 5, tu + 5, top + 1, top + 14, tv - 5, tv + 5, st);
         p.box(tu - 3, tu + 3, top + 1, top + 13, tv - 3, tv + 3, 0);
         p.crenels(tu - 5, tu + 5, tv - 5, tv + 5, top + 15, st);
+        const m = p.parts.length;
         for (let k = 0; k <= 5; k++) p.box(tu - 5 + k, tu + 5 - k, top + 15 + k, top + 15 + k, tv - 5 + k, tv + 5 - k, s.roof);
+        p.slopeTop(m, s.roof);
     }
     out.hall = hall;
 }
@@ -698,7 +715,9 @@ function buildCastle(p, s, rng, out) {
         p.box(bu0, bu1, -1, 7, bv0, bv1, st);
         p.box(bu0 + 1, bu1 - 1, 0, 6, bv0 + 1, bv1 - 1, 0);
         p.box(bu0, bu0, 0, 4, bv0 + 8, bv0 + 10, 0);
+        const m = p.parts.length;
         for (let k = 8; k <= 11; k++) p.box(bu0 - 1 + (k - 8), bu1 + 1 - (k - 8), k, k, bv0 - 1, bv1 + 1, s.roof);
+        p.slopeTop(m, s.roof);
         for (let v = bv0 + 2; v <= bv1 - 2; v += 3) { if (v >= bv0 + 7 && v <= bv0 + 11) continue; p.box(bu1 - 4, bu1 - 1, 0, 0, v, v, BLOCK.PLANKS_DARK); p.box(bu1 - 4, bu1 - 2, 1, 1, v, v, BLOCK.CLOTH_WHITE); }
         p.box(bu0 + 2, bu0 + 2, 5, 5, bv0 + 4, bv0 + 4, BLOCK.LANTERN);
         // the knights' bunks (head to the wall) and straw mats on the floor by the door side (NightLife.js)
@@ -903,6 +922,7 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
     }
     // ---- the roof (a gable along a; a towerhouse: a pyramid)
     let top;
+    const roofMark = p.parts.length;
     if (kind === 'towerhouse') {
         P.box(-w, w, h, h, -d, d, wall);
         for (let k = 0; k <= w + 1; k++) P.box(-w - 1 + k, w + 1 - k, h + 1 + k, h + 1 + k, -d - 1 + k, d + 1 - k, roof);
@@ -915,6 +935,7 @@ export function buildHouse(p, kind, cu, cv, face, rng, s, out) {
         }
         top = h + d + 1;
     }
+    p.slopeTop(roofMark, roof); // (the roof's slopes of ramps — generation 6)
     // ---- inside
     const L0 = 0;
     const lantern = (a, b, l) => P.box(a, a, l, l, b, b, BLOCK.LANTERN);

@@ -1093,11 +1093,25 @@ export class TerrainData {
         let maxTop = c.maxTop, minOpen = c.minOpen;
         for (const list of lists) {
             for (const p of list) {
+                if (p.k === 3) {
+                    // a roof's ramps (PlanSlopes.js): generation 6 only — an older world keeps its roofs' whole blocks
+                    if (!this.slopes) continue;
+                    const cs = p.cells;
+                    for (let i = 0; i < cs.length; i += 4) {
+                        const x = cs[i], L = cs[i + 1], z = cs[i + 2];
+                        if (x < x0 || x >= x0 + CHUNK || z < z0 || z >= z0 + CHUNK || L <= MIN_LAYER || L > MAX_LAYER) continue;
+                        const bi = (L - MIN_LAYER) * CHUNK * CHUNK + (z - z0) * CHUNK + (x - x0);
+                        if (!canShape(blocks[bi])) continue;
+                        (c.shape || (c.shape = new Uint8Array(blocks.length)))[bi] = cs[i + 3];
+                    }
+                    continue;
+                }
                 const ax = Math.max(p.x0, x0), bx = Math.min(p.x1, x0 + CHUNK - 1);
                 const az = Math.max(p.z0, z0), bz = Math.min(p.z1, z0 + CHUNK - 1);
                 const L0 = Math.max(p.L0, MIN_LAYER + 1), L1 = Math.min(p.L1, MAX_LAYER);
                 if (ax > bx || az > bz || L0 > L1) continue;
                 const t = p.t;
+                const shp = c.shape; // (a block put over a ramp marked before: whole)
                 const cyl = p.k === 1 || p.k === 2; // (2: a sector of a ring — the tower's spiral stair)
                 const r2 = cyl ? p.r * p.r + p.r * 0.6 : 0, h2 = cyl && p.hr >= 0 ? p.hr * p.hr + p.hr * 0.6 : -1;
                 for (let z = az; z <= bz; z++) {
@@ -1113,6 +1127,7 @@ export class TerrainData {
                         }
                         const col = (z - z0) * CHUNK + (x - x0);
                         for (let L = L0; L <= L1; L++) blocks[(L - MIN_LAYER) * CHUNK * CHUNK + col] = t;
+                        if (shp) for (let L = L0; L <= L1; L++) shp[(L - MIN_LAYER) * CHUNK * CHUNK + col] = 0;
                         if (t === BLOCK.AIR) hollowAt(c, col, L1); // (rooms: hollows under a roof)
                     }
                 }

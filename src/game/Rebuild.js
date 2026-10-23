@@ -66,14 +66,16 @@ export function planRepair(cur, orig, o, out = []) {
         for (let x = o.x0; x <= o.x1; x++) {
             for (let L = o.L0; L <= o.L1; L++) {
                 const a = orig(x, L, z), b = cur(x, L, z);
-                if (a === b) continue;
+                // (a slab, a ramp of a roof — BlockShapes.js: its shape is put back too)
+                const sa = o.origShape ? o.origShape(x, L, z) : 0;
+                if (a === b && (!o.origShape || sa === o.curShape(x, L, z))) continue;
                 const key = x + ',' + L + ',' + z;
                 if (o.placed?.(key) || o.protects?.(x, L, z)) continue;
                 if (isSolid(a)) {
                     if (a === BLOCK.ICE_SHAPE) continue;
                     if (GROUND.has(a) && L < floor - REBUILD.DEEP) continue; // (deep under: left)
                     if (o.kept?.(key)) continue;
-                    out.push({ x, L, z, t: a, k: blockKind(a) });
+                    out.push(sa ? { x, L, z, t: a, s: sa, k: blockKind(a) } : { x, L, z, t: a, k: blockKind(a) });
                 } else if (isSolid(b) && b !== BLOCK.ICE && b !== BLOCK.ICE_SHAPE && L >= floor - 1) {
                     if (a === BLOCK.WATER) continue; // (a river / the sea: leave it be)
                     out.push({ x, L, z, t: BLOCK.AIR, k: 0 }); // rubble, a fallen piece
@@ -183,6 +185,7 @@ export class Rebuild {
         const fresh = data._generateChunk(cx, cz); // (the place as it was made)
         const X0 = cx * CHUNK, Z0 = cz * CHUNK;
         const at = (c) => (x, L, z) => (L < MIN_LAYER || L > MAX_LAYER ? BLOCK.AIR : c.blocks[((L - MIN_LAYER) * CHUNK + (z - Z0)) * CHUNK + (x - X0)]);
+        const shapeOf = (c) => (x, L, z) => (!c.shape || L < MIN_LAYER || L > MAX_LAYER ? 0 : c.shape[((L - MIN_LAYER) * CHUNK + (z - Z0)) * CHUNK + (x - X0)]);
         const now = data.chunk(cx, cz);
         const floor = Math.round(s.def.F ?? 0);
         const wards = this.game.wards;
@@ -190,6 +193,7 @@ export class Rebuild {
             x0: Math.max(S.x0, X0), x1: Math.min(S.x1, X0 + CHUNK - 1), z0: Math.max(S.z0, Z0), z1: Math.min(S.z1, Z0 + CHUNK - 1),
             L0: Math.max(MIN_LAYER + 1, floor - REBUILD.DEEP), L1: Math.min(MAX_LAYER, Math.max(fresh.maxTop, now.maxTop) + 1), floor,
             placed: S.placed, kept: S.kept, protects: wards?.list?.size ? (x, L, z) => wards.protects(x, L - 1, z) : null,
+            ...(fresh.shape || now.shape ? { origShape: shapeOf(fresh), curShape: shapeOf(now) } : null),
         }, S.ops);
         if (S.i >= S.chunks.length) {
             const ops = orderOps(S.ops);
@@ -328,7 +332,7 @@ export class Rebuild {
         const op = v.task, sp = v.spot;
         v.taskT += dt;
         // gone already (done by somebody, or the place changed)
-        if (this.data && this.data.get(op.x, op.L, op.z) === op.t) { this._done(s, op); v.task = null; return true; }
+        if (this.data && this.data.get(op.x, op.L, op.z) === op.t && (this.data.shapeAt?.(op.x, op.L, op.z) || 0) === (op.s || 0)) { this._done(s, op); v.task = null; return true; }
         if (!v.onScaf) {
             const d = Math.hypot(sp.x - v.x, sp.z - v.z);
             const feet = Math.round(v.y + 1.5);
@@ -462,14 +466,14 @@ export class Rebuild {
         o.done = true; o.by = null;
         const t = this.data;
         if (!t) return;
-        const cur = t.get(o.x, o.L, o.z);
-        if (cur === o.t) return;
+        const cur = t.get(o.x, o.L, o.z), sh = o.s || 0;
+        if (cur === o.t && (t.shapeAt?.(o.x, o.L, o.z) || 0) === sh) return;
         if (o.t !== BLOCK.AIR && this._occupied(o)) { const n = (o.skips || 0) + 1; if (n < 6) s.plan.ops.push({ ...o, done: false, by: null, skips: n }); return; }
         const pv = t.enchantFree;
         t.enchantFree = true; // (the builders put back what the world had — its enchanted stone too: EnchantedStone.js)
-        t.set(o.x, o.L, o.z, o.t);
+        t.set(o.x, o.L, o.z, o.t, sh);
         t.enchantFree = pv;
-        this._edits.push([o.x, o.L, o.z, o.t]);
+        this._edits.push(sh ? [o.x, o.L, o.z, o.t, sh] : [o.x, o.L, o.z, o.t]);
         const k = o.x + ',' + o.L + ',' + o.z;
         this.log.delete(k);
         this.log.set(k, [o.x, o.L, o.z, o.t, this.game.explosions?.length || 0]);

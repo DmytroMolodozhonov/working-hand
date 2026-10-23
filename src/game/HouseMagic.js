@@ -67,6 +67,10 @@ export const HOUSE_MAGIC = {
 };
 const DOOR_COLOR = 0x7a4f2a;
 const _v = new THREE.Vector3();
+/** Is a plan's cell [x, L, z, block, shape?] there as planned — the block and its shape (a ramp of the roof: BlockShapes.js)? */
+const isThere = (data, c) => data.get(c[0], c[1], c[2]) === c[3] && (!data.shapeAt || (data.shapeAt(c[0], c[1], c[2]) || 0) === (c[4] | 0));
+/** A plan's cell as a block edit (its shape as the fifth number only when it has one). */
+const edit = (c) => (c[4] ? [c[0], c[1], c[2], c[3], c[4]] : [c[0], c[1], c[2], c[3]]);
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -535,9 +539,9 @@ export class HouseMagic {
         const bodies = m.bi < goB ? this._bodies() : null;
         for (; m.bi < goB; m.bi++) {
             const c = m.build[m.bi];
-            if (data.get(c[0], c[1], c[2]) === c[3]) continue;
+            if (isThere(data, c)) continue;
             if (this._occupied(c[0], c[1], c[2], bodies)) { m.wait.push(c); continue; }
-            data.set(c[0], c[1], c[2], c[3]); edits.push([c[0], c[1], c[2], c[3]]);
+            data.set(c[0], c[1], c[2], c[3], c[4] | 0); edits.push(edit(c));
         }
         if (edits.length) g.builder?._sendEdits(edits);
         // the trees: taken one by one in the first 70 % of the time
@@ -580,9 +584,9 @@ export class HouseMagic {
         const data = this.data, edits = [];
         const bodies = this._bodies();
         this._waiting = this._waiting.filter((c) => {
-            if (data.get(c[0], c[1], c[2]) === c[3]) return false;
+            if (isThere(data, c)) return false;
             if (this._occupied(c[0], c[1], c[2], bodies)) return true;
-            data.set(c[0], c[1], c[2], c[3]); edits.push([...c]);
+            data.set(c[0], c[1], c[2], c[3], c[4] | 0); edits.push(edit(c));
             return false;
         });
         if (edits.length) this.game.builder?._sendEdits(edits);
@@ -1028,7 +1032,7 @@ export class HouseMagic {
         const p = this.plan(rec), out = [];
         for (const c of p.cells) {
             if (c[3] === BLOCK.AIR) continue;
-            if (data.get(c[0], c[1], c[2]) !== c[3]) { out.push(c[0] + ',' + c[1] + ',' + c[2]); if (out.length >= 6000) break; }
+            if (!isThere(data, c)) { out.push(c[0] + ',' + c[1] + ',' + c[2]); if (out.length >= 6000) break; }
         }
         return out;
     }
@@ -1050,9 +1054,9 @@ export class HouseMagic {
             const p = this.plan(rec);
             for (const c of p.cells) {
                 if (c[3] === BLOCK.AIR || miss.has(c[0] + ',' + c[1] + ',' + c[2])) continue;
-                if (data.get(c[0], c[1], c[2]) === c[3]) continue;
-                data.set(c[0], c[1], c[2], c[3]);
-                edits.push([c[0], c[1], c[2], c[3]]);
+                if (isThere(data, c)) continue;
+                data.set(c[0], c[1], c[2], c[3], c[4] | 0);
+                edits.push(edit(c));
             }
             if (edits.length) { n += edits.length; if (this.auth) this.game.builder?._sendEdits(edits); else this.game.blockEdits?.push?.(...edits); }
             this._relight(rec); // (draw it again: its chunks and their light)

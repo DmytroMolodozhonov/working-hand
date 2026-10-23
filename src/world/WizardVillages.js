@@ -171,7 +171,7 @@ function windowHole(p, list, alongU, fixed, a0, a1, l0, l1) {
 
 /** A gable roof over the rectangle (slopes along v), hollow, with the gable ends in `wall`. */
 function gable(p, u0, u1, v0, v1, l, roof, wall) {
-    const half = Math.ceil((v1 - v0) / 2);
+    const half = Math.ceil((v1 - v0) / 2), mark = p.parts.length;
     for (let k = 0; k <= half + 1; k++) {
         const a = v0 - 1 + k, b = v1 + 1 - k;
         if (a > b) break;
@@ -179,6 +179,7 @@ function gable(p, u0, u1, v0, v1, l, roof, wall) {
         if (a + 1 <= b - 1) p.box(u0 + 1, u1 - 1, l + k, l + k, a + 1, b - 1, 0);
         if (k >= 1 && a + 1 <= b - 1) { p.box(u0, u0, l + k, l + k, a + 1, b - 1, wall); p.box(u1, u1, l + k, l + k, a + 1, b - 1, wall); }
     }
+    p.slopeTop(mark, roof); // (its slopes of ramps — generation 6)
     return l + half + 1;
 }
 
@@ -195,7 +196,9 @@ function buildHall(p, rng, out) {
     // the clock tower in the middle of the roof
     p.box(-4, 4, h, top + 8, 31, 39, B.ARCANE);
     p.box(-3, 3, h, top + 7, 32, 38, 0);
+    const spire = p.parts.length;
     for (let k = 0; k <= 6; k++) p.box(-5 + k, 5 - k, top + 9 + k, top + 9 + k, 30 + k, 40 - k, B.ROOF_PURPLE);
+    p.slopeTop(spire, B.ROOF_PURPLE);
     p.box(0, 0, top + 16, top + 16, 35, 35, B.ARCANE_LAMP_VIOLET);
     p.box(-1, 1, top + 4, top + 6, 30, 30, B.GOLD); // the clock face
     p.box(0, 0, top + 5, top + 5, 30, 30, B.CS_DARK);
@@ -380,7 +383,7 @@ function buildMarket(p, rng, out) {
             }
             // ---- the crooked roof: a pyramid drifting to one side, a bent spire, a twisted chimney
             const [tu, tv] = top;
-            const drift = rng() < 0.5 ? 1 : -1;
+            const drift = rng() < 0.5 ? 1 : -1, crooked = p.parts.length;
             for (let r = 0; r <= 5; r++) {
                 const sh = Math.round(r * 0.6) * drift;
                 const a0 = lo + tu + r, a1 = hi + tu - r, b0 = vc - 5 + tv + r + sh, b1 = vc + 5 + tv - r + sh;
@@ -394,6 +397,7 @@ function buildMarket(p, rng, out) {
                     break;
                 }
             }
+            p.slopeTop(crooked, roof);
             const cu0 = bk - 2 * s + tu, cv0 = vc + 3 * drift + tv;
             for (let c = 0; c < 3; c++) p.box(cu0 + (c % 2) * s, cu0 + (c % 2) * s, H + 1 + c * 3, H + 3 + c * 3, cv0 - (c === 2 ? drift : 0), cv0 - (c === 2 ? drift : 0), B.BRICK);
             // ---- the hanging sign over the lane, a lamp under the eaves

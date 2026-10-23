@@ -18,6 +18,7 @@
  */
 
 import { createRng, createNoise2D } from '../core/math.js';
+import { roofShapes } from './PlanSlopes.js';
 
 export const ICE_CASTLE = {
     MIN: 950, MAX: 1700, // m from the spawn: far, but a flight reaches it
@@ -241,11 +242,13 @@ export function iceCastlePlan(S) {
         box(u, u, v, v, P + 11, P + 11, GLOW);
     }
     // the vaulted roof: rings narrowing to the spire (hollow: a high vault inside)
+    const vault = parts.length;
     for (let i = 0; i < 11; i++) {
         const r = HR - 0.5 - i * 1.35;
         if (r < 1) break;
         cyl(0, HV, r, Math.max(-1, r - 2.2), W1 + 1 + i, W1 + 1 + i, i % 4 === 3 ? GLOW : WALL);
     }
+    { const sp = roofShapes(parts.slice(vault), [WALL]); if (sp) parts.push(sp); } // (its rings ramps — generation 6)
     // the central spire
     cyl(0, HV, 1.2, -1, W1 + 10, W1 + 24, WALL);
     cyl(0, HV, 0.6, -1, W1 + 25, W1 + 30, GLOW);
@@ -284,7 +287,9 @@ export function iceCastlePlan(S) {
         const top = F + 1 + h;
         cyl(u, v, 2.4, -1, F + 1, top, WALL);
         cyl(u, v, 2.9, 1.5, top - 6, top - 6, GLOW);
+        const cone = parts.length;
         for (let i = 0; i < 4; i++) cyl(u, v, 2.1 - i * 0.5, -1, top + 1 + i * 2, top + 2 + i * 2, WALL);
+        { const sp = roofShapes(parts.slice(cone), [WALL]); if (sp) parts.push(sp); }
         cyl(u, v, 0.4, -1, top + 9, top + 11, GLOW);
     }
     // the ice staircase over the gorge (as in the film): from the ledge beyond the gorge up to the castle's

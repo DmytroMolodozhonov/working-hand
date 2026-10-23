@@ -115,11 +115,13 @@ function buildTower(p, rng, out) {
         p.box(bu - 1, bu, -1, 8, bv - 1, bv, B.ARCANE_DARK);
     }
     // ---- the pointed roof, a violet crystal on the tip, golden stars
+    const cone = p.parts.length;
     for (let k = 0; k <= 13; k++) {
         const rr = 19 * (1 - k / 14);
         if (rr < 0.4) break;
         p.cyl(0, 0, rr, ROOF_L + k, ROOF_L + k, B.ROOF_PURPLE);
     }
+    p.slopeTop(cone, B.ROOF_PURPLE); // (a cone of ramps — generation 6)
     p.box(0, 0, ROOF_L + 14, ROOF_L + 14, 0, 0, B.ARCANE_LAMP_VIOLET);
     for (let i = 0; i < 6; i++) {
         const k = 3 + (i % 3) * 3, rr = 19 * (1 - k / 14) - 0.3;

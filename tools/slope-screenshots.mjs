@@ -15,6 +15,10 @@ const R = Number(arg('--r', 2));
 const gens = (arg('--gen', '5,6')).split(',').map(Number);
 const port = Number(arg('--port', 8795));
 const name = arg('--name', 'land');
+const site = arg('--site', null); // castle | village | tower | hamlet: the nearest one to --at (its middle, --off dx,dz from it)
+const off = arg('--off', '0,0').split(',').map(Number);
+const testGround = process.argv.includes('--test');
+const house = Number(arg('--house', 0)); // a house made by «Create a House» of this level (MagicHouse.housePlan) at --at
 fs.mkdirSync(out, { recursive: true });
 
 const srv = await startServer(port);
@@ -22,17 +26,33 @@ const browser = await launch();
 try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
     page.on('pageerror', (e) => console.error('page error:', e.message));
-    page.on('console', (m) => { if (m.type() === 'error') console.error(m.text()); });
+    page.on('console', (m) => { if (m.type() === 'error' || m.text().startsWith('site at')) console.error(m.text()); });
     await page.addInitScript(() => { window.__ZNS_NO_CAMERA__ = true; window.__ZNS_NO_WORLD_PROBE__ = true; });
     await page.goto(srv.url);
     await page.waitForFunction(() => !!window.__zns, null, { timeout: 60000 });
     for (const gen of gens) {
-        const url = await page.evaluate(async ([gen, at, cam, seed, R]) => {
+        const url = await page.evaluate(async ([gen, at, cam, seed, R, site, off, testGround, house]) => {
             const THREE = await import('three');
             const { TerrainData, mergeBuffers, CHUNK } = await import('/src/world/Terrain.js');
             const { applyVoxelDetail } = await import('/src/world/VoxelShading.js');
             const d = new TerrainData();
-            d.generate({ seed, mountains: true, seas: true, test: false, deepCaves: true, lush: true, slopes: gen >= 6 });
+            d.generate({ seed, mountains: true, seas: true, test: testGround, deepCaves: true, lush: true, slopes: gen >= 6 });
+            if (site) {
+                const idx = { castle: d.castles, village: d.villages, tower: d.towers, hamlet: d.hamlets }[site];
+                let best = null;
+                for (let r = 200; !best && r <= 3000; r += 400) {
+                    const list = idx.near(at[0], at[1], r);
+                    for (const k of list.flat ? list.flat() : list) { const o = k.houses ? k : k; const dd = Math.hypot(o.x - at[0], o.z - at[1]); if (o.x != null && (!best || dd < best.d)) best = { x: o.x, z: o.z, d: dd }; }
+                }
+                if (best) { at = [Math.round(best.x + off[0]), Math.round(best.z + off[1])]; console.log('site at', at.join(',')); }
+            }
+            if (house) {
+                const { housePlan } = await import('/src/world/MagicHouse.js');
+                const G = d.topLayer(at[0], at[1]);
+                const p = housePlan({ seed: 77, level: house, x: at[0], z: at[1], G, face: 0, woods: [] });
+                for (const [x, L, z, t] of p.fill) if (!d.get(x, L, z)) d.set(x, L, z, t);
+                for (const c of p.cells) d.set(c[0], c[1], c[2], c[3], gen >= 6 ? c[4] | 0 : 0);
+            }
             const cv = document.createElement('canvas');
             cv.width = 1400; cv.height = 800;
             const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
@@ -77,7 +97,7 @@ try {
             const u = cv.toDataURL('image/png');
             r.dispose();
             return { u, shapes };
-        }, [gen, at, cam, seed, R]);
+        }, [gen, at, cam, seed, R, site, off, testGround, house]);
         const file = path.join(out, `${name}-gen${gen}.png`);
         fs.writeFileSync(file, Buffer.from(url.u.split(',')[1], 'base64'));
         console.log('saved', file, 'shapes', url.shapes);

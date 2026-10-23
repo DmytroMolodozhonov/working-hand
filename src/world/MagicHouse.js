@@ -26,6 +26,7 @@
 import { BLOCK, TREE_KINDS } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { inwardRy } from './Castles.js';
+import { cellShapes } from './PlanSlopes.js';
 
 /** What each level takes (resources lying by the house, trees round it, mana) — «each next one twice as much». */
 export const HOUSE_LEVELS = [
@@ -98,7 +99,7 @@ function depthOf(level, rng) {
  *   x, z: its middle (whole blocks); G: the ground layer (its floor is laid in it); face: the door side;
  *   woods: the wood blocks of the trees the magic took (the most first); minD: the depth of the house it grows from.
  * @returns {{cells:number[][], fill:number[][], door, windows, beds, chests, rect, w, d, top, own:Set<string>}}
- *   cells [x, L, z, block] (AIR carves); fill — foundation stone, laid only where nothing solid is.
+ *   cells [x, L, z, block, shape?] (AIR carves; shape — a ramp of the roof, BlockShapes.js); fill — foundation stone, laid only where nothing solid is.
  */
 export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0 }) {
     level = Math.max(1, Math.min(MAX_LEVEL, level | 0));
@@ -311,6 +312,7 @@ export function housePlan({ seed, level, x, z, G, face = 0, woods = [], minD = 0
     order.sort();
     const cells = new Array(raw.length);
     for (let i = 0; i < order.length; i++) cells[i] = raw[order[i] % 65536];
+    cellShapes(cells, [roof]); // (the roof's slopes of ramps, its hips — BlockShapes.js: a fifth number on those cells)
     const c0 = pt(-w - 1, -d - 1 - bal), c1 = pt(w + 1, d + 1);
     out.rect = { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z) };
     out.floorY = Lw(0) - 1.5;
