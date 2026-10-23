@@ -1118,7 +1118,8 @@ export class CastleLife {
         const ix = Math.round(x), iz = Math.round(z);
         const L = Math.round(y + 1.5);
         const f = t.floorBelow(ix, iz, L + 1);
-        if (f > L || f < L - 3) return false;
+        // (up a ramp — BlockShapes.js: its surface right where the body steps, not its cell's top, is the step)
+        if ((f > L && !(f === L + 1 && t.shapeAt?.(ix, f, iz) && t.floorAt(x, z, y + 1.1) <= y + 1.1)) || f < L - 3) return false;
         // deep water is no ground: nobody walks into it (nor after a foe swimming there — CreatureSwim.js)
         if (t.get(ix, f + 1, iz) === BLOCK.WATER && t.get(ix, f + 2, iz) === BLOCK.WATER && t.get(ix, f + 3, iz) === BLOCK.WATER) return false;
         if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)

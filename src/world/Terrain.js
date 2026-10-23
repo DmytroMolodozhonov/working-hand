@@ -2406,19 +2406,19 @@ export class TerrainData {
             // (world corners of the cell)
             const X0 = wx - 0.5, Z0 = wz - 0.5, Y0 = L - 1.5;
             for (let k = 0; k < 4; k++) h[k] = ceil ? 1 - hh[k] : hh[k];
-            const lit = (ax, aL, az) => (sky ? skyFactor(sky(ax, aL, az)) : 1);
             // -- the slope (or the slab's middle face): the top of a floor shape, the underside of a ceiling one
             {
                 const colTop = this.faceColor(t, wx, L, wz, !ceil);
-                const k = lit(wx, ceil ? L - 1 : L + 1, wz) * 0.5 + lit(wx, L, wz) * 0.5;
-                const diag = shapeDiag(s);
-                // corners (0: −x−z, 1: +x−z, 2: −x+z, 3: +x+z)
-                const P = (i, j) => { const q = j * 3; V[q] = X0 + (i & 1); V[q + 1] = Y0 + h[i]; V[q + 2] = Z0 + (i >> 1); };
-                const tri = diag === 0 ? _TRI0 : _TRI1;
-                // one quad when both triangles lie in one plane (a slab, a ramp)
-                const planar = h[0] + h[3] === h[1] + h[2];
-                if (planar) { P(0, 0); P(1, 1); P(3, 2); P(2, 3); pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k); }
-                else for (let q = 0; q < 2; q++) { P(tri[q * 3], 0); P(tri[q * 3 + 1], 1); P(tri[q * 3 + 2], 2); pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k); }
+                const k = litOf(sky, wx, ceil ? L - 1 : L + 1, wz) * 0.5 + litOf(sky, wx, L, wz) * 0.5;
+                const tri = shapeDiag(s) === 0 ? _TRI0 : _TRI1;
+                // one quad when both triangles lie in one plane (a slab, a ramp); corners 0 −x−z, 1 +x−z, 2 −x+z, 3 +x+z
+                if (h[0] + h[3] === h[1] + h[2]) {
+                    corner(V, 0, X0, Y0, Z0, h, 0); corner(V, 1, X0, Y0, Z0, h, 1); corner(V, 2, X0, Y0, Z0, h, 3); corner(V, 3, X0, Y0, Z0, h, 2);
+                    pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k);
+                } else for (let q = 0; q < 2; q++) {
+                    for (let j = 0; j < 3; j++) corner(V, j, X0, Y0, Z0, h, tri[q * 3 + j]);
+                    pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k);
+                }
             }
             // -- the flat face: the bottom of a floor shape, the top of a ceiling one (hidden by a whole face over it)
             {
@@ -2428,7 +2428,7 @@ export class TerrainData {
                 if (!covered && !(dir === 3 && L === MIN_LAYER)) {
                     const yy = ceil ? Y0 + 1 : Y0;
                     V[0] = X0; V[1] = yy; V[2] = Z0; V[3] = X0 + 1; V[4] = yy; V[5] = Z0; V[6] = X0 + 1; V[7] = yy; V[8] = Z0 + 1; V[9] = X0; V[10] = yy; V[11] = Z0 + 1;
-                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, lit(wx, ceil ? L + 1 : L - 1, wz));
+                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, litOf(sky, wx, ceil ? L + 1 : L - 1, wz));
                 }
             }
             // -- the four sides: under the slope (over it, upside down), down to the bottom (up to the top)
@@ -2443,20 +2443,19 @@ export class TerrainData {
                 if (ha === 0 && hb === 0) continue;
                 const ax = X0 + (ca & 1), az = Z0 + (ca >> 1), bx = X0 + (cb & 1), bz = Z0 + (cb >> 1);
                 let n = 0;
-                const put = (x, y, z) => { V[n * 3] = x; V[n * 3 + 1] = y; V[n * 3 + 2] = z; n++; };
                 if (!ceil) {
-                    put(ax, Y0, az); put(bx, Y0, bz);
-                    if (hb > 0) put(bx, Y0 + hb, bz);
-                    if (ha > 0) put(ax, Y0 + ha, az);
+                    n = point(V, n, ax, Y0, az); n = point(V, n, bx, Y0, bz);
+                    if (hb > 0) n = point(V, n, bx, Y0 + hb, bz);
+                    if (ha > 0) n = point(V, n, ax, Y0 + ha, az);
                 } else {
-                    put(ax, Y0 + 1, az);
-                    if (ha > 0) put(ax, Y0 + 1 - ha, az);
-                    if (hb > 0) put(bx, Y0 + 1 - hb, bz);
-                    put(bx, Y0 + 1, bz);
+                    n = point(V, n, ax, Y0 + 1, az);
+                    if (ha > 0) n = point(V, n, ax, Y0 + 1 - ha, az);
+                    if (hb > 0) n = point(V, n, bx, Y0 + 1 - hb, bz);
+                    n = point(V, n, bx, Y0 + 1, bz);
                 }
                 // (a grass ramp's triangle side is the hill's own turf going on, green — not the earth of a cut bank)
                 const turf = t === BLOCK.GRASS && (ha === 0 || hb === 0);
-                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, lit(wx + dx, L, wz + dz));
+                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, turf), turf && pat === PATTERN.GRASS ? 0 : pat, litOf(sky, wx + dx, L, wz + dz));
             }
         }
     }
@@ -2469,6 +2468,12 @@ const _TRI0 = [0, 1, 3, 0, 3, 2], _TRI1 = [0, 1, 2, 1, 3, 2]; // (a shape's surf
 const _SDIR = [0, 1, 4, 5], _SDX = [1, -1, 0, 0], _SDZ = [0, 0, 1, -1];
 const _SCA = [1, 0, 2, 0], _SCB = [3, 2, 3, 1];
 _mesh.sides = [null, null, null, null];
+/** The daylight a shape's face gets from the cell (x, L, z) in front of it (`sky`: Terrain._skyLight's, null: all lit). */
+const litOf = (sky, x, L, z) => (sky ? skyFactor(sky(x, L, z)) : 1);
+/** Corner i of a shape's surface (heights h, the cell's world corner X0, Y0, Z0) as point j of V. */
+function corner(V, j, X0, Y0, Z0, h, i) { const q = j * 3; V[q] = X0 + (i & 1); V[q + 1] = Y0 + h[i]; V[q + 2] = Z0 + (i >> 1); }
+/** Point n of V; returns n + 1. */
+function point(V, n, x, y, z) { V[n * 3] = x; V[n * 3 + 1] = y; V[n * 3 + 2] = z; return n + 1; }
 _mesh.v = new Float32Array(12);
 _mesh.h = new Float32Array(4);
 
