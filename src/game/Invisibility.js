@@ -148,11 +148,50 @@ export class Invisibility {
         if (this.on === on) return;
         this.on = on;
         this._fade(on);
+        this._diag = null;
+        g.perf?.note?.(on ? '👻 Invisible: включена' + this._around() : '👻 Invisible: снята' + (why ? ' (' + why + ')' : ''));
         g.sync?.invis?.(on);
         if (!on) {
             this.clues.delete(g.localId);
             if (why === 'mana') g.hud.setVoice('👻 Мана кончилась — вас снова видно', true);
             else if (why === 'stop') g.hud.setVoice('👻 Невидимость снята', true);
+        }
+    }
+
+    /** (the log: who is round me — knights etc. — and in what shape) */
+    _around() {
+        const cl = this.game.castleLife, me = this.game.character?.group?.position;
+        if (!cl?.byId || !me) return '';
+        let n = 0, k = 0;
+        for (const v of cl.byId.values()) if (!v.dead && Math.hypot(v.x - me.x, v.z - me.z) < 60) { n++; if (v.role === 'knight') k++; }
+        return `; рядом (60 м): людей ${n}, рыцарей ${k}`;
+    }
+
+    /**
+     * (the log, only while invisible, twice a second) The castle people near me: any change of how one is drawn —
+     * hidden / shown, near or far shape, faint — goes into the diary as «Invisible: рыцарь #5 пропал (d=30 м, …)».
+     * It is what the author copies to find why knights blink.
+     */
+    _watch(dt) {
+        const g = this.game, cl = g.castleLife, me = g.character?.group?.position;
+        if (!cl?.byId || !me || !g.perf) return;
+        const d = this._diag || (this._diag = { t: 0, last: new Map(), n: 0 });
+        d.t -= dt;
+        if (d.t > 0) return;
+        d.t = 0.5;
+        for (const v of cl.byId.values()) {
+            const dist = Math.hypot(v.x - me.x, v.z - me.z);
+            if (dist > 90 || v.dead) { d.last.delete(v.id); continue; }
+            let faint = false;
+            v.group?.traverse?.((o) => { const m = o.material; if (m && !Array.isArray(m) && (m.transparent || m.opacity < 1) && o.visible) faint = true; });
+            const mm = v.model;
+            const st = `${v.group?.visible ? 'виден' : 'скрыт'}|${mm?._far ? 'дальняя форма' : 'ближняя'}|${faint ? 'БЛЕДНЫЙ' : 'обычный'}|${v.foe ? 'враг' : 'не враг'}`;
+            const was = d.last.get(v.id);
+            if (was !== undefined && was !== st && d.n < 200) {
+                d.n++;
+                g.perf.note(`👻 ${v.role || '?'} #${v.id} ${was} → ${st} (${Math.round(dist)} м)`);
+            }
+            d.last.set(v.id, st);
         }
     }
 
@@ -177,6 +216,7 @@ export class Invisibility {
             else if (g.combat?.drain(INVIS.DRAIN * dt, dt) === false) this.set(false, 'mana');
             else {
                 this._fadeHeld();
+                this._watch(dt);
                 // (said again now and then: a player who joined later knows too)
                 this._netT = (this._netT || 0) - dt;
                 if (this._netT <= 0) { this._netT = 5; g.sync?.invis?.(true); }
