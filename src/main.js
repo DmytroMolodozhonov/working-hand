@@ -510,9 +510,14 @@ const talkFlow = new TalkFlow({ fire: (text, info) => talkNow(text, info), playe
 voice.onQuiet = (q) => talkFlow.quiet(q);
 
 /** (the browser's recognizer) the words stood still long enough for their kind: answered. */
+// (the same words again — the native voice looks at the phrase every ~0.15 s while it is quiet — keep the wait going)
+let talkWaitKey = null;
 function earlyTalk(command) {
+    const k = talkKey(command);
+    if (talkWait && k === talkWaitKey) return;
     clearTimeout(talkWait);
-    talkWait = setTimeout(() => { talkWait = null; talkNow(command); }, STILL[readiness(command)]);
+    talkWaitKey = k;
+    talkWait = setTimeout(() => { talkWait = null; talkWaitKey = null; talkNow(command); }, STILL[readiness(command)]);
 }
 
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
@@ -520,7 +525,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
     // (the words go on / are final: the early answer waits for them, or is already given)
-    if (talkWait) { clearTimeout(talkWait); talkWait = null; }
+    if (talkWait && (isFinal || talkKey(command) !== talkWaitKey)) { clearTimeout(talkWait); talkWait = null; talkWaitKey = null; }
     // (the native voice: the phrase answered as soon as I stopped — its end is no second question; a different
     // order after it — «в атаку… нет, отбой» — or more words are: answered again, the older answer cut)
     if (isFinal && meta?.native && game?.active) {
@@ -541,7 +546,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     const talkOnly = !!meta?.talkOnly || loose;
     const talkWhy = loose ? PHRASE_WHY_RU[phrase.why] || 'обычная речь' : 'слово заклинания внутри обычной фразы — это разговор';
     if (!isFinal && !held && game?.active && (!matchSpell(command) || talkOnly) && (game.castleLife?.talk?._listener?.(command) || game.ships?.crew?._listener?.()) && !game.owls?.claims?.(command)) {
-        if (!meta?.native) earlyTalk(command);
+        // (the browser's recognizer — or a voice program from before this update, which tells no quiet: the words standing still)
+        if (!meta?.native || !Number.isFinite(meta.q)) earlyTalk(command);
         else if (!meta.cut) talkFlow.offer(command, { seg: meta.seg, q: meta.q || 0, end: meta.end }); // (a look missing the phrase's start: its end decides)
     }
     if (isMenuVoiceActive && voiceTestText) {
