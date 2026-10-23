@@ -29,6 +29,7 @@
 
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
+import { enchantMul, shieldMul, shieldPlain } from './Enchant.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
@@ -146,10 +147,10 @@ export class Gear {
         const it = s.item;
         let broken = false;
         if (it.magic) {
-            const left = this.shieldPower.get(it.uid) ?? it.max;
+            const left = this.shieldPower.get(it.uid) ?? it.max * shieldMul(it);
             if (left < 5 && cost >= STRONG) broken = true;
             this.shieldPower.set(it.uid, Math.max(0, left - cost));
-        } else if (cost >= STRONG) broken = true;
+        } else if (cost >= STRONG + shieldPlain(it)) broken = true;
         const p = s.model.position;
         for (let i = 0; i < 18; i++) g.fx.spark(p, it.magic ? 0x9fd8ff : 0xffe0a0, 0.1, _v.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.5);
         if (broken) {
@@ -423,7 +424,7 @@ export class Gear {
         setBowString(bow.model, null); // (the string snaps back)
         if (!this._endless()) it.arrows = Math.max(0, (it.arrows || 0) - 1);
         const speed = 22 + draw * 58;
-        const dmg = (2 + draw * 7) * (it.magic ? 1 + (it.bonus || 0) / 100 : 1);
+        const dmg = (2 + draw * 7) * (it.magic ? 1 + (it.bonus || 0) / 100 : 1) * enchantMul(it);
         this.fire(from, dir.multiplyScalar(speed), dmg, g.localId);
         if (g.sync) g.sync.arrow?.(from, dir, dmg);
         g.sound?.playBowRelease?.(draw);
@@ -609,7 +610,7 @@ export class Gear {
             this.shieldPower.set(uid, Math.min(max, v + dt));
         }
         const s = this._heldShield();
-        if (s?.model.userData.halo) s.model.userData.halo.material.opacity = 0.3 + 0.5 * ((this.shieldPower.get(s.item.uid) ?? s.item.max) / s.item.max);
+        if (s?.model.userData.halo) s.model.userData.halo.material.opacity = 0.3 + 0.5 * Math.min(1, (this.shieldPower.get(s.item.uid) ?? s.item.max * shieldMul(s.item)) / (s.item.max * shieldMul(s.item)));
         if (g.currentPose && !g.combat.dead) {
             this._updateBow(dt);
             this._updateHammer(dt);

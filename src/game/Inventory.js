@@ -34,6 +34,7 @@ import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
 import { accioCatcher } from './Accio.js';
 import { logStackModel, logIconUrl } from './LogModel.js';
+import { ENCHANT_TIERS } from './Enchant.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -360,6 +361,7 @@ export class Inventory {
             const ch = g.character;
             const p = ch.getGripObject(D).getWorldPosition(new THREE.Vector3());
             const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
+            if (s.ench) w.ench = s.ench;
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
             g.weapons.grab(w, D, 0.5);
@@ -400,7 +402,7 @@ export class Inventory {
 
     _storeWeapon(w, slot = null) {
         const g = this.game;
-        const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };
+        const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined };
         for (const side of ['left', 'right']) if (g.weapons.hands[side].held === w) g.weapons._forget(side, g.character.getActiveHands()[side]);
         if (slot != null && !this.slots[slot]) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) return false;
         if (g.sync) g.sync.weaponGone?.(w);
@@ -777,6 +779,7 @@ export class Inventory {
             if (g.weapons.hands[side].held) return false;
             const p = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
             const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
+            if (s.ench) w.ench = s.ench;
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
             g.weapons.grab(w, side, 0.5);
@@ -998,7 +1001,7 @@ export class Inventory {
             icon.style.background = 'none';
             icon.style.textShadow = '';
             icon.textContent = '';
-            icon.classList.remove('magic');
+            icon.classList.remove('magic', 'ench', 'ench0', 'ench1', 'ench2', 'ench3');
             count.textContent = '';
             if (!s) return;
             if (s.kind === 'res') {
@@ -1025,6 +1028,14 @@ export class Inventory {
                 if (s.count > 1) count.textContent = s.count;
                 if (s.kind === 'bow') count.textContent = s.arrows ?? '';
                 c.title = ITEM_INFO[s.kind]?.name || '';
+            }
+            if (s.ench) { // (enchanted on the pentagram: a coloured glow round the picture and a little spark — Enchant.js)
+                icon.classList.add('ench', 'ench' + s.ench.tier);
+                const sp = document.createElement('span');
+                sp.className = 'hb-spark';
+                sp.textContent = '✦';
+                icon.appendChild(sp);
+                c.title += ` — ${ENCHANT_TIERS[s.ench.tier].ru} зачарование`;
             }
         });
     }

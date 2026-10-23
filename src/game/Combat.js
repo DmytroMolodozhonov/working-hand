@@ -38,6 +38,7 @@ import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 import { SLOW } from './Slow.js';
+import { wandCostMul } from './Enchant.js';
 import { regenCellsK, regenTier, regenLine } from './ManaRegen.js';
 import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine, BREAKS_GODS } from './ProtectionGods.js';
 
@@ -595,7 +596,7 @@ export class Combat {
     costOf(name, extra = 0) {
         const base = ((SPELL_COST[name] ?? 5) + extra) * (this.game.armor?.stat('cost') ?? 1); // (a named armour's perk: spells cheaper; extra — a price that depends: «Planet Liquidation»'s planet)
         const w = this.game.items?.wand;
-        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * 10) / 10 : base; // (the plain wooden wand saves nothing)
+        return w && !w.plain && !/^(TotalDestruction|CircleAttack|Inspirius|Boom|PlanetLiquidation|Hellfire|WaterVortexSuperMaxima|CreatePlanet|EnlargePlanet|TerraformPlanet|LevitationSuperMaxima|ProtectionGods|Die$|ProtectionHouse|ProtectionInvisible|WardDispel|WardGrow|LevitationMaxima)/.test(name) ? Math.round(base * 0.85 * wandCostMul(w) * 10) / 10 : base; // (the plain wooden wand saves nothing)
     }
 
     pay(name, extra = 0) {

@@ -264,7 +264,8 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
 /** The four armour cells and what is in them, for the screen / the network (0 none, 1 plain, 2 magic, 3 named). */
 export function wornCode(worn = {}) {
     const c = (it) => (!it ? 0 : it.archmage ? 4 : it.named ? 3 : it.magic ? 2 : 1); // (4: the High Mage's suit — a robe)
-    return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0 };
+    const e = Math.max(0, ...['helmet', 'chest', 'legs', 'robe'].map((k) => (worn[k]?.ench ? worn[k].ench.tier + 1 : 0))); // (enchanted: the best level worn, 0 none — the body's glow)
+    return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0, e };
 }
 
 /**

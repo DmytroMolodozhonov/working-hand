@@ -23,6 +23,7 @@ import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
+import { enchantMul } from './Enchant.js';
 import { boneLines } from './CutBodies.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
@@ -765,7 +766,7 @@ export class WeaponSystem {
                     const along = tipVel.dot(_e);
                     const stab = !cut && z.group && !z.isBird && !z.isPhoenix && !z.isOwl && along > STAB_SPEED && along > 0.6 * speed && hs !== this._levSlot && hy > -0.6 && hy < 2.6;
                     const factor = clamp(speed / 9, 0.7, 1.6);
-                    const damage = Math.max(1, Math.round(w.spec.damage * factor));
+                    const damage = Math.max(1, Math.round(w.spec.damage * factor * enchantMul(w))); // (w.ench: enchanted on the pentagram)
                     const dir = tipVel.clone().setY(0);
                     if (dir.lengthSq() < 1e-4) dir.subVectors(zp, this.game.character.group.position).setY(0);
                     dir.normalize();

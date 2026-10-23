@@ -29,6 +29,7 @@ import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
 import { pickFlight } from './Expelliarmus.js';
 import { isDivine } from './ProtectionGods.js';
+import { enchantSoak, wearMul } from './Enchant.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -165,12 +166,12 @@ export class ArmorSystem {
         for (const [slot, n] of Object.entries(res.wear)) {
             const it = this.worn[slot];
             if (!it) continue;
-            it.hp = Math.max(0, (it.hp ?? pieceMax(it)) - n);
+            it.hp = Math.max(0, (it.hp ?? pieceMax(it)) - n * wearMul(it)); // (enchanted: wears slower)
             this._clang(slot);
             if (it.hp <= 0 && !it.magic) this._broken(slot);
         }
         if (Object.keys(res.wear).length) this._renderCells();
-        return res.hp;
+        return res.hp * enchantSoak(this.worn); // (enchanted pieces and robe soften it further)
     }
 
     _clang(slot) {
@@ -508,7 +509,7 @@ export class ArmorSystem {
         const g = this.game;
         if (m.a === 'worn' && from && from !== g.localId) {
             const w = m.w || {};
-            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0 };
+            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0, e: Math.min(4, w.e | 0) };
             this.remote.set(from, clean);
             const r = g.remotes?.get(from);
             if (r?.character) { dressArmor(r.character, clean); r.character._armorKey = JSON.stringify(clean); }

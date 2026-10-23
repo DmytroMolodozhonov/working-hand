@@ -16,6 +16,7 @@
 
 import * as THREE from 'three';
 import { buildWeapon, WEAPON_SPECS } from './WeaponModels.js';
+import { glowShell } from '../fx/EnchantGlow.js';
 
 const GRAVITY = -14;
 const _v1 = new THREE.Vector3();
@@ -47,6 +48,7 @@ export class Weapon {
         this.spec = spec;
         this.S = spec.scale;
         this.model = group;
+        this._localBox = opts.headless ? null : new THREE.Box3().setFromObject(group); // (the model's own box, for the enchant shell)
         // The model is offset so the body origin is the centre of mass.
         this.mesh = new THREE.Group();
         this.mesh.name = 'weapon';
@@ -115,6 +117,18 @@ export class Weapon {
         glow.scale.set(0.35, 1.6, 0.35);
         this.mesh.add(glow);
         this._glow = glow;
+    }
+
+    /** Enchanted on the pentagram (Enchant.js): `ench` = {tier, kind}; setting it puts the rune shell on the blade. */
+    get ench() { return this._ench || null; }
+    set ench(v) {
+        this._ench = v || null;
+        if (this._enchGlow) { this.model.remove(this._enchGlow); this._enchGlow = null; }
+        if (!v || !this._localBox || this._localBox.isEmpty()) return;
+        const size = this._localBox.getSize(new THREE.Vector3());
+        size.x = Math.max(size.x, size.length() * 0.25); size.z = Math.max(size.z, size.length() * 0.25); // (a blade is thin: the shell stays a visible sleeve)
+        this._enchGlow = glowShell(v.tier, size, this._localBox.getCenter(new THREE.Vector3()));
+        this.model.add(this._enchGlow);
     }
 
     /** Damage multiplier of this weapon (magic ones hit harder). */
@@ -329,7 +343,7 @@ export class Weapon {
     serialize() {
         const p = this.position, q = this.quaternion;
         const r = (v) => Math.round(v * 1000) / 1000;
-        return [this.id, this.type, r(p.x), r(p.y), r(p.z), r(q.x), r(q.y), r(q.z), r(q.w), this.sleeping ? 1 : 0, this.magic ? this.bonus || 1 : 0];
+        return [this.id, this.type, r(p.x), r(p.y), r(p.z), r(q.x), r(q.y), r(q.z), r(q.w), this.sleeping ? 1 : 0, this.magic ? this.bonus || 1 : 0, this.ench || 0];
     }
 
     /** Follow a pose owned by someone else (holder on another machine / host physics). */

@@ -277,6 +277,7 @@ export class DeathSystem {
         const id = d.id && !g.weapons.byId.has(d.id) ? d.id : undefined;
         const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ'));
         const w = g.weapons.markMagic(g.weapons.spawn(d.type === 'axe' ? 'axe' : 'sword', p, q, id), d.magic ? d.bonus : 0);
+        if (d.ench) w.ench = d.ench;
         w.wake?.();
         if (g.sync) { g.sync.weaponAppeared?.(w); g.sync._localRelease?.(w); }
         return w;
@@ -683,7 +684,7 @@ export class DeathSystem {
         const one = best.what;
         if (one && into) {
             if (g.weapons?.weapons?.includes(one)) {
-                const item = { kind: 'weapon', type: one.type, id: one.id, magic: !!one.magic, bonus: one.bonus || 0 };
+                const item = { kind: 'weapon', type: one.type, id: one.id, magic: !!one.magic, bonus: one.bonus || 0, ench: one.ench || undefined };
                 if (g.inventory.store(item)) {
                     g.sync?.weaponGone?.(one);
                     g.weapons.remove(one);
@@ -699,7 +700,7 @@ export class DeathSystem {
         }
         for (const w of [...(g.weapons?.weapons || [])]) {
             if (full || !this._freeWeapon(w) || w.position.distanceTo(c) > DEATH.GATHER_R) continue;
-            const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0 };
+            const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined };
             if (!g.inventory.store(item)) { full = true; break; }
             g.sync?.weaponGone?.(w);
             g.weapons.remove(w);

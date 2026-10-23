@@ -971,6 +971,7 @@ export class NetSync {
                 break;
             }
             case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
+            case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
             case 'tdes': {
                 if (m.by === this.me) break;

@@ -755,6 +755,7 @@ export class ItemSystem {
             else if (!L.away && d > 200 && (L.hover || L.rest)) this._putAway(L);
             L.model.visible = !far;
             if (far && (L.hover || L.rest)) continue;
+            if (L.ritual) continue; // (the pentagram of enchanting carries it: EnchantCircles)
             this._physics(L, dt);
         }
         this._updateSticks();

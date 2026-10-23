@@ -1743,3 +1743,16 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .world-opt { display: flex; align-items: center; gap: 8px; margin: 8px 0; cursor: pointer; }
 .world-opt input { width: 18px; height: 18px; }
 .world-opt .mp-hint { opacity: 0.75; font-size: 0.9em; }
+
+/* зачарованные вещи (Enchant.js): свечение по уровню и искорка в углу ячейки */
+.hotbar-slot .hb-icon.ench { position: relative; }
+.hotbar-slot .hb-icon.ench0 .hb-pic { filter: drop-shadow(0 0 3px #c9b8ff); }
+.hotbar-slot .hb-icon.ench1 .hb-pic { filter: drop-shadow(0 0 4px #b98cff) drop-shadow(0 0 1px #fff); }
+.hotbar-slot .hb-icon.ench2 .hb-pic { filter: drop-shadow(0 0 5px #ffd36e) drop-shadow(0 0 2px #fff); }
+.hotbar-slot .hb-icon.ench3 .hb-pic { filter: drop-shadow(0 0 6px #fff6dc) drop-shadow(0 0 3px #ffd36e); }
+.hotbar-slot .hb-icon .hb-spark { position: absolute; right: 1px; top: -2px; font-size: 13px; line-height: 1; pointer-events: none; animation: ench-twinkle 1.8s ease-in-out infinite; }
+.hotbar-slot .hb-icon.ench0 .hb-spark { color: #c9b8ff; text-shadow: 0 0 4px #c9b8ff; }
+.hotbar-slot .hb-icon.ench1 .hb-spark { color: #b98cff; text-shadow: 0 0 5px #b98cff; }
+.hotbar-slot .hb-icon.ench2 .hb-spark { color: #ffd36e; text-shadow: 0 0 6px #ffd36e; }
+.hotbar-slot .hb-icon.ench3 .hb-spark { color: #fff6dc; text-shadow: 0 0 7px #ffd36e, 0 0 3px #fff; }
+@keyframes ench-twinkle { 0%, 100% { opacity: 0.55; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }

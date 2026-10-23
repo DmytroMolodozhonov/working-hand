@@ -115,7 +115,7 @@ export function playerSnapshot(game) {
     const h = inv?.inHand;
     if (h && h.kind === 'weapon' && h.weapon) {
         const i = slots.findIndex((s) => !s);
-        if (i >= 0) slots[i] = { kind: 'weapon', type: h.weapon.type, id: h.weapon.id };
+        if (i >= 0) slots[i] = { kind: 'weapon', type: h.weapon.type, id: h.weapon.id, magic: !!h.weapon.magic, bonus: h.weapon.bonus || 0, ench: h.weapon.ench || undefined };
     }
     const p = game.character.group.position;
     return {
@@ -284,6 +284,7 @@ export class WorldKeeper {
             // (a good lying unpaid for sale is the market's, not the world's: the merchant lays it out again — kept, it came back
             // beside his new goods at every load, the counters filling up with wands and price cards)
             items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L) && !(L.item.shop && !L.item.shop.paid)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
+            enchantCircles: g.enchantCircles?.snapshot() || undefined, // (the permanent circles of the enchanting pentagram)
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
@@ -373,6 +374,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.wards) g.wards?.restore(save.wards); // houses' spheres of protection
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
+    if (save.enchantCircles) g.enchantCircles?.restore(save.enchantCircles);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
     if (save.spiders) g.spiders?.restore(save.spiders);
@@ -400,7 +402,7 @@ export function restoreWorld(game, save, THREE) {
             let w = g.weapons.byId.get(s[0]);
             const pos = new THREE.Vector3(s[2], s[3], s[4]);
             const q = new THREE.Quaternion(s[5], s[6], s[7], s[8]);
-            if (!w) { w = g.weapons.markMagic(g.weapons.spawn(s[1], pos, q, s[0]), s[10]); w.wake(); }
+            if (!w) { w = g.weapons.markMagic(g.weapons.spawn(s[1], pos, q, s[0]), s[10]); if (s[11]) w.ench = s[11]; w.wake(); }
             else if (!w.hover) w.placeAt(pos, q);
         }
     }

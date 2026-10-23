@@ -25,6 +25,8 @@
  */
 
 import { scrollKindLabel } from './DarkMagic.js';
+import { enchantValueMul, describeEnchant } from './Enchant.js';
+import { addEnchantGlow } from '../fx/EnchantGlow.js';
 import { irMaterial } from '../fx/Iridescent.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
@@ -177,6 +179,9 @@ export function wandValue(it) {
  */
 export function itemValue(it) {
     if (!it) return 0;
+    return Math.round(baseValue(it) * enchantValueMul(it));
+}
+function baseValue(it) {
     switch (it.kind) {
         case 'wand': return wandValue(it);
         case 'dragonEgg': return 700;
@@ -583,6 +588,13 @@ const kindLine = (it) => { const k = scrollKindLabel(it); return k ? `<small sty
 
 /** «Раскрой свои секреты»: what the hologram says about an item. */
 export function describeItem(it) {
+    const d = describeItemBase(it);
+    const e = d && describeEnchant(it);
+    if (e) d.lines = [...d.lines, `<b style="color:${e.glow}">${e.title}</b>: ${e.lines.join(' — ')}`]; // (enchanted on the pentagram)
+    return d;
+}
+
+function describeItemBase(it) {
     if (!it) return null;
     if (!it.kind) return { title: 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     switch (it.kind) {
@@ -977,6 +989,7 @@ export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scrol
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
+    if (it.ench) addEnchantGlow(m, it.ench); // (the shell of an enchanted thing: EnchantGlow.js — before scaling, in the model's own box)
     const s = ITEM_SCALE[it.kind];
     if (s && s !== 1) m.scale.multiplyScalar(s);
     return m;

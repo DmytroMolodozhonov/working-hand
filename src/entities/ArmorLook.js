@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three';
+import { addBodyGlow } from '../fx/EnchantGlow.js';
 
 const STEEL = 0xb8c2cc, STEEL_DARK = 0x8a94a0, STEEL_MAGIC = 0xcfdcff, GOLD = 0xd4af37, LEATHER = 0x5a3a1e;
 
@@ -173,6 +174,7 @@ export function dressArmor(ch, code) {
     // torso it is seen looking down, as the torso is: Character.setFirstPerson)
     const layer = ch._fpv ? 1 : 0;
     for (const m of list) if (m.parent === ch.head) m.layers.set(layer);
+    if (c.e > 0) addBodyGlow(ch, c.e - 1, list); // (enchanted on the pentagram: a faint rune shell — EnchantGlow.js)
     ch.refreshDarkArmor?.(); // (чёрная магия: трещины на новых доспехах)
 }
 
