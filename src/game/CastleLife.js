@@ -74,6 +74,7 @@ const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
 const THEFT_MS = 90000;
+import { settlePawn } from '../world/PawnStall.js';
 import { BUMP, LESSON, knockOutcome, beating, windDowns, packHostile, unpackHostile } from './BumpRules.js';
 const SORRY_OK = ['Ладно, бывает.', 'Хорошо, я не сержусь.', 'Ну ладно, впредь аккуратнее.', 'Бывает. Забудем.'];
 const RAMPAGE = 3; // different people of a castle hurt by one player within 2 min: that is a rampage — the guard comes
@@ -495,7 +496,8 @@ export class CastleLife {
             knight({ x: n.x, y: n.y, z: n.z }, 'yard');
         }
         // the merchants at their stalls
-        def.stalls.forEach((s, i) => this._activate(cs, def.knights + 1 + i, { ...s.back, yaw: s.yaw }, 'stall', { post: { ...s.back, yaw: s.yaw } }));
+        settlePawn(this.game.world?.terrain?.data, def);
+        def.stalls.forEach((s, i) => (!s.probe || s.settled) && !s.off && this._activate(cs, def.knights + 1 + i, { ...s.back, yaw: s.yaw }, 'stall', { post: { ...s.back, yaw: s.yaw } }));
         // farmers in a few fields
         let f = 0;
         for (const field of def.fields.slice(0, 4)) {

@@ -621,14 +621,15 @@ function potionStall(p, lot, road) {
 }
 
 /** The whole site: tower, grounds, houses. Returns the castle-shaped record. */
-export function buildTowerSite(seed, gx, gz, X, Z, F, rng, buyers = false) {
+export function buildTowerSite(seed, gx, gz, X, Z, F, rng) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], pens: [], chests: [] };
     buildGrounds(p, rng, out);
     buildWizardHouses(p, rng, out);
     buildTower(p, rng, out);
-    if (buyers) out.pawnStall = pawnStall(p, 0, 0, (u, v) => p.node(0, v, 0)); // (outside, east of the road to the great door) // (generation 7; takes no rng: the tower and its houses stay the same)
+    // the buyer outside, east of the road to the great door (by the author's wish — in old worlds too: PawnStall.settlePawn drops it where the player has built over its place); takes no rng
+    out.pawnStall = pawnStall(p, 0, 0, (u, v) => p.node(0, v, 0));
     p.joinRoads();
     // link the tower gate to the road
     p.link(out.gateNode, p.node(0, -33, 0));
@@ -685,8 +686,7 @@ export function flatDryGround(raw, X, Z) {
 
 /** Finds and remembers the towers (the same shape of answers as CastleIndex). */
 export class TowerIndex {
-    constructor(seed, raw, castles, buyers = false) {
-        this.buyers = buyers;
+    constructor(seed, raw, castles) {
         this.seed = seed; this.raw = raw; this.castles = castles;
         this.cells = new Map();
         this._lastCell = null;
@@ -756,7 +756,7 @@ export class TowerIndex {
         if (!c || c.gx !== gx || c.gz !== gz) return null; // (the one tower of the world)
         const at = this._place(gx, gz);
         if (!at) return null;
-        return buildTowerSite(this.seed, gx, gz, at.X, at.Z, 0, at.rng, this.buyers);
+        return buildTowerSite(this.seed, gx, gz, at.X, at.Z, 0, at.rng);
     }
 
     /**

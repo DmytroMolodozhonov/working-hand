@@ -191,7 +191,7 @@ function buildVillage(p, rng, out, mage, pawn = false) {
     if (mage) {
         const S = 3 + (rng() < 0.5 ? 1 : 0);
         for (let k = 0; k < S; k++) out.stalls.push(magicStall(p, k, ringNear));
-        // the buyer (generation 7): between two sellers' sides, a diagonal gap of the houses; takes no rng
+        // the buyer (by the author's wish — in old worlds too, unlike the usual rule): in a diagonal gap of the houses; takes no rng
         if (pawn) out.stalls.push(pawnStall(p, 3, 48, ringNear));
     }
     // (no post: the night watch walks its rounds round the fire and the houses — NightLife._watch)
@@ -220,14 +220,14 @@ function magicStall(p, face, ringNear) {
 
 // ------------------------------------------------------------- the site
 /** One hamlet of `type` at (X, Z), floor layer F. Returns the castle-shaped record. */
-export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, buyers = false) {
+export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], fields: [], stalls: [], posts: [] };
     const mage = type === 'magehut' || type === 'magevillage';
     if (type === 'magehut') buildMageHut(p, rng, out);
     else if (type === 'hermit') buildHermitHut(p, rng, out);
-    else buildVillage(p, rng, out, mage, type === 'magevillage' && buyers);
+    else buildVillage(p, rng, out, mage, type === 'magevillage');
     p.joinRoads();
     const id = 'hm' + gx + '_' + gz + '_' + slot;
     const houses = out.houses.map((h, i) => ({ ...h, id: id + '_h' + i }));
@@ -283,8 +283,7 @@ export function pickType(x) {
 /** Finds and remembers the hamlets (the same shape of answers as CastleIndex / TowerIndex). */
 export class HamletIndex {
     /** `busy(x, z, r)`: another site (a castle, a tower, the Ice Castle) is within `r` of a point. */
-    constructor(seed, raw, busy, buyers = false) {
-        this.buyers = buyers;
+    constructor(seed, raw, busy) {
         this.seed = seed; this.raw = raw; this.busy = busy;
         this.cells = new Map(); // cell key → [defs]
         this._lastCell = null;
@@ -312,7 +311,7 @@ export class HamletIndex {
                 if (this.busy(X, Z, zone + HAMLET.BLEND + 12)) continue;
                 const F = hamletGround(this.raw, X, Z, zone);
                 if (F == null) continue;
-                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng, this.buyers));
+                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng));
                 break;
             }
         };

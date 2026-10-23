@@ -1,6 +1,6 @@
 /**
  * PawnStall.js — the buyer's stall (a pawnbroker, `stall.pawn`): the same one by the wizards' tower and in the small wizard
- * villages (generation 7). CastleTalk buys anything from a hand put on its counter (40 % under: WizardMarket.pawnPrice),
+ * villages (in old worlds too, by the author's wish). CastleTalk buys anything from a hand put on its counter (40 % under: WizardMarket.pawnPrice),
  * BuyerSigns.js hangs the «Скупка» plaque on the counter, CastleLife / HamletLife set the seller behind it.
  *
  * Built in plan coordinates (Castles.Plan) with the customer on the −u side, the seller on the +u side, looking −u. The counter
@@ -14,7 +14,7 @@
 import { BLOCK } from './Terrain.js';
 
 export function pawnStall(p, du, dv, towards) {
-    const B = BLOCK;
+    const B = BLOCK, first = p.parts.length;
     const bx = (u0, u1, l0, l1, v0, v1, t) => p.box(u0 + du, u1 + du, l0, l1, v0 + dv, v1 + dv, t);
     bx(8, 8, 0, 0, -42, -37, B.PLANKS_DARK); // the counter
     bx(8, 8, 1, 1, -41, -38, B.CLOTH_WHITE);
@@ -34,10 +34,33 @@ export function pawnStall(p, du, dv, towards) {
     const frontNode = p.node(fu, fv, 0, 'stall');
     p.link(frontNode, towards(fu, fv));
     const c0 = p.pt(8 + du, -41 + dv), c1 = p.pt(8 + du, -38 + dv), o = p.pt(0, 0), f = p.pt(-1, 0);
+    const cc = p.pt(8 + du, -39.5 + dv), sc = p.pt(10 + du, -39.5 + dv);
     return {
+        parts: [first, p.parts.length], // (its blocks in the site's parts: the tests)
+        probe: { cx: Math.floor(cc.x), cz: Math.floor(cc.z), cL: p.L(1), sx: Math.floor(sc.x), sz: Math.floor(sc.z), sL: p.L(0) }, // (settlePawn: is the built stall still there?)
         trade: 'pawn', pawn: true, // (WizardMarket.js: the pawnshop takes anything; the seller only buys)
         front: p.pt(fu, fv), back: p.pt(10 + du, fv), frontNode,
         counter: { x0: Math.min(c0.x, c1.x), x1: Math.max(c0.x, c1.x), z0: Math.min(c0.z, c1.z), z1: Math.max(c0.z, c1.z), top: p.L(1) - 0.5 },
         yaw: Math.atan2(-(f.x - o.x), -(f.z - o.z)), // (the seller looks at the customer: −u)
     };
+}
+
+/**
+ * (the stall of a world made before the buyer came, or a place the player has changed) Is the stall really standing: the white
+ * cloth on its counter and room (3 blocks of air) where the seller stands? Not — it is switched off, no seller, no plaque, no deals
+ * (nobody stands in rock, no half-stall in a wall). `data` is the terrain data; waits (returns false) while the land is not made.
+ * Settled once a stall: true when it is done.
+ */
+export function settlePawn(data, def) {
+    let done = true;
+    for (const st of def.stalls || []) {
+        const q = st.probe;
+        if (!q || st.settled) continue;
+        if (data.landMade && (!data.landMade(q.cx, q.cz) || !data.landMade(q.sx, q.sz))) { done = false; continue; }
+        const ok = data.get(q.cx, q.cL, q.cz) === BLOCK.CLOTH_WHITE
+            && !data.get(q.sx, q.sL, q.sz) && !data.get(q.sx, q.sL + 1, q.sz) && !data.get(q.sx, q.sL + 2, q.sz);
+        st.settled = true;
+        if (!ok) { st.off = true; st.pawn = false; delete st.trade; }
+    }
+    return done;
 }

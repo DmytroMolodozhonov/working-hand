@@ -30,6 +30,7 @@ import { createRng } from '../core/math.js';
 import { rollMana } from './WizardAI.js';
 import { CAMPFIRE } from './Campfires.js';
 import { newUid } from './ItemTypes.js';
+import { settlePawn } from '../world/PawnStall.js';
 import { rollShopScroll, scrollShopPrice } from './WizardShop.js';
 
 /** A marker in the site's `killed` set (saved with the world): the lone wizard's sphere is gone for good. */
@@ -131,7 +132,8 @@ export class HamletLife {
     /** (host) The people at their day places: the sellers, the watchman, the farmers. */
     staffDay(cs) {
         const L = this.life, def = cs.def;
-        def.stalls.forEach((s, i) => L._activate(cs, (def.knights | 0) + 1 + i, { ...s.back, yaw: s.yaw }, 'stall', { post: { ...s.back, yaw: s.yaw } }));
+        settlePawn(L.game.world?.terrain?.data, def);
+        def.stalls.forEach((s, i) => (!s.probe || s.settled) && !s.off && L._activate(cs, (def.knights | 0) + 1 + i, { ...s.back, yaw: s.yaw }, 'stall', { post: { ...s.back, yaw: s.yaw } }));
         for (let k = 1; k <= (def.knights | 0); k++) {
             const yard = cs.graph.tagged('yard')[0];
             const n = yard != null ? cs.graph.nodes[yard] : def.gateIn;
