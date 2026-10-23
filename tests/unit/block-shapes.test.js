@@ -210,3 +210,25 @@ test('generation 6: no ramp beside the water at its height, every ramp on the la
         }
     }
 });
+
+test('generation 6: the roofs of a village are ramps of the roof material; generation 5 the same blocks, no shapes', async () => {
+    const OPTS = { seed: 20261015, mountains: true, seas: true, test: false, deepCaves: true, lush: true };
+    const six = new TerrainData(); six.generate({ ...OPTS, slopes: true });
+    const five = new TerrainData(); five.generate(OPTS);
+    const castle = six.castles.near(0, 0, 1500)[0];
+    assert.ok(castle, 'a castle near the spawn');
+    const roofs = new Set([BLOCK.ROOF_RED, BLOCK.ROOF_BLUE, BLOCK.ROOF_SLATE, BLOCK.THATCH, BLOCK.ROOF_PURPLE]);
+    let ramps = 0, checked = 0;
+    for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const cx = Math.floor(castle.x / CHUNK) + dx, cz = Math.floor(castle.z / CHUNK) + dz;
+        const a = six.chunk(cx, cz), b = five.chunk(cx, cz);
+        if (!a.shape) continue;
+        for (let i = 0; i < a.shape.length; i++) {
+            if (!a.shape[i]) continue;
+            // a ramp put by the land's smoothing stands on a column of the old world's air; the roofs' on the old block itself
+            if (roofs.has(a.blocks[i])) { ramps++; assert.equal(b.blocks[i], a.blocks[i], 'a roof ramp is the old roof block, reshaped'); }
+            checked++;
+        }
+    }
+    assert.ok(ramps > 50, 'roof ramps: ' + ramps + ' of ' + checked);
+});

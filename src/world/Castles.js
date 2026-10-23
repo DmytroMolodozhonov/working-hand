@@ -242,17 +242,21 @@ function tower(p, s, u, v, top, opts) {
 
 /** A straight staircase rising along +v (dir 1) or −v (dir −1) from l0 by `n` steps. */
 function stairsV(p, u0, u1, v0, dir, n, t, l0 = 0) {
+    const m = p.parts.length;
     for (let i = 0; i < n; i++) {
         const v = v0 + dir * i;
         p.box(u0, u1, l0, l0 + i, v, v, t);
     }
+    p.slopeTop(m, t); // (generation 6: each step a ramp — the stair walked up as a slope; the top step level)
 }
 
 function stairsU(p, u0, dir, v0, v1, n, t, l0 = 0) {
+    const m = p.parts.length;
     for (let i = 0; i < n; i++) {
         const u = u0 + dir * i;
         p.box(u, u, l0, l0 + i, v0, v1, t);
     }
+    p.slopeTop(m, t);
 }
 
 // ------------------------------------------------------------ furniture

@@ -131,12 +131,13 @@ function buildTower(p, rng, out) {
     // ---- the spiral stair: flight k from floor k to floor k+1 along the wall
     const flights = [];
     for (let k = 0; k + 1 < LEVELS.length; k++) {
-        const l = LEVELS[k], th = flightAngle(k);
+        const l = LEVELS[k], th = flightAngle(k), mark = p.parts.length;
         for (let i = 0; i < STEPS; i++) {
             const a0 = th + i * DELTA, a1 = a0 + DELTA;
             p.sector(0, 0, R_IN, BAND_IN, a0, a1, l + i + 1, l + i + 5, B.AIR); // headroom (cuts the floor above)
             p.sector(0, 0, R_IN, BAND_IN, a0, a1, l, l + i, B.ARCANE_DARK); // the step
         }
+        p.slopeTop(mark, B.ARCANE_DARK); // (generation 6: the steps' edges ramps where the flight rises straight along x or z)
         const up = LEVELS[k + 1];
         p.sector(0, 0, BAND_IN, BAND_IN - 1, th, th + STEPS * DELTA, up, up + 1, B.FENCE); // the railing round the hole
         p.sector(0, 0, R_IN, BAND_IN, th, th + DELTA, up, up + 1, B.FENCE); // (the hole's closed end)
