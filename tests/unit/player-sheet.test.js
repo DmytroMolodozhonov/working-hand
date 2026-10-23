@@ -48,9 +48,11 @@ test('a clean hero has no dark rows; absent modules give no rows; a throwing get
     assert.doesNotThrow(() => buildSheet(bad));
 });
 
-test('pentagrams appear once the module exists', () => {
-    const s = buildSheet({ pentagrams: { learned: new Set(['Пентаграниум']), permanent: new Set(['p1']) } });
-    assert.match(byId(s, 'pentagrams').value, /Пентаграниум/);
+test('pentagrams: known by scroll; the break-ward mark shows', () => {
+    const s = buildSheet({ breakward: { known: true, marked: true }, bonus: { spells: { GargoylePentagram: true } } });
+    assert.match(byId(s, 'pentagrams').value, /Слом магической защиты.*горгульи/i);
+    assert.ok(byId(s, 'breakMark'));
+    assert.equal(byId(buildSheet({}), 'pentagrams'), undefined);
 });
 
 test('every field has an unique id', () => {

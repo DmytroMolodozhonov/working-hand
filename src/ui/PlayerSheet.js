@@ -16,6 +16,7 @@ import { darkStage } from '../game/DarkMagic.js';
 import { ACHIEVEMENTS, ACH_IDS, achBonus } from '../game/Achievements.js';
 import { armorName, describeArmor, wornCode, pieceMax } from '../game/ArmorTypes.js';
 import { describeEnchant } from '../game/Enchant.js';
+import { PENTAGRAMS } from '../game/Pentagrams.js';
 
 const MODE_RU = { creative: '🛠 Творческий', survival: '🌙 Выживание', freeworld: '⚔️ Свободный мир', test: '🧪 Полигон' };
 const STAGE_RU = { clean: 'нет', hidden: 'не заметна', scorned: 'презираемый', outcast: 'изгнанник' };
@@ -77,12 +78,11 @@ export const FIELDS = [
     { id: 'flightMax', section: 'magic', get: (g) => g.knowsSpell && g.knowsSpell('FlyingMaxima') ? row('Дар богов', 'Flying Maxima — полёт в космос', { icon: '🪽' }) : null },
     { id: 'gmp', section: 'magic', get: (g) => g.bonus?.spells?.GiveMyPower ? row('Дар', 'Give Me My Power — забрать свою силу', { icon: '💀' }) : null },
     { id: 'pentagrams', section: 'magic', get: (g) => {
-        const p = g.pentagrams; if (!p) return null;
-        const list = [...(p.learned || p.known || [])];
-        const perm = num(p.permanent?.size ?? p.permanent?.length ?? 0);
-        if (!list.length && !perm) return null;
-        return row('Пентаграммы', list.length ? list.join(', ') : '—', { icon: '⛧', tip: perm ? `Постоянных: ${perm}` : null });
+        // the drawings the hero knows: a burnt scroll (bonus.spells[scroll]); the break-ward one has its own flag; Creative — all
+        const list = Object.values(PENTAGRAMS).filter((d) => g.config?.mode === 'creative' || g.bonus?.spells?.[d.scroll] || (d.id === 'breakward' && g.breakward?.known)).map((d) => d.title);
+        return list.length ? row('Пентаграммы', list.join(', '), { icon: '⛧', tip: 'Выученные рисунки' }) : null;
     } },
+    { id: 'breakMark', section: 'dark', get: (g) => g.breakward?.marked ? row('Метка слома защиты', 'на теле до смерти', { icon: '⛧' }) : null },
 
     ...SLOTS.map((slot) => ({ id: 'worn-' + slot, section: 'armor', get: (g) => {
         const it = g.armor?.worn?.[slot]; if (!it) return null;
