@@ -284,6 +284,7 @@ export class WorldKeeper {
             // (a good lying unpaid for sale is the market's, not the world's: the merchant lays it out again — kept, it came back
             // beside his new goods at every load, the counters filling up with wands and price cards)
             items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L) && !(L.item.shop && !L.item.shop.paid)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
+            gargoyleScorch: g.gargoyles?.snapshot() || undefined, // (the burnt pentagrams of the gargoyles: spent for good)
             enchantCircles: g.enchantCircles?.snapshot() || undefined, // (the permanent circles of the enchanting pentagram)
             weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
@@ -375,6 +376,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.beds) g.beds?.restore(save.beds);
     if (save.castles) g.castleLife?.restore(save.castles);
     if (save.enchantCircles) g.enchantCircles?.restore(save.enchantCircles);
+    if (save.gargoyleScorch) g.gargoyles?.restore(save.gargoyleScorch);
     if (save.bodies) g.death?.restore(save.bodies);
     if (save.crystals) g.crystals?.restore(save.crystals);
     if (save.spiders) g.spiders?.restore(save.spiders);

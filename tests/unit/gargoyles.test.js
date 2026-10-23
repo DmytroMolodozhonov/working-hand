@@ -373,3 +373,89 @@ test('the other tables: Imperius (Maxima only, flies), steadiness, impact, the d
     assert.ok(KINDS.G, 'pushes: a stone flier reels, never falls');
     assert.equal(KINDS.G.noKnock(), true);
 });
+
+// ---------------------------------------------------------------- the grip, the breath, the spent pentagram
+test('the grip: who can be grabbed and who tears free (a villager only flails, a knight sometimes breaks out; the king is too heavy)', async () => {
+    const R = await import('../../src/game/GargoyleRules.js');
+    assert.ok(R.grabChance('farmer') > 0 && R.grabChance('knight') > 0 && R.grabChance('x', true) > 0);
+    assert.equal(R.grabChance('king'), 0);
+    assert.equal(R.grabChance('master'), 0);
+    assert.equal(R.breakFree('farmer'), 0, 'a villager does not resist');
+    assert.ok(R.breakFree('knight') > R.breakFree('x', true) && R.breakFree('x', true) > 0, 'the knight has the best chance, a wizard less');
+});
+
+test('carried up and let go from a height: the person hangs under the claws, then falls (Levitation counts the fall)', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const watched = [];
+    g.levitation = { watchFall: (ck, c, by) => watched.push([ck, c.id, by]) };
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    const o = G.list[0];
+    const vil = { id: 'v1', role: 'farmer', x: 3, y: 0, z: 3, dead: false, hp: 8 };
+    const real = Math.random; Math.random = () => 0;
+    G._tryGrab(o, { ref: vil });
+    Math.random = real;
+    assert.equal(o.mode, 'carry');
+    assert.equal(vil.carriedBy, o.id);
+    o.model.position.set(3, 10, 3);
+    for (let i = 0; i < 40; i++) G._carry(o, 0.05);
+    assert.ok(Math.abs(vil.y - (o.model.position.y - 3.4)) < 1e-6, 'hangs below the claws');
+    assert.equal(vil.mode, 'flail');
+    for (let i = 0; i < 400 && o.carry; i++) G._carry(o, 0.05);
+    assert.equal(o.carry, null, 'it let go');
+    assert.equal(vil.carriedBy, null);
+    assert.ok(vil.vy < 0 && vil.flyFlail, 'he falls');
+    assert.equal(watched.length, 1, 'the fall from the height is counted');
+    // a kill of the gargoyle drops its victim too
+    const vil2 = { id: 'v2', role: 'knight', x: 0, y: 0, z: 0, dead: false };
+    Math.random = () => 0; const o2 = G.list[1]; G._tryGrab(o2, { ref: vil2 }); Math.random = real;
+    assert.ok(o2.carry);
+    G._die(o2, 'me', true);
+    assert.equal(vil2.carriedBy, null);
+    assert.ok(vil2.vy < 0);
+});
+
+test('the breath: fire out of the mouth lights things and bodies on its way', async () => {
+    const calls = [];
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false },
+        fire: { igniteAlong: (o, d, len) => calls.push(['fire', len]) }, burning: { igniteRay: (o, d, len, w, by) => calls.push(['burn', by]) } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    const o = G.list[0];
+    G._flame(o, new THREE.Vector3(10, 3, 10));
+    assert.ok(calls.some((c) => c[0] === 'fire') && calls.some((c) => c[0] === 'burn' && c[1] === 'me'));
+    // the stream is drawn while breathT runs
+    const sparks = [];
+    g.fx = { spark: (...a) => sparks.push(a) };
+    o.breathT = 1;
+    G._breathFx(o, 1 / 60);
+    assert.ok(sparks.length > 0 && o.breathT < 1);
+    assert.ok(GARGOYLE.FIRE.CD[0] >= 5, 'now and then, not always');
+});
+
+test('the spent pentagram: once all have flown out it never works again, the ground stays black, it is saved', async () => {
+    const g = await bareGame({ combat: { enabled: true, fatigue: 600, dead: false } });
+    const G = g.gargoyles;
+    const c = new THREE.Vector3(20, 0, 20);
+    assert.equal(G.startRitual(c).ok, true);
+    assert.equal(G.spent.length, 0);
+    for (let t = 0; t < 9; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 30);
+    assert.equal(G.spent.length, 1, 'all out: spent');
+    assert.ok(G.fx.scorch.some((q) => q.born >= 0 && q.mesh.position.x === 20), 'the ground goes black there');
+    const mana = g.combat.fatigue;
+    for (let t = 0; t < 100; t += 0.5) G.update(0.5);
+    const again = G.startRitual(new THREE.Vector3(22, 0, 21));
+    assert.equal(again.ok, false);
+    assert.equal(again.why, 'spent');
+    assert.equal(g.combat.fatigue, mana, 'nothing is taken');
+    assert.equal(G.startRitual(new THREE.Vector3(200, 0, 200)).ok, true, 'another place still works');
+    const snap = G.snapshot();
+    const g2 = await bareGame();
+    g2.gargoyles.restore(snap);
+    assert.equal(g2.gargoyles.spent.length, 1);
+    assert.equal(g2.gargoyles.startRitual(new THREE.Vector3(20, 0, 20)).why, 'spent');
+    assert.match(src('src/game/WorldSave.js'), /gargoyleScorch/);
+});

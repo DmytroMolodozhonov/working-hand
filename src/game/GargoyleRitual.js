@@ -82,6 +82,35 @@ void main() {
     gl_FragColor = vec4(col, alpha);
 }`;
 
+let _scorchMat = null;
+function scorchTexture() {
+    if (typeof document === 'undefined') return null;
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d');
+    if (!x) return null;
+    // a ragged black stain: soot out from the middle in long fingers, charred cracks, a few embers in them
+    const g = x.createRadialGradient(128, 128, 10, 128, 128, 126);
+    g.addColorStop(0, 'rgba(6,2,3,0.96)'); g.addColorStop(0.55, 'rgba(10,4,4,0.9)'); g.addColorStop(0.85, 'rgba(14,6,5,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    let seed = 7; const r = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 46; i++) { // fingers of soot
+        const a = r() * 6.283, len = 40 + r() * 60; x.strokeStyle = `rgba(8,3,3,${0.25 + r() * 0.4})`; x.lineWidth = 3 + r() * 9; x.beginPath(); x.moveTo(128, 128);
+        let px = 128, py = 128, an = a; for (let k = 0; k < 6; k++) { an += (r() - 0.5) * 0.7; px += Math.cos(an) * len / 6; py += Math.sin(an) * len / 6; x.lineTo(px, py); } x.stroke();
+    }
+    for (let i = 0; i < 34; i++) { // ember cracks
+        let px = 128 + (r() - 0.5) * 150, py = 128 + (r() - 0.5) * 150, an = r() * 6.28; x.strokeStyle = `rgba(255,${70 + (r() * 60) | 0},20,${0.25 + r() * 0.5})`; x.lineWidth = 0.8; x.beginPath(); x.moveTo(px, py);
+        for (let k = 0; k < 5; k++) { an += (r() - 0.5) * 1.2; px += Math.cos(an) * 6; py += Math.sin(an) * 6; x.lineTo(px, py); } x.stroke();
+    }
+    const t = new THREE.CanvasTexture(c); t.userData = { shared: true }; return t;
+}
+function scorchMat() {
+    if (_scorchMat) return _scorchMat;
+    const tex = scorchTexture();
+    _scorchMat = new THREE.MeshBasicMaterial({ color: tex ? 0xffffff : 0x0a0505, map: tex, transparent: true, opacity: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, fog: true });
+    _scorchMat.userData.shared = true;
+    return _scorchMat;
+}
+
 let _shared = null;
 /** The shapes and materials every ritual shares (made once). */
 function shared() {
@@ -98,7 +127,10 @@ function shared() {
     const wallMat = () => { const m = new THREE.ShaderMaterial({ vertexShader: WALL_VS, fragmentShader: WALL_FS, uniforms: { uTime: { value: 0 }, uStr: { value: 0 }, uHead: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }); m.userData.shared = true; return m; };
     const glowMat = () => { const m = new THREE.MeshBasicMaterial({ color: 0xff4a0e, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }); m.userData.shared = true; return m; };
     const skyMat = (seed) => { const m = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: { uTime: { value: 0 }, uStr: { value: 0 }, uFlash: { value: 0 }, uSeed: { value: seed }, uCam: { value: new THREE.Vector3() } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }); m.userData.shared = true; return m; };
-    _shared = { wallGeo, ringGeo, discGeo, padGeo, wallMat, glowMat, skyMat };
+    const scorchGeo = new THREE.CircleGeometry(GARGOYLE.SCORCH_R, 40);
+    scorchGeo.rotateX(-Math.PI / 2);
+    scorchGeo.userData.shared = true;
+    _shared = { wallGeo, ringGeo, discGeo, padGeo, scorchGeo, wallMat, glowMat, skyMat };
     return _shared;
 }
 
@@ -125,6 +157,35 @@ export class RitualFx {
         });
         this.flash = 0;
         this._sky = 0;
+        // the scorched ground of the spent pentagrams: a pool (the newest SCORCH_MAX; farther than 260 m not drawn)
+        const sm = scorchMat();
+        this.scorch = [];
+        for (let i = 0; i < GARGOYLE.SCORCH_MAX; i++) {
+            const m = new THREE.Mesh(S.scorchGeo, sm);
+            m.visible = false; m.frustumCulled = false; m.renderOrder = 2;
+            scene?.add(m);
+            this.scorch.push({ mesh: m, born: -1, x: 0, y: 0, z: 0 });
+        }
+    }
+
+    /** The ground of a spent pentagram goes black (it fades in over SCORCH_IN s; `instant`: a world loaded). The oldest mark is reused. */
+    addScorch(x, y, z, instant = false) {
+        if (this.scorch.some((q) => q.born >= 0 && Math.hypot(q.x - x, q.z - z) < 1)) return;
+        let slot = this.scorch.find((q) => q.born < 0);
+        if (!slot) slot = this.scorch.reduce((a, b) => (a.born < b.born ? a : b));
+        slot.born = performance.now() - (instant ? GARGOYLE.SCORCH_IN * 1000 : 0); slot.x = x; slot.y = y; slot.z = z;
+        slot.mesh.position.set(x, y + 0.07, z);
+        slot.mesh.rotation.y = (x * 12.9898 + z * 78.233) % 6.28; // (each one lies differently)
+    }
+
+    scorchStep(camPos) {
+        const now = performance.now();
+        for (const q of this.scorch) {
+            if (q.born < 0) { q.mesh.visible = false; continue; }
+            const near = !camPos || Math.hypot(camPos.x - q.x, camPos.z - q.z) < 260;
+            q.mesh.visible = near;
+            if (near) { const k = Math.min(1, (now - q.born) / (GARGOYLE.SCORCH_IN * 1000)); q.mesh.scale.setScalar(0.5 + 0.5 * k); } // (the stain spreads out over SCORCH_IN s)
+        }
     }
 
     /** One of each look (Game.prewarm): the flame wall, the glow, the cloud deck — their shaders compiled with the rest. */
@@ -133,6 +194,7 @@ export class RitualFx {
         const out = [];
         const w = new THREE.Mesh(S.wallGeo, S.wallMat()); w.scale.setScalar(0.01); out.push(w);
         out.push(new THREE.Mesh(S.ringGeo, S.glowMat()));
+        out.push(new THREE.Mesh(S.scorchGeo, scorchMat()));
         const d = new THREE.Mesh(S.discGeo, S.skyMat(1)); d.scale.setScalar(0.01); out.push(d);
         return out;
     }
@@ -215,6 +277,8 @@ export class RitualFx {
         const scene = this.game.scene;
         for (const s of this.rings) { for (const m of [s.wall, s.ring, s.pad]) { scene?.remove(m); m.material.dispose(); } }
         for (const d of this.decks) { scene?.remove(d); d.material.dispose(); }
+        for (const q of this.scorch) scene?.remove(q.mesh);
+        this.scorch = [];
         this.rings = []; this.decks = [];
     }
 }

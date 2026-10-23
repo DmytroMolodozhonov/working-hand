@@ -53,6 +53,12 @@ export const GARGOYLE = {
     PACK: 3, // at most this many on one victim (the others look for another)
     SIZE: 1, // × the model
     HEIGHT: 2.8, SPAN: 4.8, // m: the model standing (horns to the feet) and the wings spread
+    // ---- grabbing: a bite may turn into a grip — it carries the victim up and lets go from a height
+    GRAB: { VILLAGER: 0.5, KNIGHT: 0.3, WIZARD: 0.35, UP: [14, 24], HOLD: [2.5, 4], SPEED: 8, DROP_BELOW: 3.4, FREE: { knight: 0.22, wizard: 0.08, villager: 0 }, KNIGHT_BLOW: 3, KNIGHT_EVERY: 1.3 },
+    // ---- the breath: now and then fire comes out of the mouth and sets things alight
+    FIRE: { CD: [7, 16], RANGE: [5, 20], T: 1.0, LEN: 18, TICK: 0.12, HURT: 1.5, PLAYER_EVERY: 0.5 },
+    // ---- the spent pentagram: once all have flown out it never works again and stays scorched black
+    SCORCH_R: 9, SCORCH_MAX: 12, SCORCH_IN: 6, SPENT_R: 9,
     // ---- the picture on the ground
     CIRCLE_R: 4.6, // m: the ring of fire (the pentagram's own circle is the pentagram session's)
 };
@@ -252,6 +258,9 @@ export const TARGETS = {
     castlePeople: { does: 'hunt', why: 'жители, рыцари, волшебники, торговцы: бросается и рвёт; рыцари и стража отбиваются мечом, остальные бегут (alarm «monster»)' },
     animals: { does: 'hunt', why: 'зверей бьёт (×1,4): лошади, свиньи, коровы, бараны' },
     sailors: { does: 'hunt', why: 'моряков и скелетов Чёрных Усов бьёт; в корабли не врезается' },
+    grip: { does: 'grab', why: 'укус может стать хваткой: горгулья уносит жителя, волшебника или рыцаря вверх (14–24 м) и бросает; житель только машет руками, рыцарь иногда вырывается и бьёт мечом; короля и мастера башни не унести' },
+    breath: { does: 'fire', why: 'время от времени изо рта идёт огонь (раз в 7–16 с по цели в 5–20 м): поджигает дома, деревья, траву, вещи, зверей и людей; «Protection» держит; сама горгулья огнём не горит' },
+    spent: { does: 'world', why: 'когда вылетела последняя, пентаграмма сгорает навсегда (больше не работает), земля вокруг чернеет — остаётся в мире и в сохранении' },
     creatures: { does: 'ignore', why: 'драконы, паучиха, Ледяная Королева и её слуги, живые деревья, книги-птицы, совы и фениксы — не трогает (они не «всех подряд»: боссы и птицы сами по себе)' },
     // ---- the world
     world: { does: 'none', why: 'не ломает постройки; летит над землёй, не сквозь стены; прилетает к людям внутри только до двери' },
@@ -319,3 +328,21 @@ export const GARGOYLE_PENTAGRAM = {
     /** Called on the drawer's computer when the picture is good: pays and begins (not enough mana: nothing happens, the picture stays). */
     use(game, { center, by } = {}) { return game.gargoyles?.startRitual(center, { by }); },
 };
+
+// ----------------------------------------------------------------- схватить и бросить, выжженная пентаграмма (pure)
+/** Chance that a bite turns into a grip on a person of this kind ('villager' | 'knight' | 'wizard'); the king and the tower's master are too heavy / too strong. */
+export function grabChance(role, wizard = false) {
+    if (role === 'king' || role === 'master') return 0;
+    if (wizard) return GARGOYLE.GRAB.WIZARD;
+    return role === 'knight' ? GARGOYLE.GRAB.KNIGHT : GARGOYLE.GRAB.VILLAGER;
+}
+/** Chance per second that the one carried tears himself out of the claws: a knight sometimes, a wizard hardly, a villager only flails. */
+export function breakFree(role, wizard = false) {
+    const F = GARGOYLE.GRAB.FREE;
+    return wizard ? F.wizard : role === 'knight' ? F.knight : F.villager;
+}
+/** Is a point within the burnt ground of a spent pentagram (`spent`: [{x,z}])? */
+export function isSpent(spent, x, z) {
+    for (const s of spent) if (Math.hypot(s.x - x, s.z - z) < GARGOYLE.SPENT_R) return true;
+    return false;
+}

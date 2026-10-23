@@ -29,7 +29,7 @@ import { realmAt } from '../world/Planets.js';
 import { RitualFx } from './GargoyleRitual.js';
 import { gargoyleModel, poseGargoyle, gargoyleBody, gargoyleCenter, gargoyleDist, MODEL_SCALE, HIP, gargoyleStats } from './GargoyleModel.js';
 import {
-    GARGOYLE, TARGETS, PHASE, phaseAt, canStart, sparesSummoner, releasePlan, boltPlan, inDisc, rng, mayHunt, biteDamage, harmOf, roomFor, outOfLeash,
+    GARGOYLE, TARGETS, PHASE, phaseAt, canStart, sparesSummoner, releasePlan, boltPlan, inDisc, rng, mayHunt, biteDamage, harmOf, roomFor, outOfLeash, grabChance, breakFree, isSpent,
 } from './GargoyleRules.js';
 
 export { TARGETS, GARGOYLE };
@@ -64,6 +64,7 @@ export class Gargoyles {
         this.log = []; // (tests) what happened
         this._seq = 0;
         this._debris = this._makeDebris();
+        this.spent = []; // [{x, y, z}] the pentagrams out of which all have flown: they never work again and stay scorched
     }
 
     get auth() { return this.game.authority !== false; }
@@ -89,6 +90,10 @@ export class Gargoyles {
         if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth') {
             if (!silent) g.hud?.setVoice?.('🜏 Здесь пентаграмма горгулий молчит', true);
             return { ok: false, why: 'realm' };
+        }
+        if (isSpent(this.spent, center.x, center.z)) {
+            if (!silent) g.hud?.setVoice?.('🜏 Пентаграмма выжжена: из неё уже вылетели горгульи — больше она не действует', true);
+            return { ok: false, why: 'spent' };
         }
         const free = !c?.enabled;
         const chk = canStart(c?.fatigue ?? 0, free);
@@ -131,6 +136,18 @@ export class Gargoyles {
         return r;
     }
 
+    /** (every computer) The last gargoyle has flown out: the pentagram is spent — never again — and the ground round it goes black. */
+    _spend(c, instant = false) {
+        if (isSpent(this.spent, c.x, c.z)) return;
+        this.spent.push({ x: c.x, y: c.y, z: c.z });
+        if (this.spent.length > 64) this.spent.shift();
+        this.fx.addScorch(c.x, c.y, c.z, instant);
+        this._note({ ev: 'spent', x: c.x, z: c.z });
+    }
+
+    snapshot() { return this.spent.length ? { spent: this.spent.map((s) => [r1(s.x), r1(s.y), r1(s.z)]) } : null; }
+    restore(sn) { for (const a of (sn?.spent || []).slice(0, 64)) this._spend({ x: +a[0] || 0, y: +a[1] || 0, z: +a[2] || 0 }, true); }
+
     _endRitual(r) {
         this.fx.release(r);
         const i = this.rituals.indexOf(r);
@@ -153,6 +170,7 @@ export class Gargoyles {
             r.phase = ph;
             if (ph === PHASE.RELEASE) this.game.sound?.playGargoyle?.(r.c, 'burst', 1.2);
         }
+        if (this.auth && r.plan && r.spawned >= r.plan.length && !r.spentDone) { r.spentDone = true; this._spend(r.c); this._send({ op: 'spent', c: [r1(r.c.x), r1(r.c.y), r1(r.c.z)] }); }
         if (this.auth) {
             while (r.spawned < r.plan.length && r.t >= GARGOYLE.FIRE_T + r.plan[r.spawned].delay) this._release(r, r.plan[r.spawned++]);
             while (r.boltI < r.bolts.length && r.t >= r.bolts[r.boltI].t) this._bolt(r, r.bolts[r.boltI++]);
@@ -225,7 +243,7 @@ export class Gargoyles {
             variant: var_, scale: sc, rit: rit?.id ?? null, by: rit?.by ?? null, home: rit ? rit.c.clone() : pos.clone(),
             age: 0, life: plan?.life ?? rnd(...GARGOYLE.LIFE), plan, mode: 'rise', t: 0, vel: new THREE.Vector3(), yaw: plan ? plan.bearing : Math.random() * 6.28, pitch: 0, roll: 0,
             a: { mode: 'climb', seed: plan?.flap ?? Math.random() * 6.28, span: 0.9 + Math.random() * 0.2, ph: plan?.flap ?? 0, bite: 0 },
-            target: null, sub: 'approach', subT: 0, cd: rnd(0.2, 0.8), slowT: 0, stunT: 0, aggro: null, alarmT: rnd(0, 1.2), rethink: 0, crumbleT: 0, flee: 0,
+            target: null, sub: 'approach', subT: 0, cd: rnd(0.2, 0.8), fireCd: rnd(4, 12), breathT: 0, carry: null, flameT: 0, slowT: 0, stunT: 0, aggro: null, alarmT: rnd(0, 1.2), rethink: 0, crumbleT: 0, flee: 0,
         };
         const sp = gargoyleBodyParts(o);
         o._strikeParts = sp;
@@ -234,6 +252,7 @@ export class Gargoyles {
     }
 
     _remove(o) {
+        if (o.carry) this._dropVictim(o, 'gone');
         this.game.scene?.remove(o.model);
         const U = o.model.userData;
         U.skel?.dispose?.(); // (its own bone texture; the shapes and materials are shared — never disposed)
@@ -284,7 +303,7 @@ export class Gargoyles {
         if (me) add('p', g.localId, null, me.pos);
         for (const [id] of g.remotes || []) { const p = this._player(id); if (p) add('p', id, null, p.pos); }
         for (const v of g.castleLife?.byId?.values?.() || []) {
-            if (v.dead || v.arena || v.imp?.mine) continue;
+            if (v.dead || v.arena || v.imp?.mine || v.carriedBy) continue; // (one in a gargoyle's claws is not prey for the others)
             _v.set(v.x, v.y + 1.4, v.z);
             add('v', v.id, v, _v);
         }
@@ -418,6 +437,7 @@ export class Gargoyles {
     /** It is killed: shatters into stone and embers (the divine spells too). */
     _die(o, by, shatter = true) {
         if (o.dead) return;
+        if (o.carry) this._dropVictim(o, 'killed');
         o.dead = true;
         const g = this.game;
         const p = gargoyleCenter(o, new THREE.Vector3());
@@ -539,6 +559,7 @@ export class Gargoyles {
         o.cd = Math.max(0, o.cd - dt);
         if (o.aggro && this.clock > o.aggro.until) o.aggro = null;
         if (o.mode === 'crumble') { this._crumble(o, dt); return; }
+        if (o.carry) { this._carry(o, dt); return; }
         if (o.age >= o.life) { this._startCrumble(o); return; }
         const hd = hdist(p, o.home);
         // (the people's fright follows it: VillagerFear._poll keeps a danger 'monster' keyed 'garg:' + id)
@@ -633,8 +654,21 @@ export class Gargoyles {
             o.a.mode = dist > 22 ? 'fly' : dist > 5 ? 'dive' : 'hover';
             this._orient(o, dt, dist < 12 ? v.pos : null);
             o.a.headYaw = 0;
-            if (dist < GARGOYLE.REACH && o.cd <= 0) { o.sub = 'bite'; o.subT = 0; o.a.bite = 0.001; o.bitten = false; this._sound(o, 'roar', 0.7); }
+            o.fireCd -= dt;
+            const F = GARGOYLE.FIRE;
+            if (o.fireCd <= 0 && dist > F.RANGE[0] && dist < F.RANGE[1] && Math.abs(angDiff(o.yaw, Math.atan2(v.pos.x - p.x, v.pos.z - p.z))) < 0.4) {
+                o.sub = 'breath'; o.subT = 0; o.fireCd = rnd(...F.CD); o.breathT = F.T; o.flameT = 0;
+                this._send({ op: 'fb', id: o.id }); this._sound(o, 'roar', 1);
+            } else if (dist < GARGOYLE.REACH && o.cd <= 0) { o.sub = 'bite'; o.subT = 0; o.a.bite = 0.001; o.bitten = false; this._sound(o, 'roar', 0.7); }
             else if (o.subT > 9 && dist > 6) { o.target = null; o.rethink = 0.3; } // (cannot get at it: another)
+        } else if (o.sub === 'breath') { // fire out of the mouth: it hangs in the air and breathes at the prey
+            o.vel.multiplyScalar(Math.max(0, 1 - dt * 5));
+            p.addScaledVector(o.vel, dt);
+            o.a.mode = 'bite'; o.a.bite = 0.45;
+            this._orient(o, dt, v.pos);
+            o.flameT -= dt;
+            if (o.flameT <= 0) { o.flameT = GARGOYLE.FIRE.TICK; this._flame(o, v.pos); }
+            if (o.subT >= GARGOYLE.FIRE.T) { o.sub = 'approach'; o.subT = 0; o.a.bite = 0; o.cd = 0.6; }
         } else if (o.sub === 'bite') {
             o.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
             p.addScaledVector(o.vel, dt);
@@ -690,6 +724,7 @@ export class Gargoyles {
             if (v.id === g.localId) this._hurtMe(dmg, from.clone(), push);
             else this._send({ op: 'hurt', to: v.id, dmg, f: [r1(from.x), r1(from.y), r1(from.z)], v: [r1(push.x), r1(push.y), r1(push.z)] });
         } else if (v.k === 'v') {
+            this._tryGrab(o, v);
             g.castleLife?.hit(v.ref, dmg, dir.clone(), by, { via: 'ritual', src: { x: o.home.x, y: o.home.y, z: o.home.z }, srcRef: { k: 'g', id: o.id } });
             g.creatureImpact?.apply(v.ref, { v: dir.clone().multiplyScalar(GARGOYLE.SHOVE).setY(1), by, kind: 'gargoyle', jolt: 0, from: from.clone() });
         } else if (v.k === 'a') {
@@ -703,19 +738,109 @@ export class Gargoyles {
     }
 
     /** A bite on MY player (my computer counts it): a raised «Protection» facing it holds it. */
-    _hurtMe(dmg, from, push) {
+    _hurtMe(dmg, from, push, fire = false) {
         const g = this.game, c = g.combat;
         if (!c || c.dead || g.isDeadLocal) return;
         if (c.shieldFactor?.(from) >= 1) { c._blocked?.(from, 'bite'); if (push) g.knockback?.add(push.clone().multiplyScalar(0.3)); return; }
         const hurts = c.enabled || g.config?.mode !== 'creative';
         if (c.enabled) c.damage(dmg, null, 'bite'); else g.damageLocalPlayer?.(dmg);
         if (push) g.knockback?.add(push);
-        g.hud?.setVoice?.(hurts ? `🜏 Горгулья вцепилась: −${r1(dmg)}` : '🜏 Горгулья вцепилась', true);
+        if (fire) g.burning?.ignite?.('p', g.localId, null); // (the breath sets me alight)
+        g.hud?.setVoice?.(fire ? '🔥 Горгулья дохнула огнём' : hurts ? `🜏 Горгулья вцепилась: −${r1(dmg)}` : '🜏 Горгулья вцепилась', true);
+    }
+
+    // ============================================================ the grip: carried up, let go from a height
+    /** (host) A bite may become a grip on a castle person (not the king / the tower's master): chance by who he is. */
+    _tryGrab(o, v) {
+        const c = v.ref;
+        if (o.carry || !c || c.dead || c.carriedBy || c.lev || c.seated) return;
+        if (Math.random() > grabChance(c.role, !!c.wizard)) return;
+        const G = GARGOYLE.GRAB;
+        c.carriedBy = o.id;
+        o.carry = { c, t: 0, hold: rnd(...G.HOLD), up: rnd(...G.UP), hit: G.KNIGHT_EVERY, said: false };
+        o.mode = 'carry'; o.target = null;
+        this._note({ ev: 'grab', id: o.id, vid: c.id, role: c.role });
+        this._sound(o, 'screech', 1);
+        this.game.castleLife?._say?.(c, 'А-а-а! Пустите!', 3);
+    }
+
+    /** (host) Carrying: up and away over open ground, the victim hangs under the claws; a knight may tear free and strikes back. */
+    _carry(o, dt) {
+        const k = o.carry, c = k.c, p = o.model.position, G = GARGOYLE.GRAB;
+        if (!c || c.dead || c.carriedBy !== o.id) { this._dropVictim(o, 'lost'); return; }
+        k.t += dt;
+        const gy = this._ground(p.x, p.z);
+        const goal = _v2.set(p.x + Math.sin(o.yaw) * 10, gy + k.up, p.z + Math.cos(o.yaw) * 10);
+        this._fly(o, goal, G.SPEED, dt, { k: 2.2 });
+        o.a.mode = 'fly'; o.a.headYaw = 0;
+        this._orient(o, dt);
+        c.x = p.x; c.z = p.z; c.y = p.y - G.DROP_BELOW; c.vy = 0; c.vx = 0; c.vz = 0; c.mode = 'flail'; c.speed = 0; // (hanging by the claws, kicking in the air)
+        if (Math.random() < breakFree(c.role, !!c.wizard) * dt) { this._dropVictim(o, 'free'); return; }
+        if (c.role === 'knight') { k.hit -= dt; if (k.hit <= 0) { k.hit = G.KNIGHT_EVERY; this.hit(o, G.KNIGHT_BLOW, 'blade', null); } }
+        if (k.t >= k.hold && p.y - gy > k.up * 0.85) this._dropVictim(o, 'dropped');
+    }
+
+    /** (host) It lets go (or is made to): the person falls from where he is — Levitation counts the fall. */
+    _dropVictim(o, why) {
+        const k = o.carry;
+        o.carry = null;
+        if (o.mode === 'carry') { o.mode = 'roam'; o.goal = null; }
+        const c = k?.c;
+        if (!c) return;
+        c.carriedBy = null;
+        this._note({ ev: 'drop', id: o.id, vid: c.id, why });
+        if (c.dead) return;
+        this.game.levitation?.watchFall?.('v', c, o.by);
+        c.vy = -0.01; c.flyFlail = true; c.vx = o.vel.x * 0.5; c.vz = o.vel.z * 0.5;
+        this.game.castleLife?._say?.(c, why === 'free' ? 'Вырвался!' : 'А-а-а-а!', 3);
+        if (why === 'dropped' || why === 'free') this._sound(o, 'screech', 0.7);
+    }
+
+    // ============================================================ the breath
+    /** (host) One tick of the flame from the mouth towards `at`: things burn, living bodies catch, a player in it is scorched. */
+    _flame(o, at) {
+        const g = this.game, F = GARGOYLE.FIRE;
+        const mouth = o.model.userData.B.head.getWorldPosition(_v3);
+        const d = _d.subVectors(at, mouth);
+        const len = Math.min(F.LEN, d.length() + 2);
+        d.normalize();
+        g.fire?.igniteAlong?.(mouth, d, len);
+        g.animals?.burnAlong?.(mouth, d, len);
+        g.livingTrees?.burnAlong?.(mouth, d, len);
+        g.burning?.igniteRay?.(mouth, d, len, 1.4, o.by);
+        o.flameHurt = (o.flameHurt || 0) - F.TICK;
+        if (o.flameHurt > 0) return;
+        for (const id of [g.localId, ...(g.remotes?.keys?.() || [])]) {
+            const P = this._player(id);
+            if (!P) continue;
+            const along = _v2.subVectors(P.pos, mouth).dot(d);
+            if (along < 0 || along > len) continue;
+            if (_v2.copy(mouth).addScaledVector(d, along).distanceTo(P.pos) > 2.2) continue;
+            if (id === o.by && sparesSummoner(o.age)) continue;
+            o.flameHurt = F.PLAYER_EVERY;
+            if (id === g.localId) this._hurtMe(F.HURT, mouth.clone(), null, true);
+            else this._send({ op: 'hurt', to: id, dmg: F.HURT, f: [r1(mouth.x), r1(mouth.y), r1(mouth.z)], v: null, fire: 1 });
+        }
+    }
+
+    /** (every computer, per frame) The stream of fire out of the mouth: a fan of hot sparks along the way it faces. */
+    _breathFx(o, dt) {
+        o.breathT -= dt;
+        const fx = this.game.fx;
+        if (!fx) return;
+        const mouth = o.model.userData.B.head.getWorldPosition(_v3);
+        const dir = _d.set(0, -0.12, 1).applyQuaternion(o.model.quaternion).normalize();
+        const n = Math.min(10, Math.max(1, Math.round(dt * 60 * 5)));
+        for (let i = 0; i < n; i++) {
+            const sp = rnd(10, 17);
+            fx.spark(mouth, i % 3 === 0 ? 0xffd070 : i % 3 === 1 ? 0xff6a1a : 0xc01a10, 0.12 + Math.random() * 0.2, _v.set(dir.x * sp + (Math.random() - 0.5) * 2.4, dir.y * sp + (Math.random() - 0.3) * 2, dir.z * sp + (Math.random() - 0.5) * 2.4), 0.35 + Math.random() * 0.35);
+        }
     }
 
     // ============================================================ the end of its time
     _startCrumble(o) {
         if (o.mode === 'crumble') return;
+        if (o.carry) this._dropVictim(o, 'crumble');
         o.mode = 'crumble'; o.crumbleT = 0; o.target = null;
         o.a.mode = 'stone';
         this._sound(o, 'crumble', 1);
@@ -789,6 +914,7 @@ export class Gargoyles {
             this.fx.fire(r, dt, cam);
         }
         this.fx.sky(this.rituals, dt, cam);
+        this.fx.scorchStep(cam);
         if (this.auth) {
             if (this.list.length) {
                 this._scan();
@@ -817,6 +943,7 @@ export class Gargoyles {
                 if (far) continue;
                 o.model.userData.setLod(d > 55);
                 poseGargoyle(o.model, o.a, dt);
+                if (o.breathT > 0) this._breathFx(o, dt);
                 if (o.slowT > 0 && Math.random() < dt * 6) g.fx?.spark?.(gargoyleCenter(o, _v3), 0xbfe8ff, 0.07, _v.set(0, 0.5, 0), 0.5); // (frost on it)
             }
             this._wingSounds(me);
@@ -889,7 +1016,9 @@ export class Gargoyles {
                 break;
             }
             case 'hit': if (isHost) { const o = this.byId(m.id); if (o) this.hit(o, Math.min(120, Math.max(0, +m.dmg || 0)), typeof m.kind === 'string' ? m.kind.slice(0, 24) : 'melee', m.from); } break;
-            case 'hurt': if (m.to === g.localId && Array.isArray(m.f)) this._hurtMe(Math.min(10, +m.dmg || 0), vec(m.f), vec(m.v)); break;
+            case 'hurt': if (m.to === g.localId && Array.isArray(m.f)) this._hurtMe(Math.min(10, +m.dmg || 0), vec(m.f), vec(m.v), !!m.fire); break;
+            case 'spent': if (!isHost && Array.isArray(m.c)) this._spend({ x: +m.c[0] || 0, y: +m.c[1] || 0, z: +m.c[2] || 0 }); break;
+            case 'fb': { const o = this.list.find((q) => q.id === m.id); if (!isHost && o) o.breathT = GARGOYLE.FIRE.T; break; }
             case 'snd': if (!isHost && typeof m.k === 'string' && Array.isArray(m.p)) g.sound?.playGargoyle?.(vec(m.p), m.k, 1); break;
             case 'die': {
                 const o = this.list.find((q) => q.id === m.id);
