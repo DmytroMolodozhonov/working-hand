@@ -1056,13 +1056,18 @@ export class Game {
         }
     }
 
-    /** A chest's pouch of coins (a castle's treasury holds much more; a poor house — little or nothing). */
+    /**
+     * A chest's pouch of coins. The author: «в сундуках — от 5 монет до 300, рандомно» (the cave and the house chests were
+     * 5–34 / 0–89, the pouches came with 7 or 13): the plain chests (caves, houses) hold 5…300, evenly. The special ones are
+     * richer or kept as they were: a castle's treasury, the boss chests (dragon, Ice Queen, the captain), carts, ships.
+     */
     _chestPouch(chest) {
-        const coins = chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 20 + Math.floor(Math.random() * 70) : Math.random() < 0.5 ? 0 : 1 + Math.floor(Math.random() * 15))
+        const plain = () => 5 + Math.floor(Math.random() * 296); // 5…300
+        const coins = chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? plain()
             : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
             : chest.room === 'dragon' ? 400 + Math.floor(Math.random() * 600)
             : chest.room === 'iceQueen' ? 250 + Math.floor(Math.random() * 350)
-            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : chest.room === 'study' ? 200 : 120)) : 5 + Math.floor(Math.random() * 30);
+            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : chest.room === 'study' ? 200 : 120)) : plain();
         return coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
     }
 

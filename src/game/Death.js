@@ -45,8 +45,8 @@ export const DEATH = {
     GATHER_RANGE: 14, // m how far «Gather» reaches
     GATHER_CONE: 0.45, // rad (as «Акцио»)
     GATHER_NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
-    KNIGHT_COINS: [4, 15],
-    KING_COINS: [40, 80],
+    KNIGHT_COINS: [5, 300], // (the author: «у людей — от 5 монет до 300, рандомно»; was 4–15)
+    KING_COINS: [150, 300], // (the king is not poorer than a knight; was 40–80)
 };
 
 /** 'body' | 'bones' | 'gone' after `age` seconds. */
