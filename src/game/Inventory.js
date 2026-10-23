@@ -516,7 +516,7 @@ export class Inventory {
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
             st.outT = inPocket === false || inPocket == null ? (st.outT || 0) + dt : 0;
             if (st.outT > 0.4) st.armed = true; // (taken out again: ready for the next time)
-            if (this._cyc?.side === side && st.outT > POCKET_PICK) this._cyc = null; // (the hand went away and did not come back: what it holds is its choice)
+            if (this._cyc?.side === side && st.outT > POCKET_PICK) { if (!g.items?.held[side] && !g.weapons.hands[side].held) this._lost(this._cyc); this._cyc = null; } // (the hand went away and did not come back: what it holds is its choice)
             const putIn = st.armed && st.inT > POCKET_DWELL && now >= (st.hold || 0);
             if (putIn && now - st.out > 700) {
                 st.armed = false;
@@ -585,8 +585,7 @@ export class Inventory {
                 this.inHand = null;
                 this.selected = -1;
                 this._next = c.slot;
-                if (this._storeWeapon(c.weapon, c.slot)) return this.takeNext(side);
-                return false;
+                return !!this._storeWeapon(c.weapon, c.slot); // (the hand stays empty: the next touch takes the next one)
             }
             if (c.pouch) { // (the pouch from the belt, the last of the circle: back onto the belt, the circle goes on from the start)
                 this._cyc = null;
@@ -594,8 +593,9 @@ export class Inventory {
                     this._next = this.slots.length;
                     this.purse._tieOn(side);
                     this._render();
-                    return this.takeNext(side);
+                    return true; // (the empty hand; the circle goes on from the start)
                 }
+                if (!h) { this._lost(c); return this.takeNext(side); }
                 return g.items?.held[side] || g.weapons.hands[side].held ? this.pocketRight(side) : this.takeNext(side);
             }
             if (h && c.item && h.item === c.item) {
@@ -605,13 +605,29 @@ export class Inventory {
                 this.selected = -1;
                 this._cyc = null;
                 this._next = c.slot;
-                return this.takeNext(side);
+                return true; // (the empty hand between two things)
             }
-            if (!h && c.res && !g.weapons.hands[side].held) { this._cyc = null; return this.takeNext(side); } // (blocks: no thing in the hand)
+            if (!h && c.res && !g.weapons.hands[side].held) { // (blocks: no thing in the hand — they go back, the hand is empty)
+                this._cyc = null;
+                this.inHand = null;
+                this.selected = -1;
+                this._next = c.slot;
+                this._render();
+                return true;
+            }
+            if (!h && !g.weapons.hands[side].held) this._lost(c); // (let go of not through the pocket: the circle keeps its place)
             this._cyc = null;
         }
         if (g.items?.held[side] || g.weapons.hands[side].held) return this.pocketRight(side);
         return this.takeNext(side);
+    }
+
+    /** The thing from cell K left the hand not through the pocket: the next touch looks at K first (if it holds a thing again), then on. */
+    _lost(c) {
+        const n = this.slots.length + 1;
+        this.inHand = null; // (it is gone from the hand: the old pick must not block taking that cell again)
+        this.selected = -1;
+        this._next = c.pouch ? this.slots.length - 1 : (c.slot - 1 + n) % n;
     }
 
     /** Is this hand in the middle of going through the slots (its thing is not let go of by any release: no drop, no throw)? */

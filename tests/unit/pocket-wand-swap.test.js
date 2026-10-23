@@ -27,17 +27,21 @@ test('pocket: three touches — the third slot\'s thing is in the hand, the othe
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' }, c = { kind: 'apple', uid: 'c', count: 1 };
     inv.slots[0] = a; inv.slots[1] = b; inv.slots[2] = c;
+    inv.purse.takeAll();
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, a);
     assert.ok(inv.pocketCycling('left'), 'no drop / throw while choosing');
     inv.pocketTouch('left');
-    assert.equal(g.items.held.left.item, b);
+    assert.equal(g.items.held.left, null, 'between two things the hand is empty');
     assert.equal(inv.slots[0], a, 'the first came back into its slot');
     inv.pocketTouch('left');
+    assert.equal(g.items.held.left.item, b);
+    inv.pocketTouch('left');
+    inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, c);
-    assert.equal(inv.slots[1], b);
     assert.deepEqual(inv.slots.slice(0, 2), [a, b]);
     // and round the circle
+    inv.pocketTouch('left');
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, a);
     assert.equal(inv.slots[2], c);
@@ -47,6 +51,7 @@ test('pocket: empty slots are skipped; the hand away for good keeps its thing', 
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' };
     inv.slots[0] = a; inv.slots[3] = b;
+    inv.pocketTouch('left');
     inv.pocketTouch('left');
     inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, b);
@@ -89,18 +94,23 @@ test('wand swap: wands crossing touch, wands apart do not; the swap changes the 
 test('pocket: sand, wand, earth — three touches give sand, wand, earth (the wand is in the circle)', () => {
     const g = fakeGame(), inv = g.inventory;
     const wand = { kind: 'wand', uid: 'w', model: 1, color: 0x123456 };
+    inv.purse.takeAll();
     inv.slots[0] = { kind: 'res', block: 1, count: 5 };
     inv.slots[1] = wand;
     inv.slots[2] = { kind: 'res', block: 2, count: 5 };
     inv.pocketTouch('left');
     assert.equal(inv.selected, 0);
     inv.pocketTouch('left');
+    assert.equal(inv.selected, -1, 'the empty hand');
+    inv.pocketTouch('left');
     assert.equal(g.items.held.left.item, wand);
     assert.equal(inv.selected, 1);
     inv.pocketTouch('left');
-    assert.equal(inv.selected, 2);
     assert.equal(g.items.held.left, null);
     assert.equal(inv.slots[1], wand, 'the wand is back in its slot');
+    inv.pocketTouch('left');
+    assert.equal(inv.selected, 2);
+    inv.pocketTouch('left');
     inv.pocketTouch('left');
     assert.equal(inv.selected, 0, 'and round again');
 });
