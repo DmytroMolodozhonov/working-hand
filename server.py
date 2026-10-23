@@ -982,6 +982,30 @@ def ensure_pose_native():
         print("  Нейросеть камеры: не удалось установить MediaPipe (игра работает как раньше): " + " ".join(tail))
 
 
+def _restart_helpers():
+    """The game was updated while it ran (the launcher reloads this module): the programs it started — the
+    villagers' net, their voices, the speech network — still ran the OLD code (the author: «не чувствуется, что обнова
+    загружена» — 25 minutes on the old ones). Each is stopped and its module read anew; the next page starts the new one."""
+    import importlib
+    for name, attr in (("llm_native", "LLM"), ("tts_native", "TTS"), ("voice_native", "VOICE")):
+        m = sys.modules.get(name)
+        if m is None:
+            continue
+        try:
+            getattr(m, attr).stop()
+        except Exception as e:  # noqa: BLE001
+            print(f"  [обновление] {name}: не остановилась: {e}")
+        try:
+            importlib.reload(m)
+            print(f"  [обновление] {name}: новая версия загружена")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [обновление] {name}: не перезагрузилась: {e}")
+
+
+# (this module read again by the launcher after an update: the helper programs take the new code too)
+if any(n in sys.modules for n in ("llm_native", "tts_native", "voice_native")) and os.environ.get("ZNS_LAUNCHER"):
+    _restart_helpers()
+
 VOICE_PACKAGES = ["numpy", "onnxruntime", "livekit", "PyAudioWPatch" if sys.platform.startswith("win") else "sounddevice"]
 
 

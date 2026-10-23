@@ -75,7 +75,7 @@ const AT_ONCE = new Set(['greet', 'how_are_you', 'name_ask', 'bye', 'thanks', 'i
 /** In danger (a fight, zombies at the gate, a fire) only what the rules don't know goes to the net — and it is given little time. */
 const DANGER_FIRST_MS = 1500;
 /** The net's first sentence later than this (ms): the rules answer (it was 8–9 s for the whole answer). */
-const FIRST_MS = 3500;
+const FIRST_MS = 2000; // (the author's journal: 3.5 s of «Хм…» and then a canned line felt like no answer at all)
 /** The net said no, while the rules had agreed to do it: the rules' line (the villager does what he says). */
 const REFUSAL = /^(нет|не-а|неа|не могу|не пойду|не буду|ни за что|отстань|no\b|i can'?t|i won'?t)|(не пойду|не могу пойти|не стану)/i;
 
