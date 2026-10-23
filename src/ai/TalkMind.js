@@ -333,7 +333,10 @@ export class TalkMind {
         const res = brain.hear(text, ctx); // (memory, mood, the market — and the answer without the net)
         const perm = this._permCtx(brain, ctx);
         // 1) clear army orders: the rules carry them out at once
-        const order = res.action === 'ignore' ? null : detectOrder(text, ctx.players || []);
+        let order = res.action === 'ignore' ? null : detectOrder(text, ctx.players || []);
+        // («уйди», «отойди» from one who is not the king: not the throne room's «all leave» — a plain request to this one;
+        // nearly anybody does it, the rude grumbling — the author: «это просьба, которую даже злые выполняют»)
+        if (order?.name === 'dismiss' && !perm.playerIsKing) return { res: this._leaveMe(brain, res, ctx), perm, done: true };
         if (order) return { res: this._finishOrder(brain, res, validateCall(order, perm), null, perm.playerIsKing), perm, done: true };
         // 2) what the rules clearly understood is answered at once (a talk by voice must be quick);
         //    the net takes what they did not (and the open topics, where its own words are better)
@@ -344,7 +347,9 @@ export class TalkMind {
         const complex = words >= 6 && !RULES_ONLY.has(res.intent) && !res.intent.startsWith('where_');
         // (a big net answers everything only while it is quick here: on a slow computer the rules answer what they
         // understood at once, and the net only what they did not — the author: «очень медленно отвечают»)
-        const quick = (this.strong && this.quickNet ? MARKET_ONLY.has(res.intent) : !OPEN_TOPICS.has(res.intent) && !complex)
+        // (the market's words are the rules' only at a stall: «сколько будет пять плюс пять» to a farmer is no price question)
+        const trader = brain.role === 'merchant' || !!ctx.buys || !!ctx.nearbyGoods?.length;
+        const quick = (this.strong && this.quickNet ? MARKET_ONLY.has(res.intent) && trader : !OPEN_TOPICS.has(res.intent) && !complex)
             || (AT_ONCE.has(res.intent) && words <= 6) // (a greeting, the way, an insult, «за мной»: at once, like a person)
             || (!!(ctx.danger || brain.world?.danger) && res.intent !== 'unknown' && !complex); // (in danger: no thinking aloud)
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
@@ -471,6 +476,18 @@ export class TalkMind {
         // (unless the words refuse what the rules are doing — «пойдём со мной» → «Нет, не пойду» while he follows)
         if (good && res.action && !spoken && REFUSAL.test(clean)) return res;
         if (good) { this._setReply(brain, res, clean); res.smart = true; }
+        return res;
+    }
+
+    /** «Уйди» to one villager: he walks off — gladly, or grumbling, by how he takes me; the king stays where he is. */
+    _leaveMe(brain, res, ctx) {
+        res.order = true;
+        if (brain.role === 'king') { res.action = null; this._setReply(brain, res, pickFrom(['Это мой замок. Уходить будешь ты.', 'Здесь я решаю, кому уйти.'], this.rng)); return res; }
+        res.action = 'leave_me';
+        const att = brain.attitude ? brain.attitude(ctx.selfId) : 50;
+        const lines = att >= 45 ? ['Ладно, не буду мешать.', 'Хорошо, отойду.', 'Как скажешь, ухожу.', 'Понял, ухожу.']
+            : ['Да пожалуйста!', 'Ну и ладно. Сам уйду.', 'Больно надо…', 'Ухожу, ухожу. Не кричи.'];
+        this._setReply(brain, res, pickFrom(lines, this.rng));
         return res;
     }
 

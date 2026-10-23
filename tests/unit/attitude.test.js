@@ -47,3 +47,15 @@ test('town news: what happened, merged when repeated, and who did it only if see
     t += 31 * 60e3;
     assert.equal(n.told('c1').length, 0); // (old news is forgotten)
 });
+
+test('«уйди» from a stranger is a plain request: he walks off (not «only the king may»); the king stays', async () => {
+    const { TalkMind } = await import('../../src/ai/TalkMind.js');
+    const { VillagerBrain } = await import('../../src/game/VillagerBrain.js');
+    const mind = new TalkMind({ llm: null });
+    for (const t of ['уйди', 'ну ка уйди уйди все пошел нафиг', 'отойди пожалуйста']) {
+        const r = mind.first(new VillagerBrain({ id: 'v1', name: 'Тихон', role: 'farmer' }), t, { playerIsKing: false });
+        assert.equal(r.res.action, 'leave_me', t);
+        assert.ok(!/корол/i.test(r.res.reply), r.res.reply);
+    }
+    assert.equal(mind.first(new VillagerBrain({ id: 'k', name: 'Ярослав', role: 'king' }), 'уйди', {}).res.action, null);
+});

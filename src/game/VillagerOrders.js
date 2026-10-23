@@ -102,6 +102,7 @@ export class VillagerOrders {
                 break;
             }
             case 'dismiss': this._dismiss(v, by); break;
+            case 'leave_me': this._dismiss(v, by, true); break;
             case 'bow': v.bowing = 1.6; break;
             case 'flee': v.fleeFrom = by; v.fleeT = 10; v.fleeing = false; v.path = null; break;
             case 'go_to': this._guide(v, { market: 'market', throne: 'throneFront', gate: 'gateOut', walls: 'wall', barracks: 'barracksDoor', home: 'home' }[args.place]); break;
@@ -164,12 +165,13 @@ export class VillagerOrders {
      * he stands — go away, each to his own place outside it (the barracks door, the yard, the keep's door…), not
      * into each other. The vizier goes to the doors, inside the hall, and stays there to hear the king.
      */
-    _dismiss(v0, by) {
+    _dismiss(v0, by, alone = false) {
         const life = this.life, cs = v0.cs, def = cs.def;
         const me = life._playerPos(by);
         if (!me) return;
         const mine = (v) => Math.abs(v.y - (me.y - 1.95)) < 5;
-        const group = [...cs.active.values()].filter((v) => !v.dead && v.role !== 'king' && !v.foe && mine(v)
+        // (alone: «уйди» to one villager — only he goes, for a while, and says nothing more: his answer was his word)
+        const group = alone ? (v0.dead || v0.role === 'king' ? [] : [v0]) : [...cs.active.values()].filter((v) => !v.dead && v.role !== 'king' && !v.foe && mine(v)
             && (v === v0 || inHall(def, v, 3) || Math.hypot(v.x - me.x, v.z - me.z) < 12));
         const exits = this._exits(cs);
         const load = new Array(exits.length).fill(0);
@@ -187,8 +189,8 @@ export class VillagerOrders {
             exits.forEach((e, i) => { const sc = load[i] * 6 + Math.hypot(e.x - v.x, e.z - v.z); if (sc < bs) { bs = sc; bi = i; } });
             const k = load[bi]++, e = exits[bi];
             const ring = k === 0 ? [0, 0] : [Math.cos((k - 1) * 1.047) * 2.7 * (1 + Math.floor((k - 1) / 6)), Math.sin((k - 1) * 1.047) * 2.7 * (1 + Math.floor((k - 1) / 6))];
-            v.order = { kind: 'leave', by, t: 600, dest: { x: e.x + ring[0], z: e.z + ring[1], node: e.node }, walkT: 0, direct: false };
-            if (named++ < 2 && Math.random() < 0.6) life._say(v, ['Слушаюсь, Ваше Величество.', 'Как прикажете.', 'Удаляюсь.', 'Да, государь.'][Math.floor(Math.random() * 4)], 2.5);
+            v.order = { kind: 'leave', by, t: alone ? 60 : 600, dest: { x: e.x + ring[0], z: e.z + ring[1], node: e.node }, walkT: 0, direct: false };
+            if (!alone && named++ < 2 && Math.random() < 0.6) life._say(v, ['Слушаюсь, Ваше Величество.', 'Как прикажете.', 'Удаляюсь.', 'Да, государь.'][Math.floor(Math.random() * 4)], 2.5);
         }
     }
 

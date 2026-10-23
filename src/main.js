@@ -495,7 +495,10 @@ function journal(command, isFinal, meta, spell, ok, why, source = '') {
 function finalInfo(meta) {
     if (!meta?.native) return { how: 'браузер, конец фразы' };
     const why = !Number.isFinite(meta.q) ? 'старая программа голоса — перезапустите игру' : (meta.far || 0) >= 0.25 ? 'в колонках звучала речь' : meta.cut ? 'длинная фраза' : 'раньше не вышло';
-    return { end: meta.end, how: `конец фразы (${why})` };
+    // (the speech network: its time on the phrase, and how long after the phrase's sound its words came — a busy processor shows here)
+    const late = Number.isFinite(meta.soundEnd) ? Math.round(performance.now() - meta.soundEnd) : null;
+    const net = Number.isFinite(meta.cost) ? `; распознавание ${Math.round(meta.cost)} мс${late != null ? `, слова пришли через ${late} мс после звука` : ''}${voice?.native?.cost?.n ? `, в среднем ${Math.round(voice.native.cost.sum / voice.native.cost.n)} мс, худшее ${Math.round(voice.native.cost.max)} мс` : ''}` : '';
+    return { end: meta.end, how: `конец фразы (${why}${net})` };
 }
 
 /** The words go to the villager (or the sailor) who hears me now — before the phrase's end. */
