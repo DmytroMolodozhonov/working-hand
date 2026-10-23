@@ -39,6 +39,7 @@ import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor, TOOLS } from '../ai/TalkActions.js';
+import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
@@ -550,7 +551,7 @@ export class CastleTalk {
             if (v.dead) continue;
             const dx = v.x - me.x, dz = v.z - me.z;
             const d = Math.hypot(dx, dz);
-            if (d > HEAR || Math.abs(v.y - (me.y - 1.95)) > 3) continue;
+            if ((d > HEAR && !(v.order?.kind === 'door' && inHall(v.cs.def, me, 0))) || Math.abs(v.y - (me.y - 1.95)) > 3) continue; // (the vizier at the doors hears the king anywhere in the throne room)
             const facing = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
             let s = d - 2.5 * facing;
             if (this.offer && this.offer.v === v) s -= 3; // (the merchant we are bargaining with)

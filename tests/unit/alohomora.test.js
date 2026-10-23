@@ -158,3 +158,32 @@ test('the fingers find a big chest\'s lid anywhere along its front edge (its cor
     assert.equal(p(0, top + 1.5, front + 1.5), false, 'far in front');
     assert.equal(p(CHEST_W * k / 2 + 1, top, front), false, 'beside the chest');
 });
+
+test('the keep\'s broken gates come back after 180 s with nobody near; a player near stops the clock; a block in the doorway waits', async () => {
+    const { BLOCK } = await import('../../src/world/Terrain.js');
+    const G = { x: 0, y: 10, z: 0, ry: 0, w: 7, h: 7 };
+    const blocks = new Map();
+    const arch = Math.round(G.y + 1.5) + G.h;
+    for (let x = -4; x <= 4; x++) blocks.set(`${x},${arch},0`, BLOCK.STONE);
+    const data = { get: (x, L, z) => blocks.get(`${x},${L},${z}`) || 0, landMade: () => true };
+    const players = [{ p: { x: 10, z: 0 } }];
+    const sent = [];
+    const game = { authority: true, character: { group: { position: { x: 5000, z: 5000 } } }, castleLife: { _players: () => players }, world: { terrain: { data } }, sync: { net: { send: (m) => sent.push(m) } } };
+    const a = new Alohomora(game);
+    const st = a._gate('c1');
+    st.broken = true; st.hits = 2; st.gx = G.x; st.gz = G.z; st.G = G;
+    for (let i = 0; i < 400; i++) a._mendGates(0.5); // 200 s with a player 10 m away
+    assert.ok(st.broken && st.rt === 0, 'the clock stands while somebody is near');
+    players[0].p.x = 200;
+    blocks.set('1,' + Math.round(G.y + 1.5) + ',0', BLOCK.STONE); // (a player built in the doorway)
+    for (let i = 0; i < 400; i++) a._mendGates(0.5);
+    assert.ok(st.broken, 'a block in the doorway: they wait');
+    blocks.delete('1,' + Math.round(G.y + 1.5) + ',0');
+    a._mendGates(0.5);
+    assert.ok(!st.broken && st.hits === 0 && !st.unlocked, 'mended, shut');
+    assert.deepEqual(sent.map((m) => m.k), ['mend']);
+    const guest = new Alohomora({ ...game, authority: false });
+    guest._gate('c1').broken = true;
+    guest.applyNet({ t: 'lock', k: 'mend', id: 'c1', by: 'host' });
+    assert.ok(!guest.gates.get('c1').broken, 'a guest sees the same');
+});

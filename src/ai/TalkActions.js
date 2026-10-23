@@ -25,7 +25,7 @@ export const PLACES = ['market', 'throne', 'gate', 'walls', 'barracks', 'home'];
 export const TARGETS = ['zombies', 'spider', 'animals', 'enemies'];
 
 /** Army orders: they move the castle's knights (only the king gives them). */
-export const ARMY = new Set(['gather_army', 'attack', 'defend_castle']);
+export const ARMY = new Set(['gather_army', 'attack', 'defend_castle', 'dismiss']);
 
 const fn = (name, description, properties = {}, required = []) => ({
     type: 'function',
@@ -43,6 +43,7 @@ export const TOOLS = [
     fn('attack', 'Войско атакует врага. Только по приказу короля.',
         { target: { type: 'string', description: 'кого атаковать: zombies — зомби, spider — паук, animals — звери, enemies — любые враги рядом, или имя игрока' } }, ['target']),
     fn('defend_castle', 'Войско встаёт на защиту замка: к воротам и на стены, бьёт врагов у стен. Только по приказу короля.'),
+    fn('dismiss', 'Приказ «уйдите»: все рядом (в зале) расходятся с глаз долой, а советник отходит к дверям зала. Только по приказу короля.'),
     fn('bow', 'Поклониться собеседнику (королю).'),
     fn('trade_yes', 'Торговец соглашается на сделку, о которой сейчас идёт речь.'),
     fn('trade_no', 'Торговец отказывается от сделки или собеседник передумал.'),
@@ -210,6 +211,7 @@ const ORDER_WORDS = {
     gather: new RegExp(`(${L}(собери|соберите|собрать|созови|созовите|созвать|сзывай|построй|постройте|строй(ся|тесь)|подними|поднимай|поднять|веди|ведите) (\\S+ )?(\\S+ )?(войск|армию|арми[ия]${R}|рыцар|стражу|стражник|солдат|воинов|дружин|полк|отряд|всех|людей)|${L}(войско|армия|рыцари|стража|все|дружина|отряд) (\\S+ )?ко мне${R}|${L}к оружию${R}|${L}в строй${R}|${L}сбор${R}|${L}трубите сбор|${L}(войско|армия|рыцари|дружина|отряд|стража) за мной${R})`),
     attack: new RegExp(`(${L}(атак|атаку|нападай|нападайте|напасть|нападем|бей(те)?${R}|убей(те)?${R}|убить${R}|руби(те)?${R}|в бой${R}|в атаку|уничтож|перебей|перебить|истреб|прогон|прогнать|гоните|разгроми|вперед на|рубите|бейте|вали(те)?${R}|мочи(те)?${R}|взять его|взять их|схватить|схватите))`),
     defend: new RegExp(`(${L}(защищай(те)?|защитите|защитить|оборон(яй|яйте|ять|а)|охраняй(те)?|охранять|держи(те)?|удержи(те)?) (\\S+ )?(замок|замка|крепост|ворота|стены|стен${R}|город|короля|трон)|${L}на стены${R}|${L}к воротам${R}|${L}все на стены|${L}по местам${R}|${L}занять оборону|${L}к обороне)`),
+    dismiss: new RegExp(`(?<!не )(${L}(уйди|уйдите|уходи|уходите|убирайся|убирайтесь|покиньте|покинь|выйдите|выйди|отойди|отойдите|отойти|расходитесь|разойдитесь|разойдись|разойтись|свободны|прочь|вон)${R}|${L}(иди|идите) отсюда|${L}оставь(те)? нас|${L}освободи(те)? (зал|трон))`),
     stopAll: new RegExp(`(${L}отбой${R}|${L}разойдись|${L}разойтись|${L}вольно${R}|${L}отставить${R}|${L}отступ(ай|айте|ить|аем)|${L}назад${R}|${L}(хватит|прекратить|прекратите|прекрати|стоп) (бой|атаку|драку|войну|сражени)|${L}(войско|армия|рыцари|стража|все) (стой|стоять|на место|по местам|по домам|свободны))`),
 };
 
@@ -222,6 +224,7 @@ const ORDER_WORDS = {
 export function detectOrder(text, players = []) {
     const t = normalize(text);
     if (!t) return null;
+    if (ORDER_WORDS.dismiss.test(t) && !ORDER_WORDS.attack.test(t)) return { name: 'dismiss', args: {} };
     if (ORDER_WORDS.stopAll.test(t)) return { name: 'stay', args: { all: true } };
     if (ORDER_WORDS.attack.test(t)) {
         // «бей», «руби» alone are not orders without whom: «атакуй», «в атаку» are
@@ -269,7 +272,7 @@ export function validateCall(call, ctx = {}) {
             if (!king && mood < -0.3) return no();
             return yes({ place });
         }
-        case 'gather_army': case 'defend_castle':
+        case 'gather_army': case 'defend_castle': case 'dismiss':
             return king ? yes() : no();
         case 'attack': {
             const target = resolveTarget(String(a.target ?? ''), ctx.players || []);

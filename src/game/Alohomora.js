@@ -30,6 +30,8 @@
  */
 
 import * as THREE from 'three';
+import { isSolid } from '../world/Terrain.js';
+import { doorHeld } from './Wreck.js';
 import { CHEST_W, LID_LEN } from '../entities/Chest.js';
 
 export const ALOHOMORA = {
@@ -39,6 +41,8 @@ export const ALOHOMORA = {
     LOCK_SHARE: 0.55, // of the houses of a village lock their doors (at night / nobody home)
     WIZ_LOCK_SHARE: 0.85, // of the wizards' houses lock their doors (at night; most of them by day too)
     NEAR: 70, // m: the gates of a castle this near are put up
+    MEND_T: 180, // s with nobody near: the keep's broken gates are put back (the builders' work, unseen)
+    MEND_R: 40, // m: a player this near stops the clock (never put back before somebody's eyes)
 };
 
 /**
@@ -431,6 +435,13 @@ export class Alohomora {
             if (mine) g.hud?.setVoice(d0 && this.doorLocked(d0) ? '🗝️ «Lock» снят, но у двери свой крепкий замок' : '🗝️ Щёлк! Дверь отперта и приоткрылась — возьмитесь за ручку', true, true);
             g.sound?.playClang?.(0.2);
             return;
+        } else if (m.k === 'mend') {
+            // the builders hung the broken gates again (nobody was near): shut and locked, as new
+            const st = this._gate(m.id);
+            st.broken = false; st.hits = 0; st.unlocked = false; st.rt = 0;
+            const rec = this.gateRecs.get(m.id);
+            if (rec) this._placeLeaves(rec.def, st, rec.ids);
+            return;
         } else if (m.k === 'lift') {
             // (host) a guest's hand lifted the lid of an unlocked chest
             const c = g.chests?.find((x) => x.id === m.id);
@@ -449,7 +460,7 @@ export class Alohomora {
 
     _gate(id) {
         let st = this.gates.get(id);
-        if (!st) { st = { unlocked: false, broken: false, hits: 0 }; this.gates.set(id, st); }
+        if (!st) { st = { unlocked: false, broken: false, hits: 0, rt: 0 }; this.gates.set(id, st); }
         return st;
     }
 
@@ -491,7 +502,9 @@ export class Alohomora {
         const g = this.game;
         const st = this._gate(id);
         st.broken = true;
+        st.rt = 0;
         const rec = this.gateRecs.get(id);
+        if (rec) { const G = rec.def.throneGate; st.gx = G.x; st.gz = G.z; st.G = { ...G }; } // (where they stood: the clock needs it with the castle far away)
         for (const did of rec?.ids || []) {
             const d = g.doors?.list.get(did);
             if (!d) continue;
@@ -507,6 +520,7 @@ export class Alohomora {
         const g = this.game;
         if ((this._scanT -= dt) <= 0) { this._scanT = 0.5; this._scanGates(); }
         this._gatesPass(dt);
+        if (this.auth && this.gates.size) this._mendGates(dt);
         if (this.closing.size) this._closeLeaves(dt);
         if (this.auth && (this._lockT -= dt) <= 0) { this._lockT = 1; this._houseLocks(); }
         this._chestHands(dt);
@@ -540,14 +554,7 @@ export class Alohomora {
             if (this.gateRecs.has(def.id)) continue;
             const st = this._gate(def.id);
             const ids = [def.id + 'gL', def.id + 'gR'];
-            if (!st.broken) {
-                const ax = Math.cos(G.ry), az = -Math.sin(G.ry); // (along the gate: its local +X)
-                const lw = G.w / 2;
-                [-1, 1].forEach((s, k) => {
-                    if (g.doors.list.has(ids[k])) return;
-                    g.doors._place({ id: ids[k], x: G.x + ax * s * lw / 2, y: G.y, z: G.z + az * s * lw / 2, ry: G.ry, color: 0x5a3a1e, a: st.unlocked ? 0.2 : 0, w: lw, h: G.h, gen: true, gate: true, mirror: s > 0, castle: def.id });
-                });
-            }
+            if (!st.broken) this._placeLeaves(def, st, ids);
             this.gateRecs.set(def.id, { def, ids, auto: false, openT: 0 });
         }
         for (const [id, rec] of [...this.gateRecs]) {
@@ -557,6 +564,54 @@ export class Alohomora {
             for (const did of rec.ids) g.doors.remove(did);
             this.gateRecs.delete(id);
         }
+    }
+
+    /** Two leaves in the doorway (hung again after the builders mended them: shut and locked). */
+    _placeLeaves(def, st, ids) {
+        const g = this.game, G = def.throneGate;
+        const ax = Math.cos(G.ry), az = -Math.sin(G.ry); // (along the gate: its local +X)
+        const lw = G.w / 2;
+        [-1, 1].forEach((s, k) => {
+            if (g.doors.list.has(ids[k])) return;
+            g.doors._place({ id: ids[k], x: G.x + ax * s * lw / 2, y: G.y, z: G.z + az * s * lw / 2, ry: G.ry, color: 0x5a3a1e, a: st.unlocked ? 0.2 : 0, w: lw, h: G.h, gen: true, gate: true, mirror: s > 0, castle: def.id });
+        });
+    }
+
+    /**
+     * (host) Broken gates of a keep come back after MEND_T seconds with no player within MEND_R
+     * (the clock stands while somebody is near, and goes on when they leave). Not before the
+     * archway is whole again (Wreck would break them at once) and the doorway is free of blocks
+     * (a player built there: they wait). Held in the castle's land of the captured castle too.
+     */
+    _mendGates(dt) {
+        this._mendT = (this._mendT || 0) + dt;
+        if (this._mendT < 0.5) return;
+        const step = this._mendT;
+        this._mendT = 0;
+        const g = this.game, t = g.world?.terrain?.data;
+        const pl = g.castleLife?._players?.() || [{ p: g.character.group.position }];
+        for (const [id, st] of this.gates) {
+            if (!st.broken || st.gx == null) continue;
+            if (pl.some((q) => Math.hypot(q.p.x - st.gx, q.p.z - st.gz) < ALOHOMORA.MEND_R)) continue;
+            st.rt = (st.rt || 0) + step;
+            if (st.rt < ALOHOMORA.MEND_T || !t || (t.landMade && !t.landMade(st.gx, st.gz))) continue;
+            const G = st.G;
+            if (!G) continue;
+            if (!this._doorwayFree(t, G)) { st.rt = ALOHOMORA.MEND_T; continue; }
+            this.apply({ k: 'mend', id });
+            g.sync?.net?.send({ t: 'lock', k: 'mend', id }, true);
+        }
+    }
+
+    /** Is the archway whole and the doorway empty of blocks? */
+    _doorwayFree(t, G) {
+        const ax = Math.cos(G.ry), az = -Math.sin(G.ry);
+        const L0 = Math.round(G.y + 1.5), h = Math.round(G.h || 7);
+        const half = Math.floor(G.w / 2);
+        for (let a = -half; a <= half; a++) for (let L = L0; L < L0 + h; L++) {
+            if (isSolid(t.get(Math.round(G.x + ax * a), L, Math.round(G.z + az * a)))) return false;
+        }
+        return doorHeld(t, { x: G.x, y: G.y, z: G.z, ry: G.ry, h: G.h, w: G.w });
     }
 
     /** The castle's people come to the gates: they open for them and close behind. */
@@ -664,7 +719,7 @@ export class Alohomora {
         for (const id of s.c || []) { this.chests.add(id); const c = this.game.chests?.find((x) => x.id === id); if (c && !c.isOpen) c.setAjar(); }
         for (const id of s.d || []) this.picked.add(id);
         for (const [id, st] of s.g || []) {
-            this.gates.set(id, { unlocked: !!st.unlocked, broken: !!st.broken, hits: +st.hits || 0 });
+            this.gates.set(id, { unlocked: !!st.unlocked, broken: !!st.broken, hits: +st.hits || 0, rt: +st.rt || 0, gx: st.gx, gz: st.gz, G: st.G });
             if (st.broken && this.gateRecs.has(id)) for (const did of this.gateRecs.get(id).ids) this.game.doors?.remove(did);
         }
         for (const id of s.l || []) this.doorLocks.set(id, true);

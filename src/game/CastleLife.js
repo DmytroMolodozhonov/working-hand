@@ -61,6 +61,7 @@ import { Wanted, wreckPoints, wantedTactics } from './Wanted.js';
 import { knowsCulprit, sightRange, spellFamily } from './Blame.js';
 import { BodyFound } from './BodyFound.js';
 import { FACE, facesTarget } from './FaceTarget.js';
+import { Claims, hallSpots, onDais, inHall } from './ThroneHall.js';
 import { CSWIM, SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
 import { Chores, shownChore, choreCode, choreOf, choreThingsAt } from './Chores.js';
 
@@ -275,6 +276,7 @@ export class CastleLife {
         this.talk = new CastleTalk(game, this); // conversations and the market
         this.wizards = new WizardLife(this); // the wizards' towers and the wandering wizards
         this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
+        this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -1385,6 +1387,15 @@ export class CastleLife {
             const fp = this._playerPos(v.follow);
             if (!fp || v.followT <= 0 || (!v.followFar && !this._inLand(cs.def, fp, 20))) { v.follow = null; v.followFar = false; v.path = null; }
             else {
+                // (the king sits on the throne: each follower stands on his own free place before the dais — never into the throne or each other)
+                const hs = this._hallSlot(v, fp);
+                if (hs) {
+                    const dh = Math.hypot(hs.x - v.x, hs.z - v.z);
+                    if (dh > 0.7) { this._steer(v, hs.x, hs.z, dh > 8 ? RUN : WALK, dt, 0.5); v.mode = v.speed > WALK ? 'run' : v.speed > 0 ? 'walk' : 'idle'; }
+                    else { v.speed = 0; v.mode = 'idle'; v.yaw = turn(v.yaw, hs.yaw, dt * 4); }
+                    this._ground(v);
+                    return;
+                }
                 const d0 = Math.hypot(fp.x - v.x, fp.z - v.z), d = this._goSpot(v, fp.x, fp.z, d0 > 8 ? RUN : WALK, dt, 3) ? Math.min(d0, 3) : d0; // (by the castle's paths when walls are between — a tower's wall, a house)
                 v.mode = d > 3.2 && !(v.wallW?.noWay > 0) ? (v.speed > WALK ? 'run' : 'walk') : 'idle'; // (standing off a shut wall: idle)
                 this._ground(v);
@@ -2035,6 +2046,15 @@ export class CastleLife {
     _wet(x, z, y) { const w = this.game.swim?.waterAt?.(x, z, y + 0.3); return !!w && w.depth > 1 && y < w.surface; }
 
     /** To a place: straight, or along the castle's paths when walls are between. True when there. */
+    /** (a follower inside the throne room, the followed one on / by the dais) his own free place before the dais, or null. */
+    _hallSlot(v, fp) {
+        const def = v.cs.def;
+        if (!def.throne || !onDais(def, fp, 3.5) || !inHall(def, v, 2) || Math.abs(fp.y - 1.95 - v.y) > 4) return null;
+        return this.hallClaims.spot(def.id + ':hall', this._hallSpots(def), v, this._clock || 0);
+    }
+
+    _hallSpots(def) { return def._hallSpots || (def._hallSpots = hallSpots(def)); }
+
     _goSpot(v, x, z, speed, dt, stop = 0.5, y = null) {
         const d = Math.hypot(x - v.x, z - v.z);
         // (a place on another floor — down the tower's stair to the foe, up to a gallery: there only by the stairs)

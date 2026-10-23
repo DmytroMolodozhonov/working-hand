@@ -20,13 +20,16 @@
 
 import { ARMY } from '../ai/TalkActions.js';
 import { FACE, facesTarget } from './FaceTarget.js';
+import { inHall, doorSpots } from './ThroneHall.js';
 
 const WALK = 2.3, RUN = 5.6;
 const HUNT = 45; // m round the king (or the knight) a hunted creature is looked for
 const DEFEND = 30; // m beyond the castle land the defenders strike
 const REACH = 2.6;
+const BRISK = 4.4; // m/s: «уйдите» is done at once, but nobody runs through the hall
 const MAX_ARMY = 14; // knights out at once by an order (a big army costs frames)
 
+const dh0 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const posOf = (o) => o?.group?.position || o?.position || null;
 
 export class VillagerOrders {
@@ -57,7 +60,10 @@ export class VillagerOrders {
                 break;
             }
             case 'stay': case 'stop_follow':
-                if (args.all && this.life.state(cs.def.id).owner === by) { for (const k of this._army(cs)) this._release(k); }
+                if (args.all && this.life.state(cs.def.id).owner === by) {
+                    for (const k of this._army(cs)) this._release(k);
+                    for (const k of cs.active.values()) if (k.order?.kind === 'leave') this._release(k); // («вольно»: those sent away go back to their places)
+                }
                 this._release(v);
                 break;
             case 'gather_army': {
@@ -88,6 +94,7 @@ export class VillagerOrders {
                 this._shout(army, ['Все на стены!', 'Держать ворота!', 'Защищать замок!']);
                 break;
             }
+            case 'dismiss': this._dismiss(v, by); break;
             case 'bow': v.bowing = 1.6; break;
             case 'flee': v.fleeFrom = by; v.fleeT = 10; v.fleeing = false; v.path = null; break;
             case 'go_to': this._guide(v, { market: 'market', throne: 'throneFront', gate: 'gateOut', walls: 'wall', barracks: 'barracksDoor', home: 'home' }[args.place]); break;
@@ -139,6 +146,79 @@ export class VillagerOrders {
         // (an order from the king — the knights forget an old quarrel with him)
         for (const k of this._army(cs)) if (k.foe === by) k.foe = null;
         return this._army(cs);
+    }
+
+    /**
+     * «Уйдите» (the king's word): EVERYBODY of the castle in the throne room — and the ones round the king, wherever
+     * he stands — go away, each to his own place outside it (the barracks door, the yard, the keep's door…), not
+     * into each other. The vizier goes to the doors, inside the hall, and stays there to hear the king.
+     */
+    _dismiss(v0, by) {
+        const life = this.life, cs = v0.cs, def = cs.def;
+        const me = life._playerPos(by);
+        if (!me) return;
+        const mine = (v) => Math.abs(v.y - (me.y - 1.95)) < 5;
+        const group = [...cs.active.values()].filter((v) => !v.dead && v.role !== 'king' && !v.foe && mine(v)
+            && (v === v0 || inHall(def, v, 3) || Math.hypot(v.x - me.x, v.z - me.z) < 12));
+        const exits = this._exits(cs);
+        const load = new Array(exits.length).fill(0);
+        const door = doorSpots(def);
+        group.sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z));
+        let named = 0;
+        for (const v of group) {
+            v.follow = null; v.followFar = false; v.path = null; v.investigate = null; v.talking = 0; v.seated = false; v.bowing = 0;
+            if (v.task) { v.task.by = null; v.task = null; }
+            if (v.job === 'rebuild') v.job = 'wander';
+            if (v.role === 'advisor' && door.length) { v.order = { kind: 'door', by, t: 1e9, spot: door[0], walkT: 0 }; continue; }
+            if (!exits.length) { v.order = null; continue; }
+            // the exit with the fewest people sent to it so far, near him first
+            let bi = 0, bs = Infinity;
+            exits.forEach((e, i) => { const sc = load[i] * 6 + Math.hypot(e.x - v.x, e.z - v.z); if (sc < bs) { bs = sc; bi = i; } });
+            const k = load[bi]++, e = exits[bi];
+            const ring = k === 0 ? [0, 0] : [Math.cos((k - 1) * 1.047) * 2.7 * (1 + Math.floor((k - 1) / 6)), Math.sin((k - 1) * 1.047) * 2.7 * (1 + Math.floor((k - 1) / 6))];
+            v.order = { kind: 'leave', by, t: 600, dest: { x: e.x + ring[0], z: e.z + ring[1], node: e.node }, walkT: 0, direct: false };
+            if (named++ < 2 && Math.random() < 0.6) life._say(v, ['Слушаюсь, Ваше Величество.', 'Как прикажете.', 'Удаляюсь.', 'Да, государь.'][Math.floor(Math.random() * 4)], 2.5);
+        }
+    }
+
+    /** Places outside the throne room where the people sent away stand: the keep's door, the barracks, the yard, the gate. */
+    _exits(cs) {
+        const g = cs.graph, def = cs.def;
+        const out = [];
+        for (const tag of ['keepDoor', 'barracksDoor', 'yard', 'gateIn', 'well']) {
+            for (const id of g.tagged(tag)) {
+                const n = g.nodes[id];
+                if (n && !inHall(def, n, 2) && !out.some((o) => Math.hypot(o.x - n.x, o.z - n.z) < 5)) out.push({ x: n.x, y: n.y, z: n.z, node: id });
+            }
+        }
+        return out;
+    }
+
+    /** A person sent away (or the vizier at the doors) walks on: false → the normal life goes on (danger, a fight). */
+    _away(v, o, dt) {
+        const life = this.life, def = v.cs.def;
+        if (v.fear) return false;
+        const dest = o.kind === 'door' ? o.spot : o.dest;
+        const d = Math.hypot(dest.x - v.x, dest.z - v.z);
+        v.seated = false;
+        if (d > 0.9) {
+            o.walkT += dt;
+            if (!o.direct) {
+                if (!v.path) life._goTo(v, o.kind === 'door' ? v.cs.graph.nearest(dest.x, dest.y ?? v.y, dest.z, 8) : dest.node);
+                if (life._followPath(v, dt, BRISK)) { v.path = null; o.direct = true; }
+            } else life._steer(v, dest.x, dest.z, BRISK, dt, 0.5);
+            // (no way through for too long: still inside the hall → by the paths again; outside → stays where he is)
+            if (o.walkT > 30) {
+                o.walkT = 0; o.direct = false; v.path = null;
+                if (o.kind === 'leave' && !inHall(def, v, 0.5)) o.dest = { x: v.x, z: v.z, node: o.dest.node };
+            }
+            v.mode = v.speed > WALK ? 'run' : v.speed > 0 ? 'walk' : 'idle';
+        } else {
+            v.speed = 0; v.path = null; v.mode = 'idle'; o.walkT = 0;
+            if (o.kind === 'door') v.yaw = dest.yaw;
+        }
+        life._ground(v);
+        return true;
     }
 
     _release(v) {
@@ -202,6 +282,7 @@ export class VillagerOrders {
         if (o.t <= 0) { this._release(v); return false; }
         const life = this.life;
         v.seated = false;
+        if (o.kind === 'leave' || o.kind === 'door') return this._away(v, o, dt);
         if (o.kind === 'hunt') {
             const kp = life._playerPos(o.by);
             const cx = kp ? kp.x : v.x, cz = kp ? kp.z : v.z;
@@ -211,7 +292,9 @@ export class VillagerOrders {
             }
             if (!o.prey) {
                 // nobody to fight: they stay by the king
-                if (kp) {
+                const hs = kp && life._hallSlot?.(v, kp); // (the king on his throne: each on his own free place before the dais)
+                if (hs) { const dh = life._steer(v, hs.x, hs.z, dh0(hs, v) > 8 ? RUN : WALK, dt, 0.5); v.mode = dh > 0.7 ? (v.speed > WALK ? 'run' : 'walk') : 'block'; }
+                else if (kp) {
                     const d = life._steer(v, kp.x, kp.z, Math.hypot(kp.x - v.x, kp.z - v.z) > 8 ? RUN : WALK, dt, 4);
                     v.mode = d > 4.2 ? (v.speed > WALK ? 'run' : 'walk') : 'block';
                 } else { v.speed = 0; v.mode = 'block'; }
