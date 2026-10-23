@@ -83,6 +83,7 @@ import { WindRing } from './WindRing.js';
 import { Burning } from './Burning.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
+import { Settling } from '../world/Collapse.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
@@ -177,6 +178,8 @@ const ZOMBIE_SWIM = { ...SWIMMERS.person, speed: 0.9, float: 2.1, air: Infinity 
 export const ZSENSE = { HEAR: 10, SEE: 34, LOSE: 48, ROAM: 7, SCENT: 90 }; // (SCENT: it drifts towards the living this near)
 const BLOCK_COLORS = { [BLOCK.GRASS]: 0x4CAF50, [BLOCK.DIRT]: 0x7a5230, [BLOCK.STONE]: 0x8a8a8a, [BLOCK.SNOW]: 0xf2f6f8 };
 
+/** ms a frame the checks of the buildings after a change may take (Structure.js — the rest goes on next frame). */
+const SETTLE_MS = 2;
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -492,7 +495,10 @@ export class Game {
         this.burning = new Burning(this); // a creature ON FIRE: burns for a while, put out by «Firefighting» up / water (Burning.js)
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
-        if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
+        if (this.falling) { this.falling.onLand = (f) => this._fallLanded(f); this.falling.onStart = (f) => this._fallStarted(f); }
+        // (the buildings round a change are looked at a little each frame, in the order of the changes — Structure.js)
+        const tdata = this.world.terrain?.data;
+        if (tdata) { tdata.settling = new Settling(); tdata.settling.onFalls = (falls) => this._collapsed(falls); }
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.dragonRide = new DragonRide(this); // «Brain Rot Maxima»: the calmed dragon, riding it (DragonRide.js)
@@ -517,7 +523,7 @@ export class Game {
             F.igniteAlong = (o, d, len) => { this.campfires?.roastIn((q) => inStream(o, d, len, q, 0.5)); this._igniteLogsAlong(o, d, len); return al(o, d, len); };
         }
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
-        this.fire.onBlockGone = (x, L, z) => this.burnWreck?.blockGone(x, L, z);
+        this.fire.onBlockGone = (x, L, z, t) => this.burnWreck?.blockGone(x, L, z, t);
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
@@ -917,7 +923,41 @@ export class Game {
         if (this.sync) this.sync.explosion(pos, radius, power, casterId);
     }
 
-    /** A falling piece of a building hit the ground: dust, the broken blocks fly, who was under it is hurt. */
+    /**
+     * The building round a change gave way (Structure.js, worked out a little each frame by data.settling — the same
+     * on every computer): its pieces are seen coming down round after round; the people near take fright and the
+     * builders put it back later (Rebuild.js: «fall» — Danger.js).
+     */
+    _collapsed(falls) {
+        let n = 0, x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y = 0;
+        for (const f of falls) {
+            this.falling?.add(f);
+            for (const [x, L, z] of f.cells) { n++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; y += L - 1; }
+        }
+        if (!n) return;
+        this.perf?.note(`обрушение: ${n} блоков, ${Math.max(...falls.map((f) => f.stage || 0))} волн`);
+        if (this.authority) this.castleLife?.damaged(_v1.set((x0 + x1) / 2, y / n, (z0 + z1) / 2), null, n, true, { r: Math.max(x1 - x0, z1 - z0) / 2 + 4, kind: 'fall' });
+    }
+
+    /** A piece of a chain gives way (FallingBlocks: its round came): the stone groans and cracks, dust trickles from it. */
+    _fallStarted(f) {
+        const cells = f.cells;
+        if (!cells.length) return;
+        let sx = 0, sy = 0, sz = 0;
+        for (const [x, L, z] of cells) { sx += x; sy += L - 1; sz += z; }
+        const c = _v1.set(sx / cells.length, sy / cells.length, sz / cells.length);
+        this.sound?.playGiveWay?.(c, cells.length);
+        for (let i = 0; i < Math.min(24, cells.length); i++) {
+            const [x, L, z] = cells[(i * 7919) % cells.length];
+            this.fx.smoke?.spawn(x + (Math.random() - 0.5), L - 1.5, z + (Math.random() - 0.5), (Math.random() - 0.5) * 0.4, -0.6 - Math.random(), (Math.random() - 0.5) * 0.4, 0xb8ad9a, 0.5 + Math.random() * 0.5, 1.2, { shrink: -0.6 });
+        }
+    }
+
+    /**
+     * A falling piece of a building hit the ground (or a block burst under its load): the blow and the hail of stones
+     * heard, a cloud of dust rolls out low along the ground and rises, the broken blocks fly; whoever is under it —
+     * the players, the people, the animals, the zombies, the sailors — is hurt and knocked off the feet (CreatureImpact).
+     */
     _fallLanded(f) {
         if (!f.landed.length && !f.broken.length) return;
         let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, y0 = Infinity, sx = 0, sy = 0, sz = 0;
@@ -925,11 +965,23 @@ export class Game {
         for (const [x, L, z] of all) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); y0 = Math.min(y0, L - 1.5); sx += x; sy += L - 1; sz += z; }
         const c = new THREE.Vector3(sx / all.length, sy / all.length, sz / all.length);
         const debris = f.broken.map(([x, L, z, t]) => ({ x, y: L - f.d - 1, z, color: BASE_COLORS[t] ?? 0x888888 }));
-        for (let i = 0; i < Math.min(40, all.length); i++) { const [x, L, z] = all[Math.floor(Math.random() * all.length)]; debris.push({ x, y: y0 + 0.2, z, color: 0x9a8f80, size: 0.6 }); }
+        for (let i = 0; i < Math.min(40, all.length); i++) { const [x, , z] = all[Math.floor(Math.random() * all.length)]; debris.push({ x, y: y0 + 0.2, z, color: 0x9a8f80, size: 0.6 }); }
         this.fx.debrisFrom(debris, new THREE.Vector3(c.x, y0 + 0.5, c.z), 160);
-        this.sound?.playExplosion?.(c, this.character.group.position, Math.min(0.6, 0.1 + f.d * 0.04));
+        // the dust: a low ring rolling out from under it, a cloud rising over it, fine grit falling back
+        const size = f.cells.length, R = Math.max(x1 - x0, z1 - z0) / 2 + 1;
+        const puffs = Math.min(70, 10 + size);
+        for (let i = 0; i < puffs; i++) {
+            const a = (i / puffs) * Math.PI * 2 + Math.random() * 0.4, out = 2.5 + Math.random() * 3 + Math.min(4, f.d * 0.25);
+            this.fx.smoke?.spawn(c.x + Math.cos(a) * R * 0.7, y0 + 0.4 + Math.random() * 0.6, c.z + Math.sin(a) * R * 0.7, Math.cos(a) * out, 0.3 + Math.random() * 0.5, Math.sin(a) * out,
+                [0xa89e8c, 0xc2b8a5, 0x8c8272][i % 3], 1.1 + Math.random() * 1.4, 2.2 + Math.random() * 1.6, { shrink: -0.9 });
+            if (i % 2 === 0) this.fx.smoke?.spawn(c.x + (Math.random() - 0.5) * R, y0 + 1 + Math.random() * 2, c.z + (Math.random() - 0.5) * R, (Math.random() - 0.5) * 0.8, 1.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8,
+                0xb3a994, 1.4 + Math.random() * 1.6, 3 + Math.random() * 2, { shrink: -0.7 });
+        }
+        for (let i = 0; i < Math.min(60, size * 2); i++) this.fx.sand?.spawn(c.x + (Math.random() - 0.5) * R * 2, y0 + 1.5 + Math.random() * 3, c.z + (Math.random() - 0.5) * R * 2, (Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3, 0x7d7465, 0.12 + Math.random() * 0.12, 1.5 + Math.random());
+        this.sound?.playCollapse?.(c, size);
+        this.fx.shake = Math.max(this.fx.shake, Math.min(0.8, size / 400 + f.d * 0.02) * Math.max(0, 1 - c.distanceTo(this.character.group.position) / 40));
         // whoever stood under it (a body is ~4.6 m tall)
-        const dmg = Math.min(14, Math.round(2 + f.d * 1.2));
+        const dmg = Math.min(14, Math.round(2 + f.d * 1.2 + Math.min(6, size / 60)));
         const r = Math.max(x1 - x0, z1 - z0) / 2 + 0.6;
         const me = this.character.group.position;
         const under = (p, h = 4.6) => p.x > x0 - 0.6 && p.x < x1 + 0.6 && p.z > z0 - 0.6 && p.z < z1 + 0.6 && p.y > y0 - h - 1 && p.y < y0 + 1.5;
@@ -938,12 +990,25 @@ export class Game {
             else {
                 if (this.combat?.enabled) this.combat.damage(dmg, null, 'collapse'); else this.damageLocalPlayer?.(dmg);
                 this.hud?.setVoice?.(`🧱 На вас обрушилось: −${dmg}`, true);
+                // (knocked down and pushed out from under it)
+                _v2.set(me.x - c.x, 0, me.z - c.z);
+                if (_v2.lengthSq() < 0.01) _v2.set(1, 0, 0);
+                this.knockback?.add?.(_v2.normalize().multiplyScalar(4 + Math.min(6, f.d * 0.5)));
             }
         }
         if (this.authority) {
             const at = new THREE.Vector3(c.x, y0 - 1, c.z);
             this.castleLife?.hitAt(at, r, dmg, null);
             this.animals?.hitAt?.(at, r, dmg, null);
+            this.ships?.crew.hitAt?.(at, r, dmg, null, 'collapse');
+            for (const z of this.zombies) if (!z.isDead && under({ x: z.group.position.x, y: z.group.position.y - 1.95, z: z.group.position.z })) this.damageZombie(z, dmg, true, _v2.set(z.group.position.x - c.x, 0, z.group.position.z - c.z).normalize(), null);
+            // (the bodies under it are thrown down and out from under it — CreatureImpact, every kind of creature)
+            this.creatureImpact?.spellArea?.('collapse', null, (p) => {
+                if (!under({ x: p.x, y: p.y - 1, z: p.z }, 5)) return null;
+                const v = _v3.set(p.x - c.x, 0, p.z - c.z);
+                if (v.lengthSq() < 0.01) v.set(1, 0, 0);
+                return v.normalize().multiplyScalar(5 + Math.min(6, f.d * 0.5));
+            }, { down: 2 });
         }
         this.wreck?.afterBlast(c, r);
     }
@@ -3348,6 +3413,7 @@ export class Game {
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
         if (!this.space?.inSpace) this.world.update(this.character.group.position, this._viewBoost);
         this.swim.applyFog(); // (under the water: murky and blue)
+        this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
         this.falling?.update(Math.min(0.05, dt));
         this.destruction?.update(Math.min(0.05, dt));
         this.circleAttack?.update(dt);

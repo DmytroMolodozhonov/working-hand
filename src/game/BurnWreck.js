@@ -32,6 +32,7 @@
 
 import * as THREE from 'three';
 import { collapseAfter } from '../world/Collapse.js';
+import { BLOCK } from '../world/Terrain.js';
 import { isMagicItem } from './ItemTypes.js';
 
 export const BURN = {
@@ -70,8 +71,8 @@ export class BurnWreck {
         this.fuel = new Map(); // uid of a log on the ground -> {t, dur, spread}: burning now
     }
 
-    /** (Fire) A block burnt away. */
-    blockGone(x, L, z) { this.cells.push([x, L, z]); }
+    /** (Fire) A block burnt away (t: what it was). */
+    blockGone(x, L, z, t = BLOCK.PLANKS) { this.cells.push([x, L, z, t]); }
 
     /**
      * (host) Flames at p (radius r): the logs lying there catch fire and burn down in a few seconds
@@ -119,16 +120,18 @@ export class BurnWreck {
         if (!data) return;
         // the burnt places, a few metres apart
         const groups = new Map();
-        for (const [x, L, z] of list) {
+        for (const c of list) {
+            const [x, L, z] = c;
             const k = Math.floor(x / BURN.CELL) + ',' + Math.floor(L / BURN.CELL) + ',' + Math.floor(z / BURN.CELL);
             const e = groups.get(k);
-            if (e) { e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.L0 = Math.min(e.L0, L); e.L1 = Math.max(e.L1, L); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z); }
-            else groups.set(k, { x0: x, x1: x, L0: L, L1: L, z0: z, z1: z });
+            if (e) { e.x0 = Math.min(e.x0, x); e.x1 = Math.max(e.x1, x); e.L0 = Math.min(e.L0, L); e.L1 = Math.max(e.L1, L); e.z0 = Math.min(e.z0, z); e.z1 = Math.max(e.z1, z); e.gone.push(c); }
+            else groups.set(k, { x0: x, x1: x, L0: L, L1: L, z0: z, z1: z, gone: [c] });
         }
         for (const e of groups.values()) {
             const cx = (e.x0 + e.x1) / 2, cz = (e.z0 + e.z1) / 2, cy = (e.L0 + e.L1) / 2 - 1;
             const r = Math.max(e.x1 - e.x0, e.L1 - e.L0, e.z1 - e.z0) / 2 + 0.9;
-            const falls = collapseAfter(data, cx, cy, cz, r);
+            // (and the house round it: a beam burnt through — what it held may come down, Structure.js; a burning block falls burning)
+            const falls = collapseAfter(data, cx, cy, cz, r, 0, e.gone, null, (late) => { for (const f of late) this._carryFire(f); g._collapsed?.(late); });
             for (const f of falls) { this._carryFire(f); g.falling?.add(f); }
             _c.set(cx, cy, cz);
             g.wreck?.afterBlast(_c, r + 1, 0); // (doors, beds, chests, glass: as after a blast)

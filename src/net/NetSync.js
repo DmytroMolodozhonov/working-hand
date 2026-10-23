@@ -216,14 +216,18 @@ export class NetSync {
         if (msg.guns) g.ships?.cannons.restore(msg.guns);
         if (msg.bodies) g.death?.restore(msg.bodies);
         if (msg.vai && g.castleLife) g.castleLife.talk.hostSmart = true;
-        for (const e of msg.explosions || []) {
-            if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater)
-            else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
-                if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
-                else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
-            });
-            g.explosions.push(e);
-        }
+        // (the checks of the buildings after each blast: at once, in the blasts' order, unseen — Structure.js, Collapse.Settling)
+        const replay = (fn) => (g.world.terrain?.data?.settling ? g.world.terrain.data.settling.replay(fn) : fn());
+        replay(() => {
+            for (const e of msg.explosions || []) {
+                if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater)
+                else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
+                    if (e.ruin) g.world.ruin(vec(e.p), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave — «Circle Attack», «Inspirius»)
+                    else g.world.explode(vec(e.p), e.r, keepIn(e.k)); // (k: houses' spheres it could not eat into)
+                });
+                g.explosions.push(e);
+            }
+        });
         if (msg.rebuild) g.castleLife?.rebuild.restore(msg.rebuild); // (after the blasts: what was put back since)
         if (msg.ice && msg.ice.length) g.applyIce(msg.ice);
         for (const id of msg.chests || []) {

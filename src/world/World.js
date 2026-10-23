@@ -724,9 +724,12 @@ export class VoxelWorld {
         const out = { blocks: [], props: [], tables: [], falls: [] };
         if (!this.destructible) return out;
         if (this.terrain) {
+            const data = this.terrain.data;
+            data.settling?.flush(); // (the checks of the buildings after the changes before it: done first — the same order everywhere)
             out.blocks = this.terrain.removeSphere(center.x, center.y, center.z, radius, keep);
-            // what is left hanging in the air falls down (a roof without walls, a piece of floor)
-            out.falls = collapseAfter(this.terrain.data, center.x, center.y, center.z, radius);
+            // what is left hanging in the air falls down (a roof without walls, a piece of floor); then what the
+            // building round it can no longer hold (Structure.js — worked out a little each frame)
+            out.falls = collapseAfter(data, center.x, center.y, center.z, radius, 0, out.blocks, keep);
         }
 
         // Grass cubes

@@ -170,9 +170,10 @@ export class FireSystem {
      */
     _melt(terrain, x, L, z) {
         if (this.game.wards?.protects?.(x, L - 1, z)) return;
+        const was = terrain.get(x, L, z);
         terrain.set(x, L, z, BLOCK.AIR);
         (this._melted || (this._melted = [])).push([x, L, z, BLOCK.AIR]);
-        this.onBlockGone?.(x, L, z); // (what stood on it falls)
+        this.onBlockGone?.(x, L, z, was); // (what stood on it falls)
         const fx = this.game.fx;
         if (fx?.smoke && (this._melted.length & 3) === 1) fx.smoke.spawn(x, L - 0.6, z, (Math.random() - 0.5) * 0.4, 1.6 + Math.random(), (Math.random() - 0.5) * 0.4, 0xe8eef2, 0.9 + Math.random() * 0.5, 1.6, { shrink: -0.5 });
     }
@@ -261,7 +262,7 @@ export class FireSystem {
                 const was = terrain.get(b.x, b.L, b.z);
                 if (was !== BLOCK.AIR) terrain.set(b.x, b.L, b.z, BLOCK.AIR);
                 if (isCastleBlock(was)) this.onCastleBurn?.(b.x, b.L, b.z);
-                if (was !== BLOCK.AIR) this.onBlockGone?.(b.x, b.L, b.z); // (what stood on it falls: BurnWreck.js)
+                if (was !== BLOCK.AIR) this.onBlockGone?.(b.x, b.L, b.z, was); // (what stood on it falls: BurnWreck.js)
                 if (Math.random() < 0.3) {
                     const g = 50 + ((Math.random() * 30) | 0);
                     fx.smoke.spawn(b.x, b.L - 0.5, b.z, 0, 1.5, 0, (g << 16) | (g << 8) | g, 1.0, 2.5, { shrink: -0.4 });

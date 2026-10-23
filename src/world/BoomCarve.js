@@ -31,7 +31,7 @@
 
 import { breaking } from './EnchantedStone.js';
 import { BLOCK, MIN_LAYER } from './Terrain.js';
-import { hangingSearch, dropPiece } from './Collapse.js';
+import { hangingSearch, dropPiece, settleAround } from './Collapse.js';
 
 export const BOOM_SHAPE = {
     R: 56, // m: the crater's radius (across) — a mountain this wide is gone
@@ -132,10 +132,11 @@ export function boomColumns(R = BOOM_SHAPE.R) {
  */
 export function boomJob(data, e) {
     const R = e.r || BOOM_SHAPE.R;
+    data.settling?.flush(); // (the checks of the buildings after the changes before it: done first — the same order everywhere)
     return {
         data, R, base: e.b, cx: Math.round(e.p[0]), cz: Math.round(e.p[2]),
         cols: boomColumns(R), i: 0, phase: 'carve', removed: 0, castle: 0, look: craterLook(Math.round(e.p[0]), Math.round(e.p[2])),
-        wet: [], q: null, qi: 0, rimI: 0, search: null, falls: [], samples: [], spray: [], filled: 0, dug: false, done: false,
+        wet: [], q: null, qi: 0, rimI: 0, search: null, falls: [], samples: [], spray: [], filled: 0, dug: false, done: false, gone: [],
         // (near the sea its water is the sea's: drawn by the waving sea surface — Terrain.skipSeaTop, SeaSurface)
         sea: !!(data.seas?.signedDist && data.seas.signedDist(Math.round(e.p[0]), Math.round(e.p[2])) > -(boomReach(R) + 10)),
     };
@@ -175,7 +176,7 @@ function carveStep(job, ms, flow) {
                 if (t !== BLOCK.AIR && t !== BLOCK.WATER) job.samples.push(ix, y, iz, t);
             }
             for (let L = top; L > floorY + 1 && L > top - 6; L--) if (isBuilt(data.get(ix, L, iz))) { job.castle++; break; }
-            const n = data.carveColumn(ix, iz, floorY, job.wet);
+            const n = data.carveColumn(ix, iz, floorY, job.wet, job.gone);
             job.removed += n;
             // scree and rubble on the torn floor (lying on it: nothing hangs)
             const h = n ? rubbleAt(job.look, C.dx[i], C.dz[i], F.e) : 0;
@@ -210,6 +211,13 @@ function carveStep(job, ms, flow) {
         job.search = null;
         job.phase = 'flood';
         job.dug = true; // (the crater is there: Boom.js tells the people, lets what hung fall)
+        // the buildings round the crater: what the torn rim can no longer hold gives way (Structure.js — a little each
+        // frame by data.settling, its falls shown when they are worked out; without it at once)
+        const reach = boomReach(job.R);
+        const sj = settleAround(data, job.cx, job.base + reach - 18, job.cz, reach, job.gone); // (from a little under the rim up)
+        job.gone = null;
+        if (data.settling) data.settling.add(sj);
+        else { sj.step(Infinity); job.falls.push(...sj.falls); }
     }
     // 5) the sea comes into what was opened under its level (only from where water already is)
     if (job.phase === 'flood') {

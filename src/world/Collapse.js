@@ -19,6 +19,7 @@
 
 import { BLOCK, MIN_LAYER, isSolid } from './Terrain.js';
 import { isEnchanted } from './EnchantedStone.js';
+import { boxAround, settleJob } from './Structure.js';
 
 export const COLLAPSE = {
     LIMIT: 12000, // blocks: a bigger group counts as standing (a castle, a mountain)
@@ -163,12 +164,78 @@ export function dropPiece(data, piece) {
     return { d, landed, broken };
 }
 
-/** After a blast: everything left hanging falls. Returns the falls [{cells, d, landed, broken}]. */
-export function collapseAfter(data, cx, cy, cz, radius, inner = 0) {
+/**
+ * After a blast: everything left hanging falls (now: the falls are returned), and then the building round it is
+ * looked at (Structure.js: a floor on one thin column, a balcony whose wall is gone…) — by data.settling, a little
+ * each frame, its falls given to `done` (or data.settling.onFalls) when the check is over; without data.settling
+ * at once, its falls returned with the rest.
+ * gone: the blocks the change took away — [x, L, z, type] (or removeSphere's {x, y, z, type}; false — no check of
+ * the building); keep(x, y, z): blocks
+ * that hold whatever happens (a house's sphere of protection — HouseWards.js).
+ * A fall: {cells, d, landed, broken, stage} (stage: the round of the chain, 0 the first; `crushed` — blocks broken
+ * under their load where they stood, d = 0).
+ */
+export function collapseAfter(data, cx, cy, cz, radius, inner = 0, gone = null, keep = null, done = null) {
     const out = [];
     for (const piece of findHanging(data, cx, cy, cz, radius, inner)) {
         const r = dropPiece(data, piece);
-        out.push({ cells: piece.cells, ...r });
+        out.push({ cells: piece.cells, ...r, stage: 0 });
     }
+    if (gone === false) return out; // (no check of the building now: a band of a wave — the last one does it)
+    const S = data.settling;
+    if (S) S.add(settleAround(data, cx, cy, cz, radius, gone, keep), done);
+    else { const job = settleAround(data, cx, cy, cz, radius, gone, keep); job.step(Infinity); out.push(...job.falls); }
     return out;
+}
+
+/** A check of the building round a change (Structure.settleJob); its falls (as collapseAfter's) gather in job.falls. */
+export function settleAround(data, cx, cy, cz, radius, gone = null, keep = null) {
+    const list = gone && gone.length && !Array.isArray(gone[0]) ? gone.map((b) => [b.x, Math.round(b.y + 1), b.z, b.type]) : gone;
+    const falls = [];
+    const job = settleJob(data, boxAround(data, cx, cy, cz, radius),
+        (piece, stage) => { falls.push({ cells: piece.cells, ...dropPiece(data, piece), stage }); },
+        (cells, stage) => {
+            for (const [x, L, z] of cells) data.set(x, L, z, BLOCK.AIR);
+            falls.push({ cells, d: 0, landed: [], broken: cells, stage, crushed: true });
+        }, list || null, keep);
+    job.falls = falls;
+    return job;
+}
+
+/**
+ * The checks of the buildings after the changes (Structure.settleJob), one at a time, in the order of the changes, a
+ * little each frame (step(ms)). A change the other computers and a loaded save make too (a blast, a ruin, a crater)
+ * first lets the checks before it finish (flush) — so the same blocks give the same falls everywhere. now: every
+ * check at once (a save being loaded, a late joiner's world); quiet: their falls not shown (onFalls not called).
+ */
+export class Settling {
+    constructor() { this.jobs = []; this.now = false; this.quiet = false; this.onFalls = null; }
+    get busy() { return this.jobs.length > 0; }
+    add(job, done = null) { job.done$ = done; this.jobs.push(job); if (this.now) this.flush(); }
+    _finish(job) {
+        if (this.quiet || !job.falls.length) return;
+        (job.done$ || this.onFalls)?.(job.falls, job);
+    }
+    /** Work on the checks for at most `ms`. */
+    step(ms) {
+        const t0 = performance.now();
+        while (this.jobs.length) {
+            const left = ms - (performance.now() - t0);
+            if (left <= 0) return;
+            const job = this.jobs[0];
+            if (!job.step(left)) return;
+            this.jobs.shift();
+            this._finish(job);
+        }
+    }
+    /** Every check now (before a change that others make in the same order). */
+    flush() { while (this.jobs.length) { const job = this.jobs.shift(); job.step(Infinity); this._finish(job); } }
+    /** Run fn with every check at once and unseen (a save, a welcome message replaying the world's changes). */
+    replay(fn) {
+        const was = [this.now, this.quiet];
+        this.flush();
+        this.now = true; this.quiet = true;
+        try { return fn(); } finally { [this.now, this.quiet] = was; }
+    }
+    clear() { this.jobs.length = 0; }
 }

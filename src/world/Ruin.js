@@ -210,8 +210,10 @@ export function ruinArea(data, cx, cy, cz, radius = RUIN.RADIUS, hold = null, ri
         out.push([x, L, z, t]);
     }
     out.push(...caveRubble);
-    // the rest of what hangs at the edge falls down
-    const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE), ring?.inner > 0 ? ring.inner * (1 - RUIN.EDGE) : 0); // (a band: only the new band)
+    // the rest of what hangs at the edge falls down; then what the building round it can no longer hold (Structure.js:
+    // a wave's bands — only once its last band came down, round the whole circle)
+    const last = !ring || !(ring.full > 0) || radius >= ring.full - 1e-6;
+    const falls = collapseAfter(data, cx, cy, cz, radius * (1 + RUIN.EDGE), ring?.inner > 0 ? ring.inner * (1 - RUIN.EDGE) : 0, last ? removed : false, hold); // (a band: only the new band)
     return { removed, rubble: out, falls, sunk: dips.length, heaved };
 }
 

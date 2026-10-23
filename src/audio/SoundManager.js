@@ -570,6 +570,7 @@ export class SoundManager {
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
+            ['collapse', () => this._synthCollapse()], ['groan', () => this._synthGroan()], // (a building giving way, coming down — Structure.js)
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['boneClack', () => this._synthKnock(820, 0.09)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
             ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
@@ -1543,6 +1544,82 @@ export class SoundManager {
             d[i] = Math.max(-1, Math.min(1, (lp2 * 9 + sub * 0.5) * env));
         }
         return buf;
+    }
+
+    /**
+     * A piece of a building comes down (Structure.js / FallingBlocks): the deep blow of the mass hitting the ground,
+     * the crash of it breaking, a hail of stones knocking about it, the dust's rumble dying away (3 s).
+     */
+    _synthCollapse() {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * 3);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let seed = 91, lp = 0, lp2 = 0, lp3 = 0;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        // the stones: short knocks, thick at the blow, a trickle after
+        const knocks = [];
+        for (let k = 0; k < 170; k++) {
+            const t = k < 110 ? Math.pow(rnd(), 2.2) * 0.9 : 0.4 + Math.pow(rnd(), 1.6) * 2.3;
+            knocks.push({ i: Math.floor(t * sr), f: 220 + rnd() * 1400, dec: 28 + rnd() * 45, a: (k < 110 ? 0.35 : 0.18) * (0.4 + rnd()) });
+        }
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const w = rnd() * 2 - 1;
+            lp += (w - lp) * (0.05 + 0.3 * Math.exp(-t * 10)); // the crash: bright at the blow, then dull
+            lp2 += (lp - lp2) * 0.06;
+            lp3 += (w - lp3) * 0.012; // the rumble of the dust
+            const boom = Math.sin(2 * Math.PI * (58 - 26 * Math.min(t, 1)) * t) * Math.exp(-t * 3.8);
+            const crash = (lp * 1.8 + lp2 * 1.4) * Math.min(1, t * 300) * Math.exp(-t * 2.6);
+            const rumble = lp3 * 7 * Math.min(1, t * 6) * Math.exp(-t * 0.9);
+            d[i] = boom * 0.85 + crash + rumble;
+        }
+        for (const k of knocks) for (let j = 0; j < sr * 0.12 && k.i + j < len; j++) {
+            const t = j / sr;
+            d[k.i + j] += Math.sin(2 * Math.PI * k.f * t) * Math.exp(-t * k.dec) * k.a * (1 - Math.exp(-t * 4000));
+        }
+        for (let i = 0; i < len; i++) d[i] = Math.max(-1, Math.min(1, d[i]));
+        return buf;
+    }
+
+    /** …and as it gives way: stone grinding on stone, a groan that rises and snaps (0.9 s). */
+    _synthGroan() {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, len = Math.floor(sr * 0.9);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        let seed = 17, lp = 0, ph = 0;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const f = 46 + 30 * t + 6 * Math.sin(t * 31);
+            ph += 2 * Math.PI * f / sr;
+            const saw = ((ph / (2 * Math.PI)) % 1) * 2 - 1; // (a rough, buzzing tone: grinding)
+            lp += ((rnd() * 2 - 1) - lp) * 0.08;
+            const env = Math.min(1, t * 5) * (t < 0.78 ? 1 : Math.max(0, 1 - (t - 0.78) * 12));
+            const grit = lp * (0.6 + 0.4 * Math.sin(t * 90 + Math.sin(t * 13) * 3));
+            const snap = t > 0.74 ? (rnd() * 2 - 1) * Math.exp(-(t - 0.74) * 40) * 1.4 : 0;
+            d[i] = Math.max(-1, Math.min(1, (saw * 0.35 + grit * 0.9) * env + snap));
+        }
+        return buf;
+    }
+
+    /** A piece of a building lands (`size`: blocks): louder and deeper the bigger it is. */
+    playCollapse(position, size = 10) {
+        if (!this.enabled || !this.context) return;
+        if (!this.sounds.collapse) this.sounds.collapse = this._synthCollapse();
+        const k = Math.min(1, Math.sqrt(size) / 14);
+        this._playAt(this.sounds.collapse, position, 0.5 + 1.6 * k, 8 + 22 * k, 1.15 - 0.35 * k + Math.random() * 0.06);
+    }
+
+    /** A piece of a building gives way (the start of its fall). */
+    playGiveWay(position, size = 10) {
+        if (!this.enabled || !this.context) return;
+        if (!this.sounds.groan) this.sounds.groan = this._synthGroan();
+        if (!this.sounds.crack) this.sounds.crack = this._synthCrack();
+        const k = Math.min(1, Math.sqrt(size) / 14);
+        this._playAt(this.sounds.groan, position, 0.4 + 0.9 * k, 6 + 16 * k, 1.1 - 0.3 * k);
+        this._playAt(this.sounds.crack, position, 0.6 + 0.8 * k, 8 + 14 * k, 0.8 + Math.random() * 0.2);
     }
 
     /** A short dry crack of stone. */

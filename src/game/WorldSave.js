@@ -336,15 +336,19 @@ export function restoreWorld(game, save, THREE) {
     }
     for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
     g.world.restoreMovedTrees?.(save.treesMoved);
-    for (const e of save.explosions || []) {
-        // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
-        if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater — BoomCarve.js)
-        else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
-            if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave)
-            else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
-        });
-        g.explosions.push(e);
-    }
+    // (the checks of the buildings after each blast: at once, in the blasts' order, unseen — Structure.js, Collapse.Settling)
+    const replay = (fn) => (g.world.terrain?.data?.settling ? g.world.terrain.data.settling.replay(fn) : fn());
+    replay(() => {
+        for (const e of save.explosions || []) {
+            // (k: the houses' spheres of protection it could not eat into — HouseWards.js)
+            if (e.boom) runBoom(g.world.destructible ? g.world.terrain?.data : null, e); // («Бум»: its whole crater — BoomCarve.js)
+            else breaking(e.en && g.world.terrain?.data, e.en, e.p[0], e.p[2], () => { // (en: a breaker of the enchanted stone — EnchantedStone.js)
+                if (e.ruin) g.world.ruin(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k), e.ri != null ? { inner: e.ri, full: e.rf } : null); // («Total Destruction»; ri: a band of a wave)
+                else g.world.explode(new THREE.Vector3(e.p[0], e.p[1], e.p[2]), e.r, keepIn(e.k));
+            });
+            g.explosions.push(e);
+        }
+    });
     if (save.rebuild) g.castleLife?.rebuild.restore(save.rebuild); // (after the blasts: what the builders put back since)
     if (save.ice && save.ice.length) g.applyIce(save.ice);
     if (save.liquidated) g.liquidation?.restore(save.liquidated); // (before the things themselves: what crumbled is not made again)

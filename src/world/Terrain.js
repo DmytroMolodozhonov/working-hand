@@ -68,6 +68,8 @@ export const BLOCK = {
 };
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
+/** The land itself, not built (carveColumn's `gone` leaves it out). */
+const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.ICE, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS]);
 /** The palace's / the Ice Rod's ice (melts in fire: IceQueen.melt). */
 export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
@@ -1882,7 +1884,7 @@ export class TerrainData {
      * from the column's top down; bedrock, water and the gods' ground stay. `wet` gets [x, L, z] of the cells
      * opened at or under the sea's level (L ≤ 0) — the water may come in there. @returns how many went.
      */
-    carveColumn(ix, iz, floorY, wet = null) {
+    carveColumn(ix, iz, floorY, wet = null, gone = null) {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return 0;
         const lx = ix & MASK, lz = iz & MASK, col = lz * CHUNK + lx;
@@ -1894,6 +1896,7 @@ export class TerrainData {
             if (t === BLOCK.AIR || t === BLOCK.BEDROCK || (t === BLOCK.WATER && L <= 0)) continue; // (the sea's water stays: it pours in)
             if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
             if (isEnchanted(t) && !enchantMayBreak(this, ix, iz)) break; // (the enchanted stone: only near the middle of «Бум»; it holds the ground under it — nothing left hanging)
+            if (gone && !NATURAL.has(t)) gone.push([ix, L, iz, t]); // (a built block: the check of the building round it — Structure.js)
             c.blocks[idx] = BLOCK.AIR; // (a river's or a lake's water over the sea's level goes with the ground under it — none left hanging)
             if (c.shape) c.shape[idx] = 0;
             if (L < c.minOpen) c.minOpen = L;
