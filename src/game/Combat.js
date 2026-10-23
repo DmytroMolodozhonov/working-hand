@@ -38,6 +38,7 @@ import { sharpJerk } from './Jerk.js';
 import { spellPush } from './Impact.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 import { SLOW } from './Slow.js';
+import { regenCellsK, regenTier, regenLine } from './ManaRegen.js';
 import { PGODS, isDivine, isMagicKind, godsKeepsOff, ALL_ROUND, payDivine, BREAKS_GODS } from './ProtectionGods.js';
 
 export const PVP = {
@@ -610,6 +611,14 @@ export class Combat {
     }
 
     /** A burnt scroll: more strength for good. */
+    /** A new hundred of mana cells reached: the hero is told his mana now comes back faster (not at a load, not when it falls). */
+    _regenTierCheck() {
+        const t = regenTier(this.maxFatigue);
+        if (this._regenTier == null) { this._regenTier = t; return; }
+        if (t > this._regenTier) this.game.hud?.setVoice?.(regenLine(t), true);
+        this._regenTier = t;
+    }
+
     addMaxFatigue(n) {
         this.maxFatigue = (this.maxFatigue || PVP.MAX_FATIGUE) + n;
         this.fatigue = Math.min(this.maxFatigue, this.fatigue + n);
@@ -1101,7 +1110,8 @@ export class Combat {
         const holding = this.shield?.drain != null;
         const tree = !!this.game.livingTrees?.draining;
         // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * dt); // (achievements: +15 % each, «Высший маг» +100 %)
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * regenCellsK(this.maxFatigue) * dt); // (achievements: +15 % each, «Высший маг» +100 %; every 100 cells of the maximum +10 %: ManaRegen.js)
+        this._regenTierCheck();
         if (holding) {
             this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
             this.shield.left = this.fatigue / this.shield.drain;
