@@ -25,9 +25,9 @@ test('the words: «Water Vortex» (and «вотер вортекс»), «Fire Ma
     assert.equal(matchSpell('water forming'), 'WaterForming');
 });
 
-test('mana: Water Vortex is a very strong spell (25), Fire Maxima 20, Bubble free', () => {
-    assert.equal(SPELL_COST.WaterVortex, 25);
-    assert.equal(VORTEX.COST, 25);
+test('mana: Water Vortex is a very strong spell (20 + 1/s), Fire Maxima 20, Bubble free', () => {
+    assert.equal(SPELL_COST.WaterVortex, 20);
+    assert.equal(VORTEX.COST, 20);
     assert.equal(SPELL_COST.FireMaxima, 20);
     assert.equal(FIRE_MAXIMA.COST, 20);
     assert.equal(SPELL_COST.VortexBubble, 0, '«Bubble» is part of the vortex (already paid)');
@@ -158,7 +158,7 @@ test('Water Vortex: no swinging within 3 s → the water falls back; mana is pai
     ch.dir.set(0, -0.2, -1).normalize();
     const before = g.combat.fatigue;
     assert.equal(V.cast(true), 'WaterVortex');
-    assert.ok(before - g.combat.fatigue >= 25 * 0.85 - 1e-6, 'mana paid');
+    assert.ok(before - g.combat.fatigue >= 20 * 0.85 - 1e-6, 'mana paid');
     run(V, 3.4);
     assert.equal(V.state, null);
     assert.ok(V.log.some((e) => e.ev === 'fizzle'));
@@ -457,4 +457,22 @@ test('«Bubble» is carried by the hand like «Левиоса»: empty or with a
         run(other, 1);
         assert.ok(other.bubbles.get('me:1').pos.distanceTo(b.pos) < 0.3, 'the others see it where the caster carries it');
     }
+});
+
+test('Water Vortex: 20 mana at once + 1 a second while it holds water; out of mana → it falls', () => {
+    const { g, ch, V } = world();
+    ch.dir.set(0, -0.2, -1).normalize();
+    g.combat.fatigue = 100;
+    assert.equal(V.cast(true), 'WaterVortex');
+    const afterCast = g.combat.fatigue;
+    assert.ok(100 - afterCast >= 20 * 0.85 - 1e-6 && 100 - afterCast <= 20 + 1e-6, 'about 20 paid at once');
+    run(V, 2);
+    assert.ok(Math.abs((afterCast - g.combat.fatigue) - 2) < 0.2, `~1 a second (${afterCast - g.combat.fatigue})`);
+    g.combat.fatigue = 0.3;
+    run(V, 1);
+    assert.equal(V.state, null, 'no mana: the vortex fell apart');
+    assert.ok(g.hud.msgs.some((m) => /Не хватает сил/.test(m)));
+    const left = g.combat.fatigue;
+    run(V, 2);
+    assert.ok(g.combat.fatigue >= left, 'nothing more is taken once it is over');
 });

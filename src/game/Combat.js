@@ -137,7 +137,7 @@ export const SPELL_COST = {
     CreateCastle: 500, // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
     ImproveHouse: 40, // (level 2; 80, 160, 320 for the next — HouseMagic pays it itself)
     ChangeColor: 2,
-    WaterVortex: 25, // very strong: a whole vortex of water (see WaterVortex.js)
+    WaterVortex: 20, // very strong: a whole vortex of water, 20 at once + 1 a second while it holds water (see WaterVortex.js)
     VortexBubble: 0, // «Bubble» on the one the vortex hit: part of the vortex (already paid)
     FireMaxima: 20, // the only way out of the vortex's ice
     Snowman: 30, // a friendly snowman out of snow (instant; nobody's — IceQueen.castSnowman)

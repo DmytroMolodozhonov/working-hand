@@ -47,7 +47,8 @@ import { fallDir } from './Impact.js';
 import { aimOffset, applyAimOffset, steadyDir } from './AimHold.js';
 
 export const VORTEX = {
-    COST: 25, // mana (see Combat.SPELL_COST)
+    COST: 20, // mana at once (see Combat.SPELL_COST)
+    MANA_DRAIN: 1, // mana a second while the water is in the vortex (swinging, and the rings still round me while the stream flies)
     START_TIME: 3, // s to start swinging the hand after the words
     START_TURNS: 0.3, // turns of the hand that mean «it has started»
     MIN_RADIUS: 0.08, // m: the hand must really go round (after the slow centre is taken out)
@@ -472,12 +473,27 @@ export class WaterVortex {
     update(dt) {
         this._t += dt;
         if (this._mats) for (const m of this._mats) m.userData.uniforms.uTime.value += dt;
+        this._drainMana(dt);
         if (this.state) this._updateMine(dt);
         this._updateFlights(dt);
         this._updateBubbles(dt);
         this._updateEffects(dt);
         this._sendState(dt);
         this._draw(dt);
+    }
+
+    /** My vortex keeps taking mana (VORTEX.MANA_DRAIN a second) while there is water in it: swinging, or the rings still unwinding into my stream. */
+    _drainMana(dt) {
+        const c = this.game.combat;
+        if (!c?.enabled) return; // (Creative: free)
+        let mine = !!this.state;
+        if (!mine) for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { mine = true; break; }
+        if (!mine) return;
+        if (c.drain(VORTEX.MANA_DRAIN * dt, 0) !== false && c.fatigue > 1e-6) return;
+        // out of mana: the water lets go and falls
+        for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { this._collapse(this._srcOf(f), f.res); f.res = 0; }
+        if (this.state) { this._note({ ev: 'collapse' }); this.stop(); }
+        this.game.hud?.setVoice?.('🌀 Не хватает сил — вода упала', true);
     }
 
     _updateMine(dt) {
