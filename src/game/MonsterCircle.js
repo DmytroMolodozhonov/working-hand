@@ -104,7 +104,7 @@ export class MonsterCircle {
         this.armed = null; // {x, z, y, r, until} — узнана и горит
         this._job = null;  // распознавание по кусочку
         this._stand = 0;
-        this._told = 0;
+        this._told = -Infinity;
         this.remote = new Map(); // id → {mark, until}
     }
 

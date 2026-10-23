@@ -354,3 +354,64 @@ test('the hooks: no spell but «стоп» as a monster; hits, stuns, falls, pus
     assert.match(src('src/net/NetSync.js'), /mo: g\.monster\?\.netFlag\(\)/);
     assert.match(game, /monsterSamples\(\)/); // (its shaders on the loading screen)
 });
+
+test('drawing it with the wand\'s tip on the ground, standing in it: the form begins (and not before it is learned)', async () => {
+    const { MonsterCircle } = await import('../../src/game/MonsterCircle.js');
+    const draw = (known) => {
+        const { g, ch } = fakeGame();
+        const said = [];
+        g.hud.setVoice = (t) => said.push(t);
+        g.knowsSpell = (k) => known && k === MONSTER_PENTAGRAM.key;
+        g.terrain.data.floorAt = () => 0;
+        const c = new MonsterCircle(g);
+        let tip = null;
+        c._tip = (out) => (tip ? out.set(tip[0], tip[1], tip[2]) : null);
+        // the figure, stroke by stroke: the tip on the ground (0.1 m over it) along each, lifted between them
+        for (const st of figureAt('monster', 6, 0, 2.2, 0.5)) {
+            for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < 4; k++) {
+                const u = k / 4, a = st[i], b = st[i + 1];
+                tip = [a[0] + (b[0] - a[0]) * u, 0.1, a[1] + (b[1] - a[1]) * u];
+                c.update(1 / 60);
+            }
+            tip = [0, 3, 0];
+            for (let i = 0; i < 60; i++) c.update(1 / 60);
+        }
+        for (let i = 0; i < 400 && c._job; i++) c.update(1 / 60);
+        return { g, ch, c, said };
+    };
+    const a = draw(false);
+    assert.equal(a.c.armed, null);
+    assert.ok(a.said.some((t) => /не знаете/.test(t)));
+    const b = draw(true);
+    assert.ok(b.c.armed, 'it glows');
+    assert.ok(Math.abs(b.c.armed.x - 6) < 0.6 && Math.abs(b.c.armed.z) < 0.6);
+    // standing in it (feet on the ground in the circle)
+    b.ch.group.position.set(6, PLAYER_GROUND_OFFSET, 0);
+    b.ch.onGround = true;
+    for (let i = 0; i < 60; i++) b.c.update(1 / 60);
+    assert.equal(b.g.monster.active, true);
+    assert.equal(b.g.combat.fatigue, 100);
+    assert.equal(b.c.armed, null, 'burnt out');
+});
+
+test('a paw closed at a wall takes a piece of it; opened — the piece flies and lies where it fell', () => {
+    const { g, ch, blocks } = fakeGame();
+    g.monster.begin(); run(g, MONSTER.GROW_S + 0.2);
+    ch.group.updateMatrixWorld(true);
+    const at = ch.getHandWorldPosition('right', new THREE.Vector3());
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) blocks.set(`${Math.round(at.x) + dx},${Math.round(at.y) + dy + 1},${Math.round(at.z)}`, BLOCK.BRICK);
+    let curl = 0;
+    ch.getGripCurl = () => curl;
+    g.monster.update(0.016);
+    curl = 0.9; g.monster.update(0.016);
+    assert.ok(g.monster.carry.right?.length >= 9, 'the bricks in the paw');
+    assert.equal(blocks.get(`${Math.round(at.x)},${Math.round(at.y) + 1},${Math.round(at.z)}`), BLOCK.AIR);
+    curl = 0; g.monster.update(0.016);
+    assert.equal(g.monster.carry.right, null);
+    assert.ok(g.monster.flying.length >= 9);
+    // the ground: a floor at y 0 (layer 1)
+    g.terrain.data.get = (x, L, z) => (L <= 0 ? BLOCK.STONE : blocks.get(`${x},${L},${z}`) || 0);
+    for (let i = 0; i < 300 && g.monster.flying.length; i++) g.monster.update(0.016);
+    assert.equal(g.monster.flying.length, 0);
+    assert.ok([...blocks.values()].filter((t) => t === BLOCK.BRICK).length >= 9, 'lying again as blocks: ' + [...blocks.entries()].filter(([, t]) => t).map(([k, t]) => k + '=' + t).join(' '));
+});

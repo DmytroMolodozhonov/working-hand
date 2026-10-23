@@ -20,8 +20,9 @@
  */
 
 import * as THREE from 'three';
-import { MONSTER, FIST, FIST_TARGETS, STOMP, growAt, fmtLeft, hpAfterFall, spellOnMonster, knocksMonster, fistPower, fistBreaks, bodyBreaks, softGround, footprint, crater, freeSpot } from './MonsterForm.js';
+import { MONSTER, FIST, FIST_TARGETS, STOMP, GRAB, growAt, fmtLeft, hpAfterFall, spellOnMonster, knocksMonster, fistPower, fistBreaks, bodyBreaks, softGround, footprint, crater, freeSpot } from './MonsterForm.js';
 import { MonsterLook } from '../entities/MonsterBody.js';
+import { BlockSwarmFx } from '../fx/GroundVortexFx.js';
 import { addDark } from './DarkMagic.js';
 import { isDivine } from './ProtectionGods.js';
 import { BLOCK, BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
@@ -47,6 +48,11 @@ export class MonsterTransform {
         this._edits = []; this._debris = []; this._castle = 0; this._castleAt = null;
         this._alarmT = 0;
         this._fellHp = null;
+        this.carry = { left: null, right: null }; // блоки в лапе (поднятый кусок стены)
+        this.flying = []; // брошенные блоки: летят, падают, ложатся
+        this._curl = { left: 0, right: 0 };
+        this.blockFx = null;
+        this._col = new THREE.Color(); this._sq = new THREE.Quaternion(); this._se = new THREE.Euler();
     }
 
     get active() { return this.phase != null; }
@@ -134,6 +140,7 @@ export class MonsterTransform {
     _finish(why) {
         const g = this.game, ch = g.character, c = g.combat;
         const was = this.phase;
+        for (const side of ['left', 'right']) if (this.carry[side]) this._let(side, true);
         this.phase = null;
         if (this.look) this.look.setOn(false);
         // ноги — где стоял монстр: человек туда, где помещается
@@ -232,11 +239,13 @@ export class MonsterTransform {
         else g.hud?.setMonsterTimer?.(this.phase === 'grow' ? '…' : '0:00', this.phase === 'grow' ? Math.min(1, this.t / MONSTER.GROW_S) : 0, null, null, this.phase === 'grow' ? 'превращение' : 'возвращение');
         if (this.phase === 'on' && !g.combat?.dead && !g.isDeadLocal) {
             this._steps(dt);
+            this._grabs(dt);
             this._fists(dt);
             this._alarmT -= dt;
             if (this._alarmT <= 0) this._alarm();
         }
         this._budget = Math.min(STOMP.BREAK_PER_S, this._budget + STOMP.BREAK_PER_S * dt);
+        this._drawBlocks(dt);
         this._flushEdits();
     }
 
@@ -359,13 +368,153 @@ export class MonsterTransform {
         return n;
     }
 
+    // ------------------------------------------------------------------ поднять кусок стены, бросить
+
+    /**
+     * Лапа у стены (у земли, у крыши) сжалась в кулак — кусок в ней: до GRAB.MAX блоков в шаре у ладони снимаются из
+     * мира (с прочностью зданий: что держалось на них — падает) и идут за рукой, как в настоящей руке (повёрнуты с
+     * ладонью). Разжал — куски летят со скоростью руки (резкий взмах — бросок), падают и ложатся блоками там, где
+     * упали; по пути бьют тех, в кого попали.
+     */
+    _grabs(dt) {
+        const g = this.game, ch = g.character, T = g.terrain?.data;
+        for (const side of ['left', 'right']) {
+            const curl = ch.getGripCurl?.(side) || 0, was = this._curl[side];
+            this._curl[side] = curl;
+            if (this.carry[side]) { if (curl < GRAB.OPEN) this._let(side); continue; }
+            if (!(was < GRAB.OPEN && curl >= GRAB.CLOSE) || !T?.get || ch.handLost?.(side)) continue;
+            const at = ch.getHandWorldPosition(side, _v);
+            this._grab(side, at, T);
+        }
+    }
+
+    _grab(side, at, T) {
+        const g = this.game, ch = g.character;
+        const R = GRAB.R, list = [];
+        const grip = ch.getGripObject(side);
+        grip.updateWorldMatrix(true, false);
+        const inv = grip.getWorldQuaternion(new THREE.Quaternion()).invert();
+        const cells = [];
+        for (let iy = Math.round(at.y - R); iy <= Math.round(at.y + R); iy++) for (let iz = Math.round(at.z - R); iz <= Math.round(at.z + R); iz++) for (let ix = Math.round(at.x - R); ix <= Math.round(at.x + R); ix++) {
+            const d2 = (ix - at.x) ** 2 + (iy - at.y) ** 2 + (iz - at.z) ** 2;
+            if (d2 <= R * R) cells.push([d2, ix, iy, iz]);
+        }
+        cells.sort((a, b) => a[0] - b[0]); // (ближние к ладони — первыми)
+        for (const [, ix, iy, iz] of cells) {
+            if (list.length >= GRAB.MAX) break;
+            if (T.landMade && !T.landMade(ix, iz)) continue;
+            const L = iy + 1, t = T.get(ix, L, iz);
+            if (t === BLOCK.AIR || t === BLOCK.WATER || !fistBreaks(t) || t === BLOCK.BEDROCK) continue;
+            if (g.wards?.protects?.(ix, iy, iz) || g.temple?.wards?.(_d.set(ix, iy, iz))) continue;
+            const f = (top) => this._col.setHex(T.faceColor ? T.faceColor(t, ix, L, iz, top) : (BASE_COLORS[t] ?? 0x888888));
+            const c1 = f(false), sideC = [c1.r, c1.g, c1.b], c2 = f(true), top = [c2.r, c2.g, c2.b];
+            if (!this._take(T, ix, L, iz, t, true)) continue;
+            list.push({ t, cx: ix, cy: iy, cz: iz, side: sideC, top, off: new THREE.Vector3(ix - at.x, iy - at.y, iz - at.z).applyQuaternion(inv) });
+        }
+        if (!list.length) return;
+        this.carry[side] = list;
+        g.sound?.playCrack?.(at, 1.4);
+        g.fx.shake = Math.max(g.fx.shake || 0, 0.25);
+        g.castleLife?.alarm?.(at, 'uproot', g.localId, 8);
+    }
+
+    /** Разжал лапу: куски летят со скоростью ладони. `drop` — просто падают (форма кончилась). */
+    _let(side, drop = false) {
+        const g = this.game, ch = g.character, list = this.carry[side];
+        this.carry[side] = null;
+        if (!list) return;
+        const grip = ch.getGripObject(side);
+        const q = grip.getWorldQuaternion(new THREE.Quaternion());
+        const at = ch.getHandWorldPosition(side, new THREE.Vector3());
+        const v = drop ? new THREE.Vector3() : (ch.handVelocity?.[side] || new THREE.Vector3()).clone();
+        for (const b of list) {
+            if (this.flying.length >= GRAB.FLY_MAX) { this._land(b, at.clone().add(b.off.clone().applyQuaternion(q))); continue; }
+            b.p = at.clone().add(b.off.applyQuaternion(q));
+            b.v = v.clone().add(_w.set((Math.random() - 0.5) * 2, Math.random() * 1.5, (Math.random() - 0.5) * 2));
+            b.q = q.clone(); b.spin = new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+            b.ft = 0; // (s in the air)
+            this.flying.push(b);
+        }
+    }
+
+    /** Кусок лёг: блок там, где упал (над тем, во что упал), если там пусто. */
+    _land(b, p) {
+        const g = this.game, T = g.terrain?.data;
+        if (!T?.get) return;
+        const ix = Math.round(p.x), iz = Math.round(p.z);
+        let L = Math.floor(p.y + 1.5);
+        for (let k = 0; k < 6 && T.get(ix, L, iz) !== BLOCK.AIR; k++) L++;
+        if (T.get(ix, L, iz) !== BLOCK.AIR || (T.landMade && !T.landMade(ix, iz))) return;
+        T.set(ix, L, iz, b.t);
+        if (T.get(ix, L, iz) === b.t) this._edits.push([ix, L, iz, b.t]);
+    }
+
+    /** Блоки в лапах и в полёте — блоками мира (BlockSwarmFx: тот же шейдер, что у Ground Vortex). */
+    _drawBlocks(dt) {
+        const g = this.game, ch = g.character;
+        const any = this.carry.left || this.carry.right || this.flying.length;
+        if (!any && !this._drew) return;
+        if (!this.blockFx && g.scene) this.blockFx = new BlockSwarmFx(g.scene);
+        const fx = this.blockFx;
+        fx?.begin();
+        for (const side of ['left', 'right']) {
+            const list = this.carry[side];
+            if (!list) continue;
+            const grip = ch.getGripObject(side);
+            const q = grip.getWorldQuaternion(this._gq || (this._gq = new THREE.Quaternion()));
+            const at = ch.getHandWorldPosition(side, _v);
+            for (const b of list) fx?.add(b, _w.copy(b.off).applyQuaternion(q).add(at), q, 1);
+        }
+        const T = g.terrain?.data, G = 20;
+        for (let i = this.flying.length - 1; i >= 0; i--) {
+            const b = this.flying[i];
+            b.ft += dt;
+            b.v.y -= G * dt;
+            b.p.addScaledVector(b.v, dt);
+            _d.copy(b.spin).multiplyScalar(dt);
+            b.q.multiply(this._sq.setFromEuler(this._se.set(_d.x, _d.y, _d.z)));
+            const sp = b.v.length();
+            if (sp > GRAB.HIT_SPEED) this._flyHit(b, sp);
+            const t = T?.get ? T.get(Math.round(b.p.x), Math.floor(b.p.y + 1.5), Math.round(b.p.z)) : 0;
+            if ((t !== BLOCK.AIR && t !== BLOCK.WATER) || b.ft > 8 || b.p.y < -60) {
+                this._land(b, b.p.clone().setY(b.p.y + 0.5));
+                this.flying.splice(i, 1);
+                continue;
+            }
+            fx?.add(b, b.p, b.q, 1);
+        }
+        fx?.end();
+        this._drew = !!any;
+    }
+
+    /** Брошенный кусок по существу на пути: урон и толчок (как удар). */
+    _flyHit(b, sp) {
+        if ((b._hitT || 0) > b.ft) return;
+        const g = this.game;
+        for (const c of this._targets()) {
+            if (c.isDead || c.dead) continue;
+            const cp = c.group?.position || c.position;
+            if (!cp) continue;
+            const big = c.isDragon || c.isBoss ? 5 : 1.4;
+            if ((cp.x - b.p.x) ** 2 + (cp.z - b.p.z) ** 2 > big * big || Math.abs(cp.y - b.p.y) > big + 1.5) continue;
+            const dir = b.v.clone().setY(0).normalize();
+            if (c.isDragon) g.dragons?.hit?.(c, GRAB.HIT_DMG, 'thrown', g.localId);
+            else g.onLocalHit?.(c, GRAB.HIT_DMG, dir, false, null);
+            const ck = kindOf(c);
+            if (ck && g.authority !== false) g.creatureImpact?.apply?.(c, { v: dir.multiplyScalar(Math.min(30, sp)).setY(6), by: g.localId, kind: 'thrown', fly: true });
+            b._hitT = b.ft + 0.5;
+            b.v.multiplyScalar(0.4);
+            return;
+        }
+    }
+
     // ------------------------------------------------------------------ кулаки
 
     _targets() {
         const g = this.game, out = this._tl || (this._tl = []);
         out.length = 0;
         const add = (l) => { if (l) for (const c of l) out.push(c); };
-        add(g.zombies); add(g.combat?.enabled ? g.combat.meleeTargets() : null); add(g.animals?.targets?.()); add(g.spiders?.targets?.());
+        add(g.zombies); add(g.combat?.enabled ? g.combat.meleeTargets?.() : null); add(g.animals?.targets?.()); add(g.spiders?.targets?.());
         add(g.dragons?.targets?.()); add(g.phoenixes?.targets?.()); add(g.castleLife?.targets?.()); add(g.livingTrees?.targets?.());
         add(g.ships?.crew?.targets?.()); add(g.owls?.targets?.()); add(g.iceCastle?.targets?.());
         return out;
@@ -375,7 +524,7 @@ export class MonsterTransform {
         const g = this.game, ch = g.character;
         for (const side of ['left', 'right']) {
             this._fist[side] = Math.max(0, this._fist[side] - dt);
-            if (this._fist[side] > 0 || ch.handLost?.(side)) continue;
+            if (this._fist[side] > 0 || ch.handLost?.(side) || this.carry[side]) continue;
             // (the hand's own speed against the body — a run carries both hands along, that is no blow — in metres: ×size)
             const rel = ch.handRelVelocity?.[side];
             if (!rel) continue;
@@ -512,6 +661,9 @@ export class MonsterTransform {
 
     dispose() {
         if (this.phase) this._finish('exit');
+        for (const b of this.flying.splice(0)) this._land(b, b.p);
+        this._flushEdits();
+        this.blockFx?.dispose(); this.blockFx = null;
         this.look?.dispose();
         this.look = null;
     }
