@@ -1428,7 +1428,7 @@ export class IceCastleLife {
             if (edits.length < 12) g.fx?.spark?.(_v.set(x, L - 1, z), 0xd8f4ff, 0.25, _v2.set(0, 2 + Math.random() * 2, 0), 1.2); // (steam)
         }
         if (edits.length) {
-            g.builder?._sendEdits?.(edits);
+            g.builder?._sendEdits?.(edits, true); // (the palace's ice melted: what it held may come down)
             if (by != null && inIcePalace(this.plan, p.x, p.z)) { if (this.auth) this.attacked(p, R, by); else g.sync?.ice?.({ e: 'atk', p: [r2(p.x), r2(p.y), r2(p.z)] }); }
             if (this.plan && Math.hypot(p.x - this.plan.x, p.z - this.plan.z) < this.plan.R + 30 && (this._meltSaidT || 0) < performance.now()) {
                 this._meltSaidT = performance.now() + 15000;

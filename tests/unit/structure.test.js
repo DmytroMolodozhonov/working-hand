@@ -24,24 +24,28 @@ function take(d, x0, L0, z0, x1, L1, z1, skip = () => false) {
 }
 const fell = (falls) => falls.reduce((a, f) => a + f.cells.length, 0);
 
-test('a stone roof 7×7 on one column 1×1, one storey high: the column breaks, the roof comes down; on a column 3×3 it stands', () => {
+test('a storey of stone 7×7 (its floor, walls and roof) on one column 1×1, one storey high: the column breaks, all of it comes down; on a column 3×3 it stands', () => {
+    const storey = (d) => { d.box(-3, 5, -3, 3, 5, 3, S); d.box(-3, 6, -3, 3, 9, 3, S); d.box(-2, 6, -2, 2, 9, 2, 0); d.box(-3, 10, -3, 3, 10, 3, S); };
     for (const [w, falls] of [[1, true], [3, false]]) {
         const d = new FlatData();
         const h = (w - 1) / 2;
         d.box(-h, 1, -h, h, 4, h, S); // the column
         for (const [x, z] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) d.box(x, 1, z, x, 4, z, S); // posts at the corners
-        d.box(-3, 5, -3, 3, 5, 3, S); // the roof
-        // the corner posts are blasted away: the column is left alone with the roof
+        storey(d);
+        // the corner posts are blasted away: the column is left alone with the storey on it
         const gone = [];
         for (const [x, z] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) gone.push(...take(d, x, 1, z, x, 4, z));
         const out = collapseAfter(d, 0, 2, 0, 4, 0, gone);
-        assert.equal(fell(out) > 40, falls, `column ${w}×${w}: ${fell(out)} blocks fell`);
-        assert.equal(d.count(-3, 5, -3, 3, 5, 3, S) > 40, !falls, 'the roof is up there or on the ground');
+        assert.equal(fell(out) > 150, falls, `column ${w}×${w}: ${fell(out)} blocks fell`);
+        assert.equal(d.count(-3, 5, -3, 3, 5, 3, S) > 40, !falls, 'the floor is up there or on the ground');
         if (falls) assert.ok(out.some((f) => f.crushed), 'the column broke under it');
         // plain physics too (the building judged as it stands, not against what it was)
-        const d2 = new FlatData(); d2.box(-h, 1, -h, h, 4, h, S); d2.box(-3, 5, -3, 3, 5, 3, S);
+        const d2 = new FlatData(); d2.box(-h, 1, -h, h, 4, h, S); storey(d2);
         assert.equal(judge(d2, boxAround(d2, 0, 3, 0, 4)).crushed.length > 0, falls);
     }
+    // a bare slab 7×7 on the column: no storey on it — the column holds it (a stone column carries 72)
+    const d = new FlatData(); d.box(0, 1, 0, 0, 4, 0, S); d.box(-3, 5, -3, 3, 5, 3, S);
+    assert.equal(judge(d, boxAround(d, 0, 3, 0, 4)).crushed.length, 0);
 });
 
 test('the author\'s house: a two-storey stone house left on one corner column falls whole; a 3×3 pillar under its middle does not hold it either, its walls do', () => {

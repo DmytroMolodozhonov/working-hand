@@ -1071,7 +1071,7 @@ export class LevitationMaxima {
         if (L.inst) { g.world.removeTree(L.inst); g.sync?.treeGone?.(L.inst.index); return; }
         const edits = [];
         for (const c of L.cells) { data.set(c[0], c[1], c[2], BLOCK.AIR); edits.push([c[0], c[1], c[2], BLOCK.AIR]); }
-        g.builder?._sendEdits?.(edits);
+        g.builder?._sendEdits?.(edits, true); // (a piece lifted out of a wall: what it held may come down)
         if (L.house?.magic) g.castleLife?.alarm?.(L.base, 'uproot', L.by, 10); // (a magic house: no castle's builders put it back)
         else if (L.house) g.castleLife?.damaged?.(L.base, L.by, edits.length, true, { r: 10, kind: 'uproot' });
         // (a piece of a castle wall / its ground: the guards come, the builders put it back later — Rebuild)
@@ -1387,7 +1387,7 @@ export class LevitationMaxima {
                     edits.push([x, Lt, z, BLOCK.AIR]);
                 }
             }
-            if (edits.length) g.builder?._sendEdits?.(edits.splice(0));
+            if (edits.length) g.builder?._sendEdits?.(edits.splice(0), true); // (a roof crushed: what it held may come down)
         }
         const v = L.vel;
         // (a tree falls the way it flew — or, dropped straight down, the way it leans)

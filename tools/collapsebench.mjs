@@ -7,7 +7,8 @@
  * Творческий, the same world every run; the hero is put by the nearest castle:
  *   «колонны»    — a stone roof 7×7 on four posts built by the castle: three posts blasted away → the roof must fall;
  *                  then a second one: one post blasted → it must stand;
- *   «колонна»    — a two-storey stone house; its ground floor blasted away but one corner column → the house must fall;
+ *   «колонна»    — a two-storey stone house; its ground floor taken away (Builder edits, as «Gather» or a hand) but one
+ *                  corner column 1×1 → the house must fall;
  *   «угол»       — the castle's biggest hall: the column at its corner (the walls' corner) blasted («Бомбардо Максима»);
  *   «бомбардо»   — «Бомбардо Максима» ×3 into the castle's walls;
  *   «разрушение» — «Total Destruction» at the castle's keep.
@@ -113,12 +114,14 @@ const scenarios = {
             box(x - 4, y + 10, z - 4, x + 4, y + 10, z + 4, S);
             await new Promise((r) => setTimeout(r, 1500));
             B.rec = true;
-            // the walls of the ground floor, all but the corner column (x−4, z−4): small blasts along them
-            for (let k = -3; k <= 4; k += 2) for (const [a, b] of [[k, -4], [k, 4], [-4, k], [4, k]]) {
-                if (a <= -3 && b <= -3) continue;
-                g.explode(new V(x + a, y + 2.5, z + b), 1.7, 'local', 1);
-                await new Promise((r) => setTimeout(r, 30));
+            // the walls of the ground floor taken away, all but the corner column (x−4, z−4) — as a hand or a spell takes
+            // blocks (Builder edits: the house round them is looked at, its fall goes to everybody as edits)
+            const edits = [];
+            for (let L = y + 1; L <= y + 4; L++) for (let b = z - 4; b <= z + 4; b++) for (let a = x - 4; a <= x + 4; a++) {
+                if ((a === x - 4 && b === z - 4) || d.get(a, L, b) !== S) continue;
+                d.set(a, L, b, 0); edits.push([a, L, b, 0]);
             }
+            g.builder._sendEdits(edits, true);
             await new Promise((r) => setTimeout(r, 6000));
             let left = 0;
             for (let L = y + 5; L <= y + 10; L++) for (let b = z - 4; b <= z + 4; b++) for (let a = x - 4; a <= x + 4; a++) if (d.get(a, L, b) === S) left++;

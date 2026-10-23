@@ -140,7 +140,7 @@ export class Builder {
         for (const c of cells) { data.set(c.x, c.L, c.z, BLOCK.AIR); edits.push([c.x, c.L, c.z, BLOCK.AIR]); }
         // (a hole taken beside a river or a lake fills with its water — sent too: the same everywhere)
         for (const [x, L, z] of data._flood?.(cells.map((c) => ({ x: c.x, y: c.L - 1, z: c.z }))) || []) edits.push([x, L, z, BLOCK.WATER]);
-        this._sendEdits(edits);
+        this._sendEdits(edits, true); // (what the taken blocks held may come down)
         // pulling a castle / a house apart: whoever sees it calls the guard
         if (isCastleBlock(cell.type)) g.castleLife?.damaged({ x: cell.x, y: cell.L - 1, z: cell.z }, g.localId, cells.length, false);
         const color = RESOURCE[res]?.color ?? 0xffffff;
@@ -378,13 +378,14 @@ export class Builder {
         if (edits.length) this._sendEdits(edits);
     }
 
-    _sendEdits(list) {
+    /** settle: blocks taken away by a hand or a spell — the building round them is looked at (_settleGone). */
+    _sendEdits(list, settle = false) {
         // (an edit the enchanted stone refused here never goes out: everybody else applies edits as done — EnchantedStone.js)
         const d = this.data;
         if (d && list.some((e) => isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2])))) list = list.filter((e) => d.get(e[0], e[1], e[2]) === e[3] || !(isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2]))));
         if (!list.length) return;
         // (blocks taken away: the building round them is looked at next frame — what can no longer stand comes down)
-        if (!this._settlingOut && d?.settling && this.game.world?.destructible) for (const e of list) if (e[3] === BLOCK.AIR || e[3] === BLOCK.WATER) (this._gone || (this._gone = [])).push(e);
+        if (settle && d?.settling && this.game.world?.destructible) for (const e of list) if (e[3] === BLOCK.AIR || e[3] === BLOCK.WATER) (this._gone || (this._gone = [])).push(e);
         this.game.castleLife?.rebuild?.forget(list); // (a cell the castle's builders put back is the player's now)
         this.game.blockEdits = this.game.blockEdits || [];
         for (const e of list) this.game.blockEdits.push(e);
@@ -418,8 +419,7 @@ export class Builder {
             const edits = [];
             for (const f of falls) for (const c of f.cells) edits.push([c[0], c[1], c[2], BLOCK.AIR]);
             for (const f of falls) for (const c of f.landed) edits.push(c.length > 4 ? [c[0], c[1], c[2], c[3], c[4]] : [c[0], c[1], c[2], c[3]]);
-            this._settlingOut = true;
-            try { this._sendEdits(edits); } finally { this._settlingOut = false; }
+            this._sendEdits(edits);
             this.game.sync?.falls?.(falls);
             this.game._collapsed?.(falls);
         }, false); // (not in the order of the blasts: its result goes out as edits)

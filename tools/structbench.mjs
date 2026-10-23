@@ -13,12 +13,18 @@
  * stands»: Structure.settle with nothing taken away) would let fall (must be none); and the weak places the plain
  * physics finds (no way down «висит», crushed «раздавлен», joints torn «разрыв») — they stand as built, and give way
  * only if a change loads them more (a turret standing on a roof…); a few of each (place, block).
+ * --magic: the buildings players make by magic too — «Create a House» (levels 1…5) / «Improve a House», «Create a Castle»,
+ * «Create an Ice Castle», «Ice Bridge» — built on flat land for a few seeds and judged the same way.
  * --check: fails if anything would fall.
  */
 import { TerrainData, BLOCK } from '../src/world/Terrain.js';
 import { judge, settle } from '../src/world/Structure.js';
 import { hangingSearch } from '../src/world/Collapse.js';
 import { CASTLE_CELL } from '../src/world/Castles.js';
+import { FlatData } from '../tests/unit/structure-fake.mjs';
+import { housePlan } from '../src/world/MagicHouse.js';
+import { castleCells } from '../src/world/MagicCastle.js';
+import { iceCastleMagicPlan, iceBridgePlan } from '../src/world/IceMagicPlan.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
@@ -64,7 +70,54 @@ function judgeArea(data, X0, X1, Z0, Z1, tally, label) {
     }
 }
 
-for (const seed of SEEDS) {
+if (args.includes('--magic')) {
+    const tallies = new Map();
+    const tallyOf = (k) => { if (!tallies.has(k)) tallies.set(k, { n: 0, built: 0, lost: 0, crushed: 0, torn: 0, floating: 0, fell: 0, ex: [], fex: [], fallEx: [] }); return tallies.get(k); };
+    const put = (d, cells, fill) => {
+        for (const c of fill || []) if (!d.get(c[0], c[1], c[2])) d.set(c[0], c[1], c[2], c[3]);
+        for (const c of cells) d.set(c[0], c[1], c[2], c[3]);
+    };
+    for (const seed of SEEDS.slice(0, 4)) {
+        for (let level = 1; level <= 5; level++) {
+            const d = new FlatData(), pl = housePlan({ seed, level, x: 0, z: 0, G: 0, face: seed & 3, woods: [BLOCK.WOOD] });
+            put(d, pl.cells, pl.fill);
+            const T = tallyOf('дом ' + level); T.n++;
+            judgeArea(d, -40, 40, -40, 40, T, `сид ${seed}`);
+        }
+        {
+            const d = new FlatData(), r = castleCells({ seed, x: 0, z: 0, G: 0, face: seed & 3 });
+            const cells = [];
+            for (let i = 0; i < r.n; i++) cells.push([r.cells[i * 5], r.cells[i * 5 + 1], r.cells[i * 5 + 2], r.cells[i * 5 + 3]]);
+            const fill = [];
+            for (let i = 0; i < (r.fill?.length || 0); i += 4) fill.push([r.fill[i], r.fill[i + 1], r.fill[i + 2], r.fill[i + 3]]);
+            put(d, cells, fill);
+            const T = tallyOf('замок магией'); T.n++;
+            judgeArea(d, -90, 90, -90, 90, T, `сид ${seed}`);
+        }
+        {
+            const d = new FlatData(), pl = iceCastleMagicPlan({ x: 0, z: 0, G: 0, rot: seed & 3, pil: [] });
+            put(d, pl.cells, pl.floor);
+            const T = tallyOf('ледяной магией'); T.n++;
+            judgeArea(d, -70, 70, -70, 70, T, `сид ${seed}`);
+        }
+        {
+            const d = new FlatData(), len = 20 + (seed % 5) * 8, pl = iceBridgePlan({ ax: 0, az: 0, aL: 1, bx: len, bz: 0, bL: 1 });
+            put(d, pl.cells);
+            const T = tallyOf('ледяной мост'); T.n++;
+            judgeArea(d, -10, len + 10, -15, 15, T, `длина ${len}`);
+        }
+    }
+    console.log('\nпостройки магией:');
+    for (const [k, T] of tallies) {
+        bad += T.fell;
+        weak += T.lost + T.crushed + T.torn;
+        console.log(`  ${k.padEnd(14)} штук ${String(T.n).padStart(3)}  блоков ${String(T.built).padStart(8)}  упало бы ${T.fell}  | слабые места «как построено»: висит ${T.lost}  раздавлен ${T.crushed}  разрыв ${T.torn}` +
+            (T.floating ? `   (и ${T.floating} висели в воздухе вовсе)` : ''));
+        for (const e of [...T.fallEx, ...T.ex]) console.log('      ' + e);
+    }
+}
+
+for (const seed of args.includes('--magic') && !args.includes('--seeds') ? [] : SEEDS) {
     const data = new TerrainData();
     data.generate({ seed, mountains: true, seas: true, test: TEST, deepCaves: true, lush: true, slopes: true });
     data.skipSeaTop = true;

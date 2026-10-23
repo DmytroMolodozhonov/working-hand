@@ -48,7 +48,7 @@ export class Quake {
         // a crack beside a river or a lake fills with its water (sent too: the same on every computer)
         const holes = edits.filter((e) => e[3] === BLOCK.AIR).map((e) => ({ x: e[0], y: e[1] - 1, z: e[2] }));
         for (const [x, L, z] of data._flood?.(holes) || []) edits.push([x, L, z, BLOCK.WATER]);
-        g.builder._sendEdits(edits);
+        g.builder._sendEdits(edits, true); // (the ground cracked under a wall: what it held may come down)
         return edits;
     }
 

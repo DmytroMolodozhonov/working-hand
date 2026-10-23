@@ -19,8 +19,9 @@
  *     ground, the one it hangs from, the ones it leans on. So a roof's weight runs along the roof to its walls, a
  *     wall's down the wall. Then:
  *     - a lone column (nothing beside it) bends and breaks under far less than a wall: it carries STRUCT.COLUMN of its
- *       material's `carry` one storey high, less the taller it is (a stone column 1×1 one storey high: 36 — a 7×7
- *       stone roof is 49: the column breaks, the roof comes down; a column 3×3 has its blocks braced — it holds);
+ *       material's `carry` one storey high, less the taller it is (a stone column 1×1 one storey high: 72 — a 7×7
+ *       stone floor with a storey of walls and a roof on it is ~200: the column breaks, all of it comes down; a hall's
+ *       pillar under its share of the vault holds; a column 3×3 has its blocks braced — it holds a house);
  *     - the weight passed sideways across a wall of joints one over the other between two columns may not be more than
  *       their bonds together (a 1-thick slab: one joint; a deep beam: all of its layers) — else it tears there (a
  *       house on a 2×2 pillar: its floor tears round the pillar);
@@ -50,10 +51,12 @@ export const STRUCT = {
     LEAN: 0.1, // leaning on the edge of a block a layer lower costs this share of a step (a rafter, an arch's ring: pressed, not bent)
     LEAN_CARRY: 0.5, // …and passes down at most this share of what the weaker block carries
     UNDER: 2, // the block under a block takes this many shares of its weight (each other holder one)
-    COLUMN: 0.06, // a lone column one storey high (nothing beside it) carries this share of its material's `carry` (stone: 36)
+    COLUMN: 0.12, // a lone column one storey high (nothing beside it) carries this share of its material's `carry` (stone: 72)
     STOREY: 4, // layers: …one storey; a column four times as tall carries half of that, a quarter as tall — twice as much
     CHAIN: 8, // layers: a lamp or a chandelier hangs on its chain this far under its ceiling
     WORSE: 1.05, // a block over its strength gives way only if it carries this much more than before the change (worse())
+    TIP: 0.5, // blocks: how far beyond the feet of its columns the middle of a piece's weight may be (balance())
+    BEND: 30, // weight × blocks off their feet each lone column's own stiffness holds still (a lamp's hood, a lean-to on its posts)
     MARGIN: 11, // m round the change looked at too (the roofs and floors that lean on it: a stone slab reaches 10)
     DEPTH: 4, // layers under the change looked at
     ROUNDS: 10, // at most this many rounds of falling in one check (a chain)
@@ -177,7 +180,8 @@ const buf = {
     n: 0, owner: null, T: null, P: null, recv: null, order: null, RUN: null, SX: null, SZ: null, seen: null, lost: null, cnt: null,
     // Dial's buckets as lists in flat arrays: head[p] → an entry; entry e: its cell ec[e], the next en[e]
     head: new Int32Array(STRUCT.Q + 1), ec: new Int32Array(1 << 16), en: new Int32Array(1 << 16), ne: 0,
-    touched: new IntList(), marked: new IntList(), stack: new IntList(),
+    touched: new IntList(), marked: new IntList(), stack: new IntList(), tops: new IntList(), body: new IntList(), feet: new IntList(),
+    mx: null, mz: null, // the first moments (Σ weight × x, z off the block) of what each block carries: where its weight's middle is
     // the box before the change (one job's at a time: preOwner)
     preOwner: null, preT: null, preP: null, preLoad: null, preSX: null, preSZ: null,
 };
@@ -187,6 +191,7 @@ function ensure(n) {
     buf.n = m;
     buf.T = new Uint8Array(m); buf.P = new Int32Array(m); buf.recv = new Float32Array(m); buf.order = new Int32Array(m); buf.RUN = new Uint8Array(m);
     buf.SX = new Float32Array(m); buf.SZ = new Float32Array(m); buf.seen = new Uint8Array(m * 2); buf.lost = new Uint8Array(m);
+    buf.mx = new Float32Array(m); buf.mz = new Float32Array(m);
     buf.preT = new Uint8Array(m); buf.preP = new Int32Array(m); buf.preLoad = new Float32Array(m); buf.preSX = new Float32Array(m); buf.preSZ = new Float32Array(m);
     buf.preOwner = null;
 }
@@ -331,8 +336,10 @@ function* waysDown(job) {
 function* weigh(job, out, record) {
     STATS.phase = 'weigh';
     const { NX, NY, NZ } = job.B;
-    const n = NX * NY * NZ, NXZ = NX * NZ, T = buf.T, P = buf.P, recv = buf.recv, Q = STRUCT.Q;
-    recv.fill(0, 0, n);
+    const n = NX * NY * NZ, NXZ = NX * NZ, T = buf.T, P = buf.P, recv = buf.recv, Q = STRUCT.Q, mx = buf.mx, mz = buf.mz;
+    recv.fill(0, 0, n); mx.fill(0, 0, n); mz.fill(0, 0, n);
+    const tops = buf.tops;
+    tops.n = 0;
     // the order: the dearest way down first; of the same cost, the higher first (key = P·NY + L) — a counting sort
     const K = (Q + 1) * NY;
     if (!buf.cnt || buf.cnt.length < K + 1) buf.cnt = new Int32Array(K + 1);
@@ -363,9 +370,10 @@ function* weigh(job, out, record) {
         const i = order[o], t = T[i], p = P[i];
         const L = (i / NXZ) | 0, r = i - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
         if (L === 0 || x === 0 || z === 0 || x === NX - 1 || z === NZ - 1 || L === NY - 1) continue; // (the box's edge: held from beyond)
-        const load = W[t] + recv[i];
+        const load = W[t] + recv[i], MX = mx[i], MZ = mz[i];
         if (record) keepLoad[i] = load;
-        else if (recv[i] > CARRY[t] * STRUCT.COLUMN * 0.25 && !sides(i, NX)) {
+        else if (!sides(i, NX) && KIND[T[i + NXZ]] === 2 && sides(i + NXZ, NX) && recv[i] > W[t]) tops.push(i); // (the top of a lone column under something: is it balanced? — balance())
+        if (!record && recv[i] > CARRY[t] * STRUCT.COLUMN * 0.25 && !sides(i, NX)) {
             // a lone column bends and breaks under a weight a wall carries easily; the taller, the less
             let up = i + NXZ, dn = i - NXZ, h = 1;
             while (up < n && KIND[T[up]] === 2 && !sides(up, NX)) { h++; up += NXZ; }
@@ -406,11 +414,77 @@ function* weigh(job, out, record) {
                     : Math.min(BOND[t], KIND[T[j]] === 2 ? BOND[T[j]] : Infinity);
                 if (a > bond && (!pre || worse(load, before(i)))) { torn.add(i * 16 + d); out.torn++; continue; }
             }
-            if (KIND[T[j]] === 2) recv[j] += a;
+            if (KIND[T[j]] === 2) {
+                recv[j] += a;
+                // (and where its middle is: what i carried, and i itself, a step off j)
+                const f = a / load;
+                if (d < 0 || d === 4) { mx[j] += f * MX; mz[j] += f * MZ; } else { mx[j] += f * MX - a * HELD[d][0]; mz[j] += f * MZ - a * HELD[d][2]; }
+            }
         }
     }
+    if (!record && tops.n) yield* balance(job, crushed, out, pre ? before : null);
     yield* shear(job, out, record);
     return crushed;
+}
+
+/**
+ * Balance: a piece of a building resting on lone columns only (no wall, no ground under any of it) stands only if
+ * the middle of its weight is over them — over the box round their feet (STRUCT.TIP more at most). A roof on its four
+ * posts stands; on one post at its corner (the three others knocked out) it tips over: the column breaks, the roof
+ * comes down. (A roof resting on a wall too is held by the wall.) before(i): the load before the change — only a
+ * piece whose columns carry more now may tip.
+ */
+function* balance(job, crushed, out, before) {
+    STATS.phase = 'balance';
+    const { NX, NY, NZ } = job.B, NXZ = NX * NZ, n = NXZ * NY, T = buf.T, recv = buf.recv, mx = buf.mx, mz = buf.mz, mark = buf.lost;
+    const tops = buf.tops, body = buf.body, feet = buf.feet, stack = buf.stack, done = buf.marked;
+    done.n = 0;
+    const isTop = (c) => !sides(c, NX) && KIND[T[c]] === 2;
+    for (let q = 0; q < tops.n; q++) {
+        const t0 = tops.a[q];
+        if (mark[t0 + NXZ]) continue;
+        // the piece over this column: its built blocks that are not lone columns, as far as they go
+        body.n = 0; feet.n = 0; stack.n = 0;
+        stack.push(t0 + NXZ); mark[t0 + NXZ] = 1; body.push(t0 + NXZ);
+        let held = false;
+        while (stack.n && !held) {
+            const c = stack.a[--stack.n];
+            const L = (c / NXZ) | 0, r = c - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
+            if (L <= 1 || x === 0 || z === 0 || x === NX - 1 || z === NZ - 1 || L >= NY - 1 || body.n > 30000) { held = true; break; } // (beyond the box: held as before)
+            const dn = c - NXZ, kd = KIND[T[dn]];
+            if (kd === 1) { held = true; break; } // (it rests on the ground somewhere)
+            if (kd === 2 && isTop(dn)) { if (!mark[dn]) { mark[dn] = 2; feet.push(dn); body.push(dn); } }
+            for (let d = 0; d < 6; d++) {
+                const e = d === 0 ? c + 1 : d === 1 ? c - 1 : d === 2 ? c + NX : d === 3 ? c - NX : d === 4 ? c + NXZ : c - NXZ;
+                if (mark[e] || KIND[T[e]] !== 2 || !sides(e, NX)) { if (KIND[T[e]] === 1) held = true; continue; }
+                mark[e] = 1; body.push(e); stack.push(e);
+            }
+            if (due(8)) yield;
+        }
+        if (!held && feet.n) {
+            // the middle of the weight on the columns, and the box round their feet
+            let W0 = 0, sx = 0, sz = 0, x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, more = !before;
+            for (let k = 0; k < feet.n; k++) {
+                const c = feet.a[k], r = c % NXZ, z = (r / NX) | 0, x = r - z * NX, l = W[T[c]] + recv[c];
+                W0 += l; sx += l * x + mx[c]; sz += l * z + mz[c];
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+                if (before && worse(l, before(c))) more = true;
+            }
+            // (how far off its feet the middle is; a little weight a little off — a lamp's hood on its post — the column's
+            // own stiffness holds: STRUCT.BEND, weight × blocks)
+            const cx = sx / W0, cz = sz / W0, tip = 0.5 + STRUCT.TIP;
+            const off = Math.max(x0 - tip - cx, cx - x1 - tip, z0 - tip - cz, cz - z1 - tip);
+            if (STATS.why) STATS.why.push({ feet: feet.n, W: +W0.toFixed(1), off: +off.toFixed(2), body: body.n, at: [x0, z0, x1, z1], c: [+cx.toFixed(1), +cz.toFixed(1)] });
+            if (more && off > 0 && W0 * (off + STRUCT.TIP) > STRUCT.BEND * feet.n) {
+                // it tips over: the columns under it break, as a whole each (down to where something braces them)
+                for (let k = 0; k < feet.n; k++) for (let c = feet.a[k]; c >= NXZ && KIND[T[c]] === 2 && !sides(c, NX); c -= NXZ) crushed.push(c);
+                out.crushed++;
+            }
+        }
+        for (let k = 0; k < body.n; k++) done.push(body.a[k]); // (the other columns of the same piece: done with it)
+    }
+    for (let k = 0; k < done.n; k++) mark[done.a[k]] = 0;
+    done.n = 0;
 }
 
 /**

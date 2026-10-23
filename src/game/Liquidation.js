@@ -498,7 +498,7 @@ export class Liquidation {
         data.set(h.x, h.L, h.z, BLOCK.AIR);
         const edits = [[h.x, h.L, h.z, BLOCK.AIR]];
         for (const [x, L, z] of data._flood?.([{ x: h.x, y: h.L - 1, z: h.z }]) || []) edits.push([x, L, z, BLOCK.WATER]);
-        g.builder._sendEdits(edits);
+        g.builder._sendEdits(edits, true); // (what the crumbled block held may come down)
         // a castle / a village wall crumbled: a crime there (whoever sees it calls the guard)
         if (h.type >= BLOCK.CS_GREY && h.type <= BLOCK.RUNE) g.castleLife?.damaged?.({ x: h.x, y: h.L - 1, z: h.z }, g.localId, 1, false);
     }
