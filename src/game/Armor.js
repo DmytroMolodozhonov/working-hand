@@ -23,6 +23,7 @@
  */
 
 import * as THREE from 'three';
+import { logLine } from './BumpRules.js';
 import { PIECES, ARMOR, pieceMax, wornEffects, spellGuard, soakBlow, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
 import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
@@ -58,6 +59,8 @@ export class ArmorSystem {
         this.remote = new Map(); // playerId -> worn code (what the others wear)
         this.stripped = new Set(); // villager ids «Disarmor» stripped (their look stays so)
         this._wearT = { right: 0, left: 0 };
+        this._edge = { right: { cx: null, cdy: 0, lostT: 0, done: false }, left: { cx: null, cdy: 0, lostT: 0, done: false } }; // (the greaves: the hand last seen / how long out of the picture)
+        this._wearLog = { right: 0, left: 0, low: 0 };
         this._told = new Set(); // (piece kinds whose «how to put it on» was said)
         this._statsOn = { maxHp: 0, maxMana: 0 };
         this._healT = 0;
@@ -240,14 +243,49 @@ export class ArmorSystem {
             const hand = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
             // (held there: the time adds up; a frame's jitter out of the place only takes a little off, it does not start over)
             // (the camera shakes a hand held over the body: a moment out of the place takes off only a third as much)
-            if (wearSpot(h.item.kind, h.item.piece, hand, g.currentPose?.bodyTouch?.[side] ?? null)) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
+            const touch = g.currentPose?.bodyTouch?.[side] ?? null;
+            let on = wearSpot(h.item.kind, h.item.piece, hand, touch);
+            // (the greaves, the camera sees to the waist: the hand drawn down to the thigh near the middle slips out of
+            // the picture and stays there (~0.45 s); then it comes back — put on. A hand just hanging goes out at the side)
+            let gone = false;
+            if (slot === 'legs') gone = this._legsEdge(side, dt, g.currentPose?.bodyEdge?.[side] ?? null);
+            if (gone) this._wearT[side] = ARMOR.WEAR_T;
+            else if (on) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
+            if (slot === 'legs') this._legsLog(side, dt, hand, touch, g.currentPose?.bodyEdge?.[side] ?? null, on, gone);
             if (this._wearT[side] < ARMOR.WEAR_T) continue;
+            this._edge[side].lostT = 0;
             this._wearT[side] = 0;
             const inv = g.inventory;
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
             this.wear(item);
         }
+    }
+
+    /** The greaves: the hand went out of the picture near the body's middle, low (down to the thigh), stayed ≥ WEAR_T and came back — or stays out 1.2 s. */
+    _legsEdge(side, dt, e) {
+        const E = this._edge[side];
+        if (!e) { E.lostT = 0; return false; }
+        if (!e.lost) {
+            const done = E.lostT >= ARMOR.WEAR_T;
+            E.lostT = 0; E.cx = e.cx; E.cdy = e.cdy; E.hipsSeen = e.hipsSeen;
+            return done;
+        }
+        // (lost: it counts only if last seen low and near the middle — not hanging at the side, not stretched out)
+        if (E.cx == null || Math.abs(E.cx) > 0.75 || E.cdy < (E.hipsSeen ? 0.6 : 0.5)) { E.lostT = 0; return false; }
+        E.lostT += dt;
+        return E.lostT >= 1.2;
+    }
+
+    /** For the author's log: why the greaves do not go on (a line each 2 s while the hand is low for over 0.5 s). */
+    _legsLog(side, dt, hand, touch, e, on, gone) {
+        const L = this._wearLog;
+        L.low = hand.y < 0.3 || (e && e.lost) ? L.low + dt : 0;
+        L[side] -= dt;
+        if (L.low < 0.5 || L[side] > 0) return;
+        L[side] = 2;
+        const f = (v) => (typeof v === 'number' ? v.toFixed(2) : '—');
+        logLine(`поножи не надеты (${side}): visibility=${f(e?.vis)} hipsSeen=${e?.hipsSeen ?? '—'} knee=${touch ? touch.knee : 'нет'} рука y=${f(hand.y)} z=${f(hand.z)} x=${f(hand.x)} wearT=${this._wearT[side].toFixed(2)} lostT=${this._edge[side].lostT.toFixed(2)} lastCx=${f(this._edge[side].cx)} gone=${gone} on=${on}`);
     }
 
     // ------------------------------------------------------------ «Suit Up»

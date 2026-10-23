@@ -293,6 +293,26 @@ export function bodyTouch(lm, side, aspect = 4 / 3, hand = null) {
     };
 }
 
+/**
+ * The wrist as the greaves see it when `bodyTouch` has none (the hand slipped below the picture's edge or
+ * is lost): → {lost, cx, cdy, hipsSeen, vis} | null (the body not seen). cx — the wrist's place across the
+ * body in shoulder widths (0 — the middle), cdy — down the torso (1 — the hips); only meaningful while seen
+ * (Armor.js remembers the last seen one: a hand drawn to the thigh goes out of the picture near the middle,
+ * a hand just hanging goes out at the side).
+ */
+export function bodyEdge(lm, side, aspect = 4 / 3) {
+    const w = side === 'left' ? 15 : 16;
+    const ls = lm?.[11], rs = lm?.[12], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
+    if (!ls || !rs || !wr) return null;
+    const W = Math.abs(ls.x - rs.x) * aspect;
+    if (W < 0.03) return null;
+    const sy = (ls.y + rs.y) / 2, mx = (ls.x + rs.x) / 2;
+    const hipsSeen = !!(lh && rh && (lh.visibility ?? 1) > 0.3 && (rh.visibility ?? 1) > 0.3);
+    const T = hipsSeen ? Math.max(0.5 * W, (lh.y + rh.y) / 2 - sy) : 1.3 * W;
+    const vis = wr.visibility ?? 1;
+    return { lost: vis < 0.4 || wr.y > 0.985, cx: (wr.x - mx) * aspect / W, cdy: (wr.y - sy) / T, hipsSeen, vis };
+}
+
 export class PoseInterpreter {
     /**
      * @param {object} [faceSolver] Kalidokit.Face (optional; head rotation)
@@ -410,6 +430,7 @@ export class PoseInterpreter {
             Object.assign(data, bodyPlaces(lm, results.leftHandLandmarks, results.rightHandLandmarks, data.aspect, this.leftHanded));
             data.mouthHand = { left: handAtMouth(lm, results.leftHandLandmarks, 'left', data.aspect), right: handAtMouth(lm, results.rightHandLandmarks, 'right', data.aspect) };
             data.bodyTouch = { left: bodyTouch(lm, 'left', data.aspect, results.leftHandLandmarks), right: bodyTouch(lm, 'right', data.aspect, results.rightHandLandmarks) }; // (armour put on by hand: Armor.js)
+            data.bodyEdge = { left: bodyEdge(lm, 'left', data.aspect), right: bodyEdge(lm, 'right', data.aspect) };
 
             const zDiff = (lm[11].z || 0) - (lm[12].z || 0);
             data.bodyRotation = Math.max(-1, Math.min(1, zDiff * 5));

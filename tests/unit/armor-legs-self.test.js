@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { bodyTouch } from '../../src/input/PoseInterpreter.js';
+import { bodyTouch, bodyEdge } from '../../src/input/PoseInterpreter.js';
 import { wearSpot, makePiece, makeRobe, makeArchmageSuit } from '../../src/game/ArmorTypes.js';
 import { ArmorSystem } from '../../src/game/Armor.js';
 
@@ -103,3 +103,29 @@ test('an arm stretched out to the camera before the chest is not on the chest; a
     lm[16].z = -0.2; // (pressed on the chest: the camera's depth still puts it a shoulder width in front)
     assert.ok(bodyTouch(lm, 'right', 1).chest);
 });
+
+// the camera sees to the waist (sitting, close): the hand with the greaves goes down out of the picture and stays — put on
+function edgeGame(side, frames) {
+    const it = makePiece('legs');
+    const held = { left: null, right: null }; held[side] = { item: it };
+    const g = game();
+    Object.assign(g.character, { getHandWorldPosition: (s, out) => out.set(0.7, -0.65, 0) });
+    g.items = { held, releaseHand: (s) => { const x = held[s].item; held[s] = null; return x; } };
+    const a = new ArmorSystem(g);
+    for (const f of frames) {
+        const lm = pose(f.wrist, { hips: false });
+        if (f.lost) lm[side === 'left' ? 15 : 16].visibility = 0.1;
+        g.currentPose = { bodyTouch: { [side]: bodyTouch(lm, side, 1) }, bodyEdge: { [side]: bodyEdge(lm, side, 1) } };
+        a._handWear(0.05);
+    }
+    return a.worn.legs === it;
+}
+const rep = (n, f) => Array.from({ length: n }, () => f);
+for (const side of ['left', 'right']) {
+    test(`greaves (${side}): hand down out of the picture near the middle, held, back → on; hanging → not`, () => {
+        const seen = { wrist: { x: 0.46, y: 0.85 } }, gone = { wrist: { x: 0.46, y: 0.99 }, lost: true };
+        assert.ok(edgeGame(side, [...rep(4, seen), ...rep(12, gone), ...rep(3, seen)]));
+        assert.ok(!edgeGame(side, [...rep(4, { wrist: { x: 0.3, y: 0.9 } }), ...rep(40, { wrist: { x: 0.3, y: 0.99 }, lost: true }), ...rep(3, { wrist: { x: 0.3, y: 0.9 } })]), 'hanging at the side');
+        assert.ok(!edgeGame(side, [...rep(4, { wrist: { x: 0.5, y: 0.5 } }), ...rep(40, { wrist: { x: 0.5, y: 0.99 }, lost: true })].slice(0, 20)), 'too short');
+    });
+}
