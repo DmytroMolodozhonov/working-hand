@@ -1049,6 +1049,7 @@ export class Combat {
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.hp = Math.max(0, this.hp - amount);
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)
+        this.game.castleLife?.guard?.masterHurt(this.game.localId, byId, kind); // (my knights, if I am a king: whoever did it is their first enemy — Bodyguard.js)
         this.game.hud.damageFlash();
         if (this.game.sound) this.game.sound.playHit();
         if (this.hp <= 0) this.die(byId, kind);

@@ -30,7 +30,7 @@ const BRISK = 4.4; // m/s: «уйдите» is done at once, but nobody runs thr
 const MAX_ARMY = 14; // knights out at once by an order (a big army costs frames)
 
 const dh0 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-const posOf = (o) => o?.group?.position || o?.position || null;
+const posOf = (o) => o?.group?.position || o?.position || o?.model?.position || (o?.x != null ? o : null); // (a villager is himself {x, y, z}; the Ice Castle's / the spider's body is its model)
 
 export class VillagerOrders {
     constructor(life) {
@@ -92,6 +92,12 @@ export class VillagerOrders {
                 const posts = this._posts(cs);
                 army.forEach((k, i) => { k.order = { kind: 'defend', by, t: 900, post: posts.length ? posts[i % posts.length] : null }; k.follow = null; k.path = null; });
                 this._shout(army, ['Все на стены!', 'Держать ворота!', 'Защищать замок!'], v);
+                break;
+            }
+            case 'guard_me': case 'guard': {
+                // «охраняй меня»: a bodyguard — walks in the formation round the king, strikes whoever goes at him, no wandering after strangers
+                v.follow = by; v.followT = 1800; v.followFar = true; v.guard = true; v.path = null; v.order = null; v.foe = null; v.investigate = null;
+                this._shout([v], ['Буду рядом, государь!', 'Не отойду от вас!', 'Никто вас не тронет!']);
                 break;
             }
             case 'dismiss': this._dismiss(v, by); break;
@@ -224,7 +230,7 @@ export class VillagerOrders {
     }
 
     _release(v) {
-        v.follow = null; v.followFar = false; v.order = null; v.path = null;
+        v.follow = null; v.followFar = false; v.order = null; v.path = null; v.guard = null; v.gOwner = null; v.gFoe = null; v.gSlot = null; v.guardOrder = null;
     }
 
     /**
@@ -377,7 +383,7 @@ export class VillagerOrders {
 
     /** (host) the sword swing of a knight with an order reached: the creature takes the blow. */
     strike(v) {
-        const o = v.order;
+        const o = v.order?.prey ? v.order : v.guardOrder; // (a bodyguard's blow: Bodyguard.js)
         const c = o?.prey;
         if (!c || !this._alive(c)) return;
         const p = posOf(c.obj);
@@ -393,5 +399,8 @@ export class VillagerOrders {
         } else if (c.kind === 'a') g.animals?.hit?.(c.obj, dmg, p.clone ? p.clone().set(dir.x, 0, dir.z) : null, o.by);
         else if (c.kind === 's') g.spiders?.hit?.(c.obj, dmg * 2, 'melee');
         else if (c.kind === 'D') g.dragons?.hit?.(c.obj, dmg * 2, 'melee', o.by);
+        else if (c.kind === 'I') g.iceCastle?.hit?.(c.obj, dmg, 'servant', o.by);
+        // (a knight / a wizard who went at the king: a guard's blow is nobody's «crime» — not the king's: `by` stays empty)
+        else if (c.kind === 'v') g.castleLife?.hit?.(c.obj, dmg, dir, null, { via: 'guard' });
     }
 }

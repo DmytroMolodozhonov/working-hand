@@ -53,6 +53,7 @@ import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
+import { Bodyguard, isLord } from './Bodyguard.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { creditKill } from './Mana.js';
 import { VillagerFear } from './VillagerFear.js';
@@ -293,6 +294,7 @@ export class CastleLife {
             log: (text, v) => { const t = `${v.role || '?'} #${v.id} (${v.cs?.def?.kind || '?'}) ${Math.round(v.x)},${Math.round(v.z)}: ${text}`; console.warn('[stuck]', t); this.game.perf?.note?.('стоит: ' + t); },
         });
         this.wanted = new Wanted(); // (host) each player's hidden «wanted level»: how hard the knights and wizards fight them (Wanted.js)
+        this.guard = new Bodyguard(this); // (host) the king's bodyguards: the formation, whoever goes at him first (Bodyguard.js)
         this.found = new BodyFound(this); // (host) a body found: the alarm, the search for strangers (BodyFound.js)
         this.brainLine = (v) => this.talk.ambientLine(v);
     }
@@ -1329,6 +1331,7 @@ export class CastleLife {
                     if (until < Date.now()) { cs.hostile.delete(pid); continue; }
                     const p = this._playerPos(pid);
                     // (just given up on them out there: only if they come back near)
+                    if (isLord(v, pid, this.state(cs.def.id).owner)) continue; // (the king is never his own men's enemy)
                     if (p && v.gaveUp?.id === pid && v.gaveUp.until > Date.now() && (Math.hypot(p.x - v.x, p.z - v.z) > 12 || !this._inLand(cs.def, p, 30))) continue;
                     if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : SHOUT.knight)); break; }
                 }
@@ -1349,6 +1352,8 @@ export class CastleLife {
             }
         }
         if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
+        if (v.foe != null && isLord(v, v.foe, this.state(cs.def.id).owner)) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
+        if (v.gOwner != null && this.guard.step(v, dt)) return; // (a bodyguard: the king's enemy first, the formation round him)
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
@@ -3370,6 +3375,7 @@ export class CastleLife {
             this.rebuild.update(dt);
             this.night?.update(dt);
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
+            this.guard.update(dt);
             this._squads(dt);
             this._assignSlots();
             this._healWays(dt);
@@ -3430,7 +3436,7 @@ export class CastleLife {
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }
                 if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
-                else if (this.auth && v.model.strikeNow && v.order) this.orders.strike(v);
+                else if (this.auth && v.model.strikeNow && (v.order || v.guardOrder)) this.orders.strike(v);
             }
             if ((v.mode === 'swim' || v.mode === 'paddle') && visible && d < 40) splashes(g, v.x, v.y + SWIMMERS.person.float, v.z, dt, v.mode === 'paddle', v); // (the water round a swimmer)
             if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + (v.wizard ? 5.6 : 4.4), v.z), cam);
