@@ -34,10 +34,16 @@ export const TREE_SIZES = [
     { name: 'Ель', H: [19, 25], W: [8, 10.5], D: [0.6, 0.85], clear: 5.0 },
     { name: 'Вишня', H: [9, 11.5], W: [10, 13], D: [0.5, 0.7], clear: 4.8 },
     { name: 'Тёмный дуб', H: [15, 19], W: [14, 18], D: [1.1, 1.4], clear: 5.2 },
+    // the apple trees (Animals.js: not of the forest — kinds 5 and 6 never come out of the world's recipe): low and wide,
+    // as a real apple tree is, the apples hanging within a raised hand's reach (2.9–4.4 m), the leaves a little higher
+    { name: 'Яблоня', H: [7.5, 9], W: [8, 10], D: [0.45, 0.6], clear: 3.9 },
+    { name: 'Золотая яблоня', H: [8.5, 10], W: [9, 11], D: [0.6, 0.75], clear: 3.9 },
 ];
+/** The cells of the leaf atlas (TreeLeaves.js): one per kind, the apple trees' two too. */
+export const ATLAS_CELLS = 7;
 
 const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
-const BARK = [hex(0x5e4632), hex(0xe9e6de), hex(0x4f3a2b), hex(0x5b3330), hex(0x3a2c22)];
+const BARK = [hex(0x5e4632), hex(0xe9e6de), hex(0x4f3a2b), hex(0x5b3330), hex(0x3a2c22), hex(0x5a4030), hex(0x9a6a2a)];
 const BARK_DARK = hex(0x2b2724); // (the birch's black cracks)
 
 /** A small seeded random (mulberry32). */
@@ -118,6 +124,16 @@ const SPEC = [
         L: [{ seg: 12, sides: 11, curveV: 0.45 },
             { n: [5, 7], from: 0.75, down: [0.5, 0.9], rotate: 2.4, ratio: 0.72, curve: -0.6, curveV: 0.6, trop: 0.01, seg: 9, sides: 7, rr: 0.6 },
             { n: [9, 11], from: 0.2, down: [0.6, 1.05], rotate: 2.4, ratio: 0.48, curve: -0.35, curveV: 0.6, trop: 0.01, seg: 5, sides: 4, rr: 0.55 }] },
+    // apple tree: a short crooked trunk forking low into spreading limbs, a round dome of leaves, the branch ends drooping with fruit
+    { split: [0.28, 0.32], shape: 'round', leafSize: 1.15, leafPer: 10, leaves1: 6, gnarl: 0.5, low: 1.6,
+        L: [{ seg: 10, sides: 9, curveV: 0.35 },
+            { n: [5, 6], from: 0.7, down: [0.7, 1.0], rotate: 2.4, ratio: 0.9, curve: -0.4, curveV: 0.45, trop: 0.01, seg: 8, sides: 6, rr: 0.66 },
+            { n: [8, 10], from: 0.2, down: [0.6, 1.0], rotate: 2.4, ratio: 0.5, curve: 0.2, curveV: 0.45, trop: -0.02, seg: 5, sides: 4, rr: 0.55 }] },
+    // the golden apple tree: the same, mightier and more twisted
+    { split: [0.27, 0.31], shape: 'round', leafSize: 1.25, leafPer: 11, leaves1: 6, gnarl: 0.9, low: 1.6,
+        L: [{ seg: 11, sides: 10, curveV: 0.4 },
+            { n: [6, 7], from: 0.7, down: [0.7, 1.0], rotate: 2.4, ratio: 0.9, curve: -0.45, curveV: 0.5, trop: 0.01, seg: 8, sides: 7, rr: 0.66 },
+            { n: [8, 10], from: 0.2, down: [0.6, 1.0], rotate: 2.4, ratio: 0.5, curve: 0.2, curveV: 0.5, trop: -0.02, seg: 5, sides: 4, rr: 0.55 }] },
 ];
 
 /** How long a limb is by where it starts on the trunk (0 low … 1 high): the crown's outline. */
@@ -140,7 +156,7 @@ const range = (rnd, [a, b]) => a + (b - a) * rnd();
  * far: the simple shape for far away (the trunk, the limbs, a few big cards).
  */
 export function buildTree(kind, variant, { far = false } = {}) {
-    kind = Math.max(0, Math.min(4, kind | 0));
+    kind = Math.max(0, Math.min(6, kind | 0));
     variant |= 0;
     const rnd = treeRandom(0x9e3779b1 ^ (kind * 7919 + variant * 104729));
     const S = TREE_SIZES[kind], P = SPEC[kind];
@@ -205,7 +221,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
             for (let i = 0; i < nk; i++) {
                 const along = next.from + (1 - next.from) * ((i + 0.3 + rnd() * 0.4) / nk);
                 const at = pointAt(stem, along);
-                if (level === 0 && at.p[1] < (kind === 3 ? 2.4 : kind === 1 || kind === 2 ? clear : 3.8)) continue;
+                if (level === 0 && at.p[1] < (P.low ?? (kind === 3 ? 2.4 : kind === 1 || kind === 2 ? clear : 3.8))) continue;
                 turn += next.rotate + (rnd() - 0.5) * 0.5;
                 const down = range(rnd, next.down) * (level === 0 ? (form === 'tall' ? 0.7 : form === 'spread' ? 1.25 : 1) : 1);
                 // the child's direction: off the parent by `down`, turned round it by `turn`
@@ -311,11 +327,11 @@ export function buildTree(kind, variant, { far = false } = {}) {
             const nrm = unit(add(add(mul(out, 0.6), [0, 0.65, 0]), mul(fn, dot(fn, out) >= 0 ? 0.15 : -0.15))); // (up-ish: the sun lights the whole crown, the lower part a little less)
             // darker inside the crown, lighter at its top and edge
             const outF = Math.min(1, len(sub(mid, crownC)) / crownR);
-            const sh = cardTint * (kind === 3 ? 0.82 + 0.14 * outF : 0.74 + 0.3 * outF + 0.12 * Math.max(0, nrm[1]));
+            const sh = cardTint * (kind === 3 || kind === 6 ? 0.82 + 0.14 * outF : 0.7 + 0.26 * outF + 0.08 * Math.max(0, nrm[1]));
             const col = [sh, sh, sh];
             const flip = rnd() < 0.5; // (the picture mirrored: not every sprig the same)
             // (the atlas: one cell per kind — TreeLeaves.js)
-            const uL = (kind + (flip ? 0.995 : 0.005)) / 5, uR = (kind + (flip ? 0.005 : 0.995)) / 5;
+            const uL = (kind + (flip ? 0.995 : 0.005)) / ATLAS_CELLS, uR = (kind + (flip ? 0.005 : 0.995)) / ATLAS_CELLS;
             const v0 = leaf.vert(c0[0], c0[1], c0[2], nrm, col, sway(c0[1]), uL, 0);
             leaf.vert(c1[0], c1[1], c1[2], nrm, col, sway(c1[1]), uR, 0);
             leaf.vert(c2[0], c2[1], c2[2], nrm, col, sway(c2[1]) + 0.15, uR, 1);
@@ -341,7 +357,30 @@ export function buildTree(kind, variant, { far = false } = {}) {
         if (a[q] > box[3]) box[3] = a[q]; if (a[q + 1] > box[4]) box[4] = a[q + 1]; if (a[q + 2] > box[5]) box[5] = a[q + 2];
     }
     const foot = pointAt(trunk, 1.7 / trunkLen);
+    // the apple trees: where the apples hang — under the branches' ends, all round, within a raised hand's reach
+    const apples = [];
+    if (kind >= 5 && !far) {
+        const bins = new Array(14).fill(0), cand = [];
+        for (const st of stems) {
+            if (st.level < 1) continue;
+            for (let f = 0.35; f <= 1; f += 0.16) {
+                const at = pointAt(st, f), y = at.p[1] - 0.32;
+                if (y < 2.9 || y > 4.4 || Math.hypot(at.p[0], at.p[2]) < 1.2) continue;
+                cand.push([at.p[0], y, at.p[2], st.level]);
+            }
+        }
+        // (spread round the crown: the fewest apples on a side first)
+        for (let i = 0; i < cand.length && apples.length < 22; i++) {
+            const k = Math.floor(rnd() * cand.length), c = cand[k];
+            const b = Math.floor(((Math.atan2(c[2], c[0]) + Math.PI) / (Math.PI * 2)) * 14) % 14;
+            if (bins[b] > Math.min(...bins) + 1) continue;
+            if (apples.some((a) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) < 0.55)) continue;
+            bins[b]++;
+            apples.push([c[0], c[1], c[2]]);
+        }
+    }
     const info = {
+        apples,
         kind, variant, H: box[4], W: Math.max(box[3] - box[0], box[5] - box[2]), R0, box,
         crown: { c: crownC, rx: (box[3] - box[0]) / 2, ry: (box[4] - clear) / 2, lowest },
         spheres,

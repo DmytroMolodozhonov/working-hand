@@ -6,6 +6,7 @@
  *   --levels high,max   graphics presets to measure (high: quality «Высокая» + view «Высокая»;
  *                       max: quality «Высокая» + view «Максимальная»; ultra: «Высокая» + «Ультра качество»)
  *   --seed 20261015     the world's seed (the same world every run)
+ *   --trees off         the world without the real trees (block trees as before), to compare
  *   --gen 5             the world's generation (default: the newest; 5 — the land without ramps, to compare)
  *   --out file.json     save the numbers (and print a table)
  *   --check             fail (exit code 1) when the flight is not smooth (LIMITS below)
@@ -37,6 +38,7 @@ const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
 const LEVELS = opt('levels', 'high,max').split(',');
 const SEED = parseInt(opt('seed', '20261015'), 10);
+const TREES = opt('trees', null); // 'off': the world without real trees (Trees.js) — the block trees, to compare
 const GEN = opt('gen', null); // the world's generation (default: the newest — WORLD_GEN); 5: without ramps, to compare
 const OUT = opt('out', null);
 const PROFILE = args.includes('--profile');
@@ -339,15 +341,15 @@ async function runLevel(browser, url, level) {
         Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     });
     const P = PRESETS[level];
-    await page.evaluate(({ P, SEED, GEN }) => {
+    await page.evaluate(({ P, SEED, GEN, TREES }) => {
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
         // which things need a shader that was not ready (a material's first compile is noted, with
         // the objects using it — every material, the same way, so the shaders stay the ones the game makes)
         const seen = window.__compiled = [];
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on', ...(GEN ? { gen: Number(GEN) } : null) });
-    }, { P, SEED, GEN });
+        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on', ...(GEN ? { gen: Number(GEN) } : null), ...(TREES === 'off' ? { realTrees: false } : null) });
+    }, { P, SEED, GEN, TREES });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     await sleep(4000); // (the first frames: shaders of what is on screen)

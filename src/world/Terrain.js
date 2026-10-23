@@ -256,6 +256,8 @@ export const WORLD_GEN = 8;
  * changes: the keep's depth behind the throne, the height of the upper floor, a hall 4 shorter).
  */
 export const FURNISH_FROM_GEN = 8;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
 // 7: the lone wizards' houses are roomier (Hamlets.js buildMageHut → Castles.buildWizHut): a wizard can walk about in them.
 // 6: ramps and slabs (BlockShapes.js): the land's one-block steps are smoothed into slopes (Terrain._slopeLand), the
@@ -494,6 +496,10 @@ function hash01(a, b, seed) {
     return (h >>> 0) / 4294967296;
 }
 
+/** Real trees: points round a tree whose land must not be a site's (the crown would reach into a roof). */
+const TREE_CROWN_REACH = [[0, 0], [1, 1], [5, 0], [-5, 0], [0, 5], [0, -5], [4, 4], [-4, 4], [4, -4], [-4, -4]];
+/** Shapes per kind of the real trees (TreeBuild.TREE_GEN.VARIANTS — kept the same here: no import of the builder in the recipe). */
+const TREE_VARIANTS = 12;
 const TREE_CELL = 12; // one possible tree per 12×12 m cell
 const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
@@ -529,12 +535,13 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
         this.wizHuts = !!(this.lush && wizHuts); // (generation 7: the lone wizards' houses roomy — Hamlets.js)
+        this.meshTrees = !!(mountains && lush && meshTrees); // (a world made with real trees — `realTrees`: not blocks — chunk.trees, Trees.js)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
@@ -959,9 +966,26 @@ export class TerrainData {
                 // ground's, worked out from the recipe so every chunk the crown reaches agrees)
                 if (h >= this.land.snowLine(tx, tz, this.land.climate(tx, tz, _lush.clim2).T) - 1) continue;
                 if (h > 36 && hashLand(tx, tz, this.seed + 5) < smoothstep(36, 60, h) * 0.55) continue;
-                this._tree(put, tx, tz, h, kind);
+                if (this.meshTrees) this._meshTree(c, tx, tz, h, kind, 1e6 + (gx + 32768) * 65536 + (gz + 32768));
+                else this._tree(put, tx, tz, h, kind);
             }
         }
+    }
+
+    /**
+     * A world of real trees (`realTrees`): a real tree (Trees.js draws it) where a block tree would have stood — kept in the chunk its trunk
+     * stands in (`c.trees`: id, foot, kind, shape, size, turn — all from the seed: the same tree on every computer).
+     * Its crown is much wider than a block tree's: not over a castle, a village or a house (nothing grows through a roof).
+     */
+    _meshTree(c, tx, tz, h, kind, id) {
+        if (tx >> SHIFT !== c.cx || tz >> SHIFT !== c.cz) return;
+        const S = this.sites;
+        if (S) for (const [dx, dz] of TREE_CROWN_REACH) if (S.landAt(tx + dx, tz + dz)) return;
+        const r = (k) => hashLand(tx * 7 + k, tz * 13 - k, this.seed + 71 + k);
+        (c.trees || (c.trees = [])).push({
+            id, x: tx + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), z: tz + 0.5 * (kind === 0 || kind === 4 ? 1 : 0), y: h - 0.5, kind,
+            v: Math.floor(r(1) * TREE_VARIANTS), s: Math.round((0.86 + 0.28 * r(2)) * 100) / 100, turn: Math.round(r(3) * 628) / 100, tint: Math.round((0.9 + 0.2 * r(4)) * 100) / 100,
+        });
     }
 
     /**
@@ -1090,7 +1114,8 @@ export class TerrainData {
                         if (L > c.top[col]) c.top[col] = L;
                         if (L > c.maxTop) c.maxTop = L;
                     };
-                    this._tree(put, p.x, p.z, cl[0], kind);
+                    if (this.meshTrees) this._meshTree(c, p.x, p.z, cl[0], kind, 5e9 + (Math.round(p.x) + 32768) * 65536 + (Math.round(p.z) + 32768));
+                    else this._tree(put, p.x, p.z, cl[0], kind);
                 }
             }
         }

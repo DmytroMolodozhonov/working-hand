@@ -16,7 +16,8 @@ test('apple trees: golden ones half as common as before (15% of cells), ordinary
 
 test('the red apple tree: the same tree with red apples; the apple is ordinary food that tames horses', () => {
     const t = goldenTreeModel(true), gold = goldenTreeModel();
-    assert.equal(t.userData.apples.length, gold.userData.apples.length);
+    // (real trees now — AppleTrees.js: each its own shape, 12 apples and more hanging round its crown)
+    assert.ok(t.userData.apples.length >= 12 && gold.userData.apples.length >= 12);
     assert.equal(t.userData.apples[0].material.color.getHex(), 0xc8202a);
     assert.equal(ITEM_INFO.redApple.heal, 3); // (the author: an apple +3, a golden one +10)
     assert.ok(makeItemModel({ kind: 'redApple' }).children.length);

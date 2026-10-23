@@ -284,6 +284,9 @@ export class Game {
         this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : config.smooth ? WORLD_GEN : 5);
         // (multiplayer: the gods' spells on the Earth — the host's choice when the world was made, kept with it; off by default)
         this.config.godsOnEarth = !!(config.godsOnEarth ?? config.saved?.godsOnEarth);
+        // real trees, not blocks (TreeBuild.js, Trees.js): every world made from now on, smooth or not; a saved world keeps
+        // what it was made with (its felled and burnt trees lie on those), a guest takes the host's
+        this.config.realTrees = !!(config.realTrees ?? (config.saved ? config.saved.realTrees : !config.map));
 
         progress(62, 'Создание мира...');
         this.scene = new THREE.Scene();
@@ -302,6 +305,7 @@ export class Game {
             slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
             wizHuts: this.gen >= 7, // (the lone wizards' houses roomy — Hamlets.js)
             furnish: this.gen >= FURNISH_FROM_GEN, // (the castles' rooms furnished, more chests — CastleFurniture.js)
+            meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)
@@ -3091,6 +3095,7 @@ export class Game {
         zoo.add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial({ color: 0xbfefff, transparent: true, opacity: 0.22, shininess: 120, specular: 0xffffff, depthWrite: false, side: THREE.DoubleSide })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')) })));
         for (const m of this.items?.sampleModels?.() || []) zoo.add(m);
+        for (const m of this.world.forest?.sampleModels?.() || []) zoo.add(m); // (the real trees' bark and leaves, their shadow)
         for (const m of chestSamples()) zoo.add(m); // (every look of a chest: plain, a boss's, a ship's, the Ice Queen's)
         for (const m of this.cauldrons?.sampleModels?.() || []) zoo.add(m); // (a cauldron's iron, rust, liquid, bubbles; a flask)
         for (const m of this.castleLife?.talk?.signs?.sampleModels?.() || []) zoo.add(m); // (the «Скупка» plaques of the buyers)
@@ -3100,7 +3105,7 @@ export class Game {
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
-        zoo.add(goldenTreeModel(), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
+        zoo.add(goldenTreeModel(), goldenTreeModel(true), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
@@ -3203,6 +3208,8 @@ export class Game {
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
         try { this.boom?.warm(); } catch (e) { /* (only a head start) */ }
         try { prepareStructure(); } catch (e) { /* (only a head start) */ } // (the buffers of the checks of the buildings — Structure.js)
+        // (real trees: every shape made now — a few ms each; not over a new forest in flight)
+        try { const f = this.world?.forest; if (f) for (const step of f.warmSteps()) { step(); await new Promise((r) => setTimeout(r, 0)); } } catch (e) { console.warn('[Game] trees warm-up', e); }
     }
 
     start() {
@@ -3432,6 +3439,7 @@ export class Game {
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
         if (!this.space?.inSpace) this.world.update(this.character.group.position, this._viewBoost);
+        this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
         this.falling?.update(Math.min(0.05, dt));

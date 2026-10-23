@@ -90,8 +90,10 @@ const CHUNK_MARGIN = 32; // load terrain one chunk beyond the fog
 const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows (on the ground)
 const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
 const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _c = new THREE.Vector3();
+const _tm = new THREE.Matrix4();
 import { CollisionWorld } from './Collision.js';
 import { Flora } from './Flora.js';
+import { WorldTrees } from './Trees.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
 import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
 import '../core/Shadows.js'; // (the sun shadow's soft edge: patched into the shaders before they compile)
@@ -123,6 +125,7 @@ export class VoxelWorld {
         if (opts.map) {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
+            this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
             this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish);
             this.createSkybox();
         }
@@ -302,8 +305,9 @@ export class VoxelWorld {
     // ----------------------------------------------------------------- terrain
     createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
+        if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);
 
         // Decorative grass cubes (1000, instanced) — same look as before.
@@ -338,6 +342,7 @@ export class VoxelWorld {
 
     createTrees(rng) {
         const count = 50;
+        if (this.forest) { this._createRealTrees(rng, count); return; }
         // Voxel trees: a darker trunk and a crown built from several boxes in
         // different greens (instead of one green cube on a stick).
         const trunkGeo = mergeBoxes([
@@ -402,9 +407,74 @@ export class VoxelWorld {
         this.scene.add(this.leafMesh);
     }
 
+    /**
+     * A world of real trees: the start area's trees are real trees too (Trees.js) — the same places as the block-look ones of
+     * older worlds (flat ground, not on the tables, not in a village), ids 0…count−1 (a save keeps which are gone).
+     */
+    _createRealTrees(rng, count) {
+        const list = [];
+        let attempts = 0;
+        while (list.length < count && attempts < 2000) {
+            attempts++;
+            const x = (rng() - 0.5) * (this.terrainWidth - 10);
+            const z = (rng() - 0.5) * (this.terrainDepth - 10);
+            if (this.terrain && !this._flatAround(x, z, 1)) continue;
+            if (this.terrain?.data?.sites?.landAt(Math.round(x), Math.round(z))) continue; // (not in a village)
+            if (Math.abs(x) < 13 && z > -11 && z < 3) continue; // (the crowns not over the spawn's tables)
+            if (list.some((o) => Math.hypot(o.x - x, o.z - z) < 7)) continue; // (wide crowns: not trunk to trunk)
+            const kind = Math.floor(rng() * 5);
+            list.push({ id: list.length, x, z, y: this.terrain ? this.terrain.surfaceY(x, z) : -0.5, kind, v: Math.floor(rng() * 12), s: 0.88 + rng() * 0.24, turn: rng() * Math.PI * 2, tint: 0.9 + rng() * 0.2 });
+        }
+        this.forest.addFixed(list);
+    }
+
+    /**
+     * A tree's own model as it is drawn — [{geometry, material, matrix, color, depth}], the trunk, then the crown —
+     * for a copy of it (carried by «Левиоса Максима», come alive). `at`: {x, y, z} to stand it elsewhere (standing).
+     */
+    treeParts(t, at = null) {
+        if (t.mesh) return this.forest.parts(t, at ? this.forest.matrixAt(t, at.x, at.y, at.z) : t.matrix);
+        const [tm, lm] = this.treeMatrices(at ? { ...t, x: at.x, y: at.y, z: at.z, fallen: null } : t);
+        const col = (src) => { if (!src.instanceColor) return null; const c = new THREE.Color(); src.getColorAt(t.index, c); return c; };
+        return [
+            { geometry: this.trunkMesh.geometry, material: this.trunkMesh.material, matrix: tm, color: col(this.trunkMesh) },
+            { geometry: this.leafMesh.geometry, material: this.leafMesh.material, matrix: lm, color: col(this.leafMesh) },
+        ];
+    }
+
+    /** A tree went down by dy with the ground under it («Drawdown»). */
+    sinkTree(t, dy) {
+        if (t.mesh) { this.forest.shift(t, dy); return; }
+        for (const mesh of [this.trunkMesh, this.leafMesh]) {
+            if (!mesh) continue;
+            mesh.getMatrixAt(t.index, _tm);
+            _tm.elements[13] += dy;
+            mesh.setMatrixAt(t.index, _tm);
+            mesh.instanceMatrix.needsUpdate = true;
+        }
+        if (t.y != null) t.y += dy;
+        if (t.crown) { t.crown.minY += dy; t.crown.maxY += dy; }
+    }
+
+    /** The ids of the trees taken away (a save, a friend joining): the ones here and the ones whose land went away. */
+    treesGoneList() {
+        const out = new Set();
+        for (const t of this.trees || []) if (!t.alive) out.add(t.index);
+        if (this.forest) for (const id of this.forest.gone) out.add(id);
+        return [...out];
+    }
+
+    /** A tree gone by its id (a save, the host's word): one not here yet stays gone when its land comes. */
+    treeGoneById(i) {
+        const t = this.trees?.find((x) => x.index === i);
+        if (t && t.alive) this.removeTree(t);
+        else if (!t && this.forest) this.forest.goneById(i);
+    }
+
     /** A tree burnt down: the crown is gone, the trunk is charred (it still blocks the way). */
     /** «Gather»: a spawn-area tree is taken away whole. */
     removeTree(t) {
+        if (t?.mesh) { this.forest.removeTree(t); return; }
         if (!this.trunkMesh || !t || !t.alive) return;
         t.alive = false;
         const dummy = new THREE.Object3D();
@@ -423,6 +493,7 @@ export class VoxelWorld {
      * on the ground at y, or lying felled towards `dir` ('x', '-x', 'z', '-z'): «Левиоса Максима» carried it.
      */
     placeTree(t, x, y, z, dir = null) {
+        if (t?.mesh) { this.forest.placeTree(t, x, y, z, dir); return; }
         if (!this.trunkMesh || !t) return;
         if (t.alive) this.collision.removeBox(t.boxId);
         Object.assign(t, { x, y, z, fallen: dir || null, alive: true, moved: true });
@@ -466,10 +537,15 @@ export class VoxelWorld {
     }
 
     restoreMovedTrees(list) {
-        for (const [i, x, y, z, dir] of list || []) { const t = this.trees?.find((q) => q.index === i); if (t) this.placeTree(t, +x, +y, +z, dir || null); }
+        for (const [i, x, y, z, dir] of list || []) {
+            const t = this.trees?.find((q) => q.index === i);
+            if (t) this.placeTree(t, +x, +y, +z, dir || null);
+            else this.forest?.movedById(i, +x, +y, +z, dir || null); // (its land not here yet: put down when it comes)
+        }
     }
 
     burnTree(t) {
+        if (t?.mesh) { this.forest.burnTree(t); return; }
         if (!this.trunkMesh || !t.alive) return;
         const dummy = new THREE.Object3D();
         dummy.position.set(t.x, -1000, t.z);
@@ -700,6 +776,7 @@ export class VoxelWorld {
         for (const t of this.trees) {
             const c = t.crown;
             if (!t.alive || !c) continue;
+            if (t.mesh) { if (this.forest.leavesHit(t, x, y, z)) return t; continue; } // (a real crown: its leaf clusters)
             if (x >= c.minX && x <= c.maxX && y >= c.minY && y <= c.maxY && z >= c.minZ && z <= c.maxZ) return t;
         }
         return null;
@@ -753,12 +830,35 @@ export class VoxelWorld {
             if (changed) this.grass.instanceMatrix.needsUpdate = true;
         }
 
+        // Real trees: broken when the blast reaches the trunk or the crown — splinters and leaves fly
+        if (this.forest) {
+            for (const t of this.trees) {
+                if (!t.mesh || !t.alive) continue;
+                const dx = t.x - center.x, dz = t.z - center.z;
+                const dy = Math.max(0, Math.max(t.y - 0.5 - center.y, center.y - (t.y + t.h))); // trunk+crown span
+                const reach = radius + t.r + (center.y > t.y + t.c0 ? Math.min(3, (t.h - t.c0) * 0.25) : 0.6);
+                if (dx * dx + dz * dz + dy * dy > reach * reach) continue;
+                if (this.forest.godGift?.(t)) continue;
+                this.forest.removeTree(t);
+                out.trees = out.trees || [];
+                out.trees.push(t);
+                const bark = [0x6b4a2e, 0xd9d4ca, 0x5a3d29, 0x6a3a34, 0x3d2b1d][t.kind] ?? 0x6b4a2e;
+                const leaf = [0x3f8a30, 0x6a9f3a, 0x2f6238, 0xf2a6c8, 0x335c26][t.kind] ?? 0x3f8a30;
+                const n = Math.min(8, Math.max(4, Math.round(t.c0)));
+                for (let k = 0; k < n; k++) out.props.push({ x: t.x + (Math.random() - 0.5) * t.r * 2, y: t.y + 0.5 + (k / n) * t.c0, z: t.z + (Math.random() - 0.5) * t.r * 2, color: bark, size: Math.max(0.6, t.r * 1.4) });
+                if (!t.burnt) for (let k = 0; k < 14; k++) {
+                    const a = (k / 14) * Math.PI * 2, rr = (t.crown ? (t.crown.maxX - t.crown.minX) / 2 : 4) * (0.3 + 0.6 * ((k * 37) % 10) / 10);
+                    out.props.push({ x: t.x + Math.cos(a) * rr, y: t.y + t.c0 + ((k * 53) % 10) / 10 * (t.h - t.c0), z: t.z + Math.sin(a) * rr, color: leaf, size: 1.3 });
+                }
+            }
+        }
+
         // Trees: destroyed when the blast reaches the trunk.
         if (this.trunkMesh) {
             const dummy = new THREE.Object3D();
             let changed = false;
             for (const t of this.trees) {
-                if (!t.alive) continue;
+                if (!t.alive || t.mesh) continue;
                 const dx = t.x - center.x, dz = t.z - center.z;
                 const dy = Math.max(0, Math.max(-0.5 - center.y, center.y - 11)); // trunk+crown span
                 if (dx * dx + dz * dz + dy * dy > (radius + 1.2) ** 2) continue;

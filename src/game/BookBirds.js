@@ -295,7 +295,8 @@ export class BookBirds {
         const trees = (g.world.trees || []).filter((t) => t.alive && !t.burning && !t.burnt && Math.hypot(t.x - from.x, t.z - from.z) > minD && Math.hypot(t.x - from.x, t.z - from.z) < maxD);
         if (trees.length && r() < 0.85) {
             const t = trees[Math.floor(r() * trees.length)];
-            const v = new THREE.Vector3(t.x + (r() - 0.5) * 2, 11.6, t.z + (r() - 0.5) * 2);
+            // (a real tree: on top of one of its leaf clusters — Trees.perch)
+            const v = t.mesh && g.world.forest ? g.world.forest.perch(t, r) : new THREE.Vector3(t.x + (r() - 0.5) * 2, 11.6, t.z + (r() - 0.5) * 2);
             v.support = { tree: t };
             return v;
         }

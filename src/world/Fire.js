@@ -64,8 +64,8 @@ export class FireSystem {
         let hit = false;
         for (const t of w.trees || []) {
             if (!t.alive || t.burning || t.burnt) continue;
-            const dx = t.x - p.x, dz = t.z - p.z;
-            if (dx * dx + dz * dz > (radius + 3) * (radius + 3) || p.y > 13 || p.y < -2) continue;
+            const dx = t.x - p.x, dz = t.z - p.z, gy = (t.y ?? -0.5) + 0.5; // (its foot: a tree anywhere, not only at the start)
+            if (dx * dx + dz * dz > (radius + 3) * (radius + 3) || p.y - gy > (t.h ?? 12.5) + 0.5 || p.y - gy < -2) continue;
             this._igniteTree(t);
             hit = true;
         }
@@ -91,8 +91,8 @@ export class FireSystem {
             // instanced trees: trunk or crown in the stream
             for (const t of this.world.trees || []) {
                 if (!t.alive || t.burning || t.burnt) continue;
-                const dx = t.x - _v.x, dz = t.z - _v.z;
-                if (dx * dx + dz * dz < 9 && _v.y > -1 && _v.y < 12) { this._igniteTree(t); hit = true; }
+                const dx = t.x - _v.x, dz = t.z - _v.z, gy = (t.y ?? -0.5) + 0.5;
+                if (dx * dx + dz * dz < 9 && _v.y - gy > -1 && _v.y - gy < (t.h ?? 11.5) + 0.5) { this._igniteTree(t); hit = true; }
             }
             if (terrain) {
                 const x = Math.round(_v.x), z = Math.round(_v.z), L = Math.floor(_v.y + 1.5);
@@ -125,7 +125,8 @@ export class FireSystem {
         let n = 0;
         for (let i = this.burningTrees.length - 1; i >= 0; i--) {
             const t = this.burningTrees[i].tree;
-            if (Math.hypot(t.x - p.x, t.z - p.z) > radius + 2.5 || p.y > 14 || p.y < -3) continue;
+            const gy = (t.y ?? -0.5) + 0.5;
+            if (Math.hypot(t.x - p.x, t.z - p.z) > radius + 2.5 || p.y - gy > (t.h ?? 12.5) + 1.5 || p.y - gy < -3) continue;
             t.burning = false; // (still standing: what burnt off is gone, the rest is wet)
             this.burningTrees.splice(i, 1);
             n++;
@@ -210,16 +211,18 @@ export class FireSystem {
             const t = b.tree;
             b.t += dt;
             const k = Math.min(1, b.t / 1.5); // flames grow
+            // (where it burns: its own foot, crown and size — a real tree is up to 25 m tall and 15 wide)
+            const gy = (t.y ?? -0.5) + 0.5, c0 = t.c0 ?? 5, top = t.h ?? 11, cw = t.crown ? Math.min(6, (t.crown.maxX - t.crown.minX) / 2) : 3;
             if (t.alive) {
-                this.game.fireLights?.want(t.x, 7, t.z, 1.5 * k); // (the burning crown lights what is round it)
-                for (let n = 0; n < 3; n++) {
-                    const y = 5 + Math.random() * 6 * k, rr = 3 * k;
+                this.game.fireLights?.want(t.x, gy + (c0 + top) / 2, t.z, 1.5 * k); // (the burning crown lights what is round it)
+                for (let n = 0; n < (t.mesh ? 5 : 3); n++) {
+                    const y = gy + c0 + Math.random() * (top - c0) * k, rr = cw * k;
                     fx.glow.spawn(t.x + (Math.random() - 0.5) * rr * 2, y, t.z + (Math.random() - 0.5) * rr * 2, (Math.random() - 0.5), 2 + Math.random() * 3, (Math.random() - 0.5),
                         [0xffe08a, 0xffa020, 0xff5a00, 0xd02000][(Math.random() * 4) | 0], 0.5 + Math.random() * 0.7, 0.5 + Math.random() * 0.4, { shrink: 1.2 });
                 }
                 if (Math.random() < 0.25) {
                     const g = 60 + ((Math.random() * 40) | 0);
-                    fx.smoke.spawn(t.x, 10 + Math.random() * 2, t.z, (Math.random() - 0.5) * 0.6, 2 + Math.random(), (Math.random() - 0.5) * 0.6, (g << 16) | (g << 8) | g, 1.4 + Math.random(), 3, { shrink: -0.4 });
+                    fx.smoke.spawn(t.x, gy + top - 1 + Math.random() * 2, t.z, (Math.random() - 0.5) * 0.6, 2 + Math.random(), (Math.random() - 0.5) * 0.6, (g << 16) | (g << 8) | g, 1.4 + Math.random(), 3, { shrink: -0.4 });
                 }
             }
             // The fire jumps to trees nearby
@@ -231,7 +234,7 @@ export class FireSystem {
                     if (d < FIRE.SPREAD_RADIUS && hash01(o.x, o.z, t.x) < FIRE.SPREAD_CHANCE) this._igniteTree(o);
                 }
                 // and to voxel leaves around
-                this.ignite(_v.set(t.x, 8, t.z), 3);
+                this.ignite(_v.set(t.x, gy + c0 + 2, t.z), 3);
             }
             if (b.t > FIRE.BURN_TIME) {
                 this.burningTrees.splice(i, 1);

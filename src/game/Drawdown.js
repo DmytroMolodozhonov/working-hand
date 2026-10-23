@@ -250,14 +250,7 @@ export class Drawdown {
         const W = g.world;
         for (const tr of W?.trees || []) {
             if (!tr.alive || !inCol(tr.x, tr.z)) continue;
-            for (const mesh of [W.trunkMesh, W.leafMesh]) {
-                if (!mesh) continue;
-                mesh.getMatrixAt(tr.index, _m);
-                _m.elements[13] -= 1;
-                mesh.setMatrixAt(tr.index, _m);
-                mesh.instanceMatrix.needsUpdate = true;
-            }
-            if (tr.crown) { tr.crown.minY -= 1; tr.crown.maxY -= 1; }
+            W.sinkTree(tr, -1);
         }
     }
 

@@ -294,7 +294,7 @@ export class HouseMagic {
         for (const t of g.world?.trees || []) {
             if (!t.alive || t.burning) continue;
             const d = Math.hypot(t.x - x, t.z - z);
-            if (d <= r) out.push({ i: t, x: t.x, z: t.z, y: 4, d, wood: TREE_KINDS[t.kind || 0].wood });
+            if (d <= r) out.push({ i: t, x: t.x, z: t.z, y: (t.y ?? -0.5) + 4.5, d, wood: TREE_KINDS[t.kind || 0].wood });
         }
         const R = Math.ceil(r);
         const houses = [...this.list.values()].map((h) => this.plan(h).rect);

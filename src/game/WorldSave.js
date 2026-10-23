@@ -208,6 +208,7 @@ export class WorldKeeper {
         this.seed = seed ?? game.seed;
         this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
         this.godsOnEarth = !!game.config?.godsOnEarth; // (multiplayer: the gods' spells allowed on the Earth — chosen when made)
+        this.realTrees = !!game.config?.realTrees; // (made with real trees, not blocks — Trees.js)
         this.created = created || Date.now();
         this.createdVersion = createdVersion || { ...GAME_VERSION };
         this.players = players || {}; // 'id:'+lasting id (or an old name) -> snapshot (guests and the host)
@@ -263,6 +264,7 @@ export class WorldKeeper {
             seed: this.seed,
             gen: this.gen,
             godsOnEarth: this.godsOnEarth || undefined,
+            realTrees: this.realTrees || undefined,
             created: this.created,
             updated: Date.now(),
             version: { ...GAME_VERSION }, // the game that wrote it last
@@ -271,7 +273,7 @@ export class WorldKeeper {
             dayMs: DAY,
             explosions: g.explosions.slice(-4000),
             edits: (g.blockEdits || []).slice(-30000),
-            treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
+            treesGone: g.world.treesGoneList?.() || [],
             treesMoved: g.world.movedTrees?.() || [], // (carried by «Левиоса Максима»: World.placeTree)
             ice: g.iceCells || [],
             chests: [...new Set([...(g.chests || []).filter((c) => c.isOpen).map((c) => c.id), ...(g._openedChests || [])])],
@@ -334,7 +336,7 @@ export function restoreWorld(game, save, THREE) {
         const towers = g.world?.terrain?.data?.towers;
         g.builder?.applyEdits(towers?.dropLostEdits ? towers.dropLostEdits(save.edits) : save.edits);
     }
-    for (const i of save.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
+    for (const i of save.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
     g.world.restoreMovedTrees?.(save.treesMoved);
     // (the checks of the buildings after each blast: at once, in the blasts' order, unseen — Structure.js, Collapse.Settling)
     const replay = (fn) => (g.world.terrain?.data?.settling ? g.world.terrain.data.settling.replay(fn) : fn());

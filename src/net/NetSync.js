@@ -179,7 +179,7 @@ export class NetSync {
             weather: g.storm && g.storm.until > performance.now() ? Math.round((g.storm.until - performance.now()) / 1000) : 0,
             rain: g.storm?.rainLeft?.() || 0, // («Let it rain» still falling)
             edits: g.blockEdits || [],
-            treesGone: g.world.trees ? g.world.trees.filter((t) => !t.alive).map((t) => t.index) : [],
+            treesGone: g.world.treesGoneList?.() || [],
             treesMoved: g.world.movedTrees?.() || [],
             crystals: g.crystals?.snapshot() || [],
             ships: g.ships ? g.ships.snapshot(true) : [],
@@ -191,7 +191,7 @@ export class NetSync {
     applyWelcome(msg) {
         const g = this.game;
         if (Array.isArray(msg.edits) && msg.edits.length) g.builder?.applyEdits(msg.edits.slice(-30000));
-        for (const i of msg.treesGone || []) { const t = g.world.trees?.find((x) => x.index === i); if (t && t.alive) g.world.removeTree(t); }
+        for (const i of msg.treesGone || []) g.world.treeGoneById(i); // (one whose land is not here yet stays gone when it comes)
         g.world.restoreMovedTrees?.(msg.treesMoved);
         if (msg.crystals) g.crystals?.restore(msg.crystals);
         if (msg.dayStart) { g.dayStart = msg.dayStart; if (g.dayCycle) g.world.setDayPhase(g.dayPhase()); }
@@ -888,7 +888,7 @@ export class NetSync {
             case 'mcfx': if (Array.isArray(m.p)) g.crystals?.remoteFx(vec(m.p), m.by || m.from || null, m.n | 0); break;
             case 'mcq': if (this.net.isHost && Array.isArray(m.l)) g.crystals?.burst(m.l.slice(0, 8).map(String), m.from || m.by, m.k || null); break; // (who broke it: the sender himself)
             case 'mcb': if (!this.net.isHost && Array.isArray(m.l)) { const l = m.l.slice(0, 50).map(String); g.crystals?.onBurst(l, m.by || null, l.map((_, i) => (Array.isArray(m.p?.[i]) ? vec(m.p[i]) : null)), null); } break;
-            case 'tree': { const t = g.world.trees?.find((x) => x.index === m.i); if (t && t.alive) g.world.removeTree(t); break; }
+            case 'tree': g.world.treeGoneById(m.i); break;
             case 'wgone': {
                 const w = g.weapons.byId.get(m.w);
                 if (w) { this.weaponOwners.delete(m.w); g.weapons.remove(w); }
@@ -1230,6 +1230,7 @@ function sanitizeConfig(c) {
         seed: c.seed,
         gen: c.gen ?? 1, // world generation (an old host sends none: 1)
         godsOnEarth: !!c.godsOnEarth, // (the host's world: the gods' spells allowed on the Earth — Game._godsBanned)
+        realTrees: !!c.realTrees, // (the host's world has real trees, not blocks — Trees.js)
     };
 }
 

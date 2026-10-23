@@ -10,14 +10,18 @@
 import * as THREE from 'three';
 import { buildTree } from './TreeBuild.js';
 import { drawLeafAtlas, bleedLeafPixels, LEAF_ATLAS } from './TreeLeaves.js';
+import { applySkyComp } from './VoxelShading.js';
 
 export const TREE_WIND = { time: { value: 0 }, strength: { value: 1 } };
+/** The golden apple tree's light (Animals.js pulses it: soft by day, bright by night). */
+export const GOLD_GLOW = { value: 0.5 };
 
 let _atlas = null;
 /** The leaf pictures (made once: on the loading screen — Game.prewarm). */
 export function leafAtlas() {
     if (_atlas) return _atlas;
     const W = LEAF_ATLAS.CELL * LEAF_ATLAS.KINDS, H = LEAF_ATLAS.CELL;
+    if (typeof OffscreenCanvas === 'undefined' && typeof document === 'undefined') return (_atlas = new THREE.DataTexture(new Uint8Array([90, 140, 60, 255]), 1, 1, THREE.RGBAFormat)); // (no canvas: a test in node)
     const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
     const ctx = cv.getContext('2d');
     drawLeafAtlas(ctx);
@@ -65,17 +69,37 @@ export function barkMaterial() {
     return m;
 }
 
-/** Leaves: the atlas, cut out by its alpha, both sides lit alike, swaying. */
-export function leafMaterial() {
+/**
+ * Leaves: the atlas, cut out by its alpha, both sides lit alike, swaying. glow: the golden apple tree's — its leaves
+ * shine with their own colour (GOLD_GLOW), day and night.
+ */
+export function leafMaterial({ glow = false } = {}) {
     const m = new THREE.MeshLambertMaterial({ vertexColors: true, map: leafAtlas(), alphaTest: 0.42, side: THREE.DoubleSide });
     m.onBeforeCompile = (shader) => {
         addSway(shader);
         shader.fragmentShader = shader.fragmentShader
             .replace('( gl_FrontFacing ) ? vIndirectFront : vIndirectBack', 'vIndirectFront')
             .replace('( gl_FrontFacing ) ? vLightFront : vLightBack', 'vLightFront');
+        if (glow) {
+            shader.uniforms.uGoldGlow = GOLD_GLOW;
+            shader.fragmentShader = shader.fragmentShader
+                .replace('#include <common>', '#include <common>\nuniform float uGoldGlow;')
+                .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.85, 0.45) * uGoldGlow;');
+        }
     };
-    m.customProgramCacheKey = () => 'tree-leaf';
+    m.customProgramCacheKey = () => (glow ? 'tree-leaf-gold' : 'tree-leaf');
     return m;
+}
+
+let _shared = null;
+/** The trees' materials, made once and shared by every tree (the world's, the apple trees, a tree come alive). */
+export function sharedTreeMaterials() {
+    return _shared || (_shared = {
+        bark: applySkyComp(barkMaterial()),
+        leaves: applySkyComp(leafMaterial()),
+        gold: applySkyComp(leafMaterial({ glow: true })),
+        depth: leafDepthMaterial(),
+    });
 }
 
 /** The shadow of the leaves: cut out like them (not square cards), swaying the same. */
@@ -96,7 +120,7 @@ function toGeometry(a) {
     if (a.uv) g.setAttribute('uv', new THREE.BufferAttribute(a.uv, 2));
     g.setIndex(new THREE.BufferAttribute(a.index, 1));
     g.computeBoundingSphere();
-    g.userData.shared = true; // (one per shape: never disposed with a tree)
+    g.userData.shared = g.userData.keep = true; // (one per shape: never disposed with a tree)
     return g;
 }
 

@@ -192,7 +192,7 @@ export class Builder {
             const tt = (tx * d.x + tz * d.z) / (flat * flat);
             if (tt < 0 || tt > bestT) continue;
             const px = o.x + d.x * tt, pz = o.z + d.z * tt, py = o.y + d.y * tt;
-            const y0 = (t.y ?? -0.5) - 1, y1 = y0 + 13; // the trunk and the crown
+            const y0 = (t.y ?? -0.5) - 1, y1 = y0 + (t.h ? t.h + 1 : 13); // the trunk and the crown
             const dy = py < y0 ? y0 - py : py > y1 ? py - y1 : 0;
             if (Math.hypot(px - t.x, pz - t.z, dy) > Math.max(2.2, tt * 0.12)) continue;
             bestT = tt;

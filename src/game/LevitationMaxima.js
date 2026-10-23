@@ -1000,14 +1000,14 @@ export class LevitationMaxima {
      */
     _instModel(t, base) {
         const w = this.game.world;
-        const [tm, lm] = w.treeMatrices(t);
         const back = new THREE.Matrix4().makeTranslation(-base.x, -base.y, -base.z);
-        return [[w.trunkMesh, tm], [w.leafMesh, lm]].map(([src, m]) => {
-            const one = new THREE.InstancedMesh(src.geometry, src.material, 1);
-            one.setMatrixAt(0, back.clone().multiply(m));
-            if (src.instanceColor) { src.getColorAt(t.index, _c); one.setColorAt(0, _c); }
+        return w.treeParts(t).map((p) => {
+            const one = new THREE.InstancedMesh(p.geometry, p.material, 1);
+            one.setMatrixAt(0, back.clone().multiply(p.matrix));
+            if (p.color) one.setColorAt(0, p.color);
+            if (p.depth) one.customDepthMaterial = p.depth;
             one.castShadow = true;
-            one.receiveShadow = src.receiveShadow;
+            one.receiveShadow = !p.depth;
             one.frustumCulled = false;
             one.userData.shared = true; // (the world's geometry: never disposed with it)
             return one;

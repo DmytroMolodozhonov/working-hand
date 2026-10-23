@@ -7,9 +7,9 @@
  *  dark oak — the oak's lobed leaves, darker and denser.
  * Drawn on any 2D context (a page's canvas or an OffscreenCanvas in a worker); the gaps stay clear (alpha).
  */
-import { treeRandom } from './TreeBuild.js';
+import { treeRandom, ATLAS_CELLS } from './TreeBuild.js';
 
-export const LEAF_ATLAS = { CELL: 256, KINDS: 5 };
+export const LEAF_ATLAS = { CELL: 256, KINDS: ATLAS_CELLS };
 
 const rgb = (h, k = 1) => `rgb(${Math.min(255, ((h >> 16) & 255) * k) | 0},${Math.min(255, ((h >> 8) & 255) * k) | 0},${Math.min(255, (h & 255) * k) | 0})`;
 
@@ -93,7 +93,7 @@ function sprig(ctx, kind, ox, S) {
         rosette(main[20][0], main[20][1], -Math.PI / 2, 6, 32);
     } else if (kind === 1) {
         // birch: a thin twig, small toothed leaves alternating, lots of them
-        const base = 0x5a8f36;
+        const base = 0x4c8232;
         const main = stalk(ctx, rnd, cx, by, cx + (rnd() - 0.5) * 50, 8, (rnd() - 0.5) * 60, 3, '#5a4a3e');
         for (let i = 2; i <= 20; i++) {
             const [x, y] = main[i];
@@ -133,6 +133,33 @@ function sprig(ctx, kind, ox, S) {
             const dir = s % 2 ? 1 : -1;
             shoot(x, y, x + dir * (100 - s * 10), y - 45 - rnd() * 20, 2.5, 20);
         }
+    } else if (kind >= 5) {
+        // the apple trees: oval glossy leaves in bunches of 4–6 on short spurs; the golden one's leaves are gold,
+        // lighter at their edges (it is a magic tree: the light seems to come from inside them)
+        const gold = kind === 6;
+        const base = gold ? 0xe0a82a : 0x4f8a34;
+        const main = stalk(ctx, rnd, cx, by, cx + (rnd() - 0.5) * 30, 20, (rnd() - 0.5) * 40, 4, gold ? '#7a4a1a' : '#4a3426');
+        for (let t = 0; t < 9; t++) {
+            const i = 3 + Math.round((t / 9) * 16);
+            const [x, y] = main[i];
+            const dir = t % 2 ? 1 : -1;
+            const ex = x + dir * (30 + rnd() * 45), ey = y - 15 - rnd() * 35;
+            stalk(ctx, rnd, x, y, ex, ey, dir * 6, 2, gold ? '#7a4a1a' : '#4a3426');
+            const n = 4 + Math.floor(rnd() * 3);
+            for (let j = 0; j < n; j++) {
+                const a = Math.atan2(ey - y, ex - x) + (j - (n - 1) / 2) * 0.55 + (rnd() - 0.5) * 0.3;
+                const L = 30 + rnd() * 14;
+                leaf(ctx, rnd, ex, ey, a, L, L * 0.42, 'toothed', base + (rnd() < 0.4 ? (gold ? 0x141000 : 0x0a1206) : 0));
+                if (gold && rnd() < 0.6) {
+                    // (a bright rim: the gold glints)
+                    leafPath(ctx, ex, ey, a, L * 0.9, L * 0.3, 'toothed');
+                    ctx.strokeStyle = 'rgba(255,240,160,0.75)';
+                    ctx.lineWidth = 1.2;
+                    ctx.stroke();
+                }
+            }
+        }
+        for (let j = 0; j < 5; j++) leaf(ctx, rnd, main[20][0], main[20][1] + 8, -Math.PI / 2 + (j - 2) * 0.5, 34, 14, 'toothed', base);
     } else {
         // cherry: clusters of five-petalled blossom, a few young bronze-green leaves
         const main = stalk(ctx, rnd, cx, by, cx + (rnd() - 0.5) * 30, 18, (rnd() - 0.5) * 40, 3, '#5a3a36');

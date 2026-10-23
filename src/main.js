@@ -1497,7 +1497,7 @@ net.on('message', (msg) => {
     if ((game && game.active) || starting) return;
     pendingWelcome = msg;
     const local = readConfig();
-    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth }, msg);
+    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth, realTrees: !!msg.config.realTrees }, msg);
 });
 
 function escapeHtml(s) {

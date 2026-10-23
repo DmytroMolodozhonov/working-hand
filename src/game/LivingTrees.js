@@ -129,21 +129,23 @@ const hashId = (s) => { let h = 2166136261; for (const c of String(s || '')) h =
  */
 export function treeOwnLook(d, { data = null, world = null } = {}) {
     const turn = new THREE.Matrix4().makeRotationY(-(d.ry || 0)); // (inside the turned body: still as it stood in the world)
-    if (d.inst != null && world?.trunkMesh) {
+    if (d.inst != null && (world?.trunkMesh || world?.forest)) {
         const t = world.trees?.find((q) => q.index === d.inst);
-        if (!t) return null;
-        const [tm, lm] = world.treeMatrices({ ...t, x: d.x, y: d.y, z: d.z, fallen: null });
+        if (!t || (!t.mesh && !world.trunkMesh)) return null;
         const back = new THREE.Matrix4().makeTranslation(-d.x, -d.y, -d.z).premultiply(turn);
-        const one = (src, m) => {
-            const o = new THREE.InstancedMesh(src.geometry, src.material, 1);
-            o.setMatrixAt(0, back.clone().multiply(m));
-            if (src.instanceColor) { src.getColorAt(t.index, _c); o.setColorAt(0, _c); }
+        const one = (p) => {
+            const o = new THREE.InstancedMesh(p.geometry, p.material, 1);
+            o.setMatrixAt(0, back.clone().multiply(p.matrix));
+            if (p.color) o.setColorAt(0, p.color);
+            if (p.depth) o.customDepthMaterial = p.depth;
             o.castShadow = true;
             o.frustumCulled = false;
             o.userData.shared = true; // (the world's shapes and materials)
             return o;
         };
-        return { trunk: [one(world.trunkMesh, tm)], crown: [one(world.leafMesh, lm)], crownY: 5.3 * (t.scale ?? 1), half: 0.8, mats: [] };
+        const [trunk, crown] = world.treeParts(t, { x: d.x, y: d.y, z: d.z });
+        // (a real tree: its crown from where its branches begin, its trunk's own width)
+        return { trunk: [one(trunk)], crown: crown ? [one(crown)] : [], crownY: t.mesh ? t.c0 : 5.3 * (t.scale ?? 1), half: t.mesh ? t.r : 0.8, mats: [] };
     }
     if (!Array.isArray(d.cells) || d.cells.length < 8) return null;
     const k = TREE_KINDS[d.kind | 0] || TREE_KINDS[0];

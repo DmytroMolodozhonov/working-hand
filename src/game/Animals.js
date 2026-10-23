@@ -48,6 +48,7 @@ import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
+import { appleTreeModel, pulseGolden } from './AppleTrees.js';
 
 export { animalModel };
 
@@ -148,28 +149,12 @@ export function appleTreeAt(gx, gz, seed) {
     return r < APPLE_TREES.GOLDEN ? 'golden' : r < APPLE_TREES.GOLDEN + APPLE_TREES.RED ? 'red' : null;
 }
 
-/** An apple tree: the golden one (gold bark and leaves, golden apples) or an ordinary one with red apples (red = true). */
-export function goldenTreeModel(red = false) {
-    const g = new THREE.Group();
-    bx(g, 0.8, 4, 0.8, red ? 0x6b4a2a : 0xb8860b, 0, 2, 0);
-    const leaf = red ? new THREE.MeshLambertMaterial({ color: 0x3f8f3a }) : new THREE.MeshLambertMaterial({ color: 0xffd23f, emissive: 0x4a3a00 });
-    for (const [w, h, d, x, y, z] of [[4.4, 2.2, 4.4, 0, 4.8, 0], [3.2, 1.6, 3.2, 0.2, 6.4, -0.1], [1.8, 1.2, 1.8, -0.2, 7.6, 0.2]]) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), leaf);
-        m.position.set(x, y, z);
-        m.castShadow = true;
-        g.add(m);
-    }
-    const apples = [];
-    const appleMat = red ? new THREE.MeshLambertMaterial({ color: 0xc8202a }) : new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.75, roughness: 0.25, emissive: 0x332200 });
-    const spots = [[1.9, 4.0, 0.8], [-1.6, 4.1, 1.3], [0.6, 3.9, -2.0], [-1.0, 4.0, -1.6], [2.0, 4.6, -1.0], [-2.0, 4.5, -0.3]];
-    for (const [x, y, z] of spots) {
-        const a = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), appleMat);
-        a.position.set(x, y - 0.4, z);
-        g.add(a);
-        apples.push(a);
-    }
-    g.userData.apples = apples;
-    return g;
+/**
+ * An apple tree: the golden one (glowing, magic) or an ordinary one with red apples (red = true) — real trees with real
+ * apples now (AppleTrees.js); `pick` 0…1 chooses its shape.
+ */
+export function goldenTreeModel(red = false, pick = 0) {
+    return appleTreeModel(red, pick);
 }
 
 // =================================================================== system
@@ -604,8 +589,9 @@ export class Animals {
             const top = t.topLayer(x, z);
             if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
             const y = top - 0.5;
-            const model = goldenTreeModel(kind === 'red');
+            const model = goldenTreeModel(kind === 'red', h(gx + 17, gz - 11));
             model.position.set(x, y, z);
+            model.rotation.y = h(gx - 7, gz + 29) * Math.PI * 2;
             this.game.scene.add(model);
             const boxId = this.game.collision.addBox({ minX: x - 0.45, maxX: x + 0.45, minY: y, maxY: y + 4, minZ: z - 0.45, maxZ: z + 0.45, kind: 'tree', noSupport: true });
             const was = picked.get(key);
@@ -1650,9 +1636,21 @@ export class Animals {
         this._treeT -= dt;
         if (this._treeT <= 0) { this._treeT = 2; this._treesAround(me); }
         // apples grow back
+        const now = Date.now();
+        pulseGolden(dt, g.world?._night || 0); // (the golden trees' light: soft by day, strong at night)
         for (const tr of this.trees.values()) {
             if (!tr) continue;
-            tr.apples.forEach((ap, i) => { tr.model.userData.apples[i].visible = ap.until <= Date.now(); });
+            const A = tr.model.userData.apples;
+            for (let i = 0; i < A.length; i++) A[i].visible = tr.apples[i].until <= now;
+            // golden sparkles rise from its apples now and then (near enough to be seen)
+            if (!tr.red && g.fx?.glow && Math.random() < dt * 3 && Math.abs(tr.x - me.x) + Math.abs(tr.z - me.z) < 90) {
+                const ap = A[Math.floor(Math.random() * A.length)];
+                if (ap?.visible) {
+                    ap.getWorldPosition(_v2);
+                    g.fx.glow.spawn(_v2.x + (Math.random() - 0.5) * 0.3, _v2.y, _v2.z + (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.2, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 0.2,
+                        Math.random() < 0.5 ? 0xffe28a : 0xffc640, 0.18 + Math.random() * 0.14, 1.6 + Math.random(), { shrink: 0.6 });
+                }
+            }
         }
         if (this.auth) {
             this._tick = (this._tick || 0) + 1;
