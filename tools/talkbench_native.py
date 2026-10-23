@@ -52,9 +52,47 @@ def say(so, tts, voices, text, voice="M2", steps=5):
     return a, (time.perf_counter() - t) * 1000
 
 
+def llm_bench(req):
+    """The villagers' net (llm_native: llama-server, as the game starts it), if it can run here: the time to its
+    first word on a villager's question — read anew (cold) and after the warm-up the game now makes while the
+    player comes near (warm) — and the time per word. None when it can't start (no model, no network)."""
+    import llm_native
+    L = llm_native.LLM
+    if not L.available():
+        return {"error": "нет программы нейросети для этой системы"}
+    L.start()
+    t = time.time()
+    while L.state not in ("ready", "error") and time.time() - t < 1800:
+        time.sleep(1)
+    if L.state != "ready":
+        return {"error": L.error or L.state}
+
+    def ask(messages, n=40, stream=True):
+        marks = []
+        t0 = time.perf_counter()
+        L.generate({"id": "b%d" % len(marks), "messages": messages, "maxTokens": n, "temperature": 0.4, "stream": stream, "tools": req.get("tools")},
+                   lambda m: marks.append(time.perf_counter() - t0))
+        total = time.perf_counter() - t0
+        first = marks[0] * 1000 if marks else total * 1000
+        per = (total - marks[0]) * 1000 / (len(marks) - 1) if len(marks) > 1 else 0
+        return {"ttft": round(first), "perTok": round(per, 1), "total": round(total * 1000), "tokens": len(marks)}
+
+    sys_m = {"role": "system", "content": req["system"]}
+    user = lambda ctx, w: {"role": "user", "content": "[%s]\n\nСобеседник говорит тебе: %s" % (ctx, w)}  # noqa: E731
+    ask([sys_m, {"role": "user", "content": "Привет, как дела?"}], 3, False)  # (the game's own warm-up at load: the common words)
+    cold = ask([sys_m, user(req["cold"], req["q1"])])
+    ask([sys_m, user(req["warm"], "")], 1, False)  # (the warm-up while the player comes near: TalkMind.warmRequest)
+    warm = ask([sys_m, user(req["warm"], req["q2"])])
+    L.stop()
+    return {"cold": cold, "warm": warm, "model": llm_native.MODELS.get(L.model or llm_native.DEFAULT_MODEL)}
+
+
 def main():
     import numpy as np
     scen = json.load(open(sys.argv[1], encoding="utf-8"))
+    if len(sys.argv) > 2 and sys.argv[2] == "--llm-only":
+        json.dump({"llm": llm_bench(json.load(open(sys.argv[3], encoding="utf-8")))}, sys.stdout, ensure_ascii=False)
+        return
     threads = max(1, min(4, (os.cpu_count() or 4) // 4))  # (as tts_native.serve: the game's own setting)
     so, tts, voices = tts_engine(threads)
     say(so, tts, voices, "Да, конечно.")  # (warm-up, as the game does)
@@ -79,6 +117,11 @@ def main():
         evs = voice_native.offline(mic, threads=2)
         out["asr"].append({"id": sc["id"], "end_ms": round((len(lead) + end) / 16, 1),
                            "events": [e for e in evs if e.get("type") == "seg"]})
+    if len(sys.argv) > 3 and sys.argv[2] == "--llm":
+        try:
+            out["llm"] = llm_bench(json.load(open(sys.argv[3], encoding="utf-8")))
+        except Exception as e:  # noqa: BLE001
+            out["llm"] = {"error": str(e)}
     json.dump(out, sys.stdout, ensure_ascii=False)
 
 

@@ -169,6 +169,7 @@ export class CastleTalk {
                 () => ({ castleName: def.name, kingName: life.state(def.id).kingDead ? (life.state(def.id).ownerName || def.king) : def.king, playerIsKing: life.state(def.id).owner === this.game.localId, kingDead: !!life.state(def.id).kingDead, timeOfDay: this.game.isNight ? 'night' : 'day', danger: v.cs.hostile.size > 0 }),
                 { memory: this.memories.get(v.id) },
             );
+            if (v.guest && !this.memories.has(v.id)) b._mood = Math.max(b._mood || 0, 0.6); // (the Creative guest is glad to see me: he is here to be talked to — CreativeGuest.js)
             this.brains.set(v.id, b);
         }
         return b;

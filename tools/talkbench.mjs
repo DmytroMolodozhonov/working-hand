@@ -235,30 +235,49 @@ async function realLLM(url) {
     return { cold, warm };
 }
 
+/** What the real net is asked (tools/talkbench_native.py): the game's own words — a villager's description and two questions. */
+function llmRequest() {
+    const mind = new TalkMind({ llm: { ready: true, strong: true } });
+    const mk = (role, name, seed) => new VillagerBrain({ id: seed, name, role, female: false, castleName: 'Каменный Утёс', kingName: 'Ульрих', seed }, () => ({ castleName: 'Каменный Утёс', kingName: 'Ульрих', timeOfDay: 'day' }));
+    const w = mind.warmRequest(mk('farmer', 'Ян', 5), {});
+    return { system: mind.basePrompt(), cold: mind.persona(mk('advisor', 'Олег', 3), {}), warm: w.context, tools: w.tools,
+        q1: 'Расскажи, почему король не любит волшебников из башни?', q2: 'А что у вас нового в замке за последнее время?' };
+}
+
 async function main() {
     const args = process.argv.slice(2);
     const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
     const real = args.includes('--real');
     const only = opt('only', null)?.split(',');
-    let tts = { a: 600, b: 15 }, asr = null, ttsRows = null, src = 'модель (--fake)';
+    let tts = { a: 600, b: 15 }, asr = null, ttsRows = null, src = 'модель (--fake)', realNet = null, netWhy = '';
     if (real || opt('from', null)) {
         let data;
         if (opt('from', null)) data = JSON.parse(fs.readFileSync(opt('from'), 'utf8'));
         else {
             console.log('Настоящие сети: синтез фраз игрока, распознавание GigaAM, голоса жителей (≈ 2 мин)…');
             const py = process.platform === 'win32' ? 'python' : 'python3';
-            const r = spawnSync(py, [path.join(ROOT, 'tools/talkbench_native.py'), path.join(ROOT, 'tests/fixtures/talk-scenarios.json')], { encoding: 'utf8', maxBuffer: 1 << 28, env: { ...process.env, ZNS_VOICE_MODELS: process.env.ZNS_VOICE_MODELS || '', ZNS_TTS_DIR: process.env.ZNS_TTS_DIR || '' } });
+            // (the villagers' net too, as the game starts it — if it is downloaded here: cold and warmed-up)
+            const reqFile = path.join(fs.mkdtempSync(path.join((process.env.TMPDIR || process.env.TEMP || '/tmp'), 'talkbench-')), 'llm.json');
+            fs.writeFileSync(reqFile, JSON.stringify(llmRequest()));
+            const llmArgs = args.includes('--no-llm') ? [] : ['--llm', reqFile];
+            const r = spawnSync(py, [path.join(ROOT, 'tools/talkbench_native.py'), path.join(ROOT, 'tests/fixtures/talk-scenarios.json'), ...llmArgs], { encoding: 'utf8', maxBuffer: 1 << 28, env: { ...process.env, ZNS_VOICE_MODELS: process.env.ZNS_VOICE_MODELS || '', ZNS_TTS_DIR: process.env.ZNS_TTS_DIR || '' } });
             if (r.status !== 0) { console.error(r.stderr?.slice(-2000)); process.exit(2); }
             data = JSON.parse(r.stdout);
         }
         asr = new Map(data.asr.map((a) => [a.id, a]));
+        if (data.llm?.warm) realNet = data.llm;
+        else if (data.llm?.error) netWhy = data.llm.error;
         ttsRows = data.tts;
         tts = ttsModel(data.tts);
         src = `настоящие GigaAM + Supertonic (${data.cpu} ядер, голос в ${data.tts_threads} потоке)`;
     }
     let llm = { pp: Number(opt('pp', 100)), tg: Number(opt('tg', 12)), real: null };
+    if (realNet) {
+        llm = { ...llm, realCold: realNet.cold, real: realNet.warm };
+    }
     const url = opt('llm', process.env.ZNS_LLM_URL || null);
-    let llmNote = `модель нейросети: чтение ${llm.pp} ток/с, письмо ${llm.tg} ток/с (--pp/--tg)`;
+    let llmNote = realNet ? `настоящая нейросеть ${realNet.model}: первое слово без подогрева ${realNet.cold.ttft} мс, с подогревом ${realNet.warm.ttft} мс, ${realNet.warm.perTok} мс/слово`
+        : `модель нейросети: чтение ${llm.pp} ток/с, письмо ${llm.tg} ток/с (--pp/--tg)${netWhy ? ` — настоящая не запустилась: ${netWhy}` : ''}`;
     if (url) {
         try { const m = await realLLM(url); llm = { ...llm, realCold: m.cold, real: m.warm }; llmNote = `настоящая нейросеть ${url}: первое слово без подогрева ${Math.round(m.cold.ttft)} мс, с подогревом ${Math.round(m.warm.ttft)} мс, ${Math.round(m.warm.perTok)} мс/ток`; } catch (e) { llmNote += ` (llama-server не ответил: ${e.message})`; }
     }
