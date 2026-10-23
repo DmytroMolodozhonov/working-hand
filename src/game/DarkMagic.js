@@ -110,6 +110,13 @@ export class DarkHero {
 const HARSH = new Set(['tower', 'town']);
 export const isHarsh = (settlement) => HARSH.has(settlement);
 
+/** Какое это место для отношения магов: башня / город (строго) · малое поселение, дом одиночки, странник (мягко). */
+export function placeOf(def, entry = null) {
+    if (def?.kind === 'tower') return 'tower';
+    if (entry?.town) return 'town';
+    return def?.kind === 'hamlet' && def.wizHut ? 'lone' : 'small';
+}
+
 /** Заметит ли волшебник метки (обычные жители — никогда). */
 export const wizardDetects = (level) => darkStage(level) === 'scorned' || darkStage(level) === 'outcast';
 

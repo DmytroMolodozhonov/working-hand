@@ -53,6 +53,7 @@ import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
 import { Attention, ATT, inSight } from './Attention.js';
+import { wizardDetects, placeOf, shopRefuses, expelled, attitude, wizardLine, REFUSE_LINE, EXPEL_LINE } from './DarkMagic.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -403,6 +404,25 @@ export class CastleTalk {
         return { volume, muffled, pan };
     }
 
+    /**
+     * Чёрная магия (DarkMagic.js): волшебник (и только он) замечает тьму героя с 41. Презрение — реплика раз в 90 с;
+     * лавка мага отказывает (в половине случаев при 41…80, всегда при 81…100 в башне и городах; в малых поселениях
+     * — у кого какая терпимость); изгой в башне и городе — «Уходи». Ответ: true — слова приняты, дальше не идёт.
+     */
+    _darkGate(v, tradeOnly = false) {
+        const g = this.game, lvl = g.dark?.level || 0;
+        if (!v.wizard || !wizardDetects(lvl)) return false;
+        const place = placeOf(v.cs?.def, v.entry), now = performance.now();
+        const memo = (this._dark = this._dark || new Map());
+        const m = memo.get(v.id) || { refuse: null, until: 0, scornAt: -1e9 };
+        memo.set(v.id, m);
+        if (now > m.until) { m.refuse = this._trader(v) ? shopRefuses(lvl, place, Math.random, v.id) : false; m.until = now + 120000; }
+        if (!tradeOnly && expelled(lvl, place)) { this._sayReply(v, EXPEL_LINE, 4); return true; }
+        if (m.refuse && this._trader(v)) { this._sayReply(v, REFUSE_LINE, 4); return true; }
+        if (!tradeOnly && attitude(lvl, place, v.id) === 'scorn' && now - m.scornAt > 90000) { m.scornAt = now; this._sayReply(v, wizardLine(lvl, place, v.id), 5); return true; }
+        return false;
+    }
+
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
     _sayReply(v, text, seconds = 5, broadcast = true) {
         if (!text) return;
@@ -571,6 +591,7 @@ export class CastleTalk {
         const v = this._listener(text);
         if (!v) return false;
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
+        if (this._darkGate(v)) return true; // (чёрный маг: волшебник презирает, не продаёт, гонит — DarkMagic.js)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
@@ -1024,6 +1045,11 @@ export class CastleTalk {
 
     /** I took a good from a counter: the merchant names its price. */
     tookGood(item) {
+        { // (чёрный маг: лавка мага не продаёт — товар остаётся на прилавке, как до разговора)
+            const [cid0, s0] = String(item.shop?.stall || '').split(':s');
+            const cs0 = this.life.castles.get(cid0), v0 = cs0 ? this._merchantOf(cs0.def, +s0) : null;
+            if (v0 && this._darkGate(v0, true)) return;
+        }
         if (this.prepaid.delete(item.uid) || item.shop?.paid) { delete item.shop; return; } // (paid for: mine)
         const key = item.shop.stall;
         const [cid, s] = key.split(':s');
