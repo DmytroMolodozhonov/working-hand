@@ -54,7 +54,7 @@ import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
 import { PEGASUS_COLOR } from './AnimalModels.js';
-import { FarShape } from '../core/FarShape.js';
+import { FarShape, skinnedSamples } from '../core/FarShape.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -62,7 +62,7 @@ import { sailorModels } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
 import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
-import { prewarmVillagers } from '../entities/VillagerModel.js';
+import { prewarmVillagers, villagerMaterials } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
 import { Campfires } from './Campfires.js';
@@ -3191,7 +3191,12 @@ export class Game {
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(animalModel('horse', PEGASUS_COLOR)); // (the Pegasus of some herds: its glossy coat — a shader of its own, compiled when a herd came into view)
-        { const s = animalModel('sheep', 0x6b3f1e), f = new FarShape(s); for (let i = 0; i < 3; i++) { f.set(true); f.refresh(); f.set(false); } f.dispose(); } // (a far animal's one shape: its code warmed — the first ones made in flight took 5–18 ms)
+        // (each animal as the video card draws it — one shape per material moved by its parts, FarShape: the skinned
+        // shaders, with and without the shadow, and the kinds' shapes made now — not when the first herd comes into view)
+        for (const m of [...['cow', 'pig', 'sheep', 'horse'].map((t) => animalModel(t, 0x6b3f1e)), animalModel('horse', PEGASUS_COLOR), ...[1, 2, 3, 4].flatMap((k) => [animalModel('pig', k), animalModel('cow', k)])]) {
+            new FarShape(m).set(true);
+            zoo.add(m);
+        }
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
@@ -3212,6 +3217,7 @@ export class Game {
         for (const m of this.groundprud?.sampleModels?.() || []) zoo.add(m); // (the earth of «Groundprud» rising out of the ground)
         for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
+        for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
         try {
@@ -3220,7 +3226,7 @@ export class Game {
             if (this.ships && cls) zoo.add(new ShipModel(buildLayout(cls), { look: 'black', name: 'prewarm' }).group); // (the black ship's deck, black flag, green fire)
             { const B = barrierParts(); zoo.add(new THREE.Mesh(B.shell, B.shellMat), new THREE.Mesh(B.ring, B.ringMat)); } // (its magic barrier's flash)
             for (const v of sailorModels()) zoo.add(v.group); // (Captain Black Moustache, his skeletons)
-            for (const k of KIND_IDS) zoo.add(dragonModel(k));
+            for (const k of KIND_IDS) { const dm = dragonModel(k); new FarShape(dm).set(true); zoo.add(dm); } // (drawn by the video card as one shape: its skinned shaders)
             zoo.add(cartModel(false), cartModel(true));
         } catch (e) { /* (a model that can't be made here: compiled on first sight, as before) */ }
         const box = new THREE.BoxGeometry(1, 1, 1);

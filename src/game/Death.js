@@ -390,7 +390,7 @@ export class DeathSystem {
         const c = group.clone(true);
         c.visible = true;
         const sprites = [];
-        c.traverse((o) => { o.layers.set(0); if (o.isSprite || o.userData.farOne) sprites.push(o); if (o.userData.vroot) o.visible = true; }); // (a far person's one shape: its parts instead)
+        c.traverse((o) => { o.layers.set(0); if (o.isSprite || o.userData.farOne) sprites.push(o); if (o.userData.vroot || o.userData.farHid) o.visible = true; }); // (a far person's one shape: its parts instead — FarShape)
         for (const s of sprites) s.parent?.remove(s);
         holdShapes(c); // (a person's shapes it shares: kept while it lies there — removeBody gives them back)
         return c;

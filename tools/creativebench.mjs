@@ -28,6 +28,8 @@ const CHECK = args.includes('--check');
 const PROFILE = args.includes('--profile');
 const ALLOC = args.includes('--alloc');
 const KEYS = args.includes('--keys'); // the full keys of the shaders compiled after the start (and of all prewarmed ones like them)
+const OWNERS = args.includes('--owners'); // the scene's top things: how many, their parts, materials, a sample of names
+const SCAN = args.includes('--scan'); // at the start: 16 directions — draws, triangles and who is drawn in each
 const ABLATE = opt('ablate', null); // e.g. trees,villagers,animals,terrain: standing, each hidden in turn — its cost of drawing
 /** --check: what the Creative start scene must keep (only tighten). */
 const LIMITS = { gameMeanMs: 11, gameP95Ms: 20, calls: 650, triangles: 480000, newShaders: 0 }; // (23.10: 8.9 / 16.3 ms, ~600 calls, 425k triangles — before the fixes 11.6 ms and ~700 calls)
@@ -149,6 +151,48 @@ async function scene(FRAMES) {
     };
 }
 
+/** Runs in the page: the hero turned to 16 directions; in each — the draws, triangles, and who is in the picture (meshes by owner). */
+async function scanDirs() {
+    const g = window.__zns.game, ch = g.character, T = window.__zns.THREE;
+    const yaw0 = g.cameraBaseRotation || 0, out = [];
+    const fr = new T.Frustum(), pm = new T.Matrix4();
+    const owner = (o) => {
+        let top = o; while (top.parent && top.parent !== g.scene) top = top.parent;
+        return top.name || Object.keys(top.userData || {}).slice(0, 2).join('/') || top.type;
+    };
+    const origFrame = g.frame;
+    for (let k = 0; k < 16; k++) {
+        const yaw = yaw0 + (k / 16) * Math.PI * 2;
+        const rows = [];
+        await new Promise((resolve) => {
+            let n = 0;
+            g.frame = function () {
+                g.smoothBody = yaw; g.cameraBaseRotation = yaw; ch.setBodyRotation(yaw);
+                g.lastTime = performance.now() - 1000 / 60;
+                const t0 = performance.now();
+                origFrame.call(g);
+                const info = g.renderer.info.render;
+                if (n++ >= 3) rows.push({ calls: info.calls, tris: info.triangles, game: performance.now() - t0 - (g._parts['графика'] || 0) });
+                if (rows.length >= 4) { g.frame = origFrame; resolve(); }
+            };
+        });
+        const cam = g.camera;
+        fr.setFromProjectionMatrix(pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+        const by = {}, sh = {};
+        g.scene.traverseVisible((o) => {
+            if (!(o.isMesh || o.isPoints || o.isLine || o.isSprite)) return;
+            const inPic = !o.frustumCulled || fr.intersectsObject(o);
+            const w = owner(o);
+            if (inPic) by[w] = (by[w] || 0) + 1;
+            if (o.castShadow) sh[w] = (sh[w] || 0) + 1;
+        });
+        const m = (key) => rows.reduce((a, r) => a + r[key], 0) / rows.length;
+        out.push({ deg: Math.round((k / 16) * 360), calls: Math.round(m('calls')), tris: Math.round(m('tris')), game: +m('game').toFixed(1),
+            who: Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 10), shadows: Object.entries(sh).sort((a, b) => b[1] - a[1]).slice(0, 6) });
+    }
+    return out;
+}
+
 /** Runs in the page: standing, the same view, with one kind of thing hidden at a time — what each costs to draw. */
 async function ablate({ names, FRAMES }) {
     const g = window.__zns.game;
@@ -239,6 +283,45 @@ try {
     let cdp = null, heap = null;
     if (PROFILE) { cdp = await page.context().newCDPSession(page); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
     if (ALLOC) { heap = await page.context().newCDPSession(page); await heap.send('HeapProfiler.enable'); await heap.send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true }); }
+    if (args.includes('--animals')) {
+        const an = await page.evaluate(() => {
+            const g = window.__zns.game, me = g.character.group.position;
+            return g.animals.list.map((a) => { let n = 0; a.model.traverseVisible((o) => { if (o.isMesh) n++; }); const p = a.group.position;
+                return `${a.type} ${Math.round(Math.hypot(p.x - me.x, p.z - me.z))}м far:${!!a.far?.on} видимых:${n} state:${a.state} guard:${a.guard || ''} fly:${!!a.fly}/${a.flyCode} tamed:${!!a.tamed} pen:${!!a.pen} lev:${!!a.lev} stun:${a.stunT > 0}`; });
+        });
+        console.log('\nзвери:\n  ' + an.join('\n  '));
+    }
+    if (OWNERS) {
+        const ow = await page.evaluate(() => {
+            const g = window.__zns.game, by = {};
+            for (const top of g.scene.children) {
+                const k = top.name || Object.keys(top.userData || {}).slice(0, 2).join('/') || top.type;
+                const e = by[k] || (by[k] = { tops: 0, meshes: 0, shown: 0, shadow: 0, mats: new Set(), geos: new Set(), names: new Set(), ud: new Set() });
+                e.tops++;
+                for (const u of Object.keys(top.userData || {}).slice(0, 6)) e.ud.add(u);
+                top.traverse((o) => { if (!(o.isMesh || o.isPoints || o.isLine || o.isSprite)) return; e.meshes++; let v = true; for (let q = o; q; q = q.parent) if (!q.visible) { v = false; break; } if (v) { e.shown++; if (o.castShadow) e.shadow++; } e.mats.add(o.material); e.geos.add(o.geometry); if (o.name && e.names.size < 8) e.names.add(o.name); });
+            }
+            return Object.entries(by).filter(([, e]) => e.shown > 8).sort((a, b) => b[1].shown - a[1].shown).slice(0, 30)
+                .map(([k, e]) => `${k}: ${e.tops} шт, частей ${e.meshes} (видимых ${e.shown}, с тенью ${e.shadow}), материалов ${e.mats.size}, геометрий ${e.geos.size}; userData ${[...e.ud].join(',')}; имена ${[...e.names].join(',')}`);
+        });
+        console.log('\nкрупные вещи сцены:\n  ' + ow.join('\n  '));
+        const grp = await page.evaluate(() => {
+            const g = window.__zns.game, out = [];
+            for (const top of g.scene.children) {
+                if (top.name || Object.keys(top.userData || {}).length || top.type !== 'Group' || !top.visible) continue;
+                let n = 0; const nm = new Set(); top.traverseVisible((o) => { if (o.isMesh) { n++; if (o.name && nm.size < 5) nm.add(o.name); } });
+                if (n < 3) continue;
+                const p = top.position; out.push(`${n} ч. @${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)} дети:${top.children.length} ${[...nm].join(',')} ${top.children.slice(0, 4).map((c) => c.name || Object.keys(c.userData || {}).slice(0, 2).join('/') || c.type).join('|')}`);
+            }
+            return out.sort((a, b) => parseInt(b) - parseInt(a)).slice(0, 25);
+        });
+        console.log('\nбезымянные группы (видимых частей):\n  ' + grp.join('\n  '));
+    }
+    if (SCAN) {
+        const sc = await page.evaluate(scanDirs);
+        console.log('\nнаправления (градусы: вызовов, треугольников, игра мс; кто в кадре — мешей; тени — отбрасывающих):');
+        for (const d of sc) console.log(`  ${String(d.deg).padStart(3)}° ${String(d.calls).padStart(5)} ${String(d.tris).padStart(8)} ${String(d.game).padStart(5)}  ${d.who.map(([k, v]) => k + ' ' + v).join(', ')}\n        тени: ${d.shadows.map(([k, v]) => k + ' ' + v).join(', ')}`);
+    }
     if (KEYS) await page.evaluate(() => { window.__KEYS = true; });
     const r = await page.evaluate(scene, FRAMES);
     if (KEYS) console.log('\nпрогретые ключи (Lambert/Phong):\n' + (await page.evaluate(() => window.__zns.game.renderer.info.programs.filter((p) => /Lambert|Phong/.test(p.name)).map((p) => p.name + ' ' + String(p.cacheKey).slice(0, 600)).join('\n'))));

@@ -91,6 +91,7 @@ const SHADOW_EXTENT = 45; // m around the player that receive the sun's shadows 
 const _defaultSun = new THREE.Vector3(50, 100, 50).normalize();
 const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _c = new THREE.Vector3();
 const _tm = new THREE.Matrix4();
+const _pm = new THREE.Matrix4(), _pc = new THREE.Color(); // (the pedestals' copies)
 import { CollisionWorld } from './Collision.js';
 import { Flora } from './Flora.js';
 import { WorldTrees } from './Trees.js';
@@ -570,35 +571,14 @@ export class VoxelWorld {
      * if held by magic. Returns the top surface Y.
      */
     createPedestal(x, z, { y = 0, godGift = true } = {}) {
+        // (all the pedestals are drawn together: each of their 7 parts is ONE instanced mesh for every pedestal — the stone foot,
+        // step, column, head, the gold rim, the glowing disc and the turning rune ring; Creative's 20 pedestals were 140 draws
+        // and 100 shadow casters — now 7 and 5. The group stays: their place, the gift of the gods' mark)
         const g = new THREE.Group();
         g.position.set(x, y, z);
-        // (shapes and materials shared by every pedestal — the temple's too)
-        const P = this._pedestalKit || (this._pedestalKit = {
-            stone: new THREE.MeshLambertMaterial({ color: 0x6d6a75 }),
-            stoneLight: new THREE.MeshLambertMaterial({ color: 0x8e8a99 }),
-            gold: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.9 }),
-            foot: new THREE.CylinderGeometry(1.35, 1.6, 0.45, 8), step: new THREE.CylinderGeometry(1.05, 1.2, 0.3, 8),
-            col: new THREE.CylinderGeometry(0.55, 0.7, 1.4, 8), head: new THREE.CylinderGeometry(0.95, 0.6, 0.3, 8),
-            rim: new THREE.TorusGeometry(0.95, 0.05, 6, 24), disc: new THREE.CircleGeometry(0.85, 24), ring: new THREE.TorusGeometry(0.7, 0.035, 6, 32),
-        });
-        const add = (geo, mat, yy) => { const m = new THREE.Mesh(geo, mat); m.position.y = yy; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
-        add(P.foot, P.stone, -0.25);
-        add(P.step, P.stoneLight, 0.12);
-        add(P.col, P.stoneLight, 0.97);
-        add(P.head, P.stone, 1.82);
-        const rim = add(P.rim, P.gold, 1.97);
-        rim.rotation.x = Math.PI / 2;
-        // magic: a glowing disc and a slowly turning rune ring above the top
-        const glowMat = new THREE.MeshBasicMaterial({ color: 0x9b7bff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
-        const disc = new THREE.Mesh(P.disc, glowMat);
-        disc.rotation.x = -Math.PI / 2;
-        disc.position.y = 1.99;
-        g.add(disc);
-        const ring = new THREE.Mesh(P.ring, new THREE.MeshBasicMaterial({ color: 0x7fe7ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-        ring.position.y = 2.6;
-        ring.rotation.x = Math.PI / 2;
-        g.add(ring);
-        // a gift of the gods (the temple's): no spell breaks or moves it
+        const K = this._pedestalKit || (this._pedestalKit = this._makePedestalKit());
+        const i = K.n++;
+        if (K.n > K.cap) this._growPedestalKit(K);
         if (godGift) g.userData.godGift = true;
         this.scene.add(g);
         const surfaceY = 1.97;
@@ -609,28 +589,106 @@ export class VoxelWorld {
         this.pedestals = this.pedestals || [];
         // (a gift of the gods — CLAUDE.md «Дары богов»: no spell breaks or moves it; it is no block: blasts,
         //  fire, «Inspirius», «Total Destruction», quakes, «Gather» take the ground round it, never it — it stands as it was)
-        this.pedestals.push({ ring, disc, t: Math.random() * 6, x, z, y, group: g, boxes: [b1, b2], godGift: true });
+        const p = { i, t: Math.random() * 6, spin: 0, x, z, y, group: g, boxes: [b1, b2], godGift: true };
+        this.pedestals.push(p);
+        this._placePedestal(p);
+        for (const m of K.meshes) m.count = K.n;
         return surfaceY;
+    }
+
+    /** The pedestals' shared parts: one instanced mesh each (made once; grown ×2 when full). */
+    _makePedestalKit() {
+        const K = {
+            n: 0, cap: 0,
+            stone: new THREE.MeshLambertMaterial({ color: 0x6d6a75 }),
+            stoneLight: new THREE.MeshLambertMaterial({ color: 0x8e8a99 }),
+            gold: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.9 }),
+            // (the glow: additive, so a copy's colour times its brightness is exactly the old opacity's look)
+            glow: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }),
+            runes: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
+            parts: null, meshes: [],
+        };
+        const rx = new THREE.Matrix4().makeRotationX(Math.PI / 2), rxn = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+        K.parts = [
+            { geo: new THREE.CylinderGeometry(1.35, 1.6, 0.45, 8), mat: K.stone, y: -0.25, shadow: true },
+            { geo: new THREE.CylinderGeometry(1.05, 1.2, 0.3, 8), mat: K.stoneLight, y: 0.12, shadow: true },
+            { geo: new THREE.CylinderGeometry(0.55, 0.7, 1.4, 8), mat: K.stoneLight, y: 0.97, shadow: true },
+            { geo: new THREE.CylinderGeometry(0.95, 0.6, 0.3, 8), mat: K.stone, y: 1.82, shadow: true },
+            { geo: new THREE.TorusGeometry(0.95, 0.05, 6, 24).applyMatrix4(rx), mat: K.gold, y: 1.97, shadow: true },
+            { geo: new THREE.CircleGeometry(0.85, 24).applyMatrix4(rxn), mat: K.glow, y: 1.99, glow: 0x9b7bff, disc: true },
+            { geo: new THREE.TorusGeometry(0.7, 0.035, 6, 32).applyMatrix4(rx), mat: K.runes, y: 2.6, glow: 0x7fe7ff, ring: true },
+        ];
+        this._growPedestalKit(K);
+        return K;
+    }
+
+    _growPedestalKit(K) {
+        const cap = Math.max(32, K.cap * 2, K.n);
+        const old = K.meshes;
+        K.meshes = K.parts.map((part, k) => {
+            const m = new THREE.InstancedMesh(part.geo, part.mat, cap);
+            m.frustumCulled = false; // (spread over the place: drawn as one)
+            m.castShadow = !!part.shadow;
+            m.receiveShadow = !!part.shadow;
+            m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            if (part.glow) { m.setColorAt(0, _pc.setHex(part.glow)); m.instanceColor.setUsage(THREE.DynamicDrawUsage); }
+            m.userData.godGift = true;
+            m.userData.shared = true;
+            m.name = 'pedestals';
+            const was = old[k];
+            if (was) {
+                m.instanceMatrix.array.set(was.instanceMatrix.array.subarray(0, Math.min(was.instanceMatrix.array.length, m.instanceMatrix.array.length)));
+                if (was.instanceColor) m.instanceColor.array.set(was.instanceColor.array.subarray(0, Math.min(was.instanceColor.array.length, m.instanceColor.array.length)));
+                this.scene.remove(was);
+                was.dispose();
+            }
+            m.count = K.n;
+            this.scene.add(m);
+            return m;
+        });
+        K.cap = cap;
+    }
+
+    /** One pedestal's copies put in place (its ring turned and lifted, its glow as bright as now). */
+    _placePedestal(p) {
+        const K = this._pedestalKit;
+        K.parts.forEach((part, k) => {
+            const m = K.meshes[k];
+            let yy = p.y + part.y;
+            if (part.ring) { yy = p.y + 2.6 + Math.sin(p.t * 1.6) * 0.08; _pm.makeRotationY(-p.spin).setPosition(p.x, yy, p.z); } else _pm.makeTranslation(p.x, yy, p.z);
+            m.setMatrixAt(p.i, _pm);
+            m.instanceMatrix.needsUpdate = true;
+            if (part.glow) {
+                const k2 = part.disc ? (0.35 + Math.sin(p.t * 2.2) * 0.12) / 0.45 : 1; // (the disc breathes: its brightness, as its opacity did)
+                m.setColorAt(p.i, _pc.setHex(part.glow).multiplyScalar(k2));
+                m.instanceColor.needsUpdate = true;
+            }
+        });
     }
 
     /** Take away the pedestals standing at these points (the temple leaving with its planet). */
     removePedestals(points) {
+        const K = this._pedestalKit;
         for (const p of [...(this.pedestals || [])]) {
             if (!points.some((q) => Math.abs(q.x - p.x) < 0.01 && Math.abs(q.z - p.z) < 0.01)) continue;
             this.scene.remove(p.group);
-            p.ring.material.dispose(); p.disc.material.dispose();
             for (const id of p.boxes) this.collision.removeBox(id);
             this.pedestals.splice(this.pedestals.indexOf(p), 1);
         }
+        if (!K) return;
+        // (the copies packed again: the ones left, in order)
+        K.n = this.pedestals.length;
+        this.pedestals.forEach((p, i) => { p.i = i; this._placePedestal(p); });
+        for (const m of K.meshes) m.count = K.n;
     }
 
     /** Rune rings turn and breathe. */
     _animatePedestals(dt) {
+        if (!this._pedestalKit) return;
         for (const p of this.pedestals || []) {
             p.t += dt;
-            p.ring.rotation.z += dt * 0.8;
-            p.ring.position.y = 2.6 + Math.sin(p.t * 1.6) * 0.08;
-            p.disc.material.opacity = 0.35 + Math.sin(p.t * 2.2) * 0.12;
+            p.spin += dt * 0.8;
+            this._placePedestal(p);
         }
     }
 

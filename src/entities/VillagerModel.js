@@ -20,6 +20,7 @@
 
 import { ARENA_MODES, arenaPose } from './ArenaPoses.js';
 import * as THREE from 'three';
+import { FarShape } from '../core/FarShape.js';
 import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
 
@@ -1257,14 +1258,17 @@ export class VillagerModel {
     setFar(on) {
         if (on && (this.torch || this.blanket || this.mat || this.look.skeleton || this.limbs)) on = false;
         if (!on) {
-            if (this._far) { this._far = false; this.root.visible = true; if (this._lod) this._lod.visible = false; }
+            if (this._far) { this._far = false; this._one?.set(false); }
             return;
         }
         // (a crowd going far at once — a settlement woken, a flight over a town: its one-shape copies are made a few
         // a frame, the rest stay as they are a moment longer — the next look of CastleLife asks again)
-        if (!this._lod && !lodBuildAllowed()) return;
+        if (!this._one && !lodBuildAllowed()) return;
         this._far = true;
-        this._refreshLod();
+        // (the one shape is moved by the video card — FarShape: its parts are the bones; nothing remade on the processor
+        // at each pose, as the old copy was — 10–22 ms frames when a town's people went far at once in flight)
+        if (!this._one) { this._one = new FarShape(this.group, { cache: false }); this.group.userData.farRadius = 4.5; }
+        if (!this._one.on) this._one.set(true); else this._one.check(); // (a tool taken, a red flash: the shape follows)
     }
 
     /** The far shape made again from the parts as they are posed now. */
@@ -1856,6 +1860,7 @@ export class VillagerModel {
     dispose() {
         this.group.parent?.remove(this.group);
         if (this._lod) { this._lod.geometry.dispose(); this._lod = null; }
+        this._one?.dispose();
         if (!this._gone) { this._gone = true; for (const m of this._meshes) giveGeo(m.geometry); for (const m of this._propMeshes) giveGeo(m.geometry); } // (its shapes: given back once)
     }
 }
@@ -1865,6 +1870,9 @@ export class VillagerModel {
  * the hit and highlight materials. Their geometries are private clones, so
  * the caller may dispose them freely.
  */
+/** The materials a person is drawn with (its own, a red flash, a highlight) — their one-shape twins warmed (Game.prewarm). */
+export function villagerMaterials() { return [MAT, HIT_MAT, HL_MAT]; }
+
 export function prewarmVillagers() {
     const out = [];
     const add = (v) => { out.push(v.group); return v; };

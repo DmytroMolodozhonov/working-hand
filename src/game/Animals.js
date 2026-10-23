@@ -51,7 +51,7 @@ import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, pulseGolden } from './AppleTrees.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
-export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 1, THINK: 0.05, THINK_DISTANT: 0.1 };
+export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1 };
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
 
 export { animalModel };
@@ -1617,13 +1617,12 @@ export class Animals {
         if (a.lie > 0.01) foldLegs(a.model, a.lie); // (lying: the legs folded under the body)
         if (a.model.userData.wings && !a.dead) this._pigBody(a, dt || 1 / 60); // (a pig's wings; Leviosa calls this without dt)
         if (a.form || a.formK || a.model.userData.minotaur || a.model.userData.bronze) this.guards.look(a, dt || 1 / 60); // (the bull / the minotaur)
-        if (a.far?.on) a.far.refresh(); // (drawn far as one shape: posed anew)
     }
 
     /**
-     * How each animal is drawn this frame (before they think and move): near — as it is, every frame; far (FAR.LOD m+) —
-     * one shape per material (FarShape: ~22 parts → 3–5 draws), its pose renewed every FAR.STEP s (FAR.DISTANT_STEP
-     * beyond FAR.DISTANT); out of the camera's picture — not posed at all until it comes into view (then at once).
+     * How each animal is drawn this frame (before they think and move): one shape per material at every distance (FarShape:
+     * ~22 parts → 3–5 draws, the parts moved by the video card); far (FAR.LOD m+) its pose renewed every FAR.STEP s
+     * (FAR.DISTANT_STEP beyond FAR.DISTANT); out of the camera's picture — not posed at all until it comes into view (then at once).
      * A herd of the evening's «herds by area» (Creative's start: ~30 animals round) cost ~150 draws and ~1.5 ms of posing.
      */
     _lookFar(me, dt = 0) {
@@ -1641,13 +1640,14 @@ export class Animals {
             // (calm and far: it thinks every FAR.THINK / FAR.THINK_DISTANT s; anything happening — fleeing, a fight, a master — every frame)
             const calm = plain && d > FAR.LOD && a.state === 'graze' && !a.attacker && a.servantOf == null && !a.tamed && !a.pen;
             a.thinkEvery = calm && dt > 0 ? Math.max(1, Math.min(8, Math.round((!seen || d > FAR.DISTANT ? FAR.THINK_DISTANT : FAR.THINK) / dt))) : 1;
-            const want = plain && d > FAR.LOD;
+            const want = plain; // (one shape at every distance: the video card poses it — FarShape)
             if (want && !a.far?.on) {
-                if (builds >= FAR.BUILDS) continue; // (a herd come far at once: a few a frame)
+                if (builds >= FAR.BUILDS) continue; // (a herd come at once: a few a frame — the shapes of a kind are made once)
                 builds++;
                 if (!a.far) { a.far = new FarShape(a.model); a.model.userData.farRadius = 3.5 * (a.group.scale.x || 1); }
                 a.far.set(true);
-            } else if (!want && a.far?.on) a.far.set(false);
+            } else if (want && (a.farT = (a.farT || 0) + dt) > 0.5) { a.farT = 0; a.far.check(); } // (a part shown / hidden / repainted by the game)
+            else if (!want && a.far?.on) a.far.set(false);
         }
     }
 

@@ -32,6 +32,7 @@ import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
 import { DRAGON_HP, DRAGON_KINDS, KIND_IDS, DRAGON, rollDragon, flameReach, dragonDamage, isFire, rollHoard, HANDFUL, dragonWand, dragonEgg } from './DragonKinds.js';
 import { dragonModel, poseDragon, BODY, SCALE } from './DragonModel.js';
+import { FarShape } from '../core/FarShape.js';
 import { LAIR } from '../world/DragonLairs.js';
 import { newUid } from './ItemTypes.js';
 import { createRng } from '../core/math.js';
@@ -127,13 +128,18 @@ export class Dragons {
         model.position.copy(pos);
         model.rotation.y = yaw;
         this.game.scene.add(model);
+        // (drawn as one shape per material, its ~80 parts moved by the video card — FarShape; it was 82 draws)
+        model.updateMatrixWorld(true);
+        model.userData.farRadius = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).length() * 0.75 + 4;
+        const one = new FarShape(model);
+        one.set(true);
         const K = DRAGON_KINDS[kind];
         const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
         shadow.rotation.x = -Math.PI / 2;
         shadow.visible = false;
         this.game.scene.add(shadow);
         const d = {
-            id, kind, react, flame, hp, lair, slot, model, group: model, shadow, mode, size: SCALE * K.size,
+            id, kind, react, flame, hp, lair, slot, model, group: model, shadow, mode, size: SCALE * K.size, one, oneT: 0,
             isDragon: true, dead: false, get isDead() { return this.dead; }, get position() { return this.model.position; },
             bodyCapsule: (out) => dragonBody(d, out),
             t: Math.random() * 10, fly: mode === 'air' ? 1 : 0, sleep: mode === 'sleep' ? 1 : 0, walk: 0, mouth: 0, look: 0, lower: 0, sweep: 0, spread: 0,
@@ -149,6 +155,7 @@ export class Dragons {
         const i = this.list.indexOf(d);
         if (i >= 0) this.list.splice(i, 1);
         this.game.scene.remove(d.model);
+        d.one?.dispose();
         this.game.scene.remove(d.shadow);
         d.shadow.geometry.dispose(); d.shadow.material.dispose();
         // (the model's geometry and materials are shared between dragons: DragonModel)
@@ -1322,6 +1329,7 @@ export class Dragons {
         this._t += dt;
         this._lairT -= dt;
         if (this._lairT <= 0) { this._lairT = 1; this._updateLairs(); if (this.auth) this._watchHoard(); }
+        for (const d of this.list) if (d.one && (d.oneT += dt) > 0.5) { d.oneT = 0; d.one.check(); } // (a part repainted / hidden by the game: the one shape follows)
         if (this.auth) {
             this._wanderers(dt);
             for (const d of [...this.list]) {

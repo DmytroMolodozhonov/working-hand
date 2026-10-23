@@ -174,36 +174,34 @@ test('wrapText: ≤ 28 chars per line, ≤ 4 lines', () => {
     assert.ok(wrapText('Ааааааааааааааааааааааааааааааааааааааааа').every((l) => l.length <= 28));
 });
 
-test('far away one shape (setFar): the same points as the parts in their pose, the parts hidden; near again — the parts', () => {
+test('far away one shape (setFar): drawn as one shape moved by the video card — the same points as the parts in their pose, the parts hidden; near again — the parts', () => {
     const v = new VillagerModel(villagerLook(7, 'knight'), { tool: 'sword', shield: true });
     v.group.position.set(40, 3, -12);
     v.group.rotation.y = 0.7;
     run(v, 0.4, { mode: 'walk', speed: 1.6 });
+    const parts = v._meshes.filter((m) => m.visible);
     v.setFar(true);
-    const lod = v._lod, parts = v._meshes.filter((m) => m.visible);
-    assert.ok(lod?.visible && !v.root.visible, 'one shape drawn, the parts not');
-    assert.equal(lod.geometry.attributes.position.count, parts.reduce((n, m) => n + m.geometry.attributes.position.count, 0));
-    // every point where its part puts it (in the person's own space)
+    const shown = () => { const out = []; v.group.traverseVisible((o) => { if (o.isMesh) out.push(o); }); return out; };
+    const one = shown();
+    assert.ok(one.length >= 1 && one.length <= 3 && one.every((m) => m.isSkinnedMesh), `one shape per material drawn, the parts not (${one.length})`);
+    assert.equal(one.reduce((n, m) => n + m.geometry.attributes.position.count, 0), parts.reduce((n, m) => n + m.geometry.attributes.position.count, 0));
+    // every point where its part puts it (the card's bones are the parts)
     v.group.updateMatrixWorld(true);
-    const inv = v.group.matrixWorld.clone().invert(), p = new THREE.Vector3(), q = new THREE.Vector3();
-    let o = 0, worst = 0;
-    for (const m of parts) {
-        const P = m.geometry.attributes.position;
-        for (let i = 0; i < P.count; i += 7) {
-            p.fromBufferAttribute(P, i).applyMatrix4(m.matrixWorld).applyMatrix4(inv);
-            q.fromBufferAttribute(lod.geometry.attributes.position, o + i);
-            worst = Math.max(worst, p.distanceTo(q));
-        }
-        o += P.count;
-    }
+    for (const m of one) m.skeleton.update();
+    const world = [], p = new THREE.Vector3();
+    for (const m of parts) { const P = m.geometry.attributes.position; for (let i = 0; i < P.count; i++) world.push(p.fromBufferAttribute(P, i).applyMatrix4(m.matrixWorld).clone()); }
+    let worst = 0;
+    const box = new THREE.Box3(), box2 = new THREE.Box3().setFromPoints(world);
+    for (const m of one) for (let i = 0; i < m.geometry.attributes.position.count; i++) box.expandByPoint(m.boneTransform(i, p).applyMatrix4(m.matrixWorld));
+    for (const k of ['min', 'max']) for (const a of ['x', 'y', 'z']) worst = Math.max(worst, Math.abs(box[k][a] - box2[k][a]));
     assert.ok(worst < 1e-4, `off by ${worst}`);
     // a torch at night: drawn as it is
     v.setTorch(true);
     v.setFar(true);
-    assert.ok(v.root.visible && !lod.visible);
+    assert.ok(shown().every((m) => !m.isSkinnedMesh));
     v.setTorch(false);
     v.setFar(true);
     v.setFar(false);
-    assert.ok(v.root.visible && !lod.visible, 'near: the parts again');
+    assert.ok(shown().every((m) => !m.isSkinnedMesh) && parts.every((m) => m.visible), 'near: the parts again');
     v.dispose();
 });
