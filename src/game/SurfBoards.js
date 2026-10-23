@@ -642,7 +642,7 @@ export class SurfBoards {
     /** One foot onto the board (the other leg paddles). */
     mount(b, foot = 'left') {
         if (typeof b === 'string') b = this.reg.map.get(b);
-        if (!b) return false;
+        if (!b || this.game.monster?.active) return false; // (the monster form: a board under a 24 m body — no)
         const m = this._ensureModel(b);
         if (this.hold?.id === b.id) {
             // (the board in the hands, on the water: the hands let it go as the foot goes on)

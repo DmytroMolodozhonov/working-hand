@@ -117,7 +117,8 @@ export function playerSnapshot(game) {
         const i = slots.findIndex((s) => !s);
         if (i >= 0) slots[i] = { kind: 'weapon', type: h.weapon.type, id: h.weapon.id, magic: !!h.weapon.magic, bonus: h.weapon.bonus || 0, ench: h.weapon.ench || undefined };
     }
-    const p = game.character.group.position;
+    // (the monster form is never saved: the man's place and health are — MonsterForm.js; it ends on leaving)
+    const p = game.monster?.active ? game.monster.humanPos() : game.character.group.position;
     return {
         slots,
         extraSlots: inv ? Math.max(0, inv.slots.length - 5) : 0,
@@ -126,7 +127,7 @@ export function playerSnapshot(game) {
         ownWand: inv?.ownWand || undefined, // my own wand (lying on the ground when the game was left: «Акцио» brings it back, the stand-in goes — Inventory.gotWand)
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
-        hp: game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
+        hp: game.monster?.active ? game.monster.origHp : game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
         mp: game.combat?.enabled ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn

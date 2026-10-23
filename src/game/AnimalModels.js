@@ -1062,3 +1062,6 @@ export function animateMinotaur(m, o) {
     ud.arms[0].rotation.x = L(ud.arms[0].rotation.x, rArm); ud.arms[0].userData.elbow.rotation.x = L(ud.arms[0].userData.elbow.rotation.x, rEl);
     ud.arms[1].rotation.x = L(ud.arms[1].rotation.x, lArm); ud.arms[1].userData.elbow.rotation.x = L(ud.arms[1].userData.elbow.rotation.x, lEl);
 }
+
+/** (MonsterBody.js — the monster form of the hero — draws its body with the same tools) */
+export { sweep, keys, hideTexture, rng as modelRng };

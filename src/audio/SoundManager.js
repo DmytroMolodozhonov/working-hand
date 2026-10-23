@@ -574,7 +574,7 @@ export class SoundManager {
             ['collapse', () => this._synthCollapse()], ['groan', () => this._synthGroan()], // (a building giving way, coming down — Structure.js)
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['boneClack', () => this._synthKnock(820, 0.09)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
-            ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
+            ['snowStep', () => this._synthSnowStep()], ['land', () => this._synthKnock(55, 0.22)], ['giantStep', () => this._synthGiantStep()], // (the monster form's steps — MonsterForm.js) ['snowman', () => this._synthSnowman()], ['house_stone', () => this._synthKnock(110, 0.35)],
             // («Create an Ice Castle», «Ice Bridge» — IceMagic.js)
             ['iceBell', () => this._synthIceBell()], ['iceFloor', () => this._synthIceFloor(2.6)],
             ['iceDone', () => this._synthChime([523, 659, 784, 1047, 1319, 1568, 2093], 3.2, 1.5)], ['iceChime', () => this._synthChime([1568, 2093, 2637, 3136], 1.4, 3)],
@@ -1443,6 +1443,35 @@ export class SoundManager {
         if (!this.context) return;
         if (!this.sounds.land) this.sounds.land = this._synthKnock(55, 0.22);
         this._play(this.sounds.land, 0.6 * volume, 0.9 + Math.random() * 0.2);
+    }
+
+    /**
+     * A step of the monster form (MonsterForm.js, ×7): a deep thud the ground answers — the foot's blow (25–32 Hz),
+     * the earth crunching under it, a short rumble rolling away; at `position`, heard far (the others too).
+     */
+    playGiantStep(position, volume = 1) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        if (!this.sounds.giantStep) this.sounds.giantStep = this._synthGiantStep();
+        if (position) this._playAt(this.sounds.giantStep, position, 1.3 * volume, 30, 0.88 + Math.random() * 0.2);
+        else this._play(this.sounds.giantStep, 0.9 * volume, 0.88 + Math.random() * 0.2);
+    }
+
+    _synthGiantStep() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 0.9);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        let lp = 0, lp2 = 0, ph = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            const f = 32 - 9 * Math.min(1, t * 3); // (the thud's pitch sinks as the ground gives)
+            ph += (2 * Math.PI * f) / sr;
+            lp += ((Math.random() * 2 - 1) - lp) * 0.06;  // the rumble (low noise)
+            lp2 += ((Math.random() * 2 - 1) - lp2) * 0.5; // the crunch (the earth, the stones under the foot)
+            const thud = Math.sin(ph) * Math.exp(-t * 6) * 1.1;
+            const crunch = lp2 * Math.exp(-t * 28) * 0.45 * (0.6 + 0.4 * Math.sin(t * 310));
+            const roll = lp * 2.2 * Math.exp(-t * 3.2) * Math.min(1, t * 20);
+            d[i] = Math.max(-1, Math.min(1, (thud + crunch + roll) * Math.min(1, t * 2500) * 0.85));
+        }
+        return buf;
     }
 
     /** A step on snow: a soft muffled crunch (the crystals giving under the foot). */

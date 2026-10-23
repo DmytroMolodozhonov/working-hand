@@ -71,7 +71,7 @@ export class WandSwap {
         const L = it.held.left, R = it.held.right;
         // (only a HELD spell stops it — Concentration: a lit Lumos or a spell just said never does; that was why the
         // author's wands never changed hands)
-        if (!L || !R || L.item.kind !== 'wand' || R.item.kind !== 'wand' || g.focus?.held?.()) { this.timer.reset(); this._told = false; return; }
+        if (!L || !R || L.item.kind !== 'wand' || R.item.kind !== 'wand' || g.focus?.held?.() || g.monster?.active) { this.timer.reset(); this._told = false; return; }
         const [a0, a1, b0, b1] = this._p;
         this._ends(L, a0, a1);
         this._ends(R, b0, b1);

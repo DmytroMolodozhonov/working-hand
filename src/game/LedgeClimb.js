@@ -125,6 +125,7 @@ export class LedgeClimb {
             const o = this.climb?.holds[side === 'left' ? 'right' : 'left'];
             if (o && Math.abs(e.T - (o.y - 0.06)) > UNEVEN) continue; // (the other hand is on another edge, far up or down)
             if (!this.climb) {
+                if (this.game.monster?.active) return; // (the monster steps over a ledge: nothing to climb)
                 this.climb = { T: e.T, L: e.L, ix: e.ix, iz: e.iz, base: feet, lift: 0, holds: {}, over: null };
                 this._hint('🧗 Рука на краю. Положите обе ладони на край и тяните руки вниз, к себе — вы подтянетесь и выберетесь наверх');
             }

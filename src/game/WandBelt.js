@@ -74,6 +74,8 @@ export class WandBelt {
         const g = this.game, ch = g.character, items = g.items, inv = g.inventory;
         if (!ch || !items || !inv) return;
         this._show();
+        if (this.model) this.model.visible = !g.monster?.active; // (the monster form: no wand — MonsterForm.js)
+        if (g.monster?.active) return;
         if (!g.currentPose || g.combat?.immobile || g.combat?.dead || ch.flying) return;
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();

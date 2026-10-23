@@ -556,6 +556,28 @@ export class Hud {
         el.classList.toggle('low', low);
     }
 
+    /**
+     * The monster form's clock (MonsterForm.js): a dark-red plate at the top right — a wolf's head, the time left
+     * «9:58», a thin bar running down, the monster's HP. `left` null hides it; under 30 s it pulses.
+     */
+    setMonsterTimer(left, frac = 1, hp = null, maxHp = null, text = null) {
+        let el = this._monEl;
+        if (left == null) { if (el) el.style.display = 'none'; return; }
+        if (!el) {
+            el = this._monEl = document.createElement('div');
+            el.id = 'hud-monster';
+            el.innerHTML = '<div class="head">🐺</div><div class="txt"><div class="left"></div><div class="bar"><i></i></div><div class="hp"></div></div>';
+            document.body.appendChild(el);
+            el._left = el.querySelector('.left'); el._bar = el.querySelector('.bar i'); el._hp = el.querySelector('.hp');
+        }
+        el.style.display = 'flex';
+        if (el._left.textContent !== left) el._left.textContent = left;
+        el._bar.style.width = `${Math.round(Math.max(0, Math.min(1, frac)) * 1000) / 10}%`;
+        const hpText = text || (hp != null ? `❤ ${Math.ceil(hp)} / ${maxHp}` : '');
+        if (el._hp.textContent !== hpText) el._hp.textContent = hpText;
+        el.classList.toggle('low', frac < 0.05);
+    }
+
     setMultiplayer(html) {
         if (!this.el.mp) return;
         if (!html) { this.el.mp.classList.add('hidden'); return; }

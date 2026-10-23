@@ -368,7 +368,7 @@ export class CreatureImpact {
         const c = K?.get(this.game, m.id);
         if (!c || !Array.isArray(m.i)) return 'none';
         const r = this.game.remotes?.get(fromId);
-        if (r) { K.centre(c, _v); if (Math.hypot(_v.x - r.position.x, _v.z - r.position.z) > CREATURE.REACH) return 'none'; }
+        if (r) { K.centre(c, _v); if (Math.hypot(_v.x - r.position.x, _v.z - r.position.z) > CREATURE.REACH * (r.character?.size || 1)) return 'none'; } // (a monster's arm — MonsterForm.js — reaches 7× as far)
         const v = new THREE.Vector3(+m.i[0] || 0, +m.i[1] || 0, +m.i[2] || 0).clampLength(0, IMPACT.MAX_IMPULSE);
         const head = m.h && Array.isArray(m.h.lp) ? { lp: m.h.lp.slice(0, 3).map((x) => Math.max(-1.5, Math.min(1.5, +x || 0))), dir: v.clone().normalize().toArray(), speed: Math.min(20, +m.h.sp || 0) } : null;
         return this.apply(c, { v, by: fromId, kind: String(m.k || 'push').slice(0, 10), head });

@@ -799,6 +799,7 @@ export class Animals {
     tryMount() {
         const g = this.game;
         if (this.riding) { this.dismount(); return; }
+        if (g.monster?.active) return; // (a 24 m monster on a horse: no — MonsterForm.MONSTER_BLOCKS)
         const me = g.character.group.position;
         let best = null;
         for (const a of this.list) {

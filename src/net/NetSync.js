@@ -290,6 +290,7 @@ export class NetSync {
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
                 dk: g.dark?.skin || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
+                mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
             }, true);
         }
         // Water ball in my hand
@@ -979,6 +980,7 @@ export class NetSync {
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
+            case 'mpen': if (m.by !== this.me) g.monsterCircle?.onNet(m); break; // (a drawn «Пентаграмма страшного монстра» glows / burns out: MonsterCircle.js)
             case 'tdes': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)

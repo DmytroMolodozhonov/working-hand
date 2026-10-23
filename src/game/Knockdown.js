@@ -113,6 +113,8 @@ export class Knockdown {
     /** Off the feet: falls `dir`, lies at least `down` s, then gets up by the player's own movement. */
     knock({ dir, down = KNOCK.MIN_DOWN, by = null, kind = 'push', cause = null, toss = 0, strength = 0.3, fly = false, tumble = 0 } = {}) {
         const g = this.game, ch = g.character;
+        // the monster form: nothing but the gods' spells, «Инспириус», «Total Destruction Максима» throw it down (MonsterForm.js)
+        if (g.monster?.active && !g.monster.knocks(kind, cause)) { this.held?.({ dir, v: toss }); return false; }
         // (the author: 5 s at least + 1…5 s by chance; «Up» or a friend's hand still lift one earlier)
         if (down !== Infinity) down = Math.max(down ?? KNOCK.MIN_DOWN, KNOCK.MIN_DOWN) + KNOCK.EXTRA_DOWN[0] + Math.random() * (KNOCK.EXTRA_DOWN[1] - KNOCK.EXTRA_DOWN[0]);
         if (kind !== 'Stupefy' && !g.combat?.stunned && !g.combat?.frozen) this.daze(strength); // (not the stun's or the ice's stiff fall)

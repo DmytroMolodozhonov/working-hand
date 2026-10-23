@@ -4,6 +4,7 @@
  * smoothly interpolated, with a floating name tag.
  */
 
+import { applyRemoteMonster } from '../game/MonsterTransform.js';
 import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
 import { CombatVisuals } from '../game/Combat.js';
@@ -87,6 +88,7 @@ export class RemoteAvatar {
         if (s.ft !== undefined) this.fatigue = s.ft;
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
         this.imperius = !!s.im; // («Империус»: their mind is in another body — their eyes burn white)
+        this.monsterForm = Array.isArray(s.mo) ? s.mo : null; // (the monster form: drawn in update — MonsterTransform.applyRemoteMonster)
         if (this.imperius !== !!this._impShown) { this._impShown = this.imperius; this.character.setImperiusEyes(this.imperius); }
         this.dark = Math.max(0, Math.min(100, Number(s.dk) || 0)); // (их уровень тьмы: метки на теле — DarkSkin.js; волшебники читают его как данные)
         if (this.dark !== this._darkShown) { this._darkShown = this.dark; this.character.setDarkLevel(this.dark); }
@@ -126,6 +128,7 @@ export class RemoteAvatar {
         const s = this.target;
         if (!s) return;
         const ch = this.character;
+        if (this.monsterForm || this._monster?.on || (ch.size || 1) !== 1) applyRemoteMonster(this, this.monsterForm, dt); // (×7, the monster's body on their bones)
         ch.restoreArms(); // (an arm drawn reaching last frame — a hand held — back to the tracked one first)
         const k = Math.min(1, dt * 12);
         let p = s.s.p;

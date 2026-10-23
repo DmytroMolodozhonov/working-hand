@@ -43,6 +43,7 @@ export class BodyImpact {
         const g = this.game, c = g.combat, ch = g.character;
         if (!c || c.dead || g.isDeadLocal || g.spiders?.held) return 'none';
         if (g.levitation?.lifted) { this._kickHead(o); return 'none'; }      // (the magic holds the body)
+        if (g.monster?.active && !g.monster.pushedBy(o)) return 'none'; // (the monster form: 7× the body, nothing simple moves it — MonsterForm.js)
         if (g.circleAttack?.holdsMe?.()) return 'none'; // (my «Circle Attack»: I stand on my island — nothing pushes me off)
         if (this._godsHold(o)) { this._note(o, 'blocked'); return 'blocked'; } // (the gods' shield: no spell moves me — ProtectionGods.js)
         if (o.blast && c.blastProof?.()) { this._note(o, 'blocked'); return 'blocked'; } // (a dome: a blast's wave never moves me — mine either)

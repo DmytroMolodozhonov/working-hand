@@ -88,19 +88,20 @@ export class Swimming {
         const g = this.game;
         const ch = g.character;
         const p = ch.group.position;
-        const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z, p.y - FEET + 0.3);
-        const w = w0 && g.ships?.dryAt(p.x, p.y - FEET + 0.2, p.z) ? null : w0; // (inside a floating hull it is dry)
+        const S = ch.size || 1; // (the monster form ×7 — MonsterForm.js: deep water comes up to its belt, it wades on)
+        const w0 = g.flight?.active ? null : this.waterAt(p.x, p.z, p.y - FEET * S + 0.3);
+        const w = w0 && g.ships?.dryAt(p.x, p.y - FEET * S + 0.2, p.z) ? null : w0; // (inside a floating hull it is dry)
         const pose = g.combat?.immobile ? null : g.currentPose; // (frozen in ice: the arms can't swim)
 
         // on a surfboard: the board holds you up (SurfBoards places the body)
         if (g.boards?.mounted) { this.swimming = false; this.underwater = false; this._leave(dt); this.air = Math.min(AIR_MAX, this.air + dt * 5); this._renderHud(); return; }
-        this.swimming = !!w && w.depth >= SWIM_DEPTH && p.y - FEET < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
+        this.swimming = !!w && w.depth >= SWIM_DEPTH * S && p.y - FEET * S < w.surface && !g.up?.rising && !g.levitation?.lifted && !g.ledge?.active; // («Up»: thrown up out of it; «Левиоса»: the caster's hand lifts me out of the water; the palms on the bank: the arms pull me out — LedgeClimb)
         if (this.swimming) this._swim(dt, w, pose);
         else this._leave(dt);
         this._updateRipples(dt);
 
         // Air (the eyes: lower when the body lies in the water)
-        this.underwater = !!w && p.y + EYES * Math.cos(this._tilted ? this.motion.tilt : 0) < w.surface - 0.05;
+        this.underwater = !!w && p.y + EYES * S * Math.cos(this._tilted ? this.motion.tilt : 0) < w.surface - 0.05;
         const now = performance.now();
         if (this.bubble && now > this.bubble.until) this._popBubble();
         if (this.underwater && !this.bubble) {
@@ -129,9 +130,10 @@ export class Swimming {
         const ch = g.character;
         const p = ch.group.position;
         const M = this.motion;
-        const bottomY = w.bottom + 0.5 + FEET - 0.05;
+        const S = ch.size || 1;
+        const bottomY = w.bottom + 0.5 + FEET * S - 0.05;
         // afloat, the eyes stay just above the water: the flatter the body lies, the lower its hips
-        const floatY = w.surface + 0.4 - EYES * Math.cos(M.tilt);
+        const floatY = w.surface + 0.4 - EYES * S * Math.cos(M.tilt);
         if (this.y == null) {
             // just came into the deep water: floating where the body is (it sinks no further)
             this.y = Math.min(p.y, floatY);

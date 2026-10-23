@@ -215,6 +215,7 @@ export class Rigging {
         if (!this.climb || this.climb.ship !== s) {
             const p = ch.group.position;
             s.pose.toLocal(p.x, p.y - PLAYER_GROUND_OFFSET, p.z, _l);
+            if (this.game.monster?.active) return; // (a rope ladder does not hold a monster)
             this.climb = { ship: s, ld, holds: {}, ly: _l.y };
             if (!this._told) { this._told = true; g.hud.setVoice('🪜 Вы держитесь за перекладину. Тяните руку вниз — тело поднимается; другой рукой хватайтесь выше', true); }
         }

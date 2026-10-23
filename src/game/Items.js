@@ -764,6 +764,8 @@ export class ItemSystem {
         for (const side of ['right', 'left']) {
             const h = this.held[side];
             if (!h) continue;
+            // (the monster form: the wand is gone from the hand while it lasts — it stays in its slot: MonsterForm.js)
+            if (g.monster?.hidesWand && h.item.kind === 'wand') { h.model.visible = false; continue; }
             const grip = ch.getGripObject(side);
             grip.getWorldPosition(h.model.position);
             const kind = h.item.kind;
@@ -791,7 +793,7 @@ export class ItemSystem {
         }
         if (this.justLet.size) { const t = performance.now(); for (const [uid, e] of this.justLet) if (t - e.at > REGRAB.MS) this.justLet.delete(uid); }
         if (this.worn.backpack) this._placeBackpack(this.worn.backpack.model, ch);
-        if (!g.currentPose || g.combat.dead) { this._netSend(dt); return; }
+        if (!g.currentPose || g.combat.dead || g.monster?.active) { this._netSend(dt); return; } // (a monster's paws take no little things)
         const now = performance.now();
         // pick up: an empty hand at a thing whose fingers CLOSE on it (a fist bumping into it takes nothing)
         for (const side of ['right', 'left']) {
@@ -1223,6 +1225,17 @@ export class ItemSystem {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 6;
                 g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), 0x9fd8ff, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
+            }
+            return;
+        }
+        if (item.stat === 'pentagram' && item.pentagram === 'monster') {
+            // (выученный рисунок — как выученное заклинание: смерть забирает, Legacy возвращает — PentagramMonster.js)
+            g.bonus.spells = { ...(g.bonus.spells || {}), PentagramMonster: true };
+            g.hud.setVoice?.('📜🔥 Свиток сгорел: теперь вы знаете <span style="color:#ff5a4a">пентаграмму страшного монстра</span> — круг концом палочки по земле, поперёк зубчатая пасть; встаньте в него', true);
+            const c = g.character.group.position;
+            for (let i = 0; i < 60; i++) {
+                const a = (i / 60) * Math.PI * 6;
+                g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), i % 3 ? 0xb3121e : 0x1a0404, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
             }
             return;
         }

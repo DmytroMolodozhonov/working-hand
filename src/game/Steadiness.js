@@ -72,7 +72,7 @@ export class Steadiness {
     }
 
     /** The skill as the rules see it (Creative: 100). */
-    get effective() { return this.game.config?.mode === 'creative' ? STEADY.MAX : this.skill; }
+    get effective() { return this.game.config?.mode === 'creative' || this.game.monster?.active ? STEADY.MAX : this.skill; } // (the monster form: 100 — MonsterForm.STEADY)
 
     /** Does the hero stay on their feet? opts: see holdChance. */
     holds(kind, opts = {}, rnd = Math.random) {

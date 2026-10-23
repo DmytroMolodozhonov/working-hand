@@ -97,6 +97,9 @@ import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
 import { BreakwardMark } from './BreakwardMark.js';
 import { Steadiness } from './Steadiness.js';
+import { MonsterTransform } from './MonsterTransform.js';
+import { MonsterCircle } from './MonsterCircle.js';
+import { monsterSamples } from '../entities/MonsterBody.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
 import { darkSamples } from '../entities/DarkSkin.js';
@@ -455,6 +458,8 @@ export class Game {
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
+        this.monster = new MonsterTransform(this); // «Пентаграмма страшного монстра»: ×7, 10 минут (MonsterForm.js)
+        this.monsterCircle = new MonsterCircle(this); // … её рисуют концом палочки по земле и встают в круг (MonsterCircle.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -1483,9 +1488,12 @@ export class Game {
         return r ? r.handPose(side) : null;
     }
 
-    damageLocalPlayer(amount) {
+    damageLocalPlayer(amount, kind = null) {
         if (this.isDeadLocal || this.config.mode === 'creative') return;
+        const mon = this.monster?.active ? this.monster : null; // (the monster form: MonsterForm.spellOnMonster)
+        if (mon) { amount = mon.filterDamage(amount, kind, null); if (!(amount > 0)) return; }
         this.playerHP -= amount;
+        if (mon && this.playerHP <= 0) { mon.fell(null, kind); return; }
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.hud.damageFlash();
         if (this.sound) this.sound.playHit();
@@ -1625,6 +1633,7 @@ export class Game {
 
     /** The hand holding a wand (null: none). While a wand is held, every spell is cast with that hand. */
     wandSide() {
+        if (this.monster?.hidesWand) return null; // (the monster form: no wand in the hand — MonsterForm.js)
         return this.items?.heldOf?.('wand')?.side || null;
     }
 
@@ -1662,6 +1671,12 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        // the monster form: no wand, no spells — only «стоп» to stop what is mine (MonsterForm.MONSTER_BLOCKS)
+        if (this.monster?.active && !(name === 'Stand' && /стоп|stop/i.test(text))) {
+            if (isFinal) this.hud.setVoice('🐺 В облике монстра колдовать нельзя — палочки нет', true);
+            this.lastCastWhy = 'в облике монстра колдовать нельзя';
+            return null;
+        }
         // «стоп» takes off any «Protection» of mine first — either hand, plain or the gods', the dome — whatever else it meets below
         if (name === 'Stand' && /стоп|stop/i.test(text) && this.combat.shield) { this.combat.dropShield('🛑 Стоп — щит снят'); this.sync?.stopSpells?.(); }
         // «Shield» / «Щит» with a swarm of things up: the things close into a wall (ItemSwarm.shield) — not the hand shield
@@ -3020,6 +3035,7 @@ export class Game {
      * game goes on (a host's death never closes the room for the others).
      */
     onLocalDeath(text, byId) {
+        this.monster?.end('dead', true); // (death: the monster form is gone at once — MonsterForm.js)
         this.burning?.onDeath?.(); // (death puts the fire out)
         const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
         // (the author: «умер — всё»: the hero starts anew in the same world; all they grew lies in the body — Legacy.js)
@@ -3225,6 +3241,7 @@ export class Game {
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
+        zoo.add(monsterSamples(), ...MonsterCircle.samples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js; черты на земле)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)
         for (const m of glowSamples()) zoo.add(m); // (the rune shell of an enchanted thing)
@@ -3578,7 +3595,7 @@ export class Game {
         this.mana?.update(dt); // (the beaten wizard's power flying to me)
         mark('эффекты'); // (sparks, smoke, flashes — apart from «мир», the land and its pieces)
         // See further while flying (smoothly), terrain streams in around the player
-        this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8);
+        this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : this.monster?.viewBoost || 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8); // (a 24 m monster sees further too)
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
         if (!this.space?.inSpace) this.world.update(this.character.group.position, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
@@ -3707,6 +3724,7 @@ export class Game {
         this._jumpStep(pose);
         this.steady.step(dt);
         this.darkExile.update(dt);
+        this.monster.update(dt); // (the monster form: the size, the clock, the steps, the fists — before the body walks)
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
@@ -4256,9 +4274,9 @@ export class Game {
             ch.getHeadPosition(this.camera.position);
             ch.getHeadQuaternion(this.camera.quaternion);
         } else {
-            _v1.copy(this.cameraOffset).applyAxisAngle(_v2.set(0, 1, 0), ch.group.rotation.y).add(ch.group.position);
+            _v1.copy(this.cameraOffset).multiplyScalar(ch.size || 1).applyAxisAngle(_v2.set(0, 1, 0), ch.group.rotation.y).add(ch.group.position);
             this.camera.position.lerp(_v1, frameAlpha(0.1, dt));
-            _v2.copy(ch.group.position).add(_v1.set(0, 2, 0));
+            _v2.copy(ch.group.position).add(_v1.set(0, 2 * (ch.size || 1), 0));
             // reading the open book: over the shoulder, the pages filling the view
             const rc = this.books?.readCam || this.scrolls?.readCam;
             this._readK = (this._readK || 0) + ((rc ? rc.k : 0) - (this._readK || 0)) * Math.min(1, dt * 6);
@@ -4298,9 +4316,10 @@ export class Game {
      */
     _feetY(p) {
         const ch = this.character;
-        const f = p.y - PLAYER_GROUND_OFFSET + CROUCH.DROP * (ch.lowK || 0);
+        const S = ch.size || 1; // (the monster form ×7: MonsterForm.js)
+        const f = p.y - (PLAYER_GROUND_OFFSET - CROUCH.DROP * (ch.lowK || 0)) * S;
         if (!ch.onGround || ch.swimY != null || this.flight?.active || this.ledge?.active) return f;
-        return Math.max(f, Math.min(ch.groundY, f + 1.05));
+        return Math.max(f, Math.min(ch.groundY, f + 1.05 * S));
     }
 
     /** Walking on snow: a soft crunch at every step (a step is ~0.8 m walking, longer running). */
@@ -4338,7 +4357,7 @@ export class Game {
      */
     _jumpOnto() {
         const ch = this.character, T = this.collision?.terrain, p = ch.group.position;
-        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2) return; // (a run carries it on already)
+        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2 || (ch.size || 1) > 1.01) return; // (a run carries it on already; a monster steps over by itself)
         const fx = -Math.sin(ch.group.rotation.y), fz = -Math.cos(ch.group.rotation.y);
         const feet = p.y - PLAYER_GROUND_OFFSET;
         for (let d = PLAYER_RADIUS + 0.1; d <= PLAYER_RADIUS + 0.9; d += 0.2) {
@@ -4368,7 +4387,8 @@ export class Game {
         if (!T?.solidIn) return false;
         const feet = this._feetY(p);
         // (over a step it stands on: from that step's top — the walls' test does the same, Collision)
-        const ix = Math.round(p.x), iz = Math.round(p.z), reach = Math.floor(feet + 1.05 + 0.5 + 1e-9);
+        const S = this.character.size || 1;
+        const ix = Math.round(p.x), iz = Math.round(p.z), reach = Math.floor(feet + 1.05 * S + 0.5 + 1e-9);
         const stand = T.floorBelow ? Math.max(feet, T.floorBelow(ix, iz, reach) - 0.5) : feet;
         return T.solidIn(ix, iz, reach + 1, Math.floor(stand + (this.character.bodyHeight?.(true) ?? BODY_H) + 1.5 - 1e-3));
     }
@@ -4381,9 +4401,12 @@ export class Game {
         if (w.length) {
             const o = this._wardP || (this._wardP = { x: 0, y: 0, z: 0 });
             o.x = p.x; o.y = this._feetY(p); o.z = p.z;
-            if (pushOut(o, PLAYER_RADIUS, w, 1, 'me')) { p.x = o.x; p.z = o.z; }
+            if (pushOut(o, PLAYER_RADIUS * (ch.size || 1), w, 1, 'me')) { p.x = o.x; p.z = o.z; }
         }
-        return this.collision.resolveCylinder(p, PLAYER_RADIUS, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, 1.05, true, ch.bodyHeight?.(true) ?? BODY_H);
+        // (the monster form: its body first smashes what it can — walls, fences, trees — and what stays is a wall: MonsterTransform)
+        if (this.monster?.active) this.monster.smashAt(p);
+        const S = ch.size || 1;
+        return this.collision.resolveCylinder(p, PLAYER_RADIUS * S, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, 1.05 * S, true, ch.bodyHeight?.(true) ?? BODY_H);
     }
 
     /**
@@ -4393,7 +4416,7 @@ export class Game {
      */
     _roofNeed(p) {
         const T = this.terrain, ch = this.character;
-        if (!T?.ceilingAbove || !T.floorBelow || !ch.onGround || ch.swimY != null) return 0;
+        if (!T?.ceilingAbove || !T.floorBelow || !ch.onGround || ch.swimY != null || (ch.size || 1) > 1.01) return 0; // (a monster does not stoop: it breaks the roof)
         const feet = this._feetY(p), reach = Math.floor(feet + 1.05 + 0.5 + 1e-9), r = PLAYER_RADIUS - 0.02;
         let need = 0;
         for (let iz = Math.round(p.z - r); iz <= Math.round(p.z + r); iz++) {
@@ -4418,7 +4441,7 @@ export class Game {
         const t = this.terrain?.data;
         if (!t?.raycast) return;
         const from = _v2.copy(ch.group.position);
-        from.y += this.knock?.down ? 0.4 : 1.2;
+        from.y += (this.knock?.down ? 0.4 : 1.2) * (ch.size || 1);
         if (this.collision.pointBlocked(from.x, from.y, from.z)) return; // (the body itself stuck: nothing better to do)
         const to = this.camera.position, d = _v1.subVectors(to, from), len = d.length();
         if (len < 1e-3) return;
@@ -4430,6 +4453,8 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
+        this.monsterCircle?.dispose();
+        this.monster?.dispose(); // (leaving: the form taken off first — the man's place and health are saved)
         this.ships?.dispose();
         this.inventory?.dispose();
         this.books?.dispose();

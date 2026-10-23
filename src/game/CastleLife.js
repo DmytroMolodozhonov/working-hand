@@ -2429,8 +2429,10 @@ export class CastleLife {
     _strike(v) {
         if (v.model.limbs?.rightArm != null) return; // (no sword arm any more)
         const fp = this._playerPos(v.foe);
-        if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4) return;
-        if (Math.abs(fp.y - 1.95 - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
+        // (a giant foe — the monster form ×7, MonsterForm.js: the sword reaches its legs from beside them)
+        const fs = v.foe === this.game.localId ? this.game.character?.size || 1 : this.game.remotes?.get(v.foe)?.character?.size || 1;
+        if (!fp || Math.hypot(fp.x - v.x, fp.z - v.z) > 3.4 + 0.48 * (fs - 1)) return;
+        if (Math.abs(fp.y - 1.95 * fs - v.y) > 2.6) return; // (he is up on a roof over my head: the sword cuts the air)
         if (!facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.MELEE)) return; // («лицом к цели»: a swing from the side / behind cuts the air)
         if (confusedMiss(v)) return; // (lost in Accentric's haze: the swing cuts the air — StrongSpells)
         const sq = v.cs?.squads?.get(v.foe);

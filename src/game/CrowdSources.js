@@ -14,8 +14,14 @@ export function crowdOf(g) {
     c.addSource((push) => {
         // the players (me and the others by the network) — the feet, 1.95 m under the eyes
         const me = g.character?.group?.position;
-        if (me && !g.isDeadLocal) push({ x: me.x, y: me.y - 1.95, z: me.z, r: BODY_R.player, ref: g.character, id: 'me', kind: 'player' });
-        for (const [id, r] of g.remotes || []) if (!r.dead && r.position) push({ x: r.position.x, y: r.position.y - 1.95, z: r.position.z, r: BODY_R.player, ref: r, id: String(id), kind: 'player' });
+        // (a player in the monster form — MonsterForm.js: ×7, the feet 14 m under the body's middle — is walked round as big as he is)
+        const ms = g.character?.size || 1;
+        if (me && !g.isDeadLocal) push({ x: me.x, y: me.y - 1.95 * ms, z: me.z, r: BODY_R.player * ms, ref: g.character, id: 'me', kind: 'player' });
+        for (const [id, r] of g.remotes || []) {
+            if (r.dead || !r.position) continue;
+            const rs = r.character?.size || 1;
+            push({ x: r.position.x, y: r.position.y - 1.95 * rs, z: r.position.z, r: BODY_R.player * rs, ref: r, id: String(id), kind: 'player' });
+        }
         // the castle / village people, wizards, travellers
         for (const v of g.castleLife?.byId?.values?.() || []) {
             if (v.dead || v.seated || v.climb || v.group?.visible === false) continue;

@@ -173,6 +173,19 @@ export class VoxelCharacter {
         this.jumpVel = { x: 0, z: 0 }; // the run carried on through the air (a long jump)
         this._jumpT = 0;
         this._planar = { x: 0, z: 0 }; // how fast the body has been walking (smoothed over ~0.5 s)
+        // the body's size (1; the monster form ×7 — MonsterForm.js): the group is scaled, the feet, the head's room,
+        // the walls' height, a step's reach go with it; sizeRun / jumpK — how much faster it runs and jumps
+        this.size = 1;
+        this.sizeRun = 1;
+        this.jumpK = 1;
+    }
+
+    /** The whole body this many times its size (the model by the group's scale: no new shapes). */
+    setSize(k) {
+        k = Math.max(0.2, +k || 1);
+        if (k === this.size) return;
+        this.size = k;
+        this.group.scale.setScalar(k);
     }
 
     /**
@@ -181,7 +194,7 @@ export class VoxelCharacter {
      * the body may jump (on the ground, not in water, not lying…). True: it left the ground.
      */
     jump(strength) {
-        const v = jumpSpeed(strength, this.gravityK);
+        const v = jumpSpeed(strength, this.gravityK) * (this.jumpK || 1);
         if (v < 1 || this.jumpAir || !this.onGround) return false;
         this.verticalVelocity = v;
         this.jumpAir = true;
@@ -199,7 +212,7 @@ export class VoxelCharacter {
     /** The jump turned out stronger while the body still went up (it went up higher): a little more push. */
     jumpBoost(strength) {
         if (!this.jumpAir || this.verticalVelocity <= 0 || this._jumpT > 0.25 || strength <= (this._jumpS || 0)) return;
-        const v = jumpSpeed(strength, this.gravityK) - G * this.gravityK * this._jumpT;
+        const v = jumpSpeed(strength, this.gravityK) * (this.jumpK || 1) - G * this.gravityK * this._jumpT;
         if (v > this.verticalVelocity) this.verticalVelocity = v;
         this._jumpS = strength;
     }
@@ -706,7 +719,7 @@ export class VoxelCharacter {
      * head ducks a little more by itself under a roof just too low (Game._roofNeed lowers it then).
      */
     bodyHeight(rock = false) {
-        return BODY_H - CROUCH.DROP * Math.min(1, this.crouchK + (rock ? CROUCH.DUCK : 0));
+        return (BODY_H - CROUCH.DROP * Math.min(1, this.crouchK + (rock ? CROUCH.DUCK : 0))) * (this.size || 1);
     }
 
     /**
@@ -766,7 +779,7 @@ export class VoxelCharacter {
             } else if (this.isRunning) {
                 const walkSpeed = 2.5, runSpeed = 9.75; // (the run: 30% faster than the first 7.5, as the author asked)
                 // (on one leg: hopping, no running; Dismember sets limbSpeed / canRun; runBonus: a caught running book; armPump: the arms working)
-                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (1 + this.armPump.bonus) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * (this.steadyK ?? 1) * walkK(this.gravityK); // (a heavy planet: slower)
+                const speed = (walkSpeed + (runSpeed - walkSpeed) * (this.canRun === false ? 0 : this.runIntensity)) * (this.speedScale ?? 1) * (this.runBonus ?? 1) * (1 + this.armPump.bonus) * (this.armorRun ?? 1) * (this.limbSpeed ?? 1) * (this.slowScale ?? 1) * (this.steadyK ?? 1) * (this.sizeRun || 1) * walkK(this.gravityK); // (a heavy planet: slower; the monster form: longer strides)
                 const moveDistance = speed * dt;
                 this.group.position.z -= Math.cos(this.group.rotation.y) * moveDistance;
                 this.group.position.x -= Math.sin(this.group.rotation.y) * moveDistance;
@@ -778,14 +791,15 @@ export class VoxelCharacter {
             }
             // Ground following + gravity (flat ground keeps the original baseY exactly)
             // the floor under the feet (not a ceiling / roof / cave rock above)
-            const feetNow = this.group.position.y - PLAYER_GROUND_OFFSET + this.bodyDrop();
+            const S = this.size || 1; // (the monster form: everything ×7 — the feet, the step, the head's room)
+            const feetNow = this.group.position.y - (PLAYER_GROUND_OFFSET - this.bodyDrop()) * S;
             // (going up a step the body eases up after the feet: they reach from the floor they stand on)
-            const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1)) : feetNow) + 1.1;
+            const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1 * S)) : feetNow) + 1.1 * S;
             const px = this.group.position.x, pz = this.group.position.z;
             const ground = collision ? (this.stepBoxes && collision.standAt ? collision.standAt(px, pz, reach) : collision.groundAt ? collision.groundAt(px, pz, reach) : collision.groundY(px, pz)) : -0.5;
             this.groundY = ground;
             const crouchDrop = this.knockedDown ? 1.45 * (1 - (this.liftUp || 0)) : this.bodyDrop();
-            const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
+            const targetY = ground + (PLAYER_GROUND_OFFSET - crouchDrop) * S;
             let y = this.group.position.y;
             // (up or down a ramp — the floor rising or sinking no steeper than the walk, BlockShapes.js: the feet keep to
             // it, no lag behind going up, no little falls going down; a block's step is still stepped up and fallen off)
@@ -808,7 +822,7 @@ export class VoxelCharacter {
                 let ny = y + this.verticalVelocity * dt;
                 // (thrown up under a cave roof / a ceiling: the head stops at the rock, never in it)
                 if (collision?.ceilingAt) {
-                    const roof = collision.ceilingAt(this.group.position.x, this.group.position.z, feetNow + 1.1) - HEAD_ROOM + PLAYER_GROUND_OFFSET - this.bodyDrop();
+                    const roof = collision.ceilingAt(this.group.position.x, this.group.position.z, feetNow + 1.1 * S) - (HEAD_ROOM - PLAYER_GROUND_OFFSET + this.bodyDrop()) * S;
                     if (ny > roof) { ny = Math.max(roof, targetY); if (this.verticalVelocity > 0) this.verticalVelocity = 0; }
                 }
                 this.group.position.y = Math.max(targetY, ny);

@@ -555,6 +555,7 @@ export class Combat {
 
     stun(seconds, byId, kind = 'stupefy') {
         if (this.godsKeepsOff(kind)) return; // (the gods' dome: no spell knocks me down — ProtectionGods.js)
+        if (this.game.monster?.active && !this.game.monster.stuns(kind)) return; // (the monster form: only the gods' spells stun it)
         this.stunLeft = Math.max(this.stunLeft || 0, seconds);
         this.stunBy = byId;
         this.stunKind = kind;
@@ -566,6 +567,7 @@ export class Combat {
     /** «Даст»: sand in the eyes and the joints — slowed for a while (every mode). */
     slow(seconds = SLOW.TIME, byId = null) {
         if (this.godsKeepsOff('Sands')) return; // (the gods' dome: no sand gets in)
+        if (this.game.monster?.active) return; // (the monster form: sand, chill — nothing slows it: MonsterForm.MONSTER_VS)
         this.slowLeft = Math.max(this.slowLeft || 0, seconds);
         this.slowBy = byId;
         if (this.game.character) this.game.character.slowScale = SLOW.SCALE;
@@ -984,6 +986,7 @@ export class Combat {
         if (!this.enabled || this.dead) return false;
         if (this.shieldFactor(from) >= 1 && this._blocked(from, 'Ice')) return false;
         if (this.game.armor?.guard('chill')) return false; // (a magic robe / the whole magic set: the cold does not take)
+        if (this.game.monster?.active) return true; // (the monster form: the cold does not take it — the beam goes on, nothing happens)
         if (this.frozen) return true;
         this.chill = Math.min(1, this.chill + amount);
         this.chillTimer = 0.4;
@@ -993,6 +996,7 @@ export class Combat {
 
     freeze(byId, time = PVP.FREEZE_TIME) {
         if (this.godsKeepsOff('Frozen')) return; // (the gods' dome: no ice takes me)
+        if (this.game.monster?.active) return; // (the monster form: «Айс», «Frozen» — the ice cracks off its fur, as off a dragon's scales)
         this.chill = 0;
         this.frozenLeft = Math.max(this.frozenLeft, time);
         this.frozenBy = byId;
@@ -1063,6 +1067,9 @@ export class Combat {
         if (this.dead) return;
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         if (BLAST_HARM.has(kind) && this.blastProof()) return; // (a dome: no blast, no falling pieces get in — mine either)
+        // the monster form (MonsterForm.js): simple spells and fire do nothing, blades a quarter, strong spells a half…
+        const mon = this.game.monster?.active ? this.game.monster : null;
+        if (mon) { amount = mon.filterDamage(amount, kind, byId); if (!(amount > 0)) return; }
         // Any hit on a frozen player shatters them, whatever their HP
         // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic)
         if (this.frozen && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
@@ -1074,11 +1081,13 @@ export class Combat {
         this.game.castleLife?.guard?.masterHurt(this.game.localId, byId, kind); // (my knights, if I am a king: whoever did it is their first enemy — Bodyguard.js)
         this.game.hud.damageFlash();
         if (this.game.sound) this.game.sound.playHit();
+        if (this.hp <= 0 && mon) { mon.fell(byId, kind); return; } // (the beast's body falls apart: the man inside lives)
         if (this.hp <= 0) this.die(byId, kind);
     }
 
     die(byId, how) {
         if (this.dead) return;
+        if (this.game.monster?.active && this.game.monster.saves(how, byId)) return; // (a beheading, a shatter… tear the monster's body, not the man)
         this.dead = true;
         this.game.levitation?.dropMe?.(false);
         this.hp = 0;

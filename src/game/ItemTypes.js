@@ -437,7 +437,7 @@ export const LOOT_FOR = { maxMana: 0 };
 /** A scroll of a chest (health, strength, a spell…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
 export function rollScroll(r = Math.random, mild = false) {
     const it = _rollScroll(r);
-    return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
+    return mild && (MIGHTY.has(it.spell) || it.pentagram === 'monster') && r() < 0.65 ? _rollScroll(r) : it;
 }
 const MIGHTY = new Set(['Imperius', 'AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower', 'CircleAttack', 'WaterVortexSuperMaxima', 'CreateCastle']);
 /**
@@ -459,6 +459,7 @@ export const SCROLL_WEIGHTS = [
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
     ['Pentagranium', 1.1], ['pent:devil', 0.9], ['pent:*', 0.7], // (black magic: the spell and the drawings of pentagrams — rare, Pentagrams.js)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
+    ['pentagram:monster', 1.2], // («Пентаграмма страшного монстра» — чёрная, PentagramMonster.js: редкая, как сильные; простой сундук чаще перебрасывает)
 ];
 const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
 
@@ -788,6 +789,7 @@ function scrollModel(it) {
     const ribbon = cyl(0.064, 0.064, 0.05, mat(pg ? pg.seal : it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
+    if (pent) { const seal = cyl(0.028, 0.028, 0.018, mat(0x1a0608), 0, 0, 0.066, 10); seal.rotation.x = Math.PI / 2; g.add(seal); }
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }
     return g;
 }

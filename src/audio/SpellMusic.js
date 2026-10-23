@@ -389,6 +389,26 @@ const TUNES = {
         noise(o, sr, 5.9, 2.4, 0.08, (u) => 0.02 + 0.05 * (1 - u), (u) => (1 - u) * (1 - u), r);
         return finish(o, sr, { rms: 0.08 });
     },
+    /**
+     * «Пентаграмма страшного монстра» (MonsterForm.js): the body tearing and growing — a heartbeat of timpani that
+     * quickens as the size grows, a low minor drone swelling under it, horns climbing in fourths, a gong and the
+     * beast's last roar over a deep echo.
+     */
+    thMonster(sr) {
+        const o = buf(sr, 7.5), r = rng(611);
+        pad(o, sr, ['E1', 'B1', 'E2', 'G2'], 0, 5.2, 0.45, { att: 1.6, rel: 1.2, vib: 0.008, harm: 6, det: 0.016 });
+        pad(o, sr, ['C2', 'G2', 'C3', 'Eb3'], 3.6, 7.2, 0.4, { att: 0.5, rel: 1.4, vib: 0.006, harm: 5, det: 0.014 });
+        // the heartbeat: lub-dub, closer and closer, as the body grows
+        let t = 0.2, gap = 0.95;
+        while (t < 4.6) { drum(o, sr, t, 0.75, 46, 0.6, r); drum(o, sr, t + 0.16, 0.45, 58, 0.4, r); t += gap; gap = Math.max(0.34, gap * 0.84); }
+        melody([[0, 'E2', 1.5], [1.5, 'A2', 1.5], [3, 'D3', 1], [4, 'G3', 2.5]], 0.55, 1.6, (f, tt, l) => { brass(o, sr, f, tt, l, 0.12); brass(o, sr, f * 1.5, tt, l, 0.05); });
+        bell(o, sr, hz('E2'), 4.7, 0.35, 3.5, 0.6); // (the gong)
+        glide(o, sr, 4.7, 1.9, 0.22, (u) => 95 + 60 * Math.sin(u * Math.PI) - 30 * u, (u) => Math.min(1, u * 6) * (1 - u) ** 1.5, 7);
+        noise(o, sr, 4.7, 2.2, 0.16, (u) => 0.05 + 0.12 * (1 - u), (u) => Math.min(1, u * 8) * (1 - u) ** 2, r);
+        drum(o, sr, 4.72, 0.9, 30, 2.4, r);
+        reverb(o, sr, 0.35, 0.82);
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Flying Maxima»: out of the air — a Lydian arpeggio climbing, the pad opening, then airy and far (space). */
     thOrbit(sr) {
         const o = buf(sr, 11), r = rng(71);
@@ -642,6 +662,10 @@ const FX = {
     /** «Паузин»: an air brake — a soft whoom settling. */
     fxPause(sr) { const o = buf(sr, 0.6), r = rng(79); noise(o, sr, 0, 0.6, 0.3, (u) => 0.15 * (1 - u) + 0.02, swell(0.05, 0.7), r); glide(o, sr, 0, 0.6, 0.2, (u) => 300 - 150 * u, swell(0.05, 0.7)); return finish(o, sr, { peak: 0.5 }); },
     /** «Стоп»: two soft bell notes falling — the spell let go. */
+    /** The monster's roar (MonsterForm.js): a throat's growl rising and breaking — harmonics on a wobbling low pitch, breath, the chest's rumble. */
+    fxMonsterRoar(sr) { const o = buf(sr, 1.9), r = rng(717); glide(o, sr, 0, 1.8, 0.3, (u) => (80 + 90 * Math.sin(u * Math.PI * 0.9)) * (1 + 0.04 * Math.sin(u * 140)), (u) => Math.min(1, u * 7) * (1 - u) ** 1.2, 8); noise(o, sr, 0, 1.8, 0.22, (u) => 0.08 + 0.2 * Math.sin(u * Math.PI), (u) => Math.min(1, u * 9) * (1 - u), r); drum(o, sr, 0.02, 0.5, 36, 1.2, r); reverb(o, sr, 0.25, 0.75); return finish(o, sr, { peak: 0.8 }); },
+    /** The monster form falling back to a man: the roar sinking into a groan, the body shrinking (a hollow whoosh down). */
+    fxMonsterBack(sr) { const o = buf(sr, 1.8), r = rng(719); glide(o, sr, 0, 1.6, 0.25, (u) => 160 - 110 * u, (u) => Math.min(1, u * 5) * (1 - u), 6); noise(o, sr, 0.1, 1.6, 0.18, (u) => 0.3 - 0.25 * u, swell(0.2, 0.5), r); reverb(o, sr, 0.3, 0.7); return finish(o, sr, { peak: 0.65 }); },
     fxStop(sr) { const o = buf(sr, 0.8); bell(o, sr, hz('E5'), 0, 0.15, 0.6, 0.1); bell(o, sr, hz('A4'), 0.12, 0.15, 0.7, 0.1); return finish(o, sr, { peak: 0.45 }); },
     /** «Максима» (more push in a duel): a rising power-up and a chord. */
     fxMaxima(sr) { const o = buf(sr, 0.8), r = rng(83); noise(o, sr, 0, 0.5, 0.3, (u) => 0.05 + 0.4 * u, (u) => u, r); pad(o, sr, ['C4', 'G4', 'C5'], 0.45, 0.5, 0.5, { att: 0.02, rel: 0.3, harm: 4 }); return finish(o, sr, { peak: 0.65 }); },
@@ -735,7 +759,7 @@ export const SPELL_SOUND = {
     Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
-    Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' },
+    Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
     Thunderwave: { own: ['thunder'] }, LightningStrike: { own: ['thunder'] }, Earthquake: { own: ['explosion'] }, EarthquakeMaxima: { own: ['explosion'] },

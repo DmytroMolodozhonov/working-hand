@@ -467,7 +467,7 @@ export class Beds {
 
     /** The hero lies down in a bed. */
     lieDown(b) {
-        if (!b) return;
+        if (!b || this.game.monster?.active) return; // (the monster form does not fit a bed)
         this.lying = b.id;
         this._upT = 0; this._bedJump = this.game.currentPose?.jump?.jumps; this._stillT = 0; this._healT = 0; this._waitSaid = false;
         this._holdLying(b);

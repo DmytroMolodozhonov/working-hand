@@ -172,6 +172,7 @@ export class DragonRide {
     onMounted(d, r) {
         this._pending = null;
         const g = this.game;
+        if (g.monster?.active) return; // (the monster form: no riding — MonsterForm.MONSTER_BLOCKS)
         if (!r?.ok || !d) { g.hud.setVoice(r?.say || '🐉 Не получилось залезть', true); return; }
         this.riding = d;
         this.phase = 'ground';
