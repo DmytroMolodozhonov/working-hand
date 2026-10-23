@@ -58,7 +58,8 @@ export const STRUCT = {
     DEPTH: 4, // layers under the change looked at
     ROUNDS: 10, // at most this many rounds of falling in one check (a chain)
     STAGE: 0.45, // s between the rounds of a chain, as seen (FallingBlocks)
-    MAX_CELLS: 1_600_000, // a box bigger than this is cut down to it (round the change)
+    MAX_CELLS: 900_000, // a box bigger than this is cut down to it (round the change)
+    WARM_CELLS: 360_000, // the buffers made ahead (~9 MB): a «Total Destruction» box
 };
 
 /**
@@ -146,6 +147,8 @@ function costs() {
 }
 
 const INF = 0x3fffffff;
+/** (for the benches) the phase at work and the slowest pieces of work seen: [ms, phase, box] */
+export const STATS = { phase: '', slow: [] };
 /**
  * «As built, so it stands»: against the box as it was before the change, a block gives way only if the change made
  * it worse — over its strength (checked before) and carrying more than it did (STRUCT.WORSE).
@@ -165,22 +168,41 @@ const DXH = Int8Array.from(HELD, (h) => h[0]), DLH = Int8Array.from(HELD, (h) =>
  * The buffers of the job at work (one at a time; a job that finds them taken by another starts its round anew).
  * A box of the world read into flat arrays: x0…x0+NX−1, L0…L0+NY−1, z0…z0+NZ−1 — index ((L−L0)·NZ + z−z0)·NX + x−x0.
  */
-const buf = { n: 0, owner: null, T: null, P: null, recv: null, order: null, RUN: null, SX: null, SZ: null, seen: null, lost: null, cnt: null, bk: [], touched: [], marked: [] };
+/** A list of whole numbers that grows (no garbage: the same array, kept). */
+class IntList {
+    constructor(n = 4096) { this.a = new Int32Array(n); this.n = 0; }
+    push(v) { if (this.n === this.a.length) { const b = new Int32Array(this.a.length * 2); b.set(this.a); this.a = b; } this.a[this.n++] = v; }
+}
+const buf = {
+    n: 0, owner: null, T: null, P: null, recv: null, order: null, RUN: null, SX: null, SZ: null, seen: null, lost: null, cnt: null,
+    // Dial's buckets as lists in flat arrays: head[p] → an entry; entry e: its cell ec[e], the next en[e]
+    head: new Int32Array(STRUCT.Q + 1), ec: new Int32Array(1 << 16), en: new Int32Array(1 << 16), ne: 0,
+    touched: new IntList(), marked: new IntList(), stack: new IntList(),
+    // the box before the change (one job's at a time: preOwner)
+    preOwner: null, preT: null, preP: null, preLoad: null, preSX: null, preSZ: null,
+};
 function ensure(n) {
     if (buf.n >= n) return;
     const m = Math.max(n, Math.ceil(buf.n * 1.5));
     buf.n = m;
-    buf.T = new Uint8Array(m); buf.P = new Int32Array(m); buf.recv = new Float64Array(m); buf.order = new Int32Array(m); buf.RUN = new Uint8Array(m);
-    buf.SX = new Float64Array(m); buf.SZ = new Float64Array(m); buf.seen = new Uint8Array(m * 2); buf.lost = new Uint8Array(m);
+    buf.T = new Uint8Array(m); buf.P = new Int32Array(m); buf.recv = new Float32Array(m); buf.order = new Int32Array(m); buf.RUN = new Uint8Array(m);
+    buf.SX = new Float32Array(m); buf.SZ = new Float32Array(m); buf.seen = new Uint8Array(m * 2); buf.lost = new Uint8Array(m);
+    buf.preT = new Uint8Array(m); buf.preP = new Int32Array(m); buf.preLoad = new Float32Array(m); buf.preSX = new Float32Array(m); buf.preSZ = new Float32Array(m);
+    buf.preOwner = null;
 }
 
-// the work is cut into pieces: every phase yields when the job's time is up (checked every 2048 steps)
+/** Made ahead (the loading screen — Game.warmUp): the buffers of a box as big as a «Total Destruction»'s, the tables (no first-blast jerk). */
+export function prepareStructure(cells = STRUCT.WARM_CELLS) { if (!ready) costs(); ensure(cells); }
+
+// the work is cut into pieces: every phase yields when the job's time is up (looked at the clock every ~500 cells' work;
+// due(k): k cells' work done)
 const clock = typeof performance !== 'undefined' ? () => performance.now() : () => Date.now();
 let deadline = Infinity, ops = 0;
-const due = () => (++ops & 2047) === 0 && clock() > deadline;
+const due = (k = 1) => { ops += k; if (ops < 512) return false; ops = 0; return deadline !== Infinity && clock() > deadline; };
 
 /** The box read from the world (cells of the gods' gifts and of `keep` read as bedrock: they hold). Returns the built blocks (trees left out). */
 function* readBox(job) {
+    STATS.phase = 'readBox';
     const { data, B } = job, { x0, z0, L0, NX, NY, NZ } = B;
     const n = NX * NY * NZ, NXZ = NX * NZ;
     ensure(n);
@@ -204,7 +226,7 @@ function* readBox(job) {
                 if (KIND[t] === 2 && !fast && !TREE[t]) built++;
             }
         }
-        if (due()) yield;
+        if (due(NX * 8)) yield;
     }
     return built;
 }
@@ -224,14 +246,23 @@ function sides(i, NX) {
  * Dial's buckets: the costs are whole numbers ≤ Q.
  */
 function* waysDown(job) {
+    STATS.phase = 'waysDown';
     const { NX, NY, NZ } = job.B;
     const n = NX * NY * NZ, NXZ = NX * NZ, T = buf.T, P = buf.P, Q = STRUCT.Q, RUN = buf.RUN, DEEP = STRUCT.DEEP;
     for (let d = 0; d < 9; d++) OFF[d] = HELD[d][0] + HELD[d][1] * NXZ + HELD[d][2] * NX;
     P.fill(INF, 0, n);
-    const bk = buf.bk;
-    for (let i = 0; i <= Q; i++) { if (!bk[i]) bk[i] = []; bk[i].length = 0; }
+    const head = buf.head;
+    head.fill(-1);
+    buf.ne = 0;
     // (a lamp, a chandelier on its chain: never too far — its chain holds it wherever its ceiling is)
-    const push = (i, p) => { if (p > Q && CHAINED[T[i]]) p = Q; if (p < P[i] && p <= Q) { P[i] = p; bk[p].push(i); } };
+    const push = (i, p) => {
+        if (p > Q && CHAINED[T[i]]) p = Q;
+        if (p >= P[i] || p > Q) return;
+        P[i] = p;
+        if (buf.ne === buf.ec.length) { const a = new Int32Array(buf.ec.length * 2), b = new Int32Array(buf.ec.length * 2); a.set(buf.ec); b.set(buf.en); buf.ec = a; buf.en = b; }
+        const e = buf.ne++;
+        buf.ec[e] = i; buf.en[e] = head[p]; head[p] = e;
+    };
     const torn = job.torn, any = torn.size > 0;
     // how thick each column of blocks is (blocks one on another, the ground among them), up to DEEP
     for (let c = 0; c < NXZ; c++) {
@@ -244,7 +275,7 @@ function* waysDown(job) {
             for (let l = L; l < e; l++) RUN[c + l * NXZ] = r;
             L = e;
         }
-        if (due()) yield;
+        if (due(NY)) yield;
     }
     // the starts: built blocks on (or beside, or under) what holds, and those on the box's edges
     for (let L = 0; L < NY; L++) {
@@ -259,13 +290,15 @@ function* waysDown(job) {
                 if (d > 4 && !edgeOnly(i, d, NXZ)) continue;
                 push(i, d === 4 ? HANG[t] : Math.round(SIDE[t] * (d > 4 ? STRUCT.LEAN : 1 / DEEP)));
             }
+            if ((x & 15) === 15 && due(64)) yield;
         }
-        if (due()) yield;
+        if (due(NX)) yield;
     }
     for (let p = 0; p <= Q; p++) {
-        const list = bk[p];
-        for (let k = 0; k < list.length; k++) {
-            const i = list[k];
+        while (head[p] !== -1) {
+            const e = head[p];
+            head[p] = buf.en[e];
+            const i = buf.ec[e];
             if (P[i] !== p) continue;
             const L = (i / NXZ) | 0, r = i - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
             // standing on i: the block over it (free)
@@ -286,7 +319,7 @@ function* waysDown(job) {
             }
             // a lamp on its chain under i (air between)
             if (L > 1 && !KIND[T[i - NXZ]]) for (let k2 = 2; k2 <= STRUCT.CHAIN && L - k2 >= 0; k2++) { const j = i - k2 * NXZ, c = KIND[T[j]]; if (c === 2 && CHAINED[T[j]]) push(j, p + HANG[T[j]]); if (c) break; }
-            if (due()) yield;
+            if (due(4)) yield;
         }
     }
 }
@@ -296,6 +329,7 @@ function* waysDown(job) {
  * job.pre). Returns the cells crushed; tears the joints that pass too much (into job.torn); counts in `out`.
  */
 function* weigh(job, out, record) {
+    STATS.phase = 'weigh';
     const { NX, NY, NZ } = job.B;
     const n = NX * NY * NZ, NXZ = NX * NZ, T = buf.T, P = buf.P, recv = buf.recv, Q = STRUCT.Q;
     recv.fill(0, 0, n);
@@ -305,21 +339,27 @@ function* weigh(job, out, record) {
     const cnt = buf.cnt;
     cnt.fill(0, 0, K + 1);
     let m = 0;
-    for (let i = 0; i < n; i++) if (KIND[T[i]] === 2 && P[i] !== INF) { cnt[P[i] * NY + ((i / NXZ) | 0)]++; m++; }
+    for (let i0 = 0; i0 < n; i0 += 16384) {
+        for (let i = i0, e = Math.min(n, i0 + 16384); i < e; i++) if (KIND[T[i]] === 2 && P[i] !== INF) { cnt[P[i] * NY + ((i / NXZ) | 0)]++; m++; }
+        if (due(16384)) yield;
+    }
     let acc = 0;
     for (let k = K - 1; k >= 0; k--) { const c = cnt[k]; cnt[k] = acc; acc += c; }
     const order = buf.order;
-    for (let i = 0; i < n; i++) if (KIND[T[i]] === 2 && P[i] !== INF) order[cnt[P[i] * NY + ((i / NXZ) | 0)]++] = i;
-    if (due()) yield;
+    for (let i0 = 0; i0 < n; i0 += 16384) {
+        for (let i = i0, e = Math.min(n, i0 + 16384); i < e; i++) if (KIND[T[i]] === 2 && P[i] !== INF) order[cnt[P[i] * NY + ((i / NXZ) | 0)]++] = i;
+        if (due(16384)) yield;
+    }
     const crushed = [];
     const torn = job.torn, SX = buf.SX, SZ = buf.SZ, touched = buf.touched;
     // (against the box before the change: only a block that is still the same one has its old load)
     const pre = record ? null : job.pre, preT = pre?.T, preLoad = pre?.load;
     const before = (i) => (preT[i] === T[i] ? preLoad[i] : 0);
-    const keepLoad = record ? (job.pre.load = new Float32Array(n)) : null;
+    const keepLoad = record ? job.pre.load : null;
+    if (record) keepLoad.fill(0, 0, n);
     const hold = new Int32Array(10), way = new Int8Array(10), share = new Float64Array(10);
     for (let o = 0; o < m; o++) {
-        if (due()) yield;
+        if (due(6)) yield;
         const i = order[o], t = T[i], p = P[i];
         const L = (i / NXZ) | 0, r = i - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
         if (L === 0 || x === 0 || z === 0 || x === NX - 1 || z === NZ - 1 || L === NY - 1) continue; // (the box's edge: held from beyond)
@@ -380,22 +420,25 @@ function* weigh(job, out, record) {
  * passed before — the whole wall of joints tears.
  */
 function* shear(job, out, record) {
+    STATS.phase = 'shear';
     const { NX, NZ } = job.B, NXZ = NX * NZ, n = NXZ * job.B.NY, T = buf.T, SX = buf.SX, SZ = buf.SZ, seen = buf.seen;
     const touched = buf.touched, marked = buf.marked, torn = job.torn;
+    const TA = touched.a;
     if (record) {
         // (before the change: only what crossed each joint is kept)
-        const sx = job.pre.SX = new Float32Array(n), sz = job.pre.SZ = new Float32Array(n);
-        for (const code of touched) { const J = code >> 1; if (code & 1) { sz[J] = SZ[J]; SZ[J] = 0; } else { sx[J] = SX[J]; SX[J] = 0; } }
-        touched.length = 0;
+        const sx = job.pre.SX, sz = job.pre.SZ;
+        sx.fill(0, 0, n); sz.fill(0, 0, n);
+        for (let q = 0; q < touched.n; q++) { const code = TA[q], J = code >> 1; if (code & 1) { sz[J] = SZ[J]; SZ[J] = 0; } else { sx[J] = SX[J]; SX[J] = 0; } }
+        touched.n = 0;
         return;
     }
     const pre = job.pre, preT = pre?.T;
     const both = (a, b) => KIND[T[a]] && KIND[T[b]] && (KIND[T[a]] === 2 || KIND[T[b]] === 2);
     const bondOf = (a, b) => Math.min(KIND[T[a]] === 2 ? BOND[T[a]] : Infinity, KIND[T[b]] === 2 ? BOND[T[b]] : Infinity);
-    for (let q = 0; q < touched.length; q++) {
-        const code = touched[q];
+    for (let q = 0; q < touched.n; q++) {
+        const code = TA[q];
         if (seen[code]) continue;
-        if (due()) yield;
+        if (due(8)) yield;
         const ax = code & 1, o = ax ? NX : 1, A = ax ? SZ : SX, PA = pre ? (ax ? pre.SZ : pre.SX) : null, dPos = ax ? 2 : 0;
         let a = code >> 1;
         while (a >= NXZ && both(a - NXZ, a - NXZ + o) && !torn.has((a - NXZ) * 16 + dPos)) a -= NXZ;
@@ -409,9 +452,9 @@ function* shear(job, out, record) {
         out.torn++;
         for (let b = start; b < a; b += NXZ) { torn.add(b * 16 + dPos); torn.add((b + o) * 16 + dPos + 1); }
     }
-    for (const code of touched) { const J = code >> 1; if (code & 1) SZ[J] = 0; else SX[J] = 0; }
-    for (const code of marked) seen[code] = 0;
-    touched.length = 0; marked.length = 0;
+    for (let q = 0; q < touched.n; q++) { const code = TA[q], J = code >> 1; if (code & 1) SZ[J] = 0; else SX[J] = 0; }
+    for (let q = 0; q < marked.n; q++) seen[marked.a[q]] = 0;
+    touched.n = 0; marked.n = 0;
 }
 
 /**
@@ -420,22 +463,27 @@ function* shear(job, out, record) {
  * block that had a way down then (one that never had — as built — goes only along with a piece that falls).
  */
 function* lostPieces(job) {
+    STATS.phase = 'lostPieces';
     const { data, B } = job, { x0, z0, L0, NX, NY, NZ } = B;
     const n = NX * NY * NZ, NXZ = NX * NZ, T = buf.T, P = buf.P, seen = buf.lost;
     const pieces = [];
     let any = false;
-    for (let i = 0; i < n; i++) if (P[i] === INF && KIND[T[i]] === 2) { any = true; break; }
+    for (let i0 = 0; i0 < n && !any; i0 += 16384) {
+        for (let i = i0, e = Math.min(n, i0 + 16384); i < e; i++) if (P[i] === INF && KIND[T[i]] === 2) { any = true; break; }
+        if (due(16384)) yield;
+    }
     if (!any) return pieces;
     seen.fill(0, 0, n);
-    const pre = job.pre, stack = [];
+    const pre = job.pre, stack = buf.stack;
     const visit = (j) => { if (!seen[j] && KIND[T[j]] === 2 && P[j] === INF) { seen[j] = 1; stack.push(j); } };
     for (let i = 0; i < n; i++) {
+        if ((i & 16383) === 16383 && due(16384)) yield;
         if (seen[i] || KIND[T[i]] !== 2 || P[i] !== INF) continue;
         if (pre && pre.T[i] === T[i] && pre.P[i] === INF) continue;
         const cells = [];
-        stack.length = 0; stack.push(i); seen[i] = 1;
-        while (stack.length) {
-            const a = stack.pop();
+        stack.n = 0; stack.push(i); seen[i] = 1;
+        while (stack.n) {
+            const a = stack.a[--stack.n];
             const L = (a / NXZ) | 0, r = a - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
             const wx = x0 + x, wL = L0 + L, wz = z0 + z, t = T[a];
             const sh = data.shapeAt ? data.shapeAt(wx, wL, wz) : 0;
@@ -448,7 +496,7 @@ function* lostPieces(job) {
             if (L > 0) { visit(a - NXZ); if (x < NX - 1) visit(a - NXZ + 1); if (x > 0) visit(a - NXZ - 1); if (z < NZ - 1) visit(a - NXZ + NX); if (z > 0) visit(a - NXZ - NX); }
         }
         pieces.push({ cells });
-        if (due()) yield;
+        if (due(cells.length * 4)) yield;
     }
     return pieces;
 }
@@ -475,6 +523,7 @@ function still(data, cells) { for (const c of cells) if (data.get(c[0], c[1], c[
  * worked out (the round is made anew against it), 'stale' — the world changed under it (made anew).
  */
 function* round(job) {
+    if (job.pre && buf.preOwner !== job) job.pre = null; // (another job's box before its change took the buffers: worked out anew)
     const built = yield* readBox(job);
     if (!built) return 'stop';
     const n = job.B.NX * job.B.NY * job.B.NZ;
@@ -495,7 +544,9 @@ function* round(job) {
         }
         job.torn.clear();
         yield* waysDown(job);
-        job.pre = { T: T.slice(0, n), P: buf.P.slice(0, n) };
+        buf.preT.set(T.subarray(0, n)); buf.preP.set(buf.P.subarray(0, n));
+        job.pre = { T: buf.preT, P: buf.preP, load: buf.preLoad, SX: buf.preSX, SZ: buf.preSZ };
+        buf.preOwner = job;
         yield* weigh(job, out, true);
         return 'again';
     }
@@ -538,7 +589,10 @@ export function settleJob(data, B, drop, crush, gone = null, keep = null) {
             try {
                 while (!job.done) {
                     if (!job.gen || buf.owner !== job) { job.gen = round(job); buf.owner = job; }
+                    const t0 = clock();
                     const r = job.gen.next();
+                    const dt = clock() - t0;
+                    if (dt > 4 && STATS.slow.length < 50) STATS.slow.push([+dt.toFixed(1), STATS.phase, `${job.B.NX}x${job.B.NY}x${job.B.NZ}`, r.done ? 'end ' + r.value : '']);
                     if (!r.done) return false; // (its time is up: on with it next time)
                     job.gen = null;
                     if (r.value === 'more' && ++job.rounds < STRUCT.ROUNDS) continue;
@@ -547,6 +601,7 @@ export function settleJob(data, B, drop, crush, gone = null, keep = null) {
                 }
             } finally { deadline = prev; }
             if (buf.owner === job) buf.owner = null;
+            if (buf.preOwner === job) buf.preOwner = null;
             job.pre = null; job.torn.clear();
             return true;
         },

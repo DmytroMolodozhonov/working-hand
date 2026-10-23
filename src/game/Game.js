@@ -84,6 +84,7 @@ import { Burning } from './Burning.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { Settling } from '../world/Collapse.js';
+import { prepareStructure } from '../world/Structure.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
@@ -3184,6 +3185,7 @@ export class Game {
         try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }
         try { this.boom?.warm(); } catch (e) { /* (only a head start) */ }
+        try { prepareStructure(); } catch (e) { /* (only a head start) */ } // (the buffers of the checks of the buildings — Structure.js)
     }
 
     start() {

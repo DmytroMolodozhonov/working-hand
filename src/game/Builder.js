@@ -21,6 +21,8 @@ import { SHAPE } from '../world/BlockShapes.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, isWood, isLeaves, isCastleBlock } from '../world/Terrain.js';
 import { RESOURCE, STACK, resourceOf } from './Inventory.js';
+import { settleAround } from '../world/Collapse.js';
+import { stuffOf } from '../world/Structure.js';
 import { knows } from './SpellBook.js';
 
 export const BUILD_SPELLS = {
@@ -324,6 +326,7 @@ export class Builder {
     }
 
     update(dt) {
+        if (this._gone?.length) this._settleGone();
         const b = this.build;
         if (b) {
             b.t += dt;
@@ -380,11 +383,59 @@ export class Builder {
         const d = this.data;
         if (d && list.some((e) => isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2])))) list = list.filter((e) => d.get(e[0], e[1], e[2]) === e[3] || !(isEnchanted(e[3]) || isEnchanted(d.get(e[0], e[1], e[2]))));
         if (!list.length) return;
+        // (blocks taken away: the building round them is looked at next frame — what can no longer stand comes down)
+        if (!this._settlingOut && d?.settling && this.game.world?.destructible) for (const e of list) if (e[3] === BLOCK.AIR || e[3] === BLOCK.WATER) (this._gone || (this._gone = [])).push(e);
         this.game.castleLife?.rebuild?.forget(list); // (a cell the castle's builders put back is the player's now)
         this.game.blockEdits = this.game.blockEdits || [];
         for (const e of list) this.game.blockEdits.push(e);
         if (this.game.blockEdits.length > 30000) this.game.blockEdits.splice(0, this.game.blockEdits.length - 30000);
         if (this.game.sync) this.game.sync.blocks?.(list);
+    }
+
+    /**
+     * (whoever made the change) The building round blocks taken away by edits — a block gathered, a piece of a wall
+     * lifted off by «Левиоса Максима», crumbled by «Liquidation», the ground cracked under a wall by «Землетрясение»:
+     * what can no longer stand comes down (Structure.js, worked out a little each frame by data.settling). Its result
+     * goes to everybody as edits (saved with the world, as the change itself) and they see it fall too (NetSync.falls).
+     * (What a removed block was is not in the edit any more: the stuff beside it stands for it.)
+     */
+    _settleGone() {
+        const d = this.data, list = this._gone;
+        this._gone = null;
+        if (!d?.settling) return;
+        let x0 = Infinity, x1 = -Infinity, L0 = Infinity, L1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+        const gone = [];
+        for (const [x, L, z] of list) {
+            if (d.get(x, L, z) !== BLOCK.AIR && d.get(x, L, z) !== BLOCK.WATER) continue; // (put back since)
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (L < L0) L0 = L; if (L > L1) L1 = L; if (z < z0) z0 = z; if (z > z1) z1 = z;
+            gone.push([x, L, z, this._wasHere(x, L, z)]);
+        }
+        if (!gone.length) return;
+        const r = Math.max(x1 - x0, L1 - L0, z1 - z0) / 2 + 1;
+        const job = settleAround(d, (x0 + x1) / 2, (L0 + L1) / 2 - 1, (z0 + z1) / 2, Math.min(r, 24), gone);
+        d.settling.add(job, (falls) => {
+            // the result, for everybody: the pieces taken from where they hung and put where they landed, the crushed gone
+            const edits = [];
+            for (const f of falls) for (const c of f.cells) edits.push([c[0], c[1], c[2], BLOCK.AIR]);
+            for (const f of falls) for (const c of f.landed) edits.push(c.length > 4 ? [c[0], c[1], c[2], c[3], c[4]] : [c[0], c[1], c[2], c[3]]);
+            this._settlingOut = true;
+            try { this._sendEdits(edits); } finally { this._settlingOut = false; }
+            this.game.sync?.falls?.(falls);
+            this.game._collapsed?.(falls);
+        }, false); // (not in the order of the blasts: its result goes out as edits)
+    }
+
+    /** What a block taken away by an edit most likely was: what is built beside it (a wall's stone, a floor's planks). */
+    _wasHere(x, L, z) {
+        const d = this.data, count = new Map();
+        for (const [dx, dL, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0]]) {
+            const t = d.get(x + dx, L + dL, z + dz);
+            if (t === BLOCK.AIR || t === BLOCK.WATER || stuffOf(t) == null) continue;
+            count.set(t, (count.get(t) || 0) + 1);
+        }
+        let best = BLOCK.DIRT, n = 0;
+        for (const [t, k] of count) if (k > n) { best = t; n = k; }
+        return best;
     }
 
     /** Edits from another player (or the welcome message). */

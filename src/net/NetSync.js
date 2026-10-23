@@ -351,6 +351,20 @@ export class NetSync {
         for (let i = 0; i < list.length; i += 400) this.net.send({ t: 'blk', l: list.slice(i, i + 400) }, true);
     }
 
+    /**
+     * A building came down after an edit made here (Builder._settleGone — its blocks went as edits already): the
+     * others see it fall (FallingBlocks) — the pieces, where they hung, how far they fell, what landed and broke.
+     */
+    falls(list) {
+        const out = [];
+        let n = 0;
+        for (const f of list) {
+            if ((n += f.cells.length) > 4000) break; // (a whole castle: the rest is just there)
+            out.push({ c: f.cells, d: f.d, l: f.landed, b: f.broken, s: f.stage || 0, ...(f.crushed ? { x: 1 } : {}) });
+        }
+        if (out.length) this.net.send({ t: 'fal', f: out }, true);
+    }
+
     /** A spawn-area tree was gathered. */
     treeGone(index) {
         this.net.send({ t: 'tree', i: index }, true);
@@ -859,6 +873,12 @@ export class NetSync {
                 break;
             }
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
+            case 'fal': if (m.by !== this.me && Array.isArray(m.f)) { // (a building's pieces seen falling: its blocks are where they landed already — 'blk')
+                const list = m.f.slice(0, 200).filter((f) => Array.isArray(f?.c) && Array.isArray(f.l) && Array.isArray(f.b))
+                    .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}) }));
+                for (const f of list) g.falling?.add(f);
+                break;
+            }
             case 'mcg': g.crystals?.applyGone((m.l || []).slice(0, 50)); break;
             case 'mcfx': if (Array.isArray(m.p)) g.crystals?.remoteFx(vec(m.p), m.by || m.from || null, m.n | 0); break;
             case 'mcq': if (this.net.isHost && Array.isArray(m.l)) g.crystals?.burst(m.l.slice(0, 8).map(String), m.from || m.by, m.k || null); break; // (who broke it: the sender himself)

@@ -173,9 +173,10 @@ export function dropPiece(data, piece) {
  * the building); keep(x, y, z): blocks
  * that hold whatever happens (a house's sphere of protection — HouseWards.js).
  * A fall: {cells, d, landed, broken, stage} (stage: the round of the chain, 0 the first; `crushed` — blocks broken
- * under their load where they stood, d = 0).
+ * under their load where they stood, d = 0). ordered: a change every computer and a loaded save make the same way
+ * (a blast — not a fire's): its check is done before the next such change (Settling.flush).
  */
-export function collapseAfter(data, cx, cy, cz, radius, inner = 0, gone = null, keep = null, done = null) {
+export function collapseAfter(data, cx, cy, cz, radius, inner = 0, gone = null, keep = null, done = null, ordered = !done) {
     const out = [];
     for (const piece of findHanging(data, cx, cy, cz, radius, inner)) {
         const r = dropPiece(data, piece);
@@ -183,7 +184,7 @@ export function collapseAfter(data, cx, cy, cz, radius, inner = 0, gone = null, 
     }
     if (gone === false) return out; // (no check of the building now: a band of a wave — the last one does it)
     const S = data.settling;
-    if (S) S.add(settleAround(data, cx, cy, cz, radius, gone, keep), done);
+    if (S) S.add(settleAround(data, cx, cy, cz, radius, gone, keep), done, ordered);
     else { const job = settleAround(data, cx, cy, cz, radius, gone, keep); job.step(Infinity); out.push(...job.falls); }
     return out;
 }
@@ -211,7 +212,7 @@ export function settleAround(data, cx, cy, cz, radius, gone = null, keep = null)
 export class Settling {
     constructor() { this.jobs = []; this.now = false; this.quiet = false; this.onFalls = null; }
     get busy() { return this.jobs.length > 0; }
-    add(job, done = null) { job.done$ = done; this.jobs.push(job); if (this.now) this.flush(); }
+    add(job, done = null, ordered = true) { job.done$ = done; job.ordered = ordered; this.jobs.push(job); if (this.now) this.flush(true); }
     _finish(job) {
         if (this.quiet || !job.falls.length) return;
         (job.done$ || this.onFalls)?.(job.falls, job);
@@ -228,12 +229,24 @@ export class Settling {
             this._finish(job);
         }
     }
-    /** Every check now (before a change that others make in the same order). */
-    flush() { while (this.jobs.length) { const job = this.jobs.shift(); job.step(Infinity); this._finish(job); } }
+    /**
+     * The checks of the changes made the same everywhere, now (before the next such change: the same order on every
+     * computer); the others (a fire's, an edit's — their results go out as they are) wait their turn (all: these too).
+     */
+    flush(all = false) {
+        const later = [];
+        while (this.jobs.length) {
+            const job = this.jobs.shift();
+            if (!all && !job.ordered) { later.push(job); continue; }
+            job.step(Infinity);
+            this._finish(job);
+        }
+        this.jobs.push(...later);
+    }
     /** Run fn with every check at once and unseen (a save, a welcome message replaying the world's changes). */
     replay(fn) {
         const was = [this.now, this.quiet];
-        this.flush();
+        this.flush(true);
         this.now = true; this.quiet = true;
         try { return fn(); } finally { [this.now, this.quiet] = was; }
     }
