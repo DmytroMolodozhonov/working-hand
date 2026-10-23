@@ -78,6 +78,7 @@ import { Inspirius } from './Inspirius.js';
 import { Boom } from './Boom.js';
 import { Hellfire } from './Hellfire.js';
 import { Firefighting } from './Firefighting.js';
+import { WindRing } from './WindRing.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
@@ -359,6 +360,8 @@ export class Game {
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             doors: (vAt, from) => this.doors?.blow(vAt, from), // (a gust / a burst swings the doors' leaves: Doors.blow)
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
+            windRingBegin: (o, by) => this.windRing?.begin(o, by), // («Вайнд Максима» up: the wave that puts fires out — WindRing.js)
+            windRingStep: (sp, dt) => this.windRing?.step(sp, dt),
             impulseWorld: (name, origin, r, pushAt, casterId) => this._impulseWorld(name, origin, r, pushAt, casterId), // («Wind Impulse»: things, book-birds)
             drawdown: (name, at, casterId) => this.drawdown?.start(name, at, casterId),
             liquidation: (name, o, d, casterId) => this.liquidation?.fly(name, o, d, casterId),
@@ -467,6 +470,7 @@ export class Game {
         this.planetDestroy = new PlanetDestroy(this); // «Planet Liquidation»: a planet blown up — the sixth scroll of the gods' library
         this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
+        this.windRing = new WindRing(this);
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
@@ -2036,6 +2040,19 @@ export class Game {
         if (!side) { if (isFinal) this.hud.setVoice(over ? '🌿 Поднимите руку и направьте её на тех, кого разбросать, — и скажите «Overgrown»' : '🌬️ Поднимите руку и направьте её туда, куда дуть, — и скажите «Вайнд»', true); return null; }
         const tired = this.combat.check(name);
         if (tired) { this.hud.setVoice(tired, true); return null; }
+        // «Вайнд Максима» with the wand raised up (or at oneself): a ring of wind out of me that also puts out fires (WindRing.js)
+        if (name === 'WindMaxima') {
+            const hand = castingHand(this);
+            if (hand && aimedUpOrSelf(this, hand)) {
+                const c = this.combat.center(new THREE.Vector3());
+                this.spells.cast(name, c, _v1.set(0, 1, 0), hand.side, this.localId);
+                if (this.sync) this.sync.spell(name, c, _v1.set(0, 1, 0), hand.side);
+                this.combat.pay(name);
+                this[key] = now;
+                this._interimCast = isFinal ? null : { name, at: now };
+                return name;
+            }
+        }
         const origin = this.spellStart(side);
         const dir = ch.getHandDirection(side);
         this.spells.cast(name, origin, dir, side, this.localId);

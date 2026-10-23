@@ -280,11 +280,12 @@ export class Hellfire {
         this.state = null;
         this._endAt = this._t;
         this._note({ ev: 'out', why });
-        if (why === 'water') this._dieDown(s.c, s.R * (1 - s.k));
+        if (why === 'water' || why === 'wind') this._dieDown(s.c, s.R * (1 - s.k));
         else this._leave(this.me, s, this.game.character.group.position);
         this._send(null, why);
         if (why === 'mana') this.game.hud?.setVoice?.('🔥 Адский огонь вышел из-под власти — мана кончилась. Брошенный огонь догорает ещё полминуты', true);
         else if (why === 'water') this.game.hud?.setVoice?.('💨 Вода погасила адский огонь', true);
+        else if (why === 'wind') this.game.hud?.setVoice?.('💨 Ветер сбил адский огонь — он погас', true);
         else if (why === 'wand') this.game.hud?.setVoice?.('🔥 Палочка не в руке — огонь больше не слушается и догорает', true);
         else if (why === 'stop') this.game.hud?.setVoice?.(`🛑 Адский огонь остановлен но брошенный огонь догорает ещё полминуты — не входите в него`, true);
         return true;
@@ -485,8 +486,10 @@ export class Hellfire {
      * Another wizard's fire is drowned on its own computer (it sends the smaller fire on).
      * @returns true when the water reached some of the fire
      */
-    douse(hit, dt = 0) {
+    douse(hit, dt = 0, wind = null) {
         const burst = !(dt > 0);
+        // («Вайнд Максима» up — WindRing.js: `wind` = the wave, once per fire: it shakes the held blaze hard
+        // (smaller, no growth for a moment) but doesn't drown it; whatever was left on the ground goes out whole)
         let any = false;
         const s = this.state;
         if (s) {
@@ -498,7 +501,15 @@ export class Hellfire {
                     on = hit(_a.set(body.x + Math.cos(a) * s.rr, body.y - 0.5, body.z + Math.sin(a) * s.rr), (s.rw || HELLFIRE.RING_W) / 2);
                 }
             }
-            if (on) {
+            if (on && wind) {
+                if (wind.hf !== s) {
+                    wind.hf = s; any = true;
+                    s.R = Math.max(0, s.R - HELLFIRE.DOUSE_KNOCK);
+                    s.dousedT = Math.max(s.dousedT || 0, HELLFIRE.DOUSE_HOLD);
+                    this._note({ ev: 'windKnock', R: r2(s.R) });
+                    if (s.R < HELLFIRE.R_MIN) this.stop('wind');
+                }
+            } else if (on) {
                 any = true;
                 s.R = Math.max(0, s.R - (burst ? HELLFIRE.DOUSE_KNOCK : HELLFIRE.DOUSE_RATE * dt));
                 s.dousedT = Math.max(s.dousedT || 0, burst ? HELLFIRE.DOUSE_HOLD : 0.3);
@@ -511,7 +522,7 @@ export class Hellfire {
             const f = this.left[i];
             if (!hit(f.c, f.R)) continue;
             any = true;
-            f.R0 = Math.max(0, f.R0 - (burst ? HELLFIRE.LEFT_KNOCK : HELLFIRE.DOUSE_RATE * 1.5 * dt));
+            f.R0 = wind ? 0 : Math.max(0, f.R0 - (burst ? HELLFIRE.LEFT_KNOCK : HELLFIRE.DOUSE_RATE * 1.5 * dt));
             if (f.R0 * leftStrength(f.t) < 0.25) { this._dieDown(f.c, Math.max(0.5, f.R0)); this.left.splice(i, 1); this._note({ ev: 'leftOut' }); }
         }
         return any;

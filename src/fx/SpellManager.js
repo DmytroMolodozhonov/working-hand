@@ -21,6 +21,7 @@ import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
 import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
+import { WIND_RING, isWindRing, windRingPush } from '../game/WindRing.js';
 import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
 import { flyingMaximaWords } from '../game/Space.js';
@@ -463,7 +464,7 @@ export class SpellManager {
         const d = direction.clone().normalize();
         this._from = o; // (where the spell comes from: a house's sphere stops it from outside)
         // book-birds are knocked down by the spells that fly
-        if (RAY_SPELLS.has(name) && this.hooks.birdRay) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1, name);
+        if (RAY_SPELLS.has(name) && this.hooks.birdRay && !isWindRing(name, d)) this.hooks.birdRay(o, d, 30, name.endsWith('Maxima') ? 2 : 1, name);
         switch (name) {
             case 'Sapira': this.castSapira(o, d, casterId); break;
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
@@ -479,7 +480,7 @@ export class SpellManager {
             case 'LightningBeam': this.castLightningHit(o, casterId, o.clone().add(direction)); break;
             case 'Earthquake': this.castEarthquake(o, d, casterId, 1); break;
             case 'EarthquakeMaxima': this.castEarthquake(o, d, casterId, 3); break;
-            case 'WindMaxima': this.castWind(o, d, casterId, 3); break;
+            case 'WindMaxima': if (isWindRing(name, d)) this.castWindRing(o, casterId); else this.castWind(o, d, casterId, 3); break; // (the wand up: a ring of wind — WindRing.js)
             case 'Overgrown': case 'OvergrownMaxima': this.castOvergrown(name, o, d, casterId); break;
             // («Wave Attack»: raised, aimed, sent — WaveAttack.js; an old one-shot: d's length = the distance)
             case 'WaveAttack': case 'WaveAttackMaxima': this.hooks.wave?.(name, o.clone(), direction.clone(), handSide, casterId); break;
@@ -1043,6 +1044,76 @@ export class SpellManager {
         this.hooks.windShips?.(origin, direction, power, casterId);
         // Doors: the gust swings the leaves it reaches (every computer the same — Doors.blow; a locked one only rattles)
         this.hooks.doors?.((p) => push(p), origin);
+    }
+
+    // ---------------------------------------------------------- Wind Maxima, the wand up
+    /**
+     * «Вайнд Максима» with the wand raised up (WindRing.js): a ring of wind goes out of the caster in every
+     * direction — whoever is in reach is blown away with the force of «Вайнд Максима»; the wave's front runs
+     * outward at WIND_RING.SPEED and puts out each fire as it reaches it (hooks.windRing). `origin`: the caster's body.
+     */
+    castWindRing(origin, casterId) {
+        const R = WIND_RING.R;
+        this._fx('fxWind', origin, 0.8);
+        // the wave seen: a pale shell and a ring on the ground rushing out, streaks of air at chest height
+        if (!this._impGeo) { this._impGeo = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true); this._impRing = new THREE.RingGeometry(0.86, 1, 48); }
+        const shellMat = new THREE.MeshBasicMaterial({ color: 0xe4f4ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const shell = new THREE.Mesh(this._impGeo, shellMat);
+        const ring = new THREE.Mesh(this._impRing, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        const ground = this.hooks.collision ? this.hooks.collision.surfaceY(origin.x, origin.z) : origin.y - 1.5;
+        const H = Math.max(2.4, origin.y - ground + 1.4);
+        shell.position.set(origin.x, ground + H / 2, origin.z);
+        ring.position.set(origin.x, ground + 0.06, origin.z);
+        this.scene.add(shell); this.scene.add(ring);
+        for (let i = 0; i < 80; i++) {
+            const a = (i / 80) * Math.PI * 2 + Math.random() * 0.1;
+            const v = _a.set(Math.cos(a), (Math.random() - 0.5) * 0.15, Math.sin(a)).multiplyScalar(WIND_RING.SPEED * (0.85 + Math.random() * 0.3));
+            this.fx.spark(_c.set(origin.x, origin.y + (Math.random() - 0.4) * 1.2, origin.z), Math.random() < 0.5 ? 0xe8f6ff : 0xbfe3ff, 0.14 + Math.random() * 0.2, v, 0.5);
+        }
+        const push = (pos) => windRingPush(origin, pos);
+        // (twice on bodies, as «Вайнд Максима» ahead; the lift only a little more)
+        const body = (pos) => { const v = push(pos); return v && v.multiplyScalar(WIND_BODY_K).setY(v.y * 1.25); };
+        if (this.auth && this.hooks.creatures) this.hooks.creatures('WindMaxima', casterId, (pos) => { const v = body(pos); return v && v.clone(); }, { from: origin });
+        else if (this.auth) {
+            for (const z of this.zombies) {
+                if (z.isDead) continue;
+                const v = body(_c.copy(z.group.position).add(UP));
+                if (!v) continue;
+                z.windVel = (z.windVel || new THREE.Vector3()).add(v.clone().setY(0));
+                z.vy = Math.max(z.vy || 0, v.y);
+            }
+        }
+        for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
+            if (w.holder || w.remoteTarget) continue;
+            const v = push(w.position);
+            if (!v) continue;
+            w.hover = null;
+            w.wake();
+            w.velocity.add(v);
+            w.angularVelocity.set((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+        }
+        this.hooks.impulseWorld?.('WindMaxima', origin, R, push, casterId);
+        this.hooks.doors?.((p) => push(p), origin);
+        if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => { const v = body(pos); return v && v.clone(); }, 'WindMaxima');
+        // the front: runs out, puts out each fire as it comes to it
+        const wave = this.hooks.windRingBegin?.(origin, casterId) || null;
+        const T = R / WIND_RING.SPEED + 0.05;
+        let t = 0;
+        this.spells.push({
+            life: T + 0.2,
+            onUpdate: (spell, dt) => {
+                t += dt;
+                const k = Math.min(1, t / T), r = 0.5 + R * k;
+                shell.scale.set(r, H, r);
+                ring.scale.setScalar(r);
+                shellMat.opacity = 0.3 * (1 - k * k);
+                ringMat.opacity = 0.5 * (1 - k * k);
+                if (wave) this.hooks.windRingStep?.(wave, dt);
+            },
+            onEnd: () => { this.scene.remove(shell); this.scene.remove(ring); shellMat.dispose(); ringMat.dispose(); },
+        });
     }
 
     // ---------------------------------------------------------- Wind Impulse

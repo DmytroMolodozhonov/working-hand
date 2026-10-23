@@ -244,6 +244,7 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
     const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle' };
     const tables = {
         'Wind Impulse': [(await import('../../src/game/WindImpulse.js')).IMPULSE_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'doors', 'ships', 'world']],
+        'Wind Maxima up': [(await import('../../src/game/WindRing.js')).WIND_RING_TARGETS, ['me', 'players', 'servants', 'campfires', 'trees', 'blocks', 'inferno', 'fireMaxima', 'hellfire', 'hellfireLeft', 'carts', 'ships', 'doors', 'items', 'water', 'ground', 'godGifts', 'space', 'burningBodies']],
         Drawdown: [(await import('../../src/game/Drawdown.js')).DRAWDOWN_TARGETS, ['me', 'players', 'blocks', 'trees', 'furniture', 'looseThings', 'water', 'ships', 'ward']],
         Liquidation: [(await import('../../src/game/Liquidation.js')).LIQUIDATION_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'blocks', 'trees', 'furniture', 'ships', 'water', 'ground']],
         Stitching: [(await import('../../src/game/Stitching.js')).STITCH_TARGETS, ['me', 'players', 'blocks', 'houses', 'caves', 'open', 'water', 'ships', 'ward']],

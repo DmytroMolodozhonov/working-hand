@@ -140,6 +140,30 @@ export class FireSystem {
     }
 
     /**
+     * «Вайнд Максима» upward: a wave of wind puts out every fire whose place `reached(x, y, z)` says it ran
+     * over (`y` null for a tree: only along the ground). `out(x, y, z)` is called for each fire put out.
+     * @returns how many
+     */
+    douseWhere(reached, out = null) {
+        let n = 0;
+        for (let i = this.burningTrees.length - 1; i >= 0; i--) {
+            const t = this.burningTrees[i].tree;
+            if (!reached(t.x, null, t.z)) continue;
+            t.burning = false; // (what burnt off is gone)
+            this.burningTrees.splice(i, 1);
+            out?.(t.x, 3, t.z);
+            n++;
+        }
+        for (const [key, b] of this.burningBlocks) {
+            if (!reached(b.x, b.L - 1, b.z)) continue;
+            this.burningBlocks.delete(key);
+            if ((n & 3) === 0) out?.(b.x, b.L, b.z); // (a puff for every fourth: a burning house has hundreds)
+            n++;
+        }
+        return n;
+    }
+
+    /**
      * Fire melts snow (any fire: «Инферно», a burning hand, «Бомбардо»'s blast, Hellfire…): the
      * block is gone in a puff of steam, its water runs off. Like the burning blocks it happens the
      * same on every computer (no chance in it); kept in the world's changes (a save).
