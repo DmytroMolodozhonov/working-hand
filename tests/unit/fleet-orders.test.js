@@ -381,3 +381,61 @@ test('every ship class: the crew stations (gun spots) lie on the deck inside the
         assert.ok(hullHalfWidth(L, L.gangZ, L.deck) > 3, `${c} gangway`);
     }
 });
+
+test('the boarding ends: the deck is ours and the rest are below — or no blow for a long while — they surrender and the ship is taken', () => {
+    const W = world();
+    W.addCrew(W.mine, 8);
+    const enemy = W.addCrew(W.foe, 5);
+    const taken = [];
+    W.C.capture = (T, by) => taken.push([T.id, by]);
+    W.C.alive = (s) => (W.crews.get(s.id) || []).filter((v) => !v.dead).length;
+    const f = W.fleet.state(W.mine);
+    f.by = 'king'; f.lash = { planks: true, T: W.foe };
+    // one of hers still on the deck: no surrender
+    enemy.forEach((v, i) => { v.l.y = i === 0 ? W.foe.layout.deck : 0.6; });
+    W.fleet._surrender(W.mine, f, W.foe);
+    f.clearAt = performance.now() - 60000; f.planksAt = performance.now();
+    W.fleet._surrender(W.mine, f, W.foe);
+    assert.equal(taken.length, 0, 'they still hold the deck');
+    // the deck cleared (all below) for 15 s: she gives up
+    enemy[0].l.y = 0.6;
+    f.clearAt = null;
+    W.fleet._surrender(W.mine, f, W.foe);
+    assert.ok(f.clearAt != null);
+    f.clearAt = performance.now() - 16000;
+    W.fleet._surrender(W.mine, f, W.foe);
+    assert.deepEqual(taken, [['foe', 'king']]);
+    // no blow for 30 s while our men are over there: the same
+    const g = W.crews.get('mine'); g[4].ship = W.foe;
+    enemy[0].l.y = W.foe.layout.deck; // (one on the deck, so not the first rule)
+    W.fleet.blowAt = performance.now() - 40000; f.planksAt = performance.now() - 40000;
+    W.fleet._surrender(W.mine, f, W.foe);
+    assert.equal(taken.length, 2);
+});
+
+test('the men spread over the foes: not all of them after one; two at a time down a stair; the defenders hold their level', () => {
+    const W = world();
+    const mine = W.addCrew(W.mine, 8);
+    const theirs = W.addCrew(W.foe, 6);
+    // all our boarders on her main deck; three of hers on deck, two below
+    const deck = W.foe.layout.deck;
+    mine.forEach((v, i) => { v.ship = W.foe; v.l = { x: i * 0.3, y: deck, z: 0 }; v.fleetBoard = 'foe'; });
+    theirs.forEach((v, i) => { v.l = { x: 3 + i, y: i < 3 ? deck : 0.6, z: 5 }; });
+    W.fleet._intrAt = 0;
+    const picks = new Map();
+    for (const v of mine.slice(1)) {
+        const f = W.fleet.sailorFoe(v, W.foe);
+        assert.ok(f);
+        v.foe = f.id; v.fp = f;
+        picks.set(f.id, (picks.get(f.id) || 0) + 1);
+    }
+    const onDeck = [...picks].filter(([id]) => ['c:foe:c0', 'c:foe:c1', 'c:foe:c2'].includes(id));
+    assert.ok(onDeck.length >= 2, `they spread: ${JSON.stringify([...picks])}`);
+    assert.ok(Math.max(...picks.values()) <= 4, 'not all on one');
+    // the defenders hold their level: an intruder on another level is not their business
+    const d = theirs[3]; d.l.y = 0.6;
+    const intr = mine[1]; intr.l.y = deck;
+    W.fleet._intrAt = 0;
+    const f = W.fleet.sailorFoe(d, W.foe);
+    assert.ok(!f || f.id !== 'c:' + intr.id, 'a defender below does not climb after a boarder on deck');
+});
