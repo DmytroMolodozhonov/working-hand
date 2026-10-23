@@ -2,7 +2,7 @@
  * GroundVortex.js — «Ground Vortex» (a scroll; held): the earth rises and circles round the hero. Rules, numbers and the
  * «who / what» table — GroundVortexRules.js (read its header first); the blocks are drawn by src/fx/GroundVortexFx.js.
  *
- *   «Ground Vortex»  the wand on the ground (≤ 16 m) + the words (20 mana, then 0.5 a second). Pointing at the ground lifts
+ *   «Ground Vortex»  the wand on the ground (≤ 16 m) + the words (20 mana, then 1 a second). Pointing at the ground lifts
  *                    blocks (2.5 a second), every turn of the hand more (a full turn ~10); they circle in a funnel round the hero.
  *   the hand         stops going round and points, calm → the vortex leaves the hero and follows the wand as a snake (a train).
  *   «Атака» / a sharp throw of the wand hand → the blocks fly where the wand points (a volley / a salvo of 12).

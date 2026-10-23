@@ -180,3 +180,13 @@ test('class: a lifted block comes out of the world as an edit; the shield takes 
     // every laid cell is free ground with something under it
     for (const e of edits) if (e[3] === BLOCK.STONE) assert.notEqual(data.get(e[0], e[1] - 1, e[2]), BLOCK.AIR);
 });
+
+test('price: 20 at once + 1 a second (the shared VortexCost); the swarm maths is in ObjectSwarm and the rules re-export it', async () => {
+    const { VORTEX_PRICE, vortexDrain, vortexAffordable } = await import('../../src/game/VortexCost.js');
+    const S = await import('../../src/game/ObjectSwarm.js');
+    assert.equal(VORTEX_PRICE.COST_ONCE, 20); assert.equal(VORTEX_PRICE.PER_SECOND, 1);
+    assert.equal(GV.COST, 20); assert.equal(GV.DRAIN, 1); assert.equal(SPELL_COST.GroundVortex, 20);
+    assert.equal(vortexDrain(2.5), 2.5); assert.equal(vortexAffordable(19), false); assert.equal(vortexAffordable(20), true);
+    for (const f of ['funnelSlot', 'ringOffset', 'shieldCovers', 'blocksToBreak', 'trailAt', 'trailPush', 'salvoVelocity', 'flyStep']) assert.equal(R[f], S[f], f);
+    assert.equal(S.SWARM.MAX_THINGS, 160); assert.equal(GV.MAX_BLOCKS, 160);
+});
