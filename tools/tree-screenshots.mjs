@@ -17,12 +17,13 @@ const browser = await launch();
 try {
     const page = await browser.newPage({ viewport: { width: 1400, height: 760 } });
     page.on('pageerror', (e) => console.error('page error:', e.message));
-    await page.goto(srv.url + 'style.css');
+    await page.goto(srv.url + 'tools/tree-view.html');
     const kinds = only != null ? [Number(only)] : [0, 1, 2, 3, 4];
     for (const k of kinds) {
         const url = await page.evaluate(async ([k, far, dist]) => {
-            const THREE = await import('/vendor/three/three.module.js');
-            const { buildTree, TREE_GEN } = await import('/src/world/TreeBuild.js?' + Date.now());
+            const THREE = await import('three');
+            const TM = await import('/src/world/TreeMaterials.js?' + Date.now());
+            const { TREE_GEN } = await import('/src/world/TreeBuild.js');
             const cv = document.createElement('canvas');
             cv.width = 1400; cv.height = 760;
             const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
@@ -37,22 +38,20 @@ try {
             scene.add(sun);
             const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0x5f9a45 }));
             ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-            const geo = (a) => {
-                const g = new THREE.BufferGeometry();
-                g.setAttribute('position', new THREE.BufferAttribute(a.pos, 3));
-                g.setAttribute('normal', new THREE.BufferAttribute(a.nor, 3));
-                g.setAttribute('color', new THREE.BufferAttribute(a.col, 3));
-                g.setIndex(new THREE.BufferAttribute(a.index, 1));
-                return g;
-            };
-            const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-            const N = TREE_GEN.VARIANTS, gap = 15;
+            const bark = TM.barkMaterial(), leaves = TM.leafMaterial(), depth = TM.leafDepthMaterial();
+            const ac = document.createElement('canvas');
+            const { drawLeafAtlas, LEAF_ATLAS } = await import('/src/world/TreeLeaves.js');
+            ac.width = LEAF_ATLAS.CELL * LEAF_ATLAS.KINDS; ac.height = LEAF_ATLAS.CELL;
+            drawLeafAtlas(ac.getContext('2d'));
+            window.__atlas = ac.toDataURL('image/png');
+            const N = TREE_GEN.VARIANTS, gap = 13;
             for (let v = 0; v < N; v++) {
-                const t = buildTree(k, v, { far });
-                for (const part of [t.wood, t.leaf]) {
-                    const m = new THREE.Mesh(geo(part), mat);
+                const t = TM.treeGeometry(k, v, far);
+                for (const [g, isLeaf] of [[t.wood, false], [t.leaf, true]]) {
+                    const m = new THREE.Mesh(g, isLeaf ? leaves : bark);
+                    if (isLeaf) m.customDepthMaterial = depth;
                     m.position.x = (v - (N - 1) / 2) * gap;
-                    m.castShadow = m.receiveShadow = true;
+                    m.castShadow = true; m.receiveShadow = !isLeaf; // (leaves: no self-shadow speckle — their own shade is in their colours)
                     scene.add(m);
                 }
             }
@@ -60,7 +59,7 @@ try {
             const hero = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.5, 0.4), new THREE.MeshLambertMaterial({ color: 0xd03030 }));
             hero.position.set((-(N - 1) / 2 + 0.5) * gap, 1.75, 3); scene.add(hero);
             const cam = new THREE.PerspectiveCamera(42, 1400 / 760, 0.5, 500);
-            cam.position.set(dist < 100 ? -45 : 0, 7, dist); cam.lookAt(dist < 100 ? -45 : 0, 8, 0);
+            cam.position.set(dist < 100 ? -42 : 0, 7, dist); cam.lookAt(dist < 100 ? -42 : 0, 8, 0);
             r.render(scene, cam);
             const u = cv.toDataURL('image/png');
             r.dispose();
@@ -69,6 +68,8 @@ try {
         const file = path.join(out, `tree-${k}${far ? '-far' : ''}.png`);
         fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
         console.log('saved', file);
+        const atlas = await page.evaluate(() => window.__atlas);
+        if (atlas) fs.writeFileSync(path.join(out, 'leaf-atlas.png'), Buffer.from(atlas.split(',')[1], 'base64'));
     }
 } finally {
     await browser.close();
