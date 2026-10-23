@@ -31,6 +31,7 @@ import { KD } from '../game/Impact.js';
 import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
 
+const _v3k = new THREE.Vector3();
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -352,6 +353,8 @@ export class VoxelCharacter {
         };
         solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist);
         solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist);
+        this._bendKept('left');
+        this._bendKept('right');
 
         this._updateHands(poseData);
     }
@@ -871,6 +874,7 @@ export class VoxelCharacter {
         }
 
         // Hands pushed by collisions spring back (realistic resistance)
+        this._relaxKept(dt);
         const spring = Math.min(1, 15 * dt);
         for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) {
             const rest = h.group.userData.restOffset; // set by the camera/hand setup screen
@@ -885,13 +889,25 @@ export class VoxelCharacter {
      * a body it pushes, a shield taking a spell); springs back by itself next frames.
      */
     setHandOffset(side, worldDelta, max = 0.6) {
-        const hand = this.getActiveHands()[side];
-        if (!hand || !hand.group.parent) return;
-        _v1.copy(worldDelta).clampLength(0, max);
-        hand.group.parent.getWorldQuaternion(_q1).invert();
-        _v1.applyQuaternion(_q1);
-        const rest = hand.group.userData.restOffset;
-        hand.group.position.set((rest?.x || 0) + _v1.x, (rest?.y || 0) + _v1.y, this.BONE_LENGTH_LOWER + (rest?.z || 0) + _v1.z);
+        // (the hand stays on the end of the forearm: the whole ARM is bent to the new place — the wrist never comes apart)
+        const keep = this._handKeep || (this._handKeep = { left: new THREE.Vector3(), right: new THREE.Vector3() });
+        keep[side].copy(worldDelta).clampLength(0, max);
+        this._bendKept(side);
+    }
+
+    /** The arm of `side` bent so that its hand lies where the tracked hand + the kept push is (the bones keep their length). */
+    _bendKept(side) {
+        const k = this._handKeep?.[side];
+        if (!k || k.lengthSq() < 1e-8) return;
+        this.reachHand(side, this.getHandWorldPosition(side, _v3k).add(k), 1, 0);
+    }
+
+    /** The push on a hand lets go (about 0.1 s); false — nothing is left. */
+    _relaxKept(dt) {
+        const keep = this._handKeep;
+        if (!keep) return;
+        const f = Math.exp(-15 * Math.max(0, dt));
+        for (const side of ['left', 'right']) keep[side].multiplyScalar(f);
     }
 
     getPosition(out = new THREE.Vector3()) { return out.copy(this.group.position); }

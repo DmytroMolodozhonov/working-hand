@@ -115,6 +115,22 @@ const ARM_MASS = 1.2;
 /** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
 const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
+/**
+ * Where a backpack is put on: the hand with it brought to the shoulder or behind the back (a natural swing «over the shoulder»),
+ * or both hands behind the back. Body space: x right, y up from the hips, the body looks along −Z, its back is at z +0.4;
+ * the hero ~3.5 m tall, shoulders at ±0.7 (y ≈ 0.5 above the hips… the arm anchor), arm 1.9 m. The camera's depth is rough, so loose.
+ */
+export const BACKPACK_WEAR = { T: 0.35, T_SHOULDER: 0.6, SHOULDER_R: 1.0, BACK_Z: 0.1, BACK_X: 1.7 };
+export function backpackSpot(hand, other, shoulder) {
+    const bx = Math.abs(hand.x), sy = shoulder ? shoulder.y : 0.5;
+    // behind the back (either hand with the pack; the arm's depth is a guess, so the band is wide)
+    if (hand.z > BACKPACK_WEAR.BACK_Z && bx < BACKPACK_WEAR.BACK_X && hand.y > sy - 2.4 && hand.y < sy + 1.0) return 'back';
+    if (hand.z > 0.25 && other.z > 0.25) return 'back2';
+    // at the shoulder (same side or the far one) or over it
+    if (shoulder && hand.y > sy - 0.7 && hand.y < sy + 1.4 && hand.z > -0.9 && Math.hypot(hand.x - shoulder.x, hand.y - sy, hand.z - shoulder.z) < BACKPACK_WEAR.SHOULDER_R) return 'shoulder';
+    return null;
+}
+
 export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
@@ -1130,15 +1146,16 @@ export class ItemSystem {
 
     _wear(dt, ch) {
         const bp = this.heldOf('backpack');
-        if (!bp) { this._wearT = 0; return; }
+        if (!bp || (bp.item.shop && !bp.item.shop.paid)) { this._wearT = 0; this._wearWhy = null; return; }
         ch.group.updateMatrixWorld(true);
         _inv.copy(ch.group.matrixWorld).invert();
-        const l = ch.getHandWorldPosition('left', _v).applyMatrix4(_inv);
-        const r = ch.getHandWorldPosition('right', _v2).applyMatrix4(_inv);
-        // both hands behind the back (the body looks along −Z)
-        if (l.z > 0.25 && r.z > 0.25) this._wearT += dt; else this._wearT = 0;
-        if (this._wearT < 0.4) return;
-        this._wearT = 0;
+        const spot = backpackSpot(ch.getHandWorldPosition(bp.side, _v).applyMatrix4(_inv),
+            ch.getHandWorldPosition(bp.side === 'left' ? 'right' : 'left', _v2).applyMatrix4(_inv),
+            (bp.side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_f).applyMatrix4(_inv));
+        // (held there the time adds up; a moment out of the place — the camera shakes the hand — takes off only a little)
+        if (spot) this._wearT += dt; else this._wearT = Math.max(0, this._wearT - 0.35 * dt);
+        if (this._wearT < (spot === 'shoulder' ? BACKPACK_WEAR.T_SHOULDER : BACKPACK_WEAR.T)) { if (!spot && this._wearT === 0 && this._wearWhy !== 'far') { this._wearWhy = 'far'; handLog('рюкзак не надет: рука не у плеча и не за спиной'); } return; }
+        this._wearT = 0; this._wearWhy = null;
         const item = this.releaseHand(bp.side);
         this.wear(item);
     }
