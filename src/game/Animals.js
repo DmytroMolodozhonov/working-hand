@@ -34,6 +34,7 @@ import { confusedMiss } from './StrongSpells.js';
 import { SWIMMERS, deepAt, waterAt, swimStep, splashes } from './CreatureSwim.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
+import { FarShape } from '../core/FarShape.js';
 import { animalMagicKind, creditKill } from './Mana.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -49,6 +50,9 @@ import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, pulseGolden } from './AppleTrees.js';
+/** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
+export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 3, THINK: 0.05, THINK_DISTANT: 0.1 };
+const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
 
 export { animalModel };
 
@@ -333,6 +337,7 @@ export class Animals {
         const g = this.game;
         if (a.pen && !a.dead) g.houses?.penReturn(a.pen.id); // (a pen animal far away: it comes back with the pen)
         g.scene.remove(a.model);
+        a.far?.dispose(); // (its far copy's own buffers)
         // (shapes are shared by all animals: nothing to dispose — but a running book's are its own)
         if (a.model.userData.runbook) a.model.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
         if (a.bones) g.scene.remove(a.bones);
@@ -1596,11 +1601,46 @@ export class Animals {
     }
 
     _animate(a, k, dt = 0) {
+        // (far off or out of the picture: the pose is renewed rarely — the time adds up, nothing is lost — _lookFar)
+        if (dt && a.animStep) { a.animAcc = (a.animAcc || 0) + dt; if (a.animAcc < a.animStep) return; dt = Math.min(a.animAcc, 1); }
+        a.animAcc = 0;
         if (dt) animatePose(a, dt, a.pose ?? POSE.stand); // (the head down to the grass / looking about)
         animateLegs(a.model, a.walkT, k * (1 - (a.lie || 0)));
         if (a.lie > 0.01) foldLegs(a.model, a.lie); // (lying: the legs folded under the body)
         if (a.model.userData.wings && !a.dead) this._pigBody(a, dt || 1 / 60); // (a pig's wings; Leviosa calls this without dt)
         if (a.form || a.formK || a.model.userData.minotaur || a.model.userData.bronze) this.guards.look(a, dt || 1 / 60); // (the bull / the minotaur)
+        if (a.far?.on) a.far.refresh(); // (drawn far as one shape: posed anew)
+    }
+
+    /**
+     * How each animal is drawn this frame (before they think and move): near — as it is, every frame; far (FAR.LOD m+) —
+     * one shape per material (FarShape: ~22 parts → 3–5 draws), its pose renewed every FAR.STEP s (FAR.DISTANT_STEP
+     * beyond FAR.DISTANT); out of the camera's picture — not posed at all until it comes into view (then at once).
+     * A herd of the evening's «herds by area» (Creative's start: ~30 animals round) cost ~150 draws and ~1.5 ms of posing.
+     */
+    _lookFar(me, dt = 0) {
+        const cam = this.game.camera;
+        if (!cam?.projectionMatrix) return; // (no picture: a test's game)
+        _farM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+        _farF.setFromProjectionMatrix(_farM);
+        let builds = 0;
+        for (const a of this.list) {
+            const p = a.group.position, d = Math.hypot(p.x - me.x, p.z - me.z);
+            const plain = !a.dead && !a.rider && a !== this.riding && !a.lev && !a.cart && !a.mount?.on && !a.guard && !a.form && !a.formK
+                && !a.fly && !a.flyCode && a.type !== 'runbook' && !a.model.userData.minotaur && !a.model.userData.bronze && !(a.stunT > 0);
+            const seen = _farF.intersectsSphere(_farS.set(p, 4 * (a.group.scale.x || 1) + 2));
+            a.animStep = !plain || d < FAR.LOD ? 0 : !seen ? 1e9 : d > FAR.DISTANT ? FAR.DISTANT_STEP : FAR.STEP;
+            // (calm and far: it thinks every FAR.THINK / FAR.THINK_DISTANT s; anything happening — fleeing, a fight, a master — every frame)
+            const calm = plain && d > FAR.LOD && a.state === 'graze' && !a.attacker && a.servantOf == null && !a.tamed && !a.pen;
+            a.thinkEvery = calm && dt > 0 ? Math.max(1, Math.min(8, Math.round((!seen || d > FAR.DISTANT ? FAR.THINK_DISTANT : FAR.THINK) / dt))) : 1;
+            const want = plain && d > FAR.LOD;
+            if (want && !a.far?.on) {
+                if (builds >= FAR.BUILDS) continue; // (a herd come far at once: a few a frame)
+                builds++;
+                if (!a.far) { a.far = new FarShape(a.model); a.model.userData.farRadius = 3.5 * (a.group.scale.x || 1); }
+                a.far.set(true);
+            } else if (!want && a.far?.on) a.far.set(false);
+        }
     }
 
     _playerPos(id) {
@@ -1635,6 +1675,7 @@ export class Animals {
         const me = g.character.group.position;
         this._treeT -= dt;
         if (this._treeT <= 0) { this._treeT = 2; this._treesAround(me); }
+        this._lookFar(me, dt);
         // apples grow back
         const now = Date.now();
         pulseGolden(dt, g.world?._night || 0); // (the golden trees' light: soft by day, strong at night)
@@ -1684,6 +1725,17 @@ export class Animals {
                 }
                 if (a.cart && !(a.stunT > 0) && !a.vy) continue; // (in a cart's harness: it walks where the cart goes — Carriages.js)
                 if (a.mount?.on && !(a.stunT > 0) && !a.vy) continue; // (under a rider of the roads: he leads it — Riders.js)
+                // (a calm grazing animal far off thinks every few frames, its time added up — _lookFar; herds round the
+                // start were ~30 animals thinking every frame: 1.5 ms)
+                if (a.thinkEvery > 1) {
+                    a.thinkAcc = (a.thinkAcc || 0) + dt;
+                    if ((this._tick + a.id) % a.thinkEvery !== 0) continue;
+                    const t = Math.min(a.thinkAcc, 0.1);
+                    a.thinkAcc = 0;
+                    this._think(a, t);
+                    continue;
+                }
+                a.thinkAcc = 0;
                 this._think(a, dt);
             }
             this._burnInFire(dt); // (in a burning tree's / block's fire)
