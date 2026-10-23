@@ -446,6 +446,19 @@ const FX = {
     fxShield(sr) { const o = buf(sr, 0.9); glide(o, sr, 0, 0.9, 0.35, (u) => 330 + 30 * Math.sin(u * 40), (u) => Math.min(1, u * 10) * (1 - u), 4); bell(o, sr, 1975, 0.02, 0.2, 0.8, 0.5); return finish(o, sr, { peak: 0.6 }); },
     /** «Invisibility»: a shimmering hiss falling away, a bell fading. */
     fxInvis(sr) { const o = buf(sr, 1.3), r = rng(5); noise(o, sr, 0, 1.3, 0.25, (u) => 0.6 - 0.5 * u, swell(0.15, 0.7), r); glide(o, sr, 0, 1.3, 0.12, (u) => 2400 - 1600 * u, swell(0.1, 0.8), 2); return finish(o, sr, { peak: 0.55 }); },
+    /**
+     * «Visible Godi»: an eye opening — a soft breath rustling up, a veiled glassy glide rising through it, then a little
+     * wondering tune of four bells (B, D#, F#, B) and a bloom of pad under the last one.
+     */
+    fxSeeing(sr) {
+        const o = buf(sr, 1.9), r = rng(23);
+        noise(o, sr, 0, 0.9, 0.22, (u) => 0.08 + 0.4 * u, swell(0.35, 0.5), r); // (the breath, brightening)
+        glide(o, sr, 0.05, 0.85, 0.1, (u) => 330 + 620 * u * u + 6 * Math.sin(u * 60), swell(0.3, 0.45), 2); // (the veiled glide up)
+        ['B5', 'D#6', 'F#6', 'B6'].forEach((n, k) => bell(o, sr, hz(n), 0.45 + k * 0.17, 0.15, 1.1, 0.25));
+        pad(o, sr, ['B3', 'F#4', 'B4'], 0.8, 1.9, 0.12, { att: 0.2, rel: 0.7, harm: 2, vib: 0.004 });
+        noise(o, sr, 0.5, 0.5, 0.05, () => 0.9, swell(0.2, 0.6), r); // (a shimmer of dust)
+        return finish(o, sr, { peak: 0.6 });
+    },
     /** «Rescue»: a warm healing chime — three notes rising over a soft chord. */
     fxHeal(sr) { const o = buf(sr, 1.6); pad(o, sr, ['C4', 'E4', 'G4'], 0, 0.8, 0.3, { att: 0.2, rel: 0.7, harm: 1 }); ['C5', 'E5', 'G5', 'C6'].forEach((n, k) => bell(o, sr, hz(n), k * 0.13, 0.16, 1.2, 0.15)); return finish(o, sr, { peak: 0.6 }); },
     /** «Air Bubble»: bubbles — little chirps rising. */
@@ -581,6 +594,8 @@ const LOOPS = {
     loopAlive(sr) { const o = buf(sr, 3.3); pad(o, sr, [55, 82.5], 0, 3.3, 0.4, { att: 0.01, rel: 0, harm: 4 }); glide(o, sr, 0.6, 1.4, 0.15, (u) => 100 + 30 * u + 5 * Math.sin(u * 50), (u) => Math.sin(u * Math.PI), 5); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** «Strengthen House» held: a bright steady hum (E and B) with a quick shimmer of silver bells climbing. */
     loopStrengthen(sr) { const o = buf(sr, 2.3); pad(o, sr, [164.8, 246.9, 329.6], 0, 2.3, 0.26, { att: 0.01, rel: 0, harm: 2, vib: 0.005 }); glide(o, sr, 0, 2.3, 0.05, (u) => 600 + 400 * u, () => 1, 1); for (const [t, n] of [[0.2, 'B5'], [0.9, 'E6'], [1.6, 'G#6']]) bell(o, sr, hz(n), t, 0.04, 0.7, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
+    /** «Visible Godi» held: a quiet veiled hum (A and E) breathing slowly, one far bell now and then. */
+    loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** «Электром» held: the hum of a live wire and its crackle. */
@@ -666,7 +681,7 @@ export const SPELL_SOUND = {
     Draw: { cast: 'fxLumos', rate: 0.8 },
     Protection: { cast: 'fxShield' }, ProtectionMaxima: { cast: 'fxShield', rate: 0.8 },
     ProtectionGods: { cast: 'fxShield', theme: 'thGods' }, ProtectionGodsMaxima: { cast: 'fxShield', theme: 'thGods', rate: 0.9 }, // (the gods' shield: its tune — ProtectionGods.js)
-    Invisibility: { cast: 'fxInvis' }, Rescue: { cast: 'fxHeal' },
+    Invisibility: { cast: 'fxInvis' }, VisibleGodi: { cast: 'fxSeeing' }, Rescue: { cast: 'fxHeal' },
     AirBubble: { cast: 'fxBubble' }, AirBubbleMaxima: { cast: 'fxBubble', rate: 0.8 },
     Breakthrough: { cast: 'fxStone' }, BreakthroughMaxima: { cast: 'fxStone', rate: 0.85 },
     Flight: { own: ['cast'] }, Pause: { cast: 'fxPause' },
@@ -685,6 +700,7 @@ export const HELD_SOUND = {
     Build: { loop: 'loopBuild', end: 'fxStop' },
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
+    VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
     Imperius: { loop: 'loopImperius', end: 'endImperius' }, // (the mind in another body; the end — the mind back home)

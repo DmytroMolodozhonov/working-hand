@@ -27,6 +27,7 @@ import { WIND_RING, isWindRing, windRingPush } from '../game/WindRing.js';
 import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
 import { groundprudWords } from '../game/GroundprudWords.js';
+import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 
 const _a = new THREE.Vector3();
@@ -111,6 +112,8 @@ export function matchSpell(text) {
     if (bridgeWords(s)) return 'CreateBridge';
     // «Groundprud» («граунтпруд»): one word, before the plain «Protection»
     if (groundprudWords(s)) return 'Groundprud';
+    // «Visible Godi» («визибл годи»): both words together, before «Invisible» and the short tokens (VisibleGodiWords.js)
+    if (visibleGodiWords(s)) return 'VisibleGodi';
     // «Protection Gods» / «… Maxima» («Протекшн Гадс», «Божественная защита»): the gods' shield — the long phrase first,
     // never a plain «Protection» while the gods' word was said (ProtectionGods.js)
     const gods = godsShieldWords(s);

@@ -56,7 +56,8 @@ export const FIRST_SPELL = {
     Lumos: 1, LumosFlashlight: 1, LumosAhead: 1, Draw: 1, Accio: 1, Gather: 1, Levitation: 1, Up: 1, Fire: 1, Wind: 1,
     CreateFloor: 1, CreateCeiling: 1, CreateWall: 1, CreateDoor: 1, BuildRoof: 1, CreateBed: 1, CreateBoard: 1,
     ChangeColor: 1, Unfurl: 1, Furl: 1, Alohomora: 1, Lock: 1, Waterball: 1, WaterForming: 1, AirBubble: 1, VortexBubble: 1,
-    Protection: 1, WardDispel: 1, Rescue: 1, Brainrot: 3, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1, Groundprud: 2, // (Groundprud: a wall of the ground — the author: +2 cells at the first cast; Groundprud.js)
+    Protection: 1, WardDispel: 1, Rescue: 1, Brainrot: 3, Firefighting: 1, Drawdown: 1, Stitching: 1, CreateBridge: 1, VisibleGodi: 5, // («Visible Godi»: the author — +5 cells at the first real look behind a wall; VisibleGodi.js)
+    Groundprud: 2, // (Groundprud: a wall of the ground — the author: +2 cells at the first cast; Groundprud.js)
     Fireworks: 3, // (the author: «за первое применение даётся 3 ячейки маны» — once, at the first real salvo)
     // medium: +2…+5
     LumosMaxima: 2, LumosFollowing: 3, AirBubbleMaxima: 2, AlohomoraMaxima: 2, Maxima: 2,
@@ -406,7 +407,7 @@ const TITLES = {
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle',
-    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud',
+    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', VisibleGodi: 'Visible Godi',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',
 };

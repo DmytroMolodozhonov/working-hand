@@ -161,6 +161,8 @@ import { Stitching } from './Stitching.js';
 import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
+import { VisibleGodi } from './VisibleGodi.js';
+import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { Fireworks } from './Fireworks.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
@@ -176,7 +178,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks']);
+const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -449,6 +451,7 @@ export class Game {
         this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
+        this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
@@ -553,6 +556,7 @@ export class Game {
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);
+        this.seeFx = new SeeThroughFx(this); // «Visible Godi»'s cloud: one shader made now, drawn only while the spell is on (SeeThroughFx.js)
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, isWeapon && w ? dmg * (w.damageScale || 1) : dmg, dir, isWeapon, hit, w);
 
@@ -1494,7 +1498,7 @@ export class Game {
         }
         // another spell from the wand that holds my «Protection»: it knocks the shield down (Combat.castFrom) — except Lumos: a light on the wand tip is no spell in the way
         if (name && !/^Protection(Gods)?(Maxima)?$/.test(name) && !/^Lumos/.test(name) && !NOT_SPELLS.has(name) && name !== 'Maxima') this.combat.castFrom(this.wandSide());
-        if (name && name !== 'Invisibility' && name !== 'Stand') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
+        if (name && name !== 'Invisibility' && name !== 'Stand' && name !== 'VisibleGodi') this.invis?.noted(this.localId); // (a spell gives an invisible caster away: about where)
         // mana: a spell paid for that always works counts at once; the others report it themselves when they work
         if (name && (this.combat.paidCount || 0) > paid && !this._manaLater && !MANA_LATER.has(name)) this.mana?.success(name);
         return name;
@@ -1804,6 +1808,7 @@ export class Game {
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
@@ -1987,6 +1992,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
+        if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
         if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
@@ -3119,6 +3125,7 @@ export class Game {
     /** The scene to the screen: the usual way, or with the «Ультра качество» picture. */
     _draw() {
         if (!this.ultra?.render()) this.renderer.render(this.scene, this.camera);
+        this.seeFx?.render(); // («Visible Godi»: the cloud over the picture — nothing when the spell is off)
     }
 
     /**
@@ -3206,6 +3213,7 @@ export class Game {
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
+        this.seeFx?.prewarm(); // («Visible Godi»: the cloud's shader)
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
@@ -3435,6 +3443,7 @@ export class Game {
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
+        this.visibleGodi?.update(dt);
         this.fireworks?.update(dt);
         if (earth) this._updateCaves(dt);
         this.keeper?.update(dt);
@@ -4340,6 +4349,7 @@ export class Game {
         this.scrolls?.dispose();
         this.swim?.dispose();
         this.seaSurface?.dispose();
+        this.seeFx?.dispose();
         this.ultra?.dispose();
         this.items?.dispose();
         this.wandMagic?.dispose();
