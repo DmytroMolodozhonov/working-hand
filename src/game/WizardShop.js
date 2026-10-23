@@ -9,14 +9,38 @@
  */
 
 import { newUid, itemValue, SPELL_RU, fitThings } from './ItemTypes.js';
-import { bookSpells } from './BookBirds.js';
+import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
 
-/** A chest in a wizards' house: 1–3 things (a rich house a little more). */
-export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0) {
+/**
+ * A lone wizard's house keeps what a house needs (the author: «в домах одиночных волшебников свитки про дом, защиту
+ * дома, улучшение дома — в разы чаще, 40%»): its chest holds one thing about houses with this chance
+ * (the towers' and the wizards' villages' chests are as they were).
+ */
+export const LONE_HOUSE = { CHANCE: 0.4 };
+
+/** Things about a house: «Improve a House» / «Create a House» scrolls, «Alohomora Maxima» (doors), the book of protection (its five spells). */
+const HOUSE_THINGS = [['ImproveHouse', 3], ['CreateHouse', 3], ['AlohomoraMaxima', 1.5], ['ward', 3]];
+
+/** One thing about houses (see HOUSE_THINGS). */
+export function rollHouseThing(r = Math.random) {
+    let y = r() * HOUSE_THINGS.reduce((a, [, w]) => a + w, 0);
+    for (const [k, w] of HOUSE_THINGS) {
+        if ((y -= w) >= 0) continue;
+        if (k === 'ward') { const id = WARD_ID + Math.floor(r() * 1e6); return { kind: 'book', uid: newUid(), id, spells: bookSpells(id), ward: true }; }
+        return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: k };
+    }
+    return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'ImproveHouse' };
+}
+
+/** Is this thing one of those about a house? */
+export const isHouseThing = (it) => !!it && ((it.kind === 'scroll' && it.stat === 'spell' && HOUSE_THINGS.some(([k]) => k === it.spell)) || (it.kind === 'book' && !!it.ward));
+
+/** A chest in a wizards' house: 1–3 things (a rich house a little more). `lone`: a lone wizard's house (LONE_HOUSE). */
+export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lone = false) {
     const out = [];
     const n = randInt(r, 1, rich ? 3 : 2) + (rich && r() < 0.3 ? 1 : 0);
     for (let i = 0; i < n; i++) {
@@ -32,7 +56,15 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0) {
     // (the wizards keep magic armour more often than anybody — and now and then a magic robe: ArmorTypes)
     const arm = rollChestArmor(r, { wizard: true });
     if (arm) out.push(arm);
-    return count > 0 ? fitThings(out, count, r) : out;
+    const things = count > 0 ? fitThings(out, count, r) : out;
+    if (lone && r() < LONE_HOUSE.CHANCE) {
+        // (it takes the place of the plainest thing: food, a health / mana scroll — else a random one; never an extra, the chest keeps its count)
+        const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || (it.kind === 'scroll' && it.stat !== 'spell');
+        let at = things.findIndex(plain);
+        if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
+        if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
+    }
+    return things;
 }
 
 /** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */

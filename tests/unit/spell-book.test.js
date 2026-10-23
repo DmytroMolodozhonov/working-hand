@@ -60,3 +60,19 @@ test('every spell a beginner does not know has a real source: a scroll somewhere
         if (found.has(k)) assert.ok(SPELL_RIBBON[k] && SPELL_RU[k], `the scroll «${k}»: its ribbon and its name`);
     }
 });
+
+test('a lone wizard\'s house chest holds a thing about houses 40 % of the time; other wizards\' houses do not', async () => {
+    const { rollWizardHouseLoot, isHouseThing, LONE_HOUSE } = await import('../../src/game/WizardShop.js');
+    let s = 12345;
+    const r = () => { s = (Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9) >>> 0; return s / 4294967296; };
+    const N = 4000;
+    let lone = 0, other = 0;
+    for (let i = 0; i < N; i++) {
+        const a = rollWizardHouseLoot(r, i % 3 === 0, 3, true), b = rollWizardHouseLoot(r, i % 3 === 0, 3, false);
+        assert.equal(a.length, 3, 'the chest keeps its three things');
+        if (a.some(isHouseThing)) lone++;
+        if (b.some(isHouseThing)) other++;
+    }
+    assert.ok(Math.abs(lone / N - LONE_HOUSE.CHANCE) < 0.04, `lone wizards: ${lone / N}`);
+    assert.ok(other / N < 0.02, `other wizards' houses: ${other / N}`);
+});
