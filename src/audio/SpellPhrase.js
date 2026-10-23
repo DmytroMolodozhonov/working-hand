@@ -240,6 +240,10 @@ export function afterCast(last, spell, meta, now) {
     // one phrase says one «… Максима»; in the next 1.5 s another «X Максима» is that same end, however clearly it was made out)
     if (/Maxima$/.test(spell) && /Maxima$/.test(last.spell) && spell !== last.spell && !last.spell.startsWith(spell)
         && (meta?.seg != null && meta.seg === last.seg || now - last.at < AFTER_CAST_MS)) return `конец той же фразы «${last.spell}» прочитан как «${spell}»`;
+    // (the author's journal: «Бомбардо» cast alone, its «…Максима» refused as too late, then the tail «…максима» read as «Айс Максима»
+    // 2 s on and cast — a spell that has a «Максима» of its own leaves no other «X Максима» for 4 s; «Джолт» is a duel chain, left free)
+    if (/Maxima$/.test(spell) && spell !== last.spell + 'Maxima' && last.spell !== 'Jolt' && SAID_BY.has(last.spell + 'Maxima'))
+        return `«${last.spell}» только что сработало, а «…максима» после него — его хвост, не «${spell}»`;
     if (meta?.seg != null && meta.seg === last.seg) {
         // (the same spell or a piece of it again: no; its longer form after a long pause — no second blast; only
         // «Джолт» → «Джолт Максима»: the game makes the charge already flying grow)

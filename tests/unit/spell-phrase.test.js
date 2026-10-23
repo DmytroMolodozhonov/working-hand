@@ -83,6 +83,11 @@ test('«Бомбардо Максима» is no «Айс Максима» twice:
     assert.ok(afterCast(last, 'IceMaxima', { native: true, seg: 8, fit: 1.9 }, 1600)); // (the next «phrase» of the same breath)
     assert.ok(afterCast(last, 'IceMaxima', null, 1600)); // (the browser's voice tells no segment, no fit)
     assert.equal(afterCast(last, 'IceMaxima', { native: true, seg: 9, fit: 1.9 }, 3600), null); // (a new phrase, a moment later: mine)
+    // (the journal 22:39: «Бомбардо» alone, then «…максима» 2.3 s on read as «Айс Максима»)
+    const alone = { spell: 'Bombardo', at: 1000, seg: 7 };
+    assert.ok(afterCast(alone, 'IceMaxima', { native: true, seg: 8, fit: 1.9 }, 3300));
+    assert.equal(afterCast(alone, 'IceMaxima', { native: true, seg: 9, fit: 1.9 }, 5200), null);
+    assert.equal(afterCast({ spell: 'Jolt', at: 1000, seg: 7 }, 'IceMaxima', { native: true, seg: 8, fit: 1.9 }, 2000), null); // (a duel chain)
     assert.equal(afterCast(last, 'Ice', { native: true, seg: 8, fit: 1.9 }, 1800), null); // (plain «Айс» is not a «Максима» tail)
 });
 
