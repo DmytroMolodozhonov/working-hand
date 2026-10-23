@@ -11,7 +11,7 @@
  *     nothing; a step sideways costs 1/reach of the block stepped onto (STRUCT.Q = 1: a stone balcony reaches 10
  *     blocks, a plank one 7, thatch 3) — ½, ⅓, ¼ of it from a column 2, 3, 4+ blocks thick (a thick slab, a beam, a
  *     wall over a gap reach farther); leaning on the edge of a block a layer lower (a roof's ramps, the ring of an
- *     arch) costs ¼; hanging under a block ¼ (the bottom of a thick slab; a lamp on its chain hangs anywhere under its
+ *     arch) costs a tenth; hanging under a block ¼ (the bottom of a thick slab; a lamp on its chain hangs anywhere under its
  *     ceiling). A block not reached within Q — a balcony twice as long as its stone allows, a floor whose walls are
  *     gone — has nothing to hold it: it falls.
  *  2. The weight. From the top down (the farthest from the ground first) each block passes all it carries (its own
@@ -47,14 +47,14 @@ export const STRUCT = {
     Q: 120, // the dearest way down a block may have (a step sideways onto stone: Q / its reach)
     DEEP: 4, // a step sideways from a column of 2, 3, 4+ blocks one on another costs ½, ⅓, ¼
     HANG: 0.25, // hanging under a block costs this share of a step (what hangs is held by its joint's bond)
-    LEAN: 0.25, // leaning on the edge of a block a layer lower costs this share of a step (a rafter, an arch's ring: pressed, not bent)
+    LEAN: 0.1, // leaning on the edge of a block a layer lower costs this share of a step (a rafter, an arch's ring: pressed, not bent)
     LEAN_CARRY: 0.5, // …and passes down at most this share of what the weaker block carries
     UNDER: 2, // the block under a block takes this many shares of its weight (each other holder one)
     COLUMN: 0.05, // a lone column one storey high (nothing beside it) carries this share of its material's `carry` (stone: 30)
     STOREY: 4, // layers: …one storey; a column twice as tall carries half of that, half as tall — twice as much (at most all)
     CHAIN: 8, // layers: a lamp or a chandelier hangs on its chain this far under its ceiling
     WORSE: 1.05, // a block over its strength gives way only if it carries this much more than before the change (worse())
-    MARGIN: 12, // m round the change looked at too (the roofs and floors that lean on it)
+    MARGIN: 11, // m round the change looked at too (the roofs and floors that lean on it: a stone slab reaches 10)
     DEPTH: 4, // layers under the change looked at
     ROUNDS: 10, // at most this many rounds of falling in one check (a chain)
     STAGE: 0.45, // s between the rounds of a chain, as seen (FallingBlocks)
@@ -450,8 +450,8 @@ function* lostPieces(job) {
     return pieces;
 }
 
-/** The box round a change at (cx, cy, cz), radius r: `margin` round it (a small change: less), from DEPTH layers under it to the tops over it. */
-export function boxAround(data, cx, cy, cz, r, margin = Math.min(STRUCT.MARGIN, 6 + r)) {
+/** The box round a change at (cx, cy, cz), radius r: `margin` round it, from DEPTH layers under it to the tops over it. */
+export function boxAround(data, cx, cy, cz, r, margin = STRUCT.MARGIN) {
     const R = r + margin;
     let x0 = Math.floor(cx - R), x1 = Math.ceil(cx + R), z0 = Math.floor(cz - R), z1 = Math.ceil(cz + R);
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
