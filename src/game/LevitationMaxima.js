@@ -503,7 +503,6 @@ const _e = new THREE.Euler();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 
-const BOX = new THREE.BoxGeometry(1, 1, 1);
 const ROOT = new THREE.CylinderGeometry(0.06, 0.22, 1, 5).translate(0, -0.5, 0);
 
 export class LevitationMaxima {
@@ -515,7 +514,6 @@ export class LevitationMaxima {
         this._seq = 0;
         this._last = 0;
         this._netT = 0;
-        this.mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
         this.rootMat = new THREE.MeshLambertMaterial({ color: 0x5b3a1e });
     }
 
@@ -1039,7 +1037,10 @@ export class LevitationMaxima {
 
     /** For Game.prewarm: the carried blocks' material (a lifted house / rock, a living tree of its own blocks). */
     sampleModels() {
-        return [new THREE.Mesh(voxelGeometry([[0, 0, 0, BLOCK.STONE]], 0, 0, 0), voxelMaterial(new THREE.Vector3())), ...this.swarm.sampleModels()];
+        // (the lump / house / tree as one mesh, and the blocks of a shattered one flying — instanced: another shader)
+        const one = new THREE.InstancedMesh(voxelGeometry([[0, 0, 0, BLOCK.STONE]], 0, 0, 0).translate(0, -0.5, 0), voxelMaterial(new THREE.Vector3(0, -1, 0)), 1);
+        one.setMatrixAt(0, new THREE.Matrix4());
+        return [new THREE.Mesh(voxelGeometry([[0, 0, 0, BLOCK.STONE]], 0, 0, 0), voxelMaterial(new THREE.Vector3())), one, ...this.swarm.sampleModels()];
     }
 
     /** Roots under a torn-out tree's lump of earth (hidden in the ground until it comes out). */
@@ -1513,33 +1514,53 @@ export class LevitationMaxima {
             };
             items.push(it);
         }
-        const mesh = new THREE.InstancedMesh(BOX, this.mat, items.length);
-        items.forEach((it, i) => mesh.setColorAt(i, _c.setHex(it.color)));
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-        mesh.castShadow = true;
-        mesh.frustumCulled = false;
-        g.scene.add(mesh);
+        // each block flies with the world's own look (its textures, colours and patterns — the same shader as the lump and the
+        // ground), not as a plain coloured cube: one instanced mesh per kind of block (and tint)
         const T = Math.max(...items.map((it) => it.delay + it.T));
-        this.shards.push({ mesh, items, t: 0, T, dust: 0 });
+        const groups = new Map();
+        sorted.slice(0, items.length).forEach((c, i) => {
+            let key = c[3] + ':' + (data?.faceColor ? data.faceColor(c[3], c[0], c[1], c[2], true) : 0);
+            if (!groups.has(key) && groups.size >= 12) key = c[3] + ':x'; // (a few tints at most: the draw calls stay few)
+            if (!groups.has(key)) groups.set(key, { cell: c, idx: [] });
+            groups.get(key).idx.push(i);
+        });
+        const mat = voxelMaterial(_v2.set(0, -1, 0)); // (a block centred on itself: its layer spans y −0.5…0.5, the world's −1.5…−0.5 above)
+        const parts = [];
+        const geos = [...groups.values()].map(({ cell, idx }) => ({ idx, geo: voxelGeometry([[cell[0], cell[1], cell[2], cell[3]]], cell[0], cell[1], cell[2], data).translate(0, -0.5, 0) }));
+        // (a face that was buried in the ground has no daylight where it was: all the blocks are lit as the brightest face of the piece — a cave's piece stays as dark as it was)
+        let lit = 0;
+        for (const { geo } of geos) for (const v of geo.getAttribute('voxSky').array) lit = Math.max(lit, v);
+        for (const { idx, geo } of geos) {
+            geo.getAttribute('voxSky').array.fill(lit);
+            const mesh = new THREE.InstancedMesh(geo, mat, idx.length);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.frustumCulled = false;
+            g.scene.add(mesh);
+            parts.push({ mesh, idx });
+        }
+        this.shards.push({ parts, mat, items, t: 0, T, dust: 0 });
         this._shardStep(this.shards[this.shards.length - 1], 0);
         return T;
     }
 
     _shardStep(S, dt) {
         S.t += dt;
-        const { mesh, items, t } = S;
-        for (let i = 0; i < items.length; i++) {
-            const it = items[i];
-            const u = Math.max(0, Math.min(1, (t - it.delay) / it.T));
-            const e = u * u; // (falling: faster and faster)
-            const arc = 4 * it.h * u * (1 - u);
-            _v1.set(it.S[0] + (it.E[0] - it.S[0]) * u, it.S[1] + (it.E[1] - it.S[1]) * e + arc, it.S[2] + (it.E[2] - it.S[2]) * u);
-            _q.setFromAxisAngle(it.ax, it.spin * u * (1 - u) * 2);
-            const k = it.broken ? Math.max(0, 1 - Math.max(0, u - 0.55) / 0.45) : 1;
-            _m.compose(_v1, _q, _s.set(k, k, k));
-            mesh.setMatrixAt(i, _m);
+        const { parts, items, t } = S;
+        for (const { mesh, idx } of parts) {
+            for (let j = 0; j < idx.length; j++) {
+                const it = items[idx[j]];
+                const u = Math.max(0, Math.min(1, (t - it.delay) / it.T));
+                const e = u * u; // (falling: faster and faster)
+                const arc = 4 * it.h * u * (1 - u);
+                _v1.set(it.S[0] + (it.E[0] - it.S[0]) * u, it.S[1] + (it.E[1] - it.S[1]) * e + arc, it.S[2] + (it.E[2] - it.S[2]) * u);
+                _q.setFromAxisAngle(it.ax, it.spin * u * (1 - u) * 2);
+                const k = it.broken ? Math.max(0, 1 - Math.max(0, u - 0.55) / 0.45) : 1;
+                _m.compose(_v1, _q, _s.set(k, k, k));
+                mesh.setMatrixAt(j, _m);
+            }
+            mesh.instanceMatrix.needsUpdate = true;
         }
-        mesh.instanceMatrix.needsUpdate = true;
     }
 
     /** (every computer) Dust, flying rubble and the thud as it lands. */
@@ -1703,7 +1724,7 @@ export class LevitationMaxima {
         for (let i = this.shards.length - 1; i >= 0; i--) {
             const S = this.shards[i];
             this._shardStep(S, dt);
-            if (S.t > S.T + 0.6) { g.scene?.remove(S.mesh); S.mesh.dispose?.(); this.shards.splice(i, 1); }
+            if (S.t > S.T + 0.6) { for (const { mesh } of S.parts) { g.scene?.remove(mesh); mesh.geometry.dispose(); mesh.dispose?.(); } S.mat.dispose(); this.shards.splice(i, 1); }
         }
         for (let i = this.pending.length - 1; i >= 0; i--) {
             const P = this.pending[i];
