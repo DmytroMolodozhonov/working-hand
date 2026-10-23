@@ -51,7 +51,7 @@ import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
 import { appleTreeModel, pulseGolden } from './AppleTrees.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
-export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 3, THINK: 0.05, THINK_DISTANT: 0.1 };
+export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 1, THINK: 0.05, THINK_DISTANT: 0.1 };
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
 
 export { animalModel };

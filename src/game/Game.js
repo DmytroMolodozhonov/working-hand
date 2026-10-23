@@ -54,6 +54,7 @@ import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
 import { PEGASUS_COLOR } from './AnimalModels.js';
+import { FarShape } from '../core/FarShape.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -3161,6 +3162,7 @@ export class Game {
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(animalModel('horse', PEGASUS_COLOR)); // (the Pegasus of some herds: its glossy coat — a shader of its own, compiled when a herd came into view)
+        { const s = animalModel('sheep', 0x6b3f1e), f = new FarShape(s); for (let i = 0; i < 3; i++) { f.set(true); f.refresh(); f.set(false); } f.dispose(); } // (a far animal's one shape: its code warmed — the first ones made in flight took 5–18 ms)
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
