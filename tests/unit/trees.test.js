@@ -39,13 +39,21 @@ test('branches grow out of their parents, the trunk out of the ground', () => {
     }
 });
 
+test('far away the very same tree, lighter: its branches where they are near, its crown as wide (no tree «loading» as it comes near)', () => {
+    for (const [k, v] of [[0, 2], [1, 5], [2, 8], [3, 1], [4, 6]]) {
+        const near = buildTree(k, v).info, far = buildTree(k, v, { far: true }).info;
+        assert.deepEqual(far.trunk.pts, near.trunk.pts, 'the same trunk');
+        for (let i = 0; i < 6; i++) assert.ok(Math.abs(far.box[i] - near.box[i]) < 2.6, `${TREE_SIZES[k].name} ${v}: the crown's reach ${i}: ${far.box[i].toFixed(1)} / ${near.box[i].toFixed(1)}`);
+    }
+});
+
 test('points: detailed near, light far (a forest stays smooth)', () => {
     let sum = 0;
     for (const [k, v] of shapes) {
         const near = buildTree(k, v).info.verts, far = buildTree(k, v, { far: true }).info.verts;
         sum += near;
         assert.ok(near <= 11000, `${TREE_SIZES[k].name} ${v}: ${near} points near`);
-        assert.ok(far <= 800 && far < near / 6, `${TREE_SIZES[k].name} ${v}: ${far} points far`);
+        assert.ok(far <= 2600 && far < near / 2.5, `${TREE_SIZES[k].name} ${v}: ${far} points far`);
     }
     assert.ok(sum / shapes.length <= 7000, `on average ${Math.round(sum / shapes.length)} points`);
 });

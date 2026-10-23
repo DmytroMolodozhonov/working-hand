@@ -156,12 +156,17 @@ const range = (rnd, [a, b]) => a + (b - a) * rnd();
  * index); leaf: the leaf cards (with uv: TreeLeaves.js's picture). info: height, the box, the crown (centre,
  * radii, `spheres` [x, y, z, r] round the leaf clusters — hits), the trunk (axis points, radii: collision),
  * joints (every branch's start and how far it is from its parent's axis — tests), the lowest leaf.
- * far: the simple shape for far away (the trunk, the limbs, a few big cards).
+ * far: the lighter shape of the same tree for far away — 1 (or true): a third of the sprigs, bigger, the thin
+ * branches not drawn; 2 (very far): a seventh of the sprigs, the trunk and the limbs only.
  */
 export function buildTree(kind, variant, { far = false } = {}) {
+    const lod = far === true ? 1 : Math.max(0, Math.min(2, far | 0));
+    far = lod > 0;
     kind = Math.max(0, Math.min(6, kind | 0));
     variant |= 0;
     const rnd = treeRandom(0x9e3779b1 ^ (kind * 7919 + variant * 104729));
+    // (the leaves draw from their own stream: the far shape — fewer, bigger sprigs — grows the very same branches)
+    const lrnd = treeRandom(0x5bd1e995 ^ (kind * 7919 + variant * 104729));
     const S = TREE_SIZES[kind], P = SPEC[kind];
     // every tree its own (the author: «некоторые деревья могут быть тонкими, некоторые очень толстыми… крона
     // разнообразная»): young and slim, grown, or old and thick; the crown round, tall, spreading or lopsided
@@ -188,8 +193,8 @@ export function buildTree(kind, variant, { far = false } = {}) {
     const stems = [];
     const grow = (level, start, dir, length, radius, parentPath = null) => {
         const spec = P.L[level];
-        const seg = far ? Math.max(2, Math.ceil(spec.seg / 3)) : spec.seg;
-        const sides = far ? (level === 0 ? 5 : 3) : spec.sides;
+        const seg = spec.seg; // (the same far: the same bends, the same tree — only drawn with fewer rings)
+        const sides = far ? (level === 0 ? (lod > 1 ? 4 : 5) : 3) : spec.sides;
         const pts = [start], radii = [radius];
         let d = dir.slice(), p = start.slice();
         const bendAxis = perp(d);
@@ -212,14 +217,15 @@ export function buildTree(kind, variant, { far = false } = {}) {
         }
         const stem = { level, pts, radii, length };
         stems.push(stem);
-        tube(stem, sides, level === 0 ? (P.gnarl ? 0.18 : 0.05) : 0);
+        // (far away: the thin branches are not seen — only their leaves; the rest with every other ring)
+        if (!far || level < 2) tube(far ? thin(stem) : stem, sides, level === 0 ? (P.gnarl ? 0.18 : 0.05) : 0);
         if (parentPath) {
             const j = distToPath(start, parentPath.pts);
             joints.push({ level, at: start, parentR: radiusAt(parentPath, j.at), d: j.d });
         }
         // children
         const next = P.L[level + 1];
-        if (next && !(far && level === 1)) {
+        if (next) {
             const nk = Math.round(range(rnd, next.n) * (level === 1 ? dens : 1));
             let turn = rnd() * Math.PI * 2;
             for (let i = 0; i < nk; i++) {
@@ -240,7 +246,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
                 grow(level + 1, at.p, cd, Math.max(0.6, L), Math.max(0.02, at.r * next.rr * (0.85 + rnd() * 0.3)), stem);
             }
             // the oaks and the cherry: a leader goes on up from the fork and fills the crown's top
-            if (level === 0 && !P.needles && kind !== 1 && !far) {
+            if (level === 0 && !P.needles && kind !== 1) {
                 const at = pointAt(stem, 0.999), up = unit(add(at.d, [(rnd() - 0.5) * 0.3, 1.2, (rnd() - 0.5) * 0.3]));
                 const L = Math.max(2, (H - at.p[1]) * (form === 'spread' ? 0.55 : 0.75));
                 grow(1, at.p, up, L, at.r * 0.62, stem);
@@ -267,6 +273,13 @@ export function buildTree(kind, variant, { far = false } = {}) {
         const k = 0.88 + 0.12 * Math.sin(r * 1.7 + s * 2.3 + variant) - (level === 2 ? 0.08 : 0);
         return [barkC[0] * k, barkC[1] * k, barkC[2] * k];
     };
+
+    /** A stem with every other ring (the far shape). */
+    function thin(stem) {
+        const step = lod > 1 ? 3 : 2;
+        const keep = (i) => i % step === 0 || i === stem.pts.length - 1;
+        return { ...stem, pts: stem.pts.filter((_, i) => keep(i)), radii: stem.radii.filter((_, i) => keep(i)) };
+    }
 
     function tube(stem, sides, twist) {
         const { pts, radii, level } = stem;
@@ -301,24 +314,26 @@ export function buildTree(kind, variant, { far = false } = {}) {
     // ---- leaf cards: a sprig of leaves each (its stalk at the card's bottom middle, the leaves up along it)
     const cardTint = 0.9 + rnd() * 0.15;
     function addLeaves(stem, level) {
-        const n = far ? 2 : Math.round((level === 1 ? P.leaves1 : P.leafPer) * dens);
-        let size0 = P.leafSize * (far ? 2.6 : 1) * (level === 1 ? 1.15 : 1);
+        // (far: the same crown from a third of the sprigs, each bigger — no bare branches showing a tree «loading»)
+        const n0 = Math.round((level === 1 ? P.leaves1 : P.leafPer) * dens), n = far ? Math.max(1, Math.round(n0 / (lod > 1 ? 7 : 3))) : n0;
+        let size0 = P.leafSize * (lod > 1 ? 2.1 : far ? 1.55 : 1) * (level === 1 ? 1.15 : 1);
         if (P.needles) size0 *= Math.max(0.4, Math.min(1, (level === 1 ? stem.length : stem.length * 2.2) / 3.2)); // (short boughs up top: small sprays — the cone)
         let sx = 0, sy = 0, sz = 0, cnt = 0;
         for (let i = 0; i < n; i++) {
-            const f = level === 1 ? (P.needles ? 0.2 + 0.8 * ((i + rnd() * 0.7) / n) : 0.55 + 0.45 * ((i + rnd()) / n)) : 0.15 + 0.85 * ((i + rnd() * 0.6) / n);
+            const f = far ? 0.45 + 0.55 * ((i + 1) / n) - lrnd() * 0.08 : level === 1 ? (P.needles ? 0.2 + 0.8 * ((i + lrnd() * 0.7) / n) : 0.55 + 0.45 * ((i + lrnd()) / n)) : 0.15 + 0.85 * ((i + lrnd() * 0.6) / n);
             const at = pointAt(stem, f);
             if (at.p[1] < clear + 0.3) continue;
-            const size = size0 * (0.75 + rnd() * 0.5);
+            const size = size0 * (0.75 + lrnd() * 0.5);
             // the sprig's direction: out from the branch, round it, the way the kind holds its leaves
-            const side = rot(perp(at.d), at.d, rnd() * Math.PI * 2);
+            const side = rot(perp(at.d), at.d, lrnd() * Math.PI * 2);
             let up;
-            if (P.needles) up = unit(add(at.d, [(rnd() - 0.5) * 0.4, (rnd() - 0.6) * 0.3, (rnd() - 0.5) * 0.4])); // (spruce: along the bough, flat)
+            if (P.needles) up = unit(add(at.d, [(lrnd() - 0.5) * 0.4, (lrnd() - 0.6) * 0.3, (lrnd() - 0.5) * 0.4])); // (spruce: along the bough, flat)
             else if (P.hang) up = unit(add(mul(side, 0.45), [0, -P.hang, 0])); // (birch: hanging sprays)
             else up = unit(add(mul(at.d, 0.6), add(mul(side, 0.7), [0, 0.25, 0])));
+            if (far && i === n - 1 && !P.hang) up = unit(add(at.d, [0, 0.3, 0])); // (far: the end sprig carries the branch on — the crown keeps its reach)
             let across = cross(up, P.needles ? [0, 1, 0] : side);
             across = len(across) < 0.1 ? perp(up) : unit(across);
-            if (P.needles) across = unit(rot(across, up, (rnd() - 0.5) * 0.7));
+            if (P.needles) across = unit(rot(across, up, (lrnd() - 0.5) * 0.7));
             if (P.needles && i % 3 === 2 && level === 2) { up = unit(add(mul(at.d, 0.3), [0, -1, 0])); across = perp(up); } // (a branchlet hanging)
             const base = at.p;
             let top = add(base, mul(up, size));
@@ -334,7 +349,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
             const outF = Math.min(1, len(sub(mid, crownC)) / crownR);
             const sh = cardTint * (kind === 3 || kind === 6 ? 0.82 + 0.14 * outF : 0.52 + 0.4 * outF + 0.12 * Math.max(0, nrm[1]));
             const col = [sh, sh, sh];
-            const flip = rnd() < 0.5; // (the picture mirrored: not every sprig the same)
+            const flip = lrnd() < 0.5; // (the picture mirrored: not every sprig the same)
             // (the atlas: one cell per kind — TreeLeaves.js)
             const uL = (kind + (flip ? 0.995 : 0.005)) / ATLAS_CELLS, uR = (kind + (flip ? 0.005 : 0.995)) / ATLAS_CELLS;
             const v0 = leaf.vert(c0[0], c0[1], c0[2], nrm, col, sway(c0[1]), uL, 0);

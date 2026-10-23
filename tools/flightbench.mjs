@@ -239,7 +239,8 @@ async function flyRoute() {
     const info = g.renderer.info;
     return {
         frames, segs, newProgs, warmAtTakeoff, genCallers: window.__genCallers, prewarmed: g.prewarmedPrograms, castle: { x: castle.x, z: castle.z }, peak,
-        terrain: { ...g.terrain.stats, meshes: g.terrain.meshes.size, chunks: data.chunks.size, queue: g.terrain._queue.length },
+        terrain: { ...g.terrain.stats, meshes: g.terrain.meshes.size, chunks: data.chunks.size, queue: g.terrain._queue.length, view: Math.round(g.terrain.viewDistance || 0) },
+        trees: g.world.forest ? { ...g.world.forest.stats, appear: g.world.forest.appearStats() } : null, // (the real trees: how far away they first showed)
         render: { calls: info.render.calls, triangles: info.render.triangles, programs: info.programs.length, geometries: info.memory.geometries, textures: info.memory.textures },
     };
 }
@@ -435,6 +436,7 @@ function table(results) {
         if (gc.length) { console.log('  земля, сделанная в кадре (>2 мс; кто попросил):'); for (const [k, v] of gc) console.log(`    ${v.n}× всего ${v.ms.toFixed(0)} мс, самая долгая ${v.max.toFixed(0)}: ${k}`); }
         console.log('  кто виноват в кадрах >33мс:', JSON.stringify(r.culprits));
         console.log('  мир:', JSON.stringify(r.terrain), ' графика:', JSON.stringify(r.render));
+        if (r.trees) console.log('  деревья (появились на расстоянии, м):', JSON.stringify(r.trees.appear), ' в поле зрения:', r.trees.drawn, 'вблизи:', r.trees.near);
         if (r.errors.length) console.log('  ошибки:', r.errors);
     }
 }

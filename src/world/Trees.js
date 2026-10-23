@@ -19,7 +19,8 @@ import { sharedTreeMaterials, treeGeometry } from './TreeMaterials.js';
 
 export const TREES = {
     NEAR: 52, // m: the detailed shape within this
-    FAR_SHAPES: 3, // far shapes per kind (a far tree takes the one of its variant % FAR_SHAPES)
+    FAR2: 115, // m: beyond this the very light shape (the same tree: its trunk, limbs and a few big sprigs)
+    FAR_SHAPES: TREE_GEN.VARIANTS, // far shapes per kind: each tree its own (the far shape is the same tree, lighter — no other tree swapped in as it comes near)
     REGISTER_MS: 1.2, // ms a frame for taking new chunks' trees in
     MOVE: 2.5, // m the player moves before the lists are remade
     TURN: 0.06, // rad the view turns before the lists are remade
@@ -54,6 +55,7 @@ export class WorldTrees {
         this._at = new THREE.Vector3(1e9, 0, 1e9);
         this._look = new THREE.Vector3();
         this.stats = { registered: 0, drawn: 0, near: 0, shapes: 0 };
+        this._appear = { d: new Float32Array(512), i: 0, n: 0 }; // (the distances trees first showed at — appearStats)
     }
 
     // ------------------------------------------------------------------ the trees in the world
@@ -268,13 +270,14 @@ export class WorldTrees {
      * One shape's instanced mesh (made when first needed; grown ×2 when full): its bark and leaves in one shape and one
      * material — one draw (and one for the shadow, near). `bare`: the bark alone — the burnt trees of that shape.
      */
-    _shape(kind, v, far, bare, need) {
-        const key = this._key(kind, v, far, bare);
+    _shape(kind, v, lod, bare, need) {
+        const far = lod > 0;
+        const key = this._key(kind, v, lod, bare);
         let e = this.meshes.get(key);
         if (e && e.cap >= need) return e;
         const cap = Math.max(8, e ? e.cap * 2 : 8, need);
         if (e) { this.group.remove(e.mesh); e.mesh.dispose(); }
-        const g = treeGeometry(kind, v, far);
+        const g = treeGeometry(kind, v, lod);
         const mesh = new THREE.InstancedMesh(bare ? g.wood : g.full, this.leaves, cap);
         mesh.frustumCulled = false; // (culled here, tree by tree)
         mesh.castShadow = !far;
@@ -292,7 +295,7 @@ export class WorldTrees {
         return e;
     }
 
-    _key(kind, v, far, bare) { return ((kind * 16 + v) * 2 + (far ? 1 : 0)) * 2 + (bare ? 1 : 0); }
+    _key(kind, v, lod, bare) { return ((kind * 16 + v) * 3 + lod) * 2 + (bare ? 1 : 0); }
 
     _draw(camera) {
         _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -309,20 +312,21 @@ export class WorldTrees {
             _sph.center.set(t.x, t.y + t.h * 0.5, t.z);
             _sph.radius = t.h * 0.75 + 4;
             if (!_fr.intersectsSphere(_sph)) continue;
-            const isFar = d2 > TREES.NEAR * TREES.NEAR;
-            const v = isFar ? t.v % TREES.FAR_SHAPES : t.v;
-            const key = this._key(t.kind, v, isFar, !!t.burnt);
+            const lod = d2 <= TREES.NEAR * TREES.NEAR ? 0 : d2 <= TREES.FAR2 * TREES.FAR2 ? 1 : 2;
+            const key = this._key(t.kind, lod ? t.v % TREES.FAR_SHAPES : t.v, lod, !!t.burnt);
             let l = lists.get(key);
             if (!l) lists.set(key, (l = []));
             l.push(t);
             drawn++;
-            if (!isFar) near++;
+            // (how far away a tree is when it first shows: «it appears in front of me» — a ring of the last ones)
+            if (!t._seen) { t._seen = true; const A = this._appear; A.d[A.i++ % A.d.length] = Math.sqrt(d2); A.n++; }
+            if (!lod) near++;
         }
         for (const [key, e] of this.meshes) if (!(lists.get(key)?.length)) e.mesh.count = 0;
         for (const [key, l] of lists) {
             if (!l.length) continue;
-            const t0 = l[0], isFar = (TREES.NEAR * TREES.NEAR) < ((t0.x - cx) ** 2 + (t0.z - cz) ** 2);
-            const e = this._shape(t0.kind, isFar ? t0.v % TREES.FAR_SHAPES : t0.v, isFar, !!t0.burnt, l.length);
+            const kv = Math.floor(key / 6), lod = (key >> 1) % 3; // (the key: kind, shape, how far, bare — _key)
+            const e = this._shape(Math.floor(kv / 16), kv % 16, lod, (key & 1) === 1, l.length);
             const m = e.mesh;
             for (let i = 0; i < l.length; i++) {
                 const t = l[i];
@@ -336,6 +340,17 @@ export class WorldTrees {
         this.stats.drawn = drawn;
         this.stats.near = near;
         this.stats.shapes = lists.size;
+    }
+
+    /**
+     * Where the trees first showed (m from the eye, the last 512): {n, min, p10, median} — a tree that shows near was
+     * not there when it came into view (tools/flightbench.mjs prints it).
+     */
+    appearStats() {
+        const A = this._appear, k = Math.min(A.n, A.d.length);
+        if (!k) return { n: 0 };
+        const d = Array.from(A.d.subarray(0, k)).sort((a, b) => a - b);
+        return { n: A.n, min: Math.round(d[0]), p10: Math.round(d[Math.floor(k * 0.1)]), median: Math.round(d[k >> 1]), near60: d.filter((x) => x < 60).length };
     }
 
     /** One tree of each shape, to compile the shaders on the loading screen (Game.prewarm). */
@@ -362,7 +377,7 @@ export class WorldTrees {
      */
     warmSteps() {
         const out = [];
-        for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) out.push(() => { treeGeometry(k, v, false); if (v < TREES.FAR_SHAPES) treeGeometry(k, v, true); });
+        for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) out.push(() => { treeGeometry(k, v, 0); if (v < TREES.FAR_SHAPES) { treeGeometry(k, v, 1); treeGeometry(k, v, 2); } });
         return out;
     }
 
