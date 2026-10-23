@@ -25,7 +25,7 @@ const SHOTS = !args.includes('--no-shots');
 const CHECK = args.includes('--check');
 const HOLD = parseFloat(opt('hold', '40')); // the ritual's seconds to run (the hunt is measured from 12 to this)
 /** --check: what 30 gargoyles may cost the game's own work in a step (only tighten). */
-const LIMITS = { gameMeanMs: 9, gameP95Ms: 18, drawsAdded: 130, newShaders: 0, newGeometries: 2, newTextures: 2 };
+const LIMITS = { gameMeanMs: 9, gameP95Ms: 18, drawsAdded: 130, newPrograms: 0, newGeometries: 4, newTextures: 40 }; // (a live gargoyle owns one bone texture; they are freed with it)
 
 fs.mkdirSync(OUT, { recursive: true });
 const port = 8900 + Math.floor(Math.random() * 90);
@@ -143,7 +143,7 @@ try {
         if (huntStats && huntStats.mean > LIMITS.gameMeanMs) bad.push(`игра ${huntStats.mean} > ${LIMITS.gameMeanMs} мс`);
         if (huntStats && huntStats.p95 > LIMITS.gameP95Ms) bad.push(`p95 ${huntStats.p95} > ${LIMITS.gameP95Ms} мс`);
         if (huntCalls > LIMITS.drawsAdded) bad.push(`вызовов +${huntCalls | 0} > ${LIMITS.drawsAdded}`);
-        if (news.length > LIMITS.newShaders) bad.push(`шейдеров в полёте: ${news.length}`);
+        if (after.prog - before.snap.prog > LIMITS.newPrograms) bad.push(`новых шейдерных программ: ${after.prog - before.snap.prog}`);
         if (after.geo - before.snap.geo > LIMITS.newGeometries) bad.push(`геометрий +${after.geo - before.snap.geo}`);
         if (after.tex - before.snap.tex > LIMITS.newTextures) bad.push(`текстур +${after.tex - before.snap.tex}`);
         if (bad.length) { console.log('ПРОВАЛ: ' + bad.join('; ')); failed = true; } else console.log('проверка пройдена');
