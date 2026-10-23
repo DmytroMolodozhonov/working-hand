@@ -19,7 +19,7 @@
  *     ground, the one it hangs from, the ones it leans on. So a roof's weight runs along the roof to its walls, a
  *     wall's down the wall. Then:
  *     - a lone column (nothing beside it) bends and breaks under far less than a wall: it carries STRUCT.COLUMN of its
- *       material's `carry` one storey high, less the taller it is (a stone column 1×1 one storey high: 30 — a 7×7
+ *       material's `carry` one storey high, less the taller it is (a stone column 1×1 one storey high: 36 — a 7×7
  *       stone roof is 49: the column breaks, the roof comes down; a column 3×3 has its blocks braced — it holds);
  *     - the weight passed sideways across a wall of joints one over the other between two columns may not be more than
  *       their bonds together (a 1-thick slab: one joint; a deep beam: all of its layers) — else it tears there (a
@@ -50,8 +50,8 @@ export const STRUCT = {
     LEAN: 0.1, // leaning on the edge of a block a layer lower costs this share of a step (a rafter, an arch's ring: pressed, not bent)
     LEAN_CARRY: 0.5, // …and passes down at most this share of what the weaker block carries
     UNDER: 2, // the block under a block takes this many shares of its weight (each other holder one)
-    COLUMN: 0.05, // a lone column one storey high (nothing beside it) carries this share of its material's `carry` (stone: 30)
-    STOREY: 4, // layers: …one storey; a column twice as tall carries half of that, half as tall — twice as much (at most all)
+    COLUMN: 0.06, // a lone column one storey high (nothing beside it) carries this share of its material's `carry` (stone: 36)
+    STOREY: 4, // layers: …one storey; a column four times as tall carries half of that, a quarter as tall — twice as much
     CHAIN: 8, // layers: a lamp or a chandelier hangs on its chain this far under its ceiling
     WORSE: 1.05, // a block over its strength gives way only if it carries this much more than before the change (worse())
     MARGIN: 11, // m round the change looked at too (the roofs and floors that lean on it: a stone slab reaches 10)
@@ -80,7 +80,7 @@ const S_FENCE = { w: 0.2, reach: 3, bond: 5, carry: 20 };
 const S_LEAVES = { w: 0.05, reach: 6, bond: 5, carry: 6 };
 const S_CLOTH = { w: 0.05, reach: 12, bond: 5, carry: 40 }; // (banners, awnings, garlands: fastened to their walls and poles)
 const S_CARPET = { w: 0.4, reach: 7, bond: 30, carry: 150 }; // (a carpet lies on the floorboards: the floor itself)
-const S_LAMP = { w: 0.1, reach: 2, bond: 20, carry: 100 }; // (also the fire in a hearth, under its stones)
+const S_LAMP = { w: 0.1, reach: 2, bond: 20, carry: 600 }; // (its iron frame on a post; also the fire in a hearth, under its stones)
 const S_PLANT = { w: 0.05, reach: 2, bond: 1, carry: 2 };
 const S_SHELF = { w: 0.4, reach: 3, bond: 8, carry: 40 }; // (books, potions)
 const S_DEFAULT = { w: 0.6, reach: 4, bond: 15, carry: 150 };
@@ -270,7 +270,9 @@ function* waysDown(job) {
             const L = (i / NXZ) | 0, r = i - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
             // standing on i: the block over it (free)
             if (L < NY - 1) { const j = i + NXZ; if (KIND[T[j]] === 2) push(j, p); }
-            // the blocks i holds otherwise: j = i − OFF[d] (a step beside it the cheaper, the thicker the column i is in)
+            // the blocks i holds otherwise: j = i − OFF[d] (a step beside it the cheaper, the thicker the column i is in;
+            // a lamp holds nothing beside it or under it — only what stands on it, the stones of a hearth over its fire)
+            if (CHAINED[T[i]] && STUFF[T[i]] === S_LAMP) continue;
             const deep = RUN[i], inner = x > 0 && x < NX - 1 && z > 0 && z < NZ - 1;
             for (let d = 0; d < 9; d++) {
                 if (!inner || L === 0 || L === NY - 1) {
@@ -328,7 +330,7 @@ function* weigh(job, out, record) {
             let up = i + NXZ, dn = i - NXZ, h = 1;
             while (up < n && KIND[T[up]] === 2 && !sides(up, NX)) { h++; up += NXZ; }
             while (dn >= NXZ && KIND[T[dn]] === 2 && !sides(dn, NX)) { h++; dn -= NXZ; }
-            if (recv[i] > CARRY[t] * Math.min(1, STRUCT.COLUMN * STRUCT.STOREY / h) && (!pre || worse(load, before(i)))) {
+            if (recv[i] > CARRY[t] * Math.min(1, STRUCT.COLUMN * Math.sqrt(STRUCT.STOREY / h)) && (!pre || worse(load, before(i)))) {
                 crushed.push(i); out.crushed++;
                 for (let j = i - NXZ; j > dn; j -= NXZ) crushed.push(j); // (it breaks as a whole, down to where something braces it)
                 continue;
@@ -347,6 +349,7 @@ function* weigh(job, out, record) {
             if (kj === 2 && (P[j] === INF || P[j] * NY + L + HELD[d][1] >= pk)) continue; // (only one nearer the ground)
             if (kd && (kj === 1 || P[j] >= p)) continue; // (standing on a block: sideways only to a built one nearer the ground — an arch's push)
             if (d > 4 && !edgeOnly(i, d, NXZ)) continue;
+            if (kj === 2 && STUFF[T[j]] === S_LAMP) continue; // (a lamp holds nothing beside it)
             hold[h] = j; way[h] = d; share[h] = 1; h++; sum += 1;
         }
         // (none: a lamp on its chain — its little weight is its ceiling's, left out)
