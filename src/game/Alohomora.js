@@ -253,7 +253,7 @@ export class Alohomora {
         const rule = TARGETS[kind]?.[maxima ? 'maxima' : 'plain'];
         if (rule === 'refuse') { if (isFinal) g.hud.setVoice('🔒 Слишком сильный замок — нужна «Алохомора Максима»', true); return null; }
         if (rule !== 'unlock' || !this._isLocked(t)) {
-            if (isFinal) g.hud.setVoice(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Алохомора» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт' : '🔓 Не заперто — возьмитесь за ручку', true);
+            if (isFinal) g.hud.setVoice(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Алохомора» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт' : '🔓 Не заперто — возьмитесь за ручку', true, true);
             return null;
         }
         const tired = g.combat.check(name);
@@ -428,7 +428,7 @@ export class Alohomora {
                 this._flash(d.model.userData.knob.getWorldPosition(new THREE.Vector3()));
             }
             const d0 = g.doors?.list.get(m.ids?.[0]);
-            if (mine) g.hud?.setVoice(d0 && this.doorLocked(d0) ? '🗝️ «Lock» снят, но у двери свой крепкий замок' : '🗝️ Щёлк! Дверь отперта и приоткрылась — возьмитесь за ручку', true);
+            if (mine) g.hud?.setVoice(d0 && this.doorLocked(d0) ? '🗝️ «Lock» снят, но у двери свой крепкий замок' : '🗝️ Щёлк! Дверь отперта и приоткрылась — возьмитесь за ручку', true, true);
             g.sound?.playClang?.(0.2);
             return;
         } else if (m.k === 'lift') {
@@ -437,7 +437,7 @@ export class Alohomora {
             if (this.auth && c && c.picked && !c.isOpen) g.openChest(c, null, m.by || m.from);
             return;
         }
-        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Крышка приподнялась — поднимите её рукой' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true);
+        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Крышка приподнялась — поднимите её рукой' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true, true);
         g.sound?.playClang?.(0.2);
     }
 

@@ -1618,7 +1618,9 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
     transition: opacity 0.4s;
 }
 #voice-debug.hint.on { opacity: 1; transition: opacity 0.15s; }
-@media (max-height: 560px) { #voice-debug.hint { font-size: 20px !important; top: 92px !important; } }
+#voice-debug.hint.big { font-size: 34px !important; padding: 10px 26px !important; }
+@media (max-height: 560px) { #voice-debug.hint.big { font-size: 26px !important; }
+  #voice-debug.hint { font-size: 20px !important; top: 92px !important; } }
 
 /* the armour's extra health under the HP bar (Hud.setArmor): silver, «🛡 +N» */
 #armor-hp {

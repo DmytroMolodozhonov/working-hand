@@ -429,7 +429,7 @@ export class Hud {
      * the bars or the minimap), and it fades by itself after HINT_MS; a new one replaces it, the same
      * one is not shown again for a while. «ЖДУ КОМАНДУ» stays the small indicator it was.
      */
-    setVoice(html, show = true) {
+    setVoice(html, show = true, big = false) { // (big: a short answer to a spell, a little larger — «Щёлк! …»)
         const v = this.el.voice;
         if (!v) return;
         const now = performance.now();
@@ -439,10 +439,10 @@ export class Hud {
             if (hint && !hintPolicy.allow(html)) return; // (the setting «Подсказки»: a «how to» hint once / always / never — HintPolicy.js)
             if (html === this._lastVoice) {
                 // the same line again: an indicator just stays; a hint only after a while (no flicker)
-                if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint); return; }
+                if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint, big); return; }
             }
             v.innerHTML = html; this._lastVoice = html; this._voiceAt = now;
-            this._showVoice(v, hint);
+            this._showVoice(v, hint, big);
             clearTimeout(this._voiceTimer);
             if (hint) this._voiceTimer = setTimeout(() => { v.classList.remove('on'); this._voiceTimer = setTimeout(() => { if (!v.classList.contains('on')) { v.style.display = 'none'; } }, 450); }, HINT_MS);
         } else {
@@ -453,9 +453,10 @@ export class Hud {
         }
     }
 
-    _showVoice(v, hint) {
+    _showVoice(v, hint, big = false) {
         v.classList.remove('hidden');
         v.classList.toggle('hint', hint);
+        v.classList.toggle('big', hint && big);
         v.style.display = 'block';
         v.classList.add('on');
     }
