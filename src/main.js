@@ -14,7 +14,9 @@ import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
-import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab } from './ui/Codex.js';
+import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
+import { PlayerSheetView } from './ui/PlayerSheet.js';
+import { makePlayerPreview } from './ui/PlayerPreview.js';
 import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
@@ -1228,10 +1230,19 @@ $('v5-gpu')?.addEventListener('change', (e) => {
     const v5 = document.querySelector('input[name="hand-version"]:checked')?.value === 'v5';
     if (v5) poseService._setHands?.(e.target.checked ? 'v5rtm' : 'v5');
 });
+// «🧙 Игрок»: the hero's sheet (data refreshed on open and every 0.5 s while the tab is open; the 3D hero is drawn only then)
+const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
+    spells: [...new Set(SPELLS.map((s) => matchSpell(s.name)).filter(Boolean))],
+    look: () => activeLook(),
+    name: () => localStorage.getItem('zns-name') || 'Герой',
+    openCodex: () => { const b = document.querySelector('[data-pause-tab="pause-spells"]'); if (b && !b.hidden) showPauseTab('pause-spells'); },
+    makeCharacter: makePlayerPreview,
+});
 function showPauseTab(id) {
+    if (id === 'pause-player') playerSheet.show(); else playerSheet.hide();
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
-    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses'); // (the spell book and the bosses need room)
+    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player'); // (the spell book and the bosses need room)
     if (id === 'pause-audio') pauseAudio.sync();
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
@@ -1253,8 +1264,8 @@ function togglePauseMenu(show) {
         const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = creativeMap;
         document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
-        showPauseTab('pause-main');
-    }
+        showPauseTab('pause-player');
+    } else playerSheet.hide();
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
     if (game && !(net && net.active)) game.paused = open;

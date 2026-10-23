@@ -531,3 +531,34 @@ button, input, select, textarea { font-family: inherit; }
 .pause-audio-ctl.pause-radios { flex-wrap: wrap; gap: 6px 14px; }
 .pause-audio-ctl.pause-radios label, .pause-audio-ctl .pause-check { color: var(--ui-text); font-size: 0.92rem; cursor: pointer; }
 .pause-audio-ctl input[type="radio"], .pause-audio-ctl input[type="checkbox"] { accent-color: var(--ui-violet); width: 17px; height: 17px; vertical-align: -3px; margin-right: 6px; }
+
+/* pause → «🧙 Игрок»: the hero's sheet (cards with icons; scrolls inside; the preview canvas sits beside) */
+#pause-player { position: relative; text-align: left; max-height: min(66vh, 640px); overflow-y: auto; padding-right: 4px; }
+.ps-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.ps-hero { flex: 0 0 240px; margin: 0 auto; text-align: center; position: sticky; top: 0; }
+.ps-canvas { width: 240px; height: 340px; border-radius: 16px; cursor: grab; touch-action: none;
+    background: radial-gradient(circle at 50% 35%, rgba(108, 71, 224, 0.35), rgba(5, 3, 18, 0.75)); border: 1px solid var(--ui-border); }
+.ps-name { font: 700 1.35rem var(--ui-font-title, serif); color: var(--ui-gold); margin-top: 8px; text-shadow: var(--ui-glow, none); overflow-wrap: anywhere; }
+.ps-sub { color: var(--ui-muted); font-size: 0.9rem; }
+.ps-cards { flex: 1 1 320px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 10px; }
+.ps-card { padding: 10px 12px; border-radius: 14px; background: rgba(5, 3, 18, 0.5); border: 1px solid var(--ui-border); }
+.ps-card h3 { margin: 0 0 6px; font-size: 1rem; color: var(--ui-violet); letter-spacing: 0.02em; }
+.ps-row { display: grid; grid-template-columns: 1.6em 1fr auto; align-items: center; gap: 2px 8px; padding: 5px 2px; border-bottom: 1px solid rgba(167, 139, 255, 0.12); }
+.ps-row:last-child { border-bottom: 0; }
+.ps-row.link { cursor: pointer; }
+.ps-row.link:hover .ps-label { color: var(--ui-cyan); }
+.ps-ico { text-align: center; }
+.ps-label { color: var(--ui-muted); font-size: 0.9rem; }
+.ps-value { font-weight: 700; color: var(--ui-text); text-align: right; font-size: 0.95rem; }
+.ps-value small { display: block; font-weight: 400; color: var(--ui-muted); font-size: 0.75rem; }
+.ps-row.ench .ps-value { color: var(--ui-cyan); text-shadow: 0 0 8px rgba(126, 232, 255, 0.5); }
+.ps-bar { grid-column: 2 / 4; height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.ps-bar i { display: block; height: 100%; border-radius: 4px; }
+.ps-chips { grid-column: 2 / 4; display: flex; gap: 4px; flex-wrap: wrap; }
+.ps-chip { width: 1.8em; height: 1.8em; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: rgba(255, 255, 255, 0.06); filter: grayscale(1); opacity: 0.4; }
+.ps-chip.on { filter: none; opacity: 1; background: rgba(255, 215, 106, 0.18); }
+.ps-tip { position: absolute; z-index: 5; width: 250px; padding: 8px 10px; border-radius: 10px; pointer-events: none; font-size: 0.82rem;
+    background: rgba(12, 8, 36, 0.97); border: 1px solid var(--ui-violet); color: var(--ui-text); box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5); }
+.ps-tip b { display: block; margin-bottom: 4px; color: var(--ui-gold); }
+.ps-tip.hidden { display: none; }
+@media (max-width: 640px) { .ps-hero { position: static; } }
