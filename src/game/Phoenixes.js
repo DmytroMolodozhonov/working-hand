@@ -1230,6 +1230,7 @@ export class Phoenixes {
         const dmg = Math.min(10, +m.dmg || PHOENIX.STRIKE_DMG);
         if (c.frozen) c.frozenLeft = 0; // (its fire melts the ice)
         if (c.enabled) c.damage(dmg, null, 'Inferno'); else g.damageLocalPlayer?.(dmg);
+        g.burning?.ignite('p', g.localId, null); // (its fire sets me alight)
         const dir = _v.subVectors(at, from).setY(0);
         if (dir.lengthSq() < 1e-4) dir.set(0, 0, 1);
         g.impact?.apply?.({ v: dir.normalize().multiplyScalar(9).setY(4), from, by: null, kind: 'phoenix' });

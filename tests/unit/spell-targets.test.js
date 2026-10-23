@@ -162,6 +162,13 @@ test('«Firefighting» decides every creature and thing (Firefighting.FIREFIGHT_
     for (const k of ['me', 'players', 'servants', 'campfires', 'trees', 'blocks', 'inferno', 'fireMaxima', 'hellfire', 'hellfireLeft', 'ships', 'items', 'water', 'ground']) assert.ok(T[k]?.why, k);
 });
 
+test('burning on the body decides every creature and thing (Burning.BURN_TARGETS)', async () => {
+    const { BURN_TARGETS: T } = await import('../../src/game/Burning.js');
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle' };
+    for (const k of ALL) assert.ok(T[names[k]]?.why, `burning forgets: ${k}`);
+    for (const k of ['me', 'players', 'servants', 'blackship', 'items', 'ships', 'water', 'ground', 'space']) assert.ok(T[k]?.why, k);
+});
+
 test('the phoenix: blades, arrows, fists, «Левиоса», water, fire and «Брейнрот» know it; its table says what each does', async () => {
     const { TARGETS } = await import('../../src/game/Phoenixes.js');
     for (const k of ['blade', 'fist', 'arrow', 'AvadaKedavra', 'Stupefy', 'IceDuel', 'Inferno', 'Hellfire', 'FireMaxima', 'Bombardo', 'Lightning', 'Wind', 'Levitation',

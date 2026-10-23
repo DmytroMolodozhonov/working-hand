@@ -31,6 +31,9 @@
 
 import * as THREE from 'three';
 import { FIRE_MAXIMA } from './WaterVortex.js';
+import { BURN } from './Burning.js';
+
+const BURN_CFG = () => BURN;
 
 export const FIREFIGHT = {
     REACH: 15, // m: the plain burst…
@@ -55,7 +58,8 @@ export const FIREFIGHT = {
  */
 export const FIREFIGHT_TARGETS = {
     // ---- creatures
-    me: { does: 'воздух вокруг на миг исчез: 4 с адский огонь меня не жжёт; не толкает (своё заклинание — никогда)', why: 'без воздуха огонь на теле гаснет' },
+    burning: { does: 'горящие (игрок, зомби, жители, звери, моряки; Burning.js) гаснут: в конусе вперёд — все, кто в нём; палочка ВВЕРХ / на себя — все в радиусе 3 м вокруг колдующего (Maxima — 6 м), включая его самого', why: 'без воздуха огонь на теле не горит' },
+    me: { does: 'воздух вокруг на миг исчез: 4 с адский огонь меня не жжёт; если я горю — гасну; не толкает (своё заклинание — никогда)', why: 'без воздуха огонь на теле гаснет' },
     players: { does: 'облиты: 4 с не горят в адском огне; не толкает и не ранит (решает компьютер самого игрока)', why: 'это воздух на миг, не удар' },
     zombies: { does: 'лёгкий толчок (Maxima — сильнее, может пошатнуть), без урона', why: 'толчок схлопнувшегося воздуха' },
     castlePeople: { does: 'рыцари, король, волшебники, торговцы: лёгкий толчок, без урона', why: 'толчок схлопнувшегося воздуха' },
@@ -133,6 +137,7 @@ export class Firefighting {
      */
     act(sp, dt) {
         const g = this.game;
+        if (sp.self) return this._air(sp, dt);
         const max = sp.max;
         const half = max ? FIREFIGHT.MAX_HALF : FIREFIGHT.HALF;
         const full = max ? FIREFIGHT.MAX_REACH : FIREFIGHT.REACH;
@@ -156,6 +161,26 @@ export class Firefighting {
             sp.tickT = FIREFIGHT.TICK;
             if (this._douse(sp, reach, half, hit)) did = true;
         }
+        return did;
+    }
+
+    /**
+     * «Firefighting» with the wand raised UP (or at oneself): the air round the CASTER vanishes for an instant —
+     * whoever burns within BURN.UP_R (UP_R_MAX for «Maxima») stops burning: the caster, a neighbour, a beast; the fires
+     * of blocks round them go out too. Seen: the air collapsing onto the caster; heard: the suck of air.
+     * Not burning, nobody near burning: only the mana is spent (nothing to count).
+     */
+    _air(sp, dt) {
+        if (sp.done || sp.t < FIREFIGHT.AT) return false;
+        sp.done = true;
+        const g = this.game, B = BURN_CFG();
+        const R = sp.max ? B.UP_R_MAX : B.UP_R;
+        let did = (g.burning?.douseAround?.(sp.o, R) || 0) > 0;
+        if ((g.fire?.douse?.(sp.o, R) || 0) > 0) did = true;
+        this._implode(sp.o, Math.min(R, 2.2));
+        g.sound?.playSpellFx?.('fxVacuum', sp.o, 1, 1);
+        if (did) this._steam(_c.copy(sp.o), 1.2);
+        this._note({ ev: 'air', max: !!sp.max, did, by: sp.by });
         return did;
     }
 
@@ -245,6 +270,7 @@ export class Firefighting {
             if (auth) g.dragons.hit?.(dr, 0, 'Firefighting', sp.by); // (no harm — it only angers it: ON_DRAGON.Firefighting)
         }
         // creatures: no damage — a light shove (the host); my own player: soaked (every computer: its own)
+        if (g.burning?.douseWhere?.(hit)) { did = true; this._steam(_b.copy(o).addScaledVector(d, Math.min(reach, 3)), 1); } // (whoever burns in the cone stops burning)
         this._creatures(sp, hit);
         this._me(sp, hit);
         if (sp.max && !sp.birds && auth) { sp.birds = true; g.books?.hitRay?.(o, d, reach, 0.9, 'water'); } // (the hose: wet pages, the bird falls)

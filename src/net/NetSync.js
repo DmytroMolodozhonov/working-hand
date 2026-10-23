@@ -486,6 +486,16 @@ export class NetSync {
         this.net.send({ t: 'invis', by: this.me, on: on ? 1 : 0 }, true);
     }
 
+    /** I catch fire / stopped burning (Burning.js: each computer decides its own player). */
+    burn(on) {
+        this.net.send({ t: 'burn', by: this.me, on: on ? 1 : 0 }, true);
+    }
+
+    /** (the host) the burning creatures: [[kind, id], …] (Burning.onList). */
+    burnList(l) {
+        this.net.send({ t: 'burnl', by: this.me, l }, true);
+    }
+
     /** My «Let the Hellfire Come» fire (~10×/s; null: it went out) — see Hellfire.onNet. */
     hellfire(s, why = null) {
         this.net.send(why ? { t: 'hf', by: this.me, s, w: why } : { t: 'hf', by: this.me, s }, true);
@@ -1079,6 +1089,8 @@ export class NetSync {
             case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
             case 'hf': if (m.by !== this.me) g.hellfire?.onNet(m); break;
+            case 'burn': if (m.by !== this.me) g.burning?.onNet(m); break;
+            case 'burnl': if (m.by !== this.me) g.burning?.onList(m); break;
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;

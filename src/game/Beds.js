@@ -601,7 +601,7 @@ export class Beds {
     }
 
     _beginSleep(dayStart) {
-        if (this.sleeping) return;
+        if (this.sleeping || this.game.burning?.me) return; // (a burning man does not fall asleep)
         this.sleeping = { t: 0, dayStart, switched: false };
         this._showOverlay('💤 Вы заснули…', 0);
     }

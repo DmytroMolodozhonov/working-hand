@@ -66,7 +66,7 @@ export const WIND_RING_TARGETS = {
     blackship: { does: 'push', why: 'капитан и скелеты держатся стойкой (Sailors.BRACE): сдвиг до полуметра; корабль не повреждается; его огонь и так гаснет сам (проклятие)' },
     phoenix: { does: 'push', why: 'лёгкую птицу отбрасывает; пылающий феникс гаснет и бросает огненную атаку (Phoenixes.watered), без урона' },
     owl: { does: 'push', why: 'сову отбрасывает (со свитка — Owls.TARGETS), без урона' },
-    burningBodies: { does: 'out', why: 'отдельного горения на теле зомби/жителя/животного в игре нет — они горят, только стоя в огне, и когда огонь вокруг погас, не горят; игроку 2 с адский огонь не жжёт' },
+    burningBodies: { does: 'out', why: 'зажжённые существа (Burning.js: игрок, зомби, жители, звери, моряки) гаснут, когда фронт дошёл до них' },
     campfires: { does: 'out', why: 'костёр гаснет совсем, когда фронт дошёл' },
     trees: { does: 'out', why: 'горящие деревья гаснут (что сгорело — сгорело)' },
     blocks: { does: 'out', why: 'горящая трава, листья, дерево, дома и стены замков гаснут' },
@@ -197,6 +197,8 @@ export class WindRing {
         }
         // the Hellfire: this computer's own blaze, the fires left on the ground (every computer keeps them)
         if (g.hellfire?.douse?.((c, r) => reached(c.x, c.y, c.z, r), 0, sp)) did = true;
+        // whoever burns where the front is (the people and beasts, me): the fire goes out
+        if (g.burning?.douseWhere?.((c, r) => reached(c.x, c.y, c.z, r))) did = true;
         // me: the air round me is moving — for a moment the Hellfire doesn't burn me
         this._me(sp, front);
         return did;

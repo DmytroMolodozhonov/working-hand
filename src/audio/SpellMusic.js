@@ -462,6 +462,14 @@ const FX = {
         noise(o, sr, 0.2, 0.7, 0.22, (u) => 0.22 - 0.17 * u, (u) => Math.min(1, u * 6) * (1 - u) ** 1.5, r); // (the air rushing back, the fire's last hiss)
         return finish(o, sr, { peak: 0.7 });
     },
+    /** A creature on fire (Burning.js): the crackle of flames, a hollow roar under it, a hiss. */
+    fxCrackle(sr) {
+        const o = buf(sr, 0.9), r = rng(223);
+        noise(o, sr, 0, 0.9, 0.3, () => 0.12, (u) => Math.min(1, u * 8) * (1 - u) ** 0.8, r); // (the roar of the flames)
+        crackle(o, sr, 0, 0.85, 0.7, 70, r); // (snaps and pops)
+        glide(o, sr, 0, 0.9, 0.1, (u) => 95 + 25 * Math.sin(u * 17), (u) => Math.min(1, u * 6) * (1 - u), 3);
+        return finish(o, sr, { peak: 0.55 });
+    },
     /** «Overgrown»: leaves rustling and wood groaning as it grows. */
     fxGrow(sr) { const o = buf(sr, 1.5), r = rng(37); noise(o, sr, 0, 1.5, 0.25, () => 0.5, (u) => Math.min(1, u * 4) * (1 - u) * (0.6 + 0.4 * Math.abs(Math.sin(u * 30))), r); glide(o, sr, 0.1, 1.3, 0.2, (u) => 80 + 70 * u + 8 * Math.sin(u * 60), swell(0.2, 0.3), 6); return finish(o, sr, { peak: 0.6 }); },
     /** «Wall Rise» (Breakthrough): stone grinding up, knocks as it settles. */

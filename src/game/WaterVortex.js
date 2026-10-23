@@ -1274,6 +1274,7 @@ export class WaterVortex {
                 const dmg = FIRE_MAXIMA.CREATURE_DMG * (g.fireBoost?.(e.by) ?? 1); // (the dragon's wand: 60% hotter)
                 if (c.enabled) c.damage(dmg, e.by, 'Inferno');
                 else g.damageLocalPlayer?.(dmg);
+                g.burning?.ignite('p', g.localId, e.by); // (the flower sets me alight)
             }
         } else if (rescued.has(`p:${this.me}`) && c.frozen) c.frozenLeft = 0;
         // creatures (the host decides)
@@ -1303,6 +1304,7 @@ export class WaterVortex {
                 }
             }
         }
+        g.burning?.igniteSphere?.(e.p, R, e.by); // (the creatures in the flower catch fire: Burning.js)
         // trees catch fire
         try { g.fire?.igniteAlong?.(_a.copy(e.p).addScaledVector(e.d, -R), e.d.clone().setY(0).lengthSq() > 1e-3 ? e.d.clone().setY(0).normalize() : new THREE.Vector3(1, 0, 0), R * 2); } catch (err) { /* no trees here */ }
     }

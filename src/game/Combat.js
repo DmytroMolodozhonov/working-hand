@@ -932,6 +932,7 @@ export class Combat {
         }
         // (fire from a wizard holding the dragon's wand burns 60% harder: Game.fireBoost)
         this.damage((HIT_DAMAGE[kind] ?? 2) * (kind === 'Inferno' ? this.game.fireBoost?.(byId) ?? 1 : 1), byId, kind);
+        if (kind === 'Inferno' && !this.dead) this.game.burning?.ignite('p', this.game.localId, byId); // (the stream sets me alight)
         // its physical effect: a push, a stagger, off the feet (BodyImpact; SPELL_PHYSICS when no push is given)
         if (this.game.impact) this.game.impact.spellHit(kind, from, byId, push);
         else if (push) this.game.knockback.add(push);

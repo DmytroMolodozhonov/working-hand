@@ -80,6 +80,7 @@ import { Boom } from './Boom.js';
 import { Hellfire } from './Hellfire.js';
 import { Firefighting } from './Firefighting.js';
 import { WindRing } from './WindRing.js';
+import { Burning } from './Burning.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
 import { setNearShadow } from '../core/Shadows.js';
@@ -347,6 +348,7 @@ export class Game {
                 }
                 this.books?.hitRay(o, d, len, width);
                 this.houses?.hitRay(o, d, len, width);
+                if (name === 'Inferno') this.burning?.igniteRay(o, d, len, width, this.localId); // (the stream sets whoever it touches alight: Burning.js)
                 this.animals?.hitRay(o, d, len, width, 3, this.localId, name);
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) { this.dragons?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); if (name === 'Thunderwave') this.dragons?.noise(o); } // (dragons: fire does nothing — DragonKinds.ON_DRAGON)
@@ -486,6 +488,7 @@ export class Game {
         this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
         this.windRing = new WindRing(this);
+        this.burning = new Burning(this); // a creature ON FIRE: burns for a while, put out by «Firefighting» up / water (Burning.js)
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
         this.falling = this.world.terrain ? new FallingBlocks(this.scene, this.world.terrain) : null;
         if (this.falling) this.falling.onLand = (f) => this._fallLanded(f);
@@ -1730,8 +1733,13 @@ export class Game {
         this.lastSpellCastTime = now;
         if (name === 'Flight') return name;
         const side = this.wandSide() || this.magicHand || this.lastMagicHand || this.dom;
-        const origin = this.spellStart(side);
-        const dir = this.character.getHandDirection(side);
+        let origin = this.spellStart(side);
+        let dir = this.character.getHandDirection(side);
+        // «Firefighting» with the wand raised UP (or at oneself): the air round ME vanishes — whoever burns near goes out (Firefighting._air)
+        if (name === 'Firefighting' || name === 'FirefightingMaxima') {
+            const hand = castingHand(this);
+            if (hand && aimedUpOrSelf(this, hand)) { origin = this.combat.center(new THREE.Vector3()); dir = new THREE.Vector3(0, 1, 0); }
+        }
         this.spells.cast(name, origin, dir, side, this.localId);
         if (this.sync) this.sync.spell(name, origin, dir, side);
         return name;
@@ -2817,6 +2825,7 @@ export class Game {
      * game goes on (a host's death never closes the room for the others).
      */
     onLocalDeath(text, byId) {
+        this.burning?.onDeath?.(); // (death puts the fire out)
         const manaMax = this.mana?.max; // (told to the others: a duel won against me is worth this much)
         // (the author: «умер — всё»: the hero starts anew in the same world; all they grew lies in the body — Legacy.js)
         // («Дай» dissolved me: no body — the old power is gone for good, nobody can take it back: StrongMagic)
@@ -3303,6 +3312,7 @@ export class Game {
         this.combat.update(dt);
         this.vortex.update(dt);
         this.hellfire?.update(dt);
+        this.burning?.update(dt);
         this.waterStorm?.update(dt);
         this.planetMagic?.update(dt); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)
         this.planetDestroy?.update(dt); // («Planet Liquidation»: the warnings, the blast, the host taking the planet away)
@@ -4185,6 +4195,7 @@ export class Game {
         this.wandMagic?.dispose();
         this.vortex?.dispose();
         this.hellfire?.dispose();
+        this.burning?.dispose();
         this.waterStorm?.dispose();
         this.gear?.dispose();
         this.bleeding?.dispose();

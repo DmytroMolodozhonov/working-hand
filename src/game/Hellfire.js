@@ -604,6 +604,7 @@ export class Hellfire {
             // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
             const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat * K : 0;
             const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);
+            if (inside) g.burning?.ignite(b.kind, b.id, by); // (in the blaze itself the fire sticks to the body: Burning.js)
             if (dmg > 0) {
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
@@ -675,6 +676,7 @@ export class Hellfire {
         this._note({ ev: 'hurtMe', dmg, by: by || 'self', heat: near });
         if (c.enabled) c.damage(dmg, by, HELLFIRE.NAME);
         else g.damageLocalPlayer?.(dmg);
+        if (!near) g.burning?.ignite('p', g.localId, by); // (in the blaze or the ring the fire sticks to me)
         // flames on my body
         if (this.pool && !near) for (let i = 0; i < 14; i++) this.pool.spawn(me.x + (Math.random() - 0.5) * 0.7, me.y - 0.8 + Math.random() * 1.6, me.z + (Math.random() - 0.5) * 0.7, (Math.random() - 0.5), 2 + Math.random() * 2, (Math.random() - 0.5), pick(FLAME), 0.3 + Math.random() * 0.3, 0.5, { shrink: 0.3, spin: 6 });
     }

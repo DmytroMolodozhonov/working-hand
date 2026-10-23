@@ -621,6 +621,8 @@ export class SpellManager {
     castFirefighting(max, origin, direction, casterId, handSide = 'right') {
         const name = max ? 'FirefightingMaxima' : 'Firefighting';
         const sp = { o: origin.clone(), d: direction.clone().normalize(), max, t: 0, by: casterId, side: handSide, done: false, worked: false };
+        // wand straight UP (Game sends (0,1,0) for «up / at oneself»): the air round the caster vanishes — an instant burst, not a hose
+        if (direction.y > 0.999) { sp.self = true; max = false; } // (sp.max stays: «Maxima» reaches farther)
         this.spells.push({
             life: max ? FIREFIGHT.MAX_LIFE : FIREFIGHT.BURST,
             held: max, by: casterId, kind: name, spray: sp, // (the hose: «стоп» ends it)
