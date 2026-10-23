@@ -192,6 +192,8 @@ export class Knockdown {
         const hard = L.drop >= IMPACT.FALL_KNOCK_DROP || L.speed >= IMPACT.FALL_KNOCK_SPEED;
         if (this.down) { g.fx.shake = Math.max(g.fx.shake || 0, 0.6); if (hard && !g.combat?.stunned && !g.combat?.frozen) this.daze(fallStrength(L)); return; }
         if (!hard) return;
+        // (a short hard drop — the speed rule alone — may find a steady hero on the feet; a deep fall never: Steadiness.js)
+        if (g.steady?.holds(null, { drop: L.drop, spell: false })) { g.fx.shake = Math.max(g.fx.shake || 0, 0.5); return; }
         const kb = g.knockback, ch = g.character;
         this.knock({ dir: kb && Math.hypot(kb.x, kb.z) > 1 ? fallDir(kb.x, kb.z, ch.group.rotation.y) : 'back', kind: 'fall', strength: fallStrength(L) });
         this.state = 'down'; this.t = 0; // (already on the ground)

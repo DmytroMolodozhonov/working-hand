@@ -853,7 +853,7 @@ export class Levitation {
         if (push.lengthSq() < 1e-4) push.set(0, 0, 1);
         if (o.kind === 'p') {
             // the host's own wizard: knocked off his feet (his own computer — this one)
-            if (speed >= THROW.KNOCK_V * 0.5) g.knock?.knock({ dir: 'back', down: 1.5, by: f.by, kind: 'thrown', strength: 0.4 });
+            if (speed >= THROW.KNOCK_V * 0.5 && !g.steady?.holds('Levitation')) g.knock?.knock({ dir: 'back', down: 1.5, by: f.by, kind: 'thrown', strength: 0.4 });
             if (d) { if (g.combat?.enabled) g.combat.damage(d, f.by, 'thrown'); else if (g.config?.mode !== 'creative') g.damageLocalPlayer?.(d); }
             return;
         }
@@ -997,7 +997,8 @@ export class Levitation {
         this.myFly = null;
         if (speed < THROW.KNOCK_V) return;
         const hard = speed >= THROW.ROLL_V;
-        g.knock?.knock({ dir: 'back', down: 1.5 + Math.min(3, (speed - THROW.KNOCK_V) * 0.2), by: this.fallBy, kind: 'fall', strength: Math.min(1, 0.3 + speed / 30), ...(hard ? { toss: 3, fly: true, tumble: 1 } : {}) });
+        // (thrown by a wizard's Leviosa: a steady hero may land on their feet — unless it was a drop of 5 m or more)
+        if (!g.steady?.holds('Levitation', { drop: (this.fallTop ?? p.y) - p.y })) g.knock?.knock({ dir: 'back', down: 1.5 + Math.min(3, (speed - THROW.KNOCK_V) * 0.2), by: this.fallBy, kind: 'fall', strength: Math.min(1, 0.3 + speed / 30), ...(hard ? { toss: 3, fly: true, tumble: 1 } : {}) });
         const d = impactDamage(speed) - (wall ? 0 : fallDamage((this.fallTop ?? p.y) - p.y)); // (the height's own fall is counted by _myLanding)
         if (d <= 0) return;
         if (g.combat.enabled) g.combat.damage(d, this.fallBy, 'fall');

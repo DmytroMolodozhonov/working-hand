@@ -130,6 +130,7 @@ export function playerSnapshot(game) {
         mp: game.combat?.enabled ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
+        steady: game.steady?.snapshot() || null, // «Устойчивость»: the skill and the run towards the next +1
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
         ach: game.achievements?.snapshot() || null, // the achievements (and «Высший маг»): kept for good
         limbs: game.dismember?.snapshot() || null, // cut off (until death): no healing by leaving
@@ -179,6 +180,7 @@ export function applyPlayerSnapshot(game, s) {
         }
         inv._render?.();
     }
+    if (s.steady) game.steady?.restore(s.steady);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.ach) game.achievements?.restore(s.ach);
     if (s.limbs && Number.isFinite(s.hp) && s.hp > 0) game.dismember?.restoreMine(s.limbs, s.bleed || 0);

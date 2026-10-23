@@ -93,6 +93,7 @@ import { buildWeapon } from '../entities/WeaponModels.js';
 import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { captureLegacy, wipeHero } from './Legacy.js';
+import { Steadiness } from './Steadiness.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
@@ -427,6 +428,7 @@ export class Game {
         this.vortex = new WaterVortex(this); // «Water Vortex» (+ «Bubble», «Frozen») and «Fire Maxima»
         this.waterStorm = new WaterStorm(this); // «Water Vortex Super Maxima»: a great storm of water held and steered by the wand
         this.combat = new Combat(this); // Свободный мир: HP, fatigue, shields, freezing
+        this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -3609,6 +3611,7 @@ export class Game {
         else if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
+        this.steady.step(dt);
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)

@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { IMPACT, classify, fallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush } from './Impact.js';
 import { fallStrength } from './Knockdown.js';
 import { GOT_UP_T } from './HandRelease.js';
+import { STEADY } from './Steadiness.js';
 import { isMagicKind, isDivine, ALL_ROUND } from './ProtectionGods.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -60,6 +61,10 @@ export class BodyImpact {
             if (o.always && !dome && !facing && !frozen && !swim) res = 'knockdown';
         }
         if (v * k >= IMPACT.KNOCK_ANY && res === 'stagger' && !swim && k >= 1) res = 'knockdown';
+        // «Устойчивость» (Steadiness.js): a SPELL that would knock me down may find me on my feet — the chance is the skill
+        // (not the gods' spells, Wind Maxima, Inspirius; Bombardo Maxima takes 60 % of it). Held: no fall, the body only
+        // reels and the shove / toss are halved. A hand, a horn, a sword, a ball are no spells: they are not resisted.
+        if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; k *= STEADY.HELD_PUSH_K; }
         // the push itself
         if (k > 0) {
             if (g.flight?.active) g.knockback.addScaledVector(o.v, k);

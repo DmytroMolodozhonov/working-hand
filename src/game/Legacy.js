@@ -62,9 +62,10 @@ export function captureLegacy(g) {
         // (and «дуэльное мастерство»: the duels won, and whom — Mana.masteryWon)
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length || mana.mastery > 0) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [], mastery: mana.mastery || 0, beaten: mana.beaten || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
+        steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady;
     return empty ? null : rec;
 }
 
@@ -88,6 +89,7 @@ export function wipeHero(g) {
     g.bonus = { hp: 0, fatigue: 0 };
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
+    g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }
 
@@ -112,6 +114,7 @@ export function absorbLegacy(g, rec) {
     if (rec.flight) B.flight = true;
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
+    if (rec.steady) g.steady?.restore(rec.steady);
     if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;
     if (M && rec.mana) {
