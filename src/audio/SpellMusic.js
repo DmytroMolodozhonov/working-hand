@@ -213,6 +213,37 @@ const TUNES = {
         pad(o, sr, ['D4', 'F4', 'A4'], 5.6, 7.4, 0.14, { att: 1.4, vib: 0.006, harm: 1 }); // (a far choir)
         return finish(o, sr, { rms: 0.07 });
     },
+    /**
+     * «Империус»: the mind leaving its body — a glass harmonica winding down in E minor like a hypnotist's watch, a
+     * whispering choir under it, the heart slowing, then one high clear note: the eyes open somewhere else.
+     */
+    thImperius(sr) {
+        const o = buf(sr, 7.5), r = rng(331);
+        pad(o, sr, ['E3', 'B3', 'G4'], 0, 6.2, 0.38, { att: 1.6, rel: 1.2, harm: 2, vib: 0.007, det: 0.006 });
+        melody([[0, 'B5'], [0.5, 'G5'], [1, 'E5'], [1.5, 'B4'], [2, 'A5'], [2.5, 'F#5'], [3, 'D#5'], [3.5, 'B4'], [4, 'G5'], [4.5, 'E5'], [5, 'B4'], [5.5, 'G4', 2]], 0.55, 0.2, (f, t) => { bell(o, sr, f, t, 0.12, 1.6, 0.05); bell(o, sr, f * 2.005, t, 0.03, 0.9, 0); });
+        for (let k = 0; k < 7; k++) drum(o, sr, 0.8 + k * (0.55 + k * 0.09), 0.28 * (1 - k / 9), 46, 0.45, r); // (the heart slowing down)
+        noise(o, sr, 0.3, 5.5, 0.05, (u) => 0.1 + 0.08 * Math.sin(u * 23), swell(0.3, 0.3), r); // (the whispers)
+        bell(o, sr, hz('E7'), 6.3, 0.09, 1.1, 0.2); // (the eyes open)
+        reverb(o, sr, 0.3, 0.5);
+        return finish(o, sr, { rms: 0.065 });
+    },
+    /**
+     * «Империус Максима»: the same trance made divine — a golden choir in E major over an organ pedal, the glass
+     * melody doubled by a horn, harps rising, the gods' bells: any mind in the world opens.
+     */
+    thImperiusMaxima(sr) {
+        const o = buf(sr, 9.5), r = rng(337);
+        pad(o, sr, ['E2', 'B2', 'E3'], 0, 8.2, 0.5, { att: 1.2, rel: 1.2, harm: 5, det: 0.002 }); // (the organ's pedal)
+        pad(o, sr, ['G#4', 'B4', 'E5'], 0.8, 4.6, 0.22, { att: 1.4, vib: 0.008, harm: 1 });
+        pad(o, sr, ['A4', 'C#5', 'E5'], 4.4, 6.2, 0.22, { att: 0.8, vib: 0.008, harm: 1 });
+        pad(o, sr, ['G#4', 'B4', 'E5', 'G#5'], 6, 8.4, 0.28, { att: 0.6, rel: 1.2, vib: 0.008, harm: 1 });
+        melody([[0, 'B5'], [0.5, 'G#5'], [1, 'E5'], [1.5, 'B4'], [2, 'C#6'], [2.5, 'A5'], [3, 'E5'], [3.5, 'C#5'], [4, 'B5', 2], [6, 'E6', 3]], 0.6, 0.3, (f, t, l) => { bell(o, sr, f, t, 0.1, 1.8, 0.05); brass(o, sr, f / 2, t, l * 0.9, 0.05); });
+        for (let k = 0; k < 12; k++) pluck(o, sr, hz(['E4', 'G#4', 'B4', 'E5'][k % 4]) * (k >= 8 ? 2 : 1), 4 + k * 0.11, 0.18, 1.4, r); // (the harps rising)
+        for (const [t, n] of [[6.3, 'E7'], [6.6, 'B6'], [7, 'G#7']]) bell(o, sr, hz(n), t, 0.06, 1.6, 0.2);
+        drum(o, sr, 6.2, 0.45, 55, 1.2, r);
+        reverb(o, sr, 0.3, 0.55);
+        return finish(o, sr, { rms: 0.07 });
+    },
     /** «Brain Rot Maxima»: a slow, wide, dragon-sized lullaby — low strings, a rising horn, a soft far roar settling into calm. */
     thDragonCalm(sr) {
         const o = buf(sr, 9), r = rng(313);
@@ -502,6 +533,12 @@ const FX = {
     fxGrow(sr) { const o = buf(sr, 1.5), r = rng(37); noise(o, sr, 0, 1.5, 0.25, () => 0.5, (u) => Math.min(1, u * 4) * (1 - u) * (0.6 + 0.4 * Math.abs(Math.sin(u * 30))), r); glide(o, sr, 0.1, 1.3, 0.2, (u) => 80 + 70 * u + 8 * Math.sin(u * 60), swell(0.2, 0.3), 6); return finish(o, sr, { peak: 0.6 }); },
     /** «Wall Rise» (Breakthrough): stone grinding up, knocks as it settles. */
     fxStone(sr) { const o = buf(sr, 1.4), r = rng(43); noise(o, sr, 0, 1.2, 0.4, () => 0.06, swell(0.2, 0.2), r); glide(o, sr, 0, 1.2, 0.2, (u) => 45 + 30 * u + 6 * Math.sin(u * 90), swell(0.2, 0.2), 5); drum(o, sr, 1.15, 0.5, 70, 0.25, r); return finish(o, sr, { peak: 0.7 }); },
+    /** «Империус»: the mind lifted out — an airy glass whoosh rising, a shimmer, a soft breath drawn in. */
+    fxImperius(sr) { const o = buf(sr, 1.3), r = rng(341); noise(o, sr, 0, 1.2, 0.25, (u) => 0.03 + 0.3 * u, swell(0.4, 0.3), r); glide(o, sr, 0, 1.2, 0.18, (u) => 300 + 900 * u * u, swell(0.2, 0.3), 2); for (let k = 0; k < 6; k++) bell(o, sr, 1400 + 260 * k, 0.5 + k * 0.08, 0.06, 0.6, 0.3); return finish(o, sr, { peak: 0.55 }); },
+    /** «Империус Максима»: the same, wider and golden — a deeper rush and a chord of bells. */
+    fxImperiusMaxima(sr) { const o = buf(sr, 1.6), r = rng(347); noise(o, sr, 0, 1.4, 0.3, (u) => 0.02 + 0.25 * u, swell(0.4, 0.3), r); glide(o, sr, 0, 1.4, 0.2, (u) => 160 + 600 * u * u, swell(0.2, 0.3), 3); ['E6', 'G#6', 'B6', 'E7'].forEach((n, k) => bell(o, sr, hz(n), 0.7 + k * 0.1, 0.08, 0.8, 0.2)); return finish(o, sr, { peak: 0.6 }); },
+    /** The mind back home: the whoosh falling, a low breath out, the body's heart beating once. */
+    endImperius(sr) { const o = buf(sr, 1.3), r = rng(353); noise(o, sr, 0, 1, 0.25, (u) => 0.3 - 0.27 * u, swell(0.1, 0.5), r); glide(o, sr, 0, 1, 0.16, (u) => 1100 - 850 * u, swell(0.1, 0.4), 2); drum(o, sr, 0.95, 0.4, 50, 0.35, r); return finish(o, sr, { peak: 0.5 }); },
     /** «Брейнрот»: a goofy wobbling boing. */
     fxBrainrot(sr) { const o = buf(sr, 0.9); glide(o, sr, 0, 0.9, 0.35, (u) => 220 + 260 * Math.sin(u * Math.PI) + 60 * Math.sin(u * 50), swell(0.03, 0.4), 3); return finish(o, sr, { peak: 0.6 }); },
     /** «Brain Rot Maxima»: the boing, low and slow — a golden wobble that settles. */
@@ -536,6 +573,8 @@ const FX = {
 const LOOPS = {
     /** «Левиоса» held: a soft airy hum with a slow tremble. */
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
+    /** «Империус» held: a trance — a soft beating hum (E and B, a little apart), the far heart of the body left behind. */
+    loopImperius(sr) { const o = buf(sr, 3.3), r = rng(359); pad(o, sr, [82.4, 123.5, 124.3], 0, 3.3, 0.26, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); drum(o, sr, 0.4, 0.12, 44, 0.4, r); drum(o, sr, 0.62, 0.08, 44, 0.35, r); drum(o, sr, 2.05, 0.12, 44, 0.4, r); drum(o, sr, 2.27, 0.08, 44, 0.35, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     /** «Brain Rot Maxima» held: a calm low breathing hum (A and E) with a slow warm swell — a big sleeper breathing. */
     loopDragonCalm(sr) { const o = buf(sr, 3.3), r = rng(317); pad(o, sr, [110, 165], 0, 3.3, 0.3, { att: 0.01, rel: 0, harm: 3, vib: 0.003 }); noise(o, sr, 0.2, 2.6, 0.06, (u) => 0.1 + 0.05 * Math.sin(u * Math.PI), swell(0.5, 0.5), r); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** A living tree: the wood's slow creak over a low drone. */
@@ -615,6 +654,7 @@ export const SPELL_SOUND = {
     WaveAttack: { own: ['waterRise', 'splash'] }, WaveAttackMaxima: { own: ['waterRise', 'splash'] },
     Wind: { own: ['fxWind'] }, WindMaxima: { own: ['fxWind'] }, WindImpulse: { own: ['fxWind'] }, WindImpulseMaxima: { own: ['fxWind'] },
     Overgrown: { own: ['fxGrow'] }, OvergrownMaxima: { own: ['fxGrow'] },
+    Imperius: { cast: 'fxImperius', theme: 'thImperius' }, ImperiusMaxima: { cast: 'fxImperiusMaxima', theme: 'thImperiusMaxima' }, // (the mind into another body — ImperiusControl.js)
     Brainrot: { own: ['fxBrainrot'] }, BrainrotMaxima: { cast: 'fxBrainrotMaxima', theme: 'thDragonCalm' }, WallRise: { own: ['fxStone'] }, WallRiseMaxima: { own: ['fxStone'] },
     Drawdown: { own: ['explosion', 'rumble'] }, DrawdownMaxima: { own: ['explosion', 'rumble'] },
     Liquidation: { own: ['splash'] }, LiquidationMaxima: { own: ['splash'] }, Stitching: { own: ['seal', 'sealChime'] }, CreateBridge: { cast: 'fxCreate' }, Groundprud: { own: ['fxStone', 'rumble'] },
@@ -647,6 +687,7 @@ export const HELD_SOUND = {
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
+    Imperius: { loop: 'loopImperius', end: 'endImperius' }, // (the mind in another body; the end — the mind back home)
     DragonTame: { loop: 'loopDragonCalm', end: 'fxStop' }, // («Brain Rot Maxima» held: the dragon calmed — DragonRide.js)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },

@@ -89,6 +89,8 @@ export const SPELL_COST = {
     AlohomoraMaxima: 25, // … a strong lock: the gates of a throne room
     Wind: 8,
     Brainrot: 15,
+    Imperius: 100, // «Империус»: the mind into an ordinary creature (the author: 100; the maximum ≥ 150; then 1 a second — Imperius.js)
+    ImperiusMaxima: 500, // «Империус Максима»: into any creature, a player too (the author: 500; the maximum ≥ 750; then 2 a second)
     BrainrotMaxima: 30, // «Brain Rot Maxima» (the dragons — DragonTame.js): once to cast, then 0,5 a second to hold it
     LightningStrike: 25,
     ToTheSun: 12,

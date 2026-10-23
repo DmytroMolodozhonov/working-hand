@@ -79,7 +79,8 @@ export const EVERYDAY = new Set(['спасибо', 'акция', 'акции', '
  * to himself, and the fire came). A word of the sound's letters that begins with one of these (a letter off is allowed) and
  * is not the spell's own word is talk. Raise the list when the journal shows another such word.
  */
-export const SOUNDALIKE_STEMS = ['интерес', 'интерфейс', 'интернет', 'информац', 'инфекц', 'инфляц', 'инфаркт', 'инфракрас'];
+export const SOUNDALIKE_STEMS = ['интерес', 'интерфейс', 'интернет', 'информац', 'инфекц', 'инфляц', 'инфаркт', 'инфракрас',
+    'империя', 'империи', 'империю', 'империей', 'империал', 'имперск', 'император']; // («империя» sounds like «Империус» — talk)
 
 /** The everyday stem a word of what was heard begins with (not the spell's own word), or null. */
 export function everydayHeard(written, canonical = '') {

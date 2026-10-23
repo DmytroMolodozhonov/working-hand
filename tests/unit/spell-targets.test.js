@@ -433,3 +433,26 @@ test('a living creature stays a target in every STATE (thrown, lying, stunned, f
     assert.match(src('src/game/CastleLife.js'), /targets\(reach = 40\)/);
     // (the real matrix, with real models: tests/unit/duel-creature-states.test.js)
 });
+
+test('«Империус» / «… Максима» (Imperius.js): every kind of creature is decided — taken by the plain one, only by the Maxima, or why not; the code that must know it knows it', async () => {
+    const { IMPERIUS_TARGETS, kindOf } = await import('../../src/game/Imperius.js');
+    // every creature of the game has its row (KINDS above — and the players)
+    const rows = {
+        zombies: ['zombie'], 'castle people (villagers, knights, the king, wizards)': ['villager', 'knight', 'king', 'wizard', 'towerHead'], animals: ['cow', 'sheep', 'horse', 'pig', 'pegasus', 'runbook', 'guardBeast'],
+        'sailors (ships\' crews)': ['sailor', 'blackbeard', 'pirateSkeleton'], 'the giant spider': ['spider'], 'living trees': ['tree', 'skeleton'], 'book-birds': ['bookbird'], dragons: ['dragon'],
+        phoenixes: ['phoenix'], owls: ['owl'], 'the Ice Castle (queen, snowmen, ice monsters)': ['snowman', 'iceMonster', 'iceQueen'],
+    };
+    for (const k of ALL) {
+        assert.ok(rows[k], `Imperius: no rows for ${k}`);
+        for (const r of rows[k]) assert.ok(IMPERIUS_TARGETS[r], `IMPERIUS_TARGETS forgets ${r} (${k})`);
+    }
+    assert.ok(IMPERIUS_TARGETS.player?.player, 'another player: only the Maxima');
+    for (const s of ['z', 'v', 'a', 's', 'D', 'sp', 'b', 'o', 'p', 't', 'I', 'pl']) assert.ok(kindOf(s, {}), `kindOf knows the system «${s}»`);
+    const g = src('src/game/Game.js');
+    assert.match(g, /name === 'Imperius' \|\| name === 'ImperiusMaxima'\) return this\.imperius\.cast/, 'the cast goes to ImperiusControl');
+    assert.match(g, /z\.imp && .*this\.imperius\?\.step\('z'/, 'the zombies\' loop gives a taken zombie to the mind in it');
+    assert.match(src('src/game/CastleLife.js'), /imperius\?\.step\('v'/, 'the people\'s loop too');
+    assert.match(src('src/game/Animals.js'), /imperius\?\.step\('a'/, 'the animals\' loop too');
+    assert.match(src('src/game/Concentration.js'), /Imperius: \{/, 'a held spell (concentration)');
+    assert.match(src('src/game/Space.js'), /name === 'Imperius'/, 'space says why not');
+});

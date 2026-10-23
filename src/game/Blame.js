@@ -43,7 +43,7 @@ export function spellFamily(name) {
     if (/^(Drawdown|Earthquake|Breakthrough)/.test(n)) return 'quake';
     if (/Levi/.test(n)) return 'leviosa';
     if (/^Wind/.test(n)) return 'wind';
-    if (/^Brainrot/.test(n)) return 'servant';
+    if (/^(Brainrot|Imperius)/.test(n)) return 'servant'; // («Империус»: a creature gone mad — its master only a seen cast names)
     return n;
 }
 

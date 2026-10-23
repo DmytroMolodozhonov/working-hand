@@ -59,6 +59,7 @@ export const HELD = {
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     Fireworks: { ru: 'Салют', icon: '🎆', own: [] }, // (10 s of salvos over the wand: Fireworks.js — «стоп» ends it)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
+    Imperius: { ru: 'Империус', icon: '🌀', own: [], only: true }, // (the mind in another body: nothing of the hero's — not even Lumos or the shield; only «стоп» — ImperiusControl.js)
 };
 
 /** Said while holding anything: no concentration in them (the author's exceptions). */
@@ -70,6 +71,7 @@ export const FREE = new Set(['Lumos', 'LumosMaxima', 'LumosFlashlight', 'LumosAh
  */
 export function mayCast(held, name, ctx = {}) {
     if (!held || !name) return true;
+    if (HELD[held]?.only) return name === 'Stand' || name === 'Stop'; // («Империус»: you play the creature — no spell of yours but «стоп»)
     if (FREE.has(name)) return true;
     if (name === 'Flight' && ctx.hovering) return true;
     if (held === 'Build' && ctx.isBuild) return true; // (another «Create a …»: the next piece of the building)
@@ -106,6 +108,7 @@ export class Concentration {
         if (g.lightning) return 'Lightning';
         if (g.strong?.electrum) return 'Electrum';
         if (g.fireworks?.on) return 'Fireworks';
+        if (g.imperius?.active) return 'Imperius';
         if (g.dragonRide?.active) return 'DragonTame';
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
@@ -123,7 +126,8 @@ export class Concentration {
         const held = this.held();
         if (mayCast(held, name, { hovering: !!this.game.flight?.hovering, isBuild })) return null;
         const ru = HELD[held]?.ru || held;
-        const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
+        const say = held === 'Duel' ? '⚡ Идёт дуэль — другие заклинания не работают (только «Protection» второй рукой)'
+            : held === 'Imperius' ? '🌀 Вы в чужом теле — колдовать нельзя. «Стоп» — вернуться в своё' : `🧘 Сначала «стоп» — вы держите «${ru}»`;
         this.game.lastCastWhy = held === 'Duel' ? 'занято: идёт дуэль' : `занято: вы держите «${ru}» — сначала «стоп» (концентрация)`; // (the spell journal)
         if (isFinal && this._gate.pass(held + ':' + name)) this.game.hud?.setVoice?.(say, true);
         return held;
@@ -163,6 +167,7 @@ export class Concentration {
         if (g.strong?.stopElectrum?.('focus')) done.push('Электром');
         if (g.fireworks?.stop?.('focus')) done.push('салют');
         if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');
+        if (g.imperius?.stop?.(why === 'dead' ? 'dead' : 'hurt')) done.push('Империус');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');
         if (g.ships?.stopWind?.()) done.push('ветер в паруса');
         if (g.wards?.feeding) { g.wards.stopFeed?.(); done.push('усиление дома'); }

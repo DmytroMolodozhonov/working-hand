@@ -288,6 +288,7 @@ export class NetSync {
                 wd: netWand(g.items?.wand), // (my wand: it counts in a duel as everywhere — Duel._wandK)
                 dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
+                im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
             }, true);
         }
         // Water ball in my hand
@@ -431,6 +432,11 @@ export class NetSync {
 
     bookGone(id, to) {
         if (this.net.isHost) this.net.send({ t: 'bgone', id, to }, true);
+    }
+
+    /** «Империус» (ImperiusControl.onNet): a guest asks for / drives / lets go a creature; the host answers. */
+    imperius(m) {
+        this.net.send({ t: 'imp', ...m, by: this.me });
     }
 
     brainrot(id, k = 'z') {
@@ -917,6 +923,7 @@ export class NetSync {
             case 'bhold': if (this.net.isHost) { const b = g.books?.birds.get(m.id); if (b) g.books.holdBird(b, !!m.on, m.from); } break;
             case 'bat': if (this.net.isHost && Array.isArray(m.p)) { const b = g.books?.birds.get(m.id); if (b && b.state === 'held') { b.model.position.set(+m.p[0] || 0, +m.p[1] || 0, +m.p[2] || 0); b.heldSeen = performance.now(); } } break;
             case 'bgone': if (!this.net.isHost) g.books?.netGone(m.id, m.to); break;
+            case 'imp': g.imperius?.onNet(m, this.net.isHost); break;
             case 'brainrot': if (this.net.isHost) { if (m.k && m.k !== 'z') g.servants?.make(m.k, m.id, m.from || m.by); else g.applyBrainrot(m.id, m.from || m.by); } break;
             case 'ltree': if (!this.net.isHost) { g.livingTrees?.applyNet(m.l); g.servants?.applyNet(m.sv); } break;
             case 'alivehit': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t?.skel && Number.isFinite(+m.dmg)) g.livingTrees.hit(t, Math.min(20, Math.max(0, +m.dmg)), m.kind === 'fist' ? 'fist' : 'melee', m.from); } break;

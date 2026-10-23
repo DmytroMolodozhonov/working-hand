@@ -73,7 +73,7 @@ const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
 const FAR_ONE = SHADOW_NEAR; // m: farther ones (no shadow there either) are drawn as one shape each (one draw instead of 8–12)
-const WALK = 2.3, RUN = 5.6;
+export const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
 const THEFT_MS = 90000;
@@ -3392,6 +3392,7 @@ export class CastleLife {
                 }
                 v.landWaitT = 0;
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
+                if (v.imp && !v.dead && g.imperius?.step('v', v, dt)) continue; // («Империус»: a mind in it, not its own — ImperiusControl.step)
                 this._think(v, dt);
                 this.stuck.env.now = this._clock;
                 this.stuck.watch(v, dt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
@@ -3401,6 +3402,7 @@ export class CastleLife {
         } else {
             for (const v of this.byId.values()) {
                 v.sayT -= dt; // (here too: else after a guest's first line every line of the host's villagers was dropped)
+                if (v.imp?.mine && !v.dead && g.imperius?.step('v', v, dt)) continue; // (my mind is in it: my computer moves it)
                 if (!v.net) continue;
                 const k = Math.min(1, dt * 8);
                 v.x += (v.net.x - v.x) * k; v.y += (v.net.y - v.y) * k; v.z += (v.net.z - v.z) * k;
@@ -3435,7 +3437,8 @@ export class CastleLife {
                     // (a builder's hammer heard: the repairs — Rebuild.js)
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }
-                if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
+                if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('v', v); // (my mind's blow: at the sword's own moment)
+                else if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
                 else if (this.auth && v.model.strikeNow && (v.order || v.guardOrder)) this.orders.strike(v);
             }
             if ((v.mode === 'swim' || v.mode === 'paddle') && visible && d < 40) splashes(g, v.x, v.y + SWIMMERS.person.float, v.z, dt, v.mode === 'paddle', v); // (the water round a swimmer)

@@ -69,7 +69,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
 
 /** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */
 export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
-    'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack'];
+    'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack', 'Imperius'];
 
 /** The price of a scroll in a tower's shop (coins). */
 export function scrollShopPrice(it) {
@@ -79,7 +79,7 @@ export function scrollShopPrice(it) {
         case 'hp': return 70 + 10 * n;
         case 'fatigue': return 65 + 5 * n;
         case 'flight': return 380;
-        case 'spell': return { LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
+        case 'spell': return { LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, Imperius: 850, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
         default: return 100;
     }
 }

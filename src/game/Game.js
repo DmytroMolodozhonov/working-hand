@@ -100,6 +100,8 @@ import { Blackbeard } from './Blackbeard.js';
 import { sampleIceModels } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
+import { ImperiusControl } from './ImperiusControl.js';
+import { pulse as imperiusPulse } from '../entities/ImperiusEyes.js';
 import { Carriages, cartModel } from './Carriages.js';
 import { CASTLE_CELL } from '../world/Castles.js';
 import { ShipModel, barrierParts } from '../entities/ShipModel.js';
@@ -172,7 +174,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks']);
+const MANA_LATER = new Set(['Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -514,6 +516,7 @@ export class Game {
         this.spiders = new Spiders(this); // the night boss: a giant spider
         this.dragons = new Dragons(this); // dragons: in their lairs high in the mountains, now and then flying over the world
         this.dragonRide = new DragonRide(this); // «Brain Rot Maxima»: the calmed dragon, riding it (DragonRide.js)
+        this.imperius = new ImperiusControl(this); // «Империус» / «… Максима»: the mind in another body (ImperiusControl.js)
         this.blackbeard = new Blackbeard(this); // Captain Black Moustache's black ship: one in the world, out on the open sea (Blackbeard.js)
         this.iceCastle = new IceCastleLife(this); // the one Ice Castle of the world: the Ice Queen, her snowmen and ice monsters, the Ice Rod (IceQueen.js)
         this.loreLibrary = new LoreLibrary(this); // the books of the world's history in the libraries (LoreBooks.js)
@@ -1742,6 +1745,7 @@ export class Game {
         if (name === 'Fire') return isFinal ? this.campfires.cast(isFinal) : null; // (unfinished «Fire…»: it may be «Fire Maxima»)
         if (name === 'Wind' || name === 'WindMaxima' || name === 'Overgrown' || name === 'OvergrownMaxima') return this._castWind(name, isFinal);
         if (name === 'Brainrot') return this._castBrainrot(isFinal);
+        if (name === 'Imperius' || name === 'ImperiusMaxima') return this.imperius.cast(name, isFinal); // (the mind into the creature pointed at — ImperiusControl.js)
         if (name === 'BrainrotMaxima') return this.dragonRide.cast(isFinal); // (a dragon calmed, ridden — DragonRide.js; every other creature: «Брейнрот»)
         if (name === 'Snowman') return this.iceCastle.castSnowman(isFinal); // (a friendly snowman out of the snow pointed at — IceQueen.js)
         if (name === 'Alive' || name === 'AliveMaxima') return isFinal ? this.livingTrees.cast(isFinal, name === 'AliveMaxima') : null; // (unfinished «Alive…»: it may be «Alive Maxima»)
@@ -1923,6 +1927,7 @@ export class Game {
     stopSpells() {
         const done = [];
         const W = this.wandMagic;
+        if (this.imperius?.stop('stop')) done.push('Империус'); // (the mind flies back into its own body)
         if (this.combat.dropShield('🛑 Стоп — щит снят')) done.push('щит');
         if (this.levitation.active) { this.levitation.release(false); done.push('Левиоса'); }
         if (this.levMax?.stop()) done.push('Левиоса Максима'); // (what it holds falls)
@@ -3330,6 +3335,7 @@ export class Game {
             this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
         }
         this._updatePlayer(dt);
+        this.imperius?.afterPlayer(dt); // («Империус»: the body asked for a walk — the creature walks; the body stays)
         this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
         this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
         this._updateChests(dt);
@@ -3381,6 +3387,8 @@ export class Game {
         if (earth) this.spiders.update(dt);
         if (earth) this.dragons.update(dt);
         this.dragonRide.update(dt, earth);
+        this.imperius.update(dt); // (after the creatures moved: the link, the mana, the passage of the mind)
+        if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
         if (earth) this.iceCastle.update(dt);
         this.temple?.update(dt); // (the Gods' temple: on Venus)
         if (earth) this.phoenixes.update(dt);
@@ -3569,6 +3577,7 @@ export class Game {
         else if (flying) this._updateFlight(dt, pose);
         if (iced) ch.setRunning(false);
         this._jumpStep(pose);
+        this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
         ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
@@ -3935,6 +3944,8 @@ export class Game {
         const charPos = ch.group.position;
         for (let i = this.zombies.length - 1; i >= 0; i--) {
             const z = this.zombies[i];
+            // («Империус»: a mind in it — mine drives it, a guest's is drawn where it is — ImperiusControl.step)
+            if (z.imp && (this.authority || z.imp.mine) && this.imperius?.step('z', z, dt)) { if (z.removable) this.removeZombie(z); continue; }
             if (!this.authority) {
                 // Multiplayer guest: the host moves zombies; we only animate them
                 // and report our own punches.
@@ -4142,7 +4153,8 @@ export class Game {
             this.camera.rotateY(Math.sin(t * 0.37 + 2) * 0.03 * dz);
         }
         this.hud?.setDizzy?.(dz, this.renderer?.domElement);
-        if (this.config.mode !== 'test') this._cameraOutOfRock(ch);
+        if (this.config.mode !== 'test' && !this.imperius?.viewing) this._cameraOutOfRock(ch);
+        this.imperius?.camera(this.camera, dt); // («Империус»: the creature's eyes — or the way there along the light)
         this.camera.updateMatrixWorld(true);
     }
 
@@ -4173,7 +4185,7 @@ export class Game {
             this._jumpSeen = J.jumps;
             const busy = this.flight.busy || ch.swimY != null || ch.swimming || this.knock.down || this.knock.flyT > 0
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
-                || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active
+                || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy
                 || (this.config.mode === 'test' && this.testState === 'setup');
             if (!first && !busy && ch.onGround && ch.jump(J.strength)) { this._jumpAt = J.at; this._jumpOnto(); }
         } else if (J && J.air && ch.jumpAir && J.at === this._jumpAt) ch.jumpBoost(J.strength); // (it went up higher)

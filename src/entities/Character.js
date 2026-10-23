@@ -30,6 +30,7 @@ import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
 import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
+import { setEyes } from './ImperiusEyes.js';
 
 const _v3k = new THREE.Vector3();
 const _v1 = new THREE.Vector3();
@@ -925,6 +926,9 @@ export class VoxelCharacter {
      * is out of sight, and looking down one sees the chest, the belly, the belt and the legs
      * going on from it — no emptiness).
      */
+    /** «Империус»: the mind is out of this body — its eyes burn white (ImperiusEyes.js; every computer sees them). */
+    setImperiusEyes(on) { setEyes(this, on); }
+
     setFirstPerson(isFPV) {
         this._fpv = isFPV;
         const layer = isFPV ? 1 : 0;

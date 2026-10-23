@@ -14,6 +14,7 @@ import { dieWords } from '../game/StrongSpells.js';
 import { isExpelliarmus } from '../game/Expelliarmus.js';
 import { alohomoraWords, isLockWord } from '../game/Alohomora.js';
 import * as THREE from 'three';
+import { CurvedBeam } from './Particles.js';
 import { INFERNO, InfernoLook, infernoReach, infernoDrain, inStream, streamStop } from './InfernoStream.js';
 import { thunderPush } from '../game/Impact.js';
 import { THUNDER, inThunderZone } from '../game/ThunderWave.js';
@@ -84,10 +85,22 @@ export function godsShieldWords(s) {
     return /(максим|maxim|макс|max|купол)/.test(s) ? 'ProtectionGodsMaxima' : 'ProtectionGods';
 }
 
+// «Империус» as the recognizer writes it: «империус», «империюс», «империос», «империус», «imperius», «imperio»… —
+// one word of its own (never «империя», «император», «империал», «империализм»); with «Максима»: «Империус Максима».
+const IMPERIUS_WORD = /^(?:и|э|е)мп(?:е|э|и)р(?:и|ы)?(?:у|ю|о|йу)(?:с|з|ш)(?:а|у|ом|е)?$|^imp(?:e|i)ri?(?:u|o)s$|^imperio$|^imperious$/;
+export function imperiusWords(text) {
+    const w = String(text || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я]+/).filter(Boolean);
+    if (!w.some((x) => IMPERIUS_WORD.test(x))) return null;
+    return w.some((x) => /^(?:макс|max|мах|maks|мекс|мэкс)/.test(x)) ? 'ImperiusMaxima' : 'Imperius';
+}
+
 export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
+    const imp = imperiusWords(s);
+    if (imp) return imp;
     // «Дай» («Die», «Дия»): an everyday word — only the whole phrase, one word of its own (StrongSpells.dieWords)
     if (dieWords(s)) return 'Die';
     // «Create an Ice Castle» / «Ice Bridge» («айс касл», «айс бридж», «создай ледяной замок / мост»): the ice
@@ -476,6 +489,7 @@ export class SpellManager {
             case 'Thunderwave': this.castThunderwave(o, d, casterId); break;
             case 'Wind': this.castWind(o, d, casterId, 1); break;
             case 'Brainrot': this.castBrainrot(o, direction.clone()); break; // (its length = the distance)
+            case 'Imperius': case 'ImperiusMaxima': this.castImperius(o, direction.clone(), name === 'ImperiusMaxima'); break; // (the mind's light from the eyes to the creature — ImperiusControl draws the rest)
             case 'BrainrotMaxima': this.castBrainrot(o, direction.clone(), true); break; // (the same rings, golden and wider: at a dragon)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
             case 'ToTheSun': this.hooks.sun?.(o); break;
@@ -953,6 +967,47 @@ export class SpellManager {
      * «Брейнрот»: hypnotic rings roll out from a glowing spot above the
      * wizard's head towards the zombie (the length of `direction` = distance).
      */
+    /**
+     * «Империус» seen by everybody: a white thread of light from the caster's eyes arcs over to the creature, winds
+     * round itself, and the creature's head flares; «Максима» — the thread gilded, wider, with a second strand. Two
+     * curved beams per cast from a pool of two (made once: no new shaders, nothing left behind), glow motes on the way.
+     */
+    castImperius(origin, direction, maxima = false) {
+        this._fx(maxima ? 'fxImperiusMaxima' : 'fxImperius', origin, 1, 'playSapira');
+        const pool = this._impPool || (this._impPool = [0, 1].map(() => ({ busy: false, beams: [new CurvedBeam(this.scene, { segments: 18, radial: 6, radius: 0.28, color: 0xcfe6ff, opacity: 0.3 }), new CurvedBeam(this.scene, { segments: 18, radial: 5, radius: 0.07, color: 0xffffff, opacity: 0.95 })] })));
+        const slot = pool.find((p) => !p.busy) || pool[0];
+        slot.busy = true;
+        const edge = slot.beams[0].mesh.material, core = slot.beams[1].mesh.material;
+        edge.color.setHex(maxima ? 0xffe9a8 : 0xcfe6ff);
+        const p0 = origin.clone(), p2 = origin.clone().add(direction);
+        const len = direction.length();
+        const p1 = p0.clone().add(p2).multiplyScalar(0.5);
+        p1.y += Math.max(1.5, len * 0.22);
+        const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), m = new THREE.Vector3();
+        const at = (t, out) => { const it = 1 - t; return out.set(it * it * p0.x + 2 * it * t * p1.x + t * t * p2.x, it * it * p0.y + 2 * it * t * p1.y + t * t * p2.y, it * it * p0.z + 2 * it * t * p1.z + t * t * p2.z); };
+        const RUN = 0.55, HOLD = 0.35, FADE = 0.45;
+        let t = 0, flared = false;
+        this.spells.push({
+            life: RUN + HOLD + FADE,
+            onUpdate: (spell, dt) => {
+                t += dt;
+                const head = Math.min(1, t / RUN), tail = t > RUN + HOLD ? Math.min(1, (t - RUN - HOLD) / FADE) : 0;
+                at(tail, a); at(head, c); at((tail + head) / 2, b);
+                m.addVectors(a, c).multiplyScalar(0.5);
+                b.multiplyScalar(2).sub(m); // (the piece's control point: it lies on the same arc)
+                for (const beam of slot.beams) beam.setCurve(a, b, c);
+                const k = t > RUN + HOLD ? 1 - tail : 1;
+                edge.opacity = (maxima ? 0.42 : 0.3) * k; core.opacity = 0.95 * k;
+                if (this.fx?.glow && Math.random() < 0.8) { at(tail + (head - tail) * Math.random(), m); this.fx.glow.spawn(m.x, m.y, m.z, (Math.random() - 0.5) * 0.5, Math.random() * 0.5, (Math.random() - 0.5) * 0.5, maxima && Math.random() < 0.5 ? 0xffe08a : 0xffffff, 0.14, 0.5); }
+                if (!flared && head >= 1) {
+                    flared = true;
+                    if (this.fx?.glow) for (let i = 0; i < (maxima ? 30 : 18); i++) { const r = 1 + Math.random() * 2; const q = Math.random() * Math.PI * 2; this.fx.glow.spawn(p2.x, p2.y, p2.z, Math.cos(q) * r, (Math.random() - 0.3) * 2, Math.sin(q) * r, i % 3 ? 0xffffff : (maxima ? 0xffd86a : 0xbfdcff), 0.16, 0.6); }
+                }
+            },
+            onEnd: () => { for (const beam of slot.beams) beam.hide(); edge.opacity = 0.3; core.opacity = 0.95; slot.busy = false; },
+        });
+    }
+
     castBrainrot(origin, direction, maxima = false) {
         this._fx(maxima ? 'fxBrainrotMaxima' : 'fxBrainrot', origin, 1, 'playSapira');
         const dist = Math.max(2, direction.length());

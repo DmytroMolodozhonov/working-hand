@@ -26,6 +26,7 @@
  */
 
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
+import { IMPERIUS, IMPERIUS_MAXIMA } from './Imperius.js';
 
 const _fp = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 const _fv = { x: 0, y: 0, z: 0 };
@@ -76,6 +77,8 @@ export const FIRST_SPELL = {
     CreatePlanet: 100, EnlargePlanet: 100, TerraformPlanet: 100, LevitationSuperMaxima: 100, Boom: 100, PlanetLiquidation: 100,
     FlyingMaxima: 100, // (the gods' own flight through space: given by the gods at 1000 cells — Space.checkUnlock)
     Die: 100, // («Дай»: the ninth scroll of the gods' library — StrongSpells.js)
+    ImperiusMaxima: IMPERIUS_MAXIMA.FIRST, // (the tenth: «Империус Максима» — Imperius.js; the library's 100, the author's rule)
+    Imperius: IMPERIUS.FIRST, // («Империус»: a strong scroll of the Earth — +15)
     ProtectionGods: 100, ProtectionGodsMaxima: 100, // (the gods' shield and its dome: each its own scroll, each its own first — ProtectionGods.js)
 };
 

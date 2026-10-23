@@ -1673,6 +1673,7 @@ export class Animals {
                     else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);
                     continue;
                 }
+                if (a.imp && g.imperius?.step('a', a, dt)) continue; // («Империус»: a mind in it — ImperiusControl.step)
                 if (a.rider && a.rider !== g.localId) { if (a.model.userData.wings) this._pigBody(a, dt); continue; } // a guest rides it: their computer moves it (a Pegasus' wings beat here too)
                 if (a === this.riding) continue;
                 if (a.lev) {
@@ -1688,6 +1689,7 @@ export class Animals {
             this._burnInFire(dt); // (in a burning tree's / block's fire)
         } else {
             for (const a of this.list) if (a.net && a !== this.riding) {
+                if (a.imp?.mine && !a.dead && g.imperius?.step('a', a, dt)) continue; // (my mind is in it: my computer moves it)
                 a.group.position.lerp(a.net, Math.min(1, dt * 8));
                 if (a.type === 'runbook') continue; // (RunningBook moves its little legs)
                 a.walkT += dt * (a.netMoving && !a.flyCode ? 6 : 0);
