@@ -151,6 +151,7 @@ const SWIM_LINES = {
 /** Harm whose kind is done through something else, not straight from the hand (Blame.js: the culprit is not plain). */
 export const viaOfKind = (kind) => (kind === 'quake' ? 'quake' : kind === 'fire' ? 'fire' : null);
 const _v = new THREE.Vector3();
+const _view = new THREE.Frustum(), _viewM = new THREE.Matrix4(), _viewS = new THREE.Sphere(); // (the camera's picture: far people out of it are not posed)
 const _v2 = new THREE.Vector3();
 
 function strHash(s) {
@@ -3435,6 +3436,8 @@ export class CastleLife {
         const me = g.character.group.position;
         const cam = g.camera;
         const range = drawRange(g.world?.terrain?.viewDistance); // (as far as the world is drawn)
+        const pic = !!cam?.projectionMatrix; // (no picture — a test's game: everyone is «seen»)
+        if (pic) _view.setFromProjectionMatrix(_viewM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)); // (far people out of the picture: their pose waits — below)
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             const lv = drawLevel(d, range, { foe: v.foe, shadowNear: FAR_ONE });
@@ -3448,7 +3451,10 @@ export class CastleLife {
                 v.animT = (v.animT || 0) + dt;
                 const far = lv === 'far' || lv === 'distant'; // (far: drawn as one shape — VillagerModel.setFar)
                 if (!far) v.model.setFar(false);
-                if (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12)) {
+                // (a far one out of the picture — behind me, aside: the pose and its one-shape copy wait, the time adds up,
+                // and the moment he comes into view he is posed at once; the far copies were remade for people nobody saw)
+                const unseen = pic && far && !v.foe && !v.order && !v.guardOrder && !_view.intersectsSphere(_viewS.set(_v.set(v.x, v.y + 1.5, v.z), 4));
+                if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     const ck = this.auth ? shownChore(v) : v.chore;

@@ -20,6 +20,7 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
+const _sp = { x: 0, y: 0, z: 0 }; // (a point of a sail's cloth)
 const _e = new THREE.Euler();
 const _Y = new THREE.Vector3(0, 1, 0);
 const _nm = new THREE.Matrix3(), _v3 = new THREE.Vector3();
@@ -391,10 +392,15 @@ export class SailMesh {
         const s = this.spec;
         const vis = Math.max(0, unfurl * (1 - burnt));
         this.mesh.visible = vis > 0.02 && burnt < 1;
-        const nx = s.normal.x, nz = s.normal.z;
-        const p = { x: 0, y: 0, z: 0 };
-        let maxB = 0;
         const flutter = fill > 0.02 && fill < 0.2 ? 0.3 : (fill <= 0.02 && vis > 0.3 ? 0.12 : 0);
+        // (the same cloth as last time — furled in a harbour, or full and steady — and no flutter: nothing to remake; every
+        // sail of every ship about remade its cloth, normals and bounds each frame: a third of the ships' time)
+        const L = this._last || (this._last = { unfurl: -1, fill: -1, side: 0, burnt: -1, flutter: -1 });
+        if (!flutter && !L.flutter && L.unfurl === unfurl && L.fill === fill && L.side === side && L.burnt === burnt) return;
+        L.unfurl = unfurl; L.fill = fill; L.side = side; L.burnt = burnt; L.flutter = flutter;
+        const nx = s.normal.x, nz = s.normal.z;
+        const p = _sp;
+        let maxB = 0;
         for (let j = 0; j <= this.rows; j++) {
             const v = (j / this.rows) * Math.max(0.02, vis);
             const char = burnt > 0 && j >= this.rows - 1 ? 0.25 : 1;

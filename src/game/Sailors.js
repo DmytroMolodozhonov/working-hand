@@ -37,6 +37,7 @@ import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { skeletonDamage } from './Skeletons.js';
 import { SHADOW_NEAR } from '../core/Shadows.js';
+import { DRAW } from './DrawRange.js';
 import { STARTLE, segDist2 } from './Startle.js';
 
 /** A sailor doing these is moved every frame, however far (its blows land on the frame they come). */
@@ -125,6 +126,7 @@ const GUARD = 2.6; // m/s: stepping in and out with the blade up
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
+const _view = new THREE.Frustum(), _viewM = new THREE.Matrix4(), _viewS = new THREE.Sphere(); // (the camera's picture: far sailors out of it are not posed)
 const _l = { x: 0, y: 0, z: 0 };
 const _o = { x: 0, y: 0, z: 0 };
 const _w2 = { x: 0, y: 0, z: 0 };
@@ -1017,14 +1019,17 @@ export class Sailors {
             }
             this._place(s);
             this._drawBuoys(list);
-            const me = g.character.group.position;
+            const me = g.character.group.position, cam = g.camera, pic = !!cam?.projectionMatrix;
+            if (pic) _view.setFromProjectionMatrix(_viewM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
             for (const v of list) {
-                // (far sailors: moved less often and drawn as one shape each — VillagerModel.setFar; a fighting one every frame)
+                // (far sailors: moved less often and drawn as one shape each — VillagerModel.setFar; a fighting one every frame;
+                // far and out of the picture — a harbour's crews behind me: not posed until seen, then at once — as CastleLife's people)
                 const d = Math.hypot(v.x - me.x, v.z - me.z), busy = BUSY.has(v.mode);
                 v.animT = (v.animT || 0) + dt;
                 const far = d > SHADOW_NEAR && !busy;
                 if (!far) v.model.setFar(false);
-                if (d < 35 || busy || v.animT > (d < 60 ? 0.066 : 0.12)) {
+                const unseen = pic && far && !_view.intersectsSphere(_viewS.set(_w.set(v.x, v.y + 1.5, v.z), 4));
+                if (!unseen && (d < 35 || busy || v.animT > (d > DRAW.DISTANT ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     v.model.update(v.animT, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
                     v.animT = 0;
                     if (far) v.model.setFar(true);
