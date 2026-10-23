@@ -278,7 +278,7 @@ export class WorldTrees {
         const mesh = new THREE.InstancedMesh(bare ? g.wood : g.full, this.leaves, cap);
         mesh.frustumCulled = false; // (culled here, tree by tree)
         mesh.castShadow = !far;
-        mesh.receiveShadow = false; // (no speckled self-shadow on the leaves: their own shade is in their colours)
+        mesh.receiveShadow = !far; // (the sun's shadows on it near: other trees', its own branches' — light through the crown in patches)
         mesh.count = 0;
         mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3); // (the tint, the char — made for the whole capacity)

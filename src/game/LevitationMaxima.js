@@ -1007,7 +1007,7 @@ export class LevitationMaxima {
             if (p.color) one.setColorAt(0, p.color);
             if (p.depth) one.customDepthMaterial = p.depth;
             one.castShadow = true;
-            one.receiveShadow = !p.depth;
+            one.receiveShadow = true;
             one.frustumCulled = false;
             one.userData.shared = true; // (the world's geometry: never disposed with it)
             return one;

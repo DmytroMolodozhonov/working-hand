@@ -8,7 +8,7 @@
  * all; it fades out far away), and are cut out by the picture's alpha (also in the shadow).
  */
 import * as THREE from 'three';
-import { buildTree } from './TreeBuild.js';
+import { buildTree, ATLAS_CELLS, BARK_CELL } from './TreeBuild.js';
 import { drawLeafAtlas, bleedLeafPixels, LEAF_ATLAS } from './TreeLeaves.js';
 import { applySkyComp } from './VoxelShading.js';
 
@@ -62,21 +62,47 @@ function addSway(shader) {
 }
 
 /**
- * Leaves: the atlas, cut out by its alpha, both sides lit alike, swaying. glow: the golden apple tree's — its leaves
- * shine with their own colour (GOLD_GLOW), day and night.
+ * The trees' one material (bark and leaves — the bark's points take the atlas's plain cell): lit per pixel like the
+ * land's blocks (Phong, the same dull shine as TerrainView's), with the sun's shadows on it; the leaf cards lit alike
+ * from both sides (light comes through real leaves — a card seen from behind is not black), cut out by the picture's
+ * alpha, swaying. The bark gets its own relief in the shader: long plates up the stem with dark cracks between them,
+ * lighter ridges (fading out far away, no flicker). glow: the golden apple tree's leaves shine with their own colour
+ * (GOLD_GLOW), day and night.
  */
 export function leafMaterial({ glow = false } = {}) {
-    const m = new THREE.MeshLambertMaterial({ vertexColors: true, map: leafAtlas(), alphaTest: 0.42, side: THREE.DoubleSide });
+    const m = new THREE.MeshPhongMaterial({ vertexColors: true, map: leafAtlas(), alphaTest: 0.42, side: THREE.DoubleSide, shininess: 8, specular: 0x111111 });
     m.onBeforeCompile = (shader) => {
         addSway(shader);
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vTreeP;\nvarying float vTreeBark;')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTreeP = position;\nvTreeBark = uv.x > ' + (BARK_CELL / ATLAS_CELLS).toFixed(4) + ' ? 1.0 : 0.0;');
         shader.fragmentShader = shader.fragmentShader
-            .replace('( gl_FrontFacing ) ? vIndirectFront : vIndirectBack', 'vIndirectFront')
-            .replace('( gl_FrontFacing ) ? vLightFront : vLightBack', 'vLightFront');
+            .replace('#include <common>', `#include <common>
+varying vec3 vTreeP;
+varying float vTreeBark;
+float treeHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }`)
+            // (a leaf card from behind: lit as from the front — no back-face flip of the normal)
+            .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize( vNormal );\ngeometryNormal = normal;')
+            .replace('#include <color_fragment>', `#include <color_fragment>
+if (vTreeBark > 0.5) {
+    // bark: plates elongated up the stem, cracks between them, each plate its own shade; far away the average
+    vec3 q = vec3(vTreeP.x * 7.0, vTreeP.y * 1.7, vTreeP.z * 7.0);
+    vec3 cell = floor(q), f = fract(q);
+    float plate = treeHash(cell);
+    float edge = min(min(f.x, 1.0 - f.x), min(f.z, 1.0 - f.z));
+    float crack = 1.0 - smoothstep(0.02, 0.16, edge);
+    float rowCut = 1.0 - smoothstep(0.0, 0.06, min(f.y, 1.0 - f.y));
+    float grain = treeHash(floor(vTreeP * vec3(22.0, 4.0, 22.0)));
+    float fw = max(max(fwidth(q.x), fwidth(q.z)), fwidth(q.y));
+    float near = 1.0 - smoothstep(0.35, 0.9, fw);
+    float k = 1.0 + near * ((plate - 0.5) * 0.26 + (grain - 0.5) * 0.12 - crack * 0.42 - rowCut * 0.18);
+    diffuseColor.rgb *= mix(0.92, k, near);
+}`);
         if (glow) {
             shader.uniforms.uGoldGlow = GOLD_GLOW;
             shader.fragmentShader = shader.fragmentShader
                 .replace('#include <common>', '#include <common>\nuniform float uGoldGlow;')
-                .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.85, 0.45) * uGoldGlow;');
+                .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.85, 0.45) * uGoldGlow * (vTreeBark > 0.5 ? 0.25 : 1.0);');
         }
     };
     m.customProgramCacheKey = () => (glow ? 'tree-leaf-gold' : 'tree-leaf');

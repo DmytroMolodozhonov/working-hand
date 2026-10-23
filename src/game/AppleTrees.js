@@ -97,7 +97,7 @@ export function appleTreeModel(red = false, pick = 0) {
     const wood = new THREE.Mesh(shape.wood, M.bark);
     const leaf = new THREE.Mesh(shape.leaf, red ? M.leaves : M.gold);
     leaf.customDepthMaterial = M.depth;
-    for (const m of [wood, leaf]) { m.castShadow = true; m.receiveShadow = m === wood; g.add(m); }
+    for (const m of [wood, leaf]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
     const apples = [];
     for (const [x, y, z] of shape.info.apples) {
         const a = new THREE.Mesh(appleGeometry(), red ? A.red : A.gold);

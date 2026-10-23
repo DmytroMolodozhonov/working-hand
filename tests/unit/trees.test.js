@@ -95,3 +95,22 @@ test('the apple trees: real apples hanging within a raised hand\'s reach, all ro
         assert.ok(good >= 3, `${TREE_SIZES[kind].name}: shapes with apples enough — ${good}`);
     }
 });
+
+test('the trees are lit by the land\'s own rules: per pixel like the blocks, night and caves (the sky\'s share), the sun\'s shadows', async () => {
+    const THREE = await import('three');
+    const { sharedTreeMaterials } = await import('../../src/world/TreeMaterials.js');
+    const M = sharedTreeMaterials();
+    // (the same model of light as TerrainView's blocks: Phong, the same dull shine)
+    assert.equal(M.leaves.type, 'MeshPhongMaterial');
+    assert.equal(M.leaves.shininess, 8);
+    assert.equal(M.bark, M.leaves, 'the bark is lit by the same shader');
+    // its shader: night / caves (uSkyComp from applySkyComp), leaves lit alike from both sides, bark relief
+    const lib = THREE.ShaderLib.phong;
+    const shader = { uniforms: {}, vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader };
+    M.leaves.onBeforeCompile(shader, null);
+    assert.ok(shader.uniforms.uSkyComp, 'the sky\'s share (night, caves) — as the blocks');
+    assert.match(shader.fragmentShader, /reflectedLight\.directDiffuse \*= uSkyComp/);
+    assert.match(shader.fragmentShader, /normal = normalize\( vNormal \);/, 'a leaf seen from behind is not black');
+    assert.match(shader.fragmentShader, /vTreeBark/, 'the bark has its relief');
+    assert.match(shader.vertexShader, /attribute float sway/);
+});

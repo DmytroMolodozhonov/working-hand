@@ -330,7 +330,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
             const nrm = unit(add(add(mul(out, 0.6), [0, 0.65, 0]), mul(fn, dot(fn, out) >= 0 ? 0.15 : -0.15))); // (up-ish: the sun lights the whole crown, the lower part a little less)
             // darker inside the crown, lighter at its top and edge
             const outF = Math.min(1, len(sub(mid, crownC)) / crownR);
-            const sh = cardTint * (kind === 3 || kind === 6 ? 0.82 + 0.14 * outF : 0.7 + 0.26 * outF + 0.08 * Math.max(0, nrm[1]));
+            const sh = cardTint * (kind === 3 || kind === 6 ? 0.82 + 0.14 * outF : 0.52 + 0.4 * outF + 0.12 * Math.max(0, nrm[1]));
             const col = [sh, sh, sh];
             const flip = rnd() < 0.5; // (the picture mirrored: not every sprig the same)
             // (the atlas: one cell per kind — TreeLeaves.js)
