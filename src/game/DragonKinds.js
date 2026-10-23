@@ -155,7 +155,7 @@ export const ON_DRAGON = {
     Drawdown: { dmg: 0, why: '«Drawdown»: земля под ним проседает — стоящий на ней дракон опускается вместе с ней, без урона' },
     Stitching: { dmg: 0, why: '«Stitching»: камни в дракона не кладутся' },
     CreateBridge: { dmg: 0, why: '«Create a Bridge»: доски в дракона не кладутся' },
-    GroundPrat: { dmg: 0, why: '«Ground Prat»: блок в дракона не кладётся — стена вырастает рядом, когда он отойдёт' },
+    Groundprud: { dmg: 0, why: '«Groundprud»: блок в дракона не кладётся — стена вырастает рядом, когда он отойдёт' },
     Invisibility: { dmg: 0, why: 'невидимого игрока дракон не видит — теряет его' },
 };
 

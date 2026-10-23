@@ -1,4 +1,4 @@
-// «Ground Prat»: the words, the price, the scroll, and the wall's plan (size, material, the places it refuses).
+// «Groundprud»: the words, the price, the scroll, and the wall's plan (size, material, the places it refuses).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -7,18 +7,18 @@ import { START_SPELLS } from '../../src/game/SpellBook.js';
 import { firstSpellGain } from '../../src/game/Mana.js';
 import { SCROLL_WEIGHTS } from '../../src/game/ItemTypes.js';
 import { BLOCK } from '../../src/world/Terrain.js';
-import { groundPratPlan, groundPratAim, columnMaterial, columnHeight, wallMaterial, GROUND_PRAT } from '../../src/game/GroundPrat.js';
+import { groundprudPlan, groundprudAim, columnMaterial, columnHeight, wallMaterial, GROUNDPRUD } from '../../src/game/Groundprud.js';
 
-test('«Ground Prat»: both words together, never a lone word, never «Protection …»; 10 mana, +2 cells, only from a scroll', () => {
-    for (const t of ['Ground Prat', 'граунд прат', 'граундпрат', 'граунт прат', 'граунд прэт', 'граунд брат', 'граунд протекшн', 'граунд протект']) assert.equal(matchSpell(t), 'GroundPrat', t);
-    for (const t of ['ground', 'граунд', 'прат', 'брат', 'мой брат пришёл']) assert.notEqual(matchSpell(t), 'GroundPrat', t);
+test('«Groundprud»: both words together, never a lone word, never «Protection …»; 10 mana, +2 cells, only from a scroll', () => {
+    for (const t of ['Groundprud', 'groundprud', 'ground prud', 'groundproud', 'ground proud', 'граунтпруд', 'граундпруд', 'граунт пруд', 'граунд пруд', 'граунтпрут', 'граундпрут', 'граунтпрюд', 'граундпрюд']) assert.equal(matchSpell(t), 'Groundprud', t);
+    for (const t of ['ground', 'граунд', 'пруд', 'прат', 'на пруду', 'пошли к пруду', 'мы купались в пруд', 'граница', 'ground proof']) assert.notEqual(matchSpell(t), 'Groundprud', t);
     assert.equal(matchSpell('протекшн'), 'Protection');
     assert.equal(matchSpell('Protection Maxima'), 'ProtectionMaxima');
     assert.equal(matchSpell('протекшн хаус'), 'ProtectionHouse');
-    assert.equal(SPELL_COST.GroundPrat, 10);
-    assert.equal(firstSpellGain('GroundPrat'), 2);
-    assert.ok(!START_SPELLS.has('GroundPrat'), 'known only from a scroll');
-    assert.ok(SCROLL_WEIGHTS.some(([n, w]) => n === 'GroundPrat' && w > 0), 'a scroll that really falls');
+    assert.equal(SPELL_COST.Groundprud, 10);
+    assert.equal(firstSpellGain('Groundprud'), 2);
+    assert.ok(!START_SPELLS.has('Groundprud'), 'known only from a scroll');
+    assert.ok(SCROLL_WEIGHTS.some(([n, w]) => n === 'Groundprud' && w > 0), 'a scroll that really falls');
 });
 
 /** A flat world: the ground at layer 10 of `kind(x, z)`; `set` holds what was laid. */
@@ -37,32 +37,32 @@ const A = { x: 0, z: 10, L: 10 }, F = { x: 0, z: 1 };
 
 test('the plan: 7 wide, 2 thick, 5 high ±1 at the edges, standing on the ground (no column hangs)', () => {
     const { get, top } = world();
-    const p = groundPratPlan(get, top, A, F, 12345);
+    const p = groundprudPlan(get, top, A, F, 12345);
     assert.ok(p.cells, p.why);
     const wall = p.cells.filter(([, , , , , c]) => c.h > 1);
     const xs = new Set(wall.map((c) => c[0])), zs = new Set(wall.map((c) => c[2]));
     assert.equal(xs.size, 7, 'seven across');
     assert.equal(zs.size, 2, 'two thick');
     for (const c of p.cols) assert.ok(c.h >= 4 && c.h <= 6, 'five ±1: ' + c.h);
-    assert.ok(Math.max(...p.cols.map((c) => c.h)) <= GROUND_PRAT.H + 1);
+    assert.ok(Math.max(...p.cols.map((c) => c.h)) <= GROUNDPRUD.H + 1);
     // every cell stands right on the ground or on the cell under it
     const have = new Set(p.cells.map((c) => c[0] + ',' + c[1] + ',' + c[2]));
     for (const [x, L, z] of p.cells) assert.ok(L === 11 || have.has(x + ',' + (L - 1) + ',' + z), 'hangs: ' + [x, L, z]);
     const tmax = Math.max(...p.cells.map((c) => c[4]));
-    assert.ok(tmax <= GROUND_PRAT.GROW + 1e-9 && tmax > GROUND_PRAT.GROW * 0.8, 'about two seconds: ' + tmax);
+    assert.ok(tmax <= GROUNDPRUD.GROW + 1e-9 && tmax > GROUNDPRUD.GROW * 0.8, 'about two seconds: ' + tmax);
 });
 
 test('the crest is the same for the same seed on every computer, and not a flat board', () => {
     const { get, top } = world();
-    const a = groundPratPlan(get, top, A, F, 77), b = groundPratPlan(get, top, A, F, 77);
+    const a = groundprudPlan(get, top, A, F, 77), b = groundprudPlan(get, top, A, F, 77);
     assert.deepEqual(a.cols.map((c) => c.h), b.cols.map((c) => c.h));
-    const hs = new Set(); for (const s of [1, 2, 3, 4, 5, 6]) for (const c of groundPratPlan(get, top, A, F, s).cols) hs.add(c.h);
+    const hs = new Set(); for (const s of [1, 2, 3, 4, 5, 6]) for (const c of groundprudPlan(get, top, A, F, s).cols) hs.add(c.h);
     assert.ok(hs.size >= 2, 'toothed');
 });
 
 test('the material of each column is the ground under it: stone, sand, earth with grass on top, snow, gravel', () => {
     const { get, top } = world((x) => (x < -1 ? BLOCK.STONE : x > 1 ? BLOCK.SAND : BLOCK.GRASS));
-    const p = groundPratPlan(get, top, A, F, 3);
+    const p = groundprudPlan(get, top, A, F, 3);
     const byX = (x) => p.cells.filter((c) => c[0] === x && c[1] === 11 && c[5].h > 1).map((c) => c[3]);
     assert.ok(byX(-3).every((b) => b === BLOCK.STONE));
     assert.ok(byX(3).every((b) => b === BLOCK.SAND));
@@ -84,28 +84,28 @@ test('no wood, leaves, ice or building blocks: the earthy block lower down; noth
 
 test('it refuses the enchanted stone and the gifts of the gods (the columns are left out; a whole strip of them: no spell)', () => {
     const half = world((x) => (x < 0 ? BLOCK.ENCHANTED : BLOCK.STONE));
-    const p = groundPratPlan(half.get, half.top, A, F, 5);
+    const p = groundprudPlan(half.get, half.top, A, F, 5);
     assert.ok(p.cells && p.cells.every((c) => c[0] >= 0), 'grows only on the free half');
     const all = world(() => BLOCK.ENCHANTED);
-    assert.equal(groundPratPlan(all.get, all.top, A, F, 5).why, 'holy');
+    assert.equal(groundprudPlan(all.get, all.top, A, F, 5).why, 'holy');
     const gift = world();
-    assert.equal(groundPratPlan(gift.get, gift.top, A, F, 5, () => true).why, 'holy');
-    const part = groundPratPlan(gift.get, gift.top, A, F, 5, (x) => x > 0);
+    assert.equal(groundprudPlan(gift.get, gift.top, A, F, 5, () => true).why, 'holy');
+    const part = groundprudPlan(gift.get, gift.top, A, F, 5, (x) => x > 0);
     assert.ok(part.cells.every((c) => c[0] <= 0), 'a gift on one side: only the other grows');
 });
 
 test('it refuses water, and a column with something already above the ground', () => {
     const lake = world(() => BLOCK.GRASS, () => true);
-    assert.equal(groundPratPlan(lake.get, lake.top, A, F, 1).why, 'water');
+    assert.equal(groundprudPlan(lake.get, lake.top, A, F, 1).why, 'water');
     const w = world(() => BLOCK.GRASS, (x) => x > 0);
-    const p = groundPratPlan(w.get, w.top, A, F, 1);
+    const p = groundprudPlan(w.get, w.top, A, F, 1);
     assert.ok(p.cells.every((c) => c[0] <= 0), 'dry columns only');
 });
 
 test('a column far above or below the spot is left out (no pillars over a cliff)', () => {
     const get = (x, L) => (L <= (x > 1 ? 20 : 10) ? BLOCK.STONE : BLOCK.AIR);
     const top = (x) => (x > 1 ? 20 : 10);
-    const p = groundPratPlan(get, top, A, F, 9);
+    const p = groundprudPlan(get, top, A, F, 9);
     assert.ok(p.cells.every((c) => c[0] <= 1));
 });
 
@@ -115,12 +115,12 @@ test('the aim: the ground ahead only; not forward, not too near, not too far', (
     const me = { x: 0, y: 11.5, z: 0 };
     const down = (a) => ({ x: 0, y: -Math.sin(a), z: Math.cos(a) });
     const o = { x: 0, y: 13, z: 0 };
-    assert.equal(groundPratAim(data, o, { x: 0, y: 0, z: 1 }, me).why, 'none');
-    assert.equal(groundPratAim(data, o, down(0.33), me).why, 'far');
-    assert.equal(groundPratAim(data, o, down(1.2), me).why, 'near');
-    const ok = groundPratAim(data, o, down(0.55), me);
+    assert.equal(groundprudAim(data, o, { x: 0, y: 0, z: 1 }, me).why, 'none');
+    assert.equal(groundprudAim(data, o, down(0.33), me).why, 'far');
+    assert.equal(groundprudAim(data, o, down(1.2), me).why, 'near');
+    const ok = groundprudAim(data, o, down(0.55), me);
     assert.ok(ok.plan?.cells, ok.why);
-    assert.ok(ok.A.z > GROUND_PRAT.NEAR && ok.A.z <= GROUND_PRAT.FAR);
+    assert.ok(ok.A.z > GROUNDPRUD.NEAR && ok.A.z <= GROUNDPRUD.FAR);
 });
 
 test('the height of a column: five, ±1 at the edges only', () => {
@@ -131,7 +131,7 @@ test('the height of a column: five, ±1 at the edges only', () => {
 });
 
 test('grow(): the caster lays the blocks in about two seconds, a body in a cell holds its column, others only watch', async () => {
-    const { GroundPrat } = await import('../../src/game/GroundPrat.js');
+    const { Groundprud } = await import('../../src/game/Groundprud.js');
     const make = (bodyAt = null) => {
         const { get, top, set } = world();
         const sent = [];
@@ -146,19 +146,19 @@ test('grow(): the caster lays the blocks in about two seconds, a body in a cell 
     };
     const run = (spells, secs) => { const s = spells[0]; for (let t = 0; t < secs && s.life > 0; t += 0.05) s.onUpdate(s, 0.05); return s; };
     const a = make();
-    new GroundPrat(a.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
+    new Groundprud(a.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
     const s = run(a.spells, 1);
     assert.ok(a.sent.length > 0 && a.sent.length < 100, 'half-grown at one second: ' + a.sent.length);
     run(a.spells, 4);
     assert.ok(a.sent.length >= 60 && a.sent.length <= 110, 'a wall of ~70 blocks (+ scree): ' + a.sent.length);
     assert.ok(s.life <= 0, 'it ends');
     const b = make({ x: 0, z: 10 });
-    new GroundPrat(b.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
+    new Groundprud(b.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
     run(b.spells, 6);
     assert.ok(!b.sent.some(([x, , z]) => x === 0 && z === 10), 'no block into the body, and none hung above it');
     assert.ok(b.sent.length > 40);
     const c = make();
-    new GroundPrat(c.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'other');
+    new Groundprud(c.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'other');
     run(c.spells, 6);
     assert.equal(c.sent.length, 0, 'the others lay nothing: the blocks come from the caster');
 });

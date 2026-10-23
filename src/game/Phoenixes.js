@@ -128,7 +128,7 @@ export const TARGETS = {
     Drawdown: { does: 'none', why: '«Drawdown»: в воздухе не касается; на земле — опускается с ней' },
     Stitching: { does: 'none', why: '«Stitching»: не касается' },
     CreateBridge: { does: 'none', why: '«Create a Bridge»: не касается' },
-    GroundPrat: { does: 'none', why: '«Ground Prat»: земля поднимается вдалеке от птицы — не касается' },
+    Groundprud: { does: 'none', why: '«Groundprud»: земля поднимается вдалеке от птицы — не касается' },
     Invisibility: { does: 'none', why: 'невидимого игрока не видит: не лечит и не нападает' },
     Alohomora: { does: 'none', why: 'живое существо без замков' },
     Lock: { does: 'none', why: '«Lock» запирает только двери' },

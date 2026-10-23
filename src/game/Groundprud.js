@@ -1,5 +1,5 @@
 /**
- * GroundPrat.js — «Ground Prat» (10 mana, +2 cells of mana at the first cast, a scroll): the ground rises into a wall.
+ * Groundprud.js — «Groundprud» (10 mana, +2 cells of mana at the first cast, a scroll): the ground rises into a wall.
  * It belongs to the Protection group (the author: «сэкономить на Protection»): another wizard's spell hits the wall.
  *
  * The wand points at the ground a few steps ahead (2.5–9 m, downwards). From that spot a wall grows across the way
@@ -33,7 +33,7 @@ import { isEnchanted } from '../world/EnchantedStone.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 
-export const GROUND_PRAT = {
+export const GROUNDPRUD = {
     REACH: 12, // m along the hand when looking for the ground
     NEAR: 2.5, FAR: 9, // m from the caster to the spot
     W: 7, T: 2, H: 5, // blocks: width, thickness, height (the hero is ~3.5 m: «чуть выше роста»)
@@ -45,7 +45,7 @@ export const GROUND_PRAT = {
 };
 
 /** ON WHOM AND ON WHAT (CLAUDE.md). The wall is blocks laid on the ground; it never strikes. */
-export const GROUND_PRAT_TARGETS = {
+export const GROUNDPRUD_TARGETS = {
     me: { does: 'none', why: 'колдующего не задевает: стена растёт на расстоянии от 2,5 м; если он стоит на её месте — блок ждёт' },
     players: { does: 'wait', why: 'блок не кладётся в игрока: ждёт 1,5 с, потом это место пропускается (и всё, что над ним в столбце); никого не толкает и не ранит' },
     zombies: { does: 'wait', why: 'в тело блок не кладётся; зомби упирается в стену и обходит её (коллизия блоков)' },
@@ -98,8 +98,8 @@ export function columnMaterial(get, x, g, z) {
 /** One column's height in blocks: 5, ±1 at the two edges, a block short here and there inside. Same seed → same crest. */
 export function columnHeight(seed, x, z, w) {
     const r = hash(seed, x, z), edge = Math.abs(w) >= 3;
-    if (edge) return GROUND_PRAT.H + (r < 0.4 ? -1 : r > 0.8 ? 1 : 0);
-    return GROUND_PRAT.H - (r < 0.25 ? 1 : 0);
+    if (edge) return GROUNDPRUD.H + (r < 0.4 ? -1 : r > 0.8 ? 1 : 0);
+    return GROUNDPRUD.H - (r < 0.25 ? 1 : 0);
 }
 
 /**
@@ -108,8 +108,8 @@ export function columnHeight(seed, x, z, w) {
  * get(x, L, z) → block; top(x, z) → the highest solid layer; gift(x, L, z) → a gift of the gods.
  * t = the second (0…GROW) the cell appears; col = the column (`next` is the layer it needs next); k = its layer in it.
  */
-export function groundPratPlan(get, top, A, f, seed = 1, gift = null) {
-    const sx = -f.z, sz = f.x, G = GROUND_PRAT;
+export function groundprudPlan(get, top, A, f, seed = 1, gift = null) {
+    const sx = -f.z, sz = f.x, G = GROUNDPRUD;
     const cols = new Map(); // "x,z" → column
     const half = (G.W - 1) / 2;
     const nw = Math.round(G.W / 0.35);
@@ -164,8 +164,8 @@ export function groundPratPlan(get, top, A, f, seed = 1, gift = null) {
 }
 
 /** Why it cannot grow — the hint for the player. */
-export function groundPratHint(why) {
-    if (why === 'holy') return '🧱 Заколдованный камень и дары богов не слушаются — «Ground Prat» здесь не поднять';
+export function groundprudHint(why) {
+    if (why === 'holy') return '🧱 Заколдованный камень и дары богов не слушаются — «Groundprud» здесь не поднять';
     if (why === 'water') return '🌊 Из воды стена не растёт — найдите сухую землю';
     if (why === 'near') return '🧱 Покажите на землю чуть дальше от себя — стена вырастет перед вами';
     if (why === 'far') return '🧱 Земля слишком далеко — подойдите ближе или покажите на землю поближе';
@@ -175,12 +175,12 @@ export function groundPratHint(why) {
 
 /**
  * Where the wand shows: the spot on the ground and the way from the caster.
- * get / top / gift as in groundPratPlan; origin, dir: the hand; me: the caster's feet (x, y, z). → {A, f, plan} | {why}
+ * get / top / gift as in groundprudPlan; origin, dir: the hand; me: the caster's feet (x, y, z). → {A, f, plan} | {why}
  */
-export function groundPratAim(data, origin, dir, me, known = null, gift = null) {
+export function groundprudAim(data, origin, dir, me, known = null, gift = null) {
     if (!data) return { why: 'none' };
     if (dir.y > -0.12) return { why: 'none' }; // (not at the ground: forward, up)
-    const hit = data.raycast(origin, dir, GROUND_PRAT.REACH);
+    const hit = data.raycast(origin, dir, GROUNDPRUD.REACH);
     if (!hit) return { why: 'none' };
     const x = Math.round(hit.x), z = Math.round(hit.z);
     if (known && !known(x, z)) return { why: 'unknown' };
@@ -188,19 +188,19 @@ export function groundPratAim(data, origin, dir, me, known = null, gift = null) 
     const g = top(x, z);
     if (Math.abs(hit.y - (g - 0.5)) > 0.9) return { why: 'none' }; // (the side of a cliff, a wall: not the ground)
     const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz);
-    if (d < GROUND_PRAT.NEAR) return { why: 'near' };
-    if (d > GROUND_PRAT.FAR) return { why: 'far' };
+    if (d < GROUNDPRUD.NEAR) return { why: 'near' };
+    if (d > GROUNDPRUD.FAR) return { why: 'far' };
     const f = { x: dx / d, z: dz / d };
     const A = { x, z, L: g };
     const seed = (x * 73856093) ^ (z * 19349663) ^ Math.round(f.x * 100) * 83492791;
-    const plan = groundPratPlan(get, top, A, f, seed, gift);
+    const plan = groundprudPlan(get, top, A, f, seed, gift);
     return plan.cells ? { A, f, plan, seed } : plan;
 }
 
 const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x8a6a44 : 0xb8b4aa);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
-export class GroundPrat {
+export class Groundprud {
     constructor(game) {
         this.game = game;
         this._lastAt = -1e9;
@@ -215,22 +215,22 @@ export class GroundPrat {
         if (now - this._lastAt < 1500) return null;
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         const hand = aim ? { side: 'right', origin: aim.origin, dir: aim.dir } : castingHand(g);
-        if (!hand) return hint(groundPratHint('none'));
+        if (!hand) return hint(groundprudHint('none'));
         const data = this.data;
         const p = g.character.group.position;
-        const at = groundPratAim(data, hand.origin, hand.dir, p, data?.landMade ? (x, z) => data.landMade(x, z) : null, data?.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
-        if (!at.plan) return hint(groundPratHint(at.why));
+        const at = groundprudAim(data, hand.origin, hand.dir, p, data?.landMade ? (x, z) => data.landMade(x, z) : null, data?.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
+        if (!at.plan) return hint(groundprudHint(at.why));
         const mid = _v.set(at.A.x, at.A.L, at.A.z);
         if (g.wards?.forbids?.(hand.origin, mid)) return hint('🛡️ Здесь чужая защита дома — стену не поднять');
         if (g.ships?.footprintAt?.(at.A.x, at.A.L - 1, at.A.z)) return hint('⚓ Корабль — не земля: стена здесь не растёт');
-        const tired = g.combat.check('GroundPrat');
+        const tired = g.combat.check('Groundprud');
         if (tired) { g.hud.setVoice(tired, true); return null; }
-        g.combat.pay('GroundPrat');
+        g.combat.pay('Groundprud');
         this._lastAt = now;
         const o = new THREE.Vector3(at.A.x, at.A.L, at.A.z), d = new THREE.Vector3(at.f.x, 0, at.f.z);
         this.grow(o, d, g.localId, at.plan);
-        g.sync?.spell('GroundPrat', o, d, hand.side);
-        return 'GroundPrat';
+        g.sync?.spell('Groundprud', o, d, hand.side);
+        return 'Groundprud';
     }
 
     /**
@@ -245,7 +245,7 @@ export class GroundPrat {
         const h = Math.hypot(d.x, d.z) || 1, f = { x: d.x / h, z: d.z / h };
         if (!plan) {
             const seed = (A.x * 73856093) ^ (A.z * 19349663) ^ Math.round(f.x * 100) * 83492791;
-            plan = groundPratPlan((x, L, z) => data.get(x, L, z), (x, z) => data.topLayer(x, z), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
+            plan = groundprudPlan((x, L, z) => data.get(x, L, z), (x, z) => data.topLayer(x, z), A, f, seed, data.godGiftAt ? (x, L, z) => data.godGiftAt(x, L, z) : null);
         }
         if (!plan.cells) return;
         const mine = casterId === g.localId || casterId === 'local';
@@ -258,7 +258,7 @@ export class GroundPrat {
         };
         let t = 0, sendT = 0, finished = false, first = true;
         g.spells.spells.push({
-            life: GROUND_PRAT.GROW + GROUND_PRAT.WAIT + 1.5,
+            life: GROUNDPRUD.GROW + GROUNDPRUD.WAIT + 1.5,
             onUpdate: (spell, dt) => {
                 t += dt;
                 let left = 0;
@@ -270,7 +270,7 @@ export class GroundPrat {
                     if (col.next !== k) { left++; continue; } // (the one under it is still to come)
                     if (occupied(g, { x, L, z })) {
                         e.wait += dt;
-                        if (e.wait < GROUND_PRAT.WAIT) { left++; continue; }
+                        if (e.wait < GROUNDPRUD.WAIT) { left++; continue; }
                         col.dead = true; e.done = true; continue;
                     }
                     e.done = true; col.next++;
@@ -282,11 +282,11 @@ export class GroundPrat {
                     data.set(x, L, z, block);
                     out.push([x, L, z, block]);
                     this._liftThings(x, L, z, col.g + col.h);
-                    if (first) { first = false; g.mana?.success?.('GroundPrat'); }
+                    if (first) { first = false; g.mana?.success?.('Groundprud'); }
                 }
                 sendT += dt;
-                if (sendT >= GROUND_PRAT.SEND) { sendT = 0; flush(); }
-                if (!left && t >= GROUND_PRAT.GROW && !finished) {
+                if (sendT >= GROUNDPRUD.SEND) { sendT = 0; flush(); }
+                if (!left && t >= GROUNDPRUD.GROW && !finished) {
                     finished = true;
                     flush();
                     g.sound?.playStep?.();

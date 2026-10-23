@@ -24,7 +24,7 @@ import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
 import { WIND_RING, isWindRing, windRingPush } from '../game/WindRing.js';
 import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
-import { groundPratWords } from '../game/GroundPratWords.js';
+import { groundprudWords } from '../game/GroundprudWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 
 const _a = new THREE.Vector3();
@@ -95,8 +95,8 @@ export function matchSpell(text) {
     if (iceMagic) return iceMagic;
     // «Create a Bridge» («криейт э бридж», «создай мост»): after «Ice Bridge», a word of its own (Bridge.js)
     if (bridgeWords(s)) return 'CreateBridge';
-    // «Ground Prat» («граунд прат»): the two words together, before the plain «Protection» (it may be heard «граунд протекшн»)
-    if (groundPratWords(s)) return 'GroundPrat';
+    // «Groundprud» («граунтпруд»): one word, before the plain «Protection»
+    if (groundprudWords(s)) return 'Groundprud';
     // «Protection Gods» / «… Maxima» («Протекшн Гадс», «Божественная защита»): the gods' shield — the long phrase first,
     // never a plain «Protection» while the gods' word was said (ProtectionGods.js)
     const gods = godsShieldWords(s);
@@ -498,7 +498,7 @@ export class SpellManager {
             case 'Drawdown': case 'DrawdownMaxima': this.hooks.drawdown?.(name, o, casterId); break; // (Drawdown.js)
             case 'Liquidation': case 'LiquidationMaxima': this.hooks.liquidation?.(name, o, d, casterId); break; // (Liquidation.js)
             case 'Stitching': this.hooks.stitching?.(o, d, casterId); break; // (Stitching.js)
-            case 'GroundPrat': this.hooks.groundPrat?.(o, direction.clone(), casterId); break; // (GroundPrat.js: o = the spot, direction = away from the caster)
+            case 'Groundprud': this.hooks.groundprud?.(o, direction.clone(), casterId); break; // (Groundprud.js: o = the spot, direction = away from the caster)
             case 'CreateBridge': this.hooks.bridge?.(o, direction.clone(), casterId); break; // (Bridge.js: o = the feet, its length = to the far end)
             case 'WallRise': case 'WallRiseMaxima': this.castWallRise(o, d, casterId, name === 'WallRiseMaxima'); break; // (Breakthrough's wall)
             case 'Flight': return false; // handled by the game (it moves the caster)

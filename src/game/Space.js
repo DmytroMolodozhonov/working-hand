@@ -106,7 +106,7 @@ export function spaceSpellBlock(name, where, air, def = null) {
         // (nothing under the feet: no ground to raise, build on or shake; nobody to command)
         // («Бум» tears a mountain or a castle from inside: in open space there is none — on a planet it works as at home, air or no air)
         if (name === 'Boom') return '💥 В открытом космосе нет ни горы, ни замка — «Бум» нечего разорвать изнутри';
-        if (/^(Earthquake|EarthquakeMaxima|Breakthrough|BreakthroughMaxima|WallRise|WallRiseMaxima|Gather|CreateFloor|CreateWall|CreateCeiling|BuildRoof|CreateDoor|CreateBed|CreateBoard|CreateHouse|ImproveHouse|CreateCastle|IceCastle|IceBridge|Liquidation|LiquidationMaxima|Stitching|CreateBridge|GroundPrat|Overgrown|OvergrownMaxima|Alive|AliveMaxima|Snowman|TotalDestruction|TotalDestructionMaxima|CircleAttack|CircleAttackMaxima|Inspirius|ToTheSun|LevitationMaxima|Brainrot|Attack|Rescue|ProtectionHouse|Up|Bombardo|BombardoMaxima)$/.test(name)) return '🌌 В космосе под ногами ничего нет — это заклинание здесь не на что направить';
+        if (/^(Earthquake|EarthquakeMaxima|Breakthrough|BreakthroughMaxima|WallRise|WallRiseMaxima|Gather|CreateFloor|CreateWall|CreateCeiling|BuildRoof|CreateDoor|CreateBed|CreateBoard|CreateHouse|ImproveHouse|CreateCastle|IceCastle|IceBridge|Liquidation|LiquidationMaxima|Stitching|CreateBridge|Groundprud|Overgrown|OvergrownMaxima|Alive|AliveMaxima|Snowman|TotalDestruction|TotalDestructionMaxima|CircleAttack|CircleAttackMaxima|Inspirius|ToTheSun|LevitationMaxima|Brainrot|Attack|Rescue|ProtectionHouse|Up|Bombardo|BombardoMaxima)$/.test(name)) return '🌌 В космосе под ногами ничего нет — это заклинание здесь не на что направить';
     }
     return null;
 }
