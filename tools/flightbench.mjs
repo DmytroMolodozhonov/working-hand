@@ -400,7 +400,7 @@ async function runLevel(browser, url, level) {
         fs.writeFileSync(out, JSON.stringify(profile));
         console.log('profile:', out);
     }
-    const res = { level, genCallers: r.genCallers, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, total: {}, segs: {} };
+    const res = { level, genCallers: r.genCallers, warmAtTakeoff: r.warmAtTakeoff, newProgs: r.newProgs, prewarmed: r.prewarmed, route: r.segs, castle: r.castle, peak: r.peak, terrain: r.terrain, render: r.render, trees: r.trees, total: {}, segs: {} };
     res.total = { frame: metrics(r.frames, 'gap'), cpu: metrics(r.frames, 'cpu'), game: metrics(r.frames, 'game'), parts: partsAvg(r.frames) };
     for (const s of ['прямой', 'разворот', 'замок', 'горы', 'поселение', ...(SPACE_ROUTE ? ['выход', 'космос', 'посадка', 'марс', 'домой'] : [])]) {
         const f = r.frames.filter((x) => x.seg === s);
