@@ -26,6 +26,7 @@ import { confusedMiss } from './StrongSpells.js';
 import * as THREE from 'three';
 import { crowdStep } from './CrowdSources.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { FarShape } from '../core/FarShape.js';
 import { iceQueenModel, snowmanModel, friendSnowmanModel, puddleModel, iceMonsterModel, snowflakeShotModel, shardModel, iceSpikeModel, ICE_MATERIALS, ROD_TIP, FRIEND_H } from './IceModels.js';
 import { iceYaw, iceLocal, PALACE_ICE, inIcePalace } from '../world/IceCastle.js';
 import { IceFixtures, GATE } from './IceFixtures.js';
@@ -238,10 +239,14 @@ export class IceCastleLife {
         model.position.copy(pos);
         model.rotation.y = yaw;
         g.scene.add(model);
+        // (drawn as one shape per material, its parts moved by the video card — FarShape; not the Snowman spell's friend: it
+        // is built bit by bit and blinks, part by part)
+        let one = null;
+        if (type !== 'friend') { model.userData.farRadius = (type === 'queen' ? 5 : 3.5) * S; one = new FarShape(model); one.set(true); }
         const T = type === 'queen' ? ICE.QUEEN : type === 'monster' ? ICE.MONSTER : type === 'friend' ? ICE.FRIEND : ICE.SNOW;
         const c = {
             id: id || (type === 'queen' ? 'iceQueen' : type === 'monster' ? 'iceMon' + slot : (type === 'friend' ? 'frs' : 'snow') + (++this._seq) + Math.floor(Math.random() * 1e4).toString(36)),
-            type, ck: 'I', isIce: true, model, group: model, hp: hp ?? T.HP, max: T.HP, dead: false,
+            type, ck: 'I', isIce: true, model, group: model, one, oneT: 0, hp: hp ?? T.HP, max: T.HP, dead: false,
             r: T.R, h: T.H, speed: T.SPEED, turn: T.TURN || 3, slot,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
             bodyCapsule: (out) => iceBody(c, out),
@@ -255,6 +260,7 @@ export class IceCastleLife {
 
     _remove(c) {
         this.game.scene.remove(c.model);
+        c.one?.dispose();
         if (c.bubble) { this.game.scene.remove(c.bubble.sprite); c.bubble.dispose?.(); }
         const i = this.list.indexOf(c);
         if (i >= 0) this.list.splice(i, 1);
@@ -1279,7 +1285,9 @@ export class IceCastleLife {
         if (hurt !== !!c._hurtShown) {
             c._hurtShown = hurt;
             c.model.traverse((o) => { if (o.isMesh && (o.material === ICE_MATERIALS.solid || o.material === ICE_MATERIALS.hit)) o.material = hurt ? ICE_MATERIALS.hit : ICE_MATERIALS.solid; });
+            c.one?.check(); // (the one shape in the new colour at once)
         }
+        if (c.one && (c.oneT += dt) > 0.5) { c.oneT = 0; c.one.check(); } // (a part shown / hidden by the game)
     }
 
     /**

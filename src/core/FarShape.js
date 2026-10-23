@@ -12,11 +12,13 @@
  *   one.check();     // now and then: a part shown / hidden / repainted by the game → the shape follows
  *   one.set(false);  // the parts as they were
  * Left out (drawn as themselves): parts with `userData.farOne` / `userData.noFar`, instanced, morphing (a pig's wings),
- * multi-material ones.
+ * multi-material ones, own shaders, cut-out shadows (leaves with a custom depth material).
  */
 import * as THREE from 'three';
 
 export const FAR_SHAPE = { CACHE_MAX: 96 };
+/** How many shapes were made (its count only grows: a measure for creativebench — a part flickering would show here). */
+export const farShapeStats = { builds: 0, merged: 0 };
 
 const _geoCache = new Map(); // parts' geometry ids → merged geometry (shared by every model of that kind; never disposed)
 const _skinMats = new WeakMap(); // material → its skinned twin (the same look, moved by the card)
@@ -29,11 +31,22 @@ const plainLit = (m) => m.isMeshLambertMaterial && !m.map && !m.transparent && !
 const _plain = new Map(); // side → the shared white vertex-coloured Lambert the baked buckets draw with
 function plainMat(side) {
     let m = _plain.get(side);
-    if (!m) { m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side }); m.name = 'farshape-plain'; _plain.set(side, m); }
+    if (!m) { m = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, side }); m.name = 'farshape-plain'; m.userData.shared = true; _plain.set(side, m); }
     return m;
+}
+/** Before a draw: the twin takes what the game changed on its material (opacity, colours) this frame. */
+function syncTwin() {
+    const tw = this.material, src = tw.userData.src;
+    if (!src) return;
+    if (tw.opacity !== src.opacity) tw.opacity = src.opacity;
+    if (tw.color && src.color && !tw.color.equals(src.color)) tw.color.copy(src.color);
+    if (tw.emissive && src.emissive && !tw.emissive.equals(src.emissive)) tw.emissive.copy(src.emissive);
+    if (tw.emissiveIntensity !== src.emissiveIntensity) tw.emissiveIntensity = src.emissiveIntensity;
 }
 /** A part's own material (a red flash of HurtFlash on it is not a new look: the shape flashes by itself). */
 const baseMat = (p) => p.userData._hurtLit?.orig || p.material;
+/** A part's camera layers (the ones it had before the shape took it — FarShape 'layers'). */
+const layerOf = (p) => p.userData.farMask ?? p.layers.mask;
 
 /** The material's twin that the video card moves by the bones (r128: `skinning` is the material's own switch). */
 export function skinnedMaterial(mat) {
@@ -44,6 +57,8 @@ export function skinnedMaterial(mat) {
         if (mat.onBeforeCompile) m.onBeforeCompile = mat.onBeforeCompile; // (the sky's tint etc.: the same shader)
         if (mat.customProgramCacheKey) m.customProgramCacheKey = mat.customProgramCacheKey;
         m.name = (mat.name || '') + '+skin';
+        m.userData.src = mat;
+        m.userData.shared = true; // (one twin for every model: not disposed with a model — ItemTypes.disposeModel)
         _skinMats.set(mat, m);
     }
     return m;
@@ -79,6 +94,7 @@ function mergedGeometry(parts, idxs, key, bake = false) {
         if (G.index) for (let i = 0; i < G.index.count; i++) idx[io++] = G.index.getX(i) + vo; else for (let i = 0; i < n; i++) idx[io++] = vo + i;
         vo += n;
     });
+    farShapeStats.merged++;
     geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
@@ -96,14 +112,17 @@ function mergedGeometry(parts, idxs, key, bake = false) {
 export class FarShape {
     /** @param {THREE.Object3D} root the model (its group: the shape is its child) */
     /** @param {{cache?: boolean}} [o] cache: false — the model's parts are its own (a person's proportions): its shape is its own too */
-    constructor(root, { cache = true } = {}) {
+    /** hide: 'visible' (the parts' flags — they stay hit by rays) or 'layers' (their camera layers emptied: the game's own
+     *  `visible` stays the truth, read every check — the hero's hands, shown and hidden by the game every frame) */
+    constructor(root, { cache = true, hide = 'visible' } = {}) {
         this.root = root;
         this.cache = cache;
+        this.byLayers = hide === 'layers';
         this.on = false;
         this.parts = []; // the meshes hidden for the shape (= the skeleton's bones, in order)
         this.meshes = []; // the skinned meshes (one per material)
         this.skeleton = null;
-        this._sig = '';
+        this._sig = null;
     }
 
     /** The parts that go into the shape: drawn now (shown up to the root), plain meshes. */
@@ -112,9 +131,14 @@ export class FarShape {
         const R = this.root;
         R.traverse((o) => {
             if (!o.isMesh || o.userData.farOne || o.userData.noFar || o.isInstancedMesh || o.isSkinnedMesh) return;
-            for (let q = o; q && q !== R; q = q.parent) if (!q.visible && !(q === o && this.on && this.parts.includes(o))) return;
+            if (this.byLayers) {
+                for (let q = o; q && q !== R; q = q.parent) if (!q.visible) return;
+                if (o.userData.farMask != null && o.layers.mask !== 0) { o.userData.farMask = o.layers.mask; o.layers.mask = 0; } // (the game set its layer anew: taken)
+                if (layerOf(o) === 0) return;
+            }
+            else for (let q = o; q && q !== R; q = q.parent) if (!q.visible && !(q === o && this.on && this.parts.includes(o))) return;
             const G = o.geometry, M = o.material;
-            if (!G?.attributes?.position || !G.attributes.normal || Array.isArray(M) || !M || M.morphTargets || M.skinning || G.morphAttributes?.position) return;
+            if (!G?.attributes?.position || !G.attributes.normal || Array.isArray(M) || !M || M.morphTargets || M.skinning || M.isShaderMaterial || o.customDepthMaterial || o.customDistanceMaterial || G.morphAttributes?.position) return; // (own shaders, cut-out shadows: drawn as themselves)
             out.push(o);
         });
         return out;
@@ -124,11 +148,10 @@ export class FarShape {
         if (on === this.on) return;
         this.on = on;
         if (!on) {
-            for (const p of this.parts) { p.visible = true; delete p.userData.farHid; }
+            for (const p of this.parts) this._show(p);
             for (const m of this.meshes) m.visible = false;
             return;
         }
-        this._sig = this._sig || '';
         this.check(true);
     }
 
@@ -136,37 +159,66 @@ export class FarShape {
     check(force = false) {
         if (!this.on) return;
         const list = this._shown(this._list || (this._list = []));
-        let sig = '';
-        for (const p of list) sig += p.geometry.id + ':' + baseMat(p).id + ',';
+        // (what the shape is made of, as one number — no strings: the hero's hands are checked every frame)
+        let sig = list.length;
+        for (const p of list) {
+            sig = (Math.imul(sig, 31) + p.geometry.id) | 0;
+            sig = (Math.imul(sig, 31) + baseMat(p).id) | 0;
+            sig = (Math.imul(sig, 31) + layerOf(p) * 2 + (p.userData._cs ?? p.castShadow ? 1 : 0)) | 0;
+            sig = (Math.imul(sig, 31) + p.id) | 0;
+        }
         if (!force && sig === this._sig) return;
         // (a part whose joint the game hid: out of the shape, its own flag given back — the joint keeps it hidden)
-        for (const p of this.parts) if (!list.includes(p)) { p.visible = true; delete p.userData.farHid; }
+        for (const p of this.parts) if (!list.includes(p)) this._show(p); // (noFar: the game took it out — an apple picked: it stays hidden)
         this.parts.length = 0;
-        for (const p of list) { this.parts.push(p); p.visible = false; p.userData.farHid = true; } // (farHid: a copy of the model — a body — shows it again)
+        for (const p of list) { this.parts.push(p); this._hide(p); }
         if (sig !== this._sig || !this.meshes.length) { this._sig = sig; this._build(list); }
         for (const m of this.meshes) m.visible = true;
     }
 
+    /** A part taken into the shape: not drawn by itself (farHid: a copy of the model — a body — shows it again). */
+    _hide(p) {
+        if (this.byLayers) { if (p.userData.farMask == null) { p.userData.farMask = p.layers.mask; p.layers.mask = 0; } }
+        else { p.visible = false; p.userData.farHid = true; }
+    }
+
+    _show(p) {
+        if (this.byLayers) { if (p.userData.farMask != null) { p.layers.mask = p.userData.farMask; delete p.userData.farMask; } return; }
+        if (!p.userData.noFar) p.visible = true;
+        delete p.userData.farHid;
+    }
+
     _build(list) {
+        farShapeStats.builds++;
         this._drop();
         if (!list.length) return;
         this.skeleton = new THREE.Skeleton(list.slice(), list.map(() => new THREE.Matrix4()));
+        // (a bucket: one material (or the plain-coloured family), one set of camera layers, one shadow — as its parts had them)
         const by = new Map();
-        list.forEach((p) => { const bm = baseMat(p), key = plainLit(bm) ? plainMat(bm.side) : bm; let a = by.get(key); if (!a) by.set(key, (a = { parts: [] })); a.parts.push(p); });
+        for (const p of list) {
+            const bm = baseMat(p), mat = plainLit(bm) ? plainMat(bm.side) : bm, cs = !!(p.userData._cs ?? p.castShadow), lm = layerOf(p);
+            const k = mat.id + '|' + lm + '|' + (cs ? 1 : 0);
+            let a = by.get(k);
+            if (!a) by.set(k, (a = { mat, lm, cs, parts: [] }));
+            a.parts.push(p);
+        }
         // (whatever the pose: the model's own size round its centre, in its own units)
         const r = (this.root.userData.farRadius || 4) / Math.max(1e-3, this.root.scale.x);
-        // (shadows: as its parts would cast — Shadows.setNearShadow keeps that in `_cs` and switches it near/far)
-        const casts = list.some((p) => (p.userData._cs ?? p.castShadow)), anyShadow = casts && this.root.userData._shadowOn !== false, anyRecv = list.some((p) => p.receiveShadow);
-        for (const [mat, b] of by) {
+        const anyRecv = list.some((p) => p.receiveShadow), shadowsOn = this.root.userData._shadowOn !== false;
+        for (const b of by.values()) {
+            const mat = b.mat;
             // (its parts' places in the skeleton and their shapes: the same for every model of the kind — one geometry for all)
             const idxs = b.parts.map((p) => list.indexOf(p));
             const bake = mat.name === 'farshape-plain';
             const geo = mergedGeometry(b.parts, idxs, this.cache ? idxs.join(',') + '|' + b.parts.map((p) => p.geometry.id + (bake ? '.' + baseMat(p).id : '')).join(',') : null, bake);
             const mesh = new THREE.SkinnedMesh(geo, skinnedMaterial(mat));
+            // (a material that changes as the game goes — a sparkle's pulse, a glow: its twin follows it before each draw)
+            if (!bake) mesh.onBeforeRender = syncTwin;
             mesh.bind(this.skeleton, _ident);
-            mesh.castShadow = anyShadow;
-            mesh.userData._cs = casts;
+            mesh.castShadow = b.cs && shadowsOn;
+            mesh.userData._cs = b.cs; // (Shadows.setNearShadow switches it near/far as its parts)
             mesh.receiveShadow = anyRecv;
+            mesh.layers.mask = b.lm;
             mesh.raycast = () => {}; // (the parts are what is hit)
             mesh.userData.farOne = true;
             this._sphere(geo, r);
@@ -190,7 +242,7 @@ export class FarShape {
     dispose() {
         this.set(false);
         this._drop();
-        this._sig = '';
+        this._sig = null;
     }
 }
 

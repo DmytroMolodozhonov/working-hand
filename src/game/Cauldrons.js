@@ -611,7 +611,7 @@ export class Cauldrons {
             if (inIt) continue;
             if (c.boxId != null) g.collision.removeBox(c.boxId);
             g.scene.remove(c.group);
-            disposeModel(c.group);
+            c.group.userData.one?.dispose(); disposeModel(c.group);
             this.list.delete(c.id);
             this._hintAt.delete(c.id);
             this.caves.delete(c.cave);
@@ -1084,7 +1084,7 @@ export class Cauldrons {
         if (c.boxId != null) this.game.collision.removeBox(c.boxId);
         if (c.tripod) { this.game.scene.remove(c.tripod); disposeModel(c.tripod); }
         this.game.scene.remove(c.group);
-        disposeModel(c.group);
+        c.group.userData.one?.dispose(); disposeModel(c.group);
         this.list.delete(id);
         this._hintAt.delete(id);
         return true;
@@ -1095,7 +1095,7 @@ export class Cauldrons {
             if (c.boxId != null) this.game.collision.removeBox(c.boxId);
             if (c.tripod) { this.game.scene.remove(c.tripod); disposeModel(c.tripod); }
             this.game.scene.remove(c.group);
-            disposeModel(c.group);
+            c.group.userData.one?.dispose(); disposeModel(c.group);
         }
         this.list.clear();
     }

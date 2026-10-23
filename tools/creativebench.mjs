@@ -44,6 +44,8 @@ async function scene(FRAMES) {
     let yaw = g.cameraBaseRotation || 0;
     const yaw0 = yaw;
     const setYaw = (y) => { yaw = y; g.smoothBody = y; g.cameraBaseRotation = y; ch.setBodyRotation(y); };
+    const FS = await import('/src/core/FarShape.js').catch(() => null);
+    const builds0 = FS?.farShapeStats ? { ...FS.farShapeStats } : null;
     const nProg0 = g.renderer.info.programs.length;
     let nSeen = window.__compiled?.length || 0;
     const newProgs = [];
@@ -128,6 +130,7 @@ async function scene(FRAMES) {
     while (!done && performance.now() - t0 < 1200000) await new Promise((r) => setTimeout(r, 200));
     g.frame = origFrame;
     for (const u of undo) u();
+    const farBuilds = builds0 ? { builds: FS.farShapeStats.builds - builds0.builds, merged: FS.farShapeStats.merged - builds0.merged, frames: sysFrames } : null;
     const systems = Object.entries(sys).map(([k, v]) => [k, +(v / Math.max(1, sysFrames)).toFixed(3)]).sort((a, b) => b[1] - a[1]).slice(0, 30);
     const info = g.renderer.info;
     const cl = g.castleLife;
@@ -145,7 +148,7 @@ async function scene(FRAMES) {
     }
     groups.sort((a, b) => b.k - a.k);
     return {
-        frames, newProgs, systems, people, peopleVisible, objs, meshes, visMeshes, groups: groups.slice(0, 16),
+        frames, newProgs, systems, farBuilds, people, peopleVisible, objs, meshes, visMeshes, groups: groups.slice(0, 16),
         render: { programs: info.programs.length, geometries: info.memory.geometries, textures: info.memory.textures },
         pos: { x: Math.round(start.x), y: Math.round(start.y), z: Math.round(start.z) },
     };
@@ -283,6 +286,34 @@ try {
     let cdp = null, heap = null;
     if (PROFILE) { cdp = await page.context().newCDPSession(page); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start'); }
     if (ALLOC) { heap = await page.context().newCDPSession(page); await heap.send('HeapProfiler.enable'); await heap.send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true }); }
+    if (args.includes('--hero')) {
+        const hh = await page.evaluate(() => {
+            const g = window.__zns.game, root = g.character.group, by = new Map();
+            root.traverseVisible((o) => {
+                if (!o.isMesh) return;
+                const path = []; for (let q = o.parent; q && q !== root && path.length < 3; q = q.parent) path.push(q.name || q.type);
+                const k = `${o.material?.type}${o.material?.name ? '(' + o.material.name + ')' : ''} cs:${o.castShadow} ${o.isInstancedMesh ? 'inst' : ''} ${o.isSkinnedMesh ? 'skin' : ''} ← ${o.name || '-'} < ${path.join(' < ')}`;
+                by.set(k, (by.get(k) || 0) + 1);
+            });
+            return [...by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}× ${k}`);
+        });
+        console.log('\nгерой (видимые части):\n  ' + hh.join('\n  '));
+    }
+    if (args.includes('--people')) {
+        const pp = await page.evaluate(() => {
+            const g = window.__zns.game, me = g.character.group.position, out = [];
+            g.scene.traverse((o) => {
+                if (o.name !== 'villager' && !(o.userData && '_shadowOn' in o.userData && o.parent === g.scene)) return;
+                let n = 0; o.traverseVisible((q) => { if (q.isMesh) n++; });
+                if (!n) return;
+                const v = [...(g.castleLife?.byId?.values() || [])].find((x) => x.group === o);
+                const m = v?.model;
+                out.push(`${o.name || '?'} ${Math.round(Math.hypot(o.position.x - me.x, o.position.z - me.z))}м видимых:${n} castleLife:${!!v} role:${v?.role || ''} far:${!!m?._far} one:${!!m?._one?.on} torch:${!!m?.torch} mat:${!!m?.mat} limbs:${!!m?.limbs}`);
+            });
+            return out;
+        });
+        console.log('\nлюди:\n  ' + pp.join('\n  '));
+    }
     if (args.includes('--animals')) {
         const an = await page.evaluate(() => {
             const g = window.__zns.game, me = g.character.group.position;
@@ -308,7 +339,8 @@ try {
         const grp = await page.evaluate(() => {
             const g = window.__zns.game, out = [];
             for (const top of g.scene.children) {
-                if (top.name || Object.keys(top.userData || {}).length || top.type !== 'Group' || !top.visible) continue;
+                const uk = Object.keys(top.userData || {});
+                if (top.name || (uk.length && !(uk.length === 1 && uk[0] === '_shadowOn')) || top.type !== 'Group' || !top.visible) continue;
                 let n = 0; const nm = new Set(); top.traverseVisible((o) => { if (o.isMesh) { n++; if (o.name && nm.size < 5) nm.add(o.name); } });
                 if (n < 3) continue;
                 const p = top.position; out.push(`${n} ч. @${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)} дети:${top.children.length} ${[...nm].join(',')} ${top.children.slice(0, 4).map((c) => c.name || Object.keys(c.userData || {}).slice(0, 2).join('/') || c.type).join('|')}`);
@@ -354,7 +386,7 @@ try {
         console.log(`\nмусор (выборка): всего ${(tot / 1048576).toFixed(1)} МБ за ${r.frames.length} кадров; больше всего:`);
         for (const [k, v] of [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${(v / 1048576).toFixed(2).padStart(7)} МБ  ${k}`);
     }
-    const out = { level: LEVEL, pos: r.pos, systems: r.systems, total: {}, segs: {}, render: r.render, newProgs: r.newProgs, people: r.people, peopleVisible: r.peopleVisible, objs: r.objs, meshes: r.meshes, visMeshes: r.visMeshes, groups: r.groups };
+    const out = { level: LEVEL, pos: r.pos, systems: r.systems, farBuilds: r.farBuilds, total: {}, segs: {}, render: r.render, newProgs: r.newProgs, people: r.people, peopleVisible: r.peopleVisible, objs: r.objs, meshes: r.meshes, visMeshes: r.visMeshes, groups: r.groups };
     const sum = (f) => ({ game: stats(f.map((x) => x.game)), cpu: stats(f.map((x) => x.cpu)), calls: stats(f.map((x) => x.calls)), tris: stats(f.map((x) => x.tris)) });
     out.total = sum(r.frames);
     for (const s of ['стоим', 'оглядываемся', 'идём', 'стоим2']) out.segs[s] = sum(r.frames.filter((x) => x.seg === s));
@@ -375,6 +407,7 @@ const row = (name, s) => console.log(`  ${name.padEnd(14)} ${f(s.game).padStart(
 row('всё', res.total);
 for (const k in res.segs) if (res.segs[k].game) row(k, res.segs[k]);
 console.log('  части кадра (сред мс):', JSON.stringify(res.parts));
+if (res.farBuilds) console.log(`  одна форма (FarShape) за сцену: собрано ${res.farBuilds.builds}, новых геометрий ${res.farBuilds.merged} за ${res.farBuilds.frames} кадров`);
 console.log('  системы (сред мс за кадр):', res.systems.map(([k, v]) => `${k} ${v}`).join(', '));
 console.log(`  графика: ${JSON.stringify(res.render)}; объектов сцены ${res.objs}, мешей ${res.meshes} (видимых ${res.visMeshes}); жителей ${res.people} (видимых ${res.peopleVisible})`);
 console.log('  крупные группы сцены (видимых мешей / треуг.):', res.groups.map((x) => `${x.name} ${x.k}/${x.tri}`).join('; '));

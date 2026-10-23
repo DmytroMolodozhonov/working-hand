@@ -77,6 +77,7 @@ const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
 const FAR_ONE = SHADOW_NEAR; // m: farther ones (no shadow there either) are drawn as one shape each (one draw instead of 8–12)
+const NEAR_ONE = true; // people near drawn as one shape too (the video card moves its parts — FarShape)
 export const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
@@ -3506,10 +3507,12 @@ export class CastleLife {
                 // (far people move their arms and legs less often — nobody sees the difference)
                 v.animT = (v.animT || 0) + dt;
                 const far = lv === 'far' || lv === 'distant'; // (far: drawn as one shape — VillagerModel.setFar)
-                if (!far) v.model.setFar(false);
+                // (near too: one shape per material moved by the video card — FarShape; a near person was 10–30 draws)
+                if (!far && !NEAR_ONE) v.model.setFar(false);
                 // (a far one out of the picture — behind me, aside: the pose and its one-shape copy wait, the time adds up,
                 // and the moment he comes into view he is posed at once; the far copies were remade for people nobody saw)
                 const unseen = pic && far && !v.foe && !v.order && !v.guardOrder && !_view.intersectsSphere(_viewS.set(_v.set(v.x, v.y + 1.5, v.z), 4));
+                if (unseen && !v.model._far) v.model.setFar(true); // (out of the picture: no pose, but already one shape for when it comes into view)
                 if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
@@ -3517,7 +3520,7 @@ export class CastleLife {
                     v.model.update(v.animT, { mode: v.mode, speed: v.speed, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide });
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
-                    if (far) v.model.setFar(true);
+                    if (far || NEAR_ONE) v.model.setFar(true);
                     // (a builder's hammer heard: the repairs — Rebuild.js)
                     if (v.model.workStrikeNow && v.role === 'builder' && v.model.toolKind === 'hammer' && d < 40) g.sound?.playHammer?.(_v.set(v.x, v.y + 2.2, v.z), 0.8);
                 }

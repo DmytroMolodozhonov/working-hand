@@ -31,7 +31,8 @@ test('FarShape: an animal is one shape per material, its parts moved by the vide
     one.set(true);
     const now = drawn(cow);
     const plain = [...mats].filter((m) => m.isMeshLambertMaterial && !m.map && !m.transparent).length;
-    assert.equal(now.length, mats.size - plain + (plain ? 1 : 0), `${parts.length} parts → one draw per material, the plain-coloured ones in one (${now.length})`);
+    // (one draw per material — the plain-coloured ones in one — and per kind of shadow: the parts that cast apart)
+    assert.ok(now.length <= mats.size - plain + (plain ? 2 : 0) && now.length * 4 < parts.length, `${parts.length} parts → ${now.length} draws`);
     // (a baked part's colour: its material's colour times its own)
     const bodyPart = parts.find((p) => p.material.isMeshLambertMaterial && !p.material.map);
     if (bodyPart) assert.ok(now.some((m) => m.material.name.startsWith('farshape-plain')));

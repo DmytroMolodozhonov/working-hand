@@ -106,7 +106,7 @@ import { Temple } from './Temple.js';
 import { LoreLibrary } from './LoreLibrary.js';
 import { Blackbeard } from './Blackbeard.js';
 import { FleetOrders } from './FleetOrders.js';
-import { sampleIceModels } from './IceModels.js';
+import { sampleIceModels, iceQueenModel, snowmanModel, iceMonsterModel } from './IceModels.js';
 import { Dragons } from './Dragons.js';
 import { DragonRide } from './DragonRide.js';
 import { ImperiusControl } from './ImperiusControl.js';
@@ -435,6 +435,14 @@ export class Game {
         this.character.setHandQuality(config.handQuality || 'high');
         this.character.setFirstPerson(this.cameraMode === 'fpv' && !isTest);
         this.character.setShowHands(!!config.showHands);
+        // (my hands: each drawn as one shape per material, the finger bones moved by the video card — FarShape; ~44 draws
+        // every frame were the hands' segments. Hidden by camera layers, so the game's own `visible`/layers stay the truth)
+        this._handOnes = [this.character.leftSimplifiedHand, this.character.rightSimplifiedHand].filter(Boolean).map((h) => {
+            h.group.userData.farRadius = 3; // (with a staff or a sword in it)
+            const f = new FarShape(h.group, { cache: false, hide: 'layers' });
+            f.set(true);
+            return f;
+        });
         if (isTest) this.character.group.position.set(10, 1.5, 10);
         else if (config.look) this.character.setLook(config.look); // the hero made in «Персонаж»
 
@@ -3213,8 +3221,9 @@ export class Game {
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
-        zoo.add(goldenTreeModel(), goldenTreeModel(true), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
+        zoo.add(...[goldenTreeModel(), goldenTreeModel(true)].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
+        for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)
@@ -3625,6 +3634,7 @@ export class Game {
 
         mark('прочее');
         this.ultra?.update(deltaTime); // («Ультра качество»: nothing when off)
+        for (const f of this._handOnes || []) f.check(); // (a finger hidden, a thing taken into the hand: the hand's one shape follows)
         if (!this.space?.render()) this._draw(); // (space: its own picture first — Space.render)
         mark('графика');
         this._frameEnd = performance.now();

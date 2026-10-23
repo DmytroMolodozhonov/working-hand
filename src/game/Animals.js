@@ -589,6 +589,7 @@ export class Animals {
             if (until.some((u) => u > Date.now())) picked.set(key, until); else picked.delete(key);
             this.game.scene.remove(tr.model);
             this.game.collision.removeBox(tr.boxId);
+            tr.one?.dispose(); // (its one shape first: the shape of its kind and the twin material are shared — not disposed below)
             tr.model.traverse((o) => { if (o.isMesh && !o.geometry.userData.keep) { o.geometry.dispose(); o.material.dispose(); } }); // (the trunk: shared)
         }
         for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
@@ -606,10 +607,18 @@ export class Animals {
             model.position.set(x, y, z);
             model.rotation.y = h(gx - 7, gz + 29) * Math.PI * 2;
             this.game.scene.add(model);
+            // (its apples (and bark) drawn as one shape by the video card — FarShape; the leaves' cut-out shadow: as themselves)
+            model.updateMatrixWorld(true);
+            model.userData.farRadius = new THREE.Box3().setFromObject(model).getSize(_v2).length() * 0.6 + 1;
+            const one = new FarShape(model);
             const boxId = this.game.collision.addBox({ minX: x - 0.45, maxX: x + 0.45, minY: y, maxY: y + 4, minZ: z - 0.45, maxZ: z + 0.45, kind: 'tree', noSupport: true });
             const was = picked.get(key);
             picked.delete(key);
-            this.trees.set(key, { key, x, y, z, model, boxId, red: kind === 'red', apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) });
+            const tr = { key, x, y, z, model, boxId, red: kind === 'red', one, apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) };
+            const A = model.userData.apples, now = Date.now();
+            for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; A[i].userData.noFar = !grown; A[i].visible = grown; }
+            one.set(true);
+            this.trees.set(key, tr);
         }
     }
 
@@ -617,7 +626,9 @@ export class Animals {
         const ap = tr.apples[i];
         if (ap.until > Date.now()) return;
         ap.until = Date.now() + 5 * 60 * 1000; // grows again in 5 min
-        tr.model.userData.apples[i].visible = false;
+        const am = tr.model.userData.apples[i];
+        am.visible = false; am.userData.noFar = true;
+        tr.one?.check();
         if (this.game.sync && this.auth) this.game.sync.appleGone?.(tr.key, i, ap.until);
         const item = { kind: tr.red ? 'redApple' : 'apple', uid: newUid(), count: 1 };
         if (toId === this.game.localId) this._give(item, side);
@@ -1690,11 +1701,14 @@ export class Animals {
         for (const tr of this.trees.values()) {
             if (!tr) continue;
             const A = tr.model.userData.apples;
-            for (let i = 0; i < A.length; i++) A[i].visible = tr.apples[i].until <= now;
+            // (an apple grown / picked: in the tree's one shape or out of it — FarShape; drawn by the video card, ~18 apples one draw)
+            let changed = false;
+            for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; if (!!A[i].userData.noFar === grown) { A[i].userData.noFar = !grown; A[i].visible = grown && !tr.one; changed = true; } }
+            if (changed && tr.one) tr.one.check();
             // golden sparkles rise from its apples now and then (near enough to be seen)
             if (!tr.red && g.fx?.glow && Math.random() < dt * 3 && Math.abs(tr.x - me.x) + Math.abs(tr.z - me.z) < 90) {
                 const ap = A[Math.floor(Math.random() * A.length)];
-                if (ap?.visible) {
+                if (ap && !ap.userData.noFar) {
                     ap.getWorldPosition(_v2);
                     g.fx.glow.spawn(_v2.x + (Math.random() - 0.5) * 0.3, _v2.y, _v2.z + (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.2, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 0.2,
                         Math.random() < 0.5 ? 0xffe28a : 0xffc640, 0.18 + Math.random() * 0.14, 1.6 + Math.random(), { shrink: 0.6 });

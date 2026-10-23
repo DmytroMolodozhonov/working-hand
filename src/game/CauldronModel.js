@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { FarShape } from '../core/FarShape.js';
 import { CAULDRON, PROFILE, innerRadius } from './Potions.js';
 
 let _iron = null, _rust = null, _rustSpot = null;
@@ -102,6 +103,13 @@ export function makeCauldronModel({ old = false } = {}) {
     bubbles.frustumCulled = false;
     g.add(bubbles);
     g.userData.cauldron = true;
+    // (its iron, rust and lugs drawn as one shape by the video card — FarShape: 14 draws → 3; the potion's surface stays
+    // itself — its colour and its showing change as the brewing goes; the owner disposes it with the cauldron: `userData.one`)
+    liquid.userData.noFar = true;
+    g.userData.farRadius = 2.5;
+    const one = new FarShape(g);
+    one.set(true);
+    g.userData.one = one;
     return { group: g, liquid, bubbles };
 }
 
