@@ -33,9 +33,13 @@ import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
 import { armorName } from './ArmorTypes.js';
 import { accioCatcher } from './Accio.js';
+import { logStackModel, logIconUrl } from './LogModel.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
+
+/** A tree's trunk block (shown as a log, not a cube — LogModel.js). */
+const isWood = (b) => TREE_KINDS.some((k) => k.wood === b);
 
 /** Names and colours of the resources (blocks) for the slots. */
 export const RESOURCE = {
@@ -827,16 +831,31 @@ export class Inventory {
     _updateHandBlock() {
         const s = this.inHand && this.inHand.kind === 'res' ? this.inHand.stack : null;
         const side = this.resSide();
-        if (!side) { if (this._handBlock) this._handBlock.visible = false; return; }
+        if (!side) { if (this._handBlock) this._handBlock.visible = false; if (this._handLog) this._handLog.visible = false; return; }
         if (!this._handBlock) {
             this._handBlock = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.28), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x222222 }));
             this.game.scene.add(this._handBlock);
         }
         const b = this._handBlock;
-        b.visible = true;
-        b.material.color.setHex(RESOURCE[s.block]?.color ?? 0xffffff);
         const p = this.game.character.getGripObject(side).getWorldPosition(_v);
         const t = performance.now() / 1000;
+        if (isWood(s.block)) { // wood is a log, not a cube (LogModel.js)
+            b.visible = false;
+            const col = RESOURCE[s.block]?.color ?? 0x8b5a2b, n = Math.min(3, s.count || 1);
+            if (!this._handLog || this._handLog.userData.key !== col + ':' + n) {
+                if (this._handLog) this.game.scene.remove(this._handLog);
+                this._handLog = logStackModel(col, n);
+                this._handLog.userData.key = col + ':' + n;
+                this.game.scene.add(this._handLog);
+            }
+            this._handLog.visible = true;
+            this._handLog.position.set(p.x, p.y + 0.3 + Math.sin(t * 3) * 0.04, p.z);
+            this._handLog.rotation.set(0, t * 0.7, 0);
+            return;
+        }
+        if (this._handLog) this._handLog.visible = false;
+        b.visible = true;
+        b.material.color.setHex(RESOURCE[s.block]?.color ?? 0xffffff);
         b.position.set(p.x, p.y + 0.3 + Math.sin(t * 3) * 0.04, p.z);
         b.rotation.set(t * 0.7, t, 0);
     }
@@ -973,7 +992,8 @@ export class Inventory {
             if (s.kind === 'res') {
                 const r = RESOURCE[s.block];
                 const col = '#' + (r?.color ?? 0xffffff).toString(16).padStart(6, '0');
-                icon.style.background = `linear-gradient(135deg, ${col}, ${col} 60%, rgba(0,0,0,.35))`;
+                const logPic = isWood(s.block) ? logIconUrl(r?.color ?? 0x8b5a2b) : '';
+                icon.style.background = logPic ? `center / contain no-repeat url(${logPic})` : `linear-gradient(135deg, ${col}, ${col} 60%, rgba(0,0,0,.35))`;
                 count.textContent = s.count;
                 c.title = r?.name || '';
             } else if (s.kind === 'weapon') {

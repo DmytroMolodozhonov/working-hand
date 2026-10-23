@@ -56,7 +56,7 @@ import { newUid } from './ItemTypes.js';
 import { HouseMagicFx } from '../fx/HouseMagicFx.js';
 
 export const HOUSE_MAGIC = {
-    PILE_R: 4.5, // m: the heap — wool and sand this near the point the wand shows
+    PILE_R: 12, // m: the heap — wool and sand lying this near the point the wand shows, or near the hero, count (any piles, summed)
     AIM: 30, // m: how far the wand reaches the heap
     AHEAD: 13, // m: Creative, the hand not pointing at the ground — the house this far ahead
     NEAR_HOUSE: 22, // m from the house's middle: a heap thrown «beside the house»
@@ -80,7 +80,7 @@ export function countPile(items) {
     let wool = 0, sand = 0;
     for (const it of items) {
         if (it.kind === 'wool') wool += it.count || 1;
-        else if (it.kind === 'blocks' && it.block === BLOCK.SAND) sand += it.count || 1;
+        else if ((it.kind === 'blocks' || it.kind === 'res') && it.block === BLOCK.SAND) sand += it.count || 1;
     }
     return { wool, sand };
 }
@@ -90,9 +90,9 @@ export function missingFor(level, pile, trees) {
     const need = HOUSE_LEVELS[level];
     if (!need) return null;
     const miss = [];
-    if (pile.wool < need.wool) miss.push(`шерсти ${need.wool - pile.wool}`);
-    if (pile.sand < need.sand) miss.push(`песка ${need.sand - pile.sand}`);
-    if (trees < need.trees) miss.push(`деревьев рядом ${need.trees - trees}`);
+    if (pile.wool < need.wool) miss.push(`шерсть ${need.wool - pile.wool} из ${need.wool} (есть ${pile.wool})`);
+    if (pile.sand < need.sand) miss.push(`песок ${need.sand - pile.sand} из ${need.sand} (есть ${pile.sand})`);
+    if (trees < need.trees) miss.push(`деревьев рядом ${need.trees - trees} из ${need.trees} (есть ${trees})`);
     return miss.length ? miss : null;
 }
 
@@ -243,15 +243,16 @@ export class HouseMagic {
         return new THREE.Vector3(x, g.collision.groundY(x, z), z);
     }
 
-    _isRes(L) { return !L.hover && (L.item.kind === 'wool' || (L.item.kind === 'blocks' && L.item.block === BLOCK.SAND)); }
+    _isRes(L) { return !L.hover && (L.item.kind === 'wool' || ((L.item.kind === 'blocks' || L.item.kind === 'res') && L.item.block === BLOCK.SAND)); }
 
-    /** The wool and sand lying round a point: [{L, item}]. */
-    _pileAt(p, r = HOUSE_MAGIC.PILE_R) {
+    /** The wool and sand lying round a point (and round `also`, e.g. the hero): [{L, item}], every pile once. */
+    _pileAt(p, r = HOUSE_MAGIC.PILE_R, also = null) {
         const out = [];
         for (const L of this.game.items?.loose.values() || []) {
             if (!this._isRes(L)) continue;
             const m = L.model.position;
-            if (Math.hypot(m.x - p.x, m.z - p.z) <= r && Math.abs(m.y - p.y) < 3) out.push(L);
+            const near = (q) => Math.hypot(m.x - q.x, m.z - q.z) <= r && Math.abs(m.y - (q.y ?? m.y)) < 6;
+            if (near(p) || (also && near(also))) out.push(L);
         }
         return out;
     }
@@ -376,14 +377,14 @@ export class HouseMagic {
             rec = { id: 'mh' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), seed, level: 0, x, z, G, face: faceTowards(dx, dz), woods: [], d: 0, owner: this._key(by), name: this._name(by), t: 0 };
         }
         const need = HOUSE_LEVELS[level];
-        const pile = this._pileAt(at);
+        const pile = this._pileAt(at, HOUSE_MAGIC.PILE_R, ask.c ? { x: +ask.c[0] || 0, z: +ask.c[1] || 0 } : null); // (what lies round the wand's point or round the hero; wool and sand only — sheep and blocks of the world do not count)
         const onGround = countPile(pile.map((L) => L.item));
         // (the wool and sand carried in the slots / the hands add to the heap: the ground is used first)
         const carried = cleanClaim(ask.inv);
         const has = { wool: onGround.wool + carried.wool, sand: onGround.sand + carried.sand };
         const trees = this._treesNear(rec.x, rec.z);
         const miss = missingFor(level, has, trees.length);
-        if (miss && !creative) return `🏠 Не хватает: ${miss.join(', ')}. ${level === 1 ? 'Нужно: 3 шерсти и 10 песка (в ячейках, в руках или рядом на земле) и 3 дерева неподалёку' : `Для уровня ${level}: шерсти ${need.wool}, песка ${need.sand}, деревьев рядом ${need.trees}`}`;
+        if (miss && !creative) return `🏠 Не хватает: ${miss.join(', ')}. Считаются: лежащее рядом (12 м), в руках, в ячейках и сумке; деревья — стоящие рядом`;
         // the wood the walls are made of: the trees it takes, the most of a kind first
         const take = trees.slice(0, need.trees);
         const count = new Map();

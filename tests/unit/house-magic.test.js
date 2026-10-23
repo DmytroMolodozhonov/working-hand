@@ -86,7 +86,7 @@ test('not enough: the hint says what is missing; nothing is used up', () => {
     const { g, G, drop } = world({ trees: 1 });
     drop('wool', 3, 0, 0); drop('blocks', 4, 0, 1);
     const r = g.houseMagic._hostStart(ask('CreateHouse', [0, G, 0]), 'local');
-    assert.match(r, /песка 6/); assert.match(r, /деревьев рядом 2/);
+    assert.match(r, /песок 6 из 10 \(есть 4\)/); assert.match(r, /деревьев рядом 2 из 3/);
     assert.equal(g.items.loose.size, 2);
     assert.equal(g.combat.fatigue, 100);
 });
@@ -195,7 +195,7 @@ test('the wool and sand in the pockets are enough: nothing is thrown out, they a
     w2.g.items.held = { right: null, left: null };
     w2.drop('wool', 1, 0, 0);
     const r = w2.g.houseMagic._hostStart({ ...ask('CreateHouse', [0, w2.G, 0]), inv: { wool: 1, sand: 0 } }, 'local');
-    assert.match(r, /Не хватает: шерсти 1, песка 10/);
+    assert.match(r, /Не хватает: шерсть 1 из 3 \(есть 2\), песок 10 из 10 \(есть 0\)/);
     assert.equal(w2.g.inventory.slots[0].count, 1, 'a refused spell takes nothing');
     // the ground and the pockets together
     const w3 = world();
@@ -206,4 +206,18 @@ test('the wool and sand in the pockets are enough: nothing is thrown out, they a
     assert.equal(w3.g.items.loose.size, 0);
     assert.equal(w3.g.inventory.slots[0], null);
     assert.equal(w3.g.inventory.slots[1], null);
+});
+
+test('sources are summed: wool lying 9 m from the aim, sand in the slots, standing trees; a sheep is no wool', () => {
+    const { g, G, drop } = world();
+    g.inventory = { slots: [{ kind: 'blocks', block: BLOCK.SAND, count: 10 }, null, null, null, null], _render() {} };
+    g.items.held = { right: null, left: null };
+    g.animals = { list: [{ kind: 'sheep', dead: false }, { kind: 'sheep', dead: false }, { kind: 'sheep', dead: false }] }; // (sheep nearby: not wool)
+    drop('wool', 1, 9, -9); drop('wool', 1, -8, -6); // (far from the aimed point, near the hero at (0, -14))
+    const r1 = g.houseMagic._hostStart({ ...ask('CreateHouse', [0, G, 0]), inv: { wool: 0, sand: 10 } }, 'local');
+    assert.match(r1, /Не хватает: шерсть 1 из 3 \(есть 2\)/, 'two wool lying + a hint naming what is missing');
+    assert.doesNotMatch(r1, /песок/);
+    drop('wool', 1, 0, -20);
+    assert.equal(g.houseMagic._hostStart({ ...ask('CreateHouse', [0, G, 0]), inv: { wool: 0, sand: 10 } }, 'local'), true, 'ground wool + pocket sand + trees');
+    assert.equal(g.inventory.slots[0], null, 'the sand came out of the slot');
 });

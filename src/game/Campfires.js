@@ -578,6 +578,7 @@ export class Campfires {
                     this.addWood(f, L.item.count || 1);
                     continue;
                 }
+                if (kind === 'logs') { g.burnWreck?.igniteLoose(p, 0.2); continue; } // (a bundle of logs thrown in the flames burns down)
                 if (!canCook(L.item)) continue;
                 const t = (f.cook.get(uid) || 0) + dt;
                 f.cook.set(uid, t);

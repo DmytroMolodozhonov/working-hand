@@ -69,6 +69,7 @@ import { Houses } from './Houses.js';
 import { WizVillages } from './WizVillages.js';
 import { Wreck } from './Wreck.js';
 import { BurnWreck, burnsInFire } from './BurnWreck.js';
+import { logStackModel } from './LogModel.js';
 import { WaveAttacks } from './WaveAttack.js';
 import { TotalDestruction } from './TotalDestruction.js';
 import { LOOT_FOR } from './ItemTypes.js';
@@ -488,8 +489,8 @@ export class Game {
         {
             // every spell's fire (the Inferno stream, Hellfire's blaze and ring, a fire-breath) roasts the meat in it
             const F = this.fire, ig = F.ignite.bind(F), al = F.igniteAlong.bind(F);
-            F.ignite = (p, r = 1.5) => { this.campfires?.roastIn((q) => q.distanceTo(p) <= r + 0.4); return ig(p, r); };
-            F.igniteAlong = (o, d, len) => { this.campfires?.roastIn((q) => inStream(o, d, len, q, 0.5)); return al(o, d, len); };
+            F.ignite = (p, r = 1.5) => { this.campfires?.roastIn((q) => q.distanceTo(p) <= r + 0.4); this.burnWreck?.igniteLoose(p, r); return ig(p, r); };
+            F.igniteAlong = (o, d, len) => { this.campfires?.roastIn((q) => inStream(o, d, len, q, 0.5)); this._igniteLogsAlong(o, d, len); return al(o, d, len); };
         }
         this.fire.onCastleBurn = (x, L, z) => this._castleBurnt(x, L, z);
         this.fire.onBlockGone = (x, L, z) => this.burnWreck?.blockGone(x, L, z);
@@ -1077,6 +1078,12 @@ export class Game {
      * (host) A chest that was never opened burnt down (BurnWreck.js): its things are rolled as on
      * opening; what burns is gone, the rest (coins, steel, magic things…) lies in the ashes.
      */
+    /** (host) The logs lying in a stream of fire catch fire (BurnWreck.igniteLoose). */
+    _igniteLogsAlong(o, d, len) {
+        if (!this.authority || !this.items?.loose?.size || !this.burnWreck) return;
+        for (const L of this.items.loose.values()) if (!L.hover && L.item.kind === 'logs' && inStream(o, d, len, L.model.position, 0.6)) this.burnWreck.igniteLoose(L.model.position, 0.2);
+    }
+
     spillBurntChest(chest, rp, burn = true) { // (burn false: «Liquidation Максима» crumbled it — nothing burns, all falls out)
         if (chest.store) { if (this.authority) (chest.store.castle ? this.castleMagic : this.houseMagic)?.chestBurnt(chest, rp); return; } // (a magic house's chest: what was put in it)
         if (!this.authority || chest.itemType !== 'loot' || chest.ship) return;
@@ -2962,6 +2969,7 @@ export class Game {
         zoo.add(goldenTreeModel(), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
+        zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
         for (const m of this.wards?.sampleModels?.() || []) zoo.add(m); // (the dome of «Protection House»)
         for (const m of sampleShieldModels()) zoo.add(m); // (the shields: «Protection», and the gods' golden one — ProtectionGods.js)

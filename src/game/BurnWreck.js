@@ -35,6 +35,9 @@ import { collapseAfter } from '../world/Collapse.js';
 import { isMagicItem } from './ItemTypes.js';
 
 export const BURN = {
+    LOG_TIME: 3.5, // s a log lying in flames takes to burn down (a little longer or shorter each)
+    LOG_SPREAD: 1.6, // m: a burning log lights the logs this near
+
     TICK: 0.3, // s between the checks of the burnt places
     CELL: 4, // m: burnt blocks closer than this are checked together
     CHEST_HEAT: 3.5, // s in the flames before a chest burns down
@@ -51,6 +54,10 @@ export function burnsInFire(it) {
     return FLAMMABLE.has(it.kind);
 }
 
+/** Kinds that catch fire lying on the ground (the rest of FLAMMABLE burns only in a burning chest or when its carrier burns). */
+const GROUND_FUEL = new Set(['logs']);
+export const burnsOnGround = (it) => !!it && GROUND_FUEL.has(it.kind) && burnsInFire(it);
+
 const _v = new THREE.Vector3();
 const _c = new THREE.Vector3();
 
@@ -60,13 +67,47 @@ export class BurnWreck {
         this.cells = []; // [x, L, z] burnt since the last check
         this.t = 0;
         this.burnt = new Set(); // ids of chests burnt down
+        this.fuel = new Map(); // uid of a log on the ground -> {t, dur, spread}: burning now
     }
 
     /** (Fire) A block burnt away. */
     blockGone(x, L, z) { this.cells.push([x, L, z]); }
 
+    /**
+     * (host) Flames at p (radius r): the logs lying there catch fire and burn down in a few seconds
+     * (smoke, then ash; a burning log lights those beside it). A log in the hand or the bag burns only with its carrier.
+     */
+    igniteLoose(p, r = 1.5) {
+        const g = this.game;
+        if (!g.authority || !g.items?.loose?.size) return;
+        for (const [uid, L] of g.items.loose) {
+            if (L.hover || this.fuel.has(uid) || !burnsOnGround(L.item)) continue;
+            const m = L.model.position;
+            if (Math.hypot(m.x - p.x, m.z - p.z) > r + 0.4 || Math.abs(m.y - p.y) > 2.5) continue;
+            this.fuel.set(uid, { t: 0, dur: BURN.LOG_TIME * (0.8 + Math.random() * 0.4), spread: 0 });
+        }
+    }
+
+    _burnLogs(dt) {
+        const g = this.game, loose = g.items?.loose;
+        for (const [uid, b] of [...this.fuel]) {
+            const L = loose?.get(uid);
+            if (!L) { this.fuel.delete(uid); continue; }
+            const m = L.model.position;
+            b.t += dt;
+            g.fx?.glow?.spawn(m.x, m.y + 0.2, m.z, (Math.random() - 0.5) * 0.6, 1 + Math.random(), (Math.random() - 0.5) * 0.6, [0xffe08a, 0xffa020, 0xff5a00][(Math.random() * 3) | 0], 0.3, 0.5, { shrink: 1.5 });
+            g.fx?.smoke?.spawn(m.x, m.y + 0.6, m.z, (Math.random() - 0.5) * 0.4, 1.4, (Math.random() - 0.5) * 0.4, 0x3a3a3a, 1, 2, { shrink: -0.4 });
+            if ((b.spread -= dt) <= 0) { b.spread = 1; this.igniteLoose(m, BURN.LOG_SPREAD); g.fire?.ignite && !b.lit && (b.lit = true, g.fire.ignite(m, 1)); }
+            if (b.t < b.dur) continue;
+            this.fuel.delete(uid);
+            for (let k = 0; k < 5; k++) g.fx?.debrisFrom?.([{ x: m.x + (Math.random() - 0.5) * 0.8, y: m.y + 0.1, z: m.z + (Math.random() - 0.5) * 0.8, color: k % 3 ? 0x2a2420 : 0x6e4a2a, size: 0.3 }], _v.set(m.x, m.y, m.z), 8);
+            this._burnItem(L); // (the log is gone, for everybody)
+        }
+    }
+
     update(dt) {
         const g = this.game;
+        if (this.fuel.size && g.authority) this._burnLogs(dt);
         this.t -= dt;
         if (this.t > 0) return;
         this.t = BURN.TICK;
