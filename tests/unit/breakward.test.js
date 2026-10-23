@@ -104,6 +104,8 @@ test('activate: costs 50, +1 dark, mark; needs a learned drawing; death removes 
     m.learn();
     assert.equal(m.activate(), null);
     assert.equal(g.combat.fatigue, 50); assert.equal(darkLevel(g.dark), 1); assert.equal(m.marked, true);
+    assert.equal(m.activate(), 'защита уже сломана'); // (одноразово)
+    assert.equal(g.combat.fatigue, 50); assert.equal(darkLevel(g.dark), 1);
     const back = new BreakwardMark(fakeGame()); back.restore(m.snapshot());
     assert.equal(back.marked, true); assert.equal(back.known, true);
     wipeHero(g);

@@ -63,10 +63,11 @@ export function captureLegacy(g) {
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length || mana.mastery > 0) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [], mastery: mana.mastery || 0, beaten: mana.beaten || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
         dark: g.dark?.snapshot() || null, // (чёрная магия: уровень тьмы — DarkMagic.js)
+        bw: g.breakward?.marked ? { m: 1 } : null, // (метка «слом защиты»: умирает с прокачками, «Give Me My Power» возвращает)
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.bw;
     return empty ? null : rec;
 }
 
@@ -119,6 +120,7 @@ export function absorbLegacy(g, rec) {
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);
     if (rec.steady) g.steady?.restore(rec.steady);
+    if (rec.bw && g.breakward) { g.breakward.marked = true; g.breakward._shown = ''; g.breakward._hud(); }
     if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;
     if (M && rec.mana) {
