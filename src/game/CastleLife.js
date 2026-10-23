@@ -396,10 +396,10 @@ export class CastleLife {
     }
 
     /** All living villagers near the local player (targets for weapons and fists). */
-    targets() {
+    targets(reach = 40) {
         const out = [];
         const me = this.game.character.group.position;
-        for (const v of this.byId.values()) if (!v.dead && Math.abs(v.x - me.x) < 40 && Math.abs(v.z - me.z) < 40) out.push(v);
+        for (const v of this.byId.values()) if (!v.dead && Math.abs(v.x - me.x) < reach && Math.abs(v.z - me.z) < reach) out.push(v);
         return out;
     }
 

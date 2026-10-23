@@ -65,6 +65,7 @@ import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js
 const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
 export { JERK, sharpJerk } from './Jerk.js';
 
+const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
 export const DUEL_SPELLS = {
     Stupefy: { color: 0xff3b3b, name: 'Остолбеней' },
     // a poison-green charge: an acid core (never white), a murky swamp-green glow, smoke and sparks (AvadaLook.js);
@@ -532,12 +533,12 @@ export class Duel {
         };
         if (skip !== this.me && g.character && !g.combat?.dead && !g.isDeadLocal) this._heroBody(g.character.group, put('p', this.me));
         for (const [id, r] of g.remotes || []) if (!r.dead && id !== skip) this._heroBody(r.character.group, put('p', id));
-        for (const z of g.zombies || []) if (!z.isDead) this._zombieBody(z, put('z', z.id));
+        for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
-        for (const v of g.castleLife?.targets() || []) if (v.id !== skip) this._villagerBody(v, put('v', v.id)); // (never the wizard who cast it)
+        for (const v of g.castleLife?.targets(DUEL.RANGE_DIE + 5) || []) if (v.id !== skip) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
-        for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._villagerBody(v, put('c', v.id)); // (never Captain Black Moustache by the charge he beat back himself)
+        for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._tipped(v, this._villagerBody(v, put('c', v.id))); // (never Captain Black Moustache by the charge he beat back himself)
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
         for (const bd of g.books?.birds?.values() || []) if (bd.state !== 'fall') this._roundBody('b', bd, put('b', bd.id));
         // the giant spider: its whole (big) body, nose to tail
@@ -564,7 +565,7 @@ export class Duel {
         }
         if (kind === 'z') {
             const z = g.zombieById?.get(id);
-            return z && !z.isDead ? this._zombieBody(z, e) : null;
+            return z && !z.isDead ? this._tipped(z, this._zombieBody(z, e)) : null;
         }
         if (kind === 's') { const sp = g.spiders?.byId(id); return sp ? spiderBody(sp, e) : null; }
         if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
@@ -573,7 +574,7 @@ export class Duel {
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
-        return kind === 'v' || kind === 'c' ? this._villagerBody(c, e) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
+        return kind === 'v' || kind === 'c' ? this._tipped(c, this._villagerBody(c, e)) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
     }
 
     /** A wizard's hero: along the body (upright, or lying flat flying like Superman). */
@@ -582,6 +583,22 @@ export class Duel {
         e.a.copy(group.position).addScaledVector(up, -BODY.HERO.DOWN);
         e.b.copy(group.position).addScaledVector(up, BODY.HERO.UP);
         e.r = BODY.HERO.R;
+        return e;
+    }
+
+    /**
+     * A creature knocked over / thrown (CreatureImpact tips its model on a pivot at the feet) is seen
+     * lying or slanting, so the body a charge can touch lies the same way: the standing capsule `e`
+     * is turned about that pivot (a charge at a body lying on the ground must not fly through it).
+     */
+    _tipped(c, e) {
+        const piv = c.group?.userData?.impPivot || c.model?.root;
+        if (!piv || Math.abs(piv.rotation.x) + Math.abs(piv.rotation.z) < 0.05) return e;
+        piv.getWorldPosition(_tipP);
+        if (piv.parent) piv.parent.getWorldQuaternion(_tipQ); else _tipQ.identity();
+        _tipD.copy(_tipQ).multiply(piv.quaternion).multiply(_tipQ.invert());
+        e.a.sub(_tipP).applyQuaternion(_tipD).add(_tipP);
+        e.b.sub(_tipP).applyQuaternion(_tipD).add(_tipP);
         return e;
     }
 
