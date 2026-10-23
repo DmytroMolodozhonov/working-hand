@@ -29,7 +29,7 @@
 
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
-import { enchantMul, shieldMul, shieldPlain } from './Enchant.js';
+import { enchantMul, shieldMul, shieldPlain, enchantAdd } from './Enchant.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { SPELL_COST } from './Combat.js';
 import { spiderDist } from './Spider.js';
@@ -564,7 +564,7 @@ export class Gear {
         const storm = g.storm?.k > 0.5 && g.storm.thunder; // (any thunderstorm, «Let it rain»'s too)
         if (!storm) { if (this.hammer.storm) this.hammer = { uses: 0, failed: false, storm: 0 }; return; }
         this.hammer.storm = 1;
-        if (!hm || g.lightning || this.hammer.failed || this.hammer.uses >= 3) return;
+        if (!hm || g.lightning || this.hammer.failed || this.hammer.uses >= 3 + enchantAdd(hm.item, 'uses')) return;
         const ch = g.character;
         const head = ch.head.getWorldPosition(_v);
         if (hm.model.position.y < head.y + 0.3) return; // raise it above the head
@@ -585,7 +585,10 @@ export class Gear {
         else this.hammer.failed = true;
         const g = this.game;
         if (!ok) g.hud.setVoice('🔨 Молния ушла в землю — молот зарядится только в следующую грозу', true);
-        else if (this.hammer.uses < 3) g.hud.setVoice(`🔨 Ещё ${3 - this.hammer.uses} раз(а) в эту грозу`, true);
+        else {
+            const max = 3 + enchantAdd(g.items.heldOf('hammer')?.item, 'uses');
+            if (this.hammer.uses < max) g.hud.setVoice(`🔨 Ещё ${max - this.hammer.uses} раз(а) в эту грозу`, true);
+        }
     }
 
     // =============================================================== weather

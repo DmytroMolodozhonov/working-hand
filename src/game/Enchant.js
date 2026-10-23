@@ -66,8 +66,10 @@ export function enchantKind(it) {
     if (it.kind === 'weapon') return 'weapon';
     if (it.kind === 'bow') return 'bow';
     if (it.kind === 'shield') return 'shield';
-    if (it.kind === 'wand') return 'wand';
-    return null; // блоки, монеты, еда, свитки, книги, зелья, рюкзак, молот, Ледяной Жезл (дар богов) …
+    if (it.kind === 'wand') return 'wand'; // (a wizard's wand and a wanderer's staff: both kind 'wand')
+    if (it.kind === 'hammer') return 'hammer';
+    if (it.kind === 'backpack') return 'backpack';
+    return null; // блоки, монеты, еда, свитки, книги, зелья, ингредиенты, Ледяной Жезл (дар богов) …
 }
 
 /**
@@ -75,6 +77,7 @@ export function enchantKind(it) {
  *   dmg    — доля меньше урона по здоровью (после брони) | cut — доля меньше износа деталей
  *   atk    — доля больше урона | keen — оружие не тупится (запас)
  *   shield — во сколько раз больше силы щита; plain — на сколько выше порог поломки простого щита
+ *   uses   — сколько лишних ударов молнии за грозу (молот Тора) | slots — лишние ячейки рюкзака
  *   power  — добавка к силе заклинаний палочки, % | save — доля дешевле мана
  */
 export const ENCHANTS = {
@@ -85,6 +88,8 @@ export const ENCHANTS = {
     weapon: { atk: [0.08, 0.16, 0.26, 0.4], text: 'бьёт сильнее, клинок не тупится' },
     bow: { atk: [0.08, 0.16, 0.26, 0.4], text: 'стрелы бьют сильнее' },
     shield: { shield: [1.15, 1.3, 1.5, 1.8], plain: [0, 5, 10, 20], text: 'выдерживает больше ударов и заклинаний' },
+    hammer: { uses: [0, 1, 1, 2], text: 'молния попадает в молот чаще за одну грозу' },
+    backpack: { slots: [0, 1, 1, 2], text: 'в рюкзак влезает больше вещей' },
     wand: { power: [3, 6, 10, 15], save: [0.02, 0.04, 0.06, 0.1], text: 'заклинания сильнее (сверх обычных +15 %) и дешевле' },
 };
 
@@ -143,6 +148,8 @@ export function describeEnchant(it) {
     if (R.cut) bits.push(`износ −${Math.round(R.cut[t] * 100)}%`);
     if (R.atk) bits.push(`+${Math.round(R.atk[t] * 100)}% урона`);
     if (R.shield) bits.push(`сила щита ×${R.shield[t]}`);
+    if (R.uses) bits.push(R.uses[t] ? `+${R.uses[t]} молнии за грозу` : 'молот легче ловит молнию');
+    if (R.slots) bits.push(R.slots[t] ? `+${R.slots[t]} яч. рюкзака` : 'рюкзак крепче');
     if (R.power) bits.push(`+${R.power[t]}% силы заклинаний`);
     if (R.save) bits.push(`мана −${Math.round(R.save[t] * 100)}%`);
     return { title: `✦ ${T.ru} зачарование`, color: T.color, glow: T.glow, lines: [R.text, bits.join(', ')] };
@@ -171,6 +178,6 @@ export const ENCHANT_PENTAGRAM = {
 export const ENCHANT_TARGETS = {
     me: { does: 'pay', why: 'платит 30 % текущей маны; видит обряд' },
     players: { does: 'look', why: 'видят столб света и парящий предмет (сообщение «ench»), платит тот, кто начал' },
-    items: { does: 'enchant', why: 'один предмет за раз: доспехи, мантии, оружие, лук, щит, палочка; блоки, монеты, еда, свитки, книги, зелья, рюкзак, молот, дары богов — нельзя' },
+    items: { does: 'enchant', why: 'один предмет за раз: доспехи, мантии, оружие, лук, щит, палочка/посох, молот Тора, рюкзак; блоки, монеты, еда, свитки, книги, зелья, ингредиенты, дары богов — нельзя' },
     creatures: { does: 'none', why: 'на существ не действует; стоящий в круге не ранится' },
 };

@@ -20,6 +20,7 @@
  * sees what the others hold.
  */
 
+import { enchantAdd } from './Enchant.js';
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
@@ -1185,7 +1186,7 @@ export class ItemSystem {
         const model = makeItemModel(item);
         g.scene.add(model);
         this.worn.backpack = { item, model };
-        g.inventory.setExtraSlots(item.slots || 3);
+        g.inventory.setExtraSlots((item.slots || 3) + enchantAdd(item, 'slots'));
         g.hud.setVoice?.(`🎒 Рюкзак надет: +${item.slots} ячейки`, true);
         if (g.sync) g.sync.itemHold?.('back', item);
     }

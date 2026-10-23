@@ -40,12 +40,12 @@ test('enchantTier is deterministic from the rng', () => {
 });
 
 test('only equipment can be enchanted, and only once', () => {
-    for (const bad of [{ kind: 'res', block: 3, count: 5 }, { kind: 'coins', count: 9 }, { kind: 'apple' }, { kind: 'bread' }, { kind: 'scroll', stat: 'spell' }, { kind: 'book' }, { kind: 'potion' }, { kind: 'backpack' }, { kind: 'iceRod' }, { kind: 'hammer' }]) {
+    for (const bad of [{ kind: 'res', block: 3, count: 5 }, { kind: 'coins', count: 9 }, { kind: 'apple' }, { kind: 'bread' }, { kind: 'scroll', stat: 'spell' }, { kind: 'book' }, { kind: 'potion' }, { kind: 'iceRod' }, { kind: 'flask' }, { kind: 'arrows' }]) {
         const r = canEnchant(bad);
         assert.equal(r.ok, false, bad.kind);
         assert.equal(r.why, 'Это нельзя зачаровать');
     }
-    for (const good of [makePiece('helmet'), makePiece('chest', { magic: true }), makePiece('legs'), makeRobe(false), makeRobe(true), { kind: 'weapon', type: 'sword' }, { kind: 'bow' }, { kind: 'shield', type: 0 }, { kind: 'wand' }]) {
+    for (const good of [makePiece('helmet'), makePiece('chest', { magic: true }), makePiece('legs'), makeRobe(false), makeRobe(true), { kind: 'weapon', type: 'sword' }, { kind: 'bow' }, { kind: 'shield', type: 0 }, { kind: 'wand' }, { kind: 'wand', staff: true }, { kind: 'hammer' }, { kind: 'backpack' }]) {
         assert.equal(canEnchant(good).ok, true, good.kind);
     }
     assert.equal(canEnchant({ kind: 'robe', archmage: true }).ok, false);
