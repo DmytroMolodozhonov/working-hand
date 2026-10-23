@@ -145,13 +145,22 @@ export function fillerPool({ role = 'farmer', female = false, wizard = false, la
 /**
  * One thinking word. `ready` (optional): the lines already made in this voice — taken first (heard at once).
  */
-export function fillerLine({ role = 'farmer', female = false, wizard = false, text = '', intent = '', last = '', lang = null, ready = null } = {}, rng = Math.random) {
+export function fillerLine({ role = 'farmer', female = false, wizard = false, text = '', intent = '', last = '', lang = null, ready = null, short = false } = {}, rng = Math.random) {
     const lg = lang || (isEnglishText(text) ? 'en' : 'ru');
-    const pool = fillerPool({ role, female, wizard, lang: lg, kind: fillerKind(text, intent) });
+    let pool = fillerPool({ role, female, wizard, lang: lg, kind: fillerKind(text, intent) });
+    // (short: the net answers within half a second — the answer waits for the word to end: «Хм…», not «Ммм, ну смотри…» —
+    // the author's journal: a 1.5 s «Хм, интересно…» held the ready answer back)
+    if (short) { const sh = pool.filter(isShortFiller); pool = sh.length ? sh : (lg === 'en' ? ['Hm…', 'Well…'] : ['Хм…', 'Ага…', 'Так…']); }
     let fresh = pool.filter((l) => l !== last);
     if (!fresh.length) fresh = pool;
     if (ready) { const r = fresh.filter((l) => ready(l)); if (r.length) fresh = r; }
     return pickFrom(fresh, rng);
+}
+
+/** A thinking word said in half a second: one word, a few letters. */
+export function isShortFiller(l) {
+    const t = String(l).replace(/[…!.,?]/g, '').trim();
+    return t.split(/\s+/).length === 1 && t.length <= 7;
 }
 
 export function isEnglishText(s) {

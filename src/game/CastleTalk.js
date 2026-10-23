@@ -37,7 +37,7 @@ import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
-import { TalkMind, fillerLine, fillerPool, isEnglishText } from '../ai/TalkMind.js';
+import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
 import { detectOrder, toolsFor, TOOLS, ORDER_LINES } from '../ai/TalkActions.js';
 import { TalkTrace } from '../ai/TalkTrace.js';
 import { quickOrder } from '../ai/TalkFlow.js';
@@ -348,13 +348,13 @@ export class CastleTalk {
     }
 
     /** «Хм…» while the net thinks: over the head only. */
-    _sayThinking(v, text = '', intent = '') {
+    _sayThinking(v, text = '', intent = '', again = false) {
         v.talkedAt = performance.now();
         this._partner = v;
         // (his own words while he thinks — by role, a woman's own, by the question, in my language; never the same
         // twice running; those already made in his voice first: heard at once, not after a wait)
         const vo = this._voiceOpts(v);
-        const line = fillerLine({ role: v.role, female: vo.female, wizard: !!v.wizard, text, intent, last: v.lastFiller || this._lastFiller, ready: (l) => this.speech.isReady?.(l, vo) }, Math.random);
+        const line = fillerLine({ role: v.role, female: vo.female, wizard: !!v.wizard, text, intent, last: v.lastFiller || this._lastFiller, ready: (l) => this.speech.isReady?.(l, vo), short: !!(this.mind?.llm && this.mind.quickNet && !again) }, Math.random);
         v.lastFiller = line; this._lastFiller = line;
         this._filler = { v, at: performance.now() };
         const tr = this.trace.current;
@@ -392,7 +392,8 @@ export class CastleTalk {
             const base = { role: v.role, female: vo.female, wizard: !!v.wizard, lang };
             const take = (kind, n) => fillerPool({ ...base, kind }).sort(() => Math.random() - 0.5).slice(0, n);
             // his quick words (orders, alarm) and his answers to orders — said the moment he hears (TalkAcks)
-            const lines = lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [];
+            // (first his short «Хм…» / «Ага…»: with a quick net the answer follows them at once)
+            const lines = [...take(null, 12).filter(isShortFiller).slice(0, 2), ...(lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [])];
             if (lang === 'ru' && (v.role === 'knight' || v.role === 'advisor')) lines.push(...(king ? ORDER_LINES.obey : ORDER_LINES.refuse)[v.role === 'advisor' ? 'advisor' : 'knight'].slice(0, 2));
             // his thinking words, by the kind of question (the net thinks; a rules' answer not made yet follows them)
             lines.push(...take(null, 2), ...take('question', 1), ...take('request', 1), ...take(v.role === 'merchant' ? 'trade' : 'greet', 1));
@@ -526,7 +527,7 @@ export class CastleTalk {
         };
         this.trace.mark(tr, 'net');
         // (a long think — open talk, a complex phrase — gets a second «сейчас скажу…» if the answer is still not there)
-        if (this.mind._weak?.(first.res, text)) setTimeout(() => { if (turn === this._turn && this._asking && tr.at.sent == null) thinking(); }, 2800);
+        if (this.mind._weak?.(first.res, text)) setTimeout(() => { if (turn === this._turn && this._asking && tr.at.sent == null) this._sayThinking(v, text, first.res?.intent, true); }, 2800);
         this._asking = true;
         this.mind.ask(b, text, ctx, first, { onThinking: thinking, onSentence, onToken: () => this.trace.mark(tr, 'tok') }).then((res) => {
             this._asking = false;
