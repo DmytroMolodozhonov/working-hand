@@ -464,6 +464,11 @@ export class NetSync {
         this.net.send({ t: 'spell', by: this.me, name, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], side }, true);
     }
 
+    /** «Fireworks»: one salvo from my wand tip (the seed makes the same bursts on every computer — Fireworks.js). */
+    fireworks(origin, dir, seed) {
+        this.net.send({ t: 'fwk', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], s: seed >>> 0 }, true);
+    }
+
     /** «Вингардиум Левиоса» on a living body (k 'z' / 'a' / 'v') or on a wizard (k 'p'): held / let go. */
     lev(k, id, side, hold, on, gentle = false) {
         this.net.send({ t: 'lev', by: this.me, k, id, side, h: r3(hold), on: on ? 1 : 0, g: gentle ? 1 : 0 }, true);
@@ -943,6 +948,7 @@ export class NetSync {
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
             }
+            case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
             case 'tdes': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)

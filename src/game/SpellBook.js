@@ -25,6 +25,8 @@ export const START_SPELLS = new Set([
     'Firefighting',
     // building: the campfire, a bed and its colour, a passage sewn up, gathering, a bridge (the author: «без свитка»)
     'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'Gather', 'CreateBridge',
+    // the fireworks over the wand (the author: «изначально известно без свитка»)
+    'Fireworks',
     // a thing in the hand is the key (the Ice Rod, Thor's hammer)
     'RodFrozen', 'RodIce', 'Hammer',
 ]);

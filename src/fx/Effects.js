@@ -4,7 +4,7 @@
  */
 
 import * as THREE from 'three';
-import { ParticlePool, SegmentPool, CurvedBeam } from './Particles.js';
+import { ParticlePool, GlowPool, SegmentPool, CurvedBeam } from './Particles.js';
 
 const _v = new THREE.Vector3();
 const _bd = new THREE.Vector3();
@@ -26,6 +26,8 @@ export class Effects {
         this.sand = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 2000, ground, friction: 0.8 });
         this.shards = new ParticlePool(scene, { geometry: new THREE.ConeGeometry(0.4, 1, 4), capacity: 500, transparent: true, gravity: -9.8, ground, friction: 0.5 });
         this.debris = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 1600, lit: true, gravity: -22, ground, bounce: 0.25, friction: 0.6 });
+        // the fireworks' sparks (Fireworks.js): soft glowing points, additive, no fog (seen from far away)
+        this.fireworks = new GlowPool(scene, { capacity: 3500 });
         this.smoke = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 1, 1), capacity: 700, transparent: true, depthWrite: false });
         // broken planks of a ship (a long thin board: the same material as the debris — no new shader)
         this.planks = new ParticlePool(scene, { geometry: new THREE.BoxGeometry(1, 0.1, 0.22), capacity: 240, lit: true, gravity: -16, ground, bounce: 0.2, friction: 0.5 });
@@ -359,6 +361,7 @@ export class Effects {
     update(dt) {
         this.sparks.update(dt);
         this.glow.update(dt);
+        this.fireworks.update(dt);
         this.sand.update(dt);
         this.shards.update(dt);
         this.debris.update(dt);

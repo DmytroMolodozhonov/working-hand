@@ -243,6 +243,21 @@ const TUNES = {
         melody([[0, 'B5', 1], [1, 'E6', 1], [2, 'D#6', 0.5], [2.5, 'B5', 0.5], [3, 'G#6', 2]], 0.6, 2.7, (f, t) => bell(o, sr, f, t, 0.17, 2.4));
         return finish(o, sr, { rms: 0.065 });
     },
+    /** «Fireworks»: a festive fanfare — bright brass over a rolling drum, a bell sparkle on top, a whistle going up and a pop at the end of the phrase. */
+    thFireworks(sr) {
+        const o = buf(sr, 6.5), r = rng(241);
+        pad(o, sr, ['C3', 'G3', 'C4', 'E4'], 0, 5.2, 0.3, { att: 0.3, rel: 1.2, harm: 3 });
+        melody([[0, 'C5', 0.5], [0.5, 'E5', 0.5], [1, 'G5', 0.5], [1.5, 'C6', 1.5], [3, 'A5', 0.5], [3.5, 'G5', 0.5], [4, 'E5', 0.5], [4.5, 'G5', 0.5], [5, 'C6', 2]], 0.55, 0.15, (f, t, l) => { brass(o, sr, f, t, l, 0.16); brass(o, sr, f / 2, t, l, 0.08); });
+        for (let k = 0; k < 14; k++) drum(o, sr, 0.15 + k * 0.16, 0.2 + (k % 2) * 0.1, 140 + (k % 3) * 20, 0.2, r);
+        drum(o, sr, 0.15, 0.55, 64, 1, r);
+        const arp = ['C6', 'E6', 'G6', 'C7', 'G6', 'E6'];
+        for (let k = 0; k < 12; k++) bell(o, sr, hz(arp[k % 6]), 2.4 + k * 0.17, 0.1, 1.6, 0.4);
+        glide(o, sr, 3.4, 1.1, 0.07, (u) => 500 + 2600 * u * u, (u) => Math.min(1, u * 6) * (1 - u * 0.5), 2);
+        noise(o, sr, 4.5, 0.05, 0.7, () => 0.9, (u) => 1 - u, r);
+        drum(o, sr, 4.5, 0.6, 80, 0.9, r);
+        for (let k = 0; k < 9; k++) bell(o, sr, hz(arp[(k * 5) % 6]) * 2, 4.6 + k * 0.13, 0.07, 1.2, 0.5);
+        return finish(o, sr, { rms: 0.07 });
+    },
     /** «Strengthen House»: the beam feeding the guard — the ward's E major climbing higher and brighter, a rising glow, a bell on top. */
     thStrengthen(sr) {
         const o = buf(sr, 6.5), r = rng(59);
@@ -452,6 +467,19 @@ const FX = {
     fxDie(sr) { const o = buf(sr, 1.6), r = rng(193); noise(o, sr, 0, 1.2, 0.35, (u) => 0.2 * (1 - u) + 0.02, swell(0.4, 0.3), r); glide(o, sr, 0.1, 1.3, 0.3, (u) => 300 - 230 * u, swell(0.1, 0.5), 3); drum(o, sr, 1.05, 0.9, 38, 0.55, r); reverb(o, sr, 0.4, 0.85); return finish(o, sr, { peak: 0.72 }); },
     /** «Wind»: a gust — noise through a sweeping resonance. */
     fxWind(sr) { const o = buf(sr, 1), r = rng(29); noise(o, sr, 0, 1, 0.5, (u) => 0.04 + 0.3 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI) ** 0.7, r); glide(o, sr, 0, 1, 0.04, (u) => 500 + 500 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI)); return finish(o, sr, { peak: 0.6 }); },
+    /** «Fireworks»: the rocket's whistle going up — a thin rising tone over a hiss of burning powder. */
+    fxFwLaunch(sr) { const o = buf(sr, 1.3), r = rng(243); noise(o, sr, 0, 1.3, 0.3, (u) => 0.3 + 0.25 * u, (u) => Math.min(1, u * 14) * (1 - u * 0.55), r); glide(o, sr, 0.05, 1.2, 0.2, (u) => 900 + 2300 * u * u + 40 * Math.sin(u * 90), (u) => Math.min(1, u * 10) * (1 - u) ** 0.5, 2); crackle(o, sr, 0, 1.2, 0.3, 60, r); return finish(o, sr, { peak: 0.6 }); },
+    /** «Fireworks»: the burst — a flat crack, a deep boom and its echo rolling off the hills. */
+    fxFwBoom(sr) {
+        const o = buf(sr, 1.9), r = rng(247);
+        noise(o, sr, 0, 0.05, 1, () => 0.95, (u) => 1 - u, r);
+        drum(o, sr, 0, 0.95, 48, 1.3, r);
+        noise(o, sr, 0, 0.5, 0.45, () => 0.1, (u) => (1 - u) ** 2, r);
+        reverb(o, sr, 0.5, 0.55);
+        return finish(o, sr, { peak: 0.9 });
+    },
+    /** «Fireworks»: the sparks crackling and popping as they fall. */
+    fxFwCrackle(sr) { const o = buf(sr, 1.8), r = rng(251); crackle(o, sr, 0, 1.8, 0.7, 90, r); noise(o, sr, 0, 1.8, 0.1, () => 0.6, (u) => Math.min(1, u * 8) * (1 - u) ** 1.4, r); return finish(o, sr, { peak: 0.55 }); },
     /** «Firefighting»: the air torn away from the fire — a sharp suck of air, a hollow clap where it vanished, the air rushing back. */
     fxVacuum(sr) {
         const o = buf(sr, 0.95), r = rng(211);
@@ -581,6 +609,7 @@ export const SPELL_SOUND = {
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
     Thunderwave: { own: ['thunder'] }, LightningStrike: { own: ['thunder'] }, Earthquake: { own: ['explosion'] }, EarthquakeMaxima: { own: ['explosion'] },
     Inferno: { own: ['inferno'] }, Fire: { own: ['inferno'] }, FireMaxima: { own: ['inferno'] },
+    Fireworks: { own: ['fxFwLaunch', 'fxFwBoom', 'fxFwCrackle'], theme: 'thFireworks' }, // (the rockets' whistle, the bursts, the crackle — Fireworks.js; the fanfare from the caster)
     Firefighting: { own: ['fxVacuum'] }, FirefightingMaxima: { own: ['fxVacuum'] }, // (no water: the air is taken from the fire)
     Waterball: { own: ['waterRise', 'splash'] }, WaterForming: { own: ['waterRise'] }, WaterVortex: { own: ['splash', 'waterRise'] },
     WaveAttack: { own: ['waterRise', 'splash'] }, WaveAttackMaxima: { own: ['waterRise', 'splash'] },
@@ -616,6 +645,7 @@ export const HELD_SOUND = {
     Build: { loop: 'loopBuild', end: 'fxStop' },
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
+    Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)
     DragonTame: { loop: 'loopDragonCalm', end: 'fxStop' }, // («Brain Rot Maxima» held: the dragon calmed — DragonRide.js)
     Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },

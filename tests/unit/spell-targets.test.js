@@ -247,7 +247,7 @@ test('«Create a House» waits for every kind of body before it puts a block whe
     for (const k of ['zombies', 'castleLife', 'animals']) assert.ok(ci.includes(k), k);
 });
 
-test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibility» decide every creature and thing (their TARGETS — «не действует» is written too, with why)', async () => {
+test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibility», «Fireworks» decide every creature and thing (their TARGETS — «не действует» is written too, with why)', async () => {
     const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle' };
     const tables = {
         'Wind Impulse': [(await import('../../src/game/WindImpulse.js')).IMPULSE_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'doors', 'ships', 'world']],
@@ -257,6 +257,7 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
         Stitching: [(await import('../../src/game/Stitching.js')).STITCH_TARGETS, ['me', 'players', 'blocks', 'houses', 'caves', 'open', 'water', 'ships', 'ward']],
         'Create a Bridge': [(await import('../../src/game/Bridge.js')).BRIDGE_TARGETS, ['me', 'players', 'blocks', 'gap', 'water', 'trees', 'houses', 'ships', 'ward', 'godGift', 'fire', 'blast']],
         'Groundprud': [(await import('../../src/game/Groundprud.js')).GROUNDPRUD_TARGETS, ['me', 'players', 'blocks', 'items', 'water', 'ground', 'trees', 'houses', 'ships', 'ward', 'godGift', 'enchanted', 'space', 'spells', 'blackship']],
+        Fireworks: [(await import('../../src/game/Fireworks.js')).FIREWORKS_TARGETS, ['me', 'players', 'servants', 'sleepers', 'looseThings', 'houses', 'ships', 'ward', 'godGift', 'enchanted', 'blackship', 'water', 'space']],
         Invisibility: [(await import('../../src/game/Invisibility.js')).INVIS_TARGETS, ['me', 'players', 'servants', 'spells', 'hits', 'things']],
         'Ice Castle / Ice Bridge': [(await import('../../src/game/IceMagic.js')).ICE_MAGIC_TARGETS, ['me', 'players', 'blocks', 'trees', 'water', 'houses', 'ships', 'fire', 'looseThings', 'ward']],
     };

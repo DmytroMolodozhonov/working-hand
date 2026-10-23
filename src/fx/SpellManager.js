@@ -20,6 +20,7 @@ import { THUNDER, inThunderZone } from '../game/ThunderWave.js';
 import { isUpWord } from '../game/UpSpell.js';
 import { overgrownPush, overgrownRange } from '../game/Overgrown.js';
 import { FIREFIGHT, firefightWords } from '../game/Firefighting.js';
+import { fireworksWords } from './FireworkShapes.js';
 import { IMPULSE, impulsePush } from '../game/WindImpulse.js';
 import { WIND_RING, isWindRing, windRingPush } from '../game/WindRing.js';
 import { iceMagicWords } from '../game/IceMagic.js';
@@ -120,6 +121,8 @@ export function matchSpell(text) {
         has('attack', 'atack', 'attac', 'атак', 'аттак', 'атэк', 'этак', 'атек', 'аттек', 'эттек', 'аттэк', 'эттак')) || has('circleattack', 'сёрклаттак', 'серклаттак', 'серкалатак')) {
         return has('макс', 'max', 'мах', 'maks') ? 'CircleAttackMaxima' : 'CircleAttack';
     }
+    // «Fireworks» («файрворкс», «фаер воркс»…): the fire word AND «works» — before Firefighting, Hellfire, Fire, Fire Maxima (Fireworks.js)
+    if (fireworksWords(s)) return 'Fireworks';
     // «Firefighting» («файрфайтинг», «фаер файтинг»…): the fire word AND «fighting» — before Hellfire, Fire, Fire Maxima
     const ff = firefightWords(s);
     if (ff) return ff;

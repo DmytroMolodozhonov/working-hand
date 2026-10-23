@@ -192,6 +192,116 @@ export class ParticlePool {
 }
 
 /**
+ * GlowPool — soft round glowing points (THREE.Points with its own tiny shader): the fireworks' sparks and flashes.
+ * The same `spawn` as ParticlePool ({shrink, fade, gravity, drag}); no per-spark matrices — only positions, sizes, colours and
+ * alphas go to the graphics card, so thousands cost little. Additive, no fog (a far burst must not melt into the 90 m fog),
+ * hidden behind trees and hills (depth test), `size` is the visible diameter in metres (the point is the same size seen from any
+ * distance in metres, so a far burst stays a bright ball: the pixel size is clamped to what the card can draw).
+ */
+export class GlowPool {
+    constructor(scene, o) {
+        const n = this.capacity = o.capacity;
+        this.pos = new Float32Array(n * 3);
+        this.vel = new Float32Array(n * 3);
+        this.size = new Float32Array(n);
+        this.shrink = new Float32Array(n);
+        this.life = new Float32Array(n);
+        this.maxLife = new Float32Array(n);
+        this.col = new Float32Array(n * 3);
+        this.fade = new Uint8Array(n);
+        this.grav = new Float32Array(n);
+        this.drag = new Float32Array(n);
+        this.aSize = new Float32Array(n);
+        this.aAlpha = new Float32Array(n);
+        this.active = 0;
+        const geo = new THREE.BufferGeometry();
+        this._pos = new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+        this._size = new THREE.BufferAttribute(this.aSize, 1).setUsage(THREE.DynamicDrawUsage);
+        this._alpha = new THREE.BufferAttribute(this.aAlpha, 1).setUsage(THREE.DynamicDrawUsage);
+        this._col = new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+        geo.setAttribute('position', this._pos);
+        geo.setAttribute('aSize', this._size);
+        geo.setAttribute('aAlpha', this._alpha);
+        geo.setAttribute('aColor', this._col);
+        geo.setDrawRange(0, 0);
+        this.uniforms = { uScale: { value: 400 }, uMax: { value: 128 }, uHot: { value: 0.6 } }; // (uHot: how white the hot core is — less by day, so the colours survive a bright sky)
+        const mat = new THREE.ShaderMaterial({
+            uniforms: this.uniforms,
+            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+            vertexShader: `attribute float aSize; attribute float aAlpha; attribute vec3 aColor; uniform float uScale; uniform float uMax;
+varying vec3 vColor; varying float vAlpha;
+void main() { vColor = aColor; vAlpha = aAlpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); float d = max(0.1, -mv.z); gl_PointSize = clamp(aSize * uScale * 2.2 / d, 1.0, uMax); gl_Position = projectionMatrix * mv; }`,
+            fragmentShader: `varying vec3 vColor; varying float vAlpha; uniform float uHot;
+void main() { vec2 p = gl_PointCoord - vec2(0.5); float d = length(p) * 2.0; if (d > 1.0) discard;
+float core = exp(-d * d * 9.0); float halo = exp(-d * d * 2.6) * (1.0 - d * d);
+float lum = max(vColor.r, max(vColor.g, vColor.b)); vec3 hot = mix(vColor, vec3(1.0), uHot * lum);
+vec3 c = vColor * (halo * 0.95) + hot * core * 0.8; gl_FragColor = vec4(c * vAlpha, 1.0); }`,
+        });
+        this.mesh = new THREE.Points(geo, mat);
+        this.mesh.frustumCulled = false;
+        this.mesh.renderOrder = FX_RENDER_ORDER;
+        this.mesh.visible = false;
+        scene.add(this.mesh);
+    }
+
+    /** The picture's height in pixels and the camera's field of view (°): how big a metre looks. `maxPx`: the card's largest point. */
+    view(heightPx, fovDeg, maxPx = 128) {
+        this.uniforms.uScale.value = heightPx / (2 * Math.tan((fovDeg * Math.PI) / 360));
+        this.uniforms.uMax.value = maxPx;
+    }
+
+    spawn(x, y, z, vx, vy, vz, color, size, life, o) {
+        let i = this.active;
+        if (i >= this.capacity) i = Math.floor(Math.random() * this.capacity);
+        else this.active++;
+        const i3 = i * 3;
+        this.pos[i3] = x; this.pos[i3 + 1] = y; this.pos[i3 + 2] = z;
+        this.vel[i3] = vx; this.vel[i3 + 1] = vy; this.vel[i3 + 2] = vz;
+        this.size[i] = size;
+        this.shrink[i] = o?.shrink ?? 0.5;
+        this.life[i] = life;
+        this.maxLife[i] = life;
+        this.fade[i] = (o?.fade ?? true) ? 1 : 0;
+        this.grav[i] = o?.gravity ?? 0;
+        this.drag[i] = o?.drag ?? 0;
+        _c.setHex(color);
+        this.col[i3] = _c.r; this.col[i3 + 1] = _c.g; this.col[i3 + 2] = _c.b;
+    }
+
+    _kill(i) {
+        const last = --this.active;
+        if (i === last) return;
+        const i3 = i * 3, l3 = last * 3;
+        for (let k = 0; k < 3; k++) { this.pos[i3 + k] = this.pos[l3 + k]; this.vel[i3 + k] = this.vel[l3 + k]; this.col[i3 + k] = this.col[l3 + k]; }
+        this.size[i] = this.size[last]; this.shrink[i] = this.shrink[last]; this.life[i] = this.life[last]; this.maxLife[i] = this.maxLife[last];
+        this.fade[i] = this.fade[last]; this.grav[i] = this.grav[last]; this.drag[i] = this.drag[last];
+    }
+
+    update(dt) {
+        for (let i = this.active - 1; i >= 0; i--) { this.life[i] -= dt; if (this.life[i] <= 0) this._kill(i); }
+        const n = this.active, P = this._pos.array, C = this._col.array;
+        for (let i = 0; i < n; i++) {
+            const i3 = i * 3;
+            this.vel[i3 + 1] += this.grav[i] * dt;
+            if (this.drag[i] > 0) { const k = Math.exp(-this.drag[i] * dt); this.vel[i3] *= k; this.vel[i3 + 1] *= k; this.vel[i3 + 2] *= k; }
+            this.pos[i3] += this.vel[i3] * dt; this.pos[i3 + 1] += this.vel[i3 + 1] * dt; this.pos[i3 + 2] += this.vel[i3 + 2] * dt;
+            P[i3] = this.pos[i3]; P[i3 + 1] = this.pos[i3 + 1]; P[i3 + 2] = this.pos[i3 + 2];
+            C[i3] = this.col[i3]; C[i3 + 1] = this.col[i3 + 1]; C[i3 + 2] = this.col[i3 + 2];
+            const age = this.maxLife[i] - this.life[i];
+            this.aSize[i] = Math.max(0.001, this.size[i] * (1 - this.shrink[i] * age));
+            const f = this.life[i] / this.maxLife[i];
+            this.aAlpha[i] = this.fade[i] ? Math.min(1, f * 1.6) * (0.55 + 0.45 * f) : 1; // (a quick bloom out of the flash, then a slow cooling)
+        }
+        this.mesh.visible = n > 0;
+        this._pos.needsUpdate = this._size.needsUpdate = this._alpha.needsUpdate = this._col.needsUpdate = n > 0 || this._had;
+        this._had = n > 0;
+        this.mesh.geometry.setDrawRange(0, n);
+    }
+
+    clear() { this.active = 0; this.mesh.geometry.setDrawRange(0, 0); this.mesh.visible = false; }
+}
+
+/**
  * Pool of oriented segments (lightning bolts, beams): each instance is a unit
  * cylinder stretched between two points.
  */

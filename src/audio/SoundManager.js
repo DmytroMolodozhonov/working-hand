@@ -685,6 +685,13 @@ export class SoundManager {
         v.play();
     }
 
+    /** One of the spells' effects far away (the fireworks' boom): `ref` the distance up to which it is loud. */
+    playSpellFxAt(key, position, volume = 1, rate = 1, ref = 8) {
+        if (!this.context || !this.sounds[key] || !position) return false;
+        this._spellAt(this.sounds[key], position, volume, ref, rate);
+        return true;
+    }
+
     /** One of the spells' effects (SpellMusic FX: 'fxStupefy', 'fxWind'…) — at `position`, or the caster's own. */
     playSpellFx(key, position = null, volume = 1, rate = 1) {
         if (!this.context || !this.sounds[key]) return false;

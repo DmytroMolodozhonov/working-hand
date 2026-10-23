@@ -156,6 +156,7 @@ export const ON_DRAGON = {
     Stitching: { dmg: 0, why: '«Stitching»: камни в дракона не кладутся' },
     CreateBridge: { dmg: 0, why: '«Create a Bridge»: доски в дракона не кладутся' },
     Groundprud: { dmg: 0, why: '«Groundprud»: блок в дракона не кладётся — стена вырастает рядом, когда он отойдёт' },
+    Fireworks: { dmg: 0, why: '«Fireworks»: никого не ранит и не злит — дракон может поглядеть, обиды не копит' },
     Invisibility: { dmg: 0, why: 'невидимого игрока дракон не видит — теряет его' },
 };
 

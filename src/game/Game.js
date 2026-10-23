@@ -157,6 +157,7 @@ import { Stitching } from './Stitching.js';
 import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
+import { Fireworks } from './Fireworks.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
 import { CastHints } from './CastHints.js';
@@ -171,7 +172,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima']);
+const MANA_LATER = new Set(['BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -437,6 +438,7 @@ export class Game {
         this.groundprud = new Groundprud(this); // «Groundprud»: the ground rises into a wall (Groundprud.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
+        this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
@@ -1753,6 +1755,7 @@ export class Game {
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
+        if (name === 'Fireworks') return this.fireworks.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
             // The same phrase heard again — the microphone repeats an unfinished phrase many times
@@ -1934,6 +1937,7 @@ export class Game {
         if (this.livingTrees?.stopMine()) done.push('живое дерево');
         if (this.ships?.stopWind()) done.push('ветер в паруса');
         if (this.invis?.stop()) done.push('невидимость');
+        if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
         this.sync?.stopSpells?.();
@@ -3375,6 +3379,7 @@ export class Game {
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
+        this.fireworks?.update(dt);
         if (earth) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.storm.update(dt);
