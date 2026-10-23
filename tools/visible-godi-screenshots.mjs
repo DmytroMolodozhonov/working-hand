@@ -136,7 +136,8 @@ try {
             // scene alone, with the cloud drawn at 24 a second (the real rate), and with the second picture in EVERY frame (the worst case)
             let ms = null;
             if (o.bench !== false && (id === 'wood1' || id === 'stone3')) {
-                const run = (step, withFx) => { gl.finish(); const t0 = performance.now(); for (let k = 0; k < 24; k++) { r.setRenderTarget(null); r.autoClear = true; r.render(scene, camera); if (withFx) fx.render(200 + k * step); gl.finish(); } return (performance.now() - t0) / 24; };
+                const one = new Uint8Array(4);
+                const run = (step, withFx) => { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one); const t0 = performance.now(); for (let k = 0; k < 24; k++) { r.setRenderTarget(null); r.autoClear = true; r.render(scene, camera); if (withFx) fx.render(200 + k * step); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one); } return (performance.now() - t0) / 24; };
                 run(1 / 60, true);
                 const base = run(1 / 60, false), real = run(1 / 60, true), worst = run(1 / 24, true);
                 ms = { scene: +base.toFixed(1), cloud24Hz: +real.toFixed(1), everyFrame: +worst.toFixed(1) };

@@ -114,6 +114,8 @@ void main() {
 }
 `;
 
+/** How far behind the wall the second picture draws (m): the cloud is a blur, the far world only costs. */
+export const SEE_FAR = 110;
 const EASE_OPEN = (u) => { const c = 1.35; const x = Math.min(1, Math.max(0, u)) - 1; return 1 + (c + 1) * x * x * x + c * x * x; }; // easeOutBack: the eye opens with a little overshoot
 const _s = new THREE.Vector3();
 const _sz = new THREE.Vector2();
@@ -207,7 +209,8 @@ export class SeeThroughFx {
         this._ensureRT();
         cam.updateMatrixWorld();
         cam.matrixWorld.decompose(c2.position, c2.quaternion, _s);
-        c2.fov = cam.fov; c2.aspect = cam.aspect; c2.far = cam.far; c2.near = Math.min(this.near, c2.far * 0.5);
+        c2.fov = cam.fov; c2.aspect = cam.aspect; c2.near = Math.min(this.near, cam.far * 0.5);
+        c2.far = Math.min(cam.far, c2.near + SEE_FAR); // (what is far behind a wall is a blur: not drawn at all — fewer things to submit)
         c2.updateProjectionMatrix();
         c2.updateMatrixWorld(true);
         const prevT = r.getRenderTarget(), auto = r.autoClear, sa = r.shadowMap.autoUpdate, sn = r.shadowMap.needsUpdate;

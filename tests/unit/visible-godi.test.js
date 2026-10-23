@@ -17,7 +17,7 @@ import { VOCAB } from '../../src/audio/SpellSpotter.js';
 import { spellPhrase } from '../../src/audio/SpellPhrase.js';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 import { SEE, SEEN, MU, VISIBLE_TARGETS, SEE_THROUGH, seeThrough, clearOf, bandOf, traceView, nearOf, VisibleGodi, BLOCK_HINT } from '../../src/game/VisibleGodi.js';
-import { SeeThroughFx } from '../../src/fx/SeeThroughFx.js';
+import { SeeThroughFx, SEE_FAR } from '../../src/fx/SeeThroughFx.js';
 
 const seg = (code, n) => ({ code, from: 1, to: 1 + n });
 const wallOf = (type, n, z0 = 1) => (x, y, z) => (z >= z0 && z < z0 + n ? type : 0);
@@ -360,6 +360,7 @@ test('the cloud: nothing is drawn while off; the small picture is made when swit
     assert.ok(behind.every((c) => c.target === fx.rt && c.cam !== camera), 'into the small picture, from a camera of its own');
     assert.ok(behind.every((c) => Math.abs(c.cam.near - nearOf(info)) < 1e-6), 'the near plane stands behind the wall: ' + behind[0].cam.near);
     assert.ok(behind.every((c) => c.shadow[0] === false && c.shadow[1] === false), 'no shadow pass of its own');
+    assert.ok(behind.every((c) => c.cam.far <= c.cam.near + SEE_FAR + 1e-6), 'what is far behind the wall is not drawn');
     assert.equal(renderer.shadowMap.autoUpdate, true, 'the main picture\'s shadow settings are given back');
     assert.equal(renderer.target, null);
     // too thick (clear < 0.05) or magic: milk only, no second pass
