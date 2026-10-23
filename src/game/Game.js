@@ -53,6 +53,7 @@ import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
+import { PEGASUS_COLOR } from './AnimalModels.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -3159,6 +3160,7 @@ export class Game {
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
+        zoo.add(animalModel('horse', PEGASUS_COLOR)); // (the Pegasus of some herds: its glossy coat — a shader of its own, compiled when a herd came into view)
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
@@ -3193,6 +3195,12 @@ export class Game {
             const im = new THREE.InstancedMesh(box, m, 1); // (instanced, without per-instance colours: coins, cannon balls, blocks)
             im.setMatrixAt(0, new THREE.Matrix4());
             zoo.add(im);
+            // (and with them — each copy its own colour: sparks, the start's trees, falling blocks… — a shader of its own,
+            // which was compiled the first time the player turned round in Creative: a freeze of ~0.1–0.3 s)
+            const ic = new THREE.InstancedMesh(box, m, 1);
+            ic.setMatrixAt(0, new THREE.Matrix4());
+            ic.setColorAt(0, new THREE.Color(1, 1, 1));
+            zoo.add(ic);
         }
         zoo.add(new THREE.LineSegments(box, new THREE.LineBasicMaterial({ color: 0x5b4630 })));
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
