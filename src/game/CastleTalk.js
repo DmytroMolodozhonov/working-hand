@@ -52,6 +52,7 @@ import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
+import { Attention, ATT } from './Attention.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -159,6 +160,9 @@ export class CastleTalk {
         this._labelText = new Map(); // good uid -> label text (rebuilt by _watchMarket)
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
+        this.attention = new Attention(); // whom I look at, walk to, talk with — he hears my words, he notices me (Attention.js)
+        this._attT = 0;
+        this._attPrev = null;
         this.llm = null;
         this.mind = new TalkMind();
         this.hostSmart = false; // (a guest) the host's net answers for me
@@ -288,6 +292,49 @@ export class CastleTalk {
         if (w.chest && w.helmet) return 'knight';
         if (g.items?.heldOf?.('wand') || w.robe) return 'wizard';
         return 'traveller';
+    }
+
+    /** Did I raise my voice just now (the microphone's loudest in the last 2.5 s well over its background)? */
+    _shouting() {
+        const vs = this.game.voice;
+        const L = vs?._levels;
+        if (!L?.length || !Number.isFinite(vs.noiseFloor)) return false;
+        const t = performance.now() - 2500;
+        let peak = -Infinity;
+        for (let i = L.length - 1; i >= 0 && L[i][0] >= t; i--) if (L[i][1] > peak) peak = L[i][1];
+        return peak - vs.noiseFloor >= 30;
+    }
+
+    /**
+     * (a few times a second) Whom I look at, walk to, talk with — and the one who notices me turns to me: from across
+     * the street if I look at him and come, not only when I bump into him (the author).
+     */
+    _attend(dt, now) {
+        const g = this.game;
+        const cam = g.camera, me = g.character.group.position;
+        if (!cam) return;
+        cam.getWorldDirection(_v);
+        const look = { x: _v.x, y: _v.y, z: _v.z };
+        const eye = { x: me.x, y: me.y + 1.3, z: me.z };
+        const prev = this._attPrev;
+        const vel = prev && dt > 0 ? { x: (me.x - prev.x) / dt, z: (me.z - prev.z) / dt } : null;
+        this._attPrev = { x: me.x, z: me.z };
+        const near = this._attNear || (this._attNear = []);
+        near.length = 0;
+        for (const v of this.life.byId.values()) {
+            if (v.dead || Math.abs(v.x - me.x) > 45 || Math.abs(v.z - me.z) > 45) continue;
+            near.push({ id: v.id, x: v.x, y: v.y + 1.3, z: v.z });
+        }
+        this.attention.update(eye, look, vel, near, dt, now);
+        // he notices me: stops what he does a moment and looks at me (not in a fight, asleep, busy at a task for the king)
+        for (const [id, a] of this.attention.of) {
+            if (a.score < ATT.NOTICE || a.d > ATT.TALK + 3) continue;
+            const v = this.life.byId.get(id);
+            if (!v || v.dead || v.foe || v.sleep || v.follow || v.order || v.fleeT > 0 || v.job === 'king') continue;
+            if (!(v.talking > 0)) v.talkTo = g.localId;
+            if (v.talkTo === g.localId) v.talking = Math.max(v.talking || 0, 1.2);
+            v.noticedAt = now;
+        }
     }
 
     /** Something I did changed how this villager takes me (a blow: −12) — Attitude.js. */
@@ -526,6 +573,7 @@ export class CastleTalk {
         if (info.refine && this._partner === v) this.speech.cancelKey?.(v.id);
         this.llm?.stopWarm?.(); // (the processor is the answer's now: its voice must not wait for a warm-up)
         const turn = ++this._turn;
+        this.attention?.talkedWith(v.id, performance.now()); // (my next words go on to him, even if I look away a moment)
         const tr = this._traceTurn(v, text, info);
         v.talking = 4;
         v.talkTo = g.localId;
@@ -759,7 +807,10 @@ export class CastleTalk {
      *    knight of my castle within a shout hears it (the order goes to the whole army: VillagerOrders).
      */
     _listener(text = null) {
-        const best = this._nearest();
+        // (the one I address — looked at, walked to, just talked with; across a yard if I shout — Attention.js;
+        // in a crowd the one I look at, not whoever stands nearest)
+        const id = this.attention?.addressee((i) => { const v = this.life.byId.get(i); return !!v && !v.dead && Math.abs(v.y - (this.game.character.group.position.y - 1.95)) < 8; }, this._shouting());
+        const best = (id && this.life.byId.get(id)) || this._nearest();
         if (!text) return best;
         const t = normalizeText(text);
         const role = ROLE_CALL.find(([re]) => re.test(t))?.[1];
@@ -1460,9 +1511,12 @@ export class CastleTalk {
         const g = this.game;
         const me = g.character.group.position;
         for (const v of this.life.byId.values()) {
-            if (v.dead || v.foe || v.talking > 0 || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
+            // (one who just noticed me stands facing me — that is no talk yet: he may greet me)
+            const noticed = now - (v.noticedAt || -1e9) < 400;
+            if (v.dead || v.foe || (v.talking > 0 && !noticed) || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
-            if (d > 5) continue;
+            // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)
+            if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3)) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
             this._greetT.set(v.id, now);
             // (the people of a house greet whoever comes in: a visit is no theft)
@@ -1485,6 +1539,8 @@ export class CastleTalk {
     update(dt) {
         const g = this.game;
         const now = performance.now();
+        this._attT += dt;
+        if (this._attT >= 0.1) { this._attend(this._attT, now); this._attT = 0; }
         this._scanT -= dt;
         if (this._scanT <= 0) {
             this._scanT = 0.5;
