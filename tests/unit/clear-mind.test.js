@@ -101,3 +101,13 @@ test('clearmind: the owl sheds a feather', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Owls.js', import.meta.url), 'utf8');
     assert.match(src, /kind: 'owlFeather'[^]*?_die|_die\(o, by\) \{[^]*?kind: 'owlFeather'/, 'a killed owl leaves its feather');
 });
+
+test('clearmind: flasks of one brew stack up to 10 in one slot; a different colour does not join', async () => {
+    const { sameLook } = await import('../../src/game/Inventory.js');
+    const { ITEM_INFO, describeItem } = await import('../../src/game/ItemTypes.js');
+    assert.equal(ITEM_INFO.potion.stack, 10);
+    const a = { kind: 'potion', rec: 'clearmind', color: 0x55aa33 };
+    assert.ok(sameLook(a, { kind: 'potion', rec: 'clearmind', color: 0x55aa33 }));
+    assert.ok(!sameLook(a, { kind: 'potion', rec: 'clearmind', color: 0x3355aa }));
+    assert.ok(describeItem({ ...a, count: 7 }).lines.some((l) => l.includes('7')));
+});

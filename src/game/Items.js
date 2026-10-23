@@ -1159,6 +1159,12 @@ export class ItemSystem {
         const col = h.item.color ?? 0x9fd8ff;
         for (let i = 0; i < 14; i++) g.fx?.spark(mouth, col, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
         g.sound?.playSplash?.();
+        if ((h.item.count || 1) > 1) { // (a stack of flasks: one is drunk, the rest stay in the hand; the empty one goes to a slot)
+            h.item.count--;
+            const empty = { kind: 'flask', uid: newUid(), count: 1 };
+            if (!g.inventory?.storeItem?.(empty)) this._noRoom?.(empty);
+            return;
+        }
         // (the flask is empty again, still in the same hand)
         this.releaseHand(side);
         this.takeIntoHand({ kind: 'flask', uid: newUid(), count: 1 }, side, { closed: true });

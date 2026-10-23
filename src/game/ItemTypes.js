@@ -143,7 +143,7 @@ export const ITEM_INFO = {
     minotaurHorn: { name: 'Рог Минотавра', icon: '🌀', weight: 1.5 }, // (an ingredient of the invisibility potion)
     // potions (Cauldrons.js): an empty flask is dipped into a ready cauldron; a full one is drunk
     flask: { name: 'Пустая колба', icon: '⚗️', weight: 0.2, stack: 5 },
-    potion: { name: 'Зелье', icon: '🧪', weight: 0.3 },
+    potion: { name: 'Зелье', icon: '🧪', weight: 0.3, stack: 10 }, // (flasks of one brew — the same colour and recipe — pile up to 10 in one slot)
     // ingredients of the invisibility potion: the giant spider's web (Spider.js), glass of a broken window (Houses.js)
     web: { name: 'Связка паутины', icon: '🕸️', weight: 0.3, stack: 5 },
     glass: { name: 'Осколки стекла', icon: '🔷', weight: 0.3, stack: 10 },
@@ -204,7 +204,7 @@ function baseValue(it) {
         case 'bronzeHorn': return 160;
         case 'minotaurHorn': return 200;
         case 'flask': return 3 * (it.count || 1);
-        case 'potion': return 60;
+        case 'potion': return 60 * (it.count || 1);
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
@@ -646,7 +646,7 @@ function describeItemBase(it) {
         case 'flask': return { title: '⚗️ Пустая колба', color: 0xcfe9f2, lines: [`Колб: <b>${it.count || 1}</b>`, 'Окуните её в котёл с готовым зельем — она наполнится'] };
         case 'potion': {
             const r = recipeById(it.rec);
-            return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [r ? r.desc : 'Неизвестное зелье', r?.effect ? 'Поднесите ко рту и подержите — выпьете (колба останется)' : 'Пока его не выпить'] };
+            return { title: `🧪 ${r ? r.name : 'Зелье'}`, color: it.color ?? 0x9fd8ff, lines: [(it.count || 1) > 1 ? `Колб: <b>${it.count}</b> (до 10 в одной ячейке)` : '', r ? r.desc : 'Неизвестное зелье', r?.effect ? 'Поднесите ко рту и подержите — выпьете (колба останется)' : 'Пока его не выпить'].filter(Boolean) };
         }
         case 'web': return { title: '🕸️ Связка паутины', color: 0xf2f2ff, lines: ['Осталась от гигантской паучихи', 'Ингредиент зелья невидимости: бросьте в кипящий котёл'] };
         case 'dragonEgg': return { title: '🥚 Яйцо дракона', color: DRAGON_KINDS[it.of]?.body ?? 0x2f7a3a, lines: [`Яйцо: <b>${DRAGON_KINDS[it.of]?.short || 'дракона'}</b>`, 'Тяжёлое и тёплое. Пригодится для зелий', 'В карман не влезет — заведите руку с ним за плечо'] };
