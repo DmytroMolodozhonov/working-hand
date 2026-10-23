@@ -70,7 +70,7 @@ export class ArmorSystem {
 
     // ------------------------------------------------------------ what is worn
     /** Put a thing on (from the hand, a slot, «Suit Up»). The piece worn there before → a slot (or the ground). */
-    wear(item, { quiet = false, side = null } = {}) {
+    wear(item, { quiet = false, side = null, drop = false } = {}) {
         const slot = slotOf(item);
         if (!slot || this.worn[slot] === item) return false; // (the very thing already on me)
         const g = this.game;
@@ -84,7 +84,7 @@ export class ArmorSystem {
         this.worn[slot] = item;
         // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
         let inHand = false;
-        if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side)); if (!inHand) this._stow(old); }
+        if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side)); if (!inHand) this._stow(old, drop); }
         this._changed();
         if (!quiet && old) g.hud?.setVoice?.(`🪖 Вы сняли <b>${armorName(old)}</b> и надели <b>${armorName(item)}</b>`, true);
         else if (!quiet) {
@@ -96,9 +96,9 @@ export class ArmorSystem {
     }
 
     /** Into a slot, or (no room) it falls at the feet. */
-    _stow(it) {
+    _stow(it, drop = false) {
         const g = this.game;
-        if (g.inventory?.storeItem?.(it)) return;
+        if (!drop && g.inventory?.storeItem?.(it)) return; // («Suit Up»: the piece it replaces just falls at the feet — the author)
         const p = g.character.group.position.clone().add(_v.set(0, 1, 0));
         if (g.items?.auth || !g.sync) g.items?.spawnLoose(it, p, { vel: _v2.set(0, 1, 0) });
         else g.sync.itemThrow?.(it, p, _v2.set(0, 1, 0));
@@ -315,14 +315,14 @@ export class ArmorSystem {
         let n = 0;
         for (const s of todo) {
             const b = best[s];
-            if (b.from.slot != null) { inv.slots[b.from.slot] = null; this.wear(b.it, { quiet: true }); n++; continue; }
+            if (b.from.slot != null) { inv.slots[b.from.slot] = null; this.wear(b.it, { quiet: true, drop: true }); n++; continue; }
             const L = b.from.loose;
             if (g.items.auth) {
                 const item = g.items.removeLoose(L.item.uid);
                 // (a thing of a house chest taken while its people see it is a theft — as by hand)
                 if (item.home) { const home = item.home; delete item.home; g.castleLife?.tookFromHome?.(home, g.localId); }
                 g.sync?.itemGone?.(item.uid, g.localId, 'slot');
-                this.wear(item, { quiet: true });
+                this.wear(item, { quiet: true, drop: true });
                 n++;
             } else {
                 // (a guest asks the host for it: it comes into a slot — put on from there as soon as it is in)
@@ -345,7 +345,7 @@ export class ArmorSystem {
         const inv = this.game.inventory;
         (inv?.slots || []).forEach((it, i) => {
             const s = slotOf(it);
-            if (s && score(it) > score(this.worn[s])) { inv.slots[i] = null; this.wear(it, { quiet: true }); inv._render?.(); }
+            if (s && score(it) > score(this.worn[s])) { inv.slots[i] = null; this.wear(it, { quiet: true, drop: true }); inv._render?.(); }
         });
     }
 
