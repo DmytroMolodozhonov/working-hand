@@ -35,6 +35,7 @@ import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRole
 import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
 import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
+import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -68,7 +69,6 @@ const _wardP = { x: 0, y: 0, z: 0 }; // (ShieldWalls.pushOut: a person's feet, r
 const WAKE = 90; // m beyond the castle land: its people appear
 const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
-const VIEW = 80; // m: farther villagers are not drawn
 const FAR_ONE = SHADOW_NEAR; // m: farther ones (no shadow there either) are drawn as one shape each (one draw instead of 8–12)
 const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
@@ -431,9 +431,24 @@ export class CastleLife {
         for (const cs of this.castles.values()) {
             if (!cs.awake || seen.has(cs.def.id) || cs.def.kind === 'wander') continue; // (wanderers keep their own pace)
             const far = players.every((pl) => Math.max(Math.abs(pl.p.x - cs.def.x), Math.abs(pl.p.z - cs.def.z)) > cs.def.zone + SLEEP);
-            if (far) this._sleep(cs);
+            // (a fight chased far from the place: whoever of its people is still near a player — or fighting — does not vanish with it)
+            if (far && !this._heldAwake(cs, players)) this._sleep(cs);
         }
         for (const cs of this.castles.values()) if (cs.awake && !cs.chestsMade) this._makeChests(cs); // (the chests whose land was not made yet)
+    }
+
+    /** One of the place's people is away from it near a player (or in a fight): the place stays awake. */
+    _heldAwake(cs, players) {
+        for (const v of cs.active.values()) {
+            if (v.dead) continue;
+            const strayed = Math.max(Math.abs(v.x - cs.def.x), Math.abs(v.z - cs.def.z)) > cs.def.zone + 20;
+            if (!strayed && !v.foe) continue;
+            for (const pl of players) {
+                const d = Math.hypot(pl.p.x - v.x, pl.p.z - v.z);
+                if ((strayed && d < SLEEP + 60) || (v.foe && d < 500)) return true;
+            }
+        }
+        return false;
     }
 
     _wake(cs) {
@@ -3348,9 +3363,11 @@ export class CastleLife {
         // models, bubbles, bars; fists of the local player; push me out of the people
         const me = g.character.group.position;
         const cam = g.camera;
+        const range = drawRange(g.world?.terrain?.viewDistance); // (as far as the world is drawn)
         for (const v of [...this.byId.values()]) {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
-            const visible = d < VIEW && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
+            const lv = drawLevel(d, range, { foe: v.foe, shadowNear: FAR_ONE });
+            const visible = lv !== 'none' && !(v.wizard && d < 20 && Math.abs(v.y - (me.y - 1.95)) > 9); // (a wizard on another floor of the tower: not drawn)
             v.group.visible = visible && !(v.dead && v.bodyMoved); // (its body carried off by «Левиоса»: Death's copy is it now)
             v.group.position.set(v.x, v.y + (v.seated ? VILLAGER_SIT_OFFSET : VILLAGER_FOOT_OFFSET), v.z);
             v.group.rotation.y = v.yaw;
@@ -3358,9 +3375,9 @@ export class CastleLife {
                 setNearShadow(v.group, d < SHADOW_NEAR);
                 // (far people move their arms and legs less often — nobody sees the difference)
                 v.animT = (v.animT || 0) + dt;
-                const far = d > FAR_ONE && !v.foe; // (far: drawn as one shape — VillagerModel.setFar)
+                const far = lv === 'far' || lv === 'distant'; // (far: drawn as one shape — VillagerModel.setFar)
                 if (!far) v.model.setFar(false);
-                if (d < 35 || v.foe || v.animT > (d < 60 ? 0.066 : 0.12)) {
+                if (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12)) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     const ck = this.auth ? shownChore(v) : v.chore;
@@ -3376,7 +3393,7 @@ export class CastleLife {
             }
             if ((v.mode === 'swim' || v.mode === 'paddle') && visible && d < 40) splashes(g, v.x, v.y + SWIMMERS.person.float, v.z, dt, v.mode === 'paddle', v); // (the water round a swimmer)
             if (v.bubble) v.bubble.update(dt, _v.set(v.x, v.y + (v.wizard ? 5.6 : 4.4), v.z), cam);
-            this._updateBar(v, dt, cam);
+            if (lv !== 'distant') this._updateBar(v, dt, cam); else if (v.bar) v.bar.sprite.visible = false; // (distant: no bar)
             if (v.dead) continue;
             if (d < 1.4 && d > 1e-3 && Math.abs(v.y - (me.y - 1.95)) < 2) {
                 const o = 1.4 - d;
