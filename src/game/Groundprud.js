@@ -34,10 +34,10 @@ import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 
 export const GROUNDPRUD = {
-    REACH: 12, // m along the hand when looking for the ground
-    NEAR: 2.5, FAR: 9, // m from the caster to the spot
+    REACH: 28, // m along the hand when looking for the ground
+    NEAR: 2, FAR: 18, // m from the caster to the spot (the author: twice as far as first)
     W: 7, T: 2, H: 5, // blocks: width, thickness, height (the hero is ~3.5 m: «чуть выше роста»)
-    GROW: 2, // s from the first block to the last
+    GROW: 1, // s from the first block to the last (the author: twice as fast; the earth is seen to rise smoothly meanwhile)
     WAIT: 1.5, // s a block waits for a body to step aside
     SEND: 0.12, // s: the blocks laid go out together
     STEP: 3, // blocks: the ground under a column at most this far from the spot's level (no pillars over a cliff)
@@ -46,7 +46,7 @@ export const GROUNDPRUD = {
 
 /** ON WHOM AND ON WHAT (CLAUDE.md). The wall is blocks laid on the ground; it never strikes. */
 export const GROUNDPRUD_TARGETS = {
-    me: { does: 'none', why: 'колдующего не задевает: стена растёт на расстоянии от 2,5 м; если он стоит на её месте — блок ждёт' },
+    me: { does: 'none', why: 'колдующего не задевает: стена растёт на расстоянии от 2 м; если он стоит на её месте — блок ждёт' },
     players: { does: 'wait', why: 'блок не кладётся в игрока: ждёт 1,5 с, потом это место пропускается (и всё, что над ним в столбце); никого не толкает и не ранит' },
     zombies: { does: 'wait', why: 'в тело блок не кладётся; зомби упирается в стену и обходит её (коллизия блоков)' },
     castlePeople: { does: 'wait', why: 'жителей не пугает и не задевает (стена — не опасность, не тревога); они обходят её, пути пересчитываются; строители замка её не убирают' },
@@ -63,7 +63,7 @@ export const GROUNDPRUD_TARGETS = {
     blocks: { does: 'build', why: 'вырастает из материала земли под каждым столбцом (камень, песок, земля с травой, снег, гравий, порода планеты); обычные блоки мира: их ломают «Бомбардо», «Gather», Total Destruction и так далее' },
     items: { does: 'lift', why: 'вещи на земле под стеной поднимаются на её верх, а не остаются замурованными' },
     water: { does: 'none', why: 'из воды стена не растёт: столбцы над водой пропускаются, если вся полоса на воде — «там вода»' },
-    ground: { does: 'build', why: 'цель — земля перед игроком: палочка вниз-вперёд на 2,5–9 м; в стену, в небо или в дом — подсказка «направьте на землю»' },
+    ground: { does: 'build', why: 'цель — земля перед игроком: палочка вниз-вперёд на 2–18 м; в стену, в небо или в дом — подсказка «направьте на землю»' },
     trees: { does: 'none', why: 'деревья не трогает; из дерева не строит — столбец над стволом пропускается' },
     houses: { does: 'none', why: 'стены домов и замков не ломает и не задевает; столбцы, где занято, пропускаются' },
     ships: { does: 'none', why: 'палуба — не земля, корабль не блоки мира' },
@@ -137,7 +137,7 @@ export function groundprudPlan(get, top, A, f, seed = 1, gift = null) {
     if (!list.length) return { why: holy ? 'holy' : wet ? 'water' : 'none' };
     const rise = G.GROW * 0.62, lead = G.GROW - rise;
     for (const c of list) {
-        const delay = lead * Math.min(1, Math.abs(c.w) / half);
+        const delay = c.delay = lead * Math.min(1, Math.abs(c.w) / half);
         for (let k = 0; k < c.h; k++) {
             const L = c.g + 1 + k;
             if (!free(get(c.x, L, c.z))) break;
@@ -179,14 +179,14 @@ export function groundprudHint(why) {
  */
 export function groundprudAim(data, origin, dir, me, known = null, gift = null) {
     if (!data) return { why: 'none' };
-    if (dir.y > -0.12) return { why: 'none' }; // (not at the ground: forward, up)
+    if (dir.y > -0.04) return { why: 'none' }; // (not at the ground: level, up)
     const hit = data.raycast(origin, dir, GROUNDPRUD.REACH);
     if (!hit) return { why: 'none' };
     const x = Math.round(hit.x), z = Math.round(hit.z);
     if (known && !known(x, z)) return { why: 'unknown' };
     const get = (a, L, b) => data.get(a, L, b), top = (a, b) => data.topLayer(a, b);
     const g = top(x, z);
-    if (Math.abs(hit.y - (g - 0.5)) > 0.9) return { why: 'none' }; // (the side of a cliff, a wall: not the ground)
+    if (Math.abs(hit.y - (g - 0.5)) > 2.2) return { why: 'none' }; // (high up the side of a cliff, a wall: not the ground; the foot of a slope is)
     const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz);
     if (d < GROUNDPRUD.NEAR) return { why: 'near' };
     if (d > GROUNDPRUD.FAR) return { why: 'far' };
@@ -197,6 +197,18 @@ export function groundprudAim(data, origin, dir, me, known = null, gift = null) 
     return plan.cells ? { A, f, plan, seed } : plan;
 }
 
+/** The earth rising out of the ground (every computer): one shared box, one material, two instanced meshes — a draw call each. */
+const RISE_GEO = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+RISE_GEO.userData.shared = true;
+let _riseMat = null;
+const riseMat = () => _riseMat || (_riseMat = new THREE.MeshLambertMaterial({ color: 0xffffff }));
+const RISE_COLOR = new Map([[BLOCK.STONE, 0x8d8b86], [BLOCK.DEEPSTONE, 0x6d6b68], [BLOCK.DIRT, 0x7a5a38], [BLOCK.GRASS, 0x7a5a38], [BLOCK.SAND, 0xdcc98f], [BLOCK.SNOW, 0xf0f4f8], [BLOCK.GRAVEL, 0x8a8782]]);
+const riseColor = (b, x, z, cap) => {
+    const base = cap && b === BLOCK.GRASS ? 0x5a9a3a : (RISE_COLOR.get(b) ?? 0x9a8a7a);
+    const v = 0.88 + hash(x, z, cap ? 5 : 3) * 0.2;
+    return new THREE.Color(base).multiplyScalar(cap && b !== BLOCK.GRASS ? v * 1.08 : v);
+};
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _sc = new THREE.Vector3();
 const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x8a6a44 : 0xb8b4aa);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
@@ -256,9 +268,43 @@ export class Groundprud {
             g.builder?._sendEdits(out.splice(0));
             g.castleLife?.breakWays?.({ x: A.x, y: A.L, z: A.z }, 6); // (the ways of the people round it are worked out again)
         };
-        let t = 0, sendT = 0, finished = false, first = true;
+        // the earth itself rises, smoothly, out of the ground — the blocks are laid under it (and show when it goes)
+        const cs = plan.cols, n = cs.length;
+        let body = null, cap = null;
+        if (g.scene && n) {
+            body = new THREE.InstancedMesh(RISE_GEO, riseMat(), n);
+            cap = new THREE.InstancedMesh(RISE_GEO, riseMat(), n);
+            for (const im of [body, cap]) { im.frustumCulled = false; im.castShadow = false; im.receiveShadow = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.scene.add(im); }
+            cs.forEach((c, i) => { body.setColorAt(i, riseColor(c.mat, c.x, c.z, false)); cap.setColorAt(i, riseColor(c.mat, c.x, c.z, true)); });
+        }
+        const rise = GROUNDPRUD.GROW * 0.62, HOLD = 1.2;
+        const drawRise = () => {
+            for (let i = 0; i < n; i++) {
+                const c = cs[i], pr = Math.max(0, Math.min(1, (t - c.delay) / rise));
+                const e = 1 - (1 - pr) * (1 - pr), top = c.h * e; // (fast out of the ground, slowing at the top)
+                const sh = pr > 0 && pr < 1 ? 0.035 * Math.sin(t * 60 + i * 2.1) : 0;
+                _p.set(c.x + sh, c.g - 0.62, c.z - sh);
+                _sc.set(1.04, pr > 0 ? top + 0.12 : 0.0001, 1.04);
+                body.setMatrixAt(i, _m.compose(_p, _q, _sc));
+                _p.set(c.x + sh, c.g - 0.5 + top - 0.2, c.z - sh);
+                _sc.set(1.07, pr > 0.02 ? 0.24 : 0.0001, 1.07);
+                cap.setMatrixAt(i, _m.compose(_p, _q, _sc));
+            }
+            body.instanceMatrix.needsUpdate = true; cap.instanceMatrix.needsUpdate = true;
+        };
+        const dust = (dt) => {
+            for (let k = 0; k < 4; k++) {
+                const c = cs[(Math.random() * n) | 0];
+                if (!c || t < c.delay || t > c.delay + rise + 0.15) continue;
+                const pr = Math.min(1, (t - c.delay) / rise), col = sparkColor(c.mat);
+                g.fx.spark(_v.set(c.x + (Math.random() - 0.5), c.g - 0.4, c.z + (Math.random() - 0.5)), 0xc9b48a, 0.26, _w.set((Math.random() - 0.5) * 3.2, 0.6 + Math.random() * 1.2, (Math.random() - 0.5) * 3.2), 0.8);
+                g.fx.spark(_v.set(c.x + (Math.random() - 0.5), c.g - 0.5 + c.h * (1 - (1 - pr) * (1 - pr)), c.z + (Math.random() - 0.5)), col, 0.13, _w.set((Math.random() - 0.5) * 2.4, 1.5 + Math.random() * 2.4, (Math.random() - 0.5) * 2.4), 0.6);
+            }
+        };
+        const dropRise = () => { if (!body) return; g.scene.remove(body); g.scene.remove(cap); body.dispose?.(); cap.dispose?.(); body = cap = null; };
+        let t = 0, sendT = 0, finished = false, first = true, doneAt = 0;
         g.spells.spells.push({
-            life: GROUNDPRUD.GROW + GROUNDPRUD.WAIT + 1.5,
+            life: GROUNDPRUD.GROW + GROUNDPRUD.WAIT + HOLD + 1.5,
             onUpdate: (spell, dt) => {
                 t += dt;
                 let left = 0;
@@ -274,10 +320,6 @@ export class Groundprud {
                         col.dead = true; e.done = true; continue;
                     }
                     e.done = true; col.next++;
-                    if (Math.random() < 0.6) {
-                        g.fx.spark(_v.set(x, L - 1, z), sparkColor(block), 0.14, _w.set((Math.random() - 0.5) * 2.4, 1.2 + Math.random() * 2.2, (Math.random() - 0.5) * 2.4), 0.55);
-                        if (k === 0 && Math.random() < 0.5) g.fx.spark(_v.set(x, L - 0.9, z), 0xc9b48a, 0.2, _w.set((Math.random() - 0.5) * 3, 0.6, (Math.random() - 0.5) * 3), 0.7);
-                    }
                     if (!mine || !free(data.get(x, L, z))) continue;
                     data.set(x, L, z, block);
                     out.push([x, L, z, block]);
@@ -286,15 +328,25 @@ export class Groundprud {
                 }
                 sendT += dt;
                 if (sendT >= GROUNDPRUD.SEND) { sendT = 0; flush(); }
+                if (body) { drawRise(); dust(dt); }
                 if (!left && t >= GROUNDPRUD.GROW && !finished) {
-                    finished = true;
+                    finished = true; doneAt = t;
                     flush();
                     g.sound?.playStep?.();
-                    spell.life = 0;
                 }
+                if (finished && t >= doneAt + HOLD) { dropRise(); spell.life = 0; } // (the blocks are in the picture by now)
             },
-            onEnd: () => flush(),
+            onEnd: () => { flush(); dropRise(); },
         });
+    }
+
+    /** One sample of the rising earth for Game.prewarm: its shader (instanced + per-instance colour) is compiled on loading. */
+    sampleModels() {
+        const im = new THREE.InstancedMesh(RISE_GEO, riseMat(), 1);
+        im.setMatrixAt(0, new THREE.Matrix4());
+        im.setColorAt(0, new THREE.Color(0x8d8b86));
+        im.frustumCulled = false;
+        return [im];
     }
 
     /** (the caster's computer, who owns the things) Things lying in the cell come up on the top of the wall. */

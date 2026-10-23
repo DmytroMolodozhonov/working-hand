@@ -3107,6 +3107,7 @@ export class Game {
         for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
         for (const m of this.ultra?.sampleModels?.() || []) zoo.add(m); // («Ультра качество»: the soft lawn)
         if (this.world.terrain?.flora) zoo.add(this.world.terrain.flora.sampleModel()); // (the meadows' tall grass and flowers)
+        for (const m of this.groundprud?.sampleModels?.() || []) zoo.add(m); // (the earth of «Groundprud» rising out of the ground)
         for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a

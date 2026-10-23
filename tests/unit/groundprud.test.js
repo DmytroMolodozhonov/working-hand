@@ -1,6 +1,7 @@
 // «Groundprud»: the words, the price, the scroll, and the wall's plan (size, material, the places it refuses).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { START_SPELLS } from '../../src/game/SpellBook.js';
@@ -49,7 +50,7 @@ test('the plan: 7 wide, 2 thick, 5 high ±1 at the edges, standing on the ground
     const have = new Set(p.cells.map((c) => c[0] + ',' + c[1] + ',' + c[2]));
     for (const [x, L, z] of p.cells) assert.ok(L === 11 || have.has(x + ',' + (L - 1) + ',' + z), 'hangs: ' + [x, L, z]);
     const tmax = Math.max(...p.cells.map((c) => c[4]));
-    assert.ok(tmax <= GROUNDPRUD.GROW + 1e-9 && tmax > GROUNDPRUD.GROW * 0.8, 'about two seconds: ' + tmax);
+    assert.ok(tmax <= GROUNDPRUD.GROW + 1e-9 && tmax > GROUNDPRUD.GROW * 0.8, 'about a second: ' + tmax);
 });
 
 test('the crest is the same for the same seed on every computer, and not a flat board', () => {
@@ -116,9 +117,9 @@ test('the aim: the ground ahead only; not forward, not too near, not too far', (
     const down = (a) => ({ x: 0, y: -Math.sin(a), z: Math.cos(a) });
     const o = { x: 0, y: 13, z: 0 };
     assert.equal(groundprudAim(data, o, { x: 0, y: 0, z: 1 }, me).why, 'none');
-    assert.equal(groundprudAim(data, o, down(0.33), me).why, 'far');
+    assert.equal(groundprudAim(data, o, down(0.15), me).why, 'far');
     assert.equal(groundprudAim(data, o, down(1.2), me).why, 'near');
-    const ok = groundprudAim(data, o, down(0.55), me);
+    const ok = groundprudAim(data, o, down(0.3), me);
     assert.ok(ok.plan?.cells, ok.why);
     assert.ok(ok.A.z > GROUNDPRUD.NEAR && ok.A.z <= GROUNDPRUD.FAR);
 });
@@ -130,7 +131,7 @@ test('the height of a column: five, ±1 at the edges only', () => {
     }
 });
 
-test('grow(): the caster lays the blocks in about two seconds, a body in a cell holds its column, others only watch', async () => {
+test('grow(): the caster lays the blocks in about a second, a body in a cell holds its column, others only watch', async () => {
     const { Groundprud } = await import('../../src/game/Groundprud.js');
     const make = (bodyAt = null) => {
         const { get, top, set } = world();
@@ -161,4 +162,12 @@ test('grow(): the caster lays the blocks in about two seconds, a body in a cell 
     new Groundprud(c.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'other');
     run(c.spells, 6);
     assert.equal(c.sent.length, 0, 'the others lay nothing: the blocks come from the caster');
+    // the earth seen rising: two instanced meshes while it grows, gone after
+    const d = make();
+    d.g.scene = new THREE.Scene();
+    new Groundprud(d.g).grow({ x: 0, y: 10, z: 10 }, { x: 0, y: 0, z: 1 }, 'me');
+    run(d.spells, 0.4);
+    assert.equal(d.g.scene.children.length, 2, 'the rising earth is in the scene');
+    run(d.spells, 6);
+    assert.equal(d.g.scene.children.length, 0, 'and out of it at the end');
 });
