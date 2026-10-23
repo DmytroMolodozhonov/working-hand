@@ -151,7 +151,10 @@ export class RemoteAvatar {
         ch.liftUp = kd ? Math.max(0, Math.min(1, +s.s.ku || 0)) : 0; // (pulled up by a hand)
         ch.staggerLean = sg ? +sg[0] || 0 : 0;
         ch.staggerRoll = sg ? +sg[1] || 0 : 0;
-        if (sg) ch.stepping = Math.max(ch.stepping || 0, 0.15);
+        const bk = Array.isArray(s.s.bk) ? s.s.bk : null;
+        ch.braceK = bk ? Math.max(0, Math.min(1, +bk[0] || 0)) : 0; // («устоял»: the stance instead of the steps on the spot)
+        ch.braceSide = bk ? (+bk[1] | 0) : 0;
+        if (sg && !bk) ch.stepping = Math.max(ch.stepping || 0, 0.15);
         if (!kd && !sg && !ch._pitchOwned) ch.group.rotation.x += ((s.s.rx || 0) - ch.group.rotation.x) * k; // flight tilt
         ch.flying = !kd && !sg && !s.bd && Math.abs(s.s.rx || 0) > 0.05; // (pitched on a wave on a surfboard is not flying)
         ch.legPose = Array.isArray(s.s.lg) ? { left: { hip: +s.s.lg[0] || 0 }, right: { hip: +s.s.lg[1] || 0 } } : null;

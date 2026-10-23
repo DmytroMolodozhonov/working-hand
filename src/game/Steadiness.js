@@ -16,10 +16,16 @@
  *  - Death takes it like the other growth (Legacy: captureLegacy / wipeHero / absorbLegacy); «Give Me My Power»
  *    brings back the body's value (REPLACES, not adds). Saved with the hero (WorldSave `steady`).
  * Each player has their own, counted on their own computer (the knockdown is local to its owner anyway).
+ * EVERY other creature that can be knocked down has a fixed one (`creatureSteady`, the table `NPC_STEADY` — the author):
+ * it never grows, it is drawn from the creature's id (the same on every computer, no Math.random in the world),
+ * and the host rolls it for each spell exactly like the hero's (CreatureImpact.apply: the same exceptions).
+ * Held = the «устоял» pose (CreatureImpact `held`, Knockdown.held for the hero): a foot set back, a little crouch,
+ * the body leaning into the blow by its strength and coming upright again in 0.5 … 0.8 s; the others see it.
  */
 
 import { isDivine } from './ProtectionGods.js';
 import { IMPACT } from './Impact.js';
+import { hashString } from '../core/math.js';
 
 export const STEADY = {
     MIN: 1, MAX: 100,
@@ -112,3 +118,57 @@ export class Steadiness {
         this.acc = this.skill >= STEADY.MAX ? 0 : clamp(Number(s?.acc) || 0, 0, needFor(this.skill) - 1);
     }
 }
+
+// ------------------------------------------------------------------ everybody else
+/** [low, high] steadiness of a kind of creature (fixed for life; the exact value is drawn from its id). */
+export const NPC_STEADY = {
+    resident: [1, 10], merchant: [1, 10], seller: [1, 10], // (farmers, builders, the king's helper, the traders, the scroll seller)
+    knight: [10, 30], king: [40, 50],
+    novice: [20, 30], adept: [30, 40], teacher: [40, 50], elder: [50, 60], master: [100, 100], // (wizards by rank; the Master of the tower is 100)
+    sailor: [10, 30], skeleton: [10, 30], captain: [30, 50], // (Captain Black Moustache too)
+    zombie: [1, 10], animal: [1, 10], horse: [10, 20], other: [5, 15],
+};
+/** A wizard's rank when the entry has none: by his road role. */
+const RANK_OF_ROLE = { student: 'novice', teacher: 'teacher', wanderer: 'adept', townwiz: 'adept', mage: 'adept' };
+const WIZ_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
+
+/** Which row of NPC_STEADY a creature is (ck: its CreatureImpact kind). */
+export function steadyKind(ck, c) {
+    const role = c.role || c.entry?.role;
+    if (ck === 'z') return 'zombie';
+    if (ck === 'a') return c.type === 'horse' ? 'horse' : 'animal';
+    if (ck === 'c') return role === 'blackbeard' ? 'captain' : role === 'skeleton' ? 'skeleton' : /captain|капитан/i.test(String(role || c.title || '')) ? 'captain' : 'sailor';
+    if (ck === 'v') {
+        if (role === 'king') return 'king';
+        if (role === 'knight') return 'knight';
+        if (role === 'merchant' || role === 'seller') return role;
+        if (c.wizard || WIZ_ROLES.has(role)) {
+            const rank = c.rank || c.entry?.rank || RANK_OF_ROLE[role];
+            return role === 'master' || rank === 'master' ? 'master' : NPC_STEADY[rank] && rank !== 'resident' ? rank : 'adept';
+        }
+        return 'resident';
+    }
+    return 'other';
+}
+
+/** The creature's steadiness, 1 … 100 — the same for the same id on every computer. */
+export function creatureSteady(ck, c) {
+    const kind = steadyKind(ck, c), [lo, hi] = NPC_STEADY[kind];
+    return lo + (hashString(kind + '|' + String(c.id)) % (hi - lo + 1));
+}
+
+/** (host) Does this creature stay on its feet against `kind` (a spell)? */
+export function creatureHolds(ck, c, kind, opts = {}, rnd = Math.random) {
+    const p = holdChance(creatureSteady(ck, c), kind, opts);
+    return p > 0 && rnd() < p;
+}
+
+/** The «устоял» pose, 0 … 1 at `k` (0 … 1 of its time): quick into the stance, held, then back upright. */
+export function braceProfile(k) {
+    k = clamp(k, 0, 1);
+    const sm = (x) => x * x * (3 - 2 * x);
+    return k < 0.22 ? sm(k / 0.22) : k < 0.55 ? 1 : 1 - sm((k - 0.55) / 0.45);
+}
+/** How long (s) and how far (rad) the body leans for a blow of speed `v` (hero m/s). */
+export const braceTime = (v) => clamp(0.5 + v / 80, 0.5, 0.8);
+export const braceLean = (v) => clamp(0.14 + 0.012 * v, 0.14, 0.42);

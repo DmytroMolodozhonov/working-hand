@@ -157,6 +157,8 @@ export class VoxelCharacter {
         this._pitchOwned = false;
         this.staggerLean = 0; // reeling: the body leans back (+) / forward (−)…
         this.staggerRoll = 0; // …or aside
+        this.braceK = 0; // «устоял» (Knockdown.held): 0 … 1, how deep in the stance (a foot set back, a little crouch)
+        this.braceSide = 0; // … which way: ∓1 a foot back / forward, ∓2 aside
         this.stepping = 0; // s of steps left (reeling: the legs step though nobody walks)
         this.slowScale = 1; // walking speed (the ice beam's chill slows it)
         this.airTop = null; // the highest point of this fall (landing → Knockdown)
@@ -732,7 +734,7 @@ export class VoxelCharacter {
         // back (kneeling) so they stay above the ground
         const roof = Math.min(1, this.roofNeed || 0);
         this.crouchK = ease(this.crouchK, Math.min(1, Math.max(this.isCrouching ? 1 : 0, this.stoop || 0, roof - CROUCH.DUCK)), CROUCH.DOWN, CROUCH.UP, dt);
-        this.lowK = ease(this.lowK, Math.max(this.crouchK, roof), CROUCH.DOWN * 1.6, CROUCH.UP, dt);
+        this.lowK = ease(this.lowK, Math.max(this.crouchK, roof, 0.16 * (this.braceK || 0)), CROUCH.DOWN * 1.6, CROUCH.UP, dt); // (the stance of «устоял»: a slight crouch)
         const crouchAngle = -1.1 * this.lowK;
         // Knocked down: tips over the way it was pushed (and gets up again); reeling: leans
         const up = this.knockedDown ? 1 - (this.liftUp || 0) : 1; // (pulled up by a hand: the body follows it)
@@ -860,6 +862,15 @@ export class VoxelCharacter {
             const tuck = this.verticalVelocity > 0 ? -0.55 : -0.25;
             this.leftLegPivot.rotation.x += (tuck - this.leftLegPivot.rotation.x) * k;
             this.rightLegPivot.rotation.x += (tuck - this.rightLegPivot.rotation.x) * k;
+        } else if (this.braceK > 0.01 && !this.isRunning) {
+            // «устоял»: one foot set back (or forward / aside) to hold the ground, the other takes the weight a little
+            const b = this.braceK, s = this.braceSide, k = Math.min(1, 18 * dt);
+            const lead = s === -1 ? -0.8 : s === 1 ? 0.8 : s === 2 ? 0.35 : 0.2; // (+ = forward)
+            const fL = s === -2 ? lead : s === 2 ? -0.1 : lead, fR = s === -2 ? -0.1 : s === 2 ? lead : -lead * 0.35;
+            this.leftLegPivot.rotation.x += (fL * b + crouchAngle - this.leftLegPivot.rotation.x) * k;
+            this.rightLegPivot.rotation.x += (fR * b + crouchAngle - this.rightLegPivot.rotation.x) * k;
+            this.leftLegPivot.rotation.z += ((s === 2 ? -0.35 : 0) * b - this.leftLegPivot.rotation.z) * k;
+            this.rightLegPivot.rotation.z += ((s === -2 ? 0.35 : 0) * b - this.rightLegPivot.rotation.z) * k;
         } else if (this.isRunning || this.stepping > 0) {
             const intensity = this.isRunning ? this.runIntensity : 0.6;
             const animSpeed = 8 + (intensity * 12);
@@ -1084,7 +1095,8 @@ export class VoxelCharacter {
             kd: this.knockedDown ? (KD[this.fallDir] || 1) : 0,
             tb: this.knockedDown && this.tumbleAng ? r3(this.tumbleAng) : undefined, // (flipping over in the air: «Джолт»)
             ku: this.knockedDown && this.liftUp > 0 ? r2(this.liftUp) : undefined,
-            sg: this.stepping > 0 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
+            sg: this.stepping > 0 || this.braceK > 0.01 ? [r2(this.staggerLean || 0), r2(this.staggerRoll || 0)] : undefined,
+            bk: this.braceK > 0.01 ? [r2(this.braceK), this.braceSide] : undefined, // («устоял»: the stance, seen by the others)
             lg: this.legPose ? [r3(this.legPose.left?.hip || 0), r3(this.legPose.right?.hip || 0)] : undefined, // (on a surfboard)
             rz: this.boardRoll ? r3(this.boardRoll) : undefined,
             sw: this.swimming ? r2(this.swimMove || 0) : undefined, // (in deep water: how hard the legs kick)

@@ -27,6 +27,7 @@
  */
 
 import * as THREE from 'three';
+import { creatureHolds, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
 export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
@@ -221,7 +222,16 @@ export class CreatureImpact {
         if (o.always && res !== 'shatter') res = 'knockdown';
         if (v / B.mass >= IMPACT.KNOCK_ANY && res === 'stagger') res = 'knockdown';
         if (res === 'knockdown' && K.noKnock?.(this.game, c)) res = 'stagger';
-        this._note(ck, c, o, res);
+        // «Устойчивость» (Steadiness.js): every creature has its own, fixed (creatureSteady). A SPELL that would knock it down
+        // may find it on its feet — the same chance and exceptions as the hero's: it reels in the «устоял» pose, the shove
+        // is halved, nothing flips it over (a hand, a horn, a sword, a ball are no spells: not resisted)
+        let held = false;
+        if (res === 'knockdown' && o.spell && creatureHolds(ck, c, o.spell, { cause: o.cause })) {
+            held = true; res = 'stagger';
+            o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 };
+        }
+        const vHeld = Math.hypot(o.v.x, o.v.z);
+        this._note(ck, c, o, held ? 'held' : res);
         if (res === 'knockdown' && ck === 'v' && (o.spell === 'Wind' || o.spell === 'WindMaxima')) this.game.castleLife?.windKnocked?.(c, o.by); // (a wizard knocked down twice by the wind may teach a lesson — nothing else)
         if (res !== 'none') K.struck?.(this.game, c, o); // (the kind's own answer to it: a sailor's crew takes offence)
         if (res === 'shatter') { K.shatter?.(this.game, c, o.by); return res; }
@@ -241,7 +251,7 @@ export class CreatureImpact {
         // thrown and tumbling over in the air («Джолт»): as long as it is in the air (at least a moment)
         const tumble = res === 'knockdown' && o.tumble > 0 && toss > 2 && !o.noSlide ? { turns: o.tumble | 0 || 1, dur: Math.max(0.5, 2 * toss / CREATURE.G + 0.15) } : null;
         if (res === 'knockdown') this._knock(ck, c, e, dir, o.always?.down ?? o.down ?? CREATURE.MIN_DOWN, true, tumble);
-        else if (res === 'stagger') this._stagger(ck, c, e, dir, v / B.mass);
+        else if (res === 'stagger') this._stagger(ck, c, e, dir, (held ? vHeld : v) / B.mass, true, held);
         // dizzy once it is up again (a heavy body less)
         if (o.daze > 0 && res !== 'none') this._daze(ck, c, e, o.daze / Math.sqrt(B.mass));
         return res;
@@ -309,14 +319,16 @@ export class CreatureImpact {
         if (emit) this._emit(ck, c, 'd', [r2(t)]);
     }
 
-    _stagger(ck, c, e, dir, v, emit = true) {
+    /** `held`: it stood against a spell («устоял» — a foot set back, a crouch, a lean into the blow, upright again). */
+    _stagger(ck, c, e, dir, v, emit = true, held = false) {
         const s = e.s, K = KINDS[ck];
         if (s.state === 'falling' || s.state === 'down' || s.state === 'rising') return;
-        s.state = 'stagger'; s.t = 0; s.leanDir = dir;
-        s.staggerT = Math.min(CREATURE.STAGGER_MAX, 0.3 + v / 20);
-        s.lean = Math.min(0.4, 0.14 + 0.014 * v);
+        s.state = 'stagger'; s.t = 0; s.leanDir = dir; s.held = held;
+        s.staggerT = held ? braceTime(v) : Math.min(CREATURE.STAGGER_MAX, 0.3 + v / 20);
+        s.lean = held ? braceLean(v) : Math.min(0.4, 0.14 + 0.014 * v);
         if (this.auth) K.hold(this.game, c, s.staggerT + 0.1);
-        if (emit) this._emit(ck, c, 's', [KD[dir], r2(v)]);
+        if (held) this.log.push({ ck, id: c.id, k: 'brace', res: 'held', v: r2(v) });
+        if (emit) this._emit(ck, c, held ? 'h' : 's', [KD[dir], r2(v)]);
     }
 
     _busy(s) { return s.state !== 'up' || s.jolt.busy || Math.abs(s.vx) + Math.abs(s.vz) > 0.05 || s.daze > 0 || !!s.tum; }
@@ -339,6 +351,7 @@ export class CreatureImpact {
             if (ev === 'k') this._knock(ck, c, e, KD_NAME[a] || 'back', b < 0 ? Infinity : Math.max(0.3, +b || 1.5) + 0.5, false, c3 > 0 ? { turns: +c3, dur: +c4 || 0.8 } : null);
             else if (ev === 'd') this._daze(ck, c, e, Math.min(30, +a || 0), false);
             else if (ev === 's') this._stagger(ck, c, e, KD_NAME[a] || 'back', +b || 4, false);
+            else if (ev === 'h') this._stagger(ck, c, e, KD_NAME[a] || 'back', +b || 4, false, true);
             else if (ev === 'r') { if (e.s.state === 'down' || e.s.state === 'falling') { e.s.state = 'rising'; e.s.t = 0; } }
             else if (ev === 'j') e.s.jolt.kick({ pitch: +a || 0, yaw: +b || 0, roll: +c3 || 0 });
         }
@@ -478,7 +491,8 @@ export class CreatureImpact {
         if (s.state === 'falling') { ang = HALF_PI * ease(s.t / CREATURE.FALL_T); lift = 0; }
         else if (s.state === 'down') { ang = HALF_PI; lift = 1; }
         else if (s.state === 'rising') { const k = 1 - smooth(s.t / CREATURE.RISE_T); ang = HALF_PI * k; lift = k; }
-        else if (s.state === 'stagger') ang = s.lean * Math.sin(Math.PI * Math.min(1, s.t / s.staggerT));
+        const brace = s.state === 'stagger' && s.held ? braceProfile(s.t / s.staggerT) : 0;
+        if (s.state === 'stagger') ang = s.held ? s.lean * brace : s.lean * Math.sin(Math.PI * Math.min(1, s.t / s.staggerT));
         if (s.state === 'falling') lift = ease(s.t / CREATURE.FALL_T);
         s.angle = ang;
         // tumbling over in the air: whole turns on top of the fall (eased: it ends as the fall does)
@@ -491,13 +505,14 @@ export class CreatureImpact {
         }
         // dizzy on its feet: a slow sway from side to side
         let sway = 0;
+        if (brace > 0) sway = 0.05 * brace * Math.sin(s.t * 17) * (1 - Math.min(1, s.t / s.staggerT)); // (the body rocks to find its balance)
         if (s.daze > 0 && s.state === 'up') sway = Math.min(1, s.daze / 1.5) * (0.13 * Math.sin((s.dazeT2 || 0) * 2.3) + 0.05 * Math.sin((s.dazeT2 || 0) * 5.1));
         if (piv) {
             const f = K.faces;
             const turn = (a) => { let x = 0, z = 0; if (dir === 'back') x = -f * a; else if (dir === 'front') x = f * a; else if (dir === 'right') z = f * a; else z = -f * a; return [x, z]; };
             const [rx, rz] = turn(ang);
             piv.rotation.x = rx; piv.rotation.z = rz + sway;
-            piv.position.y = P.base + (P.lie || 0) * lift * Math.sin(ang);
+            piv.position.y = P.base + (P.lie || 0) * lift * Math.sin(ang) - 0.14 * brace; // (a little crouch to hold the ground)
             if (s.tum) {
                 // round its middle, not its feet: the pivot moves so that the middle stays put
                 if (s.tum.x0 == null) { s.tum.x0 = piv.position.x; s.tum.z0 = piv.position.z; }
@@ -519,10 +534,19 @@ export class CreatureImpact {
         const reel = s.state === 'stagger' ? Math.sin(Math.PI * Math.min(1, s.t / s.staggerT)) : s.state === 'falling' ? 1 - s.t / CREATURE.FALL_T : 0;
         s.flail += dt * 22;
         const [la, ra] = K.arms(c);
-        const fl = reel * (0.5 + 0.35 * Math.sin(s.flail));
-        overlay(la, 'z', -fl); overlay(ra, 'z', fl);
         const legs = K.legs(c);
-        legs.forEach((l, i) => overlay(l, 'x', s.state === 'stagger' ? reel * 0.55 * Math.sin(s.flail * 0.6 + (i % 2 ? Math.PI : 0)) : 0));
+        if (s.held && s.state === 'stagger') {
+            // the stance: one arm thrown out high for balance, the other low; the foot on the blow's side set back (or forward when pushed on)
+            const side = s.leanDir === 'left' ? -1 : s.leanDir === 'right' ? 1 : 0, along = s.leanDir === 'back' ? 1 : s.leanDir === 'front' ? -1 : 0;
+            overlay(la, 'z', -brace * (0.95 + 0.12 * Math.sin(s.t * 14) + (side > 0 ? 0.2 : 0)));
+            overlay(ra, 'z', brace * (0.4 + 0.1 * Math.sin(s.t * 14 + 1) + (side < 0 ? 0.35 : 0)));
+            const step = (along || 0.6) * K.faces * 0.75 * brace;
+            legs.forEach((l, i) => { const main = i % 2 === 0; overlay(l, 'x', main ? step : -step * 0.35); overlay(l, 'z', side ? (main ? -0.4 : 0.15) * side * brace : 0); });
+        } else {
+            const fl = reel * (0.5 + 0.35 * Math.sin(s.flail));
+            overlay(la, 'z', -fl); overlay(ra, 'z', fl);
+            legs.forEach((l, i) => { overlay(l, 'x', s.state === 'stagger' ? reel * 0.55 * Math.sin(s.flail * 0.6 + (i % 2 ? Math.PI : 0)) : 0); overlay(l, 'z', 0); });
+        }
     }
 
     /** Back to the creature's own animation (alive: upright; dead: its death takes over). */
@@ -540,8 +564,8 @@ export class CreatureImpact {
         if (head) { overlay(head, 'x', 0); overlay(head, 'y', 0); overlay(head, 'z', 0); }
         const [la, ra] = K.arms(c);
         overlay(la, 'z', 0); overlay(ra, 'z', 0);
-        for (const l of K.legs(c)) overlay(l, 'x', 0);
-        s.state = 'up';
+        for (const l of K.legs(c)) { overlay(l, 'x', 0); overlay(l, 'z', 0); }
+        s.state = 'up'; s.held = false;
     }
 }
 

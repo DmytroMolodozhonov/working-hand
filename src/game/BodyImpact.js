@@ -64,7 +64,8 @@ export class BodyImpact {
         // «Устойчивость» (Steadiness.js): a SPELL that would knock me down may find me on my feet — the chance is the skill
         // (not the gods' spells, Wind Maxima, Inspirius; Bombardo Maxima takes 60 % of it). Held: no fall, the body only
         // reels and the shove / toss are halved. A hand, a horn, a sword, a ball are no spells: they are not resisted.
-        if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; k *= STEADY.HELD_PUSH_K; }
+        let held = false;
+        if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; held = true; k *= STEADY.HELD_PUSH_K; }
         // the push itself
         if (k > 0) {
             if (g.flight?.active) g.knockback.addScaledVector(o.v, k);
@@ -86,7 +87,7 @@ export class BodyImpact {
             if (g.flight?.busy) g.flight.land?.('blown');
             g.knock.knock({ dir, down: o.always?.down ?? o.down ?? undefined, by: o.by, kind: o.spell || o.kind, cause: o.cause || null, toss: o.toss || 0, strength: Math.max(fallStrength({ v: v * k }), 0.15),
                 fly: !!o.fly && k >= 1, tumble: o.tumble || 0 }); // («Джолт»: thrown through the air, tumbling over)
-        } else if (res === 'stagger') g.knock.stagger({ dir, v: v * k });
+        } else if (res === 'stagger') { if (held) g.knock.held({ dir, v: v * k }); else g.knock.stagger({ dir, v: v * k }); }
         if (facing) this._recoil(o);
         return (facing || dome) && res === 'none' ? 'blocked' : res;
     }

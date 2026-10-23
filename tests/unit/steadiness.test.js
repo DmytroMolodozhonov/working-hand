@@ -76,3 +76,61 @@ test('save keeps the skill', () => {
     assert.equal(h.steady.skill, 63); assert.equal(h.steady.acc, 55);
     assert.equal(game().steady.snapshot(), null);
 });
+
+// ------------------------------------------------------------------ the others
+import { creatureSteady, steadyKind, NPC_STEADY, braceProfile, braceTime, braceLean, creatureHolds } from '../../src/game/Steadiness.js';
+
+test('creatures: fixed value by kind, from the id (the same every time), inside the author\'s ranges', () => {
+    const inR = (v, k) => assert.ok(v >= NPC_STEADY[k][0] && v <= NPC_STEADY[k][1], `${k}: ${v}`);
+    for (let i = 0; i < 40; i++) {
+        inR(creatureSteady('v', { id: 'c:' + i, role: 'farmer' }), 'resident');
+        inR(creatureSteady('v', { id: 'c:' + i, role: 'knight' }), 'knight');
+        inR(creatureSteady('v', { id: 'c:' + i, role: 'king' }), 'king');
+        inR(creatureSteady('v', { id: 'w:' + i, role: 'townwiz', rank: 'novice', wizard: true }), 'novice');
+        inR(creatureSteady('v', { id: 'w:' + i, role: 'mage', rank: 'adept', wizard: true }), 'adept');
+        inR(creatureSteady('v', { id: 'w:' + i, role: 'mage', rank: 'elder', wizard: true }), 'elder');
+        inR(creatureSteady('c', { id: 's:' + i, role: 'sailor' }), 'sailor');
+        inR(creatureSteady('c', { id: 's:' + i, role: 'blackbeard' }), 'captain');
+    }
+    assert.equal(creatureSteady('v', { id: 'tower:0', role: 'master', wizard: true }), 100);
+    assert.equal(creatureSteady('v', { id: 'x', role: 'farmer' }), creatureSteady('v', { id: 'x', role: 'farmer' }));
+    assert.equal(steadyKind('v', { role: 'merchant' }), 'merchant');
+    assert.equal(steadyKind('v', { role: 'student', wizard: true }), 'novice');
+});
+
+test('creatures: the same exceptions (gods, Wind Maxima, Inspirius) and the Bombardo Maxima share', () => {
+    const tower = { id: 'tower:0', role: 'master', wizard: true }; // 100
+    assert.equal(creatureHolds('v', tower, 'Jolt', {}, () => 0.99), true);
+    assert.equal(creatureHolds('v', tower, 'WindMaxima', {}, () => 0), false);
+    assert.equal(creatureHolds('v', tower, 'Inspirius', {}, () => 0), false);
+    assert.equal(creatureHolds('v', tower, 'BombardoMaxima', {}, () => 0.41), false);
+    assert.equal(creatureHolds('v', tower, 'BombardoMaxima', {}, () => 0.39), true);
+});
+
+test('the stance: quick in, held, upright again; leans harder for a harder blow; 0.5 … 0.8 s', () => {
+    assert.equal(braceProfile(0), 0); assert.equal(braceProfile(0.4), 1); assert.equal(braceProfile(1), 0);
+    assert.ok(braceTime(0) >= 0.5 && braceTime(1000) <= 0.8);
+    assert.ok(braceLean(30) > braceLean(5));
+});
+
+import * as THREE from 'three';
+import { VillagerModel, villagerLook } from '../../src/entities/VillagerModel.js';
+import { CreatureImpact } from '../../src/game/CreatureImpact.js';
+
+test('a steady creature that stays up runs the «устоял» animation (not a fall), everybody is told', () => {
+    const scene = new THREE.Scene(), sent = [];
+    const model = new VillagerModel(villagerLook(9, 'knight'), {}); scene.add(model.group);
+    const v = { id: 'tower:0', isVillager: true, role: 'master', wizard: true, model, group: model.group, x: 0, y: 0, z: 0, yaw: 0, dead: false, stunT: 0, vy: 0, mode: 'idle', speed: 0 };
+    const g = { scene, authority: true, localId: 'me', remotes: new Map(), fx: { spark() {} }, collision: { resolveCylinder() {} }, zombies: [], zombieById: new Map(),
+        sync: { creatureImpacts: (l) => sent.push(...l) }, castleLife: { byId: new Map([[v.id, v]]), _walkable: () => true } };
+    const ci = g.creatureImpact = new CreatureImpact(g);
+    const res = ci.apply(v, { v: new THREE.Vector3(0, 0, -30), spell: 'Jolt', always: { down: 2.5 }, toss: 7 });
+    assert.equal(res, 'stagger');
+    assert.equal(ci.isDown(v), false);
+    assert.ok(ci.log.some((l) => l.k === 'brace' && l.res === 'held'));
+    for (let t = 0; t < 0.35; t += 1 / 30) ci.update(1 / 30);
+    assert.ok(Math.abs(model.root.rotation.x) > 0.05 || Math.abs(model.root.rotation.z) > 0.05, 'leans into the blow');
+    for (let t = 0; t < 0.6; t += 1 / 30) ci.update(1 / 30);
+    assert.equal(ci.stateOf(v), 'up');
+    assert.ok(sent.some((e) => e[2] === 'h'), 'the others get the stance event');
+});

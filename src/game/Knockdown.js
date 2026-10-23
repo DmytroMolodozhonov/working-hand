@@ -23,6 +23,7 @@
  */
 
 import { KD, fallDir, IMPACT } from './Impact.js';
+import { braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { knockMessage, lyingMessage } from './Hints.js';
 
 export const KNOCK = { MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: a fall from a blow or a spell keeps one down 5 s at least + 1…5 s by chance — nobody jumps up at once)
@@ -98,7 +99,7 @@ export class Knockdown {
         this._seenLanding = performance.now();
         const ch = this.game.character;
         if (ch) {
-            ch.knockedDown = false; ch.stepping = 0; ch.staggerLean = 0; ch.staggerRoll = 0; ch.liftUp = 0;
+            ch.braceK = 0; ch.knockedDown = false; ch.stepping = 0; ch.staggerLean = 0; ch.staggerRoll = 0; ch.liftUp = 0;
             // (respawn / a fresh start: upright at once, not slowly getting up)
             if (ch._pitchOwned) { ch._fallPitch = 0; ch._pitchOwned = false; if (ch.group) ch.group.rotation.x = 0; }
             if (ch._fallRoll) { ch._fallRoll = 0; if (ch.group) ch.group.rotation.z = 0; }
@@ -182,6 +183,35 @@ export class Knockdown {
         ch.staggerRoll = dir === 'left' ? 0.1 + 0.008 * v : dir === 'right' ? -0.1 - 0.008 * v : 0;
     }
 
+    /**
+     * Stood against a spell: the «устоял» pose (a foot set back, a little crouch, the body leaning into the blow by its
+     * strength, then upright again in 0.5 … 0.8 s). `update` plays it as a profile over the stagger (Character shows it,
+     * the others see it in the pose: `sg` + `bk`).
+     */
+    held({ dir, v }) {
+        if (this.down) return;
+        this.stagger({ dir, v });
+        const ch = this.game.character;
+        this.braceHeld = true;
+        this.staggerT = braceTime(v);
+        this._braceLean = braceLean(v);
+        this._braceDir = dir;
+        ch.stepping = 0; // (the legs do not run on the spot: they stand in the stance)
+        this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.25);
+    }
+
+    _braceStep() {
+        const ch = this.game.character;
+        if (this.state === 'stagger' && this.braceHeld) {
+            const p = braceProfile(this.t / this.staggerT), d = this._braceDir, L = this._braceLean * p;
+            ch.braceK = p;
+            ch.braceSide = d === 'back' ? -1 : d === 'front' ? 1 : d === 'left' ? -2 : 2; // (±1: set back / forward; ±2: aside)
+            ch.staggerLean = d === 'back' ? L : d === 'front' ? -L : 0;
+            ch.staggerRoll = d === 'left' ? L : d === 'right' ? -L : 0;
+            ch.stepping = 0;
+        } else if (ch.braceK) { ch.braceK = 0; this.braceHeld = false; }
+    }
+
     /** Any landing (Leviosa, a blast, wind, a cliff, a tired flight). */
     _landing() {
         const g = this.game, L = g.character.landing;
@@ -220,6 +250,7 @@ export class Knockdown {
         if (this.dizzyLeft > 0) this.dizzyLeft = Math.max(0, this.dizzyLeft - dt);
         if (this.flyT > 0) { this.flyT -= dt; if ((ch.onGround && this.t > 0.15) || ch.swimY != null) this.flyT = 0; }
         this._tumbleStep(dt);
+        this._braceStep();
         if (this.state !== 'down') trackStand(this, g.currentPose, dt); // (knows the person's upright height before a fall)
         switch (this.state) {
             case 'stagger':
