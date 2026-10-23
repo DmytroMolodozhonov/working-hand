@@ -893,13 +893,10 @@ export class Inventory {
         }
         bar.innerHTML = '';
         this.cells = [];
-        const hand = document.createElement('div');
-        hand.className = 'hotbar-slot hand';
-        hand.title = 'Свободная рука';
-        hand.innerHTML = '<div class="hb-icon">✋</div><div class="hb-key">0</div>';
-        hand.onclick = () => this.select(-1);
-        bar.appendChild(hand);
-        this.handCell = hand;
+        // (no cells of the free hand and of the pouch any more — the author: the wand is plainly in the hand, and the one pouch needs no cell;
+        // the empty-hand step (select(-1)) and the pouch at the end of the pocket's circle go on working, just not drawn)
+        this.handCell = null;
+        this.pouchCell = null;
         for (let i = 0; i < this.slots.length; i++) {
             const c = document.createElement('div');
             c.className = 'hotbar-slot';
@@ -908,13 +905,6 @@ export class Inventory {
             bar.appendChild(c);
             this.cells.push(c);
         }
-        // the pouch cell on the right (the hand's cell mirrored): the best pouch, and how many of them
-        const pouch = document.createElement('div');
-        pouch.className = 'hotbar-slot hand pouch';
-        pouch.innerHTML = '<div class="hb-icon"></div><div class="hb-count"></div>';
-        pouch.onclick = () => this.pouchClick();
-        bar.appendChild(pouch);
-        this.pouchCell = pouch;
         this._pouchKey = null;
         this.bar = bar;
         this._render();
