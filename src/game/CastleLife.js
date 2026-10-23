@@ -29,6 +29,7 @@ import { shareFoes } from './CrewTactics.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
+import { WALL, StuckWatch } from './Unstick.js';
 import { FLEE, threatDist, threatCost, pathPasses, openWay, fleeSearch } from './FleePlan.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
@@ -278,6 +279,15 @@ export class CastleLife {
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
         this.chores = new Chores(this); // what the people do all day by their houses, at the well, the market (Chores.js)
         this.night = new NightLife(this); // the night: everybody home asleep, only the watch out (NightLife.js)
+        this.stuck = new StuckWatch({ // «стоит без причины» (Unstick.js)
+            now: 0,
+            skip: (v) => this._standsFine(v),
+            diagnose: (v) => this._whyStuck(v),
+            replan: (v) => this._replan(v),
+            unseen: (v) => this._players().every((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) > 45),
+            nearestFree: (v) => this._nearestFree(v),
+            log: (text, v) => { const t = `${v.role || '?'} #${v.id} (${v.cs?.def?.kind || '?'}) ${Math.round(v.x)},${Math.round(v.z)}: ${text}`; console.warn('[stuck]', t); this.game.perf?.note?.('стоит: ' + t); },
+        });
         this.wanted = new Wanted(); // (host) each player's hidden «wanted level»: how hard the knights and wizards fight them (Wanted.js)
         this.found = new BodyFound(this); // (host) a body found: the alarm, the search for strangers (BodyFound.js)
         this.brainLine = (v) => this.talk.ambientLine(v);
@@ -907,6 +917,7 @@ export class CastleLife {
         const d = Math.hypot(dx, dz);
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 10);
         if (d <= stopAt) { v.speed = 0; return d; }
+        if (!v.wallW?.inWay && speed > 0) { const r = this._wallGuard(v, tx, tz, d, stopAt, speed, dt); if (r !== null) return r; }
         const s = Math.min(d - stopAt, speed * slowFactor(v) * dt);
         // a ledge right ahead (half a body high): climb it rather than inch at it
         if (!this._walkable(v.x + dx / d * 0.75, v.z + dz / d * 0.75, v.y) && this._tryClimb(v, dx / d, dz / d)) { v.speed = 0; return d; }
@@ -939,6 +950,106 @@ export class CastleLife {
             }
         }
         return d;
+    }
+
+    /**
+     * Walls between it and the goal that the straight way does not see (a house built by magic, rubble):
+     * no progress for a while → the way round block by block (gridWay) and along it; no way (a shut house,
+     * a door it can't pass) → it backs off from the wall, stands, and after WALL.LEAVE s gives the goal up.
+     * → null: go on as usual; a number: this step is done (the distance to the goal).
+     */
+    _wallGuard(v, tx, tz, d, stopAt, speed, dt) {
+        const W = v.wallW || (v.wallW = { t: 0, best: Infinity, gx: tx, gz: tz, way: null, noWay: 0, planAt: -9 });
+        const clock = this._clock || 0;
+        if (Math.hypot(tx - W.gx, tz - W.gz) > 4) { W.gx = tx; W.gz = tz; W.t = 0; W.best = Infinity; W.way = null; W.noWay = 0; }
+        if (W.noWay > 0) {
+            W.noWay += dt;
+            if (W.noWay > WALL.LEAVE) { W.noWay = 0; W.t = 0; W.best = Infinity; W.planAt = clock + 10; this._giveUp(v); v.speed = 0; return d; }
+            // (a polite distance from the wall: back off, face the goal, wait)
+            v.yaw = turn(v.yaw, Math.atan2(-(tx - v.x), -(tz - v.z)), dt * 6);
+            if (Math.hypot(v.x - W.bx, v.z - W.bz) < WALL.KEEP && d < WALL.KEEP + stopAt + 3) {
+                const ux = (v.x - tx) / (d || 1), uz = (v.z - tz) / (d || 1), st = Math.min(0.9, speed) * dt;
+                if (this._walkable(v.x + ux * (st + BODY_R), v.z + uz * (st + BODY_R), v.y)) { v.x += ux * st; v.z += uz * st; v.speed = 0.9; return d; }
+            }
+            v.speed = 0;
+            return d;
+        }
+        if (W.way) {
+            const p = W.way[0];
+            if (!p) { W.way = null; return null; }
+            W.inWay = true;
+            const r = this._steer(v, p.x, p.z, speed, dt, 0.25);
+            W.inWay = false;
+            if (r < 0.45) W.way.shift();
+            if (!W.way.length) { W.way = null; W.t = 0; W.best = Infinity; }
+            else if (v.speed === 0 && (W.stuckT = (W.stuckT || 0) + dt) > 2.5) { W.stuckT = 0; W.way = null; W.planAt = -9; } // (even the way round is shut now: look again)
+            else if (v.speed > 0) W.stuckT = 0;
+            return d;
+        }
+        // (is it getting nearer? a slide along a wall that makes no way is not)
+        if (d < W.best - 0.3) { W.best = d; W.t = 0; } else W.t += dt;
+        if (W.t < WALL.PLAN || d < stopAt + 0.5 || clock < W.planAt) return null;
+        W.planAt = clock + 3; W.t = 0;
+        if (d > 22 || this._lineWalk(v, tx, tz)) return null; // (far: not a wall of a house; the straight way is open: it's the crowd, not a wall)
+        const w = this._gridWay(v, { x: tx, y: v.y, z: tz }, 1200);
+        if (w && w.length) { W.way = w; W.best = Infinity; W.stuckT = 0; return null; }
+        // no way at all: it knows the wall is shut
+        W.noWay = 0.001; W.bx = v.x; W.bz = v.z;
+        return null;
+    }
+
+    /** Standing is right for it now (asleep, talking, waiting for a player, at its post, in a fight…): not «stuck». */
+    _standsFine(v) {
+        if (v.dead || v.sleep || v.handLink || v.lev || v.climb || v.seated || v.talking > 0 || v.stunT > 0 || v.bowing > 0 || v.giveT > 0) return 'state';
+        if (v.foe || v.follow || v.investigate || v.fleeT > 0 || v.fireT > 0 || v.order || v.servantOf != null || v.fear || v.chore || v.waitT > 0) return 'busy';
+        if (v.mode !== 'walk' && v.mode !== 'run' && v.mode !== 'idle') return 'mode';
+        if (v.job === 'king' || v.job === 'guard' || v.job === 'stall' || (v.post && Math.hypot(v.post.x - v.x, v.post.z - v.z) < 2)) return 'post';
+        if (v.wallW?.noWay > 0) return 'wall'; // (it stands off a shut wall on purpose, and lets go of the goal by itself)
+        if (this.game.isNight && this.night?.asleepTime?.()) return 'night';
+        if (this._players().some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 4)) return 'player'; // (waits for a player / is blocked by one)
+        return null;
+    }
+
+    /** Why it stands: for the log. */
+    _whyStuck(v) {
+        const land = this.game.world?.terrain?.data;
+        if (land?.landMade && !land.landMade(v.x, v.z)) return 'ждёт землю (воркеры не принесли)';
+        const g = v.cs?.graph;
+        if (!g || !g.nodes.length) return 'нет узлов пути в месте';
+        if (g.nearest(v.x, v.y, v.z, 6) < 0) return 'нет узла рядом (вне путей)';
+        if (!v.path || v.pathI >= v.path.length) return `путь пуст (работа ${v.job}, режим ${v.mode})`;
+        const near = crowdNear(this.game, v.x, v.y, v.z, 1.6, v) || [];
+        if (near.length) return `заблокирован: ${near[0].ref?.role || near[0].kind || 'кто-то'} ${near[0].ref?.id ?? ''}`;
+        if (!this._walkable(v.x, v.z, v.y)) return 'стоит в непроходимом месте';
+        return `упирается в препятствие на пути (узел ${v.path[v.pathI]})`;
+    }
+
+    /** A new way for a stuck one: the path and all it was doing with it forgotten, cut ways looked at again. */
+    _replan(v) {
+        v.path = null; v.gridWay = null; v.wallW = null; v.detourT = 0; v.backT = 0; v.holdT = 0;
+        if (v.cs?.cut?.size) v.cs.cut.clear();
+        return true;
+    }
+
+    /** The nearest place of its castle's ways where one can stand (for one stuck out of sight). */
+    _nearestFree(v) {
+        const g = v.cs?.graph;
+        if (!g?.nodes.length) return null;
+        let best = null, bd = Infinity;
+        for (const n of g.nodes) {
+            const d = Math.hypot(n.x - v.x, n.z - v.z) + Math.abs(n.y - v.y) * 2;
+            if (d < bd && d > 0.5 && this._walkable(n.x, n.z, n.y)) { bd = d; best = n; }
+        }
+        return best ? { x: best.x, y: best.y, z: best.z } : null;
+    }
+
+    /** The goal can't be reached (a shut wall): it lets go of it and goes about its day. */
+    _giveUp(v) {
+        v.path = null; v.gridWay = null;
+        if (v.follow) { v.follow = null; v.followFar = false; }
+        if (v.investigate) v.investigate = null;
+        v.waitT = Math.max(v.waitT || 0, 6);
+        v.mode = 'idle';
     }
 
     /**
@@ -1251,7 +1362,7 @@ export class CastleLife {
             if (!fp || v.followT <= 0 || (!v.followFar && !this._inLand(cs.def, fp, 20))) { v.follow = null; v.followFar = false; v.path = null; }
             else {
                 const d = this._steer(v, fp.x, fp.z, Math.hypot(fp.x - v.x, fp.z - v.z) > 8 ? RUN : WALK, dt, 3);
-                v.mode = d > 3.2 ? (v.speed > WALK ? 'run' : 'walk') : 'idle';
+                v.mode = d > 3.2 && !(v.wallW?.noWay > 0) ? (v.speed > WALK ? 'run' : 'walk') : 'idle'; // (standing off a shut wall: idle)
                 this._ground(v);
                 return;
             }
@@ -3210,9 +3321,17 @@ export class CastleLife {
             for (const v of [...this.byId.values()]) {
                 if (v.handLink) continue; // (held by the hand: HandHold leads them)
                 // (its land is not made yet — the workers bring it: it waits, instead of making the ground here in the middle of a frame)
-                if (land?.landMade && !land.landMade(v.x, v.z)) { v.speed = 0; if (!v.dead) v.mode = 'idle'; continue; }
+                if (land?.landMade && !land.landMade(v.x, v.z)) {
+                    v.speed = 0; if (!v.dead) v.mode = 'idle';
+                    // (waits for the workers' ground: that is only while no player is near — else it's a fault worth a line in the log)
+                    if ((v.landWaitT = (v.landWaitT || 0) + dt) > 30 && this._players().some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 90) && this._clock - (v.landLogAt ?? -1e9) > 60) { v.landLogAt = this._clock; this.stuck.env.log(`стоит без причины ${Math.round(v.landWaitT)} с: ${this._whyStuck(v)}`, v); }
+                    continue;
+                }
+                v.landWaitT = 0;
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
                 this._think(v, dt);
+                this.stuck.env.now = this._clock;
+                this.stuck.watch(v, dt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
             }
             this._bossNow = null;
             this._separate(dt);

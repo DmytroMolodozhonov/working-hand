@@ -7,7 +7,9 @@
  *   tower  — a wizards' tower: the player stands on the plaza and blows a hole in the tower's wall
  *            (the hole is carved straight into the world — the tower's stone may be charmed against
  *            «Бомбардо» — and then the blast itself goes off, as the player's «Бомбардо»);
- *   castle — the nearest castle's village: a blast in the street among the people.
+ *   castle — the nearest castle's village: a blast in the street among the people;
+ *   house  — a shut 6×6 house of walls on the plaza of the tower, the player inside: the wizards are sent to him
+ *            («иди за мной» / search) — none may press into the wall for long or go through it; they stand off and let go.
  *
  * Every person of the site is recorded (4 times a second of game time) and judged:
  *   застрял   — wants to go (walks / runs / flees / has a path) and is not getting anywhere for 3 s;
@@ -26,8 +28,9 @@ import fs from 'node:fs';
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
 const SITE = opt('site', 'tower');
+const HOUSE = SITE === 'house';
 const SECONDS = Number(opt('seconds', '40'));
-const EXTRA = Number(opt('extra', SITE === 'tower' ? '6' : '0'));
+const EXTRA = Number(opt('extra', SITE === 'tower' || HOUSE ? '6' : '0'));
 const OUT = opt('out', null);
 const CHECK = args.includes('--check');
 const PORT = Number(opt('port', '8171'));
@@ -47,10 +50,10 @@ async function scene({ site, seconds, extra, side }) {
     g.combat.stun = () => {}; g.combat.freeze = () => {}; if (g.knock) g.knock.knock = () => {}; if (g.knockback) g.knockback.add = () => {};
     const def = window.__site;
     const cs = L.castles.get(def.id);
-    const out = site === 'tower' ? new T.Vector3(def.gate.x - def.x, 0, def.gate.z - def.z).normalize() : null;
+    const out = site === 'tower' || site === 'house' ? new T.Vector3(def.gate.x - def.x, 0, def.gate.z - def.z).normalize() : null;
     // the player: on the plaza before the tower (28 m from its middle) / in the village street
     let me;
-    if (site === 'tower') me = { x: def.x + out.x * 30, z: def.z + out.z * 30 };
+    if (site === 'tower' || site === 'house') me = { x: def.x + out.x * 30, z: def.z + out.z * 30 };
     else {
         const hs = (def.houses || []).filter((h) => h.inside);
         const h = hs.sort((a, b) => Math.hypot(a.inside.x - def.x, a.inside.z - def.z) - Math.hypot(b.inside.x - def.x, b.inside.z - def.z))[Math.floor(hs.length / 2)] || { inside: def.gate };
@@ -58,6 +61,18 @@ async function scene({ site, seconds, extra, side }) {
     }
     const stand = () => { const y = g.collision.groundY(me.x, me.z); g.character.group.position.set(me.x, y + 1.95, me.z); };
     stand();
+    // the house: a ring of walls 6×6 round the player, 5 blocks high (built like the spell does: blocks of the world)
+    let houseWalls = 0;
+    if (site === 'house') {
+        const cx = Math.round(me.x), cz = Math.round(me.z);
+        for (let x = cx - 3; x <= cx + 3; x++) for (let z = cz - 3; z <= cz + 3; z++) {
+            if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) !== 3) continue;
+            const f = td.floorBelow(x, z, 80);
+            for (let L0 = f + 1; L0 <= f + 5; L0++) { td.set(x, L0, z, 3); houseWalls++; }
+        }
+        g.world.terrain.flushAround(me.x, me.z);
+        window.__house = { cx, cz };
+    }
     // more people about (the tower: students in the rooms of all the floors)
     for (let k = 0; k < extra; k++) {
         const rooms = cs.graph.tagged('room');
@@ -69,6 +84,16 @@ async function scene({ site, seconds, extra, side }) {
     }
     for (let i = 0; i < 40; i++) { stand(); await frames(3); }
     console.log('[bench] ready: ' + cs.active.size + ' people');
+    if (site === 'house') {
+        // every wizard and student of the tower comes to the player in the house (half «follow me», half «go and look who is there»)
+        let k = 0;
+        for (const v of cs.active.values()) {
+            if (v.dead) continue;
+            v.path = null; v.job = 'wander'; v.post = null; v.sleep = null; v.waitT = 0;
+            if (k++ % 2) { v.follow = g.localId; v.followT = 120; v.followFar = true; }
+            else v.investigate = { x: me.x, y: g.collision.groundY(me.x, me.z), z: me.z, by: g.localId, t: 120 };
+        }
+    }
     const clock = () => L.wizards.fight.clock;
     // where it goes off: the tower's wall facing the player, the ground floor (a hole ~4.5 m); the village: the street near the people
     let blast;
@@ -103,7 +128,7 @@ async function scene({ site, seconds, extra, side }) {
             const path = !!(v.path && v.pathI < v.path.length);
             r.s.push({
                 t: +t.toFixed(2), x: +v.x.toFixed(2), y: +v.y.toFixed(2), z: +v.z.toFixed(2), m: v.mode, sp: +(v.speed || 0).toFixed(2),
-                want: moving || path, dead: !!v.dead, foe: v.foe != null, flee: v.fleeT > 0 || !!v.fear, inv: !!v.investigate,
+                want: (moving || path) && !(v.wallW?.noWay > 0), stand: v.wallW?.noWay > 0, dead: !!v.dead, foe: v.foe != null, flee: v.fleeT > 0 || !!v.fear, inv: !!v.investigate,
                 busy: !!(v.stunT > 0 || v.vy || v.lev || v.climb || v.seated || v.sleep || v.flinchT > 0 || v.holdT != null || v.castT > 0),
                 wall: solid(v.x, v.y, v.z), job: v.job, fear: v.fear?.state || null,
                 // (for looking into one: its role in the fight, where it wants to stand, the path left, its flight's plan)
@@ -126,7 +151,7 @@ async function scene({ site, seconds, extra, side }) {
         hits.push({ t: +(clock() - t0).toFixed(1), v: v.id, by: by ?? null, dmg, spell: o?.kind || (o?.spell ? 'spell' : null), via: o?.via || null, ...(own && window.__crowdDebug ? { from: new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/https?:\/\/[^/]+/, '')).join(' < ') } : {}) });
         return hit0(v, dmg, dir, by, o);
     };
-    g.explode(new T.Vector3(blast.x, blast.y, blast.z), 4, g.localId, 1);
+    if (site !== 'house') g.explode(new T.Vector3(blast.x, blast.y, blast.z), 4, g.localId, 1);
     let next = 0.25, scanned = false;
     const debug = [];
     const wall0 = performance.now();
@@ -178,7 +203,7 @@ async function scene({ site, seconds, extra, side }) {
     const strikes = {};
     for (const [id, c] of casts) strikes[id] = c;
     // the knights' blows: counted from their «attack» mode
-    return { me, blast, carved, gameS: +(clock() - t0).toFixed(1), realS: +((performance.now() - wall0) / 1000).toFixed(1), people: [...rec.values()], casts: strikes, debug, hits, hostile: cs.hostile.has(g.localId), door: def.door || def.gate };
+    return { me, blast, carved, houseWalls, gameS: +(clock() - t0).toFixed(1), realS: +((performance.now() - wall0) / 1000).toFixed(1), people: [...rec.values()], casts: strikes, debug, hits, hostile: cs.hostile.has(g.localId), door: def.door || def.gate };
 }
 
 /** In Node: judge the recordings. */
@@ -270,7 +295,7 @@ try {
     await page.evaluate((site) => {
         const g = window.__zns.game, data = g.world.terrain.data;
         g.dayStart = Date.now() - 0.3 * 24 * 60 * 1000; // (daylight: mid-morning of the game's 24-minute day)
-        const list = site === 'tower' ? data.towers.near(0, 0, 4000) : data.castles.near(0, 0, 2500);
+        const list = site === 'tower' || site === 'house' ? data.towers.near(0, 0, 4000) : data.castles.near(0, 0, 2500);
         const t = list.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
         window.__site = t;
         g.character.group.position.set(t.gate.x, t.gate.y + 2.2, t.gate.z);

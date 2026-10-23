@@ -275,6 +275,18 @@ export class Travelers {
         // stuck for long (no way round): they get down and go on foot
         if (want > 0 && c.spd < 0.05) P.stuckT += dt; else P.stuckT = 0;
         if (P.stuckT > 25) { P.stuckT = 0; this._onFoot(P, alive); }
+        // standing and not asked to go (no driver / somebody not sat / can't go): «стоит без причины» — a line in the log, then helped
+        if (P.state === 'go' && want === 0 && c.spd < 0.05 && !alive.some((v) => v.talking > 0)) P.idleT = (P.idleT || 0) + dt; else P.idleT = 0;
+        if (P.idleT > 30) {
+            P.idleT = 0;
+            const why = !carts.canGo(c) ? 'телега не может ехать (лошади/повреждена)' : !driver ? 'нет возницы на месте' : `не все сели: ${alive.filter((v) => !(v.seated || v.seat == null)).map((v) => v.role + '#' + v.id).join(', ')}`;
+            const t = `повозка #${c.id} ${Math.round(c.x)},${Math.round(c.z)}: стоит без причины 30 с: ${why}`;
+            console.warn('[stuck]', t); this.game.perf?.note?.('стоит: ' + t);
+            const L = this.life, seen = L._players().some((pl) => Math.hypot(pl.p.x - c.x, pl.p.z - c.z) < 45);
+            if (!carts.canGo(c) || !driver) this._onFoot(P, alive); // (no cart / no driver: they walk on)
+            else if (!seen) for (const v of alive) if (!v.seated && v.seat != null) { const sp = carts.seatPos(c, v.seat, {}); v.x = sp.x; v.y = sp.y; v.z = sp.z; v.seated = true; } // (out of sight: back on their seats)
+            else this._onFoot(P, alive);
+        }
         // the cart can't go any more (broken, the horses dead or gone): on foot
         if (!carts.canGo(c) && P.state === 'go' && !c.wreck && alive.length && !this._harnessed(c)) this._onFoot(P, alive);
     }
