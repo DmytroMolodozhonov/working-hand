@@ -415,3 +415,12 @@ test('«Brain Rot Maxima» (DragonTame.js): every kind of creature and thing is 
     assert.match(body(d, '    _breathe(d, dt) {'), /b\.ride/, 'an ordered fire burns only its target');
     assert.match(body(d, '    _think(d, dt) {'), /d\.tame\?\.rider/, 'a ridden dragon is flown by its rider');
 });
+
+test('a living creature stays a target in every STATE (thrown, lying, stunned, far): the body follows the tipped model (Duel._tipped), the people list reaches «Дай»', () => {
+    const d = src('src/game/Duel.js');
+    const bodies = body(d, '    _bodies(skip = null) {');
+    for (const k of ["this._tipped(z, this._zombieBody", "this._tipped(v, this._villagerBody(v, put('v'", "this._tipped(v, this._villagerBody(v, put('c'"]) assert.ok(bodies.includes(k), `_bodies forgets the tipped body: ${k}`);
+    assert.match(bodies, /castleLife\?\.targets\(DUEL\.RANGE_DIE/, 'castle people as far as «Дай» reaches');
+    assert.match(src('src/game/CastleLife.js'), /targets\(reach = 40\)/);
+    // (the real matrix, with real models: tests/unit/duel-creature-states.test.js)
+});
