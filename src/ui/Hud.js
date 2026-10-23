@@ -764,16 +764,27 @@ export class Hud {
         const inside = (x, y, m = 0) => Math.abs(x) < hw - m && Math.abs(y) < hh - m;
 
         // the round trees near the start (the voxel ones are already in the picture)
+        // (a world of real trees has them everywhere: all the dots in one path a colour — two fills, not two a tree)
         if (world && world.trees) {
+            const r = 4.5, r2 = 3;
+            ctx.fillStyle = '#1f6b24';
+            ctx.beginPath();
             for (const t of world.trees) {
                 if (t.alive === false) continue;
                 const dx = (t.x - charPos.x) * scale, dy = (t.z - charPos.z) * scale;
                 if (!inside(dx, dy)) continue;
-                ctx.fillStyle = '#1f6b24';
-                ctx.beginPath(); ctx.arc(dx, dy, 4.5, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#2e8b2e';
-                ctx.beginPath(); ctx.arc(dx - 1, dy - 1, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.moveTo(dx + r, dy); ctx.arc(dx, dy, r, 0, Math.PI * 2);
             }
+            ctx.fill();
+            ctx.fillStyle = '#2e8b2e';
+            ctx.beginPath();
+            for (const t of world.trees) {
+                if (t.alive === false) continue;
+                const dx = (t.x - charPos.x) * scale - 1, dy = (t.z - charPos.z) * scale - 1;
+                if (!inside(dx, dy)) continue;
+                ctx.moveTo(dx + r2, dy); ctx.arc(dx, dy, r2, 0, Math.PI * 2);
+            }
+            ctx.fill();
         }
         ctx.fillStyle = '#e74c3c';
         ctx.strokeStyle = '#4a0000';

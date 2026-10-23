@@ -21,8 +21,9 @@ export const TREES = {
     NEAR: 52, // m: the detailed shape within this
     FAR2: 115, // m: beyond this the very light shape (the same tree: its trunk, limbs and a few big sprigs)
     FAR_SHAPES: TREE_GEN.VARIANTS, // far shapes per kind: each tree its own (the far shape is the same tree, lighter — no other tree swapped in as it comes near)
+    FAR2_SHAPES: 4, // very far (beyond FAR2, in the haze): 4 shapes a kind are enough — fewer draws
     REGISTER_MS: 1.2, // ms a frame for taking new chunks' trees in
-    MOVE: 2.5, // m the player moves before the lists are remade
+    MOVE: 4, // m the player moves before the lists are remade
     TURN: 0.06, // rad the view turns before the lists are remade
     REMAKE_S: 0.6, // and at least this often
     CHAR: 0x3a3029, // a burnt trunk
@@ -313,7 +314,7 @@ export class WorldTrees {
             _sph.radius = t.h * 0.75 + 4;
             if (!_fr.intersectsSphere(_sph)) continue;
             const lod = d2 <= TREES.NEAR * TREES.NEAR ? 0 : d2 <= TREES.FAR2 * TREES.FAR2 ? 1 : 2;
-            const key = this._key(t.kind, lod ? t.v % TREES.FAR_SHAPES : t.v, lod, !!t.burnt);
+            const key = this._key(t.kind, lod === 2 ? t.v % TREES.FAR2_SHAPES : t.v, lod, !!t.burnt);
             let l = lists.get(key);
             if (!l) lists.set(key, (l = []));
             l.push(t);
@@ -377,7 +378,7 @@ export class WorldTrees {
      */
     warmSteps() {
         const out = [];
-        for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) out.push(() => { treeGeometry(k, v, 0); if (v < TREES.FAR_SHAPES) { treeGeometry(k, v, 1); treeGeometry(k, v, 2); } });
+        for (let k = 0; k < TREE_GEN.KINDS; k++) for (let v = 0; v < TREE_GEN.VARIANTS; v++) out.push(() => { treeGeometry(k, v, 0); treeGeometry(k, v, 1); if (v < TREES.FAR2_SHAPES) treeGeometry(k, v, 2); });
         return out;
     }
 
