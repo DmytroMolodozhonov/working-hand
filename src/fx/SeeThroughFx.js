@@ -1,22 +1,21 @@
 /**
- * SeeThroughFx.js — the picture of «Visible Godi» (the rules: game/VisibleGodi.js).
+ * SeeThroughFx.js — the window of «Visible Godi» (the rules: game/VisibleGodi.js; the steam itself: SteamFx.js).
  *
- * A little cloud in the middle of the screen: blurred and unsharp, clearer in the middle, milky-blue at its rim, its
- * edge slowly breathing, a few sparkles drifting in it. Inside the cloud — what lies BEHIND the wall in front of the
- * hero: the scene is drawn once more from the same eyes with the camera's near plane stood just past the far side
- * of the wall (so the wall itself is not in the picture), into a small picture (a quarter of the screen, 24 times a
- * second — 15 on a weak computer), and the cloud shows it: the less clear the look (VisibleGodi.clearOf), the more it
- * is blurred, the greyer-blue, the lower in contrast and the grainier; below SEE.SHAPES only dim shapes are left (a
- * difference of two blurs), below SEE.WORKED no second picture is drawn at all — only milk. Magic stops the look:
- * milky «nothing», slowly swirling.
+ * Where my own steam covers the screen the wall is not drawn: the mask is the union of my puffs projected on the screen
+ * (their edges ragged, a milky-blue rim, a few sparkles). Inside it — what lies BEHIND the wall in front of the hero: the
+ * scene is drawn once more from the same eyes with the camera's near plane stood just past the far side of the wall, into
+ * a small picture (a quarter of the screen, 24 times a second — 15 on a weak computer). The less clear the look
+ * (VisibleGodi.clearOf), the more it is blurred, the greyer-blue, the lower in contrast and the grainier; below SEE.SHAPES
+ * only dim shapes are left (a difference of two blurs), below SEE.WORKED no second picture is drawn — only milk. Magic
+ * stops the look: milky «nothing», slowly swirling.
  *
  * Cheap on purpose (CLAUDE.md «Производительность»): the shader and its quad are made once (Game.prewarm); the small
- * picture is made when the spell is switched on and freed when it ends; the second scene pass runs only while the
- * look really goes through a wall; nothing else is drawn when the spell is off. No new lights, no new materials of
- * the scene, no shadow pass of its own (the sun's shadow map stays as the main picture left it).
+ * picture is made when the spell is switched on and the steam is on the screen and freed when it ends; nothing is drawn
+ * when the spell is off, no steam is on the screen or there is no wall near; no new lights, no new materials of the scene,
+ * no shadow pass of its own (the sun's shadow map stays as the main picture left it).
  */
 import * as THREE from 'three';
-import { SEE, nearOf } from '../game/VisibleGodi.js';
+import { SEE, nearOf, puffStrength } from '../game/VisibleGodi.js';
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -29,7 +28,8 @@ uniform sampler2D tBehind;
 uniform vec2 uTexel;
 uniform float uAspect;
 uniform float uTime;
-uniform float uRadius;
+uniform vec4 uPuffs[40]; // the hero's own steam on the screen: x, y (height units from the middle), radius, strength
+uniform int uN;
 uniform float uSee;
 uniform float uBlock;
 uniform float uHaze;
@@ -61,17 +61,22 @@ vec3 blurred(vec2 uv, float px, float rot, int n) {
 
 void main() {
     vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
-    vec2 p = q / max(uRadius, 1e-3);
-    float a = atan(p.y, p.x);
-    // the cloud's edge breathes: slow waves and a little noise round it
-    float wob = 1.0 + 0.06 * sin(a * 3.0 + uTime * 0.7) + 0.045 * sin(a * 5.0 - uTime * 1.1) + 0.06 * (vnoise(vec2(a * 1.5 + uTime * 0.3, uTime * 0.2)) - 0.5);
-    float r = length(p) / wob;
-    if (r > 1.3) discard;
-    float mask = 1.0 - smoothstep(0.5, 1.0, r);
-    float core = 1.0 - smoothstep(0.0, 0.7, r);
-    float rim = smoothstep(0.5, 0.98, r) * (1.0 - smoothstep(0.98, 1.2, r));
+    // the steam's mask: the union of the puffs on the screen, their edges ragged with slow noise
+    float wob = 0.8 + 0.4 * vnoise(q * 7.0 + vec2(uTime * 0.25, -uTime * 0.18));
+    float keep = 1.0;
+    for (int i = 0; i < 40; i++) {
+        if (i >= uN) break;
+        vec4 pf = uPuffs[i];
+        float d = length(q - pf.xy) / max(pf.z * wob, 1e-4);
+        keep *= 1.0 - pf.w * (1.0 - smoothstep(0.3, 1.0, d));
+    }
+    float mask = 1.0 - keep;
+    if (mask < 0.004) discard;
+    float core = smoothstep(0.25, 0.95, mask);
+    float rim = smoothstep(0.04, 0.3, mask) * (1.0 - smoothstep(0.3, 0.75, mask));
+    float a = 0.0;
     vec3 milky = vec3(0.77, 0.86, 0.95);
-    float sw = vnoise(p * 2.2 + vec2(uTime * 0.15, -uTime * 0.1)) * 0.6 + vnoise(p * 5.0 - vec2(uTime * 0.2, 0.0)) * 0.4;
+    float sw = vnoise(q * 3.0 + vec2(uTime * 0.15, -uTime * 0.1)) * 0.6 + vnoise(q * 7.0 - vec2(uTime * 0.2, 0.0)) * 0.4;
     vec3 cloud = milky * (0.8 + 0.32 * sw);
 
     vec3 seen = cloud;
@@ -96,18 +101,18 @@ void main() {
         }
         seen = col;
     }
-    float wSee = uSee / max(uSee + uBlock + uHaze, 1e-3);
+    float wSee = uSee / max(uSee + uBlock, 1e-3);
     vec3 outc = mix(cloud, seen, wSee);
-    float alpha = clamp(mask * (uHaze * 0.26 + uSee * 0.97 + uBlock * 0.9), 0.0, 1.0);
+    float alpha = clamp(mask * (uSee * 0.97 + uBlock * 0.9), 0.0, 1.0);
     // the milky-blue rim, shimmering, and a few sparkles drifting in the cloud
-    float on = clamp(uSee + uBlock + uHaze, 0.0, 1.0);
-    float shimmer = 0.65 + 0.35 * sin(a * 7.0 + uTime * 2.3) * sin(a * 3.0 - uTime * 1.7);
+    float on = clamp(uSee + uBlock, 0.0, 1.0);
+    float shimmer = 0.65 + 0.35 * sin(q.x * 23.0 + uTime * 2.3) * sin(q.y * 17.0 - uTime * 1.7);
     outc += vec3(0.62, 0.8, 1.0) * rim * 0.42 * shimmer;
     alpha = max(alpha, rim * 0.38 * on);
     vec2 g = q * 46.0 + vec2(0.0, uTime * 0.6);
     vec2 cell = floor(g);
     float h = hash21(cell + floor(uTime * 1.5));
-    float spark = step(0.982, h) * pow(max(0.0, 1.0 - length(fract(g) - 0.5) * 2.0), 3.0) * smoothstep(0.1, 0.5, r) * (1.0 - smoothstep(0.9, 1.15, r));
+    float spark = step(0.982, h) * pow(max(0.0, 1.0 - length(fract(g) - 0.5) * 2.0), 3.0) * smoothstep(0.1, 0.5, mask);
     outc += vec3(0.9, 0.96, 1.0) * spark * 0.9;
     alpha = max(alpha, spark * 0.8 * on);
     gl_FragColor = vec4(outc, alpha);
@@ -117,7 +122,7 @@ void main() {
 /** How far behind the wall the second picture draws (m): the cloud is a blur, the far world only costs. */
 export const SEE_FAR = 110;
 const EASE_OPEN = (u) => { const c = 1.35; const x = Math.min(1, Math.max(0, u)) - 1; return 1 + (c + 1) * x * x * x + c * x * x; }; // easeOutBack: the eye opens with a little overshoot
-const _s = new THREE.Vector3();
+const _s = new THREE.Vector3(), _pv = new THREE.Vector3();
 const _sz = new THREE.Vector2();
 
 export class SeeThroughFx {
@@ -132,6 +137,8 @@ export class SeeThroughFx {
         this.see = 0; this.block = 0; this.haze = 0; this.clear = 1; // smoothed
         this.target = { see: 0, block: 0, haze: 1, clear: 1, shape: 0 };
         this.near = 1;
+        this.coverage = -1; // puffs of my steam on the screen now (-1: not looked yet)
+        this._puffs = null; this._now = 0;
         this.rt = null; // the small picture: made when switched on, freed when over
         this._behindAt = -1; // when the picture behind was drawn last
         this._clock = 0;
@@ -145,7 +152,7 @@ export class SeeThroughFx {
             fragmentShader: FRAG,
             uniforms: {
                 tBehind: { value: null }, uTexel: { value: new THREE.Vector2(1 / 512, 1 / 288) }, uAspect: { value: 16 / 9 }, uTime: { value: 0 },
-                uRadius: { value: 0 }, uSee: { value: 0 }, uBlock: { value: 0 }, uHaze: { value: 0 }, uClear: { value: 1 }, uShape: { value: 0 }, uTaps: { value: 13 },
+                uPuffs: { value: Array.from({ length: 40 }, () => new THREE.Vector4()) }, uN: { value: 0 }, uSee: { value: 0 }, uBlock: { value: 0 }, uHaze: { value: 0 }, uClear: { value: 1 }, uShape: { value: 0 }, uTaps: { value: 13 },
             },
             transparent: true, depthTest: false, depthWrite: false,
         });
@@ -174,12 +181,39 @@ export class SeeThroughFx {
     /** What the last ray found (VisibleGodi.update, ~10 times a second). */
     setTarget(info) {
         const t = this.target;
-        if (!info || info.state === 'open' || info.state === 'far') { t.see = 0; t.block = 0; t.haze = 1; t.shape = 0; t.clear = 1; this.near = 1; return; }
+        if (!info || info.state === 'open' || info.state === 'far') { t.see = 0; t.block = 0; t.haze = 0; t.shape = 0; t.clear = 1; this.near = 1; return; }
         if (info.state === 'blocked') { t.see = 0; t.block = 1; t.haze = 0; t.shape = 0; t.clear = 0; return; }
         if (info.clear < SEE.WORKED) { t.see = 0; t.block = 0.8; t.haze = 0; t.shape = 0; t.clear = 0; return; } // (too thick: only milk)
         t.see = 1; t.block = 0; t.haze = 0; t.clear = info.clear;
         t.shape = info.clear < SEE.SHAPES ? 1 - (info.clear - SEE.WORKED) / (SEE.SHAPES - SEE.WORKED) : 0;
         this.near = nearOf(info);
+    }
+
+    /** My steam (VisibleGodi.puffs, performance clock in s): where it is on the screen is where the wall is not drawn. */
+    setPuffs(puffs, now) { this._puffs = puffs; this._now = now; }
+
+    /** The puffs → the mask's discs (x, y from the middle in screen heights, radius, strength); returns how many are on the screen. */
+    _project() {
+        const cam = this.camera, u = this.mat.uniforms, list = u.uPuffs.value;
+        let n = 0;
+        const P = this._puffs;
+        if (P && this.on) {
+            cam.updateMatrixWorld();
+            const inv = cam.matrixWorldInverse, f = 1 / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)), asp = cam.aspect;
+            for (let i = P.length - 1; i >= 0 && n < 40; i--) {
+                const q = P[i], age = this._now - q.t0, w = puffStrength(age) * this.open;
+                if (w <= 0.01) continue;
+                _pv.set(q.x, q.y, q.z).applyMatrix4(inv);
+                const z = -_pv.z;
+                if (z < 0.4 || z > 40) continue;
+                const k = f / z, sx = _pv.x * k * 1, sy = _pv.y * k;
+                const r = SEE.PUFF_R * 1.25 * k * (0.55 + 0.45 * Math.min(1, age / 0.9));
+                if (Math.abs(sx) > 0.5 * asp + r || Math.abs(sy) > 0.5 + r) continue;
+                list[n++].set(sx, sy, r, w);
+            }
+        }
+        u.uN.value = n;
+        return n;
     }
 
     _ensureRT() {
@@ -238,7 +272,8 @@ export class SeeThroughFx {
         this.haze += (T.haze * live - this.haze) * k;
         this.clear += (T.clear - this.clear) * (1 - Math.exp(-dt * 5));
         if (!this.on && this.open <= 0.001) { this._freeRT(); return false; }
-        const seeing = this.on && this.see > 0.02 && T.see > 0;
+        this.coverage = this._project();
+        const seeing = this.on && this.see > 0.02 && T.see > 0 && this.coverage > 0;
         if (seeing) {
             const every = this.low ? 1 / 15 : 1 / 24;
             if (!this.rt || now - this._behindAt >= every) {
@@ -252,12 +287,12 @@ export class SeeThroughFx {
         u.tBehind.value = this.rt ? this.rt.texture : null;
         u.uAspect.value = _sz.x / Math.max(1, _sz.y);
         u.uTime.value = now % 1000;
-        u.uRadius.value = 0.27 * EASE_OPEN(this.open); // a quarter of the screen's height (22–30%)
         u.uSee.value = this.rt ? this.see : 0;
         u.uBlock.value = this.block;
-        u.uHaze.value = this.haze;
+        u.uHaze.value = 0;
         u.uClear.value = this.clear;
         u.uShape.value = T.shape * (this.see > 0.02 ? 1 : 0);
+        if (this.coverage <= 0 || this.see + this.block < 0.01) return false; // (no steam on the screen, or no wall to look through: nothing to draw) // (none of my steam on the screen: nothing to draw)
         const prevT = r.getRenderTarget(), auto = r.autoClear;
         r.setRenderTarget(null);
         r.autoClear = false;

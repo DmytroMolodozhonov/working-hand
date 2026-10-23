@@ -18,6 +18,8 @@ import { spellPhrase } from '../../src/audio/SpellPhrase.js';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 import { SEE, SEEN, MU, VISIBLE_TARGETS, SEE_THROUGH, seeThrough, clearOf, bandOf, traceView, nearOf, VisibleGodi, BLOCK_HINT } from '../../src/game/VisibleGodi.js';
 import { SeeThroughFx, SEE_FAR } from '../../src/fx/SeeThroughFx.js';
+import { SteamBodies } from '../../src/fx/SteamFx.js';
+import * as steamApi from '../../src/game/VisibleGodi.js';
 
 const seg = (code, n) => ({ code, from: 1, to: 1 + n });
 const wallOf = (type, n, z0 = 1) => (x, y, z) => (z >= z0 && z < z0 + n ? type : 0);
@@ -313,10 +315,10 @@ test('the first time (and only when it really showed something): +5 cells once; 
 
 test('«Visible Godi» decides every creature and thing (VISIBLE_TARGETS — «не действует» is written too, with why)', () => {
     for (const k of ['me', 'players', 'servants', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'dragon', 'phoenix', 'owl', 'iceCastle', 'blackship', 'bosses',
-        'blocks', 'doors', 'ships', 'water', 'ward', 'godGift', 'enchanted', 'space', 'spells', 'concentration']) {
+        'blocks', 'doors', 'ships', 'water', 'ward', 'godGift', 'enchanted', 'space', 'spells', 'concentration', 'steam']) {
         assert.ok(VISIBLE_TARGETS[k]?.why && ['see', 'none', 'blocked'].includes(VISIBLE_TARGETS[k].does), `forgets: ${k}`);
     }
-    assert.equal(VISIBLE_TARGETS.players.does, 'none', 'nobody else sees the cloud or learns of it');
+    assert.equal(VISIBLE_TARGETS.players.does, 'see', 'the others see the steam');
     assert.match(BLOCK_HINT, /Магия этой стены не пускает ваш взгляд/);
 });
 
@@ -331,27 +333,30 @@ function fakeRenderer() {
     return r;
 }
 
-test('the cloud: nothing is drawn while off; the small picture is made when switched on and freed after; the second pass only while the look goes through a wall', () => {
+test('the steam window: nothing is drawn while off or with none of my steam on the screen; the small picture is made when switched on and freed after; the second pass only while the look goes through a wall', () => {
     const renderer = fakeRenderer();
     const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
     camera.updateMatrixWorld(true);
     const fx = new SeeThroughFx({ renderer, scene, camera, quality: { current: { pixelRatio: 1 } } });
     fx.prewarm();
     assert.equal(renderer.compiled, 1, 'the shader is compiled on the loading screen');
-    for (let i = 0; i < 30; i++) fx.render(i / 60);
+    const steam = (t, z = -4) => [{ x: 0, y: 0, z, t0: t - 5, seed: 1 }]; // (a puff four metres ahead, five seconds old)
+    const run = (t0, n, puffs) => { for (let i = 0; i < n; i++) { const t = t0 + i / 60; fx.setPuffs(puffs ? puffs(t) : [], t); fx.render(t); } };
+    run(0, 30);
     assert.equal(renderer.calls.length, 0, 'off: not a single draw call');
     assert.equal(fx.stats.rtMade, 0);
-    // on, nothing in front yet: the haze only (the cloud, no second pass, no small picture)
-    fx.setOn(true);
-    fx.setTarget({ state: 'open' });
-    for (let i = 0; i < 30; i++) fx.render(1 + i / 60);
-    assert.equal(fx.stats.passes, 0);
-    assert.equal(fx.stats.rtMade, 0, 'the small picture is not made before it is needed');
-    assert.equal(renderer.calls.filter((c) => c.target === null && c.scene !== scene).length, 30, 'one cloud draw per frame');
-    // a wall of planks: the second pass, ~24 a second, into one small picture of a quarter of the screen
+    // on, but no steam on the screen (or none in front): nothing is drawn, nothing is made
     const info = { state: 'see', clear: 0.88, first: 1, exit: 2, stopAt: Infinity, thick: 1, segs: [] };
+    fx.setOn(true);
     fx.setTarget(info);
-    for (let i = 0; i < 120; i++) fx.render(2 + i / 60); // 2 s
+    run(1, 30);
+    run(2, 30, (t) => steam(t, 4)); // (behind the camera)
+    assert.equal(renderer.calls.length, 0, 'no steam on the screen: no draw call');
+    assert.equal(fx.coverage, 0);
+    assert.equal(fx.stats.rtMade, 0, 'the small picture is not made before it is needed');
+    // my steam in front and a wall of planks: the second pass, ~24 a second, into one small picture of a quarter of the screen
+    run(3, 120, steam); // 2 s
+    assert.ok(fx.coverage >= 1);
     assert.equal(fx.stats.rtMade, 1, 'one small picture');
     assert.ok(fx.stats.passes >= 44 && fx.stats.passes <= 52, 'about 24 a second: ' + fx.stats.passes);
     assert.equal(fx.rt.width, 640);
@@ -363,45 +368,129 @@ test('the cloud: nothing is drawn while off; the small picture is made when swit
     assert.ok(behind.every((c) => c.cam.far <= c.cam.near + SEE_FAR + 1e-6), 'what is far behind the wall is not drawn');
     assert.equal(renderer.shadowMap.autoUpdate, true, 'the main picture\'s shadow settings are given back');
     assert.equal(renderer.target, null);
-    // too thick (clear < 0.05) or magic: milk only, no second pass
+    assert.equal(renderer.calls.filter((c) => c.target === null && c.scene !== scene).length, 120, 'one window draw per frame');
+    // no wall near the eyes: the steam is only steam (no window)
+    const before0 = renderer.calls.length;
+    fx.setTarget({ state: 'far' });
+    run(6, 60, steam);
+    run(7, 60, steam);
+    assert.ok(renderer.calls.length - before0 < 60, 'no wall: the window closes and nothing more is drawn');
+    fx.setTarget(info);
+    // too thick (clear < 0.05): milk only, no second pass
     const before = fx.stats.passes;
     fx.setTarget({ state: 'see', clear: 0.02, exit: 8, stopAt: Infinity });
-    for (let i = 0; i < 60; i++) fx.render(4 + i / 60);
+    run(8, 60, steam);
     assert.ok(fx.stats.passes - before <= 12, 'milk: the pictures stop once the look fades (' + (fx.stats.passes - before) + ' while it faded)');
     const settled = fx.stats.passes;
-    for (let i = 0; i < 60; i++) fx.render(4.9 + i / 60);
+    run(9, 60, steam);
     assert.equal(fx.stats.passes, settled, 'and none after');
     fx.setTarget({ state: 'blocked' });
     const p2 = fx.stats.passes;
-    for (let i = 0; i < 60; i++) fx.render(5 + i / 60);
+    run(10, 60, steam);
     assert.equal(fx.stats.passes, p2, 'magic: no second pass');
-    // off: the cloud closes, the picture is freed once; later frames cost nothing
+    // off: the window closes, the picture is freed once; later frames cost nothing
     fx.setOn(false);
-    for (let i = 0; i < 60; i++) fx.render(6 + i / 60);
+    run(11, 60, steam);
     assert.equal(fx.rt, null);
     assert.equal(fx.stats.rtFreed, 1);
     const n = renderer.calls.length;
-    for (let i = 0; i < 30; i++) fx.render(8 + i / 60);
+    run(13, 30, steam);
     assert.equal(renderer.calls.length, n, 'closed: nothing is drawn');
-    // nothing is made again and again: one material, made at the start
     assert.equal(fx.stats.materials, 1);
     // on again: one more picture (made, then freed — never one per frame)
     fx.setOn(true);
     fx.setTarget(info);
-    for (let i = 0; i < 60; i++) fx.render(9 + i / 60);
+    run(14, 60, steam);
     assert.equal(fx.stats.rtMade, 2);
     fx.dispose();
 });
 
-test('the cloud on a weak computer: a smaller picture, fewer taps, a slower rate', () => {
+test('the window on a weak computer: a smaller picture, fewer taps, a slower rate', () => {
     const renderer = fakeRenderer();
     const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 1000);
     const fx = new SeeThroughFx({ renderer, scene, camera, quality: { current: { pixelRatio: 0.6 } } });
     fx.setOn(true);
     fx.setTarget({ state: 'see', clear: 0.5, exit: 2, stopAt: Infinity });
-    for (let i = 0; i < 120; i++) fx.render(i / 60);
+    for (let i = 0; i < 120; i++) { const t = i / 60; fx.setPuffs([{ x: 0, y: 0, z: -4, t0: t - 5, seed: 1 }], t); fx.render(t); }
     assert.ok(fx.rt.width < 500, 'about a ninth of the screen: ' + fx.rt.width);
     assert.equal(fx.mat.uniforms.uTaps.value, 7);
     assert.ok(fx.stats.passes >= 28 && fx.stats.passes <= 32, 'about 15 a second: ' + fx.stats.passes);
     fx.dispose();
+});
+
+test('the steam: the jet sticks to the near face of a wall, hangs ahead in open air; a puff only when the wand has moved on; it is finite and thins out', () => {
+    const { steamPoint, puffDue, puffStrength } = steamApi;
+    const tip = { x: 0, y: 0, z: 0 }, dir = { x: 0, y: 0, z: 1 };
+    const wall = (z0) => (x, y, z) => (z >= z0 ? BLOCK.STONE : 0);
+    const free = steamPoint(() => 0, tip, dir);
+    assert.ok(Math.abs(free.z - SEE.JET_FREE) < 1e-9, 'open air: ' + free.z);
+    const near = steamPoint(wall(5), tip, dir);
+    assert.ok(Math.abs(near.z - (5 - SEE.JET_STICK)) < 0.15, 'on the near side of the wall at 5 m: ' + near.z);
+    assert.ok(steamPoint(wall(1.0), tip, dir).z >= 0.6 - 1e-9, 'never inside the hand');
+    assert.ok(Math.abs(steamPoint(wall(20), tip, dir).z - SEE.JET_FREE) < 1e-9, 'a wall beyond the jet\'s reach: the steam hangs in air');
+    assert.equal(puffDue(null, near, 5), true);
+    assert.equal(puffDue({ x: 0, y: 0, z: near.z - 0.2 }, near, 5), false, 'a still hand wastes no steam');
+    assert.equal(puffDue({ x: 0, y: 0, z: near.z - 1 }, near, 5), true);
+    assert.equal(puffDue(null, near, 0), false, 'the jet is dry');
+    assert.equal(puffStrength(0), 0);
+    assert.ok(puffStrength(2) === 1 && puffStrength(SEE.PUFF_LIFE - 20) === 1);
+    assert.ok(puffStrength(SEE.PUFF_LIFE - 4) > 0 && puffStrength(SEE.PUFF_LIFE - 4) < 1);
+    assert.equal(puffStrength(SEE.PUFF_LIFE), 0);
+});
+
+test('painting: the wand leaves puffs as it moves (sent to the others), the steam runs out, and with nothing left the spell ends by itself', () => {
+    const { data, eye } = worldWithWall(BLOCK.PLANKS, 1);
+    const sent = [], bodies = [];
+    const { g, said } = fakeGame(data, eye, { sync: { steamPuff: (p, s) => sent.push([p.z, s]), steamOff: () => sent.push('off') }, steam: { setJet() {}, clear: (id) => bodies.push('clear ' + id), addPuff: (id) => bodies.push(id) } });
+    let sweep = 0;
+    g.character.getHandDirection = (s, v) => v.set(Math.sin(sweep), 0, Math.cos(sweep)); // (the wand sweeps)
+    g.character.getHandWorldPosition = (s, v) => v.set(0, eye.y, 0);
+    const v = g.visibleGodi = new VisibleGodi(g);
+    v.cast(true);
+    for (let i = 0; i < 400 && v.steam > 0; i++) { sweep += 0.03; v.update(0.05); }
+    assert.ok(v.puffs.length > 3, 'puffs were left: ' + v.puffs.length);
+    assert.ok(v.puffs.length <= SEE.OWNER_MAX);
+    assert.equal(sent.filter((x) => x !== 'off').length, SEE.STEAM - v.steam, 'every puff is sent to the others');
+    assert.ok(v.steam >= 0 && v.steam < SEE.STEAM, 'steam was used: ' + v.steam);
+    // a still wand wastes nothing
+    const keep = v.steam;
+    for (let i = 0; i < 40; i++) v.update(0.05);
+    assert.ok(keep - v.steam <= 1, 'a still wand: at most one more puff');
+    // drain the rest, then let the puffs thin out: the spell ends by itself («Пар разошёлся»)
+    v.steam = 0;
+    assert.ok(said.some((t) => /Пар кончился/.test(t)) || (v.update(0.05), said.some((t) => /Пар кончился/.test(t))));
+    v.puffs.length = 0;
+    v.update(0.05);
+    assert.ok(!v.on, 'no steam, no puffs: over');
+    assert.match(said.at(-1), /Пар разошёлся/);
+    assert.ok(sent.includes('off') && bodies.includes('clear local'), 'the others are told it is over');
+});
+
+test('another hero\'s steam: puffs from the net are drawn on my computer (a body per hero, reused), «o» clears them; my own echo is ignored', () => {
+    const scene = new THREE.Scene();
+    const sb = new SteamBodies({ scene, renderer: { domElement: { height: 720 } }, camera: new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 100) });
+    const { data, eye } = worldWithWall(BLOCK.PLANKS, 1);
+    const { g } = fakeGame(data, eye, { steam: sb });
+    const v = new VisibleGodi(g);
+    const now = performance.now() / 1000;
+    v.onNet('bob', { k: 'p', p: [1, 2, 3], s: 42 });
+    v.onNet('bob', { k: 'p', p: [1, 2, 4], s: 43 });
+    v.onNet('me', { k: 'p', p: [9, 9, 9], s: 1 });
+    v.onNet('eve', { k: 'p', p: ['x', 2, 3], s: 1 });
+    assert.equal(sb.alive('bob', now + 0.1), 2);
+    assert.equal(sb.alive('me', now + 0.1), 0, 'my own echo');
+    assert.equal(sb.alive('eve', now + 0.1), 0, 'a broken message');
+    assert.equal(sb.alive('bob', now + SEE.PUFF_LIFE + 1), 0, 'it thins out by itself');
+    sb.update(0.016, now + 0.1);
+    assert.equal(sb.bodies.get('bob').points.visible, true);
+    v.onNet('bob', { k: 'o' });
+    sb.update(0.016, now + 0.2);
+    assert.equal(sb.bodies.get('bob').points.visible, false, 'the end of their spell clears it');
+    // many heroes: bodies are reused (never more than the pool), puffs of one hero are a ring (never more than OWNER_MAX)
+    for (let i = 0; i < 12; i++) sb.addPuff('p' + i, 0, 0, 0, i, now);
+    assert.ok(sb.bodies.size <= 5, 'bodies: ' + sb.bodies.size);
+    for (let i = 0; i < SEE.OWNER_MAX + 15; i++) sb.addPuff('local', i, 0, 0, i, now);
+    assert.equal(sb.alive('local', now + 0.1), SEE.OWNER_MAX);
+    assert.equal(sb.stats.bodies <= 5, true);
+    sb.dispose();
 });

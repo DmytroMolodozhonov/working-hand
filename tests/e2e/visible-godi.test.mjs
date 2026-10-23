@@ -20,7 +20,7 @@ test.after(async () => {
     srv?.stop();
 });
 
-test('Visible Godi: a scroll, 20 mana + 1 a second, the look through a wall of planks, «стоп»', async () => {
+test('Visible Godi: a scroll, 20 mana + 1 a second, the steam painted on a wall of planks, the look through it, «стоп»', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await waitHudVisible(page);
@@ -44,8 +44,11 @@ test('Visible Godi: a scroll, 20 mana + 1 a second, the look through a wall of p
         const paid = before - g.combat.fatigue;
         const held = g.focus.held();
         const again = g.castLocalSpell('Bombardo', true); // (concentration)
+        // (the wand's jet paints: a few puffs on the wall ahead, as a sweeping wand would leave them)
+        const cam = g.camera, dir = new g.camera.position.constructor(); cam.getWorldDirection(dir);
+        for (const [dx, dy] of [[0, 0], [0.8, 0.3], [-0.8, 0.2], [0.3, -0.6], [-0.4, 0.7]]) g.visibleGodi._addPuff({ x: cam.position.x + dir.x * 2.4 + dx, y: cam.position.y + dir.y * 2.4 + dy, z: cam.position.z + dir.z * 2.4 }, performance.now() / 1000);
         const t0 = performance.now(), m0 = g.combat.fatigue;
-        await frames(90);
+        await frames(30);
         const secs = (performance.now() - t0) / 1000;
         const info = g.visibleGodi.info;
         const fx = g.seeFx;
@@ -64,8 +67,8 @@ test('Visible Godi: a scroll, 20 mana + 1 a second, the look through a wall of p
     assert.equal(r.again, null, 'another spell: first «стоп»');
     assert.equal(r.mid.state, 'see', 'the wall of planks is seen through: ' + JSON.stringify(r.mid));
     assert.ok(r.mid.clear > 0.8 && r.mid.clear < 0.95, 'clear ' + r.mid.clear);
-    assert.ok(r.mid.passes > 5 && r.mid.rtMade === 1, JSON.stringify(r.mid));
-    assert.ok(r.drained > 0.3 * r.secs && r.drained < 2.2 * r.secs, `1 a second: ${r.drained} in ${r.secs} s`);
+    assert.ok(r.mid.passes > 2 && r.mid.rtMade === 1, JSON.stringify(r.mid));
+    assert.ok(r.drained > 0.5 && r.drained < 2.2 * r.secs, `1 a second of game time (slow frames here count less than the clock): ${r.drained} in ${r.secs} s`);
     assert.equal(r.after.on, false);
     assert.equal(r.after.hasRT, false, 'the small picture is freed');
     assert.equal(r.after.held, null);

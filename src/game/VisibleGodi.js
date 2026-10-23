@@ -1,18 +1,23 @@
 /**
- * VisibleGodi.js — «Visible Godi» (only from a scroll): a little cloud on the screen shows what is behind a wall.
+ * VisibleGodi.js — «Visible Godi» (only from a scroll): steam from the wand paints a cloud; you see through the steam.
  *
- * The author: «Ты произносишь заклинание, и у тебя появляется такая тучка на экране — размытая, нечёткая, в
- * середине более чёткая, по краям не так сильно. И ты фактически можешь видеть сквозь стену. Не работает в
- * магических стенах или божественных стенах… Работает, только если ты прямо реально возле стены… Чем толще
- * стены, тем хуже видно. Чем стены проще (дерево, одноблочная стена), тем видно очень чётко и хорошо.»
+ * The author: «Как только ты произносишь, идёт сначала пар из палочки — такой большой жирный пар, и ты этим паром
+ * рисуешь эту тучку. У пара есть ограничение: рано или поздно он заканчивается, нельзя прям много рисовать. Ты как
+ * бы видишь через этот пар. И другие игроки тоже могут видеть (пар) — это не только для тебя заклинание.
+ * Сквозь стены вид размытый: чем толще стена — тем хуже; дерево, одноблочная стена — очень чётко. Не работает в
+ * магических и божественных стенах. Работает, только если ты прямо реально возле стены.»
  *
  * Held (Concentration.HELD): 20 mana at once (Combat.SPELL_COST), then 1 mana a second; «стоп», no mana, death,
  * a stun end it. +5 cells of the mana maximum the first time it REALLY showed something behind a wall.
  *
- * How it sees (the rules live here, pure and tested; the picture is SeeThroughFx.js):
- *   - a ray goes from the eyes straight ahead (the middle of the screen) through the blocks of the world — by small
- *     steps of 0.1 m, so a slab, a ship's plank and a door count as they are, not as whole blocks;
- *   - only when the first solid thing is at most REACH (3 m) away: «прямо возле стены»;
+ * The steam (SteamFx.js draws it, on every computer): while the spell is on, the wand's jet reaches ahead (SEE.JET_MAX m;
+ * it sticks to the first solid face it meets, else hangs SEE.JET_FREE m ahead) and a fat puff is left every SEE.PUFF_GAP m
+ * the jet moves — so you PAINT with the wand. The steam is finite: SEE.STEAM puffs, then the jet runs dry; the painted
+ * puffs thin out after SEE.PUFF_LIFE s. Nobody collides with it; it harms and frightens nobody.
+ *
+ * How it sees (the rules live here, pure and tested; the picture is SeeThroughFx.js): the eyes' ray goes through the
+ * real blocks (0.1 m steps; ships' hulls, doors, others' house spheres too); only when the first solid thing is at most
+ * REACH (3 m) away. Where the hero's own steam covers the screen the wall is not drawn:
  *   - the cluster of things the ray passes (a wall, then up to GAP_MAX of air, another wall…) is added up: every
  *     material has an extinction per metre μ (SEE_THROUGH), the clearness is exp(−Σ μ·thickness):
  *        1 block of planks ≈ 88%, of stone ≈ 65%, 3 of stone ≈ 27%, 6 of stone ≈ 8% (only shapes), 8+ — nothing;
@@ -21,7 +26,7 @@
  *   - magic stops the look: the enchanted stone (arenas, wizards' towers), arcane stone, the Ice Queen's ice, the
  *     gods' temple (golden shield), the black ship's cursed hull, another's house sphere — a milky «nothing».
  *
- * Only my computer: nobody else sees the cloud or learns of the spell (nothing is sent, nobody is frightened).
+ * Others see the steam (messages 'vgs': a puff / the end); only the caster looks through it.
  */
 
 import { BLOCK } from '../world/Terrain.js';
@@ -39,6 +44,16 @@ export const SEE = {
     SHAPES: 0.08, // below this only dim shapes are left, no details
     SCAN_T: 0.1, // s between two rays
     NEAR_PAD: 0.12, // m behind the far side of the wall where the camera's near plane stands
+    // the steam (the author: «рано или поздно он заканчивается»)
+    STEAM: 36, // puffs the jet can leave in one casting
+    PUFF_GAP: 0.7, // m the jet must move for the next puff (a still hand wastes nothing)
+    JET_MAX: 8, // m: how far the jet reaches ahead of the wand
+    JET_FREE: 3.5, // m: where the steam hangs when the jet meets nothing
+    JET_STICK: 0.5, // m: it stops this far before the solid face it meets (on the near side of the wall)
+    PUFF_LIFE: 45, // s a painted puff lasts before it thins out
+    PUFF_R: 1.35, // m: a puff's radius (the hero is 3.5 m tall: a puff is about a head and a half wide)
+    EMIT_T: 0.06, // s between two looks of the jet
+    OWNER_MAX: 40, // puffs one hero's steam keeps on every computer
 };
 
 // the codes the ray's sampler gives besides block ids
@@ -176,10 +191,31 @@ export function traceView(sample, o, d, { maxLen = SEE.MAX_LEN, step = SEE.STEP,
 /** Where the camera's near plane stands for the picture behind the wall: just past its far side, never into magic stone behind it. */
 export const nearOf = (info) => Math.max(0.2, Math.min(info.exit + SEE.NEAR_PAD, info.stopAt - 0.02));
 
+/**
+ * Where the wand's jet leaves its puff: along `dir` from `tip`, on the near side of the first solid thing within JET_MAX
+ * (steam sticks to a wall's face), else JET_FREE ahead. `sample` as in traceView. Writes into `out` {x,y,z}. Pure.
+ */
+export function steamPoint(sample, tip, dir, out = { x: 0, y: 0, z: 0 }) {
+    let hit = Infinity;
+    for (let t = SEE.STEP * 0.5; t < SEE.JET_MAX; t += SEE.STEP) {
+        if (sample(tip.x + dir.x * t, tip.y + dir.y * t, tip.z + dir.z * t, t)) { hit = t; break; }
+    }
+    const d = hit === Infinity ? SEE.JET_FREE : Math.max(0.6, Math.min(SEE.JET_MAX, hit - SEE.JET_STICK));
+    out.x = tip.x + dir.x * d; out.y = tip.y + dir.y * d; out.z = tip.z + dir.z * d;
+    return out;
+}
+
+/** Is a new puff due: the jet's end moved far enough from the last one (and steam is left)? Pure. */
+export const puffDue = (last, p, steam) => steam > 0 && (!last || Math.hypot(p.x - last.x, p.y - last.y, p.z - last.z) >= SEE.PUFF_GAP);
+
+/** How strongly a puff of age `age` s is there (0…1): it swells in 0.6 s, thins out in its last 8 s. */
+export const puffStrength = (age) => Math.min(1, Math.max(0, age / 0.6)) * (1 - Math.min(1, Math.max(0, (age - (SEE.PUFF_LIFE - 8)) / 8)));
+
 /** ON WHOM AND ON WHAT (CLAUDE.md). `does`: see | none | blocked. */
 export const VISIBLE_TARGETS = {
     me: { does: 'see', why: 'только я вижу тучку: она на моём экране' },
-    players: { does: 'none', why: 'другие игроки не видят тучку и не узнают о заклинании; в сеть ничего не уходит (расчёт и картинка — на моём компьютере)' },
+    players: { does: 'see', why: 'другие игроки ВИДЯТ пар и нарисованную тучку (сообщения «vgs»), но смотрят на неё снаружи; сквозь стены смотрит только колдующий' },
+    steam: { does: 'none', why: 'пар не толкает, не ранит, не пугает, не горит и не мешает ходить (коллизий у него нет); его конечное количество — SEE.STEAM порций, потом струя иссякает; пар редеет за PUFF_LIFE с' },
     servants: { does: 'none', why: 'мои слуги ничего не замечают' },
     zombies: { does: 'see', why: 'зомби за стеной я вижу; они меня и заклинание не замечают — на них оно не действует' },
     castlePeople: { does: 'see', why: 'жителей, рыцарей, короля и волшебников за стеной вижу; они не пугаются и не тревожатся (castleLife.alarm не зовём): взгляд — не преступление' },
@@ -221,6 +257,11 @@ export class VisibleGodi {
         this._doorAt = -1; // m along the ray where a door's leaf is
         this._cx = NaN; this._cz = NaN; this._made = true; // (the chunk last asked about: is its land made?)
         this.rays = 0; // (tests/log) how many rays were followed
+        this.puffs = []; // my painted steam: { x, y, z, t0 (s, performance clock), seed } — the picture's mask and the net's copy
+        this.steam = SEE.STEAM; // puffs left in the jet
+        this.jet = null; // { tip, head } now (SteamFx draws the thread of steam between them)
+        this._jetT = 0;
+        this._puff = { x: 0, y: 0, z: 0 };
         this.sample = (x, y, z, t) => this._sample(x, y, z, t);
     }
 
@@ -287,11 +328,12 @@ export class VisibleGodi {
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
         if (this.on) return hint('👁️ «Visible Godi» уже работает. «Стоп» — закрыть тучку');
         if (!castingHand(g)) return hint('👁️ Поднимите палочку (руку) и скажите «Visible Godi»');
+        if (g.swim?.underwater) return hint('👁️ Под водой пар не держится');
         const tired = g.combat.check('VisibleGodi');
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('VisibleGodi');
         this.set(true);
-        g.hud.setVoice('👁️ Подойдите к стене и смотрите на неё — тучка покажет, что за ней (1 мана в секунду, «стоп» — закрыть)', true);
+        g.hud.setVoice('👁️ Из палочки идёт пар — рисуйте им тучку на стене, потом смотрите сквозь неё (пар кончится; 1 мана в секунду, «стоп» — закрыть)', true);
         return 'VisibleGodi';
     }
 
@@ -303,10 +345,16 @@ export class VisibleGodi {
         this._hinted.clear();
         this._scanT = 0;
         this.info = { state: 'open', first: Infinity, exit: 0, thick: 0, clear: 1, why: null, name: '', segs: [], stopAt: Infinity };
+        this.puffs.length = 0;
+        this.steam = SEE.STEAM;
+        this.jet = null;
         g.seeFx?.setOn?.(on);
+        g.steam?.setJet?.('local', null, null, false);
+        if (!on) { g.steam?.clear?.('local'); g.sync?.steamOff?.(); }
         g.perf?.note?.(on ? '👁️ Visible Godi: включена' : '👁️ Visible Godi: выключена' + (why ? ' (' + why + ')' : ''));
         if (!on) {
-            if (why === 'mana') g.hud.setVoice('👁️ Мана кончилась — тучка растаяла', true);
+            if (why === 'steam') g.hud.setVoice('👁️ Пар разошёлся — тучки больше нет', true);
+            else if (why === 'mana') g.hud.setVoice('👁️ Мана кончилась — тучка растаяла', true);
             else if (why === 'stop') g.hud.setVoice('👁️ Тучка закрыта', true);
         }
     }
@@ -337,12 +385,67 @@ export class VisibleGodi {
             if (i.state === 'blocked') {
                 this._hint('blocked', BLOCK_HINT);
                 g.perf?.note?.(`👁️ Visible Godi: взгляд не пущен (${i.name})`);
-            } else if (i.state === 'see' && i.clear >= SEE.WORKED && !this._worked) {
+            } else if (i.state === 'see' && i.clear >= SEE.WORKED && !this._worked && g.seeFx?.coverage !== 0) {
                 this._worked = true;
                 g.mana?.success?.('VisibleGodi'); // (the first real look behind a wall: +5 cells, once)
                 g.perf?.note?.(`👁️ Visible Godi: первый просвет — ${i.name}, ${i.thick.toFixed(1)} м, ясность ${Math.round(i.clear * 100)}%`);
             }
         }
+        this._paint(dt);
         g.seeFx?.setTarget?.(this.info);
+        g.seeFx?.setPuffs?.(this.puffs, performance.now() / 1000);
+    }
+
+    /** The jet: looks ahead of the wand a few times a second, leaves a puff where the wand has moved on; old puffs go. */
+    _paint(dt) {
+        const g = this.game, now = performance.now() / 1000;
+        while (this.puffs.length && now - this.puffs[0].t0 > SEE.PUFF_LIFE) this.puffs.shift();
+        this._jetT -= dt;
+        if (this._jetT <= 0) {
+            this._jetT = SEE.EMIT_T;
+            const hand = this.steam > 0 ? castingHand(g) : null;
+            if (!hand) { if (this.jet) { this.jet = null; g.steam?.setJet?.('local', null, null, false); } }
+            else {
+                const door = this._doorAt;
+                this._doorAt = -1;
+                this._refreshThings(hand.origin);
+                const end = steamPoint(this.sample, hand.origin, hand.dir, this._puff);
+                this._doorAt = door;
+                this.jet = { tip: hand.origin, head: end };
+                g.steam?.setJet?.('local', hand.origin, end, true);
+                if (puffDue(this.puffs[this.puffs.length - 1], end, this.steam)) this._addPuff(end, now);
+            }
+        }
+        if (this.steam <= 0 && !this._hinted.has('dry')) { this.jet = null; g.steam?.setJet?.('local', null, null, false); this._hint('dry', '👁️ Пар кончился — смотрите сквозь то, что нарисовали'); }
+        if (this.steam <= 0 && !this.puffs.length) this.set(false, 'steam');
+    }
+
+    _addPuff(p, now) {
+        const g = this.game, seed = (Math.random() * 4294967296) >>> 0;
+        this.steam--;
+        this.puffs.push({ x: p.x, y: p.y, z: p.z, t0: now, seed });
+        if (this.puffs.length > SEE.OWNER_MAX) this.puffs.shift();
+        g.steam?.addPuff?.('local', p.x, p.y, p.z, seed, now);
+        g.sync?.steamPuff?.(p, seed);
+    }
+
+    /** The ships and spheres round a point (the same things scan() looks at, for the jet's own ray). */
+    _refreshThings(o) {
+        const g = this.game;
+        this._ships.length = 0;
+        if (g.ships?.list) for (const s of g.ships.list.values()) if (s.collider && s.collider.hasXZ(o.x, o.z, SEE.JET_MAX + 4)) this._ships.push(s);
+        this._wards.length = 0;
+        if (g.wards?.list) for (const w of g.wards.list.values()) if (!g.wards.mine(w)) this._wards.push(w);
+    }
+
+    /** Another player's steam ('vgs': k 'p' a puff at p with a seed, k 'o' the end of their spell). */
+    onNet(by, m) {
+        const g = this.game;
+        if (by === g.localId) return;
+        if (m.k === 'o') { g.steam?.clear?.(by); return; }
+        if (m.k !== 'p' || !Array.isArray(m.p)) return;
+        const p = m.p.map(Number);
+        if (p.some((x) => !Number.isFinite(x))) return;
+        g.steam?.addPuff?.(by, p[0], p[1], p[2], Number(m.s) >>> 0, performance.now() / 1000);
     }
 }

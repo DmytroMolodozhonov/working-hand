@@ -164,6 +164,7 @@ import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { SeeThroughFx } from '../fx/SeeThroughFx.js';
+import { SteamBodies } from '../fx/SteamFx.js';
 import { Fireworks } from './Fireworks.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
@@ -558,6 +559,7 @@ export class Game {
         this.quality.apply(this.world);
         this.ultra = new Ultra(this); // «Ультра качество»: an addition, switched on the go (Ultra.js)
         this.ultra.set(this.quality.ultra);
+        this.steam = new SteamBodies(this); // «Visible Godi»'s steam, mine and other heroes' (SteamFx.js)
         this.seeFx = new SeeThroughFx(this); // «Visible Godi»'s cloud: one shader made now, drawn only while the spell is on (SeeThroughFx.js)
         this.iceCells = []; // ice built with «Water forming» + «Frozen» (sent to late joiners)
         this.weapons.onHit = (z, dmg, dir, isWeapon, w, hit) => this.onLocalHit(z, isWeapon && w ? dmg * (w.damageScale || 1) : dmg, dir, isWeapon, hit, w);
@@ -3447,6 +3449,7 @@ export class Game {
         if (earth) this.servants.update(dt);
         this.invis?.update(dt);
         this.visibleGodi?.update(dt);
+        this.steam?.update(dt);
         this.fireworks?.update(dt);
         if (earth) this._updateCaves(dt);
         this.keeper?.update(dt);
@@ -4352,6 +4355,7 @@ export class Game {
         this.scrolls?.dispose();
         this.swim?.dispose();
         this.seaSurface?.dispose();
+        this.steam?.dispose();
         this.seeFx?.dispose();
         this.ultra?.dispose();
         this.items?.dispose();

@@ -2,232 +2,67 @@
  {
   "id": "open",
   "label": "nothing near: the haze only",
+  "ms": null,
   "state": "far",
   "clear": 1,
   "thick": 0,
   "why": null,
   "plain": {
-   "mean": 0.453,
-   "contrast": 0.113,
-   "detail": 0.0144,
-   "blue": -0.354
+   "mean": 0.858,
+   "contrast": 0.023,
+   "detail": 0.0015,
+   "blue": 0.081
   },
   "cloud": {
-   "mean": 0.542,
-   "contrast": 0.083,
-   "detail": 0.0108,
-   "blue": -0.218
+   "mean": 0.865,
+   "contrast": 0.022,
+   "detail": 0.0014,
+   "blue": 0.087
   },
   "passes": 0
  },
  {
   "id": "wood1",
   "label": "1 block of planks",
+  "ms": null,
   "state": "see",
   "clear": 0.88,
   "thick": 1,
   "why": null,
   "plain": {
-   "mean": 0.43,
-   "contrast": 0.05,
-   "detail": 0.0041,
-   "blue": -0.357
+   "mean": 0.768,
+   "contrast": 0.028,
+   "detail": 0.0018,
+   "blue": 0.006
   },
   "cloud": {
-   "mean": 0.478,
-   "contrast": 0.174,
-   "detail": 0.0103,
-   "blue": -0.181
+   "mean": 0.704,
+   "contrast": 0.08,
+   "detail": 0.0045,
+   "blue": -0.093
   },
-  "passes": 36
- },
- {
-  "id": "wood2",
-  "label": "2 blocks of planks",
-  "state": "see",
-  "clear": 0.774,
-  "thick": 2,
-  "why": null,
-  "plain": {
-   "mean": 0.43,
-   "contrast": 0.05,
-   "detail": 0.0041,
-   "blue": -0.357
-  },
-  "cloud": {
-   "mean": 0.488,
-   "contrast": 0.154,
-   "detail": 0.0136,
-   "blue": -0.136
-  },
-  "passes": 36
- },
- {
-  "id": "stone1",
-  "label": "1 block of stone",
-  "state": "see",
-  "clear": 0.651,
-  "thick": 1,
-  "why": null,
-  "plain": {
-   "mean": 0.449,
-   "contrast": 0.09,
-   "detail": 0.0038,
-   "blue": -0.038
-  },
-  "cloud": {
-   "mean": 0.507,
-   "contrast": 0.13,
-   "detail": 0.0187,
-   "blue": -0.054
-  },
-  "passes": 36
+  "passes": 2
  },
  {
   "id": "stone3",
   "label": "3 blocks of stone",
+  "ms": null,
   "state": "see",
   "clear": 0.275,
   "thick": 3,
   "why": null,
   "plain": {
-   "mean": 0.449,
-   "contrast": 0.09,
-   "detail": 0.0038,
-   "blue": -0.038
+   "mean": 0.66,
+   "contrast": 0.053,
+   "detail": 0.0029,
+   "blue": 0.041
   },
   "cloud": {
-   "mean": 0.606,
-   "contrast": 0.081,
-   "detail": 0.0353,
-   "blue": 0.085
+   "mean": 0.679,
+   "contrast": 0.072,
+   "detail": 0.0031,
+   "blue": 0.049
   },
-  "passes": 36
- },
- {
-  "id": "stone6",
-  "label": "6 blocks of stone",
-  "state": "see",
-  "clear": 0.076,
-  "thick": 6,
-  "why": null,
-  "plain": {
-   "mean": 0.449,
-   "contrast": 0.09,
-   "detail": 0.0038,
-   "blue": -0.038
-  },
-  "cloud": {
-   "mean": 0.657,
-   "contrast": 0.064,
-   "detail": 0.0392,
-   "blue": 0.13
-  },
-  "passes": 36
- },
- {
-  "id": "stone9",
-  "label": "9 blocks of stone",
-  "state": "see",
-  "clear": 0.015,
-  "thick": 10,
-  "why": null,
-  "plain": {
-   "mean": 0.449,
-   "contrast": 0.09,
-   "detail": 0.0038,
-   "blue": -0.038
-  },
-  "cloud": {
-   "mean": 0.698,
-   "contrast": 0.042,
-   "detail": 0.0018,
-   "blue": 0.111
-  },
-  "passes": 0
- },
- {
-  "id": "dirt3",
-  "label": "3 blocks of earth",
-  "state": "see",
-  "clear": 0.432,
-  "thick": 3,
-  "why": null,
-  "plain": {
-   "mean": 0.297,
-   "contrast": 0.019,
-   "detail": 0.0009,
-   "blue": -0.251
-  },
-  "cloud": {
-   "mean": 0.554,
-   "contrast": 0.099,
-   "detail": 0.0282,
-   "blue": 0.023
-  },
-  "passes": 36
- },
- {
-  "id": "leaves3",
-  "label": "3 blocks of leaves",
-  "state": "see",
-  "clear": 0.861,
-  "thick": 3,
-  "why": null,
-  "plain": {
-   "mean": 0.311,
-   "contrast": 0.018,
-   "detail": 0.0009,
-   "blue": 0.026
-  },
-  "cloud": {
-   "mean": 0.477,
-   "contrast": 0.172,
-   "detail": 0.0106,
-   "blue": -0.18
-  },
-  "passes": 36
- },
- {
-  "id": "enchanted2",
-  "label": "enchanted wall (2)",
-  "state": "blocked",
-  "clear": 0,
-  "thick": 0,
-  "why": "enchanted",
-  "plain": {
-   "mean": 0.67,
-   "contrast": 0.136,
-   "detail": 0.0057,
-   "blue": -0.121
-  },
-  "cloud": {
-   "mean": 0.783,
-   "contrast": 0.044,
-   "detail": 0.0015,
-   "blue": 0.14
-  },
-  "passes": 0
- },
- {
-  "id": "cluster",
-  "label": "planks, 3 m of air, stone",
-  "state": "see",
-  "clear": 0.372,
-  "thick": 3,
-  "why": null,
-  "plain": {
-   "mean": 0.43,
-   "contrast": 0.05,
-   "detail": 0.0041,
-   "blue": -0.357
-  },
-  "cloud": {
-   "mean": 0.572,
-   "contrast": 0.089,
-   "detail": 0.0309,
-   "blue": 0.056
-  },
-  "passes": 36
+  "passes": 1
  }
 ]

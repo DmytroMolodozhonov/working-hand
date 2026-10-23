@@ -510,6 +510,15 @@ export class NetSync {
         this.net.send({ t: 'ddat', by: this.me, p: [r3(p.x), r3(p.y), r3(p.z)] }, true);
     }
 
+    /** «Visible Godi»: a puff of my steam at p (the seed shapes it the same everywhere) / my steam is over — VisibleGodi.js. */
+    steamPuff(p, seed) {
+        this.net.send({ t: 'vgs', by: this.me, k: 'p', p: [r3(p.x), r3(p.y), r3(p.z)], s: seed >>> 0 }, true);
+    }
+
+    steamOff() {
+        this.net.send({ t: 'vgs', by: this.me, k: 'o' }, true);
+    }
+
     /** «Invisibility»: I am invisible now / seen again (Invisibility.js). */
     invis(on) {
         this.net.send({ t: 'invis', by: this.me, on: on ? 1 : 0 }, true);
@@ -955,6 +964,7 @@ export class NetSync {
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
             }
+            case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
             case 'tdes': {
                 if (m.by === this.me) break;

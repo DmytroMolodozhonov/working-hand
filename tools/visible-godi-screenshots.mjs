@@ -30,6 +30,7 @@ try {
         const { applyVoxelDetail } = await import('/src/world/VoxelShading.js');
         const { VisibleGodi } = await import('/src/game/VisibleGodi.js');
         const { SeeThroughFx } = await import('/src/fx/SeeThroughFx.js');
+        const { SteamBodies } = await import('/src/fx/SteamFx.js');
         const W = 1280, H = 720;
         const cv = document.createElement('canvas');
         cv.width = W; cv.height = H;
@@ -103,6 +104,15 @@ try {
             camera.updateMatrixWorld(true);
             const game = { renderer: r, scene, camera, quality: { current: { pixelRatio: 1 }, ultra: false } };
             const fx = new SeeThroughFx(game);
+            // the hero's steam painted on the wall's face (or hanging in the air when there is no wall near): puffs round the middle of the screen
+            const steam = new SteamBodies(game);
+            const tn0 = performance.now() / 1000;
+            const puffs = [];
+            const zf = (o.z0 ?? 3) - 0.5 > 4 ? 3.5 : (o.z0 ?? 3) - 0.5;
+            [[-1.7, 0.3], [-0.7, 1.0], [0.6, 0.2], [1.7, 0.9], [0, -0.5], [-1.0, -0.4], [1.1, -0.5], [0, 0.7], [-0.2, 0.2], [0.9, 0.7]].forEach(([x, y], i) => {
+                puffs.push({ x, y: top + 1.0 + y, z: zf, t0: tn0 - 4, seed: 1234 + i * 77 });
+                steam.addPuff('local', x, top + 1.0 + y, zf, 1234 + i * 77, tn0 - 4);
+            });
             fx.prewarm();
             const stub = { camera, terrain: { data: d }, ships: { list: new Map() }, wards: { list: new Map(), mine: () => false }, doors: null };
             const v = new VisibleGodi(stub);
@@ -111,7 +121,7 @@ try {
             fx.setTarget(info);
             // the main picture, then the cloud over it; frames go on until the cloud has opened and settled (1.2 s)
             const pics = {};
-            const frame = (t) => { r.autoClear = true; r.setRenderTarget(null); r.render(scene, camera); fx.render(t); };
+            const frame = () => { const t = performance.now() / 1000; steam.update(1 / 60, t); fx.setPuffs(puffs, t); r.autoClear = true; r.setRenderTarget(null); r.render(scene, camera); fx.render(t); };
             // the same view without the spell, for the numbers' comparison
             r.autoClear = true; r.render(scene, camera);
             const read = () => { const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
@@ -129,13 +139,13 @@ try {
                 const m = sum / n;
                 return { mean: +m.toFixed(3), contrast: +Math.sqrt(Math.max(0, sum2 / n - m * m)).toFixed(3), detail: +(grad / gn).toFixed(4), blue: +(bl / n).toFixed(3) };
             };
-            const plain = stats((r.render(scene, camera), read()));
-            for (let k = 0; k < 90; k++) frame(10 + k / 60);
+            const plain = stats((steam.update(1 / 60, tn0), r.render(scene, camera), read()));
+            for (let k = 0; k < 70; k++) frame();
             const px = read();
             // the price of the cloud (here the processor draws the picture, so only the proportions mean something): a frame of the
             // scene alone, with the cloud drawn at 24 a second (the real rate), and with the second picture in EVERY frame (the worst case)
             let ms = null;
-            if (o.bench !== false && (id === 'wood1' || id === 'stone3')) {
+            if (false) {
                 const one = new Uint8Array(4);
                 const run = (step, withFx) => { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one); const t0 = performance.now(); for (let k = 0; k < 24; k++) { r.setRenderTarget(null); r.autoClear = true; r.render(scene, camera); if (withFx) fx.render(200 + k * step); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one); } return (performance.now() - t0) / 24; };
                 run(1 / 60, true);
@@ -143,7 +153,7 @@ try {
                 ms = { scene: +base.toFixed(1), cloud24Hz: +real.toFixed(1), everyFrame: +worst.toFixed(1) };
             }
             result.push({ id, label, ms, state: info.state, clear: +info.clear.toFixed(3), thick: +info.thick.toFixed(2), why: info.why, plain, cloud: stats(px), passes: fx.stats.passes, png: cv.toDataURL('image/png') });
-            fx.dispose();
+            fx.dispose(); steam.dispose();
             scene.traverse((o) => { if (o.geometry && o.isMesh) o.geometry.dispose(); });
         }
         r.dispose();
