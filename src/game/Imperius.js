@@ -79,7 +79,7 @@ export const IMPERIUS_TARGETS = {
     pegasus: { ru: 'Пегас', magic: true, fly: true },
     runbook: { ru: 'бегущая книга', magic: true },
     guardBeast: { ru: 'медный бык / минотавр', magic: true }, // (a herd's magic guard — HerdGuards.js)
-    dragon: { ru: 'дракон', magic: true, fly: true },
+    dragon: { ru: 'дракон', magic: true, fly: true }, // (its anger, a grudge, a robbed hoard — no matter: the Maxima is the gods'; the mind in it is yours. «Brain Rot Maxima» calms; this one takes)
     spider: { ru: 'гигантская паучиха', magic: true, boss: true },
     bookbird: { ru: 'книга-птица', magic: true, fly: true },
     owl: { ru: 'сова', magic: true, fly: true },

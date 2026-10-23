@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { BODIES } from './ImperiusBodies.js';
 import { FLYERS, flyStep } from './ImperiusFlight.js';
 import { DRAGON } from './DragonKinds.js';
+import { dragonBody } from './Dragons.js';
 import { BODY_R } from './Crowd.js';
 import { flap as bookFlap } from './BookBirds.js';
 
@@ -73,6 +74,7 @@ const dragons = {
     dead(d) { return !!d.dead; },
     pos(d, out) { return out.copy(d.model.position); },
     face(d) { return d.model.rotation.y; },
+    body(d, out) { return dragonBody(d, out); }, // (a great body: aimed at — and measured to — anywhere along it, ImperiusControl._aimed)
     head(d) { return d.model.userData?.head || d.model.userData?.jaw?.parent || null; },
     size(d) { return 5.5 * (d.size || 1); },
     drive(g, d, I, dt) {

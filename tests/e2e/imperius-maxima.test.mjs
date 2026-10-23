@@ -119,3 +119,54 @@ test('a dragon: the plain spell no, the Maxima yes; run + strokes — it flies o
     }
     assert.deepEqual(realErrors(errors), []);
 });
+
+test('Creative, the author\'s case: the test dragon by the mountain is taken by «Империус Максима» — aimed at any part of its body; too far — told so, never silence', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative');
+    await waitHudVisible(page);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, ch = g.character, I = g.imperius;
+        const out = {};
+        const run = (n) => { for (let i = 0; i < n; i++) { g.lastTime = performance.now() - 50; g.frame(); } };
+        g._tdT = 0;
+        for (let i = 0; i < 40 && !g.dragons.list.some((q) => q.id === 'ctest-dragon'); i++) { g._tdT = 0; run(5); }
+        const d = g.dragons.list.find((q) => q.id === 'ctest-dragon');
+        out.has = !!d;
+        if (!d) return out;
+        const dp = d.model.position;
+        out.dragonAboveGround = +(dp.y - g.collision.groundY(dp.x, dp.z)).toFixed(2);
+        const lookFrom = (dist) => {
+            // the hero `dist` m from it, in front of it, looking at its TAIL end (not its middle)
+            const fx = -Math.sin(d.model.rotation.y), fz = -Math.cos(d.model.rotation.y);
+            const x = dp.x + fx * dist, z = dp.z + fz * dist;
+            ch.group.position.set(x, g.collision.groundY(x, z) + 2, z);
+            g.camera.position.set(x, ch.group.position.y + 1.4, z);
+            g.camera.lookAt(dp.x - fx * 6 * d.size, dp.y + 2 * d.size, dp.z - fz * 6 * d.size);
+            g.camera.updateMatrixWorld(true);
+        };
+        lookFrom(80);
+        I._lastCast = 0;
+        out.far = g.castLocalSpell('империус максима', true);
+        out.farWhy = g.lastCastWhy;
+        lookFrom(28);
+        I._lastCast = 0;
+        out.near = g.castLocalSpell('империус максима', true);
+        out.nearWhy = g.lastCastWhy; out.said = [...I._said.keys()].slice(-3);
+        out.active = I.active; out.kind = I.kind;
+        run(30);
+        out.phase = I.phase;
+        g.castLocalSpell('стоп', true);
+        run(30);
+        out.after = I.active;
+        return out;
+    });
+    assert.ok(r.has, 'the Creative test dragon is there');
+    assert.ok(r.dragonAboveGround < 3, 'on the ground by the mountain, where one can walk up: ' + r.dragonAboveGround);
+    assert.equal(r.far, null);
+    assert.match(r.farWhy || '', /далеко/, 'too far: told so — ' + r.farWhy);
+    assert.equal(r.near, 'ImperiusMaxima', JSON.stringify(r));
+    assert.ok(r.active && r.kind === 'dragon');
+    assert.equal(r.phase, 'on');
+    assert.equal(r.after, false);
+    assert.deepEqual(realErrors(errors), []);
+});

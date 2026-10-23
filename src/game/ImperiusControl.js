@@ -121,6 +121,16 @@ export class ImperiusControl {
             return null;
         }
         const t = this._aimed(name === 'ImperiusMaxima');
+        if (!t && this._hidden && !this._far) {
+            if (isFinal) this._say(`🌀 ${cap1(kindRu(this._hidden.kind))} за препятствием — заклинанию нужно его видеть`, 'hidden');
+            g.lastCastWhy = 'цель за препятствием';
+            return null;
+        }
+        if (!t && this._far) {
+            if (isFinal) this._say(`🌀 ${cap1(kindRu(this._far.kind))} слишком далеко: ${Math.round(this._far.d)} м — подойдите не дальше чем на ${IMPERIUS.CAST_R} м`, 'far');
+            g.lastCastWhy = `цель слишком далеко (${Math.round(this._far.d)} м)`;
+            return null;
+        }
         if (!t) {
             if (isFinal) this._say(`🌀 Наведите руку (или посмотрите) на существо не дальше ${IMPERIUS.CAST_R} м и скажите «${name === 'ImperiusMaxima' ? 'Империус Максима' : 'Империус'}»`, 'noaim');
             g.lastCastWhy = 'нет существа на прицеле';
@@ -150,26 +160,44 @@ export class ImperiusControl {
         if (hand) lines.push({ o: hand.origin.clone(), d: hand.dir.clone().normalize() });
         lines.push({ o: head.clone(), d: _look.set(0, 0, -1).applyQuaternion(g.camera.quaternion).clone() });
         let best = null;
+        this._far = null; // (in the line but too far: told with its distance — never silence)
+        this._hidden = null; // (in the line but behind a wall: told so)
         for (const sys of Object.keys(BODIES)) {
             const B = BODIES[sys];
             B.list(g, (c, x, y, z, up) => {
                 if (c.imp) return; // (another mind is in it already)
                 const kind = kindOf(sys, c);
                 if (!kind) return;
+                const cap = B.body ? B.body(c, this._cap || (this._cap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 })) : null;
                 for (const L of lines) {
-                    _a.set(x, y + up * 0.6, z).sub(L.o);
-                    const d = _a.length();
-                    if (d > IMPERIUS.CAST_R || d < 0.3) continue;
-                    const ang = L.d.angleTo(_a.divideScalar(d));
+                    // the point of its body nearest to the line (a great body — the dragon — by its whole length, its surface)
+                    let r = 0;
+                    if (cap) { closestOnSeg(L.o, L.d, cap.a, cap.b, _p1); r = cap.r; } else _p1.set(x, y + up * 0.6, z);
+                    _a.copy(_p1).sub(L.o);
+                    const dc = _a.length();
+                    const d = Math.max(0.3, dc - r);
+                    if (dc < 0.3) continue;
+                    const ang = Math.max(0, L.d.angleTo(_a.divideScalar(dc)) - Math.atan2(r, dc));
                     if (ang > IMPERIUS.AIM_ANG && !(d < 10 && ang < 1.0)) continue; // (close by: roughly in front is enough)
+                    if (d > IMPERIUS.CAST_R) { if (ang < IMPERIUS.AIM_ANG && d < IMPERIUS.CAST_R * 4 && (!this._far || d < this._far.d)) this._far = { d, kind }; continue; }
                     const score = ang * 3 + d * 0.03;
                     if (best && score >= best.score) continue;
-                    if (col?.lineOfSight && !col.lineOfSight(L.o.x, L.o.y, L.o.z, x, y + up * 0.6, z, 0.5)) continue; // (behind a wall: not seen, not taken)
+                    // (behind a wall: not seen, not taken — the line to its surface)
+                    if (col?.lineOfSight && !this._seen(col, L.o, _p1, _a, r, dc, cap)) { if (!this._hidden || d < this._hidden.d) this._hidden = { d, kind }; continue; }
                     best = { sys, id: c.id, kind, c, score, ctx: {} };
                 }
             });
         }
         return best;
+    }
+
+    /** Is any of it seen from `o` (the point nearest the line, short of its surface; a great body — also its ends and middle)? */
+    _seen(col, o, near, dir, r, dc, cap) {
+        const see = (p) => col.lineOfSight(o.x, o.y, o.z, p.x, p.y, p.z, 0.5);
+        if (see(_p2.copy(near).addScaledVector(dir, -Math.min(r, dc - 0.3)))) return true;
+        if (!cap) return false;
+        for (const k of [0, 0.5, 1]) { _p2.lerpVectors(cap.a, cap.b, k); _p2.y += cap.r * 0.8; if (see(_p2)) return true; } // (its back seen over a bump)
+        return false;
     }
 
     // ============================================================ the host's word
@@ -738,6 +766,20 @@ export class ImperiusControl {
 }
 
 const STILL = { yaw: 0, walk: 0, run: false, jump: false, strike: false };
+
+const cap1 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** The point of the segment a–b nearest to the ray o + t·d (t ≥ 0). */
+function closestOnSeg(o, d, a, b, out) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+    const wx = a.x - o.x, wy = a.y - o.y, wz = a.z - o.z;
+    const A = ux * ux + uy * uy + uz * uz, B = ux * d.x + uy * d.y + uz * d.z, C = d.x * d.x + d.y * d.y + d.z * d.z;
+    const D = ux * wx + uy * wy + uz * wz, E = d.x * wx + d.y * wy + d.z * wz;
+    const den = A * C - B * B;
+    let s = den > 1e-9 ? (B * E - C * D) / den : 0;
+    s = Math.max(0, Math.min(1, s));
+    return out.set(a.x + ux * s, a.y + uy * s, a.z + uz * s);
+}
 
 /** The creature's name for the line «вы в теле: …». */
 export function kindRu(kind) {
