@@ -110,13 +110,16 @@ export class CollisionWorld {
      * a ceiling, a roof or a cave above is not «ground».
      */
     groundAt(x, z, reachY) {
-        const y = (!this.terrain || !this.terrain.floorBelow) ? this.groundY(x, z) : this.terrain.floorBelow(Math.round(x), Math.round(z), Math.floor(reachY + 1.5)) - 0.5;
+        // (over a slab or a ramp: its surface right there — up a ramp the floor rises smoothly)
+        const T = this.terrain;
+        const y = !T || !T.floorBelow ? this.groundY(x, z) : T.floorAt ? T.floorAt(x, z, reachY) : T.floorBelow(Math.round(x), Math.round(z), Math.floor(reachY + 1.5)) - 0.5;
         return this.movers.length ? this._moverFloor(x, z, reachY, y) : y;
     }
 
     /** Is the point inside the world's rock (not a box, not open air in a cave)? */
     inRock(x, y, z) {
-        return !!this.terrain?.blockAt && y < this.surfaceY(x, z) && this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0;
+        if (!this.terrain?.blockAt || y >= this.surfaceY(x, z)) return false;
+        return this.terrain.occupied ? this.terrain.occupied(x, y, z) : this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0;
     }
 
     /**
@@ -141,7 +144,8 @@ export class CollisionWorld {
      */
     ceilingAt(x, z, headY) {
         let c = Infinity;
-        if (this.terrain?.ceilingAbove) {
+        if (this.terrain?.ceilingY) c = this.terrain.ceilingY(x, z, headY); // (under an upside-down ramp: its underside there)
+        else if (this.terrain?.ceilingAbove) {
             const L = this.terrain.ceilingAbove(Math.round(x), Math.round(z), Math.floor(headY + 1.5));
             if (L !== Infinity) c = L - 1.5;
         }
@@ -231,7 +235,8 @@ export class CollisionWorld {
                 const iz0 = Math.round(pos.z - radius), iz1 = Math.round(pos.z + radius);
                 for (let iz = iz0; iz <= iz1; iz++) {
                     for (let ix = ix0; ix <= ix1; ix++) {
-                        const top = this.terrain.topLayer(ix, iz) - 0.5;
+                        // (a ramp: its surface where the body meets it — one rising away is walked up, not a wall)
+                        const top = this.terrain.topNear ? this.terrain.topNear(ix, iz, pos.x, pos.z) : this.terrain.topLayer(ix, iz) - 0.5;
                         if (top <= feetY + stepHeight) continue;
                         // something above the step — but is it in the way of the body (not a ceiling over the head)?
                         // The body over this column stands on its floor (a step up): the room is measured from
@@ -277,7 +282,7 @@ export class CollisionWorld {
         }
         // under the ground's top — unless it is open air there (a cave, a tunnel, under a ledge):
         // a light thrown in a cave flies on, it does not stick at the hand
-        if (y < this.surfaceY(x, z) && (!this.terrain?.blockAt || this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0)) return true;
+        if (y < this.surfaceY(x, z) && (!this.terrain?.blockAt || (this.terrain.occupied ? this.terrain.occupied(x, y, z) : this.terrain.blockAt(Math.round(x), Math.floor(y + 1.5), Math.round(z)) !== 0))) return true;
         for (let i = 0; i < this.movers.length; i++) {
             const m = this.movers[i];
             if (m.hasXZ(x, z) && m.pointBlocked(x, y, z)) return true;

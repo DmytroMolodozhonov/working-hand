@@ -391,7 +391,7 @@ export class Builder {
         data.enchantFree = true;
         for (const e of list) {
             if (!Array.isArray(e) || e.length < 4) continue;
-            data.set(e[0] | 0, e[1] | 0, e[2] | 0, e[3] | 0);
+            data.set(e[0] | 0, e[1] | 0, e[2] | 0, e[3] | 0, e[4] | 0); // (e[4]: a slab's / a ramp's shape — BlockShapes.js; old edits have none: whole)
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }
         data.enchantFree = prev;

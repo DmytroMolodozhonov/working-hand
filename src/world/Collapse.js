@@ -84,7 +84,8 @@ export function hangingSearch(data) {
             for (const [k, tt] of seen) {
                 const L2 = (k % 256) + MIN_LAYER, rest = Math.floor(k / 256);
                 const zz = (rest % 2097152) - 1048576, xx = Math.floor(rest / 2097152) - 1048576;
-                cells.push([xx, L2, zz, tt]);
+                const sh = data.shapeAt ? data.shapeAt(xx, L2, zz) : 0; // (a slab, a ramp falls as it is — BlockShapes.js)
+                cells.push(sh ? [xx, L2, zz, tt, sh] : [xx, L2, zz, tt]);
             }
             pieces.push({ cells });
         }
@@ -151,13 +152,13 @@ export function dropPiece(data, piece) {
     const landed = [], broken = [];
     const p = Math.min(COLLAPSE.BREAK_MAX, d * COLLAPSE.BREAK_PER_M);
     for (const c of piece.cells) {
-        const [x, L, z, t] = c;
+        const [x, L, z, t, sh = 0] = c;
         if (d > 0 && hash01(x, L, z) < p) { broken.push(c); continue; }
         if (L - d < floor) { broken.push(c); continue; }
         const at = data.get(x, L - d, z);
         if (isSolid(at)) { broken.push(c); continue; }
-        data.set(x, L - d, z, t);
-        landed.push([x, L - d, z, t]);
+        data.set(x, L - d, z, t, sh);
+        landed.push(sh ? [x, L - d, z, t, sh] : [x, L - d, z, t]);
     }
     return { d, landed, broken };
 }

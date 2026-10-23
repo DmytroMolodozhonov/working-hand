@@ -36,6 +36,7 @@ import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MES
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
+import { canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SNOW: 4, BEDROCK: 5, WOOD: 6, LEAVES: 7, WATER: 8, SAND: 9, ICE: 10, ICE_SHAPE: 11,
@@ -1467,15 +1468,32 @@ export class TerrainData {
         return c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)];
     }
 
-    set(ix, L, iz, type) {
+    /**
+     * The shape of a block (BlockShapes.js: 0 the whole cube, a slab, a ramp, a corner…) — only where a
+     * solid block of a material that takes shapes lies.
+     */
+    shapeAt(ix, L, iz) {
+        if (L < MIN_LAYER || L > MAX_LAYER) return 0;
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        return c.shape ? c.shape[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] : 0;
+    }
+
+    /**
+     * Put a block (`type`; AIR takes it away) — with a `shape` (BlockShapes.SHAPE: a slab, a ramp…; 0 the whole
+     * block; a material that takes no shape is always whole).
+     */
+    set(ix, L, iz, type, shape = 0) {
         if (L < MIN_LAYER || L > MAX_LAYER) return;
+        const sh = shape > 0 && shape < SHAPE_COUNT && canShape(type) ? shape : 0;
         // (a gift of the gods — the Temple of the Gods' ground: no spell breaks or changes a block of it)
         if (this.godGiftAt && this.godGiftAt(ix, L, iz) && this.get(ix, L, iz) !== BLOCK.AIR) return;
-        // (the enchanted stone — EnchantedStone.js: never broken, changed, moved or made by a spell, but in a breaker's circle)
-        if (!this.enchantFree) { const was = this.get(ix, L, iz); if ((isEnchanted(type) || isEnchanted(was)) && was !== type && !enchantMayBreak(this, ix, iz)) return; }
+        // (the enchanted stone — EnchantedStone.js: never broken, changed, moved, reshaped or made by a spell, but in a breaker's circle)
+        if (!this.enchantFree) { const was = this.get(ix, L, iz); if ((isEnchanted(type) || isEnchanted(was)) && (was !== type || this.shapeAt(ix, L, iz) !== sh) && !enchantMayBreak(this, ix, iz)) return; }
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return; // (nothing is built in the empty zone between the planets)
-        c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = type;
+        const bi = ((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK);
+        c.blocks[bi] = type;
+        if (sh || c.shape) (c.shape || (c.shape = new Uint8Array(c.blocks.length)))[bi] = sh;
         c.modified = true;
         if (!drawn(type) && L < c.minOpen) c.minOpen = L;
         if (type !== BLOCK.AIR && L > c.maxTop) c.maxTop = L;
@@ -1556,9 +1574,56 @@ export class TerrainData {
         return !!(c.sea && c.sea[(iz & MASK) * CHUNK + (ix & MASK)]);
     }
 
-    /** World Y of the walkable surface at a world point. */
+    /** World Y of the walkable surface at a world point (over a slab or a ramp: its own surface there). */
     surfaceY(x, z) {
-        return this.topLayer(Math.round(x), Math.round(z)) - 0.5;
+        const ix = Math.round(x), iz = Math.round(z);
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const col = (iz & MASK) * CHUNK + (ix & MASK), top = c.top[col];
+        if (c.shape && top >= MIN_LAYER) {
+            const s = c.shape[(top - MIN_LAYER) * CHUNK * CHUNK + col];
+            if (s) return top - 1.5 + shapeTop(s, x - ix + 0.5, z - iz + 0.5);
+        }
+        return top - 0.5;
+    }
+
+    /**
+     * The floor (world y) under a body at (x, z) whose feet reach up to `reachY` (a step): floorBelow's
+     * layer, over a slab or a ramp its surface right there — up a ramp the floor rises smoothly, no steps.
+     */
+    floorAt(x, z, reachY) {
+        const ix = Math.round(x), iz = Math.round(z);
+        const l = this.floorBelow(ix, iz, Math.floor(reachY + 1.5));
+        if (l < MIN_LAYER) return l - 0.5;
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const s = c.shape ? c.shape[(l - MIN_LAYER) * CHUNK * CHUNK + (iz & MASK) * CHUNK + (ix & MASK)] : 0;
+        return s ? l - 1.5 + shapeTop(s, x - ix + 0.5, z - iz + 0.5) : l - 0.5;
+    }
+
+    /**
+     * The underside (world y) of the rock over a head at (x, z) at `headY` or above (ceilingAbove's layer; under
+     * an upside-down ramp or an upper slab its underside right there) — Infinity: the open sky.
+     */
+    ceilingAt(x, z, headY) {
+        const ix = Math.round(x), iz = Math.round(z);
+        const L = this.ceilingAbove(ix, iz, Math.floor(headY + 1.5));
+        if (L === Infinity) return L;
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const s = c.shape ? c.shape[(L - MIN_LAYER) * CHUNK * CHUNK + (iz & MASK) * CHUNK + (ix & MASK)] : 0;
+        return s ? L - 1.5 + shapeBottom(s, x - ix + 0.5, z - iz + 0.5) : L - 1.5;
+    }
+
+    /**
+     * The top (world y) of a column as a body at (px, pz) beside it meets it: over a ramp its surface at the
+     * column's point nearest the body (a ramp rising away from it is walked up, not a wall), else top − 0.5.
+     */
+    topNear(ix, iz, px, pz) {
+        const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
+        const col = (iz & MASK) * CHUNK + (ix & MASK), top = c.top[col];
+        if (c.shape && top >= MIN_LAYER) {
+            const s = c.shape[(top - MIN_LAYER) * CHUNK * CHUNK + col];
+            if (s) return top - 1.5 + shapeTop(s, px - ix + 0.5, pz - iz + 0.5);
+        }
+        return top - 0.5;
     }
 
     /**
@@ -1602,10 +1667,20 @@ export class TerrainData {
         return false;
     }
 
-    /** Is the world-space point inside a solid block? (water is not solid) */
+    /** Is the world-space point inside a solid block? (water is not solid; a slab or a ramp: inside its part of the cell) */
     isSolidAt(x, y, z) {
-        const L = Math.floor(y + 1.5);
-        return isSolid(this.get(Math.round(x), L, Math.round(z)));
+        const L = Math.floor(y + 1.5), ix = Math.round(x), iz = Math.round(z);
+        if (!isSolid(this.get(ix, L, iz))) return false;
+        const s = this.shapeAt(ix, L, iz);
+        return !s || shapeHas(s, x - ix + 0.5, y + 1.5 - L, z - iz + 0.5);
+    }
+
+    /** Is the world point in a block (water too) — over a slab or a ramp only in its part of the cell? */
+    occupied(x, y, z) {
+        const L = Math.floor(y + 1.5), ix = Math.round(x), iz = Math.round(z);
+        if (this.get(ix, L, iz) === BLOCK.AIR) return false;
+        const s = this.shapeAt(ix, L, iz);
+        return !s || shapeHas(s, x - ix + 0.5, y + 1.5 - L, z - iz + 0.5);
     }
 
     /** Is the world-space point under water? */
@@ -1675,9 +1750,11 @@ export class TerrainData {
                     if (this.godGiftAt && this.godGiftAt(ix, by, iz)) continue; // (a gift of the gods: the temple's ground)
                     if (isEnchanted(type) && !enchantMayBreak(this, ix, iz)) continue; // (the enchanted stone: the blast is, the stone stays)
                     c.blocks[idx] = BLOCK.AIR;
+                    const sh = c.shape ? c.shape[idx] : 0;
+                    if (sh) c.shape[idx] = 0;
                     if (L < c.minOpen) c.minOpen = L;
                     hollowAt(c, lz * CHUNK + lx, L);
-                    removed.push({ x: ix, y: by, z: iz, type });
+                    removed.push(sh ? { x: ix, y: by, z: iz, type, shape: sh } : { x: ix, y: by, z: iz, type });
                     touched = true;
                 }
                 if (touched) {
@@ -1709,6 +1786,7 @@ export class TerrainData {
             if (this.godGiftAt && this.godGiftAt(ix, L - 1, iz)) continue; // (a gift of the gods: the temple's ground)
             if (isEnchanted(t) && !enchantMayBreak(this, ix, iz)) break; // (the enchanted stone: only near the middle of «Бум»; it holds the ground under it — nothing left hanging)
             c.blocks[idx] = BLOCK.AIR; // (a river's or a lake's water over the sea's level goes with the ground under it — none left hanging)
+            if (c.shape) c.shape[idx] = 0;
             if (L < c.minOpen) c.minOpen = L;
             if (wet && L <= 0) wet.push(ix, L, iz);
             n++;
@@ -1729,6 +1807,7 @@ export class TerrainData {
         const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
         if (c.empty) return;
         c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = BLOCK.WATER;
+        if (c.shape) c.shape[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = 0;
         if (sea && L <= 0) (c.sea || (c.sea = new Uint8Array(CHUNK * CHUNK)))[(iz & MASK) * CHUNK + (ix & MASK)] = 1;
         c.modified = true;
         if (L < c.minOpen) c.minOpen = L;
@@ -1752,6 +1831,7 @@ export class TerrainData {
                     this.get(ix, L, iz + 1) === W || this.get(ix, L, iz - 1) === W) {
                     const c = this.chunk(ix >> SHIFT, iz >> SHIFT);
                     c.blocks[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = W;
+                    if (c.shape) c.shape[((L - MIN_LAYER) * CHUNK + (iz & MASK)) * CHUNK + (ix & MASK)] = 0;
                     this._markDirty(ix, iz);
                     filled.push([ix, L, iz]);
                     changed = true;
@@ -1780,7 +1860,15 @@ export class TerrainData {
         let t = 0;
         for (let i = 0; i < 1024 && t <= maxDist; i++) {
             if (isSolid(this.get(ix, iy, iz))) {
-                return { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t, dist: t };
+                const s = this.shapeAt(ix, iy, iz);
+                if (!s) return { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t, dist: t };
+                // (a slab, a ramp: the ray goes on through the cell's empty part — looked at in small steps)
+                const tOut = Math.min(tMaxX, tMaxY, tMaxZ, maxDist);
+                for (let k = 0; k <= 8; k++) {
+                    const tt = t + (tOut - t) * k / 8;
+                    const px = origin.x + dir.x * tt, py = origin.y + dir.y * tt, pz = origin.z + dir.z * tt;
+                    if (shapeHas(s, px - ix + 0.5, py + 1.5 - iy, pz - iz + 0.5)) return { x: px, y: py, z: pz, dist: tt };
+                }
             }
             if (tMaxX < tMaxY && tMaxX < tMaxZ) { ix += stepX; t = tMaxX; tMaxX += tDeltaX; }
             else if (tMaxY < tMaxZ) { iy += stepY; t = tMaxY; tMaxY += tDeltaY; }
@@ -1905,10 +1993,12 @@ export class TerrainData {
         if (!_sky.light || _sky.light.length < N) { _sky.light = new Uint8Array(N); _sky.queue = new Int32Array(N); _sky.tops = new Int16Array(RW * RW); }
         const light = _sky.light, queue = _sky.queue, tops = _sky.tops;
         light.fill(0, 0, N);
-        const blockAt = (rx, L, rz) => {
+        // (a cell the daylight does not pass: a block drawn as a cube — a slab or a ramp lets it by, as the air beside it)
+        const solidCell = (rx, L, rz) => {
             const wx = x0 + rx, wz = z0 + rz;
             const k = chunks[((wz >> SHIFT) - cz + 1) * 3 + ((wx >> SHIFT) - cx + 1)];
-            return k.blocks[((L - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK)];
+            const i = ((L - MIN_LAYER) * CHUNK + (wz & MASK)) * CHUNK + (wx & MASK);
+            return drawn(k.blocks[i]) && !(k.shape && k.shape[i]);
         };
         let maxTop = MIN_LAYER;
         for (let rz = 0; rz < RW; rz++) for (let rx = 0; rx < RW; rx++) {
@@ -1928,7 +2018,7 @@ export class TerrainData {
             if (top > maxTop) maxTop = top;
         }
         // open: at or above the column's top, and light passes there (air, water)
-        const open = (rx, L, rz) => { const t = tops[rz * RW + rx]; return L > t || (L === t && !drawn(blockAt(rx, L, rz))); };
+        const open = (rx, L, rz) => { const t = tops[rz * RW + rx]; return L > t || (L === t && !solidCell(rx, L, rz)); };
         const DX = _SKY_DX, DY = _SKY_DY, DZ = _SKY_DZ;
         let tail = 0;
         // the hollows' cells next to the open air get the daylight
@@ -1943,7 +2033,7 @@ export class TerrainData {
             const hi = k.hollow ? Math.min(top - 1, k.hollow[cb]) : top - 1;
             for (let L = Math.max(MIN_LAYER + 1, k.minOpen ?? MIN_LAYER); L <= hi; L++) {
                 const t = kb[(L - MIN_LAYER) * CHUNK * CHUNK + cb];
-                if (t !== BLOCK.AIR && t !== BLOCK.WATER && t !== BLOCK.ICE_SHAPE) continue; // (rock: drawn)
+                if (t !== BLOCK.AIR && t !== BLOCK.WATER && t !== BLOCK.ICE_SHAPE && !(k.shape && k.shape[(L - MIN_LAYER) * CHUNK * CHUNK + cb])) continue; // (rock: drawn)
                 const lit = (rx + 1 < RW && open(rx + 1, L, rz)) || (rx > 0 && open(rx - 1, L, rz)) || open(rx, L + 1, rz) || open(rx, L - 1, rz) ||
                     (rz + 1 < RW && open(rx, L, rz + 1)) || (rz > 0 && open(rx, L, rz - 1));
                 if (lit) { const i = ((L - MIN_LAYER) * RW + rz) * RW + rx; light[i] = 14; queue[tail++] = i; }
@@ -1959,7 +2049,7 @@ export class TerrainData {
                 if (nx < 0 || nz < 0 || nx >= RW || nz >= RW || nL <= MIN_LAYER || nL > MAX_LAYER) continue;
                 if (nL >= tops[nz * RW + nx]) continue; // (the open air: lit anyway)
                 const j = ((nL - MIN_LAYER) * RW + nz) * RW + nx;
-                if (light[j] >= v - 1 || drawn(blockAt(nx, nL, nz))) continue;
+                if (light[j] >= v - 1 || solidCell(nx, nL, nz)) continue;
                 light[j] = v - 1;
                 queue[tail++] = j;
             }
@@ -2049,14 +2139,36 @@ export class TerrainData {
             const gx = i % CHUNK, gz = ((i - gx) / CHUNK) % CHUNK, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
             if (gy >= 0 && gy <= yTop) pad[(gy + 1) * PXZ + (gz + 1) * PX + gx + 1] = BLOCK.AIR;
         }
-        for (const [nx, nz] of [[-1, 0], [CHUNK, 0], [0, -1], [0, CHUNK]]) {
-            const n = this.chunk(cx + (nx < 0 ? -1 : nx >= CHUNK ? 1 : 0), cz + (nz < 0 ? -1 : nz >= CHUNK ? 1 : 0)), nb = n.blocks;
+        // (slabs and ramps — BlockShapes.js: their shapes in a box like the blocks', only when the chunk or a
+        // neighbour has any; a world without them meshes exactly as it always did)
+        const sides = _mesh.sides;
+        for (let q = 0; q < 4; q++) sides[q] = this.chunk(cx + _SIDE[q * 2], cz + _SIDE[q * 2 + 1]);
+        const shaped = !!(c.shape || sides[0].shape || sides[1].shape || sides[2].shape || sides[3].shape);
+        let spad = null;
+        if (shaped) {
+            spad = _mesh.spad && _mesh.spad.length >= PXZ * PY ? _mesh.spad : (_mesh.spad = new Uint8Array(PXZ * PY));
+            spad.fill(0, 0, PXZ * PY);
+            const sh = c.shape;
+            if (sh) for (let gz = 0; gz < CHUNK; gz++) for (let gx = 0; gx < CHUNK; gx++) {
+                let i = (G0 * CHUNK + gz) * CHUNK + gx, o = PXZ + (gz + 1) * PX + gx + 1;
+                for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) spad[o] = sh[i];
+            }
+        }
+        for (let q = 0; q < 4; q++) {
+            const nx = _SIDE_G[q * 2], nz = _SIDE_G[q * 2 + 1];
+            const n = sides[q], nb = n.blocks, ns = spad ? n.shape : null;
             for (let k = 0; k < CHUNK; k++) {
                 const gx = nx === 0 ? k : nx, gz = nz === 0 ? k : nz;
                 let i = (G0 * CHUNK + (gz & MASK)) * CHUNK + (gx & MASK), o = PXZ + (gz + 1) * PX + gx + 1;
-                for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) pad[o] = nb[i];
+                for (let gy = 0; gy <= yTop; gy++, i += CHUNK * CHUNK, o += PXZ) { pad[o] = nb[i]; if (ns) spad[o] = ns[i]; }
             }
         }
+        if (hid && spad) for (const i of hid) {
+            const gx = i % CHUNK, gz = ((i - gx) / CHUNK) % CHUNK, gy = Math.floor(i / (CHUNK * CHUNK)) - G0;
+            if (gy >= 0 && gy <= yTop) spad[(gy + 1) * PXZ + (gz + 1) * PX + gx + 1] = 0;
+        }
+        // (a shape counts only on a solid block: water, air never carry one)
+        if (spad) for (let o = 0; o < PXZ * PY; o++) if (spad[o]) { const b = pad[o]; if (b === BLOCK.AIR || b === BLOCK.WATER || b === BLOCK.ICE_SHAPE) spad[o] = 0; }
 
         const x = [0, 0, 0];
         const cc = [0, 0, 0];
@@ -2071,6 +2183,7 @@ export class TerrainData {
             const maskDark = new Int8Array(su * sv); // 0 open sky … 15 deep in a cave
             const qx = d === 0 ? 1 : 0, qy = d === 1 ? 1 : 0, qz = d === 2 ? 1 : 0;
             const step = stride[d], ustep = stride[u], vstep = stride[v];
+            const dPos = d === 0 ? 0 : d === 1 ? 2 : 4; // (the side +d of BlockShapes: 0 +x, 2 +y, 4 +z; +1 the − side)
             for (x[d] = -1; x[d] < sizes[d];) {
                 let n = 0;
                 const aIn = x[d] >= 0;
@@ -2083,7 +2196,16 @@ export class TerrainData {
                         const aRaw = pad[ia];
                         const bRaw = pad[ia + step];
                         // (the usual case: rock against rock, air against air — no face)
-                        const aOpen = aRaw === AIR || aRaw === WATER || aRaw === ICE_SHAPE, bOpen = bRaw === AIR || bRaw === WATER || bRaw === ICE_SHAPE;
+                        let aOpen = aRaw === AIR || aRaw === WATER || aRaw === ICE_SHAPE, bOpen = bRaw === AIR || bRaw === WATER || bRaw === ICE_SHAPE;
+                        if (spad) {
+                            // a slab, a ramp: its own faces are made below (shapeFaces); a whole block's face against
+                            // it shows where the shape does not cover it all — as against the air
+                            const sa = spad[ia], sb = spad[ia + step];
+                            if (sa || sb) {
+                                if ((sa && sb) || (sa && (bOpen || FULL_FACES[sa * 6 + dPos])) || (sb && (aOpen || FULL_FACES[sb * 6 + dPos + 1]))) { mask[n] = 0; maskKind[n] = 0; maskDark[n] = 0; continue; }
+                                if (sa) aOpen = true; else bOpen = true;
+                            }
+                        }
                         if (aOpen === bOpen && aRaw !== WATER && bRaw !== WATER) { mask[n] = 0; maskKind[n] = 0; maskDark[n] = 0; continue; }
                         cc[u] = i; cc[v] = j;
                         const ax = cc[0], ay = cc[1], az = cc[2];
@@ -2150,9 +2272,96 @@ export class TerrainData {
                 }
             }
         }
+        if (spad) this._shapeFaces(c, out, pad, spad, PX, PXZ, yTop, lowest, x0, z0, sky, PAT);
         return { ground: finishBuffers(out.ground), raised: finishBuffers(out.raised), water: finishBuffers(out.water) };
     }
+
+    /**
+     * The faces of the chunk's slabs and ramps (BlockShapes.js): the sloping top (two triangles — one quad when
+     * they lie in one plane), the sides (a triangle or a trapezoid under the slope), the bottom; each hidden where
+     * its neighbour covers it whole (a block, a ramp beside it the same way) — no face inside the land, no
+     * gap. The same colours, patterns and daylight as the blocks' faces, in the same meshes (no new draw).
+     */
+    _shapeFaces(c, out, pad, spad, PX, PXZ, yTop, lowest, x0, z0, sky, PAT) {
+        const sh = c.shape;
+        if (!sh) return;
+        const AIR = BLOCK.AIR, WATER = BLOCK.WATER, ICE_SHAPE = BLOCK.ICE_SHAPE;
+        const V = _mesh.v, h = _mesh.h;
+        for (let gy = 0; gy <= yTop; gy++) for (let gz = 0; gz < CHUNK; gz++) for (let gx = 0; gx < CHUNK; gx++) {
+            const o = (gy + 1) * PXZ + (gz + 1) * PX + gx + 1;
+            const s = spad[o];
+            if (!s) continue;
+            const t = pad[o], L = gy + lowest, wx = x0 + gx, wz = z0 + gz;
+            const target = L >= 1 ? out.raised : out.ground;
+            const pat = PAT[t] || 0;
+            const ceil = isCeilShape(s);
+            const hh = cornerHeights(s);
+            // (world corners of the cell)
+            const X0 = wx - 0.5, Z0 = wz - 0.5, Y0 = L - 1.5;
+            for (let k = 0; k < 4; k++) h[k] = ceil ? 1 - hh[k] : hh[k];
+            const lit = (ax, aL, az) => (sky ? skyFactor(sky(ax, aL, az)) : 1);
+            // -- the slope (or the slab's middle face): the top of a floor shape, the underside of a ceiling one
+            {
+                const colTop = this.faceColor(t, wx, L, wz, !ceil);
+                const k = lit(wx, ceil ? L - 1 : L + 1, wz) * 0.5 + lit(wx, L, wz) * 0.5;
+                const diag = shapeDiag(s);
+                // corners (0: −x−z, 1: +x−z, 2: −x+z, 3: +x+z)
+                const P = (i, j) => { const q = j * 3; V[q] = X0 + (i & 1); V[q + 1] = Y0 + h[i]; V[q + 2] = Z0 + (i >> 1); };
+                const tri = diag === 0 ? _TRI0 : _TRI1;
+                // one quad when both triangles lie in one plane (a slab, a ramp)
+                const planar = h[0] + h[3] === h[1] + h[2];
+                if (planar) { P(0, 0); P(1, 1); P(3, 2); P(2, 3); pushPoly(target, V, 4, ceil ? -1 : 1, colTop, pat, k); }
+                else for (let q = 0; q < 2; q++) { P(tri[q * 3], 0); P(tri[q * 3 + 1], 1); P(tri[q * 3 + 2], 2); pushPoly(target, V, 3, ceil ? -1 : 1, colTop, pat, k); }
+            }
+            // -- the flat face: the bottom of a floor shape, the top of a ceiling one (hidden by a whole face over it)
+            {
+                const dir = ceil ? 2 : 3, no = ceil ? o + PXZ : o - PXZ, nb = pad[no], ns = spad[no];
+                const open = nb === AIR || nb === WATER || nb === ICE_SHAPE;
+                const covered = !open && (!ns || FULL_FACES[ns * 6 + (dir ^ 1)]);
+                if (!covered && !(dir === 3 && L === MIN_LAYER)) {
+                    const yy = ceil ? Y0 + 1 : Y0;
+                    V[0] = X0; V[1] = yy; V[2] = Z0; V[3] = X0 + 1; V[4] = yy; V[5] = Z0; V[6] = X0 + 1; V[7] = yy; V[8] = Z0 + 1; V[9] = X0; V[10] = yy; V[11] = Z0 + 1;
+                    pushPoly(target, V, 4, ceil ? 2 : -2, this.faceColor(t, wx, L, wz, ceil), pat, lit(wx, ceil ? L + 1 : L - 1, wz));
+                }
+            }
+            // -- the four sides: under the slope (over it, upside down), down to the bottom (up to the top)
+            for (let q = 0; q < 4; q++) {
+                const dir = _SDIR[q], dx = _SDX[q], dz = _SDZ[q];
+                const no = o + dx + dz * PX, nb = pad[no], ns = spad[no];
+                const open = nb === AIR || nb === WATER || nb === ICE_SHAPE;
+                if (!open && sideCovered(s, dir, ns)) continue;
+                // the side's two corners (low → high along the other axis) and their heights
+                const ca = _SCA[q], cb = _SCB[q];
+                const ha = hh[ca], hb = hh[cb];
+                if (ha === 0 && hb === 0) continue;
+                const ax = X0 + (ca & 1), az = Z0 + (ca >> 1), bx = X0 + (cb & 1), bz = Z0 + (cb >> 1);
+                let n = 0;
+                const put = (x, y, z) => { V[n * 3] = x; V[n * 3 + 1] = y; V[n * 3 + 2] = z; n++; };
+                if (!ceil) {
+                    put(ax, Y0, az); put(bx, Y0, bz);
+                    if (hb > 0) put(bx, Y0 + hb, bz);
+                    if (ha > 0) put(ax, Y0 + ha, az);
+                } else {
+                    put(ax, Y0 + 1, az);
+                    if (ha > 0) put(ax, Y0 + 1 - ha, az);
+                    if (hb > 0) put(bx, Y0 + 1 - hb, bz);
+                    put(bx, Y0 + 1, bz);
+                }
+                pushPoly(target, V, n, 3 + q, this.faceColor(t, wx, L, wz, false), pat, lit(wx + dx, L, wz + dz));
+            }
+        }
+    }
 }
+
+const _SIDE = [-1, 0, 1, 0, 0, -1, 0, 1]; // (the four neighbour chunks: −x, +x, −z, +z)
+const _SIDE_G = [-1, 0, CHUNK, 0, 0, -1, 0, CHUNK]; // (…their border column in the padded box)
+const _TRI0 = [0, 1, 3, 0, 3, 2], _TRI1 = [0, 1, 2, 1, 3, 2]; // (a shape's surface split along one diagonal or the other)
+// (a shape's four sides: BlockShapes dir, the step to the neighbour, the side's two corners low → high)
+const _SDIR = [0, 1, 4, 5], _SDX = [1, -1, 0, 0], _SDZ = [0, 0, 1, -1];
+const _SCA = [1, 0, 2, 0], _SCB = [3, 2, 3, 1];
+_mesh.sides = [null, null, null, null];
+_mesh.v = new Float32Array(12);
+_mesh.h = new Float32Array(4);
 
 /**
  * A mesh's vertex buffers while it is built: typed arrays reused from chunk to chunk (no garbage, no
@@ -2201,9 +2410,50 @@ export function mergeBuffers(a, b) {
     };
 }
 
+// (the normals of a shape's faces, pushPoly's `face`: 1 the slope up, −1 the slope down — worked out from the
+// polygon; ±2 up / down; 3…6 the sides +x, −x, +z, −z)
+const _FACE_N = { 2: [0, 1, 0], [-2]: [0, -1, 0], 3: [1, 0, 0], 4: [-1, 0, 0], 5: [0, 0, 1], 6: [0, 0, -1] };
+/**
+ * Append a polygon (3 or 4 points in world space, `V` flat) of a slab or a ramp, turned to face its normal.
+ * face: 1 / −1 a sloping face (its normal from its points, up / down), ±2 flat, 3…6 a side.
+ */
+function pushPoly(buf, V, n, face, color, pattern, sky) {
+    if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
+    let nx, ny, nz;
+    // the polygon's own normal (its first three points)
+    const ux = V[3] - V[0], uy = V[4] - V[1], uz = V[5] - V[2], vx = V[6] - V[0], vy = V[7] - V[1], vz = V[8] - V[2];
+    let cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
+    cx /= len; cy /= len; cz /= len;
+    if (face === 1 || face === -1) {
+        const k = cy * face < 0 ? -1 : 1;
+        nx = cx * k; ny = cy * k; nz = cz * k;
+    } else { const f = _FACE_N[face]; nx = f[0]; ny = f[1]; nz = f[2]; }
+    // the points' order as seen from outside: counter-clockwise (three.js's front face)
+    const flip = cx * nx + cy * ny + cz * nz < 0;
+    const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
+    const r = ((color >> 16) & 255) / 255, g = ((color >> 8) & 255) / 255, b = (color & 255) / 255;
+    for (let k = 0; k < n; k++) {
+        const o = (base + k) * 3;
+        P[o] = V[k * 3]; P[o + 1] = V[k * 3 + 1]; P[o + 2] = V[k * 3 + 2];
+        N[o] = nx; N[o + 1] = ny; N[o + 2] = nz;
+        C[o] = r; C[o + 1] = g; C[o + 2] = b;
+        buf.pat[base + k] = pattern;
+        buf.sky[base + k] = sky;
+    }
+    buf.nv += n;
+    if (pattern) buf.patterned = true;
+    const I = buf.idx;
+    for (let k = 1; k + 1 < n; k++) {
+        const i = buf.ni;
+        I[i] = base; I[i + 1] = base + (flip ? k + 1 : k); I[i + 2] = base + (flip ? k : k + 1);
+        buf.ni += 3;
+    }
+}
+
 /** Convert grid-space quad to world space and append it. */
 function pushQuad(buf, origin, pos, du, dv, d, positive, color, drop = 0, pattern = 0, sky = 1) {
-    if ((buf.nv >> 2) + 1 > buf.cap) growBuffers(buf);
+    if (buf.nv + 4 > buf.cap * 4) growBuffers(buf);
     // grid -> world: x_w = gx - 0.5, y_w = gy - 1.5, z_w = gz - 0.5 (gx = origin + local)
     const base = buf.nv, P = buf.pos, N = buf.nor, C = buf.col;
     const px = origin[0] + pos[0] - 0.5, py = origin[1] + pos[1] - 1.5 - drop, pz = origin[2] + pos[2] - 0.5;

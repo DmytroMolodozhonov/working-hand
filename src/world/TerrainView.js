@@ -680,6 +680,12 @@ export class Terrain {
     solidIn(ix, iz, L0, L1) { return this.data.solidIn(ix, iz, L0, L1); }
     ceilingAbove(ix, iz, L) { return this.data.ceilingAbove(ix, iz, L); }
     blockAt(ix, L, iz) { return this.data.get(ix, L, iz); }
+    // (slabs and ramps — BlockShapes.js: the floor, the ceiling, a column's top and the solid where they are)
+    shapeAt(ix, L, iz) { return this.data.shapeAt(ix, L, iz); }
+    floorAt(x, z, reachY) { return this.data.floorAt(x, z, reachY); }
+    ceilingY(x, z, headY) { return this.data.ceilingAt(x, z, headY); }
+    topNear(ix, iz, px, pz) { return this.data.topNear(ix, iz, px, pz); }
+    occupied(x, y, z) { return this.data.occupied(x, y, z); }
     raycast(origin, dir, maxDist) { return this.data.raycast(origin, dir, maxDist); }
     removeSphere(x, y, z, r, keep = null) { return this.data.removeSphere(x, y, z, r, keep); }
 

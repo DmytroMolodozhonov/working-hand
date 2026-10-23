@@ -778,7 +778,15 @@ export class VoxelCharacter {
             this.groundY = ground;
             const crouchDrop = this.knockedDown ? 1.45 * (1 - (this.liftUp || 0)) : this.bodyDrop();
             const targetY = ground + PLAYER_GROUND_OFFSET - crouchDrop;
-            const y = this.group.position.y;
+            let y = this.group.position.y;
+            // (up or down a ramp — the floor rising or sinking no steeper than the walk, BlockShapes.js: the feet keep to
+            // it, no lag behind going up, no little falls going down; a block's step is still stepped up and fallen off)
+            const gDiff = this._lastGround == null ? 0 : ground - this._lastGround;
+            if (gDiff !== 0 && this.onGround && !this.jumpAir && this.verticalVelocity <= 0 && this.swimY == null && Math.abs(y - targetY) < 0.7) {
+                const walked = Math.hypot(px - fromX, pz - fromZ);
+                if (Math.abs(gDiff) <= walked * 1.05 + 0.005) this.group.position.y = y = targetY;
+            }
+            this._lastGround = ground;
             if (this.swimY != null) {
                 // Swimming: the water holds the body (Swimming.js decides how high)
                 this.verticalVelocity = 0;

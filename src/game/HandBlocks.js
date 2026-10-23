@@ -88,7 +88,11 @@ export class HandBlocks {
     _solid(x, y, z) {
         const g = this.game;
         const data = g.world?.terrain?.data;
-        if (data?.get && handBlocked(data.get(Math.round(x), Math.floor(y + 1.5), Math.round(z)))) return true;
+        if (data?.get) {
+            const ix = Math.round(x), L = Math.floor(y + 1.5), iz = Math.round(z);
+            // (a slab, a ramp — BlockShapes.js: the hand lies on its slope, the empty part of the cell is air)
+            if (handBlocked(data.get(ix, L, iz)) && (!data.occupied || !data.shapeAt(ix, L, iz) || data.occupied(x, y, z))) return true;
+        }
         if (g.crystals?.solidAt(x, y, z)) return true; // (a mana crystal growing out of the rock: the hand lies on it)
         const col = g.collision;
         const W = col?.walls;
