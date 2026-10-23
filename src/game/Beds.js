@@ -614,7 +614,10 @@ export class Beds {
         if (!S.switched && S.t >= 2.2) {
             S.switched = true;
             const g = this.game;
+            const was = g.dayPhase?.() ?? 0;
             g.dayStart = S.dayStart;
+            const jump = ((g.dayPhase?.() ?? 0) - was + 1) % 1 * (DAY_MS / 1000); // (s of the game day that went by in the sleep)
+            g.death?.skipTime(jump); g.animals?.skipTime(jump); // (the dead turn to bones the sooner)
             if (g.dayCycle) g.world.setDayPhase(g.dayPhase());
             this._stillT = 0;
             this._showOverlay('☀️ Доброе утро!', 1);

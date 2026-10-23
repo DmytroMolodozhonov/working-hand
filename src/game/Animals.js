@@ -80,6 +80,8 @@ export const PEGASUS = {
  * Herds live in places fixed by the world's seed (HerdSites.js: by area, nothing to do with other animals). A place wakes when any
  * player comes closer than WAKE — but never in plain sight — and goes to sleep when every player is farther than GONE.
  */
+const CARCASS_MS = 24 * 60 * 1000; // a carcass lies one whole game day before only bones are left (the author)
+
 export const HERDS = {
     WAKE: 170, // m: a player this near wakes a place
     SEE_D: 110, // m: nearer than this to a player a herd appears only out of the host's sight (guests: not at all)
@@ -519,6 +521,12 @@ export class Animals {
         if (side && !g.items.held[side] && !g.weapons.hands[side].held) g.items.takeIntoHand(item, side);
         else g.inventory.storeItem(item);
         g.hud.setVoice?.({ steak: '🍖 Стейк взят', apple: '🍏 Золотое яблоко взято', redApple: '🍎 Яблоко взято' }[item.kind] || '🥩 Мясо взято', true);
+    }
+
+    /** A night slept through: carcasses are older by that much. */
+    skipTime(sec) {
+        if (!(sec > 0)) return;
+        for (const a of this.list) if (a.dead && !a.bonesAt) a.deadAt -= sec * 1000;
     }
 
     _toBones(a) {
@@ -1711,7 +1719,7 @@ export class Animals {
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)
                     this._body(a, dt); // (carcasses fall into craters too)
                     if (a.bonesAt && performance.now() - a.bonesAt > 120000) this._remove(a);
-                    else if (!a.bonesAt && performance.now() - a.deadAt > 600000) this._remove(a);
+                    else if (!a.bonesAt && performance.now() - a.deadAt > CARCASS_MS) { if (hasSkeleton(a.type)) this._toBones(a); else this._remove(a); } // (24 game minutes, or a night slept: the carcass turns to bones; the meat taken — at once)
                     continue;
                 }
                 if (a.imp && g.imperius?.step('a', a, dt)) continue; // («Империус»: a mind in it — ImperiusControl.step)

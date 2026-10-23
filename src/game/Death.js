@@ -38,7 +38,7 @@ import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
 
 export const DEATH = {
-    BODY_S: 300, // s the body lies (5 minutes)
+    BODY_S: 1440, // s the body lies: one whole game day, 24 minutes (the author: «не сразу — после 24 минут игровых, или если человек поспал»); a night's sleep brings it nearer — skipTime
     BONES_S: 1200, // s the bones stay after that (20 minutes)
     MAX_BODIES: 80, // at most this many bodies and skeletons lie about (the oldest go first)
     DRAW_R: 160, // m (x+z) a body or a skeleton is drawn within
@@ -455,6 +455,12 @@ export class DeathSystem {
             g.scene.remove(b.bones);
             disposeTree(b.bones);
         }
+    }
+
+    /** A night slept through (or any jump of the day clock): everybody's bodies grow older by that much — they sooner turn to bones. */
+    skipTime(sec) {
+        if (!(sec > 0)) return;
+        for (const b of this.bodies.values()) b.age += sec;
     }
 
     update(dt) {
