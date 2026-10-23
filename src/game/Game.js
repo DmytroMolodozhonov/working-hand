@@ -2544,12 +2544,12 @@ export class Game {
     _castAccio(isFinal) {
         const now = Date.now();
         const early = this._interimCast;
-        if (isFinal && early && early.name === 'Accio' && now - early.at < 3000) { this._interimCast = null; return null; }
-        if (now - (this._lastAccio || 0) < 900 || this.accio.active) return null;
+        if (isFinal && early && early.name === 'Accio' && now - early.at < 3000) { this.lastCastWhy = 'эта фраза уже сработала (промежуточная версия)'; this._interimCast = null; return null; }
+        if (now - (this._lastAccio || 0) < 900 || this.accio.active) { this.lastCastWhy = this.accio.active ? 'предыдущий «Акцио» ещё летит / не закончился' : 'пауза между «Акцио» (0,9 с)'; return null; }
         const tired = this.combat.check('Accio');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         const hint = this.accio.cast();
-        if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
+        if (hint) { if (!this.lastCastWhy) this.lastCastWhy = String(hint).replace(/^🪄\s*/, ''); if (isFinal) this.hud.setVoice(hint, true); return null; }
         this.combat.pay('Accio');
         this._lastAccio = now;
         this._interimCast = isFinal ? null : { name: 'Accio', at: now };

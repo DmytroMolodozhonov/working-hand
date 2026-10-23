@@ -76,8 +76,11 @@ export class Accio {
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
         // (an arm only ~20° from hanging counts too: a thing lying right by the feet is pointed at low)
         const lift = g.currentPose?.armLift;
+        // (the spell journal: what lay about and how near the pointing it was — why nothing came / why the wrong thing did)
+        const dg = { raised: 0, loose: 0, inRange: 0, inCone: 0, nearAng: Infinity, nearD: 0, noHand: false };
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
+            dg.raised++;
             const catcher = accioCatcher(free, g.dom);
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
@@ -128,14 +131,18 @@ export class Accio {
                 if (!best || score < best.score) best = { board: id, score };
             }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
-            if (!catcher) continue;
+            if (!catcher) { dg.noHand = true; continue; }
             for (const L of g.items?.loose.values() || []) {
+                dg.loose++;
                 if (L.asked || L.accio) continue;
                 const to = _v1.subVectors(L.model.position, hand);
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
+                dg.inRange++;
                 const ang = dir.angleTo(to.normalize());
+                if (ang < dg.nearAng) { dg.nearAng = ang; dg.nearD = d; }
                 if (ang > ACCIO.CONE + Math.atan2(ACCIO.NEAR, d)) continue;
+                dg.inCone++;
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { L, side: catcher, score };
             }
@@ -162,6 +169,8 @@ export class Accio {
         }
         if (!best) {
             const rb = this._runnerHint();
+            const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
+            g.lastCastWhy = 'цель не найдена: ' + why;
             if (rb) return rb;
             const busy = !free('left') && !free('right');
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
@@ -196,7 +205,11 @@ export class Accio {
             if (!free('left') && !free('right')) g.hud?.setVoice?.('🪄 Обе руки заняты — доска ляжет у ваших ног', true);
             return null;
         }
-        if (best.L) return this._castItem(best.L, best.side);
+        if (best.L) {
+            // (many things in the cone: the one nearest the line comes — the journal says how many competed)
+            if (dg.inCone > 1) g.spellLog?.note?.(`🪄 Акцио: в конусе руки ${dg.inCone} вещей, прилетела та, что ближе к линии (${Math.round(best.L.model.position.distanceTo(g.character.group.position))} м от вас)`);
+            return this._castItem(best.L, best.side);
+        }
         if (best.mc) {
             const f = g.crystals.accio(best.mc, best.side);
             if (!f) return '🪄 Этот кристалл уже кто-то взял';
