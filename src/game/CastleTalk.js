@@ -380,8 +380,9 @@ export class CastleTalk {
             const lines = lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [];
             if (lang === 'ru' && (v.role === 'knight' || v.role === 'advisor')) lines.push(...(king ? ORDER_LINES.obey : ORDER_LINES.refuse)[v.role === 'advisor' ? 'advisor' : 'knight'].slice(0, 2));
             // his thinking words, by the kind of question (the net thinks; a rules' answer not made yet follows them)
-            lines.push(...take(null, net ? 4 : 2), ...take('question', net ? 3 : 1), ...take('request', 2), ...take(v.role === 'merchant' ? 'trade' : 'greet', 2));
-            sp.prepare(lines, vo);
+            lines.push(...take(null, 2), ...take('question', 1), ...take('request', 1), ...take(v.role === 'merchant' ? 'trade' : 'greet', 1));
+            // (few: each is made by the voice program on the processor — the game, the camera and the speech share it)
+            sp.prepare(lines.slice(0, 10), vo);
         }
         // the sailor I would speak to: his «Есть!», «Есть поднять паруса!», «На абордаж!» (TalkAcks.CREW_ACKS)
         const s = g.ships?.crew?._listener?.();
@@ -1423,7 +1424,8 @@ export class CastleTalk {
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
             if (this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
             this._prepareFillers();
-            this._prewarm(now);
+            // (no warm-up of the net while I come near: on the author's processor it took the cores the voice and the
+            // speech program need — words heard 3 s late, «Джолт» 3–4 s, frames lost; TalkMind.warmRequest stays for tests)
             // (always on — loaded in the background soon after the start; meanwhile the rules answer)
             if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
@@ -1529,26 +1531,6 @@ export class CastleTalk {
             tools: llm.strong ? TOOLS : toolsFor(b?.role || 'farmer', ctx),
             maxTokens: 3,
         }).then(() => console.info(`[CastleTalk] the net warmed up in ${Math.round(performance.now() - t0)} ms`), () => {});
-    }
-
-    /**
-     * The villager I would speak to now: the net reads his description while I come near (TalkMind.warmRequest),
-     * so my question costs it only my words — the answer starts ~1 s after them, not 3–7 s. Once per villager and
-     * state (a talk more, another mood, the crown), never while it answers.
-     */
-    _prewarm(now) {
-        const L = this.llm;
-        if (!L?.ready || !L.warm || L.device !== 'native' || this._asking || now - (this._warmAt || -1e9) < 1500) return;
-        // (never while a voice is being made or heard, nor while I speak — the warm-up takes the processor the voice needs)
-        const sp = this.speech;
-        if (sp?.speaking || sp?._prepBusy || now - (this.game.voice?.speakingAt || -1e9) < 2000 || now - (this.replyAt || -1e9) < 4000) return;
-        const v = this._listener();
-        if (!v || v.dead || v.ship) return;
-        const b = this.brain(v), ctx = this._ctx(v);
-        const key = `${v.id}|${b.memory?.talks || 0}|${Math.round((b.mood || 0) * 3)}|${ctx.playerIsKing ? 1 : 0}|${ctx.danger ? 1 : 0}|${(b.memory?.log || []).length}`;
-        if (key === this._warmKey) return;
-        this.mind.llm = L;
-        if (L.warm(this.mind.warmRequest(b, ctx))) { this._warmKey = key; this._warmAt = now; }
     }
 
     /** I talk to a villager without the net (still loading): the rules answer — nothing is written about it. */

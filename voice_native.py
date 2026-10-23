@@ -72,7 +72,6 @@ SEG = {
     "max": 12.0,       # s: a phrase this long is cut into pieces
     "partial": 0.14,   # s between the looks at a phrase still being said (was 0.18: a duel is won by milliseconds)
     "window": 3.0,     # s: a look at an unfinished phrase covers its end only (spells are short)
-    "whole": 8.0,      # s: …but the look when the speaker goes quiet covers the whole phrase (words to a villager)
 }
 
 
@@ -861,7 +860,7 @@ class NativeVoice:
                 self._emit(pipe.levels(self.ms(mic.t0 + n / SR)))
                 lv_t = t_now
             # a look at the phrase still being said (only when the network is free: never a queue of old looks)
-            if pipe.seg is not None and (t_now >= pipe.seg["next"] or pipe.edge) and not busy.is_set() and not jobs:
+            if pipe.seg is not None and t_now >= pipe.seg["next"] and not busy.is_set() and not jobs:
                 j = pipe.partial()
                 if j:
                     jobs.append(j)
@@ -894,7 +893,6 @@ class Pipeline:
         self.seg = None
         self.seg_id = 0
         self.quiet = 0.0
-        self.edge = False  # (the speaker has just gone quiet: a look is due at once)
         self.floor = -70.0  # the microphone's background after the echo canceller (dB)
         self.recent = collections.deque(maxlen=31)  # (clean dB, the speakers speak?) of the last ~1 s, per 32 ms
         self.far_now = False
@@ -957,13 +955,7 @@ class Pipeline:
             else:
                 # (only a faint trace left — the echo canceller's leftover of the speakers — is quiet too)
                 faint = cleaned and cdb < max(-62.0, self.floor + 6)
-                was = self.quiet
                 self.quiet = self.quiet + 512 / SR if p < SEG["off"] or faint else 0.0
-                # (the speaker just went quiet: look at the phrase now, not at the next turn of the looks —
-                # words to a villager are answered from this look, ~0.2 s after the speech, not after the phrase's end)
-                # (two VAD steps of quiet, not one: a gap inside a word is no end)
-                if was < 0.06 <= self.quiet:
-                    self.edge = True
                 if self.quiet >= SEG["end"] or self.vad_at - self.seg["a"] >= SEG["max"] * SR:
                     jobs.append({"id": self.seg["id"], "a": self.seg["a"], "b": self.vad_at, "final": True, "q": self.quiet})
                     self.seg = None
@@ -974,14 +966,11 @@ class Pipeline:
         speakers play, only the faint trace of them the echo canceller left: its end is looked at anyway)."""
         if self.seg is None:
             return None
-        edge, self.edge = self.edge, False
         if self.recent and sum(1 for _, f in self.recent) and sum(1 for _, f in self.recent if f) > len(self.recent) // 4:
             if max(c for c, _ in self.recent) < self.floor + 15:
                 return None
         b = self.vad_at
-        # (the look at the quiet's edge reads the whole phrase — up to SEG «whole»: its words go to a villager
-        # as they are, and a look at its end only lost the start: «…почему король» for «расскажи, почему король»)
-        a = max(self.seg["a"], b - int(SEG["whole" if edge else "window"] * SR))
+        a = max(self.seg["a"], b - int(SEG["window"] * SR))
         if b - a < int(0.25 * SR):
             return None
         # (q: s of quiet already heard at its end — the page answers a finished talk phrase without waiting for SEG «end»)
@@ -1050,7 +1039,7 @@ def offline(mic, ref=None, aec=True, partial_every=SEG["partial"], threads=2):
     for k in range(0, len(mic) - FRAME + 1, FRAME):
         for j in pipe.frame(mic[k:k + FRAME], ref[k:k + FRAME]):
             out.append(pipe.look(j, to_ms))
-        if pipe.seg is not None and (k >= next_look or pipe.edge):
+        if pipe.seg is not None and k >= next_look:
             j = pipe.partial()
             if j:
                 out.append(pipe.look(j, to_ms))
