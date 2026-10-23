@@ -157,6 +157,7 @@ export const SPELL_COST = {
     LiquidationMaxima: 25, // … magic things too
     Stitching: 7, // a passage sewn shut with stones of its walls (Stitching.js)
     CreateBridge: 10, // planks over a river or a ravine, 2–40 m, +0.5 mana a metre beyond 16 (Bridge.js; no scroll)
+    GroundPrat: 10, // «Ground Prat»: the ground rises into a wall 7×2×5 where the wand points (GroundPrat.js; a scroll)
     Invisibility: 20, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)

@@ -155,6 +155,7 @@ import { Drawdown } from './Drawdown.js';
 import { Liquidation } from './Liquidation.js';
 import { Stitching } from './Stitching.js';
 import { Bridge } from './Bridge.js';
+import { GroundPrat } from './GroundPrat.js';
 import { Invisibility } from './Invisibility.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
@@ -390,6 +391,7 @@ export class Game {
             liquidation: (name, o, d, casterId) => this.liquidation?.fly(name, o, d, casterId),
             stitching: (o, d, casterId) => this.stitching?.sew(o, d, casterId),
             bridge: (o, d, casterId) => this.bridge?.grow(o, d, casterId),
+            groundPrat: (o, d, casterId) => this.groundPrat?.grow(o, d, casterId),
             collision: this.collision,
             terrain: () => this.terrain,
             leavesAt: (x, y, z) => !!this.world.leavesAt?.(x, y, z), // (the start-area trees' crowns stop a «Бомбардо»)
@@ -431,6 +433,7 @@ export class Game {
         this.drawdown = new Drawdown(this); // «Drawdown»: the ground sinks where the wand points (Drawdown.js)
         this.liquidation = new Liquidation(this); // «Liquidation»: a splash — a thing crumbles into dust (Liquidation.js)
         this.stitching = new Stitching(this); // «Stitching»: a passage sewn shut with stones (Stitching.js)
+        this.groundPrat = new GroundPrat(this); // «Ground Prat»: the ground rises into a wall (GroundPrat.js)
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -1747,6 +1750,7 @@ export class Game {
         if (name === 'Liquidation' || name === 'LiquidationMaxima') return this.liquidation.cast(name, isFinal);
         if (name === 'Stitching') return this.stitching.cast(isFinal);
         if (name === 'CreateBridge') return this.bridge.cast(isFinal);
+        if (name === 'GroundPrat') return this.groundPrat.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {

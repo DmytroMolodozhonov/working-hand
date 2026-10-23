@@ -169,7 +169,7 @@ export const SPELL_PHYSICS = {
     WindImpulse: { push: 22, range: 3, always: true, down: 1.5, toss: 4, jolt: 1.5 }, WindImpulseMaxima: { push: 34, range: 9, always: true, down: 2, toss: 6, jolt: 2.5 },
     // («Drawdown»: the ground sinks — bodies stand on it and go down with it, nobody is pushed;
     //  «Stitching»: stones laid where nobody stands; «Invisibility»: nobody sees — Drawdown.js / Stitching.js / Invisibility.js)
-    Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
+    Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, GroundPrat: null, /* (the ground rises where nobody stands — GroundPrat.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
     Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)
     IceBall: { push: 6, jolt: 1.5 }, IceBallBig: { push: 12, jolt: 2 }, WaterHit: { push: 4, wet: true },
 };
