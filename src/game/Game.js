@@ -28,6 +28,7 @@ import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
 import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
+import { chestCoins } from './CastleTreasure.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
 import { Levitation } from './Levitation.js';
@@ -1057,13 +1058,14 @@ export class Game {
     }
 
     /**
-     * A chest's pouch of coins. The author: «в сундуках — от 5 монет до 300, рандомно» (the cave and the house chests were
-     * 5–34 / 0–89, the pouches came with 7 or 13): the plain chests (caves, houses) hold 5…300, evenly. The special ones are
-     * richer or kept as they were: a castle's treasury, the boss chests (dragon, Ice Queen, the captain), carts, ships.
+     * A chest's pouch of coins. The author: «в сундуках — от 5 до 300, рандомно» (the cave chests were 5–34, the pouches came
+     * with 7 or 13): the cave chests hold 5…300; the houses — poor 5…50, rich 50…500; a king's castle — its part of the king's
+     * fortune (500…1500 in all, CastleTreasure.js). The boss chests (dragon, Ice Queen, the captain), carts, ships — as they were.
      */
     _chestPouch(chest) {
         const plain = () => 5 + Math.floor(Math.random() * 296); // 5…300
-        const coins = chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? plain()
+        const share = chest.castle ? chestCoins(chest.castle, chest) : null; // (a king's castle: its chest's part of the king's fortune 500…1500 — CastleTreasure.js)
+        const coins = share != null ? share : chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 50 + Math.floor(Math.random() * 451) : 5 + Math.floor(Math.random() * 46)) // (a rich house 50…500, a poor one 5…50)
             : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
             : chest.room === 'dragon' ? 400 + Math.floor(Math.random() * 600)
             : chest.room === 'iceQueen' ? 250 + Math.floor(Math.random() * 350)

@@ -31,6 +31,7 @@ import { RESOURCE } from './Inventory.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
 import { newUid, isGodGift, ITEM_INFO } from './ItemTypes.js';
+import { kingPurse } from './CastleTreasure.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
@@ -46,7 +47,7 @@ export const DEATH = {
     GATHER_CONE: 0.45, // rad (as «Акцио»)
     GATHER_NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
     KNIGHT_COINS: [5, 300], // (the author: «у людей — от 5 монет до 300, рандомно»; was 4–15)
-    KING_COINS: [150, 300], // (the king is not poorer than a knight; was 40–80)
+    KING_COINS: [60, 180], // (a king without a known fortune: ~12 % of 500…1500; the castle's king drops his own part — CastleTreasure.kingPurse)
 };
 
 /** 'body' | 'bones' | 'gone' after `age` seconds. */
@@ -76,12 +77,12 @@ export function lootOfPlayer({ slots = [], held = [], backpack = null } = {}) {
 }
 
 /** What an armed villager drops: a knight / the king — the sword, the shield, coins. Others — nothing. */
-export function lootOfVillager(role, { shield = false } = {}, rng = Math.random) {
+export function lootOfVillager(role, { shield = false, coins = null } = {}, rng = Math.random) {
     if (role !== 'knight' && role !== 'king') return [];
     const [a, b] = role === 'king' ? DEATH.KING_COINS : DEATH.KNIGHT_COINS;
     const out = [{ kind: 'weapon', type: 'sword', magic: role === 'king', bonus: role === 'king' ? 25 : 0 }];
     if (shield || role === 'king') out.push({ kind: 'shield', uid: newUid(), type: 2, magic: false, max: 0 });
-    out.push({ kind: 'coins', uid: newUid(), count: a + Math.floor(rng() * (b - a + 1)) });
+    out.push({ kind: 'coins', uid: newUid(), count: role === 'king' && coins != null ? coins : a + Math.floor(rng() * (b - a + 1)) }); // (the king: his part of the castle's fortune — CastleTreasure.kingPurse)
     return out;
 }
 
@@ -302,7 +303,7 @@ export class DeathSystem {
         // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
         const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...steel);
