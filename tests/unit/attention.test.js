@@ -37,3 +37,16 @@ test('nothing is kept of those far away', () => {
     run(A, { x: 0, y: 0, z: -1 }, [{ id: 'x', x: 0, y: 3.3, z: -500 }], 0.1);
     assert.equal(A.of.size, 0);
 });
+
+test('a villager behind a wall is not in sight: he does not notice my look (even when «Visible Godi» shows him); the line is asked a few times a second, not every step', async () => {
+    const { inSight } = await import('../../src/game/Attention.js');
+    let asked = 0, wall = true;
+    const los = () => { asked++; return !wall; };
+    const cache = new Map(), v = { id: 'a' };
+    assert.equal(inSight(v, los, cache, 0), false, 'a wall between us');
+    assert.equal(inSight(v, los, cache, 100), false);
+    assert.equal(asked, 1, 'cached for a moment');
+    wall = false;
+    assert.equal(inSight(v, los, cache, 400), true, 'the wall is gone (I came round it)');
+    assert.equal(asked, 2);
+});

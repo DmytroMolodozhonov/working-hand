@@ -18,7 +18,8 @@
  * How it sees (the rules live here, pure and tested; the picture is SeeThroughFx.js): the eyes' ray goes through the
  * real blocks (0.1 m steps; ships' hulls, doors, others' house spheres too); only when the first solid thing is at most
  * REACH (3 m) away. Where the hero's own steam covers the screen the wall is not drawn:
- *   - the cluster of things the ray passes (a wall, then up to GAP_MAX of air, another wall…) is added up: every
+ *   - the wall the ray passes (one mass: planks against stone count together; a room behind it ends it — the far wall
+ *     of the room is seen as a wall, never skipped) is added up: every
  *     material has an extinction per metre μ (SEE_THROUGH), the clearness is exp(−Σ μ·thickness):
  *        1 block of planks ≈ 88%, of stone ≈ 65%, 3 of stone ≈ 27%, 6 of stone ≈ 8% (only shapes), 8+ — nothing;
  *   - the picture behind is drawn from the far side of that cluster (the camera's near plane stands there), so the
@@ -36,7 +37,9 @@ import { castingHand } from './WandAim.js';
 export const SEE = {
     REACH: 3, // m: the first solid thing must be this near («прямо реально возле стены»)
     MAX_LEN: 28, // m: how far the look is followed behind the wall
-    GAP_MAX: 4, // m: air between two walls that still counts as the same «wall» (a courtyard strip, a corridor)
+    GAP_MAX: 0.25, // m: air inside one wall that still counts as that wall (a chink, a door in its frame). Never a room: what
+    // is seen through the wall must be what is really inside — the author found a villager «inside» who was not there
+    // when the look skipped a small room (4 m) and showed what stood behind its far wall
     STEP: 0.1, // m: the ray's step
     DRAIN: 1, // mana a second while it is on (the cost at once: Combat.SPELL_COST.VisibleGodi)
     FIRST: 5, // cells of the mana maximum at the first real look (Mana.FIRST_SPELL.VisibleGodi)

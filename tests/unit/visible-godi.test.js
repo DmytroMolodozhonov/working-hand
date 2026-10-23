@@ -99,12 +99,16 @@ test('the ray: nothing / far (more than 3 m) / a wall within reach; a wall, a co
     const w1 = traceView(wallOf(BLOCK.PLANKS, 1), O, D);
     assert.equal(w1.state, 'see');
     assert.ok(Math.abs(w1.thick - 1) < 0.11 && Math.abs(w1.exit - 2) < 0.11, JSON.stringify(w1));
-    // wood, 3 m of air, stone: both count; the near plane stands behind the second
+    // wood, a small room (3 m), stone: the look ends in the room — its far wall is a wall in the picture, never skipped
+    // (the author: a villager seen «inside» was not there when he came in — the look had skipped the room)
     const two = traceView((x, y, z) => (z >= 1 && z < 2 ? BLOCK.PLANKS : z >= 5 && z < 7 ? BLOCK.STONE : 0), O, D);
     assert.equal(two.state, 'see');
-    assert.equal(two.segs.length, 2);
-    assert.ok(Math.abs(two.clear - clearOf([seg(BLOCK.PLANKS, 1), seg(BLOCK.STONE, 2)])) < 0.02, String(two.clear));
-    assert.ok(two.exit > 6.9, 'the look goes to the far side of the second wall');
+    assert.equal(two.segs.length, 1);
+    assert.ok(two.exit < 2.1 && nearOf(two) < 5, 'the near plane stands in the room, before its far wall: ' + nearOf(two));
+    assert.ok(Math.abs(two.clear - clearOf([seg(BLOCK.PLANKS, 1)])) < 0.02, String(two.clear));
+    // a chink inside one wall (a door in its frame) is still that wall
+    const chink = traceView((x, y, z) => (z >= 1 && z < 1.5 ? BLOCK.PLANKS : z >= 1.6 && z < 2.5 ? BLOCK.STONE : 0), O, D);
+    assert.equal(chink.segs.length, 2);
     // a wide gap: the second wall is just a wall seen from behind the first
     const apart = traceView((x, y, z) => (z >= 1 && z < 2 ? BLOCK.PLANKS : z >= 9 && z < 10 ? BLOCK.STONE : 0), O, D);
     assert.equal(apart.segs.length, 1);
@@ -135,8 +139,7 @@ test('what stops the look: enchanted and arcane stone, the Queen\'s ice, the god
     // planks, a gap, an enchanted tower wall: the look ends before the magic (the near plane never enters it)
     const r = traceView((x, y, z) => (z >= 1 && z < 2 ? BLOCK.PLANKS : z >= 4 && z < 5 ? BLOCK.ENCHANTED : 0), O, D);
     assert.equal(r.state, 'see');
-    assert.ok(r.stopAt > 3.9 && r.stopAt < 4.1);
-    assert.ok(nearOf(r) < r.stopAt && nearOf(r) > r.exit);
+    assert.ok(nearOf(r) < 4 && nearOf(r) > r.exit, 'the near plane stands in the room, before the magic wall');
     const touching = traceView((x, y, z) => (z >= 1 && z < 2 ? BLOCK.PLANKS : z >= 2 && z < 3 ? BLOCK.ENCHANTED : 0), O, D);
     assert.ok(nearOf(touching) <= touching.stopAt - 0.02 + 1e-9, 'magic right behind the wall: the near plane stays before it');
 });

@@ -52,7 +52,7 @@ import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
-import { Attention, ATT } from './Attention.js';
+import { Attention, ATT, inSight } from './Attention.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -321,8 +321,16 @@ export class CastleTalk {
         this._attPrev = { x: me.x, z: me.z };
         const near = this._attNear || (this._attNear = []);
         near.length = 0;
+        const col = g.collision;
+        if (!this._losCache) {
+            this._losCache = new Map();
+            this._losOf = (v) => { const p = this.game.character.group.position; return this.game.collision.lineOfSight(p.x, p.y + 1.4, p.z, v.x, v.y + 3.2, v.z, 0.45); };
+        }
         for (const v of this.life.byId.values()) {
             if (v.dead || Math.abs(v.x - me.x) > 45 || Math.abs(v.z - me.z) > 45) continue;
+            // (only one I can really see: a wall between us — he neither notices my look nor is «looked at», even when
+            // «Visible Godi» shows him to me through the wall)
+            if (col?.lineOfSight && !inSight(v, this._losOf, this._losCache, now)) continue;
             near.push({ id: v.id, x: v.x, y: v.y + 1.3, z: v.z });
         }
         this.attention.update(eye, look, vel, near, dt, now);
@@ -1517,6 +1525,8 @@ export class CastleTalk {
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)
             if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3)) continue;
+            // (a wall between us: he does not know I am here — no «привет» through it)
+            if (g.collision?.lineOfSight && this._losOf && !inSight(v, this._losOf, this._losCache, now)) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
             this._greetT.set(v.id, now);
             // (the people of a house greet whoever comes in: a visit is no theft)

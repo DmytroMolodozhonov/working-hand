@@ -29,6 +29,21 @@ export const ATT = {
     NOTICE: 0.55, // the score at which he notices me (turns to me, greets)
 };
 
+/**
+ * Only those I can really see are scored (the author: a villager behind a wall must not notice that I look at him — even
+ * when «Visible Godi» shows him to me through it). `los(v)` tells whether a line from my eyes reaches him; it is asked for
+ * each one at most every `every` ms (`cache`: id → {t, ok}, kept small). Pure.
+ */
+export function inSight(v, los, cache, now, every = 300) {
+    let e = cache.get(v.id);
+    if (!e || now - e.t >= every) {
+        if (!e && cache.size > 300) cache.clear();
+        e = { t: now, ok: !!los(v) };
+        cache.set(v.id, e);
+    }
+    return e.ok;
+}
+
 export class Attention {
     constructor() {
         this.of = new Map(); // id → {gaze 0..1, score 0..1, d, cone}
