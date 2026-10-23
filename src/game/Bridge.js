@@ -4,11 +4,16 @@
  *
  * It is not really a bridge, just a filling so that one can walk across (the author: «из какого материала
  * края — из такого и создаётся мост… Не надо думать про деревья»). Standing at the edge, the raised hand (the
- * wand) points at the other bank (3–16 m away): from under the feet to that point a strip three wide grows in
- * ~1.5 s, level with the banks (or a gentle slope when one bank is higher, at most 2 in 5). No planks, no
- * railings, no beams, no wood at all: the strip is made of what the banks are made of — the near half of the
- * near bank's top block (stone → stone, earth/grass → grass, sand → sand, snow → snow, ice → ice, a castle's
- * block → the same block), the far half of the far bank's (`bridgeMaterial`).
+ * wand) shows the other bank — not a precise block (the author: «показал на другой берег — мост построился»):
+ * `findBank` walks along the hand's direction (flat, and a little to both sides if that finds nothing) from the
+ * edge, meets the FIRST gap (water, a ravine, a pit 1+ deep) and the first solid land behind it — the near edge of
+ * the far bank, not the far slope. From under the feet to there a strip three wide grows (1.5 s, up to 3 s for
+ * the longest), level with the banks, or sloping up to 1:1 when one bank is higher (up to 12 layers; more than the
+ * length allows → as far as it gets). Across 2–40 m (the widest rivers of the world are well under that): ten mana
+ * up to 16 m, +0.5 per metre beyond. No planks, no railings, no beams, no wood at all: the strip is made of what
+ * the banks are made of — the near half of the near bank's top block (stone → stone, earth/grass → grass, sand →
+ * sand, snow → snow, ice → ice, a castle's block → the same block), the far half of the far bank's (`bridgeMaterial`).
+ * On level ground with a pit or water beside the way, a plain path is laid to the pointed place.
  *
  * What it lays is ordinary blocks of the world (Builder._sendEdits): solid at once — the players and
  * every creature walk on it (Crowd / the terrain); «Бомбардо», a blast break it like any wall (it burns only
@@ -28,10 +33,14 @@ import { occupied } from './Stitching.js';
 import { stepRamps } from '../world/PlanSlopes.js';
 
 export const BRIDGE = {
-    REACH: 20, // m along the hand: where it points
-    MIN: 3, MAX: 16, // m across (the author: «на небольшое расстояние»)
-    SLOPE: 0.4, // the far bank at most this much higher / lower per metre (a gentle slope)
-    GROW: 1.5, // s from the near bank to the far one
+    REACH: 45, // m along the hand: how far the far bank is looked for (MAX + 5)
+    MIN: 2, MAX: 40, // m across (a 1-block gap too; the widest river of the world is ~20 m)
+    CHEAP: 16, // m: up to this the price is the usual 10, beyond it +EXTRA per metre
+    EXTRA: 0.5,
+    RISE: 12, // layers: the far bank at most this much higher / lower
+    FAN: [0, 0.14, -0.14, 0.28, -0.28], // rad: the hand's direction, then a little to both sides
+    GROW: 1.5, // s from the near bank to the far one (up to GROW_MAX for the longest)
+    GROW_MAX: 3,
     WAIT: 2, // s a block waits for a body to step aside
     SEND: 0.12, // s: the blocks laid go out together
 };
@@ -53,7 +62,7 @@ export const BRIDGE_TARGETS = {
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
     blocks: { does: 'build', why: 'кладёт блоки того же материала, что и края (камень, земля, песок, снег, лёд, блок замка), только в пустоту и воду; землю, стены, чужие блоки не трогает' },
-    gap: { does: 'build', why: 'нужен провал между краями (река, ущелье, яма); на ровном месте мост не строится — подсказка говорит почему' },
+    gap: { does: 'build', why: 'берег ищется по направлению руки: первый провал (вода, ущелье, яма от 1 блока) и первая твёрдая земля за ним; на ровном месте — дорожка к указанной точке, если рядом вода или яма, иначе подсказка «можно просто пройти»' },
     water: { does: 'build', why: 'над рекой мост идёт на уровне берега; если берег вровень с водой — настил ложится на воду' },
     trees: { does: 'none', why: 'деревья не трогает и из дерева не строит: ствол или листва с края — это просто земля; блок там, где дерево, не кладётся' },
     houses: { does: 'none', why: 'стены домов и замков не ломает — упирается в них' },
@@ -105,14 +114,16 @@ export function bridgeWords(text) {
  * get(x, L, z) → block; top(x, z) → the highest solid layer of a column.
  * The strip is three wide, made of the banks' material: the near half of the near bank's, the far half of the far one's.
  */
-export function bridgePlan(get, top, A, B) {
+export function bridgePlan(get, top, A, B, opts = {}) {
     const dx = B.x - A.x, dz = B.z - A.z;
     const len = Math.hypot(dx, dz);
     if (len < BRIDGE.MIN) return { why: 'near' };
     if (len > BRIDGE.MAX) return { why: 'far' };
-    if (Math.abs(B.L - A.L) > Math.max(1, Math.floor(len * BRIDGE.SLOPE))) return { why: 'steep' };
+    const rise = B.L - A.L;
+    if (Math.abs(rise) > BRIDGE.RISE) return { why: 'steep' };
     const fx = dx / len, fz = dz / len, sx = -fz, sz = fx; // (along, across)
-    const deckAt = (t) => Math.round(A.L + (B.L - A.L) * t);
+    // up to 1:1 along the way; a bank steeper than that is reached as far as the slope gets
+    const deckAt = (t) => { const r = rise * t, m = len * t; return Math.round(A.L + Math.max(-m, Math.min(m, r))); };
     // the columns of the deck (three wide) and of its edges, sampled finely so a slanting bridge has no holes
     const cols = new Map(); // "x,z" → {x, z, t}
     for (let s = 0; s <= len + 0.01; s += 0.25) {
@@ -123,13 +134,13 @@ export function bridgePlan(get, top, A, B) {
             if (!cols.has(k)) cols.set(k, { x, z, t });
         }
     }
-    // a gap to bridge: somewhere along the middle the ground is 2+ below the deck, or there is water
+    // a gap to bridge: somewhere along the way the ground is 1+ below the deck, or there is water
     let gap = 0;
-    for (let s = 1; s < len; s += 0.5) {
+    for (let s = 0.5; s < len; s += 0.5) {
         const t = s / len, x = Math.round(A.x + fx * s), z = Math.round(A.z + fz * s), L = deckAt(t);
-        if (free(get(x, L, z)) && (top(x, z) <= L - 2 || get(x, L, z) === BLOCK.WATER || get(x, L - 1, z) === BLOCK.WATER)) gap++;
+        if (free(get(x, L, z)) && (top(x, z) <= L - 1 || get(x, L, z) === BLOCK.WATER || get(x, L - 1, z) === BLOCK.WATER)) gap++;
     }
-    if (gap < 2) return { why: 'nogap' };
+    if (gap < 1 && !opts.path) return { why: 'nogap' };
     const near = bridgeMaterial(get(A.x, A.L, A.z)), far = bridgeMaterial(get(B.x, B.L, B.z));
     const cells = [];
     for (const c of cols.values()) {
@@ -148,12 +159,101 @@ export function bridgePlan(get, top, A, B) {
     return { cells, len, near, far };
 }
 
+const _wallish = (b) => (b >= BLOCK.CS_GREY && b <= BLOCK.BRICK) || b === BLOCK.PLASTER || b === BLOCK.PLANKS || b === BLOCK.PLANKS_DARK;
+/**
+ * The far bank along the direction (fx, fz) from A: the first gap (water, a drop of 2+, a pit of 1 that the ground
+ * climbs out of within 6 m) and the first solid land behind it (dry, two free layers above, not a tree) →
+ * {B:{x, z, L}} — or {why}: 'nogap' (no gap on the way), 'far' (the land is beyond MAX), 'sea' (only water up to MAX),
+ * 'wall' (a house's wall stands at the edge), 'steep' (the land is over RISE higher), 'unknown' (not made yet).
+ * known(x, z) → is this ground made yet (default: yes).
+ */
+export function findBank(get, top, A, fx, fz, known = null) {
+    const col = (s) => { const x = Math.round(A.x + fx * s), z = Math.round(A.z + fz * s); return { x, z, t: top(x, z) }; };
+    const wet = (c) => get(c.x, c.t + 1, c.z) === BLOCK.WATER;
+    let cur = A.L, inGap = false, onlyWater = true, firstGap = -1;
+    for (let s = 1; s <= BRIDGE.MAX + 0.01; s += 0.5) {
+        const x = Math.round(A.x + fx * s), z = Math.round(A.z + fz * s);
+        if (known && !known(x, z)) return { why: 'unknown' };
+        const c = { x, z, t: top(x, z) }, w = wet(c);
+        if (!inGap) {
+            let gap = w || c.t <= cur - 2;
+            if (!gap && c.t === cur - 1) { // a pit one deep: the ground comes back up soon
+                for (let k = s + 0.5; k <= s + 6; k += 0.5) { const n = col(k); if (n.t >= cur && !wet(n)) { gap = true; break; } }
+            }
+            if (gap) { inGap = true; firstGap = s; onlyWater = w; continue; }
+            if (c.t < cur) cur = c.t; // (a slope down: walked)
+            else if (c.t > cur) cur = Math.min(c.t, cur + 1);
+            if (c.t > A.L + 1) return { why: 'nogap' }; // (a hill, not a gap)
+            continue;
+        }
+        // behind the gap: the first land
+        if (w) { continue; }
+        if (c.t <= cur - 4 && c.t < A.L - 3) { onlyWater = false; continue; } // (the bottom or the slope of a ravine)
+        const b = get(c.x, c.t, c.z);
+        if (isWood(b) || isLeaves(b)) { onlyWater = false; continue; } // (a tree at the edge: the ground is further)
+        if (!free(get(c.x, c.t + 1, c.z)) || !free(get(c.x, c.t + 2, c.z))) { onlyWater = false; continue; }
+        if (_wallish(b) && c.t > A.L + 1) return { why: 'wall' };
+        if (c.t - A.L > BRIDGE.RISE) return { why: 'steep' };
+        return { B: { x: c.x, z: c.z, L: c.t } };
+    }
+    if (!inGap) return { why: 'nogap' };
+    return { why: onlyWater ? 'sea' : 'far' };
+}
+
+/** The mana beyond the usual ten for a long bridge. */
+export const bridgeExtra = (len) => Math.max(0, Math.ceil((Math.min(len, BRIDGE.MAX) - BRIDGE.CHEAP) * BRIDGE.EXTRA));
+
+/**
+ * Where the hand shows: the bridge for the direction (hx, hz) (flat), looked for along it and a little to both
+ * sides. `point` (the place the ray hit, or null): with no gap on the way, a plain path to it is laid when a pit
+ * or water lies beside the way. → {A, B, plan} | {why}
+ */
+export function bridgeAim(get, top, A, hx, hz, point = null, known = null) {
+    const h = Math.hypot(hx, hz);
+    if (h < 1e-3) return { why: 'none' };
+    hx /= h; hz /= h;
+    let fail = null;
+    for (const a of BRIDGE.FAN) {
+        const c = Math.cos(a), s = Math.sin(a);
+        const fx = hx * c - hz * s, fz = hx * s + hz * c;
+        const r = findBank(get, top, A, fx, fz, known);
+        if (r.B) {
+            const plan = bridgePlan(get, top, A, r.B);
+            if (plan.cells) return { A, B: r.B, plan };
+            fail = fail || plan.why;
+        } else if (!fail || (fail === 'nogap' && r.why !== 'nogap')) fail = r.why;
+    }
+    if (fail === 'nogap' && point) {
+        // level ground: a path to the pointed place, if a pit or water lies beside the way
+        const dx = point.x - A.x, dz = point.z - A.z, len = Math.hypot(dx, dz);
+        if (len >= BRIDGE.MIN && len <= BRIDGE.MAX) {
+            const B = { x: Math.round(point.x), z: Math.round(point.z), L: top(Math.round(point.x), Math.round(point.z)) };
+            if (Math.abs(B.L - A.L) <= 2) {
+                const fx = dx / len, fz = dz / len;
+                let near = false;
+                for (let s = 1; s < len && !near; s += 1) for (let w = -3; w <= 3; w++) {
+                    const x = Math.round(A.x + fx * s - fz * w), z = Math.round(A.z + fz * s + fx * w);
+                    if (get(x, A.L, z) === BLOCK.WATER || top(x, z) <= A.L - 2) { near = true; break; }
+                }
+                if (near) {
+                    const plan = bridgePlan(get, top, A, B, { path: true });
+                    if (plan.cells && plan.cells.length) return { A, B, plan };
+                }
+            }
+        }
+    }
+    return { why: fail || 'none' };
+}
+
 /** Why it cannot be built — the hint for the player. */
 export function bridgeHint(why) {
-    if (why === 'near') return '🌉 Слишком близко — направьте палочку на другой берег (от 3 м)';
-    if (why === 'far') return `🌉 Слишком далеко — мост достаёт до ${BRIDGE.MAX} м`;
-    if (why === 'steep') return '🌉 Тот край намного выше или ниже — мост был бы слишком крутым';
-    if (why === 'nogap') return '🌉 Здесь нечего перекрывать — настил строится через реку, ущелье или яму';
+    if (why === 'near') return '🌉 Покажите палочкой чуть дальше — на другой берег';
+    if (why === 'far') return '🌉 Другой берег далеко — подойдите чуть ближе к краю';
+    if (why === 'sea') return '🌉 Другого берега не видно — подойдите ближе или укажите на берег';
+    if (why === 'steep') return '🌉 Тот берег слишком высоко — поднимитесь повыше или найдите место пониже';
+    if (why === 'wall') return '🌉 На том берегу стена — укажите на землю рядом с ней';
+    if (why === 'nogap') return '🌉 Здесь можно просто пройти';
+    if (why === 'unknown') return '🌉 Там земля ещё не готова — подождите секунду';
     if (why === 'water') return '🌉 Там вода — направьте палочку на другой берег';
     return '🌉 Направьте палочку на другой берег реки или край ущелья — и скажите «Create a Bridge»';
 }
@@ -177,12 +277,10 @@ export class Bridge {
         const A = { x: Math.round(p.x), z: Math.round(p.z), L: Math.floor(p.y + 1.4) };
         if (!free(get(A.x, A.L + 1, A.z)) || free(get(A.x, A.L, A.z))) A.L = top(A.x, A.z); // (feet just off the ground: the column's top)
         const hit = data.raycast(origin, dir, BRIDGE.REACH);
-        if (!hit) return { why: 'none' };
-        const bx = Math.round(hit.x + dir.x * 0.05), bz = Math.round(hit.z + dir.z * 0.05);
-        const B = { x: bx, z: bz, L: top(bx, bz) };
-        if (get(bx, B.L + 1, bz) === BLOCK.WATER) return { why: 'water' };
-        const plan = bridgePlan(get, top, A, B);
-        return plan.cells ? { A, B, plan } : { why: plan.why };
+        let hx = dir.x, hz = dir.z; // (the hand's way, flat; a hand straight up or down: towards what it hit)
+        if (Math.hypot(hx, hz) < 0.25) { if (!hit) return { why: 'none' }; hx = hit.x - p.x; hz = hit.z - p.z; }
+        const known = data.landMade ? (x, z) => data.landMade(x, z) : null;
+        return bridgeAim(get, top, A, hx, hz, hit && hit.dist > 1 ? hit : null, known);
     }
 
     /** Voice on my computer. */
@@ -198,9 +296,10 @@ export class Bridge {
         const mid = _v.set((at.A.x + at.B.x) / 2, at.A.L - 1, (at.A.z + at.B.z) / 2);
         if (g.wards?.forbids?.(hand.origin, mid)) return hint('🛡️ Здесь чужая защита дома — мост не построить');
         if (g.ships?.footprintAt?.(at.B.x, at.B.L - 1, at.B.z)) return hint('⚓ На корабль мост не строится');
-        const tired = g.combat.check('CreateBridge');
+        const extra = bridgeExtra(at.plan.len);
+        const tired = g.combat.check('CreateBridge', extra);
         if (tired) { g.hud.setVoice(tired, true); return null; }
-        g.combat.pay('CreateBridge');
+        g.combat.pay('CreateBridge', extra);
         this._lastAt = now;
         const o = new THREE.Vector3(at.A.x, at.A.L, at.A.z), d = new THREE.Vector3(at.B.x - at.A.x, at.B.L - at.A.L, at.B.z - at.A.z);
         this.grow(o, d, g.localId, at.plan);
@@ -224,15 +323,16 @@ export class Bridge {
         const mine = casterId === g.localId || casterId === 'local';
         const cells = plan.cells.map((c) => ({ c, wait: 0 }));
         const color = sparkColor(plan.near);
+        const growT = BRIDGE.GROW + Math.max(0, Math.min(1, (plan.len - BRIDGE.CHEAP) / (BRIDGE.MAX - BRIDGE.CHEAP))) * (BRIDGE.GROW_MAX - BRIDGE.GROW);
         g.sound?.playWhoosh?.();
         let t = 0, i = 0, sendT = 0, done = false;
         const out = [];
         const flush = () => { if (out.length) { g.builder?._sendEdits(out.splice(0)); } };
         g.spells.spells.push({
-            life: BRIDGE.GROW + BRIDGE.WAIT + 1,
+            life: growT + BRIDGE.WAIT + 1,
             onUpdate: (spell, dt) => {
                 t += dt;
-                const front = Math.min(1, t / BRIDGE.GROW);
+                const front = Math.min(1, t / growT);
                 // the front of the magic runs over the gap
                 const fp = _v.set(A.x + d.x * front, A.L - 0.4 + d.y * front, A.z + d.z * front);
                 for (let k = 0; k < 2; k++) g.fx.spark(fp, k ? 0xfff2a8 : color, 0.1, _w.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.5);
