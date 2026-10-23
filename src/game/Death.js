@@ -32,6 +32,7 @@ import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdSh
 import { rosterEntry } from './CastleLife.js';
 import { newUid, isGodGift, ITEM_INFO } from './ItemTypes.js';
 import { kingPurse } from './CastleTreasure.js';
+import { scaleRange } from './CoinScale.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
@@ -46,9 +47,9 @@ export const DEATH = {
     GATHER_RANGE: 14, // m how far «Gather» reaches
     GATHER_CONE: 0.45, // rad (as «Акцио»)
     GATHER_NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
-    KNIGHT_COINS: [5, 300], // (the author: «у людей — от 5 монет до 300, рандомно»; was 4–15)
-    WIZ_COINS: { novice: [5, 60], adept: [20, 120], teacher: [50, 200], elder: [100, 300], master: [150, 400] }, // (a killed wizard's pouch by rank)
-    KING_COINS: [60, 180], // (a king without a known fortune: ~12 % of 500…1500; the castle's king drops his own part — CastleTreasure.kingPurse)
+    KNIGHT_COINS: scaleRange([5, 300]), // (the author: «у людей — от 5 монет до 300, рандомно»; was 4–15)
+    WIZ_COINS: { novice: scaleRange([5, 60]), adept: scaleRange([20, 120]), teacher: scaleRange([50, 200]), elder: scaleRange([100, 300]), master: scaleRange([150, 400]) }, // (a killed wizard's pouch by rank)
+    KING_COINS: scaleRange([60, 180]), // (a king without a known fortune: ~12 % of 500…1500; the castle's king drops his own part — CastleTreasure.kingPurse)
 };
 
 /** 'body' | 'bones' | 'gone' after `age` seconds. */

@@ -9,10 +9,12 @@
  * Pure (tests).
  */
 
+import { scaleCoins } from './CoinScale.js';
+
 export const TREASURE = {
-    MIN: 500, MAX: 1500,
+    MIN: scaleCoins(500), MAX: scaleCoins(1500), // (500…1500 cut by 40 %: CoinScale.js → 300…900)
     PURSE: 0.12, // the share the king carries himself
-    MIN_CHEST: 5,
+    MIN_CHEST: scaleCoins(5),
     // a room's weight among the castle's chests (any other room: 1; the sailors' stores of the port are not the king's)
     // (generation 8's extra chests of the rooms: a bedroom's or a barracks' is a purse, the kitchen's a little more; the old rooms' weights as ever)
     WEIGHT: { treasury: 4, vault: 4, king: 3, throne: 3, study: 2.5, bedroom: 0.6, barracks: 0.5, kitchen: 0.7 },

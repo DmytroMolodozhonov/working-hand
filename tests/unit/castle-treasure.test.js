@@ -1,17 +1,17 @@
-// A king's fortune: 500…1500 in all, the king's own pouch and the castle's chests sharing it (CastleTreasure.js).
+// A king's fortune: 300…900 (500…1500 cut by 40 %) in all, the king's own pouch and the castle's chests sharing it (CastleTreasure.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { castleFortune, treasureShares, chestCoins, kingPurse, isKingsCastle, TREASURE } from '../../src/game/CastleTreasure.js';
 
 const castle = (id, rooms) => ({ id, king: 'Король', chests: rooms.map((room, i) => ({ id: id + ':' + i, room })) });
 
-test('the fortune is 500…1500, the same for the same castle, and varies between castles', () => {
+test('the fortune is 300…900, the same for the same castle, and varies between castles', () => {
     const seen = new Set();
     for (let i = 0; i < 400; i++) {
         const f = castleFortune('c' + i + '_' + (i * 7));
         assert.ok(f >= TREASURE.MIN && f <= TREASURE.MAX, f);
         assert.equal(f, castleFortune('c' + i + '_' + (i * 7)));
-        seen.add(Math.floor(f / 100));
+        seen.add(Math.floor(f / 60));
     }
     assert.ok(seen.size >= 9, 'spread over the whole range');
 });

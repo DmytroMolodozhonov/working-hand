@@ -45,12 +45,12 @@ test('the dragon\'s wand: every fire spell +60% (no other), a plain +15% for the
     assert.ok(Math.abs(wandPower(w, 'Sapira') - 1.15) < 1e-9);
 });
 
-test('the hoard: 1000–5000 coins, mostly a loose heap, pouches never full (some empty)', () => {
+test('the hoard: 600–3000 coins, mostly a loose heap, pouches never full (some empty)', () => {
     let s = 7;
     const rng = () => ((s = (s * 16807) % 2147483647) / 2147483647);
     for (let i = 0; i < 50; i++) {
         const h = rollHoard(rng);
-        assert.ok(h.total >= 1000 && h.total <= 5000);
+        assert.ok(h.total >= 600 && h.total <= 3000);
         assert.equal(h.loose + h.bags.reduce((a, b) => a + b, 0), h.total);
         assert.ok(h.loose > h.total / 2);
         assert.ok(h.bags.every((n) => n < 100));

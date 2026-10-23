@@ -112,8 +112,8 @@ test('death: a killed wizard drops a pouch of coins by his rank (a wanderer by h
             assert.ok(out[0].count >= a && out[0].count <= b, `${role}/${rank}: ${out[0].count} in ${a}..${b}`);
         }
     }
-    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0)[0].count, 150);
-    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0.9999)[0].count, 400);
+    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0)[0].count, 90);
+    assert.equal(lootOfVillager('master', { rank: 'master' }, () => 0.9999)[0].count, 240);
 });
 
 test('death: the body of a killed wizard is made from his own look (robe, hat), not from a castle farmer', () => {

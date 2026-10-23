@@ -157,7 +157,7 @@ test('the grapnels: a ship is hauled in alongside the black ship and held there,
 
 test('the captain\'s chests: his gold and plunder; the barrel raised to reach', () => {
     const cap = rollPirateLoot(Math.random, 'captain');
-    assert.ok(cap.filter((i) => i.kind === 'coins').reduce((a, i) => a + i.count, 0) >= 400);
+    assert.ok(cap.filter((i) => i.kind === 'coins').reduce((a, i) => a + i.count, 0) >= 240);
     assert.ok(cap.some((i) => i.kind === 'weapon' && i.magic));
     assert.ok(rollPirateLoot(Math.random, 'store').some((i) => i.kind === 'cannonball'));
     // a ball fired at gunPitch lands where it was aimed

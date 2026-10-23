@@ -17,7 +17,7 @@
  *    often than a lair): high in the sky, its shadow on the ground; sometimes it lands to rest.
  *    Disturb it, hurt it — it attacks.
  *  - Killed: it leaves the dragon's wand (DragonKinds.dragonWand: fire spells +60%).
- *  - The hoard: a heap of loose coins (1000–5000 coins in the lair altogether, DragonKinds.rollHoard)
+ *  - The hoard: a heap of loose coins (600–3000 coins in the lair altogether, DragonKinds.rollHoard)
  *    and pouches lying on and round it (none full, some empty), one egg per dragon of the lair. Loose
  *    coins are scooped by hand — an open hand pushed into the heap, the fingers closed: a handful —
  *    and poured into an open pouch held in the other hand (or into the pouches tied on the belt:

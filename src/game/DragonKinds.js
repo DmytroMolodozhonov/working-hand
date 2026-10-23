@@ -10,6 +10,7 @@
  */
 
 import { TEMPLE_SCROLLS } from '../world/GodsTemple.js';
+import { scaleCoins } from './CoinScale.js';
 
 /** The spells of the gods (the scrolls of their library): every boss is open to them — «на то они и божественные». */
 export const GODS = new Set([...TEMPLE_SCROLLS, 'FlyingMaxima']); // (and «Flying Maxima», the gods' own flight — Mana.GOD_SPELLS)
@@ -207,7 +208,7 @@ const POUCH = 500;
  * @returns {{total:number, loose:number, bags:number[]}}
  */
 export function rollHoard(rng) {
-    const total = 1000 + Math.floor(rng() * 4001);
+    const total = scaleCoins(1000 + Math.floor(rng() * 4001)); // (1000–5000 cut by 40 %: CoinScale.js)
     const inBags = Math.floor(total * (0.2 + rng() * 0.15));
     const bags = [];
     let left = inBags;

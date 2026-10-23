@@ -37,6 +37,7 @@ import { DRAGON_KINDS } from './DragonKinds.js';
 import { rollChestArmor, armorValue, describeArmor, makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { armorItemModel } from '../entities/ArmorLook.js';
 import { iceRodModel } from './IceModels.js';
+import { scaleCoins } from './CoinScale.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -306,7 +307,7 @@ export function rollDragonLoot(r = Math.random) {
  */
 export function rollPirateLoot(r = Math.random, room = 'store') {
     const out = [];
-    const coins = (a, b) => out.push({ kind: 'coins', uid: newUid(), count: randInt(r, a, b) });
+    const coins = (a, b) => out.push({ kind: 'coins', uid: newUid(), count: scaleCoins(randInt(r, a, b)) }); // (40 % less gold: CoinScale.js)
     const sabre = (magic) => out.push({ kind: 'weapon', type: r() < 0.65 ? 'sword' : 'axe', magic, bonus: randInt(r, magic ? 30 : 1, 60), uid: newUid() });
     if (room === 'captain') {
         coins(250, 450); coins(150, 300);

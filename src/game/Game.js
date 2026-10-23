@@ -31,6 +31,7 @@ import { inStream } from '../fx/InfernoStream.js';
 import { Combat, PVP, bombardoDamage, sampleShieldModels } from './Combat.js';
 import { isDivine } from './ProtectionGods.js';
 import { chestCoins } from './CastleTreasure.js';
+import { scaleCoins } from './CoinScale.js';
 import { DAMAGE, blastDamage } from './Damage.js';
 const BLAST = DAMAGE.BlastPeak, LIGHTNING = DAMAGE.Lightning;
 import { Levitation } from './Levitation.js';
@@ -1172,11 +1173,11 @@ export class Game {
     _chestPouch(chest) {
         const plain = () => 5 + Math.floor(Math.random() * 296); // 5…300
         const share = chest.castle ? chestCoins(chest.castle, chest) : null; // (a king's castle: its chest's part of the king's fortune 500…1500 — CastleTreasure.js)
-        const coins = share != null ? share : chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 50 + Math.floor(Math.random() * 451) : 5 + Math.floor(Math.random() * 46)) // (a rich house 50…500, a poor one 5…50)
+        const coins = share != null ? share : scaleCoins(chest.cart ? (chest.cart.magic ? 60 + Math.floor(Math.random() * 140) : 10 + Math.floor(Math.random() * 40)) : chest.house ? (chest.house.rich ? 50 + Math.floor(Math.random() * 451) : 5 + Math.floor(Math.random() * 46)) // (a rich house 50…500, a poor one 5…50)
             : chest.ship ? (chest.local?.room === 'captain' ? 60 + Math.floor(Math.random() * 120) : 10 + Math.floor(Math.random() * 40))
             : chest.room === 'dragon' ? 400 + Math.floor(Math.random() * 600)
             : chest.room === 'iceQueen' ? 250 + Math.floor(Math.random() * 350)
-            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : chest.room === 'study' ? 200 : 120)) : plain();
+            : chest.castle ? 40 + Math.floor(Math.random() * (chest.room === 'treasury' || chest.room === 'vault' ? 260 : chest.room === 'study' ? 200 : 120)) : plain());
         return coins > 0 ? [{ kind: 'coins', uid: newUid(), count: coins }] : [];
     }
 
