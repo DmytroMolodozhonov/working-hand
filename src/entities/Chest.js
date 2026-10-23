@@ -35,14 +35,19 @@ export const LIFT_OPEN = OPEN_ANGLE * 0.38;
 /**
  * The chest's looks (`opts.style`): an ordinary one (oak, black iron, a brass lock), a boss's or a king's
  * (dark red wood, gold, lined with red velvet), a ship's (sea-worn grey oak, rusty iron, tarred inside),
- * the Ice Queen's (frosted pale-blue wood, silver, lined with snow-white).
+ * the Ice Queen's (frosted pale-blue wood, silver, lined with snow-white); the castles' rooms (generation 8):
+ * 'iron' (the strongbox: dark wood, bright steel bands), 'painted' (the clothes chest: teal paint, brass, lined with red
+ * cloth), 'crate' (the store crate: pale pine, black nails, no lock plate shine).
  */
-export const CHEST_STYLES = ['plain', 'rich', 'pirate', 'ice'];
+export const CHEST_STYLES = ['plain', 'rich', 'pirate', 'ice', 'iron', 'painted', 'crate'];
 const LOOK = {
     plain: { wood: 0xb07a45, lid: 0x9c6a3a, metal: 0x3a3836, mShine: 40, lock: 0xc9a14a, inside: 0x7a5a3e, cloth: false },
     rich: { wood: 0x8a3b26, lid: 0x7a3020, metal: 0xd9ad3c, mShine: 90, lock: 0xe8c45a, inside: 0xb0202a, cloth: true, emblem: true },
     pirate: { wood: 0x8c8070, lid: 0x7a6e60, metal: 0x5a3e2c, mShine: 18, lock: 0xa8843c, inside: 0x6a5440, cloth: false, band: true },
     ice: { wood: 0xd4e8f6, lid: 0xc2def2, metal: 0x6f98c0, mShine: 110, lock: 0xeaf6ff, inside: 0xcfe6f7, cloth: true, emblem: true, gloss: 90 },
+    iron: { wood: 0x565b64, lid: 0x4a4f58, metal: 0xaab3bd, mShine: 120, lock: 0xd8dde3, inside: 0x34373d, cloth: false, band: true },
+    painted: { wood: 0x3d7a78, lid: 0x346b6a, metal: 0xc9a24a, mShine: 70, lock: 0xe6c660, inside: 0x9a2f3c, cloth: true },
+    crate: { wood: 0xcaa978, lid: 0xb99868, metal: 0x4a3c2e, mShine: 8, lock: 0x6a5a44, inside: 0x8a7050, cloth: false },
 };
 /** Body walls: the box is hollow (walls T thick, the floor at FLOOR) — an opened chest is empty inside. */
 const T = 0.05, FLOOR = 0.08, BW = 1.2, BD = 0.8, BH = 0.5;

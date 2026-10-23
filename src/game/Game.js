@@ -119,7 +119,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, WATER_LEVEL_Y } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -300,6 +300,7 @@ export class Game {
             lush: this.gen >= 5, // (the new landscape: big mountains, kinds of land, colours — Landscape.js)
             slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
             wizHuts: this.gen >= 7, // (the lone wizards' houses roomy — Hamlets.js)
+            furnish: this.gen >= FURNISH_FROM_GEN, // (the castles' rooms furnished, more chests — CastleFurniture.js)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
         this.world.viewDistance = viewDistanceScale(config.viewDistance); // «Прорисовка мира» (this computer only)

@@ -26,6 +26,8 @@ import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 import { roofShapes } from './PlanSlopes.js';
+import { furnishRoom } from './CastleFurniture.js';
+import { SHAPE } from './BlockShapes.js';
 
 export const CASTLE_CELL = 480;
 /** A cell holds a castle this often (before its land is checked): the giant spider's lairs are rarer by it (SpiderLairs.js). */
@@ -142,6 +144,26 @@ export class Plan {
     slopeTop(mark, ...mats) {
         const s = roofShapes(this.parts.slice(mark), mats);
         if (s) this.parts.push(s);
+    }
+
+    /**
+     * A half block (generation 8's furniture: table tops, seats, cushions): the block already put at (u, v) on layer l
+     * becomes a slab (BlockShapes.js; a world without slopes keeps the whole block). Marks go out with flushSlabs, after
+     * the room's blocks.
+     */
+    slabAt(u, v, l, shape = SHAPE.SLAB) { (this._slabs || (this._slabs = [])).push(this.wx(u, v), this.L(l), this.wz(u, v), shape); }
+
+    flushSlabs() {
+        const c = this._slabs;
+        if (!c || !c.length) return;
+        this._slabs = null;
+        let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, L0 = Infinity, L1 = -Infinity;
+        for (let i = 0; i < c.length; i += 4) {
+            if (c[i] < x0) x0 = c[i]; if (c[i] > x1) x1 = c[i];
+            if (c[i + 1] < L0) L0 = c[i + 1]; if (c[i + 1] > L1) L1 = c[i + 1];
+            if (c[i + 2] < z0) z0 = c[i + 2]; if (c[i + 2] > z1) z1 = c[i + 2];
+        }
+        this.parts.push({ k: 3, x0, x1, z0, z1, L0, L1, t: 0, cells: c });
     }
 
     /** A straight road (centre line); every node later found on it is linked to its neighbours. */
@@ -261,6 +283,7 @@ function stairsU(p, u0, dir, v0, v1, n, t, l0 = 0) {
 
 // ------------------------------------------------------------ furniture
 export function furnish(p0, room, s, chests, aisles = []) {
+    if (s.furnish) return furnishRich(p0, room, s, chests, aisles); // (generation 8: CastleFurniture.js)
     const { u0, u1, v0, v1, kind } = room;
     // furniture never stands in the way of the walking paths (aisles) through the room
     const hits = (a0, a1, b0, b1) => aisles.some((r) => a1 >= r.u0 && a0 <= r.u1 && b1 >= r.v0 && b0 <= r.v1);
@@ -390,6 +413,53 @@ export function furnish(p0, room, s, chests, aisles = []) {
     });
 }
 
+
+/**
+ * The furnished room of generation 8 (CastleFurniture.js decides what stands in it): the same floor cells, chests and
+ * beds as the old one, but the things are many and by the room's purpose; chests of different looks and loot
+ * (`look`: Chest.js, `flavor`: ItemTypes.rollStoreLoot) — the king's, clothes chests, food crates, arms. Returns what was put.
+ */
+function furnishRich(p0, room, s, chests, aisles) {
+    const { u0, u1, v0, v1, kind, l } = room;
+    const filled = new Set();
+    const box = floorCells((...a) => p0.box(...a), l, filled);
+    const keep = aisles.map((r) => [r.u0 - 0.5, r.u1 + 0.5, r.v0 - 0.5, r.v1 + 0.5]);
+    for (const r of room.pre || []) keep.push([r.u0 - 0.5, r.u1 + 0.5, r.v0 - 0.5, r.v1 + 0.5]);
+    const o = p0.pt(0, 0);
+    const chestOf = (u, v, fu, fv, scale, w) => {
+        const q = p0.pt(fu, fv); // (the chest's front, +Z, looks along local (fu, fv))
+        const c = { ...p0.pt(u, v, l), yaw: Math.atan2(q.x - o.x, q.z - o.z), gap: CHEST_GAP, scale, room: w?.room || kind };
+        if (w?.look) c.look = w.look;
+        if (w?.flavor) c.flavor = w.flavor;
+        chests.push(c);
+    };
+    const place = (list, rects = []) => {
+        for (const r of rects) keep.push(r);
+        const n = keep.length;
+        placeChests({ a0: u0 - 0.5, a1: u1 + 0.5, b0: v0 - 0.5, b1: v1 + 0.5, filled, keep, wants: list.map((w) => [w.at[0], w.at[1], w]), scales: [3, 2.5, HOUSE_CHEST_SCALE] },
+            (u, v, fu, fv, scale, w) => chestOf(u, v, fu, fv, scale, w));
+        return keep.slice(n);
+    };
+    const env = {
+        room, s, rng: s.frng, aisles, pre: room.pre || [], windows: room.windows || [], beds: room.nBeds || 1,
+        box, slabAt: (u, v, L, shape) => p0.slabAt(u, v, L, shape),
+        chests: place,
+        putChest: ({ u, v, fu, fv, scale, look, room: rm, flavor }) => {
+            chestOf(u, v, fu, fv, scale, { look, room: rm, flavor });
+            const W = CHEST_W * scale / 2, D = CHEST_D * scale / 2;
+            keep.push(Math.abs(fu) > 0.5 ? [u - D, u + D, v - W, v + W] : [u - W, u + W, v - D, v + D]);
+        },
+        bed: ({ sleep, king }) => {
+            if (!room.beds) return;
+            const a = p0.pt(sleep[0], sleep[1], l + 2), h = p0.pt(sleep[2], sleep[3], l + 2);
+            room.beds.push({ x: a.x, y: a.y, z: a.z, yaw: Math.atan2(h.x - a.x, h.z - a.z), room: king ? 'king' : kind });
+        },
+    };
+    const stat = furnishRoom(env);
+    p0.flushSlabs();
+    return stat;
+}
+
 // ------------------------------------------------------------------ keep
 /**
  * The keep: a throne room in the middle (two storeys high), rooms on both
@@ -398,21 +468,24 @@ export function furnish(p0, room, s, chests, aisles = []) {
 function buildKeep(p, s, rng, out) {
     const { KW, KD, kv } = s;
     const st = s.stone;
-    const top = 16;
-    const u0 = -KW, u1 = KW, v0 = kv - KD, v1 = kv + KD;
+    const fz = !!s.furnish; // generation 8: a roomy king's chamber (8 high, 15 × 12), furnished rooms (CastleFurniture.js)
+    const top = fz ? 17 : 16;
+    const ext = fz ? 4 : 0; // (generation 8: the keep goes 4 further back — the rooms behind the throne are 12 deep: the king's chamber; the hall and the rooms along it as long as before)
+    const u0 = -KW, u1 = KW, v0 = kv - KD, v1 = kv + KD + ext;
+    s.keepBox = { u0, u1, v0, v1 };
     p.box(u0, u1, -3, top, v0, v1, st);
     p.box(u0 + 2, u1 - 2, 0, top - 1, v0 + 2, v1 - 2, 0);
     p.box(u0 + 2, u1 - 2, -1, -1, v0 + 2, v1 - 2, s.floor);
     p.crenels(u0, u1, v0, v1, top + 1, st);
     const hw = s.hallHalf;
-    const RN = 8;
+    const RN = fz ? 12 : 8; // (the depth of the rooms behind the throne: the king's chamber upstairs wants 12)
     const iv0 = v0 + 2, iv1 = v1 - 2;
     const hallV1 = iv1 - RN - 1;
     // walls between the hall and the side rooms / the rooms behind the throne
     p.box(-hw - 1, -hw - 1, 0, top - 1, iv0, iv1, st);
     p.box(hw + 1, hw + 1, 0, top - 1, iv0, iv1, st);
     p.box(-hw, hw, 0, top - 1, hallV1 + 1, hallV1 + 1, st);
-    p.box(0, 0, 0, top - 1, hallV1 + 2, iv1, st);
+    p.box(0, 0, 0, fz ? 7 : top - 1, hallV1 + 2, iv1, st); // (generation 8: the wall between the two rooms behind the throne stops at the floor of the upper one — the king's chamber is one)
     // the upper floor over the side rooms and behind the throne
     p.box(u0 + 2, -hw - 2, 8, 8, iv0, iv1, BLOCK.PLANKS_DARK);
     p.box(hw + 2, u1 - 2, 8, 8, iv0, iv1, BLOCK.PLANKS_DARK);
@@ -518,7 +591,23 @@ function buildKeep(p, s, rng, out) {
         });
         return ids;
     };
-    const nSide = (iv1 - iv0 + 1) >= 39 ? 3 : 2;
+    // the cells of an upper room next to a window of the keep's outer walls (curtains hang there)
+    const windowCells = (rm) => {
+        const w = [];
+        for (let u = u0 + 4; u <= u1 - 4; u += 5) {
+            if (u < rm.u0 || u > rm.u1) continue;
+            if (rm.v0 === v0 + 2) w.push([u, rm.v0]);
+            if (rm.v1 === v1 - 2) w.push([u, rm.v1]);
+        }
+        for (let v = v0 + 4; v <= v1 - 4; v += 5) {
+            if (v < rm.v0 || v > rm.v1) continue;
+            if (rm.u0 === u0 + 2) w.push([rm.u0, v]);
+            if (rm.u1 === u1 - 2) w.push([rm.u1, v]);
+        }
+        return w;
+    };
+    const nRows = iv1 - iv0 + 1 - ext; // (the rows the side rooms are shared out by: the old length; the last room gets the extension)
+    const nSide = nRows >= 39 ? 3 : 2;
     const kinds = ['kitchen', 'dining', 'armoury', 'storeroom', 'guardroom', 'chapel'];
     const upKinds = ['bedroom', 'library', 'bedroom', 'chapel', 'bedroom', 'library', 'bedroom'];
     for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
@@ -527,7 +616,7 @@ function buildKeep(p, s, rng, out) {
     for (const su of [-1, 1]) {
         const ru0 = su < 0 ? u0 + 2 : hw + 2, ru1 = su < 0 ? -hw - 2 : u1 - 2;
         for (let i = 0; i < nSide; i++) {
-            const rv0 = iv0 + Math.round((iv1 - iv0 + 1) * i / nSide), rv1 = iv0 + Math.round((iv1 - iv0 + 1) * (i + 1) / nSide) - 1;
+            const rv0 = iv0 + Math.round(nRows * i / nSide), rv1 = i === nSide - 1 ? iv1 : iv0 + Math.round(nRows * (i + 1) / nSide) - 1;
             if (i > 0) { p.box(ru0, ru1, 0, top - 1, rv0, rv0, st); }
             const r0 = i > 0 ? rv0 + 1 : rv0;
             const isStairs = su > 0 && i === 0;
@@ -552,7 +641,8 @@ function buildKeep(p, s, rng, out) {
             } else {
                 const door = [wallU, dv], mid = [cu, cvv];
                 const c1 = corner(door, true, mid);
-                furnish(p, room, s, out.chests, [leg(door, c1), leg(c1, mid)]);
+                const st2 = furnish(p, room, s, out.chests, [leg(door, c1), leg(c1, mid)]);
+                if (st2) room.items = st2.items;
                 const ids = nodes([[wallU - su * 3, dv], [wallU + su * 2, dv], c1, mid], 0, 'room:' + kind);
                 p.link(hallMid, ids[0]);
             }
@@ -561,6 +651,17 @@ function buildKeep(p, s, rng, out) {
         }
     }
     pillars();
+    if (fz) {
+        // braziers (a stone bowl with a fire) at the throne room's walls between the pillars — off the doors, off the carpet
+        for (let v = iv0 + 3; v <= hallV1 - 5; v += 6) {
+            for (const su of [-1, 1]) {
+                const bv = v + 2;
+                if (doorRows.some((d) => d.su === su && Math.abs(d.v - bv) <= 3)) continue;
+                p.box(su * hw, su * hw, 0, 0, bv, bv, BLOCK.CS_DARK);
+                p.box(su * hw, su * hw, 1, 1, bv, bv, BLOCK.LANTERN);
+            }
+        }
+    }
     // behind the throne: the treasury and a store / study
     for (const su of [-1, 1]) {
         const ru0 = su < 0 ? -hw : 1, ru1 = su < 0 ? -1 : hw;
@@ -568,7 +669,8 @@ function buildKeep(p, s, rng, out) {
         const du = su * Math.round(hw / 2);
         p.box(du - 1, du + 1, 0, 5, hallV1 + 1, hallV1 + 1, 0);
         const room = { kind, u0: ru0, u1: ru1, v0: hallV1 + 2, v1: iv1, l: 0, doorSide: 'v0' };
-        furnish(p, room, s, out.chests, [leg([du, hallV1 + 1], [du, hallV1 + 5])]);
+        const st2 = furnish(p, room, s, out.chests, [leg([du, hallV1 + 1], [du, hallV1 + 5])]);
+        if (st2) room.items = st2.items;
         const ids = nodes([[du, hallV1 - 2], [du, hallV1 + 5]], 0, 'room:' + kind);
         p.link(throneFront, ids[0]);
         out.rooms.push({ ...room, name: ROOM_NAMES[kind], ...p.rect(ru0, ru1, hallV1 + 2, iv1), y: p.L(0) - 1.5 });
@@ -577,7 +679,8 @@ function buildKeep(p, s, rng, out) {
     const upl = 9;
     const ring = [];
     for (const r of sideRooms.filter((x) => x.su > 0)) ring.push(r);
-    ring.push({ su: 1, ru0: 1, ru1: hw, r0: hallV1 + 2, rv1: iv1, north: true }, { su: -1, ru0: -hw, ru1: -1, r0: hallV1 + 2, rv1: iv1, north: true });
+    if (fz) ring.push({ su: 1, ru0: -hw, ru1: hw, r0: hallV1 + 2, rv1: iv1, north: true, king: true }); // (one big chamber over both rooms behind the throne)
+    else ring.push({ su: 1, ru0: 1, ru1: hw, r0: hallV1 + 2, rv1: iv1, north: true }, { su: -1, ru0: -hw, ru1: -1, r0: hallV1 + 2, rv1: iv1, north: true });
     for (const r of sideRooms.filter((x) => x.su < 0).reverse()) ring.push(r);
     // the doors between neighbours of the ring: [point, through a u-wall?]
     const doors = [];
@@ -590,7 +693,7 @@ function buildKeep(p, s, rng, out) {
             doors.push([[du, vb], false]);
         } else {
             const du = !r.north ? (r.su > 0 ? hw + 1 : -hw - 1) : next.north ? 0 : (next.su > 0 ? hw + 1 : -hw - 1);
-            const dv = Math.round((hallV1 + 2 + iv1) / 2); // the middle of the rooms behind the throne
+            const dv = fz ? hallV1 + 3 : Math.round((hallV1 + 2 + iv1) / 2); // the middle of the rooms behind the throne (the king's chamber: its front, the rest of it is free for the bed)
             p.box(du, du, upl, upl + 5, dv - 1, dv + 1, 0);
             doors.push([[du, dv], true]);
         }
@@ -599,16 +702,23 @@ function buildKeep(p, s, rng, out) {
         const r = ring[i];
         const isStairRoom = i === 0;
         const kind = isStairRoom ? 'gallery' : r.north && r.su > 0 ? 'king' : upKinds[upIdx++ % upKinds.length];
-        const mid = [Math.round((r.ru0 + r.ru1) / 2), Math.round((r.r0 + r.rv1) / 2)];
+        const mid = r.king ? [0, hallV1 + 3] : [Math.round((r.ru0 + r.ru1) / 2), Math.round((r.r0 + r.rv1) / 2)];
         const entry = i === 0 ? [out.stairsTopPt, true] : doors[i - 1];
         const exit = doors[i];
         const pts = [entry[0], corner(entry[0], entry[1], mid), mid];
         if (exit) pts.push(corner(exit[0], exit[1], mid), exit[0]);
         const aisles = [];
         for (let k = 1; k < pts.length; k++) aisles.push(leg(pts[k - 1], pts[k]));
-        if (!isStairRoom) {
-            furnish(p, { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0', beds: out.beds }, s, out.chests, aisles);
-            out.rooms.push({ kind, name: ROOM_NAMES[kind], ...p.rect(r.ru0, r.ru1, r.r0, r.rv1), y: p.L(upl) - 1.5, l: upl });
+        if (!isStairRoom || fz) {
+            const fr = { kind, u0: r.ru0, u1: r.ru1, v0: r.r0, v1: r.rv1, l: upl, doorSide: 'v0', beds: out.beds };
+            if (fz) {
+                fr.nBeds = s.style === 'compact' ? 1 : 2;
+                fr.windows = windowCells(fr);
+                // (the stairwell: the stairs and the hole over them are not floor)
+                if (isStairRoom) fr.pre = [{ u0: u1 - 5, u1: u1 - 3, v0: r.r0, v1: r.r0 + 9 }];
+            }
+            const st2 = furnish(p, fr, s, out.chests, aisles);
+            out.rooms.push({ kind, name: ROOM_NAMES[kind], ...p.rect(r.ru0, r.ru1, r.r0, r.rv1), y: p.L(upl) - 1.5, l: upl, ...(st2 ? { items: st2.items } : {}) });
         }
         // windows over the throne room from the side rooms (a gallery)
         if (!r.north) {
@@ -731,7 +841,15 @@ function buildCastle(p, s, rng, out) {
             out.beds.push({ x: a.x, y: a.y, z: a.z, yaw: Math.atan2(h.x - a.x, h.z - a.z), room: 'barracks' });
             out.beds.push({ x: m.x, y: m.y, z: m.z, yaw: Math.atan2(mh.x - m.x, mh.z - m.z), room: 'barracks', mat: true });
         }
-        out.rooms.push({ kind: 'barracks', name: ROOM_NAMES.barracks, ...p.rect(bu0 + 1, bu1 - 1, bv0 + 1, bv1 - 1), y: p.L(0) - 1.5, l: 0 });
+        let bst = null;
+        if (s.furnish) {
+            // (generation 8: weapon racks, benches, barrels and the soldiers' footlockers along the door's wall; the bunks' side and the mats are left to the sleepers)
+            const lying = []; // (the rows where knights lie — on the bunks and on the straw mats by them: 3 rows each, across the room)
+            for (let v = bv0 + 2; v <= bv1 - 2; v += 3) { if (v >= bv0 + 7 && v <= bv0 + 11) continue; lying.push({ u0: bu0 + 1, u1: bu1 - 1, v0: v - 1, v1: v + 1 }); }
+            bst = furnish(p, { kind: 'barracks', u0: bu0 + 1, u1: bu1 - 1, v0: bv0 + 1, v1: bv1 - 1, l: 0, doorSide: 'u0', pre: lying },
+                s, out.chests, [{ u0: bu0 - 1, u1: bu0 + 5, v0: bv0 + 8, v1: bv0 + 10 }]);
+        }
+        out.rooms.push({ kind: 'barracks', name: ROOM_NAMES.barracks, ...p.rect(bu0 + 1, bu1 - 1, bv0 + 1, bv1 - 1), y: p.L(0) - 1.5, l: 0, ...(bst ? { items: bst.items } : {}) });
         const bOut = p.node(bu0 - 3, bv0 + 9, 0, 'barracksDoor');
         const bIn = p.node(bu0 + 4, bv0 + 9, 0, 'room:barracks');
         p.link(bOut, bIn);
@@ -1259,9 +1377,10 @@ function placeChests({ a0, a1, b0, b1, filled, beds = [], keep, wants, inner = [
     // the walls: [along a?, where the face is, which way the room is from it]
     const walls = [[false, a0, 1], [false, a1, -1], [true, b0, 1], [true, b1, -1]];
     for (const a of inner) walls.push([false, a - 0.5, -1], [false, a + 0.5, 1]);
-    for (const [pa, pb] of wants) {
+    for (const want of wants) {
+        const [pa, pb] = want;
         let best = null;
-        for (const scale of scales) {
+        for (const scale of want[2]?.scales || scales) {
             if (best) break;
             const W = CHEST_W * scale, D = CHEST_D * scale, span = CHEST_GAP + D;
             for (const [alongA, face, into] of walls) {
@@ -1282,7 +1401,7 @@ function placeChests({ a0, a1, b0, b1, filled, beds = [], keep, wants, inner = [
         }
         if (!best) continue;
         keep.push(best.r);
-        put(best.ca, best.cb, best.f[0], best.f[1], best.scale);
+        put(best.ca, best.cb, best.f[0], best.f[1], best.scale, want[2]);
     }
 }
 
@@ -1794,8 +1913,9 @@ export class CastleIndex {
      * @param {number} seed
      * @param {(ix:number, iz:number) => number} rawHeight the wild height field (with .water)
      */
-    constructor(seed, rawHeight, seas = null, test = false) {
+    constructor(seed, rawHeight, seas = null, test = false, furnish = false) {
         this.seed = seed;
+        this.furnish = furnish; // generation 8: the castles' rooms furnished, more chests (FURNISH_FROM_GEN, Terrain.js)
         this.raw = rawHeight;
         this.seas = seas; // SeaIndex (generation-2 worlds): sea castles with a port
         this.test = test; // the creative test ground: a castle close by (cell 0, −1)
@@ -1976,6 +2096,9 @@ export class CastleIndex {
         const p = new Plan(X, Z, F, rot);
         const out = { rooms: [], chests: [], houses: [], stalls: [], fields: [], pens: [], cannons: [], beds: [] };
         s.sea = seaOpts;
+        // generation 8: furnished rooms. Its own numbers (the castle's go on as before): the same castle, its rooms filled.
+        s.furnish = !!this.furnish;
+        if (s.furnish) s.frng = createRng((this.seed * 6469 + gx * 90001 + gz * 1000003 + 0x2f6b9) >>> 0);
         buildVillage(p, s, rng, out);
         buildCastle(p, s, rng, out);
         if (seaOpts) { buildSeaWorks(p, s, rng, out); buildPort(p, s, rng, out); }
@@ -1991,7 +2114,7 @@ export class CastleIndex {
             id: 'cs' + gx + '_' + gz, gx, gz, x: X, z: Z, F, rot, style: s.style, styleName: STYLE_NAMES[s.style],
             name, king, population, knights, color: s.color, colorName: s.colorName, stone: s.stone,
             zone, walls, inner: p.rect(-s.W + s.T, s.W - s.T, -s.D + s.T, s.D - s.T),
-            keep: p.rect(-s.KW, s.KW, s.kv - s.KD, s.kv + s.KD),
+            keep: p.rect(-s.KW, s.KW, s.keepBox.v0, s.keepBox.v1),
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
             throne: out.throne, throneFront: out.throneFront, throneGate: out.throneGate || null, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),

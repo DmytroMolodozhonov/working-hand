@@ -330,6 +330,45 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
     return out;
 }
 
+/**
+ * What a castle's store chest holds by what it is for (generation 8, CastleFurniture.js; CLAUDE.md: «не крутые предметы»):
+ * 'food' — bread, cheese, meat, pies, apples; 'clothes' — wool, a plain robe now and then; 'arms' — arrows, a plain sword, axe,
+ * bow or shield; 'scrolls' — scrolls of health and strength, now and then a plain spell. Plain things, and only now and then ONE
+ * precious one — less often than the general rule (KEY_CHANCE) — the coins come apart, in their pouch (CastleTreasure.js).
+ */
+export function rollStoreLoot(r = Math.random, flavor = 'food', count = 0) {
+    const n = count > 0 ? count : randInt(r, 2, 3);
+    const out = [];
+    if (r() < KEY_CHANCE * 0.4) out.push(rollKeyItem(r));
+    while (out.length < n) out.push(storeThing(r, flavor));
+    return out;
+}
+
+function storeThing(r, flavor) {
+    const x = r();
+    switch (flavor) {
+        case 'clothes':
+            if (x < 0.7) return { kind: 'wool', uid: newUid(), count: randInt(r, 1, 3) };
+            if (x < 0.85) return makeRobe(false, r);
+            return rollPlainItem(r);
+        case 'arms':
+            if (x < 0.35) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+            if (x < 0.6) return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: false, bonus: 0, uid: newUid() };
+            if (x < 0.8) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: false, bonus: 0, arrows: randInt(r, 5, 12) };
+            return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 1), magic: false, max: 0 };
+        case 'scrolls':
+            if (x < 0.35) return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
+            if (x < 0.75) return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+            return rollScroll(r, true);
+        default: // 'food'
+            if (x < 0.3) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
+            if (x < 0.55) return { kind: 'cheese', uid: newUid(), count: randInt(r, 1, 2) };
+            if (x < 0.75) return { kind: 'steak', uid: newUid(), count: randInt(r, 1, 2) };
+            if (x < 0.92) return { kind: 'pie', uid: newUid(), count: 1 };
+            return { kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) };
+    }
+}
+
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
 export function rollPortLoot(r = Math.random, count = 0) {
     const out = [];

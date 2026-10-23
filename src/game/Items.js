@@ -22,7 +22,7 @@
 
 import * as THREE from 'three';
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
@@ -226,7 +226,7 @@ export class ItemSystem {
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
-        const items = (bossItems || (house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
+        const items = (bossItems || (chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();

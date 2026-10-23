@@ -248,7 +248,15 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 7;
+export const WORLD_GEN = 8;
+/**
+ * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
+ * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
+ * (a taken castle, rebuilt rooms) lie on the plan it was made with. To furnish old worlds too, lower it (the plan of a castle
+ * changes: the keep's depth behind the throne, the height of the upper floor, a hall 4 shorter).
+ */
+export const FURNISH_FROM_GEN = 8;
+// 8: the castles' rooms furnished (FURNISH_FROM_GEN).
 // 7: the lone wizards' houses are roomier (Hamlets.js buildMageHut → Castles.buildWizHut): a wizard can walk about in them.
 // 6: ramps and slabs (BlockShapes.js): the land's one-block steps are smoothed into slopes (Terrain._slopeLand), the
 //    caves' vaults rounded (_vaultCaves), roofs and stairs of the buildings made of ramps (Castles.Plan.ramp/slab).
@@ -521,12 +529,13 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
         this.wizHuts = !!(this.lush && wizHuts); // (generation 7: the lone wizards' houses roomy — Hamlets.js)
+        this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
@@ -540,7 +549,7 @@ export class TerrainData {
         this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas, this.test);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
