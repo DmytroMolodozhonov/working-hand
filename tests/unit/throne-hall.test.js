@@ -100,3 +100,10 @@ test('«уйдите»: everybody in the hall leaves it for his own place within
         }
     }
 });
+
+test('«разойдитесь» и родня: каждая фраза понята, с «пожалуйста» и после «рыцари/стража»; «идите за мной» — не расход', () => {
+    const words = ['разойдитесь', 'расходитесь', 'разойдись', 'разойтись', 'отойдите', 'отойди', 'уходите', 'уйдите', 'идите', 'покиньте зал', 'оставьте нас', 'свободны'];
+    for (const w of words) for (const f of [w, `${w} пожалуйста`, `рыцари ${w}`, `стража, ${w}, пожалуйста`]) assert.equal(detectOrder(f)?.name, 'dismiss', f);
+    for (const w of ['по местам', 'на посты', 'вольно', 'отставить']) assert.equal(detectOrder(`рыцари ${w}`)?.name, 'stay', w);
+    for (const f of ['идите за мной', 'идите сюда', 'иди ко мне']) assert.notEqual(detectOrder(f)?.name, 'dismiss', f);
+});

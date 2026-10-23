@@ -1355,10 +1355,10 @@ export class CastleLife {
         if (v.fleeT > 0) { this._fleeStep(v, dt); return; }
         // the new king comes by: bow
         const st = this.state(cs.def.id);
-        if (st.owner && v.bowT <= 0) {
+        if (st.owner && v.bowT <= 0 && !v.follow && !v.order) { // (a bow once, not on the march and not at every step)
             const op = this._playerPos(st.owner);
             if (op && Math.hypot(op.x - v.x, op.z - v.z) < 6) {
-                v.bowT = 40;
+                v.bowT = 150; // (game seconds before the next bow)
                 v.bowing = 1.6;
                 v.yaw = Math.atan2(-(op.x - v.x), -(op.z - v.z));
                 if (!this.talk.inTalk?.()) this._say(v, pick(SHOUT.bow)); // (a bow, but no cry in the middle of my talk)
@@ -1396,7 +1396,7 @@ export class CastleLife {
                     this._ground(v);
                     return;
                 }
-                const d0 = Math.hypot(fp.x - v.x, fp.z - v.z), d = this._goSpot(v, fp.x, fp.z, d0 > 8 ? RUN : WALK, dt, 3) ? Math.min(d0, 3) : d0; // (by the castle's paths when walls are between — a tower's wall, a house)
+                const d0 = Math.hypot(fp.x - v.x, fp.z - v.z), d = this._goSpot(v, fp.x, fp.z, d0 > 8 ? RUN : WALK, dt, 3.5, fp.y - 1.95) ? Math.min(d0, 3.5) : d0; // (on another floor — down a tower: only by its stair, never off the edge; 3–5 blocks off, not pressed to the king) // (by the castle's paths when walls are between — a tower's wall, a house)
                 v.mode = d > 3.2 && !(v.wallW?.noWay > 0) ? (v.speed > WALK ? 'run' : 'walk') : 'idle'; // (standing off a shut wall: idle)
                 this._ground(v);
                 return;
