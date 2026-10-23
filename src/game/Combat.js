@@ -164,6 +164,7 @@ export const SPELL_COST = {
     Fireworks: 15, // once, at the start (the author: «снимается 15 маны»); the 10 s that follow cost nothing (Fireworks.js; no scroll)
     Invisibility: 20, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
+    Pentagranium: 20, // «Пентаграниум»: black magic — the wand draws a pentagram on the ground; then 1 a second while drawing (only from a scroll — Pentagranium.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)

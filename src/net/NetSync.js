@@ -472,6 +472,11 @@ export class NetSync {
     }
 
     /** «Fireworks»: one salvo from my wand tip (the seed makes the same bursts on every computer — Fireworks.js). */
+    /** «Пентаграниум»: a pentagram lit ({k: 'mark', id, by, pent, x, y, z, r, rot}) / a rite begun on it ({k: 'rite', id, body}) — Pentagranium.js. */
+    pentagram(m) {
+        this.net.send({ t: 'pgm', by: this.me, ...m }, true);
+    }
+
     fireworks(origin, dir, seed) {
         this.net.send({ t: 'fwk', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], s: seed >>> 0 }, true);
     }
@@ -972,6 +977,7 @@ export class NetSync {
             }
             case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
+            case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
             case 'tdes': {
                 if (m.by === this.me) break;

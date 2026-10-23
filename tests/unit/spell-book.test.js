@@ -76,3 +76,21 @@ test('a lone wizard\'s house chest holds a thing about houses 40 % of the time; 
     assert.ok(Math.abs(lone / N - LONE_HOUSE.CHANCE) < 0.04, `lone wizards: ${lone / N}`);
     assert.ok(other / N < 0.02, `other wizards' houses: ${other / N}`);
 });
+
+test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wizards) and are not spell scrolls; «Пентаграниум» itself is a spell scroll only', async () => {
+    const { isPentagramScroll, figureIds } = await import('../../src/game/PentagramRules.js');
+    const { lootOfVillager } = await import('../../src/game/Death.js');
+    const r = createRng(11), drawings = new Set(), shop = new Set(), wiz = new Set();
+    for (let i = 0; i < 8000; i++) {
+        const it = rollScroll(r);
+        if (isPentagramScroll(it)) { drawings.add(it.pent); assert.ok(!it.spell && it.stat === 'pentagram'); }
+        const s = rollShopScroll(r);
+        if (isPentagramScroll(s)) shop.add(s.pent);
+        for (const d of lootOfVillager('wanderer', {}, r)) if (isPentagramScroll(d)) wiz.add(d.pent);
+    }
+    assert.deepEqual([...drawings].sort(), [...figureIds()].sort(), 'every figure has a scroll in the chests');
+    assert.ok(shop.size >= 1, 'a tower\'s shop sells a drawing now and then');
+    assert.ok(wiz.size >= 1, 'a wanderer carries one now and then');
+    assert.ok(!knows('Pentagranium', survival()) && knows('Pentagranium', survival({ Pentagranium: true })));
+    assert.ok(SPELL_RU.Pentagranium && SPELL_RIBBON.Pentagranium);
+});

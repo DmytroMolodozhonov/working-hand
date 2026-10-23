@@ -170,6 +170,7 @@ import { Bridge } from './Bridge.js';
 import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
+import { Pentagranium } from './Pentagranium.js';
 import { GroundVortex } from './GroundVortex.js';
 import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { SteamBodies } from '../fx/SteamFx.js';
@@ -190,7 +191,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['Pentagranium', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -467,6 +468,7 @@ export class Game {
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
+        this.pentagranium = new Pentagranium(this); // «Пентаграниум»: black magic — a pentagram drawn on the ground and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
@@ -1837,6 +1839,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
+        if (name === 'Pentagranium') return this.pentagranium.cast(isFinal);
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
@@ -2022,6 +2025,7 @@ export class Game {
         if (this.invis?.stop()) done.push('невидимость');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
+        if (this.pentagranium?.stop('stop')) done.push('Пентаграниум');
         if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
@@ -2853,7 +2857,7 @@ export class Game {
         const items = this.items;
         if (!items) return false;
         const mine = casterId === this.localId || casterId === 'local';
-        const paper = (it) => it && (it.kind === 'scroll' || it.kind === 'book');
+        const paper = (it) => it && ((it.kind === 'scroll' && it.stat !== 'pentagram') || it.kind === 'book'); // (a pentagram's drawing does not burn)
         let hit = false;
         const burnt = (p, it, mineToo) => { hit = true; this._paperBurnt(p, it, mineToo); };
         for (const side of ['left', 'right']) {
@@ -2929,7 +2933,7 @@ export class Game {
         for (const side of ['left', 'right']) {
             const h = items.held[side];
             const it = h?.item;
-            const p = h?.model && (it?.kind === 'scroll' || it?.kind === 'book') ? h.model.getWorldPosition(_v1) : null;
+            const p = h?.model && ((it?.kind === 'scroll' && it.stat !== 'pentagram') || it?.kind === 'book') ? h.model.getWorldPosition(_v1) : null;
             const hot = p && (this.campfires?._fireAt?.(p, 1.4, 2.6, true) || this.fire?.burningAt?.(p, 1.2));
             if (!hot) { this._paperFireT[side] = 0; continue; }
             this._paperFireT[side] += dt;
@@ -3277,6 +3281,7 @@ export class Game {
         this.flashlight.intensity = savedIntensity;
         this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
         this.seeFx?.prewarm(); // («Visible Godi»: the cloud's shader)
+        for (const m of this.pentagranium?.sampleModels?.() || []) zoo.add(m); // («Пентаграниум»: the trail's ribbons, the figure's and the glow's shaders)
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
@@ -3511,6 +3516,7 @@ export class Game {
         this.invis?.update(dt);
         this.groundVortex?.update(dt);
         this.visibleGodi?.update(dt);
+        this.pentagranium?.update(dt);
         this.steam?.update(dt);
         this.fireworks?.update(dt);
         this.enchantCircles?.update(dt);

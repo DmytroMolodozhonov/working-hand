@@ -21,10 +21,13 @@
 
 import * as THREE from 'three';
 import { CAMPFIRE } from './Campfires.js';
-import { spellScroll, makeItemModel } from './ItemTypes.js';
+import { spellScroll, makeItemModel, newUid } from './ItemTypes.js';
+import { pentagramScroll, figureIds } from './PentagramRules.js';
+import { hashString } from '../core/math.js';
 import { CHUNK, chunkKey } from '../world/Terrain.js';
 import { makeStatue, STATUE_BOX } from './CopruStatue.js';
 
+const LIB_PENTAGRAM = 0.12; // the share of a library's scrolls that are a pentagram's drawing (the forbidden shelf)
 const SCROLL_TAKEN = 1.2; // m: a library scroll moved this far from its place (or picked up) is taken
 
 /** The day places besides the Elder and the sellers: the brewer, two at the fire (nobody sits in the library). */
@@ -288,7 +291,9 @@ export class WizVillages {
             const s = L.spots[k];
             if (!s) return;
             const at = new THREE.Vector3(s.x, s.y + 0.3, s.z);
-            const it = I.spawnLoose(spellScroll(spell), at);
+            // (the forbidden shelf: now and then one of the library's scrolls is a drawing of a pentagram — the same on every computer: by the place's id; Pentagrams.js)
+            const forbidden = (hashString('forbidden|' + def.id + '|' + k) % 1000) / 1000 < LIB_PENTAGRAM;
+            const it = I.spawnLoose(forbidden ? pentagramScroll(figureIds()[hashString('pent|' + def.id + '|' + k) % figureIds().length], newUid()) : spellScroll(spell), at);
             if (!it) return;
             it.shelfAt = at.clone(); // (while it lies there it is the library's: not saved — LoreLibrary.onSpot, WorldSave)
             list.push({ id, uid: it.item.uid, x: s.x, y: s.y, z: s.z });

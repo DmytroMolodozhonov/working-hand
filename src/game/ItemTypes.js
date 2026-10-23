@@ -41,6 +41,7 @@ import { rollChestArmor, armorValue, describeArmor, makePiece, makeRobe, PIECES 
 import { armorItemModel } from '../entities/ArmorLook.js';
 import { iceRodModel } from './IceModels.js';
 import { scaleCoins } from './CoinScale.js';
+import { figureOf, figureIds, pentagramScroll } from './PentagramRules.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -68,6 +69,7 @@ export const SPELL_RU = {
     ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', // (the seventh and the eighth: the gods' shield — ProtectionGods.js)
     Die: 'Дай', // (the ninth: the gods' black beam — StrongSpells.js)
     ImperiusMaxima: 'Империус Максима', // (the tenth: the mind into any creature, any player — Imperius.js)
+    Pentagranium: 'Пентаграниум', // (black magic: a pentagram drawn on the ground — Pentagranium.js; a scroll)
     Imperius: 'Империус', // (the mind into an ordinary creature: a rare strong scroll on the Earth — Imperius.js)
     Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', IceMaxima: 'Айс Максима', // (the strong duel spells: scrolls on the Earth)
     // (scrolls since the author's list of what a beginner knows — SpellBook.js)
@@ -76,7 +78,7 @@ export const SPELL_RU = {
     CreateCastle: 'Create a Castle', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', Breakthrough: 'Breakthrough', FireMaxima: 'Fire Maxima', BreakthroughMaxima: 'Breakthrough Максима',
 };
 /** The spell scrolls and their ribbon colours (which spells a scroll teaches: SpellBook.js — TAUGHT_BY). */
-export const SCROLL_SPELL_COLOR = { GroundVortex: 0x8a5a2b, VisibleGodi: 0xd9a7b0, Groundprud: 0xb0793a, LumosFollowing: 0xfff0b8, LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Imperius: 0xe8e4f6, ImperiusMaxima: 0xfff6dc, Die: 0x050008, EarthquakeMaxima: 0x8a5a2b, LiquidationMaxima: 0x6fdc8c, ProtectionMaxima: 0x4aa3ff, IceMaxima: 0xaee9ff, JoltMaxima: 0xd9e8f0, CircleAttack: 0xff3b6b, Drawdown: 0x6b4a2a, Overgrown: 0x3e8e2f, Brainrot: 0xff7ad9, BrainrotMaxima: 0xffc23a, Waterball: 0x2a7fff, AirBubble: 0xbff3ff, WaveAttack: 0x0f5fa8, WaterVortex: 0x00a0b0, WaterVortexSuperMaxima: 0x003a70, Snowman: 0xffffff, Unfurl: 0xe8dcc0, CreateCastle: 0x8f8f9a, IceCastle: 0x7fd4ff, IceBridge: 0xcfefff, Breakthrough: 0xa0522d, FireMaxima: 0xffb000 }; // (one scroll teaches a spell and its «Максима» for Wind Impulse, Circle Attack, Drawdown, Air Bubble, Wave Attack, Breakthrough; «Waterbollow» — «Water forming» too; «Анфёрл» — «Фёрл» too)
+export const SCROLL_SPELL_COLOR = { Pentagranium: 0x8c0f24, GroundVortex: 0x8a5a2b, VisibleGodi: 0xd9a7b0, Groundprud: 0xb0793a, LumosFollowing: 0xfff0b8, LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Imperius: 0xe8e4f6, ImperiusMaxima: 0xfff6dc, Die: 0x050008, EarthquakeMaxima: 0x8a5a2b, LiquidationMaxima: 0x6fdc8c, ProtectionMaxima: 0x4aa3ff, IceMaxima: 0xaee9ff, JoltMaxima: 0xd9e8f0, CircleAttack: 0xff3b6b, Drawdown: 0x6b4a2a, Overgrown: 0x3e8e2f, Brainrot: 0xff7ad9, BrainrotMaxima: 0xffc23a, Waterball: 0x2a7fff, AirBubble: 0xbff3ff, WaveAttack: 0x0f5fa8, WaterVortex: 0x00a0b0, WaterVortexSuperMaxima: 0x003a70, Snowman: 0xffffff, Unfurl: 0xe8dcc0, CreateCastle: 0x8f8f9a, IceCastle: 0x7fd4ff, IceBridge: 0xcfefff, Breakthrough: 0xa0522d, FireMaxima: 0xffb000 }; // (one scroll teaches a spell and its «Максима» for Wind Impulse, Circle Attack, Drawdown, Air Bubble, Wave Attack, Breakthrough; «Waterbollow» — «Water forming» too; «Анфёрл» — «Фёрл» too)
 /** What the temple's scrolls are for (GodsTemple.js — the library of the Temple of the Gods). */
 const TEMPLE_SCROLL_LINE = {
     CreatePlanet: 'Заклинание богов: создать в космосе новую планету',
@@ -93,7 +95,7 @@ const TEMPLE_SCROLL_LINE = {
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { GroundVortex: 'землисто-бурая', VisibleGodi: 'дымчато-розовая', Groundprud: 'охристая', LumosFollowing: 'светло-золотистая', LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Imperius: 'перламутрово-белая', ImperiusMaxima: 'перламутровая с золотом', Die: 'чёрная, как ночь, с фиолетовым отблеском', EarthquakeMaxima: 'бурая', LiquidationMaxima: 'мятная', ProtectionMaxima: 'небесно-голубая', IceMaxima: 'ледяная', JoltMaxima: 'дымчатая', CircleAttack: 'алая', Drawdown: 'землистая', Overgrown: 'травяная', Brainrot: 'розовая', BrainrotMaxima: 'розово-золотая, с чешуйчатым отливом', Waterball: 'синяя с волной', AirBubble: 'прозрачно-голубая', WaveAttack: 'морская', WaterVortex: 'цвета морской волны', WaterVortexSuperMaxima: 'тёмно-синяя, штормовая', Snowman: 'белоснежная', Unfurl: 'парусиновая', CreateCastle: 'каменно-серая', IceCastle: 'ледяная с инеем', IceBridge: 'хрустальная', Breakthrough: 'терракотовая', FireMaxima: 'золотисто-огненная' };
+export const SCROLL_RIBBON_RU = { Pentagranium: 'кроваво-чёрная', GroundVortex: 'землисто-бурая', VisibleGodi: 'дымчато-розовая', Groundprud: 'охристая', LumosFollowing: 'светло-золотистая', LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Imperius: 'перламутрово-белая', ImperiusMaxima: 'перламутровая с золотом', Die: 'чёрная, как ночь, с фиолетовым отблеском', EarthquakeMaxima: 'бурая', LiquidationMaxima: 'мятная', ProtectionMaxima: 'небесно-голубая', IceMaxima: 'ледяная', JoltMaxima: 'дымчатая', CircleAttack: 'алая', Drawdown: 'землистая', Overgrown: 'травяная', Brainrot: 'розовая', BrainrotMaxima: 'розово-золотая, с чешуйчатым отливом', Waterball: 'синяя с волной', AirBubble: 'прозрачно-голубая', WaveAttack: 'морская', WaterVortex: 'цвета морской волны', WaterVortexSuperMaxima: 'тёмно-синяя, штормовая', Snowman: 'белоснежная', Unfurl: 'парусиновая', CreateCastle: 'каменно-серая', IceCastle: 'ледяная с инеем', IceBridge: 'хрустальная', Breakthrough: 'терракотовая', FireMaxima: 'золотисто-огненная' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -187,7 +189,7 @@ function baseValue(it) {
         case 'dragonEgg': return 700;
         case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
-        case 'scroll': return it.stat === 'flight' || it.stat === 'spell' ? 220 : 60;
+        case 'scroll': return it.stat === 'flight' || it.stat === 'spell' || it.stat === 'pentagram' ? 220 : 60;
         case 'backpack': return 30 + 5 * (it.slots || 3);
         case 'bow': return it.magic ? 90 + (it.bonus || 0) : 25;
         case 'hammer': return 300;
@@ -455,6 +457,7 @@ export const SCROLL_WEIGHTS = [
     // strong and rare
     ['AvadaKedavra', 4], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
+    ['Pentagranium', 1.1], ['pent:devil', 0.9], ['pent:*', 0.7], // (black magic: the spell and the drawings of pentagrams — rare, Pentagrams.js)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];
 const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
@@ -471,6 +474,7 @@ function _rollScroll(r) {
         if ((y -= w) >= 0) continue;
         if (k === 'hp') return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
         if (k === 'fatigue') return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+        if (k.startsWith('pent:')) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
         return spellScroll(k);
     }
     return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
@@ -617,6 +621,7 @@ function describeItemBase(it) {
         case 'shield':
             return { title: '🛡️ ' + SHIELD_KINDS[it.type || 0].name + (it.magic ? ' (волшебный)' : ''), color: it.magic ? 0x9fd8ff : 0xaaaaaa, lines: it.magic ? [`Своя сила: <b>${it.max}</b> (восстанавливается)`, 'Держит заклинания и удары; слабый — сильное заклинание его разобьёт'] : ['Держит удары и слабые заклинания', 'Сильное заклинание его разобьёт'] };
         case 'scroll':
+            if (it.stat === 'pentagram') return { title: `📜🩸 ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: figureOf(it.pent)?.ink ?? 0xc01830, lines: ['На этом свитке нарисована пентаграмма. Он не горит, ничего не даёт и не учит — его нужно только развернуть и посмотреть на рисунок', 'Развернули и посмотрели — теперь вы знаете, как её рисовать: скажите <b>«Пентаграниум»</b> и водите палочкой по земле, сначала круг, потом фигуру внутри него', ...(it.pent === 'devil' ? ['Чем полезна: она позволяет получить ещё 25% силы убитого вами волшебника — положите его тело на горящую пентаграмму'] : ['Пока от неё нет пользы: её можно только нарисовать'])] };
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b>'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), `Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
             return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b>` : `Сожгите его: мана +<b>${it.amount}</b>`] };
@@ -775,11 +780,12 @@ function dragonEggModel(kind) {
 
 function scrollModel(it) {
     const g = new THREE.Group();
-    const paper = mat(0xf3e2b3);
+    const pg = it?.stat === 'pentagram' ? figureOf(it.pent) || figureOf('devil') : null;
+    const paper = mat(pg ? pg.paper : 0xf3e2b3); // (a drawing-scroll: dark paper, a blood-red seal — not like the spells' scrolls)
     const r = cyl(0.06, 0.06, 0.36, paper);
     r.rotation.z = Math.PI / 2;
     g.add(r);
-    const ribbon = cyl(0.064, 0.064, 0.05, mat(it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
+    const ribbon = cyl(0.064, 0.064, 0.05, mat(pg ? pg.seal : it?.stat === 'flight' ? 0x3a9ad9 : it?.stat === 'spell' ? (SPELL_RIBBON[it.spell] || 0x8e2b2b) : 0x8e2b2b)); // (flight: a sky-blue ribbon, spells: their own colour)
     ribbon.rotation.z = Math.PI / 2;
     g.add(ribbon);
     for (const s of [-1, 1]) { const e = cyl(0.03, 0.03, 0.06, mat(0x5a3a1e), s * 0.21, 0); e.rotation.z = Math.PI / 2; g.add(e); }

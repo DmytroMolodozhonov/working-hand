@@ -36,6 +36,8 @@ import { scaleRange } from './CoinScale.js';
 import { VoxelCharacter } from '../entities/Character.js';
 import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
+import { pentagramScroll, figureIds } from './PentagramRules.js';
+import { darkMageLevel } from './DarkMagic.js';
 
 export const DEATH = {
     BODY_S: 1440, // s the body lies: one whole game day, 24 minutes (the author: «не сразу — после 24 минут игровых, или если человек поспал»); a night's sleep brings it nearer — skipTime
@@ -90,9 +92,14 @@ export function wizardPurse(role, rank = null) {
 }
 
 /** What an armed villager drops: a knight / the king — the sword, the shield, coins. Others — nothing. */
-export function lootOfVillager(role, { shield = false, coins = null, rank = null } = {}, rng = Math.random) {
+export function lootOfVillager(role, { shield = false, coins = null, rank = null, dark = false } = {}, rng = Math.random) {
     const wr = wizardPurse(role, rank);
-    if (wr) return [{ kind: 'coins', uid: newUid(), count: coins != null ? coins : wr[0] + Math.floor(rng() * (wr[1] - wr[0] + 1)) }]; // (a wizard's pouch; the wand falls from his hand — dropHeld)
+    if (wr) {
+        const out = [{ kind: 'coins', uid: newUid(), count: coins != null ? coins : wr[0] + Math.floor(rng() * (wr[1] - wr[0] + 1)) }]; // (a wizard's pouch; the wand falls from his hand — dropHeld)
+        // (rarely a wizard carries a drawing-scroll of a pentagram: wanderers and black mages most — Pentagrams.js)
+        if (rng() < (role === 'wanderer' ? 0.1 : rank === 'master' || rank === 'elder' ? 0.06 : 0.02) * (dark ? 3 : 1)) out.push(pentagramScroll(figureIds()[Math.floor(rng() * figureIds().length) % figureIds().length], newUid()));
+        return out;
+    }
     if (role !== 'knight' && role !== 'king') return [];
     const [a, b] = role === 'king' ? DEATH.KING_COINS : DEATH.KNIGHT_COINS;
     const out = [{ kind: 'weapon', type: 'sword', magic: role === 'king', bonus: role === 'king' ? 25 : 0 }];
@@ -320,14 +327,14 @@ export class DeathSystem {
         // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
         const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...steel);
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
         if (v.burst) return;
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived };
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null) }; // (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -725,7 +732,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

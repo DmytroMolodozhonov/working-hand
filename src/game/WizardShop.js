@@ -11,6 +11,7 @@
 import { newUid, itemValue, SPELL_RU, fitThings } from './ItemTypes.js';
 import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
+import { pentagramScroll, figureIds } from './PentagramRules.js';
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const randInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
@@ -59,7 +60,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
     const things = count > 0 ? fitThings(out, count, r) : out;
     if (lone && r() < LONE_HOUSE.CHANCE) {
         // (it takes the place of the plainest thing: food, a health / mana scroll — else a random one; never an extra, the chest keeps its count)
-        const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || (it.kind === 'scroll' && it.stat !== 'spell');
+        const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || (it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue'));
         let at = things.findIndex(plain);
         if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
         if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
@@ -69,7 +70,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
 
 /** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */
 export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'VisibleGodi', 'GroundVortex', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
-    'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack', 'Imperius'];
+    'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack', 'Imperius', 'Pentagranium'];
 
 /** The price of a scroll in a tower's shop (coins). */
 export function scrollShopPrice(it) {
@@ -79,7 +80,8 @@ export function scrollShopPrice(it) {
         case 'hp': return 70 + 10 * n;
         case 'fatigue': return 65 + 5 * n;
         case 'flight': return 380;
-        case 'spell': return { LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, Imperius: 850, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
+        case 'pentagram': return 380; // (a drawing-scroll of a pentagram: Pentagrams.js)
+        case 'spell': return { Pentagranium: 450, LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, Imperius: 850, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
         default: return 100;
     }
 }
@@ -88,6 +90,7 @@ export function scrollShopPrice(it) {
 export function rollShopScroll(r = Math.random) {
     const x = r();
     if (x < 0.75) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    if (x < 0.78) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)
     const y = r();
     return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.25 ? 'ToTheSun' : y < 0.45 ? 'Thunderwave' : y < 0.6 ? 'LightningStrike' : pick(r, SHOP_SPELLS) };
 }
@@ -99,6 +102,7 @@ export function scrollName(it) {
     if (it.stat === 'fatigue') return `свиток маны +${it.amount || 1}`;
     if (it.stat === 'flight') return 'свиток полёта';
     if (it.stat === 'spell') return `свиток «${SPELL_RU[it.spell] || it.spell}»`;
+    if (it.stat === 'pentagram') return 'свиток с рисунком пентаграммы';
     return 'свиток';
 }
 

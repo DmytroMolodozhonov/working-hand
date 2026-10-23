@@ -265,6 +265,30 @@ const TUNES = {
         melody([[0, 'F5', 2], [2, 'D5', 2], [4, 'Bb4', 2], [6, 'C#5', 2], [8, 'D5', 3]], 0.85, 0, (f, t, l) => brass(o, sr, f, t, l, 0.09));
         return finish(o, sr, { rms: 0.075 });
     },
+    /** «Пентаграниум»: black magic — a low drone on a tritone, a tolling bell, a whispering choir in E phrygian, a slow dark march. */
+    thPentagram(sr) {
+        const o = buf(sr, 9), r = rng(311);
+        pad(o, sr, ['E2', 'B2', 'E3', 'Bb3'], 0, 8.6, 0.5, { att: 1.2, rel: 0.9, harm: 4, det: 0.003 });
+        pad(o, sr, ['F3', 'C4', 'E4'], 2.2, 4.4, 0.22, { att: 0.5, rel: 0.7, harm: 3, vib: 0.006 });
+        pad(o, sr, ['G#3', 'D4', 'F4'], 4.4, 6.6, 0.22, { att: 0.5, rel: 0.7, harm: 3, vib: 0.006 });
+        pad(o, sr, ['B3', 'E4', 'G4', 'B4'], 6.6, 8.6, 0.28, { att: 0.5, rel: 0.9, harm: 3, vib: 0.007 });
+        for (const at of [0, 1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7]) drum(o, sr, at, at % 2.2 === 0 ? 0.7 : 0.4, 52, 1, r);
+        for (const [t, n] of [[0, 'E3'], [2.2, 'E3'], [4.4, 'Bb2'], [6.6, 'E3']]) bell(o, sr, hz(n), t, 0.2, 3, 0.2);
+        melody([[0, 'E5', 2], [2, 'F5', 1], [3, 'E5', 1], [4, 'Bb4', 2], [6, 'C5', 1], [7, 'Bb4', 1], [8, 'E5', 3]], 0.9, 0.4, (f, t, l) => brass(o, sr, f, t, l, 0.07));
+        noise(o, sr, 0, 8.6, 0.05, (u) => 0.06 + 0.05 * Math.sin(u * 20), swell(0.15, 0.3), r); // (a breath under it all)
+        return finish(o, sr, { rms: 0.07 });
+    },
+    /** The rite over a pentagram: a roaring hellfire — deep swell, drums in a heartbeat, a falling howl, bells breaking at the end. */
+    thRite(sr) {
+        const o = buf(sr, 7), r = rng(313);
+        noise(o, sr, 0, 6.2, 0.3, (u) => 0.05 + 0.5 * u, swell(0.5, 0.25), r);
+        pad(o, sr, ['E2', 'Bb2', 'E3'], 0, 6.2, 0.45, { att: 1.5, rel: 0.8, harm: 4, det: 0.006 });
+        glide(o, sr, 0.5, 5.2, 0.12, (u) => 880 - 700 * u + 12 * Math.sin(u * 90), swell(0.2, 0.5), 3);
+        for (let k = 0; k < 12; k++) { drum(o, sr, 0.2 + k * 0.5, 0.35 + 0.35 * (k / 12), 48 + (k % 2) * 8, 0.6, r); if (k % 2) drum(o, sr, 0.2 + k * 0.5 + 0.18, 0.2, 60, 0.4, r); }
+        crackle(o, sr, 1.2, 4.8, 0.08, 40, r);
+        ['E6', 'Bb5', 'E5', 'Bb4', 'E4'].forEach((n, k) => bell(o, sr, hz(n), 4.6 + k * 0.28, 0.12, 2, 0.3));
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Protection House»: a clear, guarding tune — a harp's rising E major, a bell's call, a soft light pad. */
     thWard(sr) {
         const o = buf(sr, 6.5), r = rng(53);
@@ -463,6 +487,15 @@ const FX = {
      * «Visible Godi»: an eye opening — a soft breath rustling up, a veiled glassy glide rising through it, then a little
      * wondering tune of four bells (B, D#, F#, B) and a bloom of pad under the last one.
      */
+    /** A pentagram is lit: a low thud, a dark rising chord, a cold bell. */
+    fxPentagram(sr) {
+        const o = buf(sr, 1.9), r = rng(317);
+        drum(o, sr, 0, 0.8, 55, 0.8, r);
+        glide(o, sr, 0.05, 1.2, 0.12, (u) => 110 + 220 * u * u, swell(0.2, 0.5), 3);
+        pad(o, sr, ['E3', 'Bb3', 'E4'], 0.3, 1.5, 0.2, { att: 0.2, rel: 0.5, harm: 3 });
+        bell(o, sr, hz('E5'), 0.6, 0.14, 1.2, 0.3); bell(o, sr, hz('Bb5'), 0.85, 0.1, 1.0, 0.3);
+        return finish(o, sr, { peak: 0.7 });
+    },
     fxSeeing(sr) {
         const o = buf(sr, 1.9), r = rng(23);
         noise(o, sr, 0, 0.9, 0.22, (u) => 0.08 + 0.4 * u, swell(0.35, 0.5), r); // (the breath, brightening)
@@ -610,6 +643,8 @@ const LOOPS = {
     /** «Ground Vortex» held: a low turning hum of earth, a far stone thud. */
     loopEarth(sr) { const o = buf(sr, 3.6), r = rng(151); pad(o, sr, [65.4, 98], 0, 3.6, 0.25, { att: 0.01, rel: 0, harm: 3, vib: 0.003 }); noise(o, sr, 0, 3.5, 0.06, (u) => 0.08 + 0.05 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.4, 50, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.34 }); },
     /** «Visible Godi» held: a quiet veiled hum (A and E) breathing slowly, one far bell now and then. */
+    /** «Пентаграниум» held: a low uneasy hum (E and B-flat), a whisper of embers, a far drum. */
+    loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
@@ -657,6 +692,7 @@ export const SPELL_SOUND = {
     LetItRain: { own: ['cast', 'rain'], theme: 'thRain' },
     Alive: { theme: 'thAlive' }, AliveMaxima: { theme: 'thAlive', rate: 0.85 },
     GiveMyPower: { own: ['magic'], theme: 'thPower' },
+    Pentagranium: { own: ['magic'], theme: 'thPentagram' }, // (black magic: its dark tune from the caster; the lit pentagram — fxPentagram, the rite — thRite: Pentagranium.js)
     ProtectionHouse: { own: ['wardHum', 'wardChime'], theme: 'thWard' }, ProtectionInvisible: { own: ['wardHum', 'wardChime'], theme: 'thWard', rate: 0.94 },
     ProtectionHouseGrant: { own: ['wardChime'], cast: 'fxShield' },
     StrengthenHouse: { own: ['wardChime'], theme: 'thStrengthen' },
@@ -717,6 +753,7 @@ export const HELD_SOUND = {
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
+    Pentagranium: { loop: 'loopDark', end: 'fxStop' }, // («Пентаграниум» held: the low hum while the wand draws)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

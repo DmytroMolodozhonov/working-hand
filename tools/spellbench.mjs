@@ -11,6 +11,7 @@
  *   «замок»      — «Create a Castle» (30 s of magic);
  *   «ледяной»    — «Ice Castle»;
  *   «бомбардо»   — «Bombardo Maxima» ×3; «землетрясение» — «Earthquake Maxima»; «разрушение» — «Total Destruction»;
+ *   «пентаграмма» — «Пентаграниум»: рисунок круг + звезда по земле (след), горящая пентаграмма и ритуал над телом волшебника (Pentagranium.js);
  *   «рой вещей»  — «Левиоса Максима» на вещь: 32 вещи цепочкой, вихрем, щитом и залпом (ItemSwarm.js);
  *   «полёт»      — a straight fast flight (new land loaded) and back over the changed places.
  * For each: the game's own work in a frame («игра», without drawing the picture — here the processor draws
@@ -143,6 +144,44 @@ const scenarios = {
     },
     async 'землетрясение'(page) { await page.evaluate(() => { window.__sb.rec = true; window.__zns.game.castDebug('EarthquakeMaxima'); }); await sleep(8000); },
     async 'разрушение'(page) { await page.evaluate(() => { window.__sb.rec = true; window.__zns.game.destruction.cast(true, 'TotalDestruction'); }); await sleep(10000); },
+    async 'пентаграмма'(page) {
+        const ok = await page.evaluate(() => {
+            const g = window.__zns.game, P = g.pentagranium, me = g.character.group.position;
+            const cx = me.x + 12, cz = me.z, gy = g.collision.groundY(cx, cz);
+            P.seen.add('devil');
+            // the wand draws the figure: a circle, then the star (the ray is fed by hand — a stitch a frame)
+            const R = 3.5, pts = [];
+            for (let i = 0; i <= 74; i++) { const a = (i / 74) * Math.PI * 2; pts.push([cx + Math.cos(a) * R, cz + Math.sin(a) * R]); }
+            const star = [0, 2, 4, 1, 3, 0].map((k) => { const a = Math.PI / 2 + k * Math.PI * 2 / 5; return [Math.cos(a), Math.sin(a)]; });
+            for (let k = 0; k < 5; k++) for (let i = 0; i < 18; i++) pts.push([cx + (star[k][0] + (star[k + 1][0] - star[k][0]) * i / 18) * R, cz + (star[k][1] + (star[k + 1][1] - star[k][1]) * i / 18) * R]);
+            let i = 0;
+            P.groundAt = () => { const p = pts[Math.min(i, pts.length - 1)]; return i < pts.length ? { x: p[0], y: g.collision.groundY(p[0], p[1]), z: p[1] } : null; };
+            const orig = P._drawStep.bind(P);
+            P._drawStep = function (dt) { i += 2; orig(dt); };
+            window.__sb.rec = true;
+            g.combat.fatigue = Math.max(g.combat.fatigue, 60);
+            P.begin();
+            window.__pgb = { cx, cz, gy };
+            return true;
+        });
+        if (!ok) return 'не началось';
+        await sleep(6000);
+        const marks = await page.evaluate(() => {
+            const g = window.__zns.game, P = g.pentagranium, b = window.__pgb;
+            const m = [...P.marks.values()][0];
+            if (!m) return 0;
+            m.mine = true;
+            g.mana.duelsWon.set('pgw', 'kill');
+            g.death.addBody({ id: 'pgb1', k: 'v', who: 'pgw', role: 'adept', wz: 1, mm: 230, x: m.x, y: m.y, z: m.z, yaw: 0, age: 0, look: null });
+            return P.marks.size;
+        });
+        if (!marks) return 'пентаграмма не засчиталась';
+        await sleep(18000); // (the bench runs the game slowly: the rite takes its 5 s of game time)
+        const left = await page.evaluate(() => { const g = window.__zns.game, P = g.pentagranium, b = g.death.bodies.get('pgb1'), m = [...P.marks.values()][0]; return b ? 'тело не сгорело: ' + JSON.stringify({ lev: b.lev, fall: g.death.falling.has('pgb1'), rit: b.rit, model: !!b.model, by: b.y, my: m?.y, fade: m?.fade, mine: m?.mine, rites: m?.rites.length, rt: m?.rites[0]?.t, life: m?.life, gt: P._t, dx: m && Math.hypot(b.x - m.x, b.z - m.z), r: m?.r }) : null; });
+        await page.evaluate(() => { window.__zns.game.pentagranium.clear(); });
+        await sleep(1000);
+        return left;
+    },
     async 'рой вещей'(page) {
         const ok = await page.evaluate(() => {
             const g = window.__zns.game, me = g.character.group.position;

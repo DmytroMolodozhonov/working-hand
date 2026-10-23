@@ -108,7 +108,7 @@ test('death: a killed wizard drops a pouch of coins by his rank (a wanderer by h
         const [a, b] = DEATH.WIZ_COINS[rank];
         for (const r of [0, 0.5, 0.999]) {
             const out = lootOfVillager(role, { rank }, () => r);
-            assert.deepEqual(out.map((d) => d.kind), ['coins'], `${role}/${rank}`);
+            assert.deepEqual(out.filter((d) => d.stat !== 'pentagram').map((d) => d.kind), ['coins'], `${role}/${rank}`); // (a drawing-scroll of a pentagram may ride along, rarely — Pentagrams.js)
             assert.ok(out[0].count >= a && out[0].count <= b, `${role}/${rank}: ${out[0].count} in ${a}..${b}`);
         }
     }

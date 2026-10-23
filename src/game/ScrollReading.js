@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { describeItem, ITEM_SCALE } from './ItemTypes.js';
 import { Steady } from '../entities/SimplifiedHand.js';
+import { figureOf, figureLines } from './PentagramRules.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
 const PARCH_H = 0.95;
@@ -36,7 +37,54 @@ const _q = new THREE.Quaternion();
 const _qs = new THREE.Quaternion();
 
 /** The text of a scroll, in ink on parchment. */
-function drawParchment(item) {
+/** A drawing-scroll: the figure to be drawn, in blood-red ink on dark paper (the circle first, then the star; the numbers show the order of the strokes). */
+function drawPentagramParchment(item) {
+    const P = figureOf(item.pent) || figureOf('devil');
+    const css = (n) => '#' + n.toString(16).padStart(6, '0');
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 440;
+    const x = c.getContext('2d');
+    const grad = x.createLinearGradient(0, 0, 1024, 0);
+    grad.addColorStop(0, '#1a0c10'); grad.addColorStop(0.1, '#2b161b'); grad.addColorStop(0.9, '#2b161b'); grad.addColorStop(1, '#1a0c10');
+    x.fillStyle = grad; x.fillRect(0, 0, 1024, 440);
+    for (let i = 0; i < 260; i++) { x.fillStyle = `rgba(${90 + (i * 37) % 60},${40 + (i * 11) % 30},${40 + (i * 7) % 30},0.05)`; x.fillRect((i * 97) % 1024, (i * 53) % 440, 2 + (i % 5), 1 + (i % 3)); }
+    x.strokeStyle = css(P.seal); x.lineWidth = 5; x.strokeRect(36, 16, 952, 408);
+    x.strokeStyle = 'rgba(190,150,110,0.35)'; x.lineWidth = 1.5; x.strokeRect(46, 26, 932, 388);
+    const cx = 690, cy = 228, R = 160;
+    x.shadowColor = css(P.ink); x.shadowBlur = 14;
+    x.strokeStyle = css(P.ink); x.lineWidth = 6; x.lineJoin = 'round'; x.lineCap = 'round';
+    x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.stroke();
+    x.lineWidth = 5;
+    for (const poly of figureLines(P.id)) {
+        x.beginPath();
+        poly.forEach((p, i) => { const px = cx + p[0] * R, py = cy - p[1] * R; if (i) x.lineTo(px, py); else x.moveTo(px, py); });
+        x.closePath(); x.stroke();
+    }
+    x.shadowBlur = 0;
+    // the order: 1 — the circle (an arrow along it), 2 — the star (from its top point on)
+    x.fillStyle = '#e6c9a8'; x.font = 'bold 34px serif'; x.textAlign = 'center';
+    x.fillText('1', cx + R + 40, cy - 6); x.fillText('2', cx + 6, cy - R * 0.42);
+    x.strokeStyle = '#e6c9a8'; x.lineWidth = 3;
+    x.beginPath(); x.arc(cx, cy, R + 24, -0.3, 0.5); x.stroke();
+    x.beginPath(); x.moveTo(cx + (R + 24) * Math.cos(0.5), cy + (R + 24) * Math.sin(0.5)); x.lineTo(cx + (R + 24) * Math.cos(0.5) - 14, cy + (R + 24) * Math.sin(0.5) - 10); x.moveTo(cx + (R + 24) * Math.cos(0.5), cy + (R + 24) * Math.sin(0.5)); x.lineTo(cx + (R + 24) * Math.cos(0.5) + 4, cy + (R + 24) * Math.sin(0.5) - 16); x.stroke();
+    x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.textAlign = 'left';
+    x.fillText(P.ru, 80, 76);
+    x.fillStyle = '#c9b49a'; x.font = '24px serif';
+    x.fillText('Нарисуйте это на земле палочкой:', 80, 130);
+    x.fillText('скажите «Пентаграниум», обведите', 80, 162);
+    x.fillText('круг, а внутри него — ' + P.figure + '.', 80, 194);
+    x.fillText(P.id === 'devil' ? 'Так вы получите силу убитого мага.' : 'Тёмный знак для особого обряда.', 80, 238);
+    x.fillStyle = css(P.seal); x.beginPath(); x.arc(170, 340, 38, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#e6a0a0'; x.lineWidth = 3; x.beginPath(); x.arc(170, 340, 28, 0, Math.PI * 2); x.stroke();
+    x.fillStyle = '#e6a0a0'; x.font = 'bold 30px serif'; x.textAlign = 'center'; x.fillText('★', 170, 352);
+    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Свиток не горит — его только смотрят.', 512, 410);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    return tex;
+}
+
+export function drawParchment(item) {
+    if (item?.stat === 'pentagram') return drawPentagramParchment(item);
     const info = describeItem(item) || { title: '📜 Свиток', lines: [] };
     const c = document.createElement('canvas');
     c.width = 1024; c.height = 440;
@@ -132,6 +180,7 @@ export class ScrollReading {
         if (R.letT > LET_T || R.slipT > 0.15 || R.closeT > 0.4) { this._letGo(R); this._rollBack(R, hs, dt); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
+        if (R.open > 0.6 && R.item?.stat === 'pentagram') g.pentagranium?.seeFigure?.(R.item.pent); // (looked at the drawing: the figure is known now)
         this._place(R, hs, hoG, dt);
     }
 
