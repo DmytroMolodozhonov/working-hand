@@ -1152,6 +1152,7 @@ export class CastleLife {
         if (v.stunT > 0 || v.vy) {
             v.stunT = (v.stunT || 0) - dt;
             if (v.vy) this._fallStep(v, dt);
+            else this._ground(v); // (knocked back / lying: follows the ground, a slope too)
             v.mode = v.flyFlail ? 'flail' : 'idle'; v.speed = 0; // (thrown by «Левиоса»: arms and legs going as it flies)
             return;
         }

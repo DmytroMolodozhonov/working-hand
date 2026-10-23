@@ -157,3 +157,19 @@ test('another module\'s creatures can join (wizards, living trees…)', () => {
     assert.equal(ci.apply(tree, { v: new THREE.Vector3(0, 0, 20) }), 'stagger', 'a tree is heavy');
     delete KINDS.X;
 });
+
+test('a knight knocked up a slope climbs it with the ground, and does not sink into the hill', () => {
+    const { g, knight, ci } = world();
+    const h = (x) => Math.max(0, Math.floor(x * 0.8)); // ~40° hill rising along +x
+    const cl = g.castleLife;
+    cl._walkable = (x, z, y) => h(Math.round(x)) - y <= 1.2;
+    cl._ground = (v) => { v.y = h(Math.round(v.x)); };
+    knight.x = 0; knight.y = 0; knight.z = 0;
+    ci.apply(knight, { v: new THREE.Vector3(14, 0, 0), kind: 'shove' });
+    for (let i = 0; i < 90; i++) {
+        ci.update(1 / 30);
+        cl._ground(knight); // (CastleLife.tick while stunned)
+        assert.ok(knight.y >= h(Math.round(knight.x)) - 1e-6, 'never below the ground');
+    }
+    assert.ok(knight.x > 0.5, 'was pushed up the hill');
+});

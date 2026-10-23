@@ -103,6 +103,8 @@ export const KINDS = {
             if (ok(c.x + dx, c.z + dz)) { c.x += dx; c.z += dz; }
             else if (ok(c.x + dx, c.z)) c.x += dx;
             else if (ok(c.x, c.z + dz)) c.z += dz;
+            // (on its feet or lying, it goes along the ground: up a slope it climbs it, never sinks into the hill)
+            if (!c.vy) cl?._ground?.(c);
         },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
