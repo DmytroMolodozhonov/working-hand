@@ -616,11 +616,21 @@ export class ItemSystem {
      * The floor under a loose thing. In a cave it is the cave's floor below it; a thing pressed into the rock
      * is moved out sideways first and never lifted more than a step — never taken up to the surface above.
      */
-    _floorUnder(p) {
+    _floorUnder(p, L = null) {
         const col = this.game.collision;
         col.pushOutOfRock?.(p);
         const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
-        return col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
+        const floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
+        // a good laid out on a stall's counter: the counter itself is its floor, as long as the counter stands
+        // (the ground under it is no judge of that — a good that sank once below the top would never come up again)
+        return L?.perch && this._perched(L.perch, p, 1) ? Math.max(floor, L.perch.top) : floor;
+    }
+
+    /** Is `p` over a standing counter `k` ({x0,x1,z0,z1,top}), not more than `below` m under its top? */
+    _perched(k, p, below) {
+        if (p.x < k.x0 - 0.5 || p.x > k.x1 + 0.5 || p.z < k.z0 - 0.5 || p.z > k.z1 + 0.5 || p.y < k.top - below || p.y > k.top + 1.5) return false;
+        const t = this.game.collision?.terrain;
+        return !t?.occupied || t.occupied(p.x, k.top - 0.3, p.z); // (blown away: the good falls with it)
     }
 
     /**
@@ -651,8 +661,10 @@ export class ItemSystem {
         const col = this.game.collision, p = L.model.position;
         if (!col) return;
         const y0 = p.y;
+        // a good that ended up inside / under its standing counter (any way it got there): back on the top
+        if (L.perch && p.y < L.perch.top - 0.3 && this._perched(L.perch, p, 3)) p.y = L.perch.top + 0.12;
         this._outOfSolid(p);
-        const gy = this._floorUnder(p);
+        const gy = this._floorUnder(p, L);
         if (p.y < gy + 0.1) p.y = gy + 0.12;
         else if (p.y > gy + 0.45) L.rest = false; // (nothing under it now: it falls — _physics)
         if (p.y !== y0 || !L.rest) L.sentRest = false; // (its new place goes to the others)
@@ -954,7 +966,7 @@ export class ItemSystem {
             }
             m.position.copy(_v);
         }
-        const ground = this._floorUnder(m.position);
+        const ground = this._floorUnder(m.position, L);
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
             if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }

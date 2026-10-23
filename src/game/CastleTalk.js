@@ -692,6 +692,7 @@ export class CastleTalk {
                     const x = along ? c.x0 + (c.x1 - c.x0 + 1) * f - 0.5 : frontEdge(stall, GOOD_IN);
                     const z = along ? frontEdge(stall, GOOD_IN) : c.z0 + (c.z1 - c.z0 + 1) * f - 0.5;
                     const L = g.items.spawnLoose(item, new THREE.Vector3(x, c.top + 0.3, z));
+                    L.perch = c; // (its counter is its floor — Items._floorUnder)
                     s.goods.push(L.item.uid);
                     budget--;
                 }
