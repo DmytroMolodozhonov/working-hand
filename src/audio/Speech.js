@@ -29,6 +29,7 @@ import { speakable } from './ruText.js';
 import { aired } from './GameVoices.js';
 
 const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const PREP_REST = 500; // ms at least between two lines made in advance (the video card is the game's first)
 
 /** How loud the game's voices stay while the player speaks (a spell must be heard over them). */
 export const DUCK_LEVEL = 0.18;
@@ -68,6 +69,7 @@ export class Speech {
         this._keep = new Set(); // lines made in advance (the thinking words): kept in the cache whatever their length
         this._prep = []; // [{text, opts}] waiting to be made in advance (one at a time, only while nobody speaks)
         this._prepBusy = false;
+        this.prepRest = PREP_REST; // (ms; tests: 0)
         this.history = []; // the last lines: { engine, voice, female, pitch, speed, text }
         if (!this.systemSupported) return;
         this._refreshVoices();
@@ -171,7 +173,15 @@ export class Speech {
         const k = this._ckey(cast, text);
         if (!k || this._cache.has(k)) { this._prepNext(); return; }
         this._prepBusy = true;
-        const done = () => { this._prepBusy = false; this._prepNext(); };
+        // (the voices are made on the video card the game draws with: lines made in advance go one by one with a rest
+        // between them — twice the line's own time, at least PREP_REST — so the card is never taken for seconds on end:
+        // a villager met made ~10 lines back to back, and the frames dropped while he stood near)
+        const t0 = clock();
+        const done = () => {
+            const rest = this.prepRest > 0 ? Math.max(this.prepRest, 2 * (clock() - t0)) : 0;
+            if (this._prepT) clearTimeout(this._prepT);
+            this._prepT = setTimeout(() => { this._prepT = null; this._prepBusy = false; this._prepNext(); }, rest);
+        };
         this.neural.synth(text, { voice: cast.voice, speed: cast.speed / cast.pitch }).then(({ pcm, sampleRate }) => {
             if (pcm?.length) this._store(k, { pcm, sr: sampleRate });
             done();

@@ -381,6 +381,7 @@ test('Speech.prepare: thinking words made in advance in each villager\'s own voi
     const { ctx, played } = fakeAudio();
     const nv = fakeNeural();
     const s = new Speech({ neural: nv, audioContext: () => ctx });
+    s.prepRest = 0; // (no rest between the lines made in advance)
     const man = { voiceKey: 'v1', role: 'farmer', female: false }, woman = { voiceKey: 'v2', role: 'farmer', female: true };
     s.prepare(['Сейчас подумаю…', 'Я понял…'], man);
     s.prepare(['Я поняла…'], woman);
