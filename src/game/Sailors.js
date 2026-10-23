@@ -18,6 +18,7 @@
  * Multiplayer: the host runs the crews ('screw'); guests draw them and send hits.
  */
 
+import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
 import * as THREE from 'three';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
@@ -1630,6 +1631,7 @@ export class Sailors {
         if (this.game.castleLife?.talk?._echo?.(text)) return false;
         if (greetsCrew(text) && this._crewNear().length) return true; // («привет, моряки»: the crew hears it further)
         if (!this._listener()) return false;
+        if (crewOrder(text) && !matchSpell(text)) return true; // («на абордаж», «право на борт»: words to the crew; a spell's word — «огонь», «поднять паруса» (Unfurl) — goes the usual way)
         const spell = matchSpell(text);
         if (spell === 'Stand') return false;
         if (!spell && seaTalk(text)) return true;
@@ -1718,9 +1720,13 @@ export class Sailors {
         // the answer is said at once — never cut by his mates' chatter (only the one I talk with is heard)
         v.talkedAt = performance.now();
         // (an order to the crew — «поднять паруса!», «на абордаж!»: his «Есть!» made in advance is heard at once, his answer follows it)
-        const quick = !!talk?._quickWord?.(v, { reply: res?.reply, intent: res?.intent }, text, ctx);
+        // (only from the ship's master: a stranger's «на абордаж!» gets his own words, not «Есть!»)
+        const order = !!crewOrder(text);
+        const quick = (!order || ctx.playerIsKing) && !!talk?._quickWord?.(v, { reply: res?.reply, intent: res?.intent }, text, ctx);
         if (talk) { talk._partner = v; if (quick) talk._more = true; else talk._urgent = true; }
-        try { this._say(v, res?.reply || 'Некогда мне, работать надо.', 6); } finally { if (talk) { talk._urgent = false; talk._more = false; } }
+        // (an order the crew's words don't know yet: his «Есть!» is the whole answer — no «А? Чего?» after it)
+        const skip = quick && order && (!res?.reply || res.intent === 'unknown');
+        try { if (!skip) this._say(v, res?.reply || 'Некогда мне, работать надо.', 6); } finally { if (talk) { talk._urgent = false; talk._more = false; } }
         if (res?.action === 'hostile' || res?.action === 'call_guards') this.provoke(s, g.localId, '🏴 Вы разозлили матросов!');
         return true;
     }
