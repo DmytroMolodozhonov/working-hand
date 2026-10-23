@@ -78,6 +78,7 @@ const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
 const THEFT_MS = 90000;
 import { settlePawn } from '../world/PawnStall.js';
+import { TownNews } from './TownNews.js';
 import { BUMP, LESSON, knockOutcome, beating, windDowns, packHostile, unpackHostile } from './BumpRules.js';
 const SORRY_OK = ['Ладно, бывает.', 'Хорошо, я не сержусь.', 'Ну ладно, впредь аккуратнее.', 'Бывает. Забудем.'];
 const RAMPAGE = 3; // different people of a castle hurt by one player within 2 min: that is a rampage — the guard comes
@@ -271,6 +272,7 @@ export class CastleLife {
         this.castles = new Map(); // id -> runtime {def, graph, awake, active: Map(idx -> v), state, chests}
         this.byId = new Map(); // villager id -> v
         this.states = new Map(); // castle id -> saved state {owner, ownerName, kingDead, killed:Set}
+        this.news = new TownNews(); // what each town knows has happened lately (its villagers' net talks about it — TownNews.js)
         this._scanT = 0;
         this._netT = 0;
         this._chatT = 4;
@@ -2445,6 +2447,20 @@ export class CastleLife {
         return c.lineOfSight ? c.lineOfSight(v.x, v.y + 3.6, v.z, p.x, p.y + 0.5, p.z, 0.45) : true;
     }
 
+    /**
+     * News for the towns where it happened (TownNews): who did it is kept only if somebody there saw it.
+     * `def`: the town already known (a villager's own); otherwise every town whose land holds `pos`.
+     */
+    _news(pos, kind, by, via = null, who = null, def = null) {
+        if (!pos) return;
+        const player = this._isPlayer(by);
+        for (const d of def ? [def] : this.index?.near(pos.x, pos.z, 0) || []) {
+            if (!def && !this._inLand(d, pos, 20)) continue;
+            const seen = player && this._anyKnows(d, by, pos, via);
+            this.news?.add(d.id, kind, { by: seen ? by : null, byName: seen ? this.game.playerName?.(by) : null, seen, who });
+        }
+    }
+
     _isPlayer(id) { return id != null && (id === this.game.localId || !!this.game.remotes?.has(id)); }
 
     /** (host) A player did something to the people (Wanted.js): nobody sees the number, they feel it. */
@@ -2471,6 +2487,8 @@ export class CastleLife {
         if (!this.auth) { this.game.sync?.villagerHit?.(v.id, dmg, dir ? [dir.x, dir.z] : null, (opts.magic ? 1 : 0) | (opts.weapon ? 2 : 0) | (opts.spell ? 4 : 0) | (opts.pierce ? 8 : 0) | (opts.hard ? 16 : 0)); this._flash(v); return; }
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
         this._achHit(v, by);
+        if (by === this.game.localId && !v.arena) this.talk?.feel?.(v, -12); // (he remembers who struck him — Attitude.js)
+        if (this._isPlayer(by) && !v.arena) this._news(v, 'hit', by, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def); // (the town remembers who struck its people)
         this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
@@ -2746,6 +2764,7 @@ export class CastleLife {
         st.killed.add(v.idx);
         this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
         this._comradeDown(v, by);
+        this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z] }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
@@ -2934,6 +2953,7 @@ export class CastleLife {
         st.kingDead = true;
         st.owner = by || null;
         st.ownerName = by ? g.playerName(by) : null;
+        this.news?.add(cs.def.id, 'captured', { by, byName: st.ownerName, seen: !!by });
         cs.hostile.clear();
         for (const v of cs.active.values()) { v.foe = null; v.fleeT = 0; v.grudge = null; }
         for (const c of cs.chests) c.locked = false;
@@ -2959,6 +2979,7 @@ export class CastleLife {
         if (!this.enabled || !pos) return;
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
         this.fright.add(kind, pos, { r });
+        this._news(pos, kind, by, viaOfKind(kind));
         this.wizards.danger(pos, kind, by, r); // (the wizards of a tower: the brave go to see, the timid run)
         // (something dreadful cast among the people: a little on the wanted level — once in a while, if somebody saw whose)
         if (by && this._isPlayer(by) && this.index?.near(pos.x, pos.z, 0).some((def) => this._inLand(def, pos, 20) && this._anyKnows(def, by, pos, viaOfKind(kind)))) {
@@ -2984,6 +3005,7 @@ export class CastleLife {
         // (a blast: the people near take fright — VillagerFear; whatever broke is put back later — Rebuild)
         // (no culprit given to the frightened: they run from the thing itself)
         if (loud) { this.fright.add(kind || 'blast', pos, { r: r ?? 4 }); this.wizards.danger(pos, kind || 'blast', by, r ?? 4, via); }
+        if (loud || blocks > 0) this._news(pos, loud ? kind || 'blast' : 'wreck', by, via);
         if (blocks > 0 || loud) this.rebuild.damaged(pos, r ?? (loud ? 6 : 2), by, loud); // (a crater in the street too)
         this.breakWays(pos, r ?? (loud ? 6 : 2)); // (no path over the hole any more: everybody's ways round it)
         const isPlayer = !!by && (by === g.localId || g.remotes.has(by));

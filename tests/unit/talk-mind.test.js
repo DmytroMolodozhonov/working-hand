@@ -191,7 +191,10 @@ test('the net agrees to a stranger\'s army order — the game refuses anyway', a
 
 test('follow by free words; nonsense calls and junk text fall back to the rules', async () => {
     let mind = new TalkMind({ llm: fakeLLM('Пойдём, покажу. <tool_call>{"name":"follow_me","arguments":{}}</tool_call>'), rng: createRng(4) });
-    let r = await mind.hear(brain('farmer', { mood: 0.7 }), 'составь мне компанию до колодца', {});
+    // (whether he goes is his character's and his attitude's — Attitude.willDo: a kind, helpful one)
+    const kind = brain('farmer', { mood: 0.7 });
+    kind.character = { ...kind.character, helpful: 90, kindness: 90 };
+    let r = await mind.hear(kind, 'составь мне компанию до колодца', {});
     assert.equal(r.action, 'follow');
     assert.ok(r.smart);
     mind = new TalkMind({ llm: fakeLLM('<tool_call>{"name":"fly_away","arguments":{}}</tool_call> As an AI language model I cannot'), rng: createRng(4) });

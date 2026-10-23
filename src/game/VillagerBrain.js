@@ -14,6 +14,7 @@
  * it never decides prices or actions.
  */
 
+import { characterOf, startAttitude, willDo, shiftAttitude } from './Attitude.js';
 import { createRng, hashString } from '../core/math.js';
 
 // ------------------------------------------------------------------ constants
@@ -749,6 +750,10 @@ export class VillagerBrain {
             talkative: this.role === 'knight' ? 0.3 + tr() * 0.3 : this.role === 'merchant' ? 0.75 + tr() * 0.25 : 0.4 + tr() * 0.6,
             brave: this.role === 'knight' ? 1 : this.role === 'king' ? 0.9 : tr(),
         };
+        // his character 0–100 (kindness, readiness to help, obedience…) and how he takes each player — Attitude.js
+        this.character = characterOf(seed, this.role);
+        this._attSeed = seed;
+        this._luck = {}; // kind → {v, at}: asked the same again soon, he answers the same
         this._mood = clamp(Number(this.villager.mood) || 0, -1, 1);
         this._baseMood = this._mood;
         this._memory = Object.assign({
@@ -766,6 +771,7 @@ export class VillagerBrain {
             following: false,
             pending: null, // 'name' when the villager asked the player's name
             log: [], // [{ who: 'player'|'npc', text }] last few lines (LLM history)
+            att: {}, // player id → his attitude to that player, 0–100 (Attitude.js; random at first, then by what happened)
         }, options.memory || {});
         this._recent = [];
         this._offer = null; // the villager's own last price offer
@@ -783,6 +789,32 @@ export class VillagerBrain {
     get memory() { return this._memory; }
     get mood() { return this._mood; }
     set mood(v) { this._mood = clamp(Number(v) || 0, -1, 1); this.villager.mood = this._mood; }
+
+    /** His attitude (0–100) to a player — at first as his nature makes it, then by talks and deeds. */
+    attitude(pid = 'me') {
+        const a = this._memory.att || (this._memory.att = {});
+        const k = String(pid ?? 'me');
+        if (a[k] == null) a[k] = startAttitude(this.character, this._attSeed);
+        return a[k];
+    }
+
+    /** Something changed how he takes a player (a talk's tone ×30, a blow −12, a gift…). */
+    feel(pid, delta) {
+        const a = this._memory.att || (this._memory.att = {});
+        a[String(pid ?? 'me')] = shiftAttitude(this.attitude(pid), delta);
+    }
+
+    /**
+     * Asked something of this kind ('army' | 'serve' | 'favor' | 'risk'): does he do it? (Attitude.willDo) —
+     * the same answer for a minute (the moment's chance is kept), then it may change. His mood just now counts too.
+     */
+    decide(kind, ctx = {}) {
+        const now = Date.now();
+        let l = this._luck[kind];
+        if (!l || now - l.at > 60000) l = this._luck[kind] = { v: this.rng(), at: now };
+        const status = ctx.status || (this._playerIsKing(ctx) ? 'king' : 'traveller');
+        return willDo(kind, { c: this.character, att: Math.max(0, Math.min(100, this.attitude(ctx.selfId) + this._mood * 25)), status, role: this.role, guest: !!ctx.guest, danger: !!(ctx.danger || this._danger()) }, l.v);
+    }
 
     /** 'friendly' | 'neutral' | 'rude' */
     get band() { return this._mood > 0.3 ? 'friendly' : this._mood < -0.3 ? 'rude' : 'neutral'; }
@@ -969,7 +1001,7 @@ export class VillagerBrain {
         if (!text) return;
         const log = this._memory.log;
         log.push({ who, text });
-        while (log.length > 14) log.shift(); // (the last ~7 exchanges: the net keeps the thread of the talk)
+        while (log.length > 22) log.shift(); // (the last ~11 exchanges: the net keeps the thread of the talk)
     }
 
     // ---------------------------------------------------------- main entry
@@ -1000,6 +1032,7 @@ export class VillagerBrain {
         res.slots = det.slots;
         res.moodDelta = Math.round(res.moodDelta * 1000) / 1000;
         this.mood = this._mood + res.moodDelta;
+        if (res.moodDelta) this.feel(ctx.selfId, res.moodDelta * 30); // (a kind word, an insult, a deal: his attitude moves too)
         const m = this._memory;
         m.talks++;
         m.lastIntent = det.intent;
@@ -1088,11 +1121,12 @@ export class VillagerBrain {
                 return this._onWhere(intent, slots, ctx, out);
             case 'follow': {
                 if (king && role !== 'king') { out.reply = say('kingFollow'); out.action = 'follow'; return out; }
+                // (his character, how he takes me, who I am: Attitude.willDo — a knight in danger stands by anyone)
                 const willing = role === 'king' ? false
-                    : role === 'knight' ? (this._mood > 0.3 || this._danger() || all.includes('help'))
-                        : this._mood > 0.5 || (this._mood > 0.2 && this.traits.talkative > 0.7);
+                    : (role === 'knight' && (this._danger() || all.includes('help'))) || this.decide('serve', ctx).yes;
                 out.reply = say(willing ? 'followYes' : 'followNo');
                 out.action = willing ? 'follow' : null;
+                if (willing) out.args = { agreed: true };
                 return out;
             }
             case 'stop_follow': {

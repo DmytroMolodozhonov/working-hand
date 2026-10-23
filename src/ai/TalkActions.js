@@ -263,6 +263,7 @@ export function validateCall(call, ctx = {}) {
         case 'follow_me': {
             if (role === 'king') return no();
             if (king) return yes();
+            if (ctx.serve) return ctx.serve.yes ? yes({ agreed: true }) : no(); // (his character and how he takes me — Attitude.willDo)
             const willing = role === 'knight' || role === 'advisor' ? (mood > 0.3 || !!ctx.danger)
                 : mood > 0.5 || (mood > 0.2 && (Number(ctx.talkative) || 0) > 0.7);
             return willing ? yes() : no();
@@ -272,10 +273,12 @@ export function validateCall(call, ctx = {}) {
             const place = String(a.place || '').toLowerCase();
             if (!PLACES.includes(place)) return no('bad_args');
             if (role === 'king' && !king) return no();
+            if (!king && ctx.favor) return ctx.favor.yes ? yes({ place }) : no();
             if (!king && mood < -0.3) return no();
             return yes({ place });
         }
-        case 'gather_army': case 'defend_castle': case 'dismiss': case 'guard_me':
+        case 'guard_me': return king ? yes() : ctx.serve?.yes ? yes({ agreed: true }) : no(); // (a bodyguard for anyone he wants to help)
+        case 'gather_army': case 'defend_castle': case 'dismiss':
             return king ? yes() : no();
         case 'attack': {
             const target = resolveTarget(String(a.target ?? ''), ctx.players || []);

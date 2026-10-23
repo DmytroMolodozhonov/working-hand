@@ -18,6 +18,7 @@
  *   // → { reply, action: 'attack', args: { target: 'zombies' }, smart: true, … }
  */
 
+import { STATUS, attitudeWord, characterRu } from '../game/Attitude.js';
 import { normalize, sanitizeReply, isMostlyRussian } from '../game/VillagerBrain.js';
 import { TOOLS, toolsFor, parseToolCalls, validateCall, detectOrder, ARMY, ORDER_LINES } from './TalkActions.js';
 import { WIZ_ROLE_RU } from '../game/WizardAI.js';
@@ -239,12 +240,18 @@ export class TalkMind {
             role === 'king' || wiz ? '' : `Правитель замка — ${king ? 'твой собеседник' : `${w.kingFemale ? 'королева' : 'король'} ${w.kingName || v.kingName || ''}`.trim()}.`,
             `Настроение: ${brain.mood > 0.3 ? 'хорошее, ты дружелюбен' : brain.mood < -0.3 ? 'плохое, ты раздражён и груб' : 'обычное'}.`,
             `Сейчас ${w.timeOfDay === 'night' ? 'ночь, у стен бродят зомби' : 'день'}${w.danger || ctx.danger ? ', рядом опасность' : ''}.`,
-            king ? `Собеседник — КОРОЛЬ этого замка${w.kingDead ? ': он победил прежнего короля и взял замок, теперь ты служишь ему верно' : ''}. Обращайся «Ваше Величество». Его приказы ты выполняешь сразу и без споров.`
-                : `Собеседник — ${m.playerName ? `путник по имени ${m.playerName}` : 'незнакомый путник'}. Он не король: приказы войску от него не выполняй, вежливо откажи. Просьбу пойти с ним выполняй, только если сам хочешь.`,
+            king ? `Собеседник — КОРОЛЬ этого замка${w.kingDead ? ': он победил прежнего короля и взял замок' : ''}. Обращайся «Ваше Величество».`
+                : `Собеседник — ${STATUS[ctx.status]?.ru || 'странник, путник без титула'}${m.playerName ? `, его зовут ${m.playerName}` : ', имени его ты не знаешь'}. Он не король этого замка: приказы войску от него не выполняй.`,
+            // (his own nature and how he takes this one — Attitude.js; the GAME decided what he does, his words follow it)
+            brain.character ? `Твой характер (0–100): ${characterRu(brain.character)}.` : '',
+            brain.attitude ? `Твоё отношение к собеседнику: ${attitudeWord(brain.attitude(ctx.selfId))} (${brain.attitude(ctx.selfId)} из 100).` : '',
+            brain.decide ? this._willLine(brain, ctx) : '',
             ctx.hostile ? 'Этот человек недавно напал на кого-то в замке — ты его боишься и не доверяешь.' : '',
             m.talks > 1 ? 'Вы уже поздоровались и сейчас разговариваете: НЕ здоровайся снова, продолжай разговор по смыслу.' : '',
             m.talks ? `Вы уже говорили ${m.talks} раз.${m.insults ? ' Он тебя оскорблял.' : ''}${m.trades ? ' Вы торговали.' : ''}${m.lastOrder ? ` Последний приказ: ${m.lastOrder}.` : ''}` : '',
-            ctx.following ? 'Сейчас ты идёшь следом за собеседником.' : '',
+            ctx.doing ? `Сейчас ${ctx.doing}.` : ctx.following ? 'Сейчас ты идёшь следом за собеседником.' : '',
+            // (what happened in his town lately: he knows it, talks of it when it comes up — and knows if the one talking did it)
+            ctx.news?.length ? `${en ? 'News of your town' : 'Что недавно случилось в твоём городе (ты это знаешь; говори об этом, если к слову или спросят)'}: ${ctx.news.join('; ')}.` : '',
             ctx.lastOffer ? `Ты сейчас предлагаешь сделку: ${ctx.lastOffer.item?.name || 'вещь'} за ${ctx.lastOffer.price} монет.` : '',
             // where he is, what he has, what the traveller has and did — answers about THIS moment, not general words
             !wiz && PLACE[role] ? `Ты стоишь ${PLACE[role]}.` : '',
@@ -285,9 +292,9 @@ export class TalkMind {
 
     _history(brain) {
         const log = brain.memory?.log || [];
-        // (the last line pair is the one being answered: the rules logged it already;
-        // the 3 exchanges before it are enough — a shorter prompt is read sooner, the answer comes sooner)
-        return log.slice(-8, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
+        // (the last line pair is the one being answered: the rules logged it already; the 9 exchanges before it —
+        // the talk goes on, not from nothing each time (the author); on the graphics card ~300 words more cost ~0.1 s)
+        return log.slice(-20, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
     }
 
     _permCtx(brain, ctx) {
@@ -297,6 +304,8 @@ export class TalkMind {
             mood: brain.mood,
             talkative: brain.traits?.talkative,
             danger: !!(ctx.danger || brain.world?.danger),
+            serve: brain.decide ? brain.decide('serve', ctx) : null, // (Attitude.willDo: the game's own decision)
+            favor: brain.decide ? brain.decide('favor', ctx) : null,
             hasOffer: !!ctx.lastOffer,
             players: ctx.players || [],
             selfId: ctx.selfId,
@@ -340,6 +349,15 @@ export class TalkMind {
             || (!!(ctx.danger || brain.world?.danger) && res.intent !== 'unknown' && !complex); // (in danger: no thinking aloud)
         const done = !this.smart || !res.reply || quick || res.action === 'ignore' || ['trade_yes', 'trade_no'].includes(res.action) || !!res.offer;
         return { res, perm, done };
+    }
+
+    /** What he would do if asked now (the game decided — Attitude.willDo): said to the net so its words agree. */
+    _willLine(brain, ctx) {
+        const d = brain.decide('serve', ctx);
+        const how = { gladly: 'выполняешь охотно', reluctant: 'выполняешь, но без охоты (можешь поворчать)', no: 'НЕ выполняешь — откажи по-своему, в духе твоего характера и отношения' }[d.how];
+        const army = brain.decide('army', ctx);
+        return `Если он просит что-то сделать для него (пойти с ним, охранять, принести, атаковать того, на кого он укажет): ты ${how} (${d.why}).`
+            + (army.yes ? ' Приказы войску от него ты исполняешь.' : '');
     }
 
     /** The rules' answer is only a word to fill the quiet (they did not understand, or it is long talk): the net is worth waiting for. */

@@ -97,7 +97,8 @@ export class VillagerOrders {
             case 'guard_me': case 'guard': {
                 // «охраняй меня»: a bodyguard — walks in the formation round the king, strikes whoever goes at him, no wandering after strangers
                 v.follow = by; v.followT = 1800; v.followFar = true; v.guard = true; v.path = null; v.order = null; v.foe = null; v.investigate = null;
-                this._shout([v], ['Буду рядом, государь!', 'Не отойду от вас!', 'Никто вас не тронет!']);
+                const lord = this.life.state(cs.def.id).owner === by;
+                this._shout([v], lord ? ['Буду рядом, государь!', 'Не отойду от вас!', 'Никто вас не тронет!'] : ['Ладно, прикрою!', 'Буду рядом.', 'Не бойся, я с тобой.']);
                 break;
             }
             case 'dismiss': this._dismiss(v, by); break;
@@ -116,6 +117,8 @@ export class VillagerOrders {
     /** (host) May `by` give this order? (a guest's order is checked again here) */
     permitted(v, name, args = {}, by) {
         const king = this.life.state(v.cs.def.id).owner === by && by != null;
+        // (a bodyguard / a companion for one he chose to help — his character and how he takes me: Attitude.willDo)
+        if (args.agreed && (name === 'guard_me' || name === 'guard' || name === 'follow_me' || name === 'follow') && v.role !== 'king') return true;
         if (ARMY.has(name)) {
             if (king) return true;
             return name === 'attack' && v.role === 'knight' && !args.playerId && (args.target === 'zombies' || args.target === 'spider');

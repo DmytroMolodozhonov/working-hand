@@ -210,6 +210,11 @@ export class CastleTalk {
             danger: v.cs.hostile.size > 0 || !!g.isNight,
             buys: !!(v.cs.def.stalls?.[v.entry?.stall]?.pawn || v.cs.def.stalls?.[v.entry?.stall]?.fence), // (who buys things at all: the pawnshop, the shady buyer)
         };
+        // (the town's own news — a blast, a fire, the dead, the king fallen — and whether I did it: TownNews.js)
+        ctx.news = this.life.news?.told(v.cs.def.id, g.localId) || [];
+        ctx.status = this._status(v);
+        ctx.guest = !!v.guest;
+        ctx.doing = this._doing(v);
         const held = g.items?.held.right || g.items?.held.left;
         if (held) ctx.heldItem = { name: nameOf(held.item), magic: isMagicItem(held.item), value: itemValue(held.item) };
         // (a buyer names only the sum of the code — the one kept for this thing at his stall — never an invented one)
@@ -267,6 +272,40 @@ export class CastleTalk {
             // (an answer to my words: said now, not held while «I speak»; in danger made in fewer steps — heard sooner)
             reply, ...(reply && this._danger(v) ? { steps: 3 } : {}),
             ...(mine ? { onStart: (at) => this._voiceHeard(tr, text, at) } : {}) });
+    }
+
+    /**
+     * Who I am to this villager (Attitude.STATUS): the king of his castle, a king elsewhere, a wanted man, the
+     * High Mage in his robe, a knight in armour, a wizard with a wand in hand — or just a traveller.
+     */
+    _status(v) {
+        const g = this.game, me = g.localId;
+        if (this.life.state(v.cs.def.id).owner === me) return 'king';
+        if ((this.life.wantedLevel?.(me) || 0) >= 2) return 'outlaw';
+        for (const st of this.life.states.values()) if (st.owner === me) return 'foreignKing';
+        const w = g.armor?.worn || {};
+        if (w.robe?.archmage) return 'archmage';
+        if (w.chest && w.helmet) return 'knight';
+        if (g.items?.heldOf?.('wand') || w.robe) return 'wizard';
+        return 'traveller';
+    }
+
+    /** Something I did changed how this villager takes me (a blow: −12) — Attitude.js. */
+    feel(v, delta) { this.brain(v).feel(this.game.localId, delta); }
+
+    /** What this villager is doing now, in words for the net — he goes on from it, not from nothing. */
+    _doing(v) {
+        const me = this.game.localId;
+        if (v.guard && v.follow === me) return 'ты охраняешь собеседника: идёшь рядом и бьёшь любого, кто на него нападёт';
+        if (v.follow === me) return 'ты идёшь следом за собеседником';
+        if (v.guiding || v.guide) return 'ты ведёшь собеседника туда, куда он просил';
+        const o = v.order;
+        if (o?.kind === 'hunt') return `по приказу ты охотишься на врагов (${{ zombies: 'зомби', spider: 'паука', animals: 'зверей' }[o.what] || 'всех врагов'})`;
+        if (o?.kind === 'defend') return 'по приказу ты защищаешь замок на стенах и у ворот';
+        if (o?.kind === 'leave') return 'тебе велели уйти с глаз';
+        if (v.foe != null) return v.foe === me ? 'ты дерёшься с собеседником' : 'ты дерёшься с врагом';
+        if (v.fleeT > 0) return 'ты убегаешь';
+        return '';
     }
 
     /** Danger round this villager now (a fight, zombies, a blast): short, quick words. */
