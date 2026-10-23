@@ -1361,7 +1361,7 @@ export class CastleLife {
             const fp = this._playerPos(v.follow);
             if (!fp || v.followT <= 0 || (!v.followFar && !this._inLand(cs.def, fp, 20))) { v.follow = null; v.followFar = false; v.path = null; }
             else {
-                const d = this._steer(v, fp.x, fp.z, Math.hypot(fp.x - v.x, fp.z - v.z) > 8 ? RUN : WALK, dt, 3);
+                const d0 = Math.hypot(fp.x - v.x, fp.z - v.z), d = this._goSpot(v, fp.x, fp.z, d0 > 8 ? RUN : WALK, dt, 3) ? Math.min(d0, 3) : d0; // (by the castle's paths when walls are between — a tower's wall, a house)
                 v.mode = d > 3.2 && !(v.wallW?.noWay > 0) ? (v.speed > WALK ? 'run' : 'walk') : 'idle'; // (standing off a shut wall: idle)
                 this._ground(v);
                 return;
