@@ -425,7 +425,11 @@ export class CastleTalk {
     _voiceStatus(st) {
         // (the voices load quietly in the background: nothing for the player to read in the game — the author)
         if (st.state === 'failed') console.warn('[CastleTalk]', st.text);
-        else if (st.state === 'ready') console.info('[CastleTalk]', st.text);
+        else if (st.state === 'ready') {
+            console.info('[CastleTalk]', st.text);
+            const d = this.speech?.neural?.device;
+            journal(`голоса жителей готовы: ${d === 'webgpu' ? 'на видеокарте (WebGPU)' : d === 'native' ? 'программа на компьютере (процессор)' : 'в браузере на процессоре'}`);
+        }
     }
 
     /**
@@ -1485,7 +1489,7 @@ export class CastleTalk {
                 this._setLLMState('ready', `${LocalLLM.describe(llm.modelKey || key, info.device)} — готова (${on})`, key);
                 this._llmWasReady = true;
                 this._warmLLM(llm);
-                journal(`✅ ГОТОВА: ${mk.label} ${nat ? 'отдельной программой на компьютере (llama.cpp, процессор — видеокарта остаётся игре)' : `на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}`}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
+                journal(`✅ ГОТОВА: ${mk.label} ${nat ? 'отдельной программой на компьютере (llama.cpp, на видеокарте)' : `на ${info.device === 'webgpu' ? `видеокарте${info.gpuName ? ` (${info.gpuName})` : ''}` : 'процессоре'}`}, ${info.dtype}, загрузка ${((performance.now() - t0) / 1000).toFixed(1)} с`
                     + `${info.why ? `; ${info.why}` : ''}${llm.nativeWhy ? `; программа на компьютере не подошла (${llm.nativeWhy.slice(0, 160)}) — работает браузерная` : ''}${tried.length ? `; до неё не загрузились: ${tried.join('; ')}` : ''}`
                     + `${llm.strong ? ' — отвечает на любые слова' : ' — отвечает на то, что не поняли готовые правила'}`);
                 console.info('[CastleTalk]', '🧠 Нейросеть жителей готова — они понимают ваши слова и выполняют просьбы');

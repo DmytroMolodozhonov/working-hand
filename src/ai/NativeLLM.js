@@ -56,7 +56,7 @@ export class NativeLLMPort {
                 st = await r.json();
             }
             this._post({ type: 'progress', fraction: 1, text: 'Нейросеть готова' });
-            this._post({ type: 'ready', device: 'native', dtype: 'q4 (llama.cpp)', gpuName: '', ms: st.ms || Date.now() - t0, why: '' });
+            this._post({ type: 'ready', device: 'native', dtype: 'q4 (llama.cpp, видеокарта)', gpuName: '', ms: st.ms || Date.now() - t0, why: '' });
         } catch (e) {
             this._post({ type: 'load_error', message: String(e?.message || e) });
         }

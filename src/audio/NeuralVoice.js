@@ -68,14 +68,55 @@ export class NeuralVoice {
     get ready() { return this.state === 'ready'; }
 
     /** Loads the model (once). onProgress(fraction 0..1, text). */
+    /** A video card the page may use (WebGPU gives an adapter)? */
+    static async gpuOk() {
+        try { return typeof navigator !== 'undefined' && !!navigator.gpu && !!(await navigator.gpu.requestAdapter()); } catch (e) { return false; }
+    }
+
+    /**
+     * Loads the model (once). onProgress(fraction 0..1, text).
+     * Where (the author: «всё сложное — на видеокарту»): the VIDEO CARD first — a worker of this page with WebGPU and the
+     * full-precision files; then the program on this computer (tts_native.py, processor); then the page's worker on the
+     * processor. Each that fails to load hands over to the next (the reason to the journal).
+     */
     load(onProgress = () => {}) {
         if (this._loading) return this._loading;
         this.state = 'loading';
         this._loading = new Promise((resolve, reject) => { (async () => {
-            let native = this._tryNative && await NativeTTSPort.available();
+            const ways = [];
+            if (this._tryNative && await NeuralVoice.gpuOk()) ways.push('gpu');
+            if (this._tryNative && await NativeTTSPort.available()) ways.push('native');
+            ways.push('cpu');
+            let lastErr = null;
+            for (const way of ways) {
+                try {
+                    const info = await this._start(way, onProgress);
+                    this.state = 'ready';
+                    this.source = info.source;
+                    this.device = way === 'gpu' && info.device === 'webgpu' ? 'webgpu' : way === 'native' ? 'native' : 'wasm';
+                    resolve(this);
+                    return;
+                } catch (e) {
+                    lastErr = e;
+                    if (way !== ways[ways.length - 1]) {
+                        console.warn(`[NeuralVoice] ${way} failed, the next way takes over:`, e?.message || e);
+                        if (typeof fetch === 'function' && typeof location !== 'undefined') fetch(new URL('api/gamelog', location.href), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Голоса жителей', line: `${way === 'gpu' ? 'на видеокарте' : 'программа на компьютере'} не подошла: ${String(e?.message || e).slice(0, 200)} — пробую дальше` }) }).catch(() => {});
+                    }
+                }
+            }
+            this._fail(lastErr || new Error('voice model failed to load'));
+            reject(lastErr);
+        })(); });
+        this._loading.catch(() => {});
+        return this._loading;
+    }
+
+    /** One way of making the voices: the worker / the program, loaded → {source, device} (rejects: not here). */
+    _start(way, onProgress) {
+        return new Promise((resolve, reject) => {
             let w;
-            try { w = this._worker = native ? new NativeTTSPort() : this._createWorker(); } catch (e) { this._fail(e); reject(e); return; }
-            const wire = (w) => {
+            try { w = this._worker = way === 'native' ? new NativeTTSPort() : this._createWorker(); } catch (e) { reject(e); return; }
+            let loaded = false;
             w.onmessage = (ev) => {
                 const m = ev.data || {};
                 switch (m.type) {
@@ -85,26 +126,13 @@ export class NeuralVoice {
                         break;
                     }
                     case 'ready':
-                        this.state = 'ready';
-                        this.source = m.source;
-                        resolve(this);
+                        loaded = true;
+                        resolve({ source: m.source, device: m.device });
                         break;
                     case 'load_error': {
-                        if (native) {
-                            // (the program did not start here: the browser's voices instead)
-                            console.warn('[NeuralVoice] the program on this computer failed, the browser takes over:', m.message);
-                            this.nativeWhy = m.message || '';
-                            fetch(new URL('api/gamelog', location.href), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: "Голоса жителей", line: `программа на компьютере не подошла: ${this.nativeWhy} — работают голоса браузера` }) }).catch(() => {});
-                            native = false;
-                            try { w.terminate(); } catch (e) { /* ignore */ }
-                            try { w = this._worker = this._createWorker(); } catch (e) { this._fail(e); reject(e); break; }
-                            wire(w);
-                            send(w);
-                            break;
-                        }
-                        const e = new Error(m.message || 'voice model failed to load');
-                        this._fail(e);
-                        reject(e);
+                        try { w.terminate(); } catch (e) { /* ignore */ }
+                        if (this._worker === w) this._worker = null;
+                        reject(new Error(m.message || 'voice model failed to load'));
                         break;
                     }
                     case 'audio': {
@@ -137,24 +165,22 @@ export class NeuralVoice {
             };
             w.onerror = (ev) => {
                 const e = new Error(ev?.message || 'voice worker error');
-                if (this.state === 'loading') reject(e);
+                if (!loaded) { reject(e); return; }
                 this._fail(e);
             };
-            };
-            const send = (w) => w.postMessage({
+            // (on the card: the original full-precision files first — WebGPU has no int8 kernels; the int8 ones after)
+            const sources = way === 'gpu' ? [...this.sources.filter((s) => !/int8/.test(s.id)), ...this.sources.filter((s) => /int8/.test(s.id))] : this.sources;
+            w.postMessage({
                 type: 'load',
-                sources: this.sources,
+                sources,
+                gpu: way === 'gpu',
                 ortUrl: new URL('../../vendor/onnxruntime/ort.webgpu.min.mjs', import.meta.url).href,
                 wasmPaths: {
                     mjs: new URL('../../vendor/transformers/ort-wasm-simd-threaded.asyncify.mjs', import.meta.url).href,
                     wasm: new URL('../../vendor/transformers/ort-wasm-simd-threaded.asyncify.wasm', import.meta.url).href,
                 },
             });
-            wire(w);
-            send(w);
-        })(); });
-        this._loading.catch(() => {});
-        return this._loading;
+        });
     }
 
     _fail(e) {

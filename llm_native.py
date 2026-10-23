@@ -1,13 +1,13 @@
 """
 llm_native.py — the villagers' conversation network as a program of its own on this computer.
 
-Why: in the browser the network (Gemma 4, ≈ 2.6 GB) ran on the game's own video card — while a
-villager thought of an answer, the picture lost frames. Here it is llama.cpp's own program
-(llama-server, from the ggml-org/llama.cpp releases — MIT), started by the game server in a
-process of its own, below normal priority, on the processor (-ngl 0): the video card stays the
-game's, and the game's frames always come first.
+Why: on the processor it starved the game, the camera, the speech program and the villagers' voices (the author's
+journal: words heard 3 s late, a voice 6–7 s late, frames lost) — so, by the author's rule «всё сложное — на
+видеокарту», it runs on the VIDEO CARD: llama.cpp's own program (llama-server, from the ggml-org/llama.cpp releases —
+MIT), its Vulkan build (any card; Metal on a Mac), the whole net on the card (-ngl 99), started by the game server in
+a process of its own, below normal priority (what it still does on the processor waits for the game).
 
-  - the program: downloaded once (≈ 20 MB, a pinned release, checked by SHA-256) into the user's own
+  - the program: downloaded once (≈ 30 MB, a pinned release, checked by SHA-256) into the user's own
     folder (the game folder is replaced by updates);
   - the model: llama-server downloads it itself from Hugging Face (-hf, ggml-org's GGUF of Gemma 4)
     once, into the same folder, then uses it from there;
@@ -32,12 +32,14 @@ import zipfile
 
 BUILD = "b11669"  # llama.cpp release (October 2026): Gemma 4, tool calls, --reasoning off
 RELEASE = f"https://github.com/ggml-org/llama.cpp/releases/download/{BUILD}/"
-# the processor build of each system (≈ 12–20 MB), checked before use
+# the VIDEO CARD build of each system (the author: «всё сложное — на видеокарту»): Vulkan on Windows and Linux (any card:
+# NVIDIA, AMD, Intel — its processor parts are in the same archive: no card, it still runs), Metal on a Mac; checked before use
 ASSETS = {
-    "win": (f"llama-{BUILD}-bin-win-cpu-x64.zip", "37b3efcf962847ca869745fd4ccf7f5e7e8dacfeff9fa3523b4ca8cdc66d632b"),
-    "linux": (f"llama-{BUILD}-bin-ubuntu-x64.tar.gz", "cf07c1c112d709bd67e522017471de57ed0ec8bea031d732c5422351c07f65ac"),
+    "win": (f"llama-{BUILD}-bin-win-vulkan-x64.zip", "2c07574e7bde71321cb785282b20cc821e951132149eeceeea32ddebdbf0598e"),
+    "linux": (f"llama-{BUILD}-bin-ubuntu-vulkan-x64.tar.gz", "e8709e5ba6c1b093dea7f3de57f4aba842f9a188fba6b465782d65d6fcfa4d9f"),
     "mac": (f"llama-{BUILD}-bin-macos-arm64.tar.gz", "dbed55493d72bc1ba2babc8770d669c2289b5bc4ee9fb2a4dfc158d45b7d13fd"),
 }
+GPU_LAYERS = "99"  # (the whole net on the video card)
 ASSET_MAX = 64 * 1024 * 1024
 # the page's model choice → the GGUF on Hugging Face (llama-server picks its usual 4-bit file)
 MODELS = {
@@ -120,7 +122,7 @@ class NativeLLM:
 
     # ------------------------------------------------------------ the program
     def binary_dir(self):
-        return os.path.join(data_dir(), BUILD)
+        return os.path.join(data_dir(), BUILD + "-gpu")  # (not the processor build kept there before)
 
     def binary(self):
         """The llama-server of this system (downloaded and checked once)."""
@@ -134,7 +136,7 @@ class NativeLLM:
         name, sha = ASSETS[platform_key()]
         os.makedirs(data_dir(), exist_ok=True)
         part = os.path.join(data_dir(), name + ".part")
-        self.detail = "скачивается программа нейросети (≈ 20 МБ)"
+        self.detail = "скачивается программа нейросети (≈ 30 МБ)"
         h = hashlib.sha256()
         with urllib.request.urlopen(urllib.request.Request(RELEASE + name, headers={"User-Agent": "Volshebstvo"}), timeout=60) as r, open(part, "wb") as f:
             total = int(r.headers.get("Content-Length") or 0)
@@ -208,7 +210,7 @@ class NativeLLM:
             os.makedirs(cache, exist_ok=True)
             threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
             args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
-                    "-ngl", "0", "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
+                    "-ngl", GPU_LAYERS, "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
                     "--no-ui", "-np", "1", "--api-key", self._key,
                     # (Gemma's sliding-window layers kept whole: a question that shares its start with the words read
                     # before reuses them — without it a changed end made the program read the villager anew, 3–7 s)

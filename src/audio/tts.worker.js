@@ -7,7 +7,10 @@
  * once, then from the browser Cache API (cache `zns-voices-v1`).
  *
  * Protocol (main → worker):
- *   { type: 'load', sources: [{id, base, files, bytes}], wasmPaths: {mjs, wasm}, ortUrl }
+ *   { type: 'load', sources: [{id, base, files, bytes}], wasmPaths: {mjs, wasm}, ortUrl, gpu }
+ *     gpu: on the VIDEO CARD (WebGPU) — the author's rule «всё сложное — на видеокарту»: the processor is the game's,
+ *     the camera's and the speech's (a line made there took 5–7 s in the author's journal). A full-precision source
+ *     (the original files) runs there; an int8 one stays on the processor (WebGPU has no int8 kernels).
  *   { type: 'synth', id, text, voice, speed, steps }
  * (worker → main):
  *   { type: 'progress', loaded, total, file }
@@ -66,7 +69,7 @@ async function fetchFile(cache, url, onBytes) {
     return bytes;
 }
 
-async function loadSource(src, cache) {
+async function loadSource(src, cache, gpu = false) {
     const f = src.files;
     const voiceFiles = Array.isArray(f.voices) ? f.voices : [f.voices];
     const all = [f.cfg, f.indexer, f.dp, f.enc, f.est, f.voc, ...voiceFiles];
@@ -90,13 +93,14 @@ async function loadSource(src, cache) {
         voices = {};
         for (const vf of voiceFiles) voices[vf.split('/').pop().replace(/\.json$/, '')] = parseVoiceJson(JSON.parse(text(got[vf])));
     }
-    const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
+    const onCard = gpu && !/int8/.test(src.id);
+    const opts = { executionProviders: onCard ? ['webgpu', 'wasm'] : ['wasm'], graphOptimizationLevel: 'all' };
     const s = {};
     for (const [k, name] of [['dp', f.dp], ['enc', f.enc], ['est', f.est], ['voc', f.voc]]) {
         s[k] = await ort.InferenceSession.create(got[name], opts);
         got[name] = null; // (free the bytes)
     }
-    return { s, cfg, indexer, voices };
+    return { s, cfg, indexer, voices, onCard };
 }
 
 async function load(msg) {
@@ -110,10 +114,10 @@ async function load(msg) {
     let lastErr = null;
     for (const src of msg.sources) {
         try {
-            model = await loadSource(src, cache);
+            model = await loadSource(src, cache, !!msg.gpu);
             // (the first run of a network is slow: warm up before the first villager speaks)
             try { await synthesize(ort, model.s, model.cfg, model.indexer, model.voices[Object.keys(model.voices)[0]], 'Да, конечно.', { steps: 5 }); } catch (e) { /* ignore */ } // (as a real line is made)
-            post({ type: 'ready', source: src.id, voices: Object.keys(model.voices) });
+            post({ type: 'ready', source: src.id, voices: Object.keys(model.voices), device: model.onCard ? 'webgpu' : 'wasm' });
             return;
         } catch (e) {
             lastErr = e;
