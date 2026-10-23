@@ -27,6 +27,7 @@
  */
 
 import * as THREE from 'three';
+import { lieClearPush } from './LieClear.js';
 import { creatureHolds, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
@@ -287,7 +288,7 @@ export class CreatureImpact {
             if (emit) this._emit(ck, c, 'k', [KD[s.dir], down === Infinity ? -1 : r2(s.minDown - (s.state === 'down' ? s.t : 0)), ...tum]);
             return;
         }
-        s.state = 'falling'; s.dir = dir; s.t = 0; s.minDown = down;
+        s.state = 'falling'; s.dir = dir; s.t = 0; s.minDown = down; s.slid = 0;
         s.riseDelay = 0.15 + ((typeof c.id === 'number' ? c.id : String(c.id).length) % 5) * 0.08;
         if (tumble) this._tumble(K, c, s, tumble);
         if (this.auth) K.hold(this.game, c, (tumble ? tumble.dur : 0) + CREATURE.FALL_T + Math.min(down, 60) + CREATURE.RISE_T + 1);
@@ -436,12 +437,34 @@ export class CreatureImpact {
                 s.vx *= f; s.vz *= f;
                 if (Math.abs(s.vx) + Math.abs(s.vz) < 0.05) s.vx = s.vz = 0;
             }
+            if (this.auth && (ck === 'v' || ck === 'z') && (s.state === 'falling' || s.state === 'down')) this._lieClear(K, c, s, dt, ck);
             this._step(ck, K, c, s, dt);
             if (s.daze > 0 && s.state === 'up') this._dazed(K, c, s, dt);
             this._draw(K, c, s, dt);
             if (!this._busy(s)) { this._release(K, c, s, false); this.active.delete(key); }
         }
         if (this._out.length && g.sync) { g.sync.creatureImpacts?.(this._out.splice(0, 200)); this._out.length = 0; }
+    }
+
+    /**
+     * (host) A body knocked down into a crater or against a wall lies with its head or legs in the rock: it slides
+     * back out of it (at most a few metres in all), never through anything (K.move) — LieClear.js.
+     */
+    _lieClear(K, c, s, dt, ck) {
+        const td = this.game.terrain?.data || this.game.world?.terrain?.data;
+        const piv = K.pivot(c).obj;
+        if (!td?.solidIn || !piv?.matrixWorld) return;
+        if ((s.clearT = (s.clearT || 0) - dt) > 0) return;
+        s.clearT = 0.05;
+        piv.updateWorldMatrix(true, false);
+        const feet = piv.getWorldPosition(_v);
+        const ax = _w.set(0, 1, 0).transformDirection(piv.matrixWorld);
+        const scale = ck === 'z' ? (c.sizeK || 1) * 2.2 : 3.4;
+        const push = lieClearPush((ix, iz, L) => td.solidIn(ix, iz, L, L), feet.x, feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0), feet.z, ax.x, ax.z, scale);
+        if (!push || (s.slid || 0) > 3) return;
+        const d = 4 * 0.05;
+        s.slid = (s.slid || 0) + d;
+        K.move(this.game, c, push.x * d, push.z * d);
     }
 
     /** Dizzy on its feet: it sways; now and then (host) a stumble a step aside — and a moment of nothing. */
