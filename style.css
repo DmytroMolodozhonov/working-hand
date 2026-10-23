@@ -941,6 +941,16 @@ body {
     overflow-y: auto;
 }
 
+/* the spells' reference: six cards in a row on a wide screen, the rest go down (the author: a row wider than five, scroll below) */
+#spells-grid, #pause-spells-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+}
+@media (max-width: 1500px) { #spells-grid, #pause-spells-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+@media (max-width: 1250px) { #spells-grid, #pause-spells-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 950px) { #spells-grid, #pause-spells-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 650px) { #spells-grid, #pause-spells-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 .item-card {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
