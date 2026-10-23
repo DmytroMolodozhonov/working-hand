@@ -479,6 +479,7 @@ def open_window(url):
     for exe in browser_candidates():
         prefer_strong_gpu(exe)
         try:
+            sp = None
             try:
                 import zns_window
                 before = zns_window.app_windows_now()
@@ -501,7 +502,12 @@ def open_window(url):
                         zns_window.on_shown(sp.close)
                 except Exception as e:  # noqa: BLE001
                     log(f"  (заставки нет: {e})")
-            subprocess.Popen(cmd)
+            try:
+                subprocess.Popen(cmd)
+            except OSError:
+                if sp:
+                    sp.kill("браузер не запустился")  # (the next browser gets a picture of its own: never two)
+                raise
             if zns_window:
                 # (the new window is hidden the moment it appears: seen only cut to its final look)
                 threading.Thread(target=zns_window.hide_new_window, args=(before,), daemon=True).start()

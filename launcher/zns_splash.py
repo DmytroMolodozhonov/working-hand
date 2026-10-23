@@ -28,6 +28,54 @@ def splash_rect(work, dpr, menu=MENU):
     return al + (ar - al - w) // 2, at + (ab - at - h) // 2, w, h
 
 
+HARD_SECONDS = 25.0  # the picture never lives longer than this, whatever happens (the author: it stayed under the game)
+KILL_GRACE = 1.0  # s: after terminate() a process still alive is killed
+
+
+def next_close_at(current, now, delay):
+    """The moment the picture goes: the earliest of the asked ones (a repeated call never delays it)."""
+    at = now + max(0.0, delay)
+    return at if current is None else min(current, at)
+
+
+def should_close(now, started, seconds, close_at):
+    """Time to go: it was asked to (close_at passed) or `seconds` since the start passed anyway."""
+    return (close_at is not None and now >= close_at) or now - started > seconds
+
+
+def _pid_alive(pid):
+    """Is the process with this id still running (the launcher that started the picture)."""
+    if not pid:
+        return True
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            k = ctypes.windll.kernel32
+            k.OpenProcess.restype = ctypes.c_void_p
+            h = k.OpenProcess(0x1000 | 0x100000, False, int(pid))  # QUERY_LIMITED_INFORMATION | SYNCHRONIZE
+            if not h:
+                return False
+            try:
+                return k.WaitForSingleObject(ctypes.c_void_p(h), 0) == 0x102  # WAIT_TIMEOUT: still running
+            finally:
+                k.CloseHandle(ctypes.c_void_p(h))
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, OverflowError):
+        return False
+
+
+def _watchdog(seconds, parent, alive=_pid_alive, die=os._exit, sleep=time.sleep, now=time.time):
+    """(a thread of the picture's process, independent of tkinter) The process ends by itself after
+    `seconds` + a little, or when the launcher that started it is gone — a stuck tk loop cannot keep it."""
+    end = now() + seconds + 3.0
+    while True:
+        sleep(0.5)
+        if now() >= end or not alive(parent):
+            die(0)
+            return
+
+
 def _mix(a, b, k):
     a, b = int(a[1:], 16), int(b[1:], 16)
     c = [round(((a >> s) & 255) * (1 - k) + ((b >> s) & 255) * k) for s in (16, 8, 0)]
@@ -68,17 +116,17 @@ def _monitor_under_cursor():
 
 
 class Splash:
-    def __init__(self, seconds=25.0, logo=None, log=print):
-        self.seconds, self.logo, self.log = seconds, logo, log
+    def __init__(self, seconds=25.0, logo=None, log=print, parent=0):
+        self.seconds, self.logo, self.log, self.parent = seconds, logo, log, parent
         self._close_at = None
         self.started = time.time()
 
     def close(self, delay=0.15):
         """(any thread) Gone in `delay` s — the game's window is shown above it first: no gap between."""
-        at = time.time() + delay
-        self._close_at = at if self._close_at is None else min(self._close_at, at)
+        self._close_at = next_close_at(self._close_at, time.time(), delay)
 
     def _run(self):
+        threading.Thread(target=_watchdog, args=(self.seconds, self.parent), daemon=True).start()
         try:
             import ctypes
             import tkinter as tk
@@ -132,9 +180,12 @@ class Splash:
 
             def tick():
                 now = time.time()
-                if (self._close_at is not None and now >= self._close_at) or now - self.started > self.seconds:
+                if should_close(now, self.started, self.seconds, self._close_at) or not _pid_alive(self.parent):
                     self.log(f"[заставка] убрана через {now - self.started:.2f} с")
-                    root.destroy()
+                    try:
+                        root.destroy()
+                    finally:
+                        os._exit(0)  # (the process is gone with its window, whatever tk does)
                     return
                 root.after(30, tick)
 
@@ -143,28 +194,56 @@ class Splash:
             del img
         except Exception as e:  # noqa: BLE001  (no tkinter: simply no loading picture)
             self.log(f"[заставка] не показана: {e!r}")
+        os._exit(0)
 
 
 class Handle:
     """The loading picture's own process (never a thread of the launcher: tkinter in a second thread
     could bring the whole launcher down — «Tcl_AsyncDelete … wrong thread» — and the game's window was
-    left with «localhost не позволяет установить соединение»)."""
+    left with «localhost не позволяет установить соединение»). It goes away when the game's window is
+    shown (`close`), at the latest `hard` seconds after the start (a timer of the launcher: it does not
+    depend on the window being found), and with the launcher (atexit); a second picture never stays."""
 
-    def __init__(self, proc, log):
+    def __init__(self, proc, log, hard=HARD_SECONDS + 5.0):
         self.proc, self.log, self.started = proc, log, time.time()
+        self._lock = threading.Lock()
+        self._done = False
+        self._timers = []
+        self._later(hard, "срок вышел")
 
-    def close(self, delay=0.15):
-        """(any thread) Gone in `delay` s — the game's window is shown above it first: no gap between."""
-        def later():
-            try:
-                if self.proc.poll() is None:
-                    self.proc.terminate()
-                    self.log(f"[заставка] убрана через {time.time() - self.started:.2f} с")
-            except Exception:  # noqa: BLE001
-                pass
-        t = threading.Timer(delay, later)
+    def _later(self, delay, why):
+        t = threading.Timer(delay, self.kill, args=(why,))
         t.daemon = True
         t.start()
+        self._timers.append(t)
+
+    def close(self, delay=0.15):
+        """(any thread) Gone in `delay` s — the game's window is shown above it first: no gap between.
+        Safe to call again."""
+        self._later(delay, "окно игры показано")
+
+    def kill(self, why=""):
+        """Stop the picture's process now (terminate, then kill). Safe to call again."""
+        with self._lock:
+            if self._done:
+                return
+            self._done = True
+        for t in self._timers:
+            if t is not threading.current_thread():
+                t.cancel()
+        try:
+            if self.proc.poll() is None:
+                self.proc.terminate()
+                try:
+                    self.proc.wait(KILL_GRACE)
+                except Exception:  # noqa: BLE001
+                    self.proc.kill()
+                self.log(f"[заставка] убрана через {time.time() - self.started:.2f} с ({why})")
+        except Exception:  # noqa: BLE001
+            pass
+
+
+_current = {"handle": None}
 
 
 def show(seconds=25.0, logo=None, log=print):
@@ -175,17 +254,25 @@ def show(seconds=25.0, logo=None, log=print):
     exe = sys.executable or "pythonw"
     w = os.path.join(os.path.dirname(exe), "pythonw.exe")
     exe = w if os.path.isfile(w) else exe  # (no black window)
+    old = _current["handle"]
+    if old:
+        old.kill("новая заставка")  # (never two pictures)
     try:
-        proc = subprocess.Popen([exe, os.path.abspath(__file__), str(seconds), logo or ""],
+        proc = subprocess.Popen([exe, os.path.abspath(__file__), str(seconds), logo or "", str(os.getpid())],
                                 creationflags=0x08000000, close_fds=True)  # (CREATE_NO_WINDOW)
     except OSError as e:
         log(f"[заставка] не запущена: {e}")
         return None
     log("[заставка] запущена (свой процесс)")
-    return Handle(proc, log)
+    h = Handle(proc, log, hard=seconds + 5.0)
+    _current["handle"] = h
+    import atexit
+    atexit.register(h.kill, "запускатор закрыт")
+    return h
 
 
 if __name__ == "__main__":
     # (the picture's own process: tkinter in its main thread)
     Splash(float(sys.argv[1]) if len(sys.argv) > 1 else 25.0, (sys.argv[2] if len(sys.argv) > 2 else "") or None,
-           log=lambda m: None)._run()
+           log=lambda m: None,
+           parent=int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else 0)._run()

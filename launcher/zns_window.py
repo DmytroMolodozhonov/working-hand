@@ -789,7 +789,8 @@ def rescue_offscreen(seconds=RESCUE_AFTER, poll=0.5):
         r = wintypes.RECT()
         user32.GetWindowRect(hwnd, ctypes.byref(r))
         if r.right > -1000 and r.bottom > -1000 and not _hidden(user32, hwnd):
-            return False  # (on the screen already)
+            _shown()  # (on the screen already — the loading picture must go all the same)
+            return False
         _log(f"страховка через {seconds:.0f} с: окно игры всё ещё спрятано/за экраном {_rect_of(user32, hwnd)} — показываю")
         with _lock:
             _reveal.pop(found, None)
