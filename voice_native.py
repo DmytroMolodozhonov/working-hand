@@ -161,6 +161,59 @@ def save_checked(part, final, name):
     CHECK.remember(final, sha)
 
 
+
+# ---------------------------------------------------------------- priority (Windows)
+def _thread_ids():
+    """Windows: the ids of this process's threads now (an empty set elsewhere)."""
+    if os.name != "nt":
+        return set()
+    import ctypes
+    from ctypes import wintypes
+
+    class TE32(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ThreadID", wintypes.DWORD),
+                    ("th32OwnerProcessID", wintypes.DWORD), ("tpBasePri", ctypes.c_long), ("tpDeltaPri", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD)]
+
+    k = ctypes.windll.kernel32
+    snap = k.CreateToolhelp32Snapshot(0x00000004, 0)  # TH32CS_SNAPTHREAD
+    out, me = set(), k.GetCurrentProcessId()
+    if snap in (0, -1):
+        return out
+    try:
+        e = TE32()
+        e.dwSize = ctypes.sizeof(TE32)
+        ok = k.Thread32First(snap, ctypes.byref(e))
+        while ok:
+            if e.th32OwnerProcessID == me:
+                out.add(e.th32ThreadID)
+            ok = k.Thread32Next(snap, ctypes.byref(e))
+    finally:
+        k.CloseHandle(snap)
+    return out
+
+
+def raise_speech_threads(before):
+    """Windows: this thread and the threads the speech network made since `before` — ABOVE NORMAL priority.
+    Found by the author's journal (a game during a Telegram call): the call and the game took the processor, one look at
+    a phrase grew to 4.7 s and the spells came 2–8 s late. The speech works in short bursts (tens of ms), so raising it
+    never starves the game — it only stops waiting behind it. Returns how many threads were raised (0 elsewhere)."""
+    if os.name != "nt":
+        return 0
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        n = 1 if k.SetThreadPriority(k.GetCurrentThread(), 1) else 0  # THREAD_PRIORITY_ABOVE_NORMAL
+        for tid in _thread_ids() - set(before):
+            h = k.OpenThread(0x0020 | 0x0040, False, tid)  # THREAD_SET_INFORMATION | THREAD_QUERY_INFORMATION
+            if h:
+                if k.SetThreadPriority(h, 1):
+                    n += 1
+                k.CloseHandle(h)
+        return n
+    except Exception:  # noqa: BLE001
+        return 0
+
 # ---------------------------------------------------------------- the networks
 class CtcNet:
     """The speech network (CTC): 16 kHz sound → log-probabilities of the 34 letters, one row per 40 ms."""
@@ -623,6 +676,7 @@ class NativeVoice:
             "speakers": self.ref_name,
             "aec": self.aec,
             "cost": round(self.cost, 1),
+            "raised": getattr(self, "raised", 0),  # (Windows: the speech threads above normal priority)
         }
 
     def download_models(self):
@@ -743,8 +797,10 @@ class NativeVoice:
             import numpy as np
             from livekit import rtc
             ctc_dir, vad_path = self.model_paths()
+            before = _thread_ids()
             ctc = CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS", "2")))
             vad = Vad(vad_path)
+            self.raised = raise_speech_threads(before)  # (Windows: above normal — a call / the game no longer delay the looks)
             mic_box, ref_box = {}, {}
 
             def on_mic(x, t):

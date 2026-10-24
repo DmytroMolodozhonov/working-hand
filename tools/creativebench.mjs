@@ -30,6 +30,7 @@ const ALLOC = args.includes('--alloc');
 const KEYS = args.includes('--keys'); // the full keys of the shaders compiled after the start (and of all prewarmed ones like them)
 const OWNERS = args.includes('--owners'); // the scene's top things: how many, their parts, materials, a sample of names
 const SCAN = args.includes('--scan');
+const AT = opt('at', null); // castle | village | tower: the scene by such a place, among its people (wakebench's places)
 const MODE = opt('mode', 'creative'); // creative | freeworld (Свободный мир — to compare)
 const AFTER = parseFloat(opt('after', '0')); // s of play before measuring (the world filled: herds, people, things) // at the start: 16 directions — draws, triangles and who is drawn in each
 const ABLATE = opt('ablate', null); // e.g. trees,villagers,animals,terrain: standing, each hidden in turn — its cost of drawing
@@ -285,6 +286,31 @@ try {
         await sleep(500);
     }
     await sleep(3000);
+    if (AT) {
+        const where = await page.evaluate((SITE) => {
+            const g = window.__zns.game, data = g.terrain.data, p0 = g.character.group.position.clone();
+            let site = null;
+            if (SITE === 'village') site = data.villages?.spawnVillage?.();
+            else if (SITE === 'tower') site = data.towers?.only?.();
+            else site = (data.castles?.near?.(p0.x, p0.z, 1500) || []).filter((c) => Math.hypot(c.x - p0.x, c.z - p0.z) > 250)[0];
+            if (!site) return null;
+            const y = g.collision.groundY(site.x + 20, site.z + 20);
+            g.character.group.position.set(site.x + 20, (Number.isFinite(y) ? y : 20) + 2.5, site.z + 20);
+            // (facing the place's middle)
+            const yaw = Math.atan2(-(site.x - (site.x + 20)), -(site.z - (site.z + 20)));
+            g.smoothBody = yaw; g.cameraBaseRotation = yaw; g.character.setBodyRotation(yaw);
+            return { id: site.id, x: site.x, z: site.z };
+        }, AT);
+        console.log('место:', JSON.stringify(where));
+        for (let i = 0; i < 120; i++) {
+            const ok = await page.evaluate((w) => { const g = window.__zns.game, cs = g.castleLife.castles.get(w?.id); return !!(cs && cs.awake && cs.active.size > 0) && (g.terrain._queue?.length ?? 0) === 0; }, where);
+            if (ok) break;
+            await sleep(2000);
+        }
+        // (its people all made and walking about)
+        await page.evaluate(async () => { const g = window.__zns.game, f0 = g.frameCount; while (g.frameCount - f0 < 150) await new Promise((r) => setTimeout(r, 200)); });
+        console.log('жителей:', await page.evaluate(() => window.__zns.game.castleLife.byId.size));
+    }
     if (AFTER > 0) {
         // (played on for a while, the game's own pace: a minute or two of the world going on round the start)
         const f0 = await page.evaluate(() => window.__zns.game.frameCount);
