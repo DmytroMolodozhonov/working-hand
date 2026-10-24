@@ -622,12 +622,26 @@ export class ItemSystem {
      */
     _floorUnder(p, L = null) {
         const col = this.game.collision;
-        col.pushOutOfRock?.(p);
+        if (col.pushOutOfRock?.(p) === false) this._liftOutOfSolid(p, L); // (buried where no side is free — an arena's floor, a thick stand: never left to sink through it)
         const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
         const floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
         // a good laid out on a stall's counter: the counter itself is its floor, as long as the counter stands
         // (the ground under it is no judge of that — a good that sank once below the top would never come up again)
         return L?.perch && this._perched(L.perch, p, 1) ? Math.max(floor, L.perch.top) : floor;
+    }
+
+    /**
+     * A thing buried in a thick solid (no free place within 3 m beside it): up to the first free place above it
+     * (at most 8 m: the floor / the top of the stand it is in), else back to the last place it was safe.
+     * Never down: «the floor is under the point» in solid rock let it sink through the whole enchanted floor.
+     */
+    _liftOutOfSolid(p, L = null) {
+        const col = this.game.collision;
+        for (let up = 0.25; up <= 8; up += 0.25) {
+            if (!col.inRock(p.x, p.y + up, p.z)) { p.y += up; return true; }
+        }
+        if (L?.safe) { p.copy(L.safe); return true; }
+        return false;
     }
 
     /** Is `p` over a standing counter `k` ({x0,x1,z0,z1,top}), not more than `below` m under its top? */
@@ -669,7 +683,8 @@ export class ItemSystem {
         if (L.perch && p.y < L.perch.top - 0.3 && this._perched(L.perch, p, 3)) p.y = L.perch.top + 0.12;
         this._outOfSolid(p);
         const gy = this._floorUnder(p, L);
-        if (p.y < gy + 0.1) p.y = gy + 0.12;
+        if (col.inRock?.(p.x, p.y, p.z)) { this._liftOutOfSolid(p, L); L.rest = false; } // (embedded in a block: out of it, then it settles)
+        else if (p.y < gy + 0.1) p.y = gy + 0.12;
         else if (p.y > gy + 0.45) L.rest = false; // (nothing under it now: it falls — _physics)
         if (p.y !== y0 || !L.rest) L.sentRest = false; // (its new place goes to the others)
     }
@@ -961,7 +976,10 @@ export class ItemSystem {
                 if (r === 'in') { m.position.copy(_v); continue; }
             }
             const gy = col.groundAt ? col.groundAt(_v.x, _v.z, _v.y + 0.5) : col.groundY(_v.x, _v.z);
-            if (_v.y > gy + 0.15 && col.pointBlocked?.(_v.x, _v.y, _v.z)) {
+            // (a wall's top edge: the «ground» there is the wall itself — into it from the side is a wall, not a floor)
+            const wallEdge = _v.y <= gy + 0.15 && col.inRock?.(_v.x, _v.y, _v.z) && !col.inRock(m.position.x, m.position.y, m.position.z)
+                && gy > (col.groundAt ? col.groundAt(m.position.x, m.position.z, m.position.y + 0.5) : gy) + 0.3;
+            if ((_v.y > gy + 0.15 || wallEdge) && col.pointBlocked?.(_v.x, _v.y, _v.z)) {
                 let hit = false;
                 for (const ax of ['x', 'z', 'y']) {
                     _v2.copy(m.position); _v2[ax] += L.vel[ax] * hs;
@@ -974,6 +992,7 @@ export class ItemSystem {
             m.position.copy(_v);
         }
         const ground = this._floorUnder(m.position, L);
+        if (m.position.y >= ground + 0.12 && !col.inRock?.(m.position.x, m.position.y, m.position.z)) (L.safe || (L.safe = new THREE.Vector3())).copy(m.position); // (the last place in the open: where it goes back to, if it is ever lost in rock)
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
             if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }
