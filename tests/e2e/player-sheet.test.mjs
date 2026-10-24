@@ -1,4 +1,4 @@
-/** The «🧙 Игрок» tab: first in the pause menu, open by default, shows the hero's real numbers. */
+/** The «🧙 Игрок» tab: second tab of the pause menu (after «Меню»), shows the hero's real numbers. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, launch, openPage, realErrors, startFromMenu, sleep } from './harness.mjs';
@@ -8,14 +8,15 @@ let srv, browser;
 test.before(async () => { srv = await startServer(PORT); browser = await launch(); });
 test.after(async () => { await browser?.close(); srv?.stop(); });
 
-test('Escape opens «Игрок» first; cards show HP, mana, name; the 3D hero draws only while open', async () => {
+test('«Игрок» is the second tab; cards show HP, mana, name; the 3D hero draws only while open', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await startFromMenu(page, 'freeworld');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.getElementById('pause-menu').classList.contains('hidden'));
     const tabs = await page.$$eval('.pause-tab:not([hidden])', (els) => els.map((e) => e.dataset.pauseTab));
-    assert.equal(tabs[0], 'pause-player');
-    assert.equal(await page.$eval('[data-pause-tab="pause-player"]', (e) => e.classList.contains('active')), true);
+    assert.deepEqual(tabs.slice(0, 2), ['pause-main', 'pause-player']); // («Меню», then «Игрок»; «Меню» is open by default)
+    assert.equal(await page.$eval('[data-pause-tab="pause-main"]', (e) => e.classList.contains('active')), true);
+    await page.click('[data-pause-tab="pause-player"]');
     await page.waitForSelector('#pause-player .ps-row');
     const rows = await page.$$eval('#pause-player .ps-label', (els) => els.map((e) => e.textContent));
     for (const l of ['Здоровье', 'Мана', 'Устойчивость']) assert.ok(rows.includes(l), l + ' in ' + rows.join());
@@ -39,6 +40,7 @@ test('Escape opens «Игрок» first; cards show HP, mana, name; the 3D hero 
         if (i === 1) await page.evaluate(() => { const g = window.__zns.game; g.armor.worn.helmet = { kind: 'armor', piece: 'helmet', magic: true, uid: 'x', hp: 30 }; });
         await page.keyboard.press('Escape'); // open
         await page.waitForFunction(() => !document.getElementById('pause-menu').classList.contains('hidden'));
+        await page.click('[data-pause-tab="pause-player"]');
         assert.ok(await painted() > 2000, 'opening ' + (i + 2) + ' paints the hero');
     }
     // other tab: the preview is given back

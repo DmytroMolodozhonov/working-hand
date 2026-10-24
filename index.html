@@ -57,21 +57,21 @@
         <div class="pause-box">
             <div class="pause-title">⏸ Пауза</div>
             <div class="pause-tabs" role="tablist">
-                <button class="pause-tab active" data-pause-tab="pause-player" role="tab">🧙 Игрок</button>
-                <button class="pause-tab" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
+                <button class="pause-tab active" data-pause-tab="pause-main" role="tab">⏸ Меню</button>
+                <button class="pause-tab" data-pause-tab="pause-player" role="tab">🧙 Игрок</button>
                 <button class="pause-tab" data-pause-tab="pause-audio" role="tab">🔊 Звук</button>
                 <button class="pause-tab" data-pause-tab="pause-graphics" role="tab">🖥 Графика</button>
                 <button class="pause-tab" data-pause-tab="pause-bosses" role="tab">👑 Боссы</button>
                 <button class="pause-tab" data-pause-tab="pause-creative" role="tab" hidden>🛠 Творческий</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
             </div>
-            <div id="pause-player" class="pause-pane active"></div>
-            <div id="pause-main" class="pause-pane">
+            <div id="pause-main" class="pause-pane active">
                 <button id="pause-continue-btn">▶ Продолжить</button>
                 <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
                 <!-- the leading hand (Правша / Левша), the same control as in «Настройки» -->
                 <div id="pause-hands"></div>
             </div>
+            <div id="pause-player" class="pause-pane"></div>
             <div id="pause-audio" class="pause-pane"></div>
             <div id="pause-graphics" class="pause-pane"></div>
             <div id="pause-bosses" class="pause-pane"><div id="pause-bosses-list" class="bosses-list"></div></div>

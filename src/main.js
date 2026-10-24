@@ -1264,7 +1264,7 @@ function togglePauseMenu(show) {
         const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = creativeMap;
         document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
-        showPauseTab('pause-player');
+        showPauseTab('pause-main');
     } else playerSheet.hide();
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
