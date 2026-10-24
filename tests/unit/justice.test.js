@@ -102,7 +102,7 @@ test('an arrest: the knight goes up to him, cuffs him, leads him to the jail doo
     assert.equal(life.cmds.run(knight, { id: 'arrest', foe: man.id }, 'me'), true);
     frames(life, [knight, man], 6);
     assert.equal(knight.cmd.stage === 'cuff' || knight.cmd.stage === 'lead', true, 'cuffed');
-    assert.ok(said.some((s) => s[0] === 'Гарольд' && /король|арестов|задержан/i.test(s[1])), 'in the king\'s name');
+    assert.ok(said.some((s) => s[0] === 'Гарольд' && /корол|арестов|задержан/i.test(s[1])), 'in the king\'s name: ' + JSON.stringify(said));
     assert.ok(said.some((s) => s[0] === 'Мария'), 'she protests');
     assert.equal(man.cmd.kind, 'captive'); assert.equal(man.mode, 'cuffed');
     const x0 = knight.x;
