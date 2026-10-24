@@ -223,3 +223,11 @@ test('каждая дуэль начинается с настроек мира:
     D._applyHero({ cells: 500, foe: 'master' });
     assert.equal(g.hero.cells, 500); assert.equal(g.config.hero.foe, 'master'); assert.equal(D.mode.foe, 'master');
 });
+
+test('победа в столкновении лучей доходит до проигравшего, даже в мантии и доспехах', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Duel.js', import.meta.url), 'utf8');
+    assert.match(src, /applyToCreature\(winnerBolt\.spell, lw, winnerBolt\.by, null, null, \{ clash: true \}\)/);
+    assert.match(src, /applyToMe\(winnerBolt\.spell, winnerBolt\.by, winnerBolt\.side, \{ clash: true \}\)/);
+    assert.match(src, /if \(!opts\.clash && g\.armor\?\.guard\(spell\)\) return;/);
+    assert.match(src, /if \(!opts\.clash && c\.isVillager && \(\(c\.robe && ROBE_BLOCKS\.has\(spell\)\)/);
+});
