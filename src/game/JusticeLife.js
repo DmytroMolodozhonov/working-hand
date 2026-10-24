@@ -55,7 +55,7 @@ export class JusticeLife {
             v.cmd = { id: 'arrest', by, kind: 'arrest', foe: p.id, stage: 'go', t: 120, walkT: 0, said: 0, handT: 0 };
             return true;
         }
-        if (what === 'search') return this._startSearch(v, a, by);
+        if (what === 'search' || what === 'enter') return this._startSearch(v, a, by, what === 'enter');
         return false;
     }
 
@@ -203,14 +203,54 @@ export class JusticeLife {
         return bi;
     }
 
-    _startSearch(v, a, by) {
+    _startSearch(v, a, by, enter = false) {
         const cs = v.cs, h = this._houseFor(cs, a, v);
         const house = h >= 0 ? cs.def.houses[h] : null;
         if (!house) return false;
         this.life.cmds._clear(v, true);
         const target = house.homeNode != null ? house.homeNode : house.doorNode;
-        v.cmd = { id: 'search_house', by, kind: 'search', stage: 'go', h, node: target, tx: house.inside?.x ?? house.c.x, tz: house.inside?.z ?? house.c.z, t: 150, walkT: 0, dwell: 0 };
+        v.cmd = { id: 'search_house', by, kind: 'search', stage: 'go', h, node: target, tx: house.inside?.x ?? house.c.x, tz: house.inside?.z ?? house.c.z, t: 150, walkT: 0, dwell: 0, enter, breakIn: !!a.breakIn, door: this._doorOf(cs, h) };
+        this.life.alog?.decision(v, `${enter ? 'входит в дом' : 'обыскивает дом'} №${h}${a.breakIn ? ' (ломая дверь, если заперта)' : ''}; дверь ${this._doorOf(cs, h)?.id ?? 'не найдена'}, ${this._doorOf(cs, h)?.locked ? 'ЗАПЕРТА' : 'открыта'}`);
         return true;
+    }
+
+    /** The house's door and whether it is locked now: { id, d, x, z, locked, spelled, near } or null. */
+    _doorOf(cs, h) {
+        const g = this.game;
+        for (const rec of g.houses?.active.values() || []) {
+            if (rec.def !== cs.def || rec.i !== h || !rec.doorId) continue;
+            const d = g.doors?.list.get(rec.doorId);
+            const locks = g.locks;
+            const spelled = !!locks?.spelled?.has(rec.doorId);
+            const locked = spelled || (!!locks?.doorLocks?.get(rec.doorId) && !locks.picked.has(rec.doorId));
+            return { id: rec.doorId, d, x: d?.x, z: d?.z, locked, spelled };
+        }
+        return null;
+    }
+
+    /** A locked door in the way of a knight told to go in: he asks (or, told «выломай», breaks it). → true while he is busy with it. */
+    _doorStep(v, c, dt) {
+        const door = this._doorOf(v.cs, c.h);
+        if (!door || !door.locked || door.x == null) return false;
+        const near = Math.hypot(door.x - v.x, door.z - v.z);
+        if (near > 4.5) return false;
+        const g = this.game;
+        if (door.spelled) { this.life._say(v, 'Дверь заперта заклинанием — мне её не открыть. Нужна «Алохомора».', 5); this.life.alog?.decision(v, 'дверь заперта заклинанием Lock — отказ'); this.life.cmds.clear(v); return true; }
+        if (!c.breakIn) {
+            this.life._say(v, 'Дверь заперта, Ваше Величество. Выломать?', 5);
+            this.life.alog?.decision(v, 'дверь заперта — спрашивает, ломать ли; жду приказа «выломай»');
+            this.life.cmds.clear(v);
+            return true;
+        }
+        c.knock = (c.knock || 0) + dt;
+        v.speed = 0; v.mode = 'work'; v.yaw = Math.atan2(-(door.x - v.x), -(door.z - v.z));
+        if (Math.floor(c.knock / 0.7) !== Math.floor((c.knock - dt) / 0.7)) g.sound?.playHammer?.({ x: v.x, y: v.y + 1.4, z: v.z }, 0.7);
+        if (c.knock < 2.4) return true;
+        g.locks?.picked?.add(door.id); // (broken open: it stays open for everybody)
+        try { g.doors?.impulse?.(door.d, { x: v.x - door.x, y: 0, z: v.z - door.z }, 1.2); } catch (_) { /* ignore */ }
+        this.life._say(v, 'Готово, дверь выломана!', 3);
+        this.life.alog?.decision(v, 'выломал дверь по приказу');
+        return false;
     }
 
     _searchStep(v, c, dt) {
@@ -219,12 +259,21 @@ export class JusticeLife {
         c.t -= dt;
         if (c.t <= 0) { cmds.clear(v); return false; }
         if (c.stage === 'go') {
+            if (this._doorStep(v, c, dt)) return true;
+            // (first to the door itself, then in: the straight way from the street ends at the wall beside the door)
+            const dn = house.doorNode != null ? v.cs.graph.nodes[house.doorNode] : null;
+            if (dn && !c.inDoor) {
+                if (Math.hypot(dn.x - v.x, dn.z - v.z) > 1.6 && c.walkT < 50) { cmds._goStep(v, c, dt, WALK * 1.4, dn.x, dn.z, 1.2); v.mode = v.speed > 0 ? 'walk' : 'idle'; life._ground(v); return true; }
+                c.inDoor = true;
+            }
             const left = cmds._goStep(v, c, dt, WALK * 1.4, c.tx, c.tz, 2.2);
             if (left > 0 && c.walkT < 70) { v.mode = v.speed > 0 ? 'walk' : 'idle'; life._ground(v); return true; }
+            if (c.enter) { life._say(v, pick(['Я внутри, Ваше Величество.', 'Вошёл. Что дальше?', 'Мы в доме.']), 4); life.alog?.decision(v, 'вошёл в дом'); for (const o of v.cs.active.values()) if (o.sleep && Math.hypot(o.x - house.c.x, o.z - house.c.z) < (house.r || 6) + 2) life.night?.wake?.(o, 'noise', v.id); cmds.done(v); return false; }
             c.stage = 'dwell'; c.dwell = 6.5 + Math.random() * 3;
             life._say(v, pick(SEARCH_START), 4);
             // the people of the house cry out
             const res = [...v.cs.active.values()].find((x) => !x.dead && x.entry?.home === c.h && x !== v && Math.hypot(x.x - house.c.x, x.z - house.c.z) < 25);
+            for (const o of v.cs.active.values()) if (o.sleep && Math.hypot(o.x - house.c.x, o.z - house.c.z) < (house.r || 6) + 2) life.night?.wake?.(o, 'noise', v.id); // (nobody sleeps through a search)
             if (res) { life._say(res, pick(RESIDENT_SAY), 4); life.rel?.bump(res, c.by, { f: -5, s: -3 }, { show: false }); }
             return true;
         }

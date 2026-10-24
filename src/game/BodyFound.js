@@ -44,6 +44,7 @@ export class BodyFound {
         if (!bodies?.size) return;
         for (const b of bodies.values()) {
             if (b.k !== 'v' || this.seen.has(b.id) || typeof b.who !== 'string') continue;
+            if (this.life.byId.get(b.who)?.byOrder != null) { this.seen.add(b.id); continue; } // (killed on the king's order: no alarm, no search)
             const cid = b.who.slice(0, b.who.lastIndexOf(':'));
             const cs = L.castles.get(cid);
             if (!cs?.awake) continue;

@@ -160,7 +160,7 @@ export class VillagerCommands {
             tx = t.x; tz = t.z; looks = t.id; stop = 2.8; node = null; base.t = 70;
         }
         else if (what === 'come' && me) { tx = me.x; tz = me.z; looks = 'me'; stop = 2.6; }
-        else if (what === 'point' && a.point) { tx = a.point.x; tz = a.point.z; }
+        else if (what === 'point' && a.point) { tx = a.point.x; tz = a.point.z; const far = Math.hypot(tx - v.x, tz - v.z); base.maxT = Math.min(300, 40 + far / 1.6); base.t = base.maxT + 20; this.life.alog?.decision(v, `иду в точку (${Math.round(tx)}, ${Math.round(tz)}), ${Math.round(far)} м, на это даю ${Math.round(base.maxT)} с`); }
         else if (what === 'dir' && me) { // «пройди пять шагов вперёд»: along or across where I look (the hero's own forward)
             const g = this.game;
             const yaw = g.character?.group?.rotation?.y ?? 0;
@@ -189,7 +189,7 @@ export class VillagerCommands {
             base.t = 90;
         } else return;
         if (what === 'come') base.t = 60; else if (!base.t || base.t < 15) base.t = 30;
-        v.cmd = { ...base, kind: 'walk', tx, tz, node, pace, looks, stop, walkT: 0, hold: what === 'come' ? 12 : what === 'retreat' ? 0 : what === 'dir' || what === 'back' || what === 'forward' ? 2 : 25 };
+        v.cmd = { ...base, kind: 'walk', maxT: base.maxT, tx, tz, node, pace, looks, stop, walkT: 0, hold: what === 'come' ? 12 : what === 'retreat' ? 0 : what === 'dir' || what === 'back' || what === 'forward' ? 2 : 25 };
         if (what === 'retreat') v.cmd.hold = 4;
     }
 
@@ -212,6 +212,7 @@ export class VillagerCommands {
         if (what === 'spar' || what === 'him') {
             const foe = a.foe ? life.byId.get(a.foe) : null;
             if (!foe || foe.dead || foe === v) return;
+            if (a.mode === 'deadly' || what === 'him') { foe.byOrder = base.by; life.alog?.decision(v, `убивает ${foe.title || ''} ${foe.name || foe.id} по приказу — его смерть законна, тревоги не будет`); }
             this._clear(v, true); v.sheath = false;
             v.cmd = { ...base, kind: 'spar', foe: foe.id, mode: a.mode === 'deadly' ? 'deadly' : 'spar', t: a.mode === 'deadly' ? 120 : 45, touches: 0, swingT: 0.6 + Math.random() * 0.6, walkT: 0 };
             return;
@@ -254,6 +255,7 @@ export class VillagerCommands {
         const life = this.life;
         if (v.fear?.level >= 2) { this.clear(v); return false; }
         if (c.t <= 0) { this.done(v); return false; }
+        if ((c.kind === 'spar' || c.kind === 'search' || c.kind === 'arrest' || c.kind === 'walk' && c.looks && c.looks !== 'me') && (c.wakeT = (c.wakeT || 0) - dt) <= 0) this._wakeNear(v, c);
         v.sheath = v.sheath && c.kind !== 'spar' && c.kind !== 'spme';
         switch (c.kind) {
             case 'pose': return this._poseStep(v, c, dt);
@@ -295,6 +297,20 @@ export class VillagerCommands {
         if (d <= stop) return 0;
         c.walkT += dt;
         const inside = life._inLand(v.cs.def, { x: v.x, z: v.z }, 0);
+        // (a place outside the walls: first out through the gate — the straight way would end at the wall)
+        if (inside && !c.outDone && !life._inLand(v.cs.def, { x: tx, z: tz }, 0)) {
+            const gr = v.cs.graph, gates = gr.tagged('gateOut');
+            if (gates.length) {
+                if (c.gate == null) { let bd = Infinity; for (const id of gates) { const n = gr.nodes[id]; const dd = n ? Math.hypot(n.x - v.x, n.z - v.z) : Infinity; if (dd < bd) { bd = dd; c.gate = id; } } }
+                const gn = gr.nodes[c.gate];
+                if (gn && Math.hypot(gn.x - v.x, gn.z - v.z) > 3.5) {
+                    if (!v.path) life._goTo(v, c.gate);
+                    if (life._followPath(v, dt, speed)) v.path = null;
+                    return d;
+                }
+            }
+            c.outDone = true; v.path = null;
+        }
         if (c.node != null && d > 6 && inside) {
             if (!v.path) life._goTo(v, c.node);
             if (life._followPath(v, dt, speed)) v.path = null;
@@ -311,6 +327,19 @@ export class VillagerCommands {
         return Math.hypot(tx - v.x, tz - v.z);
     }
 
+    /** The ones asleep round a knight at his work (an arrest, a search, a fight, a walk up to a man) are woken: they cannot sleep through it. */
+    _wakeNear(v, c) {
+        c.wakeT = 1;
+        const night = this.life.night;
+        if (!night) return;
+        const foe = c.foe ? this.life.byId.get(c.foe) : c.looks ? this.life.byId.get(c.looks) : null;
+        for (const o of v.cs.active.values()) {
+            if (!o.sleep || o.dead) continue;
+            const near = Math.hypot(o.x - v.x, o.z - v.z) < 7 || (foe && o === foe && Math.hypot(o.x - v.x, o.z - v.z) < 12);
+            if (near) { night.wake(o, 'noise', v.id); this.life.alog?.decision(o, `разбужен: рядом ${v.title || ''} ${v.name || ''} занят делом`); }
+        }
+    }
+
     _paceStep() { /* (a pace order with no walk: nothing to do — only a following villager changes pace, below) */ }
 
     _walkStep(v, c, dt) {
@@ -320,7 +349,7 @@ export class VillagerCommands {
         if (c.looks === 'me' && c.stop > 2) { const me = life._playerPos(c.by); if (me) { c.tx = me.x; c.tz = me.z; } }
         if (typeof c.looks === 'string' && c.looks !== 'me') { const f = life.byId.get(c.looks); if (f) { c.tx = f.x; c.tz = f.z; } }
         const left = this._goStep(v, c, dt, speed);
-        if (left > 0 && c.walkT < 60) {
+        if (left > 0 && c.walkT < (c.maxT || 60)) {
             v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
             life._ground(v);
             return true;

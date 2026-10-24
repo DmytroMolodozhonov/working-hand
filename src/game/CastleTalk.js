@@ -1618,6 +1618,7 @@ export class CastleTalk {
 
     // ---------------------------------------------------------- frame
     update(dt) {
+        this.commands?.sample(dt); // (where my hand points, a few times a second: the words come later than the hand)
         const g = this.game;
         const now = performance.now();
         this._attT += dt;

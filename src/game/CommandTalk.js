@@ -24,7 +24,7 @@ const SPARRERS = new Set(['knight']);
 /** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
 const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
 /** Commands that win over the king's old army-order reader (it knows no hand pointing, pairs or formations). */
-const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight', 'follow']);
+const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight', 'follow', 'follow_short', 'enter_house']);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
@@ -79,12 +79,34 @@ export class CommandTalk {
         return { o: { x: _o.x, y: _o.y, z: _o.z }, d: { x: _d.x, y: _d.y, z: _d.z }, hand: false };
     }
 
+    /** The hand raised and pointing: remembered (the words are recognised a second or two after the hand was shown). */
+    sample(dt) {
+        this._sT = (this._sT || 0) - dt;
+        if (this._sT > 0) return;
+        this._sT = 0.2;
+        const ch = this.game.character;
+        if (!ch?.isArmRaised || !(ch.isArmRaised('right') || ch.isArmRaised('left'))) return;
+        const ray = this.pointRay();
+        if (!ray?.hand) return;
+        const p = this._ground(ray);
+        if (p) this._shown = { ...p, at: performance.now(), ray };
+    }
+
     /** Where on the ground I point (a march along the ray until it meets the ground), or null. */
     pointGround(beyond = 0) {
         const ray = this.pointRay();
+        let p = ray?.hand ? this._ground(ray) : null;
+        if (!p && this._shown && performance.now() - this._shown.at < 4000) p = this._shown; // (the hand is down already: where it was)
+        if (!p && ray) p = this._ground(ray); // (no hand: where the gaze rests)
+        if (!p) return null;
+        if (beyond && ray) { const d = Math.hypot(p.x - ray.o.x, p.z - ray.o.z) || 1; return { x: p.x + (p.x - ray.o.x) / d * beyond, z: p.z + (p.z - ray.o.z) / d * beyond }; }
+        return { x: p.x, z: p.z };
+    }
+
+    _ground(ray) {
         const col = this.game.collision;
         if (!ray || !col?.groundY) return null;
-        const hit = (t) => ({ x: ray.o.x + ray.d.x * (t + beyond), z: ray.o.z + ray.d.z * (t + beyond) });
+        const hit = (t) => ({ x: ray.o.x + ray.d.x * t, z: ray.o.z + ray.d.z * t });
         // (a mountain far away: the march gets longer with the distance — 1 m near, 8 m far, up to 400 m)
         let last = null;
         for (let t = 1; t <= 400; t += t < 60 ? 1 : 8) {
@@ -112,6 +134,7 @@ export class CommandTalk {
         const chain = all.slice(1).filter((c) => CHAINABLE.has(COMMANDS[c.id].do.split(':')[0]) && c.id !== 'do_it');
         if (!again) this._last = { text, at: performance.now() };
         const def = COMMANDS[cmd.id];
+        this._text = text;
         const army = detectOrder(text, talk._players());
         if (army && !NEW_WINS.has(cmd.id)) return false; // («собери войско», «в атаку на зомби»: the king's orders, VillagerOrders)
         const me = g.character.group.position;
@@ -201,6 +224,16 @@ export class CommandTalk {
                 reply(ack());
                 return this._done(text, cmd, lead);
             }
+            case 'enter_house': {
+                const point = this.pointGround();
+                const h = point ? life.justice._houseFor(lead.cs, { point }, lead) : -1;
+                if (h < 0) { reply(point ? 'Там нет дома, Ваше Величество.' : 'В какой дом? Покажите рукой.'); this._log(text, cmd, lead, point ? `в точке (${Math.round(point.x)}, ${Math.round(point.z)}) дома нет` : 'не показали'); return true; }
+                const brk = /(выломай|выбей|взломай|вскрой|вломись|ворвись|снеси)/.test(text);
+                const who = doers.slice(0, 4);
+                who.forEach((k) => life.orders.run(k, 'cmd', { id: 'enter_house', house: h, point, breakIn: brk }, by));
+                reply(brk ? pick(['Ломаем!', 'Так точно, выбьем дверь!']) : ack() || 'Иду.');
+                return this._done(text, cmd, lead);
+            }
             case 'go_there': case 'look_there': {
                 const point = this.pointGround(/(?:^| )(за|через)(?: |$)/.test(text) ? 25 : 0); // («за ту гору»: past the mountain)
                 if (cmd.id === 'go_there' && !point) { reply(pick(['Куда? Покажите рукой.', 'Не понял, куда идти — покажите.'])); return true; }
@@ -225,7 +258,7 @@ export class CommandTalk {
 
     _done(text, cmd, lead) { this._log(text, cmd, lead, 'выполняется'); return true; }
 
-    _log(text, cmd, v, what) { this.journal(`разговор: «${text}» → команда ${cmd.id} (${COMMANDS[cmd.id].cat}) — ${v.title || ''} ${v.name || ''}: ${what}`); }
+    _log(text, cmd, v, what) { this.life.alog?.decision(v, `команда ${cmd.id}: ${what}`); this.journal(`разговор: «${text}» → команда ${cmd.id} (${COMMANDS[cmd.id].cat}) — ${v.title || ''} ${v.name || ''}: ${what}`); }
 
     _begin(v, text, info) {
         const g = this.game, talk = this.talk;
@@ -236,12 +269,12 @@ export class CommandTalk {
         if (!g.authority) g.sync?.villagerTalk?.(v.id);
         const me = g.character.group.position;
         if (!v.foe) v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z));
-        // a hand (or the wand) pointing while I speak: he looks that way at once — head and body — and not at my face
+        // a hand (or the wand) pointing while I speak (or a moment before): he looks that way at once — head and body — and not at my face
         const pr = this.pointRay();
-        if (pr?.hand && !v.foe) {
-            const pg = this.pointGround();
-            if (pg) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
-        }
+        const shown = this._shown && performance.now() - this._shown.at < 4000;
+        const pg = pr?.hand || shown ? this.pointGround() : null;
+        this.life.alog?.decision(v, `указание: ${pr?.hand ? 'рука/палочка поднята' : shown ? 'рука уже опущена, помню где была' : 'руки нет, только взгляд'}; луч (${pr ? `${(+pr.d.x).toFixed(2)}, ${(+pr.d.y).toFixed(2)}, ${(+pr.d.z).toFixed(2)}` : 'нет'}); точка на земле ${pg ? `(${Math.round(pg.x)}, ${Math.round(pg.z)}), ${Math.round(Math.hypot(pg.x - me.x, pg.z - me.z))} м от героя` : 'не найдена'}`);
+        if (pg && !v.foe) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
     }
 
     /** The people the command is for: the one I speak to, or a group by the scope words. */
@@ -283,7 +316,20 @@ export class CommandTalk {
         const g = this.game, life = this.life;
         const me = g.character.group.position;
         const t = cmd.args.target;
+        this._houseScope = false;
         if (t.ref === 'player') return { line: null, v: null };
+        // «убейте того, кто в доме», «арестуй там всех»: the people inside the house I point at
+        if (/(в|во|из|внутри) (этом |том |вон том |его |тот |этот )?(доме|избе|хижине|здании|башне|жилище|хате)|кто (там )?внутри|там внутри|кто в нём|кто в нем|арестуй там всех|арестуйте там всех/.test(this._text || '')) {
+            const point = this.pointGround();
+            const hi = point ? life.justice._houseFor(lead.cs, { point }, lead) : -1;
+            if (hi < 0) return { line: 'В какой дом? Покажите рукой.', why: 'дом не показан' };
+            const house = lead.cs.def.houses[hi];
+            const occ = [...life.byId.values()].filter((k) => !k.dead && k !== lead && !doers.includes(k) && k.cs === lead.cs && (Math.hypot(k.x - house.c.x, k.z - house.c.z) <= (house.r || 6) + 1.5 || (k.entry?.home === hi && k.job === 'home' && Math.hypot(k.x - house.c.x, k.z - house.c.z) < 25)));
+            life.alog?.decision(lead, `в доме №${hi} (${Math.round(house.c.x)}, ${Math.round(house.c.z)}): ${occ.map((k) => (k.name || k.id) + (k.sleep ? ' (спит)' : '')).join(', ') || 'никого'}`);
+            if (!occ.length) return { line: 'В доме никого нет, Ваше Величество.', why: 'дом пуст' };
+            this._houseScope = true;
+            return this._judge(cmd, lead, occ.slice(0, 4));
+        }
         const skip = new Set(doers.map((k) => k.id));
         const c = [];
         for (const k of life.byId.values()) {
@@ -549,7 +595,7 @@ export class CommandTalk {
             const t = this._target(cmd, lead, doers);
             if (t.line) { reply(t.line); return done('цель: ' + t.why); }
             if (t.creature) { reply('Это не человек, Ваше Величество — арестовать нельзя.'); return done('не человек'); }
-            const m = mayArrest(t.vs || [t.v], { all: !!cmd.args.all, ownerId: null });
+            const m = mayArrest(t.vs || [t.v], { all: !!cmd.args.all && !this._houseScope, ownerId: null });
             if (!m.ok) { reply(m.line); return done('арест: ' + m.line); }
             const attackers = doers.filter((k) => !m.targets.includes(k));
             if (!attackers.length) { reply('Некому — все заняты.'); return done('некому'); }

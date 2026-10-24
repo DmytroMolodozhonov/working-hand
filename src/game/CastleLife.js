@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { ActionLog } from './ActionLog.js';
 import { stateOf as gestureState, sayCtx, mark as markEmo } from './GestureLife.js';
 import { isStallSite } from './CreativeMarket.js';
 import { isGuestSite } from './CreativeGuest.js';
@@ -51,7 +52,7 @@ import { Chest } from '../entities/Chest.js';
 /** A chest's look by its room: the king's and the Master's own — rich; the port's — a sea chest (Chest.js). */
 const CHEST_LOOK = { king: 'rich', treasury: 'rich', throne: 'rich', vault: 'rich', study: 'rich', port: 'pirate' };
 import { createRng } from '../core/math.js';
-import { CastleTalk, onCounter } from './CastleTalk.js';
+import { CastleTalk, onCounter, journal as gameJournal } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
 import { HamletLife, hamletRoster } from './HamletLife.js';
 import { WizardFight } from './WizardFight.js';
@@ -301,6 +302,7 @@ export class CastleLife {
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
         this.court = new CourtLife(this); // the treasury, the people's troubles, the vizier who reports and leads (Court.js)
+        this.alog = new ActionLog(this, gameJournal); // the full journal of what the people in dealings do and why (ActionLog.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -1463,7 +1465,8 @@ export class CastleLife {
         // talking with a player: stops and looks at them (the king keeps his seat)
         if (v.talking > 0 && v.job !== 'king') {
             const tp = this._playerPos(v.talkTo || g.localId);
-            if (tp) v.yaw = turn(v.yaw, Math.atan2(-(tp.x - v.x), -(tp.z - v.z)), dt * 6);
+            const gp = v.glance || tp; // (shown a place with the hand: he faces it, not me — CommandTalk._begin)
+            if (gp) v.yaw = turn(v.yaw, Math.atan2(-(gp.x - v.x), -(gp.z - v.z)), dt * 6);
             v.mode = 'talk'; v.speed = 0;
             // (a comfortable distance for a talk: too close — a small step back, still facing me)
             const dd = tp ? Math.hypot(tp.x - v.x, tp.z - v.z) : 9;
@@ -2857,7 +2860,7 @@ export class CastleLife {
         if (!quiet) {
             st.killed.add(v.idx);
             this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
-            this._comradeDown(v, by);
+            if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z] }); // (mana: a wizard beaten in a duel)
@@ -3540,6 +3543,7 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
             this.rel?.update(dt);
+            this.alog?.update(dt);
             this.social?.update(dt);
             this.court?.update(dt);
             for (const cs of this.castles.values()) if (cs.awake && (cs.watchT = (cs.watchT || 0) - dt) <= 0) { cs.watchT = 0.7; this.watch.assign(cs, dt); }
@@ -3611,7 +3615,7 @@ export class CastleLife {
                         if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); } else v.model.lookAt(_v.set(v.glance.x, v.y + 3.4, v.glance.z));
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
-                    { const gs = d < 38 ? gestureState(this, v) : null; v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);

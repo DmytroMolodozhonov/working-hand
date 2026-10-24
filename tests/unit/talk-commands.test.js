@@ -467,3 +467,14 @@ test('the king\'s friends: only the vizier takes the word, only from the king, a
     life.cmds.run(adv, { id: 'rank_revoke', pid: 'p2', pname: 'Олег' }, 'me');
     assert.equal(life.ranks.at(-1).level, 0);
 });
+
+test('the author\'s phrases from the game log (the hill, the house, «пошли», the secret task)', () => {
+    const cases = {
+        'тебе нужно отправиться за тот холм который я показываю тебе': 'go_there', 'иди вон туда бедишь иди': 'go_there',
+        'у меня тайное задание иди за ту гору': 'go_there', 'иди собери вещи': 'pick_up', 'сходи принеси меч': 'bring',
+        'да пошли за мной': 'follow', 'ну идешь': 'follow_short', 'идем': 'follow_short', 'эй идем за мной': 'follow',
+        'войти в этот дом': 'enter_house', 'в этот дом войди в этот дом': 'enter_house', 'войди в тот дом дом который я показываю войди': 'enter_house',
+        'выломай эту дверь': 'enter_house', 'арестуй там всех': 'arrest', 'убейте того кто в доме есь кто в доме убейте': 'fight_him',
+    };
+    for (const [t, want] of Object.entries(cases)) assert.equal(id(t), want, t);
+});
