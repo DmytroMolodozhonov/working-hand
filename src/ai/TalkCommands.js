@@ -463,7 +463,10 @@ export function itemFilter(t) {
     for (const [re, k, name] of ITEM_KINDS) if (re.test(t)) { kinds = new Set(k); label = name; break; }
     const area = /(сзади|позади|за спиной|за тобой|за вами)/.test(t) ? 'behind' : /(около меня|рядом со мной|возле меня|у меня)/.test(t) ? 'me' : 'here';
     const toChest = /(сундук|в сундуки|по сундукам)/.test(t);
-    return { kinds: kinds ? [...kinds] : null, label, area, toChest };
+    // «вот эти убери», «принеси вот это»: the things I show with the hand (plural: «эти», «те» — the heap round the pointed one)
+    const pointed = /(^| )(вот эти|вот этот|вот эту|вот это|вот те|вон те|вон тот|вон ту|вон то|эти|этот|эту|этих|этим|это)( |$)/.test(t) && !/все это|всё это/.test(t);
+    const plural = /(^| )(вот эти|вот те|вон те|эти|этих|те|все)( |$)/.test(t);
+    return { kinds: kinds ? [...kinds] : null, label, area, toChest, pointed, plural };
 }
 
 /** Commands that are short words said alone: in a longer phrase they are ordinary talk («погоди, а где король?»). */
@@ -479,6 +482,7 @@ export function scopeOf(t) {
     if (SCOPE_RIGHT.test(t) && !/(с|против) \S*(правым|правого)/.test(t)) return { kind: 'right' };
     if (SCOPE_NEAR.test(t) && !/(с|против) \S*ближайш/.test(t)) return { kind: 'nearest' };
     if (SCOPE_REST.test(t)) return { kind: 'rest' };
+    if (/(^| )(один из вас|одного из вас|кто нибудь|кто то|любой из вас|хоть кто|хоть один|кто нибудь из вас)( |$)/.test(t)) return { kind: 'any' };
     if (SCOPE_ALL.test(t)) return { kind: 'all' };
     return { kind: 'none' };
 }
@@ -654,7 +658,7 @@ export function pickGroup(scope, list, me, max = 10) {
         case 'n': return byD.slice(0, Math.min(max, scope.n));
         case 'left': return [[...byD].sort((a, b) => side(a) - side(b))[0]];
         case 'right': return [[...byD].sort((a, b) => side(b) - side(a))[0]];
-        case 'nearest': return [byD[0]];
+        case 'nearest': case 'any': return [byD[0]];
         case 'rest': return byD.slice(1, max);
         default: return [list[0]];
     }

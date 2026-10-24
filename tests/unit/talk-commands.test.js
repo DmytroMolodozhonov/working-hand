@@ -402,3 +402,35 @@ test('the dead do not sit: a killed seated body is back on its feet for the mode
     life.cmds.clear(v);
     assert.equal(v.seated, false);
 });
+
+// ---------------------------------------------------------------- pointing at things, and who is addressed
+import { CommandTalk } from '../../src/game/CommandTalk.js';
+
+test('«вот эти убери»: the words say it is pointed; «один из вас» is a scope', () => {
+    assert.equal(itemFilter('убери вот эти доспехи').pointed, true);
+    assert.equal(itemFilter('убери вот эти доспехи').plural, true);
+    assert.equal(itemFilter('принеси вот это').plural, false);
+    assert.equal(itemFilter('убери доспехи сзади').pointed, false);
+    assert.equal(itemFilter('собери все это').pointed, false, '«все это» is everything, not a pointed thing');
+    assert.equal(scopeOf('один из вас подойди').kind, 'any');
+    assert.equal(scopeOf('кто нибудь принесите воды').kind, 'any');
+    assert.equal(pickGroup({ kind: 'any' }, [{ id: 'a', x: 0, z: 0, d: 5 }, { id: 'b', x: 0, z: 0, d: 2 }], { x: 0, z: 0, yaw: 0 }).length, 1);
+});
+
+test('pointing at things: the one on the ray, and the heap round it — not the others lying farther off', () => {
+    const loose = new Map();
+    const add = (uid, kind, x, z) => loose.set(uid, { item: { uid, kind }, model: { position: { x, y: 0, z } } });
+    add(1, 'armor', 0, -10); add(2, 'armor', 1.2, -10.5); add(3, 'armor', 0.4, -9.6); // a heap straight ahead
+    add(4, 'armor', 9, -10);                                                              // another heap off to the right
+    add(5, 'weapon', 0.3, -10.2);                                                         // a sword in the heap
+    const ct = new CommandTalk({ game: { items: { loose } } });
+    ct.pointRay = () => ({ o: { x: 0, y: 1.5, z: 0 }, d: { x: 0, y: -0.14, z: -0.99 }, hand: true });
+    const heap = ct._pointedThings(new Set(['armor']), true).map((e) => e.uid).sort();
+    assert.deepEqual(heap, [1, 2, 3], 'the armour of the heap I point at, no sword (asked for armour), nothing from the other heap');
+    const one = ct._pointedThings(new Set(['armor']), false).map((e) => e.uid);
+    assert.equal(one.length, 1);
+    ct.pointRay = () => ({ o: { x: 0, y: 1.5, z: 0 }, d: { x: 0, y: 0, z: 1 }, hand: true }); // pointing the other way
+    assert.deepEqual(ct._pointedThings(null, true), [], 'nothing there');
+    ct.pointRay = () => ({ o: { x: 0, y: 1.5, z: 0 }, d: { x: 9 / 13.55, y: -1.5 / 13.55, z: -10 / 13.55 }, hand: true });
+    assert.deepEqual(ct._pointedThings(new Set(['armor']), true).map((e) => e.uid), [4], 'the right-hand heap');
+});

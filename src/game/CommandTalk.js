@@ -244,6 +244,16 @@ export class CommandTalk {
         }
         if (!list.length) return [v];
         const yaw = g.character.group.rotation.y;
+        // «вы двое», «один из вас»: the ones I look at first — the attention's score, then the angle to my gaze, then the distance
+        if (scope.kind === 'n' || scope.kind === 'any') {
+            const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+            for (const e of list) {
+                const cos = e.d > 0.1 ? ((e.x - me.x) * fx + (e.z - me.z) * fz) / e.d : 1;
+                e.rank = -(this.talk.attention?.score?.(e.id) || 0) * 10 + Math.acos(Math.max(-1, Math.min(1, cos))) * 3 + e.d * 0.05;
+            }
+            list.sort((a, b) => a.rank - b.rank);
+            for (const e of list) e.d = list.indexOf(e); // (pickGroup takes the nearest first: the rank is now the "distance")
+        }
         const picked = pickGroup(scope, list, { x: me.x, z: me.z, yaw }, MAX_GROUP).filter(Boolean).map((e) => e.k);
         // (the one addressed leads the answer when he is among them)
         const i = picked.indexOf(v);
@@ -322,6 +332,31 @@ export class CommandTalk {
         return { v: ok[0], vs: ok };
     }
 
+    /** The loose things the pointing ray touches (a cone narrowing with the distance): the nearest to the ray, and its heap when `heap`. */
+    _pointedThings(kinds, heap) {
+        const ray = this.pointRay(), items = this.game.items;
+        if (!ray || !items?.loose) return [];
+        const all = [];
+        for (const L of items.loose.values()) {
+            const it = L.item;
+            if (!it || L.hover || L.away || (it.shop && !it.shop.paid) || it.godGift) continue;
+            const p = L.model.position;
+            all.push({ uid: it.uid, kind: it.kind, x: p.x, y: p.y, z: p.z });
+        }
+        let best = null, ba = Infinity;
+        for (const e of all) {
+            if (kinds && !kinds.has(e.kind)) continue;
+            const dx = e.x - ray.o.x, dy = e.y - ray.o.y, dz = e.z - ray.o.z, len = Math.hypot(dx, dy, dz);
+            if (len < 0.5 || len > 40) continue;
+            const ang = Math.acos(Math.max(-1, Math.min(1, (ray.d.x * dx + ray.d.y * dy + ray.d.z * dz) / len)));
+            const lim = Math.max(0.06, Math.min(0.3, Math.atan2(1.0, len)));
+            if (ang < lim && ang < ba) { ba = ang; best = e; }
+        }
+        if (!best) return [];
+        if (!heap) return [best];
+        return all.filter((e) => (!kinds || kinds.has(e.kind)) && Math.hypot(e.x - best.x, e.z - best.z) < 3).slice(0, 12);
+    }
+
     /**
      * «Убери доспехи сзади по сундукам», «принеси мне меч», «собери вещи»: the things lying in the place named, taken by the
      * knights one by one (VillagerCommands._fetch). → true; null when `give_item` found nothing to bring (he then says what he keeps).
@@ -344,6 +379,16 @@ export class CommandTalk {
             found.push({ uid: it.uid, d });
         }
         found.sort((a, b) => a.d - b.d);
+        // «вот эти убери»: only the things my hand (or my gaze) is on — the one nearest the ray, and, for «эти», the heap round it
+        if (f.pointed) {
+            const pointed = this._pointedThings(kinds, !!f.plural);
+            if (pointed.length) { found.length = 0; for (const e of pointed) found.push({ uid: e.uid, d: Math.hypot(e.x - lead.x, e.z - lead.z) }); found.sort((a, b) => a.d - b.d); }
+            else if (!kinds || !found.length) {
+                reply(pick(['На какие вещи вы показываете? Я там ничего не вижу.', 'Покажите рукой точнее — не пойму, какие вещи.']));
+                this._log(text, cmd, lead, 'показанных вещей не нашёл');
+                return true;
+            }
+        }
         if (!found.length) {
             if (cmd.id === 'give_item') return null;
             reply(pick(['Не вижу тут ничего такого.', `Не вижу, где лежат ${f.label || 'вещи'}.`, 'Нечего убирать — там пусто.']));
