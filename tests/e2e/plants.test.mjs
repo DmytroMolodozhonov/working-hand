@@ -33,18 +33,22 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         out.sizes = { tele: want.telewilpin?.plants.length, head: want.carnivore?.plants.length };
         if (!want.telewilpin || !want.carnivore) return out;
         const { makePiece, makeRobe } = await import('/src/game/ArmorTypes.js');
+        const { crowdOf } = await import('/src/game/CrowdSources.js');
+        // (headless frames are slow: the plants are stepped by hand, 0.1 s a step, with the crowd of this moment)
+        let fr = 1e6;
+        const run = async (n, centre = null, each = null) => { for (let i = 0; i < n; i++) { crowdOf(g).update(++fr, fr * 0.1); g.plants._rebuildNear(centre || g.character.group.position); g.plants.update(0.1); each?.(); await sleep(4); } };
         const stand = async (p, dx, dz) => { g.character.group.position.set(p.x + dx, p.y + 2.1, p.z + dz); g.character.verticalVelocity = 0; await sleep(120); };
         const hp = () => (g.combat.enabled ? g.combat.hp : g.playerHP);
         // ---- thorns
         const f = want.telewilpin.plants.find((p) => !p.dead);
         g.armor.worn.helmet = g.armor.worn.chest = g.armor.worn.legs = g.armor.worn.robe = null; g.armor._changed?.();
         const h0 = hp();
-        for (let i = 0; i < 12; i++) { await stand(f, 0.9, 0); await sleep(150); }
+        for (let i = 0; i < 25; i++) { await stand(f, 0.9, 0); await run(4); }
         out.pricked = h0 - hp();
         const full = [makePiece('helmet'), makePiece('chest', { magic: true }), makePiece('legs')];
         for (const it of full) g.armor.wear(it, { quiet: true });
         const h1 = hp(); f.pT = 0;
-        for (let i = 0; i < 12; i++) { await stand(f, 0.9, 0); await sleep(150); }
+        for (let i = 0; i < 25; i++) { await stand(f, 0.9, 0); await run(4); }
         out.steelLoss = h1 - hp();
         for (const k of ['helmet', 'chest', 'legs']) g.armor.worn[k] = null;
         // ---- a flower broken: a leaf
@@ -62,7 +66,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         const states = new Set();
         if (cow) {
             g.plants._rebuildNear(g.character.group.position); head.cool = 0;
-            for (let i = 0; i < 80 && g.animals.byId.has(cow.id); i++) { g.plants._rebuildNear(head); await sleep(100); states.add(head.st); }
+            for (let i = 0; i < 150 && g.animals.byId.has(cow.id); i++) { await run(1, head, () => states.add(head.st)); }
             out.cowEaten = !g.animals.byId.has(cow.id);
         }
         out.states = [...states];
@@ -71,14 +75,14 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         const h2 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);
         let was = new Set(), eatenSeen = false;
-        for (let i = 0; i < 260; i++) { await sleep(100); g.plants._rebuildNear(g.character.group.position); was.add(head.st); if (g.combat.eaten) eatenSeen = true; if (eatenSeen && !g.combat.eaten && head.st === 0) break; if (g.combat.dead) break; }
+        for (let i = 0; i < 260; i++) { await run(1); was.add(head.st); if (g.combat.eaten) eatenSeen = true; if (eatenSeen && !g.combat.eaten && head.st === 0) break; if (g.combat.dead) break; }
         out.meStates = [...was]; out.eatenSeen = eatenSeen; out.meLoss = h2 - hp(); out.freeAfter = !g.combat.eaten;
         // ---- a magic robe: spat out at once, no harm
         head.cool = 0; head.st = 0; head.prey = null; g.armor.worn.robe = makeRobe(true);
         const h3 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);
         let spat = false, held = false;
-        for (let i = 0; i < 60; i++) { await sleep(100); g.plants._rebuildNear(g.character.group.position); if (head.st === 6) spat = true; if (g.combat.eaten) held = true; }
+        for (let i = 0; i < 60; i++) { await run(1); if (head.st === 6) spat = true; if (g.combat.eaten) held = true; }
         out.robeSpat = spat; out.robeHeld = held; out.robeLoss = h3 - hp();
         g.armor.worn.robe = null;
         return out;
