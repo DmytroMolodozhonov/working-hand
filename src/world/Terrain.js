@@ -248,7 +248,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 9;
+export const WORLD_GEN = 10;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -258,8 +258,11 @@ export const WORLD_GEN = 9;
 export const FURNISH_FROM_GEN = 8;
 /** The first generation with plant creatures in the meadows (PlantLife.js: telewilpins, carnivorous heads). Older worlds have none. */
 export const PLANTS_FROM_GEN = 9;
+/** The first generation whose wizards' libraries show the drawing of the teleportation pentagram on a stand (PentagramStand.js; the last stand of each library). Older worlds keep their lore books on all of them. */
+export const PENT_STAND_FROM_GEN = 10;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
 // 7: the lone wizards' houses are roomier (Hamlets.js buildMageHut → Castles.buildWizHut): a wizard can walk about in them.

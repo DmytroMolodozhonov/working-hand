@@ -20,6 +20,9 @@ import { newUid, makeItemModel, ITEM_SCALE } from './ItemTypes.js';
 import { STAND, boardBox, postCell } from '../world/LoreStand.js';
 import { mergeParts } from '../core/MergeGeometry.js';
 import { setBookAngle, BOOK } from './BookModel.js';
+import { makeStandPicture } from './PentagramStand.js';
+import { PENT_STAND_FROM_GEN } from '../world/Terrain.js';
+import { figureOf } from './PentagramRules.js';
 
 const ON_SPOT = 1.2; // m: a library scroll this near its spot still lies where the library put it
 const CHECK_T = 0.5; // s: how often a stand looks at its post (and a place at its land)
@@ -93,6 +96,13 @@ export class LoreLibrary {
     wake(def) {
         if (this.sites.has(def.id)) return;
         const list = loreForSite(def);
+        // (worlds of generation 10+: the last stand of the library shows the drawing of the teleportation pentagram instead of a book — PentagramStand.js)
+        const spots = def?.lore || [];
+        if ((this.game.gen ?? 1) >= PENT_STAND_FROM_GEN && spots.length && figureOf('teleport')) {
+            const at = spots[spots.length - 1];
+            if (list.length >= spots.length) list[spots.length - 1] = { pent: 'teleport', at };
+            else list.push({ pent: 'teleport', at: spots[list.length] || at });
+        }
         if (!list.length) return;
         this.sites.set(def.id, { def, list, stands: list.map(() => null), done: list.map(() => false) });
         this._make(this.sites.get(def.id));
@@ -121,7 +131,7 @@ export class LoreLibrary {
 
     _make(S) {
         const g = this.game;
-        S.list.forEach(({ id, at }, i) => {
+        S.list.forEach(({ id, at, pent }, i) => {
             if (S.done[i]) return;
             const key = S.def.id + ':' + i;
             if (this.broken.has(key)) { S.done[i] = true; return; }
@@ -132,6 +142,14 @@ export class LoreLibrary {
             const group = makeStandModel();
             group.position.set(at.x, at.y, at.z);
             group.rotation.y = at.face || 0;
+            if (pent) { // (the drawing of a pentagram on the board: nothing to take, nothing to turn)
+                const pic = makeStandPicture(pent);
+                group.add(pic);
+                g.scene.add(group);
+                group.updateMatrixWorld(true);
+                S.stands[i] = { key, id: pent, pent, spot: at, group, book: pic, item: null, s: null, boxId: g.collision?.addBox ? g.collision.addBox({ ...boardBox({ ...at, face: at.face || 0 }), kind: 'table' }) : null };
+                return;
+            }
             const item = loreItem(id, 'lore:' + key);
             const book = makeItemModel(item);
             const sc = ITEM_SCALE.book || 1.6;
@@ -149,11 +167,11 @@ export class LoreLibrary {
 
     _remove(st) {
         const g = this.game;
-        this.game.books?.reading?.standClose(st.s);
+        if (!st.pent) this.game.books?.reading?.standClose(st.s);
         st.s = null;
         if (st.boxId != null) g.collision?.removeBox(st.boxId);
         g.scene?.remove(st.group);
-        disposeBook(st.book);
+        if (!st.pent) disposeBook(st.book); // (the picture's texture, material and shape are shared by all the stands)
     }
 
     /** The post is gone: the stand falls with it and the book drops to the floor as an ordinary loose book (the host lays it). */
@@ -163,6 +181,7 @@ export class LoreLibrary {
         this._remove(st);
         S.stands[i] = null;
         this.broken.add(st.key);
+        if (st.pent) return; // (a picture: nothing falls)
         const g = this.game;
         if (g.authority && g.items) g.items.spawnLoose(loreItem(st.id, 'lore' + newUid()), at.setY(at.y + 0.1), { quat: st.group.getWorldQuaternion(new THREE.Quaternion()) });
     }
@@ -185,6 +204,7 @@ export class LoreLibrary {
         for (const S of this.sites.values()) {
             for (const st of S.stands) {
                 if (!st) continue;
+                if (st.pent) { this._look(st, eye); continue; } // (a painted board: only looked at)
                 const d = st.book.getWorldPosition(this._p || (this._p = new THREE.Vector3())).distanceTo(eye);
                 if (d < nd) { nd = d; nearest = st; }
                 if (d < SHOW_R) {
@@ -198,8 +218,19 @@ export class LoreLibrary {
         for (const S of this.sites.values()) for (const st of S.stands) if (st?.s) reading.standStep(st.s, dt, st === nearest);
     }
 
+    /** Walking up to the painted board: once a word on what it is and how the drawing is learnt. */
+    _look(st, eye) {
+        if (st.told) return;
+        const p = st.group.getWorldPosition(this._p || (this._p = new THREE.Vector3()));
+        if (Math.hypot(p.x - eye.x, p.z - eye.z) > 3.4 || Math.abs(p.y - eye.y) > 5) return;
+        st.told = true;
+        const g = this.game;
+        g.hud?.setVoice?.('🌀 На стенде нарисована пентаграмма телепортации. Смотреть на неё может каждый, но выучить рисунок можно, только сжигая свиток с ним', true);
+    }
+
     sampleModels() {
         const m = makeStandModel();
+        if (figureOf('teleport')) { const pic = makeStandPicture('teleport'); pic.position.x = 3; m.add(pic); }
         const b = makeItemModel(loreItem('coprus', 'sample'));
         bookPoseOnStand(b.position, b.quaternion);
         b.scale.setScalar(ITEM_SCALE.book || 1.6);
