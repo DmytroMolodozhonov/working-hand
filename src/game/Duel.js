@@ -36,6 +36,7 @@
  * and referees duels ('clash' / 'clashend').
  */
 
+import { isSpectator } from './ArenaDome.js';
 import * as THREE from 'three';
 import { SegmentPool } from '../fx/Particles.js';
 import { PVP } from './Combat.js';
@@ -539,7 +540,7 @@ export class Duel {
         for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
-        for (const v of g.castleLife?.targets(DUEL.RANGE_DIE + 5) || []) if (v.id !== skip) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
+        for (const v of g.castleLife?.targets(DUEL.RANGE_DIE + 5) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
         for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._tipped(v, this._villagerBody(v, put('c', v.id))); // (never Captain Black Moustache by the charge he beat back himself)
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
@@ -948,6 +949,9 @@ export class Duel {
             this._end(b, 'blocked');
             return false;
         }
+        // the magic dome over a duel arena: a charge crossing its skin bursts on it — the stands behind are never touched (ArenaDome.js)
+        const dome = g.arenaDuels?.domeBlock?.(from, b.front);
+        if (dome) { b.front.set(dome.x, dome.y, dome.z); this._end(b, 'blocked'); return false; }
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
         if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
         if (isJolt(b.spell)) this._joltThings(b, from);

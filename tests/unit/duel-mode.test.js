@@ -66,3 +66,23 @@ test('после победы окно «Хотите повторить дуэ�
     D._modeWin();
     assert.ok(shown && D.mode.hold === true && D.mode.winT === 0);
 });
+
+import { domeOf, insideDome, domeCross, domeGeometry, isSpectator } from '../../src/game/ArenaDome.js';
+
+test('купол над ареной: внутри пола — внутри, трибуны снаружи; заряд, идущий к зрителям, упирается в купол', () => {
+    const def = { axis: { a: { x: 0, z: -15, y: 10 }, b: { x: 0, z: 15, y: 10 }, r: 23 }, floorY: 10 };
+    const D = domeOf(def);
+    assert.ok(insideDome(D, 0, 12, 0) && insideDome(D, 20, 12, 5));
+    assert.ok(!insideDome(D, 28, 12, 0), 'ряд трибуны (27 м от оси) — снаружи'); // (the first row lies beyond the floor's edge + margin)
+    assert.ok(!insideDome(D, 0, 40, 0), 'над куполом снаружи');
+    // Авада с середины пола вдоль пола к зрителю на трибуне: перехвачена на коже купола (~23,4 м от оси), не у зрителя
+    const c = domeCross(D, { x: 0, y: 13, z: 0 }, { x: 40, y: 13, z: 0 });
+    assert.ok(c && Math.abs(c.x - 23.41) < 0.1, `перехват на ${c?.x}`);
+    assert.equal(domeCross(D, { x: -5, y: 12, z: 0 }, { x: 5, y: 12, z: 3 }), null); // (two duellists' charges fly inside: untouched)
+    assert.equal(domeOf({ practice: true, axis: def.axis }), null); // (a training field has none)
+    const g = domeGeometry(D);
+    assert.ok(g.pos.length > 300 && g.idx.length > 600);
+    assert.equal(isSpectator({ arena: { kind: 'fan' } }), true);
+    assert.equal(isSpectator({ arena: { kind: 'duel' } }), false);
+    assert.equal(isSpectator({}), false);
+});

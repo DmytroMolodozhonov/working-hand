@@ -50,6 +50,8 @@ import { ArenaTagFx } from '../fx/ArenaTagFx.js';
 import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
 import { foeRanks } from './SpawnSpots.js';
+import { domeOf, domeCross } from './ArenaDome.js';
+import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
 import { DuelEndUi, AGAIN_AFTER } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
@@ -98,6 +100,7 @@ export class ArenaDuels {
         this._markT = 0;
         this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
         this._tagT = 0;
+        this.domeFx = new ArenaDomeFx(game); // the magic dome over the floor: unseen till someone comes close or a charge bursts on it
         this.endUi = new DuelEndUi(); // «Вы победили!» and «Хотите повторить дуэль?» (the duel mode)
         this.mode = null; // «Перед дуэлью» (Creative start): {arenaId, foe, id} — a fight after a fight on this arena, see startDuelMode
     }
@@ -120,6 +123,7 @@ export class ArenaDuels {
         }
         this._countdown(dt);
         this._lit(dt);
+        this._dome(dt);
         this._tags(dt);
     }
 
@@ -1286,7 +1290,29 @@ export class ArenaDuels {
 
     _lit(dt) { this.marks.update(dt, this._litState()); }
 
-    prewarm() { this.marks.prewarm(); }
+    /** The nearest arena with a dome within 90 m of the hero (for the look). */
+    _dome(dt) {
+        const p = this.game.character?.group?.position;
+        let best = null, bd = 90;
+        if (p) for (const A of this.list.values()) { if (A.def.practice) continue; const d = Math.hypot(p.x - A.def.x, p.z - A.def.z); if (d < bd) { bd = d; best = A.def; } }
+        this.domeFx.update(dt, best);
+    }
 
-    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.tagFx.dispose(); }
+    /**
+     * (Duel._step, every computer) A charge from→to crosses the skin of an arena's dome: where (it bursts there), or null. The stands behind it
+     * are never touched; the flash is seen at once.
+     */
+    domeBlock(from, to) {
+        for (const A of this.list.values()) {
+            if (A.def.practice) continue;
+            if (Math.hypot(from.x - A.def.x, from.z - A.def.z) > A.def.reach + 60 && Math.hypot(to.x - A.def.x, to.z - A.def.z) > A.def.reach + 60) continue;
+            const D = A.dome || (A.dome = domeOf(A.def)), c = domeCross(D, from, to);
+            if (c) { this.domeFx.hit(c.x, c.y, c.z); this.game.sound?.playArena?.({ x: c.x, y: c.y, z: c.z }, 'beep', 0.5, 0.6); return c; }
+        }
+        return null;
+    }
+
+    prewarm() { this.marks.prewarm(); this.domeFx.prewarm(); }
+
+    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.tagFx.dispose(); this.domeFx.dispose(); }
 }
