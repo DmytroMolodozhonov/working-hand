@@ -6,6 +6,7 @@
  */
 
 import { DEFAULT_HERO, HERO, normalizeHero } from '../game/HeroSetup.js';
+import { rankDuelPower, rankDuelRange, WIZ_RANK_RU } from '../game/WizardAI.js';
 import { SPAWN_SPOTS } from '../game/SpawnSpots.js';
 
 const T = {
@@ -15,8 +16,8 @@ const T = {
     robe: 'Магическая мантия защищает от холода и смягчает часть сильных заклинаний. Её можно носить вместе с бронёй. Если оставить галочку, герой начнёт игру в мантии.',
     spellsAll: 'Все заклинания игры известны сразу — свитки учить не нужно.',
     spellsMage: 'Известны почти все заклинания, кроме божественных (свитки храма богов, «Flying Maxima» и другие) и «Inspirius». Их можно выучить позже, сжигая свитки.',
-    duelFull: 'В столкновении лучей герой выступает на полную силу.',
-    duelCustom: 'Сделайте дуэли честнее: выставьте, на сколько процентов сильнее или слабее вас будут считаться ваши заклинания в столкновении лучей. 100 % — полная сила.',
+    duelFull: 'В столкновении лучей герой выступает на полную силу: он не слабее соперника.',
+    duelCustom: `Сделайте дуэли честнее: впишите число — столько дуэльной силы будет у героя в столкновении лучей. Это те же числа, что показаны над соперником на арене. От ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX} (сила самого сильного мага).`,
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
     spawn: 'Где герой появится при входе в мир и после возрождения. Выберите босса, которого хотите проверить, — вы окажетесь рядом с ним, а не на начальной площадке. Если рядом с кроватью — кровать не учитывается: возрождение всегда здесь.',
@@ -24,6 +25,19 @@ const T = {
     maxHp: 'Сколько здоровья у героя при обычном здоровье. По умолчанию 20 — как в Свободном мире.',
     steady: 'Устойчивость — шанс устоять на ногах, когда вас пытаются сбить заклинанием. 100 — всегда устоите, 1 — собьёт почти каждое.',
 };
+
+const f1 = (n) => (Math.round(n * 10) / 10).toLocaleString('ru-RU');
+/** Подсказки «сколько силы у волшебника такого вида» — числа считаются из тех же данных, что и бой (WizardAI). */
+export const DUEL_RANK_ROWS = [
+    ['novice', 'Младший (начинающий) волшебник'], ['adept', 'Средний (продвинутый) волшебник'], ['teacher', 'Преподаватель'],
+    ['elder', 'Сильный волшебник поселения'], ['master', 'Главный мастер башни — Джовалилиус Правдиус Нотан'],
+].map(([rank, label]) => {
+    const [lo, hi] = rankDuelRange(rank);
+    const avg = rankDuelPower(rank);
+    const who = rank === 'master' ? 'Глава башни Джовалилиус Правдиус Нотан' : `Средний ${WIZ_RANK_RU[rank][0]}`;
+    return { rank, label, avg: f1(avg), lo: f1(lo), hi: f1(hi), tip: `${who} имеет около ${f1(avg)} дуэльной силы (у разных — от ${f1(lo)} до ${f1(hi)}).` };
+});
+const rankRowsHtml = () => `<ul class="hero-ranks">${DUEL_RANK_ROWS.map((r) => `<li title="${r.tip}">${r.label}: <b>≈ ${r.avg}</b> <span class="mp-hint">(${r.lo}–${r.hi}). ${r.tip}</span></li>`).join('')}</ul>`;
 
 const html = (p) => `
 <div class="hero-settings" data-hero-panel>
@@ -46,7 +60,8 @@ const html = (p) => `
     <span class="hero-cap">⚔️ Дуэльная сила</span>
     <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full" checked> Полная</label>
     <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom"> Настроить</label>
-    <span class="hero-slide" id="${p}-duel-wrap" hidden title="${T.duelCustom}"><input type="range" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" value="100"> <b id="${p}-duel-val">100</b>%</span>
+    <span class="hero-slide" id="${p}-duel-wrap" hidden title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="0.1" value="${HERO.DUEL_MAX}"> <span class="mp-hint">от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
+    ${rankRowsHtml()}
   </div>
   <div class="hero-group" role="radiogroup" aria-label="Здоровье">
     <span class="hero-cap">❤️ Здоровье</span>
@@ -71,7 +86,6 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('cells-row').hidden = $('inf').checked;
         $('duel-wrap').hidden = radio('duel') !== 'custom';
         $('hp-wrap').hidden = radio('health') !== 'normal';
-        $('duel-val').textContent = $('duel-pct').value;
         $('dark-val').textContent = $('dark').value;
         $('steady-val').textContent = $('steady').value;
     };
@@ -81,7 +95,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         infiniteMana: $('inf').checked, cells: $('cells').value === '' ? HERO.CELLS_DEFAULT : $('cells').value,
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
-        duel: radio('duel') === 'custom' ? $('duel-pct').value : 100,
+        duelPower: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
         spawn: $('spawn').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
@@ -90,10 +104,10 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
-        root.querySelector(`input[name="${prefix}-duel"][value="${v.duel >= 100 ? 'full' : 'custom'}"]`).checked = true;
+        root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPower == null ? 'full' : 'custom'}"]`).checked = true;
         $('spawn').value = v.spawn;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
-        $('duel-pct').value = v.duel; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
+        $('duel-pct').value = v.duelPower ?? HERO.DUEL_MAX; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
     };
     sync();

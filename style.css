@@ -1826,3 +1826,6 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
     .magic-layout > .sub-tabs { flex-direction: row; flex-wrap: wrap; position: static; }
 }
 .magic-layout[hidden] { display: none; }
+.hero-ranks { list-style: none; margin: 6px 0 0; padding: 0; flex: 1 1 100%; font-size: 12px; opacity: 0.9; }
+.hero-ranks li { padding: 2px 0; }
+@media (hover: hover) { .hero-ranks .mp-hint { display: none; } }

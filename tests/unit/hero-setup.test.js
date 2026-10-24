@@ -1,7 +1,7 @@
 // «Настройки героя» Творческого мира (HeroSetup.js): по умолчанию, мана, броня/мантия, заклинания, дуэль, сохранение, старые миры.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { creativeMortal, DEFAULT_HERO, LEGACY_HERO, HERO, normalizeHero, heroOf, heroForSave, creativeInfiniteMana, creativeFiniteMana, manaRules, knownInCreative, duelFactor } from '../../src/game/HeroSetup.js';
+import { creativeMortal, DEFAULT_HERO, LEGACY_HERO, HERO, normalizeHero, heroOf, heroForSave, creativeInfiniteMana, creativeFiniteMana, manaRules, knownInCreative, duelStrengthOf, duelPercentToPower } from '../../src/game/HeroSetup.js';
 import { knows } from '../../src/game/SpellBook.js';
 import { GOD_SPELLS } from '../../src/game/Mana.js';
 import { isDivine } from '../../src/game/ProtectionGods.js';
@@ -18,15 +18,15 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duel: 100, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start' });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: null, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start' });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
-test('границы: ячейки 30…100000, сила 1…100, тьма 0…100, устойчивость 1…100, мусор → по умолчанию', () => {
-    const h = normalizeHero({ cells: 5, duel: 0, dark: 500, steady: -3, spells: 'x' });
-    assert.equal(h.cells, HERO.CELLS_MIN); assert.equal(h.duel, 1); assert.equal(h.dark, 100); assert.equal(h.steady, 1); assert.equal(h.spells, 'all');
+test('границы: ячейки 30…100000, сила 0,4…4,6, тьма 0…100, устойчивость 1…100, мусор → по умолчанию', () => {
+    const h = normalizeHero({ cells: 5, duelPower: 0, dark: 500, steady: -3, spells: 'x' });
+    assert.equal(h.cells, HERO.CELLS_MIN); assert.equal(h.duelPower, HERO.DUEL_MIN); assert.equal(h.dark, 100); assert.equal(h.steady, 1); assert.equal(h.spells, 'all');
     assert.equal(normalizeHero({ cells: 1e9 }).cells, HERO.CELLS_MAX);
-    assert.equal(normalizeHero({ cells: 'abc', duel: null }).cells, 500);
+    assert.equal(normalizeHero({ cells: 'abc', duelPower: null }).cells, 500);
     assert.equal(normalizeHero(null).armor, true);
 });
 
@@ -41,7 +41,7 @@ test('старый мир без записи: как было — бескон�
 });
 
 test('сохранение и загрузка: запись переживает JSON и сеть', () => {
-    const cfg = { mode: 'creative', hero: normalizeHero({ infiniteMana: false, cells: 1234, armor: false, robe: true, spells: 'mage', duel: 40, dark: 7, breakward: true, steady: 55 }) };
+    const cfg = { mode: 'creative', hero: normalizeHero({ infiniteMana: false, cells: 1234, armor: false, robe: true, spells: 'mage', duelPower: 1.8, dark: 7, breakward: true, steady: 55 }) };
     const back = JSON.parse(JSON.stringify(heroForSave(cfg)));
     assert.deepEqual(heroOf({ mode: 'creative', hero: back }), cfg.hero);
 });
@@ -120,11 +120,17 @@ test('заклинания: «все» — всё; «сильный маг» —
     assert.equal(knows('Bombardo', { mode: 'creative', hero: mage }), true);
 });
 
-test('дуэльная сила: 100 % — полная, иначе множитель', () => {
-    assert.equal(duelFactor(DEFAULT_HERO), 1);
-    assert.equal(duelFactor({ duel: 40 }), 0.4);
-    assert.equal(duelFactor({ duel: 0 }), 0.01);
-    assert.equal(duelFactor({ duel: 500 }), 1);
+test('дуэльная сила — число в единицах боя; старые проценты переводятся', () => {
+    assert.equal(DEFAULT_HERO.duelPower, null);
+    assert.equal(duelStrengthOf(DEFAULT_HERO, 3.2), 3.2);
+    assert.equal(duelStrengthOf({ duelPower: 1.5 }, 3.2), 1.5);
+    assert.equal(normalizeHero({ duelPower: 99 }).duelPower, null); // выше максимума — полная
+    assert.equal(normalizeHero({ duelPower: 0 }).duelPower, HERO.DUEL_MIN);
+    assert.equal(normalizeHero({ duel: 100 }).duelPower, null); // старое сохранение: 100 % = полная
+    assert.equal(normalizeHero({ duel: 40 }).duelPower, duelPercentToPower(40));
+    assert.equal(normalizeHero({ duel: 1 }).duelPower, HERO.DUEL_MIN);
+    assert.doesNotThrow(() => normalizeHero({ duel: 'abc', duelPower: 'x' }));
+    assert.equal('duel' in normalizeHero({ duel: 40 }), false);
 });
 
 test('устойчивость в Творческом берётся из настроек (по умолчанию 100)', () => {

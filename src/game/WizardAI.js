@@ -240,6 +240,14 @@ export function duelPower(mana, hpK = 1, luck = 0) {
     return Math.sqrt(Math.max(0, mana) / DUEL_MANA_UNIT) + 0.35 * Math.max(0, Math.min(1, hpK)) + luck;
 }
 
+/** Typical duel strength of a rank (the same scale as duelPower: full mana, full health, no luck). */
+export const rankDuelPower = (rank) => duelPower((WIZ_RANKS[rank] || WIZ_RANKS.adept).mana, 1, 0);
+/** The weakest possible and the strongest possible wizard's strength (a novice's least mana … the Master's most). */
+export const rankDuelRange = (rank) => {
+    const R = WIZ_RANKS[rank] || WIZ_RANKS.adept;
+    return [duelPower(R.mana * (1 - R.spread), 1, 0), duelPower(R.mana * (1 + R.spread), 1, 0)];
+};
+
 /** A wizard's strength in a beam clash: his mana now, his health (duelPower). */
 export function duelStrength(role, mana, hp, luck = 0, maxHp = null) {
     const W = WIZ[role] || WIZ.teacher;

@@ -61,7 +61,7 @@ import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
-import { manaRules, duelFactor } from './HeroSetup.js';
+import { manaRules, duelStrengthOf } from './HeroSetup.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
 const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
@@ -1498,7 +1498,8 @@ export class Duel {
         if (g.config?.mode === 'creative' && opId != null) {
             const ow = this._npcWizard(opId);
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
-            return duelPower(mana + this._mastery(id), 1, luck) * (id === this.me ? duelFactor(g.hero) : 1); // (the hero's «Дуэльная сила» %, HeroSetup.js: 100 = full)
+            const full = duelPower(mana + this._mastery(id), 1, luck);
+            return id === this.me && g.hero?.duelPower != null ? duelStrengthOf(g.hero, full) + luck : full; // (the hero's «Дуэльная сила» — a number of the same scale, HeroSetup.js; none = full)
         }
         // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
