@@ -159,7 +159,7 @@ async function bareGame(over = {}) {
     const { Gargoyles } = await import('../../src/game/Gargoyles.js');
     const g = {
         config: { mode: 'survival' }, scene: new THREE.Scene(), localId: 'me', authority: true, remotes: new Map(), said: [],
-        combat: { enabled: true, fatigue: 200, dead: false }, character: { group: new THREE.Group() }, zombies: [], animals: { list: [] }, camera: { position: new THREE.Vector3(0, 5, 0) },
+        combat: { enabled: true, fatigue: 200, dead: false, damage() {} }, character: { group: new THREE.Group() }, zombies: [], animals: { list: [] }, camera: { position: new THREE.Vector3(0, 5, 0) },
         hud: { setVoice(t) { g.said.push(t); } }, dark: { level: 0 }, ...over,
     };
     g.gargoyles = new Gargoyles(g);
@@ -436,7 +436,7 @@ test('the breath: fire out of the mouth lights things and bodies on its way', as
 });
 
 test('the spent pentagram: once all have flown out it never works again, the ground stays black, it is saved', async () => {
-    const g = await bareGame({ combat: { enabled: true, fatigue: 600, dead: false } });
+    const g = await bareGame({ combat: { enabled: true, fatigue: 600, dead: false, damage() {} } });
     const G = g.gargoyles;
     const c = new THREE.Vector3(20, 0, 20);
     assert.equal(G.startRitual(c).ok, true);
@@ -490,4 +490,15 @@ test('the clouds do not thin out while a gargoyle of the ritual lives; the last 
 
 test('they go for the people at once: a mass attack, the search and the leash are wide; the packs are big', () => {
     assert.ok(GARGOYLE.SEARCH >= 200 && GARGOYLE.LEASH >= 250 && GARGOYLE.PACK >= 5);
+});
+
+test('the flock really hunts: a target chosen is kept in that very frame (it was dropped at once, nobody attacked), and nobody gives up a far victim that is being approached', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} } });
+    const G = g.gargoyles;
+    g.castleLife = { byId: new Map([1, 2, 3, 4, 5, 6].map((i) => [`v${i}`, { id: `v${i}`, x: 15 + i * 6, y: 0, z: 10 - i * 4, dead: false, hp: 20, maxHp: 20 }])), alarm() {}, witnessCast() {}, hit() {}, damaged() {}, startle() {} };
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 14; t += 0.05) G.update(0.05);
+    const hunting = G.list.filter((o) => o.mode === 'hunt' && o.target);
+    assert.ok(hunting.length >= 5, `hunters: ${hunting.length}`);
+    for (const o of hunting) assert.ok(o.target.v, 'the target carries its victim');
 });

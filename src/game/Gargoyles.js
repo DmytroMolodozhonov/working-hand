@@ -609,7 +609,8 @@ export class Gargoyles {
         if (!o.target && o.rethink <= 0) {
             o.rethink = rnd(0.25, 0.6);
             const v = this._pick(o);
-            if (v) { o.target = { k: v.k, id: v.id, key: v.k + v.id }; o.sub = 'approach'; o.subT = 0; o.mode = 'hunt'; v.claims++; if (Math.random() < 0.25) this._sound(o, 'roar', 0.8); } else if (o.mode === 'hunt') { o.mode = 'roam'; o.goal = null; }
+            if (v) { o.target = { k: v.k, id: v.id, key: v.k + v.id, v }; // (the victim goes with it at once: `_hunt` in this very frame needs it — without it every new target was dropped in the frame it was chosen and nobody ever attacked)
+             o.sub = 'approach'; o.subT = 0; o.mode = 'hunt'; v.claims++; if (Math.random() < 0.25) this._sound(o, 'roar', 0.8); } else if (o.mode === 'hunt') { o.mode = 'roam'; o.goal = null; }
         }
         if (o.mode === 'hunt' && o.target) { this._hunt(o, dt); this._separate(o, dt); return; }
         // roam: patrol the pentagram's land high up (the screaming flock)
@@ -664,7 +665,13 @@ export class Gargoyles {
                 o.sub = 'breath'; o.subT = 0; o.fireCd = rnd(...F.CD); o.breathT = F.T; o.flameT = 0;
                 this._send({ op: 'fb', id: o.id }); this._sound(o, 'roar', 1);
             } else if (dist < GARGOYLE.REACH && o.cd <= 0) { o.sub = 'bite'; o.subT = 0; o.a.bite = 0.001; o.bitten = false; this._sound(o, 'roar', 0.7); }
-            else if (o.subT > 9 && dist > 6) { o.target = null; o.rethink = 0.3; } // (cannot get at it: another)
+            else {
+                // (cannot get at it: another — only when it makes no headway: a victim 200 m off takes more than 9 s to reach, that is no reason to drop it; it once made the whole flock circle for ever)
+                if (o.appFor !== t.key) { o.appFor = t.key; o.appD = 1e9; o.appT = 0; }
+                if (o.subT < o.appT) o.appT = 0;
+                if (dist < o.appD - 1.5) { o.appD = dist; o.appT = o.subT; }
+                else if (o.subT - o.appT > 4 && dist > 6) { o.target = null; o.rethink = 0.3; o.appFor = null; }
+            }
         } else if (o.sub === 'breath') { // fire out of the mouth: it hangs in the air and breathes at the prey
             o.vel.multiplyScalar(Math.max(0, 1 - dt * 5));
             p.addScaledVector(o.vel, dt);
