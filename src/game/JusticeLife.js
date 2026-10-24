@@ -8,6 +8,7 @@
  * The host does all of it (VillagerCommands.run 'justice:…' on the host); the king's guest sends the order.
  */
 
+import { mark as markEmo } from './GestureLife.js';
 import { ARREST_SAY, HANDED, WALK_SAY, protest, lock, unlock, newJail, isJailed, releaseLine, searchResult, RESIDENT_SAY, SEARCH_START, prisonLine } from './Justice.js';
 import { yawTo, turnToward } from './FaceTarget.js';
 import { rollHouseLoot } from './ItemTypes.js';
@@ -85,6 +86,7 @@ export class JusticeLife {
             }
             c.stage = 'cuff'; c.t2 = 1.7;
             life._say(v, pick(ARREST_SAY), 3.5);
+            markEmo(p, 'arrest', 6);
             p.cmd = { id: 'captive', by: c.by, kind: 'captive', knight: v.id, t: 400, said: 0 };
             p.follow = null; p.order = null; p.path = null; p.investigate = null; p.seated = false;
             this._clang(p);

@@ -30,6 +30,7 @@
  *    a pouch of coins lies there — take it by hand. Up to 500 coins in a slot.
  */
 
+import { markIntent } from './GestureLife.js';
 import * as THREE from 'three';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
@@ -919,6 +920,7 @@ export class CastleTalk {
     _apply(v, res) {
         if (!res || v.dead) return;
         { const c = this.life.court?.onGreet(v, res); if (c) res.reply = res.reply ? `${res.reply} ${c}` : c; } // (a man with a trouble tells it at a greeting — CourtLife)
+        markIntent(v, res.intent);
         this.life.rel?.talked(v, res); // (the tone of my words moves his bars: +дружба, −подчинение — Relations.js)
         const g = this.game;
         // («да» to buy at a stall: the merchant says «держи» only when the deal really happens — _tradeYes

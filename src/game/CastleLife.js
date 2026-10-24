@@ -22,6 +22,7 @@
  * guests show them and send their hits.
  */
 
+import { stateOf as gestureState, sayCtx, mark as markEmo } from './GestureLife.js';
 import { isStallSite } from './CreativeMarket.js';
 import { isGuestSite } from './CreativeGuest.js';
 import { confusedMiss } from './StrongSpells.js';
@@ -2572,6 +2573,7 @@ export class CastleLife {
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
         this._achHit(v, by);
         if (by === this.game.localId && !v.arena) this.talk?.feel?.(v, -12); // (he remembers who struck him — Attitude.js)
+        markEmo(v, 'hit', 2.5);
         this.rel?.onHit(v, by, false); // (the three bars: the victim and who saw it — Relations.js)
         if (this._isPlayer(by) && !v.arena) this._news(v, 'hit', by, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def); // (the town remembers who struck its people)
         this.night?.noise(v, 9);
@@ -3484,6 +3486,7 @@ export class CastleLife {
     _say(v, text, seconds = 4, broadcast = true, force = false) {
         if (!text || v.dead || v.stunT > 0 || v.sayT > 0 && !broadcast && !force) return;
         v.sayT = 1.5;
+        sayCtx(v, text, seconds);
         if (!v.bubble) { v.bubble = new SpeechBubble(); this.game.scene.add(v.bubble.sprite); }
         // a cry in a fight, a call for help, an alarm: shouted (seen and heard far)
         const shout = /!$/.test(text) && (!!v.foe || !!v.investigate || v.fleeT > 0 || v.fear?.level >= 2 || v.role === 'knight' || v.role === 'king');
@@ -3599,6 +3602,7 @@ export class CastleLife {
                 // and the moment he comes into view he is posed at once; the far copies were remade for people nobody saw)
                 const unseen = pic && far && !v.foe && !v.order && !v.guardOrder && !_view.intersectsSphere(_viewS.set(_v.set(v.x, v.y + 1.5, v.z), 4));
                 if (unseen && !v.model._far) v.model.setFar(true); // (out of the picture: no pose, but already one shape for when it comes into view)
+                v.model.faceOn?.(d < 38 && !unseen);
                 if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
@@ -3607,7 +3611,7 @@ export class CastleLife {
                         if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); } else v.model.lookAt(_v.set(v.glance.x, v.y + 3.4, v.glance.z));
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
-                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath });
+                    { const gs = d < 38 ? gestureState(this, v) : null; v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);

@@ -5,6 +5,7 @@
  * The host decides (companions, defence, burnout); the one who talks answers in words (CommandTalk).
  */
 
+import { mark as markEmo } from './GestureLife.js';
 import {
     goalOf, goalLine, heroThemes, roadTogether, ROAD_LINES, mayAsk, ASK_LINES, ASKS, reactToMagic, MAGIC_LINES, burnoutChance, BURNOUT_LINES,
     LEAVE_LINES, GOODBYE_LINES, defendDesire, DEFEND_AT, reproach, THEMES,
@@ -124,6 +125,7 @@ export class SocialLife {
                 v.watch = 0;
                 const r = reactToMagic(power, eff, this.character(v), this.mood(v), Math.random(), { wizard: this.wizardish(v) });
                 v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z)); // (he looks that way)
+                markEmo(v, r.kind, 3);
                 v.talking = Math.max(v.talking || 0, 2.5); v.talkTo = this.game.localId;
                 this.life._say(v, pick(MAGIC_LINES[r.kind]), 3);
                 if (r.f) this.rel.bump(v, this.game.localId, { f: r.f });

@@ -20,6 +20,8 @@
 
 import { ARENA_MODES, arenaPose } from './ArenaPoses.js';
 import { COMMAND_MODES, commandPose } from './CommandPoses.js';
+import { EMOTIONS, newFace, easeFace, quantFace, faceKey } from './Emotions.js';
+import { pickGesture, gesturePose, GESTURES } from './Gestures.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { SKIN_TONES } from './Appearance.js';
@@ -368,6 +370,51 @@ function skullBoxes(L, B) {
     B.push(...SKB.skull, ...SKB.jaw);
 }
 
+/** Does this look show a face that moves (not a closed helm, not a skull)? */
+const hasFace = (L) => !L.skeleton && L.hat !== 'helm';
+
+/**
+ * The moving part of the face — the brows, the lids and the mouth — as boxes, for the face `f` (Emotions.quantFace: a few steps of each
+ * number, so the shapes are cached and shared by everybody). The brows are two pieces (the inner end higher or lower = anger, sorrow);
+ * the lid is a skin box over the top of the eye; the mouth is a middle and two corners (up = a smile), opened it shows the dark and the teeth.
+ */
+function faceBoxes(L, f) {
+    const B = [];
+    const s = L.skin, hc = L.hairColor;
+    const browC = shade(hc === GREY_HAIR ? 0x8a8478 : hc, 0.85);
+    const cl = (x, a, c) => Math.max(a, Math.min(c, x));
+    for (const sx of [-1, 1]) {
+        const up = f.brow.y + (sx > 0 ? f.brow.asym : -f.brow.asym) * 0.05;
+        b(B, 0.17, 0.07, 0.04, sx * 0.2, 0.85 + up - f.brow.tilt * 0.07, -0.61, browC);
+        b(B, 0.17, 0.07, 0.04, sx * 0.36, 0.85 + up + f.brow.tilt * 0.05, -0.61, browC);
+        if (f.lid > 0.05) { const h = f.lid * 0.22; b(B, 0.28, h, 0.05, sx * 0.27, 0.77 - h / 2, -0.648, shade(s, 0.97)); }
+    }
+    const zM = L.beard === 'full' || L.beard === 'goatee' ? -0.67 : -0.61;
+    const base = L.mouth === 'grin' ? 0.4 : L.mouth === 'calm' ? 0 : 0.2; // (the way he smiles at rest: his own)
+    const cv = cl(f.mouth.curve + base, -1, 1), w = 0.3 * f.mouth.wide;
+    const lip = L.female ? 0xa04a4a : 0x8a3a3a, y0 = 0.28;
+    b(B, w * 0.6, 0.07, 0.04, 0, y0 - Math.max(0, cv) * 0.01, zM, lip);
+    for (const sx of [-1, 1]) b(B, w * 0.24, 0.07, 0.04, sx * w * 0.4, y0 + cv * 0.06 + sx * f.mouth.asym * 0.03, zM, lip);
+    if (f.mouth.open > 0.1) {
+        const h = f.mouth.open * 0.16;
+        b(B, w * 0.62, h, 0.045, 0, y0 - h / 2 + 0.02, zM - 0.003, 0x4a1414);
+        if (f.mouth.open > 0.35) b(B, w * 0.5, 0.04, 0.05, 0, y0 + 0.03, zM - 0.006, 0xffffff);
+    } else if (cv > 0.5 && L.mouth === 'grin') b(B, w * 0.45, 0.04, 0.05, 0, y0 + 0.04, zM - 0.004, 0xffffff);
+    return B;
+}
+
+/** The face shapes in use are held once more (so a model that goes back to a face made a moment ago finds it); a few hundred at most. */
+const _faceHold = new Map();
+function faceGeo(boxes) {
+    const g = partGeometry(boxes);
+    const k = g.userData.vkey;
+    if (!_faceHold.has(k)) {
+        if (_faceHold.size >= 256) { for (const g2 of _faceHold.values()) giveGeo(g2); _faceHold.clear(); }
+        takeGeo(g); _faceHold.set(k, g);
+    }
+    return g;
+}
+
 function headBoxes(L) {
     const B = [];
     const s = L.skin, hc = L.hairColor, cc = L.castleColor;
@@ -376,19 +423,14 @@ function headBoxes(L) {
     const helm = L.hat === 'helm', open = L.hat === 'openhelm';
     if (!helm) {
         // eyes, brows, nose, mouth
-        const browC = shade(hc === GREY_HAIR ? 0x8a8478 : hc, 0.85);
         for (const sx of [-1, 1]) {
             b(B, 0.26, 0.22, 0.04, sx * 0.27, 0.66, -0.61, 0xffffff);
             b(B, 0.13, 0.2, 0.05, sx * 0.23, 0.65, -0.615, L.eyes === 0x444444 ? 0x222222 : shade(L.eyes, 0.8));
-            b(B, 0.32, 0.07, 0.04, sx * 0.27, 0.85, -0.61, browC);
             if (L.female) { b(B, 0.3, 0.05, 0.05, sx * 0.27, 0.78, -0.615, 0x222222); b(B, 0.18, 0.08, 0.03, sx * 0.4, 0.43, -0.605, 0xf08a8a); }
             if (!open) b(B, 0.08, 0.24, 0.18, sx * 0.63, 0.58, 0.05, shade(s, 0.92)); // ears
         }
         b(B, 0.16, 0.22, 0.1, 0, 0.5, -0.64, shade(s, 0.86)); // nose
-        const zM = L.beard === 'full' || L.beard === 'goatee' ? -0.67 : -0.61;
-        if (L.mouth === 'grin') { b(B, 0.38, 0.13, 0.04, 0, 0.29, zM, 0x5a1f1f); b(B, 0.28, 0.05, 0.05, 0, 0.32, zM - 0.005, 0xffffff); }
-        else if (L.mouth === 'calm') b(B, 0.28, 0.07, 0.04, 0, 0.28, zM, 0x8a3a3a);
-        else { b(B, 0.3, 0.07, 0.04, 0, 0.27, zM, 0x8a3a3a); b(B, 0.07, 0.07, 0.04, -0.18, 0.31, zM, 0x8a3a3a); b(B, 0.07, 0.07, 0.04, 0.18, 0.31, zM, 0x8a3a3a); }
+        // (the brows, the lids and the mouth are the face overlay — faceBoxes: they move with what he feels)
         // beard
         const bc = hc;
         if (L.beard === 'full') {
@@ -1053,6 +1095,20 @@ export class VillagerModel {
         this.head.position.y = 0.75;
         this.torso.add(this.head);
         this._mesh(this.head, headBoxes(look));
+        // the moving face: one more small mesh on the head (its shape changes with the feeling; the cheap shared shapes — faceGeo)
+        this._face = newFace();
+        this._ftgt = newFace();
+        this._faceMesh = null;
+        this._faceKey = '';
+        this._faceAt = 0;
+        if (hasFace(look)) {
+            const fq = quantFace(this._face);
+            this._faceMesh = this._mesh(this.head, faceBoxes(look, fq), false);
+            this._faceMesh.userData.noFar = true; // (drawn on its own near the hero: the one far shape would be made again at each look of the face)
+            this._faceKey = faceKey(fq);
+        }
+        this._gest = null; this._gestT = 0; this._gestWait = 1 + (look.seed & 7) * 0.2; this._gestLast = null; this._gestId = null;
+        this._grng = (((look.seed | 0) * 2654435761) >>> 0) || 1;
         // a wizard's pointed hat: its own two meshes (it folds back under a low ceiling)
         this.hat = null;
         this.hatTilt = 0;
@@ -1386,6 +1442,71 @@ export class VillagerModel {
     /** 0 = the hat stands up, 1 = it meets a ceiling and folds back. */
     setHatTilt(k) { this._hatTarget = k ? 1 : 0; }
 
+    /** The bearing of the feeling and the gestures of the talk (state.emo: an emotion key; state.gctx: the situation; state.gest: a gesture to play now). */
+    _feel(dt, state, mode, T) {
+        const E = EMOTIONS[state.emo] || EMOTIONS.neutral, bd = E.body;
+        T.headX += bd.headX; T.headZ += bd.headZ; T.hx += bd.lean;
+        if (bd.shoulders) { T.aLZ -= bd.shoulders; T.aRZ += bd.shoulders; }
+        if (state.gest !== this._gestId) {
+            this._gestId = state.gest || null;
+            const g = this._gestId && GESTURES[this._gestId];
+            if (g) this._startGest(g);
+        }
+        if (!this._gest) {
+            if (mode !== 'talk') return;
+            this._gestWait -= dt;
+            if (this._gestWait > 0) return;
+            this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0;
+            const rnd = () => { this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0; return this._grng / 4294967296; };
+            const g = pickGesture({ ctx: state.gctx || 'answer', emo: state.emo || 'neutral', role: this.look.role, rng: rnd, last: this._gestLast, lively: 0.7 + (this.look.seed & 15) / 20 });
+            if (!g) { this._gestWait = 0.8 + rnd() * 1.4; return; }
+            this._startGest(g);
+        }
+        if (!this._gest) return;
+        this._gestT += dt;
+        const e = gesturePose(T, this._gest, this._gestT, E.amp, E.tempo);
+        if (e <= 0 && this._gestT > 0.2) {
+            this._gestLast = this._gest.id; this._gest = null;
+            this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0;
+            this._gestWait = (0.5 + (this._grng / 4294967296) * 2.2) / (E.tempo || 1);
+        }
+    }
+
+    /** A gesture begins — with a free hand: the sword hand and the shield arm do not wave. */
+    _startGest(g) {
+        const sword = this.toolKind && this.toolKind !== 'none' && !this._sheath;
+        if (sword) {
+            if (g.side === 'r') g = GESTURES[g.id.replace('_r_', '_l_')] || null;
+            else if (g.side === 'b' && g.arm) g = null;
+        }
+        if (g && this.shield && g.side !== 'r' && g.arm) g = g.side === 'l' ? GESTURES[g.id.replace('_l_', '_r_')] : null;
+        this._gest = g || null;
+        this._gestT = 0;
+    }
+
+    /** The moving face: eased toward the feeling, the mouth working while he talks; a new shape only when a number moved a step (≤ 12 a second). */
+    _faceStep(dt, state, mode, t) {
+        const m = this._faceMesh;
+        if (!m || !m.visible) return;
+        const F = (EMOTIONS[state.emo] || EMOTIONS.neutral).face, g = this._ftgt;
+        g.brow.y = F.brow.y; g.brow.tilt = F.brow.tilt; g.brow.asym = F.brow.asym;
+        g.mouth.curve = F.mouth.curve; g.mouth.open = F.mouth.open; g.mouth.wide = F.mouth.wide; g.mouth.asym = F.mouth.asym; g.lid = F.lid;
+        if (mode === 'talk' || state.talk) g.mouth.open = Math.max(F.mouth.open, Math.max(0, Math.sin(t * 10) + Math.sin(t * 6.3) * 0.6) * 0.55);
+        easeFace(this._face, g, dt, 9);
+        this._faceAt -= dt;
+        if (this._faceAt > 0) return;
+        this._faceAt = 0.08;
+        const fq = quantFace(this._face), key = faceKey(fq);
+        if (key === this._faceKey) return;
+        const geo = takeGeo(faceGeo(faceBoxes(this.look, fq)));
+        giveGeo(m.geometry);
+        m.geometry = geo;
+        this._faceKey = key;
+    }
+
+    /** Far from the hero the moving face is not drawn (a brow is a pixel at 40 m): the shape stays as it is. */
+    faceOn(on) { const m = this._faceMesh; if (m && m.visible !== on) m.visible = on; }
+
     /** Turn the head toward a world point (yaw only, ±70°); null = look ahead again. */
     lookAt(worldPos) {
         if (!worldPos) { this._lookYaw = null; return; }
@@ -1474,11 +1595,9 @@ export class VillagerModel {
             case 'talk':
                 T.headX = Math.sin(t * 4.5) * 0.07 - 0.02;
                 T.headZ = Math.sin(t * 1.3) * 0.05;
-                if (!loco) {
-                    T.aRX = 0.55 + Math.sin(t * 3.1) * 0.3;
-                    T.aRZ = -0.15 + Math.sin(t * 1.7) * 0.12;
-                    T.aLX = 0.2 + Math.max(0, Math.sin(t * 1.9 + 1)) * 0.45;
-                    T.aLZ = 0.1 * Math.sin(t * 1.1);
+                if (!loco) { // (between the gestures — Gestures.js, _feel — the hands rest a little forward)
+                    T.aRX = 0.3 + Math.sin(t * 1.3) * 0.05;
+                    T.aLX = 0.22 + Math.sin(t * 1.1 + 1) * 0.05;
                 }
                 break;
             case 'work': {
@@ -1708,6 +1827,9 @@ export class VillagerModel {
                 }
                 break;
         }
+        // ---- what he feels shows in the bearing, and in the hands when he talks (Emotions.js, Gestures.js)
+        if (!own && !loco && (mode === 'idle' || mode === 'talk')) this._feel(dt, state, mode, T);
+        this._faceStep(dt, state, mode, t);
         if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
         if (this._lookYaw != null && mode !== 'bow' && mode !== 'flail' && mode !== 'chore') T.headY = this._lookYaw;
         if (this._flickT > 0) this._flickT -= dt;
