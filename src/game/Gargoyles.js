@@ -44,6 +44,8 @@ const r1 = (v) => Math.round(v * 10) / 10;
 const r2 = (v) => Math.round(v * 100) / 100;
 const MODES = ['fly', 'glide', 'climb', 'hover', 'dive', 'bite', 'fall', 'stone'];
 const FEET = HIP * MODEL_SCALE; // m from the hip to the soles (scale 1)
+/** m: a knight sees a gargoyle this far and goes to fight it (the people and the castle are in danger). */
+const KNIGHT_SEE = 90;
 const SCAN_T = 0.4; // s between two looks at the victims
 const DEBRIS = 160;
 
@@ -165,6 +167,8 @@ export class Gargoyles {
     _stepRitual(r, dt) {
         const g = this.game;
         r.t += dt;
+        // the clouds do not thin out while a gargoyle of this ritual lives (the author): the ritual's time waits at the edge of the fade; the last one gone — the sky clears
+        if (r.t > GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD && this.list.some((o) => !o.dead && (o.rit === r.id || hdist(o.home, r.c) < 3))) r.t = GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD;
         const ph = phaseAt(r.t);
         if (ph !== r.phase) {
             r.phase = ph;
@@ -879,21 +883,26 @@ export class Gargoyles {
     knightStep(v, dt) {
         if (!this.auth || !this.list.length || v.role !== 'knight' || v.sleep || v.stunT > 0) return false;
         const L = this.game.castleLife;
-        let best = null, bd = 24;
+        // (the author: knights always answer a danger to the castle and its people — a gargoyle seen within KNIGHT_SEE m is theirs to fight; the ones that
+        // are biting or carrying somebody off first, then the nearest)
+        let best = null, bd = 1e9;
         for (const o of this.list) {
             if (o.dead || o.mode === 'crumble') continue;
             const p = o.model.position;
             const d = Math.hypot(p.x - v.x, p.z - v.z);
-            if (d < bd && p.y - v.y < 7) { bd = d; best = o; }
+            if (d > KNIGHT_SEE) continue;
+            const score = d - (o.target || o.carry ? 35 : 0);
+            if (score < bd) { bd = score; best = o; }
         }
         if (!best) return false;
         const p = best.model.position;
+        const d = Math.hypot(p.x - v.x, p.z - v.z);
         v.foe = null; v.seated = false; v.path = null;
         v.gcd = Math.max(0, (v.gcd || 0) - dt);
-        L._steer?.(v, p.x, p.z, bd > 4 ? 5.6 : 0, dt, 2.2); // (5.6: a man's run — CastleLife.RUN)
-        if (bd > 4) v.mode = 'run';
+        L._steer?.(v, p.x, p.z, d > 4 ? 5.6 : 0, dt, 2.2); // (5.6: a man's run — CastleLife.RUN)
+        if (d > 4) v.mode = 'run';
         else { v.speed = 0; v.mode = 'attack'; }
-        if (bd < 3.4 && p.y - v.y < 6 && v.gcd <= 0) {
+        if (d < 3.4 && p.y - v.y < 6 && v.gcd <= 0) {
             v.gcd = 1.1;
             this.hit(best, 4 + Math.random() * 3, 'blade', null);
             this.game.fx?.spark?.(p, 0xffe9a0, 0.1, _v.set(0, 2, 0), 0.3);

@@ -30,7 +30,8 @@ export const GARGOYLE = {
     // ---- the ritual
     FIRE_T: 5, // s of the hellfire before they come out
     RELEASE_T: 2.4, // s over which the 30 burst out
-    STORM_T: 80, // s the sky stays closed (from the start of the fire)
+    STORM_T: 80, // s the sky stays closed at least (from the start of the fire); while a gargoyle of the ritual lives the clouds HOLD — `STORM_HOLD`
+    STORM_HOLD: 14, // s before STORM_T where the clouds wait (they thin out only when the last gargoyle is gone — the author)
     SKY_R: 100, // m: the clouds and the strikes (the author: 80–120)
     SKY_FADE: 40, // m beyond SKY_R the gloom fades out
     SKY_H: 62, // m above the pentagram: the cloud deck
@@ -40,17 +41,17 @@ export const GARGOYLE = {
     BOLT_NEAR: 0.55, // a share of the strikes aimed near somebody living (so the storm is felt)
     // ---- the gargoyle
     GRACE: 20, // s after it appears: it does not touch the summoner
-    LEASH: 120, // m from the pentagram
+    LEASH: 260, // m from the pentagram (the author: they attack the people at once, a castle a couple of hundred metres off included)
     LIFE: [300, 600], // s
     CRUMBLE_T: 3.2, // s the body falls apart
     SPEED: 15, DIVE: 25, CLIMB: 11, // m/s
-    SEARCH: 70, // m: it sees a victim this far
+    SEARCH: 220, // m: it sees a victim this far (a mass attack: all the flock goes for the people, nobody circles idly)
     REACH: 2.7, // m: bite / claws
     BITE: [3, 5], // HP of a person
     HIT_CD: 1.1, // s between blows
     SHOVE: 5, // m/s of the push
     BEAST_DMG: 1.4, // × against animals and zombies (they have more HP / less armour)
-    PACK: 3, // at most this many on one victim (the others look for another)
+    PACK: 6, // at most this many on one victim (the others look for another)
     SIZE: 1, // × the model
     HEIGHT: 2.8, SPAN: 4.8, // m: the model standing (horns to the feet) and the wings spread
     // ---- grabbing: a bite may turn into a grip — it carries the victim up and lets go from a height

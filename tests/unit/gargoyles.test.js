@@ -13,13 +13,13 @@ import { DIVINE_SPELLS } from '../../src/game/ProtectionGods.js';
 
 const src = (f) => fs.readFileSync(new URL('../../' + f, import.meta.url), 'utf8');
 
-test('the numbers of the author: 40 HP, 30 of them, 150 mana, 5 s of fire, 20 s of grace, 120 m, 5–10 min, at most 60', () => {
+test('the numbers of the author: 40 HP, 30 of them, 150 mana, 5 s of fire, 20 s of grace, a wide leash, 5–10 min, at most 60', () => {
     assert.equal(GARGOYLE.HP, 40);
     assert.equal(GARGOYLE.COUNT, 30);
     assert.equal(GARGOYLE.MANA, 150);
     assert.equal(GARGOYLE.FIRE_T, 5);
     assert.equal(GARGOYLE.GRACE, 20);
-    assert.equal(GARGOYLE.LEASH, 120);
+    assert.equal(GARGOYLE.LEASH, 260);
     assert.deepEqual(GARGOYLE.LIFE, [300, 600]);
     assert.equal(GARGOYLE.MAX, 60);
     assert.ok(GARGOYLE.SKY_R >= 80 && GARGOYLE.SKY_R <= 120, 'the clouds: 80–120 m');
@@ -87,9 +87,9 @@ test('20 seconds: they do not touch the summoner, then he is prey too; everybody
     assert.ok(ENEMIES.length === 5 && IGNORED.includes('dragon'));
 });
 
-test('the radius: farther than 120 m from the pentagram it turns back', () => {
-    assert.equal(outOfLeash(119), false);
-    assert.equal(outOfLeash(121), true);
+test('the radius: farther than LEASH m from the pentagram it turns back', () => {
+    assert.equal(outOfLeash(GARGOYLE.LEASH - 1), false);
+    assert.equal(outOfLeash(GARGOYLE.LEASH + 1), true);
 });
 
 test('a bite 3–5 on people, ×1.4 on beasts', () => {
@@ -290,14 +290,14 @@ test('the ritual\'s own lightning never hurts a gargoyle (they are its own), ano
     assert.equal(a.hp, 20, 'a scroll\'s lightning: −20');
 });
 
-test('the leash: a gargoyle that got out of 120 m turns back to the pentagram', async () => {
+test('the leash: a gargoyle that got out of LEASH m turns back to the pentagram', async () => {
     const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
     const G = g.gargoyles;
     G.startRitual(new THREE.Vector3(0, 0, 0));
     for (let t = 0; t < 12; t += 0.05) G.update(0.05);
     const o = G.list[0];
     o.mode = 'roam';
-    o.model.position.set(200, 30, 0);
+    o.model.position.set(GARGOYLE.LEASH + 80, 30, 0);
     for (let i = 0; i < 40; i++) G.update(0.05);
     assert.equal(o.mode, 'return');
     const d0 = Math.hypot(o.model.position.x, o.model.position.z);
@@ -473,4 +473,21 @@ test('the pentagram is in the table PENTAGRAMS: dark, 150 mana, once, its own pi
     const { GARGOYLE_PENTAGRAM } = await import('../../src/game/GargoyleRules.js');
     assert.equal(GARGOYLE_PENTAGRAM.id, 'gargoyles');
     assert.equal(GARGOYLE_PENTAGRAM.cost, GARGOYLE.MANA);
+});
+
+test('the clouds do not thin out while a gargoyle of the ritual lives; the last one gone — the sky clears (the author)', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    assert.ok(G.list.length > 0);
+    for (let t = 0; t < GARGOYLE.STORM_T + 60; t += 0.5) G.update(0.5);
+    assert.ok(G.rituals.length === 1 && G.rituals[0].t <= GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD + 1e-6, 'the storm holds: the ritual\'s time waits');
+    for (const o of [...G.list]) G._remove(o);
+    for (let t = 0; t < GARGOYLE.STORM_HOLD + 20; t += 0.5) G.update(0.5);
+    assert.equal(G.rituals.length, 0, 'the last gargoyle is gone: the clouds go');
+});
+
+test('they go for the people at once: a mass attack, the search and the leash are wide; the packs are big', () => {
+    assert.ok(GARGOYLE.SEARCH >= 200 && GARGOYLE.LEASH >= 250 && GARGOYLE.PACK >= 5);
 });
