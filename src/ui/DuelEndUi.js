@@ -3,7 +3,7 @@
  * несколько секунд окно «Хотите повторить дуэль?» — выбрать соперника, начать заново или выйти в меню.
  * Тексты — для игрока, на «вы».
  */
-import { DUEL_FOES } from '../game/SpawnSpots.js';
+import { mountHeroPanel } from './HeroSettingsUi.js';
 
 /** Через сколько секунд после победы появляется окно. */
 export const AGAIN_AFTER = 10;
@@ -21,7 +21,7 @@ const CSS = `
 .duel-win.lose { color:#d9d2ee; animation:duel-win-in .9s cubic-bezier(.2,1.3,.4,1) both; text-shadow:0 0 22px rgba(150,130,230,.9),0 5px 12px rgba(0,0,0,.8); }
 .duel-win small { display:block; margin-top:14px; font:600 clamp(16px,2.2vw,26px)/1.2 Georgia,serif; color:#ffe2a0; text-align:center; letter-spacing:0; }
 .duel-again { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; background:rgba(8,6,20,.55); }
-.duel-again > div { min-width:min(420px,90vw); padding:26px 30px; border-radius:14px; background:linear-gradient(#2b2150,#1a1433); border:2px solid #d9b45a;
+.duel-again > div { width:min(640px,94vw); max-height:90vh; overflow:auto;  padding:26px 30px; border-radius:14px; background:linear-gradient(#2b2150,#1a1433); border:2px solid #d9b45a;
   box-shadow:0 0 40px rgba(255,200,80,.35); color:#f6ecd0; font:16px/1.4 Georgia,serif; text-align:center; }
 .duel-again h3 { margin:0 0 14px; font:800 24px Georgia,serif; color:#ffe9a8; }
 .duel-again label { display:block; margin:10px 0 6px; }
@@ -52,21 +52,22 @@ export class DuelEndUi {
     }
 
     /**
-     * Окно «Хотите повторить дуэль?»: список соперников, «Начать дуэль заново», «Выйти в меню».
-     * @param {{foe:string, onStart:(foe:string)=>void, onExit:()=>void}} o
+     * Окно «Хотите повторить дуэль?»: те же настройки героя, что при создании мира (соперник, мана, дуэльная сила, здоровье…) — их можно
+     * поменять, не выходя в главное меню; «Начать дуэль заново» или «Выйти в меню».
+     * @param {{hero:object, lost?:boolean, onStart:(hero:object)=>void, onExit:()=>void}} o
      */
-    showAgain({ foe, onStart, onExit, lost = false }) {
+    showAgain({ hero, onStart, onExit, lost = false }) {
         this._css();
         this.hideBox();
         if (document.pointerLockElement) document.exitPointerLock?.(); // (the mouse is free for the buttons)
         const w = this.box = document.createElement('div');
         w.className = 'duel-again';
-        w.innerHTML = `<div><h3>${lost ? 'Хотите сразиться ещё раз?' : 'Хотите повторить дуэль?'}</h3>
-            <label for="duel-again-foe">Кто выйдет против вас:</label>
-            <select id="duel-again-foe">${DUEL_FOES.map((f) => `<option value="${f.id}"${f.id === foe ? ' selected' : ''}>${f.label}</option>`).join('')}</select>
-            <button class="go" type="button">Начать дуэль заново</button><button class="out" type="button">Выйти в меню</button></div>`;
-        const sel = w.querySelector('select');
-        w.querySelector('.go').onclick = () => { const v = sel.value; this.hide(); onStart?.(v); };
+        w.innerHTML = `<div><h3>${lost ? 'Хотите сразиться ещё раз?' : 'Хотите повторить дуэль?'}</h3><div class="duel-again-panel"></div>
+            <div style="text-align:center"><button class="go" type="button">Начать дуэль заново</button><button class="out" type="button">Выйти в меню</button></div></div>`;
+        const panel = mountHeroPanel(w.querySelector('.duel-again-panel'), 'hero-again');
+        panel.set(hero);
+        w.querySelector('#hero-again-spawn')?.closest('.hero-row')?.setAttribute('hidden', ''); // (the place is the arena: it is not changed here)
+        w.querySelector('.go').onclick = () => { const h = panel.read(); this.hide(); onStart?.(h); };
         w.querySelector('.out').onclick = () => { this.hide(); onExit?.(); };
         document.body.appendChild(w);
     }

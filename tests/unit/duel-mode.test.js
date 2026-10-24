@@ -209,3 +209,17 @@ test('режим дуэлей: палочка — своя запоминает�
     items.wand = { kind: 'wand', uid: 's2', spare: true }; D._rememberWand();
     assert.equal(D.mode.wand.uid, 'o1'); // (a stand-in never overwrites the own wand)
 });
+
+test('каждая дуэль начинается с настроек мира: выросшие ячейки, мастерство и победы снимаются; окно меняет настройки', () => {
+    const calls = [];
+    const c = { fatigue: 50, maxFatigue: 900, hp: 3, maxHp: 20 };
+    const g = { combat: c, mana: { growth: 400, mastery: 12, beaten: new Set(['w']), duelsWon: new Map([['w', 'win']]) }, bonus: { fatigue: 100, hp: 5 }, config: {}, hero: { cells: 200, foe: 'mid' },
+        heroApply: { applyMana: () => { c.maxFatigue = 200 + g.bonus.fatigue + g.mana.growth; calls.push('mana'); }, applyHealth: () => calls.push('hp') } };
+    const D = Object.assign(Object.create(ArenaDuels.prototype), { game: g, mode: { arenaId: 'a', id: 'me', foe: 'mid' } });
+    D._resetHero();
+    assert.equal(c.maxFatigue, 200); assert.equal(c.fatigue, 200); assert.equal(c.hp, 20);
+    assert.equal(g.mana.mastery, 0); assert.equal(g.mana.beaten.size, 0); assert.equal(g.bonus.fatigue, 0);
+    assert.deepEqual(calls, ['mana', 'hp']);
+    D._applyHero({ cells: 500, foe: 'master' });
+    assert.equal(g.hero.cells, 500); assert.equal(g.config.hero.foe, 'master'); assert.equal(D.mode.foe, 'master');
+});

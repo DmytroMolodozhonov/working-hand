@@ -1217,6 +1217,7 @@ export class ArenaDuels {
         a.castCd = 0.3; a.castT = 0; a.prep = null; a.dodge = null; // (ready: his first spell goes the moment the fight begins)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
         m.freezeUntil = performance.now() + 5000; m.pin = { x: A.def.gates[0].mark.x, z: A.def.gates[0].mark.z };
+        this._resetHero(); // (the settings of the world again: the mana, the cells, the health)
         this._wandBack(); // (a wand lost in the last duel is given back: the hero never starts without one)
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
@@ -1282,6 +1283,27 @@ export class ArenaDuels {
         g.knockback?.set?.(0, 0, 0);
     }
 
+    /** The settings chosen in the window between duels (the same as at the world's making): the opponent, the mana, the power, the health… */
+    _applyHero(h) {
+        const g = this.game, m = this.mode;
+        if (!h || !m) return;
+        g.hero = h;
+        if (g.config) g.config.hero = h; // (kept with the world)
+        m.foe = h.foe;
+    }
+
+    /**
+     * Every duel starts from the settings the world was made with (the author: «мана и ячейки остаются с первого боя, а должны обнуляться»): what the
+     * hero grew or won meanwhile (cells from the first spells and beaten wizards, the duel mastery) is taken back, the mana and the health are full.
+     */
+    _resetHero() {
+        const g = this.game, ma = g.mana, c = g.combat;
+        if (ma) { ma.growth = 0; ma.mastery = 0; ma.beaten?.clear?.(); ma.duelsWon?.clear?.(); }
+        if (g.bonus) { g.bonus.fatigue = 0; g.bonus.hp = 0; }
+        g.heroApply?.applyMana?.(); g.heroApply?.applyHealth?.();
+        if (c) { c.fatigue = c.maxFatigue || c.fatigue; c.hp = c.maxHp || c.hp; g.playerHP = c.hp; c._hudKey = ''; c._manaKey = ''; }
+    }
+
     /**
      * A fresh start of the duel mode (the window's «Начать дуэль заново»): the old wizard and the whole crowd go at once (a fallen one
      * is taken away), nobody keeps anger at the hero, and the stands fill anew — as on the first duel.
@@ -1321,8 +1343,8 @@ export class ArenaDuels {
         if (!this.game.net?.active) { this.game.paused = true; m.paused = true; } // (the whole world stands still while the window is open)
         this.endUi.showAgain({
             lost: !!m.lost,
-            foe: m.foe,
-            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._unpause(); this._resetArena(); m.hold = false; m.holdPin = null; },
+            hero: { ...(this.game.hero || {}), foe: m.foe },
+            onStart: (hero) => { this._applyHero(hero); this.endUi.hide(); this._unpause(); this._resetArena(); m.hold = false; m.holdPin = null; },
             onExit: () => { this._unpause(); document.getElementById('pause-exit-btn')?.click(); }, // (the same way out as the pause menu: the world is saved)
         });
     }
