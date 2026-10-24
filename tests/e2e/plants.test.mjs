@@ -50,7 +50,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         // ---- a flower broken: a leaf
         const before = g.items.loose?.length ?? 0;
         g.plants.die(f, 'melee', null);
-        out.leaf = (g.items.loose || []).some((l) => l.item?.kind === 'telewilpinLeaf');
+        out.leaf = [...g.items.loose.values()].some((l) => l.item?.kind === 'telewilpinLeaf');
         // ---- the head: an animal near it is eaten
         const head = want.carnivore.plants.find((p) => !p.dead);
         out.headBox = !!head.boxId;
