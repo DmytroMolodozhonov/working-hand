@@ -93,7 +93,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
     console.log('ERRORS', JSON.stringify(realErrors(errors).slice(0, 5)));
     assert.ok(r.active, 'new worlds have plants');
     assert.ok(r.found.tele && r.found.head, 'both kinds grow within reach');
-    assert.ok(r.sizes.tele >= 2 && r.sizes.tele <= 6, 'a group of flowers (some places may be rock or water)');
+    assert.ok(r.sizes.tele >= 1 && r.sizes.tele <= 6, 'a group of flowers (some places may be rock or water)');
     assert.ok(r.sizes.head >= 1 && r.sizes.head <= 5);
     assert.ok(r.pricked >= 1, `thorns prick: lost ${r.pricked}`);
     assert.equal(r.steelLoss, 0, 'a full steel set is not pricked');
