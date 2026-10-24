@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { SKIN_TONES } from './Appearance.js';
 import { GAITS, styleOf, gaitPose, wizardPose, idleShift } from './MoveStyle.js';
+import { slopeLean } from '../game/HillWay.js';
 
 // (the wizards are appended: the look of every older role stays the same — its seed uses the index)
 export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage'];
@@ -1454,6 +1455,7 @@ export class VillagerModel {
             T.kR = -Math.max(0, -c) * amp * 1.5 - 0.05;
             T.aLX = -s * amp * 0.9; T.aRX = s * amp * 0.9;
             T.hx = -0.2 * clamp01((speed - 2.5) / 3);
+            if (state.slope) T.hx -= slopeLean(state.slope); // (uphill: the body leans into the hill; downhill a little back — HillWay.js)
             T.cape = -(0.14 + Math.min(0.5, speed * 0.1));
             if (mode === 'walk' || mode === 'run') gaitPose(T, this.style.gait, s, gk, t, this.toolKind === 'staff');
             rate = 28;

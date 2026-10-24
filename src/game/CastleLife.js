@@ -59,6 +59,7 @@ import { Bodyguard, isLord } from './Bodyguard.js';
 import { CastleWatch } from './CastleWatch.js';
 import { kingFights, guardRadius, guardsKilled } from './KingNerve.js';
 import { slowFactor, tickSlow } from './Slow.js';
+import { trackSlope, slopePace } from './HillWay.js';
 import { creditKill } from './Mana.js';
 import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
@@ -754,7 +755,7 @@ export class CastleLife {
         const dx = tx - v.x, dz = tz - v.z;
         const d = Math.hypot(dx, dz);
         if (d < 0.6) { v.node = v.path[v.pathI]; v.pathI++; return v.pathI >= v.path.length; }
-        const s = Math.min(d, speed * slowFactor(v) * dt);
+        const s = Math.min(d, speed * slowFactor(v) * slopePace(v.slope) * dt); // (slower up a hill, quicker down: HillWay.js)
         // somebody on the way (a man, a player, an animal, a monster): round them early, on the side
         // with room; two meeting keep to the right; a narrow spot — wait / give way (Crowd.js)
         let ux = dx / d, uz = dz / d;
@@ -888,6 +889,26 @@ export class CastleLife {
     }
 
     /**
+     * For the search of a way round a hill (HillWay.RoutePlanner): the height at (nx, nz) when one can walk there from
+     * (x, z, y) — every step the same `_walkable` as the walk itself, a ledge of two blocks too (it is climbed:
+     * `_tryClimb`) — else null. Ground not yet brought by the workers is shut (never made in a frame).
+     */
+    routeStep(x, z, y, nx, nz) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return y;
+        if (t.landMade && !t.landMade(nx, nz)) return null;
+        const n = Math.max(2, Math.ceil(Math.hypot(nx - x, nz - z) / 0.7));
+        let yy = y;
+        for (let i = 1; i <= n; i++) {
+            const px = x + (nx - x) * i / n, pz = z + (nz - z) * i / n;
+            let up = 0;
+            if (!this._walkable(px, pz, yy)) { if (!this._walkable(px, pz, yy + 1)) return null; up = 1; }
+            yy = t.floorBelow(Math.round(px), Math.round(pz), Math.round(yy + 1.5) + 1 + up) - 0.5;
+        }
+        return yy;
+    }
+
+    /**
      * (host) The world broke at `pos` (a blast, «Gather», a wall come down): the ways of the castle /
      * tower through that place which one can't walk any more are cut — nobody's path goes over the
      * hole or through the rubble, and whoever was on such a way looks for another at once. (A cut
@@ -959,7 +980,7 @@ export class CastleLife {
         v.yaw = turn(v.yaw, Math.atan2(-dx, -dz), dt * 10);
         if (d <= stopAt) { v.speed = 0; return d; }
         if (!v.wallW?.inWay && speed > 0) { const r = this._wallGuard(v, tx, tz, d, stopAt, speed, dt); if (r !== null) return r; }
-        const s = Math.min(d - stopAt, speed * slowFactor(v) * dt);
+        const s = Math.min(d - stopAt, speed * slowFactor(v) * slopePace(v.slope) * dt);
         // a ledge right ahead (half a body high): climb it rather than inch at it
         if (!this._walkable(v.x + dx / d * 0.75, v.z + dz / d * 0.75, v.y) && this._tryClimb(v, dx / d, dz / d)) { v.speed = 0; return d; }
         // somebody in the way (a player, another person, an animal): round them on the side with room;
@@ -3476,6 +3497,7 @@ export class CastleLife {
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
                 if (v.imp && !v.dead && g.imperius?.step('v', v, dt)) continue; // («Империус»: a mind in it, not its own — ImperiusControl.step)
                 this._think(v, dt);
+                trackSlope(v); // (the slope under it, from how it moved: its pace and the lean of its body)
                 this.stuck.env.now = this._clock;
                 this.stuck.watch(v, dt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
             }
@@ -3489,6 +3511,7 @@ export class CastleLife {
                 const k = Math.min(1, dt * 8);
                 v.x += (v.net.x - v.x) * k; v.y += (v.net.y - v.y) * k; v.z += (v.net.z - v.z) * k;
                 v.yaw = turn(v.yaw, v.net.yaw, dt * 10);
+                trackSlope(v); // (the guest sees the hill under it by the moves it is shown)
             }
         }
         // models, bubbles, bars; fists of the local player; push me out of the people
@@ -3519,7 +3542,7 @@ export class CastleLife {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     const ck = this.auth ? shownChore(v) : v.chore;
-                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide });
+                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide });
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);

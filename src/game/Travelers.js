@@ -33,6 +33,7 @@ import { outOfSight } from './Animals.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { earthly } from '../world/Planets.js';
+import { HillNav, RoutePlanner } from './HillWay.js';
 
 export const ROAD = {
     EVERY: 20, // s between tries
@@ -427,8 +428,16 @@ export class Travelers {
                 for (const m of walkers) if (m !== v && Math.hypot(m.x - v.x, m.z - v.z) > 12) { m.path = null; m.wallW = null; if (!seen) { m.x = v.x + 2; m.z = v.z + 2; m.y = v.y; } } // (the lagging ones: a new way, or out of sight — beside the leader)
                 if (v.roadAim == null) { v.roadT = 0; v.wallW = null; if (!seen) { const q = L._nearestFree(v); if (q) { v.x = q.x; v.y = q.y; v.z = q.z; } } }
             }
+            if (v.roadAim == null && !(lag && P.footWaitT < 12)) {
+                // (no free heading at all: a route round is searched; with one the leader walks it)
+                const aim = this._hillWay(P, v, left, lag, dt, P.dest);
+                if (aim) { L._steer(v, aim.x, aim.z, (v.walk || 2.3) * 0.85, dt); v.mode = v.speed > 0 ? 'walk' : 'idle'; L._ground(v); return true; }
+            }
             if (v.roadAim == null || (lag && P.footWaitT < 12)) { v.speed = 0; v.mode = 'idle'; L._ground(v); return true; }
-            const tx = v.x - Math.sin(v.roadAim) * 6, tz = v.z - Math.cos(v.roadAim) * 6;
+            // (no nearer to the goal for a good while — a cliff, a pit with steep sides, a hill to go round: a route round it is searched
+            // a little each frame and followed point by point — HillWay.js)
+            const aim = this._hillWay(P, v, left, lag, dt, P.dest);
+            const tx = aim ? aim.x : v.x - Math.sin(v.roadAim) * 6, tz = aim ? aim.z : v.z - Math.cos(v.roadAim) * 6;
             L._steer(v, tx, tz, (v.walk || 2.3) * 0.85, dt);
             v.mode = v.speed > 0 ? 'walk' : 'idle';
         } else if (lead) {
@@ -438,7 +447,9 @@ export class Travelers {
             const fy = lead.yaw;
             const tx = lead.x + Math.sin(fy) * back + Math.cos(fy) * side, tz = lead.z + Math.cos(fy) * back - Math.sin(fy) * side;
             const d = Math.hypot(tx - v.x, tz - v.z);
-            L._steer(v, tx, tz, d > 5 ? 4.2 : (v.walk || 2.3) * 0.95, dt, 0.4);
+            // (a follower that cannot get to its leader — he went round what it keeps standing at: a route to him)
+            const aim = this._hillWay(v, v, Math.hypot(lead.x - v.x, lead.z - v.z), false, dt, lead, 14);
+            L._steer(v, aim ? aim.x : tx, aim ? aim.z : tz, d > 5 ? 4.2 : (v.walk || 2.3) * 0.95, dt, aim ? 0.8 : 0.4);
             v.mode = v.speed > 2.4 * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle';
         }
         L._ground(v);
@@ -448,11 +459,29 @@ export class Travelers {
     /** The way on foot: straight at the goal if free, else the nearest free way round. */
     _footHeading(v, P) {
         const direct = Math.atan2(-(P.dest.x - v.x), -(P.dest.z - v.z));
-        for (const off of [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2]) {
+        // (the side it went round last time is tried first: no swinging left-right at a cliff)
+        const sd = P.footSide || (P.footSide = (numHash(P.id) & 1) ? 1 : -1);
+        for (const off of [0, 0.35 * sd, -0.35 * sd, 0.7 * sd, -0.7 * sd, 1.1 * sd, -1.1 * sd, 1.6 * sd, -1.6 * sd, 2.2 * sd, -2.2 * sd]) {
             const a = direct + off;
-            if (wayFree(this.game, v.x, v.z, -Math.sin(a), -Math.cos(a), 8, { half: 0.5, rise: 2, clear: 5, avoidLand: true, into: P.dest.into }) >= 8) return a;
+            if (wayFree(this.game, v.x, v.z, -Math.sin(a), -Math.cos(a), 8, { half: 0.5, rise: 2, clear: 5, avoidLand: true, into: P.dest.into }) >= 8) { if (off) P.footSide = Math.sign(off); return a; }
         }
         return null;
+    }
+
+    /**
+     * The route round a hill for a walker that makes no way (HillWay.HillNav): `holder` keeps the watchdog (`nav`), `goal` is the
+     * point it means to reach (a party's goal: the search runs to a point up to 80 m towards it). → the point to steer to now, or null.
+     */
+    _hillWay(holder, v, left, waiting, dt, goal, minLeft = 0) {
+        const L = this.life, nav = holder.nav || (holder.nav = new HillNav());
+        const clock = L._clock || 0;
+        nav.tick(dt, clock, left, v.x, v.z, waiting || v.talking > 0 || left < minLeft);
+        if (nav.wantPlan(clock)) {
+            const k = Math.min(1, 80 / Math.max(1, left)), gx = v.x + (goal.x - v.x) * k, gz = v.z + (goal.z - v.z) * k;
+            nav.begin(clock, new RoutePlanner(this._routeEnv || (this._routeEnv = { step: (x, z, y, nx, nz) => this.life.routeStep(x, z, y, nx, nz) }), { x: v.x, z: v.z, y: v.y }, { x: gx, z: gz }, k < 1 ? {} : { near: 3 }), v);
+        }
+        nav.work(1.2);
+        return nav.aim();
     }
 
     /** A rider: on the seat while they go; down beside the cart in trouble; back up when it is over. */
@@ -505,5 +534,6 @@ export class Travelers {
     dispose() { for (const P of [...this.parties.values()]) this._remove(P); }
 }
 
+const numHash = (id) => { let h = 0; const t = String(id ?? 0); for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h); };
 const _seat = {};
 const _look = new THREE.Vector3();
