@@ -187,7 +187,8 @@ test('старт «Перед дуэлью»: жители не говорят �
 import { liveShouts } from '../../src/game/Duel.js';
 
 test('«Максима» толкает ограниченное время: выкрики не копятся без предела', () => {
-    assert.equal(liveShouts([0, 3, 6, 9], 9.5), 2); // (only the last two are within 6 s)
+    assert.equal(liveShouts([0, 3, 6, 9], 9.5), 1); // (only the last one is within 3 s: a shout burns out by the time the next may be said)
+    assert.equal(liveShouts([0, 3.1], 5), 1);
     assert.equal(liveShouts([], 10), 0);
     assert.equal(liveShouts(undefined, 10), 0);
 });

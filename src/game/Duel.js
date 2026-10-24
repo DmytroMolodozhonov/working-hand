@@ -161,7 +161,7 @@ export const DUEL = {
     MAXIMA_BOOST: 0.05, // «Максима» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
     MAXIMA_COST: 5, // mana, at once
     MAXIMA_EVERY: 3, // s: at most once every 3 seconds
-    MAXIMA_LIFE: 6, // s: one shout pushes this long, then it is spent (they add up only while they last: a wizard shouting every 3 s no longer buries any strength)
+    MAXIMA_LIFE: 3, // s: one shout pushes this long (= the pause between two shouts), then it is spent: at most one pushes at a time — a wizard shouting every 3 s no longer buries any strength
 };
 
 /**
