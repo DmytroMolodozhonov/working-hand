@@ -17,14 +17,14 @@
 
 export const ARENA_DUEL = {
     MAX_T: 300, // s: a duel ends at 5 minutes, won or not (the bots' too)
-    COUNT: 3, // «3-2-1»
+    COUNT: 10, // «10…1», then «Бой!»
     REWARD: 100, // coins for beating the arena's wizard
     REST: [18, 40], // s between two duels (one pair goes, the next comes)
     FANS: [10, 18], // how many come to watch
     AVENGE: 0.45, // the share of the wizards near who attack a player who killed at the arena (never all)
     AVENGE_R: 70, // m: the wizards that far from the arena hear of it
     LIVE_R: 170, // m: a player that near the arena — it lives (the fans come, the duels go on)
-    CALL_WAIT: 75, // s: a player called out who does not come to his mark — his turn is lost
+    CALL_WAIT: 60, // s: a player called out who does not come to his mark — his turn is lost
     OFF_FLOOR: 12, // s: a duellist off the floor that long — gave the duel up
     FAR_FLOOR: 2.5, // m a duellist may step out over the floor's edge
     FALL_COST: 0.18, // a duellist knocked down loses this share of his mana (rounds: worn down fall by fall)

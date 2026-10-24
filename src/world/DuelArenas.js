@@ -86,7 +86,8 @@ export function buildArena(p, d = ARENA) {
     p.box(9, 9, 4, 4, -(END + 3), -(END + 3), B.ARCANE_LAMP);
     p.box(5, 10, -1, -1, -(END + 5), -(END + 2), B.RUNE);
     const book = p.pt(6.5, -(END + 3), 3); // (its top: y = L(2) top)
-    out.desk = { book: { x: book.x, y: book.y + 0.5, z: book.z }, front: p.pt(6.5, -(END + 5)), yaw: p.yaw(Math.PI) };
+    // (the steward's place: beside the gate's lane, outside — he is a living man of the tower, ArenaDuels.js; no blocks)
+    out.desk = { book: { x: book.x, y: book.y + 0.5, z: book.z }, front: p.pt(6.5, -(END + 5)), stand: p.pt(4.5, -(END + 4)), yaw: p.yaw(Math.PI) };
     // the seats: along the middle of every row, never in the gates
     out.seats = [];
     for (let k = 1; k <= T; k++) {

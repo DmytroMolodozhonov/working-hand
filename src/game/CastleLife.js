@@ -375,6 +375,7 @@ export class CastleLife {
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
         if (e.role === 'advisor') Object.assign(look, { advisor: true, magicChest: true, magicLegs: true, hat: 'chancellor', hatColor: 0x6a1233, plume: false, shirt: 0x6a1233, pants: 0x3d0a1f, boots: 0x2b1a14, dress: false }); // (the king's super-helper: no helm, magic breastplate and greaves, the cap of office)
         if (e.rank) look.rank = e.rank; // (his rank: the robe's trim and cuffs — VillagerModel)
+        if (extra.look) extra.look(look, e); // (a steward of the duel arena: his own robe — ArenaDuels.stewardLook)
         if (e.elder) { look.female = false; look.hairColor = 0xd8d8d8; look.beard = 'long'; look.hat = 'wizardTall'; } // (a settlement's Elder: an old man — WizVillages.js)
         if (this.game.armor?.wasStripped(def.id + ':' + idx)) look = strippedLook(look); // («Disarmor» took the steel / the plain robe off)
         const model = new VillagerModel(look, { castleColor: def.color });

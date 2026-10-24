@@ -44,11 +44,26 @@ import { PVP } from './Combat.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { newUid } from './ItemTypes.js';
 import { CappedLog } from '../core/CappedLog.js';
+import { ArenaQueue, STEWARD, STEWARD_LINES, duelSpots, stewardIntent } from './ArenaSteward.js';
+import { ArenaMarkFx } from '../fx/ArenaMarkFx.js';
+import { villagerLook } from '../entities/VillagerModel.js';
 
 const WALK = 2.3, RUN = 5.6;
 /** Mana a spell costs a duellist at the arena: they pace themselves (a long duel), lighter than in a real fight. */
 const arenaCost = (spell) => Math.max(2, Math.round((NPC_COST[spell] ?? 10) * 0.6));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+/**
+ * The steward's look: a merchant's, but in the arena's robe — a long violet gown, a gold vest, a violet cap with a gold band, a
+ * rod of office in the hand; no goods, no coin pouch (he sells nothing and takes nothing).
+ */
+export function stewardLook(seed, female, castleColor) {
+    const L = villagerLook(seed, 'merchant', female, { castleColor });
+    return Object.assign(L, {
+        steward: true, dress: true, dressColor: 0x4b2a7a, shirt: 0xf1ead6, pants: 0x2c1a4a, accent: 0xd8a62a,
+        hat: 'beret', hatColor: 0x3a1f66, plume: false, shield: false, tool: 'staff', boots: 0x2b1a14,
+    });
+}
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _h = new THREE.Vector3();
 
 const FAN_LINES = {
@@ -70,7 +85,10 @@ export class ArenaDuels {
         this.log = new CappedLog(); // (what happened: tests)
         this._scanT = 0;
         this.myQueue = null; // (this computer's player: signed up at which arena — for its hints)
-        this.count = null; // (the «3-2-1» shown to this player: {at, n})
+        this.count = null; // (the «10…1» shown to this player: {at, n})
+        this.askedAt = -1e9; // (the steward asked this computer's player «Хотите сразиться?» — a bare «да» counts after it)
+        this.marks = new ArenaMarkFx(game); // the lit places of a player's duel (ArenaMarkFx.js)
+        this._markT = 0;
     }
 
     get life() { return this.game.castleLife; }
@@ -89,6 +107,7 @@ export class ArenaDuels {
             this._signUp(A, dt);
         }
         this._countdown(dt);
+        this._lit(dt);
     }
 
     /** The arenas near any player (the host — near anyone; a guest — near itself, for the sign-up). */
@@ -121,7 +140,7 @@ export class ArenaDuels {
         // the seats on the long sides only (a charge flies along the floor's axis — never into the crowd)
         const seats = def.seats.map((s, i) => ({ ...s, i })).filter((s) => s.side);
         const restT = def.practice ? ARENA_DUEL.PRACTICE_REST[0] * Math.random() : 4;
-        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: [], owed: null, sayT: 0, netT: 0 };
+        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: new ArenaQueue(), owed: null, sayT: 0, netT: 0, steward: null, stewT: 0, asked: new Map(), ph: 'idle', pl: null };
     }
 
     /**
@@ -149,6 +168,7 @@ export class ArenaDuels {
         if (this.auth) {
             for (const v of [...A.fans]) this._release(v, true);
             if (A.duel) for (const v of [A.duel.a, A.duel.b]) if (v) this._release(v, true);
+            if (A.steward) { this._release(A.steward, true); A.steward = null; }
         }
         A.fans.clear();
         A.duel = null;
@@ -191,18 +211,23 @@ export class ArenaDuels {
             if (!A.duel && A.fans.size < A.want && A.spawnT <= 0) { // (the people come while the field is empty — never during a duel)
                 A.spawnT = 1.2 + Math.random() * 1.8; this._recruit(A, cs, 'fan'); }
         } else if (A.fans.size && !A.duel) { for (const v of [...A.fans]) this._release(v); A.fans.clear(); A.want = 0; } // (they leave when the field is free)
-        // the duels: one after another
+        this._keepSteward(A, cs, live, dt);
+        // the duels: one after another (a player signed up does not wait out a long rest)
         const D = A.duel;
         if (!D) {
+            if (A.queue.length && A.restT > 4) A.restT = 4;
             A.restT -= dt;
             if (live && A.restT <= 0 && this._ready(A, dt)) this._nextDuel(A, cs);
         } else this._referee(A, D, dt);
         // the reward: the winner at the lectern
         if (A.owed) {
-            const p = L._playerPos(A.owed.id);
-            if (p && Math.hypot(p.x - A.def.desk.front.x, p.z - A.def.desk.front.z) < 3.5) {
-                const b = A.def.desk.book;
-                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: ARENA_DUEL.REWARD }, new THREE.Vector3(b.x, b.y + 0.7, b.z), { hover: true });
+            const p = L._playerPos(A.owed.id), S = A.def.desk.stand || A.def.desk.front;
+            if (p && Math.hypot(p.x - S.x, p.z - S.z) < 4.5) {
+                // (the steward gives the 100 coins from his hand — or, with nobody there, they lie on the book as ever)
+                const w = A.steward && !A.steward.dead ? A.steward : null, b = A.def.desk.book;
+                const at = w ? new THREE.Vector3(w.x + (p.x - w.x) * 0.35, w.y + 2.6, w.z + (p.z - w.z) * 0.35) : new THREE.Vector3(b.x, b.y + 0.7, b.z);
+                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: ARENA_DUEL.REWARD }, at, { hover: true });
+                if (w) this._say(A, 'win');
                 this._fx(A, 'fanfare', b);
                 this._tell(A.owed.id, { e: 'paid', id: A.id });
                 this.log.push('paid:' + A.owed.id);
@@ -210,6 +235,109 @@ export class ArenaDuels {
             } else if (!p) A.owed = null;
         }
         A.sayT -= dt;
+        // a player signed up who has walked away is struck off
+        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) this._tell(id, { e: 'off', id: A.id, why: 'left' });
+    }
+
+    // ------------------------------------------------------------------ the steward
+    /**
+     * (host) The arena's steward: a living man of the tower in the robe of the arena, by the front gate, by day while anybody is
+     * near; a player near him who is not signed up is asked «Хотите сразиться?». He goes home at night.
+     */
+    _keepSteward(A, cs, live, dt) {
+        const L = this.life;
+        if (!A.def.desk?.stand) return;
+        const s = A.steward;
+        if (s && (s.dead || !L.byId.has(s.id) || s.arena?.kind !== 'steward')) A.steward = null;
+        if (live && !A.steward) {
+            A.stewT -= dt;
+            if (A.stewT <= 0) { A.stewT = 4; A.steward = this._recruitSteward(A, cs); }
+        } else if (!live && A.steward && !A.duel && !A.queue.length) { this._release(A.steward); A.steward = null; }
+        if (A.steward) this._ask(A);
+    }
+
+    _recruitSteward(A, cs) {
+        const L = this.life, def = cs.def, st = L.state(def.id), S = A.def.desk.stand, n = def.population || 24;
+        for (let idx = n - 1; idx >= 1; idx--) { // (from the end of the roster: the same man every time; never the Master)
+            if (cs.active.has(idx) || st.killed.has(idx)) continue;
+            const out = yawTo(A.def.x, A.def.z, S.x, S.z);
+            const v = L._activate(cs, idx, { x: S.x, y: S.y, z: S.z, yaw: out }, 'arena', { look: (look, e) => Object.assign(look, stewardLook(e.seed, e.female, def.color)) });
+            if (!v) continue;
+            v.arena = { id: A.id, kind: 'steward', leg: 0 };
+            v.steward = true;
+            L._ground(v);
+            this.log.push('steward:' + v.id);
+            return v;
+        }
+        return null;
+    }
+
+    /** (host) He asks a player who comes up to him. */
+    _ask(A) {
+        const L = this.life, v = A.steward, S = A.def.desk.stand, now = Date.now();
+        if (!v || v.dead || v.foe || v.fleeT > 0 || (v.talking | 0) > 0) return;
+        for (const { id, p } of L._players(true)) {
+            if (A.queue.has(id) || A.duel?.p === id || Math.hypot(p.x - S.x, p.z - S.z) > STEWARD.ASK_R) continue;
+            if (now - (A.asked.get(id) || 0) < STEWARD.ASK_EVERY * 1000) continue;
+            A.asked.set(id, now);
+            L._say(v, pick(STEWARD_LINES.ask), 4);
+            this._tell(id, { e: 'ask', id: A.id });
+            this.log.push('ask:' + id);
+            return;
+        }
+    }
+
+    /** (host) The steward says one of his lines (by key). */
+    _say(A, key) {
+        const v = A.steward;
+        if (v && !v.dead && STEWARD_LINES[key]) this.life._say(v, STEWARD_LINES[key], 4);
+    }
+
+    /** (host) The steward stands on his place, turned to the nearest player (else to the road). */
+    _steward(A, v, dt) {
+        const L = this.life, S = A.def.desk.stand;
+        v.seated = false;
+        if (Math.hypot(v.x - S.x, v.z - S.z) > 1.2) { this._go(v, S, WALK, dt, 0.5); return true; }
+        v.speed = 0; v.mode = 'idle';
+        let best = null, bd = 12;
+        for (const { p } of L._players(true)) { const d = Math.hypot(p.x - v.x, p.z - v.z); if (d < bd) { bd = d; best = p; } }
+        if (!(v.talking > 0)) v.yaw = turnToward(v.yaw, best ? yawTo(v.x, v.z, best.x, best.z) : yawTo(A.def.x, A.def.z, S.x, S.z), 2.5 * dt);
+        L._ground(v);
+        return true;
+    }
+
+    /**
+     * (the player's computer: CastleTalk) What the steward answers to my words, or null (not for him: the villager's
+     * ordinary talk goes on). Rules only, at once. Signing up / cancelling go to the host.
+     */
+    stewardHear(v, text) {
+        const A = this.list.get(v.arena?.id), g = this.game;
+        if (!A) return null;
+        const it = stewardIntent(text), now = performance.now();
+        const L = STEWARD_LINES;
+        const mine = this.auth ? A.queue.has(g.localId) || A.duel?.p === g.localId : !!this.myQueue;
+        if (it === 'no') {
+            if (!mine) return it === 'no' && now - this.askedAt < STEWARD.ANSWER_T * 1000 ? { reply: L.off } : null;
+            this._cancel(A, g.localId);
+            return { reply: L.off };
+        }
+        if (it === 'info') return { reply: L.info };
+        const asked = now - this.askedAt < STEWARD.ANSWER_T * 1000;
+        if (it === 'want' || (it === 'yes' && asked)) {
+            this.askedAt = -1e9;
+            if (mine) return { reply: L.again };
+            if (g.isNight) return { reply: L.night };
+            if (!g.items?.wand) return { reply: L.wand };
+            if (this.auth) this._join(A, g.localId); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id }); }
+            const busy = this.auth ? !!A.duel : A.ph !== 'idle';
+            return { reply: `${L.terms} ${busy ? L.wait : L.soon}` };
+        }
+        return null;
+    }
+
+    /** (every computer) This computer's player cancels his sign-up. */
+    _cancel(A, id) {
+        if (this.auth) { if (A.queue.cancel(id)) this.log.push('cancel:' + id); const D = A.duel; if (D?.p === id && D.phase !== 'fight' && D.phase !== 'over') this._end(A, D, null, 'noshow'); } else { this.myQueue = null; this.game.sync?.arena?.({ e: 'cancel', id: A.id }); }
     }
 
     /**
@@ -271,7 +399,7 @@ export class ArenaDuels {
         const fromSeat = !!v.seated; v.seated = false; v.arenaFight = false; v.fx = (v.fx | 0) & ~FX.SHIELD;
         if (v.noWand) { v.noWand = false; v.lostWand = null; v.model?.setHeldTool?.('wand'); } // (the duel is over: the wand given back)
         if (now || v.dead || !A) { v.arena = null; if (!v.dead && L.byId.has(v.id)) L._deactivate(v); return; }
-        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat };
+        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat, home: !!v.steward };
     }
 
     _freeSeat(A, v) { for (const [i, w] of A.taken) if (w === v) A.taken.delete(i); }
@@ -292,21 +420,16 @@ export class ArenaDuels {
     // ------------------------------------------------------------------ the duels
     _nextDuel(A, cs) {
         // the players signed up first (the first in the queue still here, with a wand)
-        while (A.queue.length) {
-            const id = A.queue[0];
-            if (this.life._playerPos(id)) break;
-            A.queue.shift();
-        }
-        const p = A.queue.length ? A.queue.shift() : null;
+        const p = A.queue.take((id) => !!this.life._playerPos(id));
         const a = this._recruit(A, cs, 'duel');
-        if (!a) { A.restT = 10; if (p != null) A.queue.unshift(p); return; }
+        if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
         let b = null;
         if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
         A.duel = { a, b, p, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
         a.arena.side = 1; // (the far mark)
         if (b) b.arena.side = 0;
         this.log.push('duel:' + a.id + (b ? ':' + b.id : ':player ' + p));
-        if (p != null) this._tell(p, { e: 'call', id: A.id, name: a.name });
+        if (p != null) { this._tell(p, { e: 'call', id: A.id, name: a.name }); this._say(A, 'call'); }
         this._send(A);
     }
 
@@ -351,12 +474,19 @@ export class ArenaDuels {
         if (D.phase === 'call') {
             // the player comes out to the mark at the front gate's end
             const p = L._playerPos(D.p), m = marks[0].mark;
-            if (p && Math.hypot(p.x - m.x, p.z - m.z) < 3.5 && Math.hypot(D.a.x - marks[1].mark.x, D.a.z - marks[1].mark.z) < 2) {
-                D.phase = 'count'; D.t = 0; this._send(A); this._fx(A, 'beep', A.def.centre);
+            const on = p && Math.hypot(p.x - m.x, p.z - m.z) < STEWARD.MARK_R;
+            if (on) D.atMark = true;
+            else if (D.atMark && p && Math.hypot(p.x - m.x, p.z - m.z) > STEWARD.MARK_AWAY) { this._tell(D.p, { e: 'off', id: A.id, why: 'moved' }); this._end(A, D, null, 'noshow'); return; } // (stood on his place, then walked off)
+            if (on && Math.hypot(D.a.x - marks[1].mark.x, D.a.z - marks[1].mark.z) < 2) {
+                D.phase = 'count'; D.t = 0; this._send(A); this._fx(A, 'beep', A.def.centre); this._say(A, 'go');
             } else if (D.t > ARENA_DUEL.CALL_WAIT) { this._tell(D.p, { e: 'missed', id: A.id }); this._end(A, D, null, 'noshow'); }
             return;
         }
         if (D.phase === 'count') {
+            if (D.p != null) { // (the player's place: he stays on it till «Бой!»)
+                const p = L._playerPos(D.p), m = marks[0].mark;
+                if (!p || Math.hypot(p.x - m.x, p.z - m.z) > STEWARD.MARK_AWAY) { this._tell(D.p, { e: 'off', id: A.id, why: 'moved' }); this._end(A, D, null, 'noshow'); return; }
+            }
             const n = Math.floor(D.t);
             if (n > D.said && n < ARENA_DUEL.COUNT) { D.said = n; this._fx(A, 'beep', A.def.centre); }
             if (D.t >= ARENA_DUEL.COUNT) { D.phase = 'fight'; D.t = 0; D.go = 0; this._fx(A, 'gong', A.def.centre); this._send(A); }
@@ -436,11 +566,12 @@ export class ArenaDuels {
     step(v, dt) {
         const A = this.list.get(v.arena?.id);
         if (!A) { v.arena = null; return false; }
-        if (v.foe || v.fleeT > 0 || v.investigate) { if (v.arena.kind === 'fan') { A.fans.delete(v); this._freeSeat(A, v); } v.arena = null; return false; } // (a real fight / fright: the arena is not his now)
+        if (v.foe || v.fleeT > 0 || v.investigate) { if (v.arena.kind === 'fan') { A.fans.delete(v); this._freeSeat(A, v); } if (v.arena.kind === 'steward') A.steward = null; v.arena = null; return false; } // (a real fight / fright: the arena is not his now)
         const k = v.arena.kind;
         if (k === 'fan') return this._fan(A, v, dt);
         if (k === 'leave') return this._leave(A, v, dt);
         if (k === 'duel') return this._duellist(A, v, dt);
+        if (k === 'steward') return this._steward(A, v, dt);
         return false;
     }
 
@@ -491,7 +622,7 @@ export class ArenaDuels {
         const L = this.life, G = A.def.gates[0];
         v.seated = false;
         const seat = v.arena.seat, e = v.arena.fromSeat ? this._edge(A, seat) : null;
-        const legs = e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home];
+        const legs = v.arena.home ? [A.home] : e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home]; // (the steward walks home along the road, not through the gate)
         const leg = v.arena.leg || 0;
         if (leg < legs.length) { if (this._go(v, legs[leg], WALK * (v.arena.sad ? 0.75 : 1), dt, 1.2)) v.arena.leg = leg + 1; v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t < 120) return true; }
         v.arena = null;
@@ -858,10 +989,8 @@ export class ArenaDuels {
 
     /** (host) A player signs up. */
     _join(A, id) {
-        if (A.duel?.p === id) return;
-        if (!A.queue.includes(id)) A.queue.push(id);
-        const n = A.queue.indexOf(id) + (A.duel ? 1 : 0);
-        this._tell(id, { e: 'queued', id: A.id, n });
+        if (A.duel?.p === id || A.queue.sign(id) < 0) return;
+        this._tell(id, { e: 'queued', id: A.id, n: A.queue.ahead(id, !!A.duel) });
         this.log.push('join:' + id);
     }
 
@@ -876,15 +1005,17 @@ export class ArenaDuels {
     _mine(m) {
         const g = this.game, hud = g.hud;
         switch (m.e) {
-            case 'queued': hud?.setVoice?.(m.n > 0 ? `📜 Вы записались на дуэль. Перед вами: ${m.n}` : '📜 Вы записались на дуэль — вы следующий', true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
-            case 'call': hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену — встаньте на отметку у ворот. Соперник: ${m.name || 'волшебник'}`, true); break;
+            case 'ask': this.askedAt = performance.now(); break;
+            case 'queued': this.myQueue = m.id; hud?.setVoice?.(m.n > 0 ? `📜 Вы записались на дуэль. Перед вами: ${m.n}` : '📜 Вы записались на дуэль — вы следующий', true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
+            case 'call': this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
+            case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
             case 'count': this.count = { t: 0 }; break;
             case 'end':
-                this.count = null;
-                hud?.setVoice?.(m.r === 'win' ? '🏆 Победа! Подойдите к столу записи — там награда' : m.r === 'lose' ? '😔 Поражение. Вашу палочку вернули — она на столе записи' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
+                this.count = null; this.myQueue = null;
+                hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Вашу палочку вернули — она на столе записи' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
-            case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${ARENA_DUEL.REWARD} монет на столе записи`, true); break;
-            case 'missed': hud?.setVoice?.('⌛ Вы не вышли на арену — очередь прошла', true); break;
+            case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${ARENA_DUEL.REWARD} монет`, true); break;
+            case 'missed': this.myQueue = null; hud?.setVoice?.('⌛ Вы не вышли на арену — очередь прошла', true); break;
             case 'foul': hud?.setVoice?.('☠️ Вы убили соперника — это против правил арены!', true); break;
             default: break;
         }
@@ -914,7 +1045,7 @@ export class ArenaDuels {
     _send(A) {
         const g = this.game, D = A.duel;
         if (D?.p != null && D.phase === 'count') this._tell(D.p, { e: 'count', id: A.id });
-        if (g.sync) g.sync.arena?.({ e: 'st', id: A.id, ph: D ? D.phase : 'idle' });
+        if (g.sync) g.sync.arena?.({ e: 'st', id: A.id, ph: D ? D.phase : 'idle', pl: D?.p ?? null });
     }
 
     /** A message about the arenas (m.from: who sent it). */
@@ -922,9 +1053,39 @@ export class ArenaDuels {
         const g = this.game;
         if (!m || typeof m !== 'object') return;
         if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from); } return; }
+        if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
+        if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; } return; }
         if (m.to != null) { if (m.to === g.localId) this._mine(m); return; }
         if (m.e === 'fx') { const A = this.list.get(m.id); if (A) g.sound?.playArena?.(A.def.centre, m.k, m.v ?? 1); }
     }
 
-    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); }
+    // ------------------------------------------------------------------ the lit places
+    /** The arena where a player's duel is being made, and how bright its places are (every computer from the phase). */
+    _litState() {
+        const g = this.game, me = g.character.group.position;
+        let best = null, bd = 120;
+        for (const A of this.list.values()) {
+            if (!A.def.desk) continue;
+            const ph = this.auth ? (A.duel?.phase || 'idle') : A.ph, pl = this.auth ? (A.duel?.p ?? null) : A.pl;
+            if (pl == null || ph === 'idle' || ph === 'over') continue;
+            const d = Math.hypot(me.x - A.def.x, me.z - A.def.z);
+            if (d >= bd) continue;
+            const mine = pl === g.localId, fight = ph === 'fight';
+            const k = fight ? 0.35 : 1;
+            const p = duelSpots(A.def);
+            const pm = Math.hypot(me.x - p.player.x, me.z - p.player.z);
+            bd = d;
+            best = {
+                player: { x: p.player.x, y: A.def.floorY, z: p.player.z }, foe: { x: p.foe.x, y: A.def.floorY, z: p.foe.z },
+                power: mine ? k : k * 0.55, foePower: (mine ? 0.8 : 0.5) * k, arrow: mine && !fight && pm > STEWARD.MARK_R,
+            };
+        }
+        return best;
+    }
+
+    _lit(dt) { this.marks.update(dt, this._litState()); }
+
+    prewarm() { this.marks.prewarm(); }
+
+    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); }
 }

@@ -42,6 +42,7 @@ import { detectOrder, toolsFor, TOOLS, ORDER_LINES } from '../ai/TalkActions.js'
 import { TalkTrace } from '../ai/TalkTrace.js';
 import { quickOrder } from '../ai/TalkFlow.js';
 import { ackFor, ackPool } from '../ai/TalkAcks.js';
+import { stewardPool } from './ArenaSteward.js';
 import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
@@ -509,10 +510,11 @@ export class CastleTalk {
             // (first his short «Хм…» / «Ага…»: with a quick net the answer follows them at once)
             const lines = [...take(null, 12).filter(isShortFiller).slice(0, 2), ...(lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [])];
             if (lang === 'ru' && (v.role === 'knight' || v.role === 'advisor')) lines.push(...(king ? ORDER_LINES.obey : ORDER_LINES.refuse)[v.role === 'advisor' ? 'advisor' : 'knight'].slice(0, 2));
+            if (v.arena?.kind === 'steward' && lang === 'ru') lines.unshift(...stewardPool()); // (the steward's own lines, made in advance)
             // his thinking words, by the kind of question (the net thinks; a rules' answer not made yet follows them)
             lines.push(...take(null, 2), ...take('question', 1), ...take('request', 1), ...take(v.role === 'merchant' ? 'trade' : 'greet', 1));
             // (few: each is made by the voice program on the processor — the game, the camera and the speech share it)
-            sp.prepare(lines.slice(0, 10), vo);
+            sp.prepare(lines.slice(0, v.arena?.kind === 'steward' ? 18 : 10), vo);
         }
         // the sailor I would speak to: his «Есть!», «Есть поднять паруса!», «На абордаж!» (TalkAcks.CREW_ACKS)
         const s = g.ships?.crew?._listener?.();
@@ -593,6 +595,20 @@ export class CastleTalk {
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
         if (this._darkGate(v)) return true; // (чёрный маг: волшебник презирает, не продаёт, гонит — DarkMagic.js)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
+        // (the steward of the duel arena: sign-up by the rules at once, no net — ArenaDuels.stewardHear)
+        if (v.arena?.kind === 'steward') {
+            const sr = g.arenaDuels?.stewardHear(v, text);
+            if (sr) {
+                const tr = this._traceTurn(v, text, info);
+                this.trace.mark(tr, 'rules');
+                v.talking = 4; v.talkTo = g.localId;
+                v.yaw = Math.atan2(-(g.character.group.position.x - v.x), -(g.character.group.position.z - v.z));
+                this.attention?.talkedWith(v.id, performance.now());
+                journal(`разговор: «${text}» → «${sr.reply}» — распорядитель арены (правила)`);
+                this._sayReply(v, sr.reply);
+                return true;
+            }
+        }
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
         const b = this.brain(v);

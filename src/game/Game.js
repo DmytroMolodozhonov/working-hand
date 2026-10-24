@@ -3325,6 +3325,7 @@ export class Game {
         this.flashlight.intensity = savedIntensity;
         this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
         this.seeFx?.prewarm(); // («Visible Godi»: the cloud's shader)
+        this.arenaDuels?.prewarm(); // (the lit places of a duel: three small shaders)
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
