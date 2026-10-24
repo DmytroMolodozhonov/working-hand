@@ -16,11 +16,11 @@ const CSS = `
   100% { opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0); letter-spacing:.04em } }
 @keyframes duel-win-glow { 0%,100% { text-shadow:0 0 18px rgba(255,200,70,.95),0 0 46px rgba(255,150,30,.7),0 5px 12px rgba(0,0,0,.75) }
   50% { text-shadow:0 0 30px rgba(255,236,150,1),0 0 80px rgba(255,170,40,.95),0 5px 12px rgba(0,0,0,.75) } }
-.duel-win { position:fixed; left:50%; top:34%; z-index:62; pointer-events:none; white-space:nowrap;
+.duel-win { position:fixed; left:50%; top:34%; z-index:99990; pointer-events:none; white-space:nowrap;
   font:900 clamp(48px,9vw,120px)/1 Georgia,serif; color:#fff1b8; animation:duel-win-in .9s cubic-bezier(.2,1.3,.4,1) both, duel-win-glow 1.6s ease-in-out .9s infinite; }
 .duel-win.lose { color:#d9d2ee; animation:duel-win-in .9s cubic-bezier(.2,1.3,.4,1) both; text-shadow:0 0 22px rgba(150,130,230,.9),0 5px 12px rgba(0,0,0,.8); }
 .duel-win small { display:block; margin-top:14px; font:600 clamp(16px,2.2vw,26px)/1.2 Georgia,serif; color:#ffe2a0; text-align:center; letter-spacing:0; }
-.duel-again { position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; background:rgba(8,6,20,.55); }
+.duel-again { position:fixed; inset:0; z-index:100000; display:flex; align-items:center; justify-content:center; background:rgba(8,6,20,.55); }
 .duel-again > div { width:min(640px,94vw); max-height:90vh; overflow:auto;  padding:26px 30px; border-radius:14px; background:linear-gradient(#2b2150,#1a1433); border:2px solid #d9b45a;
   box-shadow:0 0 40px rgba(255,200,80,.35); color:#f6ecd0; font:16px/1.4 Georgia,serif; text-align:center; }
 .duel-again h3 { margin:0 0 14px; font:800 24px Georgia,serif; color:#ffe9a8; }
