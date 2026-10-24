@@ -35,6 +35,13 @@ export const ARENA = {
  * The round arena of a big settlement of wizards (WizardVillages.ARENA_SPOT: a level field of r 22 kept for
  * it at the town's middle): a round floor, four rows, the marks closer.
  */
+/**
+ * The arena of the duel-only mode (Creative start «Перед дуэлью»): 2.4× the floor's area (the author: «было очень тесно»), the marks
+ * 28 m apart (inside a duel charge's reach, Duel.DUEL.RANGE 30), more levelled land round it (the desk by the gate is 55 m out).
+ * Ordinary worlds keep ARENA.
+ */
+export const ARENA_BIG = { ...ARENA, W: 23, S: 15, MARK: 14, ZONE: 64, AWAY: TOWER_ZONE + 64 + 26 };
+
 export const ARENA_ROUND = { W: 10, S: 0, TIERS: 4, STEP: 2, MARK: 8, ZONE: 0 };
 const dims = (d) => ({ ...ARENA, ...d });
 
@@ -146,10 +153,9 @@ export function inArena(def, x, z) {
 const DIRS = [[1, 0, 3], [-1, 0, 1], [0, 1, 0], [0, -1, 2]];
 
 /** Level, dry ground for an arena at (X, Z)? → the height its land is levelled to (F), or null. (raw: the world's height field) */
-function arenaGround(raw, X, Z) {
+function arenaGround(raw, X, Z, Z0 = ARENA.ZONE) {
     let wet = 0, all = 0;
     const hs = [];
-    const Z0 = ARENA.ZONE;
     for (let dz = -Z0; dz <= Z0; dz += 8) for (let dx = -Z0; dx <= Z0; dx += 8) {
         const h = raw(X + dx, Z + dz);
         all++;
@@ -168,7 +174,8 @@ function arenaGround(raw, X, Z) {
  * and any a settlement adds. landAt / partsForChunk the castles' way (Sites.js).
  */
 export class ArenaIndex {
-    constructor(seed, raw, towers, villages = null) {
+    constructor(seed, raw, towers, villages = null, dims = ARENA) {
+        this.d = dims; // the arena's measures: ARENA, or ARENA_BIG in the duel-only mode
         this.seed = seed; this.raw = raw; this.towers = towers; this.villages = villages;
         this.byVillage = new Map(); // settlement id → its round arena (WizardVillages: `def.arena`, its place)
         this.byTower = new Map(); // tower id → arena def or null
@@ -184,17 +191,17 @@ export class ArenaIndex {
         if (!t || t.kind !== 'tower') return null;
         if (this.byTower.has(t.id)) return this.byTower.get(t.id);
         let def = null;
-        const x0 = t.gx * CASTLE_CELL, z0 = t.gz * CASTLE_CELL, need = ARENA.ZONE + BLEND + 4;
+        const x0 = t.gx * CASTLE_CELL, z0 = t.gz * CASTLE_CELL, need = this.d.ZONE + BLEND + 4;
         // the side with the most room in the cell first (the same order on every computer)
         const order = DIRS.map((d) => ({ d, room: d[0] > 0 ? x0 + CASTLE_CELL - t.x : d[0] < 0 ? t.x - x0 : d[1] > 0 ? z0 + CASTLE_CELL - t.z : t.z - z0 }))
             .sort((a, b) => b.room - a.room || a.d[2] - b.d[2]);
-        for (const away of [ARENA.AWAY, ARENA.AWAY + 30]) {
+        for (const away of [this.d.AWAY, this.d.AWAY + 30]) {
             for (const { d } of order) {
                 const X = t.x + d[0] * away, Z = t.z + d[1] * away;
                 if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
-                const F = arenaGround(this.raw, X, Z);
+                const F = arenaGround(this.raw, X, Z, this.d.ZONE);
                 if (F == null) continue;
-                def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) });
+                def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, this.d);
                 break;
             }
             if (def) break;
@@ -218,7 +225,7 @@ export class ArenaIndex {
 
     /** Arenas whose land reaches within `r` of a point (a tower's / a settlement's arena never leaves its cell). */
     near(x, z, r = 0) {
-        const out = [], m = ARENA.ZONE + BLEND + r;
+        const out = [], m = this.d.ZONE + BLEND + r;
         const g0x = Math.floor((x - m) / CASTLE_CELL), g1x = Math.floor((x + m) / CASTLE_CELL);
         const g0z = Math.floor((z - m) / CASTLE_CELL), g1z = Math.floor((z + m) / CASTLE_CELL);
         for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {

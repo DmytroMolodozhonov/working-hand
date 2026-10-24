@@ -50,9 +50,12 @@ import { ArenaTagFx } from '../fx/ArenaTagFx.js';
 import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
 import { foeRanks } from './SpawnSpots.js';
+import { DuelEndUi, AGAIN_AFTER } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const WALK = 2.3, RUN = 5.6;
+/** How far the world is drawn and made in the duel-only start (m): the arena's stands reach ~50 m, the levelled land 64. */
+const MODE_VIEW = 90;
 /** Mana a spell costs a duellist at the arena: they pace themselves (a long duel), lighter than in a real fight. */
 const arenaCost = (spell) => Math.max(2, Math.round((NPC_COST[spell] ?? 10) * 0.6));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -95,6 +98,7 @@ export class ArenaDuels {
         this._markT = 0;
         this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
         this._tagT = 0;
+        this.endUi = new DuelEndUi(); // «Вы победили!» and «Хотите повторить дуэль?» (the duel mode)
         this.mode = null; // «Перед дуэлью» (Creative start): {arenaId, foe, id} — a fight after a fight on this arena, see startDuelMode
     }
 
@@ -909,6 +913,11 @@ export class ArenaDuels {
         if (!D || (D.phase !== 'fight' && D.phase !== 'count')) return false;
         const oppId = D.a === v ? (D.b ? D.b.id : D.p) : D.a.id;
         if (by !== oppId) return false;
+        if (this.mode?.arenaId === A.id) { // (the duel mode: the deadly ones are allowed — a kill is a win, nobody avenges)
+            if (killed) this._end(A, D, D.a === v ? 'p' : 'a', 'kill');
+            else if (Math.random() < 0.6) { this._fx(A, 'cheer', A.def.centre, 0.6); this._fans(A, 'hit'); }
+            return true;
+        }
         const banned = !!opts.pierce || isBanned(opts.kind);
         if (killed || banned) {
             const verdict = banned && !killed ? 'foul' : killVerdict({ byOpponent: true, via: opts.via, kind: opts.kind });
@@ -955,6 +964,7 @@ export class ArenaDuels {
     calm(v, by) {
         if (!v?.arena) return false;
         const A = this.list.get(v.arena.id);
+        if (A && this.mode?.arenaId === A.id && by === this.mode.id) return true; // (the duel mode: the crowd only cheers — no fear, no anger, whatever the hero casts)
         return !!A?.duel && A.duel.p === by && A.duel.phase !== 'over';
     }
 
@@ -1024,6 +1034,7 @@ export class ArenaDuels {
             case 'count': this.count = { t: 0 }; break;
             case 'end':
                 this.count = null; this.myQueue = null;
+                if (this.mode) { if (m.r === 'win') this._modeWin(); return; } // (the duel mode has its own end: no lectern, no coins)
                 hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Вашу палочку вернули — она на столе записи' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
             case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${ARENA_DUEL.REWARD} монет`, true); break;
@@ -1080,9 +1091,10 @@ export class ArenaDuels {
      */
     startDuelMode(arenaId, foe = 'mid') {
         this.mode = { arenaId, foe, id: this.game.localId, hinted: false };
+        if (this.game.world) this.game.world.duelFar = MODE_VIEW; // (only the arena is drawn and made: the workers have nothing else to do — FPS)
     }
 
-    stopDuelMode() { this.mode = null; }
+    stopDuelMode() { this.mode = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
 
     /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
     _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
@@ -1107,7 +1119,7 @@ export class ArenaDuels {
         if (!cs) return;
         const D = A.duel;
         // the stands: all the fans are in their seats, none walks in (the show is ready before the count)
-        if (!A.want) A.want = ARENA_DUEL.FANS[1];
+        if (!A.want) A.want = Math.round((ARENA_DUEL.FANS[0] + ARENA_DUEL.FANS[1]) / 4); // (half of the usual crowd: lighter for the frame — the author)
         if (A.fans.size < A.want && !(D && D.phase === 'fight')) this._recruit(A, cs, 'fan');
         for (const v of A.fans) {
             if (v.seated || !v.arena) continue;
@@ -1115,14 +1127,17 @@ export class ArenaDuels {
             if (!s) continue;
             v.arena.seat = s; v.arena.leg = 2; v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
         }
-        if (D) { m.next = 0; return; }
-        if (A.fans.size < Math.min(A.want, 6)) return; // (the stands must be filling up first)
+        this._keepOnFloor(A, D);
+        if (m.winT != null) { m.winT += dt; if (m.winT >= AGAIN_AFTER) { m.winT = null; this._askAgain(); } }
+        if (D || m.hold) return;
+        if (A.fans.size < Math.min(A.want, 4)) return; // (the stands must be filling up first)
         // the next duel: the opponent on his place, the player on his, the count 10…1
         const marks = A.def.gates;
         const a = this._foe(A, cs, foeRanks(m.foe));
         if (!a) { A.restT = 3; return; }
         const o = marks[1].mark;
         a.arena.side = 1; a.arena.leg = 2; a.x = o.x; a.z = o.z; a.y = o.y; a.speed = 0; a.yaw = yawTo(o.x, o.z, marks[0].mark.x, marks[0].mark.z);
+        A.owed = null; // (no coins at the lectern here: the duel is the whole game)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
@@ -1141,8 +1156,40 @@ export class ArenaDuels {
         ch.group.rotation.y = Math.atan2(O.x - M.x, O.z - M.z);
         ch.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
+        ch.airTop = null; ch.landing = null; g.knock?.reset?.(); // (no fall counted from before the move: the hero stands, he does not land hard)
+        this._last = { x: M.x, z: M.z };
         const c = g.combat;
         if (c?.enabled) { c.hp = c.maxHp || c.hp; c.fatigue = c.maxFatigue || c.fatigue; g.playerHP = c.hp; }
+    }
+
+    /** The hero stays on the arena's floor (the barrier of the duel mode: no walking off into the stands and the world beyond). */
+    _keepOnFloor(A, D) {
+        const g = this.game, p = g.character.group.position;
+        if (onArenaFloor(A.def, p.x, p.z, 0.4)) { (this._last || (this._last = {})).x = p.x; this._last.z = p.z; return; }
+        const l = this._last;
+        if (!l) return;
+        // (back to the last good place, the speed gone: a wall, not a rubber band)
+        p.x = l.x; p.z = l.z; g.character.verticalVelocity = Math.min(0, g.character.verticalVelocity);
+        g.knockback?.set?.(0, 0, 0);
+    }
+
+    /** The hero won in the duel mode: the big «Вы победили!», in ten seconds the window «Хотите повторить дуэль?». */
+    _modeWin() {
+        const m = this.mode;
+        if (!m) return;
+        m.hold = true; m.winT = 0;
+        this.endUi.showWin('Трибуны ликуют');
+    }
+
+    _askAgain() {
+        const m = this.mode;
+        if (!m) return;
+        this.endUi.hideBox();
+        this.endUi.showAgain({
+            foe: m.foe,
+            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); m.hold = false; },
+            onExit: () => document.getElementById('pause-exit-btn')?.click(), // (the same way out as the pause menu: the world is saved)
+        });
     }
 
     /**

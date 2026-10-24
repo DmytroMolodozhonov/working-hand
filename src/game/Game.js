@@ -338,6 +338,7 @@ export class Game {
             slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
             wizHuts: this.gen >= 7, // (the lone wizards' houses roomy — Hamlets.js)
             furnish: this.gen >= FURNISH_FROM_GEN, // (the castles' rooms furnished, more chests — CastleFurniture.js)
+            bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
             meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)
         });
         this.world.setNightMode(config.mode === 'survival' && !isTest);
@@ -3523,10 +3524,11 @@ export class Game {
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
-        if (earth) this.animals.update(dt);
+        const duelOnly = !!this.arenaDuels?.mode; // (the duel-only start: no animals, no roads' people, no zombies — only the arena)
+        if (earth && !duelOnly) this.animals.update(dt);
         if (earth) this.runner.update(dt);
-        if (earth) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
-        if (earth) this.carriages?.update(dt);
+        if (earth && !duelOnly) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
+        if (earth && !duelOnly) this.carriages?.update(dt);
         if (earth) this.castleLife.update(dt);
         if (earth) this.arenaDuels?.update(dt); // (the duel arenas: after the people moved)
         if (earth) this.doors.update(dt);
@@ -4217,7 +4219,7 @@ export class Game {
     }
 
     _spawnWaves(dt) {
-        if (!this.authority || this.config.map) return;
+        if (!this.authority || this.config.map || this.arenaDuels?.mode) return;
         this._updateDummy(dt);
         this._updateTestDragon(dt);
         this.zombieSpawn?.update(dt); // (zombies out of the dark: caves, the night — ZombieSpawn.js)

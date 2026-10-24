@@ -27,7 +27,7 @@ import { TowerIndex } from './WizardTowers.js';
 import { VillageIndex } from './WizardVillages.js';
 import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
-import { ArenaIndex } from './DuelArenas.js';
+import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
@@ -548,7 +548,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false, bigArena = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -578,7 +578,7 @@ export class TerrainData {
             const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * (this.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
-            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages); // (the duel arenas: DuelArenas.js)
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
             this.hamlets = new HamletIndex(seed, raw, near, this.wizHuts);

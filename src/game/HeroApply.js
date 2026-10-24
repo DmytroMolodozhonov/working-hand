@@ -63,6 +63,7 @@ export class HeroApply {
         const p = this.pending, g = this.game;
         this.pending = null;
         if (p?.hold && p.origin) { g.character.group.position.copy(p.origin); g.character.verticalVelocity = 0; } // (back from the sky)
+        this._upright();
         g.hud?.toast?.(`📍 «${spawnLabel(id)}»: ${why}`);
     }
 
@@ -80,6 +81,13 @@ export class HeroApply {
         g.knockback?.set?.(0, 0, 0);
     }
 
+    /** After a move across the world: no fall counted from the old place (the hover was 70 m up — landing from it laid the hero down). */
+    _upright() {
+        const g = this.game, ch = g.character;
+        ch.airTop = null; ch.landing = null;
+        g.knock?.reset?.();
+    }
+
     _dry(data) {
         return (x, z) => data.landMade(x, z) && !data.isSeaColumn(Math.round(x), Math.round(z)) && data.surfaceY(x, z) > WATER_LEVEL_Y + 0.5 && !data.isWaterAt(x, data.surfaceY(x, z), z);
     }
@@ -91,6 +99,7 @@ export class HeroApply {
         g.character.group.rotation.y = t.yaw || 0;
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
+        this._upright();
         if (t.duel) g.arenaDuels?.startDuelMode?.(t.arenaId, g.hero?.foe); // (the arena: a fight in ten seconds — ArenaDuels)
     }
 
@@ -120,6 +129,7 @@ export class HeroApply {
         g.character.group.rotation.y = s.pose.yaw ?? st.yaw ?? 0;
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
+        this._upright();
         if (!isCrewless()) g.hud?.toast?.('⚓ Вы в открытом море. Смотрите по сторонам: где-то рядом ходит чёрный корабль');
     }
 
