@@ -37,6 +37,9 @@ let _lobeA = null, _lobeB = null; const _headStems = [];
 const headStem = (i) => _headStems[i] || (_headStems[i] = buildHeadStem(i + 1));
 const lobes = () => { if (!_lobeA) { _lobeA = buildLobe(1, 0); _lobeB = buildLobe(2, 1); } return [_lobeA, _lobeB]; };
 
+/** Where the Creative test ground's experiment heads may grow: [angle, metres] from the start, east first — the first flat grass wins. */
+const EXP_SPOTS = [[0, 65], [0.5, 65], [-0.5, 65], [1, 65], [-1, 65], [0, 72], [0.5, 72], [-0.5, 72], [1.5, 65], [-1.5, 65], [2.2, 65], [-2.2, 65]];
+
 export class Plants {
     constructor(game) {
         this.game = game;
@@ -62,11 +65,13 @@ export class Plants {
         const gx0 = Math.floor((p.x - R) / C), gx1 = Math.floor((p.x + R) / C), gz0 = Math.floor((p.z - R) / C), gz1 = Math.floor((p.z + R) / C);
         const FAR = Math.ceil(PLANT_RANGE.KEEP / C);
         for (const [key, grp] of this.groups) {
+            if (key === 'carnivore|exp' && !grp) continue; // (the experiment heads: a spent group stays spent)
             const [kx, kz] = grp ? [grp.gx, grp.gz] : key.split('|')[1].split(',').map(Number);
             if (kx >= gx0 - FAR && kx <= gx1 + FAR && kz >= gz0 - FAR && kz <= gz1 + FAR) continue;
             if (grp) this._unload(grp);
             this.groups.delete(key);
         }
+        this._experimentHeads(p, t);
         let built = 0;
         for (let gz = gz0; gz <= gz1 && built < 2; gz++) for (let gx = gx0; gx <= gx1 && built < 2; gx++) for (const kind of Object.keys(PLANT_KINDS)) {
             const key = kind + '|' + gx + ',' + gz;
@@ -89,6 +94,41 @@ export class Plants {
             this.groups.set(key, ok.length ? this._load(kind, gx, gz, ok) : null);
             built++;
         }
+    }
+
+    /**
+     * The Creative test ground (the standard map, the start place with the pedestals): the author's experiments need carnivorous heads — three of them
+     * grow on the grass east of the start, ~65 m from it (not near, not far). The place is the first of a fixed list that is flat grass with its land made;
+     * never made in the frame (`landMade`); a cut one stays cut for the session only (`_gone`), they grow again the next time.
+     */
+    _experimentHeads(p, t) {
+        const g = this.game, key = 'carnivore|exp';
+        if (this.groups.has(key) || g.config?.mode !== 'creative' || g.config?.map || (g.gen ?? 1) < 3) return; // (the same test as Game's `testGround`)
+        if (!this._expSpot) {
+            for (const [ang, r] of EXP_SPOTS) {
+                const x = Math.round(Math.cos(ang) * r), z = Math.round(Math.sin(ang) * r);
+                const cells = [[0, 0], [7, 0], [-7, 0], [0, 7], [0, -7]].map(([dx, dz]) => [x + dx, z + dz]);
+                if (cells.some(([cx, cz]) => t.landMade && !t.landMade(cx, cz))) return; // (wait for the land: the list is in order, never skipped)
+                const tops = cells.map(([cx, cz]) => t.topLayer(cx, cz));
+                const flat = Math.max(...tops) - Math.min(...tops) <= 1;
+                const grass = cells.every(([cx, cz], i) => t.get(cx, tops[i], cz) === BLOCK.GRASS && t.get(cx, tops[i] + 1, cz) !== BLOCK.WATER);
+                const free = cells.every(([cx, cz]) => !((t.sites || t.castles)?.landAt?.(cx, cz) || t.isIsland?.(cx, cz)));
+                if (flat && grass && free) { this._expSpot = { x, z }; break; }
+            }
+            if (!this._expSpot) this._expSpot = false;
+        }
+        const S = this._expSpot;
+        if (!S || Math.hypot(p.x - S.x, p.z - S.z) > PLANT_RANGE.LOAD) return;
+        const members = [];
+        for (let i = 0; i < 3; i++) {
+            const x = S.x + (i - 1) * 7, z = S.z, id = 'cexp.' + i, top = t.topLayer(x, z);
+            if (this._gone.has(id)) continue;
+            members.push({ i, x, z, y: top - 0.5, id, yaw: Math.atan2(-x, -z) + (i - 1) * 0.4, h: 0.35 + 0.15 * i });
+        }
+        if (!members.length) { this.groups.set(key, null); return; }
+        const grp = this._load('carnivore', 0, 0, members);
+        grp.key = key; grp.gx = Math.floor(S.x / APPLE.CELL); grp.gz = Math.floor(S.z / APPLE.CELL); // (its cell: where the unloading looks)
+        this.groups.set(key, grp);
     }
 
     _load(kind, gx, gz, members) {

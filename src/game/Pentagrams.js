@@ -7,7 +7,7 @@
  */
 
 import { MONSTER_PENTAGRAM } from './PentagramMonster.js';
-import { BREAKWARD_LINES, GARGOYLE_LINES } from './PentagramFigures.js';
+import { BREAKWARD_LINES, GARGOYLE_LINES, UNITY_LINES } from './PentagramFigures.js';
 
 export const PENTAGRAMS = {
     // «Пентаграмма страшного монстра»: круг и оскаленная пасть (четыре клыка, челюсть дугой); встал в круг — 200 маны — ×7 на 10 минут (PentagramMonster.js, MonsterTransform.js)
@@ -34,6 +34,19 @@ export const PENTAGRAMS = {
         // круг + морда вершиной вниз с двумя рогами и крыльями (PentagramFigures.GARGOYLE_LINES): свой рисунок, не звезда
         lines: GARGOYLE_LINES,
         use: 'gargoyles.startRitual', // game.gargoyles.startRitual(center, { by }) — GargoyleRules.GARGOYLE_PENTAGRAM.use
+    },
+    // «Пентаграмма объединённой силы»: два предмета одного вида — в один, бафы складываются (UnitedRules.js, UnitedPower.js); чёрная магия, +30 к тьме при слове
+    unity: {
+        id: 'unity',
+        title: 'Пентаграмма объединённой силы',
+        dark: true,
+        glow: 0x8a2be2, // багрово-фиолетовое
+        cost: 120, // маны при слове
+        once: false,
+        scroll: 'PentagramUnity',
+        darkBonus: 30, // сразу +30 уровней тёмной магии (в сумме не больше 100)
+        lines: UNITY_LINES,
+        effect: 'Объединяет силы двух одинаковых вещей в одну новую: все бафы складываются.',
     },
 };
 

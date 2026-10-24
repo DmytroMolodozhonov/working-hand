@@ -178,6 +178,7 @@ import { Groundprud } from './Groundprud.js';
 import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
+import { UnitedPower } from './UnitedPower.js';
 import { GroundVortex } from './GroundVortex.js';
 import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { SteamBodies } from '../fx/SteamFx.js';
@@ -499,6 +500,7 @@ export class Game {
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
+        this.united = new UnitedPower(this); // «Пентаграмма объединённой силы» (`Pentagranium Unitas`): two things of one kind into one (UnitedPower.js)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
@@ -3581,6 +3583,7 @@ export class Game {
         this.steam?.update(dt);
         this.fireworks?.update(dt);
         this.enchantCircles?.update(dt);
+        this.united?.update(dt);
         if (earth && !duelOnly) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)

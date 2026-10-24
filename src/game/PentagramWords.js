@@ -19,6 +19,7 @@ export const PENT_NAMES = {
     devil: { en: 'Diabolus', say: ['диаболус', 'дьяболус', 'диаболис'], stems: ['diabolus', 'diabolis', 'диаболус', 'дьяболус', 'диаболис', 'диаболюс'] },
     monster: { en: 'Monstrum', say: ['монструм', 'монструн', 'монструм'], stems: ['monstrum', 'monstrun', 'монструм', 'монструн', 'монструм'] },
     breakward: { en: 'Breakward', say: ['брейквард', 'брэйквард', 'брейкворд'], stems: ['breakward', 'breakword', 'брейквард', 'брэйквард', 'брейкворд', 'брэйкворд', 'брейк вард'] },
+    unity: { en: 'Unitas', say: ['унитас', 'юнитас', 'унитес'], stems: ['unitas', 'unitus', 'унитас', 'юнитас', 'унитес', 'юнитес', 'унитос'] },
     gargoyles: { en: 'Gargoylis', say: ['гаргойлис', 'гаргоилис', 'гаргойлес'], stems: ['gargoylis', 'gargoyles', 'gargoylis', 'гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргойлз'] },
 };
 

@@ -127,6 +127,7 @@ export class Pentagranium {
         this._permanent(mark);
         this._others(mark);
         g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
+        if (def.darkBonus) addDark(g.dark || g, def.darkBonus, 'ritual'); // (united power: at once +30 to the dark level, 100 at most — DarkMagic.addDark clamps)
         g.mana?.success('Pentagranium'); // (the first success's cells; making a pentagram is no black magic — only the devil one's rite adds darkness)
         if (def?.dark) g.castleLife?.alarm?.({ x: p.x, y: center.y, z: p.z }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
         g.hud.setVoice(`✨ «${figureOf(id).ru}» рисуется на земле… ${USE_TEXT[id] || ''}`, true);
@@ -430,7 +431,7 @@ export class Pentagranium {
         m.life -= dt;
         // lit: it comes up in a second, flares on a rite, goes out in its last 6 s
         const rite = m.rites.find((r) => !r.done);
-        const hellWant = rite ? 1 : 0;
+        const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
         m.hell += (hellWant - m.hell) * Math.min(1, dt * (hellWant ? 3 : 1.2));
         if (m.anim) this._animStep(m, dt);
         m.fade = Math.min(1, Math.max(0, (m.t - m.drawT) / 1.2), Math.max(0, m.life / 6));
@@ -468,7 +469,7 @@ export class Pentagranium {
         const g = this.game, death = g.death;
         if (!death) return;
         for (const m of this.marks.values()) {
-            if (!m.mine || m.fade < 0.9 || m.rites.some((r) => !r.done)) continue; // (one rite at a time; only the pentagram's own caster makes it)
+            if (m.pent !== 'devil' || !m.mine || m.fade < 0.9 || m.rites.some((r) => !r.done)) continue; // (one rite at a time; only the pentagram's own caster makes it)
             for (const b of death.bodies.values()) {
                 if (b.lev || death.falling.has(b.id) || b.netAt && performance.now() - b.netAt < 800) continue;
                 if (!inside(m, b.x, b.z, RITE.REACH_K) || Math.abs(b.y - m.y) > 3) continue;
@@ -566,13 +567,15 @@ export class Pentagranium {
             }
         } else if (m.k === 'fx') {
             if (['teleport', 'life', 'mend'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
+        } else if (m.k === 'uni') {
+            this.game.united?.onNet(m);
         } else if (m.k === 'rite') {
             const mk = this.marks.get(m.id), b = this.game.death?.bodies.get(m.body);
             if (mk && b && !mk.rites.some((r) => r.id === b.id)) this._riteBegin(mk, b, false);
         }
     }
 
-    sampleModels() { return this.fx.sampleModels(); }
+    sampleModels() { return [...this.fx.sampleModels(), ...(this.game.united?.sampleModels?.() || [])]; }
 
     /** Death / world change: nothing stays lit. */
     clear() { this.fx.trailEnd(); for (const id of [...this.marks.keys()]) this._remove(id, 'old'); }

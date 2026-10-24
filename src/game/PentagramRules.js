@@ -115,7 +115,7 @@ export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat
  * The mana taken at the word (the author: «в этот момент снимается мана»). Others take theirs where the effect itself pays: the gargoyles' ritual
  * (150, when it starts), the enchanting rite (30 % of the current mana when the thing is laid), the devil rite (50, over the body), mending (by pieces).
  */
-export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50 };
+export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50, unity: 120 };
 
 /** The figure's turn so that its apex points away from the hero standing at (hx, hz) (it reads upright from where he stands). */
 export const turnAway = (cx, cz, hx, hz) => { const dx = cx - hx, dz = cz - hz, d = Math.hypot(dx, dz) || 1; return Math.atan2(-dx / d, dz / d); };

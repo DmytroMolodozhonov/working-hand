@@ -147,6 +147,8 @@ export function wandPower(wand, spell) {
     const b = baseSpell(spell);
     if (wand.dir && (WAND_DIRS[wand.dir]?.spells.includes(spell) || WAND_DIRS[wand.dir]?.spells.includes(b))) m *= 1.25;
     if (wand.fav && (wand.fav === b || wand.fav === spell)) m *= 1.4;
+    if (wand.favs) { const f = wand.favs[b] ?? wand.favs[spell]; if (f) m *= 1 + f / 100; } // (an united wand: every favourite and direction adds up — UnitedRules.js)
+    if (wand.dirs) for (const [d, v] of Object.entries(wand.dirs)) if (WAND_DIRS[d]?.spells.includes(spell) || WAND_DIRS[d]?.spells.includes(b)) m *= 1 + v / 100;
     m *= 1 + (wand.power || 0) / 100;
     m *= wandPowerMul(wand); // (a wand enchanted on the pentagram: Enchant.js)
     // the dragon's wand: every fire spell 60% stronger (DragonKinds.FIRE_SPELLS; its mana the same)

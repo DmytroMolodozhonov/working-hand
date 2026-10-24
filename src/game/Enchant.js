@@ -110,7 +110,16 @@ export function applyEnchant(it, tier) {
 }
 
 const row = (it) => (it?.ench ? ENCHANTS[it.ench.kind] : null);
-const num = (r, k, e) => (r && r[k] ? r[k][e.tier] : 0);
+const num = (r, k, e) => (e.sum ? (e.sum[k] ?? 0) : r && r[k] ? r[k][e.tier] : 0); // (`sum`: several enchantments united on the pentagram of united power — UnitedRules.js)
+
+/** The numbers of a thing's enchantment as a map (for uniting): from the table by its tier, or its own `sum`; null — not enchanted. */
+export function enchantSums(it) {
+    if (!it?.ench) return null;
+    if (it.ench.sum) return { ...it.ench.sum };
+    const r = ENCHANTS[it.ench.kind], out = {};
+    for (const k of Object.keys(r || {})) if (Array.isArray(r[k])) out[k] = r[k][it.ench.tier];
+    return out;
+}
 
 /** Добавка (доля/число) по ключу, 0 если нет. */
 export function enchantAdd(it, key) { return it?.ench ? num(row(it), key, it.ench) : 0; }
@@ -134,7 +143,7 @@ export const shieldPlain = (it) => enchantAdd(it, 'plain');
 
 /** Палочка: множитель силы заклинаний и множитель цены маны. */
 export const wandPowerMul = (it) => 1 + enchantAdd(it, 'power') / 100;
-export const wandCostMul = (it) => 1 - enchantAdd(it, 'save');
+export const wandCostMul = (it) => Math.max(0.1, 1 - enchantAdd(it, 'save') - (it?.uSave || 0));
 
 /** Цена вещи растёт с зачарованием (рынок). */
 export const enchantValueMul = (it) => (it?.ench ? [1.25, 1.6, 2.2, 3.2][it.ench.tier] : 1);
@@ -142,7 +151,8 @@ export const enchantValueMul = (it) => (it?.ench ? [1.25, 1.6, 2.2, 3.2][it.ench
 /** Название уровня + короткое описание бонуса (голограмма, справочник, подсказка). */
 export function describeEnchant(it) {
     if (!it?.ench) return null;
-    const T = ENCHANT_TIERS[it.ench.tier], R = ENCHANTS[it.ench.kind], t = it.ench.tier;
+    const T = ENCHANT_TIERS[it.ench.tier], R0 = ENCHANTS[it.ench.kind], t = it.ench.tier, S = it.ench.sum;
+    const R = S ? Object.fromEntries(Object.keys(R0).map((k) => [k, Array.isArray(R0[k]) ? Array.from({ length: 4 }, () => S[k] ?? (k === 'shield' ? 1 : 0)) : R0[k]])) : R0; // (united: the summed numbers stand for every tier)
     const bits = [];
     if (R.dmg) bits.push(`−${Math.round(R.dmg[t] * 100)}% урона`);
     if (R.cut) bits.push(`износ −${Math.round(R.cut[t] * 100)}%`);

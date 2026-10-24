@@ -44,6 +44,8 @@ import { iceRodModel } from './IceModels.js';
 import { scaleCoins } from './CoinScale.js';
 import { figureOf, figureIds, pentagramScroll } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
+import { describeUnited } from './UnitedRules.js';
+import { unitedWandModel } from './UnitedWandModel.js';
 
 export const WAND_DIRS = {
     duel: { name: 'дуэльная', spells: ['Sapira', 'Stupefy', 'AvadaKedavra', 'Levitation', 'Expelliarmus', 'Jolt'] },
@@ -600,6 +602,7 @@ const kindLine = (it) => { const k = scrollKindLabel(it); return k ? `<small sty
 /** «Раскрой свои секреты»: what the hologram says about an item. */
 export function describeItem(it) {
     const d = describeItemBase(it);
+    if (d && it?.united && it.kind !== 'wand') { const u = describeUnited(it); if (u) d.lines = [...d.lines, `<b style="color:#c9a8ff">${u.title}</b>: ${u.lines.join(' — ')}`]; }
     const e = d && describeEnchant(it);
     if (e) d.lines = [...d.lines, `<b style="color:${e.glow}">${e.title}</b>: ${e.lines.join(' — ')}`]; // (enchanted on the pentagram)
     return d;
@@ -613,6 +616,7 @@ function describeItemBase(it) {
             if (it.staff) return { title: '🪄 Посох странника', color: it.color, lines: ['Длинный посох с кристаллом — колдует, как палочка', 'Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны', `Сила посоха: <b>+${it.power || 0}%</b> в бою`] };
             if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
             if (it.dragon) return { title: '🐉 Палочка дракона', color: 0xc0141c, lines: ['Тёмно-алое дерево, светится, как угли', 'Все огненные заклинания на <b>60%</b> сильнее: «Инферно», «Fire», «Fire Maxima», «Let the Hellfire Come»', 'Маны — как обычно', 'Остальные заклинания — на <b>15%</b> сильнее, как с любой палочкой'] };
+            if (it.united) { const u = describeUnited(it); return { title: u.title, color: u.color, lines: ['Все заклинания на <b>15%</b> сильнее', ...u.lines] }; }
             const lines = ['Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны'];
             if (it.dir) lines.push(`Направление: <b>${WAND_DIRS[it.dir].name}</b> (+25%${it.dir === 'build' ? ', ресурсов на 40% меньше' : ''})`);
             else lines.push('Направление: нет');
@@ -1013,7 +1017,7 @@ export function makeItemModel(it) {
 
 function buildItemModel(it) {
     switch (it.kind) {
-        case 'wand': return it.dragon ? dragonWandModel() : wandModel(it);
+        case 'wand': return it.united ? unitedWandModel(it) : it.dragon ? dragonWandModel() : wandModel(it);
         case 'dragonEgg': return dragonEggModel(it.of);
         case 'scroll': return scrollModel(it);
         case 'shield': return shieldModel(it);

@@ -68,6 +68,24 @@ try {
     await snap('3-rite-start');
     await sleep(3500);
     await snap('3-rite-late');
+    // 4. «Pentagranium Unitas»: the rite of united power — a body and a plant's head burn away, two wands wind into a spiral and become one
+    await page.evaluate(async () => {
+        const { cx, cz, y } = window.__pg, g = window.__zns.game, P = g.pentagranium;
+        const { rollWand, newUid } = await import('/src/game/ItemTypes.js');
+        const THREE = window.__pg.THREE;
+        P.clear();
+        const m = P._place('uni1', 'me', 'unity', cx, y, cz, 3.5, 0.2);
+        m.mine = true; m.t = 5; m.drawT = 0; m.anim = null;
+        const put = (item, dx, dz) => { const L = g.items.spawnLoose(item, new THREE.Vector3(cx + dx, y + 0.6, cz + dz)); L.rest = true; L.vel.set(0, 0, 0); return L; };
+        put(rollWand(), -1.6, 1.0); put(rollWand(), 1.5, 1.2);
+        put({ kind: 'carnivoreHead', uid: newUid(), count: 1 }, 0.4, -1.8);
+        g.death.addBody({ id: 'uni-body', k: 'v', who: 'w', role: 'adept', x: cx - 0.6, y, z: cz - 1.0, yaw: 0.5, age: 0, look: null });
+        window.__pg.look(-6, 7, 11);
+        window.__pg.m = m;
+    });
+    for (const [name, wait] of [['4-unity-0-dissolve', 900], ['4-unity-1-rise', 1100], ['4-unity-2-spiral', 1500], ['4-unity-3-fast', 1200], ['4-unity-4-flash', 900], ['4-unity-5-wand', 1800]]) { await sleep(wait); await snap(name); }
+    const uni = await page.evaluate(() => { const g = window.__zns.game; return [...g.items.loose.values()].filter((L) => L.item.united).map((L) => ({ power: L.item.power, united: L.item.united })); });
+    console.log('united wands:', JSON.stringify(uni), 'figures:', JSON.stringify(await page.evaluate(() => [...window.__zns.game.pentagranium.fx.figs.keys()])));
     // the drawing-scrolls' parchments (what the hero sees when he unrolls one)
     for (const id of ['devil', 'teleport', 'gargoyles']) {
         const url = await page.evaluate(async (id) => { const { drawParchment } = await import('/src/game/ScrollReading.js'); return drawParchment({ kind: 'scroll', stat: 'pentagram', pent: id }).image.toDataURL('image/png'); }, id);
@@ -76,7 +94,8 @@ try {
     }
     const info = await page.evaluate(async () => {
         const THREE = window.__pg.THREE, g = window.__zns.game;
-        const b = g.pentagranium.fx.figs.get('shot');
+        const b = g.pentagranium.fx.figs.get('shot') || [...g.pentagranium.fx.figs.values()][0];
+        if (!b) return { figure: ['-', '-'], post: window.__pg.post.position.y };
         const bb = new THREE.Box3().setFromObject(b.fig);
         const s = bb.getSize(new THREE.Vector3());
         return { figure: [s.x.toFixed(1), s.z.toFixed(1)], post: window.__pg.post.position.y };
