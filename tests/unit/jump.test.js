@@ -103,10 +103,22 @@ test('jump: two jumps one after the other — two jumps', () => {
 
 test('jump: the gravity multiplier changes how high the hero jumps', () => {
     const earth = jumpHeight(1, 1);
-    assert.ok(earth > 2.2 && earth < 2.6, `Earth ${earth}`); // (~1.2 m)
+    assert.ok(earth > 1.5 && earth < 1.7, `Earth ${earth}`); // (2 blocks are jumped onto, 3 never — jump-ledge.test.js)
     assert.ok(jumpHeight(1, 0.38) > earth * 2); // Mars
     assert.ok(jumpHeight(1, 0.17) > jumpHeight(1, 0.38)); // the Moon
     assert.ok(jumpHeight(1, 2) < earth * 0.25); // heavy
     assert.ok(jumpHeight(1, 2.5) < 0.2); // Jupiter: almost no jump
     assert.ok(jumpSpeed(0, 1) < jumpSpeed(1, 1));
+});
+
+test('jump: the game jumps within ~3 camera frames (≤ 120 ms) of the body leaving the ground', () => {
+    for (const h of [0.3, 0.5, 0.8]) {
+        const r = new JumpReader();
+        let at = null;
+        for (let t = 0; t < 3; t += 1 / 30) {
+            const o = r.read(pose(jump(h)(t)), t * 1000);
+            if (o.jumps && at == null) at = t;
+        }
+        assert.ok(at != null && at - 1.35 <= (h < 0.4 ? 0.17 : 0.12), `h ${h}: detected at ${at}`); // (the flight starts at 1.35 s)
+    }
 });

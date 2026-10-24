@@ -10,13 +10,14 @@
  * (Планета выставляет его, когда герой на ней оказывается, и возвращает 1, когда улетает.)
  *
  * The jump: the legs push the body off the ground with a speed that comes from how hard the
- * person really jumped (JumpReader strength 0..1). On Earth the strongest jump is ~1.2 m (2.4
- * units: the hero is ~3.5 units tall). The same push under a weaker pull goes higher and stays
+ * person really jumped (JumpReader strength 0..1). On Earth the strongest jump is 1.6 units (the hero is ~3.5 units tall, a block is 1: a step is 1.05 and the air adds JUMP_ASSIST 0.3 — 2 blocks are jumped onto, 3 never; it was 2.4 before
+ * ). The same push under a weaker pull goes higher and stays
  * longer in the air; under a stronger one the legs barely lift the body (over ~2g: almost no jump).
  */
 
 export const G = 20;              // the hero's gravity on Earth (units / s²)
-export const JUMP_H = { MIN: 0.5, MAX: 2.4 }; // jump height on Earth (units) for strength 0 … 1
+export const JUMP_H = { MIN: 0.5, MAX: 1.6 }; // jump height on Earth (units) for strength 0 … 1 (see JUMP_ASSIST)
+export const JUMP_ASSIST = 0.3;  // in the air the body gets up onto an edge this much higher than a step (units): the edge is caught, not bumped
 
 /** The legs' take-off speed (units / s) for this strength under this gravity. */
 export function jumpSpeed(strength, gravityK = 1) {

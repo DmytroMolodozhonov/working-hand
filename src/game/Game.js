@@ -182,6 +182,7 @@ import { Fireworks } from './Fireworks.js';
 import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
+import { JUMP_ASSIST } from './Jump.js';
 import { Concentration } from './Concentration.js';
 import { CrossedShield } from './CrossedArms.js';
 import { CastHints } from './CastHints.js';
@@ -4361,7 +4362,7 @@ export class Game {
     }
 
     /**
-     * A jump right in front of a ledge (a wall of up to three blocks, room on its top): the hero
+     * A jump right in front of a ledge (a wall of up to two blocks, room on its top): the hero
      * jumps up onto it, forward with the jump as a person does — the legs push off towards it.
      * Too low a jump: the rock stops the body (Collision) and it lands back where it stood.
      */
@@ -4375,7 +4376,7 @@ export class Game {
             if (ix === Math.round(p.x) && iz === Math.round(p.z)) continue;
             const L = T.floorBelow ? T.floorBelow(ix, iz, Math.floor(feet + 3.5)) : T.topLayer(ix, iz);
             const h = L - 0.5 - feet;
-            if (h < 0.3 || h > 3.05) continue;
+            if (h < 0.3 || h > 2.4) continue; // (the strongest jump still falls short of three blocks)
             if (T.solidIn && T.solidIn(ix, iz, L + 1, L + 4)) return; // (a wall, no room on its top)
             ch.jumpVel.x = fx * 3; ch.jumpVel.z = fz * 3;
             return;
@@ -4416,7 +4417,7 @@ export class Game {
         // (the monster form: its body first smashes what it can — walls, fences, trees — and what stays is a wall: MonsterTransform)
         if (this.monster?.active) this.monster.smashAt(p);
         const S = ch.size || 1;
-        return this.collision.resolveCylinder(p, PLAYER_RADIUS * S, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, 1.05 * S, true, ch.bodyHeight?.(true) ?? BODY_H);
+        return this.collision.resolveCylinder(p, PLAYER_RADIUS * S, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, (1.05 + (ch.jumpAir ? JUMP_ASSIST : 0)) * S, true, ch.bodyHeight?.(true) ?? BODY_H);
     }
 
     /**

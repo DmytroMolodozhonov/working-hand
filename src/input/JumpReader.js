@@ -29,15 +29,15 @@
  */
 
 export const JUMP = {
-    RISE: 0.16,       // the hips and the shoulders above the standing height (torso lengths): in the air
-    RISE_HIPS: 0.22,  // … seen only down to the hips (no feet to confirm it)
+    RISE: 0.11,       // the hips and the shoulders above the standing height (torso lengths): in the air
+    RISE_HIPS: 0.2,   // … seen only down to the hips (no feet to confirm it)
     SPEED: 1.4,       // and going up at least this fast (torso lengths / s)
     SPEED_HIPS: 2.0,
     MATCH: 0.55,      // the shoulders' rise and the hips' rise within this share of each other
     SCALE: 0.15,      // the torso's length changed more than this (closer / further): not a jump
     SIDE: 1.0,        // the body moved sideways more than up (× the rise): not a jump
     ANKLE: 0.05,      // seen feet: the ankles up from their place at least this much (torso lengths)
-    HOLD: 3,          // camera frames the body has to be up (a camera's jerk is one or two)
+    HOLD: 2,          // camera frames the body has to be up (a camera's jerk is one or two)
     SQUAT: 0.2,       // the body this far below the standing height (torso lengths): a squat — the standing height stays
     LAND: 0.07,       // back within this of the standing height: landed
     AIR_MAX: 1500,    // ms: no landing seen (the pose lost in the air) — taken as landed

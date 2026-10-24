@@ -28,7 +28,7 @@ const _qId = new THREE.Quaternion();
 import { DetailedHand } from './DetailedHand.js';
 import { stumpEnd } from './LimbSurgery.js';
 import { KD } from '../game/Impact.js';
-import { G, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
+import { G, JUMP_ASSIST, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
 import { setEyes } from './ImperiusEyes.js';
 import { setDark, tickDark, refreshArmor } from './DarkSkin.js';
@@ -794,7 +794,7 @@ export class VoxelCharacter {
             const S = this.size || 1; // (the monster form: everything ×7 — the feet, the step, the head's room)
             const feetNow = this.group.position.y - (PLAYER_GROUND_OFFSET - this.bodyDrop()) * S;
             // (going up a step the body eases up after the feet: they reach from the floor they stand on)
-            const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1 * S)) : feetNow) + 1.1 * S;
+            const reach = (this.onGround && this.swimY == null ? Math.max(feetNow, Math.min(this.groundY, feetNow + 1.1 * S)) : feetNow) + (1.1 + (this.jumpAir ? JUMP_ASSIST : 0)) * S;
             const px = this.group.position.x, pz = this.group.position.z;
             const ground = collision ? (this.stepBoxes && collision.standAt ? collision.standAt(px, pz, reach) : collision.groundAt ? collision.groundAt(px, pz, reach) : collision.groundY(px, pz)) : -0.5;
             this.groundY = ground;
