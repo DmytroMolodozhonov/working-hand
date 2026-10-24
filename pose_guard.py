@@ -19,6 +19,9 @@ import threading
 
 CHECK_EVERY = 20  # a fresh look (IMAGE mode) every this many pictures
 BAD_IN_ROW = 2  # pictures of a non-body before the follower is swapped
+ARM_MAX = 5.0  # shoulder → elbow → wrist longer than this many shoulder widths: no body (arms held out sideways: up to 3.7)
+SWAP_GAP = 15  # pictures at least between two swaps
+TRUST = 15  # an odd body the fresh look confirmed is not checked again for this many pictures
 DISAGREE = 0.6  # the fresh look and the follower differ by this much of the shoulders' width: swap
 
 
@@ -43,11 +46,11 @@ def sane(pose):
     # the face between the shoulders, not far beside them
     if abs(nx - (lx + rx) / 2) > 1.2 * sw:
         return False
-    # an arm no longer than a body could have (shoulder → elbow → wrist ≤ 3 shoulder widths)
+    # an arm no longer than a body could have
     for s, e, w in ((11, 13, 15), (12, 14, 16)):
         a, b, c = _p(pose, s), _p(pose, e), _p(pose, w)
         arm = math.hypot(a[0] - b[0], a[1] - b[1]) + math.hypot(b[0] - c[0], b[1] - c[1])
-        if arm > 3.2 * sw:
+        if arm > ARM_MAX * sw:
             return False
     return True
 
@@ -85,6 +88,8 @@ class PoseGuard:
         self.bad = 0
         self.n = 0
         self.swaps = 0
+        self.trust_until = 0
+        self.last_swap = -SWAP_GAP
         self.lock = threading.Lock()
         self._make_spare()
 
@@ -123,22 +128,35 @@ class PoseGuard:
         jf = pool.submit(self.fresh, img) if check and pool is not None else None
         r = self.video.detect_for_video(img, ts)
         pose = self.to_points(r.pose_landmarks[0]) if r.pose_landmarks else None
-        ok = pose is None or sane(pose)
-        self.bad = 0 if ok else self.bad + 1
+        # (an odd body the fresh look has just confirmed — bent over the camera — is not asked about again at once)
+        ok = pose is None or self.n < self.trust_until or sane(pose)
         fresh = None
         if jf is not None or (check and pool is None):
             fresh = jf.result() if jf is not None else self.fresh(img)
             if fresh is not None and sane(fresh) and (pose is None or disagree(pose, fresh) > DISAGREE):
-                self._swap()
-                return fresh, "swap"
+                return self._swapped(fresh)
         if not ok:
             fresh = fresh or self.fresh(img)
-            if self.bad >= BAD_IN_ROW:
-                self._swap()
+            if fresh is not None and pose is not None and disagree(pose, fresh) <= DISAGREE:
+                # the fresh look sees the same body: it really is so, the follower is right
                 self.bad = 0
-                return (fresh if fresh is not None and sane(fresh) else None), "swap"
-            return (fresh if fresh is not None and sane(fresh) else None), "fresh"
+                self.trust_until = self.n + TRUST
+                return pose, ""
+            self.bad += 1
+            good = fresh if fresh is not None and sane(fresh) else None
+            if self.bad >= BAD_IN_ROW:
+                return self._swapped(good)
+            return good, "fresh"
+        self.bad = 0
         return pose, ""
+
+    def _swapped(self, pose):
+        """The follower is swapped for the spare (at most once in SWAP_GAP pictures: making a spare costs)."""
+        if self.n - self.last_swap >= SWAP_GAP and self._swap():
+            self.last_swap = self.n
+            self.bad = 0
+            return pose, "swap"
+        return pose, "fresh"
 
     def close(self):
         for t in (self.video, self.image, self.spare):

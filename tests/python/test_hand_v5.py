@@ -245,13 +245,18 @@ class PoseGuard(unittest.TestCase):
         self.assertFalse(pose_guard.sane(body(nose=(0.5, 0.4))))
 
     def test_an_arm_longer_than_a_body_could_have_is_not(self):
-        self.assertFalse(pose_guard.sane(body(wrists=((0.40, 0.55), (0.95, 0.98)))))
+        self.assertFalse(pose_guard.sane(body(wrists=((0.40, 0.55), (1.18, 0.92)))))
+
+    def test_arms_held_out_sideways_are_a_body(self):
+        # (the author's recording: arms out to the sides measure up to 3.7 shoulder widths)
+        self.assertTrue(pose_guard.sane(body(wrists=((0.02, 0.32), (0.98, 0.32)))))
 
     def test_hands_up_is_a_body(self):
         self.assertTrue(pose_guard.sane(body(wrists=((0.35, 0.05), (0.65, 0.05)))))
 
     def test_a_stuck_follower_is_swapped_and_the_fresh_look_is_used(self):
-        good, bad = body(), body(nose=(0.5, 0.4))
+        # (as on the author's recording: a small body up by the head, shoulders above the nose)
+        good, bad = body(), body(nose=(0.5, 0.25), shoulders=((0.47, 0.18), (0.53, 0.18)), wrists=((0.46, 0.24), (0.54, 0.24)))
 
         class Res:
             def __init__(self, p):
@@ -288,6 +293,30 @@ class PoseGuard(unittest.TestCase):
         self.assertEqual(g.swaps, 1)
         p3, w3 = g.run(None, 66)
         self.assertEqual((p3, w3), (good, ""), "the new follower follows the right body")
+
+    def test_an_odd_body_the_fresh_look_confirms_is_kept(self):
+        odd = body(nose=(0.5, 0.4))  # (bent over the camera: the head below the shoulders, really)
+
+        class Res:
+            def __init__(self, p):
+                self.pose_landmarks = [p]
+
+        class Follower:
+            def detect_for_video(self, img, ts):
+                return Res(odd)
+
+            def close(self):
+                pass
+
+        class Fresh:
+            def detect(self, img):
+                return Res(odd)
+        g = pose_guard.PoseGuard(Follower, Fresh, lambda p: p)
+        for i in range(4):
+            p, w = g.run(None, i * 33)
+            self.assertIs(p, odd)
+            self.assertEqual(w, "")
+        self.assertEqual(g.swaps, 0)
 
 
 class Network(unittest.TestCase):
