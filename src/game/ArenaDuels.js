@@ -702,6 +702,24 @@ export class ArenaDuels {
         }
     }
 
+    /**
+     * A duellist's step in the fight (the author: «не разворачивается и уходит — смотрит на того, с кем борется, ходит влево-вправо, настороженно»):
+     * towards (tx, tz) but face to the foe all the time — a side-step, a step back, a step in — never the back turned. Slower than a walk, on the
+     * floor, where a man can stand. true: he moved.
+     */
+    _strafe(A, v, fp, tx, tz, dt) {
+        const L = this.life;
+        this._face(v, fp, dt);
+        const dx = tx - v.x, dz = tz - v.z, d = Math.hypot(dx, dz);
+        const speed = WALK * 0.85 * (v.legK ?? 1);
+        if (d < 0.15) { v.speed = 0; return false; }
+        const s = Math.min(d, speed * dt);
+        const nx = v.x + dx / d * s, nz = v.z + dz / d * s;
+        if (L._walkable(nx, nz, v.y) && onArenaFloor(A.def, nx, nz, 1.2)) { v.x = nx; v.z = nz; v.speed = speed; return true; }
+        v.speed = 0;
+        return false;
+    }
+
     _face(v, p, dt) { if (p) v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, p.x, p.z), FACE.WIZARD_TURN * dt); }
 
     /** The opponent of `v` in duel D: {v} a wizard, {p} a player's id. */
@@ -802,8 +820,7 @@ export class ArenaDuels {
             const want = d > stance.max ? -1 : d < stance.min ? 1 : 0; // (closer / farther)
             let tx = v.x + (-uz * v.arena.dir + ux * want) * 2.5, tz = v.z + (ux * v.arena.dir + uz * want) * 2.5;
             if (!onArenaFloor(A.def, tx, tz, 2)) { tx = v.x + (A.def.centre.x - v.x) * 0.3; tz = v.z + (A.def.centre.z - v.z) * 0.3; v.arena.dir = -v.arena.dir; }
-            L._steer(v, tx, tz, WALK * 1.1, dt, 0.1);
-            moving = v.speed > 0;
+            moving = this._strafe(A, v, fp, tx, tz, dt); // (a duellist never turns his back or walks off: he side-steps, face to the foe, wary)
         }
         if (!moving) { v.speed = 0; this._face(v, fp, dt); }
         // cast: facing him, the shot clear
@@ -818,7 +835,7 @@ export class ArenaDuels {
         }
         // between: his efforts (shield up, breathless, reeling from a blow, a flourish at the other)
         const hurt = Date.now() - (v.hurtAt || 0) < 900;
-        v.mode = (v.fx & FX.SHIELD) ? 'guard' : hurt ? 'stagger' : moving ? 'walk' : v.mana < v.maxMana * 0.18 ? 'winded' : 'guard';
+        v.mode = (v.fx & FX.SHIELD) ? 'guard' : hurt ? 'stagger' : moving ? 'guard' : v.mana < v.maxMana * 0.18 ? 'winded' : 'guard'; // (moving: still the guard — the wand on the foe, the legs side-stepping)
         if (v.mode === 'guard' || v.mode === 'flourish') v.aimPitch = Math.atan2(fp.y + 0.3 - (v.y + 3.4), d || 1);
         L._ground(v);
         return true;

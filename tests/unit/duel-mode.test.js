@@ -266,3 +266,17 @@ test('повтор боя с боссом: смерти нет, окно нас�
     g.hero.spawn = 'start';
     assert.equal(new BossRetry(g).intercept(), false);
 });
+
+test('дуэлянт в бою ходит боком: лицом к сопернику, не разворачивается и не уходит', () => {
+    const L = { _walkable: () => true };
+    const D = Object.assign(Object.create(ArenaDuels.prototype), { game: { castleLife: L } }); // (`life` is the game's castleLife)
+    const A = { def: { axis: { a: { x: 0, z: -15 }, b: { x: 0, z: 15 }, r: 23 } } };
+    const v = { x: 0, z: -14, y: 0, yaw: Math.PI, speed: 0 }; // (the foe is at +z: a villager's yaw π looks along +z)
+    const fp = { x: 0, y: 0, z: 14 };
+    for (let i = 0; i < 60; i++) D._strafe(A, v, fp, 8, -14, 1 / 60); // a step to the side
+    assert.ok(v.x > 0.5, `moved sideways ${v.x.toFixed(2)}`);
+    assert.ok(Math.abs(Math.atan2(Math.sin(v.yaw - Math.PI), Math.cos(v.yaw - Math.PI))) < 0.15, `still faces the foe (yaw ${v.yaw.toFixed(2)})`);
+    assert.ok(v.speed > 0 && v.speed < 2.3);
+    L._walkable = () => false; // a wall: he stays
+    const x0 = v.x; D._strafe(A, v, fp, 20, -14, 0.1); assert.equal(v.x, x0); assert.equal(v.speed, 0);
+});
