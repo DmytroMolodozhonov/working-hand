@@ -537,7 +537,7 @@ export class ImperiusControl {
     stop(why = 'stop') {
         if (!this.name) return false;
         const g = this.game;
-        if (this.phase === 'out') return true;
+        if (this.phase === 'out') { if (why === 'dead' && (g.isDeadLocal || g.combat?.dead)) this._end(); return true; } // (killed on the way back: home at once)
         const note = {
             mana: '🌀 Мана кончилась — сознание вернулось в ваше тело',
             far: '🌀 Связь разорвалась — существо ушло слишком далеко. Вы снова в своём теле',
@@ -692,6 +692,17 @@ export class ImperiusControl {
         this._ctlT = 1 / 15;
         const m = { e: 'ctl', to: this.id, y: r2(I.yaw), w: r2(this.phase === 'on' ? I.walk : 0), r: I.run ? 1 : 0, j: this._jumps || 0 };
         if (g.authority) this._tellPuppet(this.id, m); else g.sync?.imperius?.(m);
+    }
+
+    /**
+     * The body left standing was harmed — ANY harm (a blow, a bite, an arrow, a spell, fire, a fall, a blast, lightning, bleeding…:
+     * every one goes through Combat.damage / Game.damageLocalPlayer; a shield that took it all — none). The author: the mind
+     * comes back at once (a short stun). A deadly one is the body's ordinary death (Concentration → stop('dead')).
+     */
+    interruptByDamage(amount, kind = null) {
+        if (!this.name || !(amount > 0) || this.phase === 'out') return false;
+        this.game.perf?.note?.('империус: тело ранено (' + (kind || '?') + ') — сознание вернулось');
+        return this.stop('hurt');
     }
 
     /** For my 'p' packet: the eyes of my body burn white. */

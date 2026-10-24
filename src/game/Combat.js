@@ -1077,6 +1077,7 @@ export class Combat {
         if (this.frozen && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
+        this.game.imperius?.interruptByDamage?.(amount, kind); // («Империус»: ANY harm to the body left standing brings the mind back at once — the author)
         this.hp = Math.max(0, this.hp - amount);
         this.game.fleet?.kingHurt(byId); // (the crew of my ship answers whoever struck me — FleetOrders.kingHurt)
         this.hurtAt = performance.now(); // (in a fight: the microphone listens for spells — main.js)

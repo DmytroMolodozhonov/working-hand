@@ -104,6 +104,18 @@ test('into a zombie: the view in its eyes, it walks for the hero, the body stays
         const cp0 = cow.group.position.clone();
         stepA(60, true);
         out.cowWalked = Math.hypot(cow.group.position.x - cp0.x, cow.group.position.z - cp0.z);
+        // harm to the body left standing: nothing (0, or a shield took it all) — it holds; any real harm — the mind back at once
+        I.interruptByDamage(0, 'fire');
+        out.holdsAfterNothing = I.phase === 'on';
+        g.combat.damage(2, null, 'fire');
+        out.backAfterFire = I.phase === 'out';
+        stepA(30);
+        out.activeAfterFire = I.active;
+        g.combat.stunLeft = 0;
+        g.combat.fatigue = 400; I._lastCast = 0;
+        g.camera.position.copy(p0).y += 1.4; g.camera.lookAt(cx, cow.group.position.y + 1, cz); g.camera.updateMatrixWorld(true);
+        out.cowAgain = g.castLocalSpell('империус', true);
+        stepA(30);
         out.stop = g.castLocalSpell('стоп', true);
         stepA(30);
         out.cowActiveAfterStop = I.active;
@@ -129,6 +141,8 @@ test('into a zombie: the view in its eyes, it walks for the hero, the body stays
     assert.equal(r.cowCast, 'Imperius', 'into a cow');
     assert.ok(r.cowWalked > 1, 'the cow walked: ' + r.cowWalked);
     assert.equal(r.cowActiveAfterStop, false, '«стоп»: back in the body');
+    assert.ok(r.holdsAfterNothing, 'no harm (a shield took it): it holds');
+    assert.ok(r.backAfterFire && r.activeAfterFire === false, 'fire on the body: the mind back at once');
     assert.equal(r.dragon, false);
     assert.deepEqual(realErrors(errors), []);
 });
