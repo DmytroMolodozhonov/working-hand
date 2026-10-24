@@ -104,6 +104,7 @@ export class RemoteAvatar {
             this.combat.shield = s.c[0];
             this.combat.gods = !!s.c[5]; // (ProtectionGods.js: their shield / dome golden)
             this.combat.atWand = !!s.c[6]; // (their hand shield at their wand's tip)
+            this.combat.cross = !!s.c[7]; // (the crossed arms' shield: in front of their arms)
             this.combat.side = s.c[1] ? 'left' : 'right';
             this.combat.shieldLeft = s.c[2];
             this.combat.frozen = s.c[3] > 0;
@@ -190,6 +191,7 @@ export class RemoteAvatar {
 
     /** Live hand pose for spells cast by this player (ice beam follows their hand). */
     handPose(side) {
+        if (this.combat.cross && this.combat.shield === 1) return this.character.crossShieldPose();
         return { origin: this.character.getHandWorldPosition(side), dir: this.character.getHandDirection(side) };
     }
 

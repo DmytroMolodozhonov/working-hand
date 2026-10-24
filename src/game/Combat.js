@@ -229,6 +229,7 @@ const SHIELD_LEVEL = 0.15; // m: one hand this much higher than the other — th
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 
 // Shared shield / ice-shell visuals (local and remote players)
 let SHARED = null;
@@ -695,9 +696,16 @@ export class Combat {
         return reach('right') >= reach('left') ? 'right' : 'left';
     }
 
+    /** Where the hand shield faces: the wand's / hand's way, or the body's front for the crossed arms' one. */
+    shieldDir(side, out = new THREE.Vector3()) {
+        const ch = this.game.character;
+        return this.shield?.gesture ? ch.crossShieldPose(_v4, out).dir : ch.getHandDirection(side, out);
+    }
+
     /** Where the hand shield stands on `side`: at the wand's tip when the wand is in that hand, else at the hand. */
     shieldAt(side, out = new THREE.Vector3()) {
         const g = this.game;
+        if (this.shield?.gesture) return g.character.crossShieldPose(out, _v3).origin; // (crossed arms: in front of them — CrossedArms.js)
         const r = g.castOrigin ? g.castOrigin(side, out) : null;
         return r && Number.isFinite(r.x) ? r : g.character.getHandWorldPosition(side, out);
     }
@@ -873,7 +881,7 @@ export class Combat {
         const ch = this.game.character;
         if (this.visuals) {
             if (s.type === 2) this.visuals.shatter(2, this.center(_v1), null, !!s.gods);
-            else this.visuals.shatter(1, this.shieldAt(s.side, _v1).addScaledVector(ch.getHandDirection(s.side, _v2), 0.45), _v2, !!s.gods);
+            else this.visuals.shatter(1, this.shieldAt(s.side, _v1).addScaledVector(this.shieldDir(s.side, _v2), 0.45), _v2, !!s.gods);
         }
         const at = s.type === 2 ? this.center(_v1) : this.shieldAt(s.side, _v1);
         this.game.fx?.lightFlash?.(at, s.gods ? PGODS.GOLD : 0x6fc3ff, 3, 0.3, 18);
@@ -914,7 +922,7 @@ export class Combat {
         if (s.type === 2) return 1;
         const ch = this.game.character;
         const hand = this.shieldAt(s.side, _v1);
-        const dir = ch.getHandDirection(s.side, _v2);
+        const dir = this.shieldDir(s.side, _v2);
         const toAttacker = _v3.subVectors(from, hand).normalize();
         return dir.dot(toAttacker) > 0.25 ? 1 : 0;
     }
@@ -1197,7 +1205,7 @@ export class Combat {
         this.visuals.update(dt, this.state(), {
             center: this.center(_v1).clone(),
             hand: this.shieldAt(side, new THREE.Vector3()), // (at the wand's tip when it is in that hand)
-            dir: ch.getHandDirection(side, new THREE.Vector3()),
+            dir: this.shieldDir(side, new THREE.Vector3()),
         });
     }
 
@@ -1237,7 +1245,7 @@ export class Combat {
     serialize() {
         if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
         const s = this.shield;
-        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0, s?.wand ? 1 : 0]; // (the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold; the 7th: at the wand's tip)
+        return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0, s?.wand ? 1 : 0, s?.gesture ? 1 : 0]; // (the 8th: the crossed arms' shield, in front of them; the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold; the 7th: at the wand's tip)
     }
 
     // ============================================================ melee out

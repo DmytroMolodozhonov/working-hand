@@ -110,7 +110,7 @@ export class CrossedShield {
         if (c.shield || this.refused) return; // (a shield is already up — voice, dome, gods: the gesture adds nothing)
         const name = g.castLocalSpell('protection', true);
         if (!name) { this.refused = true; return; }
-        if (c.shield?.type === 1 && !c.shield.gods) { c.shield.gesture = true; this.mine = true; }
+        if (c.shield?.type === 1 && !c.shield.gods) { c.shield.gesture = true; c.shield.wand = false; this.mine = true; }
     }
 
     _lower() {

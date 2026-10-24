@@ -565,6 +565,20 @@ export class VoxelCharacter {
         this.group.rotation.x = -tilt;
     }
 
+    /**
+     * The «Protection» of crossed arms (CrossedArms.js): the shield stands in front of the crossed hands, a little away from the
+     * body, facing where the body faces — not at a wand's tip. `origin`: between the hands, pushed forward; `dir`: the body's front.
+     */
+    crossShieldPose(origin = new THREE.Vector3(), dir = new THREE.Vector3()) {
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        dir.set(0, 0, -1).applyQuaternion(_qBody).normalize();
+        this.getHandWorldPosition('left', origin);
+        origin.add(this.getHandWorldPosition('right', _v1)).multiplyScalar(0.5);
+        origin.addScaledVector(dir, 0.25);
+        return { origin, dir };
+    }
+
     getHandDirection(side, out = new THREE.Vector3()) {
         // a wand in this hand: spells go where the wand points (Items sets it every frame)
         const a = this.aim?.[side];
