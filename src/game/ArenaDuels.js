@@ -1196,6 +1196,7 @@ export class ArenaDuels {
             const p = g.character.group.position;
             p.x = m.pin.x; p.z = m.pin.z; g.knockback?.set?.(0, 0, 0);
         }
+        this._rememberWand();
         this._keepOnFloor(A, D);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
         if (D || m.hold) return;
@@ -1226,18 +1227,23 @@ export class ArenaDuels {
      * floor and the lectern and given into his hand again, so a lost duel never leaves him with an empty hand.
      */
     _wandBack() {
-        const g = this.game, it = g.items, m = this.mode;
+        const g = this.game, it = g.items, m = this.mode, inv = g.inventory;
         if (!it || !m) return;
-        const have = it.wand;
-        if (have) { m.wand = { ...have }; return; }
-        if (!m.wand) return;
+        this._rememberWand();
+        if (!m.wand || inv?.hasUid?.(m.wand.uid)) return; // (no wand known yet, or it is still his: in a hand / a slot)
         const w = { ...m.wand };
         try {
             if (it.loose?.has?.(w.uid)) it.removeLoose?.(w.uid); // (the same wand lying on the floor / the lectern: no second one)
             const p = g.character.group.position;
             it.spawnLoose(w, new THREE.Vector3(p.x, p.y + 1.5, p.z), { hover: true });
-            it.pickUp(w.uid, g.localId, 'right');
+            it.pickUp(w.uid, g.localId, 'right'); // (Inventory.gotWand: the plain stand-in given meanwhile goes)
         } catch (e) { /* (an item system without the hand: the wand lies near him) */ }
+    }
+
+    /** The hero's own wand (not the plain stand-in), remembered whenever he holds it — it is what is given back after a loss. */
+    _rememberWand() {
+        const w = this.game.items?.wand, m = this.mode;
+        if (w && m && !w.spare) m.wand = { ...w };
     }
 
     /** The hero on his own place (the lit mark), facing the opponent's; health and mana full: a new duel is fresh. */
