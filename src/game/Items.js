@@ -22,6 +22,22 @@
 
 import { enchantAdd } from './Enchant.js';
 import * as THREE from 'three';
+import { FarShape } from '../core/FarShape.js';
+
+/**
+ * A thing lying about (a dropped sword, a shield, a pouch…) drawn as one shape per material, its parts moved by the
+ * video card (FarShape): after a battle the things the fallen dropped were hundreds of draws (the author's journal).
+ * The model keeps it in `userData.one` (disposed with it).
+ */
+function oneShape(model) {
+    if (!model?.isObject3D || model.userData.one) return;
+    let n = 0;
+    model.traverse((o) => { if (o.isMesh) n++; });
+    if (n < 3) return; // (one or two parts: nothing to gain)
+    model.userData.farRadius = 2.5;
+    model.userData.one = new FarShape(model, { cache: false });
+    model.userData.one.set(true);
+}
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
@@ -169,6 +185,7 @@ export class ItemSystem {
         model.position.copy(pos);
         if (quat) model.quaternion.copy(quat); // (thrown: as it was in the hand)
         this.game.scene.add(model);
+        oneShape(model);
         const L = { item, model, vel: vel ? vel.clone() : new THREE.Vector3(), spin: new THREE.Vector3(), hover: hover ? pos.clone() : null, t: Math.random() * 6, noPick: performance.now() + (vel ? 700 : 0), rest: false };
         // spin: an angular velocity (world axis × rad/s) — a throw keeps the wrist's snap; a spill tumbles
         if (spin) L.spin.copy(spin);
@@ -192,6 +209,7 @@ export class ItemSystem {
         o.scale.copy(m.scale);
         o.visible = false;
         this.game.scene.remove(m);
+        m.userData.one?.dispose();
         disposeModel(m);
         L.model = o;
         L.away = true;
@@ -203,6 +221,7 @@ export class ItemSystem {
         m.quaternion.copy(o.quaternion);
         m.scale.copy(o.scale);
         this.game.scene.add(m);
+        oneShape(m);
         L.model = m;
         L.away = false;
     }
@@ -212,6 +231,7 @@ export class ItemSystem {
         if (!L) return null;
         this.loose.delete(uid);
         this.game.scene.remove(L.model);
+        L.model.userData.one?.dispose();
         disposeModel(L.model);
         return L.item;
     }

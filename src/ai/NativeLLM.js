@@ -11,6 +11,18 @@ const base = () => (typeof location !== 'undefined' ? location.href : 'http://lo
 
 export class NativeLLMPort {
     /** The program can run here (server.py has it and this system has a build of it)? */
+    /**
+     * Started from the menu (main.js): the villagers' net goes to the video card before the game — not in its 15th
+     * second, when its upload froze the picture for 1–2 s (the author's journal). The same model the game will ask for.
+     */
+    static async preload(setting) {
+        if (!setting || setting === 'off' || !(await NativeLLMPort.available())) return false;
+        try {
+            await fetch(new URL('api/llm/load', base()), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: setting === 'gemma4big' ? 'gemma4big' : 'gemma4' }) });
+            return true;
+        } catch (e) { return false; }
+    }
+
     static async available() {
         if (typeof fetch === 'undefined' || (typeof window !== 'undefined' && window.__ZNS_NO_NATIVE_LLM__)) return false;
         try {

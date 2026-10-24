@@ -15,6 +15,7 @@
  */
 
 import * as THREE from 'three';
+import { FarShape, dropTwin } from '../core/FarShape.js';
 import { buildWeapon, WEAPON_SPECS } from './WeaponModels.js';
 import { glowShell } from '../fx/EnchantGlow.js';
 
@@ -56,6 +57,8 @@ export class Weapon {
         this.model.position.set(-spec.com[0] * this.S, -spec.com[1] * this.S, -spec.com[2] * this.S);
         this.mesh.add(this.model);
         scene.add(this.mesh);
+        // (one shape per material, its parts moved by the video card — FarShape: a sword was ~10 draws, and a battle left dozens)
+        if (!opts.headless) { this.model.userData.farRadius = 2.5 * this.S; this._one = new FarShape(this.model, { cache: false }); this._one.set(true); }
 
         // Rigid body state
         this.position = this.mesh.position; // centre of mass, world
@@ -113,6 +116,7 @@ export class Weapon {
             if (m.color) m.color.lerp(new THREE.Color(0x9fd8ff), 0.25);
             o.material = m;
         });
+        this._one?.check(); // (the one shape in the new look)
         const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: 0x6fb8ff, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
         glow.scale.set(0.35, 1.6, 0.35);
         this.mesh.add(glow);
@@ -371,9 +375,11 @@ export class Weapon {
 
     dispose() {
         this.scene.remove(this.mesh);
+        this._one?.dispose();
         this.model.traverse((o) => {
             if (o.isMesh) {
                 o.geometry.dispose();
+                dropTwin(o.material);
                 o.material.dispose();
             }
         });

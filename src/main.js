@@ -1618,5 +1618,15 @@ function escapeHtml(s) {
     if (vol20 || !saved.aiGemma4) save(); // (remembered: done once)
 })();
 
+// The heavy nets go to the video card now, in the menu — not in the first half-minute of a game (a freeze of 1–2 s there,
+// the author's journal): the villagers' net (the program on this computer) and their voices (shared by every game).
+// (not in the tests' pages: they never talk, and the models would be fetched for every page)
+if (!window.__ZNS_NO_WORLD_PROBE__) setTimeout(() => {
+    try {
+        const c = readConfig();
+        if (c.villagerAI !== 'off') import('./ai/NativeLLM.js').then(({ NativeLLMPort }) => NativeLLMPort.preload(c.villagerAI)).catch(() => {});
+        if (c.villagerVoice && c.villagerVoiceEngine === 'neural') import('./audio/NeuralVoice.js').then(({ NeuralVoice }) => { if (NeuralVoice.supported) NeuralVoice.shared().load().catch(() => {}); }).catch(() => {});
+    } catch (e) { /* (an old settings page) */ }
+}, 1500);
 window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));
 console.log(GAME_NAME + ': готово.');

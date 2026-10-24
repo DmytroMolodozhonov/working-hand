@@ -64,6 +64,12 @@ export function skinnedMaterial(mat) {
     return m;
 }
 
+/** A model's own material (not shared — a weapon's tinted copy) going away: its twin goes too. */
+export function dropTwin(mat) {
+    const m = _skinMats.get(mat);
+    if (m) { m.dispose(); _skinMats.delete(mat); }
+}
+
 function mergedGeometry(parts, idxs, key, bake = false) {
     let geo = key != null ? _geoCache.get(key) : null;
     if (geo) return geo;
@@ -103,9 +109,8 @@ function mergedGeometry(parts, idxs, key, bake = false) {
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    geo.userData.shared = true; // (kept: every model of the kind draws it)
-    if (key != null && _geoCache.size < FAR_SHAPE.CACHE_MAX) _geoCache.set(key, geo);
-    else geo.userData.own = true; // (an odd kind past the cache's size: its model's own, disposed with it)
+    if (key != null && _geoCache.size < FAR_SHAPE.CACHE_MAX) { _geoCache.set(key, geo); geo.userData.shared = true; } // (kept: every model of the kind draws it)
+    else geo.userData.own = true; // (its model's own — or an odd kind past the cache's size: disposed with it)
     return geo;
 }
 

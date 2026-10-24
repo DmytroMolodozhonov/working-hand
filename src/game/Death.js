@@ -27,6 +27,7 @@
  */
 
 import * as THREE from 'three';
+import { FarShape } from '../core/FarShape.js';
 import { RESOURCE } from './Inventory.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, holdShapes, releaseShapes } from '../entities/VillagerModel.js';
 import { rosterEntry } from './CastleLife.js';
@@ -381,6 +382,11 @@ export class DeathSystem {
         b.model.position.set(b.x, b.y, b.z);
         b.model.rotation.y = b.yaw || 0;
         g.scene.add(b.model);
+        // (one shape per material, its parts moved by the video card — FarShape: a body was a whole person's ~15 parts;
+        // after a battle 40–60 bodies were the most of the picture's 2000+ draws in the author's journal)
+        b.model.userData.farRadius = 4;
+        b.one = new FarShape(b.model, { cache: false });
+        b.one.set(true);
     }
 
     _playerBody(b) {
@@ -439,7 +445,7 @@ export class DeathSystem {
 
     _toBones(b) {
         const g = this.game;
-        if (b.model) { g.scene.remove(b.model); releaseShapes(b.model); b.model = null; }
+        if (b.model) { g.scene.remove(b.model); b.one?.dispose(); b.one = null; releaseShapes(b.model); b.model = null; }
         if (b.bones || !g.scene) return;
         const s = skeletonModel();
         s.scale.setScalar((b.len || 3) / 3);
@@ -457,7 +463,7 @@ export class DeathSystem {
         if (!b) return;
         this.bodies.delete(id);
         const g = this.game;
-        if (b.model) { g.scene.remove(b.model); releaseShapes(b.model); }
+        if (b.model) { g.scene.remove(b.model); b.one?.dispose(); releaseShapes(b.model); }
         if (b.bones) {
             if (dust && g.fx) for (let i = 0; i < 24; i++) g.fx.spark(_v.set(b.x + (Math.random() - 0.5) * 1.5, b.y + 0.2, b.z + (Math.random() - 0.5) * 1.5), 0xd8d0bc, 0.12, _v2.set((Math.random() - 0.5) * 1.5, Math.random() * 1.5, (Math.random() - 0.5) * 1.5), 1.2);
             g.scene.remove(b.bones);

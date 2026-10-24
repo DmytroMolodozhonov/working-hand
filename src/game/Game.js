@@ -61,7 +61,7 @@ import { Ships } from './Ships.js';
 import { sailorModels, setCrewless } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
-import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
+import { ITEM_INFO, newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
 import { prewarmVillagers, villagerMaterials } from '../entities/VillagerModel.js';
 import { Doors, doorModel } from './Doors.js';
 import { Alohomora } from './Alohomora.js';
@@ -3300,6 +3300,12 @@ export class Game {
         for (const m of this.levMax?.sampleModels?.() || []) zoo.add(m); // (blocks carried by «Левиоса Максима», a living tree of its own blocks)
         for (const v of prewarmVillagers()) zoo.add(v);
         for (const m of skinnedSamples(villagerMaterials())) zoo.add(m); // (people far off as one shape moved by the video card: its shaders — FarShape)
+        // (every thing lying about — and the swords and axes — as the video card draws them: one shape each (Items.oneShape,
+        // Weapon); their skinned shaders made now, not when a battle's loot first falls)
+        for (const kind of Object.keys(ITEM_INFO)) {
+            try { const m = makeItemModel({ kind, uid: 'prewarm' }); if (m?.isObject3D) { m.userData.farRadius = 2.5; new FarShape(m, { cache: false }).set(true); zoo.add(m); } } catch (e) { /* (a thing that needs more than its kind) */ }
+        }
+        for (const t of ['sword', 'axe']) { try { const { group } = buildWeapon(t, this.renderer); new FarShape(group, { cache: false }).set(true); zoo.add(group); } catch (e) { /* (no model here) */ } }
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
         try {

@@ -70,7 +70,7 @@ export class Speech {
         this.onStatus = onStatus;
         this._audioContext = audioContext;
         this._ctx = null;
-        this.neural = neural !== undefined ? neural : (NeuralVoice.supported ? new NeuralVoice() : null);
+        this.neural = neural !== undefined ? neural : (NeuralVoice.supported ? NeuralVoice.shared() : null);
         this.synth = (typeof window !== 'undefined' && window.speechSynthesis) || null;
         this._Utterance = (typeof window !== 'undefined' && window.SpeechSynthesisUtterance) || null;
         this._voices = [];
@@ -128,7 +128,10 @@ export class Speech {
     /** Starts downloading the neural voices in the background (once). */
     preload() {
         const nv = this.neural;
-        if (!nv || this.engine !== 'neural' || nv.state !== 'idle') return;
+        if (!nv || this.engine !== 'neural') return;
+        if (nv.state === 'ready') { this._status({ state: 'ready', fraction: 1, text: 'Голоса жителей готовы' }); return; } // (loaded in the menu — NeuralVoice.shared)
+        if (nv.state === 'loading' && nv._loading) { nv._loading.then(() => this._status({ state: 'ready', fraction: 1, text: 'Голоса жителей готовы' }), () => {}); return; }
+        if (nv.state !== 'idle') return;
         this._status({ state: 'loading', fraction: 0, text: 'Голоса жителей: загрузка…' });
         nv.load((fraction, text) => this._status({ state: 'loading', fraction, text }))
             .then(() => this._status({ state: 'ready', fraction: 1, text: 'Голоса жителей готовы' }))

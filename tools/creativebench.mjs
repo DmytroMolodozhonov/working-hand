@@ -30,7 +30,8 @@ const ALLOC = args.includes('--alloc');
 const KEYS = args.includes('--keys'); // the full keys of the shaders compiled after the start (and of all prewarmed ones like them)
 const OWNERS = args.includes('--owners'); // the scene's top things: how many, their parts, materials, a sample of names
 const SCAN = args.includes('--scan');
-const AT = opt('at', null); // castle | village | tower: the scene by such a place, among its people (wakebench's places)
+const AT = opt('at', null);
+const KILL = args.includes('--kill'); // with --at: every person of the place killed first (bodies, what they held — the author's journal: after Circle Attack 2400 draws) // castle | village | tower: the scene by such a place, among its people (wakebench's places)
 const MODE = opt('mode', 'creative'); // creative | freeworld (Свободный мир — to compare)
 const AFTER = parseFloat(opt('after', '0')); // s of play before measuring (the world filled: herds, people, things) // at the start: 16 directions — draws, triangles and who is drawn in each
 const ABLATE = opt('ablate', null); // e.g. trees,villagers,animals,terrain: standing, each hidden in turn — its cost of drawing
@@ -310,6 +311,16 @@ try {
         // (its people all made and walking about)
         await page.evaluate(async () => { const g = window.__zns.game, f0 = g.frameCount; while (g.frameCount - f0 < 150) await new Promise((r) => setTimeout(r, 200)); });
         console.log('жителей:', await page.evaluate(() => window.__zns.game.castleLife.byId.size));
+        if (KILL) {
+            const n = await page.evaluate(async () => {
+                const g = window.__zns.game, cl = g.castleLife, me = g.character.group.position;
+                let k = 0;
+                for (const v of [...cl.byId.values()]) if (!v.dead && Math.hypot(v.x - me.x, v.z - me.z) < 120) { cl._die(v, 'local'); k++; }
+                const f0 = g.frameCount; while (g.frameCount - f0 < 200) await new Promise((r) => setTimeout(r, 200));
+                return k;
+            });
+            console.log('убито:', n);
+        }
     }
     if (AFTER > 0) {
         // (played on for a while, the game's own pace: a minute or two of the world going on round the start)

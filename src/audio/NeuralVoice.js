@@ -65,6 +65,13 @@ export class NeuralVoice {
         return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
     }
 
+    /**
+     * One voice model for the whole page: every game (and the menu, which starts it — main.js) shares it. Each game
+     * made its own before: the model went to the video card again (a stall of 1–2 s half a minute into a game, in the
+     * author's journal) and the old one stayed there, nobody disposed it.
+     */
+    static shared() { return NeuralVoice._shared || (NeuralVoice._shared = new NeuralVoice()); }
+
     get ready() { return this.state === 'ready'; }
 
     /** Loads the model (once). onProgress(fraction 0..1, text). */
