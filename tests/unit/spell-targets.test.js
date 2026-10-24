@@ -52,7 +52,7 @@ test('duel charges («Авада Кедавра», «Остолбеней», «�
     assert.match(d, /iceCastle\.boltHit/);
     // (a dragon is found again as its own kind 'D', like the spider 's')
     assert.match(body(d, '    _bodyOf(kind, id, e) {'), /dragons\?\.byId/);
-    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null) {'), /phoenixes\?\.boltHit/, 'a duel charge on a phoenix: Phoenixes.boltHit');
+    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null, opts = {}) {'), /phoenixes\?\.boltHit/, 'a duel charge on a phoenix: Phoenixes.boltHit');
 });
 
 test('blasts, rays and lightning reach every creature', () => {
@@ -286,7 +286,7 @@ test('«Disarmor» decides every creature and thing (ArmorTypes.DISARMOR_TARGETS
     assert.match(src('src/game/Spider.js'), /spell === 'Disarmor'/, 'the spider answers «Disarmor» itself');
     assert.match(src('src/game/Dragons.js'), /spell === 'Disarmor'/, 'a dragon answers «Disarmor» itself');
     assert.match(src('src/game/Phoenixes.js'), /spell === 'Disarmor'/, 'a phoenix answers «Disarmor» itself');
-    assert.match(body(src('src/game/Duel.js'), '    applyToCreature(spell, c, byId, from = null, part = null) {'), /stripVillager/, 'knights / wizards stripped by the host');
+    assert.match(body(src('src/game/Duel.js'), '    applyToCreature(spell, c, byId, from = null, part = null, opts = {}) {'), /stripVillager/, 'knights / wizards stripped by the host');
 });
 
 test('a skeleton raised from a grave («Alive» at a graveyard) is one of the living trees: every place that finds them finds it', () => {
@@ -326,7 +326,7 @@ test('the Ice Castle\'s creatures: every place that finds targets knows them; th
 test('Captain Black Moustache and his skeletons (ships.crew): the parry, the skeletons\' bones, every blow says its kind', () => {
     const d = src('src/game/Duel.js');
     assert.match(body(d, '    _arriveAtCreature(b) {'), /parryBolt/, 'a duel charge at the captain: his rapier may beat it aside');
-    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null) {'), /role === 'skeleton'/, 'a duel charge at a skeleton: no harm');
+    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null, opts = {}) {'), /role === 'skeleton'/, 'a duel charge at a skeleton: no harm');
     const sl = src('src/game/Sailors.js');
     assert.match(sl.slice(sl.indexOf('    hit(v, dmg, dir, by, opts = {}) {'), sl.indexOf('    remoteHit(m) {')), /pirateBoneDamage/);
     const g = src('src/game/Game.js');
@@ -397,7 +397,7 @@ test('the strong duel spells and the new ice decide every creature and thing (St
     }
     assert.ok(S.DIE_TARGETS.titans?.why && S.DIE_TARGETS.godGifts?.why, '«Дай»: the titans and the gods\' gifts');
     const d = src('src/game/Duel.js');
-    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null) {'), /strong\?\.hitCreature/);
+    assert.match(body(d, '    applyToCreature(spell, c, byId, from = null, part = null, opts = {}) {'), /strong\?\.hitCreature/);
     assert.match(body(d, '    applyToZombie(spell, z, byId, from = null) {'), /strong\?\.hitCreature\('z'/);
     assert.match(body(d, '    applyToMe(spell, byId, side = \'right\') {'), /strong\?\.hitMe/);
     for (const f of ['src/game/Dragons.js', 'src/game/Spider.js', 'src/game/IceQueen.js']) assert.match(src(f), /strong\?\.boltHit\?\.\('[DsI]'/, `${f} asks StrongMagic`);
