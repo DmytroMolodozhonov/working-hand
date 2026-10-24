@@ -158,10 +158,10 @@ export const DUEL = {
     LUCK: 0.1, // ±10 % random
     STUN_TIME: 15,
     CLASH_FATIGUE: 1, // mana per second while pushing (free world), each side
-    MAXIMA_BOOST: 0.05, // «Максима» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
+    MAXIMA_BOOST: 0.025, // «Максима» shouted in a clash: the meeting point goes 2.5 % of the way a second faster to the opponent (they add up for the whole clash; it was 5 % — twice too much: shouts buried the strength)
     MAXIMA_COST: 5, // mana, at once
     MAXIMA_EVERY: 3, // s: at most once every 3 seconds
-    MAXIMA_LIFE: 3, // s: one shout pushes this long (= the pause between two shouts), then it is spent: at most one pushes at a time — a wizard shouting every 3 s no longer buries any strength
+    MAXIMA_LIFE: Infinity, // s: how long one shout pushes — for the whole clash (they accumulate; the push of each is half of what it was)
 };
 
 /**
