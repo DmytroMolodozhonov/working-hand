@@ -12,6 +12,7 @@ import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
 import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT } from './SpawnSpots.js';
+import { isCrewless } from './Sailors.js';
 import { SPIDER_LAIR } from '../world/SpiderLairs.js';
 import { testSeaCastleSpot } from '../world/Castles.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
@@ -19,6 +20,8 @@ import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 /** Высота, на которой герой ждёт землю дальнего места (м): внутри дальности пробуждения кораблей и далеко от крыш. */
 const HOVER_Y = 70;
+/** Корабль героя ставится на круг чёрного впереди него (м вдоль круга): так он идёт к кораблю сам, и встреча — через ~2 минуты (5 м/с). */
+const MEET_AHEAD = 650, MEET_NEAR = 120;
 
 export class HeroApply {
     constructor(game) { this.game = game; this.pending = null; }
@@ -42,6 +45,7 @@ export class HeroApply {
     requestSpawn() {
         const g = this.game, id = g.hero?.spawn;
         this.pending = null;
+        g.arenaDuels?.stopDuelMode?.();
         if (!this.on || !id || id === 'start') return;
         const data = g.world?.terrain?.data;
         const gate = () => { const c = data?.castles?.cellOf?.(0, -1); return c?.gate ? { x: c.gate.x, z: c.gate.z, yaw: c.gateYaw } : null; };
@@ -87,23 +91,36 @@ export class HeroApply {
         g.character.group.rotation.y = t.yaw || 0;
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
+        if (t.duel) g.arenaDuels?.startDuelMode?.(t.arenaId, g.hero?.foe); // (the arena: a fight in ten seconds — ArenaDuels)
     }
 
-    /** Чёрный корабль: над ним, пока он не проснулся (сам, как только герой рядом), потом на палубу. */
+    /**
+     * Корабль в море: герой на палубе ОБЫЧНОГО корабля (флейт), а чёрный корабль Чёрных Усов идёт по своему кругу и подходит
+     * сам — встреча через пару минут. Корабль ставится на круг чёрного впереди него (`MEET_AHEAD` м по ходу), без моряков на
+     * борту чёрного — рядом (`MEET_NEAR`): ждать некого. Сначала герой висит над точкой, пока корабль не проснётся сам.
+     */
     _stepShip(p, dt) {
-        const g = this.game, s = g.blackbeard?._ensure?.();
-        if (!s) { if (g.blackbeard?._none || p.age > 8) this._fail('в этом мире нет открытого моря с чёрным кораблём — вы на начальной площадке'); return; }
-        const st = s.st;
-        if (!g.terrain?.data?.landMade(st.x, st.z)) { this._hover(st.x, st.z); p.t = { x: st.x, z: st.z }; return; }
+        const g = this.game, S = g.ships, bb = g.blackbeard, black = bb?._ensure?.();
+        if (!black || !bb.spot) { if (bb?._none || p.age > 8) this._fail('в этом мире нет открытого моря — вы на начальной площадке'); return; }
+        if (!p.mine) {
+            const P = bb.spot, a = bb.angle + (isCrewless() ? MEET_NEAR : MEET_AHEAD) / P.R;
+            const x = P.cx + Math.cos(a) * P.R, z = P.cz + Math.sin(a) * P.R;
+            p.t = { x, z };
+            if (!g.terrain?.data?.landMade(x, z)) { this._hover(x, z); return; }
+            p.mine = S.spawn('fluyt', Math.round(x), Math.round(z), Math.atan2(-Math.sin(a), -Math.cos(a)) + Math.PI, { wake: false });
+            if (!p.mine) { this._fail('корабль не удалось поставить — вы на начальной площадке'); return; }
+        }
+        const s = p.mine, st = s.st;
         if (!s.awake || !s.model) { this._hover(st.x, st.z); return; } // (it wakes itself when the hero is near: no ship built in one frame)
         const L = s.layout, m = L.masts?.find((q) => q.id === 'main') || { z: 0 };
-        const lx = 3, lz = Math.min(L.L / 2 - 6, (m.z ?? 0) + 7), o = { x: 0, y: 0, z: 0 };
-        s.pose.toWorld(lx, L.deck + PLAYER_GROUND_OFFSET + 0.6, lz, o);
+        const lz = Math.min(L.L / 2 - 6, (m.z ?? 0) + 7), o = { x: 0, y: 0, z: 0 };
+        s.pose.toWorld(3, L.deck + PLAYER_GROUND_OFFSET + 0.6, lz, o);
         this.pending = null;
         g.character.group.position.set(o.x, o.y, o.z);
         g.character.group.rotation.y = s.pose.yaw ?? st.yaw ?? 0;
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
+        if (!isCrewless()) g.hud?.toast?.('⚓ Вы в открытом море. Смотрите по сторонам: где-то рядом ходит чёрный корабль');
     }
 
     /** Паучиха: ячейки вокруг по одной за кадр (каждая может строить пещеры), потом как дальнее место. */

@@ -49,6 +49,8 @@ import { ArenaMarkFx } from '../fx/ArenaMarkFx.js';
 import { ArenaTagFx } from '../fx/ArenaTagFx.js';
 import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
+import { foeRanks } from './SpawnSpots.js';
+import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const WALK = 2.3, RUN = 5.6;
 /** Mana a spell costs a duellist at the arena: they pace themselves (a long duel), lighter than in a real fight. */
@@ -93,6 +95,7 @@ export class ArenaDuels {
         this._markT = 0;
         this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
         this._tagT = 0;
+        this.mode = null; // «Перед дуэлью» (Creative start): {arenaId, foe, id} — a fight after a fight on this arena, see startDuelMode
     }
 
     get life() { return this.game.castleLife; }
@@ -106,6 +109,7 @@ export class ArenaDuels {
         if (!g.character) return;
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
+        if (this.mode && this.auth) this._modeStep(dt);
         for (const A of this.list.values()) {
             if (this.auth) this._run(A, dt);
             this._signUp(A, dt);
@@ -193,6 +197,7 @@ export class ArenaDuels {
     /** Somebody at the arena (a player within LIVE_R) and day: it lives. */
     _live(A) {
         const g = this.game;
+        if (this.mode?.arenaId === A.id) return true; // (the duel mode: day or night, the show goes on)
         if (g.isNight) return false;
         const near = (p) => p && Math.hypot(p.x - A.def.x, p.z - A.def.z) < ARENA_DUEL.LIVE_R;
         if (near(g.character.group.position)) return true;
@@ -222,7 +227,7 @@ export class ArenaDuels {
         if (!D) {
             if (A.queue.length && A.restT > 4) A.restT = 4;
             A.restT -= dt;
-            if (live && A.restT <= 0 && this._ready(A, dt)) this._nextDuel(A, cs);
+            if (live && A.restT <= 0 && this.mode?.arenaId !== A.id && this._ready(A, dt)) this._nextDuel(A, cs); // (the duel mode makes its own: _modeStep)
         } else this._referee(A, D, dt);
         // the reward: the winner at the lectern
         if (A.owed) {
@@ -374,12 +379,14 @@ export class ArenaDuels {
     _maxT(A) { return A.def.practice ? ARENA_DUEL.PRACTICE_T : ARENA_DUEL.MAX_T; }
 
     /** (host) One more wizard of the tower for the arena: from its roster, one who is not out now. */
-    _recruit(A, cs, kind) {
+    _recruit(A, cs, kind, only = null) {
         const L = this.life, def = cs.def, st = L.state(def.id);
         const n = def.population || 24;
         const start = 1 + Math.floor(Math.random() * (n - 1));
-        for (let k = 0; k < n - 1; k++) {
-            const idx = 1 + ((start - 1 + k) % (n - 1)); // (never the Master: he keeps his study)
+        // (`only(idx)`: one of this rank — the duel mode's opponent; then the Master may come too)
+        const order = only ? [...Array(n).keys()].map((i) => (i + start) % n).filter(only) : null;
+        for (let k = 0; k < (order ? order.length : n - 1); k++) {
+            const idx = order ? order[k] : 1 + ((start - 1 + k) % (n - 1)); // (never the Master: he keeps his study)
             if (cs.active.has(idx) || st.killed.has(idx)) continue;
             const h = A.home, a = Math.random() * Math.PI * 2, r = Math.random() * 4;
             const v = L._activate(cs, idx, { x: h.x + Math.cos(a) * r, y: h.y, z: h.z + Math.sin(a) * r, yaw: yawTo(h.x, h.z, A.def.x, A.def.z) }, 'arena');
@@ -1063,6 +1070,99 @@ export class ArenaDuels {
         if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; } return; }
         if (m.to != null) { if (m.to === g.localId) this._mine(m); return; }
         if (m.e === 'fx') { const A = this.list.get(m.id); if (A) g.sound?.playArena?.(A.def.centre, m.k, m.v ?? 1); }
+    }
+
+    // ------------------------------------------------------------------ the duel mode
+    /**
+     * «Перед дуэлью» (старт в Творческом, HeroApply): режим «только дуэли». Трибуны уже полны болельщиков, герой на своём месте,
+     * напротив ждёт соперник выбранного уровня (`foe`: DUEL_FOES), отсчёт 10…1 — бой. Бой кончился (победа, поражение, время) или герой
+     * погиб (`duelDeath`) — сразу новая дуэль с новым волшебником того же уровня, и так по кругу. Хост ведёт всё; остановка — `stopDuelMode`.
+     */
+    startDuelMode(arenaId, foe = 'mid') {
+        this.mode = { arenaId, foe, id: this.game.localId, hinted: false };
+    }
+
+    stopDuelMode() { this.mode = null; }
+
+    /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
+    _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
+
+    /** (host) A wizard of the wanted rank: from the roster; the Master (number 0) only when he is asked for and free; else the nearest rank. */
+    _foe(A, cs, ranks) {
+        const L = this.life, st = L.state(cs.def.id);
+        const free = (i) => !cs.active.has(i) && !st.killed.has(i);
+        let v = this._recruit(A, cs, 'duel', (i) => free(i) && ranks.includes(this._rankOf(cs, i)));
+        if (!v && ranks.includes('master')) { // (the Master is in his study: he comes out for the duel)
+            const m = L.byId.get(cs.def.id + ':0');
+            if (m && !m.dead && !m.foe) { m.arena = { id: A.id, kind: 'duel', leg: 0 }; m.job = 'arena'; v = m; }
+        }
+        return v || this._recruit(A, cs, 'duel', free); // (no one of that rank: the nearest — anyone free)
+    }
+
+    /** (host) Every step of the mode: the fans in their seats at once, then the next duel with the count. */
+    _modeStep(dt) {
+        const m = this.mode, g = this.game, A = this.list.get(m.arenaId), L = this.life;
+        if (!A || !L?.enabled || !g.character) return;
+        const cs = this._tower(A);
+        if (!cs) return;
+        const D = A.duel;
+        // the stands: all the fans are in their seats, none walks in (the show is ready before the count)
+        if (!A.want) A.want = ARENA_DUEL.FANS[1];
+        if (A.fans.size < A.want && !(D && D.phase === 'fight')) this._recruit(A, cs, 'fan');
+        for (const v of A.fans) {
+            if (v.seated || !v.arena) continue;
+            const s = v.arena.seat || this._seat(A, v);
+            if (!s) continue;
+            v.arena.seat = s; v.arena.leg = 2; v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
+        }
+        if (D) { m.next = 0; return; }
+        if (A.fans.size < Math.min(A.want, 6)) return; // (the stands must be filling up first)
+        // the next duel: the opponent on his place, the player on his, the count 10…1
+        const marks = A.def.gates;
+        const a = this._foe(A, cs, foeRanks(m.foe));
+        if (!a) { A.restT = 3; return; }
+        const o = marks[1].mark;
+        a.arena.side = 1; a.arena.leg = 2; a.x = o.x; a.z = o.z; a.y = o.y; a.speed = 0; a.yaw = yawTo(o.x, o.z, marks[0].mark.x, marks[0].mark.z);
+        a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
+        this._toMark(A);
+        A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
+        this.log.push('mode:' + a.id + ':' + (a.entry?.rank || '?'));
+        this._fx(A, 'beep', A.def.centre);
+        this._send(A);
+        if (!g.items?.wand) g.hud?.setVoice?.('🪄 Возьмите палочку в руку — через 10 секунд бой!', true);
+        else g.hud?.setVoice?.(`⚔️ Через 10 секунд бой! Соперник: ${a.name || 'волшебник'}. За вас болеют трибуны`, true);
+    }
+
+    /** The hero on his own place (the lit mark), facing the opponent's; health and mana full: a new duel is fresh. */
+    _toMark(A) {
+        const g = this.game, ch = g.character, data = g.world?.terrain?.data || g.terrain?.data, M = A.def.gates[0].mark, O = A.def.gates[1].mark;
+        const y = data?.surfaceY ? data.surfaceY(M.x, M.z) : M.y;
+        ch.group.position.set(M.x, y + PLAYER_GROUND_OFFSET + 0.1, M.z);
+        ch.group.rotation.y = Math.atan2(O.x - M.x, O.z - M.z);
+        ch.verticalVelocity = 0;
+        g.knockback?.set?.(0, 0, 0);
+        const c = g.combat;
+        if (c?.enabled) { c.hp = c.maxHp || c.hp; c.fatigue = c.maxFatigue || c.fatigue; g.playerHP = c.hp; }
+    }
+
+    /**
+     * The hero was about to die (Combat.die) while the duel mode runs on the floor: no death — a lost duel, at once the next one with a
+     * new wizard of the same level (no death screen, no body, nothing dropped). true: handled.
+     */
+    duelDeath() {
+        const m = this.mode;
+        if (!m || !this.auth) return false;
+        const A = this.list.get(m.arenaId);
+        if (!A || Math.hypot(this.game.character.group.position.x - A.def.x, this.game.character.group.position.z - A.def.z) > (A.def.outer || 30) + 6) return false;
+        this.game.combat.revive();
+        const D = A.duel;
+        if (D) {
+            if (D.phase !== 'over') this._end(A, D, 'a', 'dead');
+            for (const v of [D.a, D.b]) if (v && !v.dead) this._release(v);
+            A.duel = null;
+        }
+        this._send(A);
+        return true;
     }
 
     // ------------------------------------------------------------------ the lit places

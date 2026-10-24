@@ -25,10 +25,10 @@ export const SPAWN_SPOTS = Object.freeze([
     { id: 'castle', label: 'У замка короля', hint: 'У ворот ближнего замка Творческой площадки: король, рыцари, жители и торговцы.' },
     { id: 'port', label: 'В порту', hint: 'На причале порта у замка Творческой площадки: рядом стоят корабли с командой. Удобно проверять моряков и корабли.' },
     { id: 'tower', label: 'У башни волшебников', hint: 'У входа в башню волшебников — единственную в мире. Внутри живёт её глава. Если до башни далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
-    { id: 'arena', label: 'У арены дуэлей', hint: 'У ворот арены дуэлей рядом с башней волшебников — там, где волшебники сражаются. Если арены рядом с башней нет, вы окажетесь у арены поселения волшебников.' },
+    { id: 'arena', label: 'Перед дуэлью на арене (10 секунд до начала)', hint: 'Режим «только дуэли»: вы стоите на своём месте на арене, трибуны полны болельщиков, напротив уже ждёт соперник, идёт отсчёт 10…1 — и бой. Проиграли или погибли — сразу новая дуэль с новым волшебником того же уровня. Соперника выбираете ниже.' },
     { id: 'village', label: 'В поселении волшебников', hint: 'На площади ближнего поселения волшебников: жители, библиотека и магазин свитков.' },
     { id: 'spider', label: 'У логова паучихи', hint: 'Рядом с логовом ближайшей гигантской паучихи. Она выходит из логова ночью — днём вы увидите только паутину и пещеру.' },
-    { id: 'blackship', label: 'На чёрном корабле', hint: 'На палубе чёрного корабля капитана Чёрные Усы, посреди открытого моря. Капитан и скелеты на борту. Хотите без них — включите «Корабли без моряков».' },
+    { id: 'blackship', label: 'На корабле в море (встреча с Чёрными Усами)', hint: 'Вы на палубе обычного корабля посреди открытого моря. Через какое-то время рядом появится чёрный корабль капитана Чёрные Усы. Хотите без капитана и скелетов — включите «Корабли без моряков».' },
 ]);
 
 export const SPAWN_IDS = SPAWN_SPOTS.map((s) => s.id);
@@ -82,11 +82,11 @@ export function farTarget(id, data, ctx = {}) {
         if (!t || !fin(t.gate)) return null;
         return { x: Math.round(t.gate.x), z: Math.round(t.gate.z), yaw: Number.isFinite(t.gateYaw) ? t.gateYaw : 0 };
     }
-    if (id === 'arena') {
+    if (id === 'arena') { // (the player's own place on the floor, facing the opponent's: the duel mode — ArenaDuels.startDuelMode)
         const a = S?.arenas?.ofTower?.(S.towers?.only?.()) || S?.arenas?.ofVillage?.(S?.villages?.spawnVillage?.());
-        const g = a?.gates?.[0]?.out;
-        if (!a || !fin(g)) return null;
-        return { x: Math.round(g.x), z: Math.round(g.z), yaw: a.centre ? faceTo(g, a.centre) : 0 };
+        const m = a?.gates?.[0]?.mark, o = a?.gates?.[1]?.mark;
+        if (!a || !fin(m) || !fin(o)) return null;
+        return { x: Math.round(m.x), z: Math.round(m.z), yaw: faceTo(m, o), arenaId: a.id, duel: true };
     }
     if (id === 'village') {
         const v = S?.villages?.spawnVillage?.();
@@ -132,4 +132,25 @@ export function safeNear(t, ok, { rings = [0, 3, 6, 10, 16], around = 8 } = {}) 
         }
     }
     return null;
+}
+
+/**
+ * Соперник в режиме «Перед дуэлью»: кого вы хотите видеть напротив. `ranks` — звания волшебников башни (WizardAI.WIZ_RANKS);
+ * null — любой из четырёх уровней, каждый раз новый.
+ */
+export const DUEL_FOES = Object.freeze([
+    { id: 'mid', label: 'Средний (продвинутый волшебник)', ranks: ['adept'] },
+    { id: 'weak', label: 'Слабый (начинающий волшебник)', ranks: ['novice'] },
+    { id: 'strong', label: 'Сильный (преподаватель)', ranks: ['teacher', 'elder'] },
+    { id: 'master', label: 'Мастер башни (её глава)', ranks: ['master'] },
+    { id: 'random', label: 'Случайный', ranks: null },
+]);
+export const normalizeFoe = (id) => (DUEL_FOES.some((f) => f.id === id) ? id : 'mid');
+
+/** Звания для этой дуэли: у выбранного соперника — свои; «случайный» — один из четырёх уровней. */
+export function foeRanks(id, rng = Math.random) {
+    const f = DUEL_FOES.find((x) => x.id === id) || DUEL_FOES[0];
+    if (f.ranks) return f.ranks;
+    const pool = DUEL_FOES.filter((x) => x.ranks);
+    return pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))].ranks;
 }
