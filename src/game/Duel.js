@@ -198,10 +198,18 @@ export const CLASH = {
 export const AIM = {
     // (a real camera hand is never exactly on a small, moving target — a flying book, a running
     //  animal: the help is noticeable, but a hand pointing well beside it still misses)
-    CONE: 0.12, // rad (~7°): how far beside a body the hand may point and still mean it
-    BEND: 0.21, // rad (~12°): the most a charge ever turns off the line it was cast along
-    TURN: 3.2, // rad/s: how fast it turns while correcting (it finds the target quickly)
+    // (the author: «пусть заклинание помогает найти цель на 30% лучше» — all three ×1.3; were 0.12 / 0.21 / 3.2)
+    CONE: 0.156, // rad (~9°): how far beside a body the hand may point and still mean it
+    BEND: 0.273, // rad (~15.6°): the most a charge ever turns off the line it was cast along
+    TURN: 4.16, // rad/s: how fast it turns while correcting (it finds the target quickly)
+    // two charges flying at each other: each already turns to the meeting point (the beams are seen to come together, not to fly apart and snap)
+    MEET_BEND: 0.5, // rad: how far it may turn off the hand's line for it
+    MEET_TURN: 6, // rad/s
 };
+
+/** Random small lightning from a clash: none from weak wizards (as it was), more and more from the strong — arcs per second for a mean strength. */
+export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5 };
+export const arcRate = (power) => Math.max(0, (power - ARC.FROM) * ARC.RATE);
 
 /** Body sizes (metres) as a charge touches them: a line a–b and a radius around it. */
 export const BODY = {
@@ -326,6 +334,7 @@ const _v1 = new THREE.Vector3();
 const _qInv = new THREE.Quaternion();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _arcDir = new THREE.Vector3();
 const _vFrom = new THREE.Vector3();
 const _vPass = new THREE.Vector3();
 const _armSh = new THREE.Vector3(), _armTip = new THREE.Vector3(), _armC = {};
@@ -937,7 +946,12 @@ export class Duel {
      */
     _fly(b, dt) {
         const g = this.game;
-        if (b.tk !== 'n') {
+        // an opposing charge already flying at this one (or at its caster): turn to the point where they will meet — the beams come together early
+        const opp = b.state === 'flying' ? this._opposing(b) : null;
+        if (opp) {
+            const want = _v2.copy(opp.front).add(b.front).multiplyScalar(0.5).sub(b.front);
+            if (want.lengthSq() > 0.04 && want.dot(b.d0) > 0) bendToward(b.dir, b.d0, want.normalize(), AIM.MEET_TURN * dt, AIM.MEET_BEND);
+        } else if (b.tk !== 'n') {
             const tp = this._aimPoint(b, _v3);
             const want = tp ? _v2.subVectors(tp, b.front) : null;
             // the target is gone, or the charge has flown past it: it just flies on straight
@@ -1424,6 +1438,20 @@ export class Duel {
         }
     }
 
+    /** A flying charge of another caster that comes against `b` (aimed at b's caster, or b at his) — the one to meet; null — none. */
+    _opposing(b) {
+        let best = null, bd = 60;
+        for (const o of this.bolts.values()) {
+            if (o === b || o.state !== 'flying' || o.by === b.by) continue;
+            if (b.npc && o.npc && !this.game.arenaDuels?.pair(b.by, o.by)) continue;
+            if (o.dir.dot(b.dir) > -CLASH.FACING) continue; // (not coming against it)
+            if (!(o.tid === b.by || b.tid === o.by)) continue; // (not between these two casters)
+            const d = o.front.distanceTo(b.front);
+            if (d < bd && d > CLASH.MEET) { bd = d; best = o; }
+        }
+        return best;
+    }
+
     /** Where two charges meet (into `out`), or null: they fly against each other and pass close. */
     _meeting(a, b, out) {
         if (a.dir.dot(b.dir) > -CLASH.FACING) return null; // (not against each other: crossing on their ways elsewhere)
@@ -1585,6 +1613,38 @@ export class Duel {
         return { ok: r.duelContact !== 0, jerk: r.duelJerk === 1 };
     }
 
+    /**
+     * Random small lightning out of the clash — the surplus of power (the author: «чем сильнее маги, тем больше молний»; weak wizards: none beyond the usual
+     * sparks): they aim at nothing, never touch the two duellists, and sting any other wizard they land by (−1 HP, never a kill; the host decides).
+     */
+    _clashArcs(c, power, dt) {
+        const rate = arcRate(power);
+        if (rate <= 0) return;
+        c.arcT = (c.arcT || 0) + rate * dt;
+        const g = this.game;
+        while (c.arcT >= 1) {
+            c.arcT -= 1;
+            const m = c.a.front, a = Math.random() * Math.PI * 2, up = 0.15 + Math.random() * 0.8, len = ARC.LEN[0] + Math.random() * (ARC.LEN[1] - ARC.LEN[0]);
+            const dir = _arcDir.set(Math.cos(a), up, Math.sin(a)).normalize();
+            const col = c.marks?.[Math.random() < 0.5 ? 0 : 1] ?? 0xcfe6ff;
+            let px = m.x, py = m.y, pz = m.z;
+            const n = 9;
+            for (let i = 1; i <= n; i++) { // (a jagged path of bright sparks: a crackle of a moment)
+                const t = i / n, jx = (Math.random() - 0.5) * 1.6, jy = (Math.random() - 0.5) * 1.2, jz = (Math.random() - 0.5) * 1.6;
+                px = m.x + dir.x * len * t + jx; py = m.y + dir.y * len * t + jy; pz = m.z + dir.z * len * t + jz;
+                g.fx?.spark?.(_v1.set(px, py, pz), i % 3 ? 0xeaf4ff : col, 0.28, _v2.set(0, 0, 0), 0.16 + Math.random() * 0.1);
+            }
+            g.fx?.spark?.(_v1.set(px, py, pz), 0xffffff, 0.6, _v2.set(0, 0, 0), 0.2);
+            if (!this._referee()) continue;
+            // (the sting: the wizards by where it landed — not the two in the duel)
+            for (const v of g.castleLife?.targets(60) || []) {
+                if (v.id === c.a.by || v.id === c.b.by || v.dead || v.hp <= ARC.DMG + 2) continue;
+                if (Math.hypot(v.x - px, v.z - pz) > ARC.HIT_R || Math.abs(v.y + 2 - py) > ARC.HIT_R + 2) continue;
+                g.castleLife.hit(v, ARC.DMG, _v3.set(v.x - m.x, 0, v.z - m.z).normalize().clone(), null, { spell: true, via: 'arc' });
+            }
+        }
+    }
+
     _updateClash(c, dt) {
         const g = this.game;
         const { a, b } = c;
@@ -1636,6 +1696,7 @@ export class Duel {
         const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) : 0;
         c.pwA = sa; c.pwB = sb; // (what each side pushes with now: the bar shows mine)
+        this._clashArcs(c, (sa + sb) / 2, dt);
         const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)
         S.n++; S.sa += sa; S.sb += sb; S.ca += ca.ok ? 1 : 0; S.cb += cb.ok ? 1 : 0;
         c.v = clashPush(sa - sb) + maximaPush(ca.ok ? liveShouts(c.shoutsA, c.t) : 0, cb.ok ? liveShouts(c.shoutsB, c.t) : 0);

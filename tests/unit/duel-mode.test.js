@@ -231,3 +231,12 @@ test('победа в столкновении лучей доходит до п
     assert.match(src, /if \(!opts\?\.clash && g\.armor\?\.guard\(spell\)\) return;/);
     assert.match(src, /if \(!opts\?\.clash && c\.isVillager && \(\(c\.robe && ROBE_BLOCKS\.has\(spell\)\)/);
 });
+
+import { arcRate, ARC, AIM } from '../../src/game/Duel.js';
+
+test('молнии из столкновения: слабые маги — как раньше (нет), чем сильнее — тем больше; помощь прицела на 30% больше', () => {
+    assert.equal(arcRate(1.6), 0); assert.equal(arcRate(ARC.FROM), 0);
+    assert.ok(arcRate(2.9) > 0.5 && arcRate(4.4) > arcRate(2.9) * 2); // (the Master's clash is a storm)
+    assert.ok(Math.abs(AIM.CONE / 0.12 - 1.3) < 1e-9 && Math.abs(AIM.BEND / 0.21 - 1.3) < 1e-9 && Math.abs(AIM.TURN / 3.2 - 1.3) < 1e-9);
+    assert.ok(AIM.MEET_BEND > AIM.BEND); // (towards the opposing charge it may turn more than towards a body)
+});

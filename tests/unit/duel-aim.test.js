@@ -51,14 +51,14 @@ test('the target is only a body right on the line of the hand: on it — yes; 14
     assert.equal(pickBody(o, d, [bodyAt(0, 20, 0.7, 'far'), bodyAt(0.01, 9, 0.7, 'close')]).body.id, 'close');
     // a big body is easier to point at than a small one (its own angular size counts)
     assert.ok(pickBody(o, d, [bodyAt(12 * DEG, 10, 1.6)]), 'a big body 12° off at 10 m');
-    assert.equal(pickBody(o, d, [bodyAt(12 * DEG, 10, 0.6)]), null, 'a small one 12° off at 10 m');
+    assert.equal(pickBody(o, d, [bodyAt(14 * DEG, 10, 0.6)]), null, 'a small one 14° off at 10 m');
     // behind, too far, too close
     assert.equal(pickBody(o, d, [bodyAt(Math.PI, 8)]), null, 'behind');
     assert.equal(pickBody(o, d, [bodyAt(0, DUEL.RANGE + 5)]), null, 'out of range');
 });
 
-test('the charge corrects its way at most AIM.BEND (~12°) in all, a little at a time', () => {
-    assert.ok(AIM.BEND <= 13 * DEG && AIM.BEND >= 10 * DEG);
+test('the charge corrects its way at most AIM.BEND (~15.6°, 30% more than before) in all, a little at a time', () => {
+    assert.ok(AIM.BEND <= 16.5 * DEG && AIM.BEND >= 14 * DEG);
     const d0 = V(0, 0, -1);
     const dir = d0.clone();
     const want = V(Math.sin(30 * DEG), 0, -Math.cos(30 * DEG));
