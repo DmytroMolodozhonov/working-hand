@@ -161,10 +161,16 @@ const GREET = {
     boatswain: ['Здравия, сэр!', 'Добро пожаловать на палубу!', 'Приветствую!'],
 };
 
+/** «Корабли без моряков» (Творческий, настройки героя): на кораблях никого нет — ни моряков, ни Чёрных Усов со скелетами. */
+let crewless = false;
+export const setCrewless = (on) => { crewless = !!on; };
+export const isCrewless = () => crewless;
+
 /** The crew of a ship by its class (the same every time). */
 export function crewRoster(ship) {
     const C = ship.cls.crew;
     const out = [];
+    if (crewless) return out;
     const rng = createRng(strHash(String(ship.id)) ^ 0x5a17);
     const add = (role) => {
         const idx = out.length;
@@ -371,6 +377,7 @@ export class Sailors {
     }
 
     captainAlive(s) {
+        if (crewless) return false; // (nobody aboard: the captain's chest is not locked)
         const list = this.crews.get(s.id);
         if (list) return list.some((v) => isCaptain(v) && !v.dead);
         return !s.crewKilled.has(0);

@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: null, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start' });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: null, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', noCrew: false });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -165,11 +165,11 @@ test('здоровье: по умолчанию бессмертен; обычн
     assert.equal(surv.combat.enabled, true); assert.equal(surv.combat.manaOn, true);
 });
 
-import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointToward } from '../../src/game/SpawnSpots.js';
+import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointToward, farTarget, lairCells, spiderSpot } from '../../src/game/SpawnSpots.js';
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../../src/world/Terrain.js';
 
 test('точки появления: список, по умолчанию «Начальная площадка», безопасность, сохранение', () => {
-    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle']);
+    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'spider', 'blackship']);
     assert.equal(normalizeHero({}).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'nope' }).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'dragon' }).spawn, 'dragon');
@@ -199,4 +199,22 @@ test('точки появления: список, по умолчанию «Н�
     assert.equal(heroOf({ mode: 'creative', hero: JSON.parse(JSON.stringify(heroForSave(cfg))) }).spawn, 'queen');
     assert.equal(heroOf({ mode: 'creative' }).spawn, 'start'); // старый мир
     assert.equal(normalizeSpawn('castle'), 'castle');
+});
+
+test('дальние места старта: башня, арена, поселение, порт, паучиха; «без моряков»', () => {
+    const tower = { gate: { x: 100.4, z: -50.2 }, gateYaw: 2 };
+    const sites = { towers: { only: () => tower }, arenas: { ofTower: () => ({ gates: [{ out: { x: 10, z: 0 } }], centre: { x: 10, z: 20 } }) }, villages: { spawnVillage: () => ({ gx: 1, gz: 2, x: 500, z: 600 }), tpSpot: () => ({ x: 490, z: 600 }) } };
+    assert.deepEqual(farTarget('tower', { sites }), { x: 100, z: -50, yaw: 2 });
+    const a = farTarget('arena', { sites });
+    assert.equal(a.x, 10); assert.ok(Math.abs(a.yaw) < 1e-9); // (faces the arena's middle: +z)
+    assert.equal(farTarget('village', { sites }).x, 490);
+    assert.deepEqual(farTarget('port', {}, { port: () => ({ x: 5.2, z: 7 }) }), { x: 5, z: 7, yaw: Math.PI });
+    for (const id of ['tower', 'arena', 'village', 'port']) assert.equal(farTarget(id, {}), null, id); // (no such place: the hero stays at the start)
+    const cells = lairCells(400, 2, { x: 0, z: 0 });
+    assert.equal(cells.length, 25);
+    assert.ok(Math.hypot(cells[0].gx + 0.5, cells[0].gz + 0.5) <= Math.hypot(cells[24].gx + 0.5, cells[24].gz + 0.5));
+    const sp = spiderSpot({ x: 300, z: 0 }, { x: 0, z: 0 });
+    assert.equal(sp.x, 272);
+    assert.equal(normalizeHero({}).noCrew, false);
+    assert.equal(normalizeHero({ noCrew: true }).noCrew, true);
 });

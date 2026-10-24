@@ -58,7 +58,7 @@ import { FarShape, skinnedSamples } from '../core/FarShape.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
-import { sailorModels } from './Sailors.js';
+import { sailorModels, setCrewless } from './Sailors.js';
 import { DeathSystem } from './Death.js';
 import { refusal, HintGate } from './Hints.js';
 import { newUid, SPELL_RU, SCROLL_RIBBON_RU, baseSpell, makeItemModel, disposeModel as disposeItemModel, rollWand, spellScroll } from './ItemTypes.js';
@@ -316,6 +316,7 @@ export class Game {
         // «Настройки героя» Творческого мира (HeroSetup.js): записаны в мире; у старого мира их нет — всё как было раньше
         this.config.hero = config.mode === 'creative' ? (config.hero ?? config.saved?.hero ?? undefined) : undefined;
         this.hero = heroOf(this.config);
+        setCrewless(config.mode === 'creative' && this.hero.noCrew); // (ships without sailors: Sailors.crewRoster)
         // real trees, not blocks (TreeBuild.js, Trees.js): every world made from now on, smooth or not; a saved world keeps
         // what it was made with (its felled and burnt trees lie on those), a guest takes the host's
         this.config.realTrees = !!(config.realTrees ?? (config.saved ? config.saved.realTrees : !config.map));

@@ -44,7 +44,7 @@ import { hullHalfWidth, floorAt } from './ShipLayout.js';
 import { PlankCollider } from './ShipCollision.js';
 import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { SEA } from '../world/Sea.js';
-import { railSpots } from './Sailors.js';
+import { railSpots, isCrewless } from './Sailors.js';
 import { turnToward, yawTo } from './FaceTarget.js';
 import { isCursed } from './Ships.js';
 import { newUid } from './ItemTypes.js';
@@ -184,7 +184,7 @@ export class Blackbeard {
         const s = this._ensure();
         if (!s) return;
         this._t += dt;
-        if (this.auth && !this.taken) {
+        if (this.auth && !this.taken && !isCrewless()) {
             if (s.awake) this._brain(s, dt);
             else this._drift(s, dt);
             this._boarders(dt);

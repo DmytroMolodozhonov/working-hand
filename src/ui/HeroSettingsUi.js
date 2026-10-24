@@ -21,6 +21,7 @@ const T = {
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
     spawn: 'Где герой появится при входе в мир и после возрождения. Выберите босса, которого хотите проверить, — вы окажетесь рядом с ним, а не на начальной площадке. Если рядом с кроватью — кровать не учитывается: возрождение всегда здесь.',
+    noCrew: 'Корабли в порту и в море стоят пустыми: на них нет ни капитана, ни моряков. Чёрный корабль тоже без капитана Чёрные Усы и скелетов — на нём можно спокойно осмотреться. Удобно, чтобы проверить корабли отдельно от команды.',
     health: 'Здоровье. «Бессмертен» — герой не получает урона и не умирает (так в Творческом было всегда). «Обычное здоровье» — как в Свободном мире: удары, огонь, падение ранят, а при нуле герой погибает, роняет вещи и возрождается.',
     maxHp: 'Сколько здоровья у героя при обычном здоровье. По умолчанию 20 — как в Свободном мире.',
     steady: 'Устойчивость — шанс устоять на ногах, когда вас пытаются сбить заклинанием. 100 — всегда устоите, 1 — собьёт почти каждое.',
@@ -43,6 +44,7 @@ const html = (p) => `
 <div class="hero-settings" data-hero-panel>
   <h4 class="hero-h">🧙 Настройки героя</h4>
   <div class="hero-row" title="${T.spawn}"><label for="${p}-spawn">📍 Где появиться:</label> <select id="${p}-spawn">${SPAWN_SPOTS.map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}</select></div>
+  <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
   <div class="hero-row" id="${p}-cells-row" hidden title="${T.cells}">
     <label for="${p}-cells">🔷 Ячеек маны:</label>
@@ -96,7 +98,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
         duelPower: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
-        spawn: $('spawn').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
+        spawn: $('spawn').value, noCrew: $('nocrew').checked, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
     const set = (h) => {
@@ -105,7 +107,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
         root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPower == null ? 'full' : 'custom'}"]`).checked = true;
-        $('spawn').value = v.spawn;
+        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
         $('duel-pct').value = v.duelPower ?? HERO.DUEL_MAX; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();

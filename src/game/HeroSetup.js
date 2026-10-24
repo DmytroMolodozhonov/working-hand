@@ -39,6 +39,7 @@ export const DEFAULT_HERO = Object.freeze({
     health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
     maxHp: HERO.HP_DEFAULT,
     spawn: 'start', // where the hero appears (SpawnSpots.js)
+    noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
 
 /** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
@@ -64,6 +65,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         health: r.health === 'normal' ? 'normal' : r.health === 'immortal' ? 'immortal' : b.health === 'normal' ? 'normal' : 'immortal',
         maxHp: clamp(Math.round(num(r.maxHp, b.maxHp)), HERO.HP_MIN, HERO.HP_MAX),
         spawn: normalizeSpawn(r.spawn ?? b.spawn),
+        noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
     };
 }
 
