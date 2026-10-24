@@ -49,12 +49,14 @@ export class VillagerCommands {
     get game() { return this.life.game; }
 
     /** Is the player the lord of this villager's castle? */
-    _lord(v, by) { return this.life.state(v.cs.def.id).owner === by && by != null; }
+    _lord(v, by) { return this.life.isCommander(v.cs, by); }
+    /** The king himself (ranks are his alone to give). */
+    _owner(v, by) { return by != null && this.life.state(v.cs.def.id).owner === by; }
 
     /** (host) A command for `v` (from VillagerOrders.run 'cmd'): `a` = {id, scope…, foe, point, mode, form, slot, pace, dir}. */
     run(v, a, by) {
         if (!v || v.dead || !a || !COMMANDS[a.id]) return false;
-        const can = canDo(a.id, v.role, { playerIsKing: this._lord(v, by), wizard: !!v.wizard });
+        const can = canDo(a.id, v.role, { playerIsKing: this._lord(v, by), playerIsOwner: this._owner(v, by), wizard: !!v.wizard });
         if (!can.ok) return false;
         const c = COMMANDS[a.id];
         if (v.foe || v.fleeT > 0) return false; // (in a fight or running for his life: no time)
@@ -79,6 +81,12 @@ export class VillagerCommands {
             case 'weapon': v.sheath = what === 'away'; if (what === 'out') v.sheath = false; break;
             case 'spare': v.spare = { until: Date.now() + 120000, id: a.foe || null }; break;
             case 'fetch': this._fetch(v, what, a, me, base); break;
+            case 'rank': { // the king tells his vizier whom to raise: only the king himself; the host keeps it (CastleLife.setRank)
+                if (!this._owner(v, by) || a.pid == null || a.pid === by) return false;
+                const level = { friend: 1, honored: 2, commander: 3, deputy: 4, none: 0 }[what] ?? 1;
+                this.life.setRank(v.cs, a.pid, level, String(a.title || '').slice(0, 40), String(a.pname || '').slice(0, 30));
+                return true;
+            }
             case 'say': break; // (words only — CommandTalk)
             case 'cast': this._clear(v, true); v.cmd = { ...base, kind: 'pose', mode: 'cast', t: 2.6 }; break; // (a wizard's show: the wand arm up)
             default: return false;

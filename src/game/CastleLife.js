@@ -39,6 +39,7 @@ import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
+import { levelOf, withRank, commandsGuard, isForgiven, isRespected, RANK_TITLES, GREET_RANKED, fill as fillRank } from './Ranks.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
@@ -320,8 +321,36 @@ export class CastleLife {
 
     state(id) {
         let s = this.states.get(id);
-        if (!s) { s = { owner: null, ownerName: null, kingDead: false, killed: new Set() }; this.states.set(id, s); }
+        if (!s) { s = { owner: null, ownerName: null, kingDead: false, killed: new Set(), ranks: {} }; this.states.set(id, s); }
         return s;
+    }
+
+    // ---------------------------------------------------------- the king's friends (Ranks.js)
+    /** The rank step of a player in a castle (0: none). The king himself is above all. */
+    rankOf(cs, pid) { return this.state(cs.def?.id ?? cs).owner === pid ? 9 : levelOf(this.state(cs.def?.id ?? cs).ranks, pid); }
+
+    /** Does he command the castle's guard like the king (the king, a commander, a deputy)? */
+    isCommander(cs, pid) { const st = this.state(cs.def?.id ?? cs); return pid != null && (st.owner === pid || commandsGuard(st.ranks, pid)); }
+
+    /** For `isLord`: the player counts as "the lord" of these men when he is the owner or a friend of the castle (never an enemy). */
+    lordOf(cs, pid) { const st = this.state(cs.def.id); return isForgiven(st.ranks, pid) ? pid : st.owner; }
+
+    /**
+     * (host) The king gives (level 1…4) or takes (0) a rank: kept in the castle's state, told to everybody, announced by the knights
+     * near the friend. Only the owner may (VillagerCommands checks).
+     */
+    setRank(cs, pid, level, title, name) {
+        const st = this.state(cs.def.id);
+        const before = levelOf(st.ranks, pid);
+        st.ranks = withRank(st.ranks, pid, level, title, name);
+        if (level) { const h = cs.hostile; h.delete(pid); for (const k of cs.active.values()) if (k.foe === pid) { k.foe = null; k.grudge = null; } } // (the friend is forgiven at once)
+        this._sendState(cs);
+        const p = this._playerPos(pid);
+        if (level && level !== before && p) {
+            // the knights nearest to him greet him by his new standing — one or two voices
+            const near = [...cs.active.values()].filter((k) => !k.dead && k.role === 'knight' && Math.hypot(k.x - p.x, k.z - p.z) < 40).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, 2);
+            near.forEach((k, i) => { const line = pick(GREET_RANKED[level] || GREET_RANKED[1]); setTimeout(() => { if (!k.dead) this._say(k, fillRank(line, name, RANK_TITLES[level] === title ? '' : title), 3.5); }, 1200 + i * 1300); });
+        }
     }
 
     /** A site the game makes itself (not in the terrain's index): found by `_scan` and `_runtimeById`. */
@@ -1376,7 +1405,7 @@ export class CastleLife {
                     if (until < Date.now()) { cs.hostile.delete(pid); continue; }
                     const p = this._playerPos(pid);
                     // (just given up on them out there: only if they come back near)
-                    if (isLord(v, pid, this.state(cs.def.id).owner)) continue; // (the king is never his own men's enemy)
+                    if (isLord(v, pid, this.lordOf(cs, pid))) continue; // (the king and his friends are never his own men's enemy)
                     if (p && v.gaveUp?.id === pid && v.gaveUp.until > Date.now() && (Math.hypot(p.x - v.x, p.z - v.z) > 12 || !this._inLand(cs.def, p, 30))) continue;
                     if (p && Math.hypot(p.x - v.x, p.z - v.z) < 26 && this._sees(v, p)) { v.foe = pid; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : SHOUT.knight)); break; }
                 }
@@ -1397,7 +1426,7 @@ export class CastleLife {
             }
         }
         if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
-        if (v.foe != null && isLord(v, v.foe, this.state(cs.def.id).owner)) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
+        if (v.foe != null && isLord(v, v.foe, this.lordOf(cs, v.foe))) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
         if (v.gOwner != null && this.guard.step(v, dt)) return; // (a bodyguard: the king's enemy first, the formation round him)
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
@@ -2937,7 +2966,7 @@ export class CastleLife {
         if (v.foe != null) ids.add(v.foe);
         let hero = null, hp = null, hd = Infinity;
         for (const pid of ids) {
-            if (isLord(v, pid, st.owner) || !(cs.hostile.get(pid) > now || v.foe === pid)) continue;
+            if (isLord(v, pid, this.lordOf(cs, pid)) || !(cs.hostile.get(pid) > now || v.foe === pid)) continue;
             const p = this._playerPos(pid);
             const d = p ? Math.hypot(p.x - v.x, p.z - v.z) : Infinity;
             if (d < hd) { hd = d; hero = pid; hp = p; }
@@ -2988,6 +3017,7 @@ export class CastleLife {
         const g = this.game;
         const st = this.state(cs.def.id);
         if (by === st.owner) return false; // (the king may do as he likes)
+        if (isForgiven(st.ranks, by)) return false; // (and his friend: what he does is forgiven — Ranks.js)
         const isPlayer = by === g.localId || g.remotes.has(by);
         if (!isPlayer) return false;
         const saw = [];
@@ -3692,7 +3722,7 @@ export class CastleLife {
 
     _sendState(cs) {
         const st = this.state(cs.def.id);
-        this.game.sync?.castleState?.(cs.def.id, { owner: st.owner, ownerName: st.ownerName, kingDead: st.kingDead, killed: [...st.killed] });
+        this.game.sync?.castleState?.(cs.def.id, { owner: st.owner, ownerName: st.ownerName, kingDead: st.kingDead, killed: [...st.killed], ranks: st.ranks });
     }
 
     /** (network / save) a castle's state. */
@@ -3701,6 +3731,13 @@ export class CastleLife {
         const wasDead = st.kingDead;
         st.owner = s.owner || null; st.ownerName = s.ownerName || null; st.kingDead = !!s.kingDead;
         st.killed = new Set(s.killed || []);
+        // (the king's friends: told to everybody; if mine changed, I am told too)
+        const myBefore = levelOf(st.ranks, this.game.localId);
+        st.ranks = s.ranks && typeof s.ranks === 'object' ? s.ranks : {};
+        const my = st.ranks[this.game.localId], myLevel = my?.level | 0;
+        if (this.game.active && myLevel !== myBefore) {
+            this.game.hud?.notify?.(myLevel ? `👑 ${st.ownerName || 'Король'} дал вам место в замке «${this.castles.get(id)?.def?.name || ''}»: ${my.title}` : `👑 Ваше положение в замке отменено`);
+        }
         const cs = this.castles.get(id) || this._runtimeById(id);
         if (cs) for (const c of cs.chests) c.locked = !st.kingDead;
         if (cs && st.kingDead && !wasDead && this.game.active) this._announceCapture(cs, st);
@@ -3708,7 +3745,7 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size) out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed] };
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || Object.keys(s.ranks || {}).length) out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {} };
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;
         return out;

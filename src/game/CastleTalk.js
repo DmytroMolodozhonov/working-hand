@@ -208,7 +208,8 @@ export class CastleTalk {
         const st = this.life.state(v.cs.def.id);
         const ctx = {
             playerName: g.net?.active ? g.net.name : null,
-            playerIsKing: st.owner === g.localId,
+            playerIsKing: this.life.isCommander(v.cs, g.localId), // (the king, or his commander / deputy — Ranks.js)
+            playerIsOwner: st.owner === g.localId,
             hostile: v.cs.hostile.get(g.localId) > Date.now(),
             coins: (g.inventory?.coins?.() ?? 0) + (this._trader(v) ? this._counterCoins(v.cs.def, v.entry.stall).reduce((n, L) => n + (L.item.count || 0), 0) : 0), // (a pouch on his counter pays too)
             nearbyGoods: this._trader(v) ? this._goodsOf(v) : [],
@@ -290,6 +291,11 @@ export class CastleTalk {
     _status(v) {
         const g = this.game, me = g.localId;
         if (this.life.state(v.cs.def.id).owner === me) return 'king';
+        const rk = this.life.rankOf(v.cs, me);
+        if (rk >= 4) return 'deputy';
+        if (rk === 3) return 'commander';
+        if (rk === 2) return 'honored';
+        if (rk === 1) return 'friend';
         if ((this.life.wantedLevel?.(me) || 0) >= 2) return 'outlaw';
         for (const st of this.life.states.values()) if (st.owner === me) return 'foreignKing';
         const w = g.armor?.worn || {};

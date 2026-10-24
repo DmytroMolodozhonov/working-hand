@@ -54,7 +54,7 @@ export class VillagerOrders {
         const me = this.life._playerPos(by);
         switch (name) {
             case 'follow_me': case 'follow': {
-                const king = this.life.state(cs.def.id).owner === by;
+                const king = this.life.isCommander(cs, by);
                 v.follow = by; v.followT = king ? 600 : 90; v.followFar = king; v.path = null;
                 v.order = null;
                 break;
@@ -119,7 +119,7 @@ export class VillagerOrders {
     /** (host) May `by` give this order? (a guest's order is checked again here) */
     permitted(v, name, args = {}, by) {
         if (name === 'cmd') return true; // (VillagerCommands.run checks the rank itself)
-        const king = this.life.state(v.cs.def.id).owner === by && by != null;
+        const king = this.life.isCommander(v.cs, by); // (the king, or the king's commander / deputy — Ranks.js)
         // (a bodyguard / a companion for one he chose to help — his character and how he takes me: Attitude.willDo)
         if (args.agreed && (name === 'guard_me' || name === 'guard' || name === 'follow_me' || name === 'follow') && v.role !== 'king') return true;
         if (ARMY.has(name)) {

@@ -39,7 +39,7 @@ const PHRASES = {
     fight_him: ['сразись с ним', 'атакуй его', 'подерись с тем рыцарем'],
     fight_me: ['сразись со мной', 'давай на мечах', 'потренируемся'],
     stop_fight: ['прекратите бой', 'хватит драться', 'отбой'],
-    spare: ['не трогай его', 'оставь его в покое', 'он мой друг'],
+    spare: ['не трогай его', 'оставь его в покое', 'не бей его'],
     guard_spot: ['охраняй это место', 'стереги вход', 'встань на стражу'],
     patrol: ['патрулируй', 'обойди дозором территорию', 'сделай обход'],
     surround: ['окружите меня', 'встаньте вокруг меня', 'берите меня в кольцо'],
@@ -67,6 +67,11 @@ const PHRASES = {
     cast_light: ['зажги люмос', 'освети палочкой', 'создай светлячка'],
     cast_shield: ['защити щитом', 'поставь барьер', 'магический щит'],
     fly: ['лети', 'взлети', 'полетай'],
+    rank_friend: ['это мой друг', 'он мой друг', 'считай его другом'],
+    rank_honor: ['уважайте его', 'относитесь к нему с уважением', 'он почётный гость'],
+    rank_commander: ['слушайтесь его', 'назначаю его командиром стражи', 'поручаю ему должность казначея'],
+    rank_deputy: ['он мой наместник', 'слушайтесь его как меня', 'он здесь главный вместо меня'],
+    rank_revoke: ['лишаю его должности', 'он больше не друг', 'забудь про него'],
     move_dir: ['пройди пять шагов назад', 'ты можешь пойти вперед', 'сделай три шага влево'],
     tidy: ['убрать доспехи сзади вас по сундукам', 'приберись', 'наведи порядок'],
     bring: ['принеси мне меч который лежит рядом', 'принеси мне щит', 'притащи доспехи'],
@@ -257,6 +262,9 @@ function stubLife() {
         byId: new Map(),
         game: { fx: null, sound: null, character: { group: { position: { x: 0, y: 2, z: 0 } } } },
         state: () => ({ owner: 'me' }),
+        isCommander(cs, by) { return this.state().owner === by; },
+        rankOf() { return 0; },
+        ranks: [], setRank(cs, pid, level, title, name) { this.ranks.push({ pid, level, title, name }); },
         _playerPos: () => ({ x: 0, y: 0, z: 0 }),
         _ground() {}, _inLand: () => false, _sees: () => true,
         _steer(v, tx, tz, speed, dt, stop = 0) {
@@ -433,4 +441,17 @@ test('pointing at things: the one on the ray, and the heap round it — not the 
     assert.deepEqual(ct._pointedThings(null, true), [], 'nothing there');
     ct.pointRay = () => ({ o: { x: 0, y: 1.5, z: 0 }, d: { x: 9 / 13.55, y: -1.5 / 13.55, z: -10 / 13.55 }, hand: true });
     assert.deepEqual(ct._pointedThings(new Set(['armor']), true).map((e) => e.uid), [4], 'the right-hand heap');
+});
+
+test('the king\'s friends: only the vizier takes the word, only from the king, and only the king\'s own hand writes it', () => {
+    assert.equal(canDo('rank_friend', 'advisor', { playerIsKing: true, playerIsOwner: true }).ok, true);
+    assert.equal(canDo('rank_commander', 'advisor', { playerIsKing: true, playerIsOwner: false }).ok, false, 'a deputy cannot give ranks');
+    assert.match(canDo('rank_deputy', 'knight', { playerIsOwner: true }).line, /советник/i, 'a knight sends him to the vizier');
+    assert.equal(canDo('rank_friend', 'farmer', { playerIsOwner: true }).ok, false);
+    const life = stubLife(); const adv = person(life, 'a', 'advisor', 3, 3);
+    assert.equal(life.cmds.run(adv, { id: 'rank_commander', pid: 'p2', pname: 'Олег', title: 'маршал' }, 'me'), true);
+    assert.deepEqual(life.ranks.at(-1), { pid: 'p2', level: 3, title: 'маршал', name: 'Олег' });
+    assert.equal(life.cmds.run(adv, { id: 'rank_friend', pid: 'p3', pname: 'Ира' }, 'someone else'), false, 'not the king: nothing is written');
+    life.cmds.run(adv, { id: 'rank_revoke', pid: 'p2', pname: 'Олег' }, 'me');
+    assert.equal(life.ranks.at(-1).level, 0);
 });

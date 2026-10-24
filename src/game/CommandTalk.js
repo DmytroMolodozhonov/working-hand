@@ -11,11 +11,13 @@
 
 import * as THREE from 'three';
 import { detectOrder } from '../ai/TalkActions.js';
+import { titleFor, vizierLine, RANK_KEYS } from './Ranks.js';
 import { parseCommand, parseCommands, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
 
 const SHOUT_HEAR = 30; // m: a shouted order is heard by the guard this far (as for the army's orders)
 const MAX_GROUP = 10; // people carrying out one command (a bigger crowd costs frames)
 const GROUP_DEFAULT = new Set(['spar_group', 'formation', 'surround']); // said to nobody in particular → all the knights near
+const normalizeForTitle = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е');
 const SPARRERS = new Set(['knight']);
 /** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
 const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
@@ -52,6 +54,7 @@ export class CommandTalk {
 
     _names() {
         const out = [];
+        for (const p of this.talk._players?.() || []) if (p.name) out.push(p.name); // (the players: «это мой друг Олег»)
         for (const v of this.life.byId.values()) if (!v.dead && v.name) out.push(v.name);
         return out.length > 80 ? out.slice(0, 80) : out;
     }
@@ -108,7 +111,7 @@ export class CommandTalk {
         const army = detectOrder(text, talk._players());
         if (army && !NEW_WINS.has(cmd.id)) return false; // («собери войско», «в атаку на зомби»: the king's orders, VillagerOrders)
         const me = g.character.group.position;
-        const ctxOf = (k) => ({ playerIsKing: life.state(k.cs.def.id).owner === g.localId, wizard: !!k.wizard, female: !!k.entry?.female });
+        const ctxOf = (k) => ({ playerIsKing: life.isCommander(k.cs, g.localId), playerIsOwner: life.state(k.cs.def.id).owner === g.localId, wizard: !!k.wizard, female: !!k.entry?.female });
         const busy = (k) => k.cmd || k.order || k.follow || k.foe;
         const group = this._group(v, cmd, def);
         // (a word that matters only while something is going on — «хватит», «встань» — is an ordinary word otherwise)
@@ -134,6 +137,7 @@ export class CommandTalk {
             this._log(text, cmd, lead, 'ответ'); reply(this._sayLine(what, lead, text)); return true;
         }
         if (kind === 'cast') return this._cast(lead, what, cmd, text);
+        if (kind === 'rank') return this._rank(lead, what, cmd, text, reply);
 
         // --- a target: «сразись с ним», «не трогай его»
         let foe = null, foes = [];
@@ -416,6 +420,35 @@ export class CommandTalk {
         doers.slice(0, 4).forEach((k, i) => { if (share[i].length) life.orders.run(k, 'cmd', { id: cmd.id === 'give_item' ? 'bring' : cmd.id, uids: share[i], dest }, by); });
         reply(say);
         this._log(text, cmd, lead, `вещей: ${found.length} (${f.label}), ${dest.kind}`);
+        return true;
+    }
+
+    /**
+     * «Это мой друг», «слушайтесь его», «он мой наместник» — said to the vizier: whom (a name, the hand, or the only other player)
+     * and which step; the host keeps it (VillagerCommands 'rank') and the whole castle knows (the castle's state).
+     */
+    _rank(lead, what, cmd, text, reply) {
+        const g = this.game, life = this.life;
+        const me = g.character.group.position;
+        const players = (this.talk._players?.() || []).filter((p) => p.id !== g.localId);
+        if (!players.length) { reply('Кроме вас, Ваше Величество, здесь никого нет. Когда придёт друг — укажите на него.'); this._log(text, cmd, lead, 'некому'); return true; }
+        const cands = [];
+        for (const p of players) {
+            const pos = life._playerPos(p.id);
+            if (pos) cands.push({ id: p.id, name: p.name, x: pos.x, y: pos.y + 1.6, z: pos.z, d: Math.hypot(pos.x - me.x, pos.z - me.z) });
+        }
+        const t = cmd.args.target;
+        let who = null;
+        if (t.ref === 'name') who = players.find((p) => p.name === t.name) ? cands.find((c) => c.name === t.name) || { id: players.find((p) => p.name === t.name).id, name: t.name } : null;
+        else if (t.ref === 'point' || t.ref === 'nearest' || t.ref === 'left' || t.ref === 'right') who = pickTarget(t, cands, { x: me.x, z: me.z, yaw: g.character.group.rotation.y }, this.pointRay(), 0.3);
+        if (!who && players.length === 1) who = cands[0] || { id: players[0].id, name: players[0].name };
+        if (!who) { reply(pick(['О ком речь, Ваше Величество? Назовите имя или покажите на него.', 'Не пойму, о ком вы. Покажите рукой.'])); this._log(text, cmd, lead, 'кто — не понял'); return true; }
+        const level = what === 'none' ? 0 : RANK_KEYS[what] || 1;
+        const title = titleFor(level, normalizeForTitle(text));
+        const before = life.rankOf(lead.cs, who.id);
+        life.orders.run(lead, 'cmd', { id: cmd.id, pid: who.id, pname: who.name, title }, g.localId);
+        reply(vizierLine(level, who.name, title, before < 9 ? before : 0));
+        this._log(text, cmd, lead, `ранг ${level} (${title}) → ${who.name}`);
         return true;
     }
 
