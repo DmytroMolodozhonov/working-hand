@@ -81,6 +81,11 @@ test('refusals with a clear hint: plain wand, bread, bones, a hero\'s body, an a
     assert.ok(bodyOk({ k: 'v', role: 'knight' }).ok && bodyOk({ k: 'v', wz: 1, mm: 90 }).ok);
     assert.match(bodyOk({ k: 'v', bones: {} }).why, /Кости/);
     assert.ok(!bodyOk({ k: 'p' }).ok && !bodyOk({ k: 'v', lg: 1 }).ok && !bodyOk(null).ok);
+    // online: only the body of a real player — people do not do
+    const mp = { multiplayer: true };
+    assert.ok(bodyOk({ k: 'p', lg: 1 }, mp).ok && !bodyOk({ k: 'v', role: 'knight' }, mp).ok && !bodyOk({ k: 'v', wz: 1 }, mp).ok);
+    assert.match(bodyOk({ k: 'v' }, mp).why, /только тело убитого игрока/);
+    assert.ok(!bodyOk({ k: 'p', bones: {} }, mp).ok && !bodyOk(null, mp).ok);
 });
 
 test('«Pentagranium Unitas»: its own word and picture, a black pentagram, 120 mana, +30 dark at the word (100 at most); no scroll of its own besides the pentagram\'s', () => {
