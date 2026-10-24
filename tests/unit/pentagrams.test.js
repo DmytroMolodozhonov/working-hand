@@ -133,8 +133,12 @@ test('the figures differ: a hexagram, a square and the five-pointed star are tol
         const r = recognizeAny(lines(id, { rot: 0.5 }), new Set(['devil', 't-hex', 't-sq']));
         assert.ok(r.ok && r.id === id, `${id} drawn: ${JSON.stringify(r)}`);
     }
-    // the same star is the devil one, the breakward one and the gargoyles': the known one wins
-    assert.equal(recognizeAny(lines('devil'), new Set(['gargoyles'])).id, 'gargoyles');
+    // every pentagram has its own figure: the star is the devil one only; the breakward and the gargoyles' drawings are told apart from it and from each other
+    assert.equal(recognizeAny(lines('devil'), new Set(['gargoyles', 'breakward'])).id, 'devil');
+    for (const id of ['breakward', 'gargoyles']) {
+        const r = recognizeAny(lines(id, { rot: 0 }), new Set(['devil', 'breakward', 'gargoyles']));
+        assert.ok(r.ok && r.id === id, `${id} drawn: ${JSON.stringify(r)}`);
+    }
     assert.equal(recognizeAny(lines('devil'), new Set(['devil'])).id, 'devil');
     assert.ok(!recognizeAny([]).ok);
 });

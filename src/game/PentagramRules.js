@@ -88,6 +88,7 @@ const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 /** The lines of a table entry's drawing (closed polylines, unit radius, the first corner up) — from its `shape` (a star {n/skip}) or its `draw` list (polygons). */
 function linesOf(def) {
     const S = def.shape;
+    if (def.lines?.length) return def.lines.map((poly) => poly.map(([x, z]) => [x, z])); // (по точкам кольца: PentagramFigures.js)
     if (S?.star) {
         const n = S.star, skip = S.skip || 1, k = gcd(n, skip), rot = S.inverted ? Math.PI : 0, per = n / k;
         const corner = (i) => { const a = rot + Math.PI / 2 + i * (TAU / n); return [Math.cos(a), Math.sin(a)]; };
@@ -113,7 +114,7 @@ export function figureOf(id) {
         def, id, lines, sym,
         ru: def.title || def.ru || id,
         ink: def.glow ?? 0xc01830, paper: 0x2a1418, seal: 0x7a0d18,
-        figure: star ? (def.shape.inverted ? `перевёрнутая ${star === 5 ? 'пятиконечная' : star}-лучевая звезда` : star === 5 ? 'пятиконечная звезда' : `${star}-лучевая звезда`) : 'фигура со свитка',
+        figure: star ? (def.shape.inverted ? `перевёрнутая ${star === 5 ? 'пятиконечная' : star}-лучевая звезда` : star === 5 ? 'пятиконечная звезда' : `${star}-лучевая звезда`) : def.lines ? 'фигура по точкам кольца' : 'фигура со свитка',
         circle: ringPoints(72),
         samples: sampleFigure(lines, 80),
         works: true,

@@ -3,10 +3,11 @@
  * жизни, ремонта брони, горгулий, монстра, зачарования) добавляются СЮДА ЖЕ строкой `PENTAGRAMS.<id> = {...}` (см. `registerPentagram`).
  *
  * Рисунок — данные для распознавания и для отрисовки: `ring` (круг, доля радиуса), `star` (число лучей звезды; 5 — пентаграмма),
- * `skip` (через сколько вершин соединять), `gaps` (разорванные линии звезды — индексы), `crack` (зигзаг-трещина через центр, точки в долях радиуса).
+ * `skip` (через сколько вершин соединять), `gaps` (разорванные линии звезды — индексы), `lines` — готовые линии по точкам кольца (PentagramFigures.js). У каждой пентаграммы СВОЙ рисунок (фигура, не цвет): tests/unit/pentagram-figures.test.js.
  */
 
 import { MONSTER_PENTAGRAM } from './PentagramMonster.js';
+import { BREAKWARD_LINES, GARGOYLE_LINES } from './PentagramFigures.js';
 
 export const PENTAGRAMS = {
     // «Пентаграмма страшного монстра»: круг и оскаленная пасть (четыре клыка, челюсть дугой); встал в круг — 200 маны — ×7 на 10 минут (PentagramMonster.js, MonsterTransform.js)
@@ -19,8 +20,8 @@ export const PENTAGRAMS = {
         glow: 0x8a0f24, // тёмно-багровый
         cost: 50, // маны, когда встаёшь
         scroll: 'BreakwardScroll', // сжечь свиток — узнать рисунок
-        // круг + звезда с РАЗОРВАННЫМ щитом: две линии звезды обрываются, поперёк — трещина; отличается от целой звезды других пентаграмм
-        shape: { ring: 1, star: 5, skip: 2, gaps: [1, 3], crack: [[-0.55, 0.28], [-0.2, 0.05], [0.1, 0.3], [0.38, -0.12], [0.62, 0.08]], shieldArc: [0.1, 0.4] },
+        // круг + разорванное кольцо с молнией-трещиной (PentagramFigures.BREAKWARD_LINES): свой рисунок, не звезда
+        lines: BREAKWARD_LINES,
     },
     gargoyles: {
         id: 'gargoyles',
@@ -30,8 +31,8 @@ export const PENTAGRAMS = {
         glow: 0xff2a10, // тёмно-красный адский
         cost: 150, // маны сразу, когда рисунок удался; меньше — ничего не списывается и ритуал не начинается
         scroll: 'GargoylePentagram',
-        // круг + ПЕРЕВЁРНУТАЯ звезда (лучом вниз) с двумя рогами над кругом и крыльями по бокам (GargoyleRules.GARGOYLE_DRAW)
-        shape: { ring: 1, star: 5, skip: 2, inverted: true, horns: true, wings: true },
+        // круг + морда вершиной вниз с двумя рогами и крыльями (PentagramFigures.GARGOYLE_LINES): свой рисунок, не звезда
+        lines: GARGOYLE_LINES,
         use: 'gargoyles.startRitual', // game.gargoyles.startRitual(center, { by }) — GargoyleRules.GARGOYLE_PENTAGRAM.use
     },
 };
