@@ -19,18 +19,25 @@
  *              inside another's house sphere. Loose THINGS (a sword, a coin) are not blocks: not taken (the author).
  *   dig        round the spot the wand shows (DIG_R = 6 m), the top block (a tree: crown first) of the nearest column, down to DIG_DEPTH = 5 layers below
  *              the spot's level, never within NEAR_ME = 2.2 m of the hero's feet (no hole under him).
- *   train      the hand stops going round (calm for TRAIN_CALM s) and points: the vortex leaves the hero and follows the wand as a
- *              snake — a helix of blocks along the wand's trail (TRAIN_STEP s a block, ≤ 3 s of tail); a hand going round again — back round the hero.
- *   attack     «Атака» (or a sharp throw of the wand hand: a salvo of SALVO blocks): the blocks fly at what the wand shows, SPEED m/s,
- *              VOLLEY blocks a second, steered by the wand a little; each block that hits hurts (BLOCK_DMG, a wizard/player 2) and
- *              pushes (a few in a row knock down). One that misses or hits a wall is laid back as a block where it stopped
- *              (the caster's computer; if the cell is not free or not allowed it crumbles); one that hits a creature crumbles.
- *   shield     «Shield» (SHIELD_MIN = 12 blocks): the blocks close into 4 rings of 12 (48 blocks) at SHIELD_R = 2.5 m, a second shell (4 rings of 16) at
- *              3.8 m for the 49th-112th; the rest circle outside. A spell that would hit the hero hits the blocks facing it: each
- *              blow takes blocks away (HIT_BLOCKS, near the blow) and the hero is not touched while the blocks facing it hold (≥ 2
- *              within 25° of the blow). Fewer than SHIELD_MIN left → it opens. The gods' spells break it all (the blocks fly apart).
- *              It does not cover from above (Thunderwave), nor from a blow in melee (a creature standing next to him), nor arrows
- *              of other things — only what Protection stops by the same rules (Combat.shieldFactor / _blocked).
+ *   cloud      a lifted block first just HANGS (the author: «подняться и висеть, как под Левиосой Максима»): the swarm is a cloud of a lattice
+ *              (1.5 m × 1.3 m) that bobs a little and follows the wand (the middle: where it shows, ≥ 1.2 m over the ground, its edge ≥ 1.5 m
+ *              from the hero). It is NOT wound into a vortex by pointing.
+ *   funnel     only a hand really going round (≥ RING_RATE turns/s for RING_ON_T) winds the cloud into the funnel round the hero; calm for
+ *              RING_OFF_T → it hangs again as a cloud.
+ *   train      the hand stopped (calm ≥ 0.7 s) and the wand is led one way: a snake along the wand's trail (TRAIN_STEP s a block, ≤ 3 s of tail).
+ *   attack     «Атака»: where the wand points — a stream (VOLLEY blocks a second, SPEED m/s) (or a sharp throw of the wand hand: a salvo of SALVO);
+ *              the wand raised completely UP (≥ 70° over the horizon, UP_SIN) — the circular BURST: every block flies out of the hero in a
+ *              ring (BURST_SPEED m/s, its own small rise: a spread in height), hurting what it meets by the table; the hero is not hit.
+ *              Each block that hits hurts (BLOCK_DMG, a player 2) and pushes (a few in a row knock down). One that misses or hits the
+ *              ground / a wall is laid back as a block where it stopped (the caster's computer; if the cell is not free or not allowed it
+ *              crumbles); one that hits a creature crumbles.
+ *   shield     «Shield» (SHIELD_MIN = 12 blocks): a convex DOME before the hero — a cap of a sphere (radius of curvature 5 m, apex 3.6 m ahead,
+ *              ~7 m wide, ~5.5 m high) of two layers; every block has its own slot on the surface, 1.25 m apart (0.25 m of air), turned along
+ *              the surface, still relative to the hero (turns with him, with a lag). Nothing pushes the blocks there; the ones beyond the slots
+ *              wait far outside (7.5 m+). A spell that would hit the hero from the front hits the blocks facing it: each blow breaks blocks
+ *              (HIT_BLOCKS, near the blow); the hero is untouched while ≥ 2 blocks of 2 rows face the blow. Fewer than SHIELD_MIN → it opens.
+ *              The gods' spells sweep it all away. It does not cover from behind, from above (Thunderwave), nor from a blow in melee — only
+ *              what Protection stops by the same rules (Combat.shieldFactor / _blocked).
  *   the end    every block falls from where it is (flung out of the ring a little) and, landing, is laid back as a block in the nearest free
  *              cell (the caster's computer; stacking up to 3 high); the ones that find no place crumble. Saving the world / leaving
  *              the game lays all of them at once round the hero (returnAll) — nothing is lost for good except what the blows crumbled.
@@ -61,6 +68,9 @@ export const GV = {
     BASE: 2.5, // blocks a second while the wand shows ground
     TURN: 10, // blocks one full turn of the hand brings (at a calm speed)
     TURN_FAST: 1.6, // × at a fast hand
+    UP_SIN: Math.sin(70 * Math.PI / 180), // the wand ≥ 70° above the horizon + «Атак» = the circular burst
+    BURST_SPEED: 20, // m/s: the burst's radial flight
+    BURST_VY: [2, 6], // m/s up: each block's own (a small spread in height)
     SEP: 1.05, // m: no two blocks nearer than this (ObjectSwarm.separate)
     TAKE_PER_FRAME: 6,
     SEND_EDITS: 0.12, // s: the taken blocks go out together
@@ -239,4 +249,18 @@ export function hintFor(why) {
         case 'busy': return '🌪️ Вихрь уже кружит — «стоп», чтобы закончить';
         default: return '🌪️ Покажите палочкой на землю';
     }
+}
+
+/** Is the wand raised «completely up» (≥ 70° over the horizon)? Then «Атак» is the circular burst, else a volley the way the wand points. */
+export const isUpAttack = (d) => !!d && d.y >= GV.UP_SIN;
+
+/** The burst's velocity of the block at offset (dx, dz) from the hero (seed → its spread): radial, a little up. */
+export function burstVelocity(dx, dz, seed, j, out = {}) {
+    let L = Math.hypot(dx, dz);
+    let ux = dx, uz = dz;
+    if (L < 0.3) { const a = hash2(seed, j * 5 + 3) * Math.PI * 2; ux = Math.cos(a); uz = Math.sin(a); L = 1; }
+    const sp = GV.BURST_SPEED * (0.85 + 0.3 * hash2(seed, j * 5 + 1));
+    out.x = ux / L * sp; out.z = uz / L * sp;
+    out.y = GV.BURST_VY[0] + (GV.BURST_VY[1] - GV.BURST_VY[0]) * hash2(seed, j * 5 + 2);
+    return out;
 }

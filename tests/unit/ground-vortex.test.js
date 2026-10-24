@@ -13,7 +13,7 @@ import { SPELLS } from '../../src/ui/Codex.js';
 import { HELD, mayCast } from '../../src/game/Concentration.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 import * as R from '../../src/game/GroundVortexRules.js';
-import { GroundVortex } from '../../src/game/GroundVortex.js';
+import { GroundVortex, domeQuaternion } from '../../src/game/GroundVortex.js';
 
 const { GV } = R;
 
@@ -85,24 +85,6 @@ test('digging: the top block of the nearest columns, never under the hero, never
     for (let k = 0; k < 20; k++) for (const [x, L, z] of R.digCells(get, top, { x: 0, z: 0, L: 10 }, { x: 0, z: 0 }, 60)) { assert.ok(L >= 5); cells.set(x + ',' + L + ',' + z, BLOCK.AIR); }
 });
 
-test('the shield: 12 blocks needed, a full ring covers all round, a hole lets a blow through, blows break the blocks facing them', () => {
-    const alive = new Set(); for (let i = 0; i < 48; i++) alive.add(i);
-    const a = (i) => alive.has(i);
-    for (let b = -3; b <= 3; b += 0.5) assert.ok(R.shieldCovers(48, a, 0.4, b), `bearing ${b}`);
-    // 12 blocks spread round: gaps (the shield is thin) — but at 48 it is whole
-    const few = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-    let open = 0; for (let b = -3; b <= 3; b += 0.25) if (!R.shieldCovers(12, (i) => few.has(i), 0, b)) open++;
-    assert.ok(open > 0, 'twelve blocks leave gaps');
-    // a blow from 1.0 rad breaks the facing blocks, and then that side is open
-    const hit = R.blocksToBreak(48, a, 0.4, 1.0, 40);
-    assert.ok(hit.length >= 2);
-    for (const i of hit) alive.delete(i);
-    assert.equal(R.shieldCovers(48, a, 0.4, 1.0), false, 'the side that was hit is open now');
-    assert.ok(R.shieldCovers(48, a, 0.4, 1.0 + Math.PI), 'the far side holds');
-    assert.ok(R.hitBlocks('BombardoMaxima') > R.hitBlocks('Bombardo') && R.hitBlocks('Bombardo') > R.hitBlocks('Sapira'));
-    assert.ok(R.sweepsShield('AvadaKedavra') && R.sweepsShield('TotalDestruction') && !R.sweepsShield('Sapira'));
-    assert.equal(R.shieldSlot(112, {}), null, 'the rest circle outside');
-});
 
 test('the train: blocks follow the wand\'s trail, the older the further back', () => {
     const h = [];
@@ -155,18 +137,19 @@ test('class: a lifted block comes out of the world as an edit; the shield takes 
     const v = g.groundVortex = new GroundVortex(g);
     // a state by hand: 60 stone blocks in the vortex
     const sw = (function () {
-        const o = { by: 'me', mine: true, B: [], n: 0, angle: 0, spin: 1, sangle: 0, k: 0, tk: 0, sk: 1, shield: true, body: hero.clone(), head: hero.clone(), hist: [], spot: null, side: 'right', jerk: [], fire: null, calm: 0, acc: 0, idle: 0, life: 0, lifted: true, spotAt: -9, alarmAt: -9, worked: true, t: 0 };
+        const o = { by: 'me', mine: true, B: [], n: 0, angle: 0, spin: 1, sangle: 0, k: 0, tk: 0, sk: 1, shield: true, yaw: 0, yawT: 0, rk: 0, rtk: 0, cloud: hero.clone(), cloudInit: true, body: hero.clone(), head: hero.clone(), hist: [], spot: null, side: 'right', jerk: [], fire: null, calm: 0, acc: 0, idle: 0, life: 0, lifted: true, spotAt: -9, alarmAt: -9, worked: true, t: 0 };
         return o;
     })();
     for (let i = 0; i < 60; i++) v._newBlock(sw, i, BLOCK.STONE, i, 11, 0, null);
     v.state = sw;
     assert.equal(sw.n, 60);
     assert.ok(v.shielding);
-    // a blow from the +x side: covered; the blocks facing it break
-    const from = new THREE.Vector3(8, 12, 0);
+    // the hero faces +z (yaw 0): a blow from the front is covered, the blocks facing it break; from behind nothing stands in the way
+    const from = new THREE.Vector3(0, 12, 8);
     assert.ok(v.covers(from));
+    assert.equal(v.covers(new THREE.Vector3(0, 12, -8)), false, 'not from behind');
     assert.equal(v.take(from, 'Bombardo'), true);
-    assert.ok(sw.n <= 60 - R.hitBlocks('Bombardo') + 1 && sw.n >= 40, `n ${sw.n}`);
+    assert.ok(sw.n <= 60 - 1 && sw.n >= 40, `n ${sw.n}`);
     // the gods' spell sweeps the whole shield and goes on
     assert.equal(v.take(from, 'AvadaKedavra'), false);
     assert.equal(sw.n, 0);
@@ -189,42 +172,6 @@ test('price: 20 at once + 1 a second (the shared VortexCost); the swarm maths is
     assert.equal(vortexDrain(2.5), 2.5); assert.equal(vortexAffordable(19), false); assert.equal(vortexAffordable(20), true);
     for (const f of ['funnelSlot', 'ringOffset', 'shieldCovers', 'blocksToBreak', 'trailAt', 'trailPush', 'salvoVelocity', 'flyStep']) assert.equal(R[f], S[f], f);
     assert.equal(S.SWARM.MAX_THINGS, 160); assert.equal(GV.MAX_BLOCKS, 160);
-});
-
-// ---- the shield is a tidy lattice: no two blocks touch (the author: «блоки налезают друг на друга»)
-/** Do two unit cubes (turned about the vertical axis by ya, yb) at a, b overlap? Separating-axis test in plan + the height. */
-function cubesOverlap(a, ya, b, yb) {
-    if (Math.abs(a.y - b.y) >= 1) return false; // (side by side in height: a gap)
-    const sq = (x, z, yaw) => { const c = Math.cos(yaw), s = Math.sin(yaw); return [[0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]].map(([u, v]) => [x + u * c - v * s, z + u * s + v * c]); };
-    const A = sq(a.x, a.z, ya), B = sq(b.x, b.z, yb);
-    for (const poly of [A, B]) for (let i = 0; i < 4; i++) {
-        const p = poly[i], q = poly[(i + 1) % 4], nx = -(q[1] - p[1]), nz = q[0] - p[0];
-        const pr = (P) => { const d = P.map(([x, z]) => x * nx + z * nz); return [Math.min(...d), Math.max(...d)]; };
-        const [a0, a1] = pr(A), [b0, b1] = pr(B);
-        if (a1 <= b0 + 1e-9 || b1 <= a0 + 1e-9) return false;
-    }
-    return true;
-}
-
-test('the shield: every slot has its own place, no two blocks ever touch or overlap, at any turn of the shield', () => {
-    const slots = [];
-    for (let i = 0; i < GV.SHIELD_CAP; i++) slots.push(R.shieldSlot(i, {}));
-    assert.equal(new Set(slots.map((s) => s.shell + ':' + s.ring + ':' + s.col)).size, GV.SHIELD_CAP, 'a slot of its own for each');
-    for (const angle of [0, 0.3, 1.7]) {
-        const P = slots.map((s, i) => R.shieldOffset(i, angle, {}, s));
-        let min = 9;
-        for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
-            const d = Math.hypot(P[i].x - P[j].x, P[i].y - P[j].y, P[i].z - P[j].z);
-            min = Math.min(min, d);
-            if (d < 1.45) assert.ok(!cubesOverlap(P[i], slots[i].ph + angle, P[j], slots[j].ph + angle), `blocks ${i} and ${j} overlap (${d.toFixed(2)})`);
-        }
-        assert.ok(min >= 1.2 - 1e-9, `the nearest centres are ${min.toFixed(3)} m apart (a block is 1 m)`);
-    }
-    // not hollow: the gap between neighbours is small (≤ 0.5 m of air in a ring) so the wall reads as whole
-    const inner = slots.filter((s) => s.shell === 0 && s.ring === 0).sort((a, b) => a.col - b.col);
-    assert.equal(inner.length, GV.SHIELD_COLS);
-    const chord = 2 * GV.SHIELD_R * Math.sin(Math.PI / GV.SHIELD_COLS);
-    assert.ok(chord - 1 < 0.5 && chord >= 1.2, `${chord}`);
 });
 
 test('things of a swarm are pushed apart by a grid (cheap), never closer than the minimum', () => {
@@ -318,4 +265,142 @@ test('the train head follows the wand with a lag, no teleport', () => {
     assert.ok(p.x > 0 && p.x < 1, `${p.x}`);
     for (let i = 0; i < 120; i++) R.lagHead(p, target, 1 / 60);
     assert.ok(p.x > 9.5);
+});
+
+// ---- the dome: a convex shield before the hero, every block in its own slot, nothing touches
+/** Oriented unit cubes (centre c, quaternion q): the separating-axis test over the 15 axes. Do they overlap? */
+function obbOverlap(c1, q1, c2, q2) {
+    const ax = (q) => [new THREE.Vector3(1, 0, 0).applyQuaternion(q), new THREE.Vector3(0, 1, 0).applyQuaternion(q), new THREE.Vector3(0, 0, 1).applyQuaternion(q)];
+    const A = ax(q1), B = ax(q2), t = new THREE.Vector3().subVectors(c2, c1);
+    const axes = [...A, ...B];
+    for (const a of A) for (const b of B) { const x = new THREE.Vector3().crossVectors(a, b); if (x.lengthSq() > 1e-9) axes.push(x.normalize()); }
+    for (const L of axes) {
+        const r = (E) => 0.5 * (Math.abs(E[0].dot(L)) + Math.abs(E[1].dot(L)) + Math.abs(E[2].dot(L)));
+        if (Math.abs(t.dot(L)) >= r(A) + r(B) - 1e-9) return false; // a separating axis: they do not overlap
+    }
+    return true;
+}
+
+test('the dome: ~7 m wide, ~5.5 m high, convex towards the front, apex before the hero, never inside him', () => {
+    const D = R.DOME;
+    assert.ok(D.length >= 30, `${D.length} slots`);
+    const xs = D.map((s) => s.x), ys = D.map((s) => s.y), zs = D.map((s) => s.z);
+    const width = Math.max(...xs) - Math.min(...xs) + 1, height = Math.max(...ys) - Math.min(...ys) + 1;
+    assert.ok(width >= 6 && width <= 7.6, `width ${width}`);
+    assert.ok(height >= 5 && height <= 6.2, `height ${height}`);
+    assert.ok(Math.max(...zs) > 3 && Math.min(...ys) >= -1.5 - 1e-9, 'the apex is ahead of the hero; the lowest block stands on the ground (the feet are 2 m under the hip)');
+    // convex: the middle is further forward than the edges of the same row
+    const outer = D.filter((s) => s.layer === 0 && s.row === 2).sort((a, b) => a.ph - b.ph);
+    assert.ok(outer[Math.floor(outer.length / 2)].z > outer[0].z + 0.4 && outer[Math.floor(outer.length / 2)].z > outer[outer.length - 1].z + 0.4);
+    // never in the hero (a body ~1 m across, 3.5 m tall: from the feet −2 to +1.6 above the hip)
+    for (const s of D) if (s.y < 2.1) assert.ok(Math.hypot(s.x, s.z) >= 1.25, `a block at ${s.x.toFixed(2)},${s.y.toFixed(2)},${s.z.toFixed(2)} is in the hero`);
+    for (const s of D) assert.ok(Math.hypot(s.x, s.y - R.SWARM.EYE_Y, s.z) >= 2.3, 'no block right before his eyes (the camera is 2.15 m over the hip)');
+});
+
+test('the dome: every slot is its own place; no two blocks touch (≥ 1.05 centres, 0.1–0.35 m of air) and none overlaps, at any yaw — the cubes as drawn', () => {
+    const Dn = R.DOME.length;
+    for (const yaw of [0, 0.7, 2.5, -1.9]) {
+        const C = [], Q = [];
+        for (let i = 0; i < Dn; i++) { const o = R.domeOffset(i, yaw, {}); C.push(new THREE.Vector3(o.x, o.y, o.z)); Q.push(domeQuaternion(i, yaw)); }
+        let min = 9;
+        for (let i = 0; i < Dn; i++) for (let j = i + 1; j < Dn; j++) {
+            const d = C[i].distanceTo(C[j]);
+            min = Math.min(min, d);
+            assert.ok(d >= 1.05, `centres ${i}-${j} only ${d.toFixed(3)} apart`);
+            if (d < 1.8) assert.ok(!obbOverlap(C[i], Q[i], C[j], Q[j]), `blocks ${i} and ${j} overlap (${d.toFixed(2)})`);
+        }
+        assert.ok(min >= 1.2, `the nearest centres ${min.toFixed(3)}`);
+    }
+    // the air between neighbours along the surface: the pitch minus the block (1 m) — 0.25 m
+    assert.ok(Math.abs(R.GV.DOME_PITCH - 1 - 0.25) < 1e-9);
+    // the ones without a slot wait far from the dome (7.5 m and more from the hero), apart from each other
+    for (let j = 0; j < 120; j++) { const o = R.farOffset(j, 0.3, 0, {}); assert.ok(Math.hypot(o.x, o.z) >= 7.4, `far block ${j}`); }
+    for (let a = 0; a < 34; a++) { const p = R.farOffset(a, 0, 0, {}), q = R.farOffset((a + 1) % 34, 0, 0, {}); assert.ok(Math.hypot(p.x - q.x, p.z - q.z) >= 1.2); }
+});
+
+test('the dome covers the front only: facing blocks hold, blows break the blocks facing them, the gods\' spells sweep it', () => {
+    const alive = new Set(); for (let i = 0; i < R.DOME.length; i++) alive.add(i);
+    const a = (i) => alive.has(i), n = R.DOME.length;
+    const front = (yaw) => Math.PI / 2 - yaw; // the bearing the hero faces
+    for (const yaw of [0, 1.1, -2]) {
+        assert.ok(R.domeCovers(n, a, yaw, front(yaw)), 'straight ahead');
+        assert.ok(R.domeCovers(n, a, yaw, front(yaw) + 0.4) && R.domeCovers(n, a, yaw, front(yaw) - 0.4), 'a little aside');
+        assert.equal(R.domeCovers(n, a, yaw, front(yaw) + Math.PI), false, 'not from behind');
+        assert.equal(R.domeCovers(n, a, yaw, front(yaw) + 1.8), false, 'not from the side');
+    }
+    const hit = R.domeBreak(n, a, 0, front(0), 10);
+    assert.equal(hit.length, 10);
+    assert.ok(hit.every((i) => R.DOME[i].layer === 0), 'the front layer takes it first');
+    for (const i of R.domeBreak(n, a, 0, front(0), 200)) alive.delete(i);
+    assert.equal(R.domeCovers(n, a, 0, front(0)), false, 'a hole where it was struck');
+    assert.ok(R.sweepsShield('AvadaKedavra') && !R.sweepsShield('Sapira'));
+    // 12 blocks make a small patch in the middle (the dome opens from its middle outwards)
+    const few = new Set([...Array(12).keys()]);
+    assert.ok(R.domeCovers(12, (i) => few.has(i), 0, front(0)));
+});
+
+test('burst: the wand ≥ 70° up is the circular burst, a lower wand is a volley; the burst is radial all round with a spread in height', () => {
+    assert.ok(R.isUpAttack({ x: 0, y: 0.97, z: 0.24 }) && R.isUpAttack({ x: 0, y: 1, z: 0 }));
+    assert.equal(R.isUpAttack({ x: 0, y: 0.9, z: 0.43 }), false, '64° is not up');
+    assert.equal(R.isUpAttack({ x: 0, y: 0.5, z: 0.87 }), false);
+    assert.ok(Math.abs(Math.asin(R.GV.UP_SIN) * 180 / Math.PI - 70) < 1e-6);
+    const dirs = [];
+    for (let j = 0; j < 36; j++) {
+        const a = j / 36 * Math.PI * 2, v = R.burstVelocity(Math.cos(a) * 3, Math.sin(a) * 3, 9, j, {});
+        dirs.push(Math.atan2(v.z, v.x));
+        assert.ok(Math.abs(Math.atan2(v.z, v.x) - a) < 1e-6 || Math.abs(Math.abs(Math.atan2(v.z, v.x) - a) - Math.PI * 2) < 1e-6, 'radial');
+        assert.ok(v.y >= 2 && v.y <= 6 && Math.hypot(v.x, v.z) > 15, 'a spread in height, fast');
+    }
+    assert.equal(new Set(dirs.map((d) => d.toFixed(2))).size, 36, 'every way');
+    assert.deepEqual(R.burstVelocity(1, 1, 3, 4, {}), R.burstVelocity(1, 1, 3, 4, {}), 'the same on every computer');
+    const v0 = R.burstVelocity(0, 0, 3, 4, {});
+    assert.ok(Math.hypot(v0.x, v0.z) > 15, 'a block right on the hero still flies out');
+});
+
+test('class: a burst sends every block out and frees them; the cloud hangs, then the funnel only when the hand goes round', () => {
+    const { g, hero } = fakeGame();
+    const v = g.groundVortex = new GroundVortex(g);
+    const sw = Object.assign(v._mkForTest ? {} : {}, { by: 'me', mine: true, B: [], n: 0, angle: 0, spin: 1, yaw: 0, yawT: 0, k: 0, tk: 0, rk: 0, rtk: 0, sk: 0, shield: false, body: hero.clone(), head: hero.clone().add(new THREE.Vector3(0, 0, 8)), hist: [], cloud: new THREE.Vector3(), cloudInit: false, side: 'right', fire: null, spotAt: -9, worked: true, t: 0, jerk: [] });
+    for (let i = 0; i < 40; i++) v._newBlock(sw, i, BLOCK.STONE, i, 11, 0, null);
+    v.state = sw;
+    v._place(sw, 0.05);
+    // a cloud: hangs round its middle (over the ground, not on the hero), not wound into a funnel
+    const mid = sw.cloud;
+    assert.ok(mid.y >= 9.5 + 1.2, `the cloud hangs over the ground (${mid.y})`);
+    assert.ok(Math.hypot(mid.x - hero.x, mid.z - hero.z) >= R.cloudHalf(40) + 1.4, 'its edge is clear of the hero');
+    for (const b of sw.B) assert.ok(b.pos.distanceTo(mid) <= R.cloudHalf(40) + 0.2, 'every block is in the cloud');
+    // the funnel when the hand goes round: positions come to the hero
+    sw.rk = 1; v._place(sw, 0.05);
+    for (const b of sw.B) assert.ok(Math.hypot(b.pos.x - hero.x, b.pos.z - hero.z) < 6, 'wound round the hero');
+    // the burst
+    v._burst(sw);
+    assert.equal(sw.n, 0);
+    assert.equal(v.flights.length, 40);
+    assert.ok(v.flights.every((f) => f.burst && f.by === 'me'));
+    // the hero is not hit by his own blocks (combat.hitBySpell is not called for f.by === me)
+    let hit = 0; g.combat.hitBySpell = () => { hit++; return true; };
+    for (const f of v.flights) f.pos.copy(hero);
+    for (const f of v.flights) v._flightHits(f);
+    assert.equal(hit, 0);
+});
+
+test('the cloud: lattice slots keep their place, never touch (centres ≥ 1.5 m in plan or 1.3 m apart in height), and the swarm stays a cloud until the hand circles', () => {
+    const P = []; for (let i = 0; i < 168; i++) P.push(R.cloudSlot(i, {}));
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+        const dp = Math.hypot(P[i].x - P[j].x, P[i].z - P[j].z), dy = Math.abs(P[i].y - P[j].y);
+        assert.ok(dp >= 1.4 || dy >= 1.25, `cloud blocks ${i} and ${j} touch`);
+    }
+    assert.deepEqual(R.cloudSlot(5, {}), R.cloudSlot(5, {}));
+    assert.ok(R.cloudHalf(160) < 6.5 && R.cloudHalf(12) < 3.5);
+    const I = new R.SwarmIntent(); let t = 0;
+    for (; t < 3; t += 1 / 30) I.step(t, 1 / 30, 0.05, 0.2, { x: 0, y: -0.2, z: 1 });
+    assert.equal(I.ring, false, 'pointing alone is not circling');
+    for (let k = 0; k < 8; k++, t += 1 / 30) I.step(t, 1 / 30, 0.8, 1.5, { x: 0, y: -0.2, z: 1 });
+    assert.equal(I.ring, false, 'a moment of circling is not enough');
+    for (let k = 0; k < 12; k++, t += 1 / 30) I.step(t, 1 / 30, 0.8, 1.5, { x: 0, y: -0.2, z: 1 });
+    assert.equal(I.ring, true, 'a hand going round winds it');
+    for (let k = 0; k < 15; k++, t += 1 / 30) I.step(t, 1 / 30, 0.05, 0.2, { x: 0, y: -0.2, z: 1 });
+    assert.equal(I.ring, true, 'a short pause does not unwind it');
+    for (let k = 0; k < 30; k++, t += 1 / 30) I.step(t, 1 / 30, 0.05, 0.2, { x: 0, y: -0.2, z: 1 });
+    assert.equal(I.ring, false, 'calm: a cloud again');
 });

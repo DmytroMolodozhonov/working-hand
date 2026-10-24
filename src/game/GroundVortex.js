@@ -33,7 +33,7 @@ const ease = (u) => u * u * (3 - 2 * u);
 const ARRIVE = 0.8; // s a lifted block takes to fly from its hole into the funnel
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3();
-const _o = {}, _t1 = {}, _t2 = {};
+const _o = {}, _t1 = {}, _t2 = {}, _cc = {};
 const _col = new THREE.Color();
 
 /** Which game mode counts as «free»: Creative and the test mode need no wand and pay no mana. */
@@ -41,7 +41,7 @@ const freeMode = (g) => g.config?.mode === 'creative' || g.config?.mode === 'tes
 
 function newSwarm(by, mine) {
     return {
-        by, mine, B: [], n: 0, angle: 0, spin: GV.SPIN_MIN, sangle: 0, k: 0, tk: 0, sk: 0, shield: false,
+        by, mine, B: [], n: 0, angle: 0, spin: GV.SPIN_MIN, yaw: 0, yawT: 0, k: 0, tk: 0, rk: 0, rtk: 0, sk: 0, shield: false, cloud: new THREE.Vector3(), cloudInit: false,
         body: new THREE.Vector3(), head: new THREE.Vector3(), hist: [], spot: null, t: 0, at: 0, lush: false,
         tbody: new THREE.Vector3(), thead: new THREE.Vector3(),
     };
@@ -170,6 +170,8 @@ export class GroundVortex {
         const s = this.state;
         if (!s || s.n < 1) return this._hint('🌪️ Блоков нет — нечем бросать', isFinal);
         s.shield = false;
+        // the wand raised completely up (≥ 70°): the circular burst; else a volley the way the wand points
+        if (R.isUpAttack(this._hand(s.side).d)) { this._burst(s); this._note({ ev: 'burst' }); return 'Attack'; }
         s.fire = { rest: 0 };
         this._note({ ev: 'attack' });
         return 'Attack';
@@ -201,7 +203,7 @@ export class GroundVortex {
 
     _newBlock(sw, i, t, x, L, z, src) {
         const col = this._colors(t, x, L, z);
-        const b = { t, cx: x, cy: L - 1, cz: z, side: col.side, top: col.top, born: this._t, src: src || null, i, pos: new THREE.Vector3(), fs: R.funnelSlot(i, {}), tm: R.tumbleOf(i, {}), sh: R.shieldSlot(i, {}), spin: hashAng(i) };
+        const b = { t, cx: x, cy: L - 1, cz: z, side: col.side, top: col.top, born: this._t, src: src || null, i, pos: new THREE.Vector3(), fs: R.funnelSlot(i, {}), tm: R.tumbleOf(i, {}), spin: hashAng(i) };
         sw.B[i] = b;
         sw.n++;
         return b;
@@ -212,23 +214,34 @@ export class GroundVortex {
         return sw.B.length;
     }
 
-    /** Where the vortex blocks of a swarm are this frame (writes b.pos). */
+    /**
+     * Where the blocks of a swarm are this frame (writes b.pos): a cloud hanging where the wand shows; wound into the funnel round the
+     * hero when his hand goes round (rk); stretched along the wand's trail as a train (k); and, over all that, the dome before him
+     * (sk) — in the dome every block is in its own slot and nothing pushes it.
+     */
     _place(sw, dt) {
         const t = this._t, n = sw.B.length;
-        const k = ease(sw.k), sk = ease(sw.sk);
+        const k = ease(sw.k), rk = ease(sw.rk), sk = ease(sw.sk);
+        const gy = this.game.collision?.groundY ? this.game.collision.groundY(sw.head.x, sw.head.z) : sw.body.y - 2;
+        R.cloudCenter(sw.head, sw.body, sw.n, gy, _cc);
+        if (!sw.cloudInit) { sw.cloud.set(_cc.x, _cc.y, _cc.z); sw.cloudInit = true; } else R.lagHead(sw.cloud, _cc, dt);
+        const bx = sw.body.x, by = sw.body.y, bz = sw.body.z;
+        let rank = 0; // (the dome's slots go to the blocks in order: a broken block's place is taken by the next — a far one comes in)
+        const kd = 1 - Math.exp(-8 * dt);
         for (let i = 0; i < n; i++) {
             const b = sw.B[i];
             if (!b) continue;
+            b.slot = rank++;
             const p = b.pos;
-            R.ringOffset(i, sw.angle, t, _o, b.fs);
-            let x = _o.x, y = _o.y, z = _o.z;
-            if (sk > 0.001) {
-                if (b.sh) {
-                    R.shieldOffset(i, sw.sangle, _t1, b.sh);
-                    x += (_t1.x - x) * sk; y += (_t1.y - y) * sk; z += (_t1.z - z) * sk;
-                } else { x *= 1 + 0.45 * sk; z *= 1 + 0.45 * sk; y += 0.8 * sk; } // (the rest circle outside the shield)
+            // the cloud
+            R.cloudSlot(i, _o);
+            p.set(sw.cloud.x + _o.x, sw.cloud.y + _o.y + 0.1 * Math.sin(t * 1.7 + i * 2.3), sw.cloud.z + _o.z);
+            // the funnel
+            if (rk > 0.001) {
+                R.ringOffset(i, sw.angle, t, _t1, b.fs);
+                p.x += (bx + _t1.x - p.x) * rk; p.y += (by + _t1.y - p.y) * rk; p.z += (bz + _t1.z - p.z) * rk;
             }
-            p.set(sw.body.x + x, sw.body.y + y, sw.body.z + z);
+            // the train
             if (k > 0.001) {
                 const tau = i * GV.TRAIN_STEP;
                 R.trailAt(sw.hist, t, tau, _t1); R.trailAt(sw.hist, t, tau + 0.07, _t2);
@@ -243,6 +256,14 @@ export class GroundVortex {
                 const tx = _t1.x + (_b.x * Math.cos(th) + _c.x * Math.sin(th)) * rad, ty = _t1.y + (_b.y * Math.cos(th) + _c.y * Math.sin(th)) * rad, tz = _t1.z + (_b.z * Math.cos(th) + _c.z * Math.sin(th)) * rad;
                 p.x += (tx - p.x) * k; p.y += (ty - p.y) * k; p.z += (tz - p.z) * k;
             }
+            // the dome (its slot), or far outside when it has none
+            if (sk > 0.001) {
+                if (!R.domeOffset(b.slot, sw.yaw, _t1)) R.farOffset(b.slot - R.DOME.length, sw.angle, t, _t1);
+                p.x += (bx + _t1.x - p.x) * sk; p.y += (by + _t1.y - p.y) * sk; p.z += (bz + _t1.z - p.z) * sk;
+                // (each block goes to its slot on a spring — no jump when a broken one's place is taken)
+                if (!b.sp) b.sp = p.clone(); else b.sp.lerp(p, kd);
+                p.copy(b.sp);
+            } else b.sp = null;
             const u = (t - b.born) / ARRIVE;
             if (b.src && u < 1) {
                 const e = ease(clamp(u, 0, 1));
@@ -250,11 +271,13 @@ export class GroundVortex {
                 p.y = b.src.y + (p.y - b.src.y) * e + 2.5 * Math.sin(Math.PI * clamp(u, 0, 1));
             } else if (b.src) b.src = null;
         }
-        // things do not overlap: nearer than SEP m are pushed apart (a grid, not every pair)
-        const P = sw._P || (sw._P = []);
-        P.length = n;
-        for (let i = 0; i < n; i++) P[i] = sw.B[i] ? sw.B[i].pos : null;
-        R.separate(P, GV.SEP, 2, this._cell || (this._cell = new Map()));
+        // things do not overlap: nearer than SEP m are pushed apart (a grid, not every pair) — never in the dome (its slots are apart)
+        if (sk < 0.001 && (rk > 0.001 || k > 0.001)) {
+            const P = sw._P || (sw._P = []);
+            P.length = n;
+            for (let i = 0; i < n; i++) P[i] = sw.B[i] ? sw.B[i].pos : null;
+            R.separate(P, GV.SEP, 2, this._cell || (this._cell = new Map()));
+        }
     }
 
     // ================================================================ update
@@ -295,20 +318,24 @@ export class GroundVortex {
             s.acc += GV.BASE * dt + turns * R.turnBlocks(sp);
             this._lift(s, dt);
         } else s.acc = Math.min(s.acc, 1);
-        if (!s.lifted && !s.n) { s.idle += dt; if (s.idle > GV.IDLE_END) { this.stop('idle'); return; } } else s.idle = 0;
+        if (!s.n) { s.idle += dt; if (s.idle > GV.IDLE_END) { this.stop('idle'); return; } } else s.idle = 0;
         this._flushEdits(false, dt);
         // the funnel turns as fast as the hand
         const target = Math.max(GV.SPIN_MIN, this.meter.rate * TAU * 1.1);
         s.spin += (target - s.spin) * Math.min(1, dt * (1.2 + 2 * sp));
         s.angle += s.spin * dt;
-        s.sangle += GV.SHIELD_SPIN * dt;
+        s.yawT = this._facing();
+        s.yaw += wrapAng(s.yawT - s.yaw) * (1 - Math.exp(-GV.DOME_LAG * dt)); // (the dome turns with the hero, with a lag)
         // ring ↔ train, and the throw: only a clear intent of the hand switches them (SwarmIntent, the numbers — INTENT in ObjectSwarm)
         s.jerk.push({ t: this._t, x: hand.x, y: hand.y, z: hand.z });
         while (s.jerk.length && this._t - s.jerk[0].t > 0.5) s.jerk.shift();
         const salvo = s.intent.step(this._t, dt, this.meter.rate, sp, d, s.jerk, sharpJerk, !s.shield && s.n > 0);
         s.tk = (s.intent.train && !s.shield && s.n > 0) ? 1 : 0;
+        s.rtk = (s.intent.ring && !s.shield && s.n > 0) ? 1 : 0; // (circling winds the cloud into the funnel; the shield wants neither)
         s.k = clamp(s.k + (s.tk - s.k) * Math.min(1, dt * GV.TRAIN_IN * 2), 0, 1);
         if (Math.abs(s.k - s.tk) < 0.02) s.k = s.tk;
+        s.rk = clamp(s.rk + (s.rtk - s.rk) * Math.min(1, dt * GV.TRAIN_IN * 1.5), 0, 1);
+        if (Math.abs(s.rk - s.rtk) < 0.02) s.rk = s.rtk;
         s.sk = clamp(s.sk + (s.shield ? 1 : -1) * GV.SHIELD_IN * dt, 0, 1);
         this._head(s, o, d, body);
         R.lagHead(s.head, s.headT, dt); // (the head follows the wand with a lag — the tail does not jump)
@@ -326,12 +353,20 @@ export class GroundVortex {
         this._sendT += dt;
         if (this._sendT >= GV.SEND) {
             this._sendT = 0;
-            const flags = (s.shield ? 1 : 0) | (pointing ? 2 : 0);
-            const msg = { ev: 'st', s: [r2(body.x), r2(body.y), r2(body.z), r2(s.head.x), r2(s.head.y), r2(s.head.z), r2(s.angle), r2(s.spin), r2(s.k), r2(s.sk), flags, r2(s.spot?.x || 0), r2(s.spot?.y || 0), r2(s.spot?.z || 0), s.n, r2(s.sangle)] };
+            const flags = (s.shield ? 1 : 0) | (pointing ? 2 : 0) | (s.rtk ? 4 : 0);
+            const msg = { ev: 'st', s: [r2(body.x), r2(body.y), r2(body.z), r2(s.head.x), r2(s.head.y), r2(s.head.z), r2(s.angle), r2(s.spin), r2(s.k), r2(s.sk), flags, r2(s.spot?.x || 0), r2(s.spot?.y || 0), r2(s.spot?.z || 0), s.n, r2(s.yaw)] };
             if (this._mDirty || this._t - (s.mAt || -9) > 2) { msg.m = this._rle(s); s.mAt = this._t; this._mDirty = false; }
             this._send(msg);
             this._sent = true;
         }
+    }
+
+    /** The way the hero faces (the view's horizontal direction): yaw ψ with forward = (sin ψ, cos ψ). */
+    _facing() {
+        const cam = this.game.camera;
+        if (!cam?.getWorldDirection) return this.state ? this.state.yaw : 0;
+        cam.getWorldDirection(_d);
+        return Math.atan2(_d.x, _d.z);
     }
 
     /** Where the head of the train is: along the wand, short of what is in the way, not under the ground. */
@@ -415,6 +450,31 @@ export class GroundVortex {
         this._send({ ev: 'volley', ids, d: [r2(d.x), r2(d.y), r2(d.z)], seed });
         if (this.game.sound) this.game.sound.playStep?.();
         this.game.castleLife?.alarm?.({ x: sw.body.x, y: sw.body.y, z: sw.body.z }, 'uproot', this.me, 8);
+    }
+
+    /** The wand raised completely up + «Атак»: every block flies out of the hero in a ring (a circular burst; the hero himself is not hit). */
+    _burst(sw) {
+        const ids = [];
+        for (let i = 0; i < sw.B.length; i++) if (sw.B[i]) ids.push(i);
+        if (!ids.length) return;
+        const seed = ++this._seq * 977 + (this._t * 100 | 0);
+        this._replayBurst(sw, ids, seed);
+        this._mDirty = true;
+        this._send({ ev: 'burst', ids, seed });
+        const g = this.game;
+        g.sound?.playStep?.();
+        if (g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.5);
+        g.castleLife?.alarm?.({ x: sw.body.x, y: sw.body.y, z: sw.body.z }, 'uproot', this.me, 14);
+    }
+
+    _replayBurst(sw, ids, seed) {
+        ids.forEach((i, j) => {
+            const b = sw.B[i];
+            if (!b) return;
+            R.burstVelocity(b.pos.x - sw.body.x, b.pos.z - sw.body.z, seed, j, _o);
+            this.flights.push({ b, pos: b.pos.clone(), vel: new THREE.Vector3(_o.x, _o.y, _o.z), age: 0, by: sw.by, mine: sw.by === this.me, last: b.pos.clone(), spin: b.tm, burst: true });
+            sw.B[i] = null; sw.n--;
+        });
     }
 
     _replayVolley(sw, ids, d, seed) {
@@ -596,13 +656,14 @@ export class GroundVortex {
         const p = this.game.character.group.position;
         return Math.atan2(from.z - p.z, from.x - p.x);
     }
-    _alive(s) { return (i) => !!s.B[i]; }
+    /** The indices of the live blocks in order: slot k of the dome belongs to block list[k]. */
+    _slots(s) { const out = []; for (let i = 0; i < s.B.length; i++) if (s.B[i]) out.push(i); return out; }
 
     /** Does the shield stand between the hero and `from`? (Combat.shieldFactor asks) */
     covers(from) {
         const s = this.state;
         if (!s || !s.shield || s.sk < 0.6 || s.n < 1) return false;
-        return R.shieldCovers(s.B.length, this._alive(s), s.sangle, this._bearing(from));
+        return R.domeCovers(this._slots(s).length, () => true, s.yaw, this._bearing(from));
     }
 
     /**
@@ -623,7 +684,8 @@ export class GroundVortex {
             return false;
         }
         const want = Math.max(0, Math.round(R.hitBlocks(kind) * power));
-        const ids = R.blocksToBreak(s.B.length, this._alive(s), s.sangle, this._bearing(from), want);
+        const list = this._slots(s);
+        const ids = R.domeBreak(list.length, () => true, s.yaw, this._bearing(from), want).map((k) => list[k]);
         this._breakBlocks(s, ids, true);
         this._send({ ev: 'hit', ids });
         g.hud?.setVoice?.(`🛡️ Заслон принял удар: −${ids.length} блоков`, true);
@@ -664,13 +726,15 @@ export class GroundVortex {
             sw.spin = clamp(s[7], 0, 40); sw.tk = clamp(s[8], 0, 1); sw.shield = !!(s[10] & 1);
             sw.spotOn = !!(s[10] & 2);
             sw.spot = sw.spot || new THREE.Vector3(); sw.spot.set(s[11], s[12], s[13]);
-            sw.sangle = s[15];
+            sw.yawT = s[15]; sw.rtk = (s[10] & 4) ? 1 : 0;
+            if (!sw.yawSeen) { sw.yaw = s[15]; sw.yawSeen = true; }
             sw.at = this._t;
             if (Array.isArray(m.m)) this._applyRle(sw, m.m);
             return;
         }
         if (!sw) return;
         if (m.ev === 'volley' && Array.isArray(m.ids) && Array.isArray(m.d)) this._replayVolley(sw, m.ids.filter(Number.isInteger).slice(0, 40), _d.set(+m.d[0] || 0, +m.d[1] || 0, +m.d[2] || 1), m.seed | 0);
+        else if (m.ev === 'burst' && Array.isArray(m.ids)) this._replayBurst(sw, m.ids.filter(Number.isInteger).slice(0, GV.MAX_BLOCKS + 8), m.seed | 0);
         else if (m.ev === 'hit' && Array.isArray(m.ids)) this._breakBlocks(sw, m.ids.filter(Number.isInteger).slice(0, 40), false);
         else if (m.ev === 'sweep') { sw.shield = false; sw.sk = 0; this._releaseAll(sw, false, true); }
     }
@@ -700,6 +764,8 @@ export class GroundVortex {
         sw.body.lerp(sw.tbody, q); sw.head.lerp(sw.thead, q);
         sw.angle += sw.spin * dt;
         sw.k += (sw.tk - sw.k) * Math.min(1, dt * GV.TRAIN_IN * 2);
+        sw.rk += (sw.rtk - sw.rk) * Math.min(1, dt * GV.TRAIN_IN * 1.5);
+        sw.yaw += wrapAng(sw.yawT - sw.yaw) * (1 - Math.exp(-GV.DOME_LAG * dt));
         sw.sk = clamp(sw.sk + (sw.shield ? 1 : -1) * GV.SHIELD_IN * dt, 0, 1);
         const av = this.game.remotes?.get(sw.by);
         if (av?.position) { sw.tbody.copy(av.position); }
@@ -713,14 +779,15 @@ export class GroundVortex {
         if (!fx) return;
         fx.begin(this.data?.lush);
         const put = (b, p, spinT, scale, sw = null) => {
-            _ax.set(b.tm.ax, b.tm.ay, b.tm.az);
-            _q.setFromAxisAngle(_ax, b.tm.w * spinT);
-            const sk = sw && b.sh ? ease(sw.sk) : 0;
-            if (sk > 0.001) {
-                // in the shield a block is a whole cube turned to face the middle (no tumble, full size): they do not touch
-                _ax.set(0, 1, 0);
-                _q2.setFromAxisAngle(_ax, -(b.sh.ph + sw.sangle));
-                _q.slerp(_q2, sk);
+            // the cloud turns about the vertical axis only (neighbours never touch); wound into the funnel / the train a block tumbles
+            const tum = sw ? Math.max(ease(sw.rk), ease(sw.k)) : 1;
+            _ax.set(0, 1, 0);
+            _q.setFromAxisAngle(_ax, b.tm.w * 0.3 * spinT);
+            if (tum > 0.001) { _ax.set(b.tm.ax, b.tm.ay, b.tm.az); _q2.setFromAxisAngle(_ax, b.tm.w * spinT); _q.slerp(_q2, tum); }
+            const sk = sw ? ease(sw.sk) : 0;
+            if (sk > 0.001 && b.slot != null && b.slot < R.DOME.length) {
+                // in the dome a block is a whole cube turned along the surface (no tumble, full size): they do not touch
+                _q.slerp(domeQuaternion(b.slot, sw.yaw, _q2), sk);
                 scale += (1 - scale) * sk;
             }
             fx.add(b, p, _q, scale);
@@ -752,6 +819,15 @@ export class GroundVortex {
         this.fx?.dispose();
     }
 }
+
+const wrapAng = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+
+/** The quaternion of dome cube i: turned along the surface (yaw about the vertical, then the slope). Drawn and tested the same. */
+export function domeQuaternion(i, yaw, out = new THREE.Quaternion()) {
+    const a = R.domeAngles(i, yaw, {});
+    return out.setFromEuler(_eu.set(-a.pitch, a.yaw, 0, 'YXZ'));
+}
+const _eu = new THREE.Euler();
 
 function hashAng(i) { return R.hash2(i, 29) * TAU; }
 

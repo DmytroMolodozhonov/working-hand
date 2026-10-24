@@ -9,8 +9,9 @@
  *   the train        trailPush(hist, now, x, y, z) every frame with the wand's head; trailAt(hist, now, i * TRAIN_STEP) is thing i's
  *                    place on the wand's trail (the helix round it is up to the caller: see GroundVortex._place);
  *   the volley       salvoVelocity(dir, seed, j) — the same flight on every computer; flyStep(p, v, dt);
- *   the shield       shieldSlot / shieldOffset (4 rings × 12 + a second shell, SHIELD_CAP things), shieldCovers(n, alive, angle, bearing),
- *                    blocksToBreak(n, alive, angle, bearing, want) — which things a blow breaks; blocksFacing;
+ *   the cloud        cloudSlot(i), cloudCenter(head, body, n, gy) — lifted things hang (a lattice) where the wand shows;
+ *   the shield       a dome before the hero: DOME slots, domeOffset(i, yaw), domeAngles, domeCovers(n, alive, yaw, bearing),
+ *                    domeBreak(...) — which things a blow breaks; farOffset(j, angle, t) — the ones without a slot wait far outside;
  *   limits           SWARM.MAX_THINGS = 160, ring sizes: layerOf(i), blocksInRings(k).
  * The class that uses them keeps its own state (the things, mana, network): see GroundVortex.js.
  */
@@ -48,15 +49,16 @@ export const SWARM = {
     BODY_R: 0.5, // m: the block's reach
     // the shield
     SHIELD_MIN: 12,
-    SHIELD_R: 2.5, // m: the inner shell (12 things a ring: 1.29 m between centres — a unit cube turned by the ring's 30° needs 1.23)
-    SHIELD_R2: 3.8, // m: the outer shell (16 a ring: 1.48 m; 1.3 m of air-to-air from the inner one)
-    SHIELD_RINGS: 4,
-    SHIELD_COLS: 12,
-    SHIELD_COLS2: 16,
-    SHIELD_ROW: 1.2, // m between two rings (a thing is 1 m: 0.2 m of gap)
-    SHIELD_CAP: 112, // 48 + 64
-    SHIELD_IN: 2.2, // 1/s
-    SHIELD_SPIN: 0.55,
+    DOME_RC: 5, // m: the dome's radius of curvature (4–6 m)
+    DOME_D: 3.6, // m: the apex in front of the hero
+    DOME_GAP: 1.4, // m: the second layer is this much nearer to him
+    DOME_PITCH: 1.25, // m between two slots along the surface (1 m things: 0.25 m of air)
+    DOME_SPAN: 0.75, // rad: half the dome's width as seen from its centre (~7 m wide)
+    EYE_Y: 2.15, EYE_CLEAR: 2.4, // m: the eyes over the hip; no dome block nearer to them than this
+    FAR_R: 7.5, // m: where the things without a slot wait
+    CLOUD_DX: 1.5, CLOUD_DY: 1.3, // m: the cloud's lattice
+    SHIELD_IN: 1.6, // 1/s
+    DOME_LAG: 6, // 1/s: how fast the dome follows the hero's turning
     COVER_ARC: 0.44, // rad (25°): a block within this of the blow's bearing stands in its way
     COVER_NEED: 2,
     STALE: 1.6, // s without news and a far vortex is forgotten
@@ -119,63 +121,140 @@ export function ringOffset(i, angle, t, out = {}, f = funnelSlot(i, _fs)) {
 }
 const _fs = {};
 
-// ------------------------------------------------------------------ the shield
+// ------------------------------------------------------------------ the cloud (lifted, hanging)
 /**
- * The shield slot of thing i (the first SHIELD_CAP): {ring 0…3, col, cols, shell 0|1, r, y, ph}. null: it circles outside.
- * Two shells of 4 rings; things are cubes turned to face the middle (yaw only, full size): their centres are never nearer
- * than 1.2 m in a ring, 1.2 m between rings and 1.3 m between shells — they do not touch, they do not overlap (tests/unit/ground-vortex).
+ * A lifted thing first just HANGS: the swarm is a cloud over the place the wand shows (the author: «подняться и висеть, как под Левиосой
+ * Максима»), turning into a funnel only when the hand goes round. Things sit in a lattice (1.5 m in plan, 1.3 m up, every other
+ * layer half a step aside), the nearest to the middle first — thing i has the same place whatever the others do; they bob a little and
+ * turn about the vertical axis only, so two neighbours never touch.
  */
-export function shieldSlot(i, out = {}) {
-    if (i >= SW.SHIELD_CAP) return null;
-    const per1 = SW.SHIELD_RINGS * SW.SHIELD_COLS, per2 = SW.SHIELD_RINGS * SW.SHIELD_COLS2;
-    const shell = i >= per1 ? 1 : 0;
-    const per = shell ? per2 : per1;
-    const s = ((shell ? i - per1 : i) * 5) % per; // (5 is coprime with 48 and with 64: every slot once, spread round)
-    out.shell = shell;
-    out.cols = shell ? SW.SHIELD_COLS2 : SW.SHIELD_COLS;
-    out.ring = s % SW.SHIELD_RINGS;
-    out.col = Math.floor(s / SW.SHIELD_RINGS);
-    out.r = shell ? SW.SHIELD_R2 : SW.SHIELD_R;
-    out.y = -1.35 + out.ring * SW.SHIELD_ROW + (shell ? 0.6 : 0);
-    out.ph = (out.col + out.ring * 0.5) * (TAU / out.cols);
+const CLOUD = [];
+for (let iy = -4; iy <= 4; iy++) for (let ix = -5; ix <= 5; ix++) for (let iz = -5; iz <= 5; iz++) {
+    const st = (iy & 1) ? 0.75 : 0;
+    const x = ix * SW.CLOUD_DX + st, z = iz * SW.CLOUD_DX + st, y = iy * SW.CLOUD_DY;
+    CLOUD.push({ x, y, z, r: Math.hypot(x, y * 1.15, z) });
+}
+CLOUD.sort((a, b) => a.r - b.r || a.y - b.y || a.x - b.x || a.z - b.z);
+CLOUD.length = SW.MAX_THINGS + 8;
+
+/** Place of thing i in the cloud (offsets from its middle): {x, y, z}. */
+export function cloudSlot(i, out = {}) {
+    const c = CLOUD[Math.min(i, CLOUD.length - 1)];
+    out.x = c.x; out.y = c.y; out.z = c.z;
     return out;
 }
+/** How far from its middle a cloud of n things reaches (m). */
+export const cloudHalf = (n) => (n > 0 ? CLOUD[Math.min(n, CLOUD.length) - 1].r + 0.6 : 0);
 
-/** Block i in the shield, round the body, the shield turned by `angle`: {x, y, z} or null. */
-export function shieldOffset(i, angle, out = {}, s = shieldSlot(i, _ss)) {
-    if (!s) return null;
-    out.x = Math.cos(s.ph + angle) * s.r;
-    out.y = s.y;
-    out.z = Math.sin(s.ph + angle) * s.r;
-    return out;
-}
-const _ss = {};
-
-/** Blocks standing in the way of a blow coming from bearing `bearing` (rad, atan2(dz, dx) from the hero): indices. `alive(i)` → bool. */
-export function blocksFacing(n, alive, angle, bearing, arc = SW.COVER_ARC, out = []) {
-    out.length = 0;
-    for (let i = 0; i < Math.min(n, SW.SHIELD_CAP); i++) {
-        if (!alive(i)) continue;
-        const s = shieldSlot(i, _ss);
-        let d = Math.abs(((s.ph + angle - bearing) % TAU + TAU + Math.PI) % TAU - Math.PI);
-        if (d <= arc + (s.shell ? 0.05 : 0)) out.push(i);
+/**
+ * Where the middle of the cloud hangs: where the wand shows (`head`), over the ground (its lowest thing 1.2 m up) and not on the hero
+ * (its edge ≥ 1.5 m from his body). gy: the ground's height there. → out {x, y, z}
+ */
+export function cloudCenter(head, body, n, gy, out = {}) {
+    const half = cloudHalf(n), halfY = half / 1.15;
+    out.x = head.x; out.z = head.z;
+    out.y = Math.max(head.y, gy + 1.2 + halfY);
+    const dx = head.x - body.x, dz = head.z - body.z, d = Math.hypot(dx, dz), need = half + 1.5;
+    if (d < need) {
+        const ux = d > 1e-3 ? dx / d : 0, uz = d > 1e-3 ? dz / d : 1;
+        out.x = body.x + ux * need; out.z = body.z + uz * need;
     }
     return out;
 }
 
-/** Does the shield stop a blow from this bearing (≥ COVER_NEED blocks of at least two rings facing it)? */
-export function shieldCovers(n, alive, angle, bearing) {
-    const f = blocksFacing(n, alive, angle, bearing, SW.COVER_ARC, []);
-    if (f.length < SW.COVER_NEED) return false;
-    const rings = new Set();
-    for (const i of f) rings.add(shieldSlot(i, _ss).ring);
-    return rings.size >= 2;
+// ------------------------------------------------------------------ the shield: a dome of things before the hero
+/**
+ * «Shield»: a convex dome like a shield held before the hero — a cap of a sphere of radius DOME_RC whose middle is behind him, its
+ * apex DOME_D m in front, ~7 m wide and ~5.7 m high (the hero is 3.5 m). Two layers (the second — every other row and column of the same angles — DOME_GAP m nearer to him). Each thing
+ * has a slot of its own on the surface, a pitch of DOME_PITCH (1.25 m) along the surface: 0.25 m of air between neighbours, and the
+ * cubes are turned along the surface — they never touch (tests/unit/ground-vortex.test.js: SAT on every pair). The slots stand still
+ * relative to the hero (they turn with his yaw, with a lag). Things beyond the slots wait far outside (FAR_R…), never in the dome.
+ */
+function buildDome() {
+    const slots = [];
+    const R = SW.DOME_RC, dTh = SW.DOME_PITCH / R;
+    const th0 = Math.asin(-1.5 / R), thTop = Math.asin(3.2 / R);
+    const rows = Math.floor((thTop - th0) / dTh + 0.05) + 1;
+    for (let r = 0; r < rows; r++) {
+        const th = th0 + r * dTh, rho = R * Math.cos(th);
+        const cols = Math.floor((2 * SW.DOME_SPAN * rho) / SW.DOME_PITCH + 1e-9) + 1;
+        const dPh = SW.DOME_PITCH / rho;
+        for (let c = 0; c < cols; c++) {
+            const ph = (c - (cols - 1) / 2) * dPh;
+            // the front layer: the whole cap; the layer behind (DOME_GAP nearer): the same angles, every other row and column — its
+            // slots lie closer together on the smaller sphere, so only a quarter of them fit with air between
+            for (let layer = 0; layer < 2; layer++) {
+                if (layer && (r % 2 || c % 2)) continue;
+                const Rl = R - layer * SW.DOME_GAP;
+                if (layer) { // (not right before his eyes: the camera is 2.15 m over the hip)
+                    const ex = Rl * Math.cos(th) * Math.sin(ph), ey = Rl * Math.sin(th) - SW.EYE_Y, ez = Rl * Math.cos(th) * Math.cos(ph) - (R - SW.DOME_D);
+                    if (Math.hypot(ex, ey, ez) < SW.EYE_CLEAR) continue;
+                }
+                slots.push({
+                    layer, row: r, col: c, ph, th, R: Rl,
+                    x: Rl * Math.cos(th) * Math.sin(ph), y: Rl * Math.sin(th), z: Rl * Math.cos(th) * Math.cos(ph) - (R - SW.DOME_D),
+                    key: layer * 1000 + Math.hypot(ph * 2, th - 0.2),
+                });
+            }
+        }
+    }
+    slots.sort((a, b) => a.key - b.key);
+    return slots;
+}
+export const DOME = buildDome();
+export const domeSlot = (i) => DOME[i] || null;
+
+/** Thing i's place in the dome, from the hero's hip: the hero faces yaw ψ (forward = (sin ψ, cos ψ)). → {x, y, z} | null */
+export function domeOffset(i, yaw, out = {}) {
+    const s = DOME[i];
+    if (!s) return null;
+    const sn = Math.sin(yaw), cs = Math.cos(yaw);
+    out.x = s.x * cs + s.z * sn;
+    out.y = s.y;
+    out.z = -s.x * sn + s.z * cs;
+    return out;
+}
+/** The way a dome cube is turned: yaw (about the vertical) and pitch. */
+export const domeAngles = (i, yaw, out = {}) => { const s = DOME[i]; out.yaw = yaw + s.ph; out.pitch = s.th; return out; };
+
+/** Where a thing that has no slot waits: far outside, on rings 7.5 m and more from the hero (j = its number among those). */
+export function farOffset(j, angle, t, out = {}) {
+    const per = 34, m = Math.floor(j / per), k = j % per, r = SW.FAR_R + m * 1.5;
+    const a = (k / per) * TAU + m * 0.6 + angle * 0.4;
+    out.x = Math.cos(a) * r; out.z = Math.sin(a) * r;
+    out.y = 0.6 + m * 1.35 + 0.15 * Math.sin(t * 1.6 + j);
+    return out;
 }
 
-/** The blocks a blow takes: the ones facing it, the outer shell first, then the nearest in angle. `want` of them. */
-export function blocksToBreak(n, alive, angle, bearing, want) {
-    const f = blocksFacing(n, alive, angle, bearing, SW.COVER_ARC * 2.2, []);
-    f.sort((a, b) => (shieldSlot(b, _ss).shell - shieldSlot(a, _ss).shell) || a - b);
+const wrap = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+/** The bearing of the way the hero faces (atan2(dz, dx)). */
+const faceBearing = (yaw) => Math.PI / 2 - yaw;
+
+/** Blocks of the front layer first, within `arc` of the blow's bearing: indices. */
+export function domeFacing(n, alive, yaw, bearing, arc = SW.COVER_ARC, out = []) {
+    out.length = 0;
+    const rel = wrap(bearing - faceBearing(yaw)); // (the dome's φ is to the right: a blow at rel hits the slot with φ = −rel)
+    for (let i = 0; i < Math.min(n, DOME.length); i++) {
+        if (!alive(i)) continue;
+        if (Math.abs(wrap(DOME[i].ph + rel)) <= arc) out.push(i);
+    }
+    return out;
+}
+
+/** Does the dome stand in the way of a blow from this bearing (≥ COVER_NEED things of ≥ 2 rows facing it)? */
+export function domeCovers(n, alive, yaw, bearing) {
+    const f = domeFacing(n, alive, yaw, bearing, SW.COVER_ARC, []);
+    if (f.length < SW.COVER_NEED) return false;
+    const rows = new Set();
+    for (const i of f) rows.add(DOME[i].layer * 100 + DOME[i].row);
+    return rows.size >= 2;
+}
+
+/** The things a blow takes: the front layer's facing it, the nearest to the middle of the blow first. `want` of them. */
+export function domeBreak(n, alive, yaw, bearing, want) {
+    const f = domeFacing(n, alive, yaw, bearing, SW.COVER_ARC * 2.2, []);
+    const rel = wrap(bearing - faceBearing(yaw));
+    f.sort((a, b) => (DOME[a].layer - DOME[b].layer) || (Math.abs(wrap(DOME[a].ph + rel)) - Math.abs(wrap(DOME[b].ph + rel))) || a - b);
     return f.slice(0, want);
 }
 
@@ -236,6 +315,9 @@ export function salvoVelocity(d, seed, j, out = {}) {
  *   train → ring   only a really going-round hand: rate ≥ LEAVE_RATE for LEAVE_TIME (higher than the entry level: a hysteresis).
  *   salvo          a sharp throw (JERK: longer, faster, straighter than the duel's) AND the wand then keeps its way for HOLD s
  *                  (within HOLD_ANGLE of the throw): a flick that comes back, a shiver, a single jerk is ignored; JERK_GAP between two.
+
+ *   cloud ↔ funnel the swarm hangs as a cloud; only a hand really going round (RING_RATE for RING_ON_T) winds it into the funnel round the hero;
+ *                  it is a cloud again after RING_OFF_T of calm.
  *   the head       the train's head follows the wand with a lag (HEAD_LAG 1/s): no teleport.
  */
 export const INTENT = {
@@ -245,6 +327,7 @@ export const INTENT = {
     JERK: { WINDOW: 0.3, DIST: 2.2, STRAIGHT: 0.85, MIN_SPAN: 0.1, ONE_STEP: 0.6 },
     HOLD: 0.15, HOLD_ANGLE: 0.35, JERK_GAP: 0.9,
     HEAD_LAG: 4,
+    RING_RATE: 0.3, RING_ON_T: 0.35, RING_OFF_T: 0.8, // the hand going round (turns/s) for RING_ON_T → the funnel; calm for RING_OFF_T → the cloud again
 };
 
 const angleBetween = (a, b) => Math.acos(clamp((a.x * b.x + a.y * b.y + a.z * b.z) / (Math.hypot(a.x, a.y, a.z) * Math.hypot(b.x, b.y, b.z) || 1), -1, 1));
@@ -259,6 +342,7 @@ export class SwarmIntent {
 
     reset() {
         this.train = false;
+        this.ring = false; this.ringOn = 0; this.ringOff = 0;
         this.calm = 0; this.leave = 0;
         this.aims = []; // [{t, x, y, z}]
         this.pending = null; // a throw waiting to be confirmed: {t, x, y, z}
@@ -268,11 +352,15 @@ export class SwarmIntent {
     /** @returns {boolean} a salvo goes now */
     step(t, dt, rate, speed, aim, jerkList = null, sharp = null, canFire = true) {
         const r = Math.abs(rate);
+        if (r >= INTENT.RING_RATE) { this.ringOn += dt; this.ringOff = 0; } else { this.ringOn = 0; if (r < INTENT.CALM_RATE) this.ringOff += dt; }
+        if (!this.ring && this.ringOn >= INTENT.RING_ON_T) { this.ring = true; this.ringOff = 0; }
+        else if (this.ring && this.ringOff >= INTENT.RING_OFF_T) this.ring = false;
         // the wand's way over the last LEAD_WINDOW s
         this.aims.push({ t, x: aim.x, y: aim.y, z: aim.z });
         while (this.aims.length && t - this.aims[0].t > INTENT.LEAD_WINDOW) this.aims.shift();
         if (!this.train) {
-            if (r < INTENT.CALM_RATE && speed < INTENT.CALM_SPEED) this.calm += dt; else this.calm = 0;
+            if (this.ring) this.calm = 0;
+            else if (r < INTENT.CALM_RATE && speed < INTENT.CALM_SPEED) this.calm += dt; else this.calm = 0;
             if (this.calm >= INTENT.CALM_TIME && this._led()) { this.train = true; this.leave = 0; }
         } else {
             if (r >= INTENT.LEAVE_RATE) this.leave += dt; else this.leave = 0;
