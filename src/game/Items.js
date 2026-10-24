@@ -125,8 +125,17 @@ const WAND_V3 = { axis: 'y', handle: 0.1 };
 const PEN_WAND = false;
 /** V5: how far the wand's own end is behind its point in the palm (SimplifiedHand WAND_LINE.at): its butt at the heel of the hand. */
 const V5_WAND_BACK = 0.35;
+/**
+ * V5: how much the hand's own turn leads the wand; the rest — the forearm (the body network's elbow →
+ * wrist), carrying the grip's angle. The author: «V3 points exactly where I point, V4/V5 don't» — V3's
+ * wand is 0.6 forearm + 0.4 palm; V4 0.85 palm, V5 was the palm alone. The palm's turn from a fist of
+ * 50 px (worse: pointed at the camera) is a guess; the forearm is not — so V5 points like V3 now and
+ * the wand still lies across the palm in the V5 grip.
+ */
+const V5_WAND_PALM = 0.4;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
+const _qa = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const _UPY = new THREE.Vector3(0, 1, 0);
 const _hq = new THREE.Quaternion();
@@ -452,7 +461,14 @@ export class ItemSystem {
             h.gripped = true;
         }
         const a = hand.wandAxis(h.wandFit.r, _a, _b), d = _b;
-        const x = _c.set(1, 0, 0).applyQuaternion(hand.palm.getWorldQuaternion(_hq));
+        // the grip's angle (the palm's «up» → the wand in it) carried by the forearm, then a part of the
+        // palm's own turn: points where the arm points, bent by the wrist (V5_WAND_PALM)
+        const pq = hand.palm.getWorldQuaternion(_hq);
+        const up = _e.set(0, 1, 0).applyQuaternion(pq);
+        const fore = ch.getForearmDirection(side, _f);
+        const byArm = fore.applyQuaternion(_qa.setFromUnitVectors(up, d)).normalize();
+        d.multiplyScalar(V5_WAND_PALM).addScaledVector(byArm, 1 - V5_WAND_PALM).normalize();
+        const x = _c.set(1, 0, 0).applyQuaternion(pq);
         x.addScaledVector(d, -x.dot(d));
         if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
         x.normalize();
