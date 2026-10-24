@@ -84,6 +84,7 @@ export class VillagerCommands {
             case 'weapon': v.sheath = what === 'away'; if (what === 'out') v.sheath = false; break;
             case 'spare': v.spare = { until: Date.now() + 120000, id: a.foe || null }; break;
             case 'fetch': this._fetch(v, what, a, me, base); break;
+            case 'court': if (a.op) return this.life.court?.hostOp(v, a, by) ?? false; break; // (a guest-king's word to the vizier: the host does it — CourtLife)
             case 'rank': { // the king tells his vizier whom to raise: only the king himself; the host keeps it (CastleLife.setRank)
                 if (!this._owner(v, by) || a.pid == null || a.pid === by) return false;
                 const level = { friend: 1, honored: 2, commander: 3, deputy: 4, none: 0 }[what] ?? 1;
@@ -152,7 +153,12 @@ export class VillagerCommands {
         this._clear(v, true);
         const pace = a.pace || 'walk';
         let tx = v.x, tz = v.z, node = null, looks = null, stop = 0.6;
-        if (what === 'come' && me) { tx = me.x; tz = me.z; looks = 'me'; stop = 2.6; }
+        if (a.to || what === 'person') { // to a man (the vizier leads the king to him)
+            const t = this.life.byId.get(a.to);
+            if (!t) return;
+            tx = t.x; tz = t.z; looks = t.id; stop = 2.8; node = null; base.t = 70;
+        }
+        else if (what === 'come' && me) { tx = me.x; tz = me.z; looks = 'me'; stop = 2.6; }
         else if (what === 'point' && a.point) { tx = a.point.x; tz = a.point.z; }
         else if (what === 'dir' && me) { // «пройди пять шагов вперёд»: along or across where I look (the hero's own forward)
             const g = this.game;

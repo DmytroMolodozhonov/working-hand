@@ -250,6 +250,7 @@ export class TalkMind {
             brain.character ? `Твой характер (0–100): ${characterRu(brain.character)}.` : '',
             brain.attitude ? `Твоё отношение к собеседнику: ${attitudeWord(brain.attitude(ctx.selfId))} (${brain.attitude(ctx.selfId)} из 100).` : '',
             ctx.rel ? `Твои чувства к собеседнику (в числах игры): подчинение ${ctx.rel.sub}, дружба ${ctx.rel.fr}, любовь ${ctx.rel.lv}. Подчинение — долг, дружба — искреннее расположение; отрицательные числа — неприязнь. Говори в тон этим числам.` : '',
+            ctx.court ? `${ctx.court}` : '',
             ctx.goal ? `${ctx.goal} Это дело твоей жизни: если к слову — вспомни о нём, но не навязывай.${ctx.companion ? ' Сейчас ты идёшь в путь вместе с собеседником.' : ''}` : '',
             ctx.known ? `Что ты знаешь о собеседнике: ${ctx.known}.` : '',
             brain.decide ? this._willLine(brain, ctx) : '',

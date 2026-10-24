@@ -390,7 +390,9 @@ export class RelationsLife {
         }
         const rep = {};
         for (const [pid, r] of Object.entries(st.rep)) rep[pid] = r;
-        return { rel, rep };
+        const out = { rel, rep };
+        if (st.court) out.court = st.court;
+        return out;
     }
 
     /** The numbers of those outside any castle (sailors…): saved with the castles' states under '__free'. */
@@ -400,6 +402,7 @@ export class RelationsLife {
     unpack(st, s) {
         st.rel = s.rel && typeof s.rel === 'object' ? s.rel : (st.rel || {});
         st.rep = s.rep && typeof s.rep === 'object' ? s.rep : (st.rep || {});
+        if (s.court && typeof s.court === 'object') st.court = s.court;
     }
 
     dispose() { this.bars?.dispose(); this.bars = null; }

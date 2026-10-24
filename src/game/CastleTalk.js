@@ -39,6 +39,7 @@ import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
 import { CommandTalk } from './CommandTalk.js';
+import { parseCourt } from './Court.js';
 import { detectOrder, toolsFor, TOOLS, ORDER_LINES } from '../ai/TalkActions.js';
 import { TalkTrace } from '../ai/TalkTrace.js';
 import { quickOrder } from '../ai/TalkFlow.js';
@@ -224,6 +225,7 @@ export class CastleTalk {
         ctx.news = this.life.news?.told(v.cs.def.id, g.localId) || [];
         ctx.status = this._status(v);
         ctx.known = this.life.rel?.knownText(v) || ''; // (what he knows of me: my spells, blood, help — Relations.js)
+        ctx.court = this.life.court?.contextFor(v) || '';
         ctx.goal = this.life.social ? this.life.social.askGoal(v) : ''; // (his own life goal, for his words — Lives.js)
         ctx.companion = !!v.companion;
         ctx.rel = this.life.rel?.eff(v) || null; // (the three bars, for his will — Relations.js)
@@ -623,6 +625,8 @@ export class CastleTalk {
                 return true;
             }
         }
+        // (the king's court: to the vizier — troubles, the treasury, «веди к нему»; to a man with a trouble — a word of help)
+        if (this.life.court?.hear(v, text, info)) return true;
         // (a command in plain words — «присядь», «сразитесь друг с другом», «построиться»: the rules, at once)
         if (!(this._trader(v) && this._pursePay(v)) && this.commands.hear(v, text, info)) return true;
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
@@ -797,6 +801,7 @@ export class CastleTalk {
         // (in a talk with him, the hand down: what I say is to him — not a spell, unless it is one)
         if (!spell && this.inTalk() && this._partner === L && !this.game.isMagicActive) return true;
         if (detectOrder(text, this._players())) return true;
+        if (L.role === 'advisor' && this.life.state(L.cs.def.id).owner === this.game.localId && parseCourt(text)) return true; // (the king asks his vizier about the court)
         // (a command in plain words: he hears it, no spell — unless its words ARE a spell («подними щит») and nobody was called by name or role)
         if (this.commands.matches(text) && (!spell || ROLE_CALL.some(([re]) => re.test(normalizeText(text))))) return true;
         const intent = detectIntent(text).intent;
@@ -913,6 +918,7 @@ export class CastleTalk {
 
     _apply(v, res) {
         if (!res || v.dead) return;
+        { const c = this.life.court?.onGreet(v, res); if (c) res.reply = res.reply ? `${res.reply} ${c}` : c; } // (a man with a trouble tells it at a greeting — CourtLife)
         this.life.rel?.talked(v, res); // (the tone of my words moves his bars: +дружба, −подчинение — Relations.js)
         const g = this.game;
         // («да» to buy at a stall: the merchant says «держи» only when the deal really happens — _tradeYes
