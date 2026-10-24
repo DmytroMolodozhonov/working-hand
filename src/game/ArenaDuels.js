@@ -50,7 +50,9 @@ import { ArenaTagFx } from '../fx/ArenaTagFx.js';
 import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
 import { foeRanks } from './SpawnSpots.js';
+import { wizardWandOf } from './Expelliarmus.js';
 import { domeOf, domeCross } from './ArenaDome.js';
+import { duelReport } from './DuelReport.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
 import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -578,6 +580,7 @@ export class ArenaDuels {
         }
         if (who === 'p') A.owed = { id: D.p };
         if (D.p != null) this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why });
+        this._logEnd(A, D, who, why);
         this.log.push((A.def.practice ? 'train:' : 'end:') + (who || 'none') + ':' + why + ':' + Math.round(D.go));
         this._send(A);
     }
@@ -1089,6 +1092,62 @@ export class ArenaDuels {
         if (m.e === 'fx') { const A = this.list.get(m.id); if (A) g.sound?.playArena?.(A.def.centre, m.k, m.v ?? 1); }
     }
 
+    // ------------------------------------------------------------------ the duel journal
+    /** One line into the journal (Settings → Журнал → «Заклинания») and the console. */
+    _dl(line) {
+        try { this.game.spellLog?.note?.(line); console.info('[Дуэль]', line); } catch (_) { /* (the journal never breaks a duel) */ }
+    }
+
+    /** (host) A duel with the hero begins: who is against him, the numbers of both sides. */
+    _logStart(A, a) {
+        const g = this.game, du = g.duel, me = g.localId, c = g.combat;
+        const wand = (it) => it ? { power: it.power || 0, fav: it.fav || null, dir: it.dir || null } : null;
+        const foe = {
+            name: a.name, rank: a.entry?.rank || a.role, mana: a.mana, maxMana: a.maxMana, hp: a.hp, maxHp: a.maxHp, skill: a.W?.skill,
+            power: du?._strength?.(a.id, 0, me), wandK: du?._wandK?.(a.id, 'Stupefy'), wand: wand(wizardWandOf(a)),
+        };
+        const hero = {
+            mana: c?.fatigue, maxMana: c?.maxFatigue, hp: c?.hp, maxHp: c?.maxHp, setPower: g.hero?.duelPower ?? null,
+            power: du?._strength?.(me, 0, a.id), wandK: du?._wandK?.(me, 'Stupefy'), wand: wand(g.items?.wand), creative: g.config?.mode === 'creative',
+        };
+        this._cur = { at: performance.now(), foe, hero, foeId: a.id, casts: { me: {}, foe: {} }, clashes: [], arena: A.id };
+        this._dl(duelReport.start(this._cur));
+    }
+
+    /** (Duel._addBolt) A charge was cast: by the hero or by the arena's wizard. */
+    logCast(b) {
+        const C = this._cur;
+        if (!C || !b?.spell) return;
+        const mine = b.by === this.game.localId;
+        if (!mine && b.by !== C.foeId) return;
+        const t = (mine ? C.casts.me : C.casts.foe);
+        t[b.spell] = (t[b.spell] || 0) + 1;
+    }
+
+    /** (Duel._updateClash) A beam clash of the hero ended: what each side pushed with, who gave in. */
+    logClash(c, loser, dissolve) {
+        const C = this._cur, me = this.game.localId;
+        if (!C || !c || (c.a.by !== me && c.b.by !== me)) return;
+        const mineA = c.a.by === me, S = c.stat || { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 };
+        const k = S.n || 1, mine = mineA ? c.a : c.b, theirs = mineA ? c.b : c.a;
+        const row = {
+            mySpell: mine.spell, foeSpell: theirs.spell, secs: c.t,
+            myPush: (mineA ? S.sa : S.sb) / k, foePush: (mineA ? S.sb : S.sa) / k,
+            myContact: (mineA ? S.ca : S.cb) / k, foeContact: (mineA ? S.cb : S.ca) / k,
+            share: mineA ? c.p : 1 - c.p, lost: dissolve ? 'none' : loser === me ? 'me' : 'foe',
+        };
+        C.clashes.push(row);
+        this._dl(duelReport.clash(row));
+    }
+
+    /** (host) The duel ended: the summary — who won, why, what each cast. */
+    _logEnd(A, D, who, why) {
+        const C = this._cur;
+        if (!C || D?.p == null) return;
+        this._dl(duelReport.end({ who, why, secs: (performance.now() - C.at) / 1000, casts: C.casts, clashes: C.clashes, foe: C.foe, hero: C.hero }));
+        this._cur = null;
+    }
+
     // ------------------------------------------------------------------ the duel mode
     /**
      * «Перед дуэлью» (старт в Творческом, HeroApply): режим «только дуэли». Трибуны уже полны болельщиков, герой на своём месте,
@@ -1133,6 +1192,10 @@ export class ArenaDuels {
             if (!s) continue;
             v.arena.seat = s; v.arena.leg = 2; v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
         }
+        if (m.freezeUntil && performance.now() < m.freezeUntil && m.pin) { // (the first seconds of a duel: the hero cannot step off his place)
+            const p = g.character.group.position;
+            p.x = m.pin.x; p.z = m.pin.z; g.knockback?.set?.(0, 0, 0);
+        }
         this._keepOnFloor(A, D);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
         if (D || m.hold) return;
@@ -1146,10 +1209,12 @@ export class ArenaDuels {
         A.owed = null; // (no coins at the lectern here: the duel is the whole game)
         a.castCd = 0.3; a.castT = 0; a.prep = null; a.dodge = null; // (ready: his first spell goes the moment the fight begins)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
+        m.freezeUntil = performance.now() + 5000; m.pin = { x: A.def.gates[0].mark.x, z: A.def.gates[0].mark.z };
         this._wandBack(); // (a wand lost in the last duel is given back: the hero never starts without one)
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
         this.log.push('mode:' + a.id + ':' + (a.entry?.rank || '?'));
+        this._logStart(A, a);
         this._fx(A, 'beep', A.def.centre);
         this._send(A);
         if (!g.items?.wand) g.hud?.setVoice?.('🪄 Возьмите палочку в руку — через 10 секунд бой!', true);
@@ -1240,6 +1305,12 @@ export class ArenaDuels {
             onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._resetArena(); m.hold = false; },
             onExit: () => document.getElementById('pause-exit-btn')?.click(), // (the same way out as the pause menu: the world is saved)
         });
+    }
+
+    /** (CastleLife._die) Is this death the duel mode's own — a wizard of its arena struck down by the hero: nobody mourns, avenges or buries him. */
+    quietKill(v, by) {
+        const m = this.mode;
+        return !!(m && v?.arena && v.arena.id === m.arenaId && by === m.id);
     }
 
     /**

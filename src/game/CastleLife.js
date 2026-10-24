@@ -2804,10 +2804,15 @@ export class CastleLife {
         v.foe = null;
         v.path = null;
         const st = this.state(v.cs.def.id);
-        st.killed.add(v.idx);
-        this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
-        this._comradeDown(v, by);
-        this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
+        // (the arena's duel mode: a wizard the hero beat there falls and is taken away — no body, no news of a murder, nobody startled,
+        // and he is no more «killed» for good: the arena has the same wizards again — ArenaDuels.quietKill)
+        const quiet = !!this.game.arenaDuels?.quietKill?.(v, by);
+        if (!quiet) {
+            st.killed.add(v.idx);
+            this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
+            this._comradeDown(v, by);
+            this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
+        }
         if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z] }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)

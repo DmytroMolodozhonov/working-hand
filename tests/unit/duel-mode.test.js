@@ -118,3 +118,20 @@ test('поражение в режиме дуэлей: надпись и окн�
     D._modeWin(true);
     assert.equal(shown[1], true); assert.equal(D.mode.askAfter, 5); assert.equal(D.mode.lost, true);
 });
+
+import { duelReport } from '../../src/game/DuelReport.js';
+
+test('дуэльный журнал: соперник, силы, палочки, столкновения и причина победы; убийство в режиме — «тихое»', () => {
+    const foe = { name: 'Альфред', rank: 'adept', mana: 90, maxMana: 100, hp: 20, maxHp: 20, skill: 1, power: 2.08, wandK: 1.4, wand: { power: 30, fav: 'Stupefy' } };
+    const hero = { mana: 200, maxMana: 200, hp: 20, maxHp: 20, setPower: 2, power: 2, wandK: 1.15, wand: { power: 0 }, creative: true };
+    const s = duelReport.start({ foe, hero });
+    assert.match(s, /Альфред/); assert.match(s, /продвинутый/); assert.match(s, /вы задали 2/); assert.match(s, /не зависит от вашей маны/);
+    const row = { mySpell: 'Stupefy', foeSpell: 'Jolt', secs: 6, myPush: 2.3, foePush: 2.9, myContact: 0.5, foeContact: 1, share: 0, lost: 'me' };
+    assert.match(duelReport.clash(row), /Уступили вы/);
+    const e = duelReport.end({ who: 'a', why: 'wand', secs: 40, casts: { me: { Stupefy: 3 }, foe: { Jolt: 2 } }, clashes: [row], foe, hero });
+    assert.match(e, /победил соперник/); assert.match(e, /Stupefy ×3/); assert.match(e, /Проигранных столкновений: 1/); assert.match(e, /рука сходила с него — 1/);
+    const D = Object.assign(Object.create(ArenaDuels.prototype), { mode: { arenaId: 'a', id: 'me' } });
+    assert.equal(D.quietKill({ arena: { id: 'a' } }, 'me'), true);
+    assert.equal(D.quietKill({ arena: { id: 'a' } }, 'other'), false);
+    assert.equal(D.quietKill({}, 'me'), false);
+});

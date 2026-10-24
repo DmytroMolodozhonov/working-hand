@@ -860,6 +860,7 @@ export class Duel {
             clash: null,
         };
         this.bolts.set(b.id, b);
+        this.game.arenaDuels?.logCast?.(b); // (the arena's duel journal: who cast what — ArenaDuels.logCast)
         return b;
     }
 
@@ -1624,6 +1625,8 @@ export class Duel {
         // (the wand counts as everywhere: +15 % and its own bonuses — WandMagic.wandPower)
         const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) : 0;
+        const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)
+        S.n++; S.sa += sa; S.sb += sb; S.ca += ca.ok ? 1 : 0; S.cb += cb.ok ? 1 : 0;
         c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
@@ -1640,6 +1643,7 @@ export class Duel {
         if (c.sendT <= 0 && g.sync) { c.sendT = 0.1; g.sync.duelClash(a.id, b.id, c.p, c.v, c.k); }
         if (loser || dissolve) {
             this._note({ ev: 'clashEnd', loser, dissolve, p: Math.round(c.p * 100) / 100, lostA: c.lostA, lostB: c.lostB, jerkA: ca.jerk, jerkB: cb.jerk, a: a.by, b: b.by });
+            g.arenaDuels?.logClash?.(c, loser, dissolve);
             this._finishClash(c, loser);
             if (g.sync) g.sync.duelClashEnd(a.id, b.id, loser);
         }
