@@ -8,6 +8,7 @@
  *  - заклинания: «Все заклинания есть» либо «Только заклинания сильного мага» (всё, кроме заклинаний богов и «Инспириуса»);
  *  - дуэльная сила: полная (100 %) либо 1…100 %;
  *  - здоровье: «Бессмертен» (как раньше) или «Обычное здоровье» (урон и смерть как в Свободном мире; максимум HP, по умолчанию 20);
+ *  - место появления: «Начальная площадка» или рядом с драконом / Ледяной Королевой / замком короля (SpawnSpots.js);
  *  - продвинутые: уровень чёрной магии 0…100, «метка слома магической защиты», устойчивость 1…100.
  *
  * Настройки лежат в мире (`config.hero` → сохранение мира → гостям от хоста: «правила мира»). Мир без них (старый) —
@@ -17,6 +18,7 @@
 
 import { GOD_SPELLS } from './Mana.js';
 import { isDivine } from './ProtectionGods.js';
+import { normalizeSpawn } from './SpawnSpots.js';
 
 export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
@@ -34,6 +36,7 @@ export const DEFAULT_HERO = Object.freeze({
     dark: 0, breakward: false, steady: 100,
     health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
     maxHp: HERO.HP_DEFAULT,
+    spawn: 'start', // where the hero appears (SpawnSpots.js)
 });
 
 /** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
@@ -58,6 +61,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         steady: clamp(Math.round(num(r.steady, b.steady)), HERO.STEADY_MIN, HERO.STEADY_MAX),
         health: r.health === 'normal' ? 'normal' : r.health === 'immortal' ? 'immortal' : b.health === 'normal' ? 'normal' : 'immortal',
         maxHp: clamp(Math.round(num(r.maxHp, b.maxHp)), HERO.HP_MIN, HERO.HP_MAX),
+        spawn: normalizeSpawn(r.spawn ?? b.spawn),
     };
 }
 

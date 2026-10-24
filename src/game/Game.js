@@ -3566,6 +3566,7 @@ export class Game {
         this.enchantCircles?.update(dt);
         if (earth) this._updateCaves(dt);
         this.keeper?.update(dt);
+        this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this.storm.update(dt);
         this.sun.update(dt);
         this._updateLightning(dt);

@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duel: 100, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20 });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duel: 100, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start' });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -157,4 +157,40 @@ test('здоровье: по умолчанию бессмертен; обычн
     // «Выживание» не затронуто
     const surv = fakeGame(undefined, 'freeworld');
     assert.equal(surv.combat.enabled, true); assert.equal(surv.combat.manaOn, true);
+});
+
+import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointToward } from '../../src/game/SpawnSpots.js';
+import { TEST_CAVE, TEST_DRAGON_SPOT } from '../../src/world/Terrain.js';
+
+test('точки появления: список, по умолчанию «Начальная площадка», безопасность, сохранение', () => {
+    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle']);
+    assert.equal(normalizeHero({}).spawn, 'start');
+    assert.equal(normalizeHero({ spawn: 'nope' }).spawn, 'start');
+    assert.equal(normalizeHero({ spawn: 'dragon' }).spawn, 'dragon');
+    assert.equal(spotTarget('start'), null);
+    for (const s of SPAWN_SPOTS) assert.ok(s.label && s.hint, s.id);
+    // дракон: ~55 м от него, не внутри (его площадка r = 14), ближе к постаментам
+    const d = spotTarget('dragon');
+    const dd = Math.hypot(d.x - TEST_DRAGON_SPOT.x, d.z - TEST_DRAGON_SPOT.z);
+    assert.ok(dd > TEST_DRAGON_SPOT.r + 20 && dd < 70, `dragon distance ${dd}`);
+    assert.ok(Math.hypot(d.x, d.z) < Math.hypot(TEST_DRAGON_SPOT.x, TEST_DRAGON_SPOT.z));
+    // Королева: перед дворцом (радиус 26), не в нём
+    const q = spotTarget('queen');
+    const qd = Math.hypot(q.x - (TEST_CAVE.X - 6), q.z - (TEST_CAVE.Z - 4));
+    assert.ok(qd > 26 && qd < 60, `queen distance ${qd}`);
+    // замок: ворота даёт мир; нет ворот — нет точки (остаёмся на старте)
+    assert.equal(spotTarget('castle', { castleGate: () => null }), null);
+    assert.deepEqual(spotTarget('castle', { castleGate: () => ({ x: 10.4, z: -90.2, yaw: 1 }) }), { x: 10, z: -90, yaw: 1 });
+    // безопасное место: вода пропускается, кольцо вокруг цели
+    const t = { x: 0, z: 0 };
+    assert.deepEqual(safeNear(t, () => true), { x: 0, z: 0 });
+    const at = safeNear(t, (x, z) => Math.hypot(x, z) >= 5.5);
+    assert.ok(at && Math.hypot(at.x, at.z) >= 5.5);
+    assert.equal(safeNear(t, () => false), null);
+    assert.deepEqual(pointToward({ x: 100, z: 0 }, { x: 0, z: 0 }, 40), { x: 60, z: 0 });
+    // сохранение в мире
+    const cfg = { mode: 'creative', hero: normalizeHero({ spawn: 'queen' }) };
+    assert.equal(heroOf({ mode: 'creative', hero: JSON.parse(JSON.stringify(heroForSave(cfg))) }).spawn, 'queen');
+    assert.equal(heroOf({ mode: 'creative' }).spawn, 'start'); // старый мир
+    assert.equal(normalizeSpawn('castle'), 'castle');
 });

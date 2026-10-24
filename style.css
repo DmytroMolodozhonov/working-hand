@@ -1814,3 +1814,4 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hero-settings [hidden] { display: none !important; }
 
 .hero-slide input[type="number"] { width: 90px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.35); color: inherit; }
+.hero-row select { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.45); color: inherit; max-width: 100%; }
