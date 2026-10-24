@@ -414,7 +414,7 @@ export class ArenaDuels {
         if (A) this._freeSeat(A, v);
         const fromSeat = !!v.seated; v.seated = false; v.arenaFight = false; v.fx = (v.fx | 0) & ~FX.SHIELD;
         if (v.noWand) { v.noWand = false; v.lostWand = null; v.model?.setHeldTool?.('wand'); } // (the duel is over: the wand given back)
-        if (now || v.dead || !A) { v.arena = null; if (!v.dead && L.byId.has(v.id)) L._deactivate(v); return; }
+        if (now || v.dead || !A) { v.arena = null; if ((!v.dead || this.mode) && L.byId.has(v.id)) L._deactivate(v); return; } // (the duel mode: a fallen wizard is taken away, no body left lying)
         v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat, home: !!v.steward };
     }
 
@@ -785,7 +785,7 @@ export class ArenaDuels {
         const ready = (v.castCd ?? 0) <= 0 && v.castT <= 0.15 && !v.prep;
         let moving = false;
         const stance = arenaStance({ mana: v.mana, maxMana: v.maxMana, foeMana: ov?.mana ?? 30, foeMaxMana: ov?.maxMana ?? 30, t: D.go });
-        if (!ready || d > stance.max || d < stance.min) {
+        if (!ready || d > (ready ? Math.max(stance.max, 25) : stance.max) || d < stance.min) { // (ready and in the beam's reach: he stops and casts — he does not walk on)
             v.arena.turnT = (v.arena.turnT || 0) - dt;
             if (v.arena.turnT <= 0) { v.arena.turnT = 2.5 + Math.random() * 3.5; v.arena.dir = Math.random() < 0.5 ? -1 : 1; }
             const ux = (v.x - fp.x) / (d || 1), uz = (v.z - fp.z) / (d || 1);
@@ -1153,7 +1153,7 @@ export class ArenaDuels {
         const g = this.game, ch = g.character, data = g.world?.terrain?.data || g.terrain?.data, M = A.def.gates[0].mark, O = A.def.gates[1].mark;
         const y = data?.surfaceY ? data.surfaceY(M.x, M.z) : M.y;
         ch.group.position.set(M.x, y + PLAYER_GROUND_OFFSET + 0.1, M.z);
-        ch.group.rotation.y = Math.atan2(O.x - M.x, O.z - M.z);
+        ch.group.rotation.y = Math.atan2(O.x - M.x, O.z - M.z) + Math.PI; // (the hero looks along −Z at 0: the bearing needs a half turn)
         ch.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         ch.airTop = null; ch.landing = null; g.knock?.reset?.(); // (no fall counted from before the move: the hero stands, he does not land hard)
@@ -1173,6 +1173,28 @@ export class ArenaDuels {
         g.knockback?.set?.(0, 0, 0);
     }
 
+    /**
+     * A fresh start of the duel mode (the window's «Начать дуэль заново»): the old wizard and the whole crowd go at once (a fallen one
+     * is taken away), nobody keeps anger at the hero, and the stands fill anew — as on the first duel.
+     */
+    _resetArena() {
+        const m = this.mode, A = m && this.list.get(m.arenaId), L = this.life;
+        if (!A || !L) return;
+        const cs = this._tower(A), D = A.duel;
+        for (const v of [...A.fans]) this._release(v, true);
+        A.fans.clear(); A.taken.clear(); A.want = 0;
+        if (D) for (const v of [D.a, D.b]) if (v) this._release(v, true);
+        A.duel = null;
+        for (const w of [...(cs?.active.values() || [])]) {
+            if (w.arena?.id === A.id || (w.dead && Math.hypot(w.x - A.def.x, w.z - A.def.z) < (A.def.outer || 40) + 10)) { w.arena = w.arena || { id: A.id }; this._release(w, true); continue; }
+            if (w.foe === m.id) w.foe = null; // (whoever was angry at the hero is calm)
+            if (w.grudge?.id === m.id) w.grudge = null;
+            if (w.fleeFrom === m.id) { w.fleeFrom = null; w.fleeT = 0; }
+        }
+        if (cs) { cs.hostile.clear(); cs.wizAlarmUntil = 0; }
+        this._send(A);
+    }
+
     /** The hero won in the duel mode: the big «Вы победили!», in ten seconds the window «Хотите повторить дуэль?». */
     _modeWin() {
         const m = this.mode;
@@ -1187,7 +1209,7 @@ export class ArenaDuels {
         this.endUi.hideBox();
         this.endUi.showAgain({
             foe: m.foe,
-            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); m.hold = false; },
+            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._resetArena(); m.hold = false; },
             onExit: () => document.getElementById('pause-exit-btn')?.click(), // (the same way out as the pause menu: the world is saved)
         });
     }
