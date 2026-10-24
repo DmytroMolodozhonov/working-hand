@@ -27,8 +27,8 @@ export function shieldsNow(g) {
         const ch = g.character;
         if (c.shield.type === 2) out.push({ c: c.center(new THREE.Vector3()), r: PVP.DOME_R, by: g.localId });
         else {
-            const n = ch.getHandDirection(c.shield.side, new THREE.Vector3());
-            out.push({ disc: true, c: ch.getHandWorldPosition(c.shield.side, new THREE.Vector3()).addScaledVector(n, 0.45), n, r: PVP.SHIELD_SCALE, by: g.localId });
+            const n = c.shieldDir(c.shield.side, new THREE.Vector3());
+            out.push({ disc: true, c: c.shieldAt(c.shield.side, new THREE.Vector3()).addScaledVector(n, 0.45), n, r: PVP.SHIELD_SCALE, by: g.localId });
         }
     }
     for (const [id, r] of g.remotes || []) {

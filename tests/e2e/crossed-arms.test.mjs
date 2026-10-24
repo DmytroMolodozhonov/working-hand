@@ -48,6 +48,17 @@ test('freeworld: crossed arms raise the shield and opening them takes it down; o
     assert.equal(await shield(page), null, 'not before the hold');
     await tick(page, { crossedArms: true }, 0.4); // (the camera's smoothing lags the picture ~0.1 s: up ≈ 0.45 s after the arms cross)
     assert.deepEqual(await shield(page), { type: 1, gesture: true });
+    // the shield stands in front of the crossed arms (not at a wand's tip), facing the body's front
+    const place = await page.evaluate(() => {
+        const g = window.__zns.game, c = g.combat, ch = g.character;
+        const at = c.shieldAt('right'), dir = c.shieldDir('right');
+        const l = ch.getHandWorldPosition('left'), r = ch.getHandWorldPosition('right');
+        const mid = l.clone().add(r).multiplyScalar(0.5);
+        const fwd = ch.crossShieldPose().dir;
+        return { ahead: at.clone().sub(mid).dot(fwd), side: at.clone().sub(mid).sub(fwd.clone().multiplyScalar(at.clone().sub(mid).dot(fwd))).length(), face: dir.dot(fwd), ser: c.serialize()[7] };
+    });
+    assert.ok(place.ahead > 0.1 && place.ahead < 1, `a bit ahead of the arms: ${place.ahead}`);
+    assert.ok(place.side < 0.05 && place.face > 0.99 && place.ser === 1, JSON.stringify(place));
     await tick(page, { crossedArms: true }, 2);
     assert.ok(await shield(page), 'stays while crossed');
     // opened: gone after ~0.2 s, not before
