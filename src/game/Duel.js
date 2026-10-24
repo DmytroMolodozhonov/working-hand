@@ -161,6 +161,7 @@ export const DUEL = {
     MAXIMA_BOOST: 0.05, // «Максима» shouted in a clash: the meeting point goes 5 % of the way a second faster to the opponent (they add up)
     MAXIMA_COST: 5, // mana, at once
     MAXIMA_EVERY: 3, // s: at most once every 3 seconds
+    MAXIMA_LIFE: 6, // s: one shout pushes this long, then it is spent (they add up only while they last: a wizard shouting every 3 s no longer buries any strength)
 };
 
 /**
@@ -169,6 +170,13 @@ export const DUEL = {
  */
 export function maximaPush(boostA = 0, boostB = 0) {
     return DUEL.MAXIMA_BOOST * (Math.max(0, boostA | 0) - Math.max(0, boostB | 0));
+}
+
+/** How many of the shouts (times `t` in the clash's own clock) still push at time `now`. */
+export function liveShouts(times, now) {
+    let n = 0;
+    if (times) for (let i = 0; i < times.length; i++) if (now - times[i] < DUEL.MAXIMA_LIFE) n++;
+    return n;
 }
 
 /**
@@ -1602,7 +1610,7 @@ export class Duel {
         }
         if (a.by === this.me || b.by === this.me) {
             const mineA = a.by === this.me;
-            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p, mastery: g.mana?.mastery ?? 0 });
+            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p, mastery: g.mana?.mastery ?? 0, power: mineA ? c.pwA : c.pwB });
             this._barNow = true;
         }
         // Fatigue drains while pushing (free world)
@@ -1627,9 +1635,10 @@ export class Duel {
         // (the wand counts as everywhere: +15 % and its own bonuses — WandMagic.wandPower)
         const sa = ca.ok ? this._strength(a.by, c.luckA, b.by) * clashPower(a.spell) * this._wandK(a.by, a.spell) : 0;
         const sb = cb.ok ? this._strength(b.by, c.luckB, a.by) * clashPower(b.spell) * this._wandK(b.by, b.spell) : 0;
+        c.pwA = sa; c.pwB = sb; // (what each side pushes with now: the bar shows mine)
         const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)
         S.n++; S.sa += sa; S.sb += sb; S.ca += ca.ok ? 1 : 0; S.cb += cb.ok ? 1 : 0;
-        c.v = clashPush(sa - sb) + maximaPush(ca.ok ? c.boostA : 0, cb.ok ? c.boostB : 0);
+        c.v = clashPush(sa - sb) + maximaPush(ca.ok ? liveShouts(c.shoutsA, c.t) : 0, cb.ok ? liveShouts(c.shoutsB, c.t) : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
 
@@ -1689,7 +1698,7 @@ export class Duel {
             const key = A ? 'maxAtA' : 'maxAtB';
             if (c.t - (c[key] ?? -1e9) < DUEL.MAXIMA_EVERY - 0.25) return false;
             c[key] = c.t;
-            if (A) c.boostA = (c.boostA || 0) + 1; else c.boostB = (c.boostB || 0) + 1;
+            if (A) { c.boostA = (c.boostA || 0) + 1; (c.shoutsA || (c.shoutsA = [])).push(c.t); } else { c.boostB = (c.boostB || 0) + 1; (c.shoutsB || (c.shoutsB = [])).push(c.t); }
         }
         c.pulse = { t: 0, side: A ? 0 : 1 };
         this._note({ ev: 'maxima', by, boostA: c.boostA || 0, boostB: c.boostB || 0 });

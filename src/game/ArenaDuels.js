@@ -52,6 +52,7 @@ import { villagerLook } from '../entities/VillagerModel.js';
 import { foeRanks } from './SpawnSpots.js';
 import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
+import { starterWand } from './ItemTypes.js';
 import { domeOf, domeCross } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
@@ -1135,6 +1136,7 @@ export class ArenaDuels {
             mySpell: mine.spell, foeSpell: theirs.spell, secs: c.t,
             myPush: (mineA ? S.sa : S.sb) / k, foePush: (mineA ? S.sb : S.sa) / k,
             myContact: (mineA ? S.ca : S.cb) / k, foeContact: (mineA ? S.cb : S.ca) / k,
+            myShouts: (mineA ? c.boostA : c.boostB) || 0, foeShouts: (mineA ? c.boostB : c.boostA) || 0,
             share: mineA ? c.p : 1 - c.p, lost: dissolve ? 'none' : loser === me ? 'me' : 'foe',
         };
         C.clashes.push(row);
@@ -1160,7 +1162,9 @@ export class ArenaDuels {
         if (this.game.world) this.game.world.duelFar = MODE_VIEW; // (only the arena is drawn and made: the workers have nothing else to do — FPS)
     }
 
-    stopDuelMode() { this.mode = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
+    _unpause() { if (this.mode?.paused) { this.game.paused = false; this.mode.paused = false; } }
+
+    stopDuelMode() { this._unpause(); this.mode = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
 
     /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
     _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
@@ -1200,6 +1204,7 @@ export class ArenaDuels {
         this._rememberWand();
         this._keepOnFloor(A, D);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
+        if (m.hold && m.holdPin) { const p = g.character.group.position; p.x = m.holdPin.x; p.z = m.holdPin.z; g.knockback?.set?.(0, 0, 0); }
         if (D || m.hold) return;
         if (A.fans.size < Math.min(A.want, 4)) return; // (the stands must be filling up first)
         // the next duel: the opponent on his place, the player on his, the count 10…1
@@ -1231,7 +1236,11 @@ export class ArenaDuels {
         const g = this.game, it = g.items, m = this.mode, inv = g.inventory;
         if (!it || !m) return;
         this._rememberWand();
-        if (!m.wand || inv?.hasUid?.(m.wand.uid)) return; // (no wand known yet, or it is still his: in a hand / a slot)
+        if (!m.wand) { // (he never held one here: a plain wand into his hand — the hero is never without one at a duel)
+            if (!it.wand && !(inv?.slots || []).some((s) => s?.kind === 'wand')) m.wand = { ...starterWand(), spare: true };
+            else return;
+        }
+        if (inv?.hasUid?.(m.wand.uid)) return; // (it is still his: in a hand / a slot)
         const w = { ...m.wand };
         try {
             if (it.loose?.has?.(w.uid)) it.removeLoose?.(w.uid); // (the same wand lying on the floor / the lectern: no second one)
@@ -1244,7 +1253,8 @@ export class ArenaDuels {
     /** The hero's own wand (not the plain stand-in), remembered whenever he holds it — it is what is given back after a loss. */
     _rememberWand() {
         const w = this.game.items?.wand, m = this.mode;
-        if (w && m && !w.spare) m.wand = { ...w };
+        if (!w || !m) return;
+        if (!w.spare || !m.wand || m.wand.spare) m.wand = { ...w }; // (the own one wins over a plain stand-in; a stand-in is remembered when it is all he has)
     }
 
     /** The hero on his own place (the lit mark), facing the opponent's; health and mana full: a new duel is fresh. */
@@ -1298,6 +1308,8 @@ export class ArenaDuels {
     _modeWin(lost = false) {
         const m = this.mode;
         if (!m) return;
+        const p = this.game.character.group.position;
+        m.holdPin = { x: p.x, z: p.z }; // (the hero stays where he is while the result is shown and chosen from)
         m.hold = true; m.winT = 0; m.lost = lost; m.askAfter = lost ? AGAIN_AFTER_LOSS : AGAIN_AFTER;
         this.endUi.showWin(lost ? 'Попробуйте ещё раз — палочка вернётся к вам' : 'Трибуны ликуют', lost);
     }
@@ -1306,11 +1318,12 @@ export class ArenaDuels {
         const m = this.mode;
         if (!m) return;
         this.endUi.hideBox();
+        if (!this.game.net?.active) { this.game.paused = true; m.paused = true; } // (the whole world stands still while the window is open)
         this.endUi.showAgain({
             lost: !!m.lost,
             foe: m.foe,
-            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._resetArena(); m.hold = false; },
-            onExit: () => document.getElementById('pause-exit-btn')?.click(), // (the same way out as the pause menu: the world is saved)
+            onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._unpause(); this._resetArena(); m.hold = false; m.holdPin = null; },
+            onExit: () => { this._unpause(); document.getElementById('pause-exit-btn')?.click(); }, // (the same way out as the pause menu: the world is saved)
         });
     }
 

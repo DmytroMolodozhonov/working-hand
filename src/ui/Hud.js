@@ -413,7 +413,7 @@ export class Hud {
      */
     setDuelBar(d) {
         let el = this._duelEl;
-        this._setMastery(d ? d.mastery : null);
+        this._setMastery(d ? d.mastery : null, d?.power);
         if (!d) { if (el) el.style.display = 'none'; return; }
         if (!el) {
             el = this._duelEl = document.createElement('div');
@@ -434,7 +434,7 @@ export class Hud {
      * «Дуэльное мастерство» (Mana.masteryWon): a golden bar over the mana with how much of it I have —
      * only while a duel goes on (setDuelBar). null hides it.
      */
-    _setMastery(n) {
+    _setMastery(n, power) {
         let el = this._masteryEl;
         if (n == null) { if (el && el.style.display !== 'none') el.style.display = 'none'; return; }
         if (!el) {
@@ -445,7 +445,8 @@ export class Hud {
         }
         if (el.style.display !== 'flex') el.style.display = 'flex';
         const v = Math.max(0, Math.floor(n));
-        if (this._masteryN !== v) { this._masteryN = v; el.textContent = `⚔️ Дуэльное мастерство: ${v}`; }
+        const pw = Number.isFinite(power) ? Math.round(power * 10) / 10 : null;
+        if (this._masteryN !== v || this._masteryP !== pw) { this._masteryN = v; this._masteryP = pw; el.textContent = `⚔️ Дуэльное мастерство: ${v}${pw != null ? ` · сила в бою: ${pw}` : ''}`; }
     }
 
     /**

@@ -243,7 +243,7 @@ export class CastleTalk {
     // ---------------------------------------------------------- speaking
     /** A villager says a line: over the head, and aloud for those close enough. */
     voice(v, text, shout = false) {
-        if (!this.voiceOn || !this.speech.supported || !text) return;
+        if (!this.voiceOn || !this.speech.supported || !text || this.game.duelOnly) return;
         if (v.dead || v.stunT > 0) return; // (the dead and the knocked out say nothing)
         const me = this.game.character.group.position;
         const d = Math.hypot(v.x - me.x, v.z - me.z);
@@ -1619,12 +1619,13 @@ export class CastleTalk {
             this._age = (this._age || 0) + 0.5;
             const close = this._age < 20 && this.life.targets().some((v) => Math.hypot(v.x - g.character.group.position.x, v.z - g.character.group.position.z) < 25);
             // (the neural voices load as soon as people are near — before anybody speaks, so nobody speaks with the computer's voice first)
-            if (this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
-            this._prepareFillers();
+            const duelOnly = !!g.duelOnly; // (the duel-only start: no neural voices, no fillers, no villagers' net — nobody is talked to here)
+            if (!duelOnly && this.voiceOn && this.life.castles.size && (this._age >= 8 || close)) this.speech.preload?.();
+            if (!duelOnly) this._prepareFillers();
             // (no warm-up of the net while I come near: on the author's processor it took the cores the voice and the
             // speech program need — words heard 3 s late, «Джолт» 3–4 s, frames lost; TalkMind.warmRequest stays for tests)
             // (always on — loaded in the background soon after the start; meanwhile the rules answer)
-            if (g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
+            if (!duelOnly && g.config.villagerAI !== 'off' && !this.llm && !this._llmTried && this.life.enabled && (this._age >= 15 || close)) { this._llmTried = true; this._loadLLM(g.config.villagerAI || 'auto'); }
         }
         for (const v of this.life.byId.values()) if (v.talking > 0) v.talking -= dt;
         this._tags();

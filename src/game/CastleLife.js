@@ -3442,10 +3442,11 @@ export class CastleLife {
         if (shout && !v.sleep && this.auth) this.night?.noise(v, 16); // (a shout wakes the sleepers near)
         // (heard aloud → no words over the head: the talk is by voice; the words only when there is no voice)
         // (a voice that would cut the answer I am hearing is not said — false: then its words show)
-        const voiced = this.talk.voiceCarries?.(v, shout) && this.talk.voice(v, text, shout) !== false;
+        const mute = !!this.game.duelOnly; // (the duel-only start: no villager voices — the words show over the head, nothing is spoken)
+        const voiced = !mute && this.talk.voiceCarries?.(v, shout) && this.talk.voice(v, text, shout) !== false;
         if (voiced) v.bubble.hide?.();
         else v.bubble.show(text, { name: `${v.title} ${v.name}`, seconds, shout, color: v.wizard ? '#5b2d8e' : v.role === 'king' ? '#b8860b' : v.role === 'knight' ? '#4a5a7a' : '#5a3a1a' });
-        if (!this.talk.voiceCarries?.(v, shout)) this.talk.voice(v, text, shout);
+        if (!mute && !this.talk.voiceCarries?.(v, shout)) this.talk.voice(v, text, shout);
         if (broadcast) this.game.sync?.villagerSay?.(v.id, text); // (everybody near sees the bubble)
     }
 
@@ -3460,7 +3461,7 @@ export class CastleLife {
 
     _chatter(dt) {
         this._chatT -= dt;
-        if (this._chatT > 0 || !this.auth) return;
+        if (this._chatT > 0 || !this.auth || this.game.duelOnly) return; // (the duel-only start: nobody chatters)
         this._chatT = 5 + Math.random() * 6;
         if (this.talk.inTalk?.()) return; // (nobody chatters over my talk with someone)
         const me = this.game.character.group.position;

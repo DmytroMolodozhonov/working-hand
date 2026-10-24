@@ -61,7 +61,7 @@ test('зрители в режиме дуэлей только болеют: н�
 
 test('после победы окно «Хотите повторить дуэль?» — через 10 секунд, режим ждёт выбора', () => {
     assert.equal(AGAIN_AFTER, 10);
-    const g = { localId: 'me', character: {}, world: {}, hud: {} };
+    const g = { localId: 'me', character: { group: { position: { x: 1, z: 2 } } }, world: {}, hud: {} };
     const D = Object.assign(Object.create(ArenaDuels.prototype), { game: g, list: new Map(), log: { push() {} }, mode: null });
     let shown = null;
     D.endUi = { showWin: (s) => { shown = s; }, hide() {}, hideBox() {}, showAgain() {} };
@@ -173,4 +173,38 @@ test('«Создать мир» помнит выбор отдельно для 
     assert.equal(mem.lastMode(['creative']), null);
     assert.doesNotThrow(() => new CreateMemory(null).save('x', {})); // (no cache: just not remembered)
     assert.equal(new CreateMemory({ getItem: () => '{bad' }).load('x'), null);
+});
+
+test('старт «Перед дуэлью»: жители не говорят вслух и не болтают, мир сведён к арене', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8');
+    assert.match(src, /this\.duelOnly = config\.mode === 'creative' && this\.hero\.spawn === 'arena'/);
+    for (const sys of ['animals', 'spiders', 'dragons', 'iceCastle', 'owls', 'gargoyles', 'livingTrees']) assert.match(src, new RegExp(`!duelOnly\\) this\\.${sys}\\b`), sys);
+    const life = (await import('node:fs')).readFileSync(new URL('../../src/game/CastleLife.js', import.meta.url), 'utf8');
+    assert.match(life, /const mute = !!this\.game\.duelOnly/);
+    assert.match(life, /this\.game\.duelOnly\) return; \/\/ \(the duel-only start: nobody chatters\)/);
+});
+
+import { liveShouts } from '../../src/game/Duel.js';
+
+test('«Максима» толкает ограниченное время: выкрики не копятся без предела', () => {
+    assert.equal(liveShouts([0, 3, 6, 9], 9.5), 2); // (only the last two are within 6 s)
+    assert.equal(liveShouts([], 10), 0);
+    assert.equal(liveShouts(undefined, 10), 0);
+});
+
+test('режим дуэлей: палочка — своя запоминается; нет вовсе — простая в руку', () => {
+    const calls = [];
+    const inv = { slots: [], hasUid: () => false };
+    const items = { wand: null, loose: new Map(), removeLoose() {}, spawnLoose: (it) => calls.push('spawn:' + (it.spare ? 'spare' : 'own')), pickUp: () => calls.push('pick') };
+    const g = { localId: 'me', items, inventory: inv, character: { group: { position: { x: 0, y: 0, z: 0 } } } };
+    const D = Object.assign(Object.create(ArenaDuels.prototype), { game: g, mode: { arenaId: 'a', id: 'me' } });
+    D._wandBack(); // never held one, none in the slots → a plain wand into the hand
+    assert.deepEqual(calls, ['spawn:spare', 'pick']);
+    // a stand-in held, lost later → given back; an own one held → it wins in memory
+    D.mode = { arenaId: 'a', id: 'me' }; items.wand = { kind: 'wand', uid: 's1', spare: true }; D._rememberWand();
+    assert.equal(D.mode.wand.uid, 's1');
+    items.wand = { kind: 'wand', uid: 'o1' }; D._rememberWand();
+    assert.equal(D.mode.wand.uid, 'o1');
+    items.wand = { kind: 'wand', uid: 's2', spare: true }; D._rememberWand();
+    assert.equal(D.mode.wand.uid, 'o1'); // (a stand-in never overwrites the own wand)
 });

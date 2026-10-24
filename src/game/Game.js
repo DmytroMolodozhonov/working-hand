@@ -316,6 +316,8 @@ export class Game {
         // «Настройки героя» Творческого мира (HeroSetup.js): записаны в мире; у старого мира их нет — всё как было раньше
         this.config.hero = config.mode === 'creative' ? (config.hero ?? config.saved?.hero ?? undefined) : undefined;
         this.hero = heroOf(this.config);
+        // the duel-only start («Перед дуэлью на арене»): the world is the arena — no creatures, no ships, no villagers' talk or voices (the author: «можно отключить всё, что не касается дуэли»)
+        this.duelOnly = config.mode === 'creative' && this.hero.spawn === 'arena';
         setCrewless(config.mode === 'creative' && this.hero.noCrew); // (ships without sailors: Sailors.crewRoster)
         // real trees, not blocks (TreeBuild.js, Trees.js): every world made from now on, smooth or not; a saved world keeps
         // what it was made with (its felled and burnt trees lie on those), a guest takes the host's
@@ -3494,7 +3496,7 @@ export class Game {
         // off the Earth (space, another planet) the Earth's own life waits — unless this computer runs it
         // for other players still there (the host): then it goes on, without me in it (_playerPositions)
         const earth = !this.space?.offEarth || this._earthNeeded();
-        if (earth) {
+        if (earth && !this.duelOnly) {
             this.ships?.update(dt); // ships move first and carry everyone standing on them
             this.fleet?.update(dt);
             this.blackbeard?.update(dt); // (the black ship's mind: its course, its guns, its grapnels, its boarders)
@@ -3533,7 +3535,7 @@ export class Game {
         this.wandMagic.update(dt);
         this.gear.update(dt);
         this.bleeding.update(dt);
-        const duelOnly = !!this.arenaDuels?.mode; // (the duel-only start: no animals, no roads' people, no zombies — only the arena)
+        const duelOnly = this.duelOnly; // (the duel-only start: no animals, no roads' people, no zombies, no bosses — only the arena)
         if (earth && !duelOnly) this.animals.update(dt);
         if (earth) this.runner.update(dt);
         if (earth && !duelOnly) this.travelers?.update(dt); // (the people of the roads: before the people move — the riders sit where their cart is)
@@ -3542,33 +3544,33 @@ export class Game {
         if (earth) this.arenaDuels?.update(dt); // (the duel arenas: after the people moved)
         if (earth) this.doors.update(dt);
         if (earth) this.locks.update(dt);
-        if (earth) this.campfires.update(dt);
-        if (earth) this.lanterns?.update(dt);
-        if (earth) this.cauldrons?.update(dt);
+        if (earth && !duelOnly) this.campfires.update(dt);
+        if (earth && !duelOnly) this.lanterns?.update(dt);
+        if (earth && !duelOnly) this.cauldrons?.update(dt);
         if (earth) this.liquidation?.update(dt); // (what «Liquidation» crumbled stays gone when a house / a cave makes it again)
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
-        if (earth) this.crystals?.update(dt);
+        if (earth && !duelOnly) this.crystals?.update(dt);
         if (earth) this.beds.update(dt);
         if (earth) this.houses.update(dt);
-        if (earth) this.wizVillages?.update(dt);
-        if (earth) this.spiders.update(dt);
-        if (earth) this.dragons.update(dt);
+        if (earth && !duelOnly) this.wizVillages?.update(dt);
+        if (earth && !duelOnly) this.spiders.update(dt);
+        if (earth && !duelOnly) this.dragons.update(dt);
         this.dragonRide.update(dt, earth);
         this.imperius.update(dt); // (after the creatures moved: the link, the mana, the passage of the mind)
         if (this.imperius.active || this.remotes.size) imperiusPulse(performance.now() / 1000); // (the white eyes breathe)
-        if (earth) this.iceCastle.update(dt);
+        if (earth && !duelOnly) this.iceCastle.update(dt);
         this.temple?.update(dt); // (the Gods' temple: on Venus)
-        if (earth) this.phoenixes.update(dt);
-        if (earth) this.owls.update(dt);
-        if (earth) this.plants.update(dt);
-        if (earth) this.gargoyles.update(dt);
-        if (earth) this.livingTrees.update(dt);
+        if (earth && !duelOnly) this.phoenixes.update(dt);
+        if (earth && !duelOnly) this.owls.update(dt);
+        if (earth && !duelOnly) this.plants.update(dt);
+        if (earth && !duelOnly) this.gargoyles.update(dt);
+        if (earth && !duelOnly) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
         if (this.voice?.native) this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.());
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
-        if (earth) this.servants.update(dt);
+        if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);
         this.groundVortex?.update(dt);
         this.visibleGodi?.update(dt);
@@ -3576,7 +3578,7 @@ export class Game {
         this.steam?.update(dt);
         this.fireworks?.update(dt);
         this.enchantCircles?.update(dt);
-        if (earth) this._updateCaves(dt);
+        if (earth && !duelOnly) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this.storm.update(dt);
@@ -3613,7 +3615,7 @@ export class Game {
         this.spells.update(dt);
         this._updateMagicGesture();
         this._updatePendingSpell();
-        if (!isTest && earth) this._spawnWaves(dt);
+        if (!isTest && earth && !duelOnly) this._spawnWaves(dt);
 
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
         this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
@@ -3652,7 +3654,7 @@ export class Game {
         // (the sounds made on first use: made ahead, one every half second, after the first seconds of play)
         if (!this._soundsWarm && this.frameCount > 240 && this.frameCount % 30 === 0) this._soundsWarm = !(this.sound?.prewarmStep?.() ?? false);
         // (the castles and towers ahead: made a little a frame before the minimap and the people want them)
-        if (this.frameCount % 3 === 1) {
+        if (this.frameCount % 3 === 1 && !this.duelOnly) { // (the duel-only start: no far sites are planned, no minimap drawn — only the arena)
             const wp = this.character.group.position, vil = this.world.terrain?.data?.villages;
             this.world.terrain?.warmSites?.(wp.x, wp.z, 900 + CASTLE_CELL, CASTLE_CELL);
             // (a wizards' settlement may be further: look as far as the nearest known one — the workers make the cells)
@@ -3660,7 +3662,7 @@ export class Game {
             if (reach > 900 + CASTLE_CELL) this.world.terrain?.warmSites?.(wp.x, wp.z, reach, CASTLE_CELL);
         }
         if (this.frameCount % 5 === 0 && this.space?.inSpace) this.space.drawMap(this.hud); // (the map of the Solar System)
-        else if (this.frameCount % 5 === 0) {
+        else if (this.frameCount % 5 === 0 && !this.duelOnly) {
             const cp = this.character.group.position;
             const others = [...this.remotes].filter(([id, r]) => !r.dead && !this.invis?.hidden(id)).map(([, r]) => r).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
             // on a server: its name on the map and a mark at its start point
@@ -4228,7 +4230,7 @@ export class Game {
     }
 
     _spawnWaves(dt) {
-        if (!this.authority || this.config.map || this.arenaDuels?.mode) return;
+        if (!this.authority || this.config.map || this.duelOnly) return;
         this._updateDummy(dt);
         this._updateTestDragon(dt);
         this.zombieSpawn?.update(dt); // (zombies out of the dark: caves, the night — ZombieSpawn.js)
