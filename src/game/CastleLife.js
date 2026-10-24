@@ -178,7 +178,8 @@ export function rosterEntry(def, idx) {
     else if (idx <= def.knights) role = 'knight';
     else if (idx < merchants0 + def.stalls.length) role = 'merchant';
     else { const r = rng(); role = r < 0.45 ? 'farmer' : r < 0.85 ? 'builder' : 'merchant'; }
-    const female = role === 'king' ? false : rng() < (role === 'knight' ? 0.15 : 0.5);
+    const f = rng() < (role === 'knight' ? 0.15 : 0.5);
+    const female = role === 'king' || role === 'advisor' ? false : f; // (the king and his advisor are men: the look and the voice agree — the author heard a woman's voice from a man)
     const name = role === 'king' ? def.king : (female ? FEMALE : MALE)[Math.floor(rng() * (female ? FEMALE : MALE).length)];
     const home = def.houses.length ? Math.floor(rng() * def.houses.length) : -1;
     const stall = role === 'merchant' && idx < merchants0 + def.stalls.length ? idx - merchants0 : -1;
@@ -2801,6 +2802,8 @@ export class CastleLife {
 
     _die(v, by) {
         v.dead = true;
+        v.seated = false; // (a seated body is drawn 1.7 m lower — it sank through the floor: the dead king on his throne)
+        this.cmds?.clear(v);
         this.talk?.speech?.cancelKey?.(v.id); // (the dead say nothing: his line stops, his queue is dropped)
         v.bubble?.hide?.();
         v.mode = 'dead';

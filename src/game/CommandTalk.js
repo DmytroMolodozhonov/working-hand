@@ -11,12 +11,14 @@
 
 import * as THREE from 'three';
 import { detectOrder } from '../ai/TalkActions.js';
-import { parseCommand, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
+import { parseCommand, parseCommands, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
 
 const SHOUT_HEAR = 30; // m: a shouted order is heard by the guard this far (as for the army's orders)
 const MAX_GROUP = 10; // people carrying out one command (a bigger crowd costs frames)
 const GROUP_DEFAULT = new Set(['spar_group', 'formation', 'surround']); // said to nobody in particular → all the knights near
 const SPARRERS = new Set(['knight']);
+/** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
+const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
 /** Commands that win over the king's old army-order reader (it knows no hand pointing, pairs or formations). */
 const NEW_WINS = new Set(['spar_group', 'fight_him', 'attack_him', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight']);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -37,9 +39,14 @@ export class CommandTalk {
     }
 
     _parse(text) {
+        return this._parseAll(text)[0] || null;
+    }
+
+    /** The commands in the words: one, or a chain («подойди и поклонись»). */
+    _parseAll(text) {
         if (this._lastText === text) return this._lastParse;
         this._lastText = text;
-        this._lastParse = parseCommand(text, { names: this._names() });
+        this._lastParse = parseCommands(text, { names: this._names() });
         return this._lastParse;
     }
 
@@ -84,10 +91,19 @@ export class CommandTalk {
 
     // ------------------------------------------------------------------ the talk
     /** → true: the words were a command to `v` (answered); false: not mine. */
-    hear(v, text, info = {}) {
-        const cmd = this._parse(text);
+    hear(v, text, info = {}, again = false) {
+        const all = this._parseAll(text);
+        let cmd = all[0];
         if (!cmd) return false;
         const g = this.game, life = this.life, talk = this.talk;
+        // «делай это», «давай», «как я сказал»: the last command once more (what was asked a minute ago)
+        if (cmd.id === 'do_it') {
+            const last = this._last;
+            if (again || !last || performance.now() - last.at > 90000) return false;
+            return this.hear(v, last.text, info, true);
+        }
+        const chain = all.slice(1).filter((c) => CHAINABLE.has(COMMANDS[c.id].do.split(':')[0]) && c.id !== 'do_it');
+        if (!again) this._last = { text, at: performance.now() };
         const def = COMMANDS[cmd.id];
         const army = detectOrder(text, talk._players());
         if (army && !NEW_WINS.has(cmd.id)) return false; // («собери войско», «в атаку на зомби»: the king's orders, VillagerOrders)
@@ -113,18 +129,21 @@ export class CommandTalk {
         };
 
         // --- talk-only commands (the answer is the action)
-        if (kind === 'say') { this._log(text, cmd, lead, 'ответ'); reply(this._sayLine(what, lead, text)); return true; }
+        if (kind === 'say') {
+            if (cmd.id === 'give_item') { const r = this._fetch(doers, lead, cmd, text, reply, ack); if (r !== null) return r; } // («дай мне меч»: a sword lying near is brought; his own he keeps)
+            this._log(text, cmd, lead, 'ответ'); reply(this._sayLine(what, lead, text)); return true;
+        }
         if (kind === 'cast') return this._cast(lead, what, cmd, text);
 
         // --- a target: «сразись с ним», «не трогай его»
-        let foe = null;
+        let foe = null, foes = [];
         if (def.needsTarget || cmd.id === 'spar_group') {
             if (def.needsTarget) {
                 const t = this._target(cmd, lead, doers);
                 if (t.line && army) return false; // («бей их»: no one pointed at — the army's old order)
                 if (t.line) { reply(t.line); this._log(text, cmd, lead, 'цель: ' + t.why); return true; }
                 if (t.creature) return this._huntCreature(doers, t.creature, text, cmd, lead, ack());
-                foe = t.v;
+                foe = t.v; foes = t.vs || [];
             }
         }
         const by = g.localId;
@@ -145,12 +164,17 @@ export class CommandTalk {
             }
             case 'fight_him': case 'attack_him': {
                 if (!foe) return true;
-                const attackers = doers.filter((k) => k !== foe).slice(0, 3);
+                const targets = foes.length ? foes : [foe];
+                const attackers = doers.filter((k) => !targets.includes(k)).slice(0, 4);
                 if (!attackers.length) { reply(pick(SPAR_REFUSALS.self)); return true; }
-                for (const k of attackers) life.orders.run(k, 'cmd', { id: cmd.id === 'attack_him' ? 'attack_him' : 'fight_him', foe: foe.id, mode: cmd.args.mode }, by);
-                if (cmd.id === 'fight_him' && foe.role === 'knight') life.orders.run(foe, 'cmd', { id: 'fight_him', foe: attackers[0].id, mode: cmd.args.mode }, by);
-                reply(cmd.id === 'attack_him' ? pick(['Задержу!', 'Есть, берём его!']) : cmd.args.mode === 'deadly' ? pick(['Он сам напросился. К бою!', 'Что ж, бой насмерть!']) : pick(['Есть! Покажу, чему меня учили.', 'Слушаюсь! Сразимся.', 'Принял вызов!']));
-                this._log(text, cmd, lead, `бой с ${foe.name}, ${cmd.args.mode}`);
+                // each attacker takes a target (round the list); a knight attacked fights back at him — a fair fight, not a beating
+                attackers.forEach((k, i) => {
+                    const f = targets[i % targets.length];
+                    life.orders.run(k, 'cmd', { id: cmd.id === 'attack_him' ? 'attack_him' : 'fight_him', foe: f.id, mode: cmd.args.mode }, by);
+                    if (cmd.id === 'fight_him' && f.role === 'knight' && i < targets.length) life.orders.run(f, 'cmd', { id: 'fight_him', foe: k.id, mode: cmd.args.mode }, by);
+                });
+                reply(cmd.id === 'attack_him' ? pick(['Задержу!', 'Есть, берём его!']) : cmd.args.mode === 'deadly' ? pick(['Он сам напросился. К бою!', 'Что ж, бой насмерть!', 'Приказ есть приказ — бой!']) : pick(['Есть! Покажу, чему меня учили.', 'Слушаюсь! Сразимся.', 'Принял вызов!']));
+                this._log(text, cmd, lead, `бой: ${attackers.length} против ${targets.map((f) => f.name).join(', ')}, ${cmd.args.mode}`);
                 return true;
             }
             case 'spare': {
@@ -159,6 +183,7 @@ export class CommandTalk {
                 return true;
             }
             case 'fight_me': sendAll(); reply(pick(['Что ж, потренируемся! Защищайтесь!', 'Принимаю! В полсилы, конечно.', 'Слушаюсь. Только без обид!'])); return this._done(text, cmd, lead);
+            case 'tidy': case 'bring': case 'pick_up': case 'give_item': return this._fetch(doers, lead, cmd, text, reply, ack);
             case 'formation': case 'surround': return this._formation(doers, cmd, lead, text, reply);
             case 'come': {
                 sendAll();
@@ -174,8 +199,9 @@ export class CommandTalk {
             }
             default: break;
         }
-        // --- the common case: the same command to each (a pose, a walk, a hold…)
-        sendAll(() => ({ form: cmd.args.form }));
+        // --- the common case: the same command to each (a pose, a walk, a hold…), and what follows it in a chain
+        const then = chain.filter((c) => doers.every((k) => canDo(c.id, k.role, ctxOf(k)).ok)).map((c) => ({ id: c.id, pace: c.args.pace, dir: c.args.dir, dist: c.args.dist, mode: c.args.mode })).slice(0, 3);
+        sendAll(() => ({ form: cmd.args.form, dist: cmd.args.dist, ...(then.length ? { then } : {}) }));
         const a = ack();
         if (a) reply(a);
         // (several answered: a second voice now and then, never a choir)
@@ -225,7 +251,7 @@ export class CommandTalk {
         return picked.length ? picked : [v];
     }
 
-    /** Whom «с ним» is about: the pointed / looked-at / named one, among the people near (and the creatures). */
+    /** Whom «с ним» is about: the pointed / looked-at / named one, a place round someone («сзади тебя»), the people near (and the creatures). */
     _target(cmd, lead, doers) {
         const g = this.game, life = this.life;
         const me = g.character.group.position;
@@ -234,7 +260,7 @@ export class CommandTalk {
         const skip = new Set(doers.map((k) => k.id));
         const c = [];
         for (const k of life.byId.values()) {
-            if (k.dead || skip.has(k.id) && cmd.id !== 'spare') continue;
+            if (k.dead || (skip.has(k.id) && cmd.id !== 'spare')) continue;
             const d = Math.hypot(k.x - me.x, k.z - me.z);
             if (d > 45) continue;
             c.push({ k, id: k.id, x: k.x, y: k.y + 2.2, z: k.z, d, name: k.name });
@@ -249,19 +275,103 @@ export class CommandTalk {
             const d = Math.hypot(p.x - me.x, p.z - me.z);
             if (d < 45) cr.push({ e, id: 'c' + cr.length, x: p.x, y: p.y + 1.2, z: p.z, d });
         }
-        const pickAmong = pickTarget(t, c.concat(cr), { x: me.x, z: me.z, yaw }, ray, 0.3);
-        if (!pickAmong && t.ref === 'none') return { line: pick(SPAR_REFUSALS.none), why: 'нет цели' };
-        if (!pickAmong) return { line: pick(SPAR_REFUSALS.none), why: 'не нашёл цель' };
-        if (pickAmong.e) {
-            const kind = pickAmong.e.kind === 's' ? 'spider' : pickAmong.e.kind === 'a' ? 'animals' : pickAmong.e.kind === 'D' ? 'dragon' : 'zombies';
+        // a place round the listener (or me): «те, что сзади тебя» — one, or all of them for a «тех»
+        if (t.ref === 'region') {
+            const o = t.of === 'me' ? { x: me.x, z: me.z, yaw } : { x: lead.x, z: lead.z, yaw: lead.yaw };
+            const fx = -Math.sin(o.yaw), fz = -Math.cos(o.yaw);
+            const inside = c.filter((e) => {
+                const dx = e.x - o.x, dz = e.z - o.z, d = Math.hypot(dx, dz);
+                if (d < 0.5 || d > 28 || e.k === lead) return false;
+                const fwd = (dx * fx + dz * fz) / d, side = (dx * -fz + dz * fx) / d; // side: + to the right
+                switch (t.side) {
+                    case 'behind': return fwd < -0.25;
+                    case 'front': return fwd > 0.25;
+                    case 'left': return side < -0.3;
+                    case 'right': return side > 0.3;
+                    default: return d < 12;
+                }
+            }).sort((a, b) => Math.hypot(a.x - o.x, a.z - o.z) - Math.hypot(b.x - o.x, b.z - o.z));
+            if (!inside.length) return { line: pick(SPAR_REFUSALS.none), why: 'в той стороне никого' };
+            return this._judge(cmd, lead, t.plural ? inside.slice(0, 4) : [inside[0]]);
+        }
+        const one = pickTarget(t, c.concat(cr), { x: me.x, z: me.z, yaw }, ray, 0.3);
+        if (!one) return { line: pick(SPAR_REFUSALS.none), why: t.ref === 'none' ? 'нет цели' : 'не нашёл цель' };
+        if (one.e) {
+            const kind = one.e.kind === 's' ? 'spider' : one.e.kind === 'a' ? 'animals' : one.e.kind === 'D' ? 'dragon' : 'zombies';
             return { creature: kind };
         }
-        const f = pickAmong.k;
-        if (cmd.id === 'spare') return { v: f };
-        if (f === lead) return { line: pick(SPAR_REFUSALS.self), why: 'сам' };
-        if (f.role === 'king') return { line: pick(SPAR_REFUSALS.king), why: 'король' };
-        if (cmd.id !== 'attack_him' && f.role !== 'knight' && !f.wizard) return { line: pick(SPAR_REFUSALS.civilian), why: 'мирный' };
-        return { v: f };
+        // «тех, на кого я показываю»: the ones standing close to the pointed one
+        let list = [one];
+        if (t.plural && one.k) list = c.filter((e) => e.k && Math.hypot(e.x - one.x, e.z - one.z) < 5).slice(0, 4);
+        return this._judge(cmd, lead, list);
+    }
+
+    /** The chosen ones are fit to be fought? (a king, a civilian, himself — no, with the reason said). */
+    _judge(cmd, lead, list) {
+        const ok = [];
+        let why = null;
+        for (const e of list) {
+            const f = e.k;
+            if (cmd.id === 'spare') { ok.push(f); continue; }
+            if (f === lead) { why = why || { line: pick(SPAR_REFUSALS.self), why: 'сам' }; continue; }
+            if (f.role === 'king') { why = why || { line: pick(SPAR_REFUSALS.king), why: 'король' }; continue; }
+            if (cmd.id !== 'attack_him' && f.role !== 'knight' && !f.wizard) { why = why || { line: pick(SPAR_REFUSALS.civilian), why: 'мирный' }; continue; }
+            ok.push(f);
+        }
+        if (!ok.length) return why || { line: pick(SPAR_REFUSALS.none), why: 'нет цели' };
+        return { v: ok[0], vs: ok };
+    }
+
+    /**
+     * «Убери доспехи сзади по сундукам», «принеси мне меч», «собери вещи»: the things lying in the place named, taken by the
+     * knights one by one (VillagerCommands._fetch). → true; null when `give_item` found nothing to bring (he then says what he keeps).
+     */
+    _fetch(doers, lead, cmd, text, reply, ack) {
+        const g = this.game, life = this.life, items = g.items;
+        const f = cmd.args.items || {};
+        const me = g.character.group.position, yaw = g.character.group.rotation.y;
+        const kinds = f.kinds ? new Set(f.kinds) : null;
+        const o = f.area === 'me' ? { x: me.x, z: me.z, yaw } : { x: lead.x, z: lead.z, yaw: lead.yaw };
+        const fx = -Math.sin(o.yaw), fz = -Math.cos(o.yaw);
+        const found = [];
+        for (const L of items?.loose?.values() || []) {
+            const it = L.item;
+            if (!it || L.hover || L.away || (it.shop && !it.shop.paid) || it.godGift || (kinds && !kinds.has(it.kind))) continue;
+            const p = L.model.position;
+            const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz);
+            if (d > (f.area === 'me' ? 10 : 18) || Math.hypot(p.x - me.x, p.z - me.z) > 30) continue;
+            if (f.area === 'behind' && (d < 0.8 || (dx * fx + dz * fz) / d > -0.2)) continue;
+            found.push({ uid: it.uid, d });
+        }
+        found.sort((a, b) => a.d - b.d);
+        if (!found.length) {
+            if (cmd.id === 'give_item') return null;
+            reply(pick(['Не вижу тут ничего такого.', `Не вижу, где лежат ${f.label || 'вещи'}.`, 'Нечего убирать — там пусто.']));
+            this._log(text, cmd, lead, 'вещей не нашёл');
+            return true;
+        }
+        // where they go: to me; beside the nearest chest; a pile before me
+        let dest, say;
+        if (cmd.id === 'bring' || cmd.id === 'give_item') { dest = { kind: 'me' }; say = ack(); }
+        else {
+            let chest = null, bd = 80;
+            for (const c of g.chests || []) { const p = c.mesh?.position; if (!p) continue; const d = Math.hypot(p.x - o.x, p.z - o.z); if (d < bd) { bd = d; chest = c; } }
+            if (cmd.id === 'tidy' && chest) {
+                const cy = chest.mesh.rotation.y || 0;
+                dest = { kind: 'spot', x: chest.mesh.position.x, z: chest.mesh.position.z, yaw: cy };
+                say = f.toChest ? 'В сундук вещи не положишь — сложу рядом с ним.' : ack();
+            } else {
+                dest = { kind: 'spot', x: me.x - Math.sin(yaw) * 5, z: me.z - Math.cos(yaw) * 5, yaw: yaw + Math.PI };
+                say = cmd.id === 'tidy' ? 'Сундука рядом нет — сложу кучей перед вами.' : ack();
+            }
+        }
+        // shared out: the nearest to each knight, a few each
+        const by = g.localId, share = doers.slice(0, 4).map(() => []);
+        found.slice(0, share.length * 6).forEach((e, i) => share[i % share.length].push(e.uid));
+        doers.slice(0, 4).forEach((k, i) => { if (share[i].length) life.orders.run(k, 'cmd', { id: cmd.id === 'give_item' ? 'bring' : cmd.id, uids: share[i], dest }, by); });
+        reply(say);
+        this._log(text, cmd, lead, `вещей: ${found.length} (${f.label}), ${dest.kind}`);
+        return true;
     }
 
     _huntCreature(doers, kind, text, cmd, lead, ack) {

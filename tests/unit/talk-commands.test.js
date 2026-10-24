@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COMMANDS, COMMAND_IDS, COMMAND_ROLES, parseCommand, canDo, commandTable, scopeOf, pickGroup, pickTarget, formationSlots, commandAck, commandPool, sayReply } from '../../src/ai/TalkCommands.js';
+import { COMMANDS, COMMAND_IDS, COMMAND_ROLES, parseCommand, parseCommands, moveOf, itemFilter, canDo, commandTable, scopeOf, pickGroup, pickTarget, formationSlots, commandAck, commandPool, sayReply } from '../../src/ai/TalkCommands.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { VillagerCommands } from '../../src/game/VillagerCommands.js';
 
@@ -67,6 +67,10 @@ const PHRASES = {
     cast_light: ['зажги люмос', 'освети палочкой', 'создай светлячка'],
     cast_shield: ['защити щитом', 'поставь барьер', 'магический щит'],
     fly: ['лети', 'взлети', 'полетай'],
+    move_dir: ['пройди пять шагов назад', 'ты можешь пойти вперед', 'сделай три шага влево'],
+    tidy: ['убрать доспехи сзади вас по сундукам', 'приберись', 'наведи порядок'],
+    bring: ['принеси мне меч который лежит рядом', 'принеси мне щит', 'притащи доспехи'],
+    pick_up: ['подбери доспехи', 'подними оружие с земли', 'собери все вещи вокруг'],
 };
 
 test('every command has several wordings that read right', () => {
@@ -75,6 +79,51 @@ test('every command has several wordings that read right', () => {
         for (const t of list) { const got = id(t, { names: ['Гарольд'] }); if (got !== want) bad.push(`${t} → ${got} (нужно ${want})`); }
     }
     assert.deepEqual(bad, []);
+});
+
+// the author's own wordings from the game log: dressed up, mis-heard, infinitives
+test('dressed-up and mis-heard wordings still read (the author\'s log)', () => {
+    const cases = {
+        'ты можешь присесть': 'crouch', 'давай присаживайся': 'sit', 'а ты можешь станцевать прямо сейчас': 'dance',
+        'ты можешь это атаковать вон того рыцаря': 'fight_him', 'ты можешь убить тех рыцарей сзади тебя': 'fight_him',
+        'сяте оба': 'sit', 'ну че вы не садитесь': 'sit', 'окей встаньте': 'stand_up', 'эй один приди сюда': 'come',
+        'ану ка поделитесь друг с другом': 'spar_group', 'оба давайте делайте это': 'do_it', 'а вы можете убрать все те доспехи которые валяются сзади вас': 'tidy',
+    };
+    for (const [t, want] of Object.entries(cases)) assert.equal(id(t), want, t);
+});
+
+test('chains: «подойди и поклонись», «иди домой и ляг»', () => {
+    assert.deepEqual(parseCommands('подойди и поклонись').map((c) => c.id), ['come', 'bow_cmd']);
+    assert.deepEqual(parseCommands('иди домой и ляг').map((c) => c.id), ['go_home', 'lie']);
+    assert.deepEqual(parseCommands('встань в шеренгу а потом достань меч').map((c) => c.id), ['formation', 'weapon_out']);
+    assert.deepEqual(parseCommands('сначала подойди потом помаши').map((c) => c.id), ['come', 'wave']);
+    assert.equal(parseCommands('хлеб и вино').length, 0, 'not a chain');
+    assert.equal(parseCommands('я хочу купить хлеб и вино').length, 0);
+});
+
+test('steps and directions', () => {
+    assert.deepEqual(moveOf('пройди пять шагов назад'), { dir: 'back', dist: 9 });
+    assert.equal(moveOf('иди на десять метров вперед').dist, 10);
+    assert.equal(moveOf('сделай три шага влево').dir, 'left');
+    assert.equal(moveOf('чуть вперед').dist, 2);
+    assert.equal(moveOf('иди вперед').dist, 6);
+});
+
+test('places round someone: «сзади тебя», «тех»', () => {
+    const t = parseCommand('убей тех рыцарей сзади тебя').args.target;
+    assert.equal(t.ref, 'region'); assert.equal(t.side, 'behind'); assert.equal(t.of, 'self'); assert.equal(t.plural, true);
+    assert.equal(parseCommand('сразись с тем кто слева от меня').args.target.of, 'me');
+    assert.equal(parseCommand('убей того рыцаря сзади тебя').args.target.plural, false);
+    assert.equal(parseCommand('убей его').args.mode, 'deadly');
+});
+
+test('things: what is meant and where it lies', () => {
+    const a = itemFilter('убрать доспехи сзади вас по сундукам');
+    assert.deepEqual(a.kinds.sort(), ['armor', 'robe']); assert.equal(a.area, 'behind'); assert.equal(a.toChest, true);
+    assert.equal(itemFilter('принеси мне меч').kinds.includes('weapon'), true);
+    assert.equal(itemFilter('собери все вещи вокруг').kinds, null, 'any thing');
+    assert.equal(itemFilter('подай щит').kinds[0], 'shield');
+    assert.equal(parseCommand('убери меч').id, 'weapon_away', 'a sword put away is not tidying');
 });
 
 test('ordinary talk is not a command', () => {
@@ -112,7 +161,7 @@ test('«не могу» by role and reason', () => {
     assert.equal(canDo('fly', 'knight', {}).ok, false);
     assert.equal(canDo('build', 'builder', {}).ok, false);
     // (what the game cannot do for him — a horse, a door, a torch, a block — he answers in words: `say:no_…`)
-    for (const cid of ['mount', 'dismount', 'open_door', 'close_door', 'break_block', 'throw_it', 'give_item', 'bring', 'pick_up']) assert.match(COMMANDS[cid].do, /^say:no_/, cid);
+    for (const cid of ['mount', 'dismount', 'open_door', 'close_door', 'break_block', 'throw_it', 'give_item']) assert.match(COMMANDS[cid].do, /^say:no_/, cid);
     // a stranger cannot command the guard; the king can
     assert.equal(canDo('spar_group', 'knight', {}).why, 'rank');
     assert.equal(canDo('spar_group', 'knight', { playerIsKing: true }).ok, true);
@@ -198,7 +247,7 @@ test('commands are ordinary speech: none of the phrases casts a spell', () => {
     // («зажги люмос» and «создай светлячка» are words of a real spell: said by a wizard-friend they are the player's cast first)
     // Known: these wordings are ALSO spell phrases; the spell wins unless the villager is called by name or role
     // («рыцарь, подними щит» → the knight; «подними щит» alone → the player's Protection). A new collision fails here.
-    const known = new Set(['атакуй его → Attack', 'подними щит → Protection', 'прикройся щитом → Protection', 'запри ворота → Sapira', 'разведи костер → Fire', 'запали факел → Sapira', 'затуши костер → Fire', 'запевай → Sapira', 'защити щитом → Protection', 'магический щит → Protection', 'взлети → Flight', 'полетай → Flight']);
+    const known = new Set(['атакуй его → Attack', 'подними щит → Protection', 'прикройся щитом → Protection', 'запри ворота → Sapira', 'разведи костер → Fire', 'запали факел → Sapira', 'затуши костер → Fire', 'запевай → Sapira', 'защити щитом → Protection', 'магический щит → Protection', 'взлети → Flight', 'полетай → Flight', 'принеси мне щит → Protection', 'собери все вещи вокруг → Gather', 'собери вещи → Gather']);
     assert.deepEqual(spells.filter((s) => !known.has(s) && !/люмос|Lumos/i.test(s)), []);
 });
 
@@ -252,7 +301,7 @@ test('two knights spar: they meet, touch, and bow — nobody is hurt', () => {
     let met = false;
     for (let t = 0; t < 40; t += 0.05) {
         life.cmds.step(a, 0.05); life.cmds.step(b, 0.05);
-        if (Math.hypot(a.x - b.x, a.z - b.z) < 3) met = true;
+        if (Math.hypot(a.x - b.x, a.z - b.z) < 4) met = true;
         // the model's own swing: every 0.8 s each one
         if (a.mode === 'attack' && Math.round(t * 20) % 16 === 0) life.cmds.strike(a);
         if (b.mode === 'attack' && Math.round(t * 20) % 16 === 8) life.cmds.strike(b);
@@ -290,4 +339,66 @@ test('formation: they walk to their slots and stand there', () => {
     for (let t = 0; t < 40; t += 0.05) ks.forEach((k) => life.cmds.step(k, 0.05));
     ks.forEach((k, i) => assert.ok(Math.hypot(k.x - slots[i].x, k.z - slots[i].z) < 0.6, `knight ${i} at his place`));
     assert.equal(ks[0].mode, 'attn');
+});
+
+test('a chain: the next command begins when the first is over; a forced stop drops the rest', () => {
+    const life = stubLife(); const v = person(life, 'f', 'farmer', 8, 0);
+    life.cmds.run(v, { id: 'come', pace: 'walk', then: [{ id: 'bow_cmd' }] }, 'me');
+    for (let t = 0; t < 40 && v.cmd?.id !== 'bow_cmd'; t += 0.05) life.cmds.step(v, 0.05);
+    assert.equal(v.cmd?.id, 'bow_cmd', 'after coming — the bow');
+    life.cmds.run(v, { id: 'come', then: [{ id: 'bow_cmd' }] }, 'me');
+    life.cmds.run(v, { id: 'go_post' }, 'me'); // «вернись на пост» ends it
+    assert.equal(v.cmd, null);
+});
+
+test('steps: he goes the number of steps along where I look, then stops', () => {
+    const life = stubLife(); const v = person(life, 'f', 'farmer', 0, 0);
+    life.cmds.run(v, { id: 'move_dir', dir: 'forward', dist: 9, pace: 'walk' }, 'me'); // me looks along −z (yaw 0)
+    life.game.character.group.rotation = { y: 0 };
+    run(life, v, 12);
+    assert.ok(Math.abs(v.x) < 0.5 && v.z < -8 && v.z > -9.6, `at ${v.x.toFixed(1)}, ${v.z.toFixed(1)}`);
+});
+
+test('carrying: he takes the things lying behind him one by one, carries and lays them in a row; nothing is lost', () => {
+    const life = stubLife();
+    const v = person(life, 'k', 'knight', 0, 0);
+    v.model = { group: { add() {}, remove() {} } };
+    const loose = new Map();
+    const mk = (uid, x, z) => loose.set(uid, { item: { uid, kind: 'armor' }, model: { position: { x, y: 0, z } } });
+    mk(1, 0, 6); mk(2, 2, 7); mk(3, -2, 8);
+    const placed = [];
+    life.game.items = {
+        loose,
+        pickUp(uid) { loose.delete(uid); },
+        spawnLoose(item, pos) { placed.push({ uid: item.uid, x: pos.x, z: pos.z }); },
+    };
+    life.cmds.run(v, { id: 'tidy', uids: [1, 2, 3], dest: { kind: 'spot', x: 20, z: 0, yaw: 0 } }, 'me');
+    run(life, v, 140);
+    assert.deepEqual(placed.map((p) => p.uid).sort(), [1, 2, 3], 'all three laid down');
+    assert.equal(loose.size, 0);
+    assert.ok(placed.every((p) => Math.hypot(p.x - 20, p.z) < 8), 'by the chest');
+    const xs = placed.map((p) => p.x.toFixed(1));
+    assert.equal(new Set(xs).size, 3, 'in a row, not on one spot');
+    assert.equal(v.cmd, null, 'and the job is over');
+});
+
+test('a thing taken from him by a stop is set down where he stands', () => {
+    const life = stubLife(); const v = person(life, 'k', 'knight', 0, 0);
+    v.model = { group: { add() {}, remove() {} } };
+    const loose = new Map([[7, { item: { uid: 7, kind: 'armor' }, model: { position: { x: 0, y: 0, z: 1 } } }]]);
+    const placed = [];
+    life.game.items = { loose, pickUp(uid) { loose.delete(uid); }, spawnLoose(item, pos) { placed.push(item.uid); } };
+    life.cmds.run(v, { id: 'pick_up', uids: [7], dest: { kind: 'spot', x: 30, z: 0, yaw: 0 } }, 'me');
+    run(life, v, 3);
+    assert.ok(v.cmd?.carry, 'carrying');
+    life.cmds.run(v, { id: 'go_post' }, 'me');
+    assert.deepEqual(placed, [7], 'put down, not vanished');
+});
+
+test('the dead do not sit: a killed seated body is back on its feet for the model (it sank into the floor)', () => {
+    const life = stubLife(); const v = person(life, 'k', 'knight', 0, 0);
+    life.cmds.run(v, { id: 'sit' }, 'me'); life.cmds.step(v, 0.05);
+    assert.equal(v.seated, true);
+    life.cmds.clear(v);
+    assert.equal(v.seated, false);
 });

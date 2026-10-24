@@ -23,10 +23,12 @@
 import * as THREE from 'three';
 import { canDo, COMMANDS, formationSlots, ONLY_ACTIVE } from '../ai/TalkCommands.js';
 import { FACE, facesTarget, yawTo, turnToward } from './FaceTarget.js';
+import { makeItemModel, disposeModel } from './ItemTypes.js';
 
 const WALK = 2.3, RUN = 5.6, SNEAK = 1.3;
 const SPEEDS = { walk: WALK, run: RUN, sneak: SNEAK };
 const REACH = 2.4;
+const ENGAGE = 3.6; // m: fighters this near have met (the crowd keeps two bodies ~3 m apart — they never got closer and stood there)
 const TOUCHES = 3; // a spar ends at the third touch
 const HURT_YIELD = 0.3; // a fighter «насмерть» yields with less than this share of hp
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
@@ -59,6 +61,8 @@ export class VillagerCommands {
         const [kind, what] = c.do.split(':');
         const me = this.life._playerPos(by);
         const base = { id: a.id, by, t: c.hold || 20, sheathed: false };
+        // («подойди и поклонись»: the rest of the chain waits; `done` starts the next when this one is over)
+        const then = Array.isArray(a.then) ? a.then.slice(0, 3) : null;
         switch (kind) {
             case 'pose': this._pose(v, what, a, base); break;
             case 'face': this._face(v, what, a, me, base); break;
@@ -74,16 +78,34 @@ export class VillagerCommands {
             case 'fight': this._fight(v, what, a, me, base); break;
             case 'weapon': v.sheath = what === 'away'; if (what === 'out') v.sheath = false; break;
             case 'spare': v.spare = { until: Date.now() + 120000, id: a.foe || null }; break;
+            case 'fetch': this._fetch(v, what, a, me, base); break;
             case 'say': break; // (words only — CommandTalk)
             case 'cast': this._clear(v, true); v.cmd = { ...base, kind: 'pose', mode: 'cast', t: 2.6 }; break; // (a wizard's show: the wand arm up)
             default: return false;
+        }
+        if (v.cmd) v.cmd.then = then;
+        else if (then?.length) { // (a command that did not make a state — a release, a weapon: the chain goes on at once)
+            const [n, ...rest] = then;
+            this.run(v, { ...n, then: rest }, by);
         }
         v.talking = 0;
         return true;
     }
 
+    /** A command ended by itself: the next of the chain begins (a forced end — «хватит», a fight — drops the chain). */
+    done(v) {
+        const c = v.cmd, then = c?.then;
+        const by = c?.by;
+        this.clear(v);
+        if (then?.length && !v.dead) {
+            const [n, ...rest] = then;
+            this.run(v, { ...n, then: rest }, by);
+        }
+    }
+
     clear(v, keepSheath = false) {
         if (!v.cmd && !v.seated) return;
+        if (v.cmd?.carry) this._dropCarry(v, v.cmd);
         if (v.cmd?.seat) v.seated = false;
         v.cmd = null; v.cmdLie = false; v.paceOver = null;
         if (!keepSheath) v.sheath = false;
@@ -121,6 +143,15 @@ export class VillagerCommands {
         let tx = v.x, tz = v.z, node = null, looks = null, stop = 0.6;
         if (what === 'come' && me) { tx = me.x; tz = me.z; looks = 'me'; stop = 2.6; }
         else if (what === 'point' && a.point) { tx = a.point.x; tz = a.point.z; }
+        else if (what === 'dir' && me) { // «пройди пять шагов вперёд»: along or across where I look (the hero's own forward)
+            const g = this.game;
+            const yaw = g.character?.group?.rotation?.y ?? 0;
+            const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+            const rx = -fz, rz = fx; // my right
+            const k = { forward: [fx, fz], back: [-fx, -fz], right: [rx, rz], left: [-rx, -rz] }[a.dir] || [fx, fz];
+            const dist = Math.max(0.8, Math.min(60, Number(a.dist) || 6));
+            tx = v.x + k[0] * dist; tz = v.z + k[1] * dist; stop = 0.5; base.t = 20 + dist; base.noWalkFar = true;
+        }
         else if (what === 'back' && me) { // a few steps back from me
             const dx = v.x - me.x, dz = v.z - me.z, d = Math.hypot(dx, dz) || 1;
             tx = v.x + dx / d * 3; tz = v.z + dz / d * 3; looks = 'me'; stop = 0.4;
@@ -140,7 +171,7 @@ export class VillagerCommands {
             base.t = 90;
         } else return;
         if (what === 'come') base.t = 60; else if (!base.t || base.t < 15) base.t = 30;
-        v.cmd = { ...base, kind: 'walk', tx, tz, node, pace, looks, stop, walkT: 0, hold: what === 'come' ? 12 : what === 'retreat' ? 0 : what === 'back' || what === 'forward' ? 3 : 25 };
+        v.cmd = { ...base, kind: 'walk', tx, tz, node, pace, looks, stop, walkT: 0, hold: what === 'come' ? 12 : what === 'retreat' ? 0 : what === 'dir' || what === 'back' || what === 'forward' ? 2 : 25 };
         if (what === 'retreat') v.cmd.hold = 4;
     }
 
@@ -203,7 +234,8 @@ export class VillagerCommands {
         if (!c) { this._paceStep(v, dt); return false; }
         c.t -= dt;
         const life = this.life;
-        if (c.t <= 0 || v.fear?.level >= 2) { this.clear(v); return false; }
+        if (v.fear?.level >= 2) { this.clear(v); return false; }
+        if (c.t <= 0) { this.done(v); return false; }
         v.sheath = v.sheath && c.kind !== 'spar' && c.kind !== 'spme';
         switch (c.kind) {
             case 'pose': return this._poseStep(v, c, dt);
@@ -214,6 +246,7 @@ export class VillagerCommands {
             case 'patrol': return this._patrolStep(v, c, dt);
             case 'spar': return this._sparStep(v, c, dt);
             case 'spme': return this._spmeStep(v, c, dt);
+            case 'fetch': return this._fetchStep(v, c, dt);
             default: this.clear(v); return false;
         }
     }
@@ -282,7 +315,7 @@ export class VillagerCommands {
             if (me) v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, me.x, me.z), dt * 6);
         }
         life._ground(v);
-        if (c.hold <= 0) { this.clear(v); return false; }
+        if (c.hold <= 0) { this.done(v); return false; }
         return true;
     }
 
@@ -314,6 +347,93 @@ export class VillagerCommands {
         return true;
     }
 
+    // ------------------------------------------------------------------ carrying things
+    /**
+     * «Убери доспехи сзади по сундукам», «принеси мне меч», «собери всё это»: he walks to each thing lying there, lifts it (it
+     * is gone from the ground and seen in his arms), carries it to the place (me / beside the chest / a pile) and sets it down.
+     * `a.uids`: the things (nearest first), `a.dest`: {kind: 'me' | 'spot', x, z, yaw, id?}. A chest here keeps one loot only, so
+     * «в сундук» means: laid in a row at its foot — the knight says so.
+     */
+    _fetch(v, what, a, me, base) {
+        const uids = Array.isArray(a.uids) ? a.uids.slice(0, 8) : [];
+        const dest = a.dest;
+        if (!uids.length || !dest) return;
+        this._clear(v, true);
+        v.cmd = { ...base, kind: 'fetch', uids, dest, t: 150, carry: null, node: null, walkT: 0, n: 0, row: 0, mode: what };
+    }
+
+    _fetchStep(v, c, dt) {
+        const life = this.life, items = this.game.items;
+        if (!items) { this.done(v); return false; }
+        const hands = c.carry;
+        if (!hands) {
+            // the next thing still lying there
+            while (c.uids.length && !items.loose.has(c.uids[0])) c.uids.shift();
+            if (!c.uids.length) { if (c.n) life._say(v, pick(['Готово!', 'Всё, сделал.', 'Убрано.']), 3); this.done(v); return false; }
+            const L = items.loose.get(c.uids[0]);
+            const p = L.model.position;
+            const left = this._goStep(v, c, dt, WALK * 1.3, p.x, p.z, 1.5);
+            if (left > 0 && c.walkT < 40) { v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'idle'; life._ground(v); return true; }
+            if (left > 0) { c.uids.shift(); c.walkT = 0; return true; } // (cannot reach it: the next one)
+            // lifted: gone from the ground (everybody is told), in his arms
+            if (L.item.shop && !L.item.shop.paid) { c.uids.shift(); return true; } // (an unpaid good on a counter is not his to carry)
+            const item = L.item;
+            items.pickUp(item.uid, '#' + v.id, 'right');
+            c.carry = { item, mesh: this._carryModel(v, item) };
+            c.uids.shift();
+            c.walkT = 0;
+            v.speed = 0; v.path = null;
+            return true;
+        }
+        // to the place
+        const d = c.dest;
+        let tx = d.x, tz = d.z, stop = d.kind === 'me' ? 2.4 : 1.0;
+        if (d.kind === 'me') { const me = life._playerPos(c.by); if (me) { tx = me.x; tz = me.z; } }
+        const left = this._goStep(v, c, dt, WALK * 1.2, tx, tz, stop);
+        if (left > 0 && c.walkT < 50) { v.mode = v.speed > 0 ? 'walk' : 'idle'; life._ground(v); return true; }
+        // set down: before me (a hand's reach, at the height of a hand), or in a row at the spot
+        let px, pz, py = v.y + 1.2;
+        if (d.kind === 'me') {
+            const me = life._playerPos(c.by);
+            px = v.x + Math.cos(v.yaw - Math.PI / 2) * 0.0 - Math.sin(v.yaw) * 1.1; pz = v.z - Math.cos(v.yaw) * 1.1;
+            py = (me ? me.y - 1.95 : v.y) + 1.8;
+        } else {
+            const k = c.row++, perRow = 5;
+            const side = d.yaw ?? 0;
+            const rx = Math.cos(side), rz = -Math.sin(side), fx = -Math.sin(side), fz = -Math.cos(side);
+            px = d.x + rx * ((k % perRow) - 2) * 1.0 + fx * 1.6 * (1 + Math.floor(k / perRow));
+            pz = d.z + rz * ((k % perRow) - 2) * 1.0 + fz * 1.6 * (1 + Math.floor(k / perRow));
+            py = v.y + 1.2;
+        }
+        this._dropCarry(v, c, _a.set(px, py, pz));
+        c.n++;
+        c.walkT = 0;
+        v.speed = 0;
+        if (c.n >= 8) { life._say(v, 'Вот, всё.', 3); this.done(v); return false; }
+        return true;
+    }
+
+    /** The thing in his arms, seen: the item's own model before his chest (not a new shape per item — makeItemModel is cached by kind). */
+    _carryModel(v, item) {
+        try {
+            const m = makeItemModel(item);
+            m.scale.multiplyScalar(0.8);
+            m.position.set(0, 0.9, -0.85);
+            v.model.group.add(m);
+            return m;
+        } catch (_) { return null; }
+    }
+
+    /** Sets the carried thing down (at `at`, else at his feet): back to the ground as a loose thing. */
+    _dropCarry(v, c, at = null) {
+        const cr = c.carry;
+        if (!cr) return;
+        c.carry = null;
+        if (cr.mesh) { v.model.group.remove(cr.mesh); try { disposeModel(cr.mesh); } catch (_) { /* (shared geometry stays) */ } }
+        const pos = at ? at.clone() : _b.set(v.x, v.y + 1.4, v.z).clone();
+        this.game.items?.spawnLoose(cr.item, pos, {});
+    }
+
     // ------------------------------------------------------------------ fights
     _sparStep(v, c, dt) {
         const life = this.life;
@@ -325,9 +445,11 @@ export class VillagerCommands {
             const share = (v.hp || 1) / (v.maxHp || v.hp || 1);
             if (share < HURT_YIELD && (v.maxHp || 0) > 0) { this._sparEnd(v, c, foe, 'yield'); return true; }
         }
-        if (d > REACH + 0.6) {
+        // (met: near enough, or pressed against him and unable to get closer — the fight begins where they stand)
+        c.stuckT = v.speed < 0.2 && d < 7 ? (c.stuckT || 0) + dt : 0;
+        if (d > ENGAGE && c.stuckT < 0.8) {
             c.walkT += dt;
-            life._steer(v, foe.x, foe.z, WALK * 1.2, dt, REACH - 0.4);
+            life._steer(v, foe.x, foe.z, WALK * 1.2, dt, ENGAGE - 0.8);
             v.mode = v.speed > WALK * 1.2 ? 'run' : v.speed > 0 ? 'walk' : 'block';
             if (c.walkT > 14) { this.clear(v); return false; }
             life._ground(v);
@@ -359,7 +481,7 @@ export class VillagerCommands {
         const foe = this.life.byId.get(c.foe);
         if (!foe || foe.dead) return;
         const d = dist(v, foe);
-        if (d > REACH + 0.9) return;
+        if (d > ENGAGE + 1.2) return;
         if (!facesTarget(v.yaw, v.x, v.z, foe.x, foe.z, FACE.MELEE)) return; // («лицом к цели»)
         const fc = foe.cmd;
         const parried = fc && fc.kind === 'spar' && foe.mode === 'block' && Math.random() < 0.55;
