@@ -39,6 +39,7 @@ import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
+import { RelationsLife } from './RelationsLife.js';
 import { levelOf, withRank, commandsGuard, isForgiven, isRespected, RANK_TITLES, GREET_RANKED, fill as fillRank } from './Ranks.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -292,6 +293,7 @@ export class CastleLife {
         this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
+        this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -2564,6 +2566,7 @@ export class CastleLife {
         if (v.sleep) this.night?.wake(v, 'hit', by); // (a blow wakes a sleeper — and the ones round him hear it)
         this._achHit(v, by);
         if (by === this.game.localId && !v.arena) this.talk?.feel?.(v, -12); // (he remembers who struck him — Attitude.js)
+        this.rel?.onHit(v, by, false); // (the three bars: the victim and who saw it — Relations.js)
         if (this._isPlayer(by) && !v.arena) this._news(v, 'hit', by, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def); // (the town remembers who struck its people)
         this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
@@ -2830,6 +2833,7 @@ export class CastleLife {
     }
 
     _die(v, by) {
+        this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)
         v.dead = true;
         v.seated = false; // (a seated body is drawn 1.7 m lower — it sank through the floor: the dead king on his throne)
         this.cmds?.clear(v);
@@ -3366,6 +3370,7 @@ export class CastleLife {
         const cs = this.castles.get(home.c) || this._runtimeById(home.c);
         if (cs && home.h < 0) { this.forced(cs.def.id, by, this._playerPos(by)); return true; } // (a chest of the castle itself)
         if (!cs || !cs.def.houses?.[home.h]) return false;
+        if (this.rel?.homeAllows?.(cs, home, by, 'take')) return false; // (the family likes him enough to let him take it — Relations.mayTakeThing)
         return this.theft(cs.def, home.h, by, this._playerPos(by) || cs.def.houses[home.h].inside);
     }
 
@@ -3375,6 +3380,7 @@ export class CastleLife {
         if (!this.auth) { this.game.sync?.villagerCrime?.(v.id, kind); return; }
         // (a thing carried off from the market: the merchant goes for the thief himself — no guards)
         if (kind === 'theft' && by && by !== this.state(v.cs.def.id).owner) { v.grudge = { id: by, until: Date.now() + THEFT_MS }; v.foe = by; v.fleeT = 0; v.path = null; return; }
+        if (kind === 'theft') this.rel?.theft(v, by);
         this._offence(v.cs, by, v, false, { x: v.x, y: v.y, z: v.z });
     }
 
@@ -3524,6 +3530,7 @@ export class CastleLife {
             this.night?.update(dt);
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
+            this.rel?.update(dt);
             for (const cs of this.castles.values()) if (cs.awake && (cs.watchT = (cs.watchT || 0) - dt) <= 0) { cs.watchT = 0.7; this.watch.assign(cs, dt); }
             this._squads(dt);
             this._assignSlots();
@@ -3722,7 +3729,7 @@ export class CastleLife {
 
     _sendState(cs) {
         const st = this.state(cs.def.id);
-        this.game.sync?.castleState?.(cs.def.id, { owner: st.owner, ownerName: st.ownerName, kingDead: st.kingDead, killed: [...st.killed], ranks: st.ranks });
+        this.game.sync?.castleState?.(cs.def.id, { owner: st.owner, ownerName: st.ownerName, kingDead: st.kingDead, killed: [...st.killed], ranks: st.ranks, ...(this.rel ? this.rel.pack(cs) : {}) });
     }
 
     /** (network / save) a castle's state. */
@@ -3734,6 +3741,7 @@ export class CastleLife {
         // (the king's friends: told to everybody; if mine changed, I am told too)
         const myBefore = levelOf(st.ranks, this.game.localId);
         st.ranks = s.ranks && typeof s.ranks === 'object' ? s.ranks : {};
+        this.rel?.unpack(st, s);
         const my = st.ranks[this.game.localId], myLevel = my?.level | 0;
         if (this.game.active && myLevel !== myBefore) {
             this.game.hud?.notify?.(myLevel ? `👑 ${st.ownerName || 'Король'} дал вам место в замке «${this.castles.get(id)?.def?.name || ''}»: ${my.title}` : `👑 Ваше положение в замке отменено`);
@@ -3745,7 +3753,10 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || Object.keys(s.ranks || {}).length) out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {} };
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length) {
+                const cs = this.castles.get(id);
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {} }) };
+            }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;
         return out;
@@ -3775,6 +3786,7 @@ export class CastleLife {
     ownerOf(castleId) { return this.state(castleId).owner; }
 
     dispose() {
+        this.rel?.dispose();
         this.talk.dispose();
         this.fright.clear();
         this.rebuild.dispose();

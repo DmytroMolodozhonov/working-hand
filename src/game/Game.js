@@ -979,7 +979,7 @@ export class Game {
             if (res.shattered) { /* zombie plays the shatter sound */ } else this.sound.playHit();
         }
         if (this.sync) this.sync.zombieHit(z, res, by);
-        if (res.died && (by === this.localId || by === 'local')) this.killCount++;
+        if (res.died && (by === this.localId || by === 'local')) { this.killCount++; const zp = z.group?.position || z.position; if (zp) this.castleLife?.rel?.foeSlain(zp, this.localId); } // (the people saw it: they are grateful — Relations.js)
         return res;
     }
 
@@ -1595,6 +1595,12 @@ export class Game {
      * The advice is held back while the phrase is worked out; a spell that went off shows its own lines.
      */
     _castWithHints(text, isFinal) {
+        const name = this._castWithHints0(text, isFinal);
+        if (name) try { this.castleLife?.rel?.sawCast(name); } catch (e) { console.warn('[Relations]', e); } // (who sees a spell knows what the hero can do)
+        return name;
+    }
+
+    _castWithHints0(text, isFinal) {
         const hud = this.hud;
         if (!hud || hud.hintFilter) return this._castLocalSpell(text, isFinal);
         const held = [];

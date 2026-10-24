@@ -48,8 +48,11 @@ export class VillagerCommands {
 
     get game() { return this.life.game; }
 
+    /** The king, or his commander / deputy (Ranks.js). */
+    _cmdr(cs, by) { return this.life.isCommander ? this.life.isCommander(cs, by) : by != null && this.life.state(cs.def.id).owner === by; }
+
     /** Is the player the lord of this villager's castle? */
-    _lord(v, by) { return this.life.isCommander(v.cs, by); }
+    _lord(v, by) { return this._cmdr(v.cs, by); }
     /** The king himself (ranks are his alone to give). */
     _owner(v, by) { return by != null && this.life.state(v.cs.def.id).owner === by; }
 

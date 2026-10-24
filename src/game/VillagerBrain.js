@@ -813,7 +813,7 @@ export class VillagerBrain {
         let l = this._luck[kind];
         if (!l || now - l.at > 60000) l = this._luck[kind] = { v: this.rng(), at: now };
         const status = ctx.status || (this._playerIsKing(ctx) ? 'king' : 'traveller');
-        return willDo(kind, { c: this.character, att: Math.max(0, Math.min(100, this.attitude(ctx.selfId) + this._mood * 25)), status, role: this.role, guest: !!ctx.guest, danger: !!(ctx.danger || this._danger()) }, l.v);
+        return willDo(kind, { c: this.character, att: Math.max(0, Math.min(100, this.attitude(ctx.selfId) + this._mood * 25 + (ctx.rel ? ctx.rel.fr * 0.4 + ctx.rel.lv * 0.15 : 0))), status, role: this.role, guest: !!ctx.guest, danger: !!(ctx.danger || this._danger()) }, l.v);
     }
 
     /** 'friendly' | 'neutral' | 'rude' */

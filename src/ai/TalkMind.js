@@ -249,6 +249,8 @@ export class TalkMind {
             // (his own nature and how he takes this one — Attitude.js; the GAME decided what he does, his words follow it)
             brain.character ? `Твой характер (0–100): ${characterRu(brain.character)}.` : '',
             brain.attitude ? `Твоё отношение к собеседнику: ${attitudeWord(brain.attitude(ctx.selfId))} (${brain.attitude(ctx.selfId)} из 100).` : '',
+            ctx.rel ? `Твои чувства к собеседнику (в числах игры): подчинение ${ctx.rel.sub}, дружба ${ctx.rel.fr}, любовь ${ctx.rel.lv}. Подчинение — долг, дружба — искреннее расположение; отрицательные числа — неприязнь. Говори в тон этим числам.` : '',
+            ctx.known ? `Что ты знаешь о собеседнике: ${ctx.known}.` : '',
             brain.decide ? this._willLine(brain, ctx) : '',
             ctx.hostile ? 'Этот человек недавно напал на кого-то в замке — ты его боишься и не доверяешь.' : '',
             m.talks > 1 ? 'Вы уже поздоровались и сейчас разговариваете: НЕ здоровайся снова, продолжай разговор по смыслу.' : '',

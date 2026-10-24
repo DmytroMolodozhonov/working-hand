@@ -223,6 +223,8 @@ export class CastleTalk {
         // (the town's own news — a blast, a fire, the dead, the king fallen — and whether I did it: TownNews.js)
         ctx.news = this.life.news?.told(v.cs.def.id, g.localId) || [];
         ctx.status = this._status(v);
+        ctx.known = this.life.rel?.knownText(v) || ''; // (what he knows of me: my spells, blood, help — Relations.js)
+        ctx.rel = this.life.rel?.eff(v) || null; // (the three bars, for his will — Relations.js)
         ctx.guest = !!v.guest;
         ctx.doing = this._doing(v);
         const held = g.items?.held.right || g.items?.held.left;
@@ -909,6 +911,7 @@ export class CastleTalk {
 
     _apply(v, res) {
         if (!res || v.dead) return;
+        this.life.rel?.talked(v, res); // (the tone of my words moves his bars: +дружба, −подчинение — Relations.js)
         const g = this.game;
         // («да» to buy at a stall: the merchant says «держи» only when the deal really happens — _tradeYes
         // says what came of it; never «да-да» and nothing given)
@@ -1124,6 +1127,7 @@ export class CastleTalk {
             delete item.shop;
             g.inventory._render?.();
             g.hud.setVoice?.(`💰 Куплено: ${nameOf(item)} за ${o.price} (осталось ${g.inventory.coins()})`, true);
+            this.life.rel?.bump(v, g.localId, { f: 0.8 }); // (a fair deal: he thinks a little better of me)
             this.offer = null;
             return;
         }
@@ -1133,6 +1137,7 @@ export class CastleTalk {
         if (g.authority) this.sellNow(o.uid, o.wid, o.price, p);
         else g.sync?.tradeSell?.(o.uid, o.wid, o.price, [p.x, p.y, p.z]);
         g.hud.setVoice?.(`💰 Продано за ${o.price} монет — возьмите мешочек с прилавка`, true);
+        this.life.rel?.bump(v, g.localId, { f: 0.8 });
         this.offer = null;
     }
 

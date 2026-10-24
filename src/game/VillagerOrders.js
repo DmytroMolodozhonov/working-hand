@@ -39,6 +39,9 @@ export class VillagerOrders {
 
     get game() { return this.life.game; }
 
+    /** The king, or his commander / deputy (Ranks.js). */
+    _cmdr(cs, by) { return this.life.isCommander ? this.life.isCommander(cs, by) : by != null && this.life.state(cs.def.id).owner === by; }
+
     /**
      * A villager agreed to an action (from the talk). Host: carry it out; guest: ask the host.
      * @param {object} v the villager
@@ -54,7 +57,7 @@ export class VillagerOrders {
         const me = this.life._playerPos(by);
         switch (name) {
             case 'follow_me': case 'follow': {
-                const king = this.life.isCommander(cs, by);
+                const king = this._cmdr(cs, by);
                 v.follow = by; v.followT = king ? 600 : 90; v.followFar = king; v.path = null;
                 v.order = null;
                 break;
@@ -101,6 +104,10 @@ export class VillagerOrders {
                 this._shout([v], lord ? ['Буду рядом, государь!', 'Не отойду от вас!', 'Никто вас не тронет!'] : ['Ладно, прикрою!', 'Буду рядом.', 'Не бойся, я с тобой.']);
                 break;
             }
+            case 'rel': { // (a guest's talk moved a bar: the host writes it — RelationsLife)
+                if (args.d && typeof args.d === 'object') this.life.rel.bump(v, by, { s: +args.d.s || 0, f: +args.d.f || 0, l: +args.d.l || 0 });
+                return;
+            }
             case 'cmd': this.life.cmds.run(v, args, by); return; // (a plain-word command: VillagerCommands.js — it checks itself)
             case 'dismiss': this._dismiss(v, by); break;
             case 'leave_me': this._dismiss(v, by, true); break;
@@ -118,8 +125,8 @@ export class VillagerOrders {
 
     /** (host) May `by` give this order? (a guest's order is checked again here) */
     permitted(v, name, args = {}, by) {
-        if (name === 'cmd') return true; // (VillagerCommands.run checks the rank itself)
-        const king = this.life.isCommander(v.cs, by); // (the king, or the king's commander / deputy — Ranks.js)
+        if (name === 'cmd' || name === 'rel') return true; // (VillagerCommands.run checks the rank itself)
+        const king = this._cmdr(v.cs, by); // (the king, or the king's commander / deputy — Ranks.js)
         // (a bodyguard / a companion for one he chose to help — his character and how he takes me: Attitude.willDo)
         if (args.agreed && (name === 'guard_me' || name === 'guard' || name === 'follow_me' || name === 'follow') && v.role !== 'king') return true;
         if (ARMY.has(name)) {
