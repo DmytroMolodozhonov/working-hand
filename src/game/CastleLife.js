@@ -478,6 +478,7 @@ export class CastleLife {
     _wake(cs) {
         cs.awake = true;
         this._makeChests(cs);
+        this.game.pentagranium?.worldWake(cs.def); // (the settlement's ready teleportation pentagram, paired with the nearest settlement — PentagramWorld.js)
         this.game.loreLibrary?.wake(cs.def); // (its library's reading stands with the books of the world's history — LoreLibrary.js; on every computer)
         if (!this.auth) return;
         const def = cs.def;
@@ -534,6 +535,7 @@ export class CastleLife {
 
     _sleep(cs) {
         cs.awake = false;
+        this.game.pentagranium?.worldSleep(cs.def);
         this.game.loreLibrary?.sleep(cs.def);
         if (cs.def.kind === 'hamlet') this.hamlets.sleep(cs); // (its fire out, its sphere put away)
         for (const v of [...cs.active.values()]) this._deactivate(v);

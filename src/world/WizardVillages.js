@@ -43,6 +43,8 @@ const SPAWN_RING = [700, 2100, 4000]; // (the nearest free cell with level land 
 export const MAX_HOUSES = 100;
 const R1 = 70, R2 = 106; // the ring roads (centre lines)
 const PLAZA_R = 18;
+/** The teleportation pentagram of a settlement: on the plaza's diagonal between the lamp pillars, 9.9 m from the fire, clear of the roads and the statue (circle radius 3.5 + its outer ring 4). */
+export const TELEPORT = { LOCAL: [-7, -7], R: 3.5, WINDOW: 2 };
 /** The arena's place (another module builds the arena): local centre and radius. */
 export const ARENA_SPOT = { u: 40, v: -40, r: 22 };
 const SHOP_V = [-27, -38, -49, -60]; // the market's shops along the lane (their middles)
@@ -655,7 +657,8 @@ export class VillageIndex {
         return this._spawnCell ? this.cellOf(this._spawnCell.gx, this._spawnCell.gz) : null;
     }
 
-    _make(gx, gz) {
+    /** Is there a settlement in this cell, and where (its spot and the rng to go on with), without building it? */
+    _site(gx, gz) {
         if (offEarth((gx + 1) * CASTLE_CELL)) return null; // (no settlements on other planets)
         if (!this._freeCell(gx, gz)) return null; // (one site per cell)
         const pass = hash01(gx * 17 + 9, gz * 19 + 2, this.seed + 3100) <= VILLAGE_P;
@@ -666,9 +669,31 @@ export class VillageIndex {
             const c = this._spawnCell;
             if (!c || c.gx !== gx || c.gz !== gz) return null;
         }
-        const at = this._place(gx, gz);
+        return this._place(gx, gz);
+    }
+
+    _make(gx, gz) {
+        const at = this._site(gx, gz);
         if (!at) return null;
         return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng);
+    }
+
+    /**
+     * The place of this settlement's teleportation pentagram (a world of generation ≥ PENT_STAND_FROM_GEN): the plaza's free corner at local
+     * (TELEPORT.LOCAL), turned by the plan's quarter-turn — worked out from the cell alone, WITHOUT building the settlement (so one end can name the
+     * other: PentagramWorld.js). null: no settlement here. Cached.
+     */
+    tpSpot(gx, gz) {
+        const key = this._key(gx, gz), C = this._tp || (this._tp = new Map());
+        if (C.has(key)) return C.get(key);
+        let spot = null;
+        const at = this._site(gx, gz);
+        if (at) {
+            const rot = Math.floor(at.rng() * 4), [u, v] = TELEPORT.LOCAL;
+            spot = { id: 'wv' + gx + '_' + gz, gx, gz, x: at.X + (rot === 0 ? u : rot === 1 ? -v : rot === 2 ? -u : v), z: at.Z + (rot === 0 ? v : rot === 1 ? u : rot === 2 ? -v : -u) };
+        }
+        C.set(key, spot);
+        return spot;
     }
 
     /** Settlements whose land reaches within `r` of a point. */

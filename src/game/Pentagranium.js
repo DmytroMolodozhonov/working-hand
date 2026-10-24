@@ -28,6 +28,9 @@ import { CircleAssist, LineAssist, buildGraph, anchorsOf, turnAway, ASSIST_HINT 
 import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
 import { pieceMax } from './ArmorTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+import { PartnerSearch } from './PentagramWorld.js';
+import { TELEPORT } from '../world/WizardVillages.js';
+import { PENT_STAND_FROM_GEN } from '../world/Terrain.js';
 import { PentagramFx } from '../fx/PentagramFx.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -61,6 +64,8 @@ export class Pentagranium {
         this._riteT = 0;
         this.aim = null; // (tests) {origin, dir}
         this._pending = []; // permanent pentagrams of the save not made yet (their land is not here)
+        this._jobs = new Map(); // settlement id → {def, search, spot, partner} (the world's ready pairs: PentagramWorld.js)
+        this._worldGone = new Set(); // settlements whose pentagram was spoilt (the ground changed): not made again while the place is awake
         this._use = new Map(); // mark id → what standing on it does now {in, t, cd, hinted, from}
     }
 
@@ -88,7 +93,7 @@ export class Pentagranium {
 
     /** The permanent pentagrams (good ones, drawn once): saved with the world; made again when their land is there (nothing is built in the frame the world loads in). */
     marksSnapshot() {
-        const out = [...this.marks.values()].filter((m) => m.perm && (m.mine || this.game.authority)).map((m) => ({ id: m.id, by: m.by, pent: m.pent, x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, pair: m.pair || null }));
+        const out = [...this.marks.values()].filter((m) => m.perm && !m.world && (m.mine || this.game.authority)).map((m) => ({ id: m.id, by: m.by, pent: m.pent, x: m.x, y: m.y, z: m.z, r: m.r, rot: m.rot, pair: m.pair || null }));
         return out.length ? out.concat(this._pending.filter((p) => !out.some((o) => o.id === p.id))) : this._pending.length ? this._pending.slice() : null;
     }
     marksRestore(list) { this._pending = (Array.isArray(list) ? list : []).filter((m) => m && figureOf(m.pent) && TABLE[m.pent]?.permanent).slice(0, USE.PERM_MAX); }
@@ -163,6 +168,7 @@ export class Pentagranium {
         this.fx.trailPulse(this._t);
         if (this.draw) this._drawStep(dt);
         this._pendingStep(dt);
+        this._worldStep(dt);
         for (const m of this.marks.values()) { this._markStep(m, dt); if (m.perm && this.marks.has(m.id)) this._useStep(m, dt); }
         if (this.marks.size) {
             this._riteT -= dt;
@@ -288,7 +294,7 @@ export class Pentagranium {
     _permanent(m) {
         if (!TABLE[m.pent]?.permanent) return;
         m.perm = true; m.life = Infinity;
-        const perms = () => [...this.marks.values()].filter((o) => o.perm);
+        const perms = () => [...this.marks.values()].filter((o) => o.perm && !o.world);
         while (perms().length > USE.PERM_MAX) this._remove(perms()[0].id, 'old');
         if (m.pent === 'teleport') {
             const mate = pairUp([...this.marks.values()], m);
@@ -311,6 +317,42 @@ export class Pentagranium {
             if (!m) continue;
             m.mine = p.by === g.localId; m.perm = true; m.life = Infinity; m.t = 5; m.pair = p.pair || null;
             return; // (one a second: nothing heavy at once)
+        }
+    }
+
+    // ------------------------------------------------------------ the world's ready pairs (PentagramWorld.js)
+    /** A wizards' settlement wakes: its partner is looked for (a cell a frame), then its teleportation pentagram is lit on the plaza. */
+    worldWake(def) {
+        const g = this.game, idx = this.data?.villages;
+        if (def?.kind !== 'wizvillage' || (g.gen ?? 1) < PENT_STAND_FROM_GEN || !idx?.tpSpot || this._jobs.has(def.id) || !figureOf('teleport')) return;
+        this._jobs.set(def.id, { def, search: new PartnerSearch(idx, def.gx, def.gz), made: false, t: 0 });
+    }
+
+    /** The settlement falls asleep: its pentagram is put out (made again when it wakes). */
+    worldSleep(def) {
+        if (!def || !this._jobs.delete(def.id)) return;
+        this._worldGone.delete(def.id);
+        for (const m of [...this.marks.values()]) if (m.world === def.id) this._remove(m.id, 'old');
+    }
+
+    _worldStep(dt) {
+        if (!this._jobs.size) return;
+        for (const J of this._jobs.values()) {
+            if (!J.search.done) { J.search.step(); return; } // (one cell a frame, for one settlement at a time)
+            if (J.made || !J.search.partner || this._worldGone.has(J.def.id)) continue;
+            J.t -= dt;
+            if (J.t > 0) continue;
+            J.t = 1;
+            const data = this.data, me = J.search.me, to = J.search.partner;
+            if (!data?.landMade?.(Math.round(me.x), Math.round(me.z))) continue;
+            const y = this._height(me.x, me.z), id = 'w:' + me.id;
+            const m = this._place(id, 'world', 'teleport', me.x, y, me.z, TELEPORT.R, 0);
+            if (!m) { J.made = true; continue; }
+            m.world = J.def.id; m.perm = true; m.life = Infinity; m.t = 5; m.mine = false; m.pairSpot = { id: to.id, x: to.x, z: to.z };
+            J.made = true;
+            const p = this.game.character.group.position;
+            if (Math.hypot(p.x - me.x, p.z - me.z) <= m.r * USE.INSIDE_K) this._use.set(id, { in: true, t: 0, cd: 0, hinted: true, locked: true, from: null }); // (it lit under the hero's feet: no jump until he steps off)
+            return;
         }
     }
 
@@ -350,7 +392,7 @@ export class Pentagranium {
             g.hud.setVoice?.(`🛡️ Броня починена: ${plan.fix.map((k) => PIECE_NAME[k] || k).join(', ')}${plan.short.length ? `. Не хватило маны на: ${plan.short.map((k) => PIECE_NAME[k] || k).join(', ')}` : ''}${pays ? ` (−${plan.cost} маны)` : ''}`, true);
             this._useFx('mend', m, true);
         } else if (m.pent === 'teleport') {
-            const to = m.pair && this.marks.get(m.pair);
+            const to = (m.pair && this.marks.get(m.pair)) || (m.pairSpot && { id: 'virtual', x: m.pairSpot.x, z: m.pairSpot.z, y: null, r: m.r }); // (a settlement's ready pair: the other end may not be made here yet)
             if (!to) return hint('🌀 ' + USE_HINT.noPair);
             if (mana < USE.COST) return hint('🌀 ' + USE_HINT.noMana);
             if (Math.hypot(me.x - s.from.x, me.z - s.from.z) > USE.STILL) { s.from = { x: me.x, z: me.z }; s.t = 0; }
@@ -359,6 +401,7 @@ export class Pentagranium {
             if (Math.random() < dt * 30) this._ring(m, s.t / USE.TELEPORT_HOLD);
             if (s.t < USE.TELEPORT_HOLD) return;
             if (!this.data?.landMade?.(Math.round(to.x), Math.round(to.z))) { s.t = USE.TELEPORT_HOLD - 0.5; return hint('🌀 ' + USE_HINT.noLand); }
+            if (to.y == null) to.y = this._height(to.x, to.z); // (the land there is made: checked above)
             if (pays) { c.fatigue -= USE.COST; c._hudKey = ''; }
             this._useFx('teleport', m, true);
             me.set(to.x, to.y + PLAYER_GROUND_OFFSET + 0.1, to.z);
@@ -366,8 +409,9 @@ export class Pentagranium {
             g.knockback?.set?.(0, 0, 0);
             this._useFx('teleport', to, true);
             s.t = 0; s.in = false;
-            const ts = this._use.get(to.id) || { in: false, t: 0, cd: 0, hinted: false, locked: false, from: null };
-            ts.in = true; ts.locked = true; ts.t = 0; this._use.set(to.id, ts); // (arrived: it does not jump back until the hero steps off)
+            const toId = to.id === 'virtual' ? 'w:' + m.pairSpot.id : to.id;
+            const ts = this._use.get(toId) || { in: false, t: 0, cd: 0, hinted: false, locked: false, from: null };
+            ts.in = true; ts.locked = true; ts.t = 0; this._use.set(toId, ts); // (arrived: it does not jump back until the hero steps off)
             g.hud.setVoice?.('🌀 Вы перенеслись на парную пентаграмму', true);
         }
     }
@@ -429,6 +473,7 @@ export class Pentagranium {
         this._use.delete(id);
         for (const r of m.rites) if (r.b && !r.done) this._riteEnd(m, r, true);
         const g = this.game;
+        if (why === 'ground' && m.world) this._worldGone.add(m.world);
         if (why === 'ground' && m.mine) g.hud.setVoice('🩸 Земля под рисунком изменилась — пентаграмма погасла', true);
         if (why !== 'old') for (let i = 0; i < 16; i++) g.fx?.spark(_o.set(m.x + (Math.random() - 0.5) * m.r * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * m.r * 1.6), 0x6a0a18, 0.2, _d.set(0, 0.8, 0), 1);
     }
