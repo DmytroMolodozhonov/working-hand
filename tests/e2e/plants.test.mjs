@@ -72,6 +72,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         out.states = [...states];
         // ---- me, without armour: swallowed, hurt inside, spat out
         head.cool = 0; head.st = 0; head.prey = null;
+        g.combat.hp = g.combat.maxHp || 20; // (the thorns took 10 of them: a man at half health would die inside)
         const h2 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);
         let was = new Set(), eatenSeen = false;
@@ -79,6 +80,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         out.meStates = [...was]; out.eatenSeen = eatenSeen; out.meLoss = h2 - hp(); out.freeAfter = !g.combat.eaten;
         // ---- a magic robe: spat out at once, no harm
         head.cool = 0; head.st = 0; head.prey = null; g.armor.worn.robe = makeRobe(true);
+        g.combat.hp = g.combat.maxHp || 20;
         const h3 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);
         let spat = false, held = false;
