@@ -1304,7 +1304,9 @@ export class Dragons {
         poseDragon(d.model, { t: d.t, walk: d.walk, fly: d.fly, flap: 3.2 + (d.vel.y > 0.5 ? 2 : 0), mouth: d.mouth, look: d.look, lower: d.lower, sleep: d.sleep, sweep: d.sweep, spread: d.spread });
         // banking into its turns in the air, nose up as it climbs
         d.model.rotation.z = (d.bank || 0) * d.fly;
-        d.model.rotation.x = Math.max(-0.3, Math.min(0.3, d.vel.y * 0.03)) * d.fly;
+        // («Империус Максима»: the nose follows its path — down in a dive, as the hero's head is bowed)
+        if (d.imp) d.model.rotation.x = Math.max(-0.75, Math.min(0.5, Math.atan2(d.vel.y, Math.max(4, Math.hypot(d.vel.x, d.vel.z))))) * d.fly;
+        else d.model.rotation.x = Math.max(-0.3, Math.min(0.3, d.vel.y * 0.03)) * d.fly;
         d.bank = (d.bank || 0) * Math.max(0, 1 - dt * 2);
     }
 

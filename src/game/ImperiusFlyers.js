@@ -19,17 +19,20 @@ import { DRAGON } from './DragonKinds.js';
 import { dragonBody } from './Dragons.js';
 import { BODY_R } from './Crowd.js';
 import { flap as bookFlap } from './BookBirds.js';
+import { waterAt } from './CreatureSwim.js';
 
 const _v = new THREE.Vector3();
 const TAU = Math.PI * 2;
 const wrap = (a) => { a = (a + Math.PI) % TAU; return a < 0 ? a + Math.PI : a - Math.PI; };
 const turn = (from, to, max) => { const d = wrap(to - from); return from + Math.max(-max, Math.min(max, d)); };
 
-/** The highest thing under (x, z): the ground, a hill, a crown, a roof, a deck. */
+/** The highest thing under (x, z): the ground, a hill, a crown, a roof, a deck — the water's face (a flyer comes down onto it). */
 function floorAt(g, x, z) {
-    if (g.animals?._floor) return g.animals._floor(x, z);
-    const c = g.collision;
-    return c?.groundAt ? c.groundAt(x, z, 1e4) : c?.groundY?.(x, z) ?? 0;
+    let y;
+    if (g.animals?._floor) y = g.animals._floor(x, z);
+    else { const c = g.collision; y = c?.groundAt ? c.groundAt(x, z, 1e4) : c?.groundY?.(x, z) ?? 0; }
+    const w = waterAt(g.terrain?.data || g.world?.terrain?.data, x, z, y);
+    return w ? Math.max(y, w.surface) : y;
 }
 
 /**
@@ -39,18 +42,20 @@ function floorAt(g, x, z) {
  */
 export function flyFrame(g, p, yaw, I, st, P, dt, clear, groundSpeed = 0) {
     const under = floorAt(g, p.x, p.z);
-    flyStep(st, P, { stroke: I.stroke || 0, arms: I.arms || '', ground: groundSpeed, alt: st.air ? p.y - under : null }, dt);
+    flyStep(st, P, { stroke: I.stroke || 0, arms: I.arms || '', ground: groundSpeed, alt: st.air ? p.y - under : null, pitch: I.pitch || 0 }, dt);
     if (!st.air) return yaw;
     const ny = turn(yaw, I.yaw, (P.turn || 1) * 1.6 * dt);
     const fx = -Math.sin(ny), fz = -Math.cos(ny);
     const steps = Math.max(1, Math.ceil(Math.max(st.vf, Math.abs(st.vy)) * dt / 0.8));
     for (let i = 0; i < steps; i++) {
         p.x += fx * st.vf * dt / steps; p.z += fz * st.vf * dt / steps; p.y += st.vy * dt / steps;
-        // never into anything: the highest thing under it and ahead — it climbs over (or slows at a wall too tall)
+        // never into anything: the highest thing under it and ahead — it climbs over (or slows at a wall too tall);
+        // over flat ground it may come down onto it (a landing: flyStep), clear of it only where the ground rises ahead
         const look = Math.max(clear * 4, st.vf * 0.9);
-        let top = floorAt(g, p.x, p.z);
+        const here = floorAt(g, p.x, p.z);
+        let top = here;
         for (let k = 1; k <= 4; k++) top = Math.max(top, floorAt(g, p.x + fx * look * k / 4, p.z + fz * look * k / 4));
-        const want = top + clear;
+        const want = top > here + 0.5 ? top + clear : here;
         if (p.y < want) {
             const need = want - p.y;
             p.y = Math.min(want, p.y + Math.max(8, st.vf) * dt / steps);
@@ -94,7 +99,9 @@ const dragons = {
             if (ground > 0) D._walkTo(d, p.x - Math.sin(I.yaw) * 8, p.z - Math.cos(I.yaw) * 8, ground, dt, D.lairAt?.(p, 0) ? lair : null, false, 0);
             else d.model.rotation.y = turn(d.model.rotation.y, I.yaw, DRAGON.TURN * (d.react || 1) * dt);
             col?.resolveCylinder?.(p, 2.2 * s, p.y + 0.3, 5 * s, 1.2);
-            const gy = col?.groundAt ? col.groundAt(p.x, p.z, p.y + 2.5) : col?.groundY?.(p.x, p.z) ?? p.y;
+            let gy = col?.groundAt ? col.groundAt(p.x, p.z, p.y + 2.5) : col?.groundY?.(p.x, p.z) ?? p.y;
+            const w = waterAt(g.terrain?.data || g.world?.terrain?.data, p.x, p.z, gy);
+            if (w && w.depth >= 2) gy = Math.max(gy, w.surface - 1.2 * s); // (come down on the water: it swims, its back above it — a stroke takes it up again)
             p.y += (gy - p.y) * Math.min(1, dt * 6);
             // (no wings in its own hall nor under a roof: a stroke there is only a stroke)
             const roofed = D.lairAt?.(p, 3) || col?.pointBlocked?.(p.x, p.y + 7 * s, p.z);

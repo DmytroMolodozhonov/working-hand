@@ -317,6 +317,7 @@ export class ImperiusControl {
         }
         // the Maxima's wings: the arms' strokes, the arms down / spread (a moment of arms down between strokes is no dive)
         I.stroke = 0; I.arms = '';
+        I.pitch = g.smoothHead?.pitch || 0; // (the head bowed — down, as in «Flight»: ImperiusFlight.headPath)
         if (this._flier && this.phase === 'on') {
             I.stroke = this.flaps.update(dt, ch.handLost?.('left') ? null : ch.handRelVelocity?.left, ch.handLost?.('right') ? null : ch.handRelVelocity?.right);
             const arms = armsOf(ch);

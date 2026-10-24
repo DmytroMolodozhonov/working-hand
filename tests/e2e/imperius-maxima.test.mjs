@@ -75,10 +75,28 @@ test('a dragon: the plain spell no, the Maxima yes; run + strokes — it flies o
         out.fire = !!d.breath?.imp;
         out.activeAtFire = I.active; out.distAtFire = Math.hypot(d.model.position.x - p0.x, d.model.position.z - p0.z);
         out.fireK = d.breath?.k || 0;
-        // gliding without strokes: it comes down
-        let top = -1e9;
-        for (let i = 0; i < 120; i++) { frame(0.05, { stroke: 0 }); top = Math.max(top, d.model.position.y - g.animals._floor(d.model.position.x, d.model.position.z)); }
-        out.glideDrop = top - (d.model.position.y - g.animals._floor(d.model.position.x, d.model.position.z)); // (after the last strokes' climb is spent it sinks)
+        // up high (a few more strokes), then the head as in «Flight»: ahead — it keeps its height; bowed — it dives and lands
+        const altOf = () => d.model.position.y - g.animals._floor(d.model.position.x, d.model.position.z);
+        for (let k = 0; k < 8; k++) stroke(false);
+        for (let i = 0; i < 30; i++) frame(0.05, { stroke: 0 }); // (the strokes' climb spent)
+        out.altHigh = altOf();
+        g.smoothHead.pitch = 0;
+        const yA = d.model.position.y;
+        for (let i = 0; i < 30; i++) frame(0.05, { stroke: 0 });
+        out.aheadDy = d.model.position.y - yA; out.aheadVf = I.I.fly?.vf;
+        g.smoothHead.pitch = -0.5; // (the head bowed)
+        let touch = null, pitchMin = 0, belowGround = 0;
+        for (let i = 0; i < 400 && I.I.fly?.air; i++) {
+            const a0 = altOf();
+            frame(0.05, { stroke: 0 });
+            pitchMin = Math.min(pitchMin, d.model.rotation.x);
+            if (altOf() < -0.3) belowGround++;
+            if (!I.I.fly?.air && touch == null) touch = { t: i * 0.05, vy: (altOf() - a0) / 0.05 };
+        }
+        g.smoothHead.pitch = 0;
+        out.landed = !I.I.fly?.air; out.touch = touch; out.noseDown = pitchMin; out.belowGround = belowGround;
+        for (let i = 0; i < 20; i++) frame(0.05, { stroke: 0, run: true }); // (on its feet: it walks)
+        out.walksAfter = !I.I.fly?.air && d.rideWalk > 0;
         out.stop = g.castLocalSpell('стоп', true);
         for (let i = 0; i < 30; i++) frame(0.05, { stroke: 0 });
         out.activeAfter = I.active;
@@ -110,7 +128,13 @@ test('a dragon: the plain spell no, the Maxima yes; run + strokes — it flies o
     assert.equal(r.under, 0, 'never into the ground');
     assert.ok(r.maxAbove > 3, 'it climbed: ' + r.maxAbove);
     assert.ok(r.fire && r.fireK > 0.5, 'a long «У»: its fire, as big as the voice: ' + r.fireK + ' ' + r.activeAtFire + ' ' + r.distAtFire);
-    assert.ok(r.glideDrop > 0, 'no strokes: it glides down: ' + r.glideDrop);
+    assert.ok(r.altHigh > 6, 'up high: ' + r.altHigh);
+    assert.ok(Math.abs(r.aheadDy) < 1.5, 'looking ahead: it keeps its height: ' + r.aheadDy + ' (' + r.aheadVf + ' m/s)');
+    assert.ok(r.landed && r.touch, 'the head bowed: it dives and lands: ' + JSON.stringify({ touch: r.touch, altHigh: r.altHigh }));
+    assert.ok(r.noseDown < -0.3, 'its nose down in the dive: ' + r.noseDown);
+    assert.ok(r.touch.vy > -4, 'a soft touch: ' + r.touch.vy);
+    assert.equal(r.belowGround, 0, 'never into the ground');
+    assert.ok(r.walksAfter, 'on its feet: it walks');
     assert.equal(r.activeAfter, false, '«стоп»: back in the body');
     assert.notEqual(r.dragonMode, 'ride', 'the dragon its own again');
     if (r.owlCast !== undefined) {

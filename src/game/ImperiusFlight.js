@@ -13,7 +13,12 @@
  *    it lands. The arms spread (a T) — a long glide.
  *  - Taking off: from the ground a stroke lifts a light flyer (the book, the owl, the phoenix, the winged pig) at once;
  *    a great one (the dragon, the Pegasus) must be running fast enough first (TAKEOFF of its top ground speed).
- *  - The world is not gone through: the caller keeps it above the highest thing under its way (as PigFlight / DragonRide).
+ *  - The head steers the height, as in «Flight» (Flight.steering: looking down — a dive): the head bowed — the nose goes down
+ *    and it comes down, the steeper the more it is bowed (and gathers speed); the head up — it climbs on its own speed
+ *    (and loses it); looking straight ahead — it keeps its height while it is fast (slow — it sinks: the air no longer holds it).
+ *    Near the ground (FLARE m) a fast descent is checked — wings spread, it slows; at the ground it lands on its feet, unhurt
+ *    (the ground, a roof, the water — the caller's floor).
+ *  - The world is not gone through: the caller keeps it above the highest thing on its way (as PigFlight / DragonRide).
  */
 
 /** A stroke: the hands' downward speed (m/s against the body). */
@@ -24,6 +29,27 @@ export const FLAP = {
     FULL: 8, // m/s: a stroke this fast is a full one (strength 1)
     GAP: 0.18, // s at least between two strokes
 };
+
+/** The head's tilt (rad, + up; Game.smoothHead.pitch — the same as «Flight» reads) → the height. */
+export const HEAD = {
+    DEAD: 0.08, // rad: a nod this small is looking straight ahead
+    FULL: 0.6, // rad of the head bowed (past DEAD): the steepest dive
+    DIVE: 1.0, // rad: the steepest path down (~57°)
+    CLIMB: 0.55, // rad: the steepest climb on its own speed
+    RATE: 2.5, // 1/s: how fast the path follows the head
+    FLARE: 3, // m over the ground: it slows its flight forward too (the wings spread for the landing)
+    FLARE_VY: 2.0, // m/s: the speed down at the touch
+    FLARE_K: 1.2, // m/s more down allowed for each m over the ground (a dive is checked from ~20 m: about 1.5 s to the touch)
+    HOLD: 0.35, // of the top speed: faster than this, looking ahead, it keeps its height
+};
+
+/** The path's angle (rad, + up) the head asks for: 0 looking ahead, down to −DIVE bowed, up to CLIMB raised. */
+export function headPath(pitch) {
+    const a = Math.abs(pitch || 0) - HEAD.DEAD;
+    if (!(a > 0)) return 0;
+    const k = Math.min(1, a / (HEAD.FULL - HEAD.DEAD));
+    return pitch < 0 ? -HEAD.DIVE * k : HEAD.CLIMB * k;
+}
 
 /**
  * The flyers: lift (m/s up a full stroke gives), thrust (m/s forward), top speeds, gravity, the glide's sink, the drag,
@@ -68,7 +94,8 @@ export function strokeStrength(peak) {
 
 /**
  * One frame of the flight. st: {air, vf (m/s forward), vy (m/s up)}; P: FLYERS[kind]; i: {stroke (0…1, 0: none),
- * arms: 'down' | 'spread' | '' , ground (m/s it runs on the ground now), alt (m above what is under it)}.
+ * arms: 'down' | 'spread' | '' , ground (m/s it runs on the ground now), alt (m above what is under it), pitch (the head's
+ * tilt, rad, + up — HEAD)}.
  * → st (changed): `took` — it left the ground this frame, `landed` — it came down onto it.
  */
 export function flyStep(st, P, i, dt) {
@@ -86,12 +113,34 @@ export function flyStep(st, P, i, dt) {
         st.vy = Math.min(P.maxUp, Math.max(st.vy, 0) + P.lift * i.stroke);
         st.vf = Math.min(P.maxFwd, st.vf + P.thrust * i.stroke);
     }
-    st.vy -= P.gravity * dt;
-    // the air holds wings spread while it is fast enough; folded (arms down) it drops
+    const path = headPath(i.pitch);
     const fast = Math.min(1, st.vf / (0.45 * P.maxFwd));
-    const sink = i.arms === 'down' ? P.sink * 4 : i.arms === 'spread' ? P.sink * (1.6 - 0.8 * fast) : P.sink * (2.2 - 1.2 * fast);
-    if (st.vy < -sink) st.vy += Math.min(-sink - st.vy, P.gravity * 2 * dt);
+    const k = Math.min(1, HEAD.RATE * dt);
+    if (path < 0 && i.arms !== 'down') {
+        // the head bowed: the nose down — down along the path, steeper and faster the more it is bowed
+        const sp = Math.max(st.vf, 0.5 * P.maxFwd);
+        st.vy += (Math.sin(path) * sp * 1.2 - st.vy) * k;
+        st.vf = Math.min(P.maxFwd * 1.25, st.vf + P.gravity * 0.5 * -Math.sin(path) * dt); // (a dive gathers speed)
+    } else if (path > 0 && st.vf > 2 && !i.stroke) {
+        // the head raised: up on its own speed — the speed spent on the height
+        st.vy += (Math.sin(path) * st.vf * 0.8 - st.vy) * k;
+        st.vf = Math.max(0, st.vf - P.gravity * 0.45 * Math.sin(path) * dt);
+    } else if (!i.arms && st.vf >= HEAD.HOLD * P.maxFwd && !i.stroke && st.vy <= 0.5) {
+        // looking straight ahead, fast: the wings hold it — it keeps its height
+        st.vy += (0 - st.vy) * k;
+    } else {
+        st.vy -= P.gravity * dt;
+        // the air holds wings spread while it is fast enough; folded (arms down) it drops
+        const sink = i.arms === 'down' ? P.sink * 4 : i.arms === 'spread' ? P.sink * (1.6 - 0.8 * fast) : P.sink * (2.2 - 1.2 * fast);
+        if (st.vy < -sink) st.vy += Math.min(-sink - st.vy, P.gravity * 2 * dt);
+    }
     st.vf = Math.max(0, st.vf - st.vf * P.drag * dt * (i.arms === 'down' ? 2 : 1));
+    // near the ground a fast descent is checked: the wings spread, it slows — it comes onto its feet, never crashes
+    if (i.alt != null) {
+        const lim = HEAD.FLARE_VY + HEAD.FLARE_K * Math.max(0, i.alt);
+        if (st.vy < -lim) st.vy = -lim;
+        if (i.alt < HEAD.FLARE && st.vy < 0) st.vf = Math.max(0, st.vf - st.vf * 0.8 * dt);
+    }
     // down at the ground: it lands (the arms down, or simply coming down slowly there)
     if (i.alt != null && i.alt <= 0.35 && st.vy <= 0.5) { st.air = false; st.landed = true; st.vy = 0; st.vf = Math.min(st.vf, 2); }
     return st;
