@@ -1737,6 +1737,7 @@ export class Animals {
                     else if (!a.bonesAt && performance.now() - a.deadAt > CARCASS_MS) { if (hasSkeleton(a.type)) this._toBones(a); else this._remove(a); } // (24 game minutes, or a night slept: the carcass turns to bones; the meat taken — at once)
                     continue;
                 }
+                if (a.plantHeld) continue; // (in a carnivorous head's tendrils: Plants.js carries it)
                 if (a.imp && g.imperius?.step('a', a, dt)) continue; // («Империус»: a mind in it — ImperiusControl.step)
                 if (a.rider && a.rider !== g.localId) { if (a.model.userData.wings) this._pigBody(a, dt); continue; } // a guest rides it: their computer moves it (a Pegasus' wings beat here too)
                 if (a === this.riding) continue;

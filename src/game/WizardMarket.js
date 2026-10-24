@@ -30,7 +30,7 @@ export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычно�
 export const pawnPrice = (it) => Math.max(1, Math.round(itemValue(it) * PAWN_RATE));
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
-const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer']);
+const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead']);
 export const fenceTakes = (it) => !!it && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
 
 /** The wands: small (power 3–15), middling (16–30); never stronger. Price: 180 + 11 × power. */

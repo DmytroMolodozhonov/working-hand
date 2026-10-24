@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="tw-glow" cx="0.5" cy="0.4" r="0.6"><stop offset="0" stop-color="#ff7a2a" stop-opacity="0.75"/><stop offset="1" stop-color="#ff2a10" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tw-p" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#5a0612"/><stop offset="0.5" stop-color="#d0121f"/><stop offset="1" stop-color="#ff7a2a"/></linearGradient>
+    <linearGradient id="tw-s" x1="0" x2="1"><stop offset="0" stop-color="#1d3a1c"/><stop offset="1" stop-color="#4a7a30"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="44" r="42" fill="url(#tw-glow)"/>
+  <path d="M64 120 C58 100 72 84 62 66 C58 58 62 52 64 48" fill="none" stroke="url(#tw-s)" stroke-width="5" stroke-linecap="round"/>
+  <g fill="#c8201e" stroke="#5a1a14" stroke-width="0.8">
+    <path d="M60 104 L50 99 L60 100 Z"/><path d="M66 94 L77 89 L67 91 Z"/><path d="M61 84 L51 77 L62 80 Z"/><path d="M66 74 L76 69 L66 71 Z"/><path d="M61 64 L53 58 L62 60 Z"/>
+  </g>
+  <path d="M62 100 C44 96 34 104 30 114 C44 114 56 110 62 100 Z" fill="#2f6a28" stroke="#1d3a1c" stroke-width="1.5"/>
+  <path d="M62 100 C48 104 38 110 32 113" stroke="#c8e6a0" stroke-width="1" fill="none" opacity="0.6"/>
+  <path d="M66 90 C82 84 94 90 98 100 C84 102 72 98 66 90 Z" fill="#2f6a28" stroke="#1d3a1c" stroke-width="1.5"/>
+  <g stroke="#7a1010" stroke-width="1.4" stroke-linejoin="round">
+    <path d="M64 48 C50 46 34 36 30 18 C44 18 58 28 64 48 Z" fill="url(#tw-p)"/>
+    <path d="M64 48 C78 46 94 36 98 18 C84 18 70 28 64 48 Z" fill="url(#tw-p)"/>
+    <path d="M64 48 C44 44 28 46 20 36 C32 30 52 34 64 48 Z" fill="url(#tw-p)"/>
+    <path d="M64 48 C84 44 100 46 108 36 C96 30 76 34 64 48 Z" fill="url(#tw-p)"/>
+    <path d="M64 50 C54 40 52 22 62 8 C74 22 74 40 64 50 Z" fill="url(#tw-p)"/>
+    <path d="M64 50 C58 42 58 30 64 20 C70 30 70 42 64 50 Z" fill="#ff5a1a" stroke="#c8201e" stroke-width="1"/>
+  </g>
+  <g stroke="#ffe070" stroke-width="1.2" stroke-linecap="round"><path d="M60 46 L56 30"/><path d="M64 46 L64 26"/><path d="M68 46 L72 30"/><path d="M62 47 L50 36"/><path d="M66 47 L78 36"/></g>
+  <g fill="#fff3b0"><circle cx="56" cy="29" r="1.8"/><circle cx="64" cy="25" r="1.8"/><circle cx="72" cy="29" r="1.8"/><circle cx="50" cy="35" r="1.5"/><circle cx="78" cy="35" r="1.5"/></g>
+  <g fill="#7ad04a" stroke="#2a5a1c" stroke-width="1"><path d="M64 50 L52 56 L60 52 Z"/><path d="M64 50 L76 56 L68 52 Z"/></g>
+</svg>

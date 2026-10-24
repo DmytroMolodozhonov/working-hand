@@ -28,6 +28,7 @@ import { scrollKindLabel } from './DarkMagic.js';
 import { enchantValueMul, describeEnchant } from './Enchant.js';
 import { addEnchantGlow } from '../fx/EnchantGlow.js';
 import { irMaterial } from '../fx/Iridescent.js';
+import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { LORE_BY_ID } from './LoreBooks.js';
@@ -156,6 +157,9 @@ export const ITEM_INFO = {
     phoenixFeather: { name: 'Перо феникса', icon: '🪶', weight: 0.05, stack: 10 },
     // the clever owl (Owls.js): what it leaves when a scroll's spell kills it — just a thing for now (the author: for potions later)
     owlFeather: { name: 'Перо совы', icon: '🪶', weight: 0.03, stack: 10 },
+    // the plant creatures (Plants.js, PlantLife.js): what a broken telewilpin / a killed carnivorous head leaves — for potions later (no use yet)
+    telewilpinLeaf: { name: 'Листок телевильпина', icon: '🍁', weight: 0.05, stack: 10 },
+    carnivoreHead: { name: 'Головка плотоядной', icon: '🌿', weight: 0.6, stack: 10 },
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
@@ -210,6 +214,8 @@ function baseValue(it) {
         case 'web': return 120 * (it.count || 1);
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
+        case 'telewilpinLeaf': return 60 * (it.count || 1);
+        case 'carnivoreHead': return 140 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
@@ -658,6 +664,8 @@ function describeItemBase(it) {
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
         case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами. Остаётся от убитой совы, реже — слетает с испуганной', 'Ингредиент зелья светлого ума'] };
+        case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелья светлого ума'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     }
@@ -992,7 +1000,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1031,6 +1039,8 @@ function buildItemModel(it) {
         case 'web': return webModel();
         case 'glass': return glassModel();
         case 'phoenixFeather': return phoenixFeatherModel();
+        case 'telewilpinLeaf': return telewilpinLeafModel();
+        case 'carnivoreHead': return carnivoreHeadItemModel();
         case 'owlFeather': return owlFeatherModel();
         case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);

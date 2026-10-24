@@ -248,7 +248,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 8;
+export const WORLD_GEN = 9;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -256,8 +256,11 @@ export const WORLD_GEN = 8;
  * changes: the keep's depth behind the throne, the height of the upper floor, a hall 4 shorter).
  */
 export const FURNISH_FROM_GEN = 8;
+/** The first generation with plant creatures in the meadows (PlantLife.js: telewilpins, carnivorous heads). Older worlds have none. */
+export const PLANTS_FROM_GEN = 9;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
 // 7: the lone wizards' houses are roomier (Hamlets.js buildMageHut → Castles.buildWizHut): a wizard can walk about in them.
 // 6: ramps and slabs (BlockShapes.js): the land's one-block steps are smoothed into slopes (Terrain._slopeLand), the

@@ -39,6 +39,7 @@ export function eachBody(g, fn) {
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
+    for (const p of g.plants?.near || []) if (!p.dead) fn('plant', p, new THREE.Vector3(p.x, p.y + 2, p.z)); // (telewilpins, carnivorous heads: PlantLife.plantDamage)
 }
 
 /**
@@ -61,6 +62,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'tree': if (treeKind) g.livingTrees?.hit(c, dmg, treeKind, by); break;
         case 'book': g.books?.hitAt(pos, 0.3, by, null); break;
         case 'ice': g.iceCastle?.hit(c, dmg, spell, by); break;
+        case 'plant': g.plants?.hit(c, dmg, spell, by); break;
         default: break;
     }
 }
@@ -71,7 +73,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
  * hitBody; the rest fly (CreatureImpact).
  */
 export function throwBody(g, kind, c, v, toss, spell, by, from) {
-    if (kind === 'spider' || kind === 'book') return;
+    if (kind === 'spider' || kind === 'book' || kind === 'plant') return; // (rooted plants are not thrown)
     if (kind === 'ice') { g.iceCastle?.push(spell, by, (_p, x) => (x === c ? v : null)); return; }
     if (kind === 'dragon') { g.dragons?.push?.(spell, by, (_p, d) => (d === c ? v : null), { from }); return; }
     g.creatureImpact?.apply(c, { v: v.clone(), by, spell, jolt: 4, from, always: { down: 3 }, down: 3, toss, fly: true });

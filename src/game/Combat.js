@@ -530,6 +530,7 @@ export class Combat {
         this.chill = 0;
         this.stunLeft = 0;
         this.encased = false;
+        this.eaten = false; // (in the jaws of a carnivorous head — Plants.js)
         this.slowLeft = 0;
         if (this.game.character) this.game.character.slowScale = 1;
         this.dead = false;
@@ -550,7 +551,7 @@ export class Combat {
 
     /** Frozen or stunned: the body can't move. */
     get immobile() {
-        return this.frozen || this.stunned || this.dead || this.webbed || this.encased; // (encased: in the vortex's ice bubble)
+        return this.frozen || this.stunned || this.dead || this.webbed || this.encased || this.eaten; // (encased: in the vortex's ice bubble; eaten: held by a carnivorous head)
     }
 
     stun(seconds, byId, kind = 'stupefy') {

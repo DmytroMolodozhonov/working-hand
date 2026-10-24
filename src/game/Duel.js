@@ -555,6 +555,8 @@ export class Duel {
         for (const o of g.gargoyles?.targets() || []) gargoyleBody(o, put('g', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
         for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
+        // plant creatures (telewilpins, carnivorous heads): a charge hits the stem and the head (Plants.boltHit says what it does)
+        for (const p of g.plants?.near || []) if (!p.dead) this._plantBody(p, put('P', p.id));
         return out;
     }
 
@@ -577,9 +579,19 @@ export class Duel {
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
+        if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._tipped(c, this._villagerBody(c, e)) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
+    }
+
+    /** A plant's body for a charge: the line from its foot to its top (the head's hinge), as thick as the stem and the bloom/jaws. */
+    _plantBody(p, e) {
+        const g = this.game;
+        e.a.set(p.x, p.y + 0.3, p.z);
+        g.plants._top(p, e.b);
+        e.r = (p.kind === 'carnivore' ? 1.1 : 0.7) * p.s;
+        return e;
     }
 
     /** A wizard's hero: along the body (upright, or lying flat flying like Superman). */
@@ -715,6 +727,7 @@ export class Duel {
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
         if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
+        if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
         return null;
     }
 
@@ -1133,6 +1146,8 @@ export class Duel {
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
         // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
         if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
+        // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)
+        if (c.isPlantBody) { g.plants?.boltHit(c, spell, byId); return; }
         // an infernal gargoyle: each charge as GargoyleRules.TARGETS says; «Джолт» shoves it too (a flier: it reels, never falls)
         if (c.isGargoyle) { g.gargoyles?.boltHit(c, spell, byId); if (isJolt(spell)) this._joltCreature(c, spell, src, byId); return; }
         // a living tree: no duel spell hurts it (only fire does) — «Авада Кедавра» neither

@@ -46,7 +46,7 @@ const THING_DUST = { cauldron: 0x5a5856, chest: 0x8a6a3a, bed: 0xc8b8a0, door: 0
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
 /** Magic things the plain splash cannot take (the «Максима» can). */
-const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather']);
+const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather', 'telewilpinLeaf', 'carnivoreHead']);
 export function liquidationNeedsMaxima(it) {
     if (!it) return false;
     return isMagicItem(it) || MAGIC_KINDS.has(it.kind);

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="tl-g" cx="0.5" cy="0.5" r="0.6"><stop offset="0" stop-color="#ff7a2a" stop-opacity="0.7"/><stop offset="1" stop-color="#ff2a10" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tl-l" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#7a0614"/><stop offset="0.6" stop-color="#e8201c"/><stop offset="1" stop-color="#ff7a2a"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="62" r="52" fill="url(#tl-g)"/>
+  <g transform="rotate(25 64 64)">
+    <path d="M64 112 C62 106 64 100 64 96" stroke="#5a2018" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="M64 98 C46 90 36 70 42 50 L46 54 L45 44 L51 48 L52 36 L58 41 L60 26 L64 14 L68 26 L70 41 L76 36 L77 48 L83 44 L82 54 L86 50 C92 70 82 90 64 98 Z" fill="url(#tl-l)" stroke="#7a0a14" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M64 96 L64 18" stroke="#ffc060" stroke-width="3" stroke-linecap="round"/>
+    <g stroke="#ff9a50" stroke-width="1.6" stroke-linecap="round" opacity="0.9"><path d="M64 84 L50 70"/><path d="M64 84 L78 70"/><path d="M64 68 L52 54"/><path d="M64 68 L76 54"/><path d="M64 52 L56 42"/><path d="M64 52 L72 42"/></g>
+  </g>
+</svg>
