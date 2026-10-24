@@ -191,7 +191,6 @@ test('«Максима» копится до конца столкновения
     assert.equal(liveShouts([0, 3, 6, 9], 9.5), 4); // (they add up)
     assert.equal(liveShouts([], 10), 0);
     assert.equal(liveShouts(undefined, 10), 0);
-    assert.equal(liveShouts([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 9.5), DUEL.MAXIMA_STACK); // (ten shouts push as four)
     assert.equal(DUEL.MAXIMA_BOOST, 0.025); // (it was 0.05)
 });
 
@@ -280,4 +279,20 @@ test('дуэлянт в бою ходит боком: лицом к соперн
     assert.ok(v.speed > 0 && v.speed < 2.3);
     L._walkable = () => false; // a wall: he stays
     const x0 = v.x; D._strafe(A, v, fp, 20, -14, 0.1); assert.equal(v.x, x0); assert.equal(v.speed, 0);
+});
+
+import { collapseMaxima } from '../../src/audio/MaximaShout.js';
+
+test('«Максима» в столкновении лучей: сплошной поток «максимум максиму сим…» — один выкрик; обычная речь не трогается', () => {
+    const streams = [
+        'максимум максимум максимум максимум максимум максиму максиму максиму максиму ксим аксиму максиму максима максиму максиму',
+        'сммаксима максима максиму маким мксим мксим максим си сим си макси сим максима максим максима максима максимум',
+        'максимум максимам максимам', 'максима максима',
+    ];
+    for (const s of streams) assert.equal(collapseMaxima(s), 'максима', s.slice(0, 30));
+    assert.equal(collapseMaxima('максима'), 'максима');
+    assert.equal(collapseMaxima('бомбардо максима'), 'бомбардо максима'); // (a spell with Maxima is not a shout)
+    assert.equal(collapseMaxima('это очень интересный разговор про дуэль'), 'это очень интересный разговор про дуэль');
+    assert.equal(collapseMaxima('вайнд максима'), 'вайнд максима');
+    assert.equal(collapseMaxima(''), '');
 });

@@ -4,6 +4,7 @@
  */
 
 import { mountHeroPanel } from './ui/HeroSettingsUi.js';
+import { collapseMaxima } from './audio/MaximaShout.js';
 import { CreateMemory } from './ui/CreateMemory.js';
 import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
@@ -569,6 +570,8 @@ function earlyTalk(command) {
 
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!command) return;
+    // (in a beam clash my «Максима» shouted over and over is heard as one stream of «максимум максиму сим…»: it is one shout — MaximaShout.js)
+    if (game?.active && game.duel?.clashes?.some((c) => c.a.by === game.localId || c.b.by === game.localId)) command = collapseMaxima(command);
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
     // (the words go on / are final: the early answer waits for them, or is already given)
