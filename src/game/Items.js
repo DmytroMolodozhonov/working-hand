@@ -658,6 +658,12 @@ export class ItemSystem {
      */
     _floorUnder(p, L = null) {
         const col = this.game.collision;
+        // a good on a standing counter: the counter is its floor. A fall of a few frames dips into the top block before the
+        // clamp — that is no «buried in rock» (it was pushed out SIDEWAYS, off the counter, and fell to the ground)
+        if (L?.perch && this._perched(L.perch, p, 1)) {
+            const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
+            return Math.max(Math.min(gy, p.y + 0.6), L.perch.top);
+        }
         if (col.pushOutOfRock?.(p) === false) this._liftOutOfSolid(p, L); // (buried where no side is free — an arena's floor, a thick stand: never left to sink through it)
         const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
         const floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);

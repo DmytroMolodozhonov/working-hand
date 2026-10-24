@@ -70,3 +70,23 @@ test('market goods: a counter blown away — the goods fall with it, nothing hol
     L.chk = 1; run(g, L, 4);
     assert.ok(L.model.position.y < c.top - 1, `fell to the floor, y ${L.model.position.y.toFixed(2)} top ${c.top}`);
 });
+
+// A good laid on the counter falls a few frames and dips into the top block before the clamp: it was taken for «buried in
+// rock» and pushed out SIDEWAYS, off the counter, to fall to the ground («товар уезжает вниз с прилавка»). It stays on it.
+test('market goods: laid on the counter from above they land on it, never pushed off its edge', () => {
+    const t = make(4242, 7), g = game(t);
+    let n = 0;
+    for (const [d, st] of stalls(t)) {
+        const c = st.counter, k = n % 3;
+        const at = spot(st, k); at.y = c.top + 1.2; // (dropped from a hand's height: a frame's fall is deep enough to dip into the top block)
+        const L = g.items.spawnLoose({ kind: 'apple', uid: 'f' + n++ }, at);
+        L.perch = c;
+        const x0 = L.model.position.x, z0 = L.model.position.z;
+        for (let i = 0; i < 60; i++) g.items._physics(L, 0.1); // (a slow computer's frames: 0.1 s)
+        const p = L.model.position;
+        assert.ok(Math.abs(p.x - x0) < 0.05 && Math.abs(p.z - z0) < 0.05, `${d.id}: not pushed sideways (${(p.x - x0).toFixed(2)}, ${(p.z - z0).toFixed(2)})`);
+        assert.ok(L.rest && Math.abs(p.y - (c.top + 0.12)) < 0.2, `${d.id}: on the top, y ${p.y.toFixed(2)} top ${c.top}`);
+        g.items.removeLoose(L.item.uid);
+    }
+    assert.ok(n >= 8, `stalls ${n}`);
+});
