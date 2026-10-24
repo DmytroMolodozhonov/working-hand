@@ -303,19 +303,21 @@ export class Speech {
     }
 
     /** The player speaks now (true) / stopped (false): the game's voices go quiet / come back. */
-    duck(on) {
+    duck(on, level = DUCK_LEVEL) {
         on = !!on;
-        if (on === !!this._ducked) return;
+        if (on === !!this._ducked && (!on || level === this._duckLevel)) return;
         this._ducked = on;
+        this._duckLevel = level;
         // (the lines held meanwhile: the newest is said now)
         if (!on && !this._current && this._pending) { const p = this._pending; this._pending = null; this._speak(p.text, p.opts); }
         const g = this._duck, ctx = this._ctx;
         if (!g?.gain || !ctx) return;
         const now = ctx.currentTime || 0;
+        const to = on ? level : 1;
         try {
             g.gain.cancelScheduledValues?.(now);
-            g.gain.setTargetAtTime(on ? DUCK_LEVEL : 1, now, on ? 0.03 : 0.3);
-        } catch (e) { g.gain.value = on ? DUCK_LEVEL : 1; }
+            g.gain.setTargetAtTime(to, now, on ? 0.03 : 0.3);
+        } catch (e) { g.gain.value = to; }
     }
 
     /**

@@ -108,6 +108,8 @@ export class VillagerOrders {
                 if (args.d && typeof args.d === 'object') this.life.rel.bump(v, by, { s: +args.d.s || 0, f: +args.d.f || 0, l: +args.d.l || 0 });
                 return;
             }
+            case 'companion': this.life.social.hostInvite(v, by, args); return; // (a friend goes on the road with the hero — SocialLife; the host decides again)
+            case 'uncompanion': this.life.social.hostRelease(v, 'asked'); return;
             case 'cmd': this.life.cmds.run(v, args, by); return; // (a plain-word command: VillagerCommands.js — it checks itself)
             case 'dismiss': this._dismiss(v, by); break;
             case 'leave_me': this._dismiss(v, by, true); break;
@@ -125,7 +127,7 @@ export class VillagerOrders {
 
     /** (host) May `by` give this order? (a guest's order is checked again here) */
     permitted(v, name, args = {}, by) {
-        if (name === 'cmd' || name === 'rel') return true; // (VillagerCommands.run checks the rank itself)
+        if (name === 'cmd' || name === 'rel' || name === 'companion' || name === 'uncompanion') return true; // (VillagerCommands.run checks the rank itself)
         const king = this._cmdr(v.cs, by); // (the king, or the king's commander / deputy — Ranks.js)
         // (a bodyguard / a companion for one he chose to help — his character and how he takes me: Attitude.willDo)
         if (args.agreed && (name === 'guard_me' || name === 'guard' || name === 'follow_me' || name === 'follow') && v.role !== 'king') return true;

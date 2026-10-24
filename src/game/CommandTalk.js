@@ -10,6 +10,7 @@
  */
 
 import * as THREE from 'three';
+import { newUid } from './ItemTypes.js';
 import { detectOrder } from '../ai/TalkActions.js';
 import { titleFor, vizierLine, RANK_KEYS } from './Ranks.js';
 import { parseCommand, parseCommands, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
@@ -138,6 +139,7 @@ export class CommandTalk {
         }
         if (kind === 'cast') return this._cast(lead, what, cmd, text);
         if (kind === 'rank') return this._rank(lead, what, cmd, text, reply);
+        if (kind === 'social') return this._social(lead, what, cmd, text, reply);
 
         // --- a target: «сразись с ним», «не трогай его»
         let foe = null, foes = [];
@@ -450,6 +452,40 @@ export class CommandTalk {
         reply(vizierLine(level, who.name, title, before < 9 ? before : 0));
         this._log(text, cmd, lead, `ранг ${level} (${title}) → ${who.name}`);
         return true;
+    }
+
+    /** The life of a person: his goal, the road together, a spell shown, what a friend may ask (Lives.js / SocialLife). */
+    _social(lead, what, cmd, text, reply) {
+        const g = this.game, life = this.life, soc = life.social;
+        if (!soc) return false;
+        const done = (why) => { this._log(text, cmd, lead, why); return true; };
+        switch (what) {
+            case 'ask_goal': reply(soc.askGoal(lead)); return done('цель');
+            case 'my_goal': reply(soc.heroSays(lead, text)); return done('моя цель: ' + (soc.heroGoal?.text || ''));
+            case 'show_off': soc.watch(lead); reply(pick(['Ну, показывай!', 'О? Что ты задумал? Смотрю.', 'Я весь внимание.', 'Давай, удиви меня.'])); return done('смотрит');
+            case 'invite': {
+                const r = soc.invite(lead);
+                reply(r.line);
+                if (r.answer === 'join' || r.answer === 'help') life.orders.run(lead, 'companion', {}, g.localId);
+                return done(`в путь: ${r.answer}${r.need != null ? ` (нужно ${r.need})` : ''}`);
+            }
+            case 'uninvite': {
+                if (!lead.companion) { reply(pick(['Я и так никуда не иду с тобой.', 'Хорошо.'])); return done('не спутник'); }
+                life.orders.run(lead, 'uncompanion', {}, g.localId);
+                return done('отпущен');
+            }
+            default: break;
+        }
+        // what a friend may give: ask_enter | ask_rummage | ask_loan | ask_purse | ask_wand | ask_tool | ask_house
+        const key = what.replace('ask_', '');
+        const r = soc.ask(lead, key);
+        reply(r.line);
+        if (r.yes && r.give) {
+            const p = g.character.group.position;
+            g.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: r.give }, new THREE.Vector3(p.x + 0.6, p.y - 0.4, p.z), {});
+            g.hud?.setVoice?.(`💰 ${lead.name} одолжил вам ${r.give} монет`, true);
+        }
+        return done(`${key}: ${r.yes ? 'да (' + r.by + ')' : 'нет'}`);
     }
 
     _huntCreature(doers, kind, text, cmd, lead, ack) {

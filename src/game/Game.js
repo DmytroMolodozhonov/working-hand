@@ -1634,7 +1634,7 @@ export class Game {
         const now = performance.now();
         if (now - (this._duckCheckAt || 0) < 100) return;
         this._duckCheckAt = now;
-        if (this.voiceGate.lipsMoved(now, 700) === true) this._speakingAt = now;
+        if (this.voiceGate.lipsMoved(now, 700) === true) { this._speakingAt = now; this._voicedAt = now; }
         // (and while the hand is raised for magic: a spell is about to be said — at the wizards' tower the
         // villagers' and the wizards' voices filled the quiet after my word, and the spell came 2–3 s late)
         if (this.isMagicActive) this._speakingAt = now;
@@ -1645,12 +1645,18 @@ export class Game {
         const answering = (this.castleLife?.talk?.replyAt || -1e9) > spoke;
         // (his answer is playing: a little of his own voice gets past the echo canceller and «I speak» flickered —
         // he went quieter and louder by turns. While he answers only my mouth really moving with a loud voice stops him)
-        if (sp._current?.opts?.reply && !this.isMagicActive) {
+        // (a villager's ANSWER to me is never made quiet by a raised hand — the author: «голоса жителей до сотки, но я их плохо слышу»:
+        // the hands are up much of the time, and every answer played at 18 %, swelling and falling as the arms moved. Only my real
+        // voice — the mouth moving with a loud sound — stops him)
+        if (sp._current?.opts?.reply) {
             const barge = this.voiceGate.lipsMoved(now, 500) === true && now - (this.voice?.speakingAt || -1e9) < 300;
             if (!barge) { sp.duck(false); return; }
-            this._speakingAt = now;
+            this._speakingAt = now; this._voicedAt = now;
         }
-        sp.duck(now - at < 900 && !(answering && !this.isMagicActive));
+        // (the other voices, with only a hand raised and nobody speaking: half quiet, not nearly silent)
+        const voicedAt = Math.max(this._voicedAt || -1e9, this.voice?.speakingAt || -1e9);
+        const handOnly = now - voicedAt >= 900;
+        sp.duck(now - at < 900 && !(answering && !this.isMagicActive), handOnly ? 0.55 : undefined);
         if (sp._ducked) this._duckedAt = now;
     }
 

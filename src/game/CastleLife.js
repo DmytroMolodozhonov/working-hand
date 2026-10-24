@@ -40,6 +40,7 @@ import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
+import { SocialLife } from './SocialLife.js';
 import { levelOf, withRank, commandsGuard, isForgiven, isRespected, RANK_TITLES, GREET_RANKED, fill as fillRank } from './Ranks.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -294,6 +295,7 @@ export class CastleLife {
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
+        this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
@@ -3531,6 +3533,7 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
             this.rel?.update(dt);
+            this.social?.update(dt);
             for (const cs of this.castles.values()) if (cs.awake && (cs.watchT = (cs.watchT || 0) - dt) <= 0) { cs.watchT = 0.7; this.watch.assign(cs, dt); }
             this._squads(dt);
             this._assignSlots();
@@ -3759,6 +3762,8 @@ export class CastleLife {
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;
+        const fr = this.rel?.packFree?.();
+        if (fr && (Object.keys(fr.rel).length || Object.keys(fr.rep).length)) out.__free = fr;
         return out;
     }
 
@@ -3771,7 +3776,8 @@ export class CastleLife {
     }
 
     restore(data) {
-        const { __hostile, ...states } = data || {};
+        const { __hostile, __free, ...states } = data || {};
+        this.rel?.unpackFree?.(__free);
         for (const [id, s] of Object.entries(states)) this.applyState(id, s);
         const now = Date.now(), me = this.game.localId;
         this._pendingHostile = new Map();

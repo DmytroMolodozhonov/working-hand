@@ -50,13 +50,21 @@ export class RelationsLife {
         return st;
     }
 
+    /** Where a person's numbers are kept: a castle's people in the castle's state; any other humanoid (a sailor, a traveller) in `free`. */
+    _store(v) {
+        if (v.cs) { const st = this._st(v.cs); return { rel: st.rel, rep: st.rep, key: v.idx, cs: v.cs }; }
+        if (!this.free) this.free = { rel: {}, rep: {} };
+        return { rel: this.free.rel, rep: this.free.rep, key: v.id, cs: null };
+    }
+
     /** What the person feels now, as a stored relation (deltas); a stranger who has heard of the hero gets the town's first impression. */
     relOf(v, pid) {
-        const st = this._st(v.cs);
-        const m = st.rel[v.idx] || (st.rel[v.idx] = {});
+        const S = this._store(v);
+        const st = { rel: S.rel, rep: S.rep };
+        const m = st.rel[S.key] || (st.rel[S.key] = {});
         let a = m[pid];
         if (!a) {
-            const imp = firstImpression(st.rep[pid], this.life.talk?.brain?.(v)?.character);
+            const imp = firstImpression(st.rep[pid], this.life.talk?.brain?.(v)?.character || this.life.sailorChar?.(v));
             a = m[pid] = [imp.s, imp.f, imp.l, 0, 0, 0]; // [s, f, l, talk fr gained, talk love gained, last greeting at]
         }
         return { s: a[0], f: a[1], l: a[2] };
@@ -64,6 +72,7 @@ export class RelationsLife {
 
     /** The status (Attitude.STATUS key) he sees `pid` in. */
     statusOf(v, pid) {
+        if (!v.cs) return this.game.ships?.loyalTo?.(v.ship, pid) ? 'king' : 'traveller'; // (a sailor: the ship's master is his king)
         if (pid === this.game.localId) return this.life.talk._status(v);
         const r = this.life.rankOf(v.cs, pid);
         return r >= 9 ? 'king' : r === 4 ? 'deputy' : r === 3 ? 'commander' : r === 2 ? 'honored' : r === 1 ? 'friend' : 'traveller';
@@ -89,13 +98,13 @@ export class RelationsLife {
     }
 
     _apply(v, pid, d, show) {
-        const st = this._st(v.cs);
+        const S = this._store(v);
         const before = this.eff(v, pid);
         const cur = this.relOf(v, pid);
         const next = bumpRel(cur, d);
-        const a = st.rel[v.idx][pid];
+        const a = S.rel[S.key][pid];
         a[0] = next.s; a[1] = next.f; a[2] = next.l;
-        this.dirty.add(v.cs.def.id);
+        if (S.cs) this.dirty.add(S.cs.def.id);
         if (show && pid === this.game.localId) {
             const after = this.eff(v, pid);
             this._popFor(v, before, after);
@@ -105,7 +114,7 @@ export class RelationsLife {
     _popFor(v, before, after) {
         if (!this.bars) return;
         for (const k of ['sub', 'fr', 'lv']) { const d = after[k] - before[k]; if (d) this.bars.pop(k, d); }
-        this.focus = { id: v.id, until: performance.now() + 6000 };
+        this.focus = { v, until: performance.now() + 6000 };
     }
 
     /** What the town knows of him: a counter up. */
@@ -122,6 +131,7 @@ export class RelationsLife {
         if (!res || v.dead || !this.life.enabled) return;
         const pid = this.game.localId;
         const intent = res.intent;
+        this.life.social?.touched(v); // (he was not forgotten)
         const t = TONE[intent];
         if (!t) return;
         const now = performance.now();
@@ -135,15 +145,16 @@ export class RelationsLife {
         const eff = this.eff(v, pid);
         if (intent === 'flirt') d = flirtResult(eff, this.life.talk?.brain?.(v)?.character);
         // (talk alone makes at most TALK_CAP of friendship / love)
-        const st = this._st(v.cs);
         this.relOf(v, pid);
-        const a = st.rel[v.idx][pid];
+        const S = this._store(v);
+        const a = S.rel[S.key][pid];
         if (d.f > 0) { const room = Math.max(0, TALK_CAP.f - (a[3] || 0)); d.f = Math.min(d.f, room); }
         if (d.l > 0) { const room = Math.max(0, TALK_CAP.l - (a[4] || 0)); d.l = Math.min(d.l, room); }
         if (!d.f && !d.s && !d.l) return;
         if (this.auth) { a[3] = (a[3] || 0) + Math.max(0, d.f || 0); a[4] = (a[4] || 0) + Math.max(0, d.l || 0); }
         this.bump(v, pid, d);
-        this._rep(v.cs, pid, 'n', 0.2);
+        if (v.cs) this._rep(v.cs, pid, 'n', 0.2);
+        this.focus = { v, until: performance.now() + 7000 };
     }
 
     // ------------------------------------------------------------------ deeds
@@ -156,10 +167,11 @@ export class RelationsLife {
     /** (CastleLife.hit / _die) The hero struck a person; or killed him. */
     onHit(v, by, killed) {
         if (!this.auth || !this.life._isPlayer(by) || v.arena || v.dead && !killed) return;
+        if (!v.cs) { this._apply(v, by, (killed ? DEED.slay : DEED.hurt).victim, by === this.game.localId); return; } // (a sailor: only he himself — the crew hears below)
         const D = killed ? (v.foe === by ? DEED.hurt : DEED.slay) : DEED.hurt; // (killing one who was at me is self-defence: a wound, not a murder)
         const cs = v.cs, p = { x: v.x, y: v.y, z: v.z };
         this._rep(cs, by, D.rep || 'hurt');
-        for (const w of this._witnesses(cs, p)) this._apply(w, by, w === v ? D.victim : D.witness, by === this.game.localId);
+        for (const w of this._witnesses(cs, p)) { this._apply(w, by, w === v ? D.victim : D.witness, by === this.game.localId); if (w !== v) this.life.social?.witnessedBlow(w, v, by, killed); }
         if (v.dead || !killed) this._apply(v, by, D.victim, by === this.game.localId);
         // (a hand raised against the people: the town hears of it — one sour word to everybody)
         for (const w of cs.active.values()) if (!w.dead && w !== v) this._apply(w, by, { f: killed ? -2 : -0.5 }, false);
@@ -188,6 +200,7 @@ export class RelationsLife {
             for (const w of cs.active.values()) if (!w.dead && Math.hypot(w.x - me.x, w.z - me.z) < 30 && this.life._sees(w, { x: me.x, y: me.y, z: me.z })) { w.sawMagic = (w.sawMagic || 0) + 1; seen++; }
             if (seen && this.auth) this._rep(cs, pid, 'magic');
         }
+        this.life.social?.onSpell(name, me);
     }
 
     /** A deal done fairly, a gift, a theft: small deeds (host). */
@@ -196,7 +209,7 @@ export class RelationsLife {
 
     /** What the person knows of the hero in words, for the talk (so that his words fit): "видел N заклинаний, знает про убитых…". */
     knownText(v, pid = this.game.localId) {
-        const st = this._st(v.cs), rep = st.rep[pid];
+        const rep = this._store(v).rep[pid];
         const out = [];
         if (v.sawMagic) out.push(`ты сам видел, как он колдует (${v.sawMagic} раз)`);
         else if (rep?.magic > 3) out.push('слышал, что он колдует');
@@ -218,7 +231,7 @@ export class RelationsLife {
         const P = this.life.talk?._partner;
         const now = performance.now();
         if (P && !P.dead && now - (P.talkedAt || -1e9) < 9000) v = P;
-        else if (this.focus && now < this.focus.until) v = this.life.byId.get(this.focus.id) || null;
+        else if (this.focus && now < this.focus.until) v = this.focus.v && !this.focus.v.dead ? this.focus.v : null;
         if (!v) {
             const id = this.life.talk?.attention?.addressee?.((i) => !!this.life.byId.get(i));
             if (id) { const w = this.life.byId.get(id); if (w && (this.life.talk.attention.score(id) || 0) >= 0.55) v = w; }
@@ -379,6 +392,10 @@ export class RelationsLife {
         for (const [pid, r] of Object.entries(st.rep)) rep[pid] = r;
         return { rel, rep };
     }
+
+    /** The numbers of those outside any castle (sailors…): saved with the castles' states under '__free'. */
+    packFree() { return this.free ? { rel: this.free.rel, rep: this.free.rep } : null; }
+    unpackFree(d) { if (d && typeof d === 'object') this.free = { rel: d.rel || {}, rep: d.rep || {} }; }
 
     unpack(st, s) {
         st.rel = s.rel && typeof s.rel === 'object' ? s.rel : (st.rel || {});

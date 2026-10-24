@@ -463,6 +463,7 @@ export class Sailors {
     hit(v, dmg, dir, by, opts = {}) {
         if (!v || v.dead) return;
         const g = this.game;
+        if (by != null && this.auth) g.castleLife?.rel?.onHit(v, by, false); // (he remembers who struck him — Relations.js)
         if (!this.auth) {
             g.sync?.net.send({ t: 'shit', id: v.id, dmg: Math.round(dmg * 10) / 10, d: dir ? [dir.x, dir.z] : null, mg: opts.magic ? 1 : 0, ...(opts.kind ? { k: opts.kind } : {}), ...(opts.spell ? { sp: 1 } : {}) });
             v.model.flashHit?.(0.15);
@@ -1783,6 +1784,8 @@ export class Sailors {
         let res = this._seaReply(v, text, ctx);
         if (!res) try { res = this._brain(v).hear(text, ctx); } catch (e) { res = { reply: 'А? Чего?' }; }
         v.talking = 6; v.talkTo = g.localId;
+        g.castleLife?.rel?.talked(v, res); // (the tone of my words moves his bars — Relations.js)
+        g.castleLife?.social?.touched?.(v);
         if (!this.auth) g.sync?.net.send({ t: 'screw', talk: 1, id: v.id });
         // the answer is said at once — never cut by his mates' chatter (only the one I talk with is heard)
         v.talkedAt = performance.now();

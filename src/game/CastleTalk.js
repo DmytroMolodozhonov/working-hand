@@ -224,6 +224,8 @@ export class CastleTalk {
         ctx.news = this.life.news?.told(v.cs.def.id, g.localId) || [];
         ctx.status = this._status(v);
         ctx.known = this.life.rel?.knownText(v) || ''; // (what he knows of me: my spells, blood, help — Relations.js)
+        ctx.goal = this.life.social ? this.life.social.askGoal(v) : ''; // (his own life goal, for his words — Lives.js)
+        ctx.companion = !!v.companion;
         ctx.rel = this.life.rel?.eff(v) || null; // (the three bars, for his will — Relations.js)
         ctx.guest = !!v.guest;
         ctx.doing = this._doing(v);
