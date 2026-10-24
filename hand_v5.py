@@ -16,7 +16,12 @@ square around the hand. So V5 never asks the palm detector:
      does when it tracks), moved by the hand's own speed — and checked against the body's wrist,
      so a lost hand is found again at once, in the very next picture;
   4. the first picture of a hand is looked at twice (the square from the body, then from the
-     hand itself): the second look is straight and tight.
+     hand itself): the second look is straight and tight;
+  5. a closed, blurred or turned hand makes the network doubt (0.05–0.3) while its points are right:
+     a followed hand is still taken where it was going, of its size, with its own palm;
+  6. a hand no network sees (a fast wave blurs it) is held up to HOLD s, moved with the picture round
+     it (optical flow), while the body sees that wrist — it never vanishes and comes back.
+  Measured on the author's own recording: tools/handbench/video.py (README there).
 
 The joint network is MediaPipe's own (hand_landmarks_detector.tflite, inside the game's
 vendor/mediapipe/models/hand_landmarker.task — Apache 2.0), run by Google's LiteRT
@@ -29,6 +34,7 @@ import math
 import os
 import sys
 import threading
+import time
 import zipfile
 
 import numpy as np
@@ -53,9 +59,24 @@ POSE_SCALE = 4.0  # its side: POSE_SCALE × |wrist→knuckles| ...
 FOREARM_SCALE = 0.75  # ... at least FOREARM_SCALE × the forearm (the pose's knuckles are a guess)
 TRACK_SCALE = 2.0  # a followed hand: its palm's box × TRACK_SCALE (MediaPipe's own)
 TRACK_SHIFT = -0.1  # ... moved towards the fingers by this much of the side
-RETRY = 2  # a lost hand is looked for every RETRY-th picture
+RETRY = 2  # a lost hand the body doesn't see is looked for every RETRY-th picture (one it sees: every picture)
 STICKY = 0.05  # a followed hand's square stays while the new one is within this much of its side
 PRESENCE = 0.3  # how sure the network must be that a hand is in the square
+# (the author's recording, tools/handbench/video.py: a closed, blurred or turned hand gets 0.05–0.3 from
+# the network for a few pictures while its points are right — such a hand was dropped and came back)
+PRESENCE_TRACK = 0.12  # ... a followed hand where it was going, of its size (_consistent): this is enough
+TRACK_NEAR = 0.8  # "where it was going": the wrist and the middle knuckle within this much of the palm's size
+TRACK_GROW = 1.6  # "of its size": not this many times bigger or smaller
+WIDE = 1.6  # a lost hand is looked for in the body's square and in one this much bigger (a hand toward the camera)
+LOOKS = 3  # at most this many squares a picture for a lost hand
+TRACK_FLOW = True  # a followed or held hand moves with the picture round it (optical flow): its next square, its held place
+HOLD = 0.5  # s: a hand the network lost is held this long, carried by the body's arm, while the body sees the wrist
+IN_VIEW = 0.5  # the body's wrist this sure: it is in the picture
+WRIST_FAR = 1.0  # a hand whose wrist is this many of its sizes from the body's (sure) wrist is not this hand
+# (the body's wrist against the reference hand's on the author's recording: 0.19 of the hand's size typically, 0.66 at most)
+PALM_BONES = [(0, 5), (0, 9), (0, 13), (0, 17), (5, 9), (9, 13), (13, 17)]
+PALM_TOL = 0.35  # a doubtful hand's palm bones within this much of the sure palm's
+PALM_SURE = 0.5  # the network this sure: its palm is the hand's own palm
 RTM_GATE = 0.3  # ... or RTMPose about its points (engine "rtm")
 RTM_POSE_BOX = 0.9  # RTMPose's upright box round the body's square: this much of its side
 
@@ -376,12 +397,17 @@ class HandsV5:
         self.rtm = {s: RTMNet(rtm_path, threads) for s in ("left", "right")} if engine == "rtm" else None
         self.engine = engine
         self.rtm_error = ""
-        self.track = {"left": None, "right": None}  # {pts, vel, sq, box}
+        self.track = {"left": None, "right": None}  # {pts, z, vel, sq, box, t, wrist, fore, pres[, held, base]}
+        self.held = {"left": False, "right": False}
+        self.palm = {}  # each hand's palm when the network was sure (_palm_ok)
+        self._prev_rgb = None
         self.miss = {}
-        self.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0}
+        self.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0, "held": 0}
 
     def reset(self):
         self.track = {"left": None, "right": None}
+        self.held = {"left": False, "right": False}
+        self.palm = {}
         self.miss = {}
 
     def use_rtm(self, rtm):
@@ -389,11 +415,23 @@ class HandsV5:
         self.rtm = {"left": rtm, "right": rtm} if rtm is not None else None
         self.engine = "rtm" if rtm is not None else "mp"
 
-    def _wrist(self, pose, side, w, h):
+    def _wrist(self, pose, side, w, h, vis=0.2):
         i = POSE_SIDE[side][0]
-        if not pose or len(pose) <= i or (pose[i].get("visibility", 1.0) or 0) < 0.2:
+        if not pose or len(pose) <= i or (pose[i].get("visibility", 1.0) or 0) < vis:
             return None
         return np.array([pose[i]["x"] * w, pose[i]["y"] * h])
+
+    def _in_view(self, pose, side, w, h):
+        """The body sees this wrist, inside the picture: the hand is there to be found."""
+        p = self._wrist(pose, side, w, h, IN_VIEW)
+        return p is not None and 0 <= p[0] < w and 0 <= p[1] < h
+
+    def _forearm(self, pose, side, w, h):
+        """The forearm's turn (elbow → wrist, rad) or None."""
+        iw, ie = POSE_SIDE[side][0], POSE_SIDE[side][4]
+        if not pose or len(pose) <= iw or min(pose[iw].get("visibility", 1.0) or 0, pose[ie].get("visibility", 1.0) or 0) < IN_VIEW:
+            return None
+        return math.atan2((pose[iw]["y"] - pose[ie]["y"]) * h, (pose[iw]["x"] - pose[ie]["x"]) * w)
 
     def _seed(self, seeds, wrist, side):
         """A hand the palm detector found (21×2 picture pixels) that is this side's, or None."""
@@ -411,17 +449,67 @@ class HandsV5:
         seeds[best] = None  # (one hand for one side)
         return q
 
+    def _accept(self, look, ref, side, wrist):
+        """Is this look a hand to give? A sure one — yes, unless it is far from the body's wrist (a
+        followed square that slid up the forearm); a doubtful one — only where the followed hand was
+        going, of its size, with its own palm (_consistent, _palm_ok)."""
+        if look is None:
+            return False
+        xy, z, pres = look
+        size = max(float(np.ptp(xy[PARTIAL], axis=0).max()), 4.0)
+        if wrist is not None and np.hypot(*(xy[0] - wrist)) > WRIST_FAR * size:
+            return False
+        if pres >= PRESENCE:
+            return True
+        return ref is not None and pres >= PRESENCE_TRACK and self._consistent(xy, ref) and self._palm_ok(xy, z, side)
+
+    @staticmethod
+    def _palm(xy, z):
+        """The palm's own shape: its bones (3D: the picture and the network's depth), as parts of their sum."""
+        p = np.concatenate([xy, z[:, None]], 1)
+        b = np.array([np.linalg.norm(p[i] - p[j]) for i, j in PALM_BONES])
+        return b / max(b.sum(), 1e-6)
+
+    def _palm_ok(self, xy, z, side):
+        """A doubtful hand's palm is like the palm this hand had when the network was sure (a blurred
+        fist keeps its palm; a mangled guess — stretched along the arm, squeezed to a lump — does not)."""
+        ref = self.palm.get(side)
+        if ref is None:
+            return True
+        return float(np.max(np.abs(self._palm(xy, z) - ref) / ref)) < PALM_TOL
+
+    @staticmethod
+    def _consistent(xy, ref):
+        """A hand the network is not sure of is still taken if it is where the followed hand was going,
+        of its size (a blurred, closed or turned hand: the network doubts, the points are right)."""
+        size = max(float(np.ptp(ref[PARTIAL], axis=0).max()), 4.0)
+        if np.hypot(*(xy[0] - ref[0])) > TRACK_NEAR * size or np.hypot(*(xy[9] - ref[9])) > TRACK_NEAR * size:
+            return False
+        k = float(np.ptp(xy[PARTIAL], axis=0).max()) / size
+        return 1 / TRACK_GROW < k < TRACK_GROW
+
     def one(self, rgb, pose, side, now=None, refine=True, seeds=None):
         """One hand: (pts 21×2 picture pixels, z 21, how sure) or None. seeds: hands found by
         MediaPipe's palm detector (21×2 picture pixels) — a hand too near the camera for the body's
-        wrist to be right (close up, the body network puts the wrist anywhere on a big hand)."""
+        wrist to be right (close up, the body network puts the wrist anywhere on a big hand).
+        self.held[side] tells whether the hand given is held (the network lost it for a moment)."""
         h, w = rgb.shape[:2]
+        now = time.perf_counter() if now is None else now
+        self.held[side] = False
         tr = self.track[side]
         wrist = self._wrist(pose, side, w, h)
-        sq = pts = None
-        if tr is not None:
+        inview = self._in_view(pose, side, w, h)
+        sure_wrist = self._wrist(pose, side, w, h, IN_VIEW)
+        r = None
+        box = None
+        sq = None
+        # 1. a followed hand: its square from its own points, moved with the picture (or by its own speed)
+        if tr is not None and not tr.get("held"):
             pts = tr["pts"]
-            if tr.get("vel") is not None:
+            flow = self._flow(pts, rgb) if TRACK_FLOW else None
+            if flow is not None:
+                pts = pts + flow  # (where the hand is: the picture round it moved so)
+            elif tr.get("vel") is not None:
                 pts = pts + tr["vel"]  # (where the hand will be: it goes on as it went)
             sq = square_from_hand(pts)
             # (a hand that barely moved keeps its square: the network then sees the same picture, and
@@ -430,48 +518,55 @@ class HandsV5:
             if STICKY and last is not None and math.hypot(sq.cx - last.cx, sq.cy - last.cy) < STICKY * last.side \
                     and abs(sq.side / last.side - 1) < STICKY * 1.5 and abs(math.remainder(sq.rot - last.rot, math.tau)) < STICKY * 1.5:
                 sq = last
-            # the body's wrist far from the followed hand: the hand was lost or swapped — start again
-            if wrist is not None and np.hypot(*(pts[0] - wrist)) > sq.side * 0.9:
-                sq = pts = None
-        fresh = sq is None
-        if fresh:
-            # (a hand not found in the last picture is looked for again only every RETRY-th picture:
-            # a hand behind the back must not cost the processor every picture)
-            self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
-            seed = self._seed(seeds, wrist, side) if seeds else None
-            if seed is not None:
-                sq = square_from_hand(seed)
-            elif self.miss[side] % RETRY != 1 and RETRY > 1 and tr is None and self.miss[side] > 1:
-                return None
-            else:
-                sq = square_from_pose(pose, side, w, h)
-            if sq is None:
-                self.track[side] = None
-                return None
-            self.stats["from_pose"] += 1
-        rtm = self.rtm
-        r = None
-        box = None
-        if rtm:
-            # RTMPose's upright box: from the followed hand's own points (kept while it barely moves,
-            # as the square), or — found anew — round the body's square
-            if pts is not None:
+            if self.rtm:
                 box = box_of(pts)
                 lb = tr.get("box")
                 if STICKY and lb is not None and math.hypot(box[0] - lb[0], box[1] - lb[1]) < STICKY * lb[2] and abs(box[2] / lb[2] - 1) < STICKY * 1.5:
                     box = lb
-            try:
-                r = self._rtm(rgb, side, sq, box, fresh and refine)
-            except Exception as e:  # noqa: BLE001
-                # the video card's program died: MediaPipe's joint network alone from now on (never the camera)
-                self.rtm_error = str(e) or type(e).__name__
-                self.use_rtm(None)
-                rtm = None
-        if not rtm:
-            r = self._mp(rgb, side, sq, fresh and refine)
+            # the body's wrist far from the followed hand: the hand was lost or swapped — look anew
+            if wrist is not None and np.hypot(*(pts[0] - wrist)) > sq.side * 0.9:
+                sq = None
+            else:
+                look = self._look(rgb, side, sq, box, False)
+                if self._accept(look, pts, side, sure_wrist):
+                    r = look
+                else:
+                    sq = None
+        fresh = r is None
+        # 2. looked for: where the palm detector saw it, where it last was, where the body says it is
+        if fresh:
+            self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
+            seed = self._seed(seeds, wrist, side) if seeds else None
+            # (a hand the body doesn't see, not found in the last picture, is looked for again only every
+            # RETRY-th picture: a hand behind the back must not cost the processor every picture)
+            if seed is None and tr is None and not inview and RETRY > 1 and self.miss[side] > 1 and self.miss[side] % RETRY != 1:
+                return None
+            cands = []
+            if seed is not None:
+                cands.append(square_from_hand(seed))
+            hs = square_from_hand(tr["pts"]) if tr is not None and tr.get("held") else None
+            if hs is not None:
+                cands.append(hs)  # (where it is held; a followed one was just looked at)
+            sp = square_from_pose(pose, side, w, h)
+            if sp is not None:
+                cands.append(sp)
+                cands.append(Square(sp.cx, sp.cy, sp.side * WIDE, sp.rot))  # (a hand toward the camera: bigger than the body thinks)
+            ref = tr["pts"] if tr is not None else None
+            for c in cands[:LOOKS]:
+                self.stats["from_pose"] += 1
+                look = self._look(rgb, side, c, None, refine)
+                if self._accept(look, ref, side, sure_wrist if seed is None else None):
+                    r, sq = look, c
+                    break
         if r is None:
-            self.track[side] = None
-            return None
+            # 3. not found: held for a moment where the body's arm takes it (a fast wave blurs the hand;
+            # the network doubts for a few pictures — the hand must not vanish and come back)
+            held = self._hold(tr, pose, side, w, h, now, inview, rgb)
+            if held is None:
+                self.track[side] = None
+                return None
+            self.held[side] = True
+            return held
         xy, z, pres = r
         vel = None
         if tr is not None and not fresh:
@@ -480,23 +575,94 @@ class HandsV5:
             vel = v if tr.get("vel") is None else tr["vel"] * 0.5 + v * 0.5
             if np.hypot(*vel) > sq.side * 0.5:
                 vel = None
-        self.track[side] = {"pts": xy, "vel": vel, "sq": sq if not fresh else None, "box": box}
+        self.track[side] = {"pts": xy, "z": z, "vel": vel, "sq": sq if not fresh else None, "box": box, "t": now,
+                            "wrist": wrist, "fore": self._forearm(pose, side, w, h), "pres": pres}
+        if pres >= PALM_SURE:
+            pm = self._palm(xy, z)
+            ref = self.palm.get(side)
+            self.palm[side] = pm if ref is None else ref * 0.9 + pm * 0.1
         self.stats["found"] += 1
         self.miss[side] = 0
         return xy, z, pres
+
+    def _flow(self, pts, rgb):
+        """How the picture round the hand moved since the last picture (optical flow, Lucas–Kanade on a
+        small grey crop): (dx, dy) pixels, or None (no last picture, too few points followed)."""
+        prev = self._prev_rgb
+        if prev is None or prev.shape != rgb.shape:
+            return None
+        import cv2
+        h, w = rgb.shape[:2]
+        size = max(float(np.ptp(pts, axis=0).max()), 8.0)
+        c = pts.mean(0)
+        r = size * 1.6
+        x0, y0 = int(max(0, c[0] - r)), int(max(0, c[1] - r))
+        x1, y1 = int(min(w, c[0] + r)), int(min(h, c[1] + r))
+        if x1 - x0 < 16 or y1 - y0 < 16:
+            return None
+        a = cv2.cvtColor(np.ascontiguousarray(prev[y0:y1, x0:x1]), cv2.COLOR_RGB2GRAY)
+        b = cv2.cvtColor(np.ascontiguousarray(rgb[y0:y1, x0:x1]), cv2.COLOR_RGB2GRAY)
+        # the hand's own points and a grid over its palm
+        g = np.array([[u, v] for u in np.linspace(-0.4, 0.4, 5) for v in np.linspace(-0.4, 0.4, 5)]) * size + pts[[0, 5, 9, 13, 17]].mean(0)
+        p0 = np.concatenate([pts, g]).astype(np.float32) - np.array([x0, y0], np.float32)
+        p1, st, err = cv2.calcOpticalFlowPyrLK(a, b, p0[:, None, :], None, winSize=(21, 21), maxLevel=3)
+        ok = st.ravel() == 1
+        if ok.sum() < 8:
+            return None
+        d = (p1[:, 0, :] - p0)[ok]
+        return np.median(d, axis=0)
+
+    def _hold(self, tr, pose, side, w, h, now, inview, rgb=None):
+        """The last hand seen, moved with the picture round it (optical flow) — or, without it, carried by
+        the body's arm (its wrist's move and the forearm's turn) — for up to HOLD seconds, only while the
+        body still sees that wrist in the picture."""
+        if tr is None or now - tr["t"] > HOLD:
+            return None
+        base = tr.get("base", tr["pts"])
+        if pose is not None and not inview:
+            return None  # (the arm went out of the picture or behind the back: the hand is gone)
+        wrist = self._wrist(pose, side, w, h, IN_VIEW)
+        pts = base
+        flow = self._flow(tr["pts"], rgb) if TRACK_FLOW and rgb is not None else None
+        if flow is not None:
+            # (the picture round the hand moved so — the blurred hand itself, closer than the body's wrist)
+            pts = tr["pts"] + flow
+        elif wrist is not None and tr.get("wrist") is not None:
+            shift = wrist - tr["wrist"]
+            turn = 0.0
+            fore = self._forearm(pose, side, w, h)
+            if fore is not None and tr.get("fore") is not None:
+                turn = max(-1.0, min(1.0, math.remainder(fore - tr["fore"], math.tau)))
+            c, s = math.cos(turn), math.sin(turn)
+            o = base - base[0]
+            pts = np.stack([c * o[:, 0] - s * o[:, 1], s * o[:, 0] + c * o[:, 1]], 1) + base[0] + shift
+        elif pose is not None or now - tr["t"] > HOLD / 2:
+            return None
+        self.track[side] = dict(tr, pts=pts, held=True, base=base, vel=None, sq=None)
+        self.stats["held"] = self.stats.get("held", 0) + 1
+        return pts, tr["z"], 0.0
+
+    def _look(self, rgb, side, sq, box, refine):
+        """The engine's look at one square: (xy, z, how sure) — not judged here."""
+        if self.rtm:
+            try:
+                return self._rtm(rgb, side, sq, box, refine)
+            except Exception as e:  # noqa: BLE001
+                # the video card's program died: MediaPipe's joint network alone from now on (never the camera)
+                self.rtm_error = str(e) or type(e).__name__
+                self.use_rtm(None)
+        return self._mp(rgb, side, sq, refine)
 
     def _mp(self, rgb, side, sq, refine):
         net = self.nets[side]
         self.stats["runs"] += 1
         xy, z, pres, _ = net.run(rgb, sq)
-        if pres < PRESENCE:
-            return None
-        if refine:
-            # the first look came from the body's guess: look again, square made from the hand itself
+        if refine and pres >= PRESENCE_TRACK:
+            # the first look came from a guess: look again, square made from the hand itself
             self.stats["runs"] += 1
             self.stats["refined"] += 1
             xy2, z2, pres2, _ = net.run(rgb, square_from_hand(xy))
-            if pres2 >= PRESENCE:
+            if pres2 >= min(PRESENCE, pres):
                 xy, z, pres = xy2, z2, pres2
         return xy, z, pres
 
@@ -513,13 +679,11 @@ class HandsV5:
                 p, conf = p2, conf2
         # MediaPipe's joint network on the square made from these points: the depth, and is it a hand
         _, z, pres, _ = self.nets[side].run(rgb, square_from_hand(p))
-        if conf < RTM_GATE and pres < PRESENCE:
-            return None
-        return p, z, max(pres, conf)
+        return p, z, max(pres, conf if conf >= RTM_GATE else 0.0)
 
     def tracking(self):
         """Are both hands followed (their squares come from themselves, not from the body)?"""
-        return self.track["left"] is not None and self.track["right"] is not None
+        return all(t is not None and not t.get("held") for t in self.track.values())
 
     def process(self, rgb, pose, now=None, pool=None, seeds=None):
         """seeds: hands from MediaPipe's palm detector (normalized landmark lists), for hands lost."""
@@ -530,7 +694,7 @@ class HandsV5:
             # (each side takes its own seed first — then the two threads can't take the same one)
             got_seed = {}
             for sd in sides:
-                if self.track[sd] is None:
+                if self.track[sd] is None or self.track[sd].get("held"):
                     got_seed[sd] = [self._seed(seeds, self._wrist(pose, sd, w, h), sd)]
             seeds = got_seed
         else:
@@ -540,16 +704,22 @@ class HandsV5:
             got = [j.result() for j in jobs]
         else:
             got = [self.one(rgb, pose, s, now, True, seeds.get(s)) for s in sides]
+        self._prev_rgb = rgb  # (a held hand moves with the picture: _flow)
         hands = []
         for side, r in zip(sides, got):
             if r is None:
                 continue
             xy, z, pres = r
+            held = self.held[side]
             hands.append({
                 "landmarks": [{"x": float(xy[i, 0] / w), "y": float(xy[i, 1] / h), "z": float((z[i] - z[0]) / w)} for i in range(21)],
                 # (MediaPipe's labels are for a mirrored picture: the person's right hand is "Left")
                 "label": "Left" if side == "right" else "Right",
-                "score": float(pres),
+                # (V5 has judged the hand itself — a hand it gives is a hand: the game's 0.5 is passed;
+                # the network's own word is kept in "presence")
+                "score": 0.5 if held else 0.5 + 0.5 * min(1.0, float(pres)),
+                "presence": float(pres),
                 "side": side,
+                **({"held": True} if held else {}),
             })
         return hands

@@ -447,10 +447,14 @@ class NativePose:
         mp = self._mp
         from mediapipe.tasks.python import BaseOptions, vision
         mode = vision.RunningMode.VIDEO
-        pose = vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=os.path.join(MODELS, POSE_MODELS[max(0, min(2, self.quality))])),
-            running_mode=mode, num_poses=1,
-            min_pose_detection_confidence=0.5, min_pose_presence_confidence=0.5, min_tracking_confidence=0.5))
+        def make_pose(m):
+            return lambda: vision.PoseLandmarker.create_from_options(vision.PoseLandmarkerOptions(
+                base_options=BaseOptions(model_asset_path=os.path.join(MODELS, POSE_MODELS[max(0, min(2, self.quality))])),
+                running_mode=m, num_poses=1,
+                min_pose_detection_confidence=0.5, min_pose_presence_confidence=0.5, min_tracking_confidence=0.5))
+        # the body follower never stays stuck on a wrong body (pose_guard.py: found on the author's recording)
+        from pose_guard import PoseGuard
+        pose = PoseGuard(make_pose(mode), make_pose(vision.RunningMode.IMAGE), lambda lm: _pts(lm, True))
         hands = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=os.path.join(MODELS, "hand_landmarker.task")),
             running_mode=mode, num_hands=2,
@@ -461,6 +465,7 @@ class NativePose:
         n = [0]
         from concurrent.futures import ThreadPoolExecutor
         pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="pose-net")  # (body, hands, face at once)
+        guard_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pose-check")  # (the body's fresh look now and then)
         hand_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hand-v5")  # (V5: both hands at once)
         last_pose = [None]
 
@@ -470,7 +475,7 @@ class NativePose:
             img = mp.Image(image_format=mp.ImageFormat.SRGB, data=small if small is not None else rgb)
             n[0] += 1
             v5 = self._v5()
-            jp = pool.submit(pose.detect_for_video, img, ts)
+            jp = pool.submit(pose.run, img, ts, guard_pool)
             jf = pool.submit(face.detect_for_video, img, ts)  # (every picture: a steady head turn)
             if v5:
                 # V5: no palm search — each hand is cut out where the body has it (hand_v5.py).
@@ -479,24 +484,22 @@ class NativePose:
                 # a hand to be found anew waits for this picture's body.
                 if v5.tracking() and last_pose[0] is not None:
                     jh = pool.submit(v5.process, rgb, last_pose[0], None, hand_pool)
-                    p = jp.result()
-                    pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
+                    pl = jp.result()[0]
                     hands_out = jh.result()
                 else:
                     # a hand not followed: every 3rd picture MediaPipe's palm detector looks too —
                     # close to the camera the body's wrist is wrong, the palm detector right
                     js = pool.submit(hands.detect_for_video, img, ts) if n[0] % 3 == 0 else None
-                    p = jp.result()
-                    pl = _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None
+                    pl = jp.result()[0]
                     seeds = [_pts(lm) for lm in (js.result().hand_landmarks or [])] if js is not None else None
                     hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool, seeds=seeds)
                 last_pose[0] = pl or last_pose[0]
                 out = {"poseLandmarks": pl, "hands": hands_out}
             else:
                 jh = pool.submit(hands.detect_for_video, img, ts)
-                p, h = jp.result(), jh.result()
+                pl, h = jp.result()[0], jh.result()
                 out = {
-                    "poseLandmarks": _pts(p.pose_landmarks[0], True) if p.pose_landmarks else None,
+                    "poseLandmarks": pl,
                     "hands": [
                         {
                             "landmarks": _pts(lm),
@@ -514,6 +517,7 @@ class NativePose:
         def close():
             pool.shutdown(wait=False)
             hand_pool.shutdown(wait=False)
+            guard_pool.shutdown(wait=False)
             for t in (pose, hands, face):
                 try:
                     t.close()
