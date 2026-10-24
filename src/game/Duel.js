@@ -161,6 +161,7 @@ export const DUEL = {
     MAXIMA_BOOST: 0.025, // «Максима» shouted in a clash: the meeting point goes 2.5 % of the way a second faster to the opponent (they add up for the whole clash; it was 5 % — twice too much: shouts buried the strength)
     MAXIMA_COST: 5, // mana, at once
     MAXIMA_EVERY: 3, // s: at most once every 3 seconds
+    MAXIMA_STACK: 4, // how many shouts of one side push at once (the 5th and later add nothing: a long clash is not decided by shouting alone)
     MAXIMA_LIFE: Infinity, // s: how long one shout pushes — for the whole clash (they accumulate; the push of each is half of what it was)
 };
 
@@ -176,7 +177,7 @@ export function maximaPush(boostA = 0, boostB = 0) {
 export function liveShouts(times, now) {
     let n = 0;
     if (times) for (let i = 0; i < times.length; i++) if (now - times[i] < DUEL.MAXIMA_LIFE) n++;
-    return n;
+    return Math.min(n, DUEL.MAXIMA_STACK);
 }
 
 /**

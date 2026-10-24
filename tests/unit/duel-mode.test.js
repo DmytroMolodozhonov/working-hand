@@ -191,6 +191,7 @@ test('«Максима» копится до конца столкновения
     assert.equal(liveShouts([0, 3, 6, 9], 9.5), 4); // (they add up)
     assert.equal(liveShouts([], 10), 0);
     assert.equal(liveShouts(undefined, 10), 0);
+    assert.equal(liveShouts([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 9.5), DUEL.MAXIMA_STACK); // (ten shouts push as four)
     assert.equal(DUEL.MAXIMA_BOOST, 0.025); // (it was 0.05)
 });
 

@@ -319,6 +319,7 @@ export class Game {
         this.hero = heroOf(this.config);
         // the duel-only start («Перед дуэлью на арене»): the world is the arena — no creatures, no ships, no villagers' talk or voices (the author: «можно отключить всё, что не касается дуэли»)
         this.duelOnly = config.mode === 'creative' && this.hero.spawn === 'arena';
+        { const mm = document.getElementById('minimap-container'); if (mm) mm.style.display = this.duelOnly ? 'none' : ''; } // (the duel arena has no use for a map)
         setCrewless(config.mode === 'creative' && this.hero.noCrew); // (ships without sailors: Sailors.crewRoster)
         // real trees, not blocks (TreeBuild.js, Trees.js): every world made from now on, smooth or not; a saved world keeps
         // what it was made with (its felled and burnt trees lie on those), a guest takes the host's
