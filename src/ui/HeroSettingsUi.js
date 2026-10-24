@@ -39,7 +39,13 @@ export const DUEL_RANK_ROWS = [
     const who = rank === 'master' ? 'Глава башни Джовалилиус Правдиус Нотан' : `Средний ${WIZ_RANK_RU[rank][0]}`;
     return { rank, label, avg: f1(avg), lo: f1(lo), hi: f1(hi), tip: `${who} имеет около ${f1(avg)} дуэльной силы (у разных — от ${f1(lo)} до ${f1(hi)}).` };
 });
-const rankRowsHtml = () => `<ul class="hero-ranks">${DUEL_RANK_ROWS.map((r) => `<li title="${r.tip}">${r.label}: <b>≈ ${r.avg}</b> <span class="mp-hint">(${r.lo}–${r.hi}). ${r.tip}</span></li>`).join('')}</ul>`;
+/** Подпись соперника в списке: кто он и сколько у него дуэльной силы (числа — из боя, WizardAI). */
+const FOE_RANK = { weak: 'novice', mid: 'adept', strong: 'teacher', master: 'master' };
+const foeOption = (x) => {
+    const row = DUEL_RANK_ROWS.find((r) => r.rank === FOE_RANK[x.id]);
+    const text = row ? `${x.label} — сила ≈ ${row.avg} (у разных от ${row.lo} до ${row.hi})` : `${x.label} — любой из четырёх`;
+    return `<option value="${x.id}" title="${row ? row.tip : 'Каждый раз новый уровень соперника.'}">${text}</option>`;
+};
 
 /** Starts where ships are about: only then «Корабли без моряков» is asked. */
 const SHIP_STARTS = ['port', 'blackship'];
@@ -48,7 +54,7 @@ const html = (p) => `
 <div class="hero-settings" data-hero-panel>
   <h4 class="hero-h">🧙 Настройки героя</h4>
   <div class="hero-row" title="${T.spawn}"><label for="${p}-spawn">📍 Где появиться:</label> <select id="${p}-spawn">${SPAWN_SPOTS.map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}</select></div>
-  <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map((x) => `<option value="${x.id}">${x.label}</option>`).join('')}</select></div>
+  <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
   <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
   <div class="hero-row" id="${p}-cells-row" hidden title="${T.cells}">
@@ -63,7 +69,7 @@ const html = (p) => `
     <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full"> Полная</label>
     <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom" checked> Настроить</label>
     <span class="hero-slide" id="${p}-duel-wrap" title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="0.1" value="2"> <span class="mp-hint">от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
-    ${rankRowsHtml()}
+    <span class="mp-hint">Сколько силы у волшебников — смотрите в списке «Соперник на арене».</span>
   </div>
   <div class="hero-group" role="radiogroup" aria-label="Здоровье">
     <span class="hero-cap">❤️ Здоровье</span>

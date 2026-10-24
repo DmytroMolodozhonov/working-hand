@@ -4,6 +4,7 @@
  */
 
 import { mountHeroPanel } from './ui/HeroSettingsUi.js';
+import { CreateMemory } from './ui/CreateMemory.js';
 import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
 import { HandRecorder } from './game/HandRecorder.js';
@@ -201,6 +202,30 @@ if (creativeZombieCount && zombieCountDisplay) {
     creativeZombieCount.oninput = (e) => { zombieCountDisplay.textContent = e.target.value; };
 }
 
+// «Создать мир» помнит последний выбор отдельно для каждого режима (CreateMemory.js): настройки героя, «Гладкий мир», последняя карта
+const createMem = new CreateMemory();
+const CREATE_MODES = MODE_ORDER.filter((id) => id !== 'maps');
+function restoreCreateMemory(mode) {
+    const d = createMem.load(mode);
+    const smooth = $('smooth-world');
+    if (smooth) smooth.checked = !!d?.smooth;
+    if (mode === 'creative') { try { heroSp.set(d?.hero); } catch (e) { heroSp.set(undefined); } }
+}
+function saveCreateMemory() {
+    if (pickingMap) return;
+    const patch = { smooth: !!$('smooth-world')?.checked };
+    if (selectedMode === 'creative') patch.hero = heroSp.read();
+    createMem.save(selectedMode, patch);
+}
+{
+    const last = createMem.lastMode(CREATE_MODES);
+    if (last) selectedMode = last;
+    restoreCreateMemory(selectedMode);
+    $('hero-settings-sp').addEventListener('input', saveCreateMemory);
+    $('hero-settings-sp').addEventListener('change', saveCreateMemory);
+    $('smooth-world')?.addEventListener('change', saveCreateMemory);
+}
+
 // ------------------------------------------------------------------ settings
 const volInput = $('zombie-vol');
 const volVal = $('vol-val');
@@ -351,6 +376,10 @@ async function updateGameMapList(forceRefresh = false) {
             pickingMap = id === 'maps';
             selectedMap = null;
             selectedMode = pickingMap ? 'survival' : id;
+            if (pickingMap) { // (the map chosen last time is chosen again)
+                const nm = createMem.load('maps')?.map;
+                if (nm && maps[nm]) selectedMap = { ...maps[nm], name: nm };
+            } else { createMem.setLastMode(id); restoreCreateMemory(id); }
             applyFps();
             updateGameMapList();
         };
@@ -398,6 +427,7 @@ async function updateGameMapList(forceRefresh = false) {
         card.onclick = () => {
             pickingMap = true;
             selectedMap = selectedMap && selectedMap.name === name ? null : { ...mapData, name };
+            if (selectedMap) createMem.save('maps', { map: name });
             selectedMode = 'survival';
             updateGameMapList();
         };

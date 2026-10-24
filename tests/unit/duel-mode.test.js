@@ -156,3 +156,21 @@ test('дуэль в Творческом: мана играет роль, ког
     // (finite mana: the number is not used)
     assert.ok(Math.abs(mk(true, 200, 2) - mk(true, 200)) < 1e-9);
 });
+
+import { CreateMemory } from '../../src/ui/CreateMemory.js';
+
+test('«Создать мир» помнит выбор отдельно для каждого режима', () => {
+    const store = new Map();
+    const mem = new CreateMemory({ getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) });
+    assert.equal(mem.load('creative'), null);
+    mem.save('creative', { smooth: true, hero: { spawn: 'arena' } });
+    mem.save('creative', { smooth: false }); // (merged with what was kept)
+    mem.save('survival', { smooth: true });
+    assert.deepEqual(mem.load('creative'), { smooth: false, hero: { spawn: 'arena' } });
+    assert.deepEqual(mem.load('survival'), { smooth: true });
+    mem.setLastMode('survival');
+    assert.equal(mem.lastMode(['creative', 'survival']), 'survival');
+    assert.equal(mem.lastMode(['creative']), null);
+    assert.doesNotThrow(() => new CreateMemory(null).save('x', {})); // (no cache: just not remembered)
+    assert.equal(new CreateMemory({ getItem: () => '{bad' }).load('x'), null);
+});
