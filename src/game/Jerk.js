@@ -11,15 +11,15 @@
  * single picture (a tracking glitch). `list`: [{t (s), x, y, z}] body-relative.
  */
 export const JERK = { WINDOW: 0.3, DIST: 1.4, STRAIGHT: 0.75, MIN_SPAN: 0.08, ONE_STEP: 0.7 };
-export function sharpJerk(list) {
+export function sharpJerk(list, J = JERK) {
     if (!list || list.length < 3) return false;
     const last = list[list.length - 1];
     for (let i = 0; i < list.length - 2; i++) {
         const o = list[i];
         const span = last.t - o.t;
-        if (span > JERK.WINDOW || span < JERK.MIN_SPAN) continue;
+        if (span > J.WINDOW || span < J.MIN_SPAN) continue;
         const dist = Math.hypot(last.x - o.x, last.y - o.y, last.z - o.z);
-        if (dist < JERK.DIST) continue;
+        if (dist < J.DIST) continue;
         let path = 0, biggest = 0;
         for (let k = i + 1; k < list.length; k++) {
             const a = list[k - 1], b = list[k];
@@ -27,8 +27,8 @@ export function sharpJerk(list) {
             path += d;
             biggest = Math.max(biggest, d);
         }
-        if (dist / path < JERK.STRAIGHT) continue; // (shaking about)
-        if (biggest > dist * JERK.ONE_STEP) continue; // (one picture's jump: the camera lost the hand)
+        if (dist / path < J.STRAIGHT) continue; // (shaking about)
+        if (biggest > dist * J.ONE_STEP) continue; // (one picture's jump: the camera lost the hand)
         return true;
     }
     return false;

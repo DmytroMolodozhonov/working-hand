@@ -25,8 +25,8 @@
  *              VOLLEY blocks a second, steered by the wand a little; each block that hits hurts (BLOCK_DMG, a wizard/player 2) and
  *              pushes (a few in a row knock down). One that misses or hits a wall is laid back as a block where it stopped
  *              (the caster's computer; if the cell is not free or not allowed it crumbles); one that hits a creature crumbles.
- *   shield     «Shield» (SHIELD_MIN = 12 blocks): the blocks close into 4 rings of 12 (48 blocks) at SHIELD_R = 2.3 m, a second shell at
- *              3.2 m for the 49th-96th; the rest circle outside. A spell that would hit the hero hits the blocks facing it: each
+ *   shield     «Shield» (SHIELD_MIN = 12 blocks): the blocks close into 4 rings of 12 (48 blocks) at SHIELD_R = 2.5 m, a second shell (4 rings of 16) at
+ *              3.8 m for the 49th-112th; the rest circle outside. A spell that would hit the hero hits the blocks facing it: each
  *              blow takes blocks away (HIT_BLOCKS, near the blow) and the hero is not touched while the blocks facing it hold (≥ 2
  *              within 25° of the blow). Fewer than SHIELD_MIN left → it opens. The gods' spells break it all (the blocks fly apart).
  *              It does not cover from above (Thunderwave), nor from a blow in melee (a creature standing next to him), nor arrows
@@ -61,6 +61,7 @@ export const GV = {
     BASE: 2.5, // blocks a second while the wand shows ground
     TURN: 10, // blocks one full turn of the hand brings (at a calm speed)
     TURN_FAST: 1.6, // × at a fast hand
+    SEP: 1.05, // m: no two blocks nearer than this (ObjectSwarm.separate)
     TAKE_PER_FRAME: 6,
     SEND_EDITS: 0.12, // s: the taken blocks go out together
     IDLE_END: 14, // s with no block lifted: the vortex falls apart (nothing to hold)

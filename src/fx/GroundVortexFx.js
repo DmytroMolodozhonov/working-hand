@@ -21,7 +21,7 @@ const _c = new THREE.Color();
 
 /** The block material: the world's voxel shader with the pattern anchored to each block and its own side / top colour. */
 export function blockSwarmMaterial() {
-    const mat = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
+    const mat = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111, side: THREE.DoubleSide }));
     const base = mat.onBeforeCompile;
     mat.onBeforeCompile = (shader, r) => {
         base(shader, r);

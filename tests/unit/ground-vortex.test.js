@@ -101,7 +101,7 @@ test('the shield: 12 blocks needed, a full ring covers all round, a hole lets a 
     assert.ok(R.shieldCovers(48, a, 0.4, 1.0 + Math.PI), 'the far side holds');
     assert.ok(R.hitBlocks('BombardoMaxima') > R.hitBlocks('Bombardo') && R.hitBlocks('Bombardo') > R.hitBlocks('Sapira'));
     assert.ok(R.sweepsShield('AvadaKedavra') && R.sweepsShield('TotalDestruction') && !R.sweepsShield('Sapira'));
-    assert.equal(R.shieldSlot(96, {}), null, 'the rest circle outside');
+    assert.equal(R.shieldSlot(112, {}), null, 'the rest circle outside');
 });
 
 test('the train: blocks follow the wand\'s trail, the older the further back', () => {
@@ -189,4 +189,133 @@ test('price: 20 at once + 1 a second (the shared VortexCost); the swarm maths is
     assert.equal(vortexDrain(2.5), 2.5); assert.equal(vortexAffordable(19), false); assert.equal(vortexAffordable(20), true);
     for (const f of ['funnelSlot', 'ringOffset', 'shieldCovers', 'blocksToBreak', 'trailAt', 'trailPush', 'salvoVelocity', 'flyStep']) assert.equal(R[f], S[f], f);
     assert.equal(S.SWARM.MAX_THINGS, 160); assert.equal(GV.MAX_BLOCKS, 160);
+});
+
+// ---- the shield is a tidy lattice: no two blocks touch (the author: «блоки налезают друг на друга»)
+/** Do two unit cubes (turned about the vertical axis by ya, yb) at a, b overlap? Separating-axis test in plan + the height. */
+function cubesOverlap(a, ya, b, yb) {
+    if (Math.abs(a.y - b.y) >= 1) return false; // (side by side in height: a gap)
+    const sq = (x, z, yaw) => { const c = Math.cos(yaw), s = Math.sin(yaw); return [[0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]].map(([u, v]) => [x + u * c - v * s, z + u * s + v * c]); };
+    const A = sq(a.x, a.z, ya), B = sq(b.x, b.z, yb);
+    for (const poly of [A, B]) for (let i = 0; i < 4; i++) {
+        const p = poly[i], q = poly[(i + 1) % 4], nx = -(q[1] - p[1]), nz = q[0] - p[0];
+        const pr = (P) => { const d = P.map(([x, z]) => x * nx + z * nz); return [Math.min(...d), Math.max(...d)]; };
+        const [a0, a1] = pr(A), [b0, b1] = pr(B);
+        if (a1 <= b0 + 1e-9 || b1 <= a0 + 1e-9) return false;
+    }
+    return true;
+}
+
+test('the shield: every slot has its own place, no two blocks ever touch or overlap, at any turn of the shield', () => {
+    const slots = [];
+    for (let i = 0; i < GV.SHIELD_CAP; i++) slots.push(R.shieldSlot(i, {}));
+    assert.equal(new Set(slots.map((s) => s.shell + ':' + s.ring + ':' + s.col)).size, GV.SHIELD_CAP, 'a slot of its own for each');
+    for (const angle of [0, 0.3, 1.7]) {
+        const P = slots.map((s, i) => R.shieldOffset(i, angle, {}, s));
+        let min = 9;
+        for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+            const d = Math.hypot(P[i].x - P[j].x, P[i].y - P[j].y, P[i].z - P[j].z);
+            min = Math.min(min, d);
+            if (d < 1.45) assert.ok(!cubesOverlap(P[i], slots[i].ph + angle, P[j], slots[j].ph + angle), `blocks ${i} and ${j} overlap (${d.toFixed(2)})`);
+        }
+        assert.ok(min >= 1.2 - 1e-9, `the nearest centres are ${min.toFixed(3)} m apart (a block is 1 m)`);
+    }
+    // not hollow: the gap between neighbours is small (≤ 0.5 m of air in a ring) so the wall reads as whole
+    const inner = slots.filter((s) => s.shell === 0 && s.ring === 0).sort((a, b) => a.col - b.col);
+    assert.equal(inner.length, GV.SHIELD_COLS);
+    const chord = 2 * GV.SHIELD_R * Math.sin(Math.PI / GV.SHIELD_COLS);
+    assert.ok(chord - 1 < 0.5 && chord >= 1.2, `${chord}`);
+});
+
+test('things of a swarm are pushed apart by a grid (cheap), never closer than the minimum', () => {
+    const P = [];
+    for (let i = 0; i < 160; i++) P.push({ x: (i % 6) * 0.5, y: Math.floor(i / 36) * 0.5, z: (Math.floor(i / 6) % 6) * 0.5 });
+    const t0 = performance.now();
+    for (let k = 0; k < 20; k++) R.separate(P, 1.05, 4, new Map());
+    const ms = (performance.now() - t0) / 20;
+    let min = 9;
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) min = Math.min(min, Math.hypot(P[i].x - P[j].x, P[i].y - P[j].y, P[i].z - P[j].z));
+    assert.ok(min > 0.8, `a packed cloud of 160 opened to ${min.toFixed(2)}`);
+    assert.ok(ms < 8, `${ms.toFixed(2)} ms for 160 things`);
+    const Q = [{ x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }];
+    assert.equal(R.separate(Q, 1.05, 2), 0, 'far things are left alone');
+});
+
+// ---- the hand's intent: no mode flips by accident
+const aimAt = (a) => ({ x: Math.sin(a), y: -0.2, z: Math.cos(a) });
+function run(intent, seconds, f, dt = 1 / 30) {
+    let fired = 0;
+    for (let t = 0; t < seconds; t += dt) if (intent.step(t + (run.t0 || 0), dt, ...f(t))) fired++;
+    run.t0 = (run.t0 || 0) + seconds;
+    return fired;
+}
+const noJerk = () => null;
+
+test('ring → train: a shiver or a still wand does not switch; a hand that stopped going round and leads the wand one way does; only circling brings it back', () => {
+    run.t0 = 0;
+    let I = new R.SwarmIntent();
+    // a still hand: not enough (no lead)
+    run(I, 3, () => [0.02, 0.1, aimAt(0.2)]);
+    assert.equal(I.train, false, 'a still wand is not a lead');
+    // a shiver: the wand shakes ±0.1 rad, back and forth
+    I = new R.SwarmIntent(); run.t0 = 0;
+    run(I, 3, (t) => [0.05, 0.3, aimAt(0.2 + 0.1 * Math.sin(t * 25))]);
+    assert.equal(I.train, false, 'a shiver does not switch');
+    // a hand still going round (rate high) never switches, however the wand moves
+    I = new R.SwarmIntent(); run.t0 = 0;
+    run(I, 3, (t) => [0.8, 1.5, aimAt(t * 0.8)]);
+    assert.equal(I.train, false);
+    // a clear lead: the circling stopped for 0.7 s+, the wand is led one way (0.8 rad a second)
+    I = new R.SwarmIntent(); run.t0 = 0;
+    run(I, 0.5, () => [0.02, 0.1, aimAt(0)]);
+    assert.equal(I.train, false, 'not at once');
+    run(I, 2, (t) => [0.02, 0.1, aimAt(t * 0.8)]);
+    assert.equal(I.train, true, 'led one way: the train');
+    // stays a train while the hand is calm (hysteresis), a single circle of a moment does not drop it
+    run(I, 1, () => [0.02, 0.1, aimAt(1.5)]);
+    assert.equal(I.train, true);
+    run(I, 0.2, () => [0.9, 1.5, aimAt(1.5)]);
+    assert.equal(I.train, true, 'a moment of circling is not enough to leave');
+    run(I, 0.6, () => [0.9, 1.5, aimAt(1.5)]);
+    assert.equal(I.train, false, 'a really going-round hand brings it back');
+});
+
+test('the throw: a single jerk, a flick that comes back, a slow sweep do nothing; a long fast throw that keeps its way fires once', () => {
+    const jl = (pts) => pts.map(([t, x]) => ({ t, x, y: 0, z: 0 }));
+    const sharpAlways = () => true, sharpNever = () => false;
+    let I = new R.SwarmIntent(); run.t0 = 0;
+    // «it looks like a throw» once, but the wand comes back at once: ignored
+    assert.equal(I.step(0, 1 / 30, 0.02, 3, aimAt(0), jl([[0, 0], [0.1, 1], [0.2, 2], [0.3, 3]]), sharpAlways, true), false);
+    assert.ok(I.pending, 'waiting for the wand to keep its way');
+    assert.equal(I.step(0.08, 1 / 30, 0.02, 3, aimAt(1.0), null, sharpAlways, true), false);
+    assert.equal(I.pending, null, 'the wand went the other way: cancelled');
+    for (let t = 0.1; t < 2; t += 1 / 30) assert.equal(I.step(t, 1 / 30, 0.02, 0.1, aimAt(1.0), jl([[0, 0], [0.1, 0], [0.2, 0], [0.3, 0]]), sharpNever, true), false);
+    // a real throw: the wand keeps its way 0.15 s → fires once, then a pause between two
+    I = new R.SwarmIntent();
+    let fired = 0;
+    for (let t = 0; t < 2; t += 1 / 30) if (I.step(t, 1 / 30, 0.02, 3, aimAt(0.3), jl([[0, 0], [0.1, 1], [0.2, 2], [0.3, 3]]), sharpAlways, true)) fired++;
+    assert.equal(fired, 2, 'JERK_GAP: not a machine gun (two in two seconds at most)');
+    assert.ok(R.INTENT.JERK_GAP >= 0.9);
+    // nothing to throw (no blocks / shield): no fire at all
+    I = new R.SwarmIntent(); fired = 0;
+    for (let t = 0; t < 2; t += 1 / 30) if (I.step(t, 1 / 30, 0.02, 3, aimAt(0.3), jl([[0, 0], [0.1, 1], [0.2, 2], [0.3, 3]]), sharpAlways, false)) fired++;
+    assert.equal(fired, 0);
+});
+
+test('the real sharp-jerk reader is stricter for the swarm than for the duel, and the duel\'s own numbers are unchanged', async () => {
+    const { sharpJerk, JERK } = await import('../../src/game/Jerk.js');
+    assert.equal(JERK.DIST, 1.4);
+    const mk = (L) => Array.from({ length: 7 }, (_, i) => ({ t: i * 0.049, x: L * i / 6, y: 0, z: 0 }));
+    assert.equal(sharpJerk(mk(1.8)), true, 'the duel: 1.8 m in 0.3 s is a jerk');
+    assert.equal(sharpJerk(mk(1.8), R.INTENT.JERK), false, 'the swarm: not enough');
+    assert.equal(sharpJerk(mk(2.6), R.INTENT.JERK), true, 'the swarm: a long throw');
+    assert.ok(R.INTENT.JERK.DIST > JERK.DIST && R.INTENT.JERK.STRAIGHT > JERK.STRAIGHT);
+});
+
+test('the train head follows the wand with a lag, no teleport', () => {
+    const p = { x: 0, y: 0, z: 0 }, target = { x: 10, y: 0, z: 0 };
+    R.lagHead(p, target, 1 / 60);
+    assert.ok(p.x > 0 && p.x < 1, `${p.x}`);
+    for (let i = 0; i < 120; i++) R.lagHead(p, target, 1 / 60);
+    assert.ok(p.x > 9.5);
 });

@@ -32,7 +32,7 @@ const r2 = (v) => Math.round(v * 100) / 100;
 const ease = (u) => u * u * (3 - 2 * u);
 const ARRIVE = 0.8; // s a lifted block takes to fly from its hole into the funnel
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _ax = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _ax = new THREE.Vector3();
 const _o = {}, _t1 = {}, _t2 = {};
 const _col = new THREE.Color();
 
@@ -143,10 +143,10 @@ export class GroundVortex {
         g._manaLater = true; // (mana: it counts at the first real lift)
         this.meter.reset();
         const s = this.state = Object.assign(newSwarm(this.me, true), {
-            side, calm: 0, acc: 0, idle: 0, life: 0, lifted: false, jerk: [], jerkAt: -9, fire: null, spotAt: -9, alarmAt: -9, worked: false, power: g.wandMagic?.power?.(GV.NAME) || 1,
+            side, intent: new R.SwarmIntent(), headT: new THREE.Vector3(), jerk: [], acc: 0, idle: 0, life: 0, lifted: false, fire: null, spotAt: -9, alarmAt: -9, worked: false, power: g.wandMagic?.power?.(GV.NAME) || 1,
         });
         s.lush = !!data?.lush;
-        s.body.copy(g.character.group.position); s.head.copy(s.body);
+        s.body.copy(g.character.group.position); s.head.copy(s.body); s.headT.copy(s.body);
         this._plan.length = 0; this._planSpot = null;
         this._note({ ev: 'cast' });
         this._mDirty = true;
@@ -250,6 +250,11 @@ export class GroundVortex {
                 p.y = b.src.y + (p.y - b.src.y) * e + 2.5 * Math.sin(Math.PI * clamp(u, 0, 1));
             } else if (b.src) b.src = null;
         }
+        // things do not overlap: nearer than SEP m are pushed apart (a grid, not every pair)
+        const P = sw._P || (sw._P = []);
+        P.length = n;
+        for (let i = 0; i < n; i++) P[i] = sw.B[i] ? sw.B[i].pos : null;
+        R.separate(P, GV.SEP, 2, this._cell || (this._cell = new Map()));
     }
 
     // ================================================================ update
@@ -297,19 +302,18 @@ export class GroundVortex {
         s.spin += (target - s.spin) * Math.min(1, dt * (1.2 + 2 * sp));
         s.angle += s.spin * dt;
         s.sangle += GV.SHIELD_SPIN * dt;
-        // ring ↔ train: the hand going round keeps it at the hero; a calm pointing hand sends it after the wand
-        const calm = this.meter.rate < 0.15 && sp < 0.6;
-        s.calm = calm ? s.calm + dt : 0;
-        s.tk = (s.calm > GV.TRAIN_CALM && !s.shield && s.n > 0) ? 1 : 0;
+        // ring ↔ train, and the throw: only a clear intent of the hand switches them (SwarmIntent, the numbers — INTENT in ObjectSwarm)
+        s.jerk.push({ t: this._t, x: hand.x, y: hand.y, z: hand.z });
+        while (s.jerk.length && this._t - s.jerk[0].t > 0.5) s.jerk.shift();
+        const salvo = s.intent.step(this._t, dt, this.meter.rate, sp, d, s.jerk, sharpJerk, !s.shield && s.n > 0);
+        s.tk = (s.intent.train && !s.shield && s.n > 0) ? 1 : 0;
         s.k = clamp(s.k + (s.tk - s.k) * Math.min(1, dt * GV.TRAIN_IN * 2), 0, 1);
         if (Math.abs(s.k - s.tk) < 0.02) s.k = s.tk;
         s.sk = clamp(s.sk + (s.shield ? 1 : -1) * GV.SHIELD_IN * dt, 0, 1);
         this._head(s, o, d, body);
+        R.lagHead(s.head, s.headT, dt); // (the head follows the wand with a lag — the tail does not jump)
         R.trailPush(s.hist, this._t, s.head.x, s.head.y, s.head.z);
-        // a sharp throw of the wand hand: a salvo
-        s.jerk.push({ t: this._t, x: hand.x, y: hand.y, z: hand.z });
-        while (s.jerk.length && this._t - s.jerk[0].t > 0.5) s.jerk.shift();
-        if (!s.shield && s.n && this._t - s.jerkAt > 0.8 && s.jerk.length > 3 && sharpJerk(s.jerk)) { s.jerkAt = this._t; this._volley(s, Math.min(GV.SALVO, s.n), d); }
+        if (salvo) this._volley(s, Math.min(GV.SALVO, s.n), d);
         // «Атака»: a stream of blocks where the wand points
         if (s.fire) {
             s.fire.rest += GV.VOLLEY * dt;
@@ -338,9 +342,9 @@ export class GroundVortex {
             const hit = data.raycast(o, d, len);
             if (hit) len = Math.max(1.5, hit.dist - 1.2);
         }
-        s.head.set(o.x + d.x * len, o.y + d.y * len, o.z + d.z * len);
-        const gy = this.game.collision?.groundY ? this.game.collision.groundY(s.head.x, s.head.z) : body.y - 2;
-        if (s.head.y < gy + 1.4) s.head.y = gy + 1.4;
+        s.headT.set(o.x + d.x * len, o.y + d.y * len, o.z + d.z * len);
+        const gy = this.game.collision?.groundY ? this.game.collision.groundY(s.headT.x, s.headT.z) : body.y - 2;
+        if (s.headT.y < gy + 1.4) s.headT.y = gy + 1.4;
     }
 
     /** Take blocks out of the ground while `acc` has them. */
@@ -708,14 +712,22 @@ export class GroundVortex {
         const fx = this.fx;
         if (!fx) return;
         fx.begin(this.data?.lush);
-        const put = (b, p, spinT, scale) => {
+        const put = (b, p, spinT, scale, sw = null) => {
             _ax.set(b.tm.ax, b.tm.ay, b.tm.az);
             _q.setFromAxisAngle(_ax, b.tm.w * spinT);
+            const sk = sw && b.sh ? ease(sw.sk) : 0;
+            if (sk > 0.001) {
+                // in the shield a block is a whole cube turned to face the middle (no tumble, full size): they do not touch
+                _ax.set(0, 1, 0);
+                _q2.setFromAxisAngle(_ax, -(b.sh.ph + sw.sangle));
+                _q.slerp(_q2, sk);
+                scale += (1 - scale) * sk;
+            }
             fx.add(b, p, _q, scale);
         };
         const t = this._t;
-        if (this.state) for (const b of this.state.B) if (b) put(b, b.pos, t, b.tm.s);
-        for (const sw of this.remote.values()) for (const b of sw.B) if (b) put(b, b.pos, t, b.tm.s);
+        if (this.state) for (const b of this.state.B) if (b) put(b, b.pos, t, b.tm.s, this.state);
+        for (const sw of this.remote.values()) for (const b of sw.B) if (b) put(b, b.pos, t, b.tm.s, sw);
         for (const f of this.flights) put(f.b, f.pos, t + f.age * 2, 0.96);
         for (const f of this.falls) put(f.b, f.pos, t + f.age * 3, f.b.tm.s);
         fx.end();
