@@ -102,3 +102,19 @@ test('столкновение лучей: рука игрока «на сопе
     D._myRay = (side, hand, dir) => { hand.set(0, 12, 0); return dir.set(1, 0, 0); }; // the hand points aside: off him
     assert.equal(D._contact('me', { side: 'right', spell: 'Stupefy' }, wiz.id).ok, false);
 });
+
+test('поражение в режиме дуэлей: надпись и окно через 5 секунд; потерянная палочка возвращается в руку', () => {
+    const calls = [];
+    const items = { wand: null, loose: new Map([['w1', {}]]), removeLoose: (u) => calls.push('rm:' + u), spawnLoose: (it) => calls.push('spawn:' + it.uid), pickUp: (u, id, side) => calls.push(`pick:${u}:${id}:${side}`) };
+    const g = { localId: 'me', items, character: { group: { position: { x: 0, y: 0, z: 0 } } } };
+    const D = Object.assign(Object.create(ArenaDuels.prototype), { game: g, list: new Map(), mode: { arenaId: 'a', id: 'me', wand: { kind: 'wand', uid: 'w1' } } });
+    let shown = null;
+    D.endUi = { showWin: (s, lost) => { shown = [s, lost]; }, hide() {}, hideBox() {} };
+    D._wandBack();
+    assert.deepEqual(calls, ['rm:w1', 'spawn:w1', 'pick:w1:me:right']);
+    items.wand = { kind: 'wand', uid: 'w2' }; // (he has one: it is remembered, nothing given)
+    calls.length = 0; D._wandBack();
+    assert.equal(D.mode.wand.uid, 'w2'); assert.deepEqual(calls, []);
+    D._modeWin(true);
+    assert.equal(shown[1], true); assert.equal(D.mode.askAfter, 5); assert.equal(D.mode.lost, true);
+});

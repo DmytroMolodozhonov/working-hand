@@ -52,7 +52,7 @@ import { villagerLook } from '../entities/VillagerModel.js';
 import { foeRanks } from './SpawnSpots.js';
 import { domeOf, domeCross } from './ArenaDome.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
-import { DuelEndUi, AGAIN_AFTER } from '../ui/DuelEndUi.js';
+import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const WALK = 2.3, RUN = 5.6;
@@ -1040,7 +1040,7 @@ export class ArenaDuels {
             case 'count': this.count = { t: 0 }; break;
             case 'end':
                 this.count = null; this.myQueue = null;
-                if (this.mode) { if (m.r === 'win') this._modeWin(); return; } // (the duel mode has its own end: no lectern, no coins)
+                if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
                 hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Вашу палочку вернули — она на столе записи' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
             case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${ARENA_DUEL.REWARD} монет`, true); break;
@@ -1134,7 +1134,7 @@ export class ArenaDuels {
             v.arena.seat = s; v.arena.leg = 2; v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
         }
         this._keepOnFloor(A, D);
-        if (m.winT != null) { m.winT += dt; if (m.winT >= AGAIN_AFTER) { m.winT = null; this._askAgain(); } }
+        if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
         if (D || m.hold) return;
         if (A.fans.size < Math.min(A.want, 4)) return; // (the stands must be filling up first)
         // the next duel: the opponent on his place, the player on his, the count 10…1
@@ -1146,6 +1146,7 @@ export class ArenaDuels {
         A.owed = null; // (no coins at the lectern here: the duel is the whole game)
         a.castCd = 0.3; a.castT = 0; a.prep = null; a.dodge = null; // (ready: his first spell goes the moment the fight begins)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
+        this._wandBack(); // (a wand lost in the last duel is given back: the hero never starts without one)
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
         this.log.push('mode:' + a.id + ':' + (a.entry?.rank || '?'));
@@ -1153,6 +1154,25 @@ export class ArenaDuels {
         this._send(A);
         if (!g.items?.wand) g.hud?.setVoice?.('🪄 Возьмите палочку в руку — через 10 секунд бой!', true);
         else g.hud?.setVoice?.(`⚔️ Через 10 секунд бой! Соперник: ${a.name || 'волшебник'}. За вас болеют трибуны`, true);
+    }
+
+    /**
+     * The hero's wand for the next duel: remembered while he has it; knocked out and taken («Экспеллиармус» + «Акцио») — it is gone from the
+     * floor and the lectern and given into his hand again, so a lost duel never leaves him with an empty hand.
+     */
+    _wandBack() {
+        const g = this.game, it = g.items, m = this.mode;
+        if (!it || !m) return;
+        const have = it.wand;
+        if (have) { m.wand = { ...have }; return; }
+        if (!m.wand) return;
+        const w = { ...m.wand };
+        try {
+            if (it.loose?.has?.(w.uid)) it.removeLoose?.(w.uid); // (the same wand lying on the floor / the lectern: no second one)
+            const p = g.character.group.position;
+            it.spawnLoose(w, new THREE.Vector3(p.x, p.y + 1.5, p.z), { hover: true });
+            it.pickUp(w.uid, g.localId, 'right');
+        } catch (e) { /* (an item system without the hand: the wand lies near him) */ }
     }
 
     /** The hero on his own place (the lit mark), facing the opponent's; health and mana full: a new duel is fresh. */
@@ -1203,11 +1223,11 @@ export class ArenaDuels {
     }
 
     /** The hero won in the duel mode: the big «Вы победили!», in ten seconds the window «Хотите повторить дуэль?». */
-    _modeWin() {
+    _modeWin(lost = false) {
         const m = this.mode;
         if (!m) return;
-        m.hold = true; m.winT = 0;
-        this.endUi.showWin('Трибуны ликуют');
+        m.hold = true; m.winT = 0; m.lost = lost; m.askAfter = lost ? AGAIN_AFTER_LOSS : AGAIN_AFTER;
+        this.endUi.showWin(lost ? 'Попробуйте ещё раз — палочка вернётся к вам' : 'Трибуны ликуют', lost);
     }
 
     _askAgain() {
@@ -1215,6 +1235,7 @@ export class ArenaDuels {
         if (!m) return;
         this.endUi.hideBox();
         this.endUi.showAgain({
+            lost: !!m.lost,
             foe: m.foe,
             onStart: (foe) => { m.foe = foe; if (this.game.hero) this.game.hero.foe = foe; this.endUi.hide(); this._resetArena(); m.hold = false; },
             onExit: () => document.getElementById('pause-exit-btn')?.click(), // (the same way out as the pause menu: the world is saved)
