@@ -19,6 +19,7 @@
  */
 
 import { ARENA_MODES, arenaPose } from './ArenaPoses.js';
+import { COMMAND_MODES, commandPose } from './CommandPoses.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { SKIN_TONES } from './Appearance.js';
@@ -31,10 +32,11 @@ export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'maste
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
 export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
-export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES];
+export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
 const ARENA_SET = new Set(ARENA_MODES);
+const COMMAND_SET = new Set(COMMAND_MODES);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
 export const SLEEP_HALF = 2.05;
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
@@ -1425,6 +1427,8 @@ export class VillagerModel {
         const ck = state.chore || null;
         if (ck !== this.chore || (ck && (state.side | 0) !== this.choreSide)) this._setChore(ck, state.side | 0);
         if (mode !== this.mode) this._enterMode(mode);
+        this._bare = !!state.bare; // (lying down on an order, in the open: no blanket, no mat)
+        if (!!state.sheath !== !!this._sheath) { this._sheath = !!state.sheath; if (this.tool) this.tool.visible = !this._sheath; } // (the sword in its scabbard on an order)
         if (this._flashT > 0) { this._flashT -= dt; if (this._flashT <= 0) { this._flashT = 0; this._applyMaterial(); } }
         if (mode === 'dead') { this._updateDead(dt); return; }
         if (SLEEP_MODES.has(mode)) { this._updateSleep(dt, mode === 'sleepMat'); return; }
@@ -1694,7 +1698,10 @@ export class VillagerModel {
                 break;
             default:
                 // the duel arena: a duellist's efforts, the crowd on the stands (ArenaPoses.js)
-                if (ARENA_SET.has(mode)) {
+                if (COMMAND_SET.has(mode)) { // (an order of the player: a pose — src/entities/CommandPoses.js)
+                    rate = commandPose(T, mode, t) || rate;
+                    if (mode === 'attn' || mode === 'salute') breathe = 0.008;
+                } else if (ARENA_SET.has(mode)) {
                     if (this.castNow) { this.castNow = false; this._flickT = 0.12; }
                     rate = arenaPose(T, mode, t, this.aimPitch, this._flickT > 0);
                     if (mode === 'sitCheer' || mode === 'winded' || mode === 'stagger' || mode === 'triumph' || mode === 'flourish') breathe = 0;
@@ -1745,8 +1752,8 @@ export class VillagerModel {
             this.mat.receiveShadow = true;
             this.group.add(this.mat);
         }
-        this.blanket.visible = true;
-        this.mat.visible = onMat;
+        this.blanket.visible = !this._bare;
+        this.mat.visible = onMat && !this._bare;
         this.mat.position.set(0, -VILLAGER_FOOT_OFFSET + 0.06, 0);
         if (this.tool) this.tool.visible = false;
         if (this.shield) this.shield.visible = false;

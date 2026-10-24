@@ -101,6 +101,7 @@ export class VillagerOrders {
                 this._shout([v], lord ? ['Буду рядом, государь!', 'Не отойду от вас!', 'Никто вас не тронет!'] : ['Ладно, прикрою!', 'Буду рядом.', 'Не бойся, я с тобой.']);
                 break;
             }
+            case 'cmd': this.life.cmds.run(v, args, by); return; // (a plain-word command: VillagerCommands.js — it checks itself)
             case 'dismiss': this._dismiss(v, by); break;
             case 'leave_me': this._dismiss(v, by, true); break;
             case 'bow': v.bowing = 1.6; break;
@@ -117,6 +118,7 @@ export class VillagerOrders {
 
     /** (host) May `by` give this order? (a guest's order is checked again here) */
     permitted(v, name, args = {}, by) {
+        if (name === 'cmd') return true; // (VillagerCommands.run checks the rank itself)
         const king = this.life.state(v.cs.def.id).owner === by && by != null;
         // (a bodyguard / a companion for one he chose to help — his character and how he takes me: Attitude.willDo)
         if (args.agreed && (name === 'guard_me' || name === 'guard' || name === 'follow_me' || name === 'follow') && v.role !== 'king') return true;
@@ -235,6 +237,7 @@ export class VillagerOrders {
     }
 
     _release(v) {
+        this.life.cmds?.clear(v);
         v.follow = null; v.followFar = false; v.order = null; v.path = null; v.guard = null; v.gOwner = null; v.gFoe = null; v.gSlot = null; v.guardOrder = null;
     }
 

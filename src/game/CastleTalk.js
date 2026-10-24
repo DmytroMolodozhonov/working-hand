@@ -38,10 +38,12 @@ import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
+import { CommandTalk } from './CommandTalk.js';
 import { detectOrder, toolsFor, TOOLS, ORDER_LINES } from '../ai/TalkActions.js';
 import { TalkTrace } from '../ai/TalkTrace.js';
 import { quickOrder } from '../ai/TalkFlow.js';
 import { ackFor, ackPool } from '../ai/TalkAcks.js';
+import { commandPool } from '../ai/TalkCommands.js';
 import { stewardPool } from './ArenaSteward.js';
 import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
@@ -162,6 +164,7 @@ export class CastleTalk {
         this._labelText = new Map(); // good uid -> label text (rebuilt by _watchMarket)
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
+        this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
         this.attention = new Attention(); // whom I look at, walk to, talk with — he hears my words, he notices me (Attention.js)
         this._attT = 0;
         this._attPrev = null;
@@ -509,6 +512,7 @@ export class CastleTalk {
             // his quick words (orders, alarm) and his answers to orders — said the moment he hears (TalkAcks)
             // (first his short «Хм…» / «Ага…»: with a quick net the answer follows them at once)
             const lines = [...take(null, 12).filter(isShortFiller).slice(0, 2), ...(lang === 'ru' ? ackPool({ role: v.role, king, female: vo.female }) : [])];
+            if (lang === 'ru') lines.push(...commandPool(v.role, { wizard: !!v.wizard, female: vo.female }).slice(0, 4)); // (the words of plain commands: «Есть!», «Я не волшебник» — TalkCommands)
             if (lang === 'ru' && (v.role === 'knight' || v.role === 'advisor')) lines.push(...(king ? ORDER_LINES.obey : ORDER_LINES.refuse)[v.role === 'advisor' ? 'advisor' : 'knight'].slice(0, 2));
             if (v.arena?.kind === 'steward' && lang === 'ru') lines.unshift(...stewardPool()); // (the steward's own lines, made in advance)
             // his thinking words, by the kind of question (the net thinks; a rules' answer not made yet follows them)
@@ -609,6 +613,8 @@ export class CastleTalk {
                 return true;
             }
         }
+        // (a command in plain words — «присядь», «сразитесь друг с другом», «построиться»: the rules, at once)
+        if (!(this._trader(v) && this._pursePay(v)) && this.commands.hear(v, text, info)) return true;
         // (a coin pouch on his counter and a good named: the purchase — VillagerBrain is not asked)
         if (this._trader(v) && this._payByName(v, text)) { v.talking = 4; v.talkTo = g.localId; return true; }
         const b = this.brain(v);
@@ -781,6 +787,8 @@ export class CastleTalk {
         // (in a talk with him, the hand down: what I say is to him — not a spell, unless it is one)
         if (!spell && this.inTalk() && this._partner === L && !this.game.isMagicActive) return true;
         if (detectOrder(text, this._players())) return true;
+        // (a command in plain words: he hears it, no spell — unless its words ARE a spell («подними щит») and nobody was called by name or role)
+        if (this.commands.matches(text) && (!spell || ROLE_CALL.some(([re]) => re.test(normalizeText(text))))) return true;
         const intent = detectIntent(text).intent;
         // («Бомбардо», «Инферно» said alone are spells, even if villagers like to talk about magic)
         if (spell && (intent === 'magic' || intent === 'unknown')) return false;

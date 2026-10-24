@@ -21,6 +21,7 @@
 import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
 import { parseCrewOrder } from './FleetMath.js';
+import { parseCommand, canDo, COMMANDS, sayReply, commandAck } from '../ai/TalkCommands.js';
 import * as THREE from 'three';
 import { VillagerModel, villagerLook, VILLAGER_FOOT_OFFSET } from '../entities/VillagerModel.js';
 import { floorAt, hullHalfWidth, stairUnder } from './ShipLayout.js';
@@ -1690,6 +1691,7 @@ export class Sailors {
         if (this._orderListener(text)) return true; // (the king's order to the crew of his ship)
         if (greetsCrew(text) && this._crewNear().length) return true; // («привет, моряки»: the crew hears it further)
         if (!this._listener()) return false;
+        if (!crewOrder(text) && !matchSpell(text) && parseCommand(text)) return true; // (a plain-word command: poses, questions, «не могу» — the crew's own orders above are bigger)
         if (crewOrder(text) && !matchSpell(text)) return true; // («на абордаж», «право на борт»: words to the crew; a spell's word — «огонь», «поднять паруса» (Unfurl) — goes the usual way)
         const spell = matchSpell(text);
         if (spell === 'Stand') return false;
@@ -1771,6 +1773,7 @@ export class Sailors {
         // asleep: a mumble first (a second word wakes him) — NightLife.js
         if (v.mode === 'sleepMat' || v.nsleep) { if (this.auth) g.castleLife?.night?.rouseSailor(v, g.localId); else g.sync?.net.send({ t: 'screw', talk: 1, id: v.id }); return true; }
         const s = v.ship;
+        if (v.role !== 'blackbeard' && !v.pirate && !crewOrder(text) && this._command(v, text)) return true;
         if (v.role === 'blackbeard') { v.talkedAt = performance.now(); this._say(v, pick(PIRATE.taunt), 5); return true; } // (he talks with his rapier)
         const ctx = {
             playerName: g.net?.active ? g.net.name : null, playerIsKing: this.ships.loyalTo(s, g.localId),
@@ -1792,6 +1795,36 @@ export class Sailors {
         const skip = quick && order && (!res?.reply || res.intent === 'unknown');
         try { if (!skip) this._say(v, res?.reply || 'Некогда мне, работать надо.', 6); } finally { if (talk) { talk._urgent = false; talk._more = false; } }
         if (res?.action === 'hostile' || res?.action === 'call_guards') this.provoke(s, g.localId, '🏴 Вы разозлили матросов!');
+        return true;
+    }
+
+    /**
+     * A plain-word command (src/ai/TalkCommands.js) to a sailor: what a man can do on a deck he does or says — a wave, a
+     * cheer, a dance, an answer about his health, a joke, a song — and what he cannot (walk off in formation, sit down,
+     * fight a mate) he says so. The crew's real orders («к бою», «паруса», «на абордаж», «огонь по кораблю») are
+     * FleetOrders' and are read first: this is only what they do not know.
+     */
+    _command(v, text) {
+        const cmd = parseCommand(text);
+        if (!cmd) return false;
+        const g = this.game, talk = g.castleLife?.talk;
+        const king = this.ships.loyalTo(v.ship, g.localId);
+        const ctx = { playerIsKing: king };
+        const def = COMMANDS[cmd.id];
+        const can = canDo(cmd.id, v.role, ctx);
+        let line;
+        if (!can.ok) line = can.line;
+        else if (def.do.startsWith('say:')) line = sayReply(def.do.slice(4), { role: v.role, hpRatio: v.maxHp ? v.hp / v.maxHp : 1, danger: v.ship.hostile.size > 0, roleLine: v.role === 'captain' ? `Я капитан «${v.ship.name}».` : v.role === 'boatswain' ? 'Я боцман: слежу за палубой и командой.' : 'Я матрос. Тяну снасти и держу палубу.' });
+        else if (['wave', 'laugh', 'dance', 'nod', 'salute', 'bow_cmd', 'hug'].includes(cmd.id)) { v.waveT = cmd.id === 'dance' ? 7 : 3; line = commandAck(cmd.id, v.role, ctx) || null; }
+        else if (['hold', 'wait', 'go_post', 'attn', 'stop_fight', 'shield_down'].includes(cmd.id)) line = commandAck(cmd.id, v.role, ctx) || 'Есть!'; // (a sailor stands by his post anyway)
+        else line = king ? 'На палубе так не развернёшься, капитан. Отдайте приказ по кораблю: «к бою», «паруса», «на абордаж».' : 'Сейчас не до этого, работа.';
+        v.talking = 5; v.talkTo = g.localId; v.path = null;
+        if (!this.auth) g.sync?.net.send({ t: 'screw', talk: 1, id: v.id });
+        v.talkedAt = performance.now();
+        if (line) {
+            if (talk) { talk._partner = v; talk._urgent = true; }
+            try { this._say(v, line, 5); } finally { if (talk) talk._urgent = false; }
+        }
         return true;
     }
 

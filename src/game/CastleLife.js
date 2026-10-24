@@ -38,6 +38,7 @@ import * as THREE from 'three';
 import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
+import { VillagerCommands } from './VillagerCommands.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
@@ -289,6 +290,7 @@ export class CastleLife {
         this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
+        this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
         this.chores = new Chores(this); // what the people do all day by their houses, at the well, the market (Chores.js)
@@ -1400,6 +1402,7 @@ export class CastleLife {
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
         if (this.fright.step(v, dt)) return; // (danger near: hiding, running away, looking out, buckets)
+        if (v.cmd && this.cmds.step(v, dt)) return; // (a plain-word command: a pose, a walk, a place in the line, a spar)
         if (v.job === 'rebuild' && this.rebuild.work(v, dt)) return; // (a builder at the repairs)
         if ((v.pack > 0 || v.rounds) && this.night?.duty(v, dt)) return; // (a merchant packing up, the watch's rounds)
         if (v.fleeT > 0) { this._fleeStep(v, dt); return; }
@@ -3552,7 +3555,7 @@ export class CastleLife {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     const ck = this.auth ? shownChore(v) : v.chore;
-                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide });
+                    v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath });
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);
@@ -3562,6 +3565,7 @@ export class CastleLife {
                 if (v.imp?.mine && v.model.strikeNow) g.imperius?.landed('v', v); // (my mind's blow: at the sword's own moment)
                 else if (this.auth && v.model.strikeNow && v.impDuty) g.imperius?.guards?.guardStrike(v); // (a knight on duty: the blow / the shove)
                 else if (this.auth && v.model.strikeNow && v.foe) this._strike(v);
+                else if (this.auth && v.model.strikeNow && v.cmd) this.cmds.strike(v);
                 else if (this.auth && v.model.strikeNow && (v.order || v.guardOrder)) this.orders.strike(v);
             }
             if ((v.mode === 'swim' || v.mode === 'paddle') && visible && d < 40) splashes(g, v.x, v.y + SWIMMERS.person.float, v.z, dt, v.mode === 'paddle', v); // (the water round a swimmer)

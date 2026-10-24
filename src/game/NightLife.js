@@ -570,7 +570,7 @@ export class NightLife {
      */
     heard(v, text) {
         const g = this.game;
-        if (SLEEP_MODES.has(v.mode) || v.sleep?.phase === 'lie') {
+        if ((SLEEP_MODES.has(v.mode) && !v.cmdLie) || v.sleep?.phase === 'lie') {
             if (this.auth) this.rouse(v, g.localId);
             else g.sync?.villagerTalk?.(v.id);
             return true;

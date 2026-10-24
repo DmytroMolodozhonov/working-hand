@@ -43,6 +43,17 @@ export function loudness(pcm) {
     return Math.max(Math.min(0.8, 0.98 / Math.max(peak, 1e-4)), Math.min(4, 0.1 / rms, 0.98 / Math.max(peak, 1e-4)));
 }
 
+/** Louder by role: a knight's low voice was the quietest (the author: «голос рыцарей тише… +50%»). */
+export const ROLE_BOOST = { knight: 1.5 };
+
+/** A soft limiter: up to 0.7 untouched, above it rounds off toward 1 (never clips) — a low voice with high peaks can be as loud as the others. */
+export function softLimit(x) {
+    const a = x < 0 ? -x : x;
+    if (a <= 0.7) return x;
+    const y = 0.7 + 0.3 * Math.tanh((a - 0.7) / 0.3);
+    return x < 0 ? -y : y;
+}
+
 export class Speech {
     /**
      * @param {{lang?:string, engine?:'neural'|'system', master?:Function, neural?:object|null,
@@ -348,8 +359,13 @@ export class Speech {
         const play = (pcm, sampleRate, piece, onStart = null) => {
             const ctx = this._audio();
             if (!ctx || !pcm?.length) return;
+            // (the level is baked into the sound through a soft limiter: the same loudness for every voice, no clipping;
+            // the gain node below only carries the distance)
+            const lv = this._level(opts.voiceKey, pcm) * (ROLE_BOOST[opts.role] || 1);
+            const loud = new Float32Array(pcm.length);
+            for (let i = 0; i < pcm.length; i++) loud[i] = softLimit(pcm[i] * lv);
             const buf = ctx.createBuffer(1, pcm.length, sampleRate);
-            if (buf.copyToChannel) buf.copyToChannel(pcm, 0); else buf.getChannelData(0).set(pcm);
+            if (buf.copyToChannel) buf.copyToChannel(loud, 0); else buf.getChannelData(0).set(loud);
             const src = ctx.createBufferSource();
             src.buffer = buf;
             src.playbackRate.value = cast.pitch; // played `pitch` times faster…
@@ -358,7 +374,7 @@ export class Speech {
             const live = opts.live ? this._live(opts) : null;
             if (live && live.volume < 0.03) { maybeDone(); return; }
             const gain = ctx.createGain();
-            gain.gain.value = (live ? live.volume * Math.max(0, Math.min(1, Number(this.master()) || 0)) : opts.volume) * this._level(opts.voiceKey, pcm); // (every voice equally loud: a soft woman's voice too)
+            gain.gain.value = (live ? live.volume * Math.max(0, Math.min(1, Number(this.master()) || 0)) : opts.volume); // (distance only: the voice's own level is in the sound)
             src.connect(gain);
             let tail = gain;
             if (live && live.muffled && ctx.createBiquadFilter) { // (through a wall: dull)
