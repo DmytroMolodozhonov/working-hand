@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHORES, CHORE_KEYS, TOWN_CHORES, WIZ_CHORES, choresFor, choreCode, choreOf, shownChore } from '../../src/game/Chores.js';
+import { Chores, CHORES, CHORE_KEYS, TOWN_CHORES, WIZ_CHORES, choresFor, choreCode, choreOf, shownChore } from '../../src/game/Chores.js';
 import { VillagerModel, villagerLook } from '../../src/entities/VillagerModel.js';
 
 test('about twenty chores, the wizards have their own', () => {
@@ -42,4 +42,22 @@ test('every chore animates (no NaN), its things go away after, the tool comes ba
         assert.equal(m.root.position.y, -1.95, k);
         m.dispose();
     }
+});
+
+test('a ladder needs a real wall (5 blocks tall); a fence is no wall; pushed off the spot, the chore is over (no ladder or bench left on the path)', () => {
+    const solid = new Set();
+    const data = { get: (x, y, z) => (solid.has(`${x},${y},${z}`) ? 1 : 0) };
+    const c = new Chores({ game: { world: { terrain: { data } } } });
+    for (let y = 1; y <= 5; y++) solid.add(`3,${y},0`); // a wall
+    solid.add('6,1,0'); solid.add('6,2,0'); // a low fence
+    assert.equal(c._tallWall(3, 0, 0), true);
+    assert.equal(c._tallWall(6, 0, 0), false);
+    const L = { _ground() {}, _steer() {} };
+    const ch = new Chores({ game: {}, ...L, night: null });
+    const v = { chore: 'roof', mode: 'chore', x: 10, z: 10, y: 0, speed: 0, choreSeen: performance.now(), waitT: 30, choreAt: { x: 10, z: 10 }, choreGo: null, choreYaw: 0, yaw: 0, cs: {}, dead: false };
+    ch.life.chores = ch;
+    assert.equal(ch.step(v, 0.05), true, 'at the place: goes on');
+    v.x = 12; v.choreSeen = performance.now();
+    assert.equal(ch.step(v, 0.05), false, 'pushed 2 m off: over');
+    assert.equal(v.chore, null);
 });
