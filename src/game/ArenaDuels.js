@@ -790,7 +790,7 @@ export class ArenaDuels {
         const ready = (v.castCd ?? 0) <= 0 && v.castT <= 0.15 && !v.prep;
         let moving = false;
         const stance = arenaStance({ mana: v.mana, maxMana: v.maxMana, foeMana: ov?.mana ?? 30, foeMaxMana: ov?.maxMana ?? 30, t: D.go });
-        if (!ready || d > (ready ? Math.max(stance.max, 25) : stance.max) || d < stance.min) { // (ready and in the beam's reach: he stops and casts — he does not walk on)
+        if (!ready || d > (ready ? Math.max(stance.max, 29) : stance.max) || d < stance.min) { // (ready and in the beam's reach: he stops and casts — he does not walk on)
             v.arena.turnT = (v.arena.turnT || 0) - dt;
             if (v.arena.turnT <= 0) { v.arena.turnT = 2.5 + Math.random() * 3.5; v.arena.dir = Math.random() < 0.5 ? -1 : 1; }
             const ux = (v.x - fp.x) / (d || 1), uz = (v.z - fp.z) / (d || 1);
@@ -913,6 +913,7 @@ export class ArenaDuels {
      * foul / an accident — handled here). false — not the arena's business.
      */
     onHit(v, by, killed, opts = {}) {
+        if (v?.arena && by != null && this.mode?.arenaId === v.arena.id && by === this.mode.id && v.arena.kind !== 'duel') return true; // (the duel mode: a spectator or a wizard on his way out struck by a stray charge — nobody avenges)
         if (!v?.arena || v.arena.kind !== 'duel' || by == null) return false;
         const A = this.list.get(v.arena.id), D = A?.duel;
         if (!D || (D.phase !== 'fight' && D.phase !== 'count')) return false;
@@ -1143,6 +1144,7 @@ export class ArenaDuels {
         const o = marks[1].mark;
         a.arena.side = 1; a.arena.leg = 2; a.x = o.x; a.z = o.z; a.y = o.y; a.speed = 0; a.yaw = yawTo(o.x, o.z, marks[0].mark.x, marks[0].mark.z);
         A.owed = null; // (no coins at the lectern here: the duel is the whole game)
+        a.castCd = 0.3; a.castT = 0; a.prep = null; a.dodge = null; // (ready: his first spell goes the moment the fight begins)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
@@ -1158,7 +1160,7 @@ export class ArenaDuels {
         const g = this.game, ch = g.character, data = g.world?.terrain?.data || g.terrain?.data, M = A.def.gates[0].mark, O = A.def.gates[1].mark;
         const y = data?.surfaceY ? data.surfaceY(M.x, M.z) : M.y;
         ch.group.position.set(M.x, y + PLAYER_GROUND_OFFSET + 0.1, M.z);
-        ch.group.rotation.y = Math.atan2(O.x - M.x, O.z - M.z) + Math.PI; // (the hero looks along −Z at 0: the bearing needs a half turn)
+        g.faceYaw?.(Math.atan2(O.x - M.x, O.z - M.z) + Math.PI); // (the hero looks along −Z at 0: the bearing needs a half turn; kept for the camera too)
         ch.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         ch.airTop = null; ch.landing = null; g.knock?.reset?.(); // (no fall counted from before the move: the hero stands, he does not land hard)
@@ -1232,10 +1234,8 @@ export class ArenaDuels {
         const D = A.duel;
         if (D) {
             if (D.phase !== 'over') this._end(A, D, 'a', 'dead');
-            for (const v of [D.a, D.b]) if (v && !v.dead) this._release(v);
-            A.duel = null;
         }
-        this._send(A);
+        this._resetArena(); // (the old wizard and the crowd go at once, nobody keeps anger: the next duel starts clean)
         return true;
     }
 

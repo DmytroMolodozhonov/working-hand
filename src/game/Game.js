@@ -3073,6 +3073,15 @@ export class Game {
         this.ui.died?.(text, () => this.respawn());
     }
 
+    /**
+     * Turn the hero to face `yaw` (a rotation.y: he looks along −sin, −cos) and keep it: the body follows `cameraBaseRotation` / `smoothBody`
+     * every frame, so setting `rotation.y` alone is undone at the next frame (the view spun back).
+     */
+    faceYaw(yaw) {
+        this.cameraBaseRotation = yaw; this.smoothBody = yaw;
+        this.character.setBodyRotation(yaw);
+    }
+
     /** Back into the game: full health, a new place near the start. */
     respawn() {
         const ch = this.character;

@@ -96,7 +96,7 @@ export class HeroApply {
         const g = this.game, data = g.world.terrain.data, me = g.character.group.position;
         this.pending = null;
         me.set(at.x, data.surfaceY(at.x, at.z) + PLAYER_GROUND_OFFSET + 0.1, at.z);
-        g.character.group.rotation.y = (t.yaw || 0) + Math.PI; // (t.yaw is a bearing atan2(dx, dz); the hero looks along −Z at 0)
+        g.faceYaw((t.yaw || 0) + Math.PI); // (t.yaw is a bearing atan2(dx, dz); the hero looks along −Z at 0)
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         this._upright();
