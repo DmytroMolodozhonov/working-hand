@@ -508,10 +508,8 @@ export class ArenaDuels {
         switch (D.phase) {
             case 'enter': {
                 if (!this._enter(A, v, dt)) return true;
-                // to the middle (two steps apart, facing) — or, against a player, straight to the far mark
-                const c = A.def.centre, m = marks[1].mark, s = v.arena.side ? 1 : -1;
-                const len = Math.hypot(m.x - c.x, m.z - c.z) || 1;
-                const at = D.p != null ? m : { x: c.x + (m.x - c.x) / len * 1.6 * s, z: c.z + (m.z - c.z) / len * 1.6 * s };
+                // to his own mark (equal points on opposite sides of the floor — never next to the other), facing the other: the bow, the count, only then the fight
+                const at = me;
                 if (this._go(v, at, WALK, dt, 0.4)) { v.mode = 'idle'; this._face(v, other ? other : marks[0].mark, dt); }
                 return true;
             }
