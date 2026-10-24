@@ -3,6 +3,7 @@
  * multiplayer lobby. The menu behaves exactly like the original.
  */
 
+import { mountHeroPanel } from './ui/HeroSettingsUi.js';
 import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
 import { HandRecorder } from './game/HandRecorder.js';
@@ -195,6 +196,7 @@ setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title:
 keepLauncherAlive();
 watchServer(); // (the game's program closed while the window is open: said plainly, and back by itself)
 
+const heroSp = mountHeroPanel($('hero-settings-sp'), 'hero-sp'); // («Настройки героя»: shown with the Creative choice)
 if (creativeZombieCount && zombieCountDisplay) {
     creativeZombieCount.oninput = (e) => { zombieCountDisplay.textContent = e.target.value; };
 }
@@ -1000,6 +1002,7 @@ $('start-btn').addEventListener('click', () => {
         return;
     }
     const cfg = readConfig();
+    if (cfg.mode === 'creative' && !cfg.map) cfg.hero = heroSp.read(); // («Настройки героя» Творческого мира: HeroSettingsUi.js)
     cfg.smooth = !!$('smooth-world')?.checked; // («Гладкий мир»: ramps — only when a world is made)
     if (!cfg.map) cfg.worldName = `${modeLabel(cfg.mode) || 'Мир'} — ${new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
     startGame(cfg);
@@ -1391,7 +1394,9 @@ async function joinRoom(code) {
 }
 
 /** A new multiplayer world's choices: «Гладкий мир» (ramps) and «Божественные заклинания на Земле» (both off by default). */
-const mpWorldOpts = () => ({ smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked });
+const mpWorldOpts = () => ({ smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked, ...($('mp-mode')?.value === 'creative' ? { hero: heroMp.read() } : {}) }); // (Creative: the hero's settings — HeroSettingsUi.js; guests get the host's)
+const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
+{ const showHeroMp = () => { $('hero-settings-mp').hidden = $('mp-mode').value !== 'creative'; }; $('mp-mode')?.addEventListener('change', showHeroMp); showHeroMp(); }
 
 // Create a server: it takes a free place in the list and the game starts at once
 $('mp-host-btn').addEventListener('click', async () => {
@@ -1518,7 +1523,7 @@ net.on('message', (msg) => {
     if ((game && game.active) || starting) return;
     pendingWelcome = msg;
     const local = readConfig();
-    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth, realTrees: !!msg.config.realTrees }, msg);
+    startGame({ ...local, mode: legacyMode(msg.config.mode, msg.config.map), map: msg.config.map, zombieCount: msg.config.zombieCount, seed: msg.config.seed, gen: msg.config.gen ?? 1, godsOnEarth: !!msg.config.godsOnEarth, realTrees: !!msg.config.realTrees, hero: msg.config.hero }, msg);
 });
 
 function escapeHtml(s) {

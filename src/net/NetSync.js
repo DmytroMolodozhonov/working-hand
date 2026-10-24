@@ -49,6 +49,7 @@ import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { LUMOS } from '../game/WandMagic.js';
 import { applyCredit } from '../game/Mana.js';
+import { normalizeHero, LEGACY_HERO } from '../game/HeroSetup.js';
 
 /** My wand for the others (a duel counts it): [direction, favourite, power] — or none (a bare hand). */
 const netWand = (w) => (w ? [w.dir || 0, w.fav || 0, w.power || 0] : undefined);
@@ -1264,6 +1265,7 @@ function sanitizeConfig(c) {
         seed: c.seed,
         gen: c.gen ?? 1, // world generation (an old host sends none: 1)
         godsOnEarth: !!c.godsOnEarth, // (the host's world: the gods' spells allowed on the Earth — Game._godsBanned)
+        hero: c.mode === 'creative' && c.hero ? normalizeHero(c.hero, LEGACY_HERO) : undefined, // (the host's rules for the hero: HeroSetup.js; none from an old host)
         realTrees: !!c.realTrees, // (the host's world has real trees, not blocks — Trees.js)
     };
 }

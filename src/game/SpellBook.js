@@ -3,7 +3,7 @@
  * the cast (Game.knowsSpell → Builder.knows too), the voice's wait for a longer spell
  * (NativeVoice.knows, Game.castLocalSpell), the pause menu's spell book and the codex' badges.
  *
- * Creative (and the test mode) knows everything. Elsewhere (the author):
+ * Creative (and the test mode) knows everything (Creative's «Настройки героя» may leave out the gods' spells and «Inspirius»: HeroSetup.knownInCreative). Elsewhere (the author):
  *  - START_SPELLS: known from the very start, without a scroll or a book;
  *  - every other spell is learned: a burnt scroll (`bonus.spells[key]`), a read book-bird's book
  *    (`books.learned`), the gods' temple library, or 1000 cells of mana («Flying Maxima»).
@@ -49,6 +49,8 @@ export const MANA_SPELLS = new Set(['FlyingMaxima']);
 /** The scroll / book key that teaches this spell. */
 export const teachKey = (name) => TAUGHT_BY[name] || name;
 
+import { knownInCreative } from './HeroSetup.js';
+
 const free = (mode) => mode === 'creative' || mode === 'test';
 
 /**
@@ -57,7 +59,9 @@ const free = (mode) => mode === 'creative' || mode === 'test';
  */
 export function knows(name, who = {}) {
     if (!name) return false;
-    if (free(who.mode) || START_SPELLS.has(name)) return true;
+    if (who.mode === 'creative' && who.hero) { // (Творческий: «все заклинания есть» или «только сильного мага» — HeroSetup.js; не известное — доучить свитком можно)
+        if (knownInCreative(who.hero, name) || START_SPELLS.has(name)) return true;
+    } else if (free(who.mode) || START_SPELLS.has(name)) return true;
     if (name === 'Flight') return who.mode !== 'freeworld' || !!who.flight || !!who.learned?.has?.('Flight');
     const k = teachKey(name);
     return !!who.spells?.[k] || !!who.learned?.has?.(k);

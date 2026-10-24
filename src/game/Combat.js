@@ -540,6 +540,11 @@ export class Combat {
         this._hudKey = '';
     }
 
+    /** Do the mana rules work: «Выживание» always; Creative only with a finite mana («Настройки героя», HeroSetup.js). */
+    get manaOn() {
+        return this.enabled || (this.game.config?.mode === 'creative' && this.game.hero?.infiniteMana === false);
+    }
+
     get frozen() {
         return this.frozenLeft > 0;
     }
@@ -581,7 +586,7 @@ export class Combat {
         if (this.dead) return '💀';
         if (this.frozen) { if (this.game) this.game.lastCastWhy = 'вы заморожены'; return `🧊 Вы заморожены — разморозка через ${Math.ceil(this.frozenLeft)} с`; }
         if (this.stunned) { if (this.game) this.game.lastCastWhy = 'вы оглушены'; return `💫 Вы оглушены — ещё ${Math.ceil(this.stunLeft)} с`; }
-        if (!this.enabled) return null;
+        if (!this.manaOn) return null;
         const cost = this.costOf(name, extra);
         if (this.fatigue < cost) {
             const msg = `😮‍💨 Не хватает маны: нужно ${cost}, есть ${Math.floor(this.fatigue)}`;
@@ -605,7 +610,7 @@ export class Combat {
 
     pay(name, extra = 0) {
         this.paidCount = (this.paidCount || 0) + 1; // (mana: a spell that was paid for may count as a success)
-        if (this.enabled) this.fatigue = Math.max(0, this.fatigue - this.costOf(name, extra));
+        if (this.manaOn) this.fatigue = Math.max(0, this.fatigue - this.costOf(name, extra));
     }
 
     /**
@@ -615,7 +620,7 @@ export class Combat {
      */
     drain(amount, dt = 0) {
         if (this.dead || this.frozen || this.stunned) return false;
-        if (!this.enabled) return true;
+        if (!this.manaOn) return true;
         const bw = this.game.breakward; // (метка «слом защиты»: мана кончилась — заклинание держится на чёрной силе, Breakward.js)
         if (this.fatigue <= 0) return bw?.holdDry() || false;
         const left = this.fatigue - amount - PVP.FATIGUE_REGEN * dt;
@@ -625,7 +630,7 @@ export class Combat {
     }
 
     /** Мана кончилась и держать нечем (с меткой «слом защиты» удерживаемое живёт дальше). */
-    manaOut() { return this.enabled && this.fatigue <= 1e-6 && !this.game.breakward?.holding; }
+    manaOut() { return this.manaOn && this.fatigue <= 1e-6 && !this.game.breakward?.holding; }
 
     /** A burnt scroll: more strength for good. */
     /** A new hundred of mana cells reached: the hero is told his mana now comes back faster (not at a load, not when it falls). */
@@ -710,9 +715,9 @@ export class Combat {
             this._refund(swap);
             this.game.mana?.success('ProtectionMaxima'); // (the dome is up)
             // it holds while there is mana: 1 a second, until «стоп» (not bound to a hand: the wand casts on)
-            this.shield = { type: 2, side: 'right', left: this.enabled ? this.fatigue / PVP.DOME_DRAIN : PVP.SHIELD_HOLD_MAX, drain: PVP.DOME_DRAIN, age: 0 };
+            this.shield = { type: 2, side: 'right', left: this.manaOn ? this.fatigue / PVP.DOME_DRAIN : PVP.SHIELD_HOLD_MAX, drain: PVP.DOME_DRAIN, age: 0 };
             this.game.spiders?.onDome(); // the only way out of the spider's fangs
-            if (this.enabled) this.game.hud?.setVoice?.('🛡️ Купол держится, пока есть мана (−1 в секунду). Каждое отражённое заклинание — половина его цены. Снять — «стоп»', true);
+            if (this.manaOn) this.game.hud?.setVoice?.('🛡️ Купол держится, пока есть мана (−1 в секунду). Каждое отражённое заклинание — половина его цены. Снять — «стоп»', true);
         } else {
             if (this.shield?.type === 2) return '🛡️ Вы уже под куполом «Protection Maxima»';
             const wand = this.game.wandSide?.();
@@ -725,9 +730,9 @@ export class Combat {
             // off sooner with a sharp jerk of the shield arm or «стоп»
             const fav = this.game.items?.wand?.fav === 'Protection' ? 1.4 : 1;
             const drain = PVP.SHIELD_DRAIN / fav;
-            this.shield = { type: 1, side, left: this.enabled ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0, wand: side === wand };
+            this.shield = { type: 1, side, left: this.manaOn ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0, wand: side === wand };
             if (wand && side === wand) this.game.hud?.setVoice?.('🛡️ Щит в руке с палочкой: любое другое заклинание этой палочкой собьёт его. Держите щит другой рукой', true);
-            else if (this.enabled) this.game.hud?.setVoice?.('🛡️ Щит держится, пока есть мана (−0,5 в секунду). Каждое отражённое заклинание — половина его цены', true);
+            else if (this.manaOn) this.game.hud?.setVoice?.('🛡️ Щит держится, пока есть мана (−0,5 в секунду). Каждое отражённое заклинание — половина его цены', true);
         }
         if (this.game.sound) this.game.sound.playIce?.();
         return null;
@@ -755,12 +760,12 @@ export class Combat {
         this.game.mana?.success(name); // (the first time: +100 cells — a gift of the gods, Mana.GOD_SPELLS)
         const drain = maxima ? PGODS.DRAIN_MAX : PGODS.DRAIN;
         // (an ordinary shield held now gives way to it)
-        this.shield = { type: maxima ? 2 : 1, side, left: this.enabled ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0, gods: true, wand: !maxima && side === this.game.wandSide?.() };
+        this.shield = { type: maxima ? 2 : 1, side, left: this.manaOn ? this.fatigue / drain : PVP.SHIELD_HOLD_MAX, drain, age: 0, gods: true, wand: !maxima && side === this.game.wandSide?.() };
         if (maxima) this.game.spiders?.onDome(); // (the spider's fangs let go, as for any dome)
         const at = maxima ? this.center(_v1) : this.shieldAt(side, _v1);
         this.game.fx?.lightFlash?.(at, PGODS.GOLD, 3, 0.4, 20);
         for (let i = 0; i < 30; i++) this.game.fx?.spark?.(at, i % 3 ? PGODS.GOLD : 0xffffff, 0.18, _v2.set((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6), 0.8);
-        if (this.enabled) this.game.hud?.setVoice?.(maxima ? '✨ Божественный купол: ни одно заклинание, кроме божественных, не пройдёт. −5 маны в секунду. Снять — «стоп»' : '✨ Божественный щит: ни одно заклинание, кроме божественных, не пройдёт. −3 маны в секунду. Снять — «стоп» или рывком руки', true);
+        if (this.manaOn) this.game.hud?.setVoice?.(maxima ? '✨ Божественный купол: ни одно заклинание, кроме божественных, не пройдёт. −5 маны в секунду. Снять — «стоп»' : '✨ Божественный щит: ни одно заклинание, кроме божественных, не пройдёт. −3 маны в секунду. Снять — «стоп» или рывком руки', true);
         return null;
     }
 
@@ -786,7 +791,7 @@ export class Combat {
         const k = Math.max(0, Math.min(1, share));
         if (BREAKS_GODS.has(kind)) { this.breakGods(); return 0; } // («Дай»: the first blow breaks it — no death, no mana; the next one gets through)
         if (!isDivine(kind)) { this._godsFx(from); return 0; } // (any other spell: held for nothing)
-        if (!this.enabled) { this._godsFx(from); return 0; } // (Creative: no mana rules)
+        if (!this.manaOn) { this._godsFx(from); return 0; } // (Creative with endless mana: no mana rules)
         const r = payDivine(this.fatigue, price ?? SPELL_COST[kind] ?? 0, k);
         this.fatigue = r.mana;
         if (r.pass > 0) { this._shatter('💥 Божественная защита сломалась — не хватило маны удержать заклинание богов!'); return r.pass; }
@@ -829,7 +834,7 @@ export class Combat {
     }
 
     _refund(name) {
-        if (name && this.enabled) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + this.costOf(name));
+        if (name && this.manaOn) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + this.costOf(name));
     }
 
     /** A held «Protection»: a sharp jerk of the shield arm puts it out (not a small move). */
@@ -884,7 +889,7 @@ export class Combat {
      */
     _payHit(kind) {
         if (this.shield?.gods) return this.godsHit(kind, null, 1) <= 0; // (the gods' shield: held — only the gods' own spells cost: ProtectionGods.js)
-        if (!this.enabled || !this.shield) return true;
+        if (!this.manaOn || !this.shield) return true;
         let cost = shieldHitCost(kind);
         if (cost > 0 && BEAM_KINDS.has(kind)) {
             // (a flame / a beam keeps touching it: one spell, paid once, while it doesn't stop)
@@ -1138,23 +1143,15 @@ export class Combat {
                 hud.setFrozenOverlay?.(this.frozen ? 1 : 0);
                 if (!this.frozen) hud.setVoice?.('🧊 Вы разморозились', true);
             }
-            if (this.shield) { this.shield.left -= dt; this._shieldJerk(dt); if (this.shield && this.shield.left <= 0) this.shield = null; }
+            if (this.manaOn) { // (Creative with a finite mana: it is spent and comes back by the rules — HeroSetup.js)
+                this._manaTick(dt);
+                if (this.shield && this.shield.drain == null) this._shieldJerk(dt);
+                this._manaHud();
+            } else if (this.shield) { this.shield.left -= dt; this._shieldJerk(dt); if (this.shield && this.shield.left <= 0) this.shield = null; }
             this._updateVisuals(dt);
             return;
         }
-        // (a held «Protection» or a living tree spends the strength instead of it coming back)
-        const holding = this.shield?.drain != null;
-        const tree = !!this.game.livingTrees?.draining;
-        // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * regenCellsK(this.maxFatigue) * dt); // (achievements: +15 % each, «Высший маг» +100 %; every 100 cells of the maximum +10 %: ManaRegen.js)
-        this._regenTierCheck();
-        this.game.breakward?.step(dt);
-        if (holding) {
-            this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
-            this.shield.left = this.fatigue / this.shield.drain;
-            this._shieldJerk(dt);
-            if (this.shield && this.fatigue <= 0) this._shatter(this.shield.gods ? '✨ Божественная защита погасла — мана кончилась' : this.shield.type === 2 ? '🛡️ Купол рассыпался — мана кончилась' : '🛡️ Щит рассыпался — мана кончилась');
-        } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
+        this._manaTick(dt);
         if (this.frozenLeft > 0) {
             this.frozenLeft = Math.max(0, this.frozenLeft - dt);
             if (this.frozenLeft === 0) this.game.hud.setVoice('🧊 Вы разморозились', true);
@@ -1169,6 +1166,23 @@ export class Combat {
         this._hud();
     }
 
+    /** Mana every frame: it comes back, a held shield / a living tree spends it. Also Creative with a finite mana (HeroSetup.js). */
+    _manaTick(dt) {
+        // (a held «Protection» or a living tree spends the strength instead of it coming back)
+        const holding = this.shield?.drain != null;
+        const tree = !!this.game.livingTrees?.draining;
+        // (a held «Protection» spends the strength instead of it coming back)
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * regenCellsK(this.maxFatigue) * dt); // (achievements: +15 % each, «Высший маг» +100 %; every 100 cells of the maximum +10 %: ManaRegen.js)
+        this._regenTierCheck();
+        this.game.breakward?.step(dt);
+        if (holding) {
+            this.fatigue = Math.max(0, this.fatigue - this.shield.drain * dt);
+            this.shield.left = this.fatigue / this.shield.drain;
+            this._shieldJerk(dt);
+            if (this.shield && this.fatigue <= 0) this._shatter(this.shield.gods ? '✨ Божественная защита погасла — мана кончилась' : this.shield.type === 2 ? '🛡️ Купол рассыпался — мана кончилась' : '🛡️ Щит рассыпался — мана кончилась');
+        } else if (this.shield) { this.shield.left -= dt; if (this.shield.left <= 0) this.shield = null; }
+    }
+
     /** My own shield / ice shell. */
     _updateVisuals(dt) {
         if (!this.visuals) return;
@@ -1179,6 +1193,14 @@ export class Combat {
             hand: this.shieldAt(side, new THREE.Vector3()), // (at the wand's tip when it is in that hand)
             dir: ch.getHandDirection(side, new THREE.Vector3()),
         });
+    }
+
+    /** The mana bar alone (Creative with a finite mana: no health, no statuses). */
+    _manaHud() {
+        const key = `${Math.floor(this.fatigue)}|${this.maxFatigue}`;
+        if (key === this._manaKey) return;
+        this._manaKey = key;
+        this.game.hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE);
     }
 
     _hud() {

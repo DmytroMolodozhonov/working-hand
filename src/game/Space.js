@@ -41,6 +41,7 @@
  * The host decides the planets (game.space.planets — saved with the world); every computer flies its
  * own hero (positions go as always).
  */
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { SPACE, PLANETS, planetPosition, spinAt, realmAt, surfaceToDir, dirToSurface, earthToDir, dirToEarth, slotRect, PlanetRegistry } from '../world/Planets.js';
 import { SpaceView, VIEW_FX } from '../world/SpaceView.js';
@@ -327,7 +328,7 @@ export class Space {
         fl.hovering = false;
         this._prev.clear();
         this._ovKind = this._from === 'earth' || this.planets.get(this._from)?.air === 'air' ? 'white' : 'black'; this._ovK = 1; // (the white-out clears by itself)
-        const mana = g.combat?.enabled;
+        const mana = manaRules(g);
         g.mana?.discover?.('space'); // (the first time out: the achievement, +20 cells)
         this._say(mana ? '🌌 Вы в космосе! Магия дыхания: <b>−0,5 маны в секунду</b> — без неё здесь не выжить, и сам полёт — <b>Flying Maxima −1,5</b> и «Флайн» <b>−2,5 маны в секунду</b> (зависнуть — −1,8). Кончится мана — вернитесь в воздух' : '🌌 Вы в космосе!', 'enter', 7000);
     }
@@ -1316,8 +1317,8 @@ export class Space {
         let html = '';
         if (this.offEarth && !this.game.isDeadLocal) {
             const parts = [];
-            if (this.maxFlying && this.game.combat?.enabled) parts.push(`🚀 Полёт: <b>−${String(this.flyCost).replace('.', ',')} маны/с</b> (Flying Maxima 1,5 + «Флайн» ${this.game.flight?.hovering ? '1,8' : '2,5'})`);
-            if (this.breathing && this.game.combat?.enabled) parts.push('🫧 Дыхание магией: <b>−0,5 маны/с</b>');
+            if (this.maxFlying && manaRules(this.game)) parts.push(`🚀 Полёт: <b>−${String(this.flyCost).replace('.', ',')} маны/с</b> (Flying Maxima 1,5 + «Флайн» ${this.game.flight?.hovering ? '1,8' : '2,5'})`);
+            if (this.breathing && manaRules(this.game)) parts.push('🫧 Дыхание магией: <b>−0,5 маны/с</b>');
             if (this.realm === 'space' && this._bodies?.length) {
                 let best = null;
                 for (const b of this._bodies) if (b.def.kind !== 'star' && (!best || b.alt < best.alt)) best = b;

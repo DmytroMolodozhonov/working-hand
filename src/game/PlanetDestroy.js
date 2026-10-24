@@ -33,6 +33,7 @@
  * computer plays the same picture from doomAt (the shared clock); at doomAt + DOOM.T the host takes the planet out
  * (PlanetRegistry.remove + its debris) — saved, sent to everybody.
  */
+import { manaRules } from './HeroSetup.js';
 import { planetPosition, SPACE, slotAt, offEarth } from '../world/Planets.js';
 import { DOOM, liquidationCost, liquidationRefusal, doomable, debrisCluster, GOD_PROTECTED } from '../world/PlanetDoom.js';
 import { spaceSpellBlock } from './Space.js';
@@ -86,7 +87,7 @@ export class PlanetDestroy {
         const tired = g.combat?.check?.('PlanetLiquidation', cost.mass);
         if (tired) {
             const have = Math.floor(g.combat?.fatigue ?? 0), need = g.combat?.costOf?.('PlanetLiquidation', cost.mass) ?? cost.total;
-            return this._say(g.combat?.enabled && have < need ? `😮‍💨 «Planet Liquidation» на «${def.name}»: нужно ${cost.base} + ${cost.mass} (масса планеты) = ${need} маны, а у вас ${have}` : tired);
+            return this._say(manaRules(g) && have < need ? `😮‍💨 «Planet Liquidation» на «${def.name}»: нужно ${cost.base} + ${cost.mass} (масса планеты) = ${need} маны, а у вас ${have}` : tired);
         }
         g.combat?.pay?.('PlanetLiquidation', cost.mass);
         S.change(def.id, { doomAt: t, doomFrom: [Math.round(S.P.x), Math.round(S.P.y), Math.round(S.P.z)], doomBy: pm._me() });

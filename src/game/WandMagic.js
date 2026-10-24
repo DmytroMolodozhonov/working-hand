@@ -32,6 +32,7 @@
  * so a pen held in the hand works just the same.
  */
 
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 import { wandPowerMul } from './Enchant.js';
@@ -672,7 +673,7 @@ export class WandMagic {
             this._updateBeam(tip, _v2);
             this.light.glow.position.copy(tip);
             this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
-            if (g.combat.enabled) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
+            if (manaRules(g)) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
         }
         if (!this.light || !hasWand) this._updateBeam(null, null);
         this._updateFollow(dt);

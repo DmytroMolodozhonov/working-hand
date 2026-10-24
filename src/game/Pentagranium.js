@@ -19,6 +19,7 @@
  * credit is local to the hero whose pentagram it is (the same as every first-success and kill credit: Mana.js).
  */
 
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
 import { PENT, RITE, figureOf, figureIds, Seen, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
@@ -478,14 +479,14 @@ export class Pentagranium {
                 if (b.lev || death.falling.has(b.id) || b.netAt && performance.now() - b.netAt < 800) continue;
                 if (!inside(m, b.x, b.z, RITE.REACH_K) || Math.abs(b.y - m.y) > 3) continue;
                 const took = !!g.mana?.duelsWon?.has?.(String(b.who)) && g.mana.duelsWon.get(String(b.who)) === 'kill';
-                const ok = riteBody({ ...b, bones: !!b.bones && !b.model }, m.pent, { took, free: !g.combat?.enabled });
+                const ok = riteBody({ ...b, bones: !!b.bones && !b.model }, m.pent, { took, free: !manaRules(g) });
                 if (!ok.ok) {
                     if (!b._pgHint && (b.model || b.bones)) { b._pgHint = true; g.hud.setVoice(RITE_HINT[ok.why] || RITE_HINT['no-power'], true); }
                     continue;
                 }
                 const cost = TABLE.devil?.rite?.cost || 0;
-                if (g.combat?.enabled && g.combat.fatigue < cost) { if (!b._pgMana) { b._pgMana = true; g.hud.setVoice(`🩸 Нужно ${cost} маны — тело лежит, пока её не хватает`, true); } continue; }
-                if (g.combat?.enabled) { g.combat.fatigue -= cost; g.combat._hudKey = ''; }
+                if (manaRules(g) && g.combat.fatigue < cost) { if (!b._pgMana) { b._pgMana = true; g.hud.setVoice(`🩸 Нужно ${cost} маны — тело лежит, пока её не хватает`, true); } continue; }
+                if (manaRules(g)) { g.combat.fatigue -= cost; g.combat._hudKey = ''; }
                 this._riteBegin(m, b, true);
                 return;
             }
@@ -539,7 +540,7 @@ export class Pentagranium {
     _give(m, r) {
         const g = this.game, M = g.mana;
         let n = 0;
-        if (M && g.combat?.enabled && r.mm > 0) {
+        if (M && manaRules(g) && r.mm > 0) {
             n = riteGain(r.mm);
             M.grow(n, 'ritual');
             M.powerFlow?.([r.x, r.y, r.z], n, 'duel');

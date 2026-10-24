@@ -16,6 +16,7 @@
  * things or learned spells. (Old saves keyed by name still work once.)
  */
 
+import { manaRules } from './HeroSetup.js';
 import { onSpot } from './LoreLibrary.js'; // (a library's book still on its desk is not kept: the library lays it again)
 import { breaking } from '../world/EnchantedStone.js';
 import { keepIn } from './HouseWards.js';
@@ -128,7 +129,7 @@ export function playerSnapshot(game) {
         learned: game.books ? [...game.books.learned] : [],
         pos: [r2(p.x), r2(p.y), r2(p.z)],
         hp: game.monster?.active ? game.monster.origHp : game.combat?.enabled ? game.combat.hp : game.playerHP, // («Выживание»: the health lives in Combat)
-        mp: game.combat?.enabled ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
+        mp: manaRules(game) ? Math.round(game.combat.fatigue * 10) / 10 : undefined, // the mana in the bar now (not only its maximum)
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         dark: game.dark?.snapshot() || null, // чёрная магия: уровень тьмы
@@ -203,7 +204,7 @@ export function applyPlayerSnapshot(game, s) {
         if (Number.isFinite(s.hp) && s.hp > 0) { c.hp = Math.min(c.maxHp || game.maxHP, s.hp); game.playerHP = c.hp; }
         if (Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp);
         c._hudKey = '';
-    }
+    } else if (manaRules(game) && Number.isFinite(s.mp) && s.mp >= 0) c.fatigue = Math.min(c.maxFatigue || s.mp, s.mp); // (Creative with a finite mana: the mana left)
 }
 
 /**
@@ -219,6 +220,7 @@ export class WorldKeeper {
         this.seed = seed ?? game.seed;
         this.gen = gen ?? game.gen ?? 1; // world generation (seas from 2)
         this.godsOnEarth = !!game.config?.godsOnEarth; // (multiplayer: the gods' spells allowed on the Earth — chosen when made)
+        this.hero = game.config?.mode === 'creative' ? game.config.hero : undefined; // (HeroSetup.js: kept with the world)
         this.realTrees = !!game.config?.realTrees; // (made with real trees, not blocks — Trees.js)
         this.created = created || Date.now();
         this.createdVersion = createdVersion || { ...GAME_VERSION };
@@ -275,6 +277,7 @@ export class WorldKeeper {
             seed: this.seed,
             gen: this.gen,
             godsOnEarth: this.godsOnEarth || undefined,
+            hero: this.hero, // (Creative: the hero's settings made with the world — HeroSetup.js; none in an old world)
             realTrees: this.realTrees || undefined,
             created: this.created,
             updated: Date.now(),

@@ -37,6 +37,7 @@
  * (castle.worker.js): never a long frame.
  */
 
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { BLOCK, isCastleBlock, isSolid } from '../world/Terrain.js';
 import { faceTowards, HOUSE_REACH } from '../world/MagicHouse.js';
@@ -160,7 +161,7 @@ export class CastleMagic extends HouseMagic {
         if (this.magic) return say('🏰 Магия замка уже идёт — держите палочку');
         if (g.houseMagic?.magic) return say('🏠 Сначала дождитесь, пока достроится дом');
         if (!g.items?.heldOf?.('wand') && !this.testAim && !this.free) return say('🪄 Возьмите палочку в руку и направьте её туда, где встанет замок');
-        const why = castleProblem({ mana: g.combat?.enabled ? g.combat.fatigue : Infinity, free: this.free, stone: Infinity });
+        const why = castleProblem({ mana: manaRules(g) ? g.combat.fatigue : Infinity, free: this.free, stone: Infinity });
         if (why) return say(why);
         const at = this._aimPoint();
         const me = g.character.group.position;
@@ -247,7 +248,7 @@ export class CastleMagic extends HouseMagic {
         if (this._search) return '🏰 Замок уже ищет себе место…';
         if (!data) return '🏰 …';
         const remote = by !== g.localId && by !== 'local' ? g.remotes?.get?.(by) : null;
-        const no = castleProblem({ mana: remote ? Infinity : (g.combat?.enabled ? g.combat.fatigue : Infinity), free: this.free, stone: Infinity });
+        const no = castleProblem({ mana: remote ? Infinity : (manaRules(g) ? g.combat.fatigue : Infinity), free: this.free, stone: Infinity });
         if (no) return no;
         const x = Math.round(+ask.at?.[0] || 0), z = Math.round(+ask.at?.[2] || 0);
         if (!this.free && stoneAround(data, x, z) < CASTLE.STONE_NEED) return castleProblem({ mana: Infinity, free: false, stone: 0 });

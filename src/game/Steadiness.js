@@ -71,8 +71,8 @@ export class Steadiness {
         this._x = null; this._z = null; this._gy = null;
     }
 
-    /** The skill as the rules see it (Creative: 100). */
-    get effective() { return this.game.config?.mode === 'creative' || this.game.monster?.active ? STEADY.MAX : this.skill; } // (the monster form: 100 — MonsterForm.STEADY)
+    /** The skill as the rules see it (Creative: the hero's setting «Устойчивость», 100 by default — HeroSetup.js). */
+    get effective() { return this.game.monster?.active ? STEADY.MAX : this.game.config?.mode === 'creative' ? (this.game.hero?.steady ?? STEADY.MAX) : this.skill; } // (the monster form: 100 — MonsterForm.STEADY)
 
     /** Does the hero stay on their feet? opts: see holdChance. */
     holds(kind, opts = {}, rnd = Math.random) {

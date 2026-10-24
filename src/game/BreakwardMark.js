@@ -11,6 +11,7 @@
  * Смерть снимает метку (`onDeath`, зельем не снять); сохраняется в сохранении игрока (snapshot/restore). Каждому своё: только локальный герой.
  * Эффект виден только как индикатор в HUD (метка невидима другим); вспышка и звук — дёшево, из пула частиц.
  */
+import { manaRules } from './HeroSetup.js';
 import { BREAKWARD, BlackBar, breakwardMishap, canBypass, deficitOf, holdOutcome, MARK_HINT, MARK_NOTE, BLACK_HINT } from './Breakward.js';
 import * as THREE from 'three';
 import { addDark } from './DarkMagic.js';
@@ -37,7 +38,7 @@ export class BreakwardMark {
         const g = this.game, c = g.combat;
         if (this.marked) { g.hud?.toast?.('🜏 Защита уже сломана'); return 'защита уже сломана'; } // (одноразовая: мана не списывается, пентаграмма не гаснет)
         if (!this.known && !(c && !c.enabled)) return 'рисунок не выучен'; // (в Творческом известно всё)
-        if (c?.enabled) {
+        if (manaRules(this.game)) {
             if (c.check?.('Breakward')) return 'мало маны';
             c.fatigue = Math.max(0, c.fatigue - BREAKWARD.COST); // (цена — 50)
             c._hudKey = '';
@@ -64,7 +65,7 @@ export class BreakwardMark {
      */
     afterPay(kind, need, aim = null) {
         const c = this.game.combat;
-        if (!this.marked || !c?.enabled || !canBypass(kind)) return false;
+        if (!this.marked || !manaRules(this.game) || !canBypass(kind)) return false;
         const m = breakwardMishap(deficitOf(c.maxFatigue || 30, need), this.rng);
         if (!m) return false;
         this.game.hud?.setVoice?.(`🜏 ${m.hint}`, true);

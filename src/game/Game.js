@@ -144,6 +144,8 @@ import { headTurnStep, lyingHead } from './HeadTurn.js';
 import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
 import { Mana, NOT_SPELLS, SAME_SPELL } from './Mana.js';
+import { heroOf, manaRules } from './HeroSetup.js';
+import { HeroApply } from './HeroApply.js';
 import { knows as knowsSpellOf, howLearned, teachKey } from './SpellBook.js';
 import { Achievements } from './Achievements.js';
 import { BodyImpact } from './BodyImpact.js';
@@ -311,6 +313,9 @@ export class Game {
         this.config.gen = this.gen = config.gen ?? (config.saved ? (config.saved.gen ?? 1) : config.smooth ? WORLD_GEN : 5);
         // (multiplayer: the gods' spells on the Earth — the host's choice when the world was made, kept with it; off by default)
         this.config.godsOnEarth = !!(config.godsOnEarth ?? config.saved?.godsOnEarth);
+        // «Настройки героя» Творческого мира (HeroSetup.js): записаны в мире; у старого мира их нет — всё как было раньше
+        this.config.hero = config.mode === 'creative' ? (config.hero ?? config.saved?.hero ?? undefined) : undefined;
+        this.hero = heroOf(this.config);
         // real trees, not blocks (TreeBuild.js, Trees.js): every world made from now on, smooth or not; a saved world keeps
         // what it was made with (its felled and burnt trees lie on those), a guest takes the host's
         this.config.realTrees = !!(config.realTrees ?? (config.saved ? config.saved.realTrees : !config.map));
@@ -461,6 +466,7 @@ export class Game {
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
+        this.heroApply = new HeroApply(this); // «Настройки героя» Творческого мира (HeroApply.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
         this.monster = new MonsterTransform(this); // «Пентаграмма страшного монстра»: ×7, 10 минут (MonsterForm.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
@@ -1569,7 +1575,7 @@ export class Game {
             fps: this.fpsNow ?? null,
             frameMs: this.stats?.frameMs ?? null,
             aim: aim && now - aim.at < 4000 ? { ...aim, age: now - aim.at } : null,
-            mana: this.combat?.enabled ? this.combat.fatigue : null,
+            mana: manaRules(this) ? this.combat.fatigue : null,
             held: this.focus?.held?.() || null,
         };
     }
@@ -2076,8 +2082,8 @@ export class Game {
         if (!early || early.name !== 'Jolt' || Date.now() - early.at > 3000) return false;
         this._interimCast = null;
         const extra = this.combat.costOf('JoltMaxima') - this.combat.costOf('Jolt');
-        if (this.combat.enabled && this.combat.fatigue < extra) return true; // (no mana for more: it stays a «Джолт»)
-        if (this.duel.upgradeJolt() && this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - extra);
+        if (manaRules(this) && this.combat.fatigue < extra) return true; // (no mana for more: it stays a «Джолт»)
+        if (this.duel.upgradeJolt() && manaRules(this)) this.combat.fatigue = Math.max(0, this.combat.fatigue - extra);
         return true;
     }
 
@@ -2667,7 +2673,7 @@ export class Game {
             if (isFinal) this.hud.setVoice(this._unknownHint(name), true);
             return null;
         }
-        if (this.combat.enabled && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает маны'); return null; }
+        if (manaRules(this) && this.combat.fatigue < BUILD_SPELLS[name].cost) { this.hud.toast?.('😮‍💨 Не хватает маны'); return null; }
         let hint;
         // «Gather» at a carcass (meat) or a golden tree (apples)
         if (name === 'Gather') {
@@ -2679,13 +2685,13 @@ export class Game {
                 .map((sd) => ({ o: this.castOrigin(sd), d: this.character.getHandDirection(sd) }));
             const free = (sd) => !this.weapons.hands[sd].held && !this.items?.held[sd] && !this.boards?.handBusy?.(sd);
             const loot = this.death?.gatherAt(rays, null, accioCatcher(free, this.dom));
-            if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
+            if (loot && loot.startsWith('✨')) { this.hud.setVoice(loot, true); this._lastBuild = now; if (manaRules(this)) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost); return 'Gather'; }
             // a cluster of mana crystals: all of it into the slots
             const cr = this.crystals?.gatherAt(this.castOrigin(side), this.character.getHandDirection(side), side);
             if (cr && cr.startsWith('🎒')) { if (isFinal) this.hud.setVoice(cr, true); return null; }
             if (cr) {
                 this.hud.setVoice(cr, true);
-                if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
+                if (manaRules(this)) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
                 this.mana?.success('Gather');
                 this._lastBuild = now;
                 return 'Gather';
@@ -2699,7 +2705,7 @@ export class Game {
         else if (name === 'CreateBoard') hint = this.boards.create();
         else hint = this.builder.start(name);
         if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
-        if (this.combat.enabled) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
+        if (manaRules(this)) this.combat.fatigue = Math.max(0, this.combat.fatigue - BUILD_SPELLS[name].cost);
         this.mana?.success(name); // (mana: gathered / the building started)
         this._lastBuild = now;
         this._interimCast = isFinal ? null : { name, at: now };
@@ -3073,6 +3079,7 @@ export class Game {
         this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)
         this.strong?.reset(); // (no haze, no ice, no lightning held)
         this.combat.revive();
+        this.heroApply?.respawn(); // (Creative: the hero's settings again)
         this.playerHP = this.maxHP;
         this.isDeadLocal = false;
         const p = ch.group.position;
@@ -3379,6 +3386,7 @@ export class Game {
             this._startCoins = true;
             if (!this._playerRestored && this.inventory.coins() === 0) { this.inventory.purse.add(100); this.inventory._render?.(); }
         }
+        this.heroApply.start(); // (Creative: the mana cells, the armour and robe, the dark level… from the world's settings)
         this.prewarm();
         this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)
         // The microphone listens all game long: shield (arm forward), water
@@ -4038,7 +4046,7 @@ export class Game {
 
     /** Does the hero know this spell? One answer for everything (SpellBook.js: what is known from the start, the rest from scrolls and books). */
     knowsSpell(name) {
-        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight });
+        return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight });
     }
 
     /** Can the hero say this spell now (the pause menu's spell book outside Creative)? The same checks the cast makes. */

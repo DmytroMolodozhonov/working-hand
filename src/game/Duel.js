@@ -61,6 +61,7 @@ import { duelStrength, duelPower } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
+import { manaRules, duelFactor } from './HeroSetup.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
 const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
@@ -1497,7 +1498,7 @@ export class Duel {
         if (g.config?.mode === 'creative' && opId != null) {
             const ow = this._npcWizard(opId);
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
-            return duelPower(mana + this._mastery(id), 1, luck);
+            return duelPower(mana + this._mastery(id), 1, luck) * (id === this.me ? duelFactor(g.hero) : 1); // (the hero's «Дуэльная сила» %, HeroSetup.js: 100 = full)
         }
         // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
@@ -1547,7 +1548,7 @@ export class Duel {
             const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
             const op = this._playerPos(opponentId, _co);
             // («Дай» with no mana left to hold its beam: it stops pushing)
-            const ok = op && !(bolt.spell === 'Die' && this.game.combat?.enabled && this.game.combat.fatigue <= 0) ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
+            const ok = op && !(bolt.spell === 'Die' && manaRules(this.game) && this.game.combat.fatigue <= 0) ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
             return { ok, jerk: this._jerked(bolt.side) };
         }
         const w = this._npcWizard(id);

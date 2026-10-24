@@ -46,6 +46,7 @@
  * records and what lies in their chests) are saved with the world.
  */
 
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { stockOf, stockTake, cleanClaim } from './Stock.js';
 import { BLOCK, TREE_KINDS, isLeaves, isCastleBlock, isSolid } from '../world/Terrain.js';
@@ -198,7 +199,7 @@ export class HouseMagic {
             level = rec.level + 1; hid = rec.id;
         }
         const cost = HouseMagic.cost(level);
-        if (g.combat?.enabled && g.combat.fatigue < cost.mana) return say(`😮‍💨 Не хватает маны: нужно ${cost.mana}, есть ${Math.floor(g.combat.fatigue)}`);
+        if (manaRules(g) && g.combat.fatigue < cost.mana) return say(`😮‍💨 Не хватает маны: нужно ${cost.mana}, есть ${Math.floor(g.combat.fatigue)}`);
         const st = stockOf(g); // (what the hero carries in the slots and the hands counts too: nothing has to be thrown out)
         const ask = { kind: name, at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.z)], hid, level, inv: { wool: st.wool, sand: st.sand } };
         if (!this.auth) {

@@ -1795,3 +1795,20 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .potion-ing img { width: 20px; height: 20px; object-fit: contain; }
 .potion-emoji { font-size: 1.05rem; }
 #tab-spells, #pause-spells { overflow-y: auto; }
+
+/* «Настройки героя» в окне создания Творческого мира (HeroSettingsUi.js) */
+.hero-settings { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: rgba(5, 3, 18, 0.45); border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); text-align: left; max-height: 60vh; overflow-y: auto; }
+.hero-h { margin: 0 0 6px; font-size: 1.05em; letter-spacing: 0.02em; }
+.hero-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.hero-row input[type="number"] { width: 110px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.35); color: inherit; }
+.hero-row input[type="range"], .hero-slide input[type="range"] { flex: 1 1 140px; min-width: 120px; }
+.hero-row .mp-hint { opacity: 0.75; font-size: 0.9em; }
+.hero-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0; }
+.hero-cap { font-weight: 600; margin-right: 4px; }
+.hero-seg { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); border: 1px solid transparent; cursor: pointer; }
+.hero-seg:has(input:checked) { background: rgba(140, 110, 255, 0.28); border-color: rgba(190, 170, 255, 0.7); }
+.hero-slide { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 200px; }
+.hero-adv { margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(255, 255, 255, 0.2); }
+.hero-adv > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+@media (max-width: 640px) { .hero-settings { max-height: 55vh; padding: 10px; } .hero-seg { flex: 1 1 100%; } }
+.hero-settings [hidden] { display: none !important; }

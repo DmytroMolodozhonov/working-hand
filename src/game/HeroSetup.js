@@ -1,0 +1,90 @@
+/**
+ * HeroSetup.js — «Настройки героя» Творческого мира (чистые правила, без THREE; игровая часть — HeroApply.js).
+ *
+ * Автор: когда игрок создаёт мир в Творческом режиме, в окне создания появляются настройки героя:
+ *  - мана: «Бесконечная мана» (речь про ЯЧЕЙКИ — максимум маны) либо своё число ячеек 30…100 000 (по умолчанию 500) —
+ *    тогда мана обычная: тратится, набирается по правилам (1/с × бонусы);
+ *  - «Магическая броня» и «Магическая мантия» — каждая своей галочкой (4 сочетания);
+ *  - заклинания: «Все заклинания есть» либо «Только заклинания сильного мага» (всё, кроме заклинаний богов и «Инспириуса»);
+ *  - дуэльная сила: полная (100 %) либо 1…100 %;
+ *  - продвинутые: уровень чёрной магии 0…100, «метка слома магической защиты», устойчивость 1…100.
+ *
+ * Настройки лежат в мире (`config.hero` → сохранение мира → гостям от хоста: «правила мира»). Мир без них (старый) —
+ * `LEGACY_HERO`: так в Творческом было раньше (бесконечная мана, все заклинания, БЕЗ брони и мантии, полная сила,
+ * тьма 0, устойчивость 100).
+ */
+
+import { GOD_SPELLS } from './Mana.js';
+import { isDivine } from './ProtectionGods.js';
+
+export const HERO = {
+    CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
+    DUEL_MIN: 1, DUEL_MAX: 100,
+    DARK_MAX: 100, STEADY_MIN: 1, STEADY_MAX: 100,
+};
+
+/** Для нового Творческого мира, пока игрок ничего не менял. */
+export const DEFAULT_HERO = Object.freeze({
+    infiniteMana: true, cells: HERO.CELLS_DEFAULT,
+    armor: true, robe: true,
+    spells: 'all', // 'all' | 'mage'
+    duel: 100, // %
+    dark: 0, breakward: false, steady: 100,
+});
+
+/** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
+export const LEGACY_HERO = Object.freeze({ ...DEFAULT_HERO, armor: false, robe: false });
+
+const num = (v, d) => (Number.isFinite(+v) && v !== '' && v !== null ? +v : d);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/** Привести то, что пришло из окна / сохранения / сети, к допустимому виду (недостающее — из `base`). */
+export function normalizeHero(raw, base = DEFAULT_HERO) {
+    const r = raw && typeof raw === 'object' ? raw : {};
+    const b = { ...DEFAULT_HERO, ...base };
+    return {
+        infiniteMana: r.infiniteMana == null ? !!b.infiniteMana : !!r.infiniteMana,
+        cells: clamp(Math.round(num(r.cells, b.cells)), HERO.CELLS_MIN, HERO.CELLS_MAX),
+        armor: r.armor == null ? !!b.armor : !!r.armor,
+        robe: r.robe == null ? !!b.robe : !!r.robe,
+        spells: r.spells === 'mage' ? 'mage' : r.spells === 'all' ? 'all' : b.spells === 'mage' ? 'mage' : 'all',
+        duel: clamp(Math.round(num(r.duel, b.duel)), HERO.DUEL_MIN, HERO.DUEL_MAX),
+        dark: clamp(Math.round(num(r.dark, b.dark)), 0, HERO.DARK_MAX),
+        breakward: r.breakward == null ? !!b.breakward : !!r.breakward,
+        steady: clamp(Math.round(num(r.steady, b.steady)), HERO.STEADY_MIN, HERO.STEADY_MAX),
+    };
+}
+
+/** Настройки героя этого мира: записанные — как есть; нет записи (старый мир) — как было раньше. */
+export const heroOf = (config) => (config?.hero ? normalizeHero(config.hero, LEGACY_HERO) : { ...LEGACY_HERO });
+
+/** Для сети и сохранения: только настоящие настройки (в Творческом); в других режимах их нет. */
+export const heroForSave = (config) => (config?.mode === 'creative' && config.hero ? normalizeHero(config.hero, LEGACY_HERO) : undefined);
+
+/** Творческий и мана бесконечная: мана не тратится, ячейки не считаются (как раньше во всём Творческом). */
+export const creativeInfiniteMana = (game) => game?.config?.mode === 'creative' && (game.hero ?? heroOf(game.config)).infiniteMana;
+
+/** Творческий с конечной маной: тратится и набирается по обычным правилам. */
+export const creativeFiniteMana = (game) => game?.config?.mode === 'creative' && !(game.hero ?? heroOf(game.config)).infiniteMana;
+
+/** Работают ли правила маны (Выживание — всегда; Творческий — если мана конечная). */
+export const manaRules = (game) => !!game?.combat?.enabled || creativeFiniteMana(game);
+
+/** Заклинания «сильного мага» не включают: заклинания богов (`Mana.GOD_SPELLS`, `ProtectionGods.isDivine`) и «Инспириус». */
+export const MAGE_EXCLUDED = new Set(['Inspirius']);
+
+/** Известно ли заклинание в Творческом при этих настройках (`hero` — `heroOf(config)`). */
+export function knownInCreative(hero, spell) {
+    if (!spell) return false;
+    if (!hero || hero.spells !== 'mage') return true;
+    return !(GOD_SPELLS.has(spell) || isDivine(spell) || MAGE_EXCLUDED.has(spell));
+}
+
+/** Множитель дуэльной силы героя в Творческом (1 = полная). */
+export const duelFactor = (hero) => clamp((hero?.duel ?? 100) / 100, HERO.DUEL_MIN / 100, 1);
+
+/** Короткое описание для журнала/отчёта. */
+export function heroSummary(h) {
+    return [h.infiniteMana ? 'мана ∞' : `ячеек ${h.cells}`, h.armor ? 'броня' : 'без брони', h.robe ? 'мантия' : 'без мантии',
+        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duel}%`, `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
+}

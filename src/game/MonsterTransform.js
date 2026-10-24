@@ -19,6 +19,7 @@
  * Сеть: поза несёт `mo` (размер, превращение, рёв) — у других игроков та же модель, масштаб группы.
  */
 
+import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { MONSTER, FIST, FIST_TARGETS, STOMP, GRAB, growAt, fmtLeft, hpAfterFall, spellOnMonster, knocksMonster, fistPower, fistBreaks, bodyBreaks, softGround, footprint, crater, freeSpot } from './MonsterForm.js';
 import { MonsterLook } from '../entities/MonsterBody.js';
@@ -68,7 +69,7 @@ export class MonsterTransform {
         const g = this.game;
         if (this.phase) return 'вы уже монстр';
         if (g.combat?.dead || g.isDeadLocal) return 'вы мертвы';
-        if (g.combat?.enabled && g.config?.mode !== 'creative' && (g.combat.fatigue || 0) < MONSTER.COST) return `не хватает маны: нужно ${MONSTER.COST}, есть ${Math.floor(g.combat.fatigue || 0)}`;
+        if (manaRules(g) && (g.combat.fatigue || 0) < MONSTER.COST) return `не хватает маны: нужно ${MONSTER.COST}, есть ${Math.floor(g.combat.fatigue || 0)}`;
         // (под каменным сводом — в пещере, под скалой — 24-метровому телу не встать)
         const T = g.terrain?.data, p = g.character.group.position;
         if (T?.ceilingAbove) {
