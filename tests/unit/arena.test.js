@@ -132,3 +132,14 @@ test('a kill at the arena is a foul: a part of the wizards attack (never all); a
     assert.equal(avengers([1]).length, 1);
     assert.equal(avengers([]).length, 0);
 });
+
+test('arena: the duellists vary their spells and move by how worn out they are', async () => {
+    const { arenaSpell, arenaStance } = await import('../../src/game/ArenaRules.js');
+    const seen = new Set(); let last = null, repeats = 0;
+    for (let i = 0; i < 60; i++) { const s = arenaSpell({ role: 'teacher', foeHp: 40, last }); if (s === last) repeats++; seen.add(s); last = s; }
+    assert.ok(seen.size >= 4, 'at least 4 different spells: ' + [...seen]);
+    assert.ok(repeats < 30);
+    assert.equal(arenaStance({ mana: 3, maxMana: 40, foeMana: 40, foeMaxMana: 40 }).mood, 'back');
+    assert.equal(arenaStance({ mana: 40, maxMana: 40, foeMana: 3, foeMaxMana: 40 }).mood, 'press');
+    assert.equal(arenaStance({}).mood, 'even');
+});

@@ -95,7 +95,7 @@ export const duelClock = (t) => (t >= ARENA_DUEL.MAX_T ? 'draw' : 'on');
  * lift; «Айс» and «Сапира» only now and then and never at one already weak (`foeHp` ≤ 15 — «главное не
  * убить»). `finish`: the opponent can't answer now (stunned, frozen, down) — «Экспеллиармус».
  */
-export function arenaSpell({ role = 'student', foeHp = 20, finish = false, player = false, rng = Math.random } = {}) {
+export function arenaSpell({ role = 'student', foeHp = 20, finish = false, player = false, last = null, rng = Math.random } = {}) {
     if (finish) return 'Expelliarmus';
     const strong = role === 'teacher' || role === 'master' || role === 'adept';
     // (against a player: never the hurting ones — the wizard keeps the rules better than anyone)
@@ -103,9 +103,11 @@ export function arenaSpell({ role = 'student', foeHp = 20, finish = false, playe
         // (the disarm mostly when the other is down — `finish`: a duel is fought first, won after)
         ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.1 : 0.16], ['LevitateDuel', 0.12],
         ['IceDuel', strong ? 0.1 : 0.05], ['SapiraDuel', foeHp > 15 && !player ? 0.06 : 0],
+        // (more of a show: «Даст» slows, «Disarmor» strips the armour, the strong ones' «Айс Максима»)
+        ['SandsDuel', 0.1], ['Disarmor', 0.06], ['IceDuelMaxima', strong && !player && foeHp > 15 ? 0.06 : 0],
     ];
     let sum = 0;
-    for (const [, w] of table) sum += w;
+    for (const e of table) { if (e[0] === last) e[1] *= 0.25; sum += e[1]; } // (not the same one twice in a row: the show goes on)
     let x = rng() * sum;
     for (const [s, w] of table) { x -= w; if (x <= 0) return s; }
     return 'Stupefy';
@@ -146,4 +148,16 @@ export const arenaDownTime = (fresh) => 2.5 + 9 * (1 - Math.max(0, Math.min(1, f
  */
 export function softBlow(dmg, hp, armor = 0) {
     return Math.max(0, Math.min(dmg, hp - 1 + 0.8 * Math.max(0, armor)));
+}
+
+/**
+ * Where a duellist wants to stand (the author: «двигаются — отступают, обходят по дуге, сближаются, когда
+ * соперник ослаб; не стоят на месте»): worn out (low mana) he backs off and keeps away, the other worn out —
+ * he closes in; otherwise a band round him. → { min, max, side } (side: how readily he circles, 0…1).
+ */
+export function arenaStance({ mana = 30, maxMana = 30, foeMana = 30, foeMaxMana = 30, t = 0 } = {}) {
+    const me = arenaFresh(mana, maxMana, t), foe = arenaFresh(foeMana, foeMaxMana, t);
+    if (me < 0.3 && foe > me) return { min: 12, max: 22, side: 0.8, mood: 'back' };
+    if (foe < 0.3 && me > foe) return { min: 5, max: 11, side: 0.5, mood: 'press' };
+    return { min: 8, max: 19, side: 0.6, mood: 'even' };
 }

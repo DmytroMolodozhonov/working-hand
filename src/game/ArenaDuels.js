@@ -33,7 +33,7 @@
  */
 
 import * as THREE from 'three';
-import { ARENA_DUEL, isBanned, killVerdict, avengers, duelClock, arenaSpell, arenaDefence, arenaFresh, arenaDownTime, softBlow } from './ArenaRules.js';
+import { ARENA_DUEL, isBanned, killVerdict, avengers, duelClock, arenaSpell, arenaStance, arenaDefence, arenaFresh, arenaDownTime, softBlow } from './ArenaRules.js';
 import { ARENA, onArenaFloor } from '../world/DuelArenas.js';
 import { TOWER_ZONE } from '../world/WizardTowers.js';
 import { CAST_EFFORTS } from '../entities/ArenaPoses.js';
@@ -639,11 +639,12 @@ export class ArenaDuels {
         const d = Math.hypot(fp.x - v.x, fp.z - v.z);
         const ready = (v.castCd ?? 0) <= 0 && v.castT <= 0.15 && !v.prep;
         let moving = false;
-        if (!ready || d > 19 || d < 8) {
+        const stance = arenaStance({ mana: v.mana, maxMana: v.maxMana, foeMana: ov?.mana ?? 30, foeMaxMana: ov?.maxMana ?? 30, t: D.go });
+        if (!ready || d > stance.max || d < stance.min) {
             v.arena.turnT = (v.arena.turnT || 0) - dt;
             if (v.arena.turnT <= 0) { v.arena.turnT = 2.5 + Math.random() * 3.5; v.arena.dir = Math.random() < 0.5 ? -1 : 1; }
             const ux = (v.x - fp.x) / (d || 1), uz = (v.z - fp.z) / (d || 1);
-            const want = d > 19 ? -1 : d < 8 ? 1 : 0; // (closer / farther)
+            const want = d > stance.max ? -1 : d < stance.min ? 1 : 0; // (closer / farther)
             let tx = v.x + (-uz * v.arena.dir + ux * want) * 2.5, tz = v.z + (ux * v.arena.dir + uz * want) * 2.5;
             if (!onArenaFloor(A.def, tx, tz, 2)) { tx = v.x + (A.def.centre.x - v.x) * 0.3; tz = v.z + (A.def.centre.z - v.z) * 0.3; v.arena.dir = -v.arena.dir; }
             L._steer(v, tx, tz, WALK * 1.1, dt, 0.1);
@@ -652,7 +653,8 @@ export class ArenaDuels {
         if (!moving) { v.speed = 0; this._face(v, fp, dt); }
         // cast: facing him, the shot clear
         if (ready && !moving && facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL) && F.clearShot(v, fp)) {
-            const spell = arenaSpell({ role: v.skillRole || v.role, foeHp: ov ? ov.hp : 20, finish, player: !ov });
+            const spell = arenaSpell({ role: v.skillRole || v.role, foeHp: ov ? ov.hp : 20, finish, player: !ov, last: v.arena.last });
+            v.arena.last = spell;
             const cost = arenaCost(spell);
             if (v.mana >= cost) {
                 v.arenaCast = pick(CAST_EFFORTS);
