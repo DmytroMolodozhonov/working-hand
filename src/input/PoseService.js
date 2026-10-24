@@ -807,6 +807,7 @@ export class PoseService {
             leftHandLandmarks: this.handGuards.left.process(assigned.left, t),
             rightHandLandmarks: this.handGuards.right.process(assigned.right, t),
         };
+        results.at = performance.now(); // (CrossedArms: a picture not renewed for a while is no pose)
         this.lastResults = results;
         this._drawSkeleton(results);
         if (this.onPoseUpdate) this.onPoseUpdate(this._withSticks(this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement), r.sticks, assigned.left, assigned.right));

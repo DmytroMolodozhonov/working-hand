@@ -836,6 +836,7 @@ export class Combat {
         const s = this.shield;
         if (!s || s.type !== 1) return;
         s.age = (s.age || 0) + dt;
+        if (s.gesture) return; // (the arms crossed hold it: CrossedArms.js — it goes down when they open, not with a jerk)
         if (s.age > 0.6 && sharpJerk(this.game.duel?.jerk?.[s.side])) this.dropShield('🛡️ Вы сбросили щит');
     }
 

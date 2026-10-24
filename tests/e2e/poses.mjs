@@ -62,7 +62,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, bend = 
  *     go out of the picture's bottom, seen there with a low visibility, as a real camera does)
  *   jitter: a real camera's shake — every point moved randomly by up to this much (repeatable)
  */
-export function frame({ arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0, mirror = false } = {}) {
+export function frame({ crossedArms = false, arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0, mirror = false } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -134,6 +134,8 @@ export function frame({ arms = 'forward', raise = null, pocket = null, toMouth =
     // a hand drawn back for a throw (overhand): up by the head, the elbow out to the side, behind the shoulder
     if (windup === 'right') { rElbow = [0.31, sh - 0.02]; rWrist = [0.36, sh - 0.17]; z = { le: -0.2, lw: -0.4, re: 0.08, rw: 0.22, ...(z || {}) }; }
     if (windup === 'left') { lElbow = [0.69, sh - 0.02]; lWrist = [0.64, sh - 0.17]; z = { re: -0.2, rw: -0.4, le: 0.08, lw: 0.22, ...(z || {}) }; }
+    // the arms crossed before the chest (a defensive X): the wrists past the middle to the other shoulder, in front, the elbows bent down and out
+    if (crossedArms) { lElbow = [0.64, sh + 0.17]; lWrist = [0.45, sh + 0.1]; rElbow = [0.36, sh + 0.17]; rWrist = [0.55, sh + 0.1]; }
     if (lean) { lElbow[0] += lean; lWrist[0] += lean; rElbow[0] += lean; rWrist[0] += lean; }
     // (raised sideways: the arm stays in the body's plane, no depth)
     const ez = raise != null ? 0 : -0.2, wz = raise != null ? 0 : -0.4;

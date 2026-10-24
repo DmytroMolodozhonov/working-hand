@@ -181,6 +181,7 @@ import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { Concentration } from './Concentration.js';
+import { CrossedShield } from './CrossedArms.js';
 import { CastHints } from './CastHints.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
@@ -566,6 +567,7 @@ export class Game {
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
+        this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -3559,6 +3561,7 @@ export class Game {
         if (earth) this.burnWreck?.update(dt);
         this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal || this.imperius?.busy || this.imperius?.puppet) }); // (the dead don't take things; nor a body whose mind is elsewhere / held by another's — «Империус»)
         this.water.update(dt);
+        this.crossedShield.update(dt);
         this.combat.update(dt);
         this.vortex.update(dt);
         this.hellfire?.update(dt);
