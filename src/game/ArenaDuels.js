@@ -46,6 +46,8 @@ import { newUid } from './ItemTypes.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { ArenaQueue, STEWARD, STEWARD_LINES, duelSpots, stewardIntent } from './ArenaSteward.js';
 import { ArenaMarkFx } from '../fx/ArenaMarkFx.js';
+import { ArenaTagFx } from '../fx/ArenaTagFx.js';
+import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
 
 const WALK = 2.3, RUN = 5.6;
@@ -89,6 +91,8 @@ export class ArenaDuels {
         this.askedAt = -1e9; // (the steward asked this computer's player «Хотите сразиться?» — a bare «да» counts after it)
         this.marks = new ArenaMarkFx(game); // the lit places of a player's duel (ArenaMarkFx.js)
         this._markT = 0;
+        this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
+        this._tagT = 0;
     }
 
     get life() { return this.game.castleLife; }
@@ -108,6 +112,7 @@ export class ArenaDuels {
         }
         this._countdown(dt);
         this._lit(dt);
+        this._tags(dt);
     }
 
     /** The arenas near any player (the host — near anyone; a guest — near itself, for the sign-up). */
@@ -1054,6 +1059,7 @@ export class ArenaDuels {
         if (!m || typeof m !== 'object') return;
         if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from); } return; }
         if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
+        if (m.e === 'tg') { const A = this.list.get(m.id); if (A && !this.auth) A.tg = Array.isArray(m.t) ? m.t.slice(0, 2) : []; return; }
         if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; } return; }
         if (m.to != null) { if (m.to === g.localId) this._mine(m); return; }
         if (m.e === 'fx') { const A = this.list.get(m.id); if (A) g.sound?.playArena?.(A.def.centre, m.k, m.v ?? 1); }
@@ -1083,9 +1089,35 @@ export class ArenaDuels {
         return best;
     }
 
+    /**
+     * (Creative only) The sign over each wizard fighting at the arena: his kind, mana now / cells, duel strength. The host reads
+     * them (5 times a second) and tells the others when they change ('tg'); every computer draws what it has.
+     */
+    _tags(dt) {
+        const g = this.game, on = tagShown(g.config?.mode);
+        this._tagT -= dt;
+        if (this._tagT > 0) return;
+        this._tagT = 0.2;
+        const L = this.life, list = [];
+        for (const A of this.list.values()) {
+            if (this.auth) {
+                const D = A.duel;
+                const t = on && D && D.phase !== 'over' ? [D.a, D.b].filter((v) => v && !v.dead).map(tagOf) : [];
+                const key = t.map(tagKey).join(';') + t.map((x) => x.id).join(',');
+                if (key !== A.tgKey) { A.tgKey = key; A.tg = t; g.sync?.arena?.({ e: 'tg', id: A.id, t }); }
+            }
+            if (!on) continue;
+            for (const t of A.tg || []) {
+                const v = L.byId.get(t.id);
+                if (v && !v.dead) list.push({ tag: t, x: v.x, y: v.y, z: v.z });
+            }
+        }
+        this.tagFx.show(on ? list.slice(0, 2) : []);
+    }
+
     _lit(dt) { this.marks.update(dt, this._litState()); }
 
     prewarm() { this.marks.prewarm(); }
 
-    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); }
+    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.tagFx.dispose(); }
 }
