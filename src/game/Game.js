@@ -199,7 +199,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['Pentagranium', 'GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -491,7 +491,7 @@ export class Game {
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
-        this.pentagranium = new Pentagranium(this); // «Пентаграниум»: black magic — a pentagram drawn on the ground and the rite over a wizard's body (Pentagranium.js)
+        this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
@@ -1876,7 +1876,7 @@ export class Game {
         if (name === 'Groundprud') return this.groundprud.cast(isFinal);
         if (name === 'Invisibility') return this.invis.cast(isFinal);
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
-        if (name === 'Pentagranium') return this.pentagranium.cast(isFinal);
+        if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
@@ -2062,7 +2062,6 @@ export class Game {
         if (this.invis?.stop()) done.push('невидимость');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
-        if (this.pentagranium?.stop('stop')) done.push('Пентаграниум');
         if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
@@ -4051,6 +4050,7 @@ export class Game {
 
     /** Does the hero know this spell? One answer for everything (SpellBook.js: what is known from the start, the rest from scrolls and books). */
     knowsSpell(name) {
+        if (name === 'Pentagranium') return this.pentagranium.known().length > 0; // (no spell of its own: each pentagram is learnt by burning ITS scroll; Creative knows all)
         return knowsSpellOf(SAME_SPELL[name] || name, { mode: this.config.mode, hero: this.config.mode === 'creative' ? this.hero : null, spells: this.bonus?.spells, learned: this.books?.learned, flight: this.bonus?.flight });
     }
 

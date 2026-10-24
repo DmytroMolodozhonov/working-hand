@@ -55,7 +55,7 @@ test('every spell a beginner does not know has a real source: a scroll somewhere
     for (const n of allSpells()) {
         if (START_SPELLS.has(n)) continue;
         const k = teachKey(n);
-        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'CreateHouse' || k === 'Inspirius';
+        const ok = found.has(k) || BOOK_SPELLS.has(k) || MANA_SPELLS.has(k) || TEMPLE_SCROLLS.includes(k) || k === 'CreateHouse' || k === 'Inspirius' || k === 'Pentagranium'; // (Pentagranium: no spell scroll — each pentagram is learnt from its own scroll, Game.knowsSpell)
         assert.ok(ok, `«${n}»: not known from the start, and no scroll «${k}» turns up anywhere`);
         if (found.has(k)) assert.ok(SPELL_RIBBON[k] && SPELL_RU[k], `the scroll «${k}»: its ribbon and its name`);
     }
@@ -91,6 +91,5 @@ test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wiz
     assert.deepEqual([...drawings].sort(), [...figureIds()].sort(), 'every figure has a scroll in the chests');
     assert.ok(shop.size >= 1, 'a tower\'s shop sells a drawing now and then');
     assert.ok(wiz.size >= 1, 'a wanderer carries one now and then');
-    assert.ok(!knows('Pentagranium', survival()) && knows('Pentagranium', survival({ Pentagranium: true })));
-    assert.ok(SPELL_RU.Pentagranium && SPELL_RIBBON.Pentagranium);
+    assert.ok(!scrollsFound().has('Pentagranium'), 'there is no «Pentagranium» spell scroll: only the pentagrams\' own');
 });

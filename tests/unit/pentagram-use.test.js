@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Pentagranium } from '../../src/game/Pentagranium.js';
 import { USE, MEND_COST, mendPlan, mendPrice, pairUp, PENTAGRAM_USE_TARGETS } from '../../src/game/PentagramUse.js';
-import { recognizeAny, figureLines, figureIds } from '../../src/game/PentagramRules.js';
+import { figureLines, figureIds } from '../../src/game/PentagramRules.js';
 import { pieceMax } from '../../src/game/ArmorTypes.js';
 
 const piece = (p, magic, hp) => ({ kind: 'armor', piece: p, magic, hp: hp ?? 0 });
@@ -48,23 +48,6 @@ test('pairing: the second teleport pentagram takes the first; a third begins a n
     assert.equal(pairUp([a, b], b), a); assert.equal(a.pair, 'b'); assert.equal(b.pair, 'a');
     assert.equal(pairUp([a, b, c], c), null, 'the first two are a pair already');
     assert.equal(pairUp([a, b, c, o], o), null, 'another owner\'s');
-});
-
-test('the four drawings are told apart: the star, the square with a small circle, the sprout, the shield', () => {
-    const draw = (id, rot = 0.3) => {
-        const R = 3.5, pts = [];
-        for (let i = 0; i <= 74; i++) { const a = (i / 74) * Math.PI * 2; pts.push([Math.cos(a) * R, 8 + Math.sin(a) * R]); }
-        for (const poly of figureLines(id, rot)) for (let k = 0; k <= poly.length; k++) {
-            const a = poly[k % poly.length], b = poly[(k + 1) % poly.length], m = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) * R / 0.3));
-            for (let i = 0; i < m; i++) pts.push([(a[0] + (b[0] - a[0]) * i / m) * R, 8 + (a[1] + (b[1] - a[1]) * i / m) * R]);
-        }
-        return pts;
-    };
-    for (const id of ['devil', 'teleport', 'life', 'mend', 'enchant']) {
-        assert.ok(figureIds().includes(id), id);
-        const r = recognizeAny(draw(id), new Set([id]));
-        assert.ok(r.ok && r.id === id, `${id}: ${JSON.stringify(r)}`);
-    }
 });
 
 test('teleport: two pentagrams; 3 s standing still, 50 mana; no pair, no mana, stepping off — nothing', () => {

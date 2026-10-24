@@ -30,6 +30,7 @@ import { groundprudWords } from '../game/GroundprudWords.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
+import { pentagramWords } from '../game/PentagramWords.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -127,8 +128,8 @@ export function matchSpell(text) {
     if (has('inspir', 'инспир', 'инспайр', 'энспир', 'инспер') && !has('inspirat', 'инспирац')) return 'Inspirius';
     // «Бум» («Boom», «Бумм»): a short word — only on its own (never «бумага», «бумеранг», «и тут бум — всё упало»)
     if (boomWords(s)) return 'Boom';
-    // «Пентаграниум» (Pentagranium): black magic — a pentagram drawn on the ground (Pentagranium.js); a word of its own, never plain talk of «пентаграмма»
-    if (has('pentagrani', 'pentagrany', 'pentogran', 'пентаграни', 'пентогран', 'пентагрэни', 'пентегран', 'пентагренум', 'пентаграниум')) return 'Pentagranium';
+    // «Pentagranium <Name>» («Пентаграниум Телепортис»…): ONE pentagram per phrase — the first word AND its own English name (PentagramWords.js); the lone «Пентаграниум» is no spell
+    if (pentagramWords(s)) return 'Pentagranium';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
     if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
         'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';

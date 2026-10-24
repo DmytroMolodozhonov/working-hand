@@ -1,6 +1,6 @@
 /**
  * PentagramMonster.js — «Пентаграмма страшного монстра»: строка общей таблицы пентаграмм (Pentagrams.js `PENTAGRAMS.monster`)
- * — её рисунок и что делает стоящему на ней (pure, no imports). Рисуют её, как все пентаграммы, «Пентаграниумом» (Pentagranium.js:
+ * — её рисунок и что делает стоящему на ней (pure, no imports). Создают её, как все пентаграммы, словами «Pentagranium Monstrum» (Pentagranium.js:
  * луч палочки по земле, распознавание PentagramRules.recognize); учится сожжением её свитка-рисунка; превращение —
  * MonsterTransform.js, правила — MonsterForm.js.
  *

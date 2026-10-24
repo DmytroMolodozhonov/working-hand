@@ -38,7 +38,7 @@ export class BreakwardMark {
         const g = this.game, c = g.combat;
         if (this.marked) { g.hud?.toast?.('🜏 Защита уже сломана'); return 'защита уже сломана'; } // (одноразовая: мана не списывается, пентаграмма не гаснет)
         if (!this.known && !(c && !c.enabled)) return 'рисунок не выучен'; // (в Творческом известно всё)
-        if (manaRules(this.game)) {
+        if (manaRules(this.game) && !this.prepaid) { // (prepaid: the 50 mana were taken when the pentagram was made — Pentagranium.cast)
             if (c.check?.('Breakward')) return 'мало маны';
             c.fatigue = Math.max(0, c.fatigue - BREAKWARD.COST); // (цена — 50)
             c._hudKey = '';

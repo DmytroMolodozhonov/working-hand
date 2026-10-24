@@ -18,6 +18,7 @@
  */
 
 import { matchSpell } from '../fx/SpellManager.js';
+import { pentagramSaid } from '../game/PentagramWords.js';
 
 export const LETTERS = ' абвгдежзийклмнопрстуфхцчшщъыьэюя';
 export const SPACE = 0;
@@ -44,7 +45,7 @@ const SAID = [
     ['инвизибл', 'инвизибилити', 'инвизибел'],
     ['граунд вортекс', 'граунт вортекс', 'граунд вортэкс', 'граунд вортикс'], // (Ground Vortex — both words together, GroundVortexWords.js)
     ['шилд', 'шилт', 'шиелд'], // (Shield — the earth vortex's shield word; does something only while it circles)
-    ['пентаграниум', 'пентагранием', 'пентагрэниум', 'пентаграниум', 'пентогранием', 'пентагренум', 'пентаграни ум'], // (Пентаграниум — a word of its own, Pentagranium.js)
+    ...pentagramSaid(), // (Pentagranium <Name>: first word and the pentagram's own English name — one phrase per pentagram, PentagramWords.js; the lone first word is no spell)
     ['визибл годи', 'визибл гоуди', 'визибл гади', 'визибл боди', 'визибл годе'], // (Visible Godi — both words together, VisibleGodiWords.js)
     ['овергроун', 'оверграун', 'овергрон'],
     ['лайтнинг страйк', 'лайтнин страйк', 'лайтинг страйк'],

@@ -1,30 +1,27 @@
 /**
- * Pentagranium.js — «Пентаграниум» (Pentagranium): black magic. The wand's ray draws on the ground; a circle, then a five-pointed
- * star inside it, make a pentagram — and on a pentagram the rite «дьявольской силы» can be made. The rules and the recognition
- * are in Pentagrams.js (pure, tested); the look — src/fx/PentagramFx.js.
+ * Pentagranium.js — «Pentagranium <Name>»: pentagrams on the ground. The author: «Такие сложные пентаграммы никто рисовать не сможет. Теперь
+ * рисовать пентаграммы вообще не надо. Ты направляешь палочку на землю и произносишь пентаграмму. В этот момент снимается мана…
+ * Человек произносит — и она сама рисуется». Every pentagram is a spell of its own (a phrase: the first word «Pentagranium» and the
+ * pentagram's English name — PentagramWords.js); the lone «Pentagranium» is no spell. Rules — Pentagrams.js / PentagramRules.js (pure,
+ * tested); the look — src/fx/PentagramFx.js.
  *
- *  - Only from a scroll (SpellBook: its own key); 20 mana at once, then 1 a second while drawing (HELD `Pentagranium`: the
- *    concentration — nothing else is said but «стоп»). It does not start (and costs nothing) while the hero has seen no
- *    drawing-scroll of any figure (Creative knows them all) — and a figure never seen is never counted, drawn right or not.
- *  - The trail: a dark glowing line where the wand points at the ground (a stitch every PENT.STEP m; the ray leaving the
- *    ground for a moment makes a new stroke). The figure is looked for in the stitches (Pentagrams.recognize), no more often
- *    than PENT.CHECK_EVERY s; counted → the pentagram stays lit (PENT.LIFE s of game time, or until the ground under it is
- *    changed), the spell ends, the mana's «first success» is counted and the black mage's level grows (Mana.success → DarkMagic).
- *  - The rite: the body of a killed wizard (not bones) whose power the hero already took is laid on the pentagram with
- *    «Вингардиум Левиоса» (let go inside the circle). The pentagram flares with hellfire, the body sinks into ash and the hero
- *    gets once more 25 % of (his maximum − 30) — once per body (`b.rit`), +1 to the black level. Who decides: the caster's computer
- *    (it knows whose power it took); the others see the same (`pgm` — the mark, `pgr` — the rite) and play it.
+ *  - Known only after burning ITS scroll (`stat: 'pentagram'`, `pent: id` — Items.applyScroll → learnFigure); Creative knows all.
+ *  - The cast (instant, not held): the wand points at the ground → the figure lies THERE (apex away from the hero, radius PENT.R) and
+ *    DRAWS ITSELF (a bright tip runs round the ring and along the lines, sparks, light, a sound — `_animStep`); the mana is taken at the word
+ *    (`CAST_COST`: not enough — nothing is made). Black ones (`dark`) alarm the people; the rite of the devil one is over the body of a killed
+ *    wizard (`_findRites`: the body inside the circle, 50 mana, +25 % of his power, +1 to the black level).
+ *  - The good ones stay for good (teleport, life, mend: saved, `pentMarks`); a mark is bound to its pentagram by `id`, never by its picture.
  *
- * Multiplayer: the pentagram and the rite go to everybody ('pgm' / 'pgr'); the host does not need to count anything — the
- * credit is local to the hero whose pentagram it is (the same as every first-success and kill credit: Mana.js).
+ * Multiplayer: the pentagram and the rite go to everybody ('pgm' `mark` / `rite`): each computer draws the lines itself from the mark.
+ * The credit is local to the hero whose pentagram it is (the same as every first-success and kill credit: Mana.js).
  */
 
 import { manaRules } from './HeroSetup.js';
 import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
-import { PENT, RITE, figureOf, figureIds, Seen, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
+import { PENT, RITE, CAST_COST, figureOf, figureLines, figureIds, Seen, riteBody, riteGain, RITE_HINT, inside, turnAway } from './PentagramRules.js';
+import { pentagramWords, pentagramSpell } from './PentagramWords.js';
 import { PENTAGRAMS as TABLE } from './Pentagrams.js';
-import { RingAssist, LineAssist, buildGraph, anchorsOf, turnAway, ASSIST, ASSIST_HINT } from './PentagramAssist.js';
 import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
 import { pieceMax } from './ArmorTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -40,15 +37,13 @@ const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
 const PIECE_NAME = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
 
-const POINT_COLOR = { devil: 0xe0203c, teleport: 0x4aa8ff, life: 0x3fc84a, mend: 0xd0d8e8, enchant: 0xb07cff };
-
 /** What to do on each pentagram (the line after it is lit). */
 const USE_TEXT = {
     devil: 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы (нужно 50 маны)',
-    teleport: 'Нарисуйте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
+    teleport: 'Создайте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
     life: 'Встаньте на неё (50 маны) — здоровье восстановится целиком',
     mend: 'Встаньте на неё — надетая броня будет починена (у каждой части своя цена)',
-    monster: 'Встаньте в круг (200 маны) — и на 10 минут вы огромный монстр',
+    monster: 'Встаньте в круг — и на 10 минут вы огромный монстр',
 };
 
 export class Pentagranium {
@@ -56,12 +51,12 @@ export class Pentagranium {
         this.game = game;
         this.seen = new Seen(); // the figures the hero has unrolled and looked at (saved: WorldSave)
         this.fx = new PentagramFx(game);
-        this.draw = null; // {pts, strokes, t, nextCheck, lastN, last, gapT}
-        this.marks = new Map(); // id → a lit pentagram {id, by, pent, x, y, z, r, rot, life, hell, fade, rites[], floor[], mine}
+        this.marks = new Map(); // id → a lit pentagram {id, by, pent, x, y, z, r, rot, life, hell, fade, rites[], floor[], mine, anim}
         this._n = 0;
         this._t = 0;
         this._groundT = 0;
         this._riteT = 0;
+        this._castId = null; this._castAt = 0; // (the phrase just cast: its repeats are the same cast)
         this.aim = null; // (tests) {origin, dir}
         this._pending = []; // permanent pentagrams of the save not made yet (their land is not here)
         this._jobs = new Map(); // settlement id → {def, search, spot, partner} (the world's ready pairs: PentagramWorld.js)
@@ -69,16 +64,15 @@ export class Pentagranium {
         this._use = new Map(); // mark id → what standing on it does now {in, t, cd, hinted, from}
     }
 
-    get on() { return !!this.draw; }
     get data() { return this.game.terrain?.data || null; }
     get creative() { return this.game.config?.mode === 'creative' || this.game.config?.mode === 'test'; }
 
     // ------------------------------------------------------------ the figures the hero knows
     /** The drawing-scroll of figure `id` is burnt (Items.applyScroll): the figure is learnt for good (the author: looking at the scroll teaches nothing). */
     learnFigure(id) {
-        if (!this.seen.add(id)) { this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: рисунок «${figureOf(id)?.ru || id}» вы уже знали`, true); return false; }
+        if (!this.seen.add(id)) { this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: «${figureOf(id)?.ru || id}» вы уже знали`, true); return false; }
         if (id === 'breakward') this.game.breakward?.learn?.(); // (their mark's own «known» flag: the drawing is learnt)
-        this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете рисунок «${figureOf(id).ru}» — нарисуйте его палочкой: скажите «Пентаграниум»`, true);
+        this.game.hud.setVoice?.(`📜🔥 Свиток сгорел: теперь вы знаете «${figureOf(id).ru}»: направьте палочку на землю и скажите «${pentagramSpell(id)}»`, true);
         return true;
     }
 
@@ -99,67 +93,45 @@ export class Pentagranium {
     marksRestore(list) { this._pending = (Array.isArray(list) ? list : []).filter((m) => m && figureOf(m.pent) && TABLE[m.pent]?.permanent).slice(0, USE.PERM_MAX); }
 
     // ------------------------------------------------------------ the cast
-    /** Voice on my computer. `aim` ({origin, dir}) is for tests. */
-    cast(isFinal, aim = null) {
+    /** Voice on my computer: `text` is the phrase heard («Pentagranium Teleportis»). `aim` ({origin, dir}) is for tests. */
+    cast(isFinal, text, aim = null) {
         const g = this.game;
         const hint = (t) => { if (isFinal) g.hud.setVoice(t, true); return null; };
-        if (this.draw) return hint('🩸 Вы уже рисуете. «Стоп» — закончить');
+        const id = pentagramWords(text);
+        if (!id || !figureOf(id)) return null; // (the first word alone is no spell: nothing is said, nothing is paid)
+        const now = performance.now();
+        if (id === this._castId && now - this._castAt < 2500) return null; // (the microphone repeats an unfinished phrase: one pentagram per phrase)
+        const name = pentagramSpell(id);
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
-        if (!hand) return hint('🩸 Поднимите палочку (руку), направьте на землю и скажите «Пентаграниум»');
-        if (g.swim?.underwater) return hint('🩸 Под водой рисунок не держится');
-        if (!this.known().length) return hint('🩸 Вы не знаете ни одной пентаграммы — найдите свиток с рисунком и сожгите его («Инферно»): так вы выучите рисунок');
-        const tired = g.combat.check('Pentagranium');
-        if (tired) { g.hud.setVoice(tired, true); return null; }
-        g.combat.pay('Pentagranium');
-        this.begin();
-        g.hud.setVoice('✨ Обведите палочкой круг на земле — ровно рисовать не нужно, он ляжет сам. Потом появятся светящиеся точки: ведите палочку от одной к другой (1 мана в секунду, «стоп» — закончить)', true);
+        if (!this.known().includes(id)) return hint(`🩸 Вы не знаете «${figureOf(id).ru}» — найдите её свиток и сожгите («Инферно»): тогда её можно будет создать`);
+        if (!hand) return hint(`🩸 Поднимите палочку (руку), направьте на землю и скажите «${name}»`);
+        if (g.swim?.underwater) return hint('🩸 Под водой пентаграмма не держится');
+        const p = this.groundAt();
+        if (!p) return hint('🩸 Направьте палочку на землю — пентаграмма ляжет туда, куда вы указываете');
+        const origin = _o.set(p.x, this._height(p.x, p.z), p.z);
+        if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
+        const cost = CAST_COST[id] || 0, c = g.combat;
+        if (cost && manaRules(g) && (c?.fatigue || 0) < cost) return hint(`🩸 Нужно ${cost} маны — у вас ${Math.floor(c?.fatigue || 0)}`);
+        const def = TABLE[id], center = { x: p.x, y: origin.y, z: p.z };
+        if (typeof def.use === 'function') { // (gargoyles: the ritual itself takes the mana and starts; it may refuse — then nothing is made)
+            const r = def.use(g, { center, by: g.localId });
+            if (r && r.ok === false) return null;
+        }
+        if (cost && manaRules(g) && c) { c.fatigue -= cost; c._hudKey = ''; }
+        const me = g.character.group.position, rot = turnAway(p.x, p.z, me.x, me.z);
+        const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, p.x, center.y, p.z, PENT.R, rot, true);
+        if (!mark) return null;
+        this._castId = id; this._castAt = now;
+        mark.mine = true; mark.prepaid = cost > 0;
+        this._permanent(mark);
+        this._others(mark);
+        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
+        g.mana?.success('Pentagranium'); // (the first success's cells; making a pentagram is no black magic — only the devil one's rite adds darkness)
+        if (def?.dark) g.castleLife?.alarm?.({ x: p.x, y: center.y, z: p.z }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
+        g.hud.setVoice(`✨ «${figureOf(id).ru}» рисуется на земле… ${USE_TEXT[id] || ''}`, true);
+        g.perf?.note?.(`🩸 ${name}`);
         return 'Pentagranium';
-    }
-
-    begin() {
-        const c = this._center();
-        this.draw = { phase: 'ring', ring: new RingAssist(c.x, c.z), line: null, t: 0, gap: 0, hint: {}, idle: 0 };
-        this.fx.trailBegin();
-        this._showRing();
-        this.game.perf?.note?.('🩸 Пентаграниум: рисование');
-    }
-
-    /** Where the circle is: at the spot the wand points at (on the ground); else a few steps ahead of the hero. */
-    _center() {
-        const g = this.game, p = this.groundAt();
-        if (p) return { x: p.x, z: p.z };
-        const me = g.character.group.position, dir = _d.set(0, 0, -1);
-        const hand = castingHand(g);
-        if (hand) dir.copy(hand.dir); else if (g.camera) g.camera.getWorldDirection(dir);
-        const h = Math.hypot(dir.x, dir.z) || 1;
-        return { x: me.x + (dir.x / h) * 9, z: me.z + (dir.z / h) * 9 };
-    }
-
-    /** The guide from the first moment: a ring of glowing points of one size (and a dotted line between them) where the circle will be. */
-    _showRing() {
-        const R = this.draw.ring, h = (x, z) => this._height(x, z), pts = [];
-        const ghost = 48;
-        for (let k = 0; k < ghost; k++) { const a = (k / ghost) * Math.PI * 2, x = R.cx + Math.cos(a) * R.r, z = R.cz + Math.sin(a) * R.r; pts.push({ x, y: h(x, z), z, color: 0xfff0b8, s: 0.35 }); }
-        for (const w of R.world) pts.push({ x: w[0], y: h(w[0], w[1]), z: w[1], color: 0xffd23a, s: 1.0 });
-        this.fx.anchorsShow(pts);
-        this.draw.ringBase = ghost;
-        this.game.hud.setVoice('✨ Перед вами светится круг. Ведите палочку по его светящимся точкам — круг ляжет идеально ровным, даже если рука дрожит (1 мана в секунду, «стоп» — закончить)', true);
-    }
-
-    /** «стоп» / the mana is out / timeout / counted: the drawing ends (the trail is gone). True if it was on. */
-    stop(why = 'stop') {
-        const D = this.draw;
-        if (!D) return false;
-        this.draw = null;
-        this.fx.trailEnd();
-        this.fx.anchorsHide();
-        const g = this.game;
-        if (why === 'mana') g.hud.setVoice('🩸 Мана кончилась — рисунок рассеялся', true);
-        else if (why === 'time') g.hud.setVoice('🩸 Слишком долго — след рассеялся', true);
-        else if (why === 'stop') g.hud.setVoice('🩸 Рисунок не закончен — след рассеялся', true);
-        g.perf?.note?.('🩸 Пентаграниум: конец (' + why + ')');
-        return true;
     }
 
     // ------------------------------------------------------------ the ground under the wand
@@ -190,7 +162,6 @@ export class Pentagranium {
     update(dt) {
         this._t += dt;
         this.fx.trailPulse(this._t);
-        if (this.draw) this._drawStep(dt);
         this._pendingStep(dt);
         this._worldStep(dt);
         for (const m of this.marks.values()) { this._markStep(m, dt); if (m.perm && this.marks.has(m.id)) this._useStep(m, dt); }
@@ -200,82 +171,49 @@ export class Pentagranium {
         }
     }
 
-    /** A hint at most once in `every` s per kind. */
-    _hint(key, text, every = 5) {
-        const D = this.draw;
-        if (!D || D.t - (D.hint[key] ?? -1e9) < every) return;
-        D.hint[key] = D.t;
-        this.game.hud.setVoice(text, true);
-    }
-
-    /** The drawing goes with help (PentagramAssist.js): first the circle (fitted perfect), then the wand is led from glowing point to point. */
-    _drawStep(dt) {
-        const g = this.game, D = this.draw;
-        D.t += dt;
-        if (g.combat?.drain(PENT.DRAIN * dt, dt) === false) { this.stop('mana'); return; }
-        if (D.t > PENT.DRAW_MAX) { this.stop('time'); return; }
-        const p = this.groundAt();
-        const h = (x, z) => this._height(x, z);
-        if (!p) { D.stitched = false; this.fx.trailBreak(); D.idle += dt; if (D.idle > 6) this._hint('aim', '🩸 Направьте палочку на землю', 8); return; }
-        D.idle = 0;
-        if (D.phase === 'ring') {
-            const R = D.ring;
-            for (const e of R.step(p.x, p.z)) {
-                if (e.t === 'arcs') for (const i of e.list) { const [a, b] = R.arcEnds(i); this._arc(R, i); this._sparkLine(a, b, h(a[0], a[1])); }
-                else if (e.t === 'closed') { this._circleClosed(e); return; }
+    // ------------------------------------------------------------ the figure draws itself
+    /** The lines of the drawing in order: the ring round, then the figure's lines one by one — pieces of ≤ 0.8 m on the ground (world [x, z] pairs). */
+    _plan(m) {
+        const segs = [], push = (a, b, ring) => { segs.push({ a, b, len: Math.hypot(b[0] - a[0], b[1] - a[1]), ring }); };
+        const N = 48, at = (a) => [m.x + Math.cos(a) * m.r, m.z + Math.sin(a) * m.r];
+        const a0 = Math.atan2(Math.cos(m.rot), -Math.sin(m.rot)); // (the ring begins at the figure's apex and goes round)
+        for (let i = 0; i < N; i++) push(at(a0 + (i / N) * Math.PI * 2), at(a0 + ((i + 1) / N) * Math.PI * 2), true);
+        for (const poly of figureLines(m.pent, m.rot)) {
+            const pts = poly.map(([x, z]) => [m.x + x * m.r, m.z + z * m.r]);
+            const n = pts.length === 2 ? 1 : pts.length; // (a two-point line is one stroke; a polygon is closed)
+            for (let k = 0; k < n; k++) {
+                const a = pts[k], b = pts[(k + 1) % pts.length], pcs = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.8));
+                for (let i = 0; i < pcs; i++) push([a[0] + (b[0] - a[0]) * i / pcs, a[1] + (b[1] - a[1]) * i / pcs], [a[0] + (b[0] - a[0]) * (i + 1) / pcs, a[1] + (b[1] - a[1]) * (i + 1) / pcs], false);
             }
-            this.fx.anchorsHover(R.hover < 0 ? -1 : D.ringBase + R.hover, this._t);
-            D.pointless = R.hover >= 0 ? 0 : (D.pointless || 0) + dt;
-            if (D.pointless > 5) { D.pointless = 0; this._hint('ring', '🩸 ' + ASSIST_HINT.circle, 8); }
-            return;
         }
-        const L = D.line;
-        let hovering = false;
-        for (const e of L.step(p.x, p.z, dt)) {
-            if (e.t === 'edges') for (const k of e.keys) this._edge(L, k);
-            else if (e.t === 'refuse') this._hint('refuse', '🩸 ' + ASSIST_HINT.refuse, 3);
-            else if (e.t === 'done') { this._counted(e.id, { cx: L.circle.cx, cz: L.circle.cz, r: L.circle.r, rot: L.circle.rot }); return; }
+        return { segs, total: segs.reduce((t, q) => t + q.len, 0) };
+    }
+
+    /** A bright tip runs round the ring and along every line (a ribbon of light behind it), sparks fly off it, a flash lights the ground; at the end the figure fades in. */
+    _animStep(m, dt) {
+        const A = m.anim, g = this.game, h = (x, z) => this._height(x, z), fx = g.fx;
+        if (!A.plan) { A.plan = this._plan(m); A.i = 0; A.done = 0; this.fx.trailBegin(); this.fx.trailBreak(); g.sound?.playSpellFxAt?.('fxPentagram', _o.set(m.x, m.y, m.z), 0.9, 1.1, 14); }
+        A.t += dt;
+        const P = A.plan, target = Math.min(1, A.t / PENT.DRAW_T) * P.total;
+        let tip = null;
+        while (A.i < P.segs.length) {
+            const q = P.segs[A.i];
+            if (A.done + q.len <= target + 1e-6) { this.fx.trailLine(q.a, q.b, h); A.done += q.len; A.i++; tip = q.b; continue; }
+            const u = (target - A.done) / (q.len || 1);
+            tip = [q.a[0] + (q.b[0] - q.a[0]) * u, q.a[1] + (q.b[1] - q.a[1]) * u];
+            break;
         }
-        hovering = L.hover >= 0;
-        this.fx.anchorsHover(L.hover, this._t);
-        D.pointless = hovering ? 0 : (D.pointless || 0) + dt;
-        if (D.pointless > 4) { D.pointless = 0; this._hint('lead', '🩸 ' + ASSIST_HINT.lead, 6); }
-    }
-
-    /** One arc of the ring lies down perfectly round (a few straight pieces along the circle). */
-    _arc(R, i) {
-        const h = (x, z) => this._height(x, z), a0 = (i / R.n) * Math.PI * 2, a1 = ((i + 1) / R.n) * Math.PI * 2;
-        const steps = 5;
-        this.fx.trailBreak();
-        for (let k = 0; k <= steps; k++) { const a = a0 + ((a1 - a0) * k) / steps, x = R.cx + Math.cos(a) * R.r, z = R.cz + Math.sin(a) * R.r; this.fx.trailAdd(x, h(x, z), z, k > 0); }
-        this.fx.trailBreak();
-        this.game.sync?.pentagram?.({ k: 'seg', a: [R.arcEnds(i)[0][0], R.arcEnds(i)[0][1]], b: [R.arcEnds(i)[1][0], R.arcEnds(i)[1][1]], y: h(R.cx, R.cz) });
-    }
-
-    /** The circle is whole: the guiding points of the learnt figures light up inside it. */
-    _circleClosed(c) {
-        const g = this.game, D = this.draw, h = (x, z) => this._height(x, z);
-        const me = g.character.group.position;
-        const known = this.known().sort((a, b) => (a === 'devil' ? -1 : b === 'devil' ? 1 : 0));
-        const rot = turnAway(c.cx, c.cz, me.x, me.z);
-        D.line = new LineAssist(buildGraph(known), { cx: c.cx, cz: c.cz, r: c.r, rot });
-        D.phase = 'lines';
-        const color = (ids) => POINT_COLOR[ids[0]] ?? TABLE[ids[0]]?.glow ?? 0xffb800; // (strong colours: the points are seen on bright grass)
-        this.fx.anchorsShow(anchorsOf(D.line).map((a, i) => ({ x: a.x, y: h(a.x, a.z), z: a.z, color: color(D.line.graph.nodes[i].ids) })));
-        g.hud.setVoice('✨ Круг готов. Теперь ведите палочку от одной светящейся точки к другой и задерживайте её на точке: между ними ляжет ровная линия — так вы нарисуете пентаграмму', true);
-        g.sound?.playSpellFxAt?.('fxPentagram', _o.set(c.cx, h(c.cx, c.cz), c.cz), 0.8, 1.2, 14);
-        for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; g.fx?.spark(_o.set(c.cx + Math.cos(a) * c.r, h(c.cx, c.cz) + 0.2, c.cz + Math.sin(a) * c.r), i % 2 ? 0xfff0b8 : 0xffc860, 0.14, _d.set(0, 1.2 + Math.random(), 0), 1); }
-        g.sync?.pentagram?.({ k: 'ring', x: c.cx, y: h(c.cx, c.cz), z: c.cz, r: c.r });
-    }
-
-    /** One line between two points is laid ruler-straight; a spray of sparks along it; the others see it too. */
-    _edge(L, key) {
-        const ends = L.edgeEnds(key);
-        if (!ends) return;
-        const h = (x, z) => this._height(x, z), g = this.game;
-        this.fx.trailLine(ends[0], ends[1], h);
-        this._sparkLine(ends[0], ends[1], h(ends[0][0], ends[0][1]));
-        g.sync?.pentagram?.({ k: 'seg', a: [ends[0][0], ends[0][1]], b: [ends[1][0], ends[1][1]], y: h(ends[0][0], ends[0][1]) });
+        if (tip) {
+            const y = h(tip[0], tip[1]);
+            const dark = m.dark;
+            if (fx) for (let i = 0; i < 4; i++) fx.spark(_o.set(tip[0] + (Math.random() - 0.5) * 0.3, y + 0.15, tip[1] + (Math.random() - 0.5) * 0.3), i % 2 ? (dark ? 0xff3a50 : 0xfff0b8) : (TABLE[m.pent]?.glow ?? 0xffc860), 0.14, _d.set((Math.random() - 0.5) * 1.4, 1 + Math.random() * 2, (Math.random() - 0.5) * 1.4), 0.9);
+            if ((A._fT = (A._fT || 0) - dt) <= 0) { A._fT = 0.12; fx?.lightFlash?.(_o.set(tip[0], y + 1, tip[1]), TABLE[m.pent]?.glow ?? 0xffc860, 1.6, 0.2, 14); }
+        }
+        if (A.i >= P.segs.length && A.t >= PENT.DRAW_T) {
+            this.fx.trailEnd();
+            m.anim = null;
+            if (fx) for (let i = 0; i < 70; i++) { const a = (i / 70) * Math.PI * 2; fx.spark(_o.set(m.x + Math.cos(a) * m.r, m.y + 0.2, m.z + Math.sin(a) * m.r), m.dark ? (i % 2 ? 0xff2a44 : 0x8a0a1c) : (i % 2 ? 0xfff0b8 : TABLE[m.pent]?.glow ?? 0xffd98a), 0.18, _d.set(Math.cos(a) * 0.6, 1.6 + Math.random() * 1.5, Math.sin(a) * 0.6), 1.3); }
+        }
     }
 
     _sparkLine(a, b, y) {
@@ -285,40 +223,16 @@ export class Pentagranium {
         for (let i = 0; i <= n; i++) fx.spark(_o.set(a[0] + (b[0] - a[0]) * i / n, y + 0.2, a[1] + (b[1] - a[1]) * i / n), i % 2 ? 0xfff0b8 : 0xffc860, 0.1, _d.set((Math.random() - 0.5) * 0.4, 0.8 + Math.random(), (Math.random() - 0.5) * 0.4), 0.8);
     }
 
-    // ------------------------------------------------------------ a figure is counted
-    _counted(id, r) {
-        const g = this.game, data = this.data;
-        const cx = r.cx, cz = r.cz;
-        const y = this._height(cx, cz);
-        const origin = _o.set(cx, y, cz);
-        if (g.wards?.forbids?.(origin, origin)) { this.stop('stop'); g.hud.setVoice('🛡️ Здесь чужая защита дома — пентаграмма не держится', true); return; }
-        this.stop('done');
-        const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, cx, y, cz, r.r, r.rot);
-        if (!mark) return;
-        mark.mine = true;
-        this._permanent(mark);
-        this._others(mark);
-        g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: cx, y, z: cz, r: r.r, rot: r.rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
-        g.mana?.success('Pentagranium'); // (the mark is made: the first success's cells; drawing a pentagram is no black magic — only the devil one's rite adds darkness)
-        if (TABLE[id]?.dark) g.castleLife?.alarm?.({ x: cx, y, z: cz }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
-        g.hud.setVoice(`✨ «${figureOf(id).ru}» засветилась на земле! ${USE_TEXT[id] || ''}`, true);
-        g.sound?.playSpellFxAt?.('fxPentagram', origin, 1, 1, 14);
-        for (let i = 0; i < 70; i++) {
-            const a = (i / 70) * Math.PI * 2;
-            g.fx?.spark(_o.set(cx + Math.cos(a) * mark.r, y + 0.2, cz + Math.sin(a) * mark.r), mark.dark ? (i % 2 ? 0xff2a44 : 0x8a0a1c) : (i % 2 ? 0xfff0b8 : TABLE[id]?.glow ?? 0xffd98a), 0.18, _d.set(Math.cos(a) * 0.6, 1.6 + Math.random() * 1.5, Math.sin(a) * 0.6), 1.3);
-        }
-    }
-
     /**
-     * The other sessions' pentagrams (the shared table, Pentagrams.js): what happens when their drawing is counted. Gargoyles — their
-     * ritual starts at the centre (`def.use`); enchanting — their circle is laid (EnchantCircles.add: it draws itself); «слом защиты» —
+     * The other sessions' pentagrams (the shared table, Pentagrams.js): what happens when their pentagram is made. Gargoyles — their
+     * ritual has started at the centre (`def.use`, at the word); enchanting — their circle is laid (EnchantCircles.add: it draws itself); «слом защиты» —
      * stepping into the circle puts the mark on (BreakwardMark.activate), then the drawing goes out (`once`).
      */
     _others(m) {
         const g = this.game, def = TABLE[m.pent], c = { x: m.x, y: m.y, z: m.z };
         if (!def || m.pent === 'devil') return;
         if (m.pent === 'enchant') { g.enchantCircles?.add?.(c.x, c.y, c.z); this._remove(m.id, 'old'); return; }
-        if (typeof def.use === 'function') { def.use(g, { center: c, by: g.localId }); if (def.once) m.life = Math.min(m.life, 6); }
+        if (def.once && typeof def.use === 'function') m.life = Math.min(m.life, 6); // (the gargoyles' ritual began at the word: the picture burns out)
     }
 
     /** A good pentagram (`permanent` in the table) stays for good: the oldest permanent one goes when there are too many; teleport ones are paired. */
@@ -476,7 +390,7 @@ export class Pentagranium {
     }
 
     /** (every computer) A pentagram is lit. */
-    _place(id, by, pent, x, y, z, r, rot) {
+    _place(id, by, pent, x, y, z, r, rot, anim = false) {
         if (this.marks.has(id) || !figureOf(pent)) return null;
         const temp = () => [...this.marks.values()].filter((o) => !o.perm);
         while (temp().length >= PENT.MAX_ALIVE) this._remove(temp()[0].id, 'old'); // (the lit ones of a rite: the oldest goes; the permanent ones are counted apart)
@@ -489,7 +403,7 @@ export class Pentagranium {
         }
         const cl = data ? data.topLayer(Math.round(x), Math.round(z)) : 0;
         floor.push([Math.round(x), Math.round(z), cl]);
-        const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0 };
+        const m = { id, by, pent, perm: false, pair: null, dark: !!TABLE[pent]?.dark, x, y, z, r: R, rot: rot || 0, life: PENT.LIFE, hell: 0, fade: 0, rites: [], floor, mine: false, t: 0, drawT: anim ? PENT.DRAW_T : 0, anim: anim ? { t: 0, plan: null } : null };
         this.marks.set(id, m);
         this.fx.add(id, x, y, z, R, m.rot, (px, pz) => (data ? data.topLayer(Math.round(px), Math.round(pz)) - 0.5 : y), pent, !!TABLE[pent]?.dark, TABLE[pent]?.glow ?? 0xffd98a);
         return m;
@@ -500,6 +414,7 @@ export class Pentagranium {
         if (!m) return;
         this.marks.delete(id);
         this.fx.remove(id);
+        if (m.anim) this.fx.trailEnd();
         if (m.pair) { const o = this.marks.get(m.pair); if (o) o.pair = null; }
         this._use.delete(id);
         for (const r of m.rites) if (r.b && !r.done) this._riteEnd(m, r, true);
@@ -517,7 +432,8 @@ export class Pentagranium {
         const rite = m.rites.find((r) => !r.done);
         const hellWant = rite ? 1 : 0;
         m.hell += (hellWant - m.hell) * Math.min(1, dt * (hellWant ? 3 : 1.2));
-        m.fade = Math.min(1, m.t / 1.2, Math.max(0, m.life / 6));
+        if (m.anim) this._animStep(m, dt);
+        m.fade = Math.min(1, Math.max(0, (m.t - m.drawT) / 1.2), Math.max(0, m.life / 6));
         this.fx.set(m.id, m.fade, m.hell, this._t);
         const near = Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < PENT.FAR;
         if (near) this.fx.ambient(m, dt, m.hell);
@@ -528,9 +444,11 @@ export class Pentagranium {
         if (m.mine && typeof stand === 'function' && m.fade > 0.9) {
             const me = g.character.group.position, S = g.character.size || 1;
             const inCircle = Math.hypot(me.x - m.x, me.z - m.z) <= m.r * USE.INSIDE_K && Math.abs(me.y - PLAYER_GROUND_OFFSET * S - m.y) < 3 && !!g.character.onGround;
+            if (g.monster) g.monster.prepaid = !!m.prepaid; // (its 200 mana were taken at the word)
             if (stand(g, m, dt, inCircle)) { this._remove(m.id, 'old'); return; }
         }
         if (m.mine && m.pent === 'breakward' && g.breakward && Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < m.r) {
+            g.breakward.prepaid = !!m.prepaid; // (its 50 mana were taken at the word)
             const why = g.breakward.activate(); // (stepped on: the mark is put on once, the drawing goes out; no mana — a hint — leaves it)
             if (why === null || why === 'защита уже сломана') { this._remove(m.id, 'old'); return; }
         }
@@ -636,21 +554,16 @@ export class Pentagranium {
     }
 
     // ------------------------------------------------------------ network
-    /** Another computer: a pentagram was lit ('mark') or a rite is made on it ('rite'). */
+    /** Another computer: a pentagram was made ('mark') or a rite is made on it ('rite'). */
     onNet(by, m) {
         if (!m) return;
         if (m.k === 'mark') {
             if (typeof m.id !== 'string' || !figureOf(m.pent)) return;
-            const mk = this._place(m.id, by, m.pent, +m.x || 0, +m.y || 0, +m.z || 0, Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || 3.5)), +m.rot || 0);
+            const mk = this._place(m.id, by, m.pent, +m.x || 0, +m.y || 0, +m.z || 0, Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || PENT.R)), +m.rot || 0, true); // (every computer draws the lines itself)
             if (mk) {
                 mk.mine = false;
                 if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
             }
-        } else if (m.k === 'ring') {
-            const x = +m.x || 0, z = +m.z || 0, r = Math.min(PENT.R_MAX, +m.r || 4), y = +m.y || 0, fx = this.game.fx;
-            if (fx) for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; fx.spark(_o.set(x + Math.cos(a) * r, y + 0.2, z + Math.sin(a) * r), i % 2 ? 0xfff0b8 : 0xffc860, 0.14, _d.set(0, 1.2 + Math.random(), 0), 1); }
-        } else if (m.k === 'seg') {
-            if (Array.isArray(m.a) && Array.isArray(m.b)) this._sparkLine([+m.a[0] || 0, +m.a[1] || 0], [+m.b[0] || 0, +m.b[1] || 0], +m.y || 0);
         } else if (m.k === 'fx') {
             if (['teleport', 'life', 'mend'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
         } else if (m.k === 'rite') {
@@ -662,5 +575,5 @@ export class Pentagranium {
     sampleModels() { return this.fx.sampleModels(); }
 
     /** Death / world change: nothing stays lit. */
-    clear() { this.stop('stop'); for (const id of [...this.marks.keys()]) this._remove(id, 'old'); }
+    clear() { this.fx.trailEnd(); for (const id of [...this.marks.keys()]) this._remove(id, 'old'); }
 }

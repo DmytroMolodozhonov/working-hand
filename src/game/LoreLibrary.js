@@ -225,7 +225,7 @@ export class LoreLibrary {
         if (Math.hypot(p.x - eye.x, p.z - eye.z) > 3.4 || Math.abs(p.y - eye.y) > 5) return;
         st.told = true;
         const g = this.game;
-        g.hud?.setVoice?.('🌀 На стенде нарисована пентаграмма телепортации. Смотреть на неё может каждый, но выучить рисунок можно, только сжигая свиток с ним', true);
+        g.hud?.setVoice?.('🌀 На стенде нарисована пентаграмма телепортации. Смотреть на неё может каждый, но выучить её можно, только сжигая свиток с ней', true);
     }
 
     sampleModels() {

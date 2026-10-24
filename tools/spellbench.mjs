@@ -11,7 +11,7 @@
  *   «замок»      — «Create a Castle» (30 s of magic);
  *   «ледяной»    — «Ice Castle»;
  *   «бомбардо»   — «Bombardo Maxima» ×3; «землетрясение» — «Earthquake Maxima»; «разрушение» — «Total Destruction»;
- *   «пентаграмма» — «Пентаграниум»: рисунок круг + звезда по земле (след), горящая пентаграмма и ритуал над телом волшебника (Pentagranium.js);
+ *   «пентаграмма» — «Pentagranium <Имя>»: фигура сама рисуется на земле (след), горящая пентаграмма и ритуал над телом волшебника (Pentagranium.js);
  *   «рой вещей»  — «Левиоса Максима» на вещь: 32 вещи цепочкой, вихрем, щитом и залпом (ItemSwarm.js);
  *   «полёт»      — a straight fast flight (new land loaded) and back over the changed places.
  * For each: the game's own work in a frame («игра», without drawing the picture — here the processor draws
@@ -149,26 +149,16 @@ const scenarios = {
             const g = window.__zns.game, P = g.pentagranium, me = g.character.group.position;
             const cx = me.x + 12, cz = me.z, gy = g.collision.groundY(cx, cz);
             P.learnFigure('devil');
-            // the wand draws with help: led along the guiding ring (a trembling hand), then held on the star's corners one chord after another
-            let seq = [], stage = 'ring', i = 0;
-            P.groundAt = () => {
-                const D = P.draw;
-                if (D && stage === 'ring' && D.phase === 'ring' && !seq.length) for (const w of [...D.ring.world, D.ring.world[0], D.ring.world[1]]) seq.push([w[0] + Math.sin(seq.length * 7) * 0.3, w[1] + Math.cos(seq.length * 5) * 0.3, 1]);
-                if (D && stage === 'ring' && D.phase === 'lines') { stage = 'lead'; seq = [[cx + 40, cz, 25]]; for (const c of D.line.graph.chords) for (const n of [c.nodes[0], c.nodes.at(-1)]) seq.push([D.line.world[n][0], D.line.world[n][1], 30]); i = 0; }
-                let k = i, q = null;
-                for (const e of seq) { if (k < e[2]) { q = e; break; } k -= e[2]; }
-                return q ? { x: q[0], y: g.collision.groundY(q[0], q[1]), z: q[1] } : null;
-            };
-            const orig = P._drawStep.bind(P);
-            P._drawStep = function (dt) { i++; orig(dt); };
+            // «Pentagranium Diabolus»: the wand points at the ground, the figure draws itself
+            P.groundAt = () => ({ x: cx, y: gy, z: cz });
             window.__sb.rec = true;
             g.combat.fatigue = Math.max(g.combat.fatigue, 60);
-            P.begin();
+            P.cast(true, 'Пентаграниум Диаболус');
             window.__pgb = { cx, cz, gy };
             return true;
         });
         if (!ok) return 'не началось';
-        await sleep(24000); // (the game runs slowly here: the ring a point a frame, then 10 points held for 0.3 s each)
+        await sleep(8000); // (the figure draws itself ~2.8 s of game time; the game runs slowly here)
         const marks = await page.evaluate(() => {
             const g = window.__zns.game, P = g.pentagranium, b = window.__pgb;
             const m = [...P.marks.values()][0];

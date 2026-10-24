@@ -802,7 +802,6 @@ export const HELD_SOUND = {
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
-    Pentagranium: { loop: 'loopDark', end: 'fxStop' }, // («Пентаграниум» held: the low hum while the wand draws)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

@@ -474,7 +474,7 @@ export class NetSync {
     }
 
     /** «Fireworks»: one salvo from my wand tip (the seed makes the same bursts on every computer — Fireworks.js). */
-    /** «Пентаграниум»: a pentagram lit ({k: 'mark', id, by, pent, x, y, z, r, rot}) / a rite begun on it ({k: 'rite', id, body}) — Pentagranium.js. */
+    /** «Pentagranium <Name>»: a pentagram made ({k: 'mark', id, by, pent, x, y, z, r, rot}) / a rite begun on it ({k: 'rite', id, body}) — Pentagranium.js. */
     pentagram(m) {
         this.net.send({ t: 'pgm', by: this.me, ...m }, true);
     }

@@ -52,7 +52,7 @@ function pictureTexture(id) {
     for (const w of words) { if (x.measureText(line + w).width > 330) { x.fillText(line, 60, y); y += 46; line = ''; } line += w + ' '; }
     x.fillText(line, 60, y);
     x.font = '27px serif'; x.fillStyle = '#4a3a28';
-    const text = ['Рисунок для всех: смотрите', 'и запоминайте, как он выглядит.', '', 'Нарисовать его в зачёт можно,', 'только выучив рисунок: найдите', 'свиток с этой пентаграммой и', 'сожгите его («Инферно»).', '', 'Заклинание «Пентаграниум».'];
+    const text = ['Рисунок для всех: смотрите,', 'как выглядит эта пентаграмма.', '', 'Создать её можно, только выучив:', 'найдите её свиток и сожгите', 'его («Инферно»). Потом скажите,', 'направив палочку на землю:', '', '«Pentagranium Teleportis».'];
     y += 70;
     for (const t of text) { x.fillText(t, 60, y); y += 38; }
     const tex = new THREE.CanvasTexture(c);

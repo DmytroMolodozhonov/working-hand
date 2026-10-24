@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { MONSTER, MONSTER_VS, FIST_TARGETS, STOMP, fmtLeft, growAt, hpAfterFall, spellOnMonster, knocksMonster, fistPower, bodyBreaks, fistBreaks, softGround, footprint, crater, freeSpot } from '../../src/game/MonsterForm.js';
 import { MONSTER_PENTAGRAM } from '../../src/game/PentagramMonster.js';
 import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
-import { figureIds, figureLines, recognizeAny, pentagramScroll } from '../../src/game/PentagramRules.js';
+import { figureIds, figureLines, pentagramScroll } from '../../src/game/PentagramRules.js';
 import { MonsterTransform, applyRemoteMonster } from '../../src/game/MonsterTransform.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../../src/entities/Character.js';
 import { BLOCK } from '../../src/world/Terrain.js';
@@ -138,21 +138,9 @@ test('the pentagram row in the shared table: dark, one use, blood-red; a drawing
     assert.match(describeItem(sc).title, /монстра/);
 });
 
-test('the drawing (a circle, a fanged maw) is told from the others, drawn any way round', () => {
-    let s = 5;
-    const j = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296 - 0.5) * 0.15;
-    const drawing = (id, cx, cz, R, rot) => {
-        const pts = [];
-        for (let i = 0; i <= 72; i++) { const a = (i / 72) * Math.PI * 2; pts.push([cx + Math.cos(a) * R + j(), cz + Math.sin(a) * R + j()]); }
-        for (const poly of figureLines(id, rot)) { const P = [...poly, poly[0]]; for (let i = 0; i < P.length - 1; i++) for (let k = 0; k < 6; k++) { const u = k / 6; pts.push([cx + (P[i][0] + (P[i + 1][0] - P[i][0]) * u) * R + j(), cz + (P[i][1] + (P[i + 1][1] - P[i][1]) * u) * R + j()]); } }
-        return pts;
-    };
-    for (const rot of [0, 1.7, 3.6, 5.2]) {
-        const r = recognizeAny(drawing('monster', 5, -3, 3, rot));
-        assert.equal(r.id, 'monster', 'turned ' + rot);
-        assert.ok(r.ok);
-    }
-    for (const id of ['teleport', 'life', 'mend', 'breakward']) assert.notEqual(recognizeAny(drawing(id, 0, 0, 3, 0.4)).id, 'monster', id);
+test('the monster pentagram has its own fanged-maw picture, unlike the others', () => {
+    const jaw = JSON.stringify(figureLines('monster', 0));
+    for (const id of figureIds()) if (id !== 'monster') assert.notEqual(JSON.stringify(figureLines(id, 0)), jaw, id);
 });
 
 test('standing in my lit monster pentagram 0.8 s: the form begins and the drawing burns out; no mana — a hint, it stays', () => {

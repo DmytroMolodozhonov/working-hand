@@ -69,7 +69,7 @@ export class MonsterTransform {
         const g = this.game;
         if (this.phase) return 'вы уже монстр';
         if (g.combat?.dead || g.isDeadLocal) return 'вы мертвы';
-        if (manaRules(g) && (g.combat.fatigue || 0) < MONSTER.COST) return `не хватает маны: нужно ${MONSTER.COST}, есть ${Math.floor(g.combat.fatigue || 0)}`;
+        if (!this.prepaid && manaRules(g) && (g.combat.fatigue || 0) < MONSTER.COST) return `не хватает маны: нужно ${MONSTER.COST}, есть ${Math.floor(g.combat.fatigue || 0)}`;
         // (под каменным сводом — в пещере, под скалой — 24-метровому телу не встать)
         const T = g.terrain?.data, p = g.character.group.position;
         if (T?.ceilingAbove) {
@@ -88,7 +88,7 @@ export class MonsterTransform {
         const g = this.game, why = this.whyNot();
         if (why) { g.hud?.setVoice?.(`🐺 ${why}`, true); return false; }
         const c = g.combat;
-        if (!free && c?.enabled && g.config?.mode !== 'creative') c.fatigue = Math.max(0, c.fatigue - MONSTER.COST);
+        if (!this.prepaid && !free && c?.enabled && g.config?.mode !== 'creative') c.fatigue = Math.max(0, c.fatigue - MONSTER.COST);
         addDark(g.dark || g, MONSTER.DARK, 'ritual'); // (чёрная магия: +1 за каждое превращение)
         // всё удерживаемое прекращается; ничего другого держать огромные лапы не будут
         try { g.imperius?.active && g.imperius.stop('stop'); } catch { /* (не вселён) */ }

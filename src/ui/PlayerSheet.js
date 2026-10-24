@@ -80,7 +80,7 @@ export const FIELDS = [
     { id: 'pentagrams', section: 'magic', get: (g) => {
         // the drawings the hero knows: a burnt scroll (bonus.spells[scroll]); the break-ward one has its own flag; Creative — all
         const list = Object.values(PENTAGRAMS).filter((d) => g.config?.mode === 'creative' || g.bonus?.spells?.[d.scroll] || g.pentagranium?.seen?.has(d.id) || (d.id === 'breakward' && g.breakward?.known)).map((d) => d.title);
-        return list.length ? row('Пентаграммы', list.join(', '), { icon: '⛧', tip: 'Выученные рисунки' }) : null;
+        return list.length ? row('Пентаграммы', list.join(', '), { icon: '⛧', tip: 'Выученные пентаграммы' }) : null;
     } },
     { id: 'breakMark', section: 'dark', get: (g) => g.breakward?.marked ? row('Метка слома защиты', 'на теле до смерти', { icon: '⛧' }) : null },
 

@@ -55,7 +55,7 @@ export function pairUp(marks, m) {
 /** Texts for the person (what the hint says when the use does not go). */
 export const USE_HINT = {
     noMana: 'Не хватает маны: нужно 50',
-    noPair: 'Нужна вторая точка: нарисуйте вторую пентаграмму телепортации',
+    noPair: 'Нужна вторая точка: создайте вторую пентаграмму телепортации («Pentagranium Teleportis»)',
     full: 'Здоровье и так полное',
     whole: 'Броня целая — чинить нечего',
     noLand: 'Там, куда вы идёте, земля ещё не готова — подождите немного',

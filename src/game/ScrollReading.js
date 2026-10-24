@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { describeItem, ITEM_SCALE } from './ItemTypes.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
+import { pentagramSpell } from './PentagramWords.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
 const PARCH_H = 0.95;
@@ -37,7 +38,7 @@ const _q = new THREE.Quaternion();
 const _qs = new THREE.Quaternion();
 
 /** The text of a scroll, in ink on parchment. */
-/** A drawing-scroll: the figure to be drawn, in blood-red ink on dark paper (the circle first, then the star; the numbers show the order of the strokes). */
+/** A drawing-scroll: the figure to be drawn, in blood-red ink on dark paper (the pentagram's own figure; its spell is written beside it). */
 function drawPentagramParchment(item) {
     const P = figureOf(item.pent) || figureOf('devil');
     const css = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -61,23 +62,18 @@ function drawPentagramParchment(item) {
         x.closePath(); x.stroke();
     }
     x.shadowBlur = 0;
-    // the order: 1 — the circle (an arrow along it), 2 — the star (from its top point on)
-    x.fillStyle = '#e6c9a8'; x.font = 'bold 34px serif'; x.textAlign = 'center';
-    x.fillText('1', cx + R + 40, cy - 6); x.fillText('2', cx + 6, cy - R * 0.42);
-    x.strokeStyle = '#e6c9a8'; x.lineWidth = 3;
-    x.beginPath(); x.arc(cx, cy, R + 24, -0.3, 0.5); x.stroke();
-    x.beginPath(); x.moveTo(cx + (R + 24) * Math.cos(0.5), cy + (R + 24) * Math.sin(0.5)); x.lineTo(cx + (R + 24) * Math.cos(0.5) - 14, cy + (R + 24) * Math.sin(0.5) - 10); x.moveTo(cx + (R + 24) * Math.cos(0.5), cy + (R + 24) * Math.sin(0.5)); x.lineTo(cx + (R + 24) * Math.cos(0.5) + 4, cy + (R + 24) * Math.sin(0.5) - 16); x.stroke();
     x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.textAlign = 'left';
     x.fillText(P.ru, 80, 76);
     x.fillStyle = '#c9b49a'; x.font = '24px serif';
-    x.fillText('Скажите «Пентаграниум», обведите', 80, 130);
-    x.fillText('палочкой круг на земле, а потом', 80, 162);
-    x.fillText('соединяйте светящиеся точки:', 80, 194);
-    x.fillText(P.id === 'devil' ? 'Так вы получите силу убитого мага.' : 'Тёмный знак для особого обряда.', 80, 238);
+    x.fillText('Чтобы создать её, направьте палочку', 80, 130);
+    x.fillText('на землю и скажите:', 80, 162);
+    x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.fillText(pentagramSpell(P.id) || '', 80, 204);
+    x.fillStyle = '#c9b49a'; x.font = '24px serif';
+    x.fillText(P.id === 'devil' ? 'Так вы получите силу убитого мага.' : P.def?.dark ? 'Тёмный знак для особого обряда.' : 'Светлый знак с особой пользой.', 80, 248);
     x.fillStyle = css(P.seal); x.beginPath(); x.arc(170, 340, 38, 0, Math.PI * 2); x.fill();
     x.strokeStyle = '#e6a0a0'; x.lineWidth = 3; x.beginPath(); x.arc(170, 340, 28, 0, Math.PI * 2); x.stroke();
     x.fillStyle = '#e6a0a0'; x.font = 'bold 30px serif'; x.textAlign = 'center'; x.fillText('★', 170, 352);
-    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Рисунок выучит тот, кто сожжёт свиток.', 512, 410);
+    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Пентаграмму выучит тот, кто сожжёт свиток.', 512, 410);
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = THREE.ClampToEdgeWrapping;
     return tex;

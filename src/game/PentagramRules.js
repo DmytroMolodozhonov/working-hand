@@ -1,23 +1,12 @@
 /**
- * Pentagrams.js — pentagrams on the ground and the spell «Пентаграниум» (Pentagranium): the rules, pure (node-testable).
+ * PentagramRules.js — pentagrams on the ground: the rules, pure (node-testable). The author: «рисовать пентаграммы вообще не надо» — the hero points
+ * the wand at the ground and says «Pentagranium <Name>» (PentagramWords.js); the figure draws itself (Pentagranium.js). Each pentagram (`PENTAGRAMS`,
+ * Pentagrams.js) has its OWN picture (figureOf / figureLines: lines, not colour) and its own scroll ({kind: 'scroll', stat: 'pentagram', pent: id}):
+ * a burnt scroll teaches it (the hero's `seen` list, saved); unrolled and looked at it teaches nothing. Black magic only for the black ones.
  *
- * The author: a pentagram is DRAWN with the wand on the ground — a circle first, then a five-pointed star inside it.
- * Black magic (DarkMagic.js: «презираемая магия»; the mark and the rite give +1 to the black mage's level). There are
- * several pentagrams (`PENTAGRAMS`): each one is a figure that is known only from its own drawing-scroll
- * ({kind: 'scroll', stat: 'pentagram', pent: id}). A drawing-scroll can't be burnt (it teaches nothing, gives no mana):
- * it is only unrolled and LOOKED at — and the figure is remembered (the hero's `seen` list, saved). Without having seen
- * the figure nothing is accepted, however right the drawing is. Now the figure that works is «Пентаграмма дьявольской силы»
- * (`devil`); the others are blanks («вид есть, эффект позже»).
- *
- * The drawing: the wand's ray on the ground leaves a dark glowing trail; the stitches of the stroke are normalised and
- * compared with the template «circle + star inside» (`recognize`) — a big tolerance (a crooked, trembling, imperfect figure
- * counts: the author — «если рисунок хоть минимально похож»), but a scribble does not. The figure may be rotated and a bit
- * oval. The circle must come first.
- *
- * The rite (devil): the body of a killed WIZARD (not bones) whose power the hero has already taken (Mana.killWon /
- * duelWon — the same body) is laid on the lit pentagram with «Вингардиум Левиоса» and let go. The pentagram flares with
- * hellfire, the body sinks into ash, and the hero gets once more `RITE.K` (25 %) of the killed wizard's power
- * ((his maximum − 30), the same formula as a kill — Mana.killGain). Once per body (`b.rit`).
+ * The rite (devil): the body of a killed WIZARD (not bones) whose power the hero has already taken (Mana.killWon / duelWon — the same body) lies
+ * inside the lit pentagram. It flares with hellfire, the body sinks into ash, and the hero gets once more `RITE.K` (25 %) of the killed wizard's
+ * power ((his maximum − 30), the same formula as a kill — Mana.killGain). Once per body (`b.rit`).
  *
  * ON WHOM / ON WHAT (CLAUDE.md): see PENTAGRAM_TARGETS.
  */
@@ -28,17 +17,13 @@ import { ENCHANT_PENTAGRAM } from './Enchant.js';
 export const PENT = {
     COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
     DRAIN: 1, // mana a second while drawing
-    DRAW_MAX: 90, // s: the drawing lasts at most this long (then the concentration ends)
+    R: 3.5, // m: EVERY pentagram has this one size (the author: «все пентаграммы одного размера»): the hero is 3.5 m, a body lies inside
+    DRAW_T: 2.8, // s: the figure draws itself this long (a tip of light runs round the ring and along its lines), then it fades in
     LIFE: 480, // s of game time a pentagram stays lit (8 minutes) if no rite is made
     R_MIN: 3, R_MAX: 8, // m: the circle's radius that counts (the author: 3…8; the hero is ~3.5 m, a body lies ~3.5 m long)
-    STEP: 0.3, // m: a stitch of the trail every this far
-    MAX_PTS: 640, // stitches in all
-    SPREAD: 16, // m: a stitch farther than this from the first one is not taken
-    GAP: 4, // m: the wand jumps farther than this between two frames — a new stroke
+    MAX_PTS: 640, // pieces of the drawing's light trail (one preallocated ribbon)
     REACH: 28, // m: the wand's ray looks for the ground this far
     MAX_ALIVE: 6, // pentagrams lit at once (the oldest goes out)
-    CHECK_EVERY: 0.5, // s: the figure is compared again at most this often
-    CHECK_MIN_NEW: 8, // …and only when this many new stitches came
     FLOOR_DIFF: 1, // layers: the ground under the ring changed by more — the pentagram goes out
     FAR: 140, // m: farther than this a pentagram is not drawn
 };
@@ -46,42 +31,9 @@ export const PENT = {
 /** The rite: the share of the killed wizard's power given once more (the author: 25 %), the time of the burning. */
 export const RITE = { K: 0.25, BURN: 5, EMBERS: 8, REACH_K: 0.85, SETTLE: 0.6, DARK: 1 };
 
-/** Only the rite of the black (devil) pentagram darkens the hero (+1, DarkMagic.addDark); drawing a pentagram is no sin: there are good ones too (the author). */
+/** Only the rite of the black (devil) pentagram darkens the hero (+1, DarkMagic.addDark); making a pentagram is no sin: there are good ones too (the author). */
 
 const TAU = Math.PI * 2;
-
-/** A star's vertices (unit circle, the first up): the order of the one-stroke star {5/2}. */
-export function starPoints(rot = 0) {
-    const out = [];
-    for (let k = 0; k < 5; k++) {
-        const a = rot + Math.PI / 2 + ((k * 2) % 5) * (TAU / 5);
-        out.push([Math.cos(a), Math.sin(a)]);
-    }
-    return out;
-}
-
-/** A ring of `n` points of the unit circle. */
-export function ringPoints(n = 72, rot = 0) {
-    const out = [];
-    for (let i = 0; i < n; i++) { const a = rot + (i / n) * TAU; out.push([Math.cos(a), Math.sin(a)]); }
-    return out;
-}
-
-/** Samples along a polyline of unit coordinates, `n` of them evenly. */
-function along(poly, n, close = false) {
-    const pts = close ? [...poly, poly[0]] : poly;
-    const cum = [0];
-    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    const len = cum[cum.length - 1], out = [];
-    let seg = 1;
-    for (let k = 0; k < n; k++) {
-        const s = (k / n) * len;
-        while (seg < pts.length - 1 && cum[seg] < s) seg++;
-        const a = pts[seg - 1], b = pts[seg], u = (s - cum[seg - 1]) / ((cum[seg] - cum[seg - 1]) || 1);
-        out.push([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]);
-    }
-    return out;
-}
 
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 
@@ -99,7 +51,7 @@ function linesOf(def) {
     return polys.length ? polys : null;
 }
 
-/** The figures of the shared table (Pentagrams.js: the other sessions' pentagrams too) that have a drawing, with what the recognition and the scroll need. */
+/** The figures of the shared table (Pentagrams.js: the other sessions' pentagrams too) that have a drawing, with what the picture, the scroll and the codex need. */
 const _figs = new Map();
 export function figureOf(id) {
     const def = TABLE[id];
@@ -109,14 +61,11 @@ export function figureOf(id) {
     const lines = linesOf(def);
     if (!lines) return null;
     const star = def.shape?.star;
-    const sym = def.sym || (star ? TAU / star : TAU);
     f = {
-        def, id, lines, sym,
+        def, id, lines,
         ru: def.title || def.ru || id,
         ink: def.glow ?? 0xc01830, paper: 0x2a1418, seal: 0x7a0d18,
         figure: star ? (def.shape.inverted ? `перевёрнутая ${star === 5 ? 'пятиконечная' : star}-лучевая звезда` : star === 5 ? 'пятиконечная звезда' : `${star}-лучевая звезда`) : def.lines ? 'фигура по точкам кольца' : 'фигура со свитка',
-        circle: ringPoints(72),
-        samples: sampleFigure(lines, 80),
         works: true,
     };
     _figs.set(id, f);
@@ -124,24 +73,17 @@ export function figureOf(id) {
 }
 /** Ids of all the pentagrams that can be drawn. */
 export const figureIds = () => Object.keys(TABLE).filter((id) => figureOf(id));
-/** The figure's lines turned by `a` in the (x, z) plane: the way the recognition found it. */
+/** The figure's lines turned by `a` in the (x, z) plane: (the figure's own turn on the ground). */
 export function figureLines(id, a = 0) {
     const f = figureOf(id) || figureOf('devil');
     const ca = Math.cos(a), sa = Math.sin(a);
     return f.lines.map((poly) => poly.map(([x, z]) => [x * ca - z * sa, x * sa + z * ca]));
 }
 
-/** Samples of a figure's lines (`n` in all, shared by length). */
-function sampleFigure(polys, n) {
-    const len = (poly) => poly.reduce((t, p, i) => t + Math.hypot(p[0] - poly[(i + 1) % poly.length][0], p[1] - poly[(i + 1) % poly.length][1]), 0);
-    const total = polys.reduce((t, q) => t + len(q), 0);
-    return polys.flatMap((q) => along(q, Math.max(8, Math.round(n * len(q) / total)), true));
-}
-
 // The good pentagrams the author asked for (PentagramUse.js: what standing on them does). `permanent`: drawn once, they stay on the ground for good (saved, at most USE.PERM_MAX).
 const sq = Math.SQRT1_2;
 registerPentagram({
-    id: 'teleport', title: 'Пентаграмма телепортации', dark: false, glow: 0xcfe8ff, cost: 50, permanent: true, scroll: 'PentagramTeleport', sym: TAU / 4,
+    id: 'teleport', title: 'Пентаграмма телепортации', dark: false, glow: 0xcfe8ff, cost: 50, permanent: true, scroll: 'PentagramTeleport',
     draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[0, -1], [1, 0], [0, 1], [-1, 0]].map(([x, z]) => [x * 0.999, z * 0.999]) }, { t: 'circle', r: 0.3 }], // (a square set in the circle by its corners, a small circle inside it that touches nothing)
     effect: 'Встаньте на неё, постойте 3 секунды и заплатите 50 маны — вы окажетесь на парной пентаграмме телепортации, где бы она ни была. Нужны две такие пентаграммы.',
 });
@@ -156,7 +98,7 @@ registerPentagram({
     effect: 'Встаньте на неё — броня, которая на вас, будет починена. Плата за каждую часть своя; на что не хватило маны, то останется как было.',
 });
 
-registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its drawing is recognised here, its circle is laid by EnchantCircles — Pentagranium._others)
+registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its circle is laid by EnchantCircles — Pentagranium._others)
 
 // «Пентаграмма дьявольской силы» — the one this module owns (its rite is below); the others' entries come from their own modules (Breakward, Gargoyles, Enchant…).
 registerPentagram({
@@ -169,134 +111,14 @@ registerPentagram({
 export const pentagramScroll = (id, uid) => ({ kind: 'scroll', uid, stat: 'pentagram', pent: figureOf(id) ? id : 'devil', dark: !!TABLE[figureOf(id) ? id : 'devil']?.dark });
 export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat === 'pentagram';
 
-// ---------------------------------------------------------------- the drawing
-
-/** Distance from a point to the nearest of `pts` (an array of [x, z]). */
-function near(p, pts) {
-    let best = Infinity;
-    for (let i = 0; i < pts.length; i++) {
-        const dx = pts[i][0] - p[0], dz = pts[i][1] - p[1], d = dx * dx + dz * dz;
-        if (d < best) best = d;
-    }
-    return Math.sqrt(best);
-}
-
-export const RECOG = {
-    TOL: 0.15, // of the radius: a stitch this near the figure counts as on it (a wider band lets a dense scribble pass: it covers most of the disc)
-    CIRCLE_COVER: 0.8, // the share of the circle that must be drawn
-    STAR_COVER: 0.74, // … of the star
-    PRECISION: 0.8, // … the share of the stitches that lie on the figure
-    CORE_R: 0.5, CORE_COVER: 0.7, // the figure's heart (within 0.5 of the radius) must be drawn too
-    MEAN_ERR: 0.085, // of the radius: the mean distance of the stitches from the figure (a dense scribble never gets this close; a shaky hand — 0.12 of the radius of tremble — does)
-    FIRST_ON_CIRCLE: 0.55, // the share of the first third of the stitches on the circle («круг сначала»)
-    MIN_PTS: 40,
-    ROTATIONS: 12, // the star turned in steps of 72° / 12
-    SCALES: [0.86, 1, 1.14],
-    SHIFT: 0.07, // of the radius
-    MAX_USE: 90, // stitches kept for the comparison (resampled)
-};
-
-/** Resample the stitches evenly along the way (keeps the order). */
-export function resample(pts, n) {
-    if (pts.length <= n) return pts.slice();
-    const out = [];
-    for (let i = 0; i < n; i++) out.push(pts[Math.round((i / (n - 1)) * (pts.length - 1))]);
-    return out;
-}
-
 /**
- * Is the drawing the figure of `pent`? `pts`: stitches in the ground's plane, in the order drawn, [[x, z]…].
- * @returns {{ok: boolean, why?: string, cx?: number, cz?: number, r?: number, rot?: number, score?: number, circle?: number, star?: number, precision?: number}}
- * why: 'few' | 'size' | 'small' | 'large' | 'circle' | 'star' | 'mess' | 'order'
+ * The mana taken at the word (the author: «в этот момент снимается мана»). Others take theirs where the effect itself pays: the gargoyles' ritual
+ * (150, when it starts), the enchanting rite (30 % of the current mana when the thing is laid), the devil rite (50, over the body), mending (by pieces).
  */
-export function recognize(pts, pent = 'devil') {
-    const P = figureOf(pent) || figureOf('devil');
-    if (!pts || pts.length < RECOG.MIN_PTS) return { ok: false, why: 'few' };
-    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-    for (const p of pts) { if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0]; if (p[1] < z0) z0 = p[1]; if (p[1] > z1) z1 = p[1]; }
-    const w = x1 - x0, h = z1 - z0;
-    const R0 = Math.max(w, h) / 2;
-    if (R0 < PENT.R_MIN * 0.5) return { ok: false, why: 'size' };
-    if (Math.min(w, h) < Math.max(w, h) * 0.55) return { ok: false, why: 'mess' }; // (a long line, not a round figure)
-    const use = resample(pts, RECOG.MAX_USE);
-    const ROTS = Math.max(RECOG.ROTATIONS, Math.ceil(P.sym / 0.26)); // (a figure with a wider symmetry needs more turns)
-    const first = use.slice(0, Math.max(8, Math.floor(use.length / 3)));
-    const cx0 = (x0 + x1) / 2, cz0 = (z0 + z1) / 2;
-    let best = null;
-    const shifts = [[0, 0], [RECOG.SHIFT, 0], [-RECOG.SHIFT, 0], [0, RECOG.SHIFT], [0, -RECOG.SHIFT]];
-    // the circle first: one fit of the circle (centre, radius), then the star turned
-    for (const [sx, sz] of shifts) {
-        for (const k of RECOG.SCALES) {
-            const R = R0 * k, cx = cx0 + sx * R0, cz = cz0 + sz * R0;
-            const q = use.map((p) => [(p[0] - cx) / R, (p[1] - cz) / R]);
-            const ring = P.circle;
-            let cc = 0;
-            for (const s of ring) if (near(s, q) <= RECOG.TOL) cc++;
-            cc /= ring.length;
-            if (cc < RECOG.CIRCLE_COVER * 0.7) continue; // (no use turning the star)
-            for (let t = 0; t < ROTS; t++) { // (every turn of the figure's own symmetry: an asymmetric one — the whole round)
-                const a = (t / ROTS) * P.sym, ca = Math.cos(a), sa = Math.sin(a);
-                const star = P.samples.map((s) => [s[0] * ca - s[1] * sa, s[0] * sa + s[1] * ca]);
-                let sc = 0, kc = 0, kn = 0;
-                for (const s of star) {
-                    const hit = near(s, q) <= RECOG.TOL;
-                    if (hit) sc++;
-                    if (Math.hypot(s[0], s[1]) < RECOG.CORE_R) { kn++; if (hit) kc++; } // (the heart of the figure where its lines cross: a second circle can not stand in for it)
-                }
-                sc /= star.length;
-                if (kn && kc / kn < RECOG.CORE_COVER) continue;
-                let on = 0, err = 0;
-                for (const p of q) { const e = Math.min(near(p, ring), near(p, star)); err += e; if (e <= RECOG.TOL) on++; }
-                const prec = on / q.length, mean = err / q.length;
-                const score = cc * 0.4 + sc * 0.4 + prec * 0.2;
-                if (!best || score > best.score) best = { score, circle: cc, star: sc, precision: prec, mean, cx, cz, r: R, rot: a };
-            }
-        }
-    }
-    if (!best) return { ok: false, why: 'circle' };
-    if (best.circle < RECOG.CIRCLE_COVER) return { ok: false, why: 'circle', ...best };
-    if (best.star < RECOG.STAR_COVER) return { ok: false, why: 'star', ...best };
-    if (best.precision < RECOG.PRECISION || best.mean > RECOG.MEAN_ERR) return { ok: false, why: 'mess', ...best };
-    if (best.r < PENT.R_MIN) return { ok: false, why: 'small', ...best };
-    if (best.r > PENT.R_MAX) return { ok: false, why: 'large', ...best };
-    // the circle comes first
-    const q1 = first.map((p) => [(p[0] - best.cx) / best.r, (p[1] - best.cz) / best.r]);
-    let onc = 0;
-    for (const p of q1) if (near(p, P.circle) <= RECOG.TOL * 1.25) onc++;
-    if (onc / q1.length < RECOG.FIRST_ON_CIRCLE) return { ok: false, why: 'order', ...best };
-    return { ok: true, ...best };
-}
+export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50 };
 
-/**
- * Which figure is it, of ALL of them (the tolerance is big, so the figures are told apart by which fits best: a hexagram
- * is never taken for a pentagram while the hexagram fits better)? `{id, ...recognize}` of the best fit, ok or not.
- */
-export function recognizeAny(pts, prefer = null) {
-    return bestOf(figureIds().map((id) => [id, recognize(pts, id)]), prefer);
-}
-
-/** The best of the results `[[id, recognize()]…]` (a figure not refused beats one that is; alike drawings: the one in `prefer`). */
-export function bestOf(results, prefer = null) {
-    let best = null;
-    for (const [id, r] of results) {
-        const sc = (r.ok ? 1 + r.score : r.score || 0) + (prefer?.has(id) ? 0.003 : 0);
-        if (!best || sc > best.sc) best = { sc, id, ...r };
-    }
-    if (!best) return { ok: false, why: 'few' };
-    delete best.sc;
-    return best;
-}
-
-/** The hint for a refused drawing (why → text), or null. */
-export function recognizeHint(why) {
-    switch (why) {
-        case 'small': return '🩸 Круг слишком мал — тело не поместится (нужен круг в человеческий рост и больше)';
-        case 'large': return '🩸 Круг слишком велик — магия не дотянется до края';
-        case 'order': return '🩸 Сначала круг, потом звезда внутри него';
-        case 'star': return '🩸 Круг есть — внутри нужна пятиконечная звезда';
-        default: return null;
-    }
-}
+/** The figure's turn so that its apex points away from the hero standing at (hx, hz) (it reads upright from where he stands). */
+export const turnAway = (cx, cz, hx, hz) => { const dx = cx - hx, dz = cz - hz, d = Math.hypot(dx, dz) || 1; return Math.atan2(-dx / d, dz / d); };
 
 // ---------------------------------------------------------------- the scrolls and what the hero has seen
 
@@ -372,7 +194,7 @@ export const PENTAGRAM_TARGETS = {
     items: { does: 'none', why: 'вещи на земле не трогает' },
     blocks: { does: 'none', why: 'блоков не ломает; если земля под рисунком изменилась — пентаграмма гаснет' },
     water: { does: 'none', why: 'на воде не рисуется (луч палочки не находит земли)' },
-    ground: { does: 'mark', why: 'цель — земля под палочкой: светящийся след, потом круг и звезда' },
+    ground: { does: 'mark', why: 'цель — земля под палочкой: там сама рисуется пентаграмма (круг и её линии)' },
     ward: { does: 'none', why: 'в чужой сфере защиты дома не рисуется (HouseWards.forbids)' },
     godGift: { does: 'none', why: 'на дарах богов и в их храме не рисуется — защита сильнее' },
     enchanted: { does: 'none', why: 'на заколдованном камне (арены, башни волшебников) рисунок не держится' },

@@ -1,10 +1,9 @@
 // У каждой пентаграммы — СВОЙ рисунок (фигура, а не цвет): попарно разные, ни одна не лежит целиком в другой (с учётом поворота кольца),
-// и каждую можно нарисовать с помощью PentagramAssist. Новая пентаграмма без уникального рисунка роняет этот тест.
+// Новая пентаграмма без уникального рисунка роняет этот тест.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { figureIds, figureLines, figureOf } from '../../src/game/PentagramRules.js';
 import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
-import { buildGraph } from '../../src/game/PentagramAssist.js';
 import { ringPt, RING_N, BREAKWARD_LINES, GARGOYLE_LINES } from '../../src/game/PentagramFigures.js';
 
 const EPS = 0.03;
@@ -48,15 +47,8 @@ test('классическая звезда — только у дьявольс
     for (const id of figureIds()) if (id !== 'devil') assert.ok(!(figureOf(id).def.shape?.star === 5 && figureOf(id).def.shape.skip === 2), `у «${id}» такая же пятиконечная звезда`);
 });
 
-test('«Слом защиты» и «Горгульи» — по точкам кольца из 16 и рисуются с помощью PentagramAssist', () => {
+test('«Слом защиты» и «Горгульи» — по точкам кольца из 16', () => {
     assert.equal(RING_N, 16);
     const ring = Array.from({ length: RING_N }, (_, i) => ringPt(i));
     for (const lines of [BREAKWARD_LINES, GARGOYLE_LINES]) for (const poly of lines) for (const p of poly) assert.ok(ring.some((r) => near(r, p)), 'вершина не на точке кольца');
-    const g = buildGraph(['breakward', 'gargoyles', 'devil', 'teleport']);
-    for (const id of ['breakward', 'gargoyles']) {
-        assert.ok(g.need[id].length >= 5, `у «${id}» мало линий`);
-        const own = new Set(g.need[id]);
-        for (const other of Object.keys(g.need)) if (other !== id) assert.ok(!g.need[other].every((k) => own.has(k)) || g.need[other].length === 0, `линии «${other}» целиком внутри «${id}»: при рисовании засчитается не та`);
-    }
-    for (const id of ['breakward', 'gargoyles']) for (const k of g.need[id]) assert.ok(g.edges.find((e) => e.key === k).ids.includes(id));
 });

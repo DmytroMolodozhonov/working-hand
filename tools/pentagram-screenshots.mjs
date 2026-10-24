@@ -1,5 +1,5 @@
 // Pictures of «Пентаграниум»: the wand's trail on the ground, the lit pentagram (a hero-sized post of 3.5 m for scale) and the rite's hellfire.
-// Usage: node tools/pentagram-screenshots.mjs [--out docs/spells/pentagranium] [--port 8298]
+// The figure draws itself on «Pentagranium <Name>». Usage: node tools/pentagram-screenshots.mjs [--out docs/spells/pentagranium] [--port 8298]
 import { startServer, launch, openPage, startFromMenu, waitHudVisible, sleep } from '../tests/e2e/harness.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,41 +37,16 @@ try {
         fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(url.split(',')[1], 'base64'));
         console.log('saved', name);
     };
-    // 00. the guide from the very first moment: the ring of points (one size) where the wand pointed
+    // 00-1. «Pentagranium Diabolus» said with the wand on the ground: the figure draws itself (the ring, then its lines), then fades in
     await page.evaluate(() => {
         const { cx, cz, y } = window.__pg, g = window.__zns.game, P = g.pentagranium;
-        P.learnFigure('devil'); P.learnFigure('teleport');
-        P.groundAt = () => ({ x: cx, y, z: cz });
+        P.learnFigure('devil');
         g.combat.fatigue = Math.max(g.combat.fatigue, 90);
-        P.begin();
-        // two arcs already led along
-        const R = P.draw.ring;
-        for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) P._arc(R, i);
-        P.draw.ring.hover = 3;
-        window.__pg.ringShot = true;
+        P.groundAt = () => ({ x: cx, y, z: cz });
+        P.cast(true, 'Пентаграниум Диаболус');
     });
-    await snap('00-ring');
-    await page.evaluate(() => { const P = window.__zns.game.pentagranium; P.stop('stop'); delete P.groundAt; });
-    // 0. the guiding points inside a closed circle (the star's five corners and crossings, and the teleport's square)
-    await page.evaluate(async () => {
-        const { buildGraph, LineAssist, anchorsOf } = await import('/src/game/PentagramAssist.js');
-        const { cx, cz, y } = window.__pg, g = window.__zns.game, F = g.pentagranium.fx;
-        const L = new LineAssist(buildGraph(['devil', 'teleport']), { cx, cz, r: 3.5, rot: 0.3 });
-        F.trailBegin(); F.trailRing(cx, cz, 3.5, (x, z) => g.collision.groundY(x, z));
-        const [a, b] = [L.world[L.graph.chords[0].nodes[0]], L.world[L.graph.chords[0].nodes.at(-1)]];
-        F.trailLine(a, b, (x, z) => g.collision.groundY(x, z));
-        F.anchorsShow(anchorsOf(L).map((p, i) => ({ x: p.x, y: g.collision.groundY(p.x, p.z), z: p.z, color: L.graph.nodes[i].ids[0] === 'devil' ? 0xe0203c : 0x4aa8ff })));
-        F.anchorsHover(2, 1);
-    });
-    await snap('0-anchors');
-    await page.evaluate(() => { const F = window.__zns.game.pentagranium.fx; F.anchorsHide(); F.trailEnd(); F.trailBegin(); });
-    // 1. the trail: the circle half drawn
-    await page.evaluate(() => {
-        const { cx, cz, y } = window.__pg, g = window.__zns.game, F = g.pentagranium.fx;
-        let last = null;
-        for (let i = 0; i <= 60; i++) { const a = (i / 70) * Math.PI * 2, x = cx + Math.cos(a) * 3.6, z = cz + Math.sin(a) * 3.6; F.trailAdd(x, g.collision.groundY(x, z), z, !!last); last = 1; F.trailSmoke(x, y, z); }
-    });
-    await snap('1-trail');
+    for (const [name, wait] of [['0-draw-ring', 700], ['1-draw-lines', 1200], ['1-draw-end', 1200]]) { await sleep(wait); await snap(name); }
+    await page.evaluate(() => { const P = window.__zns.game.pentagranium; delete P.groundAt; P.clear(); });
     // 2. the lit pentagram
     await page.evaluate(() => {
         const { cx, cz, y } = window.__pg, g = window.__zns.game, P = g.pentagranium;
@@ -94,7 +69,7 @@ try {
     await sleep(3500);
     await snap('3-rite-late');
     // the drawing-scrolls' parchments (what the hero sees when he unrolls one)
-    for (const id of ['devil', 'sigil', 'ward']) {
+    for (const id of ['devil', 'teleport', 'gargoyles']) {
         const url = await page.evaluate(async (id) => { const { drawParchment } = await import('/src/game/ScrollReading.js'); return drawParchment({ kind: 'scroll', stat: 'pentagram', pent: id }).image.toDataURL('image/png'); }, id);
         fs.writeFileSync(path.join(out, 'scroll-' + id + '.png'), Buffer.from(url.split(',')[1], 'base64'));
         console.log('saved scroll', id);
