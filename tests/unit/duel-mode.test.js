@@ -228,6 +228,6 @@ test('победа в столкновении лучей доходит до п
     const src = (await import('node:fs')).readFileSync(new URL('../../src/game/Duel.js', import.meta.url), 'utf8');
     assert.match(src, /applyToCreature\(winnerBolt\.spell, lw, winnerBolt\.by, null, null, \{ clash: true \}\)/);
     assert.match(src, /applyToMe\(winnerBolt\.spell, winnerBolt\.by, winnerBolt\.side, \{ clash: true \}\)/);
-    assert.match(src, /if \(!opts\.clash && g\.armor\?\.guard\(spell\)\) return;/);
-    assert.match(src, /if \(!opts\.clash && c\.isVillager && \(\(c\.robe && ROBE_BLOCKS\.has\(spell\)\)/);
+    assert.match(src, /if \(!opts\?\.clash && g\.armor\?\.guard\(spell\)\) return;/);
+    assert.match(src, /if \(!opts\?\.clash && c\.isVillager && \(\(c\.robe && ROBE_BLOCKS\.has\(spell\)\)/);
 });

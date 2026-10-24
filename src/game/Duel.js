@@ -1131,7 +1131,7 @@ export class Duel {
     }
 
     /** A duel spell landed on an animal or a castle villager (decided by the host). */
-    applyToCreature(spell, c, byId, from = null, part = null, opts = {}) { // (opts.clash: it won a beam clash — a robe does not turn it away)
+    applyToCreature(spell, c, byId, from = null, part = null, opts = null) { // (opts.clash: it won a beam clash — a robe does not turn it away)
         const g = this.game;
         const src = from || this._casterAt(byId, c);
         const p = this._creaturePoint(c, _v1);
@@ -1144,7 +1144,7 @@ export class Duel {
         if (spell === 'Die' && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src })) return;
         if (c.isVillager && g.castleLife?.wardOff?.(c, src, spell)) return; // (a raised shield / the Master's dome took it)
         // a wizard in a magic robe: the simplest magic (and «Disarmor») does nothing on him (ArmorTypes.ROBE_BLOCKS)
-        if (!opts.clash && c.isVillager && ((c.robe && ROBE_BLOCKS.has(spell)) || (c.magicSet && !c.stripped && MAGIC_SET_BLOCKS.has(spell)))) {
+        if (!opts?.clash && c.isVillager && ((c.robe && ROBE_BLOCKS.has(spell)) || (c.magicSet && !c.stripped && MAGIC_SET_BLOCKS.has(spell)))) {
             this._burst(p, 0xc39bff, 20);
             // («Disarmor»: the robe stays on, but the bolt still throws him back as a «Джолт» does)
             if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
@@ -1222,7 +1222,7 @@ export class Duel {
         if (this.log.length > 30) this.log.shift();
     }
 
-    applyToMe(spell, byId, side = 'right', opts = {}) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
+    applyToMe(spell, byId, side = 'right', opts = null) { // (opts.clash: the charge WON a beam clash — it reaches the loser whatever he wears: no armour / robe turns it away)
         this._note({ ev: 'hitMe', spell, byId });
         const g = this.game;
         const c = g.combat;
@@ -1244,7 +1244,7 @@ export class Duel {
         }
         // «Дай»: no armour, no robe, not even the High Mage's suit holds it (the gods' shield was asked on arrival)
         if (spell === 'Die' && g.strong?.hitMe(spell, byId, side)) return;
-        if (!opts.clash && g.armor?.guard(spell)) return;
+        if (!opts?.clash && g.armor?.guard(spell)) return;
         // the strong charges and the ice (StrongMagic.hitMe)
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitMe(spell, byId, side)) return;
         if (spell === 'AvadaKedavra') {
