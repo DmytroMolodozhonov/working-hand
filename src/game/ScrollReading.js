@@ -70,9 +70,9 @@ function drawPentagramParchment(item) {
     x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.textAlign = 'left';
     x.fillText(P.ru, 80, 76);
     x.fillStyle = '#c9b49a'; x.font = '24px serif';
-    x.fillText('Нарисуйте это на земле палочкой:', 80, 130);
-    x.fillText('скажите «Пентаграниум», обведите', 80, 162);
-    x.fillText('круг, а внутри него — ' + P.figure + '.', 80, 194);
+    x.fillText('Скажите «Пентаграниум», обведите', 80, 130);
+    x.fillText('палочкой круг на земле, а потом', 80, 162);
+    x.fillText('соединяйте светящиеся точки:', 80, 194);
     x.fillText(P.id === 'devil' ? 'Так вы получите силу убитого мага.' : 'Тёмный знак для особого обряда.', 80, 238);
     x.fillStyle = css(P.seal); x.beginPath(); x.arc(170, 340, 38, 0, Math.PI * 2); x.fill();
     x.strokeStyle = '#e6a0a0'; x.lineWidth = 3; x.beginPath(); x.arc(170, 340, 28, 0, Math.PI * 2); x.stroke();

@@ -292,6 +292,69 @@ export class PentagramFx {
         _trailMats.core.opacity = 0.88 + 0.12 * Math.sin(t * 8 + 1);
     }
 
+    // ------------------------------------------------------------ the guiding points (PentagramAssist.js): glowing marks on the ground
+    /** Show the points `[{x, y, z, color}]` (one InstancedMesh: a single draw, nothing grows). */
+    anchorsShow(list) {
+        if (!this.scene) return;
+        if (!this.anchors) {
+            const c = document.createElement('canvas'); c.width = c.height = 64;
+            const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+            // (a solid disc with a soft edge, painted with normal blending in a strong colour: a point of light must be seen on bright grass too)
+            gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,1)'); gr.addColorStop(0.8, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+            x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+            const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+            geo.userData.keep = true;
+            const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, toneMapped: false, fog: false });
+            const mesh = new THREE.InstancedMesh(geo, mat, ANCHOR_MAX);
+            mesh.setColorAt(0, new THREE.Color(1, 1, 1)); // (the colour buffer is made at the full size, before the count is cut)
+            mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 9; mesh.userData.keep = true; mesh.visible = false;
+            this.scene.add(mesh);
+            this.anchors = { mesh, pos: [], hover: -1 };
+        }
+        const A = this.anchors, n = Math.min(list.length, ANCHOR_MAX);
+        A.pos = list.slice(0, n); A.hover = -1;
+        for (let i = 0; i < n; i++) { _m4.makeScale(1.3, 1, 1.3).setPosition(list[i].x, list[i].y + 0.12, list[i].z); A.mesh.setMatrixAt(i, _m4); A.mesh.setColorAt(i, _col.set(list[i].color ?? 0xfff0b8)); }
+        A.mesh.count = n; A.mesh.visible = n > 0;
+        A.mesh.instanceMatrix.needsUpdate = true; if (A.mesh.instanceColor) A.mesh.instanceColor.needsUpdate = true;
+    }
+
+    /** The point the wand is drawn to now grows; (-1: none). The others breathe by the material. */
+    anchorsHover(i, t) {
+        const A = this.anchors;
+        if (!A || !A.mesh.visible) return;
+        A.mesh.material.opacity = 0.8 + 0.2 * Math.sin(t * 4);
+        if (A.hover === i) return;
+        for (const k of [A.hover, i]) {
+            if (k < 0 || !A.pos[k]) continue;
+            const s = k === i ? 2.2 : 1.3;
+            _m4.makeScale(s, 1, s).setPosition(A.pos[k].x, A.pos[k].y + 0.12, A.pos[k].z);
+            A.mesh.setMatrixAt(k, _m4);
+        }
+        A.hover = i;
+        A.mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    anchorsHide() { if (this.anchors) { this.anchors.mesh.visible = false; this.anchors.mesh.count = 0; this.anchors.hover = -1; } }
+
+    /** A line laid straight between two points (the hand's tremble does not matter): stitches every 0.3 m. */
+    trailLine(a, b, h) {
+        const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.3));
+        this.trailBreak();
+        for (let i = 0; i <= n; i++) { const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n; this.trailAdd(x, h(x, z), z, i > 0); }
+        this.trailBreak();
+    }
+
+    /** The whole perfect ring of the circle. */
+    trailRing(cx, cz, r, h) {
+        const n = Math.max(24, Math.ceil((Math.PI * 2 * r) / 0.3));
+        this.trailBreak();
+        for (let i = 0; i <= n; i++) { const a = (i / n) * Math.PI * 2, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r; this.trailAdd(x, h(x, z), z, i > 0); }
+        this.trailBreak();
+    }
+
+    /** The next stitch begins a new stroke. */
+    trailBreak() { if (this.trail) this.trail.last = null; }
+
     // ------------------------------------------------------------ a lit pentagram
     /** A pentagram appears: the figure and the disc. `h(x, z)` → the ground's height there. */
     add(id, cx, cy, cz, R, rot, h, pent = 'devil', dark = false, glow = 0xffd98a) {
@@ -318,7 +381,7 @@ export class PentagramFx {
         for (const m of [f.fig, f.disc]) { this.scene.remove(m); m.geometry.dispose(); }
     }
 
-    clear() { for (const id of [...this.figs.keys()]) this.remove(id); this.trailEnd(); }
+    clear() { for (const id of [...this.figs.keys()]) this.remove(id); this.trailEnd(); this.anchorsHide(); }
 
     /** One of each (Game.prewarm): the shaders compile on the loading screen. */
     sampleModels() {
@@ -337,6 +400,8 @@ export class PentagramFx {
         const disc = new THREE.Mesh(discGeometry(0, 0, 3, flat), discMaterial());
         fig.position.set(2, 0, 2); disc.position.set(2, 0, 2);
         out.push(fig, disc);
+        this.anchorsShow([{ x: 4, y: 0, z: 4, color: 0xfff0b8 }]); // (the points' shader is compiled too)
+        if (this.anchors) { const c = new THREE.Mesh(this.anchors.mesh.geometry, this.anchors.mesh.material); c.position.set(-2, 0.2, 2); out.push(c); this.anchorsHide(); }
         return out;
     }
 
@@ -365,4 +430,5 @@ export class PentagramFx {
     }
 }
 
-const _p = new THREE.Vector3(), _v = new THREE.Vector3();
+const _p = new THREE.Vector3(), _v = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _col = new THREE.Color();
+const ANCHOR_MAX = 160;

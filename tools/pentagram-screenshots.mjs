@@ -39,6 +39,20 @@ try {
         fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(url.split(',')[1], 'base64'));
         console.log('saved', name);
     };
+    // 0. the guiding points inside a closed circle (the star's five corners and crossings, and the teleport's square)
+    await page.evaluate(async () => {
+        const { buildGraph, LineAssist, anchorsOf } = await import('/src/game/PentagramAssist.js');
+        const { cx, cz, y } = window.__pg, g = window.__zns.game, F = g.pentagranium.fx;
+        const L = new LineAssist(buildGraph(['devil', 'teleport']), { cx, cz, r: 3.6, rot: 0.3 });
+        F.trailBegin(); F.trailRing(cx, cz, 3.6, (x, z) => g.collision.groundY(x, z));
+        for (const k of L.graph.chords[0].nodes.slice(0, 2)) { /* (one line laid as an example) */ }
+        const [a, b] = [L.world[L.graph.chords[0].nodes[0]], L.world[L.graph.chords[0].nodes.at(-1)]];
+        F.trailLine(a, b, (x, z) => g.collision.groundY(x, z));
+        F.anchorsShow(anchorsOf(L).map((p, i) => ({ x: p.x, y: g.collision.groundY(p.x, p.z), z: p.z, color: L.graph.nodes[i].ids[0] === 'devil' ? 0xffb800 : 0x4aa8ff })));
+        F.anchorsHover(2, 1);
+    });
+    await snap('0-anchors');
+    await page.evaluate(() => { const F = window.__zns.game.pentagranium.fx; F.anchorsHide(); F.trailEnd(); F.trailBegin(); });
     // 1. the trail: the circle half drawn
     await page.evaluate(() => {
         const { cx, cz, y } = window.__pg, g = window.__zns.game, F = g.pentagranium.fx;

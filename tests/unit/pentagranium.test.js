@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Pentagranium } from '../../src/game/Pentagranium.js';
-import { PENT, RITE, starPoints, figureLines } from '../../src/game/PentagramRules.js';
+import { PENT, RITE } from '../../src/game/PentagramRules.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { knows } from '../../src/game/SpellBook.js';
 import { isDark } from '../../src/game/DarkMagic.js';
@@ -27,33 +27,30 @@ function stub({ mode = 'freeworld', fatigue = 100 } = {}) {
         perf: { note() {} },
     };
     const p = new Pentagranium(g);
-    p.fx = { trailBegin() {}, trailEnd() {}, trailAdd() {}, trailSmoke() {}, trailPulse() {}, add() {}, set() {}, remove() {}, ambient() {}, sampleModels: () => [] };
+    p.fx = { trailBegin() {}, trailEnd() {}, trailAdd() {}, trailSmoke() {}, trailPulse() {}, trailRing() {}, trailLine() {}, trailBreak() {}, anchorsShow() {}, anchorsHover() {}, anchorsHide() {}, add() {}, set() {}, remove() {}, ambient() {}, sampleModels: () => [] };
     return { g, p, said, sent, spark };
 }
 
-/** The wand held over the ground at (0, 4, -6) aimed at the next stitch of a hand-drawn figure. */
-function drawing({ R = 3.5, wob = 0, order = 'circle-first' } = {}) {
-    let s = 3;
-    const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
-    const pts = [];
-    for (let i = 0; i <= 74; i++) { const a = (i / 74) * Math.PI * 2; pts.push([Math.cos(a) * R + rnd() * wob * R, 8 + Math.sin(a) * R + rnd() * wob * R]); }
-    const circle = pts.slice(), star = [];
-    for (const poly of figureLines('devil')) for (let k = 0; k <= poly.length; k++) {
-        const a = poly[k % poly.length], b = poly[(k + 1) % poly.length], m = Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) * R / 0.3);
-        for (let i = 0; i < m; i++) star.push([(a[0] + (b[0] - a[0]) * i / m) * R + rnd() * wob * R, 8 + (a[1] + (b[1] - a[1]) * i / m) * R + rnd() * wob * R]);
-    }
-    return order === 'circle-first' ? [...circle, ...star] : [...star, ...circle];
-}
-function run(p, pts, dt = 0.05) {
-    p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1) };
+const AIM0 = () => ({ origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() });
+/** Feed the wand's ground points one a frame: the ray from the fixed wand to each (x, z). */
+function run(p, pts, dt = 0.05, until = null) {
+    p.aim = AIM0();
     for (const [x, z] of pts) {
+        if (until && p.draw?.phase === until) break; // (the circle closed: the rest of the lap is not fed)
         p.aim.dir.set(x - p.aim.origin.x, 0.5 - p.aim.origin.y, z - p.aim.origin.z).normalize();
         p.update(dt);
         if (!p.on) break;
     }
 }
+let _s = 3;
+const rnd = () => ((_s = (_s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+/** A hand going round a circle (centre (0, 8), radius R) a turn and a bit, trembling by `tremble` m. */
+const roundHand = (R = 4, tremble = 0.4, turns = 1.12) => Array.from({ length: Math.round(turns * 2 * Math.PI * R / 0.2) + 1 }, (_, i) => { const a = (i / (turns * 2 * Math.PI * R / 0.2)) * turns * 2 * Math.PI; return [Math.cos(a) * R + rnd() * tremble, 8 + Math.sin(a) * R + rnd() * tremble]; });
+/** The hand leading between the points `idx` of the line assist, trembling around each. */
+const leadTo = (p, idx, tremble = 0.3) => { const w = p.draw.line.world; run(p, idx.flatMap((i) => [0, 1, 2].map(() => [w[i][0] + rnd() * tremble, w[i][1] + rnd() * tremble]))); };
+const chordsOf = (p) => p.draw.line.graph.chords.filter((c) => c.ids.includes('devil'));
 
-test('the spell: black magic, 20 mana at once, 1 a second while drawing, only from its scroll (own key)', () => {
+test('the spell: black magic? no — an ordinary spell; 20 mana at once, 1 a second while drawing, only from its scroll (own key)', () => {
     assert.equal(SPELL_COST.Pentagranium, 20);
     assert.equal(PENT.DRAIN, 1);
     assert.ok(!isDark('Pentagranium'), 'drawing a pentagram is no black magic: there are good pentagrams too');
@@ -62,62 +59,83 @@ test('the spell: black magic, 20 mana at once, 1 a second while drawing, only fr
     assert.ok(knows('Pentagranium', { mode: 'creative' }));
 });
 
-test('without a figure seen nothing starts and nothing is paid', () => {
+test('nothing learnt: it does not start, nothing is paid, no guiding points', () => {
     const { p, g, said } = stub();
-    p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
+    p.aim = AIM0();
     assert.equal(p.cast(true), null);
     assert.deepEqual(g.combat.paid, []);
     assert.match(said.at(-1), /не знаете/);
 });
 
-test('with the figure seen: 20 mana, a drawing of a circle and a star inside is counted — the pentagram is lit, the black level grows, the spell ends', () => {
+test('with help: a trembling hand (±0.4 m) makes a perfect circle; then the hand led point to point lays straight lines; the full star counts', () => {
     const { p, g, sent } = stub();
     p.learnFigure('devil');
-    p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
+    p.aim = AIM0();
     assert.equal(p.cast(true), 'Pentagranium');
     assert.deepEqual(g.combat.paid, ['Pentagranium']);
-    assert.ok(p.on);
     const before = g.combat.fatigue;
-    run(p, drawing({ wob: 0.05 }));
-    assert.ok(!p.on, 'counted: the drawing ends');
+    run(p, roundHand(4, 0.4), 0.05, 'lines');
+    assert.equal(p.draw.phase, 'lines', 'the circle closed by itself');
+    const c = p.draw.line.circle;
+    assert.ok(Math.abs(c.cx) < 0.3 && Math.abs(c.cz - 8) < 0.3 && Math.abs(c.r - 4) < 0.35, `the fit: ${JSON.stringify(c)}`);
+    assert.ok(c.r >= 3 && c.r <= 8);
+    assert.equal(p.draw.line.world.length, 10, 'five corners and five crossings of the star');
+    assert.ok(sent.some((m) => m.k === 'ring'), 'the others see the circle');
+    // the star, chord by chord, from corner to corner (over the crossings)
+    for (const ch of chordsOf(p)) leadTo(p, [ch.nodes[0], ch.nodes.at(-1)]);
+    assert.ok(!p.on, 'the figure is whole: it counts and the drawing ends');
     assert.equal(p.marks.size, 1);
     const m = [...p.marks.values()][0];
-    assert.ok(Math.abs(m.x) < 0.8 && Math.abs(m.z - 8) < 0.8 && m.r > 2.5 && m.r < 5);
-    assert.deepEqual(g._success, ['Pentagranium'], 'the first success (and the +1 of the black mage: Mana.success → DarkMagic)');
+    assert.equal(m.pent, 'devil');
+    assert.ok(Math.abs(m.x) < 0.4 && Math.abs(m.z - 8) < 0.4 && m.r >= 3 && m.r <= 8);
+    assert.deepEqual(g._success, ['Pentagranium']);
     assert.equal(sent.at(-1).k, 'mark');
-    assert.ok(g.combat.fatigue < before, 'drawing drained mana by the second');
-    assert.ok(before - g.combat.fatigue < 10);
+    assert.ok(sent.filter((x) => x.k === 'seg').length >= 5, 'the lines are shown to the others');
+    assert.ok(g.combat.fatigue < before && before - g.combat.fatigue < 30, 'drawing drained mana by the second');
+    assert.equal(g.dark.level, 0, 'drawing a pentagram does not darken the hero');
 });
 
-test('a scribble, one circle, or a figure drawn star-first is not counted; the drawing goes on draining until «стоп» / the mana ends', () => {
-    for (const o of [{ order: 'star-first' }]) {
-        const { p } = stub(); p.learnFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
-        p.cast(true); run(p, drawing(o));
-        assert.equal(p.marks.size, 0, JSON.stringify(o));
-    }
-    const { p, g } = stub(); p.learnFigure('devil'); p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
-    p.cast(true);
-    let s = 7; const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-    run(p, Array.from({ length: 160 }, () => [(rnd() - 0.5) * 7, 8 + (rnd() - 0.5) * 7]));
-    assert.equal(p.marks.size, 0);
-    assert.ok(p.on, 'still drawing');
-    assert.ok(p.stop('stop'));
-    assert.ok(!p.on);
-    // the mana ends
-    const t = stub({ fatigue: 20.4 }); t.p.learnFigure('devil'); t.p.aim = p.aim;
-    t.p.cast(true);
+test('a connection no learnt figure has is not drawn (a hint), a point with no line to it too; the circle must be drawn first', () => {
+    const { p, said } = stub();
+    p.learnFigure('devil');
+    p.aim = AIM0(); p.cast(true);
+    run(p, [[0, 7], [1, 7], [-1, 8]]); // (the hand moves inside the circle before it exists: nothing happens)
+    assert.equal(p.draw.phase, 'circle');
+    run(p, roundHand(4, 0.2), 0.05, 'lines');
+    const L = p.draw.line, ch = chordsOf(p)[0];
+    // two corners that are next to each other round the circle are not joined by any line of the star
+    const corners = L.graph.nodes.map((n, i) => [i, Math.atan2(n.u[1], n.u[0]), Math.hypot(n.u[0], n.u[1])]).filter((x) => x[2] > 0.95);
+    corners.sort((a, b) => a[1] - b[1]);
+    leadTo(p, [corners[0][0], corners[1][0]]);
+    assert.equal(L.drawn.size, 0, 'nothing drawn');
+    assert.match(said.join('|'), /линию не провести/);
+    // led to a point of the right chord: drawn
+    leadTo(p, [ch.nodes[0], ch.nodes.at(-1)]);
+    assert.ok(L.drawn.size >= 3, 'a chord of the star is three lines (over two crossings)');
+    // the same again draws nothing new
+    const n = L.drawn.size;
+    leadTo(p, [ch.nodes.at(-1), ch.nodes[0]]);
+    assert.equal(L.drawn.size, n);
+});
+
+test('a hand that goes wide (too small / too big a circle) is told, and the circle begins again; the mana ends the drawing', () => {
+    const a = stub(); a.p.learnFigure('devil'); a.p.aim = AIM0(); a.p.cast(true);
+    run(a.p, roundHand(1.6, 0.1));
+    assert.equal(a.p.draw.phase, 'circle'); assert.match(a.said.join('|'), /слишком мал/);
+    const t = stub({ fatigue: 20.4 }); t.p.learnFigure('devil'); t.p.aim = AIM0(); t.p.cast(true);
     assert.ok(t.p.on);
     t.p.update(1); t.p.update(1);
     assert.ok(!t.p.on, 'no mana: the drawing is gone');
 });
 
-test('an unseen figure is never counted: the hero has seen only another drawing', () => {
+test('another figure learnt: its points are shown together with the others (their union); the one the hero has not learnt has no points', () => {
     const { p } = stub();
-    p.learnFigure('sigil'); // (the hexagram)
-    p.aim = { origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() };
-    p.cast(true);
-    run(p, drawing());
-    assert.equal(p.marks.size, 0, 'a pentagram drawn, only the hexagram seen');
+    p.learnFigure('devil'); p.learnFigure('teleport');
+    p.aim = AIM0(); p.cast(true);
+    run(p, roundHand(4, 0.2), 0.05, 'lines');
+    const ids = new Set(p.draw.line.graph.nodes.flatMap((n) => n.ids));
+    assert.ok(ids.has('devil') && ids.has('teleport') && !ids.has('life'));
+    assert.ok(p.draw.line.world.length > 10);
 });
 
 test('the seen figures are saved and come back', () => {

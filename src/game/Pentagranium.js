@@ -21,8 +21,9 @@
 
 import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
-import { PENT, RITE, RECOG, figureOf, figureIds, Seen, recognize, bestOf, recognizeHint, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
+import { PENT, RITE, figureOf, figureIds, Seen, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
 import { PENTAGRAMS as TABLE } from './Pentagrams.js';
+import { CircleAssist, LineAssist, buildGraph, anchorsOf, turnAway, ASSIST_HINT } from './PentagramAssist.js';
 import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
 import { pieceMax } from './ArmorTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -34,6 +35,8 @@ import { addDark } from './DarkMagic.js';
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
 const PIECE_NAME = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
+
+const POINT_COLOR = { devil: 0xe0203c, teleport: 0x4aa8ff, life: 0x3fc84a, mend: 0xd0d8e8, enchant: 0xb07cff };
 
 /** What to do on each pentagram (the line after it is lit). */
 const USE_TEXT = {
@@ -104,12 +107,12 @@ export class Pentagranium {
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('Pentagranium');
         this.begin();
-        g.hud.setVoice('🩸 Водите палочкой по земле: сначала круг, потом внутри него пятиконечная звезда (1 мана в секунду, «стоп» — закончить)', true);
+        g.hud.setVoice('✨ Обведите палочкой круг на земле — ровно рисовать не нужно, он ляжет сам. Потом появятся светящиеся точки: ведите палочку от одной к другой (1 мана в секунду, «стоп» — закончить)', true);
         return 'Pentagranium';
     }
 
     begin() {
-        this.draw = { pts: [], strokes: 0, t: 0, nextCheck: 0, lastN: 0, last: null, gap: 0, lastHint: 0 };
+        this.draw = { phase: 'circle', circle: new CircleAssist(), line: null, t: 0, gap: 0, hint: {}, stitched: false, idle: 0 };
         this.fx.trailBegin();
         this.game.perf?.note?.('🩸 Пентаграниум: рисование');
     }
@@ -120,6 +123,7 @@ export class Pentagranium {
         if (!D) return false;
         this.draw = null;
         this.fx.trailEnd();
+        this.fx.anchorsHide();
         const g = this.game;
         if (why === 'mana') g.hud.setVoice('🩸 Мана кончилась — рисунок рассеялся', true);
         else if (why === 'time') g.hud.setVoice('🩸 Слишком долго — след рассеялся', true);
@@ -165,46 +169,82 @@ export class Pentagranium {
         }
     }
 
+    /** A hint at most once in `every` s per kind. */
+    _hint(key, text, every = 5) {
+        const D = this.draw;
+        if (!D || D.t - (D.hint[key] ?? -1e9) < every) return;
+        D.hint[key] = D.t;
+        this.game.hud.setVoice(text, true);
+    }
+
+    /** The drawing goes with help (PentagramAssist.js): first the circle (fitted perfect), then the wand is led from glowing point to point. */
     _drawStep(dt) {
         const g = this.game, D = this.draw;
         D.t += dt;
         if (g.combat?.drain(PENT.DRAIN * dt, dt) === false) { this.stop('mana'); return; }
         if (D.t > PENT.DRAW_MAX) { this.stop('time'); return; }
         const p = this.groundAt();
-        if (!p) { D.gap += dt; if (D.gap > 0.25) D.last = null; } // (the ray left the ground: the next stitch begins a new stroke)
-        else {
-            D.gap = 0;
-            const l = D.last;
-            if (!l || Math.hypot(p.x - l.x, p.z - l.z) >= PENT.STEP) {
-                const far = D.pts.length && Math.hypot(p.x - D.pts[0][0], p.z - D.pts[0][1]) > PENT.SPREAD;
-                if (!far && D.pts.length < PENT.MAX_PTS) {
-                    const joined = !!l && Math.hypot(p.x - l.x, p.z - l.z) <= PENT.GAP;
-                    D.pts.push([p.x, p.z]);
-                    if (!joined) D.strokes++;
-                    this.fx.trailAdd(p.x, p.y, p.z, joined);
-                    if (Math.random() < 0.5) this.fx.trailSmoke(p.x, p.y, p.z);
-                    D.last = { x: p.x, y: p.y, z: p.z };
-                } else if (far && D.t - D.lastHint > 4) { D.lastHint = D.t; g.hud.setVoice('🩸 Далеко от начала — рисунок должен уместиться в круг', true); }
-            }
+        const h = (x, z) => this._height(x, z);
+        if (!p) { D.stitched = false; this.fx.trailBreak(); D.idle += dt; if (D.idle > 6) this._hint('aim', '🩸 Направьте палочку на землю', 8); return; }
+        D.idle = 0;
+        if (D.phase === 'circle') {
+            const e = D.circle.add(p.x, p.z);
+            if (!e) return;
+            if (e.t === 'stitch') {
+                this.fx.trailAdd(e.x, h(e.x, e.z), e.z, D.stitched); D.stitched = true;
+                if (Math.random() < 0.4) this.fx.trailSmoke(e.x, h(e.x, e.z), e.z);
+            } else if (e.t === 'bad') {
+                this._hint('size', '🩸 ' + ASSIST_HINT[e.why], 4);
+                D.circle = new CircleAssist(); D.stitched = false; this.fx.trailBegin(); // (start the circle again)
+            } else if (e.t === 'closed') this._circleClosed(e);
+            return;
         }
-        // is it the figure?
-        D.nextCheck -= dt;
-        if (D.pts.length >= RECOG.MIN_PTS && D.nextCheck <= 0 && D.pts.length - D.lastN >= PENT.CHECK_MIN_NEW) {
-            D.nextCheck = PENT.CHECK_EVERY; D.lastN = D.pts.length;
-            D.pend = { ids: figureIds(), i: 0, res: [], pts: D.pts.slice() }; // (one figure a frame: no stall)
+        const L = D.line;
+        let hovering = false;
+        for (const e of L.step(p.x, p.z)) {
+            if (e.t === 'edges') for (const k of e.keys) this._edge(L, k);
+            else if (e.t === 'refuse') this._hint('refuse', '🩸 ' + ASSIST_HINT.refuse, 3);
+            else if (e.t === 'done') { this._counted(e.id, { cx: L.circle.cx, cz: L.circle.cz, r: L.circle.r, rot: L.circle.rot }); return; }
         }
-        if (D.pend) {
-            const q = D.pend, id = q.ids[q.i++];
-            q.res.push([id, recognize(q.pts, id)]);
-            if (q.i >= q.ids.length) {
-                D.pend = null;
-                const known = this.known();
-                const r = bestOf(q.res, new Set(known)); // (told apart from the other figures: the best fit, the known one first when drawings are alike; it counts only if the hero knows THIS drawing)
-                if (r.ok && known.includes(r.id)) { this._counted(r.id, r); return; }
-                const refusal = r.ok ? null : r.why === 'small' || r.why === 'large' || r.why === 'order' ? r.why : null;
-                if (refusal && D.t - D.lastHint > 5) { D.lastHint = D.t; const h = recognizeHint(refusal); if (h) g.hud.setVoice(h, true); }
-            }
-        }
+        hovering = L.hover >= 0;
+        this.fx.anchorsHover(L.hover, this._t);
+        D.pointless = hovering ? 0 : (D.pointless || 0) + dt;
+        if (D.pointless > 4) { D.pointless = 0; this._hint('lead', '🩸 ' + ASSIST_HINT.lead, 6); }
+    }
+
+    /** The circle is closed (perfect, by the fit): it is laid whole, and the guiding points of the learnt figures light up inside it. */
+    _circleClosed(c) {
+        const g = this.game, D = this.draw, h = (x, z) => this._height(x, z);
+        const me = g.character.group.position;
+        const known = this.known().sort((a, b) => (a === 'devil' ? -1 : b === 'devil' ? 1 : 0));
+        const rot = turnAway(c.cx, c.cz, me.x, me.z);
+        D.line = new LineAssist(buildGraph(known), { cx: c.cx, cz: c.cz, r: c.r, rot });
+        D.phase = 'lines';
+        this.fx.trailBegin();
+        this.fx.trailRing(c.cx, c.cz, c.r, h);
+        const color = (ids) => POINT_COLOR[ids[0]] ?? TABLE[ids[0]]?.glow ?? 0xffb800; // (strong colours: the points are seen on bright grass)
+        this.fx.anchorsShow(anchorsOf(D.line).map((a, i) => ({ x: a.x, y: h(a.x, a.z), z: a.z, color: color(D.line.graph.nodes[i].ids) })));
+        g.hud.setVoice('✨ Круг готов. Ведите палочку от одной светящейся точки к другой: линии лягут ровно, дрожать рукой не страшно', true);
+        g.sound?.playSpellFxAt?.('fxPentagram', _o.set(c.cx, h(c.cx, c.cz), c.cz), 0.8, 1.2, 14);
+        for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; g.fx?.spark(_o.set(c.cx + Math.cos(a) * c.r, h(c.cx, c.cz) + 0.2, c.cz + Math.sin(a) * c.r), i % 2 ? 0xfff0b8 : 0xffc860, 0.14, _d.set(0, 1.2 + Math.random(), 0), 1); }
+        g.sync?.pentagram?.({ k: 'ring', x: c.cx, y: h(c.cx, c.cz), z: c.cz, r: c.r });
+    }
+
+    /** One line between two points is laid ruler-straight; a spray of sparks along it; the others see it too. */
+    _edge(L, key) {
+        const ends = L.edgeEnds(key);
+        if (!ends) return;
+        const h = (x, z) => this._height(x, z), g = this.game;
+        this.fx.trailLine(ends[0], ends[1], h);
+        this._sparkLine(ends[0], ends[1], h(ends[0][0], ends[0][1]));
+        g.sync?.pentagram?.({ k: 'seg', a: [ends[0][0], ends[0][1]], b: [ends[1][0], ends[1][1]], y: h(ends[0][0], ends[0][1]) });
+    }
+
+    _sparkLine(a, b, y) {
+        const fx = this.game.fx;
+        if (!fx) return;
+        const n = Math.max(4, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.35));
+        for (let i = 0; i <= n; i++) fx.spark(_o.set(a[0] + (b[0] - a[0]) * i / n, y + 0.2, a[1] + (b[1] - a[1]) * i / n), i % 2 ? 0xfff0b8 : 0xffc860, 0.1, _d.set((Math.random() - 0.5) * 0.4, 0.8 + Math.random(), (Math.random() - 0.5) * 0.4), 0.8);
     }
 
     // ------------------------------------------------------------ a figure is counted
@@ -529,6 +569,11 @@ export class Pentagranium {
                 mk.mine = false;
                 if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
             }
+        } else if (m.k === 'ring') {
+            const x = +m.x || 0, z = +m.z || 0, r = Math.min(PENT.R_MAX, +m.r || 4), y = +m.y || 0, fx = this.game.fx;
+            if (fx) for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; fx.spark(_o.set(x + Math.cos(a) * r, y + 0.2, z + Math.sin(a) * r), i % 2 ? 0xfff0b8 : 0xffc860, 0.14, _d.set(0, 1.2 + Math.random(), 0), 1); }
+        } else if (m.k === 'seg') {
+            if (Array.isArray(m.a) && Array.isArray(m.b)) this._sparkLine([+m.a[0] || 0, +m.a[1] || 0], [+m.b[0] || 0, +m.b[1] || 0], +m.y || 0);
         } else if (m.k === 'fx') {
             if (['teleport', 'life', 'mend'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
         } else if (m.k === 'rite') {

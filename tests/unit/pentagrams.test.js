@@ -28,7 +28,7 @@ test('an exact circle with a star inside is recognised', () => {
 });
 
 test('a crooked, trembling, turned, oval figure still counts (the author: «хоть минимально похож»)', () => {
-    for (const o of [{ wob: 0.06 }, { wob: 0.08, rot: 0.6, seed: 9 }, { oval: 0.85, wob: 0.05, seed: 3 }, { R: 2.4, wob: 0.07 }, { R: 4.8, rot: 2, seed: 11 }, { circleTurns: 0.9, wob: 0.05 }]) {
+    for (const o of [{ wob: 0.06 }, { wob: 0.08, rot: 0.6, seed: 9 }, { oval: 0.85, wob: 0.05, seed: 3 }, { R: 3.2, wob: 0.07 }, { R: 7.5, rot: 2, seed: 11 }, { circleTurns: 0.9, wob: 0.05 }]) {
         const r = recognize(figure(o));
         assert.ok(r.ok, JSON.stringify(o) + ' ' + JSON.stringify(r));
     }
@@ -54,7 +54,7 @@ test('the circle must come first; the size must fit', () => {
     const wrong = recognize([...star, ...circle]);
     assert.ok(!wrong.ok && wrong.why === 'order', JSON.stringify(wrong));
     assert.equal(recognize(figure({ R: 1.2 })).ok, false);
-    assert.equal(recognize(figure({ R: 7 })).why, 'large');
+    assert.equal(recognize(figure({ R: 11 })).why, 'large');
 });
 
 test('resample keeps the order and the ends', () => {
@@ -109,7 +109,7 @@ test('the rite gives once more 25 % of the killed one\'s power (maximum − 30),
 
 test('the cost and the sizes are the author\'s', () => {
     assert.equal(PENT.COST, 20); assert.equal(PENT.DRAIN, 1);
-    assert.ok(PENT.R_MIN * 2 >= 3 && PENT.R_MAX * 2 <= 11, 'a 4–10 m circle (a hero is 3.5 m)');
+    assert.equal(PENT.R_MIN, 3); assert.equal(PENT.R_MAX, 8); // (the author: a circle of 3…8 m radius; a hero is 3.5 m)
 });
 
 test('the table «who/what» has the creatures and the things', () => {

@@ -20,7 +20,7 @@ function stub({ fatigue = 100, hp = 10, maxHp = 20, worn = {} } = {}) {
         bleeding: { stopped: 0, stop() { this.stopped++; } }, playerHP: hp, perf: { note() {} }, death: { bodies: new Map(), falling: new Set() }, dark: { level: 0 },
     };
     const p = new Pentagranium(g);
-    p.fx = { trailBegin() {}, trailEnd() {}, trailAdd() {}, trailSmoke() {}, trailPulse() {}, add() {}, set() {}, remove() {}, ambient() {}, sampleModels: () => [] };
+    p.fx = { trailBegin() {}, trailEnd() {}, trailAdd() {}, trailSmoke() {}, trailPulse() {}, trailRing() {}, trailLine() {}, trailBreak() {}, anchorsShow() {}, anchorsHover() {}, anchorsHide() {}, add() {}, set() {}, remove() {}, ambient() {}, sampleModels: () => [] };
     return { g, p, said };
 }
 const put = (p, pent, x, z, by = 'me') => { const m = p._place(pent + x, by, pent, x, 0.5, z, 3.5, 0); m.mine = true; m._tp = 1; p._permanent(m); m.t = 5; m.fade = 1; return m; };

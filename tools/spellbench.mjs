@@ -148,16 +148,19 @@ const scenarios = {
         const ok = await page.evaluate(() => {
             const g = window.__zns.game, P = g.pentagranium, me = g.character.group.position;
             const cx = me.x + 12, cz = me.z, gy = g.collision.groundY(cx, cz);
-            P.seen.add('devil');
-            // the wand draws the figure: a circle, then the star (the ray is fed by hand — a stitch a frame)
-            const R = 3.5, pts = [];
-            for (let i = 0; i <= 74; i++) { const a = (i / 74) * Math.PI * 2; pts.push([cx + Math.cos(a) * R, cz + Math.sin(a) * R]); }
-            const star = [0, 2, 4, 1, 3, 0].map((k) => { const a = Math.PI / 2 + k * Math.PI * 2 / 5; return [Math.cos(a), Math.sin(a)]; });
-            for (let k = 0; k < 5; k++) for (let i = 0; i < 18; i++) pts.push([cx + (star[k][0] + (star[k + 1][0] - star[k][0]) * i / 18) * R, cz + (star[k][1] + (star[k + 1][1] - star[k][1]) * i / 18) * R]);
-            let i = 0;
-            P.groundAt = () => { const p = pts[Math.min(i, pts.length - 1)]; return i < pts.length ? { x: p[0], y: g.collision.groundY(p[0], p[1]), z: p[1] } : null; };
+            P.learnFigure('devil');
+            // the wand draws with help: round the circle (a trembling hand), then led from point to point along the star's chords
+            const R = 4, ring = [];
+            for (let k = 0; k <= 130; k++) { const a = (k / 100) * Math.PI * 2; ring.push([cx + Math.cos(a) * R + Math.sin(k * 7) * 0.3, cz + Math.sin(a) * R + Math.cos(k * 5) * 0.3]); }
+            let lead = [], phase = 'ring', i = 0;
+            P.groundAt = () => {
+                const L = P.draw?.line;
+                if (L && phase === 'ring') { phase = 'lead'; i = 0; for (const c of L.graph.chords) for (const n of [c.nodes[0], c.nodes.at(-1)]) for (let k = 0; k < 4; k++) lead.push(L.world[n]); }
+                const arr = phase === 'ring' ? ring : lead, q = arr[Math.min(i, arr.length - 1)];
+                return q ? { x: q[0], y: g.collision.groundY(q[0], q[1]), z: q[1] } : null;
+            };
             const orig = P._drawStep.bind(P);
-            P._drawStep = function (dt) { i += 2; orig(dt); };
+            P._drawStep = function (dt) { i++; orig(dt); };
             window.__sb.rec = true;
             g.combat.fatigue = Math.max(g.combat.fatigue, 60);
             P.begin();

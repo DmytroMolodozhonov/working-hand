@@ -30,7 +30,7 @@ export const PENT = {
     DRAIN: 1, // mana a second while drawing
     DRAW_MAX: 90, // s: the drawing lasts at most this long (then the concentration ends)
     LIFE: 480, // s of game time a pentagram stays lit (8 minutes) if no rite is made
-    R_MIN: 2, R_MAX: 5.2, // m: the circle's radius that counts (a 4–10 m circle; the hero is ~3.5 m, a body lies ~3.5 m long)
+    R_MIN: 3, R_MAX: 8, // m: the circle's radius that counts (the author: 3…8; the hero is ~3.5 m, a body lies ~3.5 m long)
     STEP: 0.3, // m: a stitch of the trail every this far
     MAX_PTS: 640, // stitches in all
     SPREAD: 16, // m: a stitch farther than this from the first one is not taken
