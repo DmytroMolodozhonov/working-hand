@@ -41,6 +41,9 @@ export const DUEL_RANK_ROWS = [
 });
 const rankRowsHtml = () => `<ul class="hero-ranks">${DUEL_RANK_ROWS.map((r) => `<li title="${r.tip}">${r.label}: <b>≈ ${r.avg}</b> <span class="mp-hint">(${r.lo}–${r.hi}). ${r.tip}</span></li>`).join('')}</ul>`;
 
+/** Starts where ships are about: only then «Корабли без моряков» is asked. */
+const SHIP_STARTS = ['port', 'blackship'];
+
 const html = (p) => `
 <div class="hero-settings" data-hero-panel>
   <h4 class="hero-h">🧙 Настройки героя</h4>
@@ -55,16 +58,11 @@ const html = (p) => `
   </div>
   <label class="world-opt" title="${T.armor}"><input type="checkbox" id="${p}-armor" checked> 🪖 Магическая броня <span class="mp-hint">— шлем, нагрудник, поножи</span></label>
   <label class="world-opt" title="${T.robe}"><input type="checkbox" id="${p}-robe" checked> 🧥 Магическая мантия <span class="mp-hint">— можно вместе с бронёй</span></label>
-  <div class="hero-group" role="radiogroup" aria-label="Заклинания">
-    <span class="hero-cap">✨ Заклинания</span>
-    <label class="hero-seg" title="${T.spellsAll}"><input type="radio" name="${p}-spells" value="all" checked> Все заклинания есть</label>
-    <label class="hero-seg" title="${T.spellsMage}"><input type="radio" name="${p}-spells" value="mage"> Только заклинания сильного мага</label>
-  </div>
   <div class="hero-group" role="radiogroup" aria-label="Дуэльная сила">
     <span class="hero-cap">⚔️ Дуэльная сила</span>
-    <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full" checked> Полная</label>
-    <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom"> Настроить</label>
-    <span class="hero-slide" id="${p}-duel-wrap" hidden title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="0.1" value="${HERO.DUEL_MAX}"> <span class="mp-hint">от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
+    <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full"> Полная</label>
+    <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom" checked> Настроить</label>
+    <span class="hero-slide" id="${p}-duel-wrap" title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="0.1" value="2"> <span class="mp-hint">от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
     ${rankRowsHtml()}
   </div>
   <div class="hero-group" role="radiogroup" aria-label="Здоровье">
@@ -75,6 +73,11 @@ const html = (p) => `
   </div>
   <details class="hero-adv">
     <summary>⚙️ Продвинутые</summary>
+    <div class="hero-group" role="radiogroup" aria-label="Заклинания">
+      <span class="hero-cap">✨ Заклинания</span>
+      <label class="hero-seg" title="${T.spellsAll}"><input type="radio" name="${p}-spells" value="all" checked> Все заклинания есть</label>
+      <label class="hero-seg" title="${T.spellsMage}"><input type="radio" name="${p}-spells" value="mage"> Только заклинания сильного мага</label>
+    </div>
     <div class="hero-row" title="${T.dark}"><label for="${p}-dark">🜏 Чёрная магия:</label> <input type="range" id="${p}-dark" min="0" max="${HERO.DARK_MAX}" value="0"> <b id="${p}-dark-val">0</b></div>
     <label class="world-opt" title="${T.breakward}"><input type="checkbox" id="${p}-bw"> 🜏 Метка слома магической защиты <span class="mp-hint">— с самого начала</span></label>
     <div class="hero-row" title="${T.steady}"><label for="${p}-steady">🦶 Устойчивость:</label> <input type="range" id="${p}-steady" min="${HERO.STEADY_MIN}" max="${HERO.STEADY_MAX}" value="100"> <b id="${p}-steady-val">100</b></div>
@@ -89,19 +92,28 @@ export function mountHeroPanel(root, prefix = 'hero') {
     const sync = () => {
         $('cells-row').hidden = $('inf').checked;
         $('foe-row').hidden = $('spawn').value !== 'arena';
+        $('nocrew').closest('label').hidden = !SHIP_STARTS.includes($('spawn').value); // (ships' crews: only when the start is at the port or at sea)
         $('duel-wrap').hidden = radio('duel') !== 'custom';
         $('hp-wrap').hidden = radio('health') !== 'normal';
         $('dark-val').textContent = $('dark').value;
         $('steady-val').textContent = $('steady').value;
     };
     root.addEventListener('input', sync);
-    root.addEventListener('change', sync);
+    root.addEventListener('change', (e) => {
+        // (the author: endless health only at the first start, the starting ground; at every other start — ordinary 20)
+        if (e.target === $('spawn')) {
+            const start = $('spawn').value === 'start';
+            root.querySelector(`input[name="${prefix}-health"][value="${start ? 'immortal' : 'normal'}"]`).checked = true;
+            if (!start) $('hp').value = HERO.HP_DEFAULT;
+        }
+        sync();
+    });
     const read = () => normalizeHero({
         infiniteMana: $('inf').checked, cells: $('cells').value === '' ? HERO.CELLS_DEFAULT : $('cells').value,
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
         duelPower: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
-        spawn: $('spawn').value, noCrew: $('nocrew').checked, foe: $('foe').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
+        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
     const set = (h) => {
@@ -112,7 +124,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPower == null ? 'full' : 'custom'}"]`).checked = true;
         $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
-        $('duel-pct').value = v.duelPower ?? HERO.DUEL_MAX; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
+        $('duel-pct').value = v.duelPower ?? 2; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
     };
     sync();

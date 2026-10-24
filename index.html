@@ -179,8 +179,10 @@
                         <div id="game-map-container">
                             <div id="game-map-list"></div>
                             <div id="creative-settings" style="display: none;">
-                                <label>Количество зомби: <span id="zombie-count-val">0</span></label>
-                                <input type="range" id="creative-zombie-count" min="0" max="50" value="0" style="width: 100%;">
+                                <div hidden>
+                                    <span id="zombie-count-val">0</span>
+                                    <input type="range" id="creative-zombie-count" min="0" max="50" value="0">
+                                </div><!-- (зомби в Творческом убраны из настроек: 0, как было по умолчанию) -->
                                 <div id="hero-settings-sp"></div>
                             </div>
                         </div>

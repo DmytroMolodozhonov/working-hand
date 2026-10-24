@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: null, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', noCrew: false });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: 2, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', noCrew: false });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -121,8 +121,8 @@ test('заклинания: «все» — всё; «сильный маг» —
 });
 
 test('дуэльная сила — число в единицах боя; старые проценты переводятся', () => {
-    assert.equal(DEFAULT_HERO.duelPower, null);
-    assert.equal(duelStrengthOf(DEFAULT_HERO, 3.2), 3.2);
+    assert.equal(DEFAULT_HERO.duelPower, 2);
+    assert.equal(duelStrengthOf({ duelPower: null }, 3.2), 3.2);
     assert.equal(duelStrengthOf({ duelPower: 1.5 }, 3.2), 1.5);
     assert.equal(normalizeHero({ duelPower: 99 }).duelPower, null); // выше максимума — полная
     assert.equal(normalizeHero({ duelPower: 0 }).duelPower, HERO.DUEL_MIN);

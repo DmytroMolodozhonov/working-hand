@@ -34,7 +34,7 @@ export const DEFAULT_HERO = Object.freeze({
     infiniteMana: true, cells: HERO.CELLS_DEFAULT,
     armor: true, robe: true,
     spells: 'all', // 'all' | 'mage'
-    duelPower: null, // число в единицах дуэльной силы игры (WizardAI.duelPower); null — полная: как у соперника
+    duelPower: 2, // число в единицах дуэльной силы игры (WizardAI.duelPower); null — полная: как у соперника (по умолчанию «Настроить» и 2)
     dark: 0, breakward: false, steady: 100,
     health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
     maxHp: HERO.HP_DEFAULT,
@@ -44,7 +44,7 @@ export const DEFAULT_HERO = Object.freeze({
 });
 
 /** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
-export const LEGACY_HERO = Object.freeze({ ...DEFAULT_HERO, armor: false, robe: false });
+export const LEGACY_HERO = Object.freeze({ ...DEFAULT_HERO, armor: false, robe: false, duelPower: null });
 
 const num = (v, d) => (Number.isFinite(+v) && v !== '' && v !== null ? +v : d);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
