@@ -1815,3 +1815,14 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 
 .hero-slide input[type="number"] { width: 90px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.35); color: inherit; }
 .hero-row select { padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.45); color: inherit; max-width: 100%; }
+
+/* «Магия»: categories in a column on the left, the cards on the right (the same in all three sections) */
+.magic-layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: start; }
+.magic-layout > .sub-tabs { flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; align-items: stretch; margin: 0; position: sticky; top: 0; gap: 6px; }
+.magic-layout > .sub-tabs .sub-tab { border-radius: 10px; text-align: left; padding: 9px 12px; }
+.magic-layout > .items-grid { height: auto; overflow: visible; padding: 0; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+@media (max-width: 760px) {
+    .magic-layout { grid-template-columns: 1fr; }
+    .magic-layout > .sub-tabs { flex-direction: row; flex-wrap: wrap; position: static; }
+}
+.magic-layout[hidden] { display: none; }

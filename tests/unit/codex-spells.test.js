@@ -51,10 +51,24 @@ test('«Магия»: the tab tree Магия → Заклинания / Зел�
     assert.equal(tree.length, 1);
     assert.equal(tree[0].name, '✨ Магия');
     assert.deepEqual(tree[0].children.map((c) => c.id), ['spells', 'potions', 'pentagrams']);
-    const none = pentagramCards(null);
-    assert.deepEqual(none.map((c) => c.id).sort(), Object.keys(PENTAGRAMS).sort());
-    assert.ok(none.every((c) => !c.svg && !c.learned && c.text), 'unlearned: no picture, but a description');
-    const all = pentagramCards(new Set(Object.keys(PENTAGRAMS)));
-    for (const c of all) assert.ok(c.learned && /<svg/.test(c.svg), `«${c.name}»: a learned pentagram shows its picture`);
+    const { isPentagramKnown, POTION_CATEGORIES, potionEntries } = await import('../../src/ui/Codex.js');
+    const nothing = pentagramCards(new Set()); // a Survival hero who learned nothing: no pictures, descriptions stay
+    assert.deepEqual(nothing.map((c) => c.id).sort(), Object.keys(PENTAGRAMS).sort());
+    assert.ok(nothing.every((c) => !c.svg && !c.learned && c.text), 'unlearned: no picture, but a description');
+    const some = pentagramCards(new Set(['devil']));
+    assert.ok(/<svg/.test(some.find((c) => c.id === 'devil').svg) && !some.find((c) => c.id === 'life').svg);
+    // no hero (the main menu) / Creative: every drawing is shown
+    for (const c of pentagramCards(null)) assert.ok(c.learned && /<svg/.test(c.svg), `«${c.name}»: the menu shows the picture`);
+    assert.equal(isPentagramKnown(null, 'devil'), true);
+    assert.equal(isPentagramKnown({}, 'devil'), true);
+    assert.equal(isPentagramKnown({ game: {}, creative: true, known: new Set() }, 'devil'), true);
+    assert.equal(isPentagramKnown({ game: {}, known: new Set() }, 'devil'), false);
+    assert.equal(isPentagramKnown({ game: {}, known: new Set(['devil']) }, 'devil'), true);
+    // the potion categories: «Все» on top, every entry in a category that exists, none empty
+    assert.equal(POTION_CATEGORIES[0].id, 'all');
+    const ids = new Set(POTION_CATEGORIES.map((c) => c.id));
+    const ent = potionEntries();
+    assert.ok(ent.every((e) => ids.has(e.cat)));
+    for (const c of POTION_CATEGORIES.slice(1)) assert.ok(ent.some((e) => e.cat === c.id), `the category «${c.name}» is empty`);
     assert.ok(potionCards().length >= 3 && potionCards().every((p) => p.ingredients.length));
 });

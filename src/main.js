@@ -1254,8 +1254,8 @@ function showPauseTab(id) {
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
     if (id === 'pause-spells') {
         const cr = game?.config?.mode === 'creative';
-        renderMagicTab({ bar: 'pause-magic-sections', spells: 'pause-magic-spells', potions: 'pause-magic-potions', pents: 'pause-magic-pentagrams', cats: 'pause-spell-cats', grid: 'pause-spells-grid', pgrid: 'pause-pentagrams-grid', vgrid: 'pause-potions-grid' },
-            cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell), new Set(game?.pentagranium?.known?.() || []));
+        renderMagicTab({ bar: 'pause-magic-sections', spells: 'pause-magic-spells', potions: 'pause-magic-potions', pents: 'pause-magic-pentagrams', cats: 'pause-spell-cats', grid: 'pause-spells-grid', pgrid: 'pause-pentagrams-grid', vgrid: 'pause-potions-grid', pcats: 'pause-pentagram-cats', vcats: 'pause-potion-cats' },
+            cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell), cr || !game?.pentagranium ? null : new Set(game.pentagranium.known() || []));
     }
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);

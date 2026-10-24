@@ -80,12 +80,12 @@
             <!-- Creative only: the whole spell book without leaving the game -->
             <div id="pause-spells" class="pause-pane">
                 <div id="pause-magic-sections" class="sub-tabs magic-sections"></div>
-                <div id="pause-magic-spells">
+                <div id="pause-magic-spells" class="magic-layout">
                     <div id="pause-spell-cats" class="sub-tabs"></div>
                     <div id="pause-spells-grid" class="items-grid"></div>
                 </div>
-                <div id="pause-magic-potions" hidden><div id="pause-potions-grid" class="items-grid"></div></div>
-                <div id="pause-magic-pentagrams" hidden><div id="pause-pentagrams-grid" class="items-grid"></div></div>
+                <div id="pause-magic-potions" class="magic-layout" hidden><div id="pause-potion-cats" class="sub-tabs"></div><div id="pause-potions-grid" class="items-grid"></div></div>
+                <div id="pause-magic-pentagrams" class="magic-layout" hidden><div id="pause-pentagram-cats" class="sub-tabs"></div><div id="pause-pentagrams-grid" class="items-grid"></div></div>
             </div>
             <div class="pause-hint">Мир сохранится сам. Escape — закрыть это окно</div>
         </div>
@@ -261,12 +261,12 @@
                 <!-- SPELLS (by category) -->
                 <div id="tab-spells" class="tab-pane">
                     <div id="magic-sections" class="sub-tabs magic-sections"></div>
-                    <div id="magic-spells">
+                    <div id="magic-spells" class="magic-layout">
                         <div id="spell-cats" class="sub-tabs"></div>
                         <div id="spells-grid" class="items-grid"></div>
                     </div>
-                    <div id="magic-potions" hidden><div id="potions-grid" class="items-grid"></div></div>
-                    <div id="magic-pentagrams" hidden><div id="pentagrams-grid" class="items-grid"></div></div>
+                    <div id="magic-potions" class="magic-layout" hidden><div id="potion-cats" class="sub-tabs"></div><div id="potions-grid" class="items-grid"></div></div>
+                    <div id="magic-pentagrams" class="magic-layout" hidden><div id="pentagram-cats" class="sub-tabs"></div><div id="pentagrams-grid" class="items-grid"></div></div>
                 </div>
 
                 <!-- ITEMS -->
