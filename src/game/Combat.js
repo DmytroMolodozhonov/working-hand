@@ -1095,6 +1095,7 @@ export class Combat {
 
     die(byId, how) {
         if (this.dead) return;
+        if (this.game.bossRetry?.intercept?.()) return; // (a start at a boss: a fall is a window to try again, not a death — BossRetry.js)
         if (this.game.arenaDuels?.duelDeath?.()) return; // (the duel mode: a lost duel and at once the next, no death — ArenaDuels.duelDeath)
         if (this.game.monster?.active && this.game.monster.saves(how, byId)) return; // (a beheading, a shatter… tear the monster's body, not the man)
         this.dead = true;

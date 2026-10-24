@@ -56,14 +56,14 @@ export class DuelEndUi {
      * поменять, не выходя в главное меню; «Начать дуэль заново» или «Выйти в меню».
      * @param {{hero:object, lost?:boolean, onStart:(hero:object)=>void, onExit:()=>void}} o
      */
-    showAgain({ hero, onStart, onExit, lost = false }) {
+    showAgain({ hero, onStart, onExit, lost = false, title = null, go = 'Начать дуэль заново' }) {
         this._css();
         this.hideBox();
         if (document.pointerLockElement) document.exitPointerLock?.(); // (the mouse is free for the buttons)
         const w = this.box = document.createElement('div');
         w.className = 'duel-again';
-        w.innerHTML = `<div><h3>${lost ? 'Хотите сразиться ещё раз?' : 'Хотите повторить дуэль?'}</h3><div class="duel-again-panel"></div>
-            <div style="text-align:center"><button class="go" type="button">Начать дуэль заново</button><button class="out" type="button">Выйти в меню</button></div></div>`;
+        w.innerHTML = `<div><h3>${title || (lost ? 'Хотите сразиться ещё раз?' : 'Хотите повторить дуэль?')}</h3><div class="duel-again-panel"></div>
+            <div style="text-align:center"><button class="go" type="button">${go}</button><button class="out" type="button">Выйти в меню</button></div></div>`;
         const panel = mountHeroPanel(w.querySelector('.duel-again-panel'), 'hero-again');
         panel.set(hero);
         w.querySelector('#hero-again-spawn')?.closest('.hero-row')?.setAttribute('hidden', ''); // (the place is the arena: it is not changed here)

@@ -144,6 +144,18 @@ export class HeroApply {
         }
     }
 
+    /**
+     * Герой снова с настройками мира: что он вырастил или выиграл с тех пор (ячейки от первых заклинаний и побеждённых, дуэльное
+     * мастерство) снимается, мана и здоровье полные. Для дуэльного режима и для повтора боя с боссом.
+     */
+    resetToSettings() {
+        const g = this.game, ma = g.mana, c = g.combat;
+        if (ma) { ma.growth = 0; ma.mastery = 0; ma.beaten?.clear?.(); ma.duelsWon?.clear?.(); }
+        if (g.bonus) { g.bonus.fatigue = 0; g.bonus.hp = 0; }
+        this.applyMana(); this.applyHealth();
+        if (c) { c.fatigue = c.maxFatigue || c.fatigue; c.hp = c.maxHp || c.hp; g.playerHP = c.hp; c._hudKey = ''; c._manaKey = ''; }
+    }
+
     /** Каждый кадр: ждём землю у цели и ставим героя (один раз). */
     step(dt) {
         const p = this.pending, g = this.game;

@@ -7,6 +7,7 @@ import { TerrainData } from '../../src/world/Terrain.js';
 import { ARENA, ARENA_BIG, onArenaFloor } from '../../src/world/DuelArenas.js';
 import { DUEL, Duel } from '../../src/game/Duel.js';
 import { ArenaDuels } from '../../src/game/ArenaDuels.js';
+import { HeroApply } from '../../src/game/HeroApply.js';
 import { AGAIN_AFTER } from '../../src/ui/DuelEndUi.js';
 
 const floorArea = (A) => Math.PI * A.W * A.W + 4 * A.W * A.S;
@@ -214,7 +215,8 @@ test('каждая дуэль начинается с настроек мира:
     const calls = [];
     const c = { fatigue: 50, maxFatigue: 900, hp: 3, maxHp: 20 };
     const g = { combat: c, mana: { growth: 400, mastery: 12, beaten: new Set(['w']), duelsWon: new Map([['w', 'win']]) }, bonus: { fatigue: 100, hp: 5 }, config: {}, hero: { cells: 200, foe: 'mid' },
-        heroApply: { applyMana: () => { c.maxFatigue = 200 + g.bonus.fatigue + g.mana.growth; calls.push('mana'); }, applyHealth: () => calls.push('hp') } };
+        heroApply: null };
+    g.heroApply = Object.assign(Object.create(HeroApply.prototype), { game: g, applyMana: () => { c.maxFatigue = 200 + g.bonus.fatigue + g.mana.growth; calls.push('mana'); }, applyHealth: () => calls.push('hp') });
     const D = Object.assign(Object.create(ArenaDuels.prototype), { game: g, mode: { arenaId: 'a', id: 'me', foe: 'mid' } });
     D._resetHero();
     assert.equal(c.maxFatigue, 200); assert.equal(c.fatigue, 200); assert.equal(c.hp, 20);
@@ -239,4 +241,28 @@ test('молнии из столкновения: слабые маги — ка
     assert.ok(arcRate(2.9) > 0.5 && arcRate(4.4) > arcRate(2.9) * 2); // (the Master's clash is a storm)
     assert.ok(Math.abs(AIM.CONE / 0.12 - 1.3) < 1e-9 && Math.abs(AIM.BEND / 0.21 - 1.3) < 1e-9 && Math.abs(AIM.TURN / 3.2 - 1.3) < 1e-9);
     assert.ok(AIM.MEET_BEND > AIM.BEND); // (towards the opposing charge it may turn more than towards a body)
+});
+
+import { BossRetry, isBossStart, BOSS_STARTS } from '../../src/game/BossRetry.js';
+
+test('повтор боя с боссом: смерти нет, окно настроек, потом герой снова у босса; дуэль — своя система', () => {
+    assert.deepEqual(BOSS_STARTS, ['dragon', 'queen', 'castle', 'tower', 'spider', 'blackship']);
+    assert.equal(isBossStart('arena'), false); assert.equal(isBossStart('start'), false); assert.equal(isBossStart('port'), false);
+    const calls = [], shown = {};
+    const g = { config: { mode: 'creative' }, hero: { spawn: 'dragon', cells: 200 }, net: null, paused: false,
+        combat: { revive: () => calls.push('revive') },
+        heroApply: { resetToSettings: () => calls.push('reset'), requestSpawn: () => calls.push('spawn') },
+        dragons: { list: [{ id: 'ctest-dragon', dead: false }], _remove: () => calls.push('rmDragon') } };
+    const B = new BossRetry(g);
+    B.ui = { showAgain: (o) => { Object.assign(shown, o); } };
+    assert.equal(B.intercept(), true); // (no death)
+    assert.deepEqual(calls, ['revive']); assert.equal(g.paused, true); assert.match(shown.title, /попробовать ещё раз/);
+    assert.equal(B.intercept(), false); // (the window is open: a second fall is not asked again)
+    shown.onStart({ spawn: 'dragon', cells: 400 });
+    assert.deepEqual(calls, ['revive', 'reset', 'rmDragon', 'spawn']);
+    assert.equal(g.hero.cells, 400); assert.equal(g.config.hero.cells, 400); assert.equal(g.paused, false); assert.equal(g._tdGone, 60);
+    g.hero.spawn = 'arena';
+    assert.equal(new BossRetry(g).intercept(), false); // (the arena: ArenaDuels' own)
+    g.hero.spawn = 'start';
+    assert.equal(new BossRetry(g).intercept(), false);
 });

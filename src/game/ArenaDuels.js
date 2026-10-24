@@ -1296,13 +1296,7 @@ export class ArenaDuels {
      * Every duel starts from the settings the world was made with (the author: «мана и ячейки остаются с первого боя, а должны обнуляться»): what the
      * hero grew or won meanwhile (cells from the first spells and beaten wizards, the duel mastery) is taken back, the mana and the health are full.
      */
-    _resetHero() {
-        const g = this.game, ma = g.mana, c = g.combat;
-        if (ma) { ma.growth = 0; ma.mastery = 0; ma.beaten?.clear?.(); ma.duelsWon?.clear?.(); }
-        if (g.bonus) { g.bonus.fatigue = 0; g.bonus.hp = 0; }
-        g.heroApply?.applyMana?.(); g.heroApply?.applyHealth?.();
-        if (c) { c.fatigue = c.maxFatigue || c.fatigue; c.hp = c.maxHp || c.hp; g.playerHP = c.hp; c._hudKey = ''; c._manaKey = ''; }
-    }
+    _resetHero() { this.game.heroApply?.resetToSettings?.(); }
 
     /**
      * A fresh start of the duel mode (the window's «Начать дуэль заново»): the old wizard and the whole crowd go at once (a fallen one

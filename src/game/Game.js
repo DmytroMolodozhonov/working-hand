@@ -145,6 +145,7 @@ import { heroBody, mountBody, moveSolid } from './BodyContact.js';
 import { HandHold } from './HandHold.js';
 import { Mana, NOT_SPELLS, SAME_SPELL } from './Mana.js';
 import { heroOf, manaRules } from './HeroSetup.js';
+import { BossRetry } from './BossRetry.js';
 import { HeroApply } from './HeroApply.js';
 import { knows as knowsSpellOf, howLearned, teachKey } from './SpellBook.js';
 import { Achievements } from './Achievements.js';
@@ -470,6 +471,7 @@ export class Game {
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
+        this.bossRetry = new BossRetry(this); // a fall in a fight with a boss at the chosen start: the window to try again (BossRetry.js)
         this.heroApply = new HeroApply(this); // «Настройки героя» Творческого мира (HeroApply.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
         this.monster = new MonsterTransform(this); // «Пентаграмма страшного монстра»: ×7, 10 минут (MonsterForm.js)
