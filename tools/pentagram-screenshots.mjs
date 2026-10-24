@@ -27,8 +27,6 @@ try {
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 3.5, 8), new THREE.MeshBasicMaterial({ color: 0xdddddd }));
         post.position.set(cx + 6.5, y + 1.75, cz); g.scene.add(post);
         window.__pg.post = post;
-        g.pentagranium.seen.add('devil');
-        g.pentagranium.fx.trailBegin();
         window.__pg.look = (dx, dy, dz) => { cam.position.set(cx + dx, y + dy, cz + dz); cam.lookAt(cx, y, cz); cam.updateMatrixWorld(true); };
         window.__pg.look(-4, 11, 13);
         window.__pg.on = true;
@@ -39,16 +37,30 @@ try {
         fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(url.split(',')[1], 'base64'));
         console.log('saved', name);
     };
+    // 00. the guide from the very first moment: the ring of points (one size) where the wand pointed
+    await page.evaluate(() => {
+        const { cx, cz, y } = window.__pg, g = window.__zns.game, P = g.pentagranium;
+        P.learnFigure('devil'); P.learnFigure('teleport');
+        P.groundAt = () => ({ x: cx, y, z: cz });
+        g.combat.fatigue = Math.max(g.combat.fatigue, 90);
+        P.begin();
+        // two arcs already led along
+        const R = P.draw.ring;
+        for (const i of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) P._arc(R, i);
+        P.draw.ring.hover = 3;
+        window.__pg.ringShot = true;
+    });
+    await snap('00-ring');
+    await page.evaluate(() => { const P = window.__zns.game.pentagranium; P.stop('stop'); delete P.groundAt; });
     // 0. the guiding points inside a closed circle (the star's five corners and crossings, and the teleport's square)
     await page.evaluate(async () => {
         const { buildGraph, LineAssist, anchorsOf } = await import('/src/game/PentagramAssist.js');
         const { cx, cz, y } = window.__pg, g = window.__zns.game, F = g.pentagranium.fx;
-        const L = new LineAssist(buildGraph(['devil', 'teleport']), { cx, cz, r: 3.6, rot: 0.3 });
-        F.trailBegin(); F.trailRing(cx, cz, 3.6, (x, z) => g.collision.groundY(x, z));
-        for (const k of L.graph.chords[0].nodes.slice(0, 2)) { /* (one line laid as an example) */ }
+        const L = new LineAssist(buildGraph(['devil', 'teleport']), { cx, cz, r: 3.5, rot: 0.3 });
+        F.trailBegin(); F.trailRing(cx, cz, 3.5, (x, z) => g.collision.groundY(x, z));
         const [a, b] = [L.world[L.graph.chords[0].nodes[0]], L.world[L.graph.chords[0].nodes.at(-1)]];
         F.trailLine(a, b, (x, z) => g.collision.groundY(x, z));
-        F.anchorsShow(anchorsOf(L).map((p, i) => ({ x: p.x, y: g.collision.groundY(p.x, p.z), z: p.z, color: L.graph.nodes[i].ids[0] === 'devil' ? 0xffb800 : 0x4aa8ff })));
+        F.anchorsShow(anchorsOf(L).map((p, i) => ({ x: p.x, y: g.collision.groundY(p.x, p.z), z: p.z, color: L.graph.nodes[i].ids[0] === 'devil' ? 0xe0203c : 0x4aa8ff })));
         F.anchorsHover(2, 1);
     });
     await snap('0-anchors');

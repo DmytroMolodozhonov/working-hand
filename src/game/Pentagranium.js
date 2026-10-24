@@ -24,7 +24,7 @@ import * as THREE from 'three';
 import { castingHand } from './WandAim.js';
 import { PENT, RITE, figureOf, figureIds, Seen, riteBody, riteGain, RITE_HINT, inside } from './PentagramRules.js';
 import { PENTAGRAMS as TABLE } from './Pentagrams.js';
-import { CircleAssist, LineAssist, buildGraph, anchorsOf, turnAway, ASSIST_HINT } from './PentagramAssist.js';
+import { RingAssist, LineAssist, buildGraph, anchorsOf, turnAway, ASSIST, ASSIST_HINT } from './PentagramAssist.js';
 import { USE, USE_HINT, mendPlan, mendPrice, pairUp } from './PentagramUse.js';
 import { pieceMax } from './ArmorTypes.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -118,9 +118,33 @@ export class Pentagranium {
     }
 
     begin() {
-        this.draw = { phase: 'circle', circle: new CircleAssist(), line: null, t: 0, gap: 0, hint: {}, stitched: false, idle: 0 };
+        const c = this._center();
+        this.draw = { phase: 'ring', ring: new RingAssist(c.x, c.z), line: null, t: 0, gap: 0, hint: {}, idle: 0 };
         this.fx.trailBegin();
+        this._showRing();
         this.game.perf?.note?.('🩸 Пентаграниум: рисование');
+    }
+
+    /** Where the circle is: at the spot the wand points at (on the ground); else a few steps ahead of the hero. */
+    _center() {
+        const g = this.game, p = this.groundAt();
+        if (p) return { x: p.x, z: p.z };
+        const me = g.character.group.position, dir = _d.set(0, 0, -1);
+        const hand = castingHand(g);
+        if (hand) dir.copy(hand.dir); else if (g.camera) g.camera.getWorldDirection(dir);
+        const h = Math.hypot(dir.x, dir.z) || 1;
+        return { x: me.x + (dir.x / h) * 9, z: me.z + (dir.z / h) * 9 };
+    }
+
+    /** The guide from the first moment: a ring of glowing points of one size (and a dotted line between them) where the circle will be. */
+    _showRing() {
+        const R = this.draw.ring, h = (x, z) => this._height(x, z), pts = [];
+        const ghost = 48;
+        for (let k = 0; k < ghost; k++) { const a = (k / ghost) * Math.PI * 2, x = R.cx + Math.cos(a) * R.r, z = R.cz + Math.sin(a) * R.r; pts.push({ x, y: h(x, z), z, color: 0xfff0b8, s: 0.35 }); }
+        for (const w of R.world) pts.push({ x: w[0], y: h(w[0], w[1]), z: w[1], color: 0xffd23a, s: 1.0 });
+        this.fx.anchorsShow(pts);
+        this.draw.ringBase = ghost;
+        this.game.hud.setVoice('✨ Перед вами светится круг. Ведите палочку по его светящимся точкам — круг ляжет идеально ровным, даже если рука дрожит (1 мана в секунду, «стоп» — закончить)', true);
     }
 
     /** «стоп» / the mana is out / timeout / counted: the drawing ends (the trail is gone). True if it was on. */
@@ -194,21 +218,20 @@ export class Pentagranium {
         const h = (x, z) => this._height(x, z);
         if (!p) { D.stitched = false; this.fx.trailBreak(); D.idle += dt; if (D.idle > 6) this._hint('aim', '🩸 Направьте палочку на землю', 8); return; }
         D.idle = 0;
-        if (D.phase === 'circle') {
-            const e = D.circle.add(p.x, p.z);
-            if (!e) return;
-            if (e.t === 'stitch') {
-                this.fx.trailAdd(e.x, h(e.x, e.z), e.z, D.stitched); D.stitched = true;
-                if (Math.random() < 0.4) this.fx.trailSmoke(e.x, h(e.x, e.z), e.z);
-            } else if (e.t === 'bad') {
-                this._hint('size', '🩸 ' + ASSIST_HINT[e.why], 4);
-                D.circle = new CircleAssist(); D.stitched = false; this.fx.trailBegin(); // (start the circle again)
-            } else if (e.t === 'closed') this._circleClosed(e);
+        if (D.phase === 'ring') {
+            const R = D.ring;
+            for (const e of R.step(p.x, p.z)) {
+                if (e.t === 'arcs') for (const i of e.list) { const [a, b] = R.arcEnds(i); this._arc(R, i); this._sparkLine(a, b, h(a[0], a[1])); }
+                else if (e.t === 'closed') { this._circleClosed(e); return; }
+            }
+            this.fx.anchorsHover(R.hover < 0 ? -1 : D.ringBase + R.hover, this._t);
+            D.pointless = R.hover >= 0 ? 0 : (D.pointless || 0) + dt;
+            if (D.pointless > 5) { D.pointless = 0; this._hint('ring', '🩸 ' + ASSIST_HINT.circle, 8); }
             return;
         }
         const L = D.line;
         let hovering = false;
-        for (const e of L.step(p.x, p.z)) {
+        for (const e of L.step(p.x, p.z, dt)) {
             if (e.t === 'edges') for (const k of e.keys) this._edge(L, k);
             else if (e.t === 'refuse') this._hint('refuse', '🩸 ' + ASSIST_HINT.refuse, 3);
             else if (e.t === 'done') { this._counted(e.id, { cx: L.circle.cx, cz: L.circle.cz, r: L.circle.r, rot: L.circle.rot }); return; }
@@ -219,7 +242,17 @@ export class Pentagranium {
         if (D.pointless > 4) { D.pointless = 0; this._hint('lead', '🩸 ' + ASSIST_HINT.lead, 6); }
     }
 
-    /** The circle is closed (perfect, by the fit): it is laid whole, and the guiding points of the learnt figures light up inside it. */
+    /** One arc of the ring lies down perfectly round (a few straight pieces along the circle). */
+    _arc(R, i) {
+        const h = (x, z) => this._height(x, z), a0 = (i / R.n) * Math.PI * 2, a1 = ((i + 1) / R.n) * Math.PI * 2;
+        const steps = 5;
+        this.fx.trailBreak();
+        for (let k = 0; k <= steps; k++) { const a = a0 + ((a1 - a0) * k) / steps, x = R.cx + Math.cos(a) * R.r, z = R.cz + Math.sin(a) * R.r; this.fx.trailAdd(x, h(x, z), z, k > 0); }
+        this.fx.trailBreak();
+        this.game.sync?.pentagram?.({ k: 'seg', a: [R.arcEnds(i)[0][0], R.arcEnds(i)[0][1]], b: [R.arcEnds(i)[1][0], R.arcEnds(i)[1][1]], y: h(R.cx, R.cz) });
+    }
+
+    /** The circle is whole: the guiding points of the learnt figures light up inside it. */
     _circleClosed(c) {
         const g = this.game, D = this.draw, h = (x, z) => this._height(x, z);
         const me = g.character.group.position;
@@ -227,11 +260,9 @@ export class Pentagranium {
         const rot = turnAway(c.cx, c.cz, me.x, me.z);
         D.line = new LineAssist(buildGraph(known), { cx: c.cx, cz: c.cz, r: c.r, rot });
         D.phase = 'lines';
-        this.fx.trailBegin();
-        this.fx.trailRing(c.cx, c.cz, c.r, h);
         const color = (ids) => POINT_COLOR[ids[0]] ?? TABLE[ids[0]]?.glow ?? 0xffb800; // (strong colours: the points are seen on bright grass)
         this.fx.anchorsShow(anchorsOf(D.line).map((a, i) => ({ x: a.x, y: h(a.x, a.z), z: a.z, color: color(D.line.graph.nodes[i].ids) })));
-        g.hud.setVoice('✨ Круг готов. Ведите палочку от одной светящейся точки к другой: линии лягут ровно, дрожать рукой не страшно', true);
+        g.hud.setVoice('✨ Круг готов. Теперь ведите палочку от одной светящейся точки к другой и задерживайте её на точке: между ними ляжет ровная линия — так вы нарисуете пентаграмму', true);
         g.sound?.playSpellFxAt?.('fxPentagram', _o.set(c.cx, h(c.cx, c.cz), c.cz), 0.8, 1.2, 14);
         for (let i = 0; i < 48; i++) { const a = (i / 48) * Math.PI * 2; g.fx?.spark(_o.set(c.cx + Math.cos(a) * c.r, h(c.cx, c.cz) + 0.2, c.cz + Math.sin(a) * c.r), i % 2 ? 0xfff0b8 : 0xffc860, 0.14, _d.set(0, 1.2 + Math.random(), 0), 1); }
         g.sync?.pentagram?.({ k: 'ring', x: c.cx, y: h(c.cx, c.cz), z: c.cz, r: c.r });

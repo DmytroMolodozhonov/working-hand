@@ -18,7 +18,11 @@
 import { figureLines } from './PentagramRules.js';
 
 export const ASSIST = {
-    R_MIN: 3, R_MAX: 8, // m: the circle's radius (a hero is 3.5 m; the author)
+    R: 3.5, // m: EVERY pentagram has this one size (the author: «все пентаграммы должны быть одного размера»): the hero is 3.5 m, a body lies inside
+    RING_N: 16, // guiding points round the circle, shown from the first moment
+    RING_MAGNET: 0.8, // m: the wand is drawn to a ring point from this far
+    DWELL: 0.3, // s: a point of the figure counts only when the wand stays on it this long (a hand sweeping past draws nothing)
+    R_MIN: 3, R_MAX: 8, // m: (the free-hand circle of the old way)
     CLOSE_COVER: 0.78, // the share of the way round that must be passed (36 sectors)
     MAX_RMS: 0.3, // of the radius: how far the stitches may lie from the fitted circle on average (rough is fine)
     SHOW_RMS: 0.5, // … the fitted circle is shown (laid) while the hand is this round
@@ -179,12 +183,56 @@ export function pathBetween(graph, a, b) {
     return [];
 }
 
+/**
+ * THE CIRCLE, with a guide from the very start: a ring of `RING_N` glowing points of ONE size round the centre (cx, cz) (where the wand pointed
+ * when the spell was said). The hero only pretends to draw: leads the wand along the points, the arc between two neighbouring points they have
+ * reached lies down perfectly round (a crooked hand or a crooked go makes no difference). A point or two skipped by a quick hand is filled;
+ * a jump to the far side draws nothing. The circle is whole when every arc is laid.
+ */
+export class RingAssist {
+    constructor(cx, cz, r = ASSIST.R, n = ASSIST.RING_N) {
+        this.cx = cx; this.cz = cz; this.r = r; this.n = n;
+        this.world = Array.from({ length: n }, (_, i) => [cx + r * Math.cos((i / n) * TAU), cz + r * Math.sin((i / n) * TAU)]);
+        this.arcs = new Uint8Array(n); // arc i joins point i and i+1
+        this.cur = -1; this.hover = -1; this.left = n;
+    }
+
+    nearest(x, z) {
+        let best = -1, bd = ASSIST.RING_MAGNET;
+        for (let i = 0; i < this.n; i++) { const d = Math.hypot(this.world[i][0] - x, this.world[i][1] - z); if (d <= bd) { bd = d; best = i; } }
+        return best;
+    }
+
+    /** The wand at (x, z): `[{t: 'arcs', list: [i…]}]` for the arcs newly laid, `{t: 'closed', cx, cz, r}` when the ring is whole. */
+    step(x, z) {
+        const ev = [], n = this.nearest(x, z);
+        this.hover = n;
+        if (n < 0 || n === this.cur || this.left === 0) return ev;
+        if (this.cur < 0) { this.cur = n; return ev; }
+        let d = (n - this.cur + this.n) % this.n;
+        const dir = d <= this.n / 2 ? 1 : -1;
+        d = dir === 1 ? d : this.n - d;
+        const from = this.cur;
+        this.cur = n;
+        if (d > 3) return ev; // (a jump over the circle: nothing is drawn)
+        const list = [];
+        for (let k = 0; k < d; k++) { const a = dir === 1 ? (from + k) % this.n : (from - k - 1 + this.n) % this.n; if (!this.arcs[a]) { this.arcs[a] = 1; this.left--; list.push(a); } }
+        if (list.length) ev.push({ t: 'arcs', list });
+        if (this.left === 0) ev.push({ t: 'closed', cx: this.cx, cz: this.cz, r: this.r });
+        return ev;
+    }
+
+    /** The two ends of arc i (world). */
+    arcEnds(i) { return [this.world[i], this.world[(i + 1) % this.n]]; }
+}
+
 /** The second phase: the wand is led from point to point on the closed circle. */
 export class LineAssist {
     /** @param graph buildGraph(ids)  @param circle {cx, cz, r, rot} (rot: the figure turned in the plane — the apex away from the hero) */
-    constructor(graph, circle) {
+    constructor(graph, circle, { armed = false } = {}) {
         this.graph = graph; this.circle = circle;
         this.drawn = new Set(); this.cur = -1; this.hover = -1; this.done = null;
+        this.dwellNode = -1; this.dwellT = 0; this.armed = armed; this.awayT = 0; // (the wand must leave the points once, and stay on a point to take it)
         const ca = Math.cos(circle.rot || 0), sa = Math.sin(circle.rot || 0);
         this.world = graph.nodes.map((n) => [circle.cx + circle.r * (n.u[0] * ca - n.u[1] * sa), circle.cz + circle.r * (n.u[0] * sa + n.u[1] * ca)]);
         let gap = Infinity;
@@ -204,11 +252,20 @@ export class LineAssist {
     /**
      * The wand is at (x, z): events `[{t: 'attach', node}, {t: 'edges', keys, from, to}, {t: 'refuse', from, to}, {t: 'done', id}]`.
      */
-    step(x, z) {
+    step(x, z, dt = 1) {
         const ev = [];
-        const n = this.nearest(x, z);
-        this.hover = n;
-        if (n < 0 || n === this.cur || this.done) return ev;
+        const near = this.nearest(x, z);
+        this.hover = near;
+        if (this.done) return ev;
+        // not armed until the wand has been away from every point (the hand that has just finished the circle stands on a point of it)
+        if (!this.armed) { if (near < 0) { this.awayT += dt; if (this.awayT >= ASSIST.DWELL) this.armed = true; } else this.awayT = 0; return ev; }
+        // a point is taken when the wand stays on it (a hand sweeping past takes nothing)
+        if (near < 0 || near !== this.dwellNode) { this.dwellNode = near; this.dwellT = 0; }
+        if (near < 0) return ev;
+        this.dwellT += dt;
+        if (this.dwellT < ASSIST.DWELL) return ev;
+        const n = near;
+        if (n === this.cur) return ev;
         if (this.cur < 0) { this.cur = n; ev.push({ t: 'attach', node: n }); return ev; }
         const path = pathBetween(this.graph, this.cur, n);
         const from = this.cur;
@@ -234,5 +291,5 @@ export const ASSIST_HINT = {
     large: 'Круг слишком велик — магия не дотянется до края: ведите по кругу поменьше',
     lead: 'Ведите палочку к светящейся точке',
     refuse: 'Отсюда в ту точку линию не провести — ведите к другой светящейся точке',
-    circle: 'Сначала обведите палочкой круг на земле — ровно рисовать не нужно, он ляжет сам',
+    circle: 'Ведите палочку по светящимся точкам круга: идти нужно по порядку, вокруг',
 };

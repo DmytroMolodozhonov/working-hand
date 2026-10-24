@@ -44,10 +44,10 @@ function run(p, pts, dt = 0.05, until = null) {
 }
 let _s = 3;
 const rnd = () => ((_s = (_s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
-/** A hand going round a circle (centre (0, 8), radius R) a turn and a bit, trembling by `tremble` m. */
-const roundHand = (R = 4, tremble = 0.4, turns = 1.12) => Array.from({ length: Math.round(turns * 2 * Math.PI * R / 0.2) + 1 }, (_, i) => { const a = (i / (turns * 2 * Math.PI * R / 0.2)) * turns * 2 * Math.PI; return [Math.cos(a) * R + rnd() * tremble, 8 + Math.sin(a) * R + rnd() * tremble]; });
-/** The hand leading between the points `idx` of the line assist, trembling around each. */
-const leadTo = (p, idx, tremble = 0.3) => { const w = p.draw.line.world; run(p, idx.flatMap((i) => [0, 1, 2].map(() => [w[i][0] + rnd() * tremble, w[i][1] + rnd() * tremble]))); };
+/** The hand led along the guiding ring (centre (cx, cz) = where the wand pointed at the cast), trembling by `tremble` m, a point at a frame. */
+const ringHand = (p, tremble = 0.4) => { const R = p.draw.ring; return [...R.world, R.world[0], R.world[1]].map((w) => [w[0] + rnd() * tremble, w[1] + rnd() * tremble]); };
+/** The hand leading to the points `idx` of the line assist: away for a moment, then staying on each. */
+const leadTo = (p, idx, tremble = 0.2) => { const w = p.draw.line.world; run(p, [[0.05, 0.05], [0.05, 0.05], [0.05, 0.05], [0.05, 0.05], [0.05, 0.05], [0.05, 0.05], [0.05, 0.05]]); run(p, idx.flatMap((i) => Array.from({ length: 9 }, () => [w[i][0] + rnd() * tremble, w[i][1] + rnd() * tremble]))); };
 const chordsOf = (p) => p.draw.line.graph.chords.filter((c) => c.ids.includes('devil'));
 
 test('the spell: black magic? no — an ordinary spell; 20 mana at once, 1 a second while drawing, only from its scroll (own key)', () => {
@@ -67,72 +67,81 @@ test('nothing learnt: it does not start, nothing is paid, no guiding points', ()
     assert.match(said.at(-1), /не знаете/);
 });
 
-test('with help: a trembling hand (±0.4 m) makes a perfect circle; then the hand led point to point lays straight lines; the full star counts', () => {
+test('with help: the ring is shown at once, led along it (trembling ±0.4 m) the circle lies perfectly round and always the same size; then the hand led point to point lays straight lines; the full star counts', () => {
     const { p, g, sent } = stub();
     p.learnFigure('devil');
     p.aim = AIM0();
     assert.equal(p.cast(true), 'Pentagranium');
     assert.deepEqual(g.combat.paid, ['Pentagranium']);
+    assert.equal(p.draw.phase, 'ring', 'the guide is there from the first moment');
+    assert.equal(p.draw.ring.world.length, 16);
+    assert.ok(Math.abs(p.draw.ring.r - 3.5) < 1e-9, 'one size');
     const before = g.combat.fatigue;
-    run(p, roundHand(4, 0.4), 0.05, 'lines');
-    assert.equal(p.draw.phase, 'lines', 'the circle closed by itself');
-    const c = p.draw.line.circle;
-    assert.ok(Math.abs(c.cx) < 0.3 && Math.abs(c.cz - 8) < 0.3 && Math.abs(c.r - 4) < 0.35, `the fit: ${JSON.stringify(c)}`);
-    assert.ok(c.r >= 3 && c.r <= 8);
+    run(p, ringHand(p, 0.4), 0.05, 'lines');
+    assert.equal(p.draw.phase, 'lines', 'the ring is whole');
+    assert.equal(p.draw.line.circle.r, 3.5);
     assert.equal(p.draw.line.world.length, 10, 'five corners and five crossings of the star');
     assert.ok(sent.some((m) => m.k === 'ring'), 'the others see the circle');
-    // the star, chord by chord, from corner to corner (over the crossings)
+    // the star, chord by chord, from corner to corner (over the crossings), staying on each point
     for (const ch of chordsOf(p)) leadTo(p, [ch.nodes[0], ch.nodes.at(-1)]);
     assert.ok(!p.on, 'the figure is whole: it counts and the drawing ends');
     assert.equal(p.marks.size, 1);
     const m = [...p.marks.values()][0];
     assert.equal(m.pent, 'devil');
-    assert.ok(Math.abs(m.x) < 0.4 && Math.abs(m.z - 8) < 0.4 && m.r >= 3 && m.r <= 8);
+    assert.equal(m.r, 3.5, 'every pentagram the same size');
     assert.deepEqual(g._success, ['Pentagranium']);
     assert.equal(sent.at(-1).k, 'mark');
-    assert.ok(sent.filter((x) => x.k === 'seg').length >= 5, 'the lines are shown to the others');
-    assert.ok(g.combat.fatigue < before && before - g.combat.fatigue < 30, 'drawing drained mana by the second');
+    assert.ok(sent.filter((x) => x.k === 'seg').length >= 16 + 5, 'the arcs and the lines are shown to the others');
+    assert.ok(g.combat.fatigue < before && before - g.combat.fatigue < 40, 'drawing drained mana by the second');
     assert.equal(g.dark.level, 0, 'drawing a pentagram does not darken the hero');
 });
 
-test('a connection no learnt figure has is not drawn (a hint), a point with no line to it too; the circle must be drawn first', () => {
-    const { p, said } = stub();
-    p.learnFigure('devil');
+test('the figure is not drawn by itself: a hand going round the circle, or sweeping across the points, draws no lines — even when every figure is known (Creative)', () => {
+    const { p } = stub({ mode: 'creative' });
+    assert.ok(p.known().length >= 4);
     p.aim = AIM0(); p.cast(true);
-    run(p, [[0, 7], [1, 7], [-1, 8]]); // (the hand moves inside the circle before it exists: nothing happens)
-    assert.equal(p.draw.phase, 'circle');
-    run(p, roundHand(4, 0.2), 0.05, 'lines');
-    const L = p.draw.line, ch = chordsOf(p)[0];
-    // two corners that are next to each other round the circle are not joined by any line of the star
-    const corners = L.graph.nodes.map((n, i) => [i, Math.atan2(n.u[1], n.u[0]), Math.hypot(n.u[0], n.u[1])]).filter((x) => x[2] > 0.95);
-    corners.sort((a, b) => a[1] - b[1]);
-    leadTo(p, [corners[0][0], corners[1][0]]);
-    assert.equal(L.drawn.size, 0, 'nothing drawn');
-    assert.match(said.join('|'), /линию не провести/);
-    // led to a point of the right chord: drawn
-    leadTo(p, [ch.nodes[0], ch.nodes.at(-1)]);
-    assert.ok(L.drawn.size >= 3, 'a chord of the star is three lines (over two crossings)');
-    // the same again draws nothing new
-    const n = L.drawn.size;
-    leadTo(p, [ch.nodes.at(-1), ch.nodes[0]]);
-    assert.equal(L.drawn.size, n);
+    run(p, ringHand(p, 0.3), 0.05, 'lines');
+    assert.equal(p.draw.phase, 'lines');
+    // the hand has just gone round the ring and still goes on round it, a point every frame (0.05 s)
+    const w = p.draw.line.world.filter((x) => Math.hypot(x[0] - p.draw.ring.cx, x[1] - p.draw.ring.cz) > 3.3);
+    run(p, [...w, ...w, ...w]);
+    assert.equal(p.draw.line.drawn.size, 0, 'nothing drawn by sweeping');
+    assert.ok(p.on);
 });
 
-test('a hand that goes wide (too small / too big a circle) is told, and the circle begins again; the mana ends the drawing', () => {
+test('a crooked go: points skipped, the other way round, nothing near the ring — the circle only closes when it has been led round; the mana ends the drawing', () => {
     const a = stub(); a.p.learnFigure('devil'); a.p.aim = AIM0(); a.p.cast(true);
-    run(a.p, roundHand(1.6, 0.1));
-    assert.equal(a.p.draw.phase, 'circle'); assert.match(a.said.join('|'), /слишком мал/);
+    run(a.p, [[500, 500], [501, 500]]); // (the wand far from the ring: nothing)
+    assert.equal(a.p.draw.phase, 'ring');
+    const half = a.p.draw.ring.world.slice(0, 8).map((w) => [w[0], w[1]]);
+    run(a.p, half);
+    assert.equal(a.p.draw.phase, 'ring', 'half a circle is no circle');
     const t = stub({ fatigue: 20.4 }); t.p.learnFigure('devil'); t.p.aim = AIM0(); t.p.cast(true);
     assert.ok(t.p.on);
     t.p.update(1); t.p.update(1);
     assert.ok(!t.p.on, 'no mana: the drawing is gone');
 });
 
+test('a connection no learnt figure has is not drawn (a hint)', () => {
+    const { p, said } = stub();
+    p.learnFigure('devil');
+    p.aim = AIM0(); p.cast(true);
+    run(p, ringHand(p, 0.1), 0.05, 'lines');
+    const L = p.draw.line;
+    const corners = L.graph.nodes.map((n, i) => [i, Math.atan2(n.u[1], n.u[0]), Math.hypot(...n.u)]).filter((x) => x[2] > 0.95).sort((a, b) => a[1] - b[1]);
+    leadTo(p, [corners[0][0], corners[1][0]]);
+    assert.equal(L.drawn.size, 0, 'nothing drawn');
+    assert.match(said.join('|'), /линию не провести/);
+    const ch = chordsOf(p)[0];
+    leadTo(p, [ch.nodes[0], ch.nodes.at(-1)]);
+    assert.ok(L.drawn.size >= 3, 'a chord of the star is three lines (over two crossings)');
+});
+
 test('another figure learnt: its points are shown together with the others (their union); the one the hero has not learnt has no points', () => {
     const { p } = stub();
     p.learnFigure('devil'); p.learnFigure('teleport');
     p.aim = AIM0(); p.cast(true);
-    run(p, roundHand(4, 0.2), 0.05, 'lines');
+    run(p, ringHand(p, 0.2), 0.05, 'lines');
     const ids = new Set(p.draw.line.graph.nodes.flatMap((n) => n.ids));
     assert.ok(ids.has('devil') && ids.has('teleport') && !ids.has('life'));
     assert.ok(p.draw.line.world.length > 10);

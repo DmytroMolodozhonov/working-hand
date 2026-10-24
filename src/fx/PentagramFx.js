@@ -300,7 +300,7 @@ export class PentagramFx {
             const c = document.createElement('canvas'); c.width = c.height = 64;
             const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
             // (a solid disc with a soft edge, painted with normal blending in a strong colour: a point of light must be seen on bright grass too)
-            gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,1)'); gr.addColorStop(0.8, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+            gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,1)'); gr.addColorStop(0.58, 'rgba(70,70,70,1)'); gr.addColorStop(0.82, 'rgba(70,70,70,0.95)'); gr.addColorStop(1, 'rgba(70,70,70,0)'); // (a bright centre in a dark rim of the same colour: an outline, seen on pale ground and on dark)
             x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
             const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
             geo.userData.keep = true;
@@ -313,7 +313,7 @@ export class PentagramFx {
         }
         const A = this.anchors, n = Math.min(list.length, ANCHOR_MAX);
         A.pos = list.slice(0, n); A.hover = -1;
-        for (let i = 0; i < n; i++) { _m4.makeScale(1.3, 1, 1.3).setPosition(list[i].x, list[i].y + 0.12, list[i].z); A.mesh.setMatrixAt(i, _m4); A.mesh.setColorAt(i, _col.set(list[i].color ?? 0xfff0b8)); }
+        for (let i = 0; i < n; i++) { const s = list[i].s ?? 1.3; _m4.makeScale(s, 1, s).setPosition(list[i].x, list[i].y + 0.12, list[i].z); A.mesh.setMatrixAt(i, _m4); A.mesh.setColorAt(i, _col.set(list[i].color ?? 0xfff0b8)); }
         A.mesh.count = n; A.mesh.visible = n > 0;
         A.mesh.instanceMatrix.needsUpdate = true; if (A.mesh.instanceColor) A.mesh.instanceColor.needsUpdate = true;
     }
@@ -322,11 +322,11 @@ export class PentagramFx {
     anchorsHover(i, t) {
         const A = this.anchors;
         if (!A || !A.mesh.visible) return;
-        A.mesh.material.opacity = 0.8 + 0.2 * Math.sin(t * 4);
+        A.mesh.material.opacity = 0.92 + 0.08 * Math.sin(t * 4);
         if (A.hover === i) return;
         for (const k of [A.hover, i]) {
             if (k < 0 || !A.pos[k]) continue;
-            const s = k === i ? 2.2 : 1.3;
+            const s = (A.pos[k].s ?? 1.3) * (k === i ? 1.7 : 1);
             _m4.makeScale(s, 1, s).setPosition(A.pos[k].x, A.pos[k].y + 0.12, A.pos[k].z);
             A.mesh.setMatrixAt(k, _m4);
         }
@@ -431,4 +431,4 @@ export class PentagramFx {
 }
 
 const _p = new THREE.Vector3(), _v = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _col = new THREE.Color();
-const ANCHOR_MAX = 160;
+const ANCHOR_MAX = 256;

@@ -1,7 +1,7 @@
 // PentagramAssist.js: the circle fitted to a trembling hand, the guiding points, the lines only between them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitCircle, arcCoverage, CircleAssist, buildGraph, pathBetween, LineAssist, anchorsOf, turnAway, ASSIST } from '../../src/game/PentagramAssist.js';
+import { fitCircle, arcCoverage, CircleAssist, RingAssist, buildGraph, pathBetween, LineAssist, anchorsOf, turnAway, ASSIST } from '../../src/game/PentagramAssist.js';
 import { figureIds } from '../../src/game/PentagramRules.js';
 
 let s = 11;
@@ -64,7 +64,7 @@ test('the star: five corners and five crossings, five chords of three lines; a t
     for (const id of figureIds()) { const gr = buildGraph([id]); assert.ok(gr.nodes.length >= 3 && gr.need[id].length >= 2, id); }
 });
 
-function line(ids = ['devil'], R = 4, rot = 0) { return new LineAssist(buildGraph(ids), { cx: 0, cz: 0, r: R, rot }); }
+function line(ids = ['devil'], R = 4, rot = 0) { return new LineAssist(buildGraph(ids), { cx: 0, cz: 0, r: R, rot }, { armed: true }); }
 const jitter = (p, a = 0.3) => [p[0] + rnd() * a, p[1] + rnd() * a];
 
 test('the wand is drawn to the nearest point (the magnet): a hand beside it counts, a hand far from every point does not', () => {
@@ -115,7 +115,7 @@ test('the learnt figures decide: a figure that is not learnt has no points and c
     const star = buildGraph(['teleport']);
     assert.equal(pathBetween(star, 0, 1).length >= 0, true);
     // nothing learnt: an empty graph, nothing to draw
-    const none = new LineAssist(buildGraph([]), { cx: 0, cz: 0, r: 4, rot: 0 });
+    const none = new LineAssist(buildGraph([]), { cx: 0, cz: 0, r: 4, rot: 0 }, { armed: true });
     assert.equal(none.world.length, 0);
     assert.equal(none.step(1, 1).length, 0);
     // the apex (0, 1) of the figure turned by turnAway points away from the hero at (0, 10) → toward (0, -1)
@@ -142,4 +142,50 @@ test('anchorsOf names the figures each point belongs to (their glow colours)', (
     const a = anchorsOf(L);
     assert.equal(a.length, L.world.length);
     assert.ok(a.every((p) => p.ids.length >= 1));
+});
+
+test('THE GUIDE FROM THE START: a ring of points of one size; led along them (crooked or not) the circle is laid perfectly round; skipped points are filled; a jump across draws nothing', () => {
+    const R = new RingAssist(10, -5);
+    assert.equal(R.world.length, ASSIST.RING_N);
+    assert.equal(R.r, ASSIST.R, 'one size for every pentagram');
+    assert.ok(R.r >= 3.4 && R.r <= 3.6);
+    let closed = null, arcs = 0;
+    for (let i = 0; i <= R.n + 1; i++) {
+        const w = R.world[i % R.n];
+        for (const e of R.step(w[0] + rnd() * 0.4, w[1] + rnd() * 0.4)) { if (e.t === 'arcs') arcs += e.list.length; if (e.t === 'closed') closed = e; }
+    }
+    assert.ok(closed && closed.r === ASSIST.R && closed.cx === 10 && closed.cz === -5, 'whole: the perfect circle');
+    assert.equal(arcs, R.n);
+    // going the other way, skipping every other point
+    const Q = new RingAssist(0, 0); let c2 = null;
+    for (let i = 0; i <= Q.n * 2; i += 2) for (const e of Q.step(...Q.world[(Q.n - (i % Q.n)) % Q.n])) if (e.t === 'closed') c2 = e;
+    assert.ok(c2, 'the other way, two points at a step');
+    // a jump to the far side draws nothing
+    const J = new RingAssist(0, 0);
+    J.step(...J.world[0]);
+    assert.equal(J.step(...J.world[8]).length, 0);
+    assert.equal(J.left, J.n);
+    // a hand far from the ring does nothing
+    assert.equal(new RingAssist(0, 0).step(50, 50).length, 0);
+});
+
+test('a point of the figure is taken only when the wand stays on it (0.3 s); the wand must leave the points once first; a hand sweeping past draws nothing', () => {
+    const L = new LineAssist(buildGraph(['devil', 'teleport']), { cx: 0, cz: 0, r: 3.5, rot: 0 });
+    const w = L.world, c = L.graph.chords.find((k) => k.ids.includes('devil'));
+    // right after the circle the hand stands on a point of it: nothing
+    for (let t = 0; t < 1; t += 0.05) assert.equal(L.step(...w[c.nodes[0]], 0.05).length, 0);
+    assert.equal(L.cur, -1);
+    // away for a moment: armed
+    for (let t = 0; t < 0.4; t += 0.05) L.step(0.05, 0.05, 0.05);
+    assert.ok(L.armed);
+    // sweeping through the corner (0.1 s) and on: not taken
+    for (let t = 0; t < 0.1; t += 0.05) L.step(...w[c.nodes[0]], 0.05);
+    L.step(0.05, 0.05, 0.05);
+    assert.equal(L.cur, -1);
+    // staying: taken; then staying on the far end: the chord is drawn
+    for (let t = 0; t < 0.4; t += 0.05) L.step(...w[c.nodes[0]], 0.05);
+    assert.equal(L.cur, c.nodes[0]);
+    let drawn = 0;
+    for (let t = 0; t < 0.5; t += 0.05) for (const e of L.step(...w[c.nodes.at(-1)], 0.05)) if (e.t === 'edges') drawn += e.keys.length;
+    assert.equal(drawn, 3);
 });

@@ -57,7 +57,7 @@ function install() {
             try { return f.apply(this, a); } finally { B.cur[path] = (B.cur[path] || 0) + performance.now() - t; }
         };
     };
-    for (const p of ['world.update', 'world.terrain.update', 'world.terrain._sendRebuild', 'world.terrain._applyRebuilt', 'world.terrain._buildLocal',
+    for (const p of ['pentagranium.update', 'world.update', 'world.terrain.update', 'world.terrain._sendRebuild', 'world.terrain._applyRebuilt', 'world.terrain._buildLocal',
         'world.terrain._applyBuilt', 'world.terrain._build', 'world.terrain.flora.update', 'houseMagic.update', 'houseMagic._build', 'houseMagic._done',
         'houseMagic._hostStart', 'houseMagic._takeTree', 'houseMagic._whirl', 'houseMagic._furnish', 'castleMagic.update', 'castleMagic._hostStart', 'iceMagic.update',
         'fx.update', 'falling.update', 'destruction.update', 'builder._sendEdits', 'builder.update', 'castleLife.update', 'houses.update', 'spells.update',
@@ -149,14 +149,14 @@ const scenarios = {
             const g = window.__zns.game, P = g.pentagranium, me = g.character.group.position;
             const cx = me.x + 12, cz = me.z, gy = g.collision.groundY(cx, cz);
             P.learnFigure('devil');
-            // the wand draws with help: round the circle (a trembling hand), then led from point to point along the star's chords
-            const R = 4, ring = [];
-            for (let k = 0; k <= 130; k++) { const a = (k / 100) * Math.PI * 2; ring.push([cx + Math.cos(a) * R + Math.sin(k * 7) * 0.3, cz + Math.sin(a) * R + Math.cos(k * 5) * 0.3]); }
-            let lead = [], phase = 'ring', i = 0;
+            // the wand draws with help: led along the guiding ring (a trembling hand), then held on the star's corners one chord after another
+            let seq = [], stage = 'ring', i = 0;
             P.groundAt = () => {
-                const L = P.draw?.line;
-                if (L && phase === 'ring') { phase = 'lead'; i = 0; for (const c of L.graph.chords) for (const n of [c.nodes[0], c.nodes.at(-1)]) for (let k = 0; k < 4; k++) lead.push(L.world[n]); }
-                const arr = phase === 'ring' ? ring : lead, q = arr[Math.min(i, arr.length - 1)];
+                const D = P.draw;
+                if (D && stage === 'ring' && D.phase === 'ring' && !seq.length) for (const w of [...D.ring.world, D.ring.world[0], D.ring.world[1]]) seq.push([w[0] + Math.sin(seq.length * 7) * 0.3, w[1] + Math.cos(seq.length * 5) * 0.3, 1]);
+                if (D && stage === 'ring' && D.phase === 'lines') { stage = 'lead'; seq = [[cx + 40, cz, 25]]; for (const c of D.line.graph.chords) for (const n of [c.nodes[0], c.nodes.at(-1)]) seq.push([D.line.world[n][0], D.line.world[n][1], 30]); i = 0; }
+                let k = i, q = null;
+                for (const e of seq) { if (k < e[2]) { q = e; break; } k -= e[2]; }
                 return q ? { x: q[0], y: g.collision.groundY(q[0], q[1]), z: q[1] } : null;
             };
             const orig = P._drawStep.bind(P);
@@ -168,7 +168,7 @@ const scenarios = {
             return true;
         });
         if (!ok) return 'не началось';
-        await sleep(6000);
+        await sleep(24000); // (the game runs slowly here: the ring a point a frame, then 10 points held for 0.3 s each)
         const marks = await page.evaluate(() => {
             const g = window.__zns.game, P = g.pentagranium, b = window.__pgb;
             const m = [...P.marks.values()][0];
