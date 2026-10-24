@@ -22,7 +22,7 @@ const L = '(?<![а-яa-z0-9])';
 const R = '(?![а-яa-z0-9])';
 
 export const PLACES = ['market', 'throne', 'gate', 'walls', 'barracks', 'home'];
-export const TARGETS = ['zombies', 'spider', 'animals', 'enemies'];
+export const TARGETS = ['zombies', 'spider', 'animals', 'enemies', 'sailors', 'dragon'];
 
 /** Army orders: they move the castle's knights (only the king gives them). */
 export const ARMY = new Set(['gather_army', 'attack', 'defend_castle', 'dismiss', 'guard_me']);
@@ -177,6 +177,8 @@ export function parseToolCalls(raw) {
 
 // ------------------------------------------------------------------ targets
 
+const T_SAILOR = new RegExp(`${L}(моряк|матрос|пират|корсар|флибустьер|экипаж)`);
+const T_DRAGON = new RegExp(`${L}(дракон)`);
 const T_ZOMBIE = new RegExp(`${L}(зомби|мертвец|мертвяк|нежит|упыр|вурдалак|скелет|покойник|нечист)`);
 const T_SPIDER = new RegExp(`${L}(паук|паучищ|паучих)`);
 const T_ANIMAL = new RegExp(`${L}(зверь|звер[яеи]|животн|волк|медвед|кабан|свин|коров|барана|баранов|овец|овц|лошад|кон[ья]${R})`);
@@ -192,6 +194,8 @@ export function resolveTarget(target, players = []) {
     const t = normalize(target);
     if (!t) return null;
     if (TARGETS.includes(t)) return { kind: t };
+    if (/^sailor/.test(t) || T_SAILOR.test(t)) return { kind: 'sailors' };
+    if (/^dragon/.test(t) || T_DRAGON.test(t)) return { kind: 'dragon' };
     if (/^(zombie|undead)/.test(t) || T_ZOMBIE.test(t)) return { kind: 'zombies' };
     if (/^spider/.test(t) || T_SPIDER.test(t)) return { kind: 'spider' };
     if (/^(animal|beast)/.test(t) || T_ANIMAL.test(t)) return { kind: 'animals' };

@@ -84,6 +84,7 @@ export class VillagerCommands {
             case 'weapon': v.sheath = what === 'away'; if (what === 'out') v.sheath = false; break;
             case 'spare': v.spare = { until: Date.now() + 120000, id: a.foe || null }; break;
             case 'fetch': this._fetch(v, what, a, me, base); break;
+            case 'justice': if (!this.life.justice.run(v, what, a, me, by)) return false; break; // (an arrest, a search — JusticeLife)
             case 'court': if (a.op) return this.life.court?.hostOp(v, a, by) ?? false; break; // (a guest-king's word to the vizier: the host does it — CourtLife)
             case 'rank': { // the king tells his vizier whom to raise: only the king himself; the host keeps it (CastleLife.setRank)
                 if (!this._owner(v, by) || a.pid == null || a.pid === by) return false;
@@ -264,6 +265,7 @@ export class VillagerCommands {
             case 'spar': return this._sparStep(v, c, dt);
             case 'spme': return this._spmeStep(v, c, dt);
             case 'fetch': return this._fetchStep(v, c, dt);
+            case 'arrest': case 'captive': case 'search': return this.life.justice.step(v, c, dt);
             default: this.clear(v); return false;
         }
     }

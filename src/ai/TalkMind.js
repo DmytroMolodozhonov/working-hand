@@ -184,6 +184,9 @@ const PLACE = {
     farmer: 'у своего поля и дома в замке',
 };
 
+/** Characters of earlier talk sent with a question (the net's window is 8192 tokens; Russian ≈ 2.5 chars per token). */
+export const HISTORY_CHARS = 3200;
+
 export const OPEN_TOPICS = new Set(['unknown', 'news', 'about_castle', 'about_king', 'zombies', 'magic', 'weather', 'money', 'family', 'flirt', 'quest', 'joke']);
 
 export class TalkMind {
@@ -253,6 +256,7 @@ export class TalkMind {
             ctx.court ? `${ctx.court}` : '',
             ctx.goal ? `${ctx.goal} Это дело твоей жизни: если к слову — вспомни о нём, но не навязывай.${ctx.companion ? ' Сейчас ты идёшь в путь вместе с собеседником.' : ''}` : '',
             ctx.known ? `Что ты знаешь о собеседнике: ${ctx.known}.` : '',
+            brain.memory?.older ? `Раньше в этом разговоре (кратко): ${brain.memory.older}` : '',
             brain.decide ? this._willLine(brain, ctx) : '',
             ctx.hostile ? 'Этот человек недавно напал на кого-то в замке — ты его боишься и не доверяешь.' : '',
             m.talks > 1 ? 'Вы уже поздоровались и сейчас разговариваете: НЕ здоровайся снова, продолжай разговор по смыслу.' : '',
@@ -293,16 +297,25 @@ export class TalkMind {
         return {
             system: this.basePrompt(),
             context: this.persona(ahead, c),
-            history: (m.log || []).slice(-6).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text })),
+            history: this._history(brain, 6),
             tools: this.strong ? TOOLS : toolsFor(brain.role, c),
         };
     }
 
-    _history(brain) {
+    _history(brain, max = 20) {
         const log = brain.memory?.log || [];
-        // (the last line pair is the one being answered: the rules logged it already; the 9 exchanges before it —
-        // the talk goes on, not from nothing each time (the author); on the graphics card ~300 words more cost ~0.1 s)
-        return log.slice(-20, -2).map((l) => ({ role: l.who === 'player' ? 'user' : 'assistant', content: l.text }));
+        // (the last line pair is the one being answered: the rules logged it already. By size, newest first: the window
+        // of the net is small, and a count of lines let long talks push the start of the prompt out — the villager
+        // forgot the thread after ~3 replies (the author). What does not fit goes to memory.older — see _logLine)
+        let left = HISTORY_CHARS;
+        const out = [];
+        for (let i = log.length - 3; i >= 0 && out.length < max; i--) {
+            const t = log[i].text || '';
+            if (t.length > left && out.length) break;
+            left -= t.length;
+            out.push({ role: log[i].who === 'player' ? 'user' : 'assistant', content: t });
+        }
+        return out.reverse();
     }
 
     _permCtx(brain, ctx) {

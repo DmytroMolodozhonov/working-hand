@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { detectOrder } from '../ai/TalkActions.js';
 import { titleFor, vizierLine, RANK_KEYS } from './Ranks.js';
+import { classOf, REFUSE_CLASS, GO_CLASS, mayArrest } from './Justice.js';
 import { parseCommand, parseCommands, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
 
 const SHOUT_HEAR = 30; // m: a shouted order is heard by the guard this far (as for the army's orders)
@@ -23,7 +24,7 @@ const SPARRERS = new Set(['knight']);
 /** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
 const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
 /** Commands that win over the king's old army-order reader (it knows no hand pointing, pairs or formations). */
-const NEW_WINS = new Set(['spar_group', 'fight_him', 'attack_him', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight']);
+const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight']);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
@@ -140,6 +141,7 @@ export class CommandTalk {
         if (kind === 'cast') return this._cast(lead, what, cmd, text);
         if (kind === 'rank') return this._rank(lead, what, cmd, text, reply);
         if (kind === 'social') return this._social(lead, what, cmd, text, reply);
+        if (kind === 'justice') { const r = this._justice(lead, what, doers, cmd, text, reply, ack); if (r !== undefined) return r; }
 
         // --- a target: «сразись с ним», «не трогай его»
         let foe = null, foes = [];
@@ -168,7 +170,7 @@ export class CommandTalk {
                 this._log(text, cmd, lead, `спарринг ${pairs.length} пар, ${cmd.args.mode}`);
                 return true;
             }
-            case 'fight_him': case 'attack_him': {
+            case 'fight_him': {
                 if (!foe) return true;
                 const targets = foes.length ? foes : [foe];
                 const attackers = doers.filter((k) => !targets.includes(k)).slice(0, 4);
@@ -176,10 +178,10 @@ export class CommandTalk {
                 // each attacker takes a target (round the list); a knight attacked fights back at him — a fair fight, not a beating
                 attackers.forEach((k, i) => {
                     const f = targets[i % targets.length];
-                    life.orders.run(k, 'cmd', { id: cmd.id === 'attack_him' ? 'attack_him' : 'fight_him', foe: f.id, mode: cmd.args.mode }, by);
+                    life.orders.run(k, 'cmd', { id: 'fight_him', foe: f.id, mode: cmd.args.mode }, by);
                     if (cmd.id === 'fight_him' && f.role === 'knight' && i < targets.length) life.orders.run(f, 'cmd', { id: 'fight_him', foe: k.id, mode: cmd.args.mode }, by);
                 });
-                reply(cmd.id === 'attack_him' ? pick(['Задержу!', 'Есть, берём его!']) : cmd.args.mode === 'deadly' ? pick(['Он сам напросился. К бою!', 'Что ж, бой насмерть!', 'Приказ есть приказ — бой!']) : pick(['Есть! Покажу, чему меня учили.', 'Слушаюсь! Сразимся.', 'Принял вызов!']));
+                reply(foes.some((f) => f.role !== 'knight' && !f.wizard) ? pick(['Это же мирный человек… Но приказ есть приказ.', 'Если таков ваш приказ, Ваше Величество… Слушаюсь.']) : cmd.args.mode === 'deadly' ? pick(['Он сам напросился. К бою!', 'Что ж, бой насмерть!', 'Приказ есть приказ — бой!']) : pick(['Есть! Покажу, чему меня учили.', 'Слушаюсь! Сразимся.', 'Принял вызов!']));
                 this._log(text, cmd, lead, `бой: ${attackers.length} против ${targets.map((f) => f.name).join(', ')}, ${cmd.args.mode}`);
                 return true;
             }
@@ -331,7 +333,7 @@ export class CommandTalk {
             if (cmd.id === 'spare') { ok.push(f); continue; }
             if (f === lead) { why = why || { line: pick(SPAR_REFUSALS.self), why: 'сам' }; continue; }
             if (f.role === 'king') { why = why || { line: pick(SPAR_REFUSALS.king), why: 'король' }; continue; }
-            if (cmd.id !== 'attack_him' && f.role !== 'knight' && !f.wizard) { why = why || { line: pick(SPAR_REFUSALS.civilian), why: 'мирный' }; continue; }
+            if (cmd.id === 'fight_him' && cmd.args.mode !== 'deadly' && f.role !== 'knight' && !f.wizard) { why = why || { line: pick(SPAR_REFUSALS.civilian), why: 'мирный' }; continue; } // (an arrest — any; a fight to the death at the king's word — any; a mere spar — only the like of himself)
             ok.push(f);
         }
         if (!ok.length) return why || { line: pick(SPAR_REFUSALS.none), why: 'нет цели' };
@@ -486,6 +488,58 @@ export class CommandTalk {
             g.hud?.setVoice?.(`💰 ${lead.name} одолжил вам ${r.give} монет`, true);
         }
         return done(`${key}: ${r.yes ? 'да (' + r.by + ')' : 'нет'}`);
+    }
+
+    /** The king's law: a class («убейте всех моряков»), an arrest, the jail, a search of a house (Justice.js / JusticeLife). */
+    _justice(lead, what, doers, cmd, text, reply, ack) {
+        const g = this.game, life = this.life, by = g.localId;
+        const done = (why) => { this._log(text, cmd, lead, why); return true; };
+        if (what === 'class') {
+            const c = classOf(text.replace(/^.*?(убей|убейте|перебей|перебейте|уничтожь|уничтожьте|истреби|истребите|вырежьте|вырежи|порубите|покрошите|расправьтесь с|расправься с|прикончите|прикончи|убивайте|убивай|разгромите|разгроми)/i, ''));
+            if (!c) return false;
+            if (c.act === 'refuse') { reply(pick(REFUSE_CLASS[c.why] || REFUSE_CLASS.none)); return done('отказ: ' + c.why); }
+            if (c.target === 'sailors') {
+                // the hero's own ship's crew is not an enemy
+                for (const v of g.ships?.crew?.byId?.values?.() || []) if (g.ships.loyalTo(v.ship, by)) { reply(pick(REFUSE_CLASS.ship)); return done('отказ: свои моряки'); }
+            }
+            life.orders.run(lead, 'attack', { target: c.target }, by);
+            reply(pick(GO_CLASS[c.target] || GO_CLASS.enemies));
+            return done('в бой: ' + c.target);
+        }
+        if (what === 'arrest') {
+            const t = this._target(cmd, lead, doers);
+            if (t.line) { reply(t.line); return done('цель: ' + t.why); }
+            if (t.creature) { reply('Это не человек, Ваше Величество — арестовать нельзя.'); return done('не человек'); }
+            const m = mayArrest(t.vs || [t.v], { all: !!cmd.args.all, ownerId: null });
+            if (!m.ok) { reply(m.line); return done('арест: ' + m.line); }
+            const attackers = doers.filter((k) => !m.targets.includes(k));
+            if (!attackers.length) { reply('Некому — все заняты.'); return done('некому'); }
+            m.targets.forEach((p, i) => life.orders.run(attackers[i % attackers.length], 'cmd', { id: 'arrest', foe: p.id }, by));
+            reply(m.note ? `${m.note}` : ack() || 'Слушаюсь! Задержим.');
+            return done(`арест: ${m.targets.map((p) => p.name).join(', ')}`);
+        }
+        if (what === 'release') {
+            const cs = lead.cs;
+            const out = life.justice.release(cs, null, by);
+            reply(out.length ? pick(['Выпускаем, Ваше Величество.', 'Слушаюсь. Двери открыты.']) : 'В тюрьме по вашему приказу никого нет.');
+            return done(`выпущено: ${out.length}`);
+        }
+        if (what === 'report') {
+            reply(life.justice.prisonReport(lead.cs));
+            return done('тюрьма');
+        }
+        if (what === 'search') {
+            const t = cmd.args.house || { ref: 'none' };
+            let house = null, point = null;
+            if (t.ref === 'name') { const v = [...life.byId.values()].find((x) => x.name === t.name); house = v?.entry?.home; }
+            else if (t.ref === 'point') point = this.pointGround();
+            const k = doers[0] || lead;
+            const ok = life.orders.run(k, 'cmd', { id: 'search_house', house: house >= 0 ? house : null, point }, by);
+            void ok;
+            reply(pick(['Слушаюсь! Обыщем.', 'Есть! Перевернём всё вверх дном.']));
+            return done('обыск');
+        }
+        return undefined;
     }
 
     _huntCreature(doers, kind, text, cmd, lead, ack) {

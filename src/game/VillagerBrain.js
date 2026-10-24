@@ -1001,7 +1001,16 @@ export class VillagerBrain {
         if (!text) return;
         const log = this._memory.log;
         log.push({ who, text });
-        while (log.length > 22) log.shift(); // (the last ~11 exchanges: the net keeps the thread of the talk)
+        while (log.length > 22) {
+            // (dropped lines are not lost: a short trace stays in memory.older and goes into the villager's description)
+            const l = log.shift();
+            const t = l.text.replace(/\s+/g, ' ').slice(0, 70);
+            const m = this._memory;
+            // (the very beginning — who he is, what he asked for — stays pinned; the rest slides)
+            if (!m.olderHead && l.who === 'player') m.olderHead = `Игрок: ${l.text.replace(/\s+/g, ' ').slice(0, 140)}.`;
+            else m.olderTail = `${m.olderTail || ''}${l.who === 'player' ? ' Игрок: ' : ' Ты: '}${t}.`.slice(-340);
+            m.older = `${m.olderHead || ''}${m.olderTail ? ' … ' + m.olderTail : ''}`;
+        }
     }
 
     // ---------------------------------------------------------- main entry

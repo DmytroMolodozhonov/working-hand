@@ -211,7 +211,7 @@ class NativeLLM:
             os.makedirs(cache, exist_ok=True)
             threads = max(2, min(8, (os.cpu_count() or 4) // 2))  # (half the cores: the game and the camera keep theirs)
             args = [self.binary(), "-hf", MODELS[model], "--host", "127.0.0.1", "--port", str(self.port),
-                    "-ngl", GPU_LAYERS, "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "4096", "-t", str(threads),
+                    "-ngl", GPU_LAYERS, "--no-mmproj", "--jinja", "--reasoning", "off", "-c", "8192", "-t", str(threads),
                     "--no-ui", "-np", "1", "--api-key", self._key,
                     # (Gemma's sliding-window layers kept whole: a question that shares its start with the words read
                     # before reuses them — without it a changed end made the program read the villager anew, 3–7 s)

@@ -42,6 +42,7 @@ import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
+import { JusticeLife } from './JusticeLife.js';
 import { levelOf, withRank, commandsGuard, isForgiven, isRespected, RANK_TITLES, GREET_RANKED, fill as fillRank } from './Ranks.js';
 import { VillagerModel, villagerLook, strippedLook, VILLAGER_FOOT_OFFSET, VILLAGER_SIT_OFFSET } from '../entities/VillagerModel.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -297,6 +298,7 @@ export class CastleLife {
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
+        this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
         this.court = new CourtLife(this); // the treasury, the people's troubles, the vizier who reports and leads (Court.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
@@ -407,7 +409,7 @@ export class CastleLife {
     // ---------------------------------------------------------- villagers
     _activate(cs, idx, at, job, extra = {}) {
         const def = cs.def;
-        if (cs.active.has(idx) || this.state(def.id).killed.has(idx)) return null;
+        if (cs.active.has(idx) || this.state(def.id).killed.has(idx) || this.justice?.isJailed(cs, idx)) return null; // (and the ones in the king's jail are not out and about)
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
@@ -3759,9 +3761,9 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length) {
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length) {
                 const cs = this.castles.get(id);
-                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.court ? { court: s.court } : {}) }) };
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;

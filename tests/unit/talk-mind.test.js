@@ -407,3 +407,21 @@ test('a big net that is slow on this computer: the rules answer what they unders
     assert.ok(r2.reply.length > 0);
     assert.match(m2.lastError, /stopped/);
 });
+
+test('долгий разговор: начало не теряется, запрос помещается в окно нейросети', () => {
+    const b = brain('farmer');
+    const mind = new TalkMind({ llm: fakeLLM('ок') });
+    for (let i = 0; i < 16; i++) {
+        b._logLine('player', i === 0 ? 'Меня зовут Олег, я ищу пропавшего брата Ивана.' : `Расскажи подлиннее про урожай номер ${i}, пожалуйста, очень подробно и долго.`);
+        b._logLine('npc', `Ну, друг, урожай номер ${i} вышел хороший, зерна много, амбар полон, хватит до весны.`);
+    }
+    assert.ok(b.memory.log.length <= 22);
+    assert.match(b.memory.older, /Олег/, 'сжатая память хранит начало');
+    assert.match(mind.persona(b, {}), /Раньше в этом разговоре.*Олег/);
+    const h = mind._history(b);
+    const chars = h.reduce((n, x) => n + x.content.length, 0);
+    assert.ok(chars <= 3300, `история ${chars}`);
+    assert.ok(h.length >= 6, 'несколько последних обменов на месте');
+    const total = mind.basePrompt().length + mind.persona(b, {}).length + chars + JSON.stringify(toolsFor('farmer', {})).length;
+    assert.ok(total < 10500, `запрос ${total} знаков`); // ≈ 4200 токенов из 8192
+});

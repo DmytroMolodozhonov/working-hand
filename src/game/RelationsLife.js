@@ -392,6 +392,7 @@ export class RelationsLife {
         for (const [pid, r] of Object.entries(st.rep)) rep[pid] = r;
         const out = { rel, rep };
         if (st.court) out.court = st.court;
+        if (st.jail) out.jail = st.jail;
         return out;
     }
 
@@ -403,6 +404,7 @@ export class RelationsLife {
         st.rel = s.rel && typeof s.rel === 'object' ? s.rel : (st.rel || {});
         st.rep = s.rep && typeof s.rep === 'object' ? s.rep : (st.rep || {});
         if (s.court && typeof s.court === 'object') st.court = s.court;
+        if (s.jail && typeof s.jail === 'object') st.jail = s.jail;
     }
 
     dispose() { this.bars?.dispose(); this.bars = null; }

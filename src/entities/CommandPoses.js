@@ -7,7 +7,7 @@
  * knees kL/kR, bounce). The pelvis follows the legs by itself, so a crouch lowers the whole body. Pure: no THREE.
  */
 
-export const COMMAND_MODES = ['crouch', 'salute', 'wave', 'nod', 'dance', 'laugh', 'hug', 'attn'];
+export const COMMAND_MODES = ['crouch', 'salute', 'wave', 'nod', 'dance', 'laugh', 'hug', 'attn', 'cuffed'];
 
 /** Joint targets of a command pose into T. Returns the smoothing rate (or 0: not mine). */
 export function commandPose(T, mode, t) {
@@ -60,6 +60,10 @@ export function commandPose(T, mode, t) {
             T.hx = -0.07; T.headX = -0.02; T.headY = 0;
             T.lL = 0.02; T.lR = -0.02;
             return 16;
+        case 'cuffed': // the hands behind the back in cuffs, the head down: walks, but is led
+            T.aLX = -0.62; T.aRX = -0.62; T.aLZ = 0.16; T.aRZ = -0.16;
+            T.hx = 0.1; T.headX = 0.38; T.wrist = -0.2;
+            return 12;
         default:
             return 0;
     }

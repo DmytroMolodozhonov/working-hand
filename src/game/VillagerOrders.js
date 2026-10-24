@@ -84,7 +84,7 @@ export class VillagerOrders {
                     if (args.playerId === this.game.localId) this.game.hud?.setVoice?.('⚔️ Король приказал страже взять вас!', true);
                     else this.game.sync?.villagerAlarm?.(args.playerId, cs.def.name);
                 } else {
-                    const what = ['zombies', 'spider', 'animals', 'enemies'].includes(args.target) ? args.target : 'enemies';
+                    const what = ['zombies', 'spider', 'animals', 'enemies', 'sailors', 'dragon'].includes(args.target) ? args.target : 'enemies';
                     for (const k of army) { k.order = { kind: 'hunt', what, by, t: 180 }; k.follow = null; k.path = null; k.investigate = null; }
                 }
                 this._shout(army, ['В атаку!', 'Бей их!', 'За короля!', 'Вперёд!'], v);
@@ -287,6 +287,7 @@ export class VillagerOrders {
         if (what === 'spider' || what === 'enemies') for (const s of g.spiders?.targets?.() || []) out.push({ kind: 's', obj: s });
         if (what === 'dragon' || what === 'enemies') for (const d of g.dragons?.targets?.() || []) out.push({ kind: 'D', obj: d });
         if (what === 'animals') for (const a of g.animals?.targets?.() || []) out.push({ kind: 'a', obj: a });
+        if (what === 'sailors') for (const v of g.ships?.crew?.byId?.values?.() || []) if (!v.dead && !v.overboard && !g.ships.loyalTo(v.ship, g.localId)) out.push({ kind: 'S', obj: v }); // (the ships' crews: not the hero's own)
         return out;
     }
 
@@ -417,6 +418,7 @@ export class VillagerOrders {
         else if (c.kind === 's') g.spiders?.hit?.(c.obj, dmg * 2, 'melee');
         else if (c.kind === 'D') g.dragons?.hit?.(c.obj, dmg * 2, 'melee', o.by);
         else if (c.kind === 'I') g.iceCastle?.hit?.(c.obj, dmg, 'servant', o.by);
+        else if (c.kind === 'S') g.ships?.crew?.hit?.(c.obj, dmg, { x: dir.x, y: 0, z: dir.z }, null, { weapon: true, kind: 'knight' });
         // (a knight / a wizard who went at the king: a guard's blow is nobody's «crime» — not the king's: `by` stays empty)
         else if (c.kind === 'v') g.castleLife?.hit?.(c.obj, dmg, dir, null, { via: 'guard' });
     }
