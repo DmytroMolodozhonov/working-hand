@@ -59,6 +59,7 @@ export const EAT = {
     INSIDE_MAX: 10, // s: the most a man is kept inside (then he is spat out, tired: not a certain death)
     SPIT_V: 11, // m/s of a spat-out body
     COOL: 6, // s before it eats again after a meal
+    COOL_MAN: 25, // … after it spat a man out (full, tired of him): he has time to walk away
     ANIMAL_BITE: 6, // HP a bite on an animal (three bites kill most)
     TOSS_V: 9, // m/s: tendrils fling a creature
 };

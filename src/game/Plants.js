@@ -414,7 +414,7 @@ export class Plants {
                 return;
             case 'spit':
                 if (!p.spat) { p.spat = true; this._hold(p, false); this._flingPrey(p); }
-                if (p.t >= 0.7) { this._letGo(p, EAT.COOL); }
+                if (p.t >= 0.7) { this._letGo(p, prey?.k === 'p' ? EAT.COOL_MAN : EAT.COOL); }
                 return;
             case 'frozen': return;
             default: p.cool = EAT.COOL; this._enter(p, 0);
