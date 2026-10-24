@@ -1776,3 +1776,22 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 #fatigue-container.marked #fatigue-text::before { content: '\1F70F '; color: #c4283f; }
 #fatigue-container.black #fatigue-fill { background: linear-gradient(90deg, #07000a, #2a0614 60%, #5a0c22); box-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 0 6px rgba(138, 15, 36, 0.9); transition: width 1s linear; animation: none; }
 #fatigue-container.black #fatigue-fill::after { display: none; }
+
+/* «Магия»: sections, pentagram cards, potion ingredients */
+.magic-sections { margin-bottom: 10px; }
+.magic-sections .sub-tab { font-size: 0.95rem; padding: 8px 16px; }
+.pent-card { gap: 6px; }
+.pent-pic { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.pent-pic.dark { background: radial-gradient(circle, #2a0a10 0%, #12060a 70%); box-shadow: 0 0 22px rgba(179, 18, 30, 0.45); }
+.pent-pic.light { background: radial-gradient(circle, #3a3320 0%, #15130a 70%); box-shadow: 0 0 22px rgba(255, 215, 120, 0.4); }
+.pent-pic.locked { background: radial-gradient(circle, #20232a 0%, #111318 70%); border: 2px dashed rgba(255, 255, 255, 0.18); }
+.pent-svg { width: 100%; height: 100%; }
+.pent-q { font-size: 3.2rem; color: rgba(255, 255, 255, 0.28); font-weight: 700; }
+.pent-card.unknown .item-name { opacity: 0.85; }
+.pent-dark { background: rgba(179, 18, 30, 0.35); color: #ffb3b8; }
+.pent-light { background: rgba(255, 210, 110, 0.25); color: #ffe6a3; }
+.potion-ings { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 8px; }
+.potion-ing { display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 14px; padding: 3px 10px 3px 6px; font-size: 0.8rem; }
+.potion-ing img { width: 20px; height: 20px; object-fit: contain; }
+.potion-emoji { font-size: 1.05rem; }
+#tab-spells, #pause-spells { overflow-y: auto; }

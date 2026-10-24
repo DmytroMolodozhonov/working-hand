@@ -14,7 +14,7 @@ import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
 import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
-import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
+import { renderMagicTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
 import { PlayerSheetView } from './ui/PlayerSheet.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
 import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
@@ -155,7 +155,7 @@ tabBtns.forEach((btn) => {
         if (btn.dataset.tab === 'tab-game') { updateGameMapList(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-items') renderItemsTab();
         if (btn.dataset.tab === 'tab-mechanics') renderMechanicsTab();
-        if (btn.dataset.tab === 'tab-spells') renderSpellsTab();
+        if (btn.dataset.tab === 'tab-spells') renderMagicTab();
         if (btn.dataset.tab === 'tab-mp') { refreshServers(); renderSavedWorlds(); }
         if (btn.dataset.tab === 'tab-character') { window.__charEditor = window.__charEditor || new CharacterEditor($('tab-character')); window.__charEditor.show(); }
         else window.__charEditor?.hide();
@@ -1247,7 +1247,11 @@ function showPauseTab(id) {
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
-    if (id === 'pause-spells') { const cr = game?.config?.mode === 'creative'; renderSpellsTab('pause-spell-cats', 'pause-spells-grid', cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell)); }
+    if (id === 'pause-spells') {
+        const cr = game?.config?.mode === 'creative';
+        renderMagicTab({ bar: 'pause-magic-sections', spells: 'pause-magic-spells', potions: 'pause-magic-potions', pents: 'pause-magic-pentagrams', cats: 'pause-spell-cats', grid: 'pause-spells-grid', pgrid: 'pause-pentagrams-grid', vgrid: 'pause-potions-grid' },
+            cr ? null : (spell) => !!game?.canSaySpell?.(spell), cr ? null : (spell) => !!game?.mana?.spellsUsed?.has(spell), new Set(game?.pentagranium?.known?.() || []));
+    }
     // (the achievements are only the bosses: who is beaten in THIS world is ticked there — the author: no separate tab)
     if (id === 'pause-bosses') renderBossesTab('pause-bosses-list', game?.achievements?.done || null);
 }

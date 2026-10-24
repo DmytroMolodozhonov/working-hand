@@ -13,6 +13,9 @@ import { ACH, ACH_BY_ID } from '../game/Achievements.js';
 import { howLearned, teachKey } from '../game/SpellBook.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { firstSpellGain, SAME_SPELL } from '../game/Mana.js';
+import { RECIPES, INGREDIENT_RU } from '../game/Potions.js';
+import { PENTAGRAMS } from '../game/Pentagrams.js';
+import { figureOf, figureLines, figureIds } from '../game/PentagramRules.js';
 
 export const SPELL_CATEGORIES = [
     { id: 'fight', name: '🔥 Боевые' },
@@ -149,7 +152,6 @@ export const ITEM_CATEGORIES = [
     { id: 'weapon', name: '⚔️ Оружие и защита' },
     { id: 'magic', name: '🪄 Волшебные вещи' },
     { id: 'things', name: '🎒 Вещи и еда' },
-    { id: 'potions', name: '🧪 Зелья' },
     { id: 'world', name: '🐾 Существа и места' },
 ];
 
@@ -725,7 +727,7 @@ export function renderSpellsTab(catsId = 'spell-cats', gridId = 'spells-grid', c
 
 export function renderItemsTab(extra = []) {
     const known = new Set(ITEM_CATEGORIES.map((c) => c.id));
-    const list = [...ITEMS, ...extra].map((it) => (known.has(it.cat) ? it : { ...it, cat: 'things' }));
+    const list = [...ITEMS, ...extra].filter((it) => it.cat !== 'potions').map((it) => (known.has(it.cat) ? it : { ...it, cat: 'things' }));
     renderCats('item-cats', 'items-grid', ITEM_CATEGORIES, list, currentItemCat, (id) => { currentItemCat = id; renderItemsTab(extra); });
 }
 
@@ -793,3 +795,152 @@ export function renderBossesTab(boxId = 'bosses-list', done = null) {
     box.innerHTML = `<div class="boss-grid">${cards}</div>
         <div class="boss-high">🌟 Победите всех — станете <b>Высшим магом</b>: ещё <b>+${ACH.HIGH_MANA}</b> ячеек маны и костюм Высшего мага.</div>`;
 }
+
+
+// ======================================================================= «✨ Магия»: заклинания, зелья, пентаграммы
+
+/** The tree of the «Магия» tab (pure): the tab and its three sections. */
+export function codexTabs() {
+    return [{
+        id: 'magic', name: '✨ Магия', children: [
+            { id: 'spells', name: '📖 Заклинания' },
+            { id: 'potions', name: '🧪 Зелья' },
+            { id: 'pentagrams', name: '🩸 Пентаграммы' },
+        ],
+    }];
+}
+
+/** What each pentagram gives you (for the player: first the use, then how). Others come from the table's own `effect`. */
+const PENT_TEXT = {
+    devil: 'Даёт ещё 25% силы убитого вами волшебника. Положите на горящую пентаграмму тело волшебника (его силу вы уже забрали) и заплатите 50 маны — слов говорить не нужно. Одно тело — один раз. Каждый обряд делает вас чуть темнее.',
+    teleport: 'Переносит вас на парную пентаграмму, как далеко бы она ни была. Нарисуйте две такие пентаграммы, встаньте на одну, не двигайтесь 3 секунды и заплатите 50 маны. Остаётся на земле навсегда.',
+    life: 'Возвращает здоровье целиком и останавливает кровь. Встаньте на неё и заплатите 50 маны. Остаётся на земле навсегда, пользоваться можно сколько угодно раз.',
+    mend: 'Чинит броню, которая на вас. Встаньте на неё — каждая часть платит свою цену маны (обычная дешевле волшебной); что не хватило оплатить, остаётся как было. Остаётся на земле навсегда.',
+    breakward: 'Снимает магические ограничения: можно сказать заклинание, которому не хватает ячеек маны, и держать удерживаемое, даже когда мана кончилась — но с риском беды. Встаньте на неё и заплатите 50 маны; метка живёт до смерти. Пентаграмма одноразовая. Чёрная магия.',
+    gargoyles: 'Выпускает стаю из 30 адских горгулий и грозу: они охотятся на всех вокруг, а вас первые 20 секунд щадят. Нарисуйте рисунок и заплатите 150 маны. Одноразовая, земля вокруг остаётся чёрной. Чёрная магия.',
+    monster: 'Превращает вас на 10 минут в огромного монстра-волкодава, в 7 раз больше человека, с кулаками, что ломают дома. Встаньте в горящий круг и заплатите 200 маны. Одноразовая. Чёрная магия.',
+    enchant: 'Зачаровывает вещь — оружие, лук, броню, мантию, щит или палочку. Положите по одной вещи в круг: обряд берёт 30% вашей текущей маны, и чем больше взято, тем крепче чары. Зачарованное второй раз не зачаровать. Остаётся на земле навсегда.',
+};
+
+const hexCss = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+
+/** A glowing picture of a pentagram: the ring and its lines (SVG, the figure from PentagramRules). */
+export function pentagramSvg(id) {
+    const def = PENTAGRAMS[id];
+    if (!def || !figureOf(id)) return '';
+    const col = hexCss(def.glow ?? 0xc01830), dark = !!def.dark;
+    const core = dark ? '#ffd6d6' : '#fffbe8';
+    const pt = ([x, z]) => `${(50 + x * 40).toFixed(1)},${(50 - z * 40).toFixed(1)}`;
+    const lines = figureLines(id).map((poly) => `<polygon points="${poly.map(pt).join(' ')}" />`).join('');
+    const ticks = Array.from({ length: 24 }, (_, i) => { const a = (i / 24) * Math.PI * 2; return `<line x1="${(50 + Math.cos(a) * 43).toFixed(1)}" y1="${(50 + Math.sin(a) * 43).toFixed(1)}" x2="${(50 + Math.cos(a) * 46.5).toFixed(1)}" y2="${(50 + Math.sin(a) * 46.5).toFixed(1)}"/>`; }).join('');
+    const gid = `pg-${id}`;
+    return `<svg class="pent-svg" viewBox="0 0 100 100" role="img" aria-label="Рисунок: ${def.title}">
+        <defs><radialGradient id="${gid}" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${col}" stop-opacity="0.35"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient>
+        <filter id="${gid}-g" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+        <circle cx="50" cy="50" r="49" fill="url(#${gid})"/>
+        <g fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" filter="url(#${gid}-g)"><circle cx="50" cy="50" r="40.5"/><circle cx="50" cy="50" r="44" stroke-width="0.6" opacity="0.7"/>${lines}</g>
+        <g stroke="${col}" stroke-width="0.6" opacity="0.8">${ticks}</g>
+        <g fill="none" stroke="${core}" stroke-width="0.5" opacity="0.85" stroke-linejoin="round">${lines}</g></svg>`;
+}
+
+/** The cards of the pentagrams (pure data): a card for every row of the table; the picture only for those the hero knows. `known` — a Set of ids (null: none). */
+export function pentagramCards(known = null) {
+    return Object.values(PENTAGRAMS).map((def) => {
+        const learned = !!known?.has?.(def.id);
+        const cost = typeof def.cost === 'number' ? (def.cost ? `${def.cost} маны` : (def.rite?.cost ? `${def.rite.cost} маны (обряд)` : '')) : def.id === 'mend' ? 'от 10 маны за часть брони' : def.id === 'enchant' ? '30% вашей текущей маны' : '';
+        return {
+            id: def.id, name: def.title || def.ru || def.id, dark: !!def.dark, glow: def.glow ?? 0xc01830, cost, learned,
+            text: PENT_TEXT[def.id] || def.effect || 'Особая пентаграмма.',
+            once: !!def.once, permanent: !!def.permanent,
+            svg: learned ? pentagramSvg(def.id) : '',
+        };
+    });
+}
+
+function pentagramCardHtml(c) {
+    const picture = c.learned && c.svg
+        ? `<div class="pent-pic ${c.dark ? 'dark' : 'light'}">${c.svg}</div>`
+        : `<div class="pent-pic locked"><span class="pent-q">?</span></div>`;
+    const tags = [c.dark ? '<span class="learn-badge pent-dark">🜏 Тёмная</span>' : '<span class="learn-badge pent-light">☀ Светлая</span>',
+        c.permanent ? '<span class="learn-badge learn-start">♾ Остаётся навсегда</span>' : c.once ? '<span class="learn-badge learn-scroll">1️⃣ Одноразовая</span>' : ''].join(' ');
+    return `<div class="item-card pent-card ${c.learned ? 'learned' : 'unknown'}" data-pent="${c.id}">
+        ${picture}
+        <div class="item-name">${c.name}</div>
+        <div class="item-learn">${tags} ${c.learned ? '<span class="learn-badge learn-start">✅ Рисунок выучен</span>' : '<span class="learn-badge mana-wait">❔ Рисунок не выучен</span>'}</div>
+        <div class="item-desc">${c.text}</div>
+        ${c.cost ? `<div class="item-stats"><div class="stat-row"><span>Цена:</span><span class="stat-val">${c.cost}</span></div></div>` : ''}
+        <div class="item-desc"><b>${c.learned ? 'Как рисовать:' : 'Как выучить:'}</b> ${c.learned ? 'скажите «Пентаграниум» и обведите палочкой круг; внутри загорятся точки — ведите палочку от одной к другой.' : 'найдите свиток с этим рисунком и сожгите его — рисунок откроется здесь. Просто посмотреть свиток знания не даёт.'}</div>
+    </div>`;
+}
+
+export function renderPentagramsTab(boxId = 'pentagrams-grid', known = null) {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    box.innerHTML = pentagramCards(known).map(pentagramCardHtml).join('');
+}
+
+/** The cards of the potions (pure data): the recipes of RECIPES, with the ingredients by name. */
+export function potionCards() {
+    return RECIPES.map((r) => {
+        const item = ITEMS.find((i) => i.cat === 'potions' && new RegExp(r.name, 'i').test(i.name));
+        return {
+            id: r.id, name: r.name, icon: item?.icon || `assets/icons/potion_${r.id === 'invis' ? 'invis' : r.id === 'clearmind' ? 'clear' : 'heal'}.svg`,
+            ingredients: Object.entries(r.ingredients).map(([k, n]) => ({ kind: k, n, name: INGREDIENT_RU[k] || k, icon: ingredientIcon(k) })),
+            window: r.window, brew: r.brew || null, text: r.desc, effect: r.effect,
+        };
+    });
+}
+const ING_ICON = { crystal: 'assets/icons/crystal.svg', web: 'assets/icons/web.svg', glass: 'assets/icons/glass.svg', owlFeather: 'assets/icons/owl_feather.svg', phoenixFeather: 'assets/icons/phoenix_feather.svg' };
+const ING_EMOJI = { apple: '🍎', minotaurHorn: '🐂', crystal: '💎', web: '🕸️', glass: '🔷', owlFeather: '🪶', phoenixFeather: '🪶' };
+const ingredientIcon = (kind) => ING_ICON[kind] || '';
+
+const POTION_USE = {
+    heal: 'Лечит: выпейте колбу — и сразу вернётся 30 здоровья.',
+    invis: 'Зелье невидимости. Сварить и разлить по колбам уже можно, а вот выпить пока нельзя — что оно делает, откроется позже.',
+    clearmind: 'Очищает тело от чёрных пятен тёмной магии: каждая колба убирает до 30 «потемнения» с тела, одежды и доспехов, 3–4 колбы очищают целиком. Уровень чёрного мага зелье не снижает.',
+};
+
+export function renderPotionsTab(boxId = 'potions-grid') {
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    const brewing = ITEMS.filter((i) => i.cat === 'potions' && /Котёл|Как сварить|Колба/.test(i.name));
+    const ings = ITEMS.filter((i) => i.cat === 'potions' && !brewing.includes(i) && !RECIPES.some((r) => i.name.includes(r.name)));
+    const recipe = (p) => `<div class="item-card potion-card">
+        <img src="${p.icon}" class="item-icon" onerror="this.style.display='none'">
+        <div class="item-name">${p.name}</div>
+        <div class="item-desc">${POTION_USE[p.id] || p.text}</div>
+        <div class="item-desc"><b>Как приготовить:</b> бросьте в кипящий котёл за ${p.window} секунд (порядок любой):</div>
+        <div class="potion-ings">${p.ingredients.map((g) => `<span class="potion-ing" title="${g.name}">${g.icon ? `<img src="${g.icon}" onerror="this.style.display='none'">` : `<span class="potion-emoji">${ING_EMOJI[g.kind] || '•'}</span>`}${g.n > 1 ? g.n + '× ' : ''}${g.name}</span>`).join('')}</div>
+        ${p.brew ? `<div class="item-desc">Варится дольше остальных: ${p.brew[0] / 60}–${p.brew[1] / 60} минуты.</div>` : ''}
+        <div class="item-desc"><b>Как пользоваться:</b> зачерпните колбой из готового котла (до 10 колб) и поднесите к рту, как еду.</div>
+    </div>`;
+    box.innerHTML = potionCards().map(recipe).join('') + [...brewing, ...ings].map((i) => card(i)).map((e) => e.outerHTML).join('');
+}
+
+// ---- the tab itself
+let magicSection = 'spells';
+/**
+ * «✨ Магия»: the sections «Заклинания / Зелья / Пентаграммы». `o`: ids of the elements, `can`/`used` — as in renderSpellsTab,
+ * `known` — Set of the pentagram figures the hero knows (null: none). `section` opens a section (a link from a hint).
+ */
+export function renderMagicTab(o = {}, can = null, used = null, known = null, section = null) {
+    const ids = { bar: 'magic-sections', spells: 'magic-spells', potions: 'magic-potions', pents: 'magic-pentagrams', cats: 'spell-cats', grid: 'spells-grid', pgrid: 'pentagrams-grid', vgrid: 'potions-grid', ...o };
+    const bar = document.getElementById(ids.bar);
+    if (section) magicSection = section;
+    if (!bar) return;
+    const secs = codexTabs()[0].children;
+    bar.innerHTML = '';
+    for (const sec of secs) {
+        const b = document.createElement('button');
+        b.className = 'sub-tab magic-sub' + (sec.id === magicSection ? ' active' : '');
+        b.textContent = sec.name;
+        b.onclick = () => renderMagicTab(o, can, used, known, sec.id);
+        bar.appendChild(b);
+    }
+    const show = { spells: ids.spells, potions: ids.potions, pentagrams: ids.pents };
+    for (const [k, id] of Object.entries(show)) { const el = document.getElementById(id); if (el) el.hidden = k !== magicSection; }
+    if (magicSection === 'spells') renderSpellsTab(ids.cats, ids.grid, can, used);
+    else if (magicSection === 'potions') renderPotionsTab(ids.vgrid);
+    else renderPentagramsTab(ids.pgrid, known);
+}
+export { figureIds };

@@ -63,7 +63,7 @@
                 <button class="pause-tab" data-pause-tab="pause-graphics" role="tab">🖥 Графика</button>
                 <button class="pause-tab" data-pause-tab="pause-bosses" role="tab">👑 Боссы</button>
                 <button class="pause-tab" data-pause-tab="pause-creative" role="tab" hidden>🛠 Творческий</button>
-                <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Заклинания</button>
+                <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Магия</button>
             </div>
             <div id="pause-main" class="pause-pane active">
                 <button id="pause-continue-btn">▶ Продолжить</button>
@@ -79,8 +79,13 @@
             <div id="pause-creative" class="pause-pane"></div>
             <!-- Creative only: the whole spell book without leaving the game -->
             <div id="pause-spells" class="pause-pane">
-                <div id="pause-spell-cats" class="sub-tabs"></div>
-                <div id="pause-spells-grid" class="items-grid"></div>
+                <div id="pause-magic-sections" class="sub-tabs magic-sections"></div>
+                <div id="pause-magic-spells">
+                    <div id="pause-spell-cats" class="sub-tabs"></div>
+                    <div id="pause-spells-grid" class="items-grid"></div>
+                </div>
+                <div id="pause-magic-potions" hidden><div id="pause-potions-grid" class="items-grid"></div></div>
+                <div id="pause-magic-pentagrams" hidden><div id="pause-pentagrams-grid" class="items-grid"></div></div>
             </div>
             <div class="pause-hint">Мир сохранится сам. Escape — закрыть это окно</div>
         </div>
@@ -152,7 +157,7 @@
                     <button class="tab-btn active" data-tab="tab-game">🎮 Одиночная игра</button>
                     <button class="tab-btn" data-tab="tab-mp">🌐 Мультиплеер</button>
                     <button class="tab-btn" data-tab="tab-character">🧙 Персонаж</button>
-                    <button class="tab-btn" data-tab="tab-spells">✨ Заклинания</button>
+                    <button class="tab-btn" data-tab="tab-spells">✨ Магия</button>
                     <button class="tab-btn" data-tab="tab-items">🗡️ Предметы</button>
                     <button class="tab-btn" data-tab="tab-mechanics">🧩 Механика игры</button>
                     <button class="tab-btn" data-tab="tab-editor">🗺️ Редактор карт</button>
@@ -253,8 +258,13 @@
 
                 <!-- SPELLS (by category) -->
                 <div id="tab-spells" class="tab-pane">
-                    <div id="spell-cats" class="sub-tabs"></div>
-                    <div id="spells-grid" class="items-grid"></div>
+                    <div id="magic-sections" class="sub-tabs magic-sections"></div>
+                    <div id="magic-spells">
+                        <div id="spell-cats" class="sub-tabs"></div>
+                        <div id="spells-grid" class="items-grid"></div>
+                    </div>
+                    <div id="magic-potions" hidden><div id="potions-grid" class="items-grid"></div></div>
+                    <div id="magic-pentagrams" hidden><div id="pentagrams-grid" class="items-grid"></div></div>
                 </div>
 
                 <!-- ITEMS -->

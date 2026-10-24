@@ -42,3 +42,19 @@ test('every spell and every thing has its own icon (none shared) and every icon 
         seen.set(s.icon, s.name);
     }
 });
+
+test('«Магия»: the tab tree Магия → Заклинания / Зелья / Пентаграммы, a card for every pentagram, the picture only for the learned', async () => {
+    const { codexTabs, pentagramCards, potionCards } = await import('../../src/ui/Codex.js');
+    const { PENTAGRAMS } = await import('../../src/game/Pentagrams.js');
+    await import('../../src/game/PentagramRules.js'); // (registers the good and the devil pentagrams)
+    const tree = codexTabs();
+    assert.equal(tree.length, 1);
+    assert.equal(tree[0].name, '✨ Магия');
+    assert.deepEqual(tree[0].children.map((c) => c.id), ['spells', 'potions', 'pentagrams']);
+    const none = pentagramCards(null);
+    assert.deepEqual(none.map((c) => c.id).sort(), Object.keys(PENTAGRAMS).sort());
+    assert.ok(none.every((c) => !c.svg && !c.learned && c.text), 'unlearned: no picture, but a description');
+    const all = pentagramCards(new Set(Object.keys(PENTAGRAMS)));
+    for (const c of all) assert.ok(c.learned && /<svg/.test(c.svg), `«${c.name}»: a learned pentagram shows its picture`);
+    assert.ok(potionCards().length >= 3 && potionCards().every((p) => p.ingredients.length));
+});
