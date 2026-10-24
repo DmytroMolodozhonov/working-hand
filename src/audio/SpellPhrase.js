@@ -82,12 +82,19 @@ export const EVERYDAY = new Set(['спасибо', 'акция', 'акции', '
 export const SOUNDALIKE_STEMS = ['интерес', 'интерфейс', 'интернет', 'информац', 'инфекц', 'инфляц', 'инфаркт', 'инфракрас',
     'империя', 'империи', 'империю', 'империей', 'империал', 'имперск', 'император']; // («империя» sounds like «Империус» — talk)
 
+/** How clearly (fit) a sound must be heard for a written near-miss of the spell's own word to count as that spell. */
+export const IMPERIUS_FIT = 1;
+
 /** The everyday stem a word of what was heard begins with (not the spell's own word), or null. */
-export function everydayHeard(written, canonical = '') {
+export function everydayHeard(written, canonical = '', fit = -Infinity) {
     const own = letters(canonical);
+    // (the author's journal 24.10: «империус» written «империя», fit +1.1, the lips moving — the network drops the «у»/«с»: when the
+    // sound is clear, a written word that is a near miss of one of the spell's own words is the spell, not «империя»)
+    const ownWords = fit >= IMPERIUS_FIT ? norm(canonical).split(' ').filter((o) => o.length >= 6) : [];
     for (const w of norm(written).split(' ')) {
         if (w.length < 6) continue;
         if (own && edits(w, own) <= 1) continue; // (it is the spell itself)
+        if (ownWords.some((o) => w.slice(0, 5) === o.slice(0, 5) && edits(w, o) <= 2)) continue;
         for (const s of SOUNDALIKE_STEMS) if (w.length >= s.length - 1 && [s.length - 1, s.length, s.length + 1].some((n) => edits(w.slice(0, n), s) <= 1)) return s; // (a letter lost, added or changed)
     }
     return null;
@@ -257,6 +264,25 @@ export function afterCast(last, spell, meta, now) {
     return null;
 }
 
+/** ms after the last letter beyond which a spell found inside a longer stream of speech is too late to be mine. */
+export const LATE_IN_SPEECH_MS = 1500;
+
+/**
+ * The author's journal 24.10 (a call: loud speakers, a busy computer): a spell found by its sound inside a long run of
+ * speech («…о смотри видишь как круто я проиграл абадакида ин» → «Авада» 7.8 s late, «валим валим…» → «Вайнд Максима» 4.9 s late)
+ * surfaced seconds after the words; nobody says a spell that late. A spell the words of which make up the whole phrase
+ * (or all but a word) is only slow — it still goes; «стоп» is always let through.
+ * @returns {string|null} why it is not cast, or null
+ */
+export function lateInSpeech(spell, command, meta, now) {
+    if (!meta?.native || spell === 'Stand' || !Number.isFinite(meta.to)) return null;
+    const lag = now - meta.to;
+    if (!(lag > LATE_IN_SPEECH_MS)) return null;
+    const said = norm(meta.written || '').split(' ').filter(Boolean).length, own = norm(command || '').split(' ').filter(Boolean).length;
+    if (said < own + 2) return null;
+    return `слово из длинной речи, дошло через ${Math.round(lag)} мс — это не сказанное заклинание`;
+}
+
 /** A short spell («Даст», «Джолт», «Айс», «Ап») must fit this much better than needed while running or in noise. */
 export const SHORT_LEN = 5;
 /** A spell this short (letters) must have its own letters in what was heard (soundTrust). */
@@ -327,7 +353,7 @@ export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
     const like = lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
-    if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical)) return 'обычное слово («интересно» и т.п.), а не заклинание';
+    if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical, fit)) return 'обычное слово («интересно» и т.п.), а не заклинание';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
     const short = len <= SHORT_LEN;
     if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;

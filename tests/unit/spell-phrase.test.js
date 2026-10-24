@@ -223,3 +223,15 @@ test('«интересно» said to oneself is no Inferno (the author: ran, sai
         assert.equal(soundTrust({ spell: 'Inferno', canonical: 'инферно', written: w, fit: 0.9, lips: null }), null, `«${w}» → Inferno`);
     }
 });
+
+test('the author\'s journal 24.10: a spell from the middle of long speech that surfaces seconds late is not cast; a plain slow spell and «стоп» are', async () => {
+    const { lateInSpeech } = await import('../../src/audio/SpellPhrase.js');
+    const m = (written, lag) => ({ native: true, to: 10000, written });
+    assert.ok(lateInSpeech('Wind', 'вайнд максима', m('валим валим валим валим валим валим что что уене использоват'), 14882));
+    assert.ok(lateInSpeech('AvadaKedavra', 'авада кедавра', m('о смотри смотри угу видишь как круто я проиграл абадакида ин'), 17821));
+    assert.ok(lateInSpeech('WindMaxima', 'вайнд максима', m('авадакидавра вайнд максима авадакидавра'), 16464));
+    assert.equal(lateInSpeech('Lock', 'лок', m('лок'), 12752), null); // (slow, but the phrase is the spell)
+    assert.equal(lateInSpeech('Stand', 'стоп', m('так сказал и стоп'), 13228), null);
+    assert.equal(lateInSpeech('Wind', 'вайнд максима', m('значит вайнд максима дальше'), 11000), null); // (in time)
+    assert.equal(lateInSpeech('Wind', 'вайнд', { native: false, written: 'a b c d e' }, 99999), null);
+});

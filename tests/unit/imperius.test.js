@@ -151,3 +151,13 @@ test('a castle\'s guard and a taken creature: a person told to go, then beaten, 
     for (const k of ['cow', 'horse', 'pegasus']) assert.equal(guardMode(k, 999, 999), 'lead', k + ': led out, never killed');
     for (const k of ['zombie', 'dragon', 'spider', 'player']) assert.equal(guardMode(k, 999, 999), null, k + ': the castle\'s own fight');
 });
+
+test('the author\'s journal 24.10: «империус» / «империус максима» heard clearly but written «империя…» are the spell; faint ones and real talk are not', async () => {
+    const { everydayHeard, soundTrust } = await import('../../src/audio/SpellPhrase.js');
+    assert.equal(everydayHeard('империя', 'империус', 1.1), null);
+    assert.equal(everydayHeard('империю максима', 'империус максима', 2.8), null);
+    assert.ok(everydayHeard('империя', 'империус', 0.3));
+    assert.ok(everydayHeard('интересно', 'инферно', 2));
+    assert.equal(soundTrust({ spell: 'ImperiusMaxima', canonical: 'империус максима', written: 'империю максима', fit: 2.8, len: 15, lips: true }), null);
+    assert.equal(soundTrust({ spell: 'Imperius', canonical: 'империус', written: 'империя', fit: 1.1, len: 8, lips: true }), null);
+});

@@ -22,7 +22,7 @@ import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NA
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
@@ -633,6 +633,8 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (spoken) {
             const no = afterCast(lastCast, spoken, meta, performance.now());
             if (no) { journal(command, isFinal, meta, spoken, false, `отсеяно: ${no}`); return; }
+            const late = lateInSpeech(spoken, command, meta, performance.now());
+            if (late) { journal(command, isFinal, meta, spoken, false, `отсеяно: ${late}`); return; }
             // breathing, steps, a rustle while running read as «Даст», «Джолт»: the mouth and the fit tell
             const lips = game.voiceGate.lipsMoved(performance.now());
             const running = !!game.character?.isRunning;
