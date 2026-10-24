@@ -77,7 +77,7 @@ export async function openPage(browser, url, { noCamera = false, viewport = { wi
 }
 
 /** Start a mode from the menu: 'creative' | 'freeworld' | map name */
-export async function startFromMenu(page, mode = 'creative', { zombies = 0 } = {}) {
+export async function startFromMenu(page, mode = 'creative', { zombies = 0, smooth = false } = {}) {
     // «Одиночная игра»: my worlds first; «Создать мир» opens the choice (open by itself while there are none)
     await page.waitForFunction(() => document.getElementById('saved-worlds')?.children.length > 0 && document.querySelector('.mode-row .mode-card'));
     if (await page.isHidden('#create-world')) await page.click('#create-world-btn');
@@ -89,6 +89,7 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0 } = {
     if (mode === 'creative' && zombies) {
         await page.evaluate((n) => { const el = document.getElementById('creative-zombie-count'); el.value = String(n); }, zombies);
     }
+    if (smooth) await page.evaluate(() => { const c = document.getElementById('smooth-world'); if (c) c.checked = true; }); // («Гладкий мир»: the newest world generation)
     await page.click('#start-btn');
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 90000 });
 }

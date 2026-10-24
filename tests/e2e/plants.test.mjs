@@ -14,7 +14,7 @@ test.after(async () => { await browser?.close(); srv?.stop(); });
 
 test('plants: groups grow, thorns prick, the head eats — and armour decides', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'creative');
+    await startFromMenu(page, 'creative', { smooth: true });
     await waitHudVisible(page);
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, out = {};
