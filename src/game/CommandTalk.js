@@ -24,6 +24,8 @@ const SPARRERS = new Set(['knight']);
 /** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
 const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
 /** Commands that win over the king's old army-order reader (it knows no hand pointing, pairs or formations). */
+/** The commands that are about a place or a thing I point at: only these make him look where the hand shows («сразитесь друг с другом» does not). */
+const POINTING = new Set(['go_there', 'look_there', 'enter_house', 'search_house', 'fight_him', 'spare', 'arrest', 'pick_up', 'tidy', 'bring', 'guard_spot', 'face_there', 'turn_there']);
 const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight', 'follow', 'follow_short', 'enter_house']);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -135,6 +137,7 @@ export class CommandTalk {
         if (!again) this._last = { text, at: performance.now() };
         const def = COMMANDS[cmd.id];
         this._text = text;
+        this._cmdId = cmd.id;
         const army = detectOrder(text, talk._players());
         if (army && !NEW_WINS.has(cmd.id)) return false; // («собери войско», «в атаку на зомби»: the king's orders, VillagerOrders)
         const me = g.character.group.position;
@@ -174,7 +177,10 @@ export class CommandTalk {
         if (def.needsTarget || cmd.id === 'spar_group') {
             if (def.needsTarget) {
                 const t = this._target(cmd, lead, doers);
-                if (t.line && army) return false; // («бей их»: no one pointed at — the army's old order)
+                if (t.line && army) {
+                    // («бей их»: no one pointed at — the army's old order; but «убить ее / его» is ONE man: ask who, do not send the whole army)
+                    if (!/(^| )(его|ее|её|него|нее|неё|этого|эту|того|ту|тот|этот)( |$)/.test(text)) { life.alog?.decision(lead, `цель не найдена (${t.why}) — приказ войску как раньше`); return false; }
+                }
                 if (t.line) { reply(t.line); this._log(text, cmd, lead, 'цель: ' + t.why); return true; }
                 if (t.creature) return this._huntCreature(doers, t.creature, text, cmd, lead, ack());
                 foe = t.v; foes = t.vs || [];
@@ -274,7 +280,7 @@ export class CommandTalk {
         const shown = this._shown && performance.now() - this._shown.at < 4000;
         const pg = pr?.hand || shown ? this.pointGround() : null;
         this.life.alog?.decision(v, `указание: ${pr?.hand ? 'рука/палочка поднята' : shown ? 'рука уже опущена, помню где была' : 'руки нет, только взгляд'}; луч (${pr ? `${(+pr.d.x).toFixed(2)}, ${(+pr.d.y).toFixed(2)}, ${(+pr.d.z).toFixed(2)}` : 'нет'}); точка на земле ${pg ? `(${Math.round(pg.x)}, ${Math.round(pg.z)}), ${Math.round(Math.hypot(pg.x - me.x, pg.z - me.z))} м от героя` : 'не найдена'}`);
-        if (pg && !v.foe) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
+        if (pg && !v.foe && POINTING.has(this._cmdId)) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
     }
 
     /** The people the command is for: the one I speak to, or a group by the scope words. */

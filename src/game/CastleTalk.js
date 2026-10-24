@@ -98,7 +98,13 @@ const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length) % arr.lengt
  * A line about the villagers' net for the game's journal (settings → «Журнал», via server.py) and the
  * console — never for the player on the screen. Not served by the game's own server: only the console.
  */
+const _journalSeen = new Map(); // line → when it was last written (the same line again within 20 s is not written: «голоса готовы» came every half second)
 export function journal(line) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const key = String(line);
+    if (now - (_journalSeen.get(key) || -1e9) < 20000 && !/^(действие|решение|разговор):/.test(key)) return;
+    if (_journalSeen.size > 200) _journalSeen.clear();
+    _journalSeen.set(key, now);
     console.info('[Жители]', line);
     try {
         if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;

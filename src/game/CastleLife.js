@@ -3612,7 +3612,12 @@ export class CastleLife {
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
                     if (v.glance) { // (he looks where I pointed — CommandTalk._begin)
                         v.glance.t -= v.animT;
-                        if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); } else v.model.lookAt(_v.set(v.glance.x, v.y + 3.4, v.glance.z));
+                        if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); }
+                        else {
+                            v.model.lookAt(_v.set(v.glance.x, v.y + 3.4, v.glance.z));
+                            // (the head turns ±70° only: the body follows, when he is not busy walking somewhere on an order)
+                            if (!v.cmd && !v.foe && !(v.speed > 0.3)) v.yaw = turn(v.yaw, Math.atan2(-(v.glance.x - v.x), -(v.glance.z - v.z)), v.animT * 5);
+                        }
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)

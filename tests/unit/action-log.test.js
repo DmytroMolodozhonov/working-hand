@@ -43,3 +43,21 @@ test('no more than ten lines a second', () => {
     log.update(0.6);
     assert.ok(lines.length <= 10);
 });
+
+test('a person who runs on the spot is written down as «застрял» with the walls and bodies round him', () => {
+    const { lines, v, life, log } = world();
+    v.cmd = null; v.mode = 'run'; v.speed = 4.4; v.order = { kind: 'leave', dest: { x: 50, z: 10 }, direct: true };
+    life._walkable = (x) => x < 11; // a wall to the east
+    life.byId.set('n1', { id: 'n1', name: 'Ульяна', x: 10.8, z: 10.5, y: 0, dead: false, speed: 0, talking: 0 });
+    let clock = 1000; log.now = () => clock;
+    for (let i = 0; i < 12; i++) { clock += 600; log.update(0.6); }
+    const l = lines.find((x) => x.startsWith('застрял:'));
+    assert.ok(l, lines.join('\n'));
+    assert.match(l, /Демьян/);
+    assert.match(l, /цель приказа «leave» \(50, 10\)/);
+    assert.match(l, /непроходимо в 0,9 м: .*В/);
+    assert.match(l, /Ульяна 0.8 м \(стоит\)/);
+    const n = lines.filter((x) => x.startsWith('застрял:')).length;
+    for (let i = 0; i < 6; i++) { clock += 600; log.update(0.6); }
+    assert.equal(lines.filter((x) => x.startsWith('застрял:')).length, n, 'not again at once');
+});
