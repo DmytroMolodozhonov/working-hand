@@ -1505,13 +1505,13 @@ export class Duel {
         if (w) return duelStrength(w.role, w.mana, w.hp, luck, w.maxHp); // (a wizard: his own mana now, his health — WizardAI)
         const free = !!g.combat?.enabled;
         // Творческий (the author): mana there is endless — in a duel a player is exactly as strong in mana
-        // as his opponent (a wizard: the wizard's mana now; another player: both the same — the larger)
-        if (g.config?.mode === 'creative' && opId != null) {
+        // as his opponent (a wizard: the wizard's mana now; another player: both the same — the larger).
+        // Only with «Бесконечная мана» ticked. With it off («ячеек N») the duel goes by the survival rules below:
+        // the mana he has now (+ the duel mastery), his health, a little luck — the author: «выставляю ману, чтобы она играла роль».
+        if (g.config?.mode === 'creative' && opId != null && !creativeFiniteMana(g)) {
             const ow = this._npcWizard(opId);
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
-            // (a hero with a FINITE mana in Creative — «ячеек 200»: his own mana now counts, as in the free world; with endless mana — as his opponent's)
-            const own = id === this.me && creativeFiniteMana(g) ? (g.combat.fatigue ?? mana) : mana;
-            const full = duelPower(own + this._mastery(id), 1, luck);
+            const full = duelPower(mana + this._mastery(id), 1, luck);
             return id === this.me && g.hero?.duelPower != null ? duelStrengthOf(g.hero, full) + luck : full; // (the hero's «Дуэльная сила» — a number of the same scale, HeroSetup.js; none = full)
         }
         // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
@@ -1606,7 +1606,7 @@ export class Duel {
             this._barNow = true;
         }
         // Fatigue drains while pushing (free world)
-        if ((a.by === this.me || b.by === this.me) && g.combat.enabled) {
+        if ((a.by === this.me || b.by === this.me) && manaRules(g)) { // (the free world, and Creative with a finite mana)
             const mine = a.by === this.me ? a : b;
             // («Дай» in a clash: +10 mana a second while its beam fights)
             g.combat.fatigue = Math.max(0, g.combat.fatigue - (DUEL.CLASH_FATIGUE + (mine.spell === 'Die' ? STRONG.Die.drain : 0)) * dt);
@@ -1667,13 +1667,13 @@ export class Duel {
             return null;
         }
         const cm = g.combat;
-        if (cm.enabled && cm.fatigue < DUEL.MAXIMA_COST) {
+        if (manaRules(g) && cm.fatigue < DUEL.MAXIMA_COST) {
             const msg = `😮‍💨 Не хватает маны: нужно ${DUEL.MAXIMA_COST}, есть ${Math.floor(cm.fatigue)}`;
             if (isFinal) g.hud.setVoice(msg, true);
             return null;
         }
         this._maximaAt = now;
-        if (cm.enabled) cm.fatigue = Math.max(0, cm.fatigue - DUEL.MAXIMA_COST);
+        if (manaRules(g)) cm.fatigue = Math.max(0, cm.fatigue - DUEL.MAXIMA_COST);
         this.applyMaxima(c.a.id, c.b.id, this.me);
         g.sync?.duelMaxima?.(c.a.id, c.b.id);
         return 'Maxima';

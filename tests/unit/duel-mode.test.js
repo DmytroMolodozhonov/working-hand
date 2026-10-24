@@ -139,3 +139,20 @@ test('дуэльный журнал: соперник, силы, палочки,
     assert.equal(D.quietKill({ arena: { id: 'a' } }, 'other'), false);
     assert.equal(D.quietKill({}, 'me'), false);
 });
+
+test('дуэль в Творческом: мана играет роль, когда «Бесконечная мана» снята; с галочкой — как раньше', () => {
+    const mk = (finite, fatigue, duelPower = null) => {
+        const g = { localId: 'me', config: { mode: 'creative' }, hero: { infiniteMana: !finite, duelPower }, combat: { fatigue, hp: 20, maxHp: 20 }, mana: { mastery: 0 }, remotes: new Map(), playerHP: 20, maxHP: 20 };
+        const foe = { id: 'w', mana: 90, hp: 14, maxHp: 14, role: 'student', wizard: true };
+        const D = Object.assign(Object.create(Duel.prototype), { game: g, _npcWizard: (id) => (id === 'w' ? foe : null), _mastery: () => 0, _playerMana: () => 0 });
+        return D._strength('me', 0, 'w');
+    };
+    // (the survival rules: the mana now — 200 mana beats a foe's 90; 30 loses to it)
+    assert.ok(mk(true, 200) > mk(true, 90) && mk(true, 90) > mk(true, 30));
+    assert.ok(Math.abs(mk(true, 200) - (Math.sqrt(200 / 30) + 0.35)) < 1e-9);
+    // (the endless mana: equal to the foe's mana, whatever the cells; a number set by the player replaces it)
+    assert.ok(Math.abs(mk(false, 5) - (Math.sqrt(90 / 30) + 0.35)) < 1e-9);
+    assert.equal(mk(false, 5, 2), 2);
+    // (finite mana: the number is not used)
+    assert.ok(Math.abs(mk(true, 200, 2) - mk(true, 200)) < 1e-9);
+});
