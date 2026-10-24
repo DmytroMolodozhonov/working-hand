@@ -333,6 +333,7 @@ export class WizardLife {
             for (const v of wizards) {
                 let f = 0;
                 if (night && !v.dead && (v.job === 'watch' || v.job === 'wander' || v.speed > 0.3 || v.role === 'wanderer')) f |= FX.LUMOS;
+                if (v.practice && v.arena) v.practice = null; // (the arena leads him: think() — and the practice timer — is not reached, a stale Levitation glow would stay on a duellist all the fight)
                 if (v.practice) f |= v.practice.bits;
                 if (v.job === 'brew' && v.mode === 'work') f |= FX.BREW;
                 if (v.job === 'teach' && v.sparkT > 0) { v.sparkT -= dt; f |= FX.SPARK; }
@@ -377,7 +378,7 @@ export class WizardLife {
         const busy = new Map();
         for (const v of wizards) if (v.practice) busy.set(v.cs, (busy.get(v.cs) || 0) + 1);
         for (const v of wizards) {
-            if (v.practice || v.dead || v.noWand || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
+            if (v.practice || v.arena || v.dead || v.noWand || v.foe || v.fleeT > 0 || v.talking > 0 || v.speed > 0.3 || v.seated) continue;
             if (v.cs.hostile?.size) continue;
             if (!players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < PRACTICE_NEAR)) continue;
             if ((busy.get(v.cs) || 0) >= PRACTICE_MAX) continue;
