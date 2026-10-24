@@ -98,11 +98,11 @@ class MPCrop:
 class V5:
     """V5 (hand_v5.py): the joint network straight on a turned square from the body / the followed hand."""
 
-    def __init__(self, refine=True, name="v5", engine="mp", sticky=None):
+    def __init__(self, refine=True, name="v5", sticky=None):
         import hand_v5
         self.sticky = sticky
         self.hv = hand_v5
-        self.h = hand_v5.HandsV5(engine=engine, rtm_path=RTMHand.PATH if engine == "rtm" else None)
+        self.h = hand_v5.HandsV5()
         self.refine = refine
         self.name = name
 
@@ -200,10 +200,6 @@ def make(name):
         return V5(False, "v5_1pass")
     if name == "v5_loose":
         return V5(True, "v5_loose", sticky=0)
-    if name == "v5_rtm_loose":
-        return V5(True, "v5_rtm_loose", engine="rtm", sticky=0)
-    if name == "v5_rtm":
-        return V5(True, "v5_rtm", engine="rtm")
     if name == "rtmpose_hand":
         return RTMHand()
     raise KeyError(name)

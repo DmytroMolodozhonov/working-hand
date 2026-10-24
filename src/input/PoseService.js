@@ -78,7 +78,7 @@ export class PoseService {
         const delegate = config.delegate === 'GPU' || config.delegate === 'CPU' ? config.delegate : null;
         // 'classic' = MediaPipe Holistic exactly as in the original game (default), 'tasks' = 3 separate networks
         const engine = config.engine || this._engine || globalThis.__ZNS_ENGINE__ || 'classic';
-        if (config.handVersion !== undefined) this._setHands(config.handVersion === 'v5' ? (config.v5gpu ? 'v5rtm' : 'v5') : '');
+        if (config.handVersion !== undefined) this._setHands(config.handVersion === 'v5' ? 'v5' : '');
         if (this.ready && quality === this._quality && engine === this._engine && (config.delegate === undefined || delegate === this._delegate)) return;
         this._quality = quality;
         this._engine = engine;
@@ -496,7 +496,7 @@ export class PoseService {
         if (r.cost) this.stats.avgCost = this.stats.avgCost ? this.stats.avgCost * 0.9 + r.cost * 0.1 : r.cost;
         this.stats.backend = r.backend;
         this.stats.handsEngine = r.handsEngine || 'mp';
-        this.stats.v5Engine = r.v5Engine || null; // ('rtm': RTMPose on the video card, 'mp': the processor)
+        this.stats.v5Engine = r.v5Engine || null; // ('gpu': the video card, 'cpu': the processor)
         // V5 asked for, but the program found the hands its old way: say so, once (honestly)
         if (this.handsWanted.startsWith('v5') && r.handsEngine !== 'v5' && r.v5) {
             const busy = r.v5 === 'устанавливается' || r.v5 === 'загружается';
@@ -658,7 +658,7 @@ export class PoseService {
         fetch(new URL(`api/pose/pace?fps=${Math.round(fps)}`, this.baseUrl)).catch(() => {});
     }
 
-    /** The hand finder for the camera program ('', 'v5' or 'v5rtm' — V5 by RTMPose on the video card); a running stream is reopened with it. */
+    /** The hand finder for the camera program ('' or 'v5' — on the video card by itself); a running stream is reopened with it. */
     _setHands(hands) {
         if (hands === this.handsWanted) return;
         this.handsWanted = hands;

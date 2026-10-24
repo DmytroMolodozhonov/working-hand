@@ -25,6 +25,8 @@
 import { BLOCK } from '../world/Terrain.js';
 
 const WALK = 2.3;
+/** blocks: a wall for a ladder / for washing windows is at least this tall. */
+const WALL_H = 5;
 
 /**
  * The chores: where (`at`: graph tags; 'door' = in front of a house), when (`parts` of the
@@ -223,7 +225,7 @@ export class Chores {
     end(v) {
         if (!v.chore && !v.chorePlan) return;
         const m = v.choreMate;
-        v.chore = null; v.chorePlan = null; v.choreGo = null; v.choreMate = null;
+        v.chore = null; v.chorePlan = null; v.choreGo = null; v.choreMate = null; v.choreAt = null;
         if (m && m.choreMate === v) { m.choreMate = null; if (m.chore) { m.chore = null; m.waitT = Math.min(m.waitT, 1.5); } }
     }
 
@@ -255,7 +257,9 @@ export class Chores {
             if (go.t >= 12 && d > 1.2) { this.end(v); v.waitT = 0; return false; } // (can't get there)
             v.choreGo = null;
             v.choreYaw = go.yaw;
+            v.choreAt = { x: go.x, z: go.z }; // (the place of the things: pushed away from it, the chore is over — nothing stands free on the path)
         }
+        if (v.choreAt && Math.hypot(v.x - v.choreAt.x, v.z - v.choreAt.z) > 1.4) { this.end(v); v.waitT = 0; return false; }
         v.speed = 0;
         const m = v.choreMate;
         const yaw = m ? Math.atan2(-(m.x - v.x), -(m.z - v.z)) : v.choreYaw ?? v.yaw;
@@ -324,10 +328,23 @@ export class Chores {
                 if (back < 0) break;
                 const x = ox + dx * back, z = oz + dz * back;
                 if (!L._walkable(x, z, v.y)) break;
+                if (!this._tallWall(ox + dx * s, oz + dz * s, v.y)) break; // (a ladder leans on a real wall: a fence, a crate, a step is no wall — the author saw one standing free on the path)
                 return { x, z, yaw: Math.atan2(-dx, -dz) };
             }
         }
         return null;
+    }
+
+    /** Is the cell (x, z) a wall at least WALL_H blocks tall above the villager's feet (so a ladder has something to lean on)? */
+    _tallWall(x, z, y) {
+        const t = this.game.world?.terrain?.data;
+        if (!t) return true;
+        const ix = Math.round(x), iz = Math.round(z), iy = Math.round(y);
+        for (let k = 1; k <= WALL_H; k++) {
+            const b = t.get(ix, iy + k, iz);
+            if (b === BLOCK.AIR || b === BLOCK.WATER) return false;
+        }
+        return true;
     }
 
     /** Ground ahead free for the things (`len` m): this way or turned; null — no room. */

@@ -317,7 +317,6 @@ function readConfig() {
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
-        v5gpu: !!$('v5-gpu')?.checked, // (V5's more exact finder on the video card)
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         leftHanded: $('handedness')?.value === 'left',
@@ -1259,15 +1258,10 @@ for (const r of document.querySelectorAll('input[name="hand-version"]')) {
         if (!r.checked || !game?.character) return;
         game.character.setHandVersion(r.value);
         if (game.config) game.config.handVersion = r.value;
-        poseService._setHands?.(r.value === 'v5' ? ($('v5-gpu')?.checked ? 'v5rtm' : 'v5') : '');
+        poseService._setHands?.(r.value === 'v5' ? 'v5' : '');
         pauseCreative.sync();
     });
 }
-// «V5 точнее (на видеокарте)»: the camera program's V5 hands found by RTMPose on the video card
-$('v5-gpu')?.addEventListener('change', (e) => {
-    const v5 = document.querySelector('input[name="hand-version"]:checked')?.value === 'v5';
-    if (v5) poseService._setHands?.(e.target.checked ? 'v5rtm' : 'v5');
-});
 // «🧙 Игрок»: the hero's sheet (data refreshed on open and every 0.5 s while the tab is open; the 3D hero is drawn only then)
 const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
     spells: [...new Set(SPELLS.map((s) => matchSpell(s.name)).filter(Boolean))],
@@ -1572,7 +1566,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size', 'v5-gpu'];
+        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
