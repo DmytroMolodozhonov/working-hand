@@ -116,11 +116,11 @@ export class Pentagranium {
         // (a name caught while the phrase is still being said may be only its first sounds, read as another pentagram: while it is heard, it must hold — the same
         // name on two looks ≥ PAUSE_MS apart — or the phrase must end; a full name said clearly is final at once)
         if (!isFinal) {
-            const w = this._pending;
-            if (!w || w.id !== id || now - w.at > 3000) { this._pending = { id, at: now }; return null; }
+            const w = this._wait;
+            if (!w || w.id !== id || now - w.at > 3000) { this._wait = { id, at: now }; return null; }
             if (now - w.at < PAUSE_MS) return null;
         }
-        this._pending = null; // (the microphone repeats an unfinished phrase: one pentagram per phrase)
+        this._wait = null; // (the microphone repeats an unfinished phrase: one pentagram per phrase)
         const name = pentagramSpell(id);
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);

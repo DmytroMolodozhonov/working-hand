@@ -41,6 +41,14 @@ test('every name: said in full it makes ITS pentagram; the effect happens (gargo
     }
 });
 
+test('after a cast the frames go on: an interim look (the pause) must not break the list of the saved marks', () => {
+    const t = stub();
+    t.p.learnFigure('life');
+    t.p.cast(false, 'пентаграниум вита', aim());
+    for (let i = 0; i < 20; i++) t.p.update(0.05); // (it once threw: the wait used the name of the saved marks' list)
+    assert.ok(Array.isArray(t.p._pending));
+});
+
 test('gargoyles refuse with a clear reason and nothing is drawn (mana, a burnt place, another ritual, no ground)', () => {
     for (const [why, re] of [['mana', /Нужно 150 маны/], ['spent', /выжжена/], ['busy', /идёт ритуал/], ['realm', /на землю/], ['off', /не выпускаются/]]) {
         const t = stub({ ritual: { ok: false, why, need: 150 } });
