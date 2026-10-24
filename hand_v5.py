@@ -68,9 +68,22 @@ PRESENCE_TRACK = 0.12  # ... a followed hand where it was going, of its size (_c
 TRACK_NEAR = 0.8  # "where it was going": the wrist and the middle knuckle within this much of the palm's size
 TRACK_GROW = 1.6  # "of its size": not this many times bigger or smaller
 WIDE = 1.6  # a lost hand is looked for in the body's square and in one this much bigger (a hand toward the camera)
+# A wand pointed straight at the target (at the camera) foreshortens the forearm and the palm: the body's
+# square (from wrist→knuckles and the forearm) and the followed square (from the palm) shrank smaller than
+# the fist itself and the hand was lost exactly then (the author: «в битве, когда прямо направляешь палочку»).
+# The shoulders don't shrink: a hand is 0.29–0.63 of the shoulders' width, a followed square 0.56–1.05.
+POSE_MIN = 0.8  # the body's square: at least this many shoulder widths
+TRACK_MIN = 0.6  # a followed (or held) hand's square: at least this many shoulder widths
+# ... and such a hand has no clear «up» (the network wants the fingers up in its square): at the wrong turn
+# it says 0, at the right one 0.7–0.9. On the video card a lost hand's square is looked at in SWEEP turns
+# and SWEEP_SIZES (shoulder widths) at once — one call more is nothing there (on the processor: not done)
+SWEEP = 12
+SWEEP_SIZES = (0.8, 1.2)
 LOOKS = 3  # at most this many squares a picture for a lost hand
 TRACK_FLOW = True  # a followed or held hand moves with the picture round it (optical flow): its next square, its held place
 HOLD = 0.5  # s: a hand the network lost is held this long, carried by the body's arm, while the body sees the wrist
+HOLD_STILL = 2.0  # s: ... and this long while it stays where it was lost (aiming the wand: the hand is still)
+STILL = 0.6  # "where it was lost": its wrist within this much of the hand's size
 IN_VIEW = 0.5  # the body's wrist this sure: it is in the picture
 WRIST_FAR = 1.0  # a hand whose wrist is this many of its sizes from the body's (sure) wrist is not this hand
 # (the body's wrist against the reference hand's on the author's recording: 0.19 of the hand's size typically, 0.66 at most)
@@ -142,6 +155,21 @@ def _up_angle(dx, dy):
     return math.atan2(dx, -dy)
 
 
+def shoulders_px(pose, w, h):
+    """The shoulders' width in picture pixels (0 when the body doesn't see them)."""
+    if not pose or len(pose) < 13:
+        return 0.0
+    a, b = pose[11], pose[12]
+    if min(a.get("visibility", 1.0) or 0, b.get("visibility", 1.0) or 0) < 0.3:
+        return 0.0
+    return math.hypot((a["x"] - b["x"]) * w, (a["y"] - b["y"]) * h)
+
+
+def at_least(sq, side_px):
+    """The same square, not smaller than side_px (a foreshortened hand: the square must still hold the fist)."""
+    return sq if sq.side >= side_px else Square(sq.cx, sq.cy, side_px, sq.rot)
+
+
 def square_from_pose(pose, side, w, h):
     """The square around a hand from the body's points (normalized), or None (not seen)."""
     iw, ip, ii, it_, ie = POSE_SIDE[side]
@@ -165,7 +193,7 @@ def square_from_pose(pose, side, w, h):
         dx, dy = (wx - ex) / fore, (wy - ey) / fore
         L = fore * 0.3
         dx, dy = dx * L, dy * L
-    side_px = max(POSE_SCALE * L, FOREARM_SCALE * fore, 0.035 * h)
+    side_px = max(POSE_SCALE * L, FOREARM_SCALE * fore, 0.035 * h, POSE_MIN * shoulders_px(pose, w, h))
     return Square(wx + POSE_CENTER * dx, wy + POSE_CENTER * dy, side_px, _up_angle(dx, dy))
 
 
@@ -370,7 +398,7 @@ class GpuNet:
 class _Pic:
     """One hand in one picture, between the steps of HandsV5 (the squares looked at, what was found)."""
 
-    __slots__ = ("side", "tr", "wrist", "inview", "sure_wrist", "pts", "sq", "found", "fresh", "cands", "seed", "skip")
+    __slots__ = ("side", "tr", "wrist", "inview", "sure_wrist", "pts", "sq", "found", "fresh", "cands", "seed", "skip", "least")
 
     def __init__(self, side):
         self.side = side
@@ -500,6 +528,7 @@ class HandsV5:
         c.wrist = self._wrist(pose, side, w, h)
         c.inview = self._in_view(pose, side, w, h)
         c.sure_wrist = self._wrist(pose, side, w, h, IN_VIEW)
+        c.least = TRACK_MIN * shoulders_px(pose, w, h)
         if tr is None or tr.get("held"):
             return c
         pts = tr["pts"]
@@ -508,7 +537,7 @@ class HandsV5:
             pts = pts + flow  # (where the hand is: the picture round it moved so)
         elif tr.get("vel") is not None:
             pts = pts + tr["vel"]  # (where the hand will be: it goes on as it went)
-        sq = square_from_hand(pts)
+        sq = at_least(square_from_hand(pts), c.least)
         # (a hand that barely moved keeps its square: the network then sees the same picture, and
         # its points don't tremble with a square that trembles with them)
         last = tr.get("sq")
@@ -541,9 +570,9 @@ class HandsV5:
             return []
         cands = []
         if c.seed is not None:
-            cands.append(square_from_hand(c.seed))
+            cands.append(at_least(square_from_hand(c.seed), c.least))
         if tr is not None and tr.get("held"):
-            cands.append(square_from_hand(tr["pts"]))  # (where it is held; a followed one was just looked at)
+            cands.append(at_least(square_from_hand(tr["pts"]), c.least))  # (where it is held; a followed one was just looked at)
         sp = square_from_pose(pose, side, w, h)
         if sp is not None:
             cands.append(sp)
@@ -551,6 +580,24 @@ class HandsV5:
         c.cands = cands[:LOOKS]
         self.stats["from_pose"] += len(c.cands)
         return c.cands
+
+    def _sweep(self, c, cands, pose, w, h):
+        """The video card's extra squares for a lost hand: round where it is held (or where the body has
+        it), in SWEEP turns and SWEEP_SIZES — a hand pointing at the camera has no clear «up»."""
+        if c.skip or not SWEEP:
+            return []
+        tr = c.tr
+        if tr is not None and tr.get("held"):
+            cx, cy = tr["pts"][PARTIAL].mean(0)
+        else:
+            sp = square_from_pose(pose, c.side, w, h)
+            if sp is None:
+                return []
+            cx, cy = sp.cx, sp.cy
+        sw = shoulders_px(pose, w, h)
+        if sw <= 0:
+            return []
+        return [Square(cx, cy, k * sw, i * math.tau / SWEEP) for k in SWEEP_SIZES for i in range(SWEEP)]
 
     def _searched(self, c, sq, look):
         """A searched square's look: True if it is the hand (then the next squares are not needed)."""
@@ -632,7 +679,7 @@ class HandsV5:
                     break
             if c.found is not None and refine:
                 self.stats["refined"] += 1
-                self._refined(c, self._look(rgb, side, square_from_hand(c.found[0])))
+                self._refined(c, self._look(rgb, side, at_least(square_from_hand(c.found[0]), c.least)))
         return self._end(c, rgb, pose, now)
 
     def _both_gpu(self, rgb, pose, now, seeds):
@@ -648,18 +695,23 @@ class HandsV5:
             for c, look in zip(tracked, looks):
                 self._tracked(c, look)
         lost = [(c, self._search(c, pose, w, h, seeds.get(c.side))) for c in cs if c.found is None]
-        flat = [(c, sq) for c, cands in lost for sq in cands]
+        flat = [(c, sq) for c, cands in lost for sq in cands + self._sweep(c, cands, pose, w, h)]
         if flat:
             looks = self._looks(rgb, [sq for _, sq in flat])
             if looks is None:
                 return None
+            # (every square of a lost hand looked at: the surest one that is this hand wins)
+            best = {}
             for (c, sq), look in zip(flat, looks):
-                if c.found is None:
-                    self._searched(c, sq, look)
+                if (c.side not in best or look[2] > best[c.side][2][2]) and self._searched(c, sq, look):
+                    best[c.side] = (c, sq, look)
+                    c.found = None
+            for c, sq, look in best.values():
+                c.found, c.sq, c.fresh = look, sq, True
         fresh = [c for c, _ in lost if c.found is not None]
         if fresh:
             self.stats["refined"] += len(fresh)
-            looks = self._looks(rgb, [square_from_hand(c.found[0]) for c in fresh])
+            looks = self._looks(rgb, [at_least(square_from_hand(c.found[0]), c.least) for c in fresh])
             if looks is None:
                 return None
             for c, look in zip(fresh, looks):
@@ -698,9 +750,14 @@ class HandsV5:
         """The last hand seen, moved with the picture round it (optical flow) — or, without it, carried by
         the body's arm (its wrist's move and the forearm's turn) — for up to HOLD seconds, only while the
         body still sees that wrist in the picture."""
-        if tr is None or now - tr["t"] > HOLD:
+        if tr is None or now - tr["t"] > HOLD_STILL:
             return None
         base = tr.get("base", tr["pts"])
+        if now - tr["t"] > HOLD:
+            # held longer only while it stays still (aiming); a hand that went on moving is gone
+            size = max(float(np.ptp(base[PARTIAL], axis=0).max()), 4.0)
+            if np.hypot(*(tr["pts"][0] - base[0])) > STILL * size:
+                return None
         if pose is not None and not inview:
             return None  # (the arm went out of the picture or behind the back: the hand is gone)
         wrist = self._wrist(pose, side, w, h, IN_VIEW)
