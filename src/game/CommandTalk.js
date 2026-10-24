@@ -24,7 +24,7 @@ const SPARRERS = new Set(['knight']);
 /** What can follow another command in a chain («иди домой и ляг»): states that need nothing resolved at the talk (a target, a place by hand). */
 const CHAINABLE = new Set(['pose', 'face', 'hold', 'release', 'walk', 'pace', 'weapon']);
 /** Commands that win over the king's old army-order reader (it knows no hand pointing, pairs or formations). */
-const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight']);
+const NEW_WINS = new Set(['spar_group', 'fight_him', 'arrest', 'release_prisoners', 'search_house', 'kill_class', 'formation', 'surround', 'guard_spot', 'patrol', 'stop_fight', 'follow']);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
@@ -80,18 +80,20 @@ export class CommandTalk {
     }
 
     /** Where on the ground I point (a march along the ray until it meets the ground), or null. */
-    pointGround() {
+    pointGround(beyond = 0) {
         const ray = this.pointRay();
         const col = this.game.collision;
         if (!ray || !col?.groundY) return null;
+        const hit = (t) => ({ x: ray.o.x + ray.d.x * (t + beyond), z: ray.o.z + ray.d.z * (t + beyond) });
+        // (a mountain far away: the march gets longer with the distance — 1 m near, 8 m far, up to 400 m)
         let last = null;
-        for (let t = 1; t <= 60; t += 1) {
+        for (let t = 1; t <= 400; t += t < 60 ? 1 : 8) {
             const x = ray.o.x + ray.d.x * t, y = ray.o.y + ray.d.y * t, z = ray.o.z + ray.d.z * t;
             const gy = col.groundY(x, z);
-            if (y <= gy + 0.2) return { x, z };
-            last = { x, z };
+            if (y <= gy + 0.2) return hit(t);
+            last = t;
         }
-        return ray.hand ? last : null; // (a gaze into the sky points at nothing; a hand points far)
+        return ray.hand && ray.d.y < 0.6 ? hit(Math.min(last, 120)) : null; // (a hand shown at the horizon points far; a gaze or a hand into the sky points at nothing)
     }
 
     // ------------------------------------------------------------------ the talk
@@ -138,6 +140,7 @@ export class CommandTalk {
             if (cmd.id === 'give_item') { const r = this._fetch(doers, lead, cmd, text, reply, ack); if (r !== null) return r; } // («дай мне меч»: a sword lying near is brought; his own he keeps)
             this._log(text, cmd, lead, 'ответ'); reply(this._sayLine(what, lead, text)); return true;
         }
+        if (kind === 'follow') return this._follow(doers, lead, cmd, text, reply);
         if (kind === 'cast') return this._cast(lead, what, cmd, text);
         if (kind === 'rank') return this._rank(lead, what, cmd, text, reply);
         if (kind === 'social') return this._social(lead, what, cmd, text, reply);
@@ -199,7 +202,7 @@ export class CommandTalk {
                 return this._done(text, cmd, lead);
             }
             case 'go_there': case 'look_there': {
-                const point = this.pointGround();
+                const point = this.pointGround(/(?:^| )(за|через)(?: |$)/.test(text) ? 25 : 0); // («за ту гору»: past the mountain)
                 if (cmd.id === 'go_there' && !point) { reply(pick(['Куда? Покажите рукой.', 'Не понял, куда идти — покажите.'])); return true; }
                 sendAll(() => ({ point }));
                 if (cmd.id === 'go_there') reply(ack());
@@ -233,6 +236,12 @@ export class CommandTalk {
         if (!g.authority) g.sync?.villagerTalk?.(v.id);
         const me = g.character.group.position;
         if (!v.foe) v.yaw = Math.atan2(-(me.x - v.x), -(me.z - v.z));
+        // a hand (or the wand) pointing while I speak: he looks that way at once — head and body — and not at my face
+        const pr = this.pointRay();
+        if (pr?.hand && !v.foe) {
+            const pg = this.pointGround();
+            if (pg) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
+        }
     }
 
     /** The people the command is for: the one I speak to, or a group by the scope words. */
@@ -457,6 +466,36 @@ export class CommandTalk {
     }
 
     /** The life of a person: his goal, the road together, a spell shown, what a friend may ask (Lives.js / SocialLife). */
+    /**
+     * «Иди за мной», «пойдём со мной»: the king's men (and his friends' too) come at once and keep on, far; a friend of mine
+     * goes as a companion (SocialLife); a stranger weighs it by how he takes me — and says no aloud, not in silence.
+     */
+    _follow(doers, lead, cmd, text, reply) {
+        const g = this.game, life = this.life, by = g.localId;
+        let n = 0, refused = null;
+        for (const k of doers.slice(0, 12)) {
+            if (k.role === 'king' || k.job === 'king') { refused = refused || k; continue; }
+            const cmdr = life.isCommander(k.cs, by);
+            const eff = life.rel?.eff?.(k, by) || { sub: 0, fr: 0, lv: 0 };
+            if (cmdr || eff.sub >= 50) { life.orders.run(k, 'follow_me', { agreed: true }, by); n++; continue; }
+            if (eff.fr >= 35 || eff.lv >= 25) {
+                const r = life.social?.invite(k);
+                if (r && (r.answer === 'join' || r.answer === 'help')) { life.orders.run(k, 'companion', {}, by); n++; if (k === lead) reply(r.line); continue; }
+                if (r && k === lead) { reply(r.line); this._log(text, cmd, lead, `за мной: ${r.answer}`); return true; }
+            }
+            if (k === lead) refused = k;
+        }
+        if (n) {
+            if (!lead.companion) reply(commandAck('come', lead.role, { role: lead.role, wizard: !!lead.wizard, female: !!lead.entry?.female }, Math.random) || pick(['Иду за вами!', 'Следую за вами.', 'Веди!']));
+            this._log(text, cmd, lead, `идут за мной: ${n}`);
+            return true;
+        }
+        const eff = life.rel?.eff?.(lead, by) || { sub: 0, fr: 0 };
+        reply(refused && (refused.role === 'king' || refused.job === 'king') ? 'Король не покидает свой трон.' : eff.fr <= -10 || eff.sub <= -10 ? pick(['Не пойду я за вами.', 'С чего бы мне идти за вами?']) : pick(['Простите, но у меня свои дела.', 'Куда это? Мы почти не знакомы — не пойду.', 'Я бы пошёл, но не за незнакомцем.']));
+        this._log(text, cmd, lead, 'за мной: отказ');
+        return true;
+    }
+
     _social(lead, what, cmd, text, reply) {
         const g = this.game, life = this.life, soc = life.social;
         if (!soc) return false;

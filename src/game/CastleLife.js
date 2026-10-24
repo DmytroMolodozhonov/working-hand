@@ -1152,7 +1152,7 @@ export class CastleLife {
     /** The goal can't be reached (a shut wall): it lets go of it and goes about its day. */
     _giveUp(v) {
         v.path = null; v.gridWay = null;
-        if (v.follow) { v.follow = null; v.followFar = false; }
+        if (v.follow && !v.followFar) v.follow = null; // (one on the march with me waits at a shut wall — the way round is looked for — and does not lose me)
         if (v.investigate) v.investigate = null;
         v.waitT = Math.max(v.waitT || 0, 6);
         v.mode = 'idle';
@@ -3602,6 +3602,10 @@ export class CastleLife {
                 if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)
                     if (v.role === 'knight' && !v.dead && (v.model.toolKind === 'sword' || v.model.toolKind === 'longbow')) { v.model.setHeldTool(v.fx & 1 ? 'longbow' : 'sword'); v.model.setAim?.(v.aimPitch || 0); }
+                    if (v.glance) { // (he looks where I pointed — CommandTalk._begin)
+                        v.glance.t -= v.animT;
+                        if (v.glance.t <= 0 || v.foe) { v.glance = null; v.model.lookAt(null); } else v.model.lookAt(_v.set(v.glance.x, v.y + 3.4, v.glance.z));
+                    }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     v.model.update(v.animT, { mode: v.mode, speed: v.speed, slope: v.slope, chore: ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath });
                     v.animT = 0;

@@ -58,7 +58,7 @@ export class VillagerOrders {
         switch (name) {
             case 'follow_me': case 'follow': {
                 const king = this._cmdr(cs, by);
-                v.follow = by; v.followT = king ? 600 : 90; v.followFar = king; v.path = null;
+                v.follow = by; v.followT = king ? 600 : args.agreed ? 900 : 90; v.followFar = king || !!args.agreed; v.path = null;
                 v.order = null;
                 break;
             }
