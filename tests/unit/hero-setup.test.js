@@ -1,7 +1,7 @@
 // «Настройки героя» Творческого мира (HeroSetup.js): по умолчанию, мана, броня/мантия, заклинания, дуэль, сохранение, старые миры.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_HERO, LEGACY_HERO, HERO, normalizeHero, heroOf, heroForSave, creativeInfiniteMana, creativeFiniteMana, manaRules, knownInCreative, duelFactor } from '../../src/game/HeroSetup.js';
+import { creativeMortal, DEFAULT_HERO, LEGACY_HERO, HERO, normalizeHero, heroOf, heroForSave, creativeInfiniteMana, creativeFiniteMana, manaRules, knownInCreative, duelFactor } from '../../src/game/HeroSetup.js';
 import { knows } from '../../src/game/SpellBook.js';
 import { GOD_SPELLS } from '../../src/game/Mana.js';
 import { isDivine } from '../../src/game/ProtectionGods.js';
@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duel: 100, dark: 0, breakward: false, steady: 100 });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duel: 100, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20 });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -132,4 +132,29 @@ test('устойчивость в Творческом берётся из на�
     assert.equal(mk(DEFAULT_HERO).effective, 100);
     assert.equal(mk({ ...DEFAULT_HERO, steady: 30 }).effective, 30);
     assert.equal(new Steadiness({ config: { mode: 'freeworld' } }).effective, 1);
+});
+
+test('здоровье: по умолчанию бессмертен; обычное здоровье включает урон (Combat.enabled) и своё число HP', () => {
+    assert.equal(normalizeHero({}).health, 'immortal');
+    assert.equal(normalizeHero({ health: 'normal', maxHp: 0 }).maxHp, 1);
+    assert.equal(normalizeHero({ health: 'normal', maxHp: 99999 }).maxHp, 1000);
+    assert.equal(normalizeHero({ health: 'zzz' }).health, 'immortal');
+    assert.equal(heroOf({ mode: 'creative' }).health, 'immortal'); // (старый мир)
+    const imm = fakeGame(DEFAULT_HERO), mort = fakeGame({ ...DEFAULT_HERO, health: 'normal', maxHp: 35 });
+    assert.equal(imm.combat.enabled, false); assert.equal(creativeMortal(imm), false);
+    assert.equal(mort.combat.enabled, true); assert.equal(creativeMortal(mort), true);
+    // обычное здоровье при бесконечной мане: мана по-прежнему не тратится
+    assert.equal(mort.combat.manaOn, false); assert.equal(manaRules(mort), false);
+    mort.combat.fatigue = 9; mort.combat.pay('TotalDestruction');
+    assert.equal(mort.combat.fatigue, 9);
+    // конечная мана + обычное здоровье: и то и другое
+    const both = fakeGame({ ...DEFAULT_HERO, health: 'normal', infiniteMana: false, cells: 60 });
+    assert.equal(both.combat.enabled, true); assert.equal(both.combat.manaOn, true);
+    // HeroApply ставит максимум HP (+ свитки здоровья)
+    mort.bonus = { hp: 5 }; mort.maxHP = 20; mort.playerHP = 20;
+    new HeroApply(mort).applyHealth();
+    assert.equal(mort.combat.maxHp, 40); assert.equal(mort.combat.hp, 35);
+    // «Выживание» не затронуто
+    const surv = fakeGame(undefined, 'freeworld');
+    assert.equal(surv.combat.enabled, true); assert.equal(surv.combat.manaOn, true);
 });

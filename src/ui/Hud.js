@@ -286,6 +286,12 @@ export class Hud {
         }
     }
 
+    /** The mana bar goes away (Creative with endless mana and the normal health). */
+    hideMana() {
+        this.el.fatigue?.classList.add('hidden');
+        this.el.manaNum?.classList.add('hidden');
+    }
+
     hidePvp() {
         this.el.fatigue?.classList.add('hidden');
         this.el.manaNum?.classList.add('hidden');

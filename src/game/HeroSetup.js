@@ -7,6 +7,7 @@
  *  - «Магическая броня» и «Магическая мантия» — каждая своей галочкой (4 сочетания);
  *  - заклинания: «Все заклинания есть» либо «Только заклинания сильного мага» (всё, кроме заклинаний богов и «Инспириуса»);
  *  - дуэльная сила: полная (100 %) либо 1…100 %;
+ *  - здоровье: «Бессмертен» (как раньше) или «Обычное здоровье» (урон и смерть как в Свободном мире; максимум HP, по умолчанию 20);
  *  - продвинутые: уровень чёрной магии 0…100, «метка слома магической защиты», устойчивость 1…100.
  *
  * Настройки лежат в мире (`config.hero` → сохранение мира → гостям от хоста: «правила мира»). Мир без них (старый) —
@@ -21,6 +22,7 @@ export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
     DUEL_MIN: 1, DUEL_MAX: 100,
     DARK_MAX: 100, STEADY_MIN: 1, STEADY_MAX: 100,
+    HP_MIN: 1, HP_MAX: 1000, HP_DEFAULT: 20,
 };
 
 /** Для нового Творческого мира, пока игрок ничего не менял. */
@@ -30,6 +32,8 @@ export const DEFAULT_HERO = Object.freeze({
     spells: 'all', // 'all' | 'mage'
     duel: 100, // %
     dark: 0, breakward: false, steady: 100,
+    health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
+    maxHp: HERO.HP_DEFAULT,
 });
 
 /** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
@@ -52,6 +56,8 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         dark: clamp(Math.round(num(r.dark, b.dark)), 0, HERO.DARK_MAX),
         breakward: r.breakward == null ? !!b.breakward : !!r.breakward,
         steady: clamp(Math.round(num(r.steady, b.steady)), HERO.STEADY_MIN, HERO.STEADY_MAX),
+        health: r.health === 'normal' ? 'normal' : r.health === 'immortal' ? 'immortal' : b.health === 'normal' ? 'normal' : 'immortal',
+        maxHp: clamp(Math.round(num(r.maxHp, b.maxHp)), HERO.HP_MIN, HERO.HP_MAX),
     };
 }
 
@@ -67,8 +73,11 @@ export const creativeInfiniteMana = (game) => game?.config?.mode === 'creative' 
 /** Творческий с конечной маной: тратится и набирается по обычным правилам. */
 export const creativeFiniteMana = (game) => game?.config?.mode === 'creative' && !(game.hero ?? heroOf(game.config)).infiniteMana;
 
-/** Работают ли правила маны (Выживание — всегда; Творческий — если мана конечная). */
-export const manaRules = (game) => !!game?.combat?.enabled || creativeFiniteMana(game);
+/** Работают ли правила маны (Выживание — всегда; Творческий — только если мана конечная, даже при обычном здоровье). */
+export const manaRules = (game) => (game?.config?.mode === 'creative' ? creativeFiniteMana(game) : !!game?.combat?.enabled);
+
+/** Творческий с «Обычным здоровьем»: урон и смерть как в Свободном мире (Combat.enabled). */
+export const creativeMortal = (game) => game?.config?.mode === 'creative' && (game.hero ?? heroOf(game.config)).health === 'normal';
 
 /** Заклинания «сильного мага» не включают: заклинания богов (`Mana.GOD_SPELLS`, `ProtectionGods.isDivine`) и «Инспириус». */
 export const MAGE_EXCLUDED = new Set(['Inspirius']);
@@ -86,5 +95,5 @@ export const duelFactor = (hero) => clamp((hero?.duel ?? 100) / 100, HERO.DUEL_M
 /** Короткое описание для журнала/отчёта. */
 export function heroSummary(h) {
     return [h.infiniteMana ? 'мана ∞' : `ячеек ${h.cells}`, h.armor ? 'броня' : 'без брони', h.robe ? 'мантия' : 'без мантии',
-        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duel}%`, `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
+        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duel}%`, `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
 }

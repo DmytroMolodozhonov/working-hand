@@ -74,7 +74,7 @@ export class Bleeding {
 
     /** I am wounded (a blade is in me: 1 HP/s). */
     start(rate = 1, text = null) {
-        if (this.game.config.mode === 'creative') return;
+        if (this.game.config.mode === 'creative' && !this.game.combat?.enabled) return;
         this.rate = Math.max(this.rate, rate);
         this.game.hud.setVoice(text || '🩸 В вас вонзилось оружие! Вытащите его и скажите «Rescue», указав на рану', true);
         this.game.sync?.bleed?.(this.rate);
@@ -98,7 +98,7 @@ export class Bleeding {
 
     /** A blade slashed me (not a deep wound): a cut that heals by itself. */
     cut(h) {
-        if (!h || this.game.config.mode === 'creative') return;
+        if (!h || (this.game.config.mode === 'creative' && !this.game.combat?.enabled)) return;
         this.addCut(this.game.character, h);
         this.game.sync?.cut?.(h);
         const now = performance.now();

@@ -628,10 +628,10 @@ export class Game {
 
         this.net && this.net.active ? (this.sync = new NetSync(this, this.net)) : (this.sync = null);
 
-        if (this.combat.enabled) { this.maxHP = PVP.MAX_HP; this.playerHP = PVP.MAX_HP; } else this.hud.hidePvp();
+        if (this.combat.enabled) { this.maxHP = this.combat.maxHp || PVP.MAX_HP; this.playerHP = this.maxHP; } else this.hud.hidePvp();
         this.hud.setMinimal?.(this.combat.enabled); // Свободный мир: only HP, fatigue and FPS on screen
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
-        this.hud.setHpVisible(config.mode !== 'creative');
+        this.hud.setHpVisible(config.mode !== 'creative' || this.combat.enabled); // (Creative with «Обычное здоровье»: the hearts show)
         this.hud.setMultiplayer(null);
 
         // The world is saved by itself on the host's (or single player's) computer
@@ -1185,7 +1185,7 @@ export class Game {
         // (point-blank can kill). Not in creative. Other players' blasts: Combat.explosion.
         if ((casterId === 'local' || casterId === this.localId) && !meSafe && !this.combat.blastProof?.()) { // (under a dome: my own blast does not reach me)
             const self = Math.round(bombardoDamage(this.combat.center(_v2).distanceTo(pos), radius, power));
-            if (self > 0 && this.config.mode !== 'creative') {
+            if (self > 0 && (this.config.mode !== 'creative' || this.combat.enabled)) {
                 if (this.combat.enabled) this.combat.damage(self, null, 'Bombardo');
                 else this.damageLocalPlayer(self);
             }

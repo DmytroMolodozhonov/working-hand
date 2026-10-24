@@ -203,7 +203,7 @@ export class Mana {
         const n = firstSpellGain(name);
         const key = SAME_SPELL[name] || name;
         if (!n || this.spellsUsed.has(key)) return 0;
-        if (GOD_SPELLS.has(key) && !this.combat?.enabled) return 0; // (Creative: mana does not count — nothing to earn)
+        if (GOD_SPELLS.has(key) && !this.combat?.manaOn) return 0; // (Creative: mana does not count — nothing to earn)
         this.spellsUsed.add(key);
         this.grow(n, 'spell', key);
         if (GOD_SPELLS.has(key)) {
@@ -225,7 +225,7 @@ export class Mana {
      */
     discover(key, name = '') {
         const n = key === 'space' ? DISCOVER.space : DISCOVER.planet;
-        if (this.found.has(key) || !this.combat?.enabled) return 0;
+        if (this.found.has(key) || !this.combat?.manaOn) return 0;
         this.found.add(key);
         this.grow(n, 'discover', key);
         const g = this.game;
@@ -251,7 +251,7 @@ export class Mana {
 
     /** The opponent `id` killed by me without a clash won (a bomb, a sword, an ambush): 25%, once per opponent. */
     killWon(oppMax = MANA.BASE, id = null, pos = null) {
-        if (!this.combat?.enabled) return 0; // (Creative: no mana rules)
+        if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (already paid — a duel or a kill)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = killGain(oppMax);
@@ -263,7 +263,7 @@ export class Mana {
     /** The beaten one's power flies to my chest: a stream of sparks (the shared pool), a flash and a chime at the end. */
     powerFlow(pos, n, how) {
         const g = this.game;
-        if (!this.combat?.enabled) return;
+        if (!this.combat?.manaOn) return;
         if (how !== 'duel') this._say(`🔷 Сила побеждённого перешла к вам (победа без дуэли): +${n} ячеек маны`);
         else this._say(`🔷 Сила побеждённого перешла к вам в дуэли: +${n} ячеек маны`);
         if (!g.camera || !Array.isArray(pos) || pos.length < 3) return;
@@ -392,7 +392,7 @@ export class Mana {
 
     _say(text) {
         const hud = this.game.hud;
-        if (!this.combat?.enabled) return; // (no mana rules outside the free world)
+        if (!this.combat?.manaOn) return; // (no mana rules outside the free world)
         if (hud?.toast) hud.toast(text);
         else hud?.setVoice?.(text, true);
     }

@@ -490,7 +490,7 @@ export class Dismemberment {
     /** dmcut aimed at me: is it a real cut? (checks first) */
     receiveCut(by, sv) {
         const g = this.game;
-        if (!g.combat?.enabled || g.combat.dead || g.isDeadLocal || g.config.mode === 'creative') return false;
+        if (!g.combat?.enabled || g.combat.dead || g.isDeadLocal) return false;
         if (sv.lf !== this.life) return false; // aimed at my previous life
         const att = g.remotes?.get(by);
         if (!att || att.position.distanceTo(g.character.group.position) > MAX_REACH) return false;

@@ -504,8 +504,9 @@ export class Combat {
     /** @param {Game} game */
     constructor(game) {
         this.game = game;
-        this.enabled = game.config.mode === 'freeworld';
-        this.hp = PVP.MAX_HP;
+        this.enabled = game.config.mode === 'freeworld' || (game.config.mode === 'creative' && game.hero?.health === 'normal'); // (Creative with «Обычное здоровье»: damage and death as in the free world — HeroSetup.js)
+        if (this.enabled && game.config.mode === 'creative') this.maxHp = game.hero.maxHp; // (Creative with «Обычное здоровье»: the number the world was made with)
+        this.hp = this.maxHp || PVP.MAX_HP;
         this.fatigue = this.maxFatigue || PVP.MAX_FATIGUE;
         this.shield = null; // {type: 1 hand | 2 dome, side, left}
         this.frozenLeft = 0;
@@ -542,7 +543,7 @@ export class Combat {
 
     /** Do the mana rules work: «Выживание» always; Creative only with a finite mana («Настройки героя», HeroSetup.js). */
     get manaOn() {
-        return this.enabled || (this.game.config?.mode === 'creative' && this.game.hero?.infiniteMana === false);
+        return this.game.config?.mode === 'creative' ? this.game.hero?.infiniteMana === false : this.enabled;
     }
 
     get frozen() {
@@ -1168,6 +1169,10 @@ export class Combat {
 
     /** Mana every frame: it comes back, a held shield / a living tree spends it. Also Creative with a finite mana (HeroSetup.js). */
     _manaTick(dt) {
+        if (!this.manaOn) { // (endless mana, normal health: nothing is spent or regained; a shield just times out)
+            if (this.shield) { this.shield.left -= dt; this._shieldJerk(dt); if (this.shield && this.shield.left <= 0) this.shield = null; }
+            return;
+        }
         // (a held «Protection» or a living tree spends the strength instead of it coming back)
         const holding = this.shield?.drain != null;
         const tree = !!this.game.livingTrees?.draining;
@@ -1209,7 +1214,7 @@ export class Combat {
         if (key === this._hudKey) return;
         this._hudKey = key;
         hud.update(this.hp, this.maxHp || PVP.MAX_HP, this.game.killCount, this.game.punchCount);
-        hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE);
+        if (this.manaOn) hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE); else hud.hideMana?.(); // (Creative with endless mana: no bar)
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
             ? `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`

@@ -18,6 +18,8 @@ const T = {
     duelCustom: 'Сделайте дуэли честнее: выставьте, на сколько процентов сильнее или слабее вас будут считаться ваши заклинания в столкновении лучей. 100 % — полная сила.',
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
+    health: 'Здоровье. «Бессмертен» — герой не получает урона и не умирает (так в Творческом было всегда). «Обычное здоровье» — как в Свободном мире: удары, огонь, падение ранят, а при нуле герой погибает, роняет вещи и возрождается.',
+    maxHp: 'Сколько здоровья у героя при обычном здоровье. По умолчанию 20 — как в Свободном мире.',
     steady: 'Устойчивость — шанс устоять на ногах, когда вас пытаются сбить заклинанием. 100 — всегда устоите, 1 — собьёт почти каждое.',
 };
 
@@ -43,6 +45,12 @@ const html = (p) => `
     <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom"> Настроить</label>
     <span class="hero-slide" id="${p}-duel-wrap" hidden title="${T.duelCustom}"><input type="range" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" value="100"> <b id="${p}-duel-val">100</b>%</span>
   </div>
+  <div class="hero-group" role="radiogroup" aria-label="Здоровье">
+    <span class="hero-cap">❤️ Здоровье</span>
+    <label class="hero-seg" title="${T.health}"><input type="radio" name="${p}-health" value="immortal" checked> Бессмертен</label>
+    <label class="hero-seg" title="${T.health}"><input type="radio" name="${p}-health" value="normal"> Обычное здоровье</label>
+    <span class="hero-slide" id="${p}-hp-wrap" hidden title="${T.maxHp}"><label for="${p}-hp">Максимум HP:</label> <input type="number" id="${p}-hp" min="${HERO.HP_MIN}" max="${HERO.HP_MAX}" value="${HERO.HP_DEFAULT}"></span>
+  </div>
   <details class="hero-adv">
     <summary>⚙️ Продвинутые</summary>
     <div class="hero-row" title="${T.dark}"><label for="${p}-dark">🜏 Чёрная магия:</label> <input type="range" id="${p}-dark" min="0" max="${HERO.DARK_MAX}" value="0"> <b id="${p}-dark-val">0</b></div>
@@ -59,6 +67,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
     const sync = () => {
         $('cells-row').hidden = $('inf').checked;
         $('duel-wrap').hidden = radio('duel') !== 'custom';
+        $('hp-wrap').hidden = radio('health') !== 'normal';
         $('duel-val').textContent = $('duel-pct').value;
         $('dark-val').textContent = $('dark').value;
         $('steady-val').textContent = $('steady').value;
@@ -70,6 +79,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
         duel: radio('duel') === 'custom' ? $('duel-pct').value : 100,
+        health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
     const set = (h) => {
@@ -78,6 +88,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
         root.querySelector(`input[name="${prefix}-duel"][value="${v.duel >= 100 ? 'full' : 'custom'}"]`).checked = true;
+        root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
         $('duel-pct').value = v.duel; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
     };

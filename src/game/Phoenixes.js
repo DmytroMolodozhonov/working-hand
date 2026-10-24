@@ -635,7 +635,7 @@ export class Phoenixes {
     // ------------------------------------------------------------ the wound watch (my own player)
     _watchMe() {
         const g = this.game, c = g.combat;
-        if (g.isDeadLocal || c?.dead || g.config?.mode === 'creative') { this._me = {}; return; }
+        if (g.isDeadLocal || c?.dead || (g.config?.mode === 'creative' && !c?.enabled)) { this._me = {}; return; }
         const on = !!c?.enabled;
         const s = {
             hp: on ? c.hp : g.playerHP ?? 0, max: on ? c.maxHp || 20 : g.maxHP ?? 20,

@@ -8,7 +8,7 @@
  * - `respawn()`: смерть в Творческом (космос и т.п.) — герой возрождается с настройками заново.
  */
 
-import { creativeFiniteMana } from './HeroSetup.js';
+import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
 
@@ -24,6 +24,15 @@ export class HeroApply {
         c.maxFatigue = g.hero.cells + (g.bonus?.fatigue || 0) + (g.mana?.growth || 0); // (the cells set + burnt scrolls + what spells grew)
         c.fatigue = Math.min(c.fatigue ?? c.maxFatigue, c.maxFatigue);
         c._hudKey = ''; c._manaKey = '';
+    }
+
+    /** Обычное здоровье в Творческом: своё число HP (+ свитки здоровья); урон и смерть — как в Свободном мире (Combat.enabled). */
+    applyHealth() {
+        const g = this.game, c = g.combat;
+        if (!this.on || !c?.enabled || !creativeMortal(g)) return;
+        c.maxHp = g.hero.maxHp + (g.bonus?.hp || 0);
+        c.hp = Math.min(c.hp ?? c.maxHp, c.maxHp);
+        g.maxHP = c.maxHp; g.playerHP = c.hp; c._hudKey = '';
     }
 
     /** Броня и мантия: в пустые места (то, что герой уже носит, не трогаем). */
@@ -48,6 +57,7 @@ export class HeroApply {
     start() {
         if (!this.on) return;
         this.applyMana();
+        this.applyHealth();
         if (!this.game._playerRestored) this.initial();
     }
 
@@ -55,6 +65,8 @@ export class HeroApply {
         if (!this.on) return;
         const g = this.game, c = g.combat;
         this.applyMana();
+        this.applyHealth();
+        if (c && creativeMortal(g)) { c.hp = c.maxHp; g.playerHP = c.hp; }
         if (c && creativeFiniteMana(g)) c.fatigue = c.maxFatigue;
         g.dark?.onDeath?.();
         g.breakward?.onDeath?.();

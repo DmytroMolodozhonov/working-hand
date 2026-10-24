@@ -1249,7 +1249,7 @@ export class HouseWards {
                 if (dir.lengthSq() < 1e-8) dir.set(1, 0, 0);
                 dir.normalize();
                 g.impact?.apply?.({ v: dir.clone().multiplyScalar(WARD.SHOVE_V), from: new THREE.Vector3(w.c.x, w.c.y, w.c.z), by: null, spell: 'Ward', jolt: 1.5, noShield: true });
-                if (g.config?.mode !== 'creative') { if (g.combat?.enabled) g.combat.damage(WARD.SHOVE_HP, null, 'Ward'); else g.damageLocalPlayer?.(WARD.SHOVE_HP); }
+                if (g.config?.mode !== 'creative' || g.combat?.enabled) { if (g.combat?.enabled) g.combat.damage(WARD.SHOVE_HP, null, 'Ward'); else g.damageLocalPlayer?.(WARD.SHOVE_HP); }
                 this.flash(w, at);
                 g.sound?.playClang?.();
                 this.log.push({ ev: 'shove', who: 'me', id: w.id });

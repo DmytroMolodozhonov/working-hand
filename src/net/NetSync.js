@@ -330,7 +330,7 @@ export class NetSync {
         this.hudTimer += dt;
         if (this.hudTimer > 0.5) {
             this.hudTimer = 0;
-            const showHp = g.config.mode !== 'creative';
+            const showHp = (g.config.mode !== 'creative' || g.combat?.enabled);
             const world = this.net.code && /WORLD/.test(this.net.code);
             const title = world ? '🌍 Общий сервер' : `🌐 Комната <b>${this.net.code}</b>`;
             const rows = [`<div class="mp-hud-title">${title} · игроков: <b>${g.remotes.size + 1}</b></div>`];

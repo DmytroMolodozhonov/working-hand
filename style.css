@@ -1812,3 +1812,5 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hero-adv > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 @media (max-width: 640px) { .hero-settings { max-height: 55vh; padding: 10px; } .hero-seg { flex: 1 1 100%; } }
 .hero-settings [hidden] { display: none !important; }
+
+.hero-slide input[type="number"] { width: 90px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--ui-border, rgba(160, 140, 255, 0.35)); background: rgba(0, 0, 0, 0.35); color: inherit; }
