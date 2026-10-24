@@ -318,6 +318,7 @@ export class Gargoyles {
             _v.set(s.x, s.y + 1.4, s.z);
             add('s', s.id, s, _v);
         }
+        for (const o of this.list) if (!o.dead && o.target) { const v = out.find((q) => q.k === o.target.k && q.id === o.target.id); if (v) v.claims++; } // (who is already on whom)
     }
 
     /** The victim `v` is still there (alive, in the list)? */
@@ -634,8 +635,7 @@ export class Gargoyles {
         if (v.roofed || !this._live(t)) return false;
         if (t.k === 'p' && t.id === o.by && sparesSummoner(o.age)) return false;
         if (hdist(v.pos, o.home) > GARGOYLE.LEASH + 12) return false;
-        v.claims++;
-        t.v = v;
+        t.v = v; // (the pack's count is recounted at every look at the victims — `_scan`: it once grew every frame, so one gargoyle shut the prey to all the others)
         return true;
     }
 

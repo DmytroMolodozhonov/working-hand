@@ -121,8 +121,9 @@ export class UnitedPower {
             const seen = this._noted.has(key);
             const hint = (t) => { if (!seen) this._hint(key, t, 9000); };
             if (c.things.length > 2) { hint('Кладите ровно два предмета одного вида'); continue; }
-            const body = c.bodies.find((b) => bodyOk(b).ok);
-            if (!body) { hint(c.bodies.length ? bodyOk(c.bodies[0]).why : 'Нужно положить в круг тело убитого человекоподобного (не кости)'); continue; }
+            const mp = !!this.game.net?.active; // (online: only a real player's killed body counts)
+            const body = c.bodies.find((b) => bodyOk(b, { multiplayer: mp }).ok);
+            if (!body) { hint(c.bodies.length ? bodyOk(c.bodies[0], { multiplayer: mp }).why : mp ? 'Нужно положить в круг тело убитого игрока (не кости)' : 'Нужно положить в круг тело убитого человекоподобного (не кости)'); continue; }
             if (!c.heads.length) { hint('Нужна головка плотоядного растения: положите её в круг'); continue; }
             if (c.things.length < 2) { hint('Нужны два предмета одного вида: положите второй'); continue; }
             const ok = canUnite(c.things[0].item, c.things[1].item);
