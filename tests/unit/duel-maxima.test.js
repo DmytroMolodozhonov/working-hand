@@ -29,13 +29,13 @@ test('«Максима» alone is heard as Maxima', () => {
     assert.equal(matchSpell('максима'), 'Maxima');
 });
 
-test('duel «Максима»: +5 % of the way a second towards the opponent per shout, adding up', () => {
+test('duel «Максима»: +2,5 % of the way a second towards the opponent per shout, adding up (half of the old 5 %)', () => {
     assert.equal(maximaPush(0, 0), 0);
-    assert.ok(Math.abs(maximaPush(1, 0) - 0.05) < 1e-9);
-    assert.ok(Math.abs(maximaPush(3, 1) - 0.1) < 1e-9);
+    assert.ok(Math.abs(maximaPush(1, 0) - 0.025) < 1e-9);
+    assert.ok(Math.abs(maximaPush(3, 1) - 0.05) < 1e-9);
     assert.ok(maximaPush(0, 2) < 0, 'the other side\'s shouts push back');
-    // worth it: one shout pushes more than its 5 mana takes from the strength (mana/30 × PUSH)
-    assert.ok(maximaPush(1, 0) > (DUEL.MAXIMA_COST / 30) * DUEL.PUSH);
+    // worth it: one shout pushes more than the 5 mana take from the strength at the poorest (30 mana → 25: the root of mana/30 × PUSH)
+    assert.ok(maximaPush(1, 0) > DUEL.PUSH * (1 - Math.sqrt(25 / 30)));
     assert.equal(DUEL.MAXIMA_COST, 5);
     assert.equal(DUEL.MAXIMA_EVERY, 3);
     assert.equal(DUEL.CLASH_FATIGUE, 1, 'a clash costs each side 1 mana a second');
