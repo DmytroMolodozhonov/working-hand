@@ -31,6 +31,12 @@ export function activeLook() {
     return (d.list.find((c) => c.id === d.active) || d.list[0]).look;
 }
 
+/** The name (nickname) of the hero to play now. */
+export function activeName() {
+    const d = load();
+    return (d.list.find((c) => c.id === d.active) || d.list[0]).name;
+}
+
 const hex = (c) => '#' + ((c >>> 0) & 0xffffff).toString(16).padStart(6, '0');
 const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 

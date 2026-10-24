@@ -562,3 +562,5 @@ button, input, select, textarea { font-family: inherit; }
 .ps-tip b { display: block; margin-bottom: 4px; color: var(--ui-gold); }
 .ps-tip.hidden { display: none; }
 @media (max-width: 640px) { .ps-hero { position: static; } }
+.ps-row > * { min-width: 0; }
+.ps-value { overflow-wrap: anywhere; }

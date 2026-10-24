@@ -22,6 +22,25 @@ test('Escape opens «Игрок» first; cards show HP, mana, name; the 3D hero 
     assert.ok((await page.textContent('#pause-player .ps-name')).length > 0);
     await sleep(1200); // (the 3D hero loads)
     await page.screenshot({ path: process.env.PS_SHOT || '/tmp/player-sheet.png' });
+    // opened again and again: the 3D hero is drawn every time (non-empty pixels), also after the armour changed
+    const painted = () => page.evaluate(async () => {
+        await new Promise((r) => setTimeout(r, 900));
+        const c = document.querySelector('#pause-player .ps-canvas');
+        const t = document.createElement('canvas'); t.width = c.width; t.height = c.height;
+        const x = t.getContext('2d'); x.drawImage(c, 0, 0);
+        const d = x.getImageData(0, 0, t.width, t.height).data;
+        let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+        return n;
+    });
+    assert.ok(await painted() > 2000, 'first opening paints the hero');
+    for (let i = 0; i < 3; i++) {
+        await page.keyboard.press('Escape'); // close
+        await page.waitForFunction(() => document.getElementById('pause-menu').classList.contains('hidden'));
+        if (i === 1) await page.evaluate(() => { const g = window.__zns.game; g.armor.worn.helmet = { kind: 'armor', piece: 'helmet', magic: true, uid: 'x', hp: 30 }; });
+        await page.keyboard.press('Escape'); // open
+        await page.waitForFunction(() => !document.getElementById('pause-menu').classList.contains('hidden'));
+        assert.ok(await painted() > 2000, 'opening ' + (i + 2) + ' paints the hero');
+    }
     // other tab: the preview is given back
     await page.click('[data-pause-tab="pause-audio"]');
     assert.equal(await page.evaluate(() => document.getElementById('pause-player').classList.contains('active')), false);

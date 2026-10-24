@@ -7,7 +7,7 @@ import { VoxelCharacter } from '../entities/Character.js';
 import { dressArmor } from '../entities/ArmorLook.js';
 
 export async function makePlayerPreview(canvas) {
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, canvas.width / canvas.height, 0.1, 100);
@@ -30,9 +30,16 @@ export async function makePlayerPreview(canvas) {
         renderer, scene, camera, hero,
         dress: (h, code) => dressArmor(h, code),
         dispose() {
-            scene.traverse((o) => { if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose?.(); });
+            // (only what the preview owns: the armour's shared materials/shapes stay for the game)
+            scene.remove(hero.group);
+            hero.group.traverse((o) => {
+                if (!(o.isMesh || o.isInstancedMesh)) return;
+                if (!o.geometry?.userData?.shared && !o.geometry?.userData?.keep) o.geometry?.dispose();
+                for (const m of [].concat(o.material || [])) if (!m.userData?.shared && !m.userData?.keep) m.dispose();
+            });
+            floor.geometry.dispose(); floor.material.dispose();
             renderer.dispose();
-            renderer.forceContextLoss?.();
+            renderer.forceContextLoss?.(); // (this canvas is thrown away: the next opening makes a NEW canvas — a lost context cannot be reused)
         },
     };
 }

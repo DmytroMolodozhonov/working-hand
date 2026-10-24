@@ -125,8 +125,8 @@ export function buildSheet(g, ctx = {}) {
     return [...by.values()].filter((s) => s.rows.length);
 }
 
-/** The hero's name (the nickname of the made hero). */
-export const heroName = (g, fallback = 'Герой') => String(g?.net?.name || g?.config?.name || fallback);
+/** The hero's name: the nickname of the made hero (`fallback`, from «Персонаж»); in a network game — the name the player joined with. */
+export const heroName = (g, fallback = 'Герой') => String((g?.net?.active && g.net.name) || fallback);
 
 /** The tooltip text of a thing: [title, lines…] (HTML), or null. */
 export function itemTip(r) {
@@ -185,17 +185,22 @@ export class PlayerSheetView {
                 <div class="ps-cards"></div>
             </div>
             <div class="ps-tip hidden"></div>`;
-        this.canvas = this.root.querySelector('.ps-canvas');
         this.cards = this.root.querySelector('.ps-cards');
         this.tip = this.root.querySelector('.ps-tip');
         this.yaw = Math.PI - 0.5;
-        let drag = null;
-        this.canvas.addEventListener('pointerdown', (e) => { drag = e.clientX; this.canvas.setPointerCapture(e.pointerId); });
-        this.canvas.addEventListener('pointermove', (e) => { if (drag != null) { this.yaw += (e.clientX - drag) * 0.012; drag = e.clientX; } });
-        this.canvas.addEventListener('pointerup', () => { drag = null; });
+        this._bindCanvas(this.root.querySelector('.ps-canvas'));
         this.cards.addEventListener('pointermove', (e) => this._hover(e));
         this.cards.addEventListener('pointerleave', () => this.tip.classList.add('hidden'));
         this.cards.addEventListener('click', (e) => { if (e.target.closest('[data-ps-link="codex"]')) this.opts.openCodex?.(); });
+    }
+
+    /** Turning by dragging; called for every new canvas (a canvas whose GL context was given back cannot draw again). */
+    _bindCanvas(canvas) {
+        this.canvas = canvas;
+        let drag = null;
+        canvas.addEventListener('pointerdown', (e) => { drag = e.clientX; canvas.setPointerCapture(e.pointerId); });
+        canvas.addEventListener('pointermove', (e) => { if (drag != null) { this.yaw += (e.clientX - drag) * 0.012; drag = e.clientX; } });
+        canvas.addEventListener('pointerup', () => { drag = null; });
     }
 
     _hover(e) {
@@ -241,10 +246,17 @@ export class PlayerSheetView {
 
     // ---- the 3D preview: its own small renderer, alive only while the tab is open
     async _startPreview() {
-        if (this._raf || !this.opts.makeCharacter) return;
+        if (this._raf || this._starting || !this.opts.makeCharacter) return;
         try {
-            if (!this._pv) this._pv = await this.opts.makeCharacter(this.canvas);
-            if (!this.open || !this._pv) return;
+            if (!this._pv) {
+                const fresh = this.canvas.cloneNode(false); // (a new canvas every opening: the old one lost its GL context with the preview)
+                this.canvas.replaceWith(fresh);
+                this._bindCanvas(fresh);
+                this._starting = true;
+                try { this._pv = await this.opts.makeCharacter(fresh); } finally { this._starting = false; }
+            }
+            if (!this.open) { this._stopPreview(); return; } // (closed while it was loading: given back at once)
+            if (!this._pv) return;
             const loop = () => {
                 if (!this.open) { this._raf = null; return; }
                 this._pv.hero.group.rotation.y = this.yaw;

@@ -18,7 +18,7 @@ import { renderSpellsTab, renderItemsTab, renderMechanicsTab, renderBossesTab, S
 import { PlayerSheetView } from './ui/PlayerSheet.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
 import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
-import { CharacterEditor, activeLook } from './ui/CharacterEditor.js';
+import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
 import { spellPhrase, PHRASE_WHY_RU, afterCast, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
@@ -1234,7 +1234,7 @@ $('v5-gpu')?.addEventListener('change', (e) => {
 const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
     spells: [...new Set(SPELLS.map((s) => matchSpell(s.name)).filter(Boolean))],
     look: () => activeLook(),
-    name: () => localStorage.getItem('zns-name') || 'Герой',
+    name: () => activeName(), // (the hero made in «Персонаж»; in a network game the server name wins — PlayerSheet.heroName)
     openCodex: () => { const b = document.querySelector('[data-pause-tab="pause-spells"]'); if (b && !b.hidden) showPauseTab('pause-spells'); },
     makeCharacter: makePlayerPreview,
 });

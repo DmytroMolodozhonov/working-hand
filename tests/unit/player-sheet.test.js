@@ -23,7 +23,7 @@ test('a hero: hp, mana, regen, steadiness, armour, coins', () => {
         dark: { level: 50, skin: 45 },
         achievements: { done: new Set(['king']), regenK: 1.15, off: false },
         canSaySpell: (s) => s === 'a', knowsSpell: () => false,
-        net: { name: 'Вася' },
+        net: { name: 'Вася', active: true },
     };
     const s = buildSheet(g, { spells: ['a', 'b'] });
     assert.equal(byId(s, 'hp').value, '12 / 20');
@@ -38,6 +38,7 @@ test('a hero: hp, mana, regen, steadiness, armour, coins', () => {
     const tip = itemTip(byId(s, 'worn-helmet'));
     assert.ok(tip.lines.some((l) => l.includes('зачарование')));
     assert.equal(heroName(g), 'Вася');
+    assert.equal(heroName({ net: { name: 'Игрок', active: false } }, 'Маг'), 'Маг');
 });
 
 test('a clean hero has no dark rows; absent modules give no rows; a throwing getter is skipped', () => {
