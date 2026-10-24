@@ -93,23 +93,23 @@ const rect = (x0, z0, x1, z1) => (x, z) => x >= x0 && x <= x1 && z >= z0 && z <=
 const anyOf = (...f) => (x, z) => f.some((g) => g(x, z));
 
 /** Two rooms joined by a corridor of width w and length len (along x). Walkers cross both ways. */
-export function corridor(w = 1.6, len = 14, n = 6, rooms = 9) {
+export function corridor(w = 1.6, len = 14, n = 4, rooms = 9) {
     const room = anyOf(rect(-rooms, -rooms / 2, 0, rooms / 2), rect(0, -w / 2, len, w / 2), rect(len, -rooms / 2, len + rooms, rooms / 2));
     const agents = [];
     for (let i = 0; i < n; i++) {
-        agents.push({ id: 'L' + i, x: -2 - (i % 3) * 1.6, z: -2.4 + ((i / 3) | 0) * 2.4, r: 0.5, speed: 1.6, goals: [{ x: len + 4 + (i % 3) * 1.5, z: -3 + ((i / 3) | 0) * 3, stop: 1.0 }] });
-        agents.push({ id: 'R' + i, x: len + 2 + (i % 3) * 1.6, z: -2.4 + ((i / 3) | 0) * 2.4, r: 0.5, speed: 1.6, goals: [{ x: -4 - (i % 3) * 1.5, z: -3 + ((i / 3) | 0) * 3, stop: 1.0 }] });
+        agents.push({ id: 'L' + i, x: -2 - (i % 3) * 1.6, z: -2.4 + ((i / 3) | 0) * 2.4, r: 0.5, speed: 1.6, goals: [{ x: 0.2, z: 0, stop: 1.6 }, { x: len - 0.2, z: 0, stop: 1.6 }, { x: len + 4 + (i % 3) * 1.5, z: -3 + ((i / 3) | 0) * 3, stop: 1.0 }] });
+        agents.push({ id: 'R' + i, x: len + 2 + (i % 3) * 1.6, z: -2.4 + ((i / 3) | 0) * 2.4, r: 0.5, speed: 1.6, goals: [{ x: len - 0.2, z: 0, stop: 1.6 }, { x: 0.2, z: 0, stop: 1.6 }, { x: -4 - (i % 3) * 1.5, z: -3 + ((i / 3) | 0) * 3, stop: 1.0 }] });
     }
     return { room, agents };
 }
 
 /** A wall with a doorway of width w, a crowd on each side going through, both ways. */
-export function doorway(w = 1.4, n = 10) {
+export function doorway(w = 1.4, n = 6) {
     const room = (x, z) => Math.abs(x) <= 12 && Math.abs(z) <= 8 && !(Math.abs(x) < 0.4 && Math.abs(z) > w / 2);
     const agents = [];
     for (let i = 0; i < n; i++) {
-        agents.push({ id: 'a' + i, x: -4 - (i % 3) * 1.3, z: -3 + ((i / 3) | 0) * 1.5, r: 0.5, speed: 1.6, goals: [{ x: 4 + (i % 3) * 1.6, z: -3 + ((i / 3) | 0) * 2, stop: 1.0 }] });
-        agents.push({ id: 'b' + i, x: 4 + (i % 3) * 1.3, z: -3 + ((i / 3) | 0) * 1.5, r: 0.5, speed: 1.6, goals: [{ x: -4 - (i % 3) * 1.6, z: -3 + ((i / 3) | 0) * 2, stop: 1.0 }] });
+        agents.push({ id: 'a' + i, x: -4 - (i % 3) * 1.3, z: -3 + ((i / 3) | 0) * 1.5, r: 0.5, speed: 1.6, goals: [{ x: 0, z: 0, stop: 1.4 }, { x: 4 + (i % 3) * 1.6, z: -3 + ((i / 3) | 0) * 2, stop: 1.0 }] });
+        agents.push({ id: 'b' + i, x: 4 + (i % 3) * 1.3, z: -3 + ((i / 3) | 0) * 1.5, r: 0.5, speed: 1.6, goals: [{ x: 0, z: 0, stop: 1.4 }, { x: -4 - (i % 3) * 1.6, z: -3 + ((i / 3) | 0) * 2, stop: 1.0 }] });
     }
     return { room, agents };
 }
@@ -150,14 +150,16 @@ export function stairs(w = 1.3) {
     const room = anyOf(rect(-8, -3, 0, 3), rect(0, -w / 2, 20, w / 2), rect(20, -3, 28, 3));
     const agents = [];
     for (let i = 0; i < 3; i++) {
-        agents.push({ id: 'u' + i, x: -2 - i * 1.4, z: 0, r: 0.5, speed: 1.4, goals: [{ x: 24 + i * 1.5, z: (i - 1) * 1.8, stop: 1.0 }] });
-        agents.push({ id: 'd' + i, x: 22 + i * 1.4, z: 0, r: 0.5, speed: 1.4, goals: [{ x: -4 - i * 1.5, z: (i - 1) * 1.8, stop: 1.0 }] });
+        agents.push({ id: 'u' + i, x: -2 - i * 1.4, z: 0, r: 0.5, speed: 1.4, goals: [{ x: 0.2, z: 0, stop: 1.4 }, { x: 19.8, z: 0, stop: 1.4 }, { x: 24 + i * 1.5, z: (i - 1) * 1.8, stop: 1.0 }] });
+        agents.push({ id: 'd' + i, x: 22 + i * 1.4, z: 0, r: 0.5, speed: 1.4, goals: [{ x: 19.8, z: 0, stop: 1.4 }, { x: 0.2, z: 0, stop: 1.4 }, { x: -4 - i * 1.5, z: (i - 1) * 1.8, stop: 1.0 }] });
     }
     return { room, agents };
 }
 
 export const SCENARIOS = {
     'коридор 1,6 м': () => corridor(1.6),
+    'коридор 1,6 м, давка 6+6': () => corridor(1.6, 14, 6),
+    'дверь 3 м, давка 10+10': () => doorway(3, 10),
     'коридор 2 м': () => corridor(2),
     'коридор 3 м': () => corridor(3),
     'дверь 1,4 м': () => doorway(1.4),

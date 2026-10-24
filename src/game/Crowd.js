@@ -16,6 +16,7 @@
  */
 
 import { avoidStep } from './Avoid.js';
+import { pilot, newPilotState } from './Pilot.js';
 
 export const CROWD = {
     CELL: 4, // m: a grid cell
@@ -223,3 +224,18 @@ export function numId(id) {
 
 /** A walker's own body as the crowd knows it — for skipping itself in `near`. */
 export const bodyOf = (ref) => ({ ref });
+
+
+/**
+ * The walking brain of the game (Pilot.js): one step of a walker through the crowd — the same contract as `steer` (the way to go as a unit
+ * {x, z}, or null: stand this step), with more: `k` the share of full speed (slower behind a slow one, in a queue), `back` (backing out of a
+ * narrow place to let the other pass), `unstick` {x, z} (stuck for ~10 s: the walker is to be set there). `st` is the walker's memory
+ * (`me._avoid`); its own part lives in `st.pilot`. opts: as `steer`, plus `rank` (0…3: on an order of the king = more), `clock` (s).
+ */
+export function steerPilot(st, p, u, opts) {
+    const ps = st.pilot || (st.pilot = newPilotState());
+    ps.rank = opts.rank || 0;
+    const a = pilot(ps, p, u, opts.others || [], { ...opts, askWay: opts.askWay || askWay });
+    if (!a) { st.waitT = 0; return null; }
+    return a;
+}

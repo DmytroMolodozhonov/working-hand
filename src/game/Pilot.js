@@ -59,7 +59,7 @@ const hashId = (id) => {
 export function newPilotState() {
     return {
         vx: 0, vz: 0, k: 1, lx: NaN, lz: NaN, still: 0, trail: [], trailX: NaN, trailZ: NaN, blocker: null,
-        unstuck: 0, squeeze: 0, probe: null, probeAt: -9, plan: null, yielding: false, clear: 0, conflictT: 0, clock: 0, lockHold: false, nw: null,
+        unstuck: 0, squeeze: 0, probe: null, probeAt: -9, plan: null, yielding: false, clear: 0, conflictT: 0, clock: 0, lockHold: false, nw: null, depth: 0,
     };
 }
 
@@ -77,16 +77,20 @@ function ttc(dx, dz, wx, wz, R) {
 
 /** How far one can go along each of BINS headings (m): 0.5 / 0.9 / 1.4 (or 0). Cached a moment: the wall oracle is not free. */
 function probeWalls(st, p, room, clock, r) {
-    if (st.probe && clock - st.probeAt < 0.1 && Math.abs(p.x - st.probeX) < 0.2 && Math.abs(p.z - st.probeZ) < 0.2) return st.probe;
+    if (st.probe && clock - st.probeAt < 0.3 && Math.abs(p.x - st.probeX) < 0.4 && Math.abs(p.z - st.probeZ) < 0.4) return st.probe;
     const out = st.probe || (st.probe = new Float32Array(BINS));
     const side = Math.min(0.3, r * 0.6); // (the shoulder: the wall oracle is for a centre point — the walls of the world are blocks)
     for (let i = 0; i < BINS; i++) {
         const a = (i / BINS) * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a);
         let free = 0;
-        for (const L of [0.5, 0.9, 1.4]) {
-            if (!room(p.x + dx * L, p.z + dz * L)) break;
-            if (!room(p.x + dx * L - dz * side, p.z + dz * L + dx * side) || !room(p.x + dx * L + dz * side, p.z + dz * L - dx * side)) break;
-            free = L;
+        if (room(p.x + dx * 0.5, p.z + dz * 0.5)) {
+            free = 0.5;
+            if (room(p.x + dx * 0.9, p.z + dz * 0.9)) {
+                free = 0.9;
+                // (the far probe and the shoulders only there: a wall at 1.4 m or a corner beside the way)
+                if (room(p.x + dx * 1.4, p.z + dz * 1.4) && room(p.x + dx * 1.4 - dz * side, p.z + dz * 1.4 + dx * side) && room(p.x + dx * 1.4 + dz * side, p.z + dz * 1.4 - dx * side)) free = 1.4;
+            }
+            if (free < 1.4 && (!room(p.x + dx * 0.5 - dz * side, p.z + dz * 0.5 + dx * side) || !room(p.x + dx * 0.5 + dz * side, p.z + dz * 0.5 - dx * side))) free = 0;
         }
         out[i] = free;
     }
@@ -163,7 +167,9 @@ function narrowestBetween(p, q, room) {
     const ax = dx / d, az = dz / d;
     let w = Infinity;
     for (let s = 0.6; s < d; s += 0.9) {
-        const sp = spanAt(p.x + ax * s, p.z + az * s, ax, az, room);
+        const x = p.x + ax * s, z = p.z + az * s;
+        if (!room(x, z)) return Infinity; // (a wall between them: they are not facing each other in a passage — each goes its own way round)
+        const sp = spanAt(x, z, ax, az, room);
         if (sp.width < w) w = sp.width;
     }
     return w;
@@ -198,6 +204,8 @@ export function pilot(st, p, u, others, opts) {
     if (!Number.isFinite(st.trailX) || Math.hypot(p.x - st.trailX, p.z - st.trailZ) > 0.9) {
         st.trail.push({ x: p.x, z: p.z });
         if (st.trail.length > 14) st.trail.shift();
+        // how deep in a narrow place it is (crumbs in a row where the ground is narrow): who is further in has the right of way
+        st.depth = spanAt(p.x, p.z, u.x, u.z, room).width < PILOT.NARROW ? (st.depth || 0) + 1 : 0;
         st.trailX = p.x; st.trailZ = p.z;
     }
     // --- how far it really moved (a stall detector independent of what the pilot meant)
@@ -323,14 +331,19 @@ function conflictOf(st, p, u, near, me, speed, room, r) {
             continue;
         }
         const need = r + n.or + 0.3;
-        const w = narrowestBetween(p, { x: p.x + n.dx, z: p.z + n.dz }, room);
+        // (the width between the two is looked at a few times a second, not every frame: it is some 100 reads of the ground)
+        const cache = st.cnf || (st.cnf = new Map());
+        const ck = n.o.id ?? n.o.ref?.id;
+        let ce = cache.get(ck);
+        if (!ce || st.clock - ce.t > 0.4) { ce = { t: st.clock, w: narrowestBetween(p, { x: p.x + n.dx, z: p.z + n.dz }, room) }; cache.set(ck, ce); if (cache.size > 24) cache.clear(); }
+        const w = ce.w;
         if (w >= need + 0.1) continue;
         const theirs = hashId(n.o.id ?? n.o.ref?.id) + (n.o.rank || 0) * 1e6;
         // (one already backing out has the right of way over what is behind it: it must be given room — a queue backs out like a train)
         const theyYield = !!n.o.pilot?.yielding;
-        const iYieldAlready = false;
-        void iYieldAlready;
-        const lower = theyYield ? true : (n.o.pilot?.plan ? false : (me < theirs || (me === theirs && String(n.o.id) > String(st.id || ''))));
+        const dm = st.depth || 0, dt2 = n.o.pilot?.depth || 0;
+        // (further in wins: to back out of a passage that is nearly passed is absurd; equal depth: the fixed order)
+        const lower = theyYield ? true : (n.o.pilot?.plan ? false : (Math.abs(dm - dt2) >= 2 ? dm < dt2 : (me < theirs || (me === theirs && String(n.o.id) > String(st.id || '')))));
         if (lower) return { n, loser: true, w };
     }
     return null;
@@ -366,10 +379,11 @@ function runPlan(st, p, u, near, speed, room, r, opts, dt) {
     st.yielding = true;
     const bl = near.find((n) => n.o === pl.blocker || (n.o.ref && n.o.ref === pl.blocker.ref) || n.o.id === pl.blocker.id);
     // the other has passed (it is behind me now / far) → the plan is over
-    const passed = !bl || (bl.dx * pl.ux + bl.dz * pl.uz) < -0.2 || bl.d > PILOT.CONFLICT + 2;
+    // (a blocker that stopped — arrived, waits itself — is not an oncoming stream: nothing to give way to, only to walk round)
+    const passed = !bl || (bl.dx * pl.ux + bl.dz * pl.uz) < -0.2 || bl.d > PILOT.CONFLICT + 2 || (bl.still && age > 2);
     if (pl.phase === 'hold') {
         if (passed) { pl.clear = (pl.clear || 0) + dt; if (pl.clear > 0.5) { st.plan = null; st.yielding = false; return undefined; } } else pl.clear = 0;
-        if (age > 40) { st.plan = null; st.yielding = false; return undefined; }
+        if (age > 14) { st.plan = null; st.yielding = false; return undefined; }
         // (holding at the passing place: stepped aside to the wider side, then still; a little shift if a body presses)
         return null;
     }

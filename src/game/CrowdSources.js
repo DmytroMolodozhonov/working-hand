@@ -4,7 +4,11 @@
  */
 
 import { choreThingsAt } from './Chores.js';
-import { Crowd, steer, BODY_R, numId } from './Crowd.js';
+import { Crowd, steer, steerPilot, BODY_R, numId } from './Crowd.js';
+import { PILOT } from './Pilot.js';
+
+/** The game walks with Pilot.js; `false` brings the old Avoid.js-based `steer` back (for a comparison, a bisect). */
+export const USE_PILOT = true;
 import { wardsOf, clipStep } from './ShieldWalls.js';
 
 /** The game's crowd (made once; filled from all the systems each frame it's asked). */
@@ -114,13 +118,19 @@ const _near = [];
  */
 export function crowdStep(g, me, p, ux, uz, d, opts = {}) {
     const r = opts.r ?? 0.55;
-    const range = Math.max(4, (opts.look ?? 2.6) + 2 * r + 3);
+    const pilotOn = USE_PILOT && !opts.legacy;
+    const range = pilotOn ? PILOT.LOCK_RANGE + 1 : Math.max(4, (opts.look ?? 2.6) + 2 * r + 3);
     let others = crowdNear(g, p.x, p.y ?? 0, p.z, range, me, opts.dy ?? 2.5, _near);
     if (opts.skip) others = others.filter((b) => !opts.skip(b));
     const st = me._avoid || (me._avoid = {});
-    const a = steer(st, p, { x: ux, z: uz }, { ...opts, others, r, maxF: d, id: numId(opts.id ?? me.id) ?? 0 });
+    let a;
+    if (pilotOn) {
+        // (what the others' own pilots say: who is backing out, how deep in a narrow place each is, their rank)
+        for (const b of others) { const q = b.ref?._avoid?.pilot; if (q) { b.pilot = q; b.rank = q.rank || 0; } }
+        a = steerPilot(st, p, { x: ux, z: uz }, { ...opts, others, r, maxF: d, id: numId(opts.id ?? me.id) ?? 0, clock: (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000 });
+    } else a = steer(st, p, { x: ux, z: uz }, { ...opts, others, r, maxF: d, id: numId(opts.id ?? me.id) ?? 0 });
     // (a player's shield / dome: never through it — along it, or it stands at it: ShieldWalls.js)
-    if (!a) return a;
+    if (!a || a.unstick) return a;
     const w = wardsOf(g);
     if (!w.length) return a;
     const c = clipStep(p, a.x, a.z, r, d, w);

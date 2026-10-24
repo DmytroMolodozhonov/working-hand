@@ -32,6 +32,7 @@ import { shareFoes } from './CrewTactics.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
+import { separate } from './Pilot.js';
 import { WALL, StuckWatch } from './Unstick.js';
 import { FLEE, threatDist, threatCost, pathPasses, openWay, fleeSearch } from './FleePlan.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
@@ -1033,12 +1034,18 @@ export class CastleLife {
         // somebody in the way (a player, another person, an animal): round them on the side with room;
         // in a narrow spot wait a moment for them to move (then squeeze past)
         let ux = dx / d, uz = dz / d;
+        let kk = 1; // (the share of full speed the pilot asks for: slower in a queue, behind a slower one — Pilot.js)
         if (speed > 0) {
-            const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y) });
+            const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y), rank: (v.cmd || v.order || v.follow || v.foe) ? 1 : 0 });
             if (!a) { v.speed = 0; return d; }
-            ux = a.x; uz = a.z;
+            if (a.unstick) { // (stuck for ~10 s among the others or the walls: set on the nearest free place — never a permanent stand)
+                if (this._walkable(a.unstick.x, a.unstick.z, v.y)) { this.alog?.decision(v, `10 с без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
+                v.speed = 0; return d;
+            }
+            ux = a.x; uz = a.z; kk = a.k ?? 1;
         }
-        const nx = v.x + ux * s, nz = v.z + uz * s;
+        const s2 = s * kk; speed *= kk;
+        const nx = v.x + ux * s2, nz = v.z + uz * s2;
         // (the body has a thickness: the shoulder never goes into a wall — a step's room is looked at a little ahead)
         const B = BODY_R;
         if (this._walkable(nx, nz, v.y) && this._walkable(nx + ux * B, nz + uz * B, v.y)) { v.x = nx; v.z = nz; v.speed = speed; }
@@ -1492,7 +1499,9 @@ export class CastleLife {
                     this._ground(v);
                     return;
                 }
-                const d0 = Math.hypot(fp.x - v.x, fp.z - v.z), d = this._goSpot(v, fp.x, fp.z, d0 > 8 ? RUN : WALK, dt, 3.5, fp.y - 1.95) ? Math.min(d0, 3.5) : d0; // (on another floor — down a tower: only by its stair, never off the edge; 3–5 blocks off, not pressed to the king) // (by the castle's paths when walls are between — a tower's wall, a house)
+                // (each follower has a place of his own round the hero — behind him, spread out; not all in one heap on one point)
+                const sl = this._followSlot(v, fp);
+                const d0 = Math.hypot(sl.x - v.x, sl.z - v.z), d = this._goSpot(v, sl.x, sl.z, Math.hypot(fp.x - v.x, fp.z - v.z) > 8 ? RUN : WALK, dt, 0.9, fp.y - 1.95) ? Math.min(d0, 3.5) : d0; // (on another floor — down a tower: only by its stair, never off the edge; 3–5 blocks off, not pressed to the king) // (by the castle's paths when walls are between — a tower's wall, a house)
                 v.mode = d > 3.2 && !(v.wallW?.noWay > 0) ? (v.speed > WALK ? 'run' : 'walk') : 'idle'; // (standing off a shut wall: idle)
                 this._ground(v);
                 return;
@@ -2457,10 +2466,62 @@ export class CastleLife {
         return true;
     }
 
-    /** People don't walk through each other: the near ones push apart. */
+    /**
+     * A place of his own for a follower round the one he follows (the author: «рыцари скапливаются возле меня»): all the followers of a player in a
+     * castle are counted (by name — the same order every frame); they stand in rings 3.2 m, 5 m, 6.8 m… from him, 1.9 m apart on a ring, spread
+     * over the half-circle BEHIND him (he looks forward: nobody blocks his way); standing still — the full circle. → { x, z } (his own place; the hero's
+     * position when he is alone / far).
+     */
+    _followSlot(v, fp) {
+        const clock = this._clock || 0;
+        let S = this._fslots;
+        if (!S || clock - S.at > 0.5) {
+            S = this._fslots = { at: clock, by: new Map() };
+            const lists = new Map();
+            for (const w of this.byId.values()) {
+                if (w.dead || !w.follow || w.job === 'king') continue;
+                const key = w.cs.def.id + '|' + w.follow;
+                let l = lists.get(key);
+                if (!l) lists.set(key, (l = []));
+                l.push(w);
+            }
+            for (const l of lists.values()) {
+                l.sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
+                l.forEach((w, i) => S.by.set(w.id, { i, n: l.length }));
+            }
+        }
+        const e = S.by.get(v.id);
+        if (!e || e.n < 2) return fp;
+        const g = this.game;
+        const ch = v.follow === g.localId ? g.character?.group : g.remotes?.get(v.follow)?.character?.group || g.remotes?.get(v.follow)?.group;
+        const yaw = ch?.rotation?.y;
+        // rings: capacity by arc length
+        let ring = 0, k = e.i, R = 3.2, cap = 0;
+        for (;;) {
+            cap = Math.max(3, Math.floor((Math.PI * 2 * R * (yaw == null ? 1 : 0.5)) / 1.9));
+            if (k < cap) break;
+            k -= cap; ring++; R = 3.2 + ring * 1.8;
+            if (ring > 6) break;
+        }
+        // the angle: behind the hero (his back direction = yaw + π... his forward is (−sin y, −cos y)), a half circle; without a heading, the full circle
+        const back = yaw == null ? 0 : Math.atan2(Math.sin(yaw), Math.cos(yaw));
+        const span = yaw == null ? Math.PI * 2 : Math.PI * 1.15;
+        const t = cap > 1 ? k / (cap - 1) - 0.5 : 0;
+        const ang = yaw == null ? (k / cap) * Math.PI * 2 + e.i * 0.0 : back + t * span;
+        // (angle measured as the direction in x–z: the point at distance R in the direction `ang` from the hero, where 0 = +x; the «behind» direction of yaw y is (sin y, cos y))
+        const bx = yaw == null ? Math.cos(ang) : Math.sin(yaw + t * span), bz = yaw == null ? Math.sin(ang) : Math.cos(yaw + t * span);
+        return { x: fp.x + bx * R, z: fp.z + bz * R, y: fp.y };
+    }
+
+    /**
+     * People don't walk through each other (the author: «текстуры накладываются друг на друга… никаких прикосновений»): every body that is a man's
+     * (and the players' — they are never pushed, only walked round) is taken OUT of those it overlaps, by the sum of the real radii and a small gap.
+     * Pilot.separate: all of the overlap that is his to undo (a standing one more, a moving pair half each); where the wall does not let him
+     * go, the other way along it. Not a soft push at a distance (the old one let the bodies stay inside each other in a narrow place).
+     */
     _separate(dt) {
-        const k = Math.min(1, dt * 10);
         const near = this._sepNear || (this._sepNear = []);
+        const bodies = this._sepBodies || (this._sepBodies = []);
         for (const p of this.byId.values()) {
             if (p.dead || p.climb || p.seated || !p.group.visible) continue;
             // asked to make way (one stands in another's way — talking too): a step aside, where one can stand
@@ -2473,24 +2534,30 @@ export class CastleLife {
             const wards = wardsOf(this.game);
             if (wards.length) {
                 const o = _wardP; o.x = p.x; o.y = p.y; o.z = p.z;
-                if (pushOut(o, this._bodyR(p), wards, k) && this._walkable(o.x, o.z, p.y)) { p.x = o.x; p.z = o.z; }
+                if (pushOut(o, this._bodyR(p), wards, Math.min(1, dt * 10)) && this._walkable(o.x, o.z, p.y)) { p.x = o.x; p.z = o.z; }
             }
-            // (only the ones round it, from the crowd's grid — never all with all; each pair once)
-            for (const b of crowdNear(this.game, p.x, p.y, p.z, 2, p, 2.5, near)) {
+            // (only the ones round it, from the crowd's grid — never all with all)
+            bodies.length = 0;
+            for (const b of crowdNear(this.game, p.x, p.y, p.z, 2.6, p, 2.5, near)) {
+                if (b.kind === 'player') { b.fixed = true; bodies.push(b); continue; }
+                if (b.kind !== 'man' || b.ref === p) continue;
                 const q = b.ref;
-                if (b.kind !== 'man' || !(String(q.id) > String(p.id))) continue;
-                const dx = q.x - p.x, dz = q.z - p.z;
-                if (Math.abs(dx) > 2 || Math.abs(dz) > 2 || Math.abs(q.y - p.y) > 2.5) continue;
-                const R = p.role === 'knight' || q.role === 'knight' || p.role === 'king' || q.role === 'king' ? 1.8 : 1.35;
-                const d = Math.hypot(dx, dz);
-                if (d >= R) continue;
-                const ux = d > 1e-3 ? dx / d : Math.random() - 0.5, uz = d > 1e-3 ? dz / d : Math.random() - 0.5;
-                // (one talking with a player stands his ground: the others step round him, they don't shove him)
-                const pa = p.talking > 0, qa = q.talking > 0;
-                const push = (R - d) * 0.5 * k;
-                const pp = pa && !qa ? 0 : qa && !pa ? push * 2 : push, qp = qa && !pa ? 0 : pa && !qa ? push * 2 : push;
-                if (pp && this._walkable(p.x - ux * pp, p.z - uz * pp, p.y)) { p.x -= ux * pp; p.z -= uz * pp; }
-                if (qp && this._walkable(q.x + ux * qp, q.z + uz * qp, q.y)) { q.x += ux * qp; q.z += uz * qp; }
+                if (Math.abs(q.y - p.y) > 2.5 || q.seated || q.climb) continue;
+                bodies.push(b);
+            }
+            if (!bodies.length) continue;
+            const r = this._bodyR(p);
+            // (talking with the hero or standing: he makes room more; a walker passing a standing one gives way first)
+            const push = separate(p, r, bodies, { id: p.id, yield: p.talking > 0 ? false : (p.speed || 0) < 0.2, cap: 0.35 * Math.max(0.3, dt * 30) });
+            if (!push.x && !push.z) continue;
+            for (const f of [1, 0.5]) {
+                if (this._walkable(p.x + push.x * f, p.z + push.z * f, p.y)) { p.x += push.x * f; p.z += push.z * f; break; }
+                if (f === 0.5) {
+                    // (the wall is in that way: along it)
+                    if (Math.abs(push.x) > Math.abs(push.z) ? this._walkable(p.x, p.z + Math.sign(push.z || 1) * Math.abs(push.x) * 0.5, p.y) : this._walkable(p.x + Math.sign(push.x || 1) * Math.abs(push.z) * 0.5, p.z, p.y)) {
+                        if (Math.abs(push.x) > Math.abs(push.z)) p.z += Math.sign(push.z || 1) * Math.abs(push.x) * 0.5; else p.x += Math.sign(push.x || 1) * Math.abs(push.z) * 0.5;
+                    }
+                }
             }
         }
     }
