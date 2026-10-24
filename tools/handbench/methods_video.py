@@ -24,7 +24,7 @@ def _palm(mode):
 class V5Game:
     """hand_v5.HandsV5 as the game runs it (pose_native.py, Tasks)."""
 
-    def __init__(self, engine="mp", prev=False, **over):
+    def __init__(self, gpu=False, prev=False, **over):
         import mediapipe as mp
         from mediapipe.tasks.python import vision
         if prev:
@@ -36,7 +36,11 @@ class V5Game:
         self.hv = hand_v5
         self.over = over
         self.mp = mp
-        self.h = hand_v5.HandsV5(engine=engine, rtm_path=over.pop("rtm_path", None) if engine == "rtm" else None)
+        self.h = hand_v5.HandsV5()
+        if gpu:
+            # the video card's program, as the game runs it (here on the processor: ZNS_V5_CPU=1 — the same answers)
+            os.environ.setdefault("ZNS_V5_CPU", "1")
+            self.h.use_gpu(hand_v5.GpuNet(hand_v5.ort_gpu_dir()))
         self.palm = _palm(vision.RunningMode.VIDEO)
         self.n = 0
         self.last_pose = None
@@ -105,8 +109,8 @@ def make(name):
         return V5Game()
     if name == "v5prev":
         return V5Game(prev=True)
-    if name == "v5rtm":
-        return V5Game(engine="rtm", rtm_path=os.path.join(DATA, "models", "rtmpose_hand.onnx"))
+    if name == "v5gpu":
+        return V5Game(gpu=True)
     if name == "mp_full":
         return MPFull(640)
     if name == "mp_full720":

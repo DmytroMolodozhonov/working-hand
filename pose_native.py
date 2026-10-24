@@ -107,49 +107,27 @@ class _V5Hands:
     LiteRT, pip ai-edge-litert, ≈ 20 MB) is installed once if missing, the network is taken out of
     the game's own hand_landmarker.task and checked (SHA-256). Until it is ready — or if it can't
     be (state "error", `why` says why) — the camera keeps finding the hands its old way.
+
+    Then the same network goes on the video card (rule of the game: everything heavy — on the video
+    card): its own program, hand_v5_gpu.py (onnxruntime DirectML / CUDA), all the squares of a picture
+    in one call. Without a video card that takes it, V5 stays on the processor (`gpu` says why).
     """
 
     def __init__(self):
         self.state = "off"  # off | installing | loading | ready | error
         self.why = ""
-        self.gpu = ""  # what the video card does for V5 (RTMPose), or why nothing
+        self.gpu = ""  # what the video card does for V5, or why nothing
         self.hands = None
         self._lock = threading.Lock()
-        self.rtm_wanted = False
-        self._remote = None  # RTMPose's program, once started
-        self._rtm_started = False
 
     def want(self, rtm=None):
-        """Asked for: start getting ready (never waits). True once it can be used. `rtm`: its more
-        exact finder, RTMPose on the video card (Settings → «V5 точнее»), on or off."""
+        """Asked for: start getting ready (never waits). True once it can be used. (`rtm`: the old
+        «V5 точнее» setting — V5 is on the video card by itself now.)"""
         with self._lock:
-            changed = rtm is not None and (bool(rtm) or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm") != self.rtm_wanted
-            if rtm is not None:  # (asked every picture without it: only the setting changes it)
-                self.rtm_wanted = bool(rtm) or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm"
             if self.state == "off":
-                self.rtm_wanted = self.rtm_wanted or os.environ.get("ZNS_V5_ENGINE", "mp") == "rtm"
                 self.state = "loading"
                 threading.Thread(target=self._prepare, name="hand-v5", daemon=True).start()
-            elif self.state == "ready" and changed:
-                self._apply_rtm()
         return self.state == "ready"
-
-    def _apply_rtm(self):
-        """RTMPose on or off as asked (started once, in the background; kept for when it is asked again)."""
-        if not self.hands:
-            return
-        if not self.rtm_wanted:
-            if self.hands.engine == "rtm":
-                self.hands.use_rtm(None)
-                print("  [Камера] Кисти V5: RTMPose выключен — MediaPipe по участкам (процессор)")
-            return
-        if self._remote is not None:
-            if self.hands.engine != "rtm":
-                self.hands.use_rtm(self._remote)
-            return
-        if not self._rtm_started:
-            self._rtm_started = True
-            threading.Thread(target=self._start_rtm, name="hand-v5-rtm", daemon=True).start()
 
     def _prepare(self):
         try:
@@ -176,36 +154,30 @@ class _V5Hands:
             from hand_v5 import HandsV5
             self.hands = HandsV5()
             self.state = "ready"
-            print("  [Камера] Кисти V5 готовы (MediaPipe по участкам вокруг запястий, процессор)")
+            print("  [Камера] Кисти V5 готовы (процессор; видеокарта готовится)")
         except Exception as e:  # noqa: BLE001
             self.why = str(e) or type(e).__name__
             self.state = "error"
             print(f"  [Камера] Кисти V5 не запустились (работают прежние кисти): {self.why}")
             return
-        # RTMPose on the video card (a program of its own; more exact on small hands and fists —
-        # tools/handbench) only when asked for (Settings → «V5 точнее (на видеокарте)», or
-        # ZNS_V5_ENGINE=rtm): the author's game once lost frames with it — the video card is the
-        # game's. By default V5 is MediaPipe's joint network on the processor, one thread a hand.
-        with self._lock:
-            self._apply_rtm()
+        if os.environ.get("ZNS_V5_GPU") == "0":
+            self.gpu = "выключена (ZNS_V5_GPU=0)"
+            return
+        self._start_gpu()
 
-    def _start_rtm(self):
+    def _start_gpu(self):
         try:
             self.gpu = "готовится"
             import hand_v5
             ort_dir = hand_v5.ort_gpu_dir()
-            probe = hand_v5.RTMRemote("--probe", ort_dir, probe=True)
-            del probe
-            remote = hand_v5.RTMRemote(hand_v5.rtm_path(), ort_dir)
-            with self._lock:
-                self._remote = remote
-                if self.rtm_wanted:
-                    self.hands.use_rtm(remote)
-            self.gpu = f"RTMPose на видеокарте ({remote.info.get('provider')}, {remote.info.get('ms')} мс)"
-            print(f"  [Камера] Кисти V5: {self.gpu}")
+            hand_v5.GpuNet(ort_dir, probe=True)
+            gpu = hand_v5.GpuNet(ort_dir)
+            self.hands.use_gpu(gpu)
+            self.gpu = f"на видеокарте ({gpu.info.get('provider')}, {gpu.info.get('ms')} мс на обе кисти)"
+            print(f"  [Камера] Кисти V5 {self.gpu}")
         except Exception as e:  # noqa: BLE001
             self.gpu = "без видеокарты: " + (str(e) or type(e).__name__)
-            print(f"  [Камера] Кисти V5: {self.gpu} — работает MediaPipe по участкам (процессор)")
+            print(f"  [Камера] Кисти V5 {self.gpu} — работают на процессоре")
 
     def reason(self):
         return {"installing": "устанавливается", "loading": "загружается"}.get(self.state, self.why or self.state)
@@ -303,10 +275,10 @@ class NativePose:
         if not self.available():
             return False
         if hands is not None:
-            # ("v5rtm": V5 found by RTMPose on the video card — Settings → «V5 точнее»)
+            # ("v5rtm": the old «V5 точнее (на видеокарте)» — V5 is on the video card by itself now)
             self.hands_mode = "v5" if hands in ("v5", "v5rtm") else ""  # (switched at once, the camera goes on)
             if self.hands_mode:
-                self.v5.want(rtm=hands == "v5rtm")
+                self.v5.want()
         with self.cond:
             self.quality = int(quality) if str(quality).isdigit() else 1
             if camera is not None:
@@ -615,7 +587,7 @@ class NativePose:
                 out.update({"t": round(t_wall * 1000), "cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
                             "handsEngine": "v5" if v5on else "mp"})
                 if v5on:
-                    out["v5Engine"] = self.v5.hands.engine  # ("rtm": RTMPose on the video card; "mp": the processor)
+                    out["v5Engine"] = self.v5.hands.engine  # ("gpu": the video card; "cpu": the processor)
                 if self.hands_mode == "v5" and self.v5.state != "ready":
                     out["v5"] = self.v5.reason()  # (the game says why the V5 hands aren't there yet)
                 with self.cond:

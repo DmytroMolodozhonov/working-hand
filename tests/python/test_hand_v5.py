@@ -78,15 +78,15 @@ class Following(unittest.TestCase):
     def make(self):
         h = hand_v5.HandsV5.__new__(hand_v5.HandsV5)
         h.nets = {"left": FakeNet(), "right": FakeNet()}
-        h.rtm = None
-        h.engine = "mp"
-        h.rtm_error = ""
+        h.gpu = None
+        h.engine = "cpu"
+        h.gpu_error = ""
         h.track = {"left": None, "right": None}
         h.held = {"left": False, "right": False}
         h.palm = {}
         h._prev_rgb = None
         h.miss = {}
-        h.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0, "held": 0}
+        h.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0, "held": 0, "calls": 0}
         return h
 
     def test_found_from_the_body_then_followed_by_itself(self):
@@ -94,15 +94,16 @@ class Following(unittest.TestCase):
         rgb = np.zeros((480, 640, 3), np.uint8)
         pose = pose_with_hand("right", (300, 300), (300, 270), (300, 400))
         self.assertIsNotNone(h.one(rgb, pose, "right"))
-        self.assertEqual(h.stats["from_pose"], 1)
+        first = h.stats["from_pose"]
+        self.assertGreater(first, 0, "found from the body's squares")
         self.assertEqual(h.stats["refined"], 1, "the first look is made twice")
         h.one(rgb, pose, "right")
-        self.assertEqual(h.stats["from_pose"], 1, "then the hand's own square")
+        self.assertEqual(h.stats["from_pose"], first, "then the hand's own square")
         # the body's wrist far away from the followed hand: found again from the body
         far = pose_with_hand("right", (100, 100), (100, 70), (100, 200))
         h.nets["right"].hand = hand_at(100, 100)
-        h.one(rgb, far, "right")
-        self.assertEqual(h.stats["from_pose"], 2)
+        self.assertIsNotNone(h.one(rgb, far, "right"))
+        self.assertGreater(h.stats["from_pose"], first)
 
     def test_not_sure_it_is_a_hand_no_hand(self):
         h = self.make()
@@ -188,14 +189,36 @@ class Following(unittest.TestCase):
         h = self.make()
 
         class Dead:
-            def run(self, *a):
+            def run_many(self, *a):
                 raise EOFError("нет ответа")
-        h.use_rtm(Dead())
+        h.use_gpu(Dead())
         pose = pose_with_hand("left", (300, 300), (300, 270), (300, 400))
-        self.assertIsNotNone(h.one(np.zeros((480, 640, 3), np.uint8), pose, "left"))
-        self.assertIsNone(h.rtm)
-        self.assertEqual(h.engine, "mp")
-        self.assertIn("нет ответа", h.rtm_error)
+        out = h.process(np.zeros((480, 640, 3), np.uint8), pose)
+        self.assertEqual(len(out), 1, "the processor took over at once")
+        self.assertIsNone(h.gpu)
+        self.assertEqual(h.engine, "cpu")
+        self.assertIn("нет ответа", h.gpu_error)
+
+    def test_with_the_video_card_both_hands_go_in_one_call(self):
+        h = self.make()
+
+        class Gpu:
+            calls = 0
+
+            def run_many(self, rgb, squares):
+                Gpu.calls += 1
+                return [h.nets["left"].run(rgb, sq) for sq in squares]
+        h.use_gpu(Gpu())
+        h.nets["right"].hand = h.nets["left"].hand = hand_at(300, 300)
+        p = pose_with_hand("left", (300, 300), (300, 270), (300, 400))
+        q = pose_with_hand("right", (300, 300), (300, 270), (300, 400))
+        pose = [q[i] if i in hand_v5.POSE_SIDE["right"] else p[i] for i in range(33)]
+        rgb = np.zeros((480, 640, 3), np.uint8)
+        h.process(rgb, pose)
+        Gpu.calls = 0
+        out = h.process(rgb, pose)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(Gpu.calls, 1, "both followed hands in one call")
 
     def test_streamed_as_the_game_reads_hands(self):
         h = self.make()

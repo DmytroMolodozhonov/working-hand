@@ -77,8 +77,6 @@ WRIST_FAR = 1.0  # a hand whose wrist is this many of its sizes from the body's 
 PALM_BONES = [(0, 5), (0, 9), (0, 13), (0, 17), (5, 9), (9, 13), (13, 17)]
 PALM_TOL = 0.35  # a doubtful hand's palm bones within this much of the sure palm's
 PALM_SURE = 0.5  # the network this sure: its palm is the hand's own palm
-RTM_GATE = 0.3  # ... or RTMPose about its points (engine "rtm")
-RTM_POSE_BOX = 0.9  # RTMPose's upright box round the body's square: this much of its side
 
 
 def sha256_of(path):
@@ -216,9 +214,9 @@ class HandNet:
 
 class RTMNet:
     """
-    RTMPose-m hand (OpenMMLab, Apache 2.0): 21 points of a hand in an upright box, 256×256, very
-    good at small and closed hands (the benchmark) — but flat (no depth). onnxruntime; on the
-    video card if this onnxruntime has one (DirectML / CUDA), else the processor.
+    RTMPose-m hand (OpenMMLab, Apache 2.0): 21 points of a hand in an upright box, 256×256 — flat
+    (no depth). Only the benchmark uses it now (tools/handbench: the reference's second opinion): on
+    the author's own recording it was not better than MediaPipe's joint network, and five times dearer.
     """
 
     MEAN = np.array([123.675, 116.28, 103.53], np.float32)
@@ -256,38 +254,13 @@ def box_of(pts, grow=1.25):
     return (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, max(hi[0] - lo[0], hi[1] - lo[1]) * grow + 4
 
 
-# RTMPose-m hand (OpenMMLab RTMPose, Apache 2.0; rtmpose-m_simcc-hand5 256×256 as ONNX — the copy kept
-# in renesas-rdk/hand_models, Apache 2.0). Fetched only for the video card, checked by SHA-256.
-RTM = {
-    "file": "rtmpose_m_hand5_256.onnx",
-    "url": "https://media.githubusercontent.com/media/renesas-rdk/hand_models/main/hand_landmark_estimation/rtmpose/rtmpose.onnx",
-    "size": 55118356,
-    "sha256": "7abd0f0e999956405c4c20992b153e099e8952cdc9f0dd25f3efe9a6b65c3cb4",
-}
+# MediaPipe's joint network (the same hand_landmarks_detector.tflite) as ONNX, for the video card:
+# converted once (tf2onnx 1.17, opset 17; the batch made free: many squares a call) — its answers
+# match the tflite's to 0.0002 px. Kept in the game (vendor/mediapipe/models), checked by SHA-256.
+GPU_NET = os.path.join(ROOT, "vendor", "mediapipe", "models", "hand_landmarks_v5.onnx")
+GPU_NET_SHA256 = "0a4335cb776271235ec2f72adff6ed69184ae618cbc3923b0782ef8ce8a0ad65"
 ORT_GPU_DIR = os.path.join(ROOT, "vendor", "ort-gpu")
 ORT_GPU_PKG = "onnxruntime-directml==1.24.4"  # (DirectML: any DirectX 12 video card on Windows)
-
-
-def rtm_path(log=print):
-    """RTMPose's file: fetched once (≈ 55 MB) and checked (SHA-256)."""
-    out = os.path.join(CACHE, RTM["file"])
-    if os.path.exists(out) and os.path.getsize(out) == RTM["size"] and sha256_of(out) == RTM["sha256"]:
-        return out
-    import urllib.request
-    os.makedirs(CACHE, exist_ok=True)
-    tmp = out + ".part"
-    log("  [Камера] Кисти V5: скачиваю RTMPose для видеокарты (один раз, 55 МБ)...")
-    with urllib.request.urlopen(RTM["url"], timeout=120) as r, open(tmp, "wb") as f:
-        while True:
-            b = r.read(1 << 20)
-            if not b:
-                break
-            f.write(b)
-    if os.path.getsize(tmp) != RTM["size"] or sha256_of(tmp) != RTM["sha256"]:
-        os.remove(tmp)
-        raise RuntimeError("RTMPose не прошёл проверку SHA-256")
-    os.replace(tmp, out)
-    return out
 
 
 def ort_gpu_dir(log=print):
@@ -308,18 +281,28 @@ def ort_gpu_dir(log=print):
     return ORT_GPU_DIR
 
 
-class RTMRemote:
-    """RTMPose in its own program on the video card (hand_v5_gpu.py); the same run() as RTMNet."""
+def gpu_net_path():
+    if not os.path.exists(GPU_NET) or sha256_of(GPU_NET) != GPU_NET_SHA256:
+        raise RuntimeError("сеть кисти для видеокарты не прошла проверку SHA-256")
+    return GPU_NET
 
-    W = H = 256
 
-    def __init__(self, model, ort_dir=None, timeout=60, probe=False):
+class GpuNet:
+    """
+    MediaPipe's joint network on the video card, in a program of its own (hand_v5_gpu.py: its own
+    onnxruntime with DirectML / CUDA). run_many(rgb, squares) → [(xy, z, how sure, which hand)] — all
+    the squares of a picture (both hands, every square tried) in ONE call: a call costs the same for
+    one square or six.
+    """
+
+    def __init__(self, ort_dir=None, timeout=60, probe=False):
         import json
         import subprocess
         import struct
         self.struct = struct
         # (CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS: the game and the voice go first)
         flags = 0x08000000 | 0x00004000 if sys.platform.startswith("win") else 0
+        model = "--probe" if probe else gpu_net_path()
         self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "hand_v5_gpu.py"), model, ort_dir or ""],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
         self.lock = threading.Lock()
@@ -354,19 +337,24 @@ class RTMRemote:
             raise EOFError("ответ оборван")
         return head[:4], data
 
-    def run(self, rgb, cx, cy, side):
+    def run_many(self, rgb, squares):
         import cv2
-        k = self.W / side
-        M = np.array([[k, 0, self.W / 2 - k * cx], [0, k, self.H / 2 - k * cy]], np.float32)
-        crop = cv2.warpAffine(rgb, M, (self.W, self.H), flags=cv2.INTER_LINEAR)
+        if not squares:
+            return []
+        crops = np.stack([cv2.warpAffine(rgb, sq.matrix(), (SIZE, SIZE), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+                          for sq in squares])
         with self.lock:
-            self.p.stdin.write(b"RUN " + self.struct.pack("<I", 1) + np.ascontiguousarray(crop).tobytes())
+            self.p.stdin.write(b"RUN " + self.struct.pack("<I", len(squares)) + np.ascontiguousarray(crops).tobytes())
             self.p.stdin.flush()
             tag, data = self._recv()
         if tag != b"OUT ":
             raise RuntimeError("программа видеокарты сломалась")
-        r = np.frombuffer(data, np.float32).reshape(21, 3)
-        return np.stack([(r[:, 0] - M[0, 2]) / k, (r[:, 1] - M[1, 2]) / k], 1), float(r[:, 2].mean())
+        r = np.frombuffer(data, np.float32).reshape(len(squares), 65)
+        out = []
+        for sq, row in zip(squares, r):
+            raw = row[:63].reshape(21, 3)
+            out.append((sq.back(raw[:, :2]), raw[:, 2] * (sq.side / SIZE), float(row[63]), float(row[64])))
+        return out
 
     def close(self):
         try:
@@ -379,30 +367,42 @@ class RTMRemote:
             pass
 
 
+class _Pic:
+    """One hand in one picture, between the steps of HandsV5 (the squares looked at, what was found)."""
+
+    __slots__ = ("side", "tr", "wrist", "inview", "sure_wrist", "pts", "sq", "found", "fresh", "cands", "seed", "skip")
+
+    def __init__(self, side):
+        self.side = side
+        self.sq = self.found = self.cands = self.seed = self.pts = None
+        self.fresh = True
+        self.skip = False
+
+
 class HandsV5:
     """
     Both hands of the person from the body's points: process(rgb, pose) → the hands in the
     format pose_native.py streams ({landmarks, label, score}). Keeps each hand's square
     between pictures (tracking).
 
-    engine "mp":  MediaPipe's joint network alone (points + depth);
-    engine "rtm": RTMPose finds the points (more exact on small hands, fists), then MediaPipe's
-                  joint network looks at the square made from them — the depth of every point
-                  (which way the palm faces) and how sure it is that a hand is there.
+    MediaPipe's joint network looks at the squares — on the video card when there is one
+    (use_gpu: GpuNet, every square of a picture in one call), else on the processor (one
+    network a hand, both hands at once in two threads). The steps are the same either way
+    (_begin → the followed square → the squares to look for a lost hand → one more look from
+    the hand found → _end), so the two give the same hands.
     """
 
-    def __init__(self, path=None, threads=1, engine="mp", rtm_path=None):
-        # one network for each hand: both hands are looked at at once (in two threads)
+    def __init__(self, path=None, threads=1):
         self.nets = {"left": HandNet(path, threads), "right": HandNet(path, threads)}
-        self.rtm = {s: RTMNet(rtm_path, threads) for s in ("left", "right")} if engine == "rtm" else None
-        self.engine = engine
-        self.rtm_error = ""
-        self.track = {"left": None, "right": None}  # {pts, z, vel, sq, box, t, wrist, fore, pres[, held, base]}
+        self.gpu = None
+        self.engine = "cpu"
+        self.gpu_error = ""
+        self.track = {"left": None, "right": None}  # {pts, z, vel, sq, t, wrist, fore, pres[, held, base]}
         self.held = {"left": False, "right": False}
         self.palm = {}  # each hand's palm when the network was sure (_palm_ok)
         self._prev_rgb = None
         self.miss = {}
-        self.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0, "held": 0}
+        self.stats = {"runs": 0, "found": 0, "from_pose": 0, "refined": 0, "held": 0, "calls": 0}
 
     def reset(self):
         self.track = {"left": None, "right": None}
@@ -410,11 +410,12 @@ class HandsV5:
         self.palm = {}
         self.miss = {}
 
-    def use_rtm(self, rtm):
-        """Switch to RTMPose (one RTMNet / RTMRemote for both hands — it keeps its own lock), or back (None)."""
-        self.rtm = {"left": rtm, "right": rtm} if rtm is not None else None
-        self.engine = "rtm" if rtm is not None else "mp"
+    def use_gpu(self, gpu):
+        """The video card's program (GpuNet), or back to the processor (None)."""
+        self.gpu = gpu
+        self.engine = "gpu" if gpu is not None else "cpu"
 
+    # ------------------------------------------------------------------ the body's arm
     def _wrist(self, pose, side, w, h, vis=0.2):
         i = POSE_SIDE[side][0]
         if not pose or len(pose) <= i or (pose[i].get("visibility", 1.0) or 0) < vis:
@@ -449,6 +450,7 @@ class HandsV5:
         seeds[best] = None  # (one hand for one side)
         return q
 
+    # ------------------------------------------------------------------ is it the hand
     def _accept(self, look, ref, side, wrist):
         """Is this look a hand to give? A sure one — yes, unless it is far from the body's wrist (a
         followed square that slid up the forearm); a doubtful one — only where the followed hand was
@@ -488,95 +490,106 @@ class HandsV5:
         k = float(np.ptp(xy[PARTIAL], axis=0).max()) / size
         return 1 / TRACK_GROW < k < TRACK_GROW
 
-    def one(self, rgb, pose, side, now=None, refine=True, seeds=None):
-        """One hand: (pts 21×2 picture pixels, z 21, how sure) or None. seeds: hands found by
-        MediaPipe's palm detector (21×2 picture pixels) — a hand too near the camera for the body's
-        wrist to be right (close up, the body network puts the wrist anywhere on a big hand).
-        self.held[side] tells whether the hand given is held (the network lost it for a moment)."""
+    # ------------------------------------------------------------------ the steps
+    def _begin(self, rgb, pose, side):
+        """1. A followed hand: its square from its own points, moved with the picture (or by its own speed)."""
         h, w = rgb.shape[:2]
-        now = time.perf_counter() if now is None else now
+        c = _Pic(side)
         self.held[side] = False
-        tr = self.track[side]
-        wrist = self._wrist(pose, side, w, h)
-        inview = self._in_view(pose, side, w, h)
-        sure_wrist = self._wrist(pose, side, w, h, IN_VIEW)
-        r = None
-        box = None
-        sq = None
-        # 1. a followed hand: its square from its own points, moved with the picture (or by its own speed)
-        if tr is not None and not tr.get("held"):
-            pts = tr["pts"]
-            flow = self._flow(pts, rgb) if TRACK_FLOW else None
-            if flow is not None:
-                pts = pts + flow  # (where the hand is: the picture round it moved so)
-            elif tr.get("vel") is not None:
-                pts = pts + tr["vel"]  # (where the hand will be: it goes on as it went)
-            sq = square_from_hand(pts)
-            # (a hand that barely moved keeps its square: the network then sees the same picture, and
-            # its points don't tremble with a square that trembles with them)
-            last = tr.get("sq")
-            if STICKY and last is not None and math.hypot(sq.cx - last.cx, sq.cy - last.cy) < STICKY * last.side \
-                    and abs(sq.side / last.side - 1) < STICKY * 1.5 and abs(math.remainder(sq.rot - last.rot, math.tau)) < STICKY * 1.5:
-                sq = last
-            if self.rtm:
-                box = box_of(pts)
-                lb = tr.get("box")
-                if STICKY and lb is not None and math.hypot(box[0] - lb[0], box[1] - lb[1]) < STICKY * lb[2] and abs(box[2] / lb[2] - 1) < STICKY * 1.5:
-                    box = lb
-            # the body's wrist far from the followed hand: the hand was lost or swapped — look anew
-            if wrist is not None and np.hypot(*(pts[0] - wrist)) > sq.side * 0.9:
-                sq = None
-            else:
-                look = self._look(rgb, side, sq, box, False)
-                if self._accept(look, pts, side, sure_wrist):
-                    r = look
-                else:
-                    sq = None
-        fresh = r is None
-        # 2. looked for: where the palm detector saw it, where it last was, where the body says it is
-        if fresh:
-            self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
-            seed = self._seed(seeds, wrist, side) if seeds else None
-            # (a hand the body doesn't see, not found in the last picture, is looked for again only every
-            # RETRY-th picture: a hand behind the back must not cost the processor every picture)
-            if seed is None and tr is None and not inview and RETRY > 1 and self.miss[side] > 1 and self.miss[side] % RETRY != 1:
+        c.tr = tr = self.track[side]
+        c.wrist = self._wrist(pose, side, w, h)
+        c.inview = self._in_view(pose, side, w, h)
+        c.sure_wrist = self._wrist(pose, side, w, h, IN_VIEW)
+        if tr is None or tr.get("held"):
+            return c
+        pts = tr["pts"]
+        flow = self._flow(pts, rgb) if TRACK_FLOW else None
+        if flow is not None:
+            pts = pts + flow  # (where the hand is: the picture round it moved so)
+        elif tr.get("vel") is not None:
+            pts = pts + tr["vel"]  # (where the hand will be: it goes on as it went)
+        sq = square_from_hand(pts)
+        # (a hand that barely moved keeps its square: the network then sees the same picture, and
+        # its points don't tremble with a square that trembles with them)
+        last = tr.get("sq")
+        if STICKY and last is not None and math.hypot(sq.cx - last.cx, sq.cy - last.cy) < STICKY * last.side \
+                and abs(sq.side / last.side - 1) < STICKY * 1.5 and abs(math.remainder(sq.rot - last.rot, math.tau)) < STICKY * 1.5:
+            sq = last
+        # the body's wrist far from the followed hand: the hand was lost or swapped — look anew
+        if c.wrist is not None and np.hypot(*(pts[0] - c.wrist)) > sq.side * 0.9:
+            return c
+        c.pts, c.sq = pts, sq
+        return c
+
+    def _tracked(self, c, look):
+        """The followed square's look: the hand, or look for it."""
+        if self._accept(look, c.pts, c.side, c.sure_wrist):
+            c.found, c.fresh = look, False
+        else:
+            c.sq = None
+
+    def _search(self, c, pose, w, h, seeds):
+        """2. The squares to look for a lost hand in: where the palm detector saw it, where it is held,
+        where the body says it is (and a bigger one: a hand toward the camera). c.skip: not this picture."""
+        side, tr = c.side, c.tr
+        self.miss[side] = self.miss.get(side, 0) + 1 if tr is None else 0
+        c.seed = self._seed(seeds, c.wrist, side) if seeds else None
+        # (a hand the body doesn't see, not found in the last picture, is looked for again only every
+        # RETRY-th picture: a hand behind the back must not cost the processor every picture)
+        if c.seed is None and tr is None and not c.inview and RETRY > 1 and self.miss[side] > 1 and self.miss[side] % RETRY != 1:
+            c.skip = True
+            return []
+        cands = []
+        if c.seed is not None:
+            cands.append(square_from_hand(c.seed))
+        if tr is not None and tr.get("held"):
+            cands.append(square_from_hand(tr["pts"]))  # (where it is held; a followed one was just looked at)
+        sp = square_from_pose(pose, side, w, h)
+        if sp is not None:
+            cands.append(sp)
+            cands.append(Square(sp.cx, sp.cy, sp.side * WIDE, sp.rot))
+        c.cands = cands[:LOOKS]
+        self.stats["from_pose"] += len(c.cands)
+        return c.cands
+
+    def _searched(self, c, sq, look):
+        """A searched square's look: True if it is the hand (then the next squares are not needed)."""
+        ref = c.tr["pts"] if c.tr is not None else None
+        if self._accept(look, ref, c.side, c.sure_wrist if c.seed is None else None):
+            c.found, c.sq, c.fresh = look, sq, True
+            return True
+        return False
+
+    def _refined(self, c, look):
+        """3. The hand found from a guessed square, looked at once more from its own points."""
+        if look is not None and look[2] >= min(PRESENCE, c.found[2]):
+            c.found = look
+
+    def _end(self, c, rgb, pose, now):
+        """4. Kept as followed — or held for a moment, or gone."""
+        h, w = rgb.shape[:2]
+        side, tr = c.side, c.tr
+        if c.found is None:
+            if c.skip:
                 return None
-            cands = []
-            if seed is not None:
-                cands.append(square_from_hand(seed))
-            hs = square_from_hand(tr["pts"]) if tr is not None and tr.get("held") else None
-            if hs is not None:
-                cands.append(hs)  # (where it is held; a followed one was just looked at)
-            sp = square_from_pose(pose, side, w, h)
-            if sp is not None:
-                cands.append(sp)
-                cands.append(Square(sp.cx, sp.cy, sp.side * WIDE, sp.rot))  # (a hand toward the camera: bigger than the body thinks)
-            ref = tr["pts"] if tr is not None else None
-            for c in cands[:LOOKS]:
-                self.stats["from_pose"] += 1
-                look = self._look(rgb, side, c, None, refine)
-                if self._accept(look, ref, side, sure_wrist if seed is None else None):
-                    r, sq = look, c
-                    break
-        if r is None:
-            # 3. not found: held for a moment where the body's arm takes it (a fast wave blurs the hand;
-            # the network doubts for a few pictures — the hand must not vanish and come back)
-            held = self._hold(tr, pose, side, w, h, now, inview, rgb)
+            # not found: held for a moment where the picture (or the body's arm) takes it — a fast wave
+            # blurs the hand; the network doubts for a few pictures: the hand must not vanish and come back
+            held = self._hold(tr, pose, side, w, h, now, c.inview, rgb)
             if held is None:
                 self.track[side] = None
                 return None
             self.held[side] = True
             return held
-        xy, z, pres = r
+        xy, z, pres = c.found
         vel = None
-        if tr is not None and not fresh:
+        if tr is not None and not c.fresh:
             # the hand's own speed (pixels a picture), eased: the next square goes with it
             v = xy[0] - tr["pts"][0]
             vel = v if tr.get("vel") is None else tr["vel"] * 0.5 + v * 0.5
-            if np.hypot(*vel) > sq.side * 0.5:
+            if np.hypot(*vel) > c.sq.side * 0.5:
                 vel = None
-        self.track[side] = {"pts": xy, "z": z, "vel": vel, "sq": sq if not fresh else None, "box": box, "t": now,
-                            "wrist": wrist, "fore": self._forearm(pose, side, w, h), "pres": pres}
+        self.track[side] = {"pts": xy, "z": z, "vel": vel, "sq": c.sq if not c.fresh else None, "t": now,
+                            "wrist": c.wrist, "fore": self._forearm(pose, side, w, h), "pres": pres}
         if pres >= PALM_SURE:
             pm = self._palm(xy, z)
             ref = self.palm.get(side)
@@ -585,6 +598,75 @@ class HandsV5:
         self.miss[side] = 0
         return xy, z, pres
 
+    # ------------------------------------------------------------------ looking
+    def _look(self, rgb, side, sq):
+        """The network's look at one square: (xy, z, how sure) — not judged here."""
+        self.stats["runs"] += 1
+        xy, z, pres, _ = self.nets[side].run(rgb, sq)
+        return xy, z, pres
+
+    def _looks(self, rgb, squares):
+        """The video card's look at many squares at once (GpuNet); on a failure, the processor's from now on."""
+        self.stats["runs"] += len(squares)
+        self.stats["calls"] += 1
+        try:
+            return [(xy, z, pres) for xy, z, pres, _ in self.gpu.run_many(rgb, squares)]
+        except Exception as e:  # noqa: BLE001
+            # the video card's program died: the processor from now on (never the camera)
+            self.gpu_error = str(e) or type(e).__name__
+            self.use_gpu(None)
+            return None
+
+    def one(self, rgb, pose, side, now=None, refine=True, seeds=None):
+        """One hand on the processor: (pts 21×2 picture pixels, z 21, how sure) or None. seeds: hands
+        found by MediaPipe's palm detector (21×2 picture pixels) — a hand too near the camera for the
+        body's wrist to be right. self.held[side]: the hand given is held (the network lost it a moment)."""
+        h, w = rgb.shape[:2]
+        now = time.perf_counter() if now is None else now
+        c = self._begin(rgb, pose, side)
+        if c.sq is not None:
+            self._tracked(c, self._look(rgb, side, c.sq))
+        if c.found is None:
+            for sq in self._search(c, pose, w, h, seeds):
+                if self._searched(c, sq, self._look(rgb, side, sq)):
+                    break
+            if c.found is not None and refine:
+                self.stats["refined"] += 1
+                self._refined(c, self._look(rgb, side, square_from_hand(c.found[0])))
+        return self._end(c, rgb, pose, now)
+
+    def _both_gpu(self, rgb, pose, now, seeds):
+        """Both hands with the video card: the followed squares in one call, the squares of the lost
+        hands in one more, the second looks in one more — three calls at most, usually one."""
+        h, w = rgb.shape[:2]
+        cs = [self._begin(rgb, pose, s) for s in ("left", "right")]
+        tracked = [c for c in cs if c.sq is not None]
+        if tracked:
+            looks = self._looks(rgb, [c.sq for c in tracked])
+            if looks is None:
+                return None
+            for c, look in zip(tracked, looks):
+                self._tracked(c, look)
+        lost = [(c, self._search(c, pose, w, h, seeds.get(c.side))) for c in cs if c.found is None]
+        flat = [(c, sq) for c, cands in lost for sq in cands]
+        if flat:
+            looks = self._looks(rgb, [sq for _, sq in flat])
+            if looks is None:
+                return None
+            for (c, sq), look in zip(flat, looks):
+                if c.found is None:
+                    self._searched(c, sq, look)
+        fresh = [c for c, _ in lost if c.found is not None]
+        if fresh:
+            self.stats["refined"] += len(fresh)
+            looks = self._looks(rgb, [square_from_hand(c.found[0]) for c in fresh])
+            if looks is None:
+                return None
+            for c, look in zip(fresh, looks):
+                self._refined(c, look)
+        return [self._end(c, rgb, pose, now) for c in cs]
+
+    # ------------------------------------------------------------------ a held hand
     def _flow(self, pts, rgb):
         """How the picture round the hand moved since the last picture (optical flow, Lucas–Kanade on a
         small grey crop): (dx, dy) pixels, or None (no last picture, too few points followed)."""
@@ -642,45 +724,6 @@ class HandsV5:
         self.stats["held"] = self.stats.get("held", 0) + 1
         return pts, tr["z"], 0.0
 
-    def _look(self, rgb, side, sq, box, refine):
-        """The engine's look at one square: (xy, z, how sure) — not judged here."""
-        if self.rtm:
-            try:
-                return self._rtm(rgb, side, sq, box, refine)
-            except Exception as e:  # noqa: BLE001
-                # the video card's program died: MediaPipe's joint network alone from now on (never the camera)
-                self.rtm_error = str(e) or type(e).__name__
-                self.use_rtm(None)
-        return self._mp(rgb, side, sq, refine)
-
-    def _mp(self, rgb, side, sq, refine):
-        net = self.nets[side]
-        self.stats["runs"] += 1
-        xy, z, pres, _ = net.run(rgb, sq)
-        if refine and pres >= PRESENCE_TRACK:
-            # the first look came from a guess: look again, square made from the hand itself
-            self.stats["runs"] += 1
-            self.stats["refined"] += 1
-            xy2, z2, pres2, _ = net.run(rgb, square_from_hand(xy))
-            if pres2 >= min(PRESENCE, pres):
-                xy, z, pres = xy2, z2, pres2
-        return xy, z, pres
-
-    def _rtm(self, rgb, side, sq, box, refine):
-        rtm = self.rtm[side]
-        cx, cy, s = box if box is not None else (sq.cx, sq.cy, sq.side * RTM_POSE_BOX)
-        self.stats["runs"] += 1
-        p, conf = rtm.run(rgb, cx, cy, s)
-        if refine and conf >= RTM_GATE * 0.5:
-            self.stats["runs"] += 1
-            self.stats["refined"] += 1
-            p2, conf2 = rtm.run(rgb, *box_of(p))
-            if conf2 >= conf * 0.8:
-                p, conf = p2, conf2
-        # MediaPipe's joint network on the square made from these points: the depth, and is it a hand
-        _, z, pres, _ = self.nets[side].run(rgb, square_from_hand(p))
-        return p, z, max(pres, conf if conf >= RTM_GATE else 0.0)
-
     def tracking(self):
         """Are both hands followed (their squares come from themselves, not from the body)?"""
         return all(t is not None and not t.get("held") for t in self.track.values())
@@ -688,6 +731,7 @@ class HandsV5:
     def process(self, rgb, pose, now=None, pool=None, seeds=None):
         """seeds: hands from MediaPipe's palm detector (normalized landmark lists), for hands lost."""
         h, w = rgb.shape[:2]
+        now = time.perf_counter() if now is None else now
         sides = ("left", "right")
         if seeds:
             seeds = [np.array([[p["x"] * w, p["y"] * h] for p in lm]) for lm in seeds]
@@ -699,11 +743,13 @@ class HandsV5:
             seeds = got_seed
         else:
             seeds = {}
-        if pool is not None:
-            jobs = [pool.submit(self.one, rgb, pose, s, now, True, seeds.get(s)) for s in sides]
-            got = [j.result() for j in jobs]
-        else:
-            got = [self.one(rgb, pose, s, now, True, seeds.get(s)) for s in sides]
+        got = self._both_gpu(rgb, pose, now, seeds) if self.gpu is not None else None
+        if got is None:
+            if pool is not None:
+                jobs = [pool.submit(self.one, rgb, pose, s, now, True, seeds.get(s)) for s in sides]
+                got = [j.result() for j in jobs]
+            else:
+                got = [self.one(rgb, pose, s, now, True, seeds.get(s)) for s in sides]
         self._prev_rgb = rgb  # (a held hand moves with the picture: _flow)
         hands = []
         for side, r in zip(sides, got):
