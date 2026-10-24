@@ -18,7 +18,7 @@
  *    it does not work on the Earth (Game._godsBanned).
  *  - Both are HELD (Concentration.HELD.Imperius): while the mind is in the creature no other spell works — not even
  *    Lumos or the shield (the author: «колдовать не можешь») — only «стоп».
- *  - The link: RANGE m between the hero's body and the creature (60 / 120). From FADE_FROM of it the screen
+ *  - The link: RANGE m between the hero's body and the creature (180 / 1800 — the author). From FADE_FROM of it the screen
  *    darkens, black at the range — there the link tears (the mind flies back, a moment of weakness).
  *  - It ends: «стоп», the mana out, too far, the creature dead, the hero's body hurt (the mind is jerked back:
  *    a short stun — the blow is real), the hero dead (the death as always — Legacy.js).
@@ -33,13 +33,13 @@ export const IMPERIUS = {
     COST: 100, // mana to cast «Империус» (the author)
     NEED_MAX: 150, // … and the mana maximum (cells) must be at least this (the author)
     UPKEEP: 1, // mana a second while the mind is in the creature (the author)
-    RANGE: 60, // m from the body: the link holds this far (the game's decision: «радиус большой, но не бесконечный»)
+    RANGE: 180, // m from the body: the link holds this far (the author: three times the first 60)
     FIRST: 15, // +cells the first time it works (Mana.FIRST_SPELL)
-    CAST_R: 30, // m: as far as one can reach a creature with the cast (the hand / the wand / the eyes on it)
+    CAST_R: 90, // m: as far as one can reach a creature with the cast (the hand / the wand / the eyes on it; the author: ×3)
     AIM_ANG: 0.5, // rad: how close to the hand's / the eyes' line the creature must be (forgiving: the camera's hand wavers)
     FADE_FROM: 0.5, // of RANGE: from here the screen starts to darken
     FADE_SAY: 0.3, // darkness at which «Связь слабеет» is said (once)
-    PASS_T: 1.0, // s: the mind's passage (into the creature and back) — the camera flies along the light
+    PASS_T: 1.0, // s: the mind's passage (into the creature and back) — the camera flies along the light (longer far: passTime)
     WEAK_T: 1.0, // s of weakness after the link tore (too far)
     HURT_STUN: 1.3, // s of stun when the body is struck (the mind jerked back)
 };
@@ -49,7 +49,8 @@ export const IMPERIUS_MAXIMA = {
     COST: 500,
     NEED_MAX: 750,
     UPKEEP: 2,
-    RANGE: 120, // m (twice the plain one)
+    RANGE: 1800, // m (the author: ten times the plain one)
+    CAST_R: 900, // m: ten times the plain one's reach (the author) — in practice as far as creatures are in the world round the hero
     FIRST: 100, // the gods' library: «за использование любого заклинания из этой библиотеки первый раз — 100 ячеек маны» (the author)
     PLAYER_BREAK: 20, // HP: a blow at least this strong on a controlled player — they tear free
     FIRE_EVERY: 7, // s: the dragon's fire, once in this long (the author)
@@ -137,6 +138,12 @@ export function blockSay(name, why) {
     if (why === 'max') return `🌀 Для «${ru}» нужно ${I.NEED_MAX} ячеек маны — пока ваш разум слишком мал, чтобы покинуть тело`;
     return `😮‍💨 Для «${ru}» нужно ${I.COST} маны`;
 }
+
+/** The reach of the cast (m). */
+export const castReach = (name) => imperiusOf(name).CAST_R ?? IMPERIUS.CAST_R;
+
+/** s the mind's passage takes over `dist` m: a moment near, a few seconds over a long way (never a heavy flight). */
+export const passTime = (dist) => Math.max(IMPERIUS.PASS_T, Math.min(3.5, IMPERIUS.PASS_T + (dist || 0) / 700));
 
 /** The mana the held spell takes in `dt` s. */
 export const upkeep = (name, dt) => imperiusOf(name).UPKEEP * Math.max(0, dt);

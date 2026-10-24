@@ -641,7 +641,7 @@ export class BookBirds {
         if (this.auth) {
             // keep a few birds around the player
             const me = g.character.group.position;
-            for (const b of [...this.birds.values()]) if (b.state !== 'fall' && b.model.position.distanceTo(me) > 130) this._removeBird(b);
+            for (const b of [...this.birds.values()]) if (b.state !== 'fall' && !b.imp && b.model.position.distanceTo(me) > 130) this._removeBird(b);
             this._spawnT -= dt;
             if (this._spawnT <= 0 && this.birds.size < BIRDS) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
         }

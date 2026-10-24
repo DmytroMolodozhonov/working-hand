@@ -49,6 +49,7 @@ test('in a castle: a taken person warned then beaten, a taken pig shooed and unh
         out.modeEarly = duty()?.impDuty?.mode || null;
         run(420); // (21 s more: still there — beaten)
         out.modeLate = duty()?.impDuty?.mode || null;
+        for (let i = 0; i < 40 && v.hp >= vhp0 && !v.dead; i++) run(5); // (his first blow: up to 10 s more — he may be coming round a wall)
         { const k = duty(); out.kd = k ? +Math.hypot(k.x - v.x, k.z - v.z).toFixed(1) : null; out.kmode = k?.mode; out.warnT = k?.impDuty?.warnT; }
         out.beaten = v.hp < vhp0;
         out.hpMid = v.hp; out.vhp0 = vhp0;
@@ -79,7 +80,7 @@ test('in a castle: a taken person warned then beaten, a taken pig shooed and unh
     assert.ok(r.awake && r.person && r.tookPerson, JSON.stringify(r));
     assert.ok(r.duty && r.modeEarly === 'warn', 'a knight comes and tells it to go: ' + JSON.stringify(r));
     assert.equal(r.modeLate, 'beat', 'still there: beaten');
-    assert.ok(r.beaten, 'the blows land: ' + r.hpMid + ' < ' + r.vhp0);
+    assert.ok(r.beaten, 'the blows land: ' + JSON.stringify(r));
     assert.equal(r.activeAfterDeath, false, 'killed: the mind is home');
     assert.ok(r.heroAlive && r.heroHurt <= 0, 'the hero unhurt: ' + r.heroHurt);
     assert.ok(r.camToHead < 1.5, 'the view is the hero\'s own again: ' + r.camToHead);

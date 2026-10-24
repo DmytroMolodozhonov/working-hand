@@ -3617,7 +3617,9 @@ export class Game {
         // See further while flying (smoothly), terrain streams in around the player
         this._viewBoost = (this._viewBoost || 0) + ((this.flight.active ? 1 : this.monster?.viewBoost || 0) - (this._viewBoost || 0)) * Math.min(1, dt * 0.8); // (a 24 m monster sees further too)
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
-        if (!this.space?.inSpace) this.world.update(this.character.group.position, this._viewBoost);
+        // («Империус»: the eyes are in the creature, up to 1800 m off — the world streams round it, not round the body left standing)
+        const focus = this.imperius?.focusPos?.(this._focusV || (this._focusV = new THREE.Vector3())) || this.character.group.position;
+        if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
         this.swim.applyFog(); // (under the water: murky and blue)
         this.world.terrain?.data?.settling?.step(SETTLE_MS); // (what the last changes left too weak gives way: Structure.js)
@@ -3627,8 +3629,8 @@ export class Game {
         this.inspirius?.update(dt);
         this.boom?.update(dt);
         if (this.dayCycle && this.frameCount % 15 === 0) this.world.setDayPhase(this.dayPhase());
-        this.world.followShadow(this.character.group.position, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
-        this.seaSurface?.update(dt, this.character.group.position);
+        this.world.followShadow(focus, this._viewBoost, (this._shadowLook || (this._shadowLook = new THREE.Vector3())).set(0, 0, -1).applyQuaternion(this.camera.quaternion));
+        this.seaSurface?.update(dt, focus);
         this.space?.afterWorld(dt); // (the sky, the light and the air of space / another planet; the breathing; the Sun's heat)
         this.space?.uploadStep(); // (a planet's map from the worker: one a frame to the video card)
         if (this.frameCount % 60 === 7) { this.space?.checkUnlock(); if (this.frameCount > 900 && this.space?.knows()) this.space.prepare(); }

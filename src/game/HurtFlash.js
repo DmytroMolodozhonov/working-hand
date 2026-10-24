@@ -98,6 +98,11 @@ export class HurtFlash {
         if (!m || !m.color || m.isShaderMaterial) return m;
         let t = this._tints.get(m);
         if (!t) { t = m.clone(); this._tints.set(m, t); } else t.copy(m);
+        delete t.userData.src; // (a far shape's twin: the red copy keeps its red — FarShape.syncTwin follows `src` only on the twin itself)
+        // (a material with its own shader piece — the sky's tint, the far shape's skin: clone() drops it, and the copy then shares
+        // the original's program without its uniforms — the draw throws. The same piece, the same program key)
+        if (m.onBeforeCompile && t.onBeforeCompile !== m.onBeforeCompile) t.onBeforeCompile = m.onBeforeCompile;
+        if (m.customProgramCacheKey && t.customProgramCacheKey !== m.customProgramCacheKey) t.customProgramCacheKey = m.customProgramCacheKey;
         t.color.lerp(RED, HURT_FLASH.TINT);
         if (t.emissive) t.emissive.lerp(RED, HURT_FLASH.GLOW);
         return t;

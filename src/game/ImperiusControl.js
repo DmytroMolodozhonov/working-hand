@@ -20,7 +20,7 @@
  */
 
 import * as THREE from 'three';
-import { IMPERIUS, imperiusOf, canTake, imperiusBlock, blockSay, upkeep, linkAt, kindOf, NET_SPELL } from './Imperius.js';
+import { IMPERIUS, imperiusOf, castReach, passTime, canTake, imperiusBlock, blockSay, upkeep, linkAt, kindOf, NET_SPELL } from './Imperius.js';
 import { BODIES, eyeOffset } from './ImperiusBodies.js';
 import { animalWings } from './ImperiusFlyers.js'; // (also adds the Maxima's creatures to BODIES: the dragon, the owl, the phoenix, the book-bird)
 import './ImperiusWalkers.js'; // (… the spider, the living trees, the Ice Castle's creatures, the sailors)
@@ -122,6 +122,7 @@ export class ImperiusControl {
             g.lastCastWhy = why === 'max' ? `мало ячеек маны (нужно ${imperiusOf(name).NEED_MAX})` : 'не хватает маны';
             return null;
         }
+        this._reach = castReach(name);
         const t = this._aimed(name === 'ImperiusMaxima');
         if (!t && this._hidden && !this._far) {
             if (isFinal) this._say(`🌀 ${cap1(kindRu(this._hidden.kind))} за препятствием — заклинанию нужно его видеть`, 'hidden');
@@ -129,12 +130,12 @@ export class ImperiusControl {
             return null;
         }
         if (!t && this._far) {
-            if (isFinal) this._say(`🌀 ${cap1(kindRu(this._far.kind))} слишком далеко: ${Math.round(this._far.d)} м — подойдите не дальше чем на ${IMPERIUS.CAST_R} м`, 'far');
+            if (isFinal) this._say(`🌀 ${cap1(kindRu(this._far.kind))} слишком далеко: ${Math.round(this._far.d)} м — подойдите не дальше чем на ${this._reach} м`, 'far');
             g.lastCastWhy = `цель слишком далеко (${Math.round(this._far.d)} м)`;
             return null;
         }
         if (!t) {
-            if (isFinal) this._say(`🌀 Наведите руку (или посмотрите) на существо не дальше ${IMPERIUS.CAST_R} м и скажите «${name === 'ImperiusMaxima' ? 'Империус Максима' : 'Империус'}»`, 'noaim');
+            if (isFinal) this._say(`🌀 Наведите руку (или посмотрите) на существо не дальше ${castReach(name)} м и скажите «${name === 'ImperiusMaxima' ? 'Империус Максима' : 'Империус'}»`, 'noaim');
             g.lastCastWhy = 'нет существа на прицеле';
             return null;
         }
@@ -186,7 +187,8 @@ export class ImperiusControl {
                     if (dc < 0.3) continue;
                     const ang = Math.max(0, L.d.angleTo(_a.divideScalar(dc)) - Math.atan2(r, dc));
                     if (L.loose ? !(d < 14 && ang < 0.9) : ang > IMPERIUS.AIM_ANG && !(d < 10 && ang < 1.0)) continue; // (close by: roughly in front is enough)
-                    if (d > IMPERIUS.CAST_R) { if (ang < IMPERIUS.AIM_ANG && d < IMPERIUS.CAST_R * 4 && (!this._far || d < this._far.d)) this._far = { d, kind }; continue; }
+                    const reach = this._reach || IMPERIUS.CAST_R;
+                    if (d > reach) { if (ang < IMPERIUS.AIM_ANG && d < reach * 4 && (!this._far || d < this._far.d)) this._far = { d, kind }; continue; }
                     const score = ang * 3 + d * 0.03;
                     if (best && score >= best.score) continue;
                     // (behind a wall: not seen, not taken — the line to its surface)
@@ -200,7 +202,7 @@ export class ImperiusControl {
 
     /** Is any of it seen from `o` (the point nearest the line, short of its surface; a great body — also its ends and middle)? */
     _seen(col, o, near, dir, r, dc, cap) {
-        const see = (p) => col.lineOfSight(o.x, o.y, o.z, p.x, p.y, p.z, 0.5);
+        const see = (p) => col.lineOfSight(o.x, o.y, o.z, p.x, p.y, p.z, Math.max(0.5, Math.hypot(p.x - o.x, p.y - o.y, p.z - o.z) / 240)); // (far: fewer looks along the line)
         if (see(_p2.copy(near).addScaledVector(dir, -Math.min(r, dc - 0.3)))) return true;
         if (!cap) return false;
         for (const k of [0, 0.5, 1]) { _p2.lerpVectors(cap.a, cap.b, k); _p2.y += cap.r * 0.8; if (see(_p2)) return true; } // (its back seen over a bump)
@@ -256,6 +258,7 @@ export class ImperiusControl {
         g.mana?.success?.(name);
         this.name = name; this.sys = sys; this.id = id; this.kind = kindOf(sys, c);
         this.phase = 'in'; this.t = 0;
+        this._passT = passTime(B.pos(c, _v).distanceTo(g.character.group.position));
         const ch = g.character;
         this._body = { x: ch.group.position.x, y: ch.group.position.y, z: ch.group.position.z, yaw: ch.group.rotation.y };
         this._heroYaw = ch.group.rotation.y;
@@ -364,7 +367,7 @@ export class ImperiusControl {
         // on the way back: only the passage (the creature is its own already — or gone: the mind is home at once)
         if (this.phase === 'out') {
             if (!this.creature) { this._end(); return; }
-            this.t += dt / IMPERIUS.PASS_T;
+            this.t += dt / (this._passT || IMPERIUS.PASS_T);
             this._beamsDraw();
             if (this.t >= 1) this._end();
             return;
@@ -390,7 +393,7 @@ export class ImperiusControl {
         if (L.torn) { this.stop('far'); return; }
         // the passage in
         if (this.phase === 'in') {
-            this.t += dt / IMPERIUS.PASS_T;
+            this.t += dt / (this._passT || IMPERIUS.PASS_T);
             this._beamsDraw();
             if (this.t >= 1) { this.phase = 'on'; this._beamsOff(); this._arrive(c); }
         }
@@ -553,6 +556,7 @@ export class ImperiusControl {
         // dead hero, a dead creature's eyes gone: the mind is home at once; else it flies back along the light
         if (why === 'dead' && (g.isDeadLocal || g.combat?.dead)) { this._end(); return true; }
         this.phase = 'out'; this.t = 0;
+        { const c = this.creature; this._passT = passTime(c ? BODIES[this.sys].pos(c, _v).distanceTo(g.character.group.position) : 0); }
         return true;
     }
 
@@ -703,6 +707,22 @@ export class ImperiusControl {
         if (!this.name || !(amount > 0) || this.phase === 'out') return false;
         this.game.perf?.note?.('империус: тело ранено (' + (kind || '?') + ') — сознание вернулось');
         return this.stop('hurt');
+    }
+
+    /** (CastleLife._scan) the creatures with a mind in them (mine; the host — the guests' too) as {id, p} «players». */
+    eyes(out) {
+        const g = this.game;
+        const add = (sys, c) => { if (c && !BODIES[sys].dead(c)) out.push({ id: 'imp:' + sys + ':' + c.id, p: BODIES[sys].pos(c, new THREE.Vector3()) }); };
+        if (this.name && this.sys !== 'pl') add(this.sys, this.creature);
+        if (g.authority) for (const H of this.hosted.values()) if (H.sys !== 'pl') add(H.sys, BODIES[H.sys]?.find(g, H.id));
+        return out;
+    }
+
+    /** Where my eyes are while the mind is out (the creature's feet) — the world streams round it (Game). null: in my body. */
+    focusPos(out) {
+        if (!this.name) return null;
+        const c = this.creature;
+        return c ? BODIES[this.sys].pos(c, out) : null;
     }
 
     /** For my 'p' packet: the eyes of my body burn white. */

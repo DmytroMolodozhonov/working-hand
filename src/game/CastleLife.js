@@ -432,6 +432,7 @@ export class CastleLife {
         const idx = this.index;
         if (!idx) return;
         const players = this._players();
+        this.game.imperius?.eyes?.(players); // («Империус»: the places round a creature with a mind in it wake and stay awake — up to 1800 m from the body)
         const seen = new Set();
         // (one place wakes per look — its people are made at once, 15–40 ms: the next one a moment later)
         let woke = false;

@@ -241,7 +241,15 @@ export class Animals {
         const g = this.game;
         out.push(g.character.group.position);
         for (const r of g.remotes?.values() || []) if (r.position && !r.dead) out.push(r.position);
+        const eyes = g.imperius?.focusPos?.(this._impEye || (this._impEye = new THREE.Vector3())); // («Империус»: herds round the creature my mind is in, too)
+        if (eyes) out.push(eyes);
         return out;
+    }
+
+    /** The creature my «Империус» mind is in is within GONE of the point (its herds stay round it). */
+    _nearEyes(p) {
+        const e = this.game.imperius?.focusPos?.(this._impEye2 || (this._impEye2 = new THREE.Vector3()));
+        return !!e && Math.hypot(e.x - p.x, e.z - p.z) <= HERDS.GONE;
     }
 
     /** (host) No guest is nearer than GONE to the point. */
@@ -1728,7 +1736,7 @@ export class Animals {
             for (const a of [...this.list]) {
                 // (gone only far away and out of sight: never vanishing in front of the player)
                 const ap = a.group.position;
-                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
+                if (ap.distanceTo(me) > HERDS.GONE && !a.tamed && !a.rider && !a.cart && !a.mount && !a.imp && !this._nearEyes(ap) && outOfSight(me, look, ap.x, ap.z, 1.2) && this._farFromGuests(ap)) { a.site?.members.delete(a.id); this._remove(a); continue; } // (the herd place sleeps: it is full again when somebody comes)
                 if (a.dead) {
                     if (a.lev?.body) continue; // (a body held up by «Вингардиум Левиоса»: Levitation carries it)
                     if (a.lev) g.levitation?.letGo('a', a, false); // (it died while held: it falls)

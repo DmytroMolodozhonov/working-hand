@@ -73,16 +73,16 @@ test('into a zombie: the view in its eyes, it walks for the hero, the body stays
         step(40);
         turnTo = null;
         out.faceErr = Math.abs(((z.group.rotation.y + Math.PI) - (zy0 + Math.PI / 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
-        // far: 45 m from the body — dark; 61 m — torn
-        z.group.position.set(p0.x + fx * 45, z.group.position.y, p0.z + fz * 45);
+        // far: 135 m from the body — dark; 185 m — torn
+        z.group.position.set(p0.x + fx * 135, z.group.position.y, p0.z + fz * 135);
         z.group.position.y = g.collision.groundY(z.group.position.x, z.group.position.z) + z.gOff;
         I.update(0.05);
-        out.dark45 = I.dark;
-        z.group.position.set(p0.x + fx * 62, z.group.position.y, p0.z + fz * 62);
+        out.dark135 = I.dark;
+        z.group.position.set(p0.x + fx * 185, z.group.position.y, p0.z + fz * 185);
         z.group.position.y = g.collision.groundY(z.group.position.x, z.group.position.z) + z.gOff;
         I.update(0.05);
         out.afterFar = I.phase;
-        step(30);
+        step(70);
         out.activeAfterFar = I.active;
         out.zFree = !z.imp;
         out.eyesAfter = !!ch._impEyes?.visible;
@@ -134,8 +134,8 @@ test('into a zombie: the view in its eyes, it walks for the hero, the body stays
     assert.ok(r.zWalked > 2 && r.zAlong > 1.5, `the zombie walked ahead: ${r.zWalked} (${r.zAlong} along)`);
     assert.ok(r.bodyMoved < 0.05, 'the body stays: ' + r.bodyMoved);
     assert.ok(r.faceErr < 0.5, 'the zombie turned with the body: ' + r.faceErr);
-    assert.ok(r.dark45 > 0.2 && r.dark45 < 1, 'dark at 45 m: ' + r.dark45);
-    assert.equal(r.afterFar, 'out', 'torn past 60 m: the mind flies back');
+    assert.ok(r.dark135 > 0.2 && r.dark135 < 1, 'dark at 135 m: ' + r.dark135);
+    assert.equal(r.afterFar, 'out', 'torn past 180 m: the mind flies back');
     assert.equal(r.activeAfterFar, false);
     assert.ok(r.zFree && !r.eyesAfter, 'the zombie its own again, the eyes as they were');
     assert.equal(r.cowCast, 'Imperius', 'into a cow');

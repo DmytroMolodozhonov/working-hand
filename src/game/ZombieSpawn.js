@@ -128,7 +128,7 @@ export class ZombieSpawn {
         const ps = this._players();
         if (!ps.length) return;
         for (const z of [...g.zombies]) {
-            if (!z.fromDark || z.isDead || z.isThrall) continue;
+            if (!z.fromDark || z.isDead || z.isThrall || z.imp) continue; // (a «Империус» mind in it: it stays)
             if (!ps.some((p) => Math.hypot(p.x - z.group.position.x, p.z - z.group.position.z) < ZSPAWN.FORGET)) g.removeZombie(z);
         }
         this._beenT -= dt;

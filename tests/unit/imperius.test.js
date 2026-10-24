@@ -2,7 +2,7 @@
 // distance, the words that cast it and the ones that never do, the scrolls' sources, the held rule.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IMPERIUS, IMPERIUS_MAXIMA, IMPERIUS_TARGETS, canTake, imperiusBlock, upkeep, linkAt, kindOf, flies } from '../../src/game/Imperius.js';
+import { IMPERIUS, IMPERIUS_MAXIMA, IMPERIUS_TARGETS, canTake, imperiusBlock, upkeep, linkAt, kindOf, flies, castReach, passTime } from '../../src/game/Imperius.js';
 import { matchSpell, imperiusWords } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { FIRST_SPELL, GOD_SPELLS } from '../../src/game/Mana.js';
@@ -77,17 +77,22 @@ test('the kind from the game\'s creature', () => {
     assert.ok(!flies('pig', false) && !flies('cow', true) && !flies('dragon', false));
 });
 
-test('the link: clear to half the range, darker and darker, torn at the range (60 / 120 m)', () => {
-    assert.equal(IMPERIUS.RANGE, 60);
-    assert.equal(IMPERIUS_MAXIMA.RANGE, 120);
+test('the link: clear to half the range, darker and darker, torn at the range (180 / 1800 m); cast from 90 / 900 m', () => {
+    assert.equal(IMPERIUS.RANGE, 180);
+    assert.equal(IMPERIUS_MAXIMA.RANGE, 1800);
+    assert.equal(castReach('Imperius'), 90);
+    assert.equal(castReach('ImperiusMaxima'), 900);
     assert.deepEqual(linkAt('Imperius', 10), { dark: 0, torn: false });
-    assert.equal(linkAt('Imperius', 30).dark, 0);
-    const a = linkAt('Imperius', 40).dark, b = linkAt('Imperius', 50).dark, c = linkAt('Imperius', 59).dark;
+    assert.equal(linkAt('Imperius', 90).dark, 0);
+    const a = linkAt('Imperius', 120).dark, b = linkAt('Imperius', 150).dark, c = linkAt('Imperius', 179).dark;
     assert.ok(a > 0 && b > a && c > b && c < 1, `${a} < ${b} < ${c}`);
-    assert.ok(!linkAt('Imperius', 59.9).torn);
-    assert.ok(linkAt('Imperius', 60).torn && linkAt('Imperius', 60).dark >= 0.99);
-    assert.equal(linkAt('ImperiusMaxima', 60).dark, 0);
-    assert.ok(linkAt('ImperiusMaxima', 90).dark > 0 && !linkAt('ImperiusMaxima', 119).torn && linkAt('ImperiusMaxima', 120).torn);
+    assert.ok(!linkAt('Imperius', 179.9).torn);
+    assert.ok(linkAt('Imperius', 180).torn && linkAt('Imperius', 180).dark >= 0.99);
+    assert.equal(linkAt('ImperiusMaxima', 900).dark, 0);
+    assert.ok(linkAt('ImperiusMaxima', 1300).dark > 0 && !linkAt('ImperiusMaxima', 1799).torn && linkAt('ImperiusMaxima', 1800).torn);
+    // the way home: quick near, a little longer from far, never slow
+    assert.equal(passTime(0), IMPERIUS.PASS_T);
+    assert.ok(passTime(1800) > passTime(180) && passTime(1800) <= 3.5);
 });
 
 test('the words: «империус» (as the recognizer writes it) and «… максима» cast; «империя», «император» are talk', () => {

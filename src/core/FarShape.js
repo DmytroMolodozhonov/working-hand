@@ -37,7 +37,7 @@ function plainMat(side) {
 /** Before a draw: the twin takes what the game changed on its material (opacity, colours) this frame. */
 function syncTwin() {
     const tw = this.material, src = tw.userData.src;
-    if (!src) return;
+    if (!src?.isMaterial) return; // (a red flash's copy — HurtFlash: its own colour, and clone() left only a plain object here)
     if (tw.opacity !== src.opacity) tw.opacity = src.opacity;
     if (tw.color && src.color && !tw.color.equals(src.color)) tw.color.copy(src.color);
     if (tw.emissive && src.emissive && !tw.emissive.equals(src.emissive)) tw.emissive.copy(src.emissive);

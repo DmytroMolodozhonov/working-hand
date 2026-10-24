@@ -68,7 +68,7 @@ test('a dragon: the plain spell no, the Maxima yes; run + strokes — it flies o
             maxAbove = Math.max(maxAbove, p.y - fl);
         }
         out.under = under; out.maxAbove = maxAbove; out.dFly = d.fly;
-        // the fire: a long loud «У» (the body brought under it: a dragon flies far in a few strokes — 120 m tears the link)
+        // the fire: a long loud «У» (the body brought under it: kept near it)
         I._body.x = d.model.position.x + 20; I._body.z = d.model.position.z; ch.group.position.x = I._body.x; ch.group.position.z = I._body.z;
         for (let i = 0; i < 20; i++) { I.voiceLevel(-64); frame(0.05, { stroke: 0 }); }
         for (let i = 0; i < 25; i++) { I.voiceLevel(-25); I.voiceLetters('ууу'); frame(0.05, { stroke: 0 }); }
@@ -144,10 +144,6 @@ test('Creative, the author\'s case: the test dragon by the mountain is taken by 
             g.camera.lookAt(dp.x - fx * 6 * d.size, dp.y + 2 * d.size, dp.z - fz * 6 * d.size);
             g.camera.updateMatrixWorld(true);
         };
-        lookFrom(80);
-        I._lastCast = 0;
-        out.far = g.castLocalSpell('империус максима', true);
-        out.farWhy = g.lastCastWhy;
         lookFrom(18);
         I._lastCast = 0;
         out.near = g.castLocalSpell('империус максима', true);
@@ -158,11 +154,20 @@ test('Creative, the author\'s case: the test dragon by the mountain is taken by 
         g.castLocalSpell('стоп', true);
         run(30);
         out.after = I.active;
+        // (1 km off — last: the land by the peak is let go out there. Only the dragon looked at — whatever else lives there, a ship's sailor, would be taken, rightly)
+        const { BODIES } = await import('/src/game/ImperiusBodies.js');
+        const lists = {};
+        for (const k of Object.keys(BODIES)) if (k !== 'D') { lists[k] = BODIES[k].list; BODIES[k].list = () => {}; }
+        lookFrom(1000); // (past the Maxima's 900 m, whole body)
+        I._lastCast = 0;
+        out.far = g.castLocalSpell('империус максима', true);
+        out.farWhy = g.lastCastWhy;
+        for (const k in lists) BODIES[k].list = lists[k];
         return out;
     });
     assert.ok(r.has, 'the Creative test dragon is there');
     assert.ok(r.dragonAboveGround < 3, 'lying on the ground of its peak: ' + r.dragonAboveGround);
-    assert.equal(r.far, null);
+    assert.equal(r.far, null, JSON.stringify(r));
     assert.match(r.farWhy || '', /далеко/, 'too far: told so — ' + r.farWhy);
     assert.equal(r.near, 'ImperiusMaxima', JSON.stringify(r));
     assert.ok(r.active && r.kind === 'dragon');
