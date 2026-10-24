@@ -460,14 +460,15 @@ test('the spent pentagram: once all have flown out it never works again, the gro
     assert.match(src('src/game/WorldSave.js'), /gargoyleScorch/);
 });
 
-test('the pentagram is in the table PENTAGRAMS: dark, 150 mana, once, an inverted star with horns and wings, a scroll', async () => {
+test('the pentagram is in the table PENTAGRAMS: dark, 150 mana, once, its own picture (a muzzle with horns and wings), a scroll, an effect at the word', async () => {
     const { PENTAGRAMS } = await import('../../src/game/Pentagrams.js');
     const P = PENTAGRAMS.gargoyles;
     assert.ok(P);
     assert.equal(P.dark, true);
     assert.equal(P.cost, 150);
     assert.equal(P.once, true);
-    assert.equal(P.shape.inverted, true);
+    assert.ok(P.lines?.length, 'its own picture of lines (PentagramFigures)');
+    assert.equal(P.use, 'gargoyles.startRitual', 'the effect that starts at the word (Pentagranium._use1)');
     assert.ok(P.scroll && P.glow);
     const { GARGOYLE_PENTAGRAM } = await import('../../src/game/GargoyleRules.js');
     assert.equal(GARGOYLE_PENTAGRAM.id, 'gargoyles');

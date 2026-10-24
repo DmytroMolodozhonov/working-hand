@@ -8,7 +8,7 @@
  */
 
 /** Пентаграниум (первое слово) — как его пишет распознавание речи. */
-export const PENT_FIRST = ['pentagrani', 'pentagrany', 'pentogran', 'pentegran', 'pentagran', 'пентаграни', 'пентогран', 'пентагрэни', 'пентегран', 'пентагренум', 'пентаграниум', 'пентагранием', 'пентаграни ум'];
+export const PENT_FIRST = ['pentagrani', 'pentagrany', 'pentogran', 'pentegran', 'pentagran', 'пентаграни', 'пентогран', 'пентагрэни', 'пентегран', 'пентагренум', 'пентаграниум', 'пентагранием', 'пентаграни ум', 'пентагранни', 'пентагрэнни', 'пентогранни', 'pentagrann', 'пентагран ни'];
 
 /** id пентаграммы → английское имя (то, что говорит игрок) и как его пишет распознавание (русские и английские обрывки). */
 export const PENT_NAMES = {
@@ -20,7 +20,7 @@ export const PENT_NAMES = {
     monster: { en: 'Monstrum', say: ['монструм', 'монструн', 'монструм'], stems: ['monstrum', 'monstrun', 'монструм', 'монструн', 'монструм'] },
     breakward: { en: 'Breakward', say: ['брейквард', 'брэйквард', 'брейкворд'], stems: ['breakward', 'breakword', 'брейквард', 'брэйквард', 'брейкворд', 'брэйкворд', 'брейк вард'] },
     unity: { en: 'Unitas', say: ['унитас', 'юнитас', 'унитес'], stems: ['unitas', 'unitus', 'унитас', 'юнитас', 'унитес', 'юнитес', 'унитос'] },
-    gargoyles: { en: 'Gargoylis', say: ['гаргойлис', 'гаргоилис', 'гаргойлес'], stems: ['gargoylis', 'gargoyles', 'gargoylis', 'гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргойлз'] },
+    gargoyles: { en: 'Gargoylis', say: ['гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргульес', 'гаргулес', 'гаргулис'], stems: ['gargoylis', 'gargoyles', 'gargules', 'gargulis', 'gargoyl', 'гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргойлз', 'гаргульес', 'гаргулес', 'гаргулис', 'гаргуль', 'гаргул', 'гаргойл', 'гаргоил'] },
 };
 
 /** «Pentagranium Teleportis» — заклинание пентаграммы `id` (для справочника, свитков и подсказок). */
@@ -30,8 +30,10 @@ export const pentagramSpell = (id) => (PENT_NAMES[id] ? `Pentagranium ${PENT_NAM
 export function pentagramWords(text) {
     const s = String(text || '').toLowerCase().trim();
     if (!s || !PENT_FIRST.some((w) => s.includes(w))) return null;
-    for (const id of Object.keys(PENT_NAMES)) if (PENT_NAMES[id].stems.some((w) => s.includes(w))) return id;
-    return null;
+    // the longest / most exact name wins (not the first in the table): a short stem inside a longer name never takes it
+    let best = null, len = 0;
+    for (const id of Object.keys(PENT_NAMES)) for (const w of PENT_NAMES[id].stems) if (w.length > len && s.includes(w)) { best = id; len = w.length; }
+    return best;
 }
 
 /** Фразы для слухового поиска (SpellSpotter): «пентаграниум телепортис» и т.д. — русским письмом, варианты. */

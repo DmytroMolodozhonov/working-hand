@@ -33,11 +33,23 @@ import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 
+/** ms: a pentagram's name still being said must hold this long unchanged before it casts (the author: «после Pentagranium подождать полсекунды»). */
+export const PAUSE_MS = 500;
+
 const _o = new THREE.Vector3(), _d = new THREE.Vector3();
 
 const PIECE_NAME = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
 
 /** What to do on each pentagram (the line after it is lit). */
+/** Why an effect that starts at the word refused (what the player is told: «why», in plain words). */
+const USE_WHY = {
+    off: () => '🜏 Горгульи сейчас не выпускаются в этом мире',
+    realm: () => '🜏 Здесь, вне земли, пентаграмма горгулий молчит — встаньте на землю',
+    spent: () => '🜏 Здесь пентаграмма уже выжжена: горгульи вылетали отсюда — выберите другое место',
+    mana: (r) => `🜏 Нужно ${r.need ?? 150} маны — пока не хватает, пентаграмма не появилась`,
+    busy: () => '🜏 Рядом уже идёт ритуал горгулий — подождите, пока он закончится',
+};
+
 const USE_TEXT = {
     devil: 'Положите на неё тело убитого волшебника с помощью «Вингардиум Левиосы»: вы получите ещё часть его силы (нужно 50 маны)',
     teleport: 'Создайте вторую такую же где угодно, потом встаньте на любую из них и простойте 3 секунды (50 маны) — вы окажетесь на другой',
@@ -100,7 +112,15 @@ export class Pentagranium {
         const id = pentagramWords(text);
         if (!id || !figureOf(id)) return null; // (the first word alone is no spell: nothing is said, nothing is paid)
         const now = performance.now();
-        if (id === this._castId && now - this._castAt < 2500) return null; // (the microphone repeats an unfinished phrase: one pentagram per phrase)
+        if (id === this._castId && now - this._castAt < 2500) return null;
+        // (a name caught while the phrase is still being said may be only its first sounds, read as another pentagram: while it is heard, it must hold — the same
+        // name on two looks ≥ PAUSE_MS apart — or the phrase must end; a full name said clearly is final at once)
+        if (!isFinal) {
+            const w = this._pending;
+            if (!w || w.id !== id || now - w.at > 3000) { this._pending = { id, at: now }; return null; }
+            if (now - w.at < PAUSE_MS) return null;
+        }
+        this._pending = null; // (the microphone repeats an unfinished phrase: one pentagram per phrase)
         const name = pentagramSpell(id);
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
@@ -114,10 +134,8 @@ export class Pentagranium {
         const cost = CAST_COST[id] || 0, c = g.combat;
         if (cost && manaRules(g) && (c?.fatigue || 0) < cost) return hint(`🩸 Нужно ${cost} маны — у вас ${Math.floor(c?.fatigue || 0)}`);
         const def = TABLE[id], center = { x: p.x, y: origin.y, z: p.z };
-        if (typeof def.use === 'function') { // (gargoyles: the ritual itself takes the mana and starts; it may refuse — then nothing is made)
-            const r = def.use(g, { center, by: g.localId });
-            if (r && r.ok === false) return null;
-        }
+        const r = this._use1(def, center);
+        if (r && r.ok === false) return hint(USE_WHY[r.why] ? USE_WHY[r.why](r) : '🩸 Пентаграмма не получилась'); // (gargoyles: the ritual takes the mana and starts at once; it may refuse — then nothing is made, and why is said)
         if (cost && manaRules(g) && c) { c.fatigue -= cost; c._hudKey = ''; }
         const me = g.character.group.position, rot = turnAway(p.x, p.z, me.x, me.z);
         const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, p.x, center.y, p.z, PENT.R, rot, true);
@@ -170,6 +188,14 @@ export class Pentagranium {
             this._riteT -= dt;
             if (this._riteT <= 0) { this._riteT = 0.25; this._findRites(); }
         }
+    }
+
+    /** The effect that starts at the word (`def.use`: a function, or 'system.method' of the game — gargoyles): its answer, or undefined if there is none. */
+    _use1(def, center) {
+        const g = this.game, by = g.localId;
+        if (typeof def.use === 'function') return def.use(g, { center, by });
+        if (typeof def.use === 'string') { const [sys, fn] = def.use.split('.'); return g[sys]?.[fn]?.(center, { by, silent: true }); }
+        return undefined;
     }
 
     // ------------------------------------------------------------ the figure draws itself
