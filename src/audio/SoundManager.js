@@ -569,7 +569,7 @@ export class SoundManager {
         const list = this._warmList || (this._warmList = [
             ['house_wood', () => this._synthKnock(170, 0.3)], ['house_block', () => this._synthKnock(320, 0.12)],
             ['house_sand', () => this._synthSizzle(0.9)], ['magic', () => this._synthChime([880, 1320, 1760], 0.9, 6)],
-            ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)],
+            ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)], ['bubblePop', () => this._synthBubblePop()],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
             ['collapse', () => this._synthCollapse()], ['groan', () => this._synthGroan()], // (a building giving way, coming down — Structure.js)
@@ -1040,6 +1040,15 @@ export class SoundManager {
         if (!this.context) return;
         if (!this.sounds.waterRise) this.sounds.waterRise = this._synthWater(1.1, false);
         this._spell(this.sounds.waterRise, 0.9, 0.9 + Math.random() * 0.2);
+    }
+
+    /** A water ball lets go (Water Vortex: «стоп» over a hanging ball): a soft «блуп» and a spill with drops — made ahead (prewarmStep). */
+    playBubblePop(position = null, volume = 1) {
+        if (!this.context) return;
+        if (!this.sounds.bubblePop) this.sounds.bubblePop = this._synthBubblePop();
+        const rate = 0.92 + Math.random() * 0.16;
+        if (position) this._playAt(this.sounds.bubblePop, position, 1.1 * volume, 7, rate);
+        else this._spell(this.sounds.bubblePop, 1.1 * volume, rate);
     }
 
     playSplash() {
@@ -1718,6 +1727,33 @@ export class SoundManager {
             bf *= 1.00012;
             const b = Math.sin(2 * Math.PI * bf * t) * bubble * 0.35;
             d[i] = Math.max(-1, Math.min(1, (lp * (splash ? 1.4 : 0.6) + b) * env));
+        }
+        return buf;
+    }
+
+    /** A soft «блуп» (a short falling tone, no click) over a slow lowpassed spill, then drops plinking one by one. */
+    _synthBubblePop() {
+        const ctx = this.context;
+        const sr = ctx.sampleRate, seconds = 1.5, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr);
+        const d = buf.getChannelData(0);
+        const drops = [];
+        for (let k = 0; k < 9; k++) drops.push({ t: 0.12 + k * 0.1 + Math.random() * 0.08, f: 900 + Math.random() * 1100, a: 0.05 + Math.random() * 0.07 });
+        let lp = 0, ph = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            // the «блуп»: 560 → 190 Hz in 0.2 s, a soft start and end
+            const bl = t < 0.22 ? Math.min(1, t / 0.012) * Math.exp(-t * 11) : 0;
+            ph += 2 * Math.PI * (190 + 370 * Math.exp(-t * 16)) / sr;
+            // the spill: lowpassed noise that swells a little and thins out
+            lp += ((Math.random() * 2 - 1) - lp) * 0.16;
+            const sp = Math.min(1, t / 0.06) * Math.exp(-t * 3.4) * 0.5;
+            let x = Math.sin(ph) * bl * 0.55 + lp * sp * 1.1;
+            for (const dr of drops) {
+                const u = t - dr.t;
+                if (u > 0 && u < 0.09) x += Math.sin(2 * Math.PI * dr.f * (1 + 0.5 * u * 8) * u) * Math.min(1, u / 0.004) * Math.exp(-u * 50) * dr.a;
+            }
+            d[i] = Math.max(-0.95, Math.min(0.95, x)) * Math.min(1, (seconds - t) / 0.1);
         }
         return buf;
     }

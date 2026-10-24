@@ -67,9 +67,11 @@ export const VORTEX = {
     VMAX: 60,
     DRAIN: 14, // m³/s at least: how fast the rings unwind into the stream
     DRAIN_TIME: 1.3, // s: a big vortex unwinds in about this long
-    RANGE: 50, // m
+    RANGE: 35, // m: «Атака» — the stream flies this far at most (from the caster), then it splashes down
+    CATCH_PAD: 0.5, // m: the stream catches a body this much beyond its size (small, quick animals don't slip by)
+    HOME_CONE: 0.26, // rad (~15°): «Атака» turns towards the nearest creature in this cone round the hand's line
     TURN: 1.4, // rad/s while correcting towards the target
-    BEND: 0.2, // rad: the most it turns in all
+    BEND: 0.3, // rad: the most it turns in all (a bit more than HOME_CONE)
     STEER: 2.5, // rad/s: the stream turns after the caster's hand while it flies
     CLING: 2, // s after the last water reached the one it hit (still time to say «Bubble»)
     BUBBLE_GROW: 2.2, // s: the whole vortex flows into the bubble (when no stream feeds it: from the puddle)
@@ -84,6 +86,28 @@ export const VORTEX = {
     AIR_DPS: 1, // HP a second without air
     KNOCK_VOLUME: 10, // m³: from this much water the hit knocks down
     BUBBLE_COST: 0, // (part of the vortex: already paid)
+};
+
+/**
+ * Who the water takes, by body kind (Duel._bodies): `push` — «Атака» pushes it (and how), `bubble` — «Bubble» wraps it
+ * (and «Frozen» freezes it), `fill` — the water flows into the ball round it, `carry` — the ball with it inside floats and
+ * follows the caster's hand. `why` — the reason when something is not.
+ */
+export const VORTEX_TARGETS = {
+    p: { push: 'knock', bubble: true, fill: true, carry: true }, // a player (me and the others over the net)
+    z: { push: 'knock', bubble: true, fill: true, carry: true }, // a zombie
+    a: { push: 'knock', bubble: true, fill: true, carry: true }, // a sheep, cow, pig, horse (the ball is fitted to the body: bubbleFit)
+    v: { push: 'knock', bubble: true, fill: true, carry: true }, // castle people: knights, the king, wizards, traders, builders
+    c: { push: 'knock', bubble: true, fill: true, carry: true }, // ships' crews: sailors, Captain Black Moustache, skeletons
+    f: { push: 'splash', bubble: true, fill: true, carry: true }, // a phoenix: thrown, its flame put out, no harm
+    t: { push: 'knock', bubble: false, fill: false, carry: false, why: 'живое дерево стоит корнями в земле — шар его не поднимет' },
+    s: { push: 'splash', bubble: false, fill: false, carry: false, why: 'гигантская паучиха слишком велика для шара' },
+    P: { push: 'splash', bubble: false, fill: false, carry: false, why: 'растение держится корнями в земле' },
+    g: { push: 'splash', bubble: false, fill: false, carry: false, why: 'горгулья — быстрый летун, уходит из шара' },
+    o: { push: 'none', bubble: false, fill: false, carry: false, why: 'сова — вода не её враг: уворачивается' },
+    b: { push: 'none', bubble: false, fill: false, carry: false, why: 'книги-птицы — не существа для воды' },
+    D: { push: 'none', bubble: false, fill: false, carry: false, why: 'дракон: вода лишь плещет по огромному телу (DragonKinds.ON_DRAGON)' },
+    I: { push: 'knock', bubble: false, fill: false, carry: false, why: 'Ледяная Королева и ледяные существа: вода плещет по льду (IceQueen.ICE_TARGETS.water)' },
 };
 
 export const FIRE_MAXIMA = {
@@ -143,6 +167,11 @@ export function pushOf(volume, power = 1) {
 /** The bubble's size when all `volume` has flowed in. */
 export function bubbleRadius(volume) {
     return clamp(1.25 + volume * 0.025, 1.3, 2.5);
+}
+
+/** The ball's size for a body of half-length `half` and thickness `r`: never smaller than the creature plus a margin (a sheep ~1.5 m, a cow ~2, a horse ~2.3). */
+export function bubbleFit(volume, half = 0, r = 0) {
+    return clamp(Math.max(bubbleRadius(volume), half + r + 0.4), 1.3, 3.2);
 }
 
 /** HP a second inside the frozen bubble (cold + no air). */
@@ -409,8 +438,11 @@ export class WaterVortex {
     }
 
     /** «Стоп» / the caster can't go on: the gathered water falls. */
-    stop() {
-        if (!this.state) return false;
+    stop(popBubbles = true) {
+        let did = false;
+        // «стоп» over my hanging ball (after «Bubble», with nobody inside or with): it bursts and the water rains down
+        if (popBubbles) for (const b of [...this.bubbles.values()]) if (b.by === this.me && b.phase === 'liquid') { this._burst(b, 'stop', true); did = true; }
+        if (!this.state) return did;
         this._collapse(this.game.character.group.position, this.state.volume);
         this.state = null;
         return true;
@@ -488,17 +520,19 @@ export class WaterVortex {
         if (!c?.enabled) return; // (Creative: free)
         let mine = !!this.state;
         if (!mine) for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { mine = true; break; }
+        if (!mine) for (const b of this.bubbles.values()) if (b.by === this.me && b.phase === 'liquid') { mine = true; break; } // (the water held in a ball is still the vortex)
         if (!mine) return;
         if (c.drain(VORTEX.MANA_DRAIN * dt, 0) !== false && !c.manaOut()) return;
         // out of mana: the water lets go and falls
         for (const f of this.flights.values()) if (f.by === this.me && f.res > 0) { this._collapse(this._srcOf(f), f.res); f.res = 0; }
-        if (this.state) { this._note({ ev: 'collapse' }); this.stop(); }
+        if (this.state) { this._note({ ev: 'collapse' }); this.stop(false); }
+        for (const b of [...this.bubbles.values()]) if (b.by === this.me && b.phase === 'liquid') this._burst(b, 'mana', true);
         this.game.hud?.setVoice?.('🌀 Не хватает сил — вода упала', true);
     }
 
     _updateMine(dt) {
         const g = this.game, s = this.state, ch = g.character;
-        if (g.combat.dead || g.combat.frozen || g.combat.stunned || this.myTrap()) { this.stop(); return; }
+        if (g.combat.dead || g.combat.frozen || g.combat.stunned || this.myTrap()) { this.stop(false); return; }
         s.t += dt;
         const body = ch.group.position;
         const hand = ch.getHandWorldPosition(s.side, this._hand || (this._hand = new THREE.Vector3())).sub(body);
@@ -540,7 +574,7 @@ export class WaterVortex {
         s.idle = turns > 0 ? 0 : s.idle + dt;
         if (s.idle > VORTEX.IDLE_END) {
             this._note({ ev: 'collapse' });
-            this.stop();
+            this.stop(false);
             this._hint('🌀 Водоворот распался — рука остановилась');
         }
     }
@@ -553,6 +587,7 @@ export class WaterVortex {
         let tk = null, tid = null;
         const t = g.duel?.findTarget?.(s.side);
         if (t && t.kind !== 'b') { tk = t.kind; tid = t.id; }
+        else { const n = this._nearInCone(o, dir); if (n) { tk = n.kind; tid = n.id; } }
         // the stream goes along the very line of the hand (as a duel spell does: the wand's line): its head
         // starts on that line just outside the rings, the water peels off the rings into it
         let h = null;
@@ -571,6 +606,21 @@ export class WaterVortex {
         this._note({ ev: 'launch', id, v: m.v, tk, tid });
         g.hud?.setVoice?.(s.bubbleAt ? '🌀 Струя летит — цель окажется в пузыре!' : '🌀 Струя летит! Скажите <b>«Bubble»</b>, когда она ударит', true);
         if (g.sound) g.sound.playWhoosh?.();
+    }
+
+    /** The nearest creature (not a book-bird) within HOME_CONE of the hand's line and the stream's range: small, quick ones too. */
+    _nearInCone(o, dir) {
+        const bodies = this.game.duel?._bodies?.(this.me) || [];
+        let best = null, bd = 1e9;
+        for (const b of bodies) {
+            if (b.kind === 'b') continue;
+            const mid = _c.addVectors(b.a, b.b).multiplyScalar(0.5).sub(o);
+            const dist = mid.length();
+            if (dist < 1 || dist > VORTEX.RANGE) continue;
+            const ang = mid.angleTo(dir) - Math.atan2(b.r, dist);
+            if (ang < VORTEX.HOME_CONE && dist < bd) { bd = dist; best = b; }
+        }
+        return best ? { kind: best.kind, id: best.id } : null;
     }
 
     _addFlight(by, m) {
@@ -701,7 +751,7 @@ export class WaterVortex {
             if (b.kind === 'b') continue; // (book-birds: no)
             const mine = b.kind === 'p' ? b.id === this.me : referee;
             if (!mine) continue;
-            if (segDist(f.pos, b.a, b.b) > b.r + rf) continue;
+            if (segDist(f.pos, b.a, b.b) > b.r + rf + VORTEX.CATCH_PAD) continue;
             // a dragon: the water can't hold such a great body — it only splashes on it (DragonKinds.ON_DRAGON.WaterVortex)
             // (the Ice Castle's creatures: the water splashes on the ice — a snowman is knocked about, IceQueen.ICE_TARGETS.water)
             if (b.kind === 'I') { const c = g.iceCastle?.byId(b.id); if (c) g.iceCastle.push('WaterVortex', f.by, (_p, x) => (x === c ? f.dir.clone().multiplyScalar(10) : null)); this._endFlight(f, 'wall'); return true; }
@@ -802,6 +852,7 @@ export class WaterVortex {
     _startBubble(f) {
         if (f.bubbled) return;
         f.bubbled = true;
+        if (f.tk && !VORTEX_TARGETS[f.tk]?.bubble) { f.tk = null; f.tid = null; } // (the water can't wrap it: a free ball where it hit)
         f.phase = 'feed';
         this._addBubble({ id: f.id, by: f.by, tk: f.tk, tid: f.tid, v: f.volume, p: f.pos });
         if (f.by === this.me) this._send({ ev: 'bubble', id: f.id, tk: f.tk, tid: f.tid, v: r3(f.volume), p: [f.pos.x, f.pos.y, f.pos.z].map(r3) });
@@ -844,7 +895,7 @@ export class WaterVortex {
         const p = m.p instanceof THREE.Vector3 ? m.p.clone() : new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
         const b = {
             id: m.id, by: m.by, tk: m.tk, tid: m.tid, phase: 'liquid', t: 0, total: +m.v || 1,
-            r: 0.5, R: bubbleRadius(+m.v || 1), pos: p, home: p.clone(), grow: 0, held: null, rest: null, net: null, sentP: null, sendT: 0, anchor: null, dmgT: 0, iceT: 0, meltT: 0, burstAsked: false,
+            r: 0.5, R: this._fitR(m), pos: p, home: p.clone(), grow: 0, held: null, rest: null, net: null, sentP: null, sendT: 0, anchor: null, dmgT: 0, iceT: 0, meltT: 0, burstAsked: false,
         };
         if (this.scene) {
             b.mesh = new THREE.Mesh(this.sphereGeo, this.bubbleMat);
@@ -860,9 +911,18 @@ export class WaterVortex {
             g.hud?.setVoice?.('🫧 Вы в водяном пузыре! Разведите руки буквой <b>T</b> и скажите «Protection Maxima», пока он не замёрз', true);
             if (g.water?.active) g.water.drop();
             if (g.flight?.busy) g.flight.land?.('stunned');
-            this.stop();
+            this.stop(false);
         }
         return b;
+    }
+
+    /** The ball's radius: by the water, and never smaller than the creature inside. */
+    _fitR(m) {
+        const v = +m.v || 1;
+        if (!m.tk || !VORTEX_TARGETS[m.tk]?.bubble) return bubbleRadius(v);
+        const e = this.game.duel?._bodyOf?.(m.tk, m.tid, this._fitBody || (this._fitBody = { kind: '', id: 0, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }));
+        if (!e) return bubbleRadius(v);
+        return bubbleFit(v, e.a.distanceTo(e.b) / 2, e.r);
     }
 
     _freeze(b) {
@@ -888,8 +948,15 @@ export class WaterVortex {
         if (!b || b.phase === 'gone') return;
         this._note({ ev: 'burst', id: b.id, why });
         if (b.phase === 'ice') this._sparkle(b.pos, 50, b.r);
-        else this._splash(b.pos, 1.5 + b.r * 0.5, 50);
-        if (this.game.sound) (b.phase === 'ice' ? this.game.sound.playFrozenHit : this.game.sound.playSplash)?.call(this.game.sound);
+        else {
+            this._splash(b.pos, 1.5 + b.r * 0.5, 50);
+            this._collapse(b.pos, Math.max(4, b.total * (b.grow || 0))); // (the water rains down from where the ball hung)
+        }
+        if (this.game.sound) {
+            if (b.phase === 'ice') this.game.sound.playFrozenHit?.();
+            else if (this.game.sound.playBubblePop) this.game.sound.playBubblePop(b.pos);
+            else this.game.sound.playSplash?.();
+        }
         this._remove(b);
         if (broadcast) this._send({ ev: 'burst', id: b.id, why });
     }

@@ -5,11 +5,12 @@
  * and the fire that melts it.
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST, Combat } from '../../src/game/Combat.js';
-import { WaterVortex, SwingMeter, VORTEX, FIRE_MAXIMA, turnWater, layersOf, layerRadius, flightSpeed, pushOf, bubbleRadius, iceDamagePerSecond } from '../../src/game/WaterVortex.js';
+import { WaterVortex, SwingMeter, VORTEX, FIRE_MAXIMA, turnWater, layersOf, layerRadius, flightSpeed, pushOf, bubbleRadius, bubbleFit, VORTEX_TARGETS, iceDamagePerSecond } from '../../src/game/WaterVortex.js';
 
 test('the words: «Water Vortex» (and «вотер вортекс»), «Fire Maxima»; the old words stay', () => {
     for (const t of ['Water Vortex', 'water vortex', 'вотер вортекс', 'Вотер вортэкс', 'ватер вортекс', 'вортекс', 'уотер вортикс']) assert.equal(matchSpell(t), 'WaterVortex', t);
@@ -475,4 +476,83 @@ test('Water Vortex: 20 mana at once + 1 a second while it holds water; out of ma
     const left = g.combat.fatigue;
     run(V, 2);
     assert.ok(g.combat.fatigue >= left, 'nothing more is taken once it is over');
+});
+
+test('«Атака»: the stream flies 35 m at most, then it splashes down', () => {
+    const { V } = world();
+    assert.equal(VORTEX.RANGE, 35);
+    V._addFlight('me', { id: 'me:9', o: [0, 5, 0], d: [1, 0, 0], v: 20, a: 0, pw: 1, tk: null, tid: null, h: [2, 5, 0], s: 'right' });
+    const f = V.flights.get('me:9');
+    let far = 0;
+    for (let i = 0; i < 60 * 4 && V.flights.has('me:9'); i++) { V.update(1 / 60); far = Math.max(far, f.pos.x); }
+    assert.equal(V.flights.size, 0, 'it ended');
+    assert.ok(far <= VORTEX.RANGE + 3 + 2, `flew ${far.toFixed(1)} m`);
+    assert.ok(far > 20, 'but it did fly');
+});
+
+test('«стоп» over a hanging ball: it bursts, the water rains down (nobody inside, and with a creature)', () => {
+    const { g, V, sent } = world();
+    g.sound = { n: 0, playBubblePop() { this.n++; } };
+    V._addBubble({ id: 'me:5', by: 'me', tk: null, tid: null, v: 20, p: [0, 4, 0] });
+    run(V, 3);
+    assert.equal(V.bubbles.size, 1);
+    assert.equal(V.stop(), true, '«стоп» did something');
+    assert.equal(V.bubbles.size, 0, 'the ball burst');
+    assert.ok(V.log.some((e) => e.ev === 'burst' && e.why === 'stop'));
+    assert.ok(sent.some((m) => m.ev === 'burst' && m.id === 'me:5'), 'the others see it burst');
+    assert.equal(g.sound.n, 1, 'the soft pop sound');
+    // somebody else\'s ball is not mine to burst
+    V._addBubble({ id: 'other:1', by: 'other', tk: null, tid: null, v: 20, p: [5, 4, 0] });
+    assert.equal(V.stop(), false);
+    assert.equal(V.bubbles.size, 1);
+});
+
+test('the table of targets: every body kind of the duel has a row; the ball is fitted to the creature', () => {
+    const src = readFileSync(new URL('../../src/game/Duel.js', import.meta.url), 'utf8');
+    const kinds = new Set([...src.matchAll(/put\('([A-Za-z])'/g)].map((m) => m[1]));
+    for (const k of kinds) {
+        const t = VORTEX_TARGETS[k];
+        assert.ok(t, `body kind «${k}» has no row in VORTEX_TARGETS`);
+        assert.ok(['knock', 'splash', 'none'].includes(t.push), k);
+        if (!t.bubble) assert.ok(t.why && !t.fill && !t.carry, `${k}: a refusal needs its reason`);
+        else assert.ok(t.fill && t.carry, k);
+    }
+    for (const k of ['p', 'z', 'a', 'v', 'c']) assert.ok(VORTEX_TARGETS[k].bubble, `${k} is wrapped`);
+    // a sheep (~1.5 m), a cow (~2), a horse (~2.3) are never bigger than their ball
+    for (const [name, half, r] of [['sheep', 0.0, 0.75], ['cow', 0.0, 1.0], ['horse', 0.0, 1.2], ['hero', 1.7, 0.7]]) {
+        assert.ok(bubbleFit(5, half, r) >= half + r + 0.4 - 1e-9, `${name}: the ball is bigger than the body`);
+        assert.ok(bubbleFit(5, half, r) <= 3.2);
+    }
+    assert.ok(bubbleFit(60, 0, 0.7) >= bubbleRadius(60), 'a big vortex keeps its size');
+});
+
+test('«Атака» catches small animals: a sheep beside the line is hit; homing takes the nearest one in the cone', () => {
+    const { g, ch, V } = world();
+    const sheep = { kind: 'a', id: 'sh1', a: new THREE.Vector3(1.0, 1, -12), b: new THREE.Vector3(1.0, 1, -12), r: 0.7 };
+    g.duel._bodies = () => [sheep];
+    g.duel._creature = () => ({ isAnimal: true });
+    g.duel._targetPos = (b, out) => (b.tk === 'a' ? out.copy(sheep.a) : null);
+    g.duel.findTarget = () => null; // (the hand points a little beside: nothing in the narrow cone)
+    // 5° off the line: inside the 15° cone
+    const near = V._nearInCone(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.07, 0, -1).normalize());
+    assert.deepEqual(near, { kind: 'a', id: 'sh1' });
+    // 40° off: not that sheep
+    assert.equal(V._nearInCone(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0.8, 0, -1).normalize()), null);
+    // a stream flying straight, 1.0 m beside the sheep\'s middle: it hits (body 0.7 + stream + pad)
+    V._addFlight('me', { id: 'me:3', o: [0, 1, 0], d: [0, 0, -1], v: 20, a: 0, pw: 1, tk: null, tid: null, h: [0, 1, -2], s: 'right' });
+    run(V, 1.5);
+    assert.ok(V.log.some((e) => e.ev === 'hit' && e.tk === 'a' && e.id === 'me:3'), 'the sheep was hit');
+    assert.ok(V.log.some((e) => e.ev === 'push' && e.tk === 'a'), 'and pushed');
+    void ch;
+});
+
+test('a hanging ball still takes 1 mana a second; out of mana it bursts', () => {
+    const { g, V } = world();
+    g.combat.fatigue = 50;
+    V._addBubble({ id: 'me:6', by: 'me', tk: null, tid: null, v: 20, p: [0, 4, 0] });
+    run(V, 3);
+    assert.ok(Math.abs(50 - g.combat.fatigue - 3) < 0.3, `~3 mana in 3 s (${50 - g.combat.fatigue})`);
+    g.combat.fatigue = 0.2;
+    run(V, 1);
+    assert.equal(V.bubbles.size, 0, 'no mana: the ball burst');
 });
