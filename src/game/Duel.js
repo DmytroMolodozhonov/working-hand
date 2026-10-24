@@ -1452,6 +1452,12 @@ export class Duel {
         return r ? out.copy(r.position).add(_v2.set(0, 0.6, 0)) : null;
     }
 
+    /** A tower's / the arena's wizard's chest (for the hand-on-him test of a beam clash); null — not a wizard. */
+    _wizardPos(id, out) {
+        const w = this._npcWizard(id);
+        return w ? out.set(w.x, w.y + 2.6, w.z) : null;
+    }
+
     _startClash(a, b, p) {
         this._note({ ev: 'clashStart', a: a.id, b: b.id, p });
         if (this.clashes.some((c) => c.a === a || c.b === b || c.a === b || c.b === a)) return;
@@ -1551,7 +1557,8 @@ export class Duel {
         if (id === this.me) {
             // (own vectors: _playerPos writes into _v2 — the hand's direction must survive it)
             const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
-            const op = this._playerPos(opponentId, _co);
+            // (the one I push against: another player, or a wizard of a tower / the arena — his place, not «nobody» — else my hand would be off him and push for nothing)
+            const op = this._playerPos(opponentId, _co) || this._wizardPos(opponentId, _co);
             // («Дай» with no mana left to hold its beam: it stops pushing)
             const ok = op && !(bolt.spell === 'Die' && manaRules(this.game) && this.game.combat.fatigue <= 0) ? dir.angleTo(op.sub(hand).normalize()) < DUEL.CONTACT_ANGLE : false;
             return { ok, jerk: this._jerked(bolt.side) };

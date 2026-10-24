@@ -40,7 +40,7 @@ export const ARENA = {
  * 28 m apart (inside a duel charge's reach, Duel.DUEL.RANGE 30), more levelled land round it (the desk by the gate is 55 m out).
  * Ordinary worlds keep ARENA.
  */
-export const ARENA_BIG = { ...ARENA, W: 23, S: 15, MARK: 14, ZONE: 64, AWAY: TOWER_ZONE + 64 + 26 };
+export const ARENA_BIG = { ...ARENA, W: 23, S: 15, MARK: 14, ZONE: 58, AWAY: TOWER_ZONE + 58 + 26, AWAYS: [TOWER_ZONE + 58 + 26, TOWER_ZONE + 58 + 56, TOWER_ZONE + 58 + 8] };
 
 export const ARENA_ROUND = { W: 10, S: 0, TIERS: 4, STEP: 2, MARK: 8, ZONE: 0 };
 const dims = (d) => ({ ...ARENA, ...d });
@@ -153,19 +153,19 @@ export function inArena(def, x, z) {
 const DIRS = [[1, 0, 3], [-1, 0, 1], [0, 1, 0], [0, -1, 2]];
 
 /** Level, dry ground for an arena at (X, Z)? → the height its land is levelled to (F), or null. (raw: the world's height field) */
-function arenaGround(raw, X, Z, Z0 = ARENA.ZONE) {
+function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false) {
     let wet = 0, all = 0;
     const hs = [];
     for (let dz = -Z0; dz <= Z0; dz += 8) for (let dx = -Z0; dx <= Z0; dx += 8) {
         const h = raw(X + dx, Z + dz);
         all++;
         if (raw.water) { wet++; continue; }
-        if (h > 26) return null;
+        if (h > (loose ? 70 : 26)) return null;
         hs.push(h);
     }
-    if (wet > all * 0.12 || hs.length < 10) return null;
+    if (wet > all * (loose ? 0.45 : 0.12) || hs.length < (loose ? 6 : 10)) return null;
     hs.sort((a, b) => a - b);
-    if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > 8) return null;
+    if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > (loose ? 30 : 8)) return null;
     return Math.max(0, Math.round(hs[hs.length >> 1])); // (the middle of its ground: a low hill levelled, never dug deep)
 }
 
@@ -195,11 +195,11 @@ export class ArenaIndex {
         // the side with the most room in the cell first (the same order on every computer)
         const order = DIRS.map((d) => ({ d, room: d[0] > 0 ? x0 + CASTLE_CELL - t.x : d[0] < 0 ? t.x - x0 : d[1] > 0 ? z0 + CASTLE_CELL - t.z : t.z - z0 }))
             .sort((a, b) => b.room - a.room || a.d[2] - b.d[2]);
-        for (const away of [this.d.AWAY, this.d.AWAY + 30]) {
+        for (const away of this.d.AWAYS || [this.d.AWAY, this.d.AWAY + 30]) {
             for (const { d } of order) {
                 const X = t.x + d[0] * away, Z = t.z + d[1] * away;
                 if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
-                const F = arenaGround(this.raw, X, Z, this.d.ZONE);
+                const F = arenaGround(this.raw, X, Z, this.d.ZONE, this.d !== ARENA); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
                 if (F == null) continue;
                 def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, this.d);
                 break;

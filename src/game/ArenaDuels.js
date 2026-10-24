@@ -460,7 +460,8 @@ export class ArenaDuels {
         const gone = (v) => !v || v.dead || !L.byId.has(v.id) || !v.arena; // (or called away from the arena: a fight, a fright — step())
         if (D.phase === 'over') {
             if (D.t > 4.5) {
-                for (const v of [D.a, D.b]) if (v && !v.dead) this._release(v);
+                const now = this.mode?.arenaId === A.id; // (the duel mode: the old wizard goes at once — he must not walk on at the hero during the next duel)
+                for (const v of [D.a, D.b]) if (v && (!v.dead || now)) this._release(v, now);
                 A.duel = null;
                 const R = A.def.practice ? ARENA_DUEL.PRACTICE_REST : ARENA_DUEL.REST; // (a training: once in a while; the arena: the next pair soon)
                 A.restT = R[0] + Math.random() * (R[1] - R[0]);
