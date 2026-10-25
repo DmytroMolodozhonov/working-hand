@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: 2, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', noCrew: false });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelPower: 2, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -224,4 +224,11 @@ test('дальние места старта: башня, арена, посел
     assert.ok(foeRanks('random', () => 0.99).length > 0);
     assert.equal(normalizeHero({}).noCrew, false);
     assert.equal(normalizeHero({ noCrew: true }).noCrew, true);
+});
+
+test('сила палочки в дуэли: 0…200 %, мусор → 0', () => {
+    assert.equal(normalizeHero({ wandBonus: 50 }).wandBonus, 50);
+    assert.equal(normalizeHero({ wandBonus: 999 }).wandBonus, HERO.WAND_MAX);
+    assert.equal(normalizeHero({ wandBonus: -5 }).wandBonus, 0);
+    assert.equal(normalizeHero({ wandBonus: 'abc' }).wandBonus, 0);
 });
