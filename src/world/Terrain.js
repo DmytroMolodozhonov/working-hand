@@ -687,6 +687,7 @@ export class TerrainData {
         // (chunks of the planets made before: by the old recipe — made again when asked)
         for (const [k, c] of this.chunks) if (c.planet && !c.modified) this.chunks.delete(k);
         this._last = null;
+        this.version++; // (what was remembered about those blocks — CastleLife._walkable — is asked again)
     }
 
     _generateChunk(cx, cz) {

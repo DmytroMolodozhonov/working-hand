@@ -1657,6 +1657,7 @@ export class Animals {
                 && !a.fly && !a.flyCode && a.type !== 'runbook' && !a.model.userData.minotaur && !a.model.userData.bronze && !(a.stunT > 0);
             const seen = _farF.intersectsSphere(_farS.set(p, 4 * (a.group.scale.x || 1) + 2));
             a.animStep = !plain || d < FAR.LOD ? 0 : !seen ? 1e9 : d > FAR.DISTANT ? FAR.DISTANT_STEP : FAR.STEP;
+            a.group.userData.matFrozen = plain && d >= FAR.LOD && !seen; // (not posed and not seen: its matrices wait too — SceneMatrices)
             // (calm and far: it thinks every FAR.THINK / FAR.THINK_DISTANT s; anything happening — fleeing, a fight, a master — every frame)
             const calm = plain && d > FAR.LOD && a.state === 'graze' && !a.attacker && a.servantOf == null && !a.tamed && !a.pen;
             a.thinkEvery = calm && dt > 0 ? Math.max(1, Math.min(8, Math.round((!seen || d > FAR.DISTANT ? FAR.THINK_DISTANT : FAR.THINK) / dt))) : 1;

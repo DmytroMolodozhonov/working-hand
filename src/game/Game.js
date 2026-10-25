@@ -55,6 +55,8 @@ import { Dismemberment } from './Dismember.js';
 import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
 import { PEGASUS_COLOR } from './AnimalModels.js';
 import { FarShape, skinnedSamples } from '../core/FarShape.js';
+import { installSceneMatrices } from '../core/SceneMatrices.js';
+import { updateFarBatches, resetFarBatches } from '../core/FarBatch.js';
 import { CastleLife } from './CastleLife.js';
 import { ArenaDuels } from './ArenaDuels.js';
 import { Ships } from './Ships.js';
@@ -327,7 +329,10 @@ export class Game {
         this.config.realTrees = !!(config.realTrees ?? (config.saved ? config.saved.realTrees : !config.map));
 
         progress(62, 'Создание мира...');
+        resetFarBatches(); // (the last game's batched shapes: let go)
+        installSceneMatrices(); // (hidden branches and people out of the picture: their matrices are not recomputed each frame)
         this.scene = new THREE.Scene();
+        this.scene.matrixAutoUpdate = false; // (the scene never moves: its still things are not forced to recompute)
         this.scene.fog = new THREE.Fog(0x87CEEB, 20, 80);
         this.scene.add(this.camera);
 
@@ -3716,6 +3721,7 @@ export class Game {
         mark('прочее');
         this.ultra?.update(deltaTime); // («Ультра качество»: nothing when off)
         for (const f of this._handOnes || []) f.check(); // (a finger hidden, a thing taken into the hand: the hand's one shape follows)
+        updateFarBatches(this.scene, this.renderer, dt); // (people, animals, bodies, things of one look near each other: one draw — FarBatch)
         if (!this.space?.render()) this._draw(); // (space: its own picture first — Space.render)
         mark('графика');
         this._frameEnd = performance.now();

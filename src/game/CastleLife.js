@@ -89,6 +89,10 @@ const SLEEP = 140;
 const SEE = 32; // m: villagers see violence this far (with a free line of sight)
 const FAR_ONE = SHADOW_NEAR; // m: farther ones (no shadow there either) are drawn as one shape each (one draw instead of 8–12)
 const NEAR_ONE = true; // people near drawn as one shape too (the video card moves its parts — FarShape)
+const THINK_AWAY = 0.15; // s: how often a calm person far from everyone and out of the picture thinks (and steps)
+/** Nothing happening to it: no fight, no fear, no order, no spell on it, not a wizard (their own magic and timers). */
+const calmAway = (v) => !v.dead && !v.foe && !v.fear && !(v.fleeT > 0) && !v.order && !v.guardOrder && !v.cmd && !v.follow && !v.investigate
+    && !(v.stunT > 0) && !v.vy && !v.lev && !v.carriedBy && !v.climb && !v.wizard && !(v.fireT > 0) && v.servantOf == null && !v.imp && !v.arena && v.mode !== 'run';
 export const WALK = 2.3, RUN = 5.6;
 const HOSTILE_MS = 180000;
 const GRUDGE_MS = 40000; // a villager angry at ONE player (a hard blow, a theft): they fight that one only, no guards
@@ -1234,15 +1238,31 @@ export class CastleLife {
         if (!t) return true;
         const ix = Math.round(x), iz = Math.round(z);
         const L = Math.round(y + 1.5);
-        const f = t.floorBelow(ix, iz, L + 1);
+        // (the blocks' answer for this cell is remembered until the world's blocks change — t.version: the people's steps
+        // ask the same cells hundreds of times a frame, each a few block lookups; 60 people in a castle spent ~1 ms here)
+        const wc = this._walkMemo || (this._walkMemo = new Map());
+        if (this._walkVer !== t.version || wc.size > 60000) { wc.clear(); this._walkVer = t.version; }
+        const key = (ix * 2097152 + iz) * 1024 + (L & 1023);
+        let cell = wc.get(key);
+        if (cell === undefined) { cell = this._walkCell(t, ix, iz, L); wc.set(key, cell); }
+        if (cell === 0) return false;
         // (up a ramp — BlockShapes.js: its surface right where the body steps, not its cell's top, is the step)
-        if ((f > L && !(f === L + 1 && t.shapeAt?.(ix, f, iz) && t.floorAt(x, z, y + 1.1) <= y + 1.1)) || f < L - 3) return false;
-        // deep water is no ground: nobody walks into it (nor after a foe swimming there — CreatureSwim.js)
-        if (t.get(ix, f + 1, iz) === BLOCK.WATER && t.get(ix, f + 2, iz) === BLOCK.WATER && t.get(ix, f + 3, iz) === BLOCK.WATER) return false;
+        if (cell === 2 && !(t.floorAt(x, z, y + 1.1) <= y + 1.1)) return false;
         if (this.game.carriages?.list.size && this.game.carriages.blocksAt(x, z, y)) return false; // (a cart on the road: round it)
         if (treeAt(this.game, x, z, 0.45)) return false; // (a tree that is a model — an apple tree: never through its trunk)
         if (this.game.locks?.spelled?.size && this.game.locks.blocksAt(x, z, y)) return false; // (a door shut by «Lock»)
-        return !t.solidIn(ix, iz, f + 1, f + 5);
+        return true;
+    }
+
+    /** The blocks' part of _walkable for a cell: 0 — no, 1 — yes, 2 — yes if the ramp's surface right there is low enough. */
+    _walkCell(t, ix, iz, L) {
+        const f = t.floorBelow(ix, iz, L + 1);
+        const ramp = f === L + 1 && !!t.shapeAt?.(ix, f, iz);
+        if ((f > L && !ramp) || f < L - 3) return 0;
+        // deep water is no ground: nobody walks into it (nor after a foe swimming there — CreatureSwim.js)
+        if (t.get(ix, f + 1, iz) === BLOCK.WATER && t.get(ix, f + 2, iz) === BLOCK.WATER && t.get(ix, f + 3, iz) === BLOCK.WATER) return 0;
+        if (t.solidIn(ix, iz, f + 1, f + 5)) return 0;
+        return f > L ? 2 : 1;
     }
 
     /** A body flying through the air may be at (x, z): no wall, no block where its body is. */
@@ -3648,6 +3668,7 @@ export class CastleLife {
             this._healWays(dt);
             this._clock = (this._clock || 0) + dt;
             const land = this.game.world?.terrain?.data;
+            const pls = this._players();
             for (const v of [...this.byId.values()]) {
                 if (v.handLink) continue; // (held by the hand: HandHold leads them)
                 // (its land is not made yet — the workers bring it: it waits, instead of making the ground here in the middle of a frame)
@@ -3660,10 +3681,18 @@ export class CastleLife {
                 v.landWaitT = 0;
                 this._bossNow = v.role === 'king' || v.role === 'master' ? v : null;
                 if (v.imp && !v.dead && g.imperius?.step('v', v, dt)) continue; // («Империус»: a mind in it, not its own — ImperiusControl.step)
-                this._think(v, dt);
+                // (calm, far from every player and out of my picture — its pose waits too: it thinks every THINK_AWAY s, its
+                // time added up — a step of 0.35 m at a walk; anything happening to it — every frame again)
+                let tdt = dt;
+                if (v.group?.userData.matFrozen && calmAway(v) && pls.every((pl) => Math.abs(pl.p.x - v.x) + Math.abs(pl.p.z - v.z) > 70)) {
+                    v.thinkAcc = (v.thinkAcc || 0) + dt;
+                    if (v.thinkAcc < THINK_AWAY) continue;
+                    tdt = Math.min(v.thinkAcc, 0.3); v.thinkAcc = 0;
+                } else v.thinkAcc = 0;
+                this._think(v, tdt);
                 trackSlope(v); // (the slope under it, from how it moved: its pace and the lean of its body)
                 this.stuck.env.now = this._clock;
-                this.stuck.watch(v, dt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
+                this.stuck.watch(v, tdt, v.mode === 'walk' || v.mode === 'run' || (v.path && v.pathI < v.path.length));
             }
             this._bossNow = null;
             this._separate(dt);
@@ -3702,6 +3731,7 @@ export class CastleLife {
                 // and the moment he comes into view he is posed at once; the far copies were remade for people nobody saw)
                 const unseen = pic && far && !v.foe && !v.order && !v.guardOrder && !_view.intersectsSphere(_viewS.set(_v.set(v.x, v.y + 1.5, v.z), 4));
                 if (unseen && !v.model._far) v.model.setFar(true); // (out of the picture: no pose, but already one shape for when it comes into view)
+                v.group.userData.matFrozen = unseen; // (nobody sees it and, far, it casts no shadow: its ~25 matrices wait too — SceneMatrices)
                 v.model.faceOn?.(d < 38 && !unseen);
                 if (!unseen && (d < 35 || v.foe || v.animT > (lv === 'distant' ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     // (a knight's bow out of its place on the back — and back again for the sword)

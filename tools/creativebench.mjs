@@ -134,7 +134,8 @@ async function scene(FRAMES) {
     while (!done && performance.now() - t0 < 1200000) await new Promise((r) => setTimeout(r, 200));
     g.frame = origFrame;
     for (const u of undo) u();
-    const farBuilds = builds0 ? { builds: FS.farShapeStats.builds - builds0.builds, merged: FS.farShapeStats.merged - builds0.merged, frames: sysFrames } : null;
+    const FB = await import('/src/core/FarBatch.js').catch(() => null);
+    const farBuilds = builds0 ? { builds: FS.farShapeStats.builds - builds0.builds, merged: FS.farShapeStats.merged - builds0.merged, frames: sysFrames, batch: FB ? { ...FB.farBatchStats } : null } : null;
     const systems = Object.entries(sys).map(([k, v]) => [k, +(v / Math.max(1, sysFrames)).toFixed(3)]).sort((a, b) => b[1] - a[1]).slice(0, 30);
     const info = g.renderer.info;
     const cl = g.castleLife;
@@ -266,13 +267,15 @@ try {
         Math.random = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
     });
     const P = PRESETS[LEVEL];
-    await page.evaluate(({ P, SEED, MODE }) => {
+    await page.evaluate(({ P, SEED, MODE, OLDMAT, NOBATCH }) => {
+        if (OLDMAT) window.__ZNS_ALL_MATRICES__ = true;
+        if (NOBATCH) window.__ZNS_NO_FAR_BATCH__ = true; // (--nobatch: every one-shape drawn by itself — to compare) // (--oldmat: every object's matrix each frame, as three.js does — to compare)
         for (const [id, v] of [['graphics-quality', P.graphics], ['view-distance', P.viewDistance], ['ultra-quality', P.ultra || 'off']]) { const el = document.getElementById(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }
         const z = window.__zns;
         const seen = window.__compiled = []; // (each material's first compile: who needed a shader after the start)
         z.THREE.Material.prototype.onBeforeCompile = function () { seen.push(this); };
         z.startGame({ ...z.readConfig(), mode: MODE, map: null, seed: SEED, zombieCount: 0, graphics: P.graphics, viewDistance: P.viewDistance, ultra: P.ultra === 'on' });
-    }, { P, SEED, MODE });
+    }, { P, SEED, MODE, OLDMAT: args.includes('--oldmat'), NOBATCH: args.includes('--nobatch') });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     await page.waitForFunction(() => !document.getElementById('hud').classList.contains('hidden'), null, { timeout: 120000 });
     // the start's land and its people: wait until the land around is made (the workers) and things settle
@@ -395,11 +398,32 @@ try {
         });
         console.log('\nбезымянные группы (видимых частей):\n  ' + grp.join('\n  '));
     }
+    if (args.includes('--census')) {
+        // every object of the scene (not only meshes): who they are, how many still move their matrix each frame
+        const cs = await page.evaluate(() => {
+            const g = window.__zns.game, by = {};
+            let all = 0, auto = 0, hiddenSub = 0;
+            const walk = (o, top, hid) => {
+                all++; if (o.matrixAutoUpdate) auto++; if (hid) hiddenSub++;
+                const e = by[top] || (by[top] = { n: 0, auto: 0, hid: 0, tops: 0 });
+                e.n++; if (o.matrixAutoUpdate) e.auto++; if (hid) e.hid++;
+                for (const c of o.children) walk(c, top, hid || !c.visible);
+            };
+            for (const top of g.scene.children) {
+                const k = top.name || Object.keys(top.userData || {}).slice(0, 2).join('/') || top.type;
+                walk(top, k, !top.visible); by[k].tops++;
+            }
+            return { all, auto, hiddenSub, sceneAuto: g.scene.matrixAutoUpdate, rows: Object.entries(by).sort((a, b) => b[1].n - a[1].n).slice(0, 25).map(([k, e]) => `${k}: ${e.tops} шт, объектов ${e.n} (сам двигает матрицу ${e.auto}, в скрытых ${e.hid})`) };
+        });
+        console.log(`\nобъекты сцены: ${cs.all}, двигают матрицу каждый кадр ${cs.auto}, в скрытых ветках ${cs.hiddenSub}; сцена сама: ${cs.sceneAuto}\n  ` + cs.rows.join('\n  '));
+    }
     if (SCAN) {
         const sc = await page.evaluate(scanDirs);
         console.log('\nнаправления (градусы: вызовов, треугольников, игра мс; кто в кадре — мешей; тени — отбрасывающих):');
         for (const d of sc) console.log(`  ${String(d.deg).padStart(3)}° ${String(d.calls).padStart(5)} ${String(d.tris).padStart(8)} ${String(d.game).padStart(5)}  ${d.who.map(([k, v]) => k + ' ' + v).join(', ')}\n        тени: ${d.shadows.map(([k, v]) => k + ' ' + v).join(', ')}`);
     }
+    const SHOT = opt('shot', null); // --shot file.png: the picture before the measuring (to compare looks: --nobatch / --oldmat)
+    if (SHOT) { await sleep(2500); await page.screenshot({ path: SHOT }); console.log('снимок: ' + SHOT); }
     if (KEYS) await page.evaluate(() => { window.__KEYS = true; });
     const r = await page.evaluate(scene, FRAMES);
     if (KEYS) console.log('\nпрогретые ключи (Lambert/Phong):\n' + (await page.evaluate(() => window.__zns.game.renderer.info.programs.filter((p) => /Lambert|Phong/.test(p.name)).map((p) => p.name + ' ' + String(p.cacheKey).slice(0, 600)).join('\n'))));
@@ -454,6 +478,7 @@ row('всё', res.total);
 for (const k in res.segs) if (res.segs[k].game) row(k, res.segs[k]);
 console.log('  части кадра (сред мс):', JSON.stringify(res.parts));
 if (res.farBuilds) console.log(`  одна форма (FarShape) за сцену: собрано ${res.farBuilds.builds}, новых геометрий ${res.farBuilds.merged} за ${res.farBuilds.frames} кадров`);
+if (res.farBuilds?.batch) { const b = res.farBuilds.batch; console.log(`  сборки (FarBatch): ${b.batches} сборок, в них ${b.slots} форм; пересобрано всего ${b.rebuilds}, вошло ${b.joins}, вышло ${b.leaves}`); }
 console.log('  системы (сред мс за кадр):', res.systems.map(([k, v]) => `${k} ${v}`).join(', '));
 console.log(`  графика: ${JSON.stringify(res.render)}; объектов сцены ${res.objs}, мешей ${res.meshes} (видимых ${res.visMeshes}); жителей ${res.people} (видимых ${res.peopleVisible})`);
 console.log('  крупные группы сцены (видимых мешей / треуг.):', res.groups.map((x) => `${x.name} ${x.k}/${x.tri}`).join('; '));

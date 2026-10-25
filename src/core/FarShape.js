@@ -15,6 +15,7 @@
  * multi-material ones, own shaders, cut-out shadows (leaves with a custom depth material).
  */
 import * as THREE from 'three';
+import { farBatchAdd, farBatchRemove, farBatchBuilt } from './FarBatch.js';
 
 export const FAR_SHAPE = { CACHE_MAX: 96 };
 /** How many shapes were made (its count only grows: a measure for creativebench — a part flickering would show here). */
@@ -119,7 +120,7 @@ export class FarShape {
     /** @param {{cache?: boolean}} [o] cache: false — the model's parts are its own (a person's proportions): its shape is its own too */
     /** hide: 'visible' (the parts' flags — they stay hit by rays) or 'layers' (their camera layers emptied: the game's own
      *  `visible` stays the truth, read every check — the hero's hands, shown and hidden by the game every frame) */
-    constructor(root, { cache = true, hide = 'visible' } = {}) {
+    constructor(root, { cache = true, hide = 'visible', batch = true } = {}) {
         this.root = root;
         this.cache = cache;
         this.byLayers = hide === 'layers';
@@ -128,6 +129,8 @@ export class FarShape {
         this.meshes = []; // the skinned meshes (one per material)
         this.skeleton = null;
         this._sig = null;
+        // (with others of its look in one draw — FarBatch: not the hero's hands, shown and hidden by the game every frame)
+        if (batch && !this.byLayers) farBatchAdd(this);
     }
 
     /** The parts that go into the shape: drawn now (shown up to the root), plain meshes. */
@@ -178,7 +181,7 @@ export class FarShape {
         this.parts.length = 0;
         for (const p of list) { this.parts.push(p); this._hide(p); }
         if (sig !== this._sig || !this.meshes.length) { this._sig = sig; this._build(list); }
-        for (const m of this.meshes) m.visible = true;
+        for (const m of this.meshes) m.visible = !m.userData.batched; // (in a batch — FarBatch: drawn there)
     }
 
     /** A part taken into the shape: not drawn by itself (farHid: a copy of the model — a body — shows it again). */
@@ -195,6 +198,7 @@ export class FarShape {
 
     _build(list) {
         farShapeStats.builds++;
+        farBatchBuilt(this); // (out of its batch: its own meshes, new, drawn until it is still again)
         this._drop();
         if (!list.length) return;
         this.skeleton = new THREE.Skeleton(list.slice(), list.map(() => new THREE.Matrix4()));
@@ -245,6 +249,7 @@ export class FarShape {
 
     /** The shape taken away for good (the model removed). */
     dispose() {
+        farBatchRemove(this);
         this.set(false);
         this._drop();
         this._sig = null;

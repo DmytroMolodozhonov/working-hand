@@ -1057,6 +1057,7 @@ export class Sailors {
                 const far = d > SHADOW_NEAR && !busy;
                 if (!far) v.model.setFar(false);
                 const unseen = pic && far && !_view.intersectsSphere(_viewS.set(_w.set(v.x, v.y + 1.5, v.z), 4));
+                v.group.userData.matFrozen = unseen; // (its matrices wait too — SceneMatrices)
                 if (!unseen && (d < 35 || busy || v.animT > (d > DRAW.DISTANT ? DRAW.DISTANT_STEP : d < 60 ? 0.066 : 0.12))) {
                     v.model.update(v.animT, { mode: v.mode === 'swim' ? 'walk' : v.mode, speed: v.speed });
                     v.animT = 0;

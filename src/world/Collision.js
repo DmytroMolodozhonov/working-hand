@@ -10,6 +10,8 @@
  */
 
 const HASH_CELL = 8;
+/** A cell's key: a number, not a string (the people's steps ask thousands of times a frame — no garbage). ±8000 km. */
+const cellKey = (cx, cz) => cx * 2097152 + cz;
 
 export class CollisionWorld {
     constructor() {
@@ -78,7 +80,7 @@ export class CollisionWorld {
     _forCells(box, fn) {
         const cx0 = Math.floor(box.minX / HASH_CELL), cx1 = Math.floor(box.maxX / HASH_CELL);
         const cz0 = Math.floor(box.minZ / HASH_CELL), cz1 = Math.floor(box.maxZ / HASH_CELL);
-        for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) fn(cx + ',' + cz);
+        for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) fn(cellKey(cx, cz));
     }
 
     /** Boxes whose XZ footprint intersects the query rectangle. Reuses an internal array. */
@@ -89,7 +91,7 @@ export class CollisionWorld {
         const cz0 = Math.floor(minZ / HASH_CELL), cz1 = Math.floor(maxZ / HASH_CELL);
         for (let cz = cz0; cz <= cz1; cz++) {
             for (let cx = cx0; cx <= cx1; cx++) {
-                const set = this.hash.get(cx + ',' + cz);
+                const set = this.hash.get(cellKey(cx, cz));
                 if (!set) continue;
                 for (const b of set) {
                     if (b.maxX < minX || b.minX > maxX || b.maxZ < minZ || b.minZ > maxZ) continue;
