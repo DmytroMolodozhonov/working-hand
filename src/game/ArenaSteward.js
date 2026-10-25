@@ -26,7 +26,11 @@ export const STEWARD = {
 /** What he says (all made in his voice in advance: CastleTalk._prepareFillers). */
 export const STEWARD_LINES = {
     ask: ['Хотите сразиться?', 'Желаете выйти на арену?', 'Хотите попробовать свои силы в дуэли?'],
-    terms: 'В случае победы — 100 монет.',
+    choose: 'С кем хотите сразиться? Младший волшебник — 50 монет за победу, средний — 100, сильный преподаватель — 150. Скажите «младший», «средний» или «сильный» — или коснитесь нужной куклы. С главой башни сражаться нельзя.',
+    master: 'С главой башни сражаться нельзя. Выберите младшего, среднего или сильного волшебника.',
+    terms_novice: 'Младший волшебник. В случае победы — 50 монет.',
+    terms_adept: 'Средний волшебник. В случае победы — 100 монет.',
+    terms_teacher: 'Сильный преподаватель. В случае победы — 150 монет.',
     wait: 'Сейчас идёт бой — подождите, я позову вас, когда арена освободится.',
     soon: 'Арена свободна — скоро позову вас на арену.',
     again: 'Вы уже записаны — ждите.',
@@ -38,9 +42,37 @@ export const STEWARD_LINES = {
     go: 'Соперник на месте — отсчёт!',
     missed: 'Вы не вышли на арену — запись снята.',
     left: 'Вы ушли с места — запись снята.',
-    win: 'Победа! Вот ваши 100 монет.',
-    info: 'Запишитесь, встаньте на светящееся место — и бой с волшебником. Победа — 100 монет, платить за участие не нужно.',
+    win: 'Победа! Вот ваша награда.',
+    info: 'Выберите соперника — младшего (за победу 50 монет), среднего (100) или сильного преподавателя (150), встаньте на светящееся место — и бой. Платить за участие не нужно. С главой башни сражаться нельзя.',
 };
+
+/**
+ * The opponents he offers (the author: «как продавец… куколки: младший, средний, сильный; с главой башни нельзя; за победу 50, 100, 150»):
+ * the tier → what it is called, the coins for a win, which ranks of the tower's wizards may stand against the player (WizardAI.WIZ_RANKS).
+ */
+export const TIERS = {
+    novice: { ru: 'Младший', who: 'младший волшебник', coins: 50, ranks: ['novice'] },
+    adept: { ru: 'Средний', who: 'средний волшебник', coins: 100, ranks: ['adept'] },
+    teacher: { ru: 'Сильный', who: 'сильный преподаватель', coins: 150, ranks: ['teacher', 'elder'] },
+};
+export const TIER_ORDER = ['novice', 'adept', 'teacher'];
+export const tierCoins = (tier) => TIERS[tier]?.coins ?? 100;
+
+const T_MASTER = /(^|[^а-я])(глав[а-я]*|мастер[а-я]*|джовал[а-я]*|нотан[а-я]*|босс[а-я]*)([^а-я]|$)/;
+const T_WORDS = [
+    ['novice', /(^|[^а-я])(младш[а-я]*|слаб[а-я]*|начинающ[а-я]*|новичок|новичк[а-я]*|ученик[а-я]*|студент[а-я]*)([^а-я]|$)/],
+    ['adept', /(^|[^а-я])(средн[а-я]*|продвинут[а-я]*)([^а-я]|$)/],
+    ['teacher', /(^|[^а-я])(сильн[а-я]*|преподавател[а-я]*|учител[а-я]*|мощн[а-я]*)([^а-я]|$)/],
+];
+
+/** Whom the player named: 'novice' | 'adept' | 'teacher' | 'master' (not allowed) | null. */
+export function stewardTier(text) {
+    const t = String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[.,!?…]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return null;
+    if (T_MASTER.test(t)) return 'master';
+    for (const [k, re] of T_WORDS) if (re.test(t)) return k;
+    return null;
+}
 
 /** Every line he may say (for the voice to make in advance). */
 export const stewardPool = () => [...STEWARD_LINES.ask, ...Object.entries(STEWARD_LINES).filter(([k]) => k !== 'ask').map(([, v]) => v)];
@@ -120,3 +152,19 @@ export function duelSpots(def) {
  */
 export const onPlace = (d, phase) => (phase === 'call' ? true : d <= STEWARD.MARK_AWAY);
 
+
+/**
+ * Where the three dolls stand (the author: «такие куколки, фактически»): in a row by the steward's place, along the
+ * line across the arena's axis, on the side away from the lectern (the path to the book stays free). → [{tier, x, y, z, yaw}].
+ */
+export function dollSpots(def) {
+    const S = def?.desk?.stand;
+    if (!S || !def.axis) return [];
+    const { a, b } = def.axis;
+    const al = Math.hypot(b.x - a.x, b.z - a.z) || 1, ax = (b.x - a.x) / al, az = (b.z - a.z) / al; // (the axis: the gates' line)
+    let lx = -az, lz = ax; // (across it)
+    const B = def.desk.book || def.desk.front;
+    if (B && (B.x - S.x) * lx + (B.z - S.z) * lz > 0) { lx = -lx; lz = -lz; } // (away from the lectern)
+    const out = def.desk.yaw ?? 0;
+    return TIER_ORDER.map((tier, i) => ({ tier, x: S.x + lx * (3.2 + i * 2.8), y: S.y, z: S.z + lz * (3.2 + i * 2.8), yaw: out }));
+}

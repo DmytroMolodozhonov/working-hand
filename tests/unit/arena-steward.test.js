@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TerrainData, BLOCK } from '../../src/world/Terrain.js';
 import { arenaSite, onArenaFloor, ARENA_ROUND } from '../../src/world/DuelArenas.js';
-import { ArenaQueue, stewardIntent, duelSpots, STEWARD, STEWARD_LINES, stewardPool } from '../../src/game/ArenaSteward.js';
+import { ArenaQueue, stewardIntent, duelSpots, STEWARD, STEWARD_LINES, stewardPool, stewardTier, TIERS, TIER_ORDER, tierCoins, dollSpots } from '../../src/game/ArenaSteward.js';
 import { ARENA_DUEL } from '../../src/game/ArenaRules.js';
 
 test('what the player says to the steward', () => {
@@ -32,10 +32,12 @@ test('the queue: sign up, wait while a duel goes on, the turn, cancel, the ones 
     assert.equal(q.take(() => true), null, 'nobody left');
 });
 
-test('the reward is exactly 100 coins and the count is 10…1', () => {
-    assert.equal(ARENA_DUEL.REWARD, 100);
+test('the count is 10…1; the reward is by the chosen opponent: 50 / 100 / 150 — the Master of the tower is never offered', () => {
     assert.equal(ARENA_DUEL.COUNT, 10);
-    assert.ok(STEWARD_LINES.terms.includes('100'));
+    assert.deepEqual(TIER_ORDER.map(tierCoins), [50, 100, 150]);
+    assert.ok(!TIERS.master, 'the Master of the tower does not fight for coins');
+    for (const t of TIER_ORDER) { assert.ok(STEWARD_LINES['terms_' + t].includes(String(TIERS[t].coins))); assert.ok(stewardPool().includes(STEWARD_LINES['terms_' + t])); }
+    assert.ok(stewardPool().includes(STEWARD_LINES.choose) && stewardPool().includes(STEWARD_LINES.master));
     assert.ok(stewardPool().includes(STEWARD_LINES.ask[0]));
 });
 
@@ -74,4 +76,20 @@ test('the round arena of a settlement: both places on its floor', () => {
     for (const c of [sp.player, sp.foe]) for (const [x, z] of ringPoints(c)) assert.ok(onArenaFloor(a, x, z, 0), 'on the round floor');
     assert.ok(Math.hypot(sp.player.x - sp.foe.x, sp.player.z - sp.foe.z) > 10, 'two places far apart');
     assert.ok(STEWARD.MARK_R > STEWARD.RING, 'standing on the ring counts');
+});
+
+test('the opponent named to the steward: младший / средний / сильный; the Master is refused; the dolls stand in a row by him', () => {
+    assert.equal(stewardTier('младший'), 'novice');
+    assert.equal(stewardTier('хочу со слабым волшебником'), 'novice');
+    assert.equal(stewardTier('давайте среднего'), 'adept');
+    assert.equal(stewardTier('сильный преподаватель'), 'teacher');
+    assert.equal(stewardTier('хочу сразиться с главой башни'), 'master');
+    assert.equal(stewardTier('Джовалилиус'), 'master');
+    assert.equal(stewardTier('да'), null);
+    assert.equal(stewardTier('хочу сразиться'), null);
+    const def = { x: 0, z: 0, axis: { a: { x: 0, z: -20 }, b: { x: 0, z: 20 } }, desk: { stand: { x: 4.5, y: 10, z: -40 }, book: { x: 6.5, y: 10, z: -36 } } };
+    const d = dollSpots(def);
+    assert.deepEqual(d.map((x) => x.tier), ['novice', 'adept', 'teacher']);
+    assert.ok(d.every((x) => Math.hypot(x.x - 4.5, x.z + 40) >= 3), 'not on the steward');
+    assert.ok(d.every((x) => x.x < 4.5), 'on the side away from the lectern');
 });

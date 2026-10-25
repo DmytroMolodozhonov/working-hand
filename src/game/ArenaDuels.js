@@ -44,8 +44,9 @@ import { PVP } from './Combat.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { newUid } from './ItemTypes.js';
 import { CappedLog } from '../core/CappedLog.js';
-import { ArenaQueue, STEWARD, STEWARD_LINES, duelSpots, stewardIntent } from './ArenaSteward.js';
+import { ArenaQueue, STEWARD, STEWARD_LINES, TIERS, tierCoins, dollSpots, duelSpots, stewardIntent, stewardTier } from './ArenaSteward.js';
 import { ArenaMarkFx } from '../fx/ArenaMarkFx.js';
+import { ArenaDollsFx } from '../fx/ArenaDollsFx.js';
 import { ArenaTagFx } from '../fx/ArenaTagFx.js';
 import { tagOf, tagKey, tagShown } from './ArenaTag.js';
 import { villagerLook } from '../entities/VillagerModel.js';
@@ -101,7 +102,9 @@ export class ArenaDuels {
         this._scanT = 0;
         this.myQueue = null; // (this computer's player: signed up at which arena — for its hints)
         this.count = null; // (the «10…1» shown to this player: {at, n})
+        this.choosingAt = -1e9; // (the steward asked «С кем хотите сразиться?» — a named opponent counts after it)
         this.askedAt = -1e9; // (the steward asked this computer's player «Хотите сразиться?» — a bare «да» counts after it)
+        this.dollsFx = new ArenaDollsFx(game); // the three dolls by the steward: whom to fight (ArenaDollsFx.js)
         this.marks = new ArenaMarkFx(game); // the lit places of a player's duel (ArenaMarkFx.js)
         this._markT = 0;
         this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
@@ -128,6 +131,9 @@ export class ArenaDuels {
             this._signUp(A, dt);
         }
         this._countdown(dt);
+        this._dollsT = (this._dollsT || 0) - dt;
+        if (this._dollsT <= 0) { this._dollsT = 1; this.dollsFx.update([...this.list.values()]); }
+        this.dollsFx.face();
         this._lit(dt);
         this._dome(dt);
         this._tags(dt);
@@ -163,7 +169,7 @@ export class ArenaDuels {
         // the seats on the long sides only (a charge flies along the floor's axis — never into the crowd)
         const seats = def.seats.map((s, i) => ({ ...s, i })).filter((s) => s.side);
         const restT = def.practice ? ARENA_DUEL.PRACTICE_REST[0] * Math.random() : 4;
-        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: new ArenaQueue(), owed: null, sayT: 0, netT: 0, steward: null, stewT: 0, asked: new Map(), ph: 'idle', pl: null };
+        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: new ArenaQueue(), tiers: new Map(), owed: null, sayT: 0, netT: 0, steward: null, stewT: 0, asked: new Map(), ph: 'idle', pl: null };
     }
 
     /**
@@ -250,17 +256,17 @@ export class ArenaDuels {
                 // (the steward gives the 100 coins from his hand — or, with nobody there, they lie on the book as ever)
                 const w = A.steward && !A.steward.dead ? A.steward : null, b = A.def.desk.book;
                 const at = w ? new THREE.Vector3(w.x + (p.x - w.x) * 0.35, w.y + 2.6, w.z + (p.z - w.z) * 0.35) : new THREE.Vector3(b.x, b.y + 0.7, b.z);
-                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: ARENA_DUEL.REWARD }, at, { hover: true });
+                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: A.owed.coins ?? ARENA_DUEL.REWARD }, at, { hover: true });
                 if (w) this._say(A, 'win');
                 this._fx(A, 'fanfare', b);
-                this._tell(A.owed.id, { e: 'paid', id: A.id });
+                this._tell(A.owed.id, { e: 'paid', id: A.id, coins: A.owed.coins });
                 this.log.push('paid:' + A.owed.id);
                 A.owed = null;
             } else if (!p) A.owed = null;
         }
         A.sayT -= dt;
         // a player signed up who has walked away is struck off
-        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) this._tell(id, { e: 'off', id: A.id, why: 'left' });
+        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) A.tiers.delete(id); this._tell(id, { e: 'off', id: A.id, why: 'left' });
     }
 
     // ------------------------------------------------------------------ the steward
@@ -346,22 +352,27 @@ export class ArenaDuels {
             return { reply: L.off };
         }
         if (it === 'info') return { reply: L.info };
-        const asked = now - this.askedAt < STEWARD.ANSWER_T * 1000;
+        const asked = now - this.askedAt < STEWARD.ANSWER_T * 1000, choosing = now - this.choosingAt < STEWARD.ANSWER_T * 1000;
+        const tier = stewardTier(text);
+        // whom he fights: «младший / средний / сильный» (right after «с кем?», or at once: «хочу со средним»); the Master of the tower — never
+        if (tier && (it === 'want' || it === 'yes' || asked || choosing)) {
+            if (tier === 'master') return { reply: L.master };
+            return { reply: this.choose(A, tier) };
+        }
         if (it === 'want' || (it === 'yes' && asked)) {
             this.askedAt = -1e9;
             if (mine) return { reply: L.again };
             if (g.isNight) return { reply: L.night };
             if (!g.items?.wand) return { reply: L.wand };
-            if (this.auth) this._join(A, g.localId); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id }); }
-            const busy = this.auth ? !!A.duel : A.ph !== 'idle';
-            return { reply: `${L.terms} ${busy ? L.wait : L.soon}` };
+            this.choosingAt = now; // («с кем?» — he names them, the dolls stand beside him)
+            return { reply: L.choose };
         }
         return null;
     }
 
     /** (every computer) This computer's player cancels his sign-up. */
     _cancel(A, id) {
-        if (this.auth) { if (A.queue.cancel(id)) this.log.push('cancel:' + id); const D = A.duel; if (D?.p === id && D.phase !== 'fight' && D.phase !== 'over') this._end(A, D, null, 'noshow'); } else { this.myQueue = null; this.game.sync?.arena?.({ e: 'cancel', id: A.id }); }
+        if (this.auth) { A.tiers.delete(id); if (A.queue.cancel(id)) this.log.push('cancel:' + id); const D = A.duel; if (D?.p === id && D.phase !== 'fight' && D.phase !== 'over') this._end(A, D, null, 'noshow'); } else { this.myQueue = null; this.game.sync?.arena?.({ e: 'cancel', id: A.id }); }
     }
 
     /**
@@ -447,11 +458,13 @@ export class ArenaDuels {
     _nextDuel(A, cs) {
         // the players signed up first (the first in the queue still here, with a wand)
         const p = A.queue.take((id) => !!this.life._playerPos(id));
-        const a = this._recruit(A, cs, 'duel');
+        const tier = p != null ? A.tiers.get(p) || null : null; // (the opponent the player chose at the steward — the dolls)
+        const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
         if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
+        if (p != null) A.tiers.delete(p);
         let b = null;
         if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
-        A.duel = { a, b, p, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
+        A.duel = { a, b, p, tier, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
         a.arena.side = 1; // (the far mark)
         if (b) b.arena.side = 0;
         this.log.push('duel:' + a.id + (b ? ':' + b.id : ':player ' + p));
@@ -577,13 +590,16 @@ export class ArenaDuels {
         if (lose) { lose.arena.sad = true; L._say(lose, pick(['Эх…', 'В другой раз…', 'Не повезло…']), 3); }
         for (const v of [D.a, D.b]) if (v) { v.arenaFight = false; v.prep = null; v.fx = (v.fx | 0) & ~FX.SHIELD; }
         if (why !== 'gone' && why !== 'noshow' && why !== 'foul') { this._fx(A, 'gong', A.def.centre); if (who) { this._fx(A, 'cheer', A.def.centre); this._fans(A, 'win'); } }
-        // the player's wand, taken by the wizard: given back on the lectern
+        // the player's wand, taken by the wizard: the winner throws it down on the floor before the player (the author: «он выкидывает её на землю»)
         if (D.trophy?.player != null) {
-            const b = A.def.desk.book;
-            this.game.items?.spawnLoose(D.trophy.item, new THREE.Vector3(b.x, b.y + 0.9, b.z), { hover: true });
+            const w = D.trophy.by, pp = this.life._playerPos(D.trophy.player), c = A.def.centre;
+            const to = pp || c, dx = to.x - w.x, dz = to.z - w.z, dl = Math.hypot(dx, dz) || 1;
+            const at = new THREE.Vector3(w.x + dx / dl * 1.2, w.y + 2.8, w.z + dz / dl * 1.2);
+            this.game.items?.spawnLoose(D.trophy.item, at, { vel: new THREE.Vector3(dx / dl * 3.2, 2.2, dz / dl * 3.2), spin: new THREE.Vector3(2, 6, 1) });
+            this.life._say(w, 'Держите свою палочку.', 3);
         }
-        if (who === 'p') A.owed = { id: D.p };
-        if (D.p != null) this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why });
+        if (who === 'p') A.owed = { id: D.p, coins: tierCoins(D.tier) };
+        if (D.p != null) this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why, coins: tierCoins(D.tier) });
         this._logEnd(A, D, who, why);
         this.log.push((A.def.practice ? 'train:' : 'end:') + (who || 'none') + ':' + why + ':' + Math.round(D.go));
         this._send(A);
@@ -1052,16 +1068,47 @@ export class ArenaDuels {
             A.touchT = 3;
             if (g.isNight) { g.hud?.setVoice?.('🌙 Ночью дуэлей нет — приходите днём', true); return; }
             if (!g.items?.wand) { g.hud?.setVoice?.('🪄 Для дуэли возьмите палочку в руку', true); return; }
-            if (this.auth) this._join(A, g.localId);
-            else g.sync?.arena?.({ e: 'join', id: A.id });
+            g.hud?.setVoice?.('📜 Выберите соперника: коснитесь куклы (младший 50 монет, средний 100, сильный 150) или скажите распорядителю. С главой башни сражаться нельзя.', true);
             return;
+        }
+        // a doll touched: that opponent is chosen (the hand on it, as on the book)
+        const dolls = dollSpots(A.def);
+        for (const side of ['right', 'left']) {
+            const h = ch.getHandWorldPosition(side, _h);
+            if (!h) continue;
+            for (const d of dolls) {
+                if (Math.hypot(h.x - d.x, h.z - d.z) > 1.1 || h.y < d.y - 0.5 || h.y > d.y + 4.4) continue;
+                A.touchT = 3;
+                const r = this.choose(A, d.tier);
+                g.hud?.setVoice?.(typeof r === 'string' ? r : r.reply, true);
+                return;
+            }
         }
     }
 
+    /**
+     * (this computer's player) He chose whom to fight — a doll touched, or the steward's «с кем?» answered: signed up with that opponent
+     * (the host keeps the tier). → the steward's answer.
+     */
+    choose(A, tier) {
+        const g = this.game, L = STEWARD_LINES;
+        if (!TIERS[tier]) return L.master;
+        const mine = this.auth ? A.queue.has(g.localId) || A.duel?.p === g.localId : !!this.myQueue;
+        if (mine) return L.again;
+        if (g.isNight) return L.night;
+        if (!g.items?.wand) return L.wand;
+        this.choosingAt = -1e9; this.askedAt = -1e9;
+        if (this.auth) this._join(A, g.localId, tier); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier }); }
+        const busy = this.auth ? !!A.duel : A.ph !== 'idle';
+        return `${L['terms_' + tier]} ${busy ? L.wait : L.soon}`;
+    }
+
     /** (host) A player signs up. */
-    _join(A, id) {
+    _join(A, id, tier = null) {
+        if (!TIERS[tier]) return; // (nobody is signed up without choosing whom he fights: the dolls / the steward's «с кем?»)
         if (A.duel?.p === id || A.queue.sign(id) < 0) return;
-        this._tell(id, { e: 'queued', id: A.id, n: A.queue.ahead(id, !!A.duel) });
+        A.tiers.set(id, tier);
+        this._tell(id, { e: 'queued', id: A.id, n: A.queue.ahead(id, !!A.duel), tier });
         this.log.push('join:' + id);
     }
 
@@ -1095,16 +1142,16 @@ export class ArenaDuels {
         const g = this.game, hud = g.hud;
         switch (m.e) {
             case 'ask': this.askedAt = performance.now(); break;
-            case 'queued': this.myQueue = m.id; hud?.setVoice?.(m.n > 0 ? `📜 Вы записались на дуэль. Перед вами: ${m.n}` : '📜 Вы записались на дуэль — вы следующий', true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
+            case 'queued': this.myQueue = m.id; hud?.setVoice?.(`📜 Вы записались на дуэль: ${TIERS[m.tier]?.who || 'соперник'}, награда за победу — ${tierCoins(m.tier)} монет. ` + (m.n > 0 ? `Перед вами: ${m.n}` : 'Вы следующий'), true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'end':
                 this.count = null; this.myQueue = null;
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
-                hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Вашу палочку вернули — она на столе записи' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
+                hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Победитель бросил вашу палочку на землю — подберите её' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
-            case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${ARENA_DUEL.REWARD} монет`, true); break;
+            case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${m.coins ?? ARENA_DUEL.REWARD} монет`, true); break;
             case 'missed': this.myQueue = null; hud?.setVoice?.('⌛ Вы не вышли на арену — очередь прошла', true); break;
             case 'foul': hud?.setVoice?.('☠️ Вы убили соперника — это против правил арены!', true); break;
             default: break;
@@ -1142,7 +1189,7 @@ export class ArenaDuels {
     onNet(m, from) {
         const g = this.game;
         if (!m || typeof m !== 'object') return;
-        if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from); } return; }
+        if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from, m.tier); } return; }
         if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
         if (m.e === 'tg') { const A = this.list.get(m.id); if (A && !this.auth) A.tg = Array.isArray(m.t) ? m.t.slice(0, 2) : []; return; }
         if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; } return; }
@@ -1499,5 +1546,5 @@ export class ArenaDuels {
 
     prewarm() { this.marks.prewarm(); this.domeFx.prewarm(); }
 
-    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.tagFx.dispose(); this.domeFx.dispose(); }
+    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.dollsFx.dispose(); this.tagFx.dispose(); this.domeFx.dispose(); }
 }
