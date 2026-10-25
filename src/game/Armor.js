@@ -85,7 +85,7 @@ export class ArmorSystem {
         this.worn[slot] = item;
         // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
         let inHand = false;
-        if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side)); if (!inHand) this._stow(old, drop); }
+        if (old) { inHand = !!(side && g.items?.takeIntoHand?.(old, side, { closed: true })); if (!inHand) this._stow(old, drop); } // (closed: the fist holds it, an open hand would let it fall)
         this._changed();
         if (!quiet && old) g.hud?.setVoice?.(`🪖 Вы сняли <b>${armorName(old)}</b> и надели <b>${armorName(item)}</b>`, true);
         else if (!quiet) {
@@ -274,7 +274,7 @@ export class ArmorSystem {
             if (this.worn[slot]?.archmage && !h.item.archmage) { g.hud?.setVoice?.('🌟 Костюм Высшего мага не снять — он на вас', true); continue; }
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
-            if (!this.wear(item, { side })) items.takeIntoHand?.(item, side);
+            if (!this.wear(item, { side })) items.takeIntoHand?.(item, side, { closed: true });
             else if (items.held[side]?.item && items.held[side].item !== item) (this._swapLock ||= {})[side] = true; // (the old piece is in the hand now)
         }
     }
