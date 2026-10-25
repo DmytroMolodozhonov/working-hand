@@ -123,6 +123,7 @@ export class Accio {
             if (!catcher) { dg.noHand = true; continue; }
             for (const L of g.items?.loose.values() || []) {
                 dg.loose++;
+                { const dd = L.model.position.distanceTo(hand); if (dd < (dg.nearestAny ?? Infinity)) dg.nearestAny = dd; }
                 if (L.asked || L.accio || L.swarm) continue;
                 const to = _v1.subVectors(L.model.position, hand);
                 const d = to.length();
@@ -157,7 +158,7 @@ export class Accio {
             }
         }
         if (!best) {
-            const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
+            const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose}${dg.nearestAny != null ? `, ближайшая в ${Math.round(dg.nearestAny)} м` : ''})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
             g.lastCastWhy = 'цель не найдена: ' + why;
             const busy = !free('left') && !free('right');
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м — и скажите «Акцио»';
