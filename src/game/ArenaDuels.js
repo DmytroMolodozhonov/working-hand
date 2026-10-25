@@ -267,7 +267,10 @@ export class ArenaDuels {
         }
         A.sayT -= dt;
         // a player signed up who has walked away is struck off
-        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) A.tiers.delete(id); this._tell(id, { e: 'off', id: A.id, why: 'left' });
+        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) {
+            A.tiers.delete(id);
+            this._tell(id, { e: 'off', id: A.id, why: 'left' });
+        }
     }
 
     // ------------------------------------------------------------------ the steward
