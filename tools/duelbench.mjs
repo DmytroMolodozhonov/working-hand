@@ -18,7 +18,7 @@ try {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 480, height: 270 } });
     await page.evaluate(({ SEED, FOE }) => {
         const z = window.__zns;
-        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, hero: { spawn: 'arena', foe: FOE, infiniteMana: false, cells: 200, health: 'normal', maxHp: 20, duelPts: 100 } });
+        z.startGame({ ...z.readConfig(), mode: 'creative', map: null, seed: SEED, zombieCount: 0, hero: { spawn: 'arena', foe: FOE, infiniteMana: false, cells: 200, health: 'normal', maxHp: 20, duelMastery: 0 } });
     }, { SEED, FOE });
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 180000 });
     // the arena: the hero is carried there (the world's land is made by the workers), then the duel is made

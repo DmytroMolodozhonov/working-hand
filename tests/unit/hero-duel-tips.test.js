@@ -9,10 +9,10 @@ test('подсказки сил волшебников берутся из да�
         const [lo, hi] = rankDuelRange(r.rank);
         assert.ok(lo < rankDuelPower(r.rank) && rankDuelPower(r.rank) < hi);
         assert.equal(rankDuelPower(r.rank), duelPower(WIZ_RANKS[r.rank].mana, 1, 0));
-        assert.match(r.tip, /дуэльной силы/);
+        assert.match(r.tip, /очков дуэльной силы/);
     }
     const p = DUEL_RANK_ROWS.map((r) => rankDuelPower(r.rank));
     assert.ok(rankDuelPower('novice') < rankDuelPower('adept') && rankDuelPower('adept') < rankDuelPower('teacher'));
     assert.ok(rankDuelPower('master') > rankDuelPower('elder'));
-    assert.ok(HERO.DUEL_MAX >= rankDuelRange('master')[1] - 0.05 && p.length === 5);
+    assert.ok(HERO.MASTERY_MAX >= rankDuelRange('master')[1] && p.length === 5);
 });

@@ -16,8 +16,7 @@ const T = {
     robe: 'Магическая мантия защищает от холода и смягчает часть сильных заклинаний. Её можно носить вместе с бронёй. Если оставить галочку, герой начнёт игру в мантии.',
     spellsAll: 'Все заклинания игры известны сразу — свитки учить не нужно.',
     spellsMage: 'Известны почти все заклинания, кроме божественных (свитки храма богов, «Flying Maxima» и другие) и «Inspirius». Их можно выучить позже, сжигая свитки.',
-    duelFull: 'В столкновении лучей у героя столько же очков силы, сколько у соперника: бой на равных.',
-    duelCustom: `Сделайте дуэли честнее: впишите, сколько очков дуэльной силы будет у героя в столкновении лучей. Очки — это та же мана: у кого их больше, тот и сильнее давит. Например: начинающий волшебник — около 50, продвинутый — около 100, преподаватель — 200, сильный волшебник поселения — 400, глава башни — около 500. Можно от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}. Работает, когда стоит галочка «Бесконечная мана». Если вы её сняли, дуэль идёт по правилам Выживания: сила — это мана, которая у вас есть сейчас, плюс дуэльное мастерство, а это число не используется.`,
+    mastery: `Дуэльное мастерство — отдельная сила, которая прибавляется к вашей мане в столкновении лучей. В бою считается так: мана + мастерство, а дальше палочка, здоровье и «Максима». Чем больше мастерства, тем сильнее вы давите на соперника. В обычной игре оно растёт с каждой выигранной дуэлью: начинающий волшебник даёт 3 очка, продвинутый — 6, преподаватель — 12, глава башни — 30. Здесь можно сразу дать себе нужное число. С бесконечной маной ваша мана в дуэли равна мане соперника, поэтому всё решает мастерство: 0 — бой на равных, 50 — вы сильнее на 50 очков. От 0 до ${HERO.MASTERY_MAX}.`,
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
     spawn: 'Где герой появится при входе в мир и после возрождения. Выберите босса, которого хотите проверить, — вы окажетесь рядом с ним, а не на начальной площадке. Если рядом с кроватью — кровать не учитывается: возрождение всегда здесь.',
@@ -66,13 +65,7 @@ const html = (p) => `
   </div>
   <label class="world-opt" title="${T.armor}"><input type="checkbox" id="${p}-armor" checked> 🪖 Магическая броня <span class="mp-hint">— шлем, нагрудник, поножи</span></label>
   <label class="world-opt" title="${T.robe}"><input type="checkbox" id="${p}-robe" checked> 🧥 Магическая мантия <span class="mp-hint">— можно вместе с бронёй</span></label>
-  <div class="hero-group" role="radiogroup" aria-label="Дуэльная сила">
-    <span class="hero-cap">⚔️ Дуэльная сила</span>
-    <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full"> Как у соперника</label>
-    <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom" checked> Настроить</label>
-    <span class="hero-slide" id="${p}-duel-wrap" title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="1" value="100"> <span class="mp-hint">очков, от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
-    <span class="mp-hint">Сколько силы у волшебников — смотрите в списке «Соперник на арене».</span>
-  </div>
+  <div class="hero-row" id="${p}-mastery-row" title="${T.mastery}"><label for="${p}-mastery">⚔️ Дуэльное мастерство:</label> <input type="number" id="${p}-mastery" min="0" max="${HERO.MASTERY_MAX}" step="1" value="0"> <span class="mp-hint">очков к мане в дуэли (0 — как у любого нового героя). Сила волшебников — в списке «Соперник на арене».</span></div>
   <div class="hero-group" role="radiogroup" aria-label="Здоровье">
     <span class="hero-cap">❤️ Здоровье</span>
     <label class="hero-seg" title="${T.health}"><input type="radio" name="${p}-health" value="immortal" checked> Бессмертен</label>
@@ -102,7 +95,6 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('foe-row').hidden = $('spawn').value !== 'arena';
         $('wand-row').hidden = $('spawn').value !== 'arena';
         $('nocrew').closest('label').hidden = !SHIP_STARTS.includes($('spawn').value); // (ships' crews: only when the start is at the port or at sea)
-        $('duel-wrap').hidden = radio('duel') !== 'custom';
         $('hp-wrap').hidden = radio('health') !== 'normal';
         $('dark-val').textContent = $('dark').value;
         $('steady-val').textContent = $('steady').value;
@@ -121,7 +113,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         infiniteMana: $('inf').checked, cells: $('cells').value === '' ? HERO.CELLS_DEFAULT : $('cells').value,
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
-        duelPts: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
+        duelMastery: $('mastery').value === '' ? 0 : $('mastery').value,
         spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
@@ -130,10 +122,9 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
-        root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPts == null ? 'full' : 'custom'}"]`).checked = true;
         $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe; $('wand').value = v.wandBonus;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
-        $('duel-pct').value = v.duelPts ?? 100; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
+        $('mastery').value = v.duelMastery; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
     };
     sync();

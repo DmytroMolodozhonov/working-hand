@@ -1132,7 +1132,7 @@ export class ArenaDuels {
             power: du?._strength?.(a.id, 0, me), wandK: du?._wandK?.(a.id, 'Stupefy'), wand: wand(wizardWandOf(a)),
         };
         const hero = {
-            mana: c?.fatigue, maxMana: c?.maxFatigue, hp: c?.hp, maxHp: c?.maxHp, setPower: creativeFiniteMana(g) ? null : (g.hero?.duelPts ?? null), finite: creativeFiniteMana(g),
+            mana: c?.fatigue, maxMana: c?.maxFatigue, hp: c?.hp, maxHp: c?.maxHp, mastery: g.mana?.mastery ?? 0, finite: creativeFiniteMana(g),
             power: du?._strength?.(me, 0, a.id), wandK: du?._wandK?.(me, 'Stupefy'), wand: wand(g.items?.wand), creative: g.config?.mode === 'creative',
         };
         this._cur = { at: performance.now(), foe, hero, foeId: a.id, casts: { me: {}, foe: {} }, clashes: [], arena: A.id };

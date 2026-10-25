@@ -128,9 +128,9 @@ import { duelReport } from '../../src/game/DuelReport.js';
 
 test('дуэльный журнал: соперник, силы, палочки, столкновения и причина победы; убийство в режиме — «тихое»', () => {
     const foe = { name: 'Альфред', rank: 'adept', mana: 90, maxMana: 100, hp: 20, maxHp: 20, skill: 1, power: 2.08, wandK: 1.4, wand: { power: 30, fav: 'Stupefy' } };
-    const hero = { mana: 200, maxMana: 200, hp: 20, maxHp: 20, setPower: 2, power: 2, wandK: 1.15, wand: { power: 0 }, creative: true };
+    const hero = { mana: 200, maxMana: 200, hp: 20, maxHp: 20, mastery: 40, power: 2, wandK: 1.15, wand: { power: 0 }, creative: true };
     const s = duelReport.start({ foe, hero });
-    assert.match(s, /Альфред/); assert.match(s, /продвинутый/); assert.match(s, /вы задали 2/); assert.match(s, /не зависит от вашей маны/);
+    assert.match(s, /Альфред/); assert.match(s, /продвинутый/); assert.match(s, /дуэльное мастерство 40/); assert.match(s, /равны сопернику/);
     const row = { mySpell: 'Stupefy', foeSpell: 'Jolt', secs: 6, myPush: 2.3, foePush: 2.9, myContact: 0.5, foeContact: 1, share: 0, lost: 'me' };
     assert.match(duelReport.clash(row), /Уступили вы/);
     const e = duelReport.end({ who: 'a', why: 'wand', secs: 40, casts: { me: { Stupefy: 3 }, foe: { Jolt: 2 } }, clashes: [row], foe, hero });
@@ -143,19 +143,19 @@ test('дуэльный журнал: соперник, силы, палочки,
 
 test('дуэль в Творческом: мана играет роль, когда «Бесконечная мана» снята; с галочкой — как раньше', () => {
     const mk = (finite, fatigue, duelPower = null) => {
-        const g = { localId: 'me', config: { mode: 'creative' }, hero: { infiniteMana: !finite, duelPts: duelPower }, combat: { fatigue, hp: 20, maxHp: 20 }, mana: { mastery: 0 }, remotes: new Map(), playerHP: 20, maxHP: 20 };
+        const g = { localId: 'me', config: { mode: 'creative' }, hero: { infiniteMana: !finite }, combat: { fatigue, hp: 20, maxHp: 20 }, mana: { mastery: duelPower ?? 0 }, remotes: new Map(), playerHP: 20, maxHP: 20 };
         const foe = { id: 'w', mana: 90, hp: 14, maxHp: 14, role: 'student', wizard: true };
-        const D = Object.assign(Object.create(Duel.prototype), { game: g, _npcWizard: (id) => (id === 'w' ? foe : null), _mastery: () => 0, _playerMana: () => 0 });
+        const D = Object.assign(Object.create(Duel.prototype), { game: g, _npcWizard: (id) => (id === 'w' ? foe : null), _mastery: Duel.prototype._mastery, _playerMana: () => 0 });
         return D._strength('me', 0, 'w');
     };
     // (the survival rules: the mana now — 200 mana beats a foe's 90; 30 loses to it)
     assert.ok(mk(true, 200) > mk(true, 90) && mk(true, 90) > mk(true, 30));
     assert.ok(Math.abs(mk(true, 200) - 200) < 1e-9);
-    // (the endless mana: equal to the foe's mana, whatever the cells; a number set by the player replaces it)
+    // (the endless mana: equal to the foe's mana, whatever the cells; the mastery set by the player is added)
     assert.ok(Math.abs(mk(false, 5) - 90) < 1e-9);
-    assert.equal(mk(false, 5, 250), 250, 'очки героя заменяют ману соперника');
-    // (finite mana: the number is not used)
-    assert.ok(Math.abs(mk(true, 200, 250) - mk(true, 200)) < 1e-9);
+    assert.equal(mk(false, 5, 250), 90 + 250, 'мастерство героя прибавляется к мане соперника');
+    // (finite mana: the mana now + the mastery)
+    assert.equal(mk(true, 200, 250), 200 + 250);
 });
 
 import { CreateMemory } from '../../src/ui/CreateMemory.js';

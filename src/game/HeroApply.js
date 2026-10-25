@@ -31,6 +31,7 @@ export class HeroApply {
     /** Ячейки маны: конечная мана в Творческом — своё число (+ свитки силы); бесконечная — как было. */
     applyMana() {
         const g = this.game, c = g.combat;
+        if (this.on && g.mana && g.hero?.duelMastery > 0) g.mana.mastery = Math.max(g.mana.mastery || 0, g.hero.duelMastery); // (дуэльное мастерство из настроек мира: с самого начала и после возрождения)
         if (!this.on || !c || !creativeFiniteMana(g)) return;
         c.maxFatigue = g.hero.cells + (g.bonus?.fatigue || 0) + (g.mana?.growth || 0); // (the cells set + burnt scrolls + what spells grew)
         c.fatigue = Math.min(c.fatigue ?? c.maxFatigue, c.maxFatigue);
