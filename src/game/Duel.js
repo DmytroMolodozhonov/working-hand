@@ -58,7 +58,7 @@ import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
-import { duelStrength, duelPower, strengthGap } from './WizardAI.js';
+import { duelStrength, duelPower, strengthGap, wizardMastery } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';

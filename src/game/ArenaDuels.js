@@ -624,7 +624,7 @@ export class ArenaDuels {
     }
 
     /** A duellist on the floor stays on it (the floor's capsule, a metre from the wall): the stands' steps are no place for him. */
-    _keepOnFloor(A, v) {
+    _keepNpcOnFloor(A, v) {
         const { a, b, r } = A.def.axis, lim = r - 1;
         const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz;
         const t = l2 > 0 ? Math.max(0, Math.min(1, ((v.x - a.x) * dx + (v.z - a.z) * dz) / l2)) : 0;
@@ -685,7 +685,7 @@ export class ArenaDuels {
         const seat = v.arena.seat, e = v.arena.fromSeat ? this._edge(A, seat) : null;
         const legs = v.arena.home ? [A.home] : e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home]; // (the steward walks home along the road, not through the gate)
         const leg = v.arena.leg || 0;
-        if (leg === 0 && !e && !v.arena.home && !v.steward && v.arena.side != null) this._keepOnFloor(A, v); // (a duellist leaving: along the floor to the gate, not up the stands)
+        if (leg === 0 && !e && !v.arena.home && !v.steward && v.arena.side != null) this._keepNpcOnFloor(A, v); // (a duellist leaving: along the floor to the gate, not up the stands)
         if (leg < legs.length) { if (this._go(v, legs[leg], WALK * (v.arena.sad ? 0.75 : 1), dt, 1.2)) v.arena.leg = leg + 1; v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t < 120) return true; }
         v.arena = null;
         L._deactivate(v); // (home in the tower)
@@ -698,7 +698,7 @@ export class ArenaDuels {
         const marks = A.def.gates, me = marks[v.arena.side].mark;
         const other = D.a === v ? D.b : D.a;
         v.seated = false;
-        if (v.arena.leg >= 2) this._keepOnFloor(A, v); // (a duellist never climbs the stands or walks into their walls — at the fight, the bow, after it)
+        if (v.arena.leg >= 2) this._keepNpcOnFloor(A, v); // (a duellist never climbs the stands or walks into their walls — at the fight, the bow, after it)
         switch (D.phase) {
             case 'enter': {
                 if (!this._enter(A, v, dt)) return true;
@@ -1319,7 +1319,7 @@ export class ArenaDuels {
             p.x = m.pin.x; p.z = m.pin.z; g.knockback?.set?.(0, 0, 0);
         }
         this._rememberWand();
-        this._keepOnFloor(A, D);
+        this._keepPlayerOnFloor(A);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
         if (m.hold && m.holdPin) { const p = g.character.group.position; p.x = m.holdPin.x; p.z = m.holdPin.z; g.knockback?.set?.(0, 0, 0); }
         if (m.friend) { this._friendStep(A, dt); return; } // (a friend instead of a wizard: the host waits for him, counts, judges)
@@ -1385,19 +1385,22 @@ export class ArenaDuels {
         ch.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         ch.airTop = null; ch.landing = null; g.knock?.reset?.(); // (no fall counted from before the move: the hero stands, he does not land hard)
-        this._last = { x: M.x, z: M.z };
+        this._last = { x: M.x, y: ch.group.position.y, z: M.z };
         const c = g.combat;
         if (c?.enabled) { c.hp = c.maxHp || c.hp; c.fatigue = c.maxFatigue || c.fatigue; g.playerHP = c.hp; }
     }
 
     /** The hero stays on the arena's floor (the barrier of the duel mode: no walking off into the stands and the world beyond). */
-    _keepOnFloor(A, D) {
+    _keepPlayerOnFloor(A) {
         const g = this.game, p = g.character.group.position;
-        if (onArenaFloor(A.def, p.x, p.z, 0.4)) { (this._last || (this._last = {})).x = p.x; this._last.z = p.z; return; }
+        if (onArenaFloor(A.def, p.x, p.z, 0.4)) { this._last = { x: p.x, y: p.y, z: p.z }; return; }
         const l = this._last;
         if (!l) return;
         // (back to the last good place, the speed gone: a wall, not a rubber band)
-        p.x = l.x; p.z = l.z; g.character.verticalVelocity = Math.min(0, g.character.verticalVelocity);
+        p.x = l.x; p.z = l.z;
+        if (Number.isFinite(l.y)) p.y = l.y;
+        g.character.verticalVelocity = 0;
+        g.character.airTop = null; g.character.landing = null; g.knock?.reset?.();
         g.knockback?.set?.(0, 0, 0);
     }
 
@@ -1532,7 +1535,7 @@ export class ArenaDuels {
         if (!m.said) { m.said = true; g.sync?.arena?.({ e: 'fhello', id: A.id }); }
         const my = this.my;
         if (my?.hold && !my.over) { const p = g.character.group.position; p.x = my.hold.x; p.z = my.hold.z; g.knockback?.set?.(0, 0, 0); }
-        else if (my?.role === 'friend') this._keepOnFloor(A, null);
+        else if (my?.role === 'friend') this._keepPlayerOnFloor(A);
     }
 
     /** (this computer) The host's word: the role — the friend (on the far lit place) or a spectator (in the stands). */

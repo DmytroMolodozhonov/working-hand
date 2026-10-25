@@ -2333,7 +2333,7 @@ export class Game {
 
     /**
      * «Брейнрот»: no hand needed — the creature you look at (or the nearest one): a zombie,
-     * an animal, a villager / a knight, somebody else's living tree — becomes your servant
+     * an animal, somebody else's living tree — becomes your servant
      * for a while: it follows you, fights your enemies and goes for whom «Атак» points at.
      */
     _castBrainrot(isFinal) {
@@ -2369,7 +2369,8 @@ export class Game {
         // (the Ice Castle's creatures: the queen's will holds them — the rod alone commands the snowmen)
         for (const c of this.iceCastle?.targets() || []) consider('I', c.id, c.model.position, c.h * 0.5);
         if (best?.k === 'I') { if (isFinal) this.hud.setVoice('❄️ Ледяную магию «Брейнрот» не берёт — снеговиками управляет только Ледяной Жезл', true); return null; }
-        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, жителя, рыцаря, живое дерево — не дальше 30 м) и скажите «Брейнрот»', true); return null; }
+        if (best?.k === 'v') { if (isFinal) this.hud.setVoice('🌀 «Брейнрот» не действует на человекоподобных: жителей, рыцарей и волшебников', true); return null; }
+        if (!best) { if (isFinal) this.hud.setVoice('🌀 Посмотрите на существо (зомби, животное, чужое живое дерево — не дальше 30 м) и скажите «Брейнрот»', true); return null; }
         const tired = this.combat.check('Brainrot');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('Brainrot');

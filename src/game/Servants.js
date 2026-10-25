@@ -1,8 +1,8 @@
 /**
  * Servants.js — creatures that obey a wizard.
  *
- *  - «Брейнрот» makes ANY creature a servant for a while: a zombie, an animal,
- *    a villager / a knight, a wizard of the castles, somebody's living tree.
+ *  - «Брейнрот» makes a zombie, an animal or somebody's living tree a servant
+ *    for a while. Villagers, knights and wizards are immune, including online.
  *  - The living tree of «Alive» is its caster's servant for as long as it lives.
  *  - A servant follows its master at a distance, guards them and fights their
  *    enemies (zombies near, and whoever attacks the master); «Атак» with the hand
@@ -127,6 +127,7 @@ export class Servants {
     /** (authority) The creature becomes `by`'s servant for SERVANT.TIME. */
     make(k, id, by) {
         const g = this.game;
+        if (k === 'v') return false; // humanoids are immune, including direct guest requests
         if (k === 'z') { g.applyBrainrot?.(id, by); return true; }
         const c = this.find(k, id);
         if (!c || k === 'p' || k === 's') return false;
@@ -137,7 +138,6 @@ export class Servants {
         } else {
             c.servantOf = by; c.servantUntil = until;
             if (k === 'a') { c.state = 'graze'; c.attacker = null; }
-            if (k === 'v') { c.foe = null; c.fleeT = 0; c.fleeFrom = null; c.investigate = null; c.path = null; }
         }
         this._sparkle(this.pos(k, id), 24);
         return true;

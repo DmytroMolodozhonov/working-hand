@@ -188,24 +188,19 @@ test('servant plan: strike in reach, chase the enemy, else follow the master at 
     assert.equal(servantPlan({ x: 0, z: 0 }, { x: 30, z: 0 }, null, 3).mode, 'chase');
 });
 
-test('«Брейнрот» on an animal and on a villager makes a servant that fights the master\'s enemies', () => {
+test('«Брейнрот» on an animal makes a servant that fights the master\'s enemies', () => {
     const g = fakeGame();
     const cow = { id: 3, dead: false, state: 'attack', attacker: 'me', group: { position: new THREE.Vector3(5, 0, 0) }, target: new THREE.Vector3() };
-    const knight = { id: 'v1', dead: false, x: -5, y: 0, z: 0, foe: 'me' };
     g.animals = { list: [cow], byId: new Map([[3, cow]]), hit: () => {} };
-    g.castleLife = { byId: new Map([['v1', knight]]), hit: () => {} };
+    g.castleLife = { byId: new Map(), hit: () => {} };
     assert.equal(g.servants.make('a', 3, 'me'), true);
     assert.equal(cow.servantOf, 'me');
     assert.equal(cow.state, 'graze', 'it stops attacking its master');
-    assert.equal(g.servants.make('v', 'v1', 'me'), true);
-    assert.equal(knight.servantOf, 'me');
-    assert.equal(knight.foe, null);
-    assert.deepEqual(g.servants.of('me').map((s) => s.k).sort(), ['a', 'v']);
-    // a zombie near: both go for it, not for each other
+    assert.deepEqual(g.servants.of('me').map((s) => s.k), ['a']);
+    // a zombie near: the animal goes for it
     const z = { id: 9, isDead: false, group: { position: new THREE.Vector3(6, 0, 3) } };
     g.zombies.push(z); g.zombieById.set(9, z);
     assert.deepEqual(g.servants.enemyFor({ k: 'a', id: 3 }, 'me', cow.group.position)?.k, 'z');
-    assert.deepEqual(g.servants.enemyFor({ k: 'v', id: 'v1' }, 'me', new THREE.Vector3(-5, 0, 0))?.k, 'z');
     const p = g.servants.plan('a', cow, cow.group.position, 3.5);
     assert.equal(p.mode, 'strike');
     // somebody else's knight going for me is an enemy too
