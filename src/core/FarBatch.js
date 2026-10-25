@@ -29,7 +29,7 @@ export const FAR_BATCH = {
     MARGIN: 5, // m round each shape (its own size) for the batch's sphere (culling)
     DROP_AFTER: 5, // s out of the scene before a forgotten shape is let go
 };
-export const farBatchStats = { rebuilds: 0, batches: 0, slots: 0, joins: 0, leaves: 0 };
+export const farBatchStats = { rebuilds: 0, batches: 0, slots: 0, joins: 0, leaves: 0, why: {} };
 
 const _shapes = new Set(); // every FarShape that may be batched
 const _pools = new Map(); // key → [Batch]
@@ -42,7 +42,7 @@ const _ident = new THREE.Matrix4();
 /** A FarShape that may be batched (FarShape calls it). */
 export function farBatchAdd(shape) { _shapes.add(shape); }
 /** Its shape was made again (FarShape._build): out of its batches now, in again when it has stayed so a moment. */
-export function farBatchBuilt(shape) { _leave(shape); shape._ver = (shape._ver || 0) + 1; shape._builtAt = _clock; }
+export function farBatchBuilt(shape) { if (shape._slots) farBatchStats.why.rebuilt = (farBatchStats.why.rebuilt || 0) + 1; _leave(shape); shape._ver = (shape._ver || 0) + 1; shape._builtAt = _clock; }
 /** It goes away (FarShape.dispose): its slots die, it is forgotten. */
 export function farBatchRemove(shape) { _leave(shape); _shapes.delete(shape); }
 /** Everything let go (a new game: the old scene's shapes). */
@@ -204,12 +204,22 @@ function _leave(shape) {
 
 /** Still as it was put in: the same build, on, the same material / shadow / layers on each of its meshes. */
 function _same(shape) {
-    if (!shape.on || shape._slotsVer !== shape._ver) return false;
+    const why = _why(shape);
+    if (why) farBatchStats.why[why] = (farBatchStats.why[why] || 0) + 1;
+    return !why;
+}
+function _why(shape) {
+    if (!shape.on) return 'off';
+    if (shape._slotsVer !== shape._ver) return 'built';
     for (const s of shape._slots) {
         const m = s.mesh, b = s.batch;
-        if (m.material !== b.mat || m.castShadow !== b.cs || m.layers.mask !== b.lm || m.receiveShadow !== b.rs || m.parent !== shape.root) return false;
+        if (m.material !== b.mat) return 'material';
+        if (m.castShadow !== b.cs) return 'shadow';
+        if (m.layers.mask !== b.lm) return 'layers';
+        if (m.receiveShadow !== b.rs) return 'receive';
+        if (m.parent !== shape.root) return 'parent';
     }
-    return true;
+    return null;
 }
 
 function _join(shape) {

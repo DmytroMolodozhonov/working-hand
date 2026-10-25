@@ -135,7 +135,7 @@ async function scene(FRAMES) {
     g.frame = origFrame;
     for (const u of undo) u();
     const FB = await import('/src/core/FarBatch.js').catch(() => null);
-    const farBuilds = builds0 ? { builds: FS.farShapeStats.builds - builds0.builds, merged: FS.farShapeStats.merged - builds0.merged, frames: sysFrames, batch: FB ? { ...FB.farBatchStats } : null } : null;
+    const farBuilds = builds0 ? { builds: FS.farShapeStats.builds - builds0.builds, merged: FS.farShapeStats.merged - builds0.merged, frames: sysFrames, batch: FB ? { ...FB.farBatchStats, why: { ...FB.farBatchStats.why } } : null } : null;
     const systems = Object.entries(sys).map(([k, v]) => [k, +(v / Math.max(1, sysFrames)).toFixed(3)]).sort((a, b) => b[1] - a[1]).slice(0, 30);
     const info = g.renderer.info;
     const cl = g.castleLife;
@@ -478,7 +478,7 @@ row('всё', res.total);
 for (const k in res.segs) if (res.segs[k].game) row(k, res.segs[k]);
 console.log('  части кадра (сред мс):', JSON.stringify(res.parts));
 if (res.farBuilds) console.log(`  одна форма (FarShape) за сцену: собрано ${res.farBuilds.builds}, новых геометрий ${res.farBuilds.merged} за ${res.farBuilds.frames} кадров`);
-if (res.farBuilds?.batch) { const b = res.farBuilds.batch; console.log(`  сборки (FarBatch): ${b.batches} сборок, в них ${b.slots} форм; пересобрано всего ${b.rebuilds}, вошло ${b.joins}, вышло ${b.leaves}`); }
+if (res.farBuilds?.batch) { const b = res.farBuilds.batch; console.log(`  сборки (FarBatch): ${b.batches} сборок, в них ${b.slots} форм; пересобрано всего ${b.rebuilds}, вошло ${b.joins}, вышло ${b.leaves} ${JSON.stringify(b.why)}`); }
 console.log('  системы (сред мс за кадр):', res.systems.map(([k, v]) => `${k} ${v}`).join(', '));
 console.log(`  графика: ${JSON.stringify(res.render)}; объектов сцены ${res.objs}, мешей ${res.meshes} (видимых ${res.visMeshes}); жителей ${res.people} (видимых ${res.peopleVisible})`);
 console.log('  крупные группы сцены (видимых мешей / треуг.):', res.groups.map((x) => `${x.name} ${x.k}/${x.tri}`).join('; '));
