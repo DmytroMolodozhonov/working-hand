@@ -101,7 +101,7 @@ export function arenaSpell({ role = 'student', foeHp = 20, finish = false, playe
     // (against a player: never the hurting ones — the wizard keeps the rules better than anyone)
     const table = [
         // (the disarm mostly when the other is down — `finish`: a duel is fought first, won after)
-        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.1 : 0.16], ['LevitateDuel', 0.12],
+        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.22 : 0.18], ['LevitateDuel', 0.12],
         ['IceDuel', strong ? 0.1 : 0.05], ['SapiraDuel', foeHp > 15 && !player ? 0.06 : 0],
         // (more of a show: «Даст» slows, «Disarmor» strips the armour, the strong ones' «Айс Максима»)
         ['SandsDuel', 0.1], ['Disarmor', 0.06], ['IceDuelMaxima', strong && !player && foeHp > 15 ? 0.06 : 0],

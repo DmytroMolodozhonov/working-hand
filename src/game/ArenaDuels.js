@@ -806,7 +806,9 @@ export class ArenaDuels {
         }
         v.arena.accioT = 0;
         // (a fresh one knocked down is let up — a round to the other, a bow to the stands; worn out — he is disarmed)
-        const finish = ov ? this._helpless(ov) && !ov.noWand && (arenaFresh(ov.mana, ov.maxMana, D.go) < ARENA_DUEL.FINISH_FRESH || (ov.arena?.falls || 0) >= 4) : false;
+        const finish = ov ? this._helpless(ov) && !ov.noWand && (arenaFresh(ov.mana, ov.maxMana, D.go) < ARENA_DUEL.FINISH_FRESH || (ov.arena?.falls || 0) >= 4)
+            // (the player stunned / frozen / down: the aim of the duel is his wand — «Экспеллиармус» at once, then «Акцио»; the author: «Остолбеней, потом Экспеллиармус»)
+            : (D.p != null && (L._pupilDown(D.p) || (D.p === g.localId && !!g.combat?.frozen)));
         if (ov && this._helpless(ov) && !finish) { v.speed = 0; v.mode = 'flourish'; this._face(v, fp, dt); L._ground(v); return true; }
         // where to stand: in the band from him, a slow circling step round him, always on the floor
         const d = Math.hypot(fp.x - v.x, fp.z - v.z);
