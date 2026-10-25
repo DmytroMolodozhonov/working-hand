@@ -455,6 +455,17 @@ export class Hud {
      * the bars or the minimap), and it fades by itself after HINT_MS; a new one replaces it, the same
      * one is not shown again for a while. «ЖДУ КОМАНДУ» stays the small indicator it was.
      */
+    /**
+     * A spell's ANSWER (not advice): shown at once, whatever the setting «Подсказки» and the cast hints say —
+     * «Алохомора» on a door that is not locked: the player thinks the spell failed, it did not.
+     */
+    answer(html, big = true) {
+        const f = this.hintFilter;
+        this.hintFilter = null;
+        this._asAnswer = true;
+        try { this.setVoice(html, true, big); } finally { this.hintFilter = f; this._asAnswer = false; }
+    }
+
     setVoice(html, show = true, big = false) { // (big: a short answer to a spell, a little larger — «Щёлк! …»)
         const v = this.el.voice;
         if (!v) return;
@@ -462,7 +473,7 @@ export class Hud {
         if (show) {
             const hint = !!html && !html.includes('ЖДУ КОМАНДУ');
             if (hint && this.hintFilter && !this.hintFilter(html)) return; // (a spell's advice waits: was it really cast? — Game._castWithHints)
-            if (hint && !hintPolicy.allow(html)) return; // (the setting «Подсказки»: a «how to» hint once / always / never — HintPolicy.js)
+            if (hint && !this._asAnswer && !hintPolicy.allow(html)) return; // (the setting «Подсказки»: a «how to» hint once / always / never — HintPolicy.js)
             if (html === this._lastVoice) {
                 // the same line again: an indicator just stays; a hint only after a while (no flicker)
                 if (!hint || now - this._voiceAt < HINT_AGAIN_MS) { if (!hint || v.classList.contains('on')) this._showVoice(v, hint, big); return; }

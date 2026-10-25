@@ -259,7 +259,8 @@ export class Alohomora {
         const rule = TARGETS[kind]?.[maxima ? 'maxima' : 'plain'];
         if (rule === 'refuse') { if (isFinal) g.hud.setVoice('🔒 Слишком сильный замок — нужна «Алохомора Максима»', true); return null; }
         if (rule !== 'unlock' || !this._isLocked(t)) {
-            if (isFinal) g.hud.setVoice(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Алохомора» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт' : '🔓 Не заперто — возьмитесь за ручку', true, true);
+            // (the spell worked — there was nothing to unlock: said as an answer, always, or the player thinks it failed)
+            if (isFinal) g.hud.answer(kind === 'towerChest' ? '🔮 Сундук академии заперт чарами Мастера — «Алохомора» тут бессильна' : t.chest ? '🔓 Этот сундук не заперт — «Алохомора» ему не нужна, его можно просто открыть' : '🔓 Эта дверь не заперта — «Алохомора» ей не нужна, её можно просто открыть за ручку');
             return null;
         }
         const tired = g.combat.check(name);
@@ -665,7 +666,7 @@ export class Alohomora {
                     const p = x.getPosition();
                     if (Math.abs(p.x - me.x) + Math.abs(p.z - me.z) > 8) continue;
                     if (!this._atLidEdge(x, G)) continue;
-                    if (!x.picked) { if (!(x.shakeT > 0)) { x.rattle(); g.sound?.playClang?.(0.1); this._chestHint(x); } continue; }
+                    if (!x.picked) { if (!(x.shakeT > 0)) { x.rattle(); this._chestHint(x);  // (the lid only rattles: no ringing bar — the author found that tune strange) } continue; }
                     c = this.lift[side] = x;
                     break;
                 }
