@@ -597,13 +597,8 @@ export class HandHold {
     /** My drawn hand moved by `worldDelta` from where it is tracked (it rests on the other hand). */
     _showHand(side, worldDelta) {
         const ch = this.game.character;
-        const hand = ch.getActiveHands()[side];
-        if (!hand?.group?.parent) return;
-        const d = _d.copy(worldDelta).clampLength(0, 0.6);
-        hand.group.parent.getWorldQuaternion(_q).invert();
-        d.applyQuaternion(_q);
-        const rest = hand.group.userData.restOffset;
-        hand.group.position.set((rest?.x || 0) + d.x, (rest?.y || 0) + d.y, ch.BONE_LENGTH_LOWER + (rest?.z || 0) + d.z);
+        // (the whole arm bends to the new place: the wrist stays on the forearm)
+        ch.setHandOffset(side, _d.copy(worldDelta), 0.6);
         this._shown = this._shown || {};
         this._shown[side] = true;
     }

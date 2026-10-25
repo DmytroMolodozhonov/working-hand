@@ -917,12 +917,25 @@ export class VoxelCharacter {
 
         // Hands pushed by collisions spring back (realistic resistance)
         this._relaxKept(dt);
+        this._keepHandsOnArms(dt);
+    }
+
+    /**
+     * Every drawn hand (simple and detailed) sits on the end of its forearm: its place in the elbow's frame is
+     * the rest place (the camera setup's offset) and nothing else. A hand pushed off by someone's code springs
+     * back; off by more than a hand's width (or NaN) — back at once, so the wrist never stays apart.
+     */
+    _keepHandsOnArms(dt) {
         const spring = Math.min(1, 15 * dt);
-        for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand]) {
+        const L = this.BONE_LENGTH_LOWER;
+        for (const h of [this.leftSimplifiedHand, this.rightSimplifiedHand, this.leftDetailedHand, this.rightDetailedHand]) {
             const rest = h.group.userData.restOffset; // set by the camera/hand setup screen
-            h.group.position.x += ((rest ? rest.x : 0) - h.group.position.x) * spring;
-            h.group.position.y += ((rest ? rest.y : 0) - h.group.position.y) * spring;
-            h.group.position.z += (this.BONE_LENGTH_LOWER + (rest ? rest.z : 0) - h.group.position.z) * spring;
+            const tx = rest ? rest.x : 0, ty = rest ? rest.y : 0, tz = L + (rest ? rest.z : 0);
+            const p = h.group.position;
+            const off = Math.abs(p.x - tx) + Math.abs(p.y - ty) + Math.abs(p.z - tz);
+            if (!(off < 0.12)) { p.set(tx, ty, tz); continue; } // (NaN, or far apart: snap)
+            p.x += (tx - p.x) * spring; p.y += (ty - p.y) * spring; p.z += (tz - p.z) * spring;
+            if (off < 1e-4) p.set(tx, ty, tz);
         }
     }
 
