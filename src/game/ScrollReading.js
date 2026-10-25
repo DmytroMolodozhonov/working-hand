@@ -161,18 +161,20 @@ export class ScrollReading {
         }
         const R = this.r;
         // the rollers are in the fists: where the closed fingers are (eased by speed: no tremble)
-        const hs = this._steady(R, 'hs', this._grip(s.side), dt);
+        // (a hand the camera lost for a moment: the parchment stays where it was — it neither jerks nor closes)
+        const lostS = this._lost(s.side), lostO = this._lost(other);
+        const hs = lostS && R.hs ? R.hs : this._steady(R, 'hs', this._grip(s.side), dt);
         if (R.rolling) { this._rollBack(R, hs, dt); return; }
         if (!free) { this._letGo(R); this._rollBack(R, hs, dt); return; }
-        const hoG = this._steady(R, 'ho', ho, dt);
+        const hoG = lostO && R.ho ? R.ho : this._steady(R, 'ho', ho, dt);
         // the fingers on the roller opened: that hand let it go
-        R.letT = curl < OPEN_CURL ? (R.letT || 0) + dt : 0;
+        R.letT = curl < OPEN_CURL && !lostO ? (R.letT || 0) + dt : 0;
         // pulled further apart than the parchment is long: the roller slips out of the fingers
         const dist = hs.distanceTo(hoG);
         R.slipT = dist > MAX_W + SLIP ? (R.slipT || 0) + dt : 0;
         // an arm dropped to the side: it rolls up again (hands brought together only roll it up
         // between them — the other hand still holds its roller, so it does not jump closed and open)
-        R.closeT = !this._up(hs) || !this._up(hoG) ? R.closeT + dt : 0;
+        R.closeT = !lostS && !lostO && (!this._up(hs, s.side) || !this._up(hoG, other)) ? R.closeT + dt : 0;
         if (R.letT > LET_T || R.slipT > 0.15 || R.closeT > 0.4) { this._letGo(R); this._rollBack(R, hs, dt); return; }
         const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
         R.open += (want - R.open) * Math.min(1, dt * 8);
@@ -239,14 +241,21 @@ export class ScrollReading {
         const eye = this._eye(_v4);
         const mid = _v3.addVectors(hs, ho).multiplyScalar(0.5);
         R.c = (R.c || new THREE.Vector3()).copy(mid);
-        // across: from fist to fist (as the reader sees it left → right); the face: to the reader
+        // across: from fist to fist, along ANY line between the hands (sideways, up-down, slanted);
+        // which end reads first: the one that keeps the text nearest to upright (sideways: left → right,
+        // up-down: bottom → top), kept steady (no flipping while the line passes through the tie)
         const across = _v6.subVectors(ho, hs);
         const camRight = _v7.set(1, 0, 0).applyQuaternion(g.camera.quaternion);
-        // (which end is in the first fist: −w/2 when the parchment runs from it to the other hand)
-        R.sSign = 1;
-        if (across.dot(camRight) < 0) { across.negate(); R.sSign = -1; }
+        const camUp = _v8.set(0, 1, 0).applyQuaternion(g.camera.quaternion);
         if (across.lengthSq() < 1e-4) across.copy(camRight);
         across.normalize();
+        const score = across.dot(camRight) + 0.5 * across.dot(camUp);
+        if (R.flip === undefined) R.flip = score < 0;
+        else if (R.flip && score > 0.15) R.flip = false;
+        else if (!R.flip && score < -0.15) R.flip = true;
+        // (which end is in the first fist: −w/2 when the parchment runs from it to the other hand)
+        R.sSign = R.flip ? -1 : 1;
+        if (R.flip) across.negate();
         const n = _v5.subVectors(eye, R.c);
         n.addScaledVector(across, -n.dot(across));
         if (n.lengthSq() < 1e-6) n.set(0, 1, 0).cross(across);
@@ -263,8 +272,12 @@ export class ScrollReading {
         // the camera: over the shoulder, the whole parchment in view
         if (g.cameraMode !== 'fpv' && k > 0.15) {
             const cam = g.camera;
-            const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * cam.aspect);
-            const dist = MAX_W / 0.75 / (2 * Math.tan(hfov / 2));
+            // (the parchment may stand upright: fit its extent along the screen's width AND height)
+            const vt = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2), ht = vt * cam.aspect;
+            const cr = _v1.set(1, 0, 0).applyQuaternion(cam.quaternion), cu = _v2.set(0, 1, 0).applyQuaternion(cam.quaternion);
+            const ex = MAX_W * Math.abs(across.dot(cr)) + PARCH_H * Math.abs(up.dot(cr));
+            const ey = MAX_W * Math.abs(across.dot(cu)) + PARCH_H * Math.abs(up.dot(cu));
+            const dist = Math.max(ex / 0.75 / (2 * ht), ey / 0.8 / (2 * vt), MAX_W * 0.4);
             this.readCam = { at: R.c, from: (this._from || (this._from = new THREE.Vector3())).copy(R.c).addScaledVector(n, dist), k: Math.min(1, (k - 0.15) * 1.5) };
         } else this.readCam = null;
         if (k > 0.6 && !R.told) {
@@ -303,10 +316,19 @@ export class ScrollReading {
     }
 
     /** A hand held up (not hanging at the side). */
-    _up(p) {
+    _up(p, side) {
         const ch = this.game.character;
+        if (!this.input && ch.isArmRaised) return ch.isArmRaised(side);
         ch.group.updateMatrixWorld(true);
-        return _v9.copy(p).applyMatrix4(_m4.copy(ch.group.matrixWorld).invert()).y > 0.2;
+        // (the lower hand of an up-down spread is at the belt: only a hand hanging at the side counts as dropped)
+        return _v9.copy(p).applyMatrix4(_m4.copy(ch.group.matrixWorld).invert()).y > -0.6;
+    }
+
+    /** The camera lost this hand just now. */
+    _lost(side) {
+        if (this.input) return !!this.input(side).lost;
+        const ch = this.game.character;
+        return !!ch.handLost?.(side);
     }
 
     _eye(out) {

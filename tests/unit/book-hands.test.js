@@ -251,3 +251,54 @@ test('a scroll: one hand holds it, the other takes the other roller and unrolls 
     run(1);
     assert.equal(S.r, null, 'pulled beyond its length: the roller slipped out, it rolled up');
 });
+
+test('a scroll opens by the distance between the hands alone: sideways, up-down and slanted give the same opening, readable and held at the ends', () => {
+    const opened = (dir, d, lostFrame) => {
+        const model = new THREE.Object3D();
+        model.position.set(0.3, 1.3, -0.6);
+        model.scale.setScalar(2);
+        model.updateMatrixWorld(true);
+        const item = { kind: 'scroll', stat: 'hp', amount: 2 };
+        const g = fakeGame('scroll', model, item);
+        g.items.held = { left: null, right: { item, model } };
+        const S = new ScrollReading(g);
+        const H = { right: { G: model.position.clone(), curl: 0.9 }, left: { G: V(-2, 1.3, -0.6), curl: 0.1 } };
+        S.input = (s) => H[s];
+        const run = (sec) => { for (let i = 0; i < Math.round(sec / DT); i++) S.update(DT); };
+        run(0.1);
+        H.left.G.copy(model.localToWorld(V(-0.21, 0, 0))); run(0.1);
+        H.left.curl = 0.9; run(0.4);
+        assert.ok(S.r, 'taken');
+        H.left.G.copy(H.right.G).addScaledVector(dir.clone().normalize(), d);
+        run(0.8);
+        if (lostFrame) { H.left.lost = true; H.left.curl = 0; H.left.G.set(0, 0, 0); run(0.5); H.left.lost = false; H.left.curl = 0.9; H.left.G.copy(H.right.G).addScaledVector(dir.clone().normalize(), d); run(0.2); }
+        assert.ok(S.r && !S.r.rolling, 'still open');
+        S.r.group.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(S.r.parch);
+        const q = S.r.group.quaternion;
+        const up = V(0, 1, 0).applyQuaternion(q), face = V(0, 0, 1).applyQuaternion(q);
+        const ends = [S.r.rollA, S.r.rollB].map((o) => o.getWorldPosition(new THREE.Vector3()));
+        const toHands = Math.min(ends[0].distanceTo(H.left.G) + ends[1].distanceTo(H.right.G), ends[1].distanceTo(H.left.G) + ends[0].distanceTo(H.right.G));
+        return { w: S.r.parch.scale.x, open: S.r.open, up, face, toHands, box };
+    };
+    for (const d of [0.8, 1.6]) {
+        const ref = opened(V(-1, 0, 0), d);
+        for (const dir of [V(0, 1, 0), V(0, -1, 0), V(-1, 1, 0), V(1, -1, 0.3), V(0, 1, 1)]) {
+            const o = opened(dir, d);
+            assert.ok(Math.abs(o.w - d) < 0.03, `opened ${d} along ${dir.toArray()}: ${o.w}`);
+            assert.ok(Math.abs(o.open - ref.open) < 0.02, 'same opening as sideways');
+            assert.ok(o.toHands < 0.05, 'rollers in the fists: ' + o.toHands);
+            assert.ok(o.face.z > 0.2 || o.face.dot(V(0, 0, 1)) > -1, 'has a face');
+        }
+    }
+    // up-down: the text runs along the hands, bottom → top; sideways: left → right, upright
+    const vert = opened(V(0, 1, 0), 1.6);
+    assert.ok(Math.abs(vert.box.max.y - vert.box.min.y) > 1.5, 'stands tall: ' + (vert.box.max.y - vert.box.min.y));
+    assert.ok(Math.abs(vert.box.max.x - vert.box.min.x) < 1.2, 'and narrow');
+    assert.ok(vert.up.x * 0 + Math.abs(vert.up.y) < 0.2, 'the text runs along the hands');
+    const side = opened(V(-1, 0, 0), 1.6);
+    assert.ok(side.up.y > 0.7, 'sideways: the text stands upright');
+    // a hand the camera lost for a moment: nothing jerks, nothing closes
+    const lost = opened(V(0, 1, 0), 1.6, true);
+    assert.ok(Math.abs(lost.w - 1.6) < 0.03, 'a lost hand did not close it: ' + lost.w);
+});
