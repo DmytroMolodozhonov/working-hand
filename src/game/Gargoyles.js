@@ -327,9 +327,11 @@ export class Gargoyles {
         if (!t) return false;
         if (t.k === 'p') return !!this._player(t.id);
         if (t.k === 'v') return !!g.castleLife?.byId?.get?.(t.id) && !g.castleLife.byId.get(t.id).dead;
-        if (t.k === 'a') return !t.ref.dead;
-        if (t.k === 'z') return !t.ref.isDead;
-        if (t.k === 's') return !t.ref.dead;
+        const ref = t.ref || t.v?.ref; // (a hunt target is {k, id, key, v}: the body is `v.ref`; a scanned victim has `ref` itself)
+        if (!ref) return false;
+        if (t.k === 'a') return !ref.dead && (g.animals?.list || []).includes(ref); // (a cow taken out of the herd is gone)
+        if (t.k === 'z') return !ref.isDead && !ref.isDying;
+        if (t.k === 's') return !ref.dead;
         return false;
     }
 
@@ -632,8 +634,8 @@ export class Gargoyles {
     _targetOk(o) {
         const t = o.target;
         const v = this.victims.find((q) => q.k === t.k && q.id === t.id);
-        if (!v) return !!this._live(t) && false;
-        if (v.roofed || !this._live(t)) return false;
+        if (!v) return false;
+        if (v.roofed || !this._live(v)) return false;
         if (t.k === 'p' && t.id === o.by && sparesSummoner(o.age)) return false;
         if (hdist(v.pos, o.home) > GARGOYLE.LEASH + 12) return false;
         t.v = v; // (the pack's count is recounted at every look at the victims — `_scan`: it once grew every frame, so one gargoyle shut the prey to all the others)

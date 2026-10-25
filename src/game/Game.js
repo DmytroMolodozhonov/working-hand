@@ -3586,7 +3586,9 @@ export class Game {
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
         if (earth && !duelOnly) this.plants.update(dt);
-        if (earth && !duelOnly) this.gargoyles.update(dt);
+        if (earth && !duelOnly) { // (one system's fault must not end the game: the full stack goes to the console, the game goes on)
+            try { this.gargoyles.update(dt); } catch (e) { if ((this._gargErr = (this._gargErr || 0) + 1) <= 5) console.error('[Gargoyles] update error', e); }
+        }
         if (earth && !duelOnly) this.livingTrees.update(dt);
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._duckVoices();

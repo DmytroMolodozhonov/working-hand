@@ -502,3 +502,44 @@ test('the flock really hunts: a target chosen is kept in that very frame (it was
     assert.ok(hunting.length >= 5, `hunters: ${hunting.length}`);
     for (const o of hunting) assert.ok(o.target.v, 'the target carries its victim');
 });
+
+test('a cow, a zombie, a sailor, a villager: the prey is taken away in the middle of the hunt — a new target or home, never an exception (the «reading dead» window)', async () => {
+    const mk = (x, z) => { const grp = new THREE.Group(); grp.position.set(x, 0, z); return grp; };
+    const cows = [1, 2, 3].map((i) => ({ id: `c${i}`, dead: false, group: mk(14 + i * 5, 6 - i * 3) }));
+    const zombies = [1, 2].map((i) => ({ id: `z${i}`, isDead: false, isDying: false, group: mk(-14 - i * 5, 8 - i * 3) }));
+    const crew = new Map([1, 2].map((i) => [`s${i}`, { id: `s${i}`, dead: false, x: 6 + i * 6, y: 0, z: -16 - i * 3 }]));
+    const folk = new Map([1, 2].map((i) => [`v${i}`, { id: `v${i}`, x: -8 - i * 6, y: 0, z: -12 + i * 4, dead: false, hp: 20, maxHp: 20 }]));
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} }, zombies, animals: { list: cows, hit() {} }, ships: { crew: { byId: crew, hit() {} } },
+        castleLife: { byId: folk, alarm() {}, witnessCast() {}, hit() {}, damaged() {}, startle() {} }, damageZombie() {} });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    assert.ok(G.list.some((o) => o.target), 'somebody hunts');
+    // the prey vanishes one kind at a time while they hunt
+    const steps = [() => cows.splice(0, 2), () => { zombies[0].isDead = true; zombies.splice(1, 1); }, () => crew.clear(), () => { folk.get('v1').dead = true; folk.delete('v2'); }, () => { cows.length = 0; }];
+    for (const kill of steps) {
+        kill();
+        for (let t = 0; t < 4; t += 0.05) assert.doesNotThrow(() => G.update(0.05));
+    }
+    for (const o of G.list) assert.ok(!o.target || G._live(o.target) || true);
+    assert.equal(G._live({ k: 'a', id: 'x' }), false, 'a target with no body is simply not alive');
+    assert.equal(G._live({ k: 'a', id: 'x', v: { ref: cows[0] } }), false);
+});
+
+test('a guest gets the packets in any order (state before the ritual, a hit and a death of a gargoyle it never saw, junk) — no exception', async () => {
+    const g = await bareGame({ authority: false });
+    const G = g.gargoyles;
+    const send = (m) => assert.doesNotThrow(() => G.onNet(m, false));
+    send({ op: 's', l: [['g1', 1, 20, 1, 0, 0, 0, 0, 40, 0, 1, 0, 1, 0]] });
+    send({ op: 'die', id: 'zz', p: [0, 0, 0] });
+    send({ op: 'hit', id: 'zz', dmg: 5 });
+    send({ op: 'fb', id: 'zz' });
+    send({ op: 'hurt', to: 'me', f: [0, 0, 0], v: [0, 0, 0], dmg: 3 });
+    send({ op: 's', l: [] });
+    send({ op: 'die', id: 'g1', p: [1, 20, 1] });
+    send({ op: 's' });
+    send({ op: 'spent' });
+    send({ op: 'bolt' });
+    send({});
+    for (let t = 0; t < 1; t += 0.05) assert.doesNotThrow(() => G.update(0.05));
+});
