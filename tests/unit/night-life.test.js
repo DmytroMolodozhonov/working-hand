@@ -113,3 +113,30 @@ test('night: a deal under way keeps the stall open (up to the grace), then the g
     n._t += DEAL_GRACE + 1; n._releaseHeld(cs);
     assert.equal(loose.size, 0, 'no endless extension');
 });
+
+test('night: «а если» — утро настало, пока держали лавку; оплаченный товар и монеты считаются сделкой; ушёл и бросил — закрытие по времени', async () => {
+    const { CastleTalk } = await import('../../src/game/CastleTalk.js');
+    // оплаченный, но не забранный товар — сделка ещё идёт; пустой прилавок — нет
+    const loose = new Map([[7, { item: { shop: { paid: true } } }], [8, { item: { shop: {} } }]]);
+    const talk = Object.create(CastleTalk.prototype);
+    talk.offer = null; talk.stalls = new Map([['c:s0', { goods: [8] }]]); talk._counterCoins = () => [];
+    talk._stallKey = (d, i) => d.id + ':s' + i; talk.game = { items: { loose } };
+    assert.equal(talk.dealBusy({ id: 'c' }, 0), false, 'неоплаченный товар — это не сделка');
+    talk.stalls.get('c:s0').goods = [7, 8];
+    assert.equal(talk.dealBusy({ id: 'c' }, 0), true, 'оплатил, но не взял');
+    talk.offer = { stall: 'c:s0' }; talk.stalls.get('c:s0').goods = [];
+    assert.equal(talk.dealBusy({ id: 'c' }, 0), true, 'предложена цена');
+    talk.offer = null; talk._counterCoins = () => [{}];
+    assert.equal(talk.dealBusy({ id: 'c' }, 0), true, 'монеты на прилавке (игрок мог уйти — тогда сработает предел 60 с)');
+    // утро: товар не трогаем
+    let phase = 0.8;
+    const items = new Set([1]);
+    const life = { talk: { stalls: new Map([['c:s0', { goods: [1], restockAt: 3 }]]), _stallKey: (d, i) => d.id + ':s' + i, dealBusy: () => true } };
+    life.game = { items: { loose: items, removeLoose: (u) => items.delete(u) }, sync: null, dayCycle: true, dayPhase: () => phase };
+    const n = new NightLife(life);
+    const cs = { def: { id: 'c', stalls: [{}] }, active: new Map() };
+    n._closeStalls(cs);
+    phase = 0.3; n._t += 5; n._releaseHeld(cs);
+    assert.equal(items.size, 1, 'настал день: товар на прилавке остаётся');
+    assert.equal(cs.heldStalls.size, 0);
+});
