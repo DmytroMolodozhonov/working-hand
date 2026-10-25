@@ -94,18 +94,7 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { w, side: catcher, score };
             }
-            // a running book: it flies into the free hand (none free: it lands dazed at the feet)
-            for (const { a, pos } of g.runner?.accioTargets() || []) {
-                const to = _v1.subVectors(pos, hand);
-                const d = to.length();
-                if (d > ACCIO.RANGE || d < 0.3) continue;
-                const ang = dir.angleTo(to.normalize());
-                // (small, fast and running off from a jittery real hand: a wider cone, and it wins
-                // over the other things in it — that is what the hand is after)
-                if (ang > ACCIO.CONE + Math.atan2(1.5, d)) continue;
-                const score = ang * 5 + d * 0.05 - 3;
-                if (!best || score < best.score) best = { rb: a, side, catcher, score, hand };
-            }
+            // (a LIVE running book is not summoned — the author: «бегущая книга только когда мёртвая»; a dead one is a body / a thing lying about, below)
             // a dead animal's body (a cow, a running book…): its meat flies into the free hand (none free: the
             // body is pulled to the feet). Bones (the meat all taken) are nothing to summon: they never stand
             // in the way of the things lying by them (the author: after a pig's meat «Акцио» stopped working)
@@ -168,20 +157,10 @@ export class Accio {
             }
         }
         if (!best) {
-            const rb = this._runnerHint();
             const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
             g.lastCastWhy = 'цель не найдена: ' + why;
-            if (rb) return rb;
             const busy = !free('left') && !free('right');
             return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
-        }
-        if (best.rb) {
-            if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
-            if (best.catcher && g.runner.accioToHand?.(best.rb, best.catcher)) return null;
-            g.runner.accio(best.rb, best.hand);
-            // (a toast: the voice line is taken by «✨ ACCIO» right after)
-            if (!best.catcher) g.hud?.toast?.('🪄 Обе руки заняты — бегущая книга упала у ваших ног. Освободите руку, и «Акцио» принесёт её прямо в неё', 4000);
-            return null;
         }
         if (best.body) {
             if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
@@ -239,19 +218,6 @@ export class Accio {
     }
 
     /** A loose thing flies to the hand (the host moves it; a guest asks the host for it). */
-    /** Nothing summoned, a running book about: why it didn't come. */
-    _runnerHint() {
-        const g = this.game, ch = g.character;
-        const books = g.runner?.accioTargets?.() || [];
-        if (!books.length) return null;
-        const me = ch.group.position;
-        const near = Math.min(...books.map((b) => b.pos.distanceTo(me)));
-        if (near > ACCIO.RANGE) return `🪄 Бегущая книга слишком далеко (${Math.round(near)} м) — «Акцио» достаёт до ${ACCIO.RANGE} м`;
-        const lift = g.currentPose?.armLift;
-        if (!['left', 'right'].some((s) => ch.isArmRaised(s) || (lift && lift[s] > ACCIO.LIFT))) return '🪄 Поднимите руку (или палочку) и покажите на бегущую книгу — и скажите «Акцио»';
-        return '🪄 Бегущая книга не там, куда показывает рука — направьте руку (палочку) прямо на неё';
-    }
-
     _castItem(L, side) {
         const g = this.game;
         for (let i = 0; i < 16; i++) g.fx.spark(L.model.position, i % 2 ? 0xfff2a8 : 0xa8d8ff, 0.1, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.5);

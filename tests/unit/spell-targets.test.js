@@ -108,7 +108,7 @@ test('«Reveal» and «Акцио» see the running book (a creature and a book 
     assert.match(reveal, /runner/, 'Reveal: the running book');
     assert.match(reveal, /books\?\.books/, 'Reveal: book-birds\' books lying about');
     const accio = body(src('src/game/Accio.js'), '    cast() {');
-    assert.match(accio, /accioToHand/, 'Accio: the running book into the free hand');
+    assert.doesNotMatch(accio, /accioToHand|runner\??\.accioTargets/, 'Accio: a LIVE running book does not answer (only a dead one — a body / a thing lying about)');
 });
 
 test('«Алохомора» decides every creature and every lock (Alohomora.js TARGETS — «не действует» is written too, with why)', async () => {
