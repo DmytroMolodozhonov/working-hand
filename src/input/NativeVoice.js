@@ -77,6 +77,8 @@ function wordsSpell(h, d) {
 export const DUEL_FAST = new Set(['Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor']);
 export const DUEL_HOT_FAST = new Set(['Ice', 'Sands']);
 export const DUEL_FIT = 0.5;
+/** ms of quiet after a duel one-word spell that is enough to cast it (the author: the slow cast loses the clash 20:80). */
+export const DUEL_QUIET = 80;
 const duelFast = (spell, d) => DUEL_FAST.has(spell) || (!!d.duel && DUEL_HOT_FAST.has(spell));
 const fitOf = (h, d) => h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity);
 
@@ -102,7 +104,7 @@ export function lookAt(d, seg = {}) {
             if (!again) say = { text: h.text, isFinal: true };
             if (!next.fired || !again) next.fired = name;
         } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= (h.spell.len >= AT_ONCE_LEN ? QUIET_AT_ONCE_LONG : QUIET_AT_ONCE)
-            || (duelFast(h.spell.spell, d) && h.tail >= QUIET_AT_ONCE_LONG && fitOf(h, d) >= DUEL_FIT)) && ((d.far || 0) < 0.25 || d.ref || gameClear(h, d))) {
+            || (duelFast(h.spell.spell, d) && h.tail >= DUEL_QUIET && fitOf(h, d) >= DUEL_FIT)) && ((d.far || 0) < 0.25 || d.ref || gameClear(h, d))) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo —
             // or, when what plays is the game's own voices (it knows their words: GameVoices) and the spell is
             // clear: at the wizards' tower the spell waited for the phrase's end, 2–3 s, behind their talk)

@@ -70,7 +70,7 @@ SEG = {
     "end": 0.85,       # s of quiet that end a phrase (longer than NativeVoice MORE_WAIT: «Protection… Хаус» is one phrase)
     "pre": 0.3,        # s of sound kept before the speech started (the first letters)
     "max": 12.0,       # s: a phrase this long is cut into pieces
-    "partial": 0.14,   # s between the looks at a phrase still being said (was 0.18: a duel is won by milliseconds)
+    "partial": 0.07,   # s between the looks at a phrase still being said (was 0.18, then 0.14: a duel is won by milliseconds; a look starts only when the network is free, so it is back-to-back on a fast computer)
     "window": 3.0,     # s: a look at an unfinished phrase covers its end only (spells are short)
 }
 

@@ -46,7 +46,7 @@ export function formatEntry(e) {
     if (m.running) parts.push('на бегу');
     if (m.gameLine) parts.push(`в это время голос игры: «${String(m.gameLine).slice(0, 50)}»`);
     const src = e.source ? ` [${e.source}]` : '';
-    const fast = e.ok && Number.isFinite(m.lag) ? ` за ${Math.round(m.lag)} мс после последней буквы${Number.isFinite(m.fromStart) ? ` (${Math.round(m.fromStart)} мс от начала слова)` : ''}` : '';
+    const fast = e.ok && Number.isFinite(m.lag) ? ` за ${Math.round(m.lag)} мс после последней буквы${Number.isFinite(m.fromStart) ? ` (${Math.round(m.fromStart)} мс от начала слова)` : ''}${Number.isFinite(m.cost) ? `, нейросеть думала ${Math.round(m.cost)} мс` : ''}` : '';
     const spell = e.spell ? ` → ${e.spell}` : ' → заклинания нет';
     // (a spell that did not work: how long after the word it was tried — a late look at the hand is a gesture that is gone)
     const late = !e.ok && e.spell && Number.isFinite(m.lag) ? ` [слово → проверка: ${Math.round(m.lag)} мс]` : '';
