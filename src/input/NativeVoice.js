@@ -74,7 +74,7 @@ function wordsSpell(h, d) {
  * just a moment (160 ms) of quiet after. «Айс» and «Даст» only while a duel is on or a charge flies at me (outside
  * a duel «Айс Максима» is a spell of its own); «Джолт Максима» grows from a «Джолт» already flying (Game._joltUpgrade).
  */
-export const DUEL_FAST = new Set(['Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor']);
+export const DUEL_FAST = new Set(['Jolt', 'Sapira', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Disarmor', 'Accio', 'Maxima']); // («Акцио» — the wand knocked out is called at once; «Максима» shouted in a clash: each ms counts)
 export const DUEL_HOT_FAST = new Set(['Ice', 'Sands']);
 export const DUEL_FIT = 0.5;
 /** ms of quiet after a duel one-word spell that is enough to cast it (the author: the slow cast loses the clash 20:80). */
