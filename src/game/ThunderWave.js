@@ -13,7 +13,14 @@ export const THUNDER = {
     NEAR: 4, // m (round-and-ahead)
     CONE: 1.2, // rad to each side of the direction
     KIND: 'Thunderwave',
+    ROOF_REACH: 9.5, // m: a roof closer than this over the point stops the bolt (as Gargoyles._roofed)
 };
+
+/** The height of the roof/ceiling over (x, y, z) that stops a bolt, or null (open sky, a hole in the roof). */
+export function roofAbove(game, x, y, z) {
+    const c = game?.collision?.ceilingAt?.(x, z, y);
+    return Number.isFinite(c) && c > y - 0.5 && c < y + THUNDER.ROOF_REACH ? c : null;
+}
 
 /** What it does to whom (one line each; «не действует» is a decision too). */
 export const THUNDER_TARGETS = {
@@ -25,6 +32,7 @@ export const THUNDER_TARGETS = {
     spider: '−10', dragons: '−10 (DragonKinds.ON_DRAGON)', phoenixes: '−10 (Phoenixes.TARGETS)', owls: '−10 (a scroll\'s spell hurts it — Owls.TARGETS)',
     livingTrees: '−10 (thunder is like lightning: MIGHTY_ON_TREES)', bookBirds: 'knocked down',
     iceCastle: '−10 to the queen, her monsters and every snowman (a scroll spell: IceQueen.iceDamage)',
+    roof: 'ONE rule for everyone (roofAbove): a solid roof/ceiling within ROOF_REACH over the point (house, castle, tower, cave, canopy, a floor above) takes the bolt — it strikes the roof, nobody under it is hurt or shoved (players, zombies, people, animals, spider, dragons, Queen, trees alike); the roof of the Temple of the Gods and enchanted stone are roofs too; a hole in the roof lets it through; someone on top of the roof is struck. Not a divine spell, so a roof stops it. Below a ship\'s deck: the ship has no roof in collision — the deck is open to it (no change)',
     world: 'glass breaks, carts are chipped (the ray of the old fan: Game.birdRay); walls and mountains stop it',
 };
 
@@ -53,16 +61,18 @@ export function thunderZone(game, o, d, casterId, deal) {
     const bodies = duel._bodies(skip);
     for (const b of bodies) {
         if (b.kind === 'p' || b.kind === 'z') continue;
-        let at = null;
+        let at = null, hitRoof = null;
         for (const k of [0.5, 0, 1]) {
             const x = b.a.x + (b.b.x - b.a.x) * k, y = b.a.y + (b.b.y - b.a.y) * k, z = b.a.z + (b.b.z - b.a.z) * k;
             if (!inThunderZone(o, d, x, y, z)) continue;
             const p = { x, y, z };
             if (!clearWay(game, o, p)) continue;
+            const roof = roofAbove(game, x, Math.max(y, b.b.y), z);
+            if (roof !== null) { hitRoof = hitRoof || { x, y: roof, z, roof: true }; continue; } // (the bolt strikes the roof; the creature is untouched)
             at = p;
             break;
         }
-        if (!at) continue;
+        if (!at) { if (hitRoof) hits.push(hitRoof); continue; }
         hits.push(at);
         if (deal) strike(game, b.kind, b.id, at, o, skip);
     }

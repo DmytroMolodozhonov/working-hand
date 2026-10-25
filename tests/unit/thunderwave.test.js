@@ -113,3 +113,40 @@ test('voice: a lone «удар» / «молния» no longer casts it', () => {
     for (const w of ['тандервейв', 'thunderwave', 'гром', 'сандер вейв']) assert.equal(matchSpell(w), 'Thunderwave', w);
     for (const w of ['удар', 'молния', 'молнию']) assert.notEqual(matchSpell(w), 'Thunderwave', w);
 });
+
+// ---- a roof takes the bolt (roofAbove): ONE rule for every creature
+import { roofAbove } from '../../src/game/ThunderWave.js';
+
+test('under a roof: not hurt; open air, a hole, on top of the roof: hurt', () => {
+    // roofs: a house over x∈[-10,-4] (2 m up), a canopy over x∈[4,8] (6 m up), a cave over x∈[12,16] (3 m up);
+    // a two-storey house over x∈[20,26]: floor 1 ceiling at 8, roof at 16; a hole in the roof at x∈[-7,-6] is open.
+    const ceil = (x, z, y) => {
+        if (x >= -7 && x <= -6) return Infinity;
+        if (x >= -10 && x <= -4) return 7;
+        if (x >= 4 && x <= 8) return 8;
+        if (x >= 12 && x <= 16) return 6;
+        if (x >= 20 && x <= 26) return y < 8 ? 8 : y < 16 ? 16 : Infinity;
+        return Infinity;
+    };
+    const { game, seen } = world();
+    game.collision = { ceilingAt: ceil };
+    const at = (x, y) => roofAbove(game, x, y, 0);
+    assert.equal(at(-9, 2), 7, 'room: roofed');
+    assert.equal(at(6, 2), 8, 'under a canopy of columns: roofed');
+    assert.equal(at(14, 2), 6, 'cave: roofed');
+    assert.equal(at(22, 10), 16, 'second floor under the roof: roofed');
+    assert.equal(at(22, 17), null, 'on top of the roof: open');
+    assert.equal(at(-6.5, 2), null, 'a hole in the roof: open');
+    assert.equal(at(0, 2), null, 'outdoors: open');
+    assert.equal(roofAbove(game, 30, 2, 0), null);
+    assert.equal(roofAbove({ collision: { ceilingAt: () => 40 } }, 0, 2, 0), null, 'a roof farther than ROOF_REACH does not stop it');
+});
+
+test('the zone: a creature under a roof is not struck, one outside is', () => {
+    const { game, seen } = world();
+    // bodies lie on x = 0: roof only over z∈[-13,-9] (the villager at -10 and the animal at -12)
+    game.collision = { ceilingAt: (x, z) => (z <= -9 && z >= -13 ? 6 : Infinity) };
+    const pts = thunderZone(game, new THREE.Vector3(0, 2, 0), new THREE.Vector3(0, 0, -1), 'me', true);
+    assert.deepEqual(seen.map((s) => s[0]).sort(), ['D', 'c', 's']);
+    assert.equal(pts.filter((p) => p.roof).length, 2, 'two bolts strike the roof');
+});

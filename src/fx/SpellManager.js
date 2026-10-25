@@ -692,7 +692,11 @@ export class SpellManager {
         }
         this.fx.lightFlash(origin, 0xaaddff, 3, 0.3, 50);
         // one zone for everybody (ThunderWave.js): −10 to each creature in it, a bolt from above on each; nothing through a wall
-        const strike = (p) => { // (the bolt: from the sky to the one struck)
+        const roofHit = (x, y, z) => this.hooks.roofAt?.(x, y, z) ?? null;
+        const strike = (p) => { // (the bolt: from the sky to the one struck; a roof over it takes the bolt instead)
+            if (p.roof) return roofStrike(p);
+            const roof = roofHit(p.x, p.y, p.z);
+            if (roof !== null) return roofStrike({ x: p.x, y: roof, z: p.z });
             _a.set(p.x, p.y, p.z);
             let prev = _b.set(p.x + (Math.random() - 0.5) * 6, p.y + 28, p.z + (Math.random() - 0.5) * 6);
             for (let s = 1; s <= 5; s++) {
@@ -702,11 +706,20 @@ export class SpellManager {
             }
             this.fx.spark(_a, 0xcfe8ff, 0.2, _c.set(0, 2, 0), 0.5);
         };
+        const roofStrike = (p) => { // (the roof/ceiling takes it: a flash and sparks on the underside, a crack; no harm below)
+            let prev = _b.set(p.x + (Math.random() - 0.5) * 2, p.y + 3, p.z + (Math.random() - 0.5) * 2);
+            this.fx.bolts.add(prev.clone(), new THREE.Vector3(p.x, p.y, p.z), 0.2);
+            for (let i = 0; i < 6; i++) this.fx.spark(_a.set(p.x, p.y - 0.15, p.z), 0xcfe8ff, 0.15, _c.set((Math.random() - 0.5) * 5, -1 - Math.random() * 2, (Math.random() - 0.5) * 5), 0.4);
+            this._sound('playThunder', 0.35);
+        };
         const d = direction.clone().normalize();
+        if (this.hooks.roofAt && casterId === this.localId && roofHit(origin.x, origin.y, origin.z) !== null) this.hooks.roofHint?.();
         for (const z of this.zombies) {
             if (z.isDead) continue;
             const zp = z.group.position, mid = _a.set(zp.x, zp.y + 1.5, zp.z);
             if (!inThunderZone(origin, d, mid.x, mid.y, mid.z) || !this.hooks.clearWay?.(origin, mid)) continue;
+            const zr = roofHit(mid.x, mid.y, mid.z);
+            if (zr !== null) { roofStrike({ x: mid.x, y: zr, z: mid.z }); continue; }
             strike(mid);
             if (this.auth) {
                 z.damageCooldown = 0;
@@ -722,6 +735,7 @@ export class SpellManager {
             const dist = to.length();
             const dirTo = to.clone().normalize();
             if (!inThunderZone(origin, d, pos.x, pos.y, pos.z)) return null;
+            if (roofHit(pos.x, pos.y, pos.z) !== null) return null; // (under a roof: no shove)
             return dirTo.setY(0).normalize().multiplyScalar(thunderPush(dist)).setY(1);
         };
         if (this.auth) this.hooks.creatures?.('Thunderwave', casterId, wave, { from: origin, noSlide: (c) => c.isAnimal /* (Animals throws its own) */, skip: (c) => !this.hooks.clearWay?.(origin, wavePoint(c)) });
@@ -729,6 +743,7 @@ export class SpellManager {
             if (!p.local) continue;
             const v = this.hooks.clearWay?.(origin, p.center()) === false ? null : wave(p.center());
             if (v) { p.hit('Thunderwave', origin, v); strike(p.center()); }
+            else if (inThunderZone(origin, d, p.center().x, p.center().y, p.center().z) && this.hooks.clearWay?.(origin, p.center()) !== false) strike(p.center()); // (under a roof: only the strike on the roof)
         }
     }
 
