@@ -37,6 +37,7 @@ import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 import { wandPowerMul } from './Enchant.js';
 import { pickRevealTarget } from './RevealTarget.js';
+import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
 import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
 
 const _v = new THREE.Vector3();
@@ -558,7 +559,7 @@ export class WandMagic {
         } else if (this.wand) { target = this.wand; at = tip.clone(); } // nothing near at all: the wand's own secrets
         if (!target) { g.hud.setVoice('🔮 Укажите рукой на предмет (или возьмите его) и скажите «Раскрой свои секреты»', true); return false; }
         // (a thing in my other hand: the card is right before the eyes — half the size, or it is too big to read: the author)
-        this._showHologram(info || describeItem(target), at, !!pick.thing?.held);
+        this._showHologram(info || withSpellDescription(describeItem(target), target), at, !!pick.thing?.held);
         return true;
     }
 
@@ -577,11 +578,11 @@ export class WandMagic {
         const words = [];
         let y = 0;
         for (const line of info.lines) {
+            if (!holoPlain(line).trim()) continue; // (an empty line — a scroll without a kind — leaves no gap)
             let px = PAD;
-            for (const part of line.split(/(<b>.*?<\/b>)/)) {
-                const bold = part.startsWith('<b>');
+            for (const { text: part, bold } of holoParts(line)) {
                 x.font = bodyFont(bold);
-                for (const word of part.replace(/<\/?b>/g, '').split(/(\s+)/)) {
+                for (const word of part.split(/(\s+)/)) {
                     if (!word) continue;
                     const w = x.measureText(word).width;
                     if (px + w > MAXX && px > PAD) { y += LH; px = PAD; if (!word.trim()) continue; }
@@ -618,7 +619,7 @@ export class WandMagic {
             x.save(); x.shadowColor = glow; x.shadowBlur = 10; x.fillStyle = fill; x.fillText(t, px, py); x.restore();
         };
         x.textAlign = 'center'; x.font = 'bold 58px sans-serif';
-        let title = info.title.replace(/<[^>]+>/g, '');
+        let title = holoPlain(info.title);
         while (title.length > 4 && x.measureText(title).width > W - PAD * 2) title = title.slice(0, -2) + '…';
         text(title, W / 2, 96, '#ffffff', '#7fe3ff');
         x.fillStyle = col; x.fillRect(PAD, 118, W - PAD * 2, 4); // a bright rule under the title

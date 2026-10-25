@@ -322,7 +322,7 @@ export class Inventory {
     store(item) {
         if (item && (this.slots.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
-        if (i < 0) { this.game.hud.toast?.('🎒 Все ячейки заняты'); return false; }
+        if (i < 0) { this.game.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
         this.slots[i] = item;
         this._render();
         return true;
@@ -416,7 +416,7 @@ export class Inventory {
      */
     pocketRight(only = null) {
         const g = this.game, dom = g.dom || 'right';
-        if (g.boards?.hold) { g.hud.toast?.('🏄 Доска слишком большая для кармана'); return; }
+        if (g.boards?.hold) { g.hud.toast?.('🏄 Доска не помещается в карман: её можно только держать в руках'); return; }
         const sides = only ? [only] : [dom, dom === 'right' ? 'left' : 'right'];
         // a sword, an axe, a hammer, a bow, a shield never go into a pocket: only on the back (over the shoulder)
         for (const side of sides) {
@@ -424,7 +424,7 @@ export class Inventory {
             const h = g.items?.held[side];
             if (w || (h && BACK_KINDS.has(h.item.kind))) {
                 const name = w ? (w.type === 'axe' ? 'Топор' : 'Меч') : ITEM_INFO[h.item.kind]?.name || 'Это';
-                g.hud.toast?.(`${name} не влезет в карман — заведите руку с ним за плечо, чтобы убрать за спину`, 1800);
+                g.hud.toast?.(`🎒 ${name} не помещается в карман. Заведите руку с ним за плечо — так вы уберёте его за спину`, 3200);
                 return;
             }
         }
@@ -434,7 +434,7 @@ export class Inventory {
             if (!h || (h.item.kind === 'wand' && side === dom)) continue;
             if (h.item.kind === 'coins' && this.purse.canTie(h.item)) { this.purse._tieOn(side); return; } // (money goes to the pouches on the belt)
             // (no room in the slots: it stays in the hand — a pouch, a scroll never vanish into a full pocket)
-            if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Все ячейки заняты'); return; }
+            if (!this.canStore(h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; }
             this._handsOff(side);
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
@@ -561,7 +561,7 @@ export class Inventory {
         }
         const h = g.items?.held[side];
         if (h && h.item.kind === 'wand') {
-            if (!this.canStore(h.item)) { this.game.hud.toast?.('🎒 Все ячейки заняты — палочка остаётся в руке'); return false; } // (never lost)
+            if (!this.canStore(h.item)) { this.game.hud.toast?.('🪄 Палочка не помещается в карман: все ячейки заняты, она остаётся в руке'); return false; } // (never lost)
             const it = g.items.releaseHand(side);
             if (this.inHand?.item === it) this.inHand = null;
             const free = this.slots.findIndex((x) => !x);
@@ -661,7 +661,7 @@ export class Inventory {
             if (i === this.slots.length) { // the pouch cell: the best pouch of the belt comes into the hand
                 if (!this.purse.any) continue;
                 const g = this.game;
-                if (g.items?.held[side] || g.weapons.hands[side].held) { this.game.hud.toast?.('🎒 Руки заняты — достать нечем'); return false; }
+                if (g.items?.held[side] || g.weapons.hands[side].held) { this.game.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); return false; }
                 this._putBackHand(side);
                 this.selected = -1;
                 this._next = i;
@@ -680,7 +680,7 @@ export class Inventory {
             const ih = this.inHand;
             if (!ih || ih.side !== side && ih.kind !== 'res') {
                 this._cyc = null;
-                this.game.hud.toast?.('🎒 Руки заняты — достать нечем'); // (never skipped silently)
+                this.game.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); // (never skipped silently)
                 return false;
             }
             this._cyc = { side, slot: i, item: ih.kind === 'item' ? ih.item : null, weapon: ih.kind === 'weapon' ? ih.weapon : null, res: it.kind === 'res' };
@@ -752,7 +752,7 @@ export class Inventory {
                 if (this.inHand?.weapon === t.w) this.inHand = null;
                 if (this._storeWeapon(t.w)) this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
             } else {
-                if (!this.canStore(t.h.item)) { g.hud.toast?.('🎒 Все ячейки заняты'); return; } // (it stays in the hand)
+                if (!this.canStore(t.h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; } // (it stays in the hand)
                 const it = g.items.releaseHand(side);
                 if (this.inHand?.item === it) this.inHand = null;
                 if (this.storeItem(it)) this._fx(`${ITEM_INFO[it.kind]?.icon || '🎒'} ${ITEM_INFO[it.kind]?.name || 'Предмет'} за спиной`, side);
@@ -942,7 +942,7 @@ export class Inventory {
         if (hs) { this._cyc = null; this.purse._tieOn(hs); this._render(); return; }
         if (!this.purse.any) { g.hud.toast?.('💰 Мешочков на поясе нет'); return; }
         const free = sides.find((sd) => !g.items?.held[sd] && !g.weapons.hands[sd].held);
-        if (!free) { g.hud.toast?.('🎒 Руки заняты — достать нечем'); return; }
+        if (!free) { g.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); return; }
         this._putBackHand(free);
         this.selected = -1;
         this._next = this.slots.length;

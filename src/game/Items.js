@@ -50,6 +50,7 @@ import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { StickTracker, stickDirection } from '../input/RealStick.js';
+import { boxTopUnder } from './ItemSupport.js';
 
 /**
  * A thing just let go of (put on a counter, dropped) is not taken back by the same moment's
@@ -666,7 +667,10 @@ export class ItemSystem {
         }
         if (col.pushOutOfRock?.(p) === false) this._liftOutOfSolid(p, L); // (buried where no side is free — an arena's floor, a thick stand: never left to sink through it)
         const gy = col.groundAt ? col.groundAt(p.x, p.z, p.y + 0.5) : col.groundY(p.x, p.z);
-        const floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
+        let floor = col.inRock?.(p.x, p.y, p.z) ? Math.min(gy, p.y - 0.12) : Math.min(gy, p.y + 0.6);
+        // furniture with a solid box (a bed, a chest, a stool…): its top is a floor too — a thing let go over a bed lies on the
+        // mattress, it does not hover in it or sink through it (the author: a bow thrown on a bed went through it)
+        floor = Math.max(floor, boxTopUnder(col, p.x, p.z, p.y));
         // a good laid out on a stall's counter: the counter itself is its floor, as long as the counter stands
         // (the ground under it is no judge of that — a good that sank once below the top would never come up again)
         return L?.perch && this._perched(L.perch, p, 1) ? Math.max(floor, L.perch.top) : floor;
@@ -1167,7 +1171,7 @@ export class ItemSystem {
         const p = g.character.group.position.clone().add(_v.set(0, 1, 0));
         if (this.auth || !g.sync) this.spawnLoose(item, p, { vel: _v2.set(0, 1, 0) });
         else g.sync.itemThrow?.(item, p, _v2.set(0, 1, 0));
-        g.hud.toast?.('🎒 Все ячейки заняты');
+        g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка');
     }
 
     _eat(dt, ch) {

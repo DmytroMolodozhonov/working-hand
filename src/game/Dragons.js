@@ -784,7 +784,7 @@ export class Dragons {
             inv._render?.();
         }
         n -= put;
-        if (put > 0) { g.sound?.playCoins?.(); g.hud?.toast?.(`💰 +${put} монет ${where}${n > 0 ? ` — ${n} не влезли и упали` : ''}`, 1800); this.log.push('pour:' + put); }
+        if (put > 0) { g.sound?.playCoins?.(); g.hud?.toast?.(`💰 +${put} монет ${where}${n > 0 ? ` — ${n} не поместились и упали на землю` : ''}`, 1800); this.log.push('pour:' + put); }
         if (n <= 0) return;
         // the rest falls: in a lair — back to its heap (rolling down to it); elsewhere — a little heap of coins on the ground
         for (let i = 0; i < Math.min(10, n); i++) g.fx?.spark(hp, 0xffd34a, 0.05, _v.set((Math.random() - 0.5) * 1.5, -1 - Math.random() * 2, (Math.random() - 0.5) * 1.5), 0.6);

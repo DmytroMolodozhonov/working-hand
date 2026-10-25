@@ -125,3 +125,12 @@ test('getting up from a bed against a wall: in the bed\'s own room, never in the
     // the ends of the bed are free: it stands there (in the room) when its sides are not
     assert.ok(s2 && Math.abs(s2.z) > 2.75, `at an end of the bed: ${JSON.stringify(s2)}`);
 });
+
+test('lying in a bed by day: the hero is told why sleep does not come (morning / day / evening), at night nothing', async () => {
+    const { noSleepWhy } = await import('../../src/game/BedRules.js');
+    assert.match(noSleepWhy(0.05, false), /сейчас утро. Спать можно только ночью/);
+    assert.match(noSleepWhy(0.35, false), /сейчас день/);
+    assert.match(noSleepWhy(0.65, false), /слишком рано/);
+    assert.equal(noSleepWhy(0.9, true), null);
+    for (const ph of [0, 0.2, 0.3, 0.6, 0.74]) assert.ok(!/[<>]/.test(noSleepWhy(ph, false)));
+});

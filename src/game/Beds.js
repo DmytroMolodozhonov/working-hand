@@ -46,7 +46,7 @@ import { PVP } from './Combat.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { bedModel, paintBed, woolModel, logsModel, BED } from './BedModels.js';
 import { stockOf, stockTake, cleanClaim } from './Stock.js';
-import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, countMaterials, BED_RECIPE, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed } from './BedRules.js';
+import { BED_COLORS, DEFAULT_BED_COLOR, parseColor, bedColorName, checkRecipe, planConsumption, countMaterials, BED_RECIPE, everyoneAsleep, RECIPE_RADIUS, bedStandSpot, homeBed, noSleepWhy } from './BedRules.js';
 import { floorUnder } from './Wreck.js';
 import { DropGate, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
 
@@ -470,6 +470,7 @@ export class Beds {
         if (!b || this.game.monster?.active) return; // (the monster form does not fit a bed)
         this.lying = b.id;
         this._upT = 0; this._bedJump = this.game.currentPose?.jump?.jumps; this._stillT = 0; this._healT = 0; this._waitSaid = false;
+        this._noSleepSaid = this._isNight() || !this.game.dayCycle; // (laid down by day: once, when the hero keeps still and sleep does not come)
         this._holdLying(b);
         const fresh = this.home?.id !== b.id;
         this.setHome(b);
@@ -549,7 +550,15 @@ export class Beds {
                 const moving = ch.isRunning || ch.handVelocity.right.length() > 2.5 || ch.handVelocity.left.length() > 2.5;
                 this._stillT = moving ? 0 : this._stillT + dt;
                 if (jumped && this._upT >= UP_AFTER) { this.standUp(); g.hud.setVoice('🛏️ Вы встали с кровати', true); }
-                else if (!this._isNight() && !this.sleeping) this._heal(dt);
+                else if (!this._isNight() && !this.sleeping) {
+                    this._heal(dt);
+                    // lying still by day, trying to sleep: it does not come — say why, once (an answer, whatever the setting «Подсказки»)
+                    if (!this._noSleepSaid && this._stillT >= STILL_NEEDED) {
+                        this._noSleepSaid = true;
+                        const why = noSleepWhy(g.dayPhase?.() ?? 0, false);
+                        if (why) g.hud.answer(why);
+                    }
+                } else this._noSleepSaid = true; // (the night came while lying: no talk of «can't sleep» when it ends)
             }
         } else if (!dead && !g.flight?.active && performance.now() - this._standAt > 2000) {
             // up on a bed (jumped or stepped onto its mattress): the hero lies down at once

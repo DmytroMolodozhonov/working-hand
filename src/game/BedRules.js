@@ -205,3 +205,15 @@ export function homeBed(home, beds, genStands = () => true) {
     if (home.gen && genStands(home)) return { bed: home };
     return { gone: true };
 }
+
+/**
+ * Why a hero lying still in a bed does not fall asleep (sleep is only for the night): the words by the time of day,
+ * or null at night. `phase` — Game.dayPhase(): 0–0.25 morning, 0.25–0.5 day, 0.5–0.75 evening, 0.75–1 night.
+ */
+export function noSleepWhy(phase, night) {
+    if (night) return null;
+    const p = ((phase % 1) + 1) % 1;
+    if (p < 0.25) return '😴 Вы не можете заснуть: сейчас утро. Спать можно только ночью';
+    if (p < 0.5) return '😴 Вы не можете заснуть: сейчас день. Спать можно только ночью';
+    return '😴 Вы не можете заснуть: слишком рано, ночь ещё не наступила. Дождитесь ночи — спать можно только ночью';
+}

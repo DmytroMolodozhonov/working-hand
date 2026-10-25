@@ -377,14 +377,15 @@ export class Hud {
             el = this._toastEl = document.createElement('div');
             el.id = 'hud-toast';
             el.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:60;pointer-events:none;'
-                + 'padding:5px 14px;border-radius:14px;background:rgba(0,0,0,.45);color:#fff;font-size:15px;'
-                + 'transition:opacity .35s;opacity:0;white-space:nowrap';
+                + 'padding:10px 22px;border-radius:16px;background:rgba(0,0,0,.72);color:#fff;font-size:22px;font-weight:600;line-height:1.3;'
+                + 'text-align:center;max-width:min(86vw,900px);text-shadow:0 1px 3px #000;box-shadow:0 2px 14px rgba(0,0,0,.5);'
+                + 'transition:opacity .35s;opacity:0'; // (big and readable: «лук не помещается» used to be a small grey line nobody saw)
             document.body.appendChild(el);
         }
         el.textContent = text;
         el.style.opacity = '1';
         clearTimeout(this._toastTimer);
-        this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
+        this._toastTimer = setTimeout(() => { el.style.opacity = '0'; }, Math.max(ms, 2600));
     }
 
     /** The big count in the middle of the screen (the duel arena's «3 — 2 — 1 — Бой!»): grows and fades by itself. */
