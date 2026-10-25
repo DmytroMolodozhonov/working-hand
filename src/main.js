@@ -1371,8 +1371,16 @@ let servers = null; // null: not checked yet / no connection
 let lastSeenServers = '';
 let pickedServer = null;
 let refreshing = false;
+let mpBusy = false;
+const mpUnavailable = () => mpBusy || net.active || starting || !!game?.active;
+function updateMpButtons() {
+    for (const id of ['mp-join-btn', 'mp-enter-btn', 'mp-host-btn', 'mp-private-btn']) {
+        const button = $(id);
+        if (button) button.disabled = mpUnavailable() || (id === 'mp-enter-btn' && !!button.dataset.full);
+    }
+}
 async function refreshServers() {
-    if (refreshing || net.active || (game && game.active) || window.__ZNS_NO_WORLD_PROBE__) { renderServers(); return; }
+    if (refreshing || mpBusy || net.active || (game && game.active) || window.__ZNS_NO_WORLD_PROBE__) { renderServers(); return; }
     refreshing = true;
     try { servers = await net.listServers(mpServer.value); } catch (e) { servers = null; }
     refreshing = false;
@@ -1408,32 +1416,40 @@ function renderServers() {
     const full = sv.players.length >= (sv.max || MAX_PLAYERS);
     if (sv.noInfo) {
         info.innerHTML = `<h4>Сервер ${escapeHtml(sv.code)}</h4><div class="mp-info-mode">Сервер есть, но прямой связи с ним пока нет — попробуйте войти: если не выйдет, игра скажет почему.</div>
-            <button id="mp-enter-btn" class="mp-btn">▶ Войти</button>`;
+            <button id="mp-enter-btn" class="mp-btn" ${mpUnavailable() ? 'disabled' : ''}>${mpBusy ? '⏳ Подключаемся...' : '▶ Войти'}</button>`;
         $('mp-enter-btn').onclick = () => joinRoom(sv.code);
         return;
     }
     info.innerHTML = `<h4>${escapeHtml(sv.name || 'Сервер')}</h4><div class="mp-info-mode">${modeTitle(sv.mode)}${sv.playing ? ' · идёт игра' : ''}</div>
         <div class="mp-info-players">${sv.players.map((n) => `<div>🧙 ${escapeHtml(n)}</div>`).join('')}</div>
-        <button id="mp-enter-btn" class="mp-btn" ${full ? 'disabled' : ''}>${full ? 'Заполнен' : '▶ Войти'}</button>`;
+        <button id="mp-enter-btn" class="mp-btn" ${full ? 'data-full="true"' : ''} ${full || mpUnavailable() ? 'disabled' : ''}>${full ? 'Заполнен' : mpBusy ? '⏳ Подключаемся...' : '▶ Войти'}</button>`;
     $('mp-enter-btn').onclick = () => joinRoom(sv.code);
 }
 setTimeout(refreshServers, 800);
 setInterval(() => { if ($('tab-mp')?.classList.contains('active')) refreshServers(); }, 8000);
-$('mp-refresh-btn').addEventListener('click', () => { servers = null; refreshing = false; renderServers(); refreshServers(); });
+$('mp-refresh-btn').addEventListener('click', () => { if (refreshing || mpUnavailable()) return; servers = null; renderServers(); refreshServers(); });
 $('mp-create-open').addEventListener('click', () => $('mp-create').classList.toggle('hidden'));
 
-async function joinRoom(code) {
+async function joinRoom(code, byCode = false) {
+    if (mpUnavailable()) return;
+    mpBusy = true;
+    updateMpButtons();
+    renderServers();
     net.stopProbe();
-    setMpStatus('Подключаемся...');
-    net.serverName = servers?.find((x) => x.code === code)?.name || 'Сервер';
-    lastJoin = { code, server: mpServer.value, name: net.serverName, byCode: false };
+    setMpStatus('⏳ Подключаемся к серверу...');
+    net.serverName = byCode ? 'Закрытая игра' : servers?.find((x) => x.code === code)?.name || 'Сервер';
+    lastJoin = { code, server: mpServer.value, name: net.serverName, byCode };
     try {
         await net.join(code, playerName(), mpServer.value);
         if (!net.active) return; // (the server was full)
-        setMpStatus('✅ Подключено! Входим в игру...');
+        setMpStatus(byCode ? '✅ Подключено! Ждём, когда хост начнёт игру...' : '✅ Подключено! Входим в игру...');
         renderPlayers();
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
+    } finally {
+        mpBusy = false;
+        updateMpButtons();
+        renderServers();
     }
 }
 
@@ -1444,14 +1460,17 @@ const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
 
 // Create a server: it takes a free place in the list and the game starts at once
 $('mp-host-btn').addEventListener('click', async () => {
+    if (mpUnavailable()) return;
+    mpBusy = true;
+    updateMpButtons();
     net.stopProbe();
     const srvName = ($('mp-srv-name').value || '').trim().slice(0, 24) || `Сервер ${playerName()}`;
     try { localStorage.setItem('zns-srv-name', srvName); } catch (e) { /* ignore */ }
-    const savedId = $('mp-world')?.value || '';
-    const saved = savedId ? await loadWorld(savedId) : null;
-    const mode = saved ? saved.mode : $('mp-mode').value;
     setMpStatus('Создаём сервер...');
     try {
+        const savedId = $('mp-world')?.value || '';
+        const saved = savedId ? await loadWorld(savedId) : null;
+        const mode = saved ? saved.mode : $('mp-mode').value;
         await net.host(playerName(), mpServer.value, null, { slots: true });
         net.info = { name: srvName, mode, playing: false };
         setMpStatus(`🟢 Сервер создан — он виден всем в списке. Код: <span class="mp-code-big">${net.code}</span> (если друг не видит сервер — пусть войдёт по коду). Запускаем...`);
@@ -1462,17 +1481,23 @@ $('mp-host-btn').addEventListener('click', async () => {
         startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName, ...mpWorldOpts() });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
+    } finally {
+        mpBusy = false;
+        updateMpButtons();
     }
 });
 
 // A game by code: works even when the server list can't be seen (a bad line, a VPN)
 $('mp-private-btn').addEventListener('click', async () => {
+    if (mpUnavailable()) return;
+    mpBusy = true;
+    updateMpButtons();
     net.stopProbe();
-    const savedId = $('mp-world')?.value || '';
-    const saved = savedId ? await loadWorld(savedId) : null;
-    const mode = saved ? saved.mode : $('mp-mode').value;
     setMpStatus('Создаём игру по коду...');
     try {
+        const savedId = $('mp-world')?.value || '';
+        const saved = savedId ? await loadWorld(savedId) : null;
+        const mode = saved ? saved.mode : $('mp-mode').value;
         const code = await net.host(playerName(), mpServer.value);
         net.info = { name: 'Игра по коду', mode, playing: false };
         setMpStatus(`🔑 Код вашей игры: <span class="mp-code-big">${code}</span><br>Скажите его другу: «Мультиплеер» → «Войти по коду». Запускаем игру...`);
@@ -1484,6 +1509,9 @@ $('mp-private-btn').addEventListener('click', async () => {
         showCodeInGame(code);
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
+    } finally {
+        mpBusy = false;
+        updateMpButtons();
     }
 });
 
@@ -1497,19 +1525,11 @@ function showCodeInGame(code) {
     }, 1000);
 }
 
-$('mp-join-btn').addEventListener('click', async () => {
+$('mp-join-btn').addEventListener('click', () => {
+    if (mpUnavailable()) return;
     const code = (mpCode.value || '').trim().toUpperCase();
     if (code.length < 4) { setMpStatus('Введите код комнаты от друга.'); return; }
-    setMpStatus('Подключаемся...');
-    net.serverName = 'Закрытая игра';
-    lastJoin = { code, server: mpServer.value, name: net.serverName, byCode: true };
-    try {
-        await net.join(code, playerName(), mpServer.value);
-        setMpStatus('✅ Подключено! Ждём, когда хост начнёт игру...');
-        renderPlayers();
-    } catch (e) {
-        setMpStatus('❌ ' + escapeHtml(e.message));
-    }
+    joinRoom(code, true);
 });
 
 net.on('peer-join', ({ name }) => {
@@ -1538,6 +1558,7 @@ net.on('version', (ev) => {
         }
         setMpStatus('❌ ' + escapeHtml('У вас с сервером разные версии игры, и скачать нужную не получилось — проверьте интернет и попробуйте войти ещё раз'));
         renderPlayers();
+        updateMpButtons();
     })();
 });
 // …and here it is again, with the server's version: join it
@@ -1560,6 +1581,7 @@ net.on('disconnected', ({ reason }) => {
     } else {
         setMpStatus('❌ ' + escapeHtml(reason));
         renderPlayers();
+        updateMpButtons();
     }
 });
 net.on('message', (msg) => {

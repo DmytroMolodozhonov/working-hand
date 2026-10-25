@@ -1022,7 +1022,7 @@ test('server list: «Создать сервер» starts a game that the other 
     await b.context.close();
 });
 
-test('no direct path between the computers: the server still shows in the list, joining says the direct link failed; another version is told to update', async () => {
+test('no direct path: unconfirmed slots stay hidden, joining by code explains the failure; another version is told to update', async () => {
     const a = await openPlayer('Хост2');
     await a.page.evaluate(() => { document.getElementById('mp-mode').value = 'creative'; });
     await a.page.click('#mp-create-open');
@@ -1033,15 +1033,16 @@ test('no direct path between the computers: the server still shows in the list, 
     const b = await openPlayer('ДругЗаРоутером');
     await b.page.evaluate(() => { window.__ZNS_ICE_POLICY__ = 'relay'; });
     await b.page.click('#mp-refresh-btn');
-    await wf(b.page, () => /Сервер SRV/.test(document.getElementById('mp-server-list').textContent), null, 40000);
-    await b.page.click('.mp-server-row');
-    await b.page.click('#mp-enter-btn');
+    await wf(b.page, () => /Нет связи|нет ни одного/.test(document.getElementById('mp-server-list').textContent), null, 40000);
+    assert.equal(await b.page.locator('.mp-server-row').count(), 0, 'unconfirmed offers are not servers');
+    const code = await ev(a.page, () => window.__zns.net.code);
+    await b.page.fill('#mp-code', code);
+    await b.page.click('#mp-join-btn');
     await wf(b.page, () => document.getElementById('mp-status').textContent.includes('❌'), null, 45000);
     const said = await b.page.textContent('#mp-status');
     assert.match(said, /напрямую/, 'it says the direct link failed, not «no internet»: ' + said);
     // a friend with another version of the game: told to update
     const c = await openPlayer('СтараяВерсия');
-    const code = await ev(a.page, () => window.__zns.net.code);
     await c.page.evaluate(() => { window.__zns.net.version = 'f00dbad'; });
     const hostVer = await ev(a.page, () => window.__zns.net.version);
     await c.page.fill('#mp-code', code);

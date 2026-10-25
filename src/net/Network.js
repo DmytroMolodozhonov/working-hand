@@ -98,6 +98,10 @@ export class Network extends Emitter {
         this.relayed = false; // a link goes through the slow go-between (TURN): send less
         this.joinedAt = new Map(); // host: peerId -> when it came
         this.talked = new Set(); // host: peers that sent anything but pings (their game runs)
+        this._joining = null; // one pending join owns its peer, timeout and callbacks
+        this._serverKey = '';
+        this._probes = new Set();
+        this._joinSession = randomCode(16); // one menu instance, not the lasting pid shared by two tabs
     }
 
     get isHost() { return this.role === 'host'; }
@@ -166,7 +170,15 @@ export class Network extends Emitter {
             return;
         }
         conn.on('open', () => {
+            if (!this.isHost) { conn.close(); return; }
             const id = conn.peer;
+            // Repeated channels/attempts from one menu must never create extra avatars.
+            // Separate browser tabs still work: they have different join sessions.
+            const session = conn.metadata?.joinSession;
+            if (this.conns.has(id) || (session && [...this.conns.values()].some((c) => c.metadata?.joinSession === session))) {
+                try { conn.close(); } catch (e) { /* ignore */ }
+                return;
+            }
             const theirs = conn.metadata?.v || '';
             netLog(`игрок «${String(conn.metadata?.name || '?').slice(0, 16)}» соединился напрямую (его версия ${theirs || 'старая'}, моя ${this.version || '?'})`);
             if (this.version && theirs && theirs !== this.version) { // another version of the game: things would go wrong in odd ways
@@ -194,6 +206,7 @@ export class Network extends Emitter {
             this.broadcast({ t: 'players', players: this.playerList() });
         });
         conn.on('data', (msg) => {
+            if (this.conns.get(conn.peer) !== conn) return; // a rejected or obsolete channel owns no player
             this.lastSeen.set(conn.peer, performance.now());
             if (!msg || typeof msg !== 'object') return;
             if (msg.t === 'ping') return;
@@ -203,7 +216,7 @@ export class Network extends Emitter {
             this.emit('message', msg);
             if (msg.relay) this.broadcast(msg, conn.peer);
         });
-        const drop = () => this._dropClient(conn.peer);
+        const drop = () => { if (this.conns.get(conn.peer) === conn) this._dropClient(conn.peer); };
         conn.on('close', drop);
         conn.on('error', drop);
         this._watchIce(conn, drop);
@@ -273,36 +286,55 @@ export class Network extends Emitter {
      * game, or the direct link between the two computers.
      */
     join(code, name, server) {
+        const clean = String(code || '').trim().toUpperCase();
+        const serverKey = (server || '').trim();
+        if (this._joining) {
+            if (this._joining.code === clean && this._joining.server === serverKey) return this._joining.promise;
+            return Promise.reject(Object.assign(new Error('Подключение уже идёт — дождитесь результата'), { type: 'connecting' }));
+        }
+        if (this.active) {
+            if (this.isClient && this.code === clean && this._serverKey === serverKey) return Promise.resolve(this.localId);
+            return Promise.reject(Object.assign(new Error('Вы уже подключены к игре'), { type: 'connected' }));
+        }
         this.leave();
         this.name = name || 'Игрок';
         const Peer = this._PeerCtor();
-        const clean = String(code || '').trim().toUpperCase();
+        const attempt = { code: clean, server: serverKey, promise: null, cancel: null };
+        this._joining = attempt;
         const t0 = performance.now();
         const sec = () => ((performance.now() - t0) / 1000).toFixed(1) + ' с';
         netLog(`вход по коду ${clean}${server ? ' (свой сервер связи ' + server + ')' : ''}, версия ${this.version || '?'}`);
-        return new Promise((resolve, reject) => {
-            const peer = new Peer(parseServer(server));
+        attempt.promise = new Promise((resolve, reject) => {
+            let peer;
+            try { peer = new Peer(parseServer(server)); } catch (err) { this._joining = null; reject(err); return; }
             let settled = false;
             const stage = { broker: false, ice: '', candidates: 0 };
             const fail = (err) => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);
+                if (this._joining === attempt) this._joining = null;
                 netLog(`вход не удался (${sec()}): ${err?.type || ''} — сервер связи ${stage.broker ? 'ответил' : 'НЕ ответил'}, прямое соединение: ${stage.ice || 'не началось'}, адресов найдено ${stage.candidates}`);
                 peer.destroy();
                 reject(Object.assign(new Error(humanError(err)), { type: err?.type, stage }));
             };
             // no answer in time: say whose fault — the connection server, or the direct link
             const timer = setTimeout(() => fail({ type: stage.broker ? 'p2p' : 'timeout' }), JOIN_WAIT);
-            peer.on('error', (err) => fail(Object.assign(err || {}, { type: err?.type })));
+            attempt.cancel = () => fail({ type: 'cancelled' });
+            peer.on('error', (err) => {
+                if (!settled) fail(err);
+                else if (this.peer === peer && this.isClient) this.emit('status', humanError(err));
+            });
             peer.on('open', (myId) => {
+                if (settled || this._joining !== attempt || peer.destroyed) return;
                 stage.broker = true;
                 netLog(`сервер связи ответил (${sec()}), ищем игру ${clean}…`);
-                const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name, v: this.version, pid: this.pid } });
+                const conn = peer.connect(PREFIX + clean, { reliable: true, serialization: 'json', metadata: { name: this.name, v: this.version, pid: this.pid, joinSession: this._joinSession } });
                 const lost = () => {
+                    if (!settled) { fail({ type: 'p2p' }); return; }
                     if (this.role !== 'client' || this.hostConn !== conn) return;
-                    this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });
                     this.leave();
+                    this.emit('disconnected', { reason: 'Хост закрыл игру или связь потеряна' });
                 };
                 conn.on('iceStateChanged', (st) => {
                     stage.ice = st;
@@ -311,15 +343,16 @@ export class Network extends Emitter {
                 const pc = conn.peerConnection;
                 if (pc) pc.addEventListener('icecandidate', (e) => { if (e.candidate) stage.candidates++; });
                 conn.on('open', () => {
+                    if (settled || this._joining !== attempt || peer.destroyed) { try { conn.close(); } catch (e) { /* ignore */ } return; }
                     clearTimeout(timer);
                     settled = true;
+                    this._joining = null;
                     netLog(`соединились с хостом напрямую (${sec()})`);
-                    peer.off('error', fail);
-                    peer.on('error', (err) => this.emit('status', humanError(err)));
                     this.peer = peer;
                     this.hostConn = conn;
                     this.role = 'client';
                     this.code = clean;
+                    this._serverKey = serverKey;
                     this.localId = myId;
                     this.lastSeen.set('H', performance.now());
                     this._startHeartbeat();
@@ -327,18 +360,17 @@ export class Network extends Emitter {
                     resolve(myId);
                 });
                 conn.on('data', (msg) => {
+                    if (this.hostConn !== conn || this.peer !== peer || !this.isClient) return;
                     this.lastSeen.set('H', performance.now());
                     if (!msg || typeof msg !== 'object' || msg.t === 'ping') return;
                     if (msg.t === 'full') {
-                        this.role = null; this.hostConn = null;
-                        try { peer.destroy(); } catch (e) { /* ignore */ }
+                        this.leave();
                         this.emit('disconnected', { reason: `Сервер заполнен (${msg.max || MAX_PLAYERS} из ${msg.max || MAX_PLAYERS})` });
                         return;
                     }
                     if (msg.t === 'version') {
                         netLog(`у хоста другая версия игры: ${msg.host}, у меня ${this.version}`);
-                        this.role = null; this.hostConn = null;
-                        try { peer.destroy(); } catch (e) { /* ignore */ }
+                        this.leave();
                         // (the menu gets the host's version for this computer at once, then joins again)
                         const ev = { host: String(msg.host || ''), full: String(msg.full || ''), handled: false };
                         this.emit('version', ev);
@@ -357,6 +389,7 @@ export class Network extends Emitter {
                 this._watchIce(conn, lost);
             });
         });
+        return attempt.promise;
     }
 
     /**
@@ -368,55 +401,70 @@ export class Network extends Emitter {
         const key = server || '';
         const id = PREFIX + code;
         return new Promise((resolve) => {
-            let asked = false, finished = false;
-            const done = (r) => { if (finished) return; finished = true; clearTimeout(timer); resolve(r); };
-            // no "not found" from the connection server in time: the game IS there, only the direct
-            // link to it didn't open (yet) — show it anyway (joining may still work, or say why not)
-            const timer = setTimeout(() => done(asked ? { online: true, noInfo: true, players: [] } : { online: false, unknown: true, players: [] }), 9000);
+            let finished = false, helper = null, conn = null, onOpen = null;
+            const unknown = () => done({ online: false, unknown: true, players: [] });
+            const onErr = (err) => {
+                if (err?.type === 'peer-unavailable') {
+                    if (!String(err.message || '').endsWith(id)) return;
+                    done({ online: false, players: [] });
+                } else if (!helper?.open || helper.destroyed) unknown();
+            };
+            const done = (r) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(timer);
+                if (onOpen) helper?.off('open', onOpen);
+                helper?.off('error', onErr);
+                helper?.off('close', unknown);
+                helper?.off('disconnected', unknown);
+                this._probes.delete(unknown);
+                try { conn?.close(); } catch (e) { /* ignore */ }
+                resolve(r);
+            };
+            // Merely sending an offer proves nothing: empty slots may not answer at all.
+            // Only an established data channel (or info) proves that a host exists.
+            const timer = setTimeout(() => done(conn?.open
+                ? { online: true, noInfo: true, players: [] }
+                : { online: false, unknown: true, players: [] }), 9000);
             const go = (peer) => {
-                asked = true;
-                const onErr = (err) => {
-                    // (several checks share one helper: only this room's "not found" is ours — SRV1 is not SRV10)
-                    if (err?.type === 'peer-unavailable') {
-                        if (!String(err.message || '').endsWith(id)) return;
-                        peer.off('error', onErr);
-                        done({ online: false, players: [] });
-                        return;
-                    }
-                    if (peer.open && !peer.destroyed) return; // (something else on a working helper: not ours)
-                    peer.off('error', onErr);
-                    done({ online: false, unknown: true, players: [] });
-                };
-                peer.on('error', onErr);
-                const conn = peer.connect(id, { reliable: true, serialization: 'json', metadata: { probe: true } });
+                if (finished || peer.destroyed) return;
+                try { conn = peer.connect(id, { reliable: true, serialization: 'json', metadata: { probe: true } }); }
+                catch (e) { unknown(); return; }
                 conn.on('data', (msg) => {
-                    if (msg?.t !== 'info') return;
-                    peer.off('error', onErr);
+                    if (finished || msg?.t !== 'info') return;
                     done({ online: true, players: msg.players || [], playing: !!msg.playing, name: msg.name || '', mode: msg.mode || '', max: msg.max || MAX_PLAYERS });
-                    try { conn.close(); } catch (e) { /* ignore */ }
                 });
-                setTimeout(() => { peer.off('error', onErr); try { conn.close(); } catch (e) { /* ignore */ } }, 9500);
+                conn.on('error', unknown);
+                conn.on('close', unknown);
+            };
+            const use = (peer) => {
+                helper = peer;
+                this._probes.add(unknown);
+                peer.on('error', onErr);
+                peer.on('close', unknown);
+                peer.on('disconnected', unknown);
+                onOpen = () => go(peer); // PeerJS open passes its id, not the peer object
+                if (peer.open) go(peer); else peer.once('open', onOpen);
             };
             const p = this._probePeer;
             if (p && !p.destroyed && !p.disconnected && this._probeKey === key) {
-                if (p.open) go(p); else p.once('open', () => go(p)); // (still connecting)
+                use(p);
                 return;
             }
-            try { p?.destroy(); } catch (e) { /* ignore */ }
+            this.stopProbe();
             // (a switched-off server is normal: no error logs; asking a room needs no go-between —
             // the connection server alone tells that the room is there)
             const opts = parseServer(server);
             const peer = new Peer({ ...opts, debug: 0, config: { ...opts.config, iceServers: ICE.filter((s) => !s.username) } });
             this._probePeer = peer;
             this._probeKey = key;
-            peer.once('open', () => go(peer));
             // the helper couldn't reach the connection server at all
             peer.on('error', (err) => {
                 if (peer.open) return;
                 if (this._probePeer === peer) this._probePeer = null;
                 try { peer.destroy(); } catch (e) { /* ignore */ }
-                done({ online: false, unknown: true, players: [] });
             });
+            use(peer);
         });
     }
 
@@ -430,6 +478,7 @@ export class Network extends Emitter {
 
     /** Stop checking the shared server (when playing). */
     stopProbe() {
+        for (const finish of [...this._probes]) finish();
         try { this._probePeer?.destroy(); } catch (e) { /* ignore */ }
         this._probePeer = null;
     }
@@ -487,8 +536,8 @@ export class Network extends Emitter {
             } else if (this.isClient) {
                 this._sendConn(this.hostConn, { t: 'ping' });
                 if (now - (this.lastSeen.get('H') || now) > TIMEOUT) {
-                    this.emit('disconnected', { reason: 'Нет связи с хостом' });
                     this.leave();
+                    this.emit('disconnected', { reason: 'Нет связи с хостом' });
                 }
             }
         }, 2000);
@@ -501,16 +550,22 @@ export class Network extends Emitter {
     }
 
     leave() {
+        this._joining?.cancel?.();
+        this._joining = null;
         clearInterval(this._heartbeat);
         this._heartbeat = null;
-        for (const c of this.conns.values()) { try { c.close(); } catch (e) { /* ignore */ } }
+        // Invalidate ownership before closing: close/error callbacks must not re-enter leave().
+        this.role = null;
+        const conns = [...this.conns.values()];
         this.conns.clear();
+        for (const c of conns) { try { c.close(); } catch (e) { /* ignore */ } }
         if (this.hostConn) { try { this.hostConn.close(); } catch (e) { /* ignore */ } }
         this.hostConn = null;
         if (this.peer) { try { this.peer.destroy(); } catch (e) { /* ignore */ } }
         this.peer = null;
         this.role = null;
         this.code = null;
+        this._serverKey = '';
         this.localId = 'solo';
         this.players.clear();
         this.lastSeen.clear();
@@ -531,6 +586,7 @@ function humanError(err) {
         case 'p2p': return 'Игра друга найдена, но ваши компьютеры не смогли соединиться напрямую: мешает роутер, провайдер, VPN или антивирус у одного из вас. Попробуйте: 1) пусть сервер создаст другой игрок; 2) другой интернет (например, раздать с телефона); 3) выключить VPN/прокси';
         case 'version': return 'У вас с хостом разные версии игры — закройте игру и запустите «Обновить и запустить игру» (обоим)';
         case 'socket-error': case 'socket-closed': return 'Соединение с сервером прервано';
+        case 'cancelled': return 'Подключение отменено';
         default: return err?.message || String(err || 'Ошибка сети');
     }
 }

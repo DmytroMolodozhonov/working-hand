@@ -3043,11 +3043,18 @@ export class Game {
         // (in a protected house: a spell from outside doesn't reach me — nor the others inside)
         const from = this.wards?.list.size ? this.wards.casterAt(casterId) : null;
         const safe = (p) => !!from && this.wards.shields(from, p);
+        // One owned capsule per descriptor, refreshed from the actual pose on every update.
+        // Duel's pooled body list must not be retained by a flying spell.
+        const bodyOf = (id) => {
+            const body = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
+            return () => this.duel?._bodyOf('p', id, body) || null;
+        };
         if (!c.dead && casterId !== 'local' && casterId !== me && !safe(c.center())) {
             out.push({
                 local: true,
                 id: me,
                 center: () => c.center(),
+                body: bodyOf(me),
                 hit: (kind, from, push) => (kind === 'Bounce' ? c.shieldFactor(from) >= 1 && (c._blocked(from), false) : c.hitBySpell(kind, from, casterId, push)),
                 blocks: (from) => c.shieldFactor(from) >= 1,
                 chill: (amount, from) => c.chillBy(amount, from, casterId),
@@ -3059,6 +3066,7 @@ export class Game {
                 local: false,
                 id,
                 center: () => r.position.clone().add(_v1.set(0, 0.6, 0)),
+                body: bodyOf(id),
                 hit: (kind, from) => { if (r.shieldBlocks(from)) r.showBlock(from, this.fx); return true; },
                 blocks: (from) => r.shieldBlocks(from),
                 chill: () => true,

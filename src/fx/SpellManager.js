@@ -31,11 +31,25 @@ import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords } from '../game/PentagramWords.js';
+import { segmentToSegment } from '../game/SegmentContact.js';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+
+/** Sweep the whole frame through the live body, not just its end through a center sphere. */
+function playerOnWay(player, from, to, width, legacyRadius) {
+    const body = player.body?.();
+    if (body) {
+        const hit = segmentToSegment(from, to, body.a, body.b);
+        return hit.dist <= body.r + width ? hit : null;
+    }
+    if (player.body) return null; // the live player has died or left
+    const center = player.center();
+    const hit = segmentToSegment(from, to, center, center);
+    return hit.dist <= legacyRadius ? hit : null;
+}
 
 /** Bombardo blast radius; «Бомбардо Максима» is MAXIMA_POWER times stronger. */
 export const BOMBARDO_RADIUS = 3.6;
@@ -1341,9 +1355,11 @@ export class SpellManager {
         ball.position.copy(origin);
         const velocity = direction.clone().multiplyScalar(25.0);
         const sanded = new Set();
+        const prev = new THREE.Vector3();
         this.spells.push({
             life: 3.0,
             onUpdate: (spell, dt) => {
+                prev.copy(ball.position);
                 ball.position.addScaledVector(velocity, dt);
                 ball.rotation.x += dt * 5;
                 ball.rotation.y += dt * 5;
@@ -1373,13 +1389,15 @@ export class SpellManager {
                     }
                 }
                 for (const p of players) {
-                    if (ball.position.distanceTo(p.center()) >= 1.5) continue;
+                    const hit = playerOnWay(p, prev, ball.position, 0.4, 1.5);
+                    if (!hit) continue;
+                    ball.position.lerpVectors(prev, ball.position, hit.s);
                     if (p.blocks(origin)) {
                         // Bounces off the shield
                         velocity.multiplyScalar(-0.8);
                         ball.position.addScaledVector(velocity, dt * 2);
                         p.hit('Sands', origin);
-                        continue;
+                        return;
                     }
                     if (p.local) p.hit('Sands', origin);
                     for (let k = 0; k < 20; k++) {
@@ -1525,12 +1543,8 @@ export class SpellManager {
         }, { from: origin });
         for (const p of this._players(casterId)) {
             if (!p.local) continue;
-            _b.copy(p.center());
-            _c.subVectors(_b, origin);
-            const proj = _c.dot(direction);
-            if (proj < 0 || proj > len) continue;
-            _c.copy(origin).addScaledVector(direction, proj);
-            if (_c.distanceTo(_b) < 1.5) p.hit('Sapira', origin);
+            const beamEnd = origin.clone().addScaledVector(direction, len);
+            if (playerOnWay(p, origin, beamEnd, 0.3, 1.5)) p.hit('Sapira', origin);
         }
     }
 
@@ -1613,16 +1627,20 @@ export class SpellManager {
                 if (bh) { explodeAt(bh); spell.life = 0; return; }
                 // Players: a shield sends the orb back, otherwise it blows up on them
                 for (const p of players) {
+                    const hit = playerOnWay(p, prev, orb.position, size * 0.45, 1.2 + size * 0.45);
+                    if (!hit) continue;
                     const pc = p.center();
-                    if (orb.position.distanceTo(pc) > 1.2 + size * 0.45) continue;
                     if (p.blocks(origin)) {
-                        _a.subVectors(orb.position, pc).normalize();
+                        // Reflect from the incoming side even when a slow frame crossed the entire body.
+                        _a.subVectors(prev, pc);
+                        if (_a.lengthSq() < 1e-9) _a.copy(vel).negate();
+                        _a.normalize();
                         vel.reflect(_a).multiplyScalar(0.9);
                         orb.position.copy(pc).addScaledVector(_a, 1.4 + size * 0.5);
                         p.hit('Bounce', origin);
-                        continue;
+                        return;
                     }
-                    explodeAt(orb.position); spell.life = 0; return;
+                    explodeAt(_b.lerpVectors(prev, orb.position, hit.s)); spell.life = 0; return;
                 }
                 // Zombies
                 for (const z of this.zombies) {
