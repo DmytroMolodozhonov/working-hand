@@ -272,6 +272,7 @@ export class NativeVoice {
         if (Number.isFinite(d.q) && Number.isFinite(meta.to) && !r.heard.spell) meta.end = meta.to - d.q * 1000;
         const sp = r.heard.sure && r.heard.spell;
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
+        meta.refChecked = !!d.ref && !r.echo; // (the speakers' own rows were compared with the microphone's: no echo of them — SpellPhrase.trustedFar)
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
         if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
         else if (d.final && !r.seg.fired) {

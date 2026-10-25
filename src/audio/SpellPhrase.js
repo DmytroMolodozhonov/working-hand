@@ -310,6 +310,20 @@ export function bodyNoise(h) {
     return null;
 }
 
+/**
+ * How much of a look was «the speakers' sound» for the checks of soundTrust. The look that carried the speakers' own rows (`ref`) and
+ * in which no echo of them was found (the spells found in the microphone are not what the speakers said) is read as nearly clean:
+ * the penalty for «колонки звучали» is for a sound that might be the friend's — here it was compared and it is not (the author:
+ * «Дискорд не должен мешать»: a spell shouted over a friend on Discord needed a clearer fit than one in silence).
+ * @param {{far?: number, ref?: any}} d  the event (voice_native.py)
+ * @param {{echo?: any}} r  what lookAt made of it
+ */
+export function trustedFar(d, r) {
+    const far = d?.far || 0;
+    return d?.ref && !r?.echo ? Math.min(far, TRUSTED_FAR) : far;
+}
+export const TRUSTED_FAR = 0.3;
+
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',

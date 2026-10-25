@@ -41,6 +41,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SR = 16000
 FRAME = SR // 100  # 10 ms: the echo canceller's step
 LETTERS = 34  # the network's letters: space, а…я, blank
+FAR_TAIL = 0.6  # s after a voice in the speakers the cleaned sound still decides (its echo tail is no speech of mine)
+REF_EVERY = 0.25  # s of sound between two partial looks that also read the speakers (the network twice on a look)
 LEAD = 0.03  # s the speakers' sound is given to the echo canceller ahead of the microphone's
 
 # the network (an open model, MIT license) as the sherpa-onnx project publishes it on GitHub: the file's
@@ -930,6 +932,59 @@ class NativeVoice:
                 pipe.seg["next"] = t_now + SEG["partial"]
 
 
+class FdafEcho:
+    """Our own echo canceller beside WebRTC's: a partitioned frequency-domain adaptive filter (the speakers' sound → what the room
+    made of it → taken off the microphone) that only SUBTRACTS — it never gates. WebRTC's canceller (AEC3) squeezes the microphone
+    while the speakers play (double talk): a spell shouted over a friend's voice on Discord came out as nothing («Дискорд мешает»,
+    voicebench: 5 of 20 spells at loud speakers against 16 of 20 with silence). The filter keeps the near voice and removes the
+    linear part of the echo; `process` takes 10 ms (FRAME samples) of microphone and of speakers, gives the cleaned 10 ms.
+    Partitions: PARTS × FRAME samples of the room's response (the delay of the sound card + the reverberation)."""
+
+    def __init__(self, np, parts=64, mu=0.35, leak=1.0):
+        self.np, self.P, self.mu = np, parts, mu
+        B = FRAME
+        self.B, self.N = B, 2 * B
+        nb = B + 1
+        self.W = np.zeros((parts, nb), np.complex64)          # the filter, per partition
+        self.X = np.zeros((parts, nb), np.complex64)          # the speakers' last spectra
+        self.xprev = np.zeros(B, np.float32)
+        self.px = np.full(nb, 1e-4, np.float32)               # smoothed power of the speakers per bin
+        self.pe = np.full(nb, 1e-4, np.float32)
+        self.pos = 0
+
+    def process(self, m, r):
+        np, B = self.np, self.B
+        xblk = np.concatenate([self.xprev, r]).astype(np.float32)
+        self.xprev = r.astype(np.float32).copy()
+        Xn = np.fft.rfft(xblk)
+        self.pos = (self.pos - 1) % self.P
+        self.X[self.pos] = Xn
+        # echo estimate: sum over partitions W_k * X_{k back}
+        idx = (self.pos + np.arange(self.P)) % self.P
+        Yh = np.sum(self.W * self.X[idx], axis=0)
+        y = np.fft.irfft(Yh, self.N)[B:].astype(np.float32)
+        e = m - y
+        # power of the speakers (smoothed), for the normalised step
+        pxn = (np.abs(Xn) ** 2).astype(np.float32)
+        self.px = 0.9 * self.px + 0.1 * pxn
+        E = np.fft.rfft(np.concatenate([np.zeros(B, np.float32), e]))
+        pen = (np.abs(E) ** 2).astype(np.float32)
+        self.pe = 0.9 * self.pe + 0.1 * pen
+        # step: smaller when the error is far above what the echo estimate explains (the near voice speaks — double talk)
+        pyh = (np.abs(Yh) ** 2).astype(np.float32)
+        far_on = float(np.sum(pxn)) > 1e-4 * B
+        if far_on:
+            mu = self.mu * np.clip((pyh + 0.1 * self.pe) / (self.pe + 1e-9), 0.1, 1.0)
+            ptot = np.sum(np.abs(self.X) ** 2, axis=0).astype(np.float32) + 1e-3 * B  # (the speakers' power over all partitions: the exact normaliser)
+            G = (mu / ptot).astype(np.float32) * E
+            # per partition gradient, constrained to the first half in time
+            Gk = np.conj(self.X[idx]) * G[None, :]
+            gt = np.fft.irfft(Gk, self.N, axis=1)
+            gt[:, B:] = 0.0
+            self.W += np.fft.rfft(gt, axis=1).astype(np.complex64)
+        return np.clip(e, -1.0, 1.0)
+
+
 class Pipeline:
     """The work on every 10 ms of sound: the echo out, the level, speech or not, the phrases; and the
     look at a phrase (the network). The live loop and the tests (offline) drive it the same way."""
@@ -959,16 +1014,24 @@ class Pipeline:
         self.floor = -70.0  # the microphone's background after the echo canceller (dB)
         self.recent = collections.deque(maxlen=31)  # (clean dB, the speakers speak?) of the last ~1 s, per 32 ms
         self.far_now = False
+        self.far_last = -10 ** 9  # the end (sample) of the last 32 ms in which the speakers spoke
+        self.trace = None       # a list: the tests / voicebench ask for (time, cleaned dB, raw dB, speech probability, speakers speak?, a phrase open?) per 32 ms
+        self.fdaf = None        # FdafEcho or None (ZNS_VOICE_AEC_MODE: webrtc | fdaf | both)
+        self.use_webrtc = True  # WebRTC's canceller on the microphone (its echo cancelling is off in mode fdaf: only the high-pass filter)
+        self.ref_at = -10 ** 9  # the end (sample) of the last partial look that carried the speakers' rows
         self.lv, self.lv_raw, self.lv_far = [], [], []
 
     def frame(self, m, r):
         """10 ms of the microphone (m) and of the speakers (r) → the looks to make (phrases just ended)."""
         np, rtc = self.np, self.rtc
         db = lambda x: 20 * np.log10(np.sqrt(np.mean(x * x)) + 1e-9)  # noqa: E731
-        if self.aec:
+        m_in = m
+        if self.fdaf is not None and self.aec:
+            m_in = self.fdaf.process(m, r)  # (our linear canceller first: it never squeezes the near voice)
+        if self.aec and self.use_webrtc:
             fr = rtc.AudioFrame((np.clip(r, -1, 1) * 32767).astype(np.int16).tobytes(), SR, 1, FRAME)
             self.apm.process_reverse_stream(fr)
-        fm = rtc.AudioFrame((np.clip(m, -1, 1) * 32767).astype(np.int16).tobytes(), SR, 1, FRAME)
+        fm = rtc.AudioFrame((np.clip(m_in, -1, 1) * 32767).astype(np.int16).tobytes(), SR, 1, FRAME)
         self.apm.process_stream(fm)
         c = np.frombuffer(bytes(fm.data), dtype=np.int16).astype(np.float32) / 32768.0
         i = self.n % self.L
@@ -990,6 +1053,8 @@ class Pipeline:
                 self.far_sp.append((self.far_at, sp))
                 self.far_at += 512
                 self.far_now = sp
+                if sp:
+                    self.far_last = self.far_at
         self.vad_buf = np.concatenate([self.vad_buf, c])
         self.raw_buf = np.concatenate([self.raw_buf, m])
         while len(self.vad_buf) >= 512:
@@ -1007,9 +1072,13 @@ class Pipeline:
             # a voice in the speakers: the cleaned sound decides (and only louder than the trace the
             # canceller leaves of them); else the plain microphone (the canceller squeezes my voice
             # while the sea, the wind or music play)
-            cleaned = self.aec and self.far_now
+            # (and for FAR_TAIL s after the voice in the speakers: its fading tail and room echo, down at −55…−70 dB, the plain microphone's
+            #  VAD took for speech — it held a phrase open and glued the friend's talk to my spell; the cleaned sound has no such tail)
+            cleaned = self.aec and (self.far_now or self.vad_at - self.far_last < FAR_TAIL * SR)
             p = pc if cleaned else pm
             self.recent.append((cdb, self.far_now))
+            if self.trace is not None:
+                self.trace.append((round(self.vad_at / SR, 3), round(cdb, 1), round(mdb, 1), round(p, 2), bool(self.far_now), self.seg is not None))
             if self.seg is None:
                 if p >= SEG["on"] and (cdb >= max(-58.0, self.floor + 8) if cleaned else mdb >= -62.0):
                     self.seg_id += 1
@@ -1074,9 +1143,12 @@ class Pipeline:
             ev["peak"] = round(float(20 * np.log10(np.sqrt((fr * fr).mean(axis=1)).max() + 1e-9)), 1)
             ev["snr"] = round(ev["peak"] - floor, 1)  # how far my voice stands above the noise
         ev["floor"] = round(float(floor), 1)
-        # (a look at a phrase still being said while the speakers play gets none: the page then waits
-        # for the phrase's end, which gets them — half the work while a friend talks over Discord)
-        if loud >= 3 and (job["final"] or ev["far"] < 0.25):
+        # (a look at a phrase still being said while the speakers play gets the speakers' rows too, at most every REF_EVERY s: with
+        # them the page can tell a friend's echo from my own spell at once, and does not wait for the phrase's end — the author:
+        # «Дискорд не должен мешать»; without them the spell waited ~1 s more than with nothing playing)
+        ref_due = job["final"] or ev["far"] < 0.25 or (b - self.ref_at) >= int(REF_EVERY * SR)
+        if loud >= 3 and ref_due:
+            self.ref_at = b
             rl = self.ctc.logprobs(self.refl[np.arange(max(0, lo), b) % self.L])
             ev["refT"] = int(rl.shape[0])
             ev["ref"] = _pack(np, rl)
@@ -1092,8 +1164,11 @@ def offline(mic, ref=None, aec=True, partial_every=SEG["partial"], threads=2):
     ctc_dir, vad_path = VOICE.model_paths()
     ctc = CtcNet(ctc_dir, threads=threads)
     vad = Vad(vad_path)
-    apm = rtc.AudioProcessingModule(echo_cancellation=aec and ref is not None, noise_suppression=False, high_pass_filter=True)
+    mode = os.environ.get("ZNS_VOICE_AEC_MODE", "webrtc")
+    apm = rtc.AudioProcessingModule(echo_cancellation=aec and ref is not None and mode != "fdaf", noise_suppression=False, high_pass_filter=True)
     pipe = Pipeline(np, rtc, ctc, vad, apm, aec and ref is not None, vad_far=Vad(vad_path) if ref is not None else None, vad_raw=Vad(vad_path))
+    if mode in ("fdaf", "both"):
+        pipe.fdaf = FdafEcho(np)
     ref = np.zeros(len(mic), np.float32) if ref is None else np.concatenate([ref, np.zeros(max(0, len(mic) - len(ref)), np.float32)])
     mic = np.concatenate([mic, np.zeros(SR, np.float32)])
     ref = np.concatenate([ref, np.zeros(len(mic) - len(ref), np.float32)])

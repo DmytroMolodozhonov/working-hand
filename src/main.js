@@ -4,6 +4,7 @@
  */
 
 import { mountHeroPanel } from './ui/HeroSettingsUi.js';
+import { DEFAULT_HERO } from './game/HeroSetup.js';
 import { collapseMaxima } from './audio/MaximaShout.js';
 import { CreateMemory } from './ui/CreateMemory.js';
 import * as THREE from 'three';
@@ -24,7 +25,7 @@ import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NA
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
-import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
+import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
 import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
@@ -216,15 +217,26 @@ function restoreCreateMemory(mode) {
 function saveCreateMemory() {
     if (pickingMap) return;
     const patch = { smooth: !!$('smooth-world')?.checked };
-    if (selectedMode === 'creative') patch.hero = heroSp.read();
+    if (selectedMode === 'creative') {
+        const hero = heroSp.read();
+        patch.hero = hero;
+        // (the settings are kept for every «Где появиться» apart: «Бесконечная мана», здоровье, броня… of the arena are not those of the port)
+        patch.heroBySpot = { ...(createMem.load('creative')?.heroBySpot || {}), [hero.spawn]: hero };
+    }
     createMem.save(selectedMode, patch);
 }
 {
     const last = createMem.lastMode(CREATE_MODES);
     if (last) selectedMode = last;
     restoreCreateMemory(selectedMode);
-    $('hero-settings-sp').addEventListener('input', saveCreateMemory);
-    $('hero-settings-sp').addEventListener('change', saveCreateMemory);
+    $('hero-settings-sp').addEventListener('input', (e) => { if (e.target?.id !== 'hero-sp-spawn') saveCreateMemory(); }); // (the start's own change is saved by its 'change' below, after the new start's settings are shown)
+    $('hero-settings-sp').addEventListener('change', (e) => {
+        if (e.target?.id === 'hero-sp-spawn') { // (another start: its own remembered settings, or the defaults of that start)
+            const spot = e.target.value, mem = createMem.load('creative')?.heroBySpot?.[spot];
+            try { heroSp.set(mem ? { ...mem, spawn: spot } : { ...DEFAULT_HERO, spawn: spot, health: spot === 'start' ? 'immortal' : 'normal' }); } catch (err) { /* keep what is on the screen */ }
+        }
+        saveCreateMemory();
+    });
     $('smooth-world')?.addEventListener('change', saveCreateMemory);
 }
 
@@ -674,7 +686,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (meta) { meta.lips = lips; meta.running = running; }
             const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips })
                 // (found by its sound: how sure, weighed with how like the spell the written letters are, the lips, the run)
-                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.far, running, lips, hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
+                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
             if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
             // «стоп, раскрой свои секреты»: first the stop (what I hold lets go), then the spell
             if (spoken !== 'Stand' && game.focus?.held?.() && stopFirst(meta?.written || command)) {
