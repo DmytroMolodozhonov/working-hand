@@ -37,7 +37,7 @@ export function formatEntry(e) {
     if (Number.isFinite(m.peak)) parts.push(`громкость ${num(m.peak)} дБ`);
     if (Number.isFinite(m.snr)) parts.push(`над шумом ${num(m.snr)} дБ${m.snr < 10 ? ' (шумно!)' : m.snr < 16 ? ' (шумновато)' : ''}`);
     else if (Number.isFinite(m.floor)) parts.push(`шум ${num(m.floor)} дБ`);
-    if (m.far > 0) parts.push(`колонки звучали ${Math.round(m.far * 100)}% времени`);
+    if (m.far > 0) parts.push(`колонки звучали ${Math.round(m.far * 100)}% времени${m.refChecked ? ', сверено со звуком колонок — это не эхо' : ''}`);
     if (m.native) parts.push(m.aec ? 'звук колонок убирается из микрофона' : 'звук колонок НЕ убирается (лучше наушники)');
     if (m.src === 'aec') parts.push('читался очищенный звук');
     // whose voice: the camera saw the mouth move with it (or not), running in front of the camera

@@ -1,0 +1,7 @@
+{
+  "clean":       { "ok": 16, "falseCasts": 1, "delayP90": 520 },
+  "chat":        { "ok": 11, "falseCasts": 0, "delayP90": 650 },
+  "overlap":     { "ok": 12, "falseCasts": 0, "delayP90": 650 },
+  "loud":        { "ok": 4,  "falseCasts": 1, "delayP90": 750 },
+  "friendspell": { "ok": 0,  "falseCasts": 0 }
+}
