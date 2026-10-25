@@ -1542,7 +1542,7 @@ export class Duel {
     _strength(id, luck, opId = null) {
         const g = this.game;
         const w = this._npcWizard(id);
-        if (w) return duelStrength(w.role, w.mana, w.hp, luck, w.maxHp); // (a wizard: his own mana now, his health — WizardAI)
+        if (w) return duelStrength(w.role, w.mana, w.hp, luck, w.maxHp, this._mastery(id)); // (a wizard: his own mana now + his duel mastery, his health — WizardAI)
         const free = !!g.combat?.enabled;
         // Творческий (the author): mana there is endless — in a duel a player is exactly as strong in mana
         // as his opponent (a wizard: the wizard's mana now; another player: both the same — the larger).
@@ -1583,6 +1583,8 @@ export class Duel {
     /** A player's «дуэльное мастерство» (mine — Mana.mastery; another's — by the network). */
     _mastery(id) {
         if (id === this.me) return this.game.mana?.mastery || 0;
+        const w = this._npcWizard(id);
+        if (w) return wizardMastery(w.entry?.rank || w.rank, w.role); // (a wizard of the game has it too, by his rank — WizardAI.wizardMastery)
         return this.game.remotes?.get(id)?.mastery || 0;
     }
 

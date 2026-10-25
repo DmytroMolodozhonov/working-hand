@@ -15,8 +15,9 @@ test('mana and strength come from the fight\'s own numbers, and follow the mana 
     const t = tagOf(v);
     assert.equal(t.title, 'Средний');
     assert.equal(t.mana, 100); assert.equal(t.max, 100);
-    assert.equal(t.power, Math.round(duelStrength('student', 100, 8, 0, 8) * 10) / 10);
-    assert.equal(t.power, Math.round(duelPower(100, 1, 0) * 10) / 10);
+    assert.equal(t.mastery, 50, 'an adept: half of his 100 mana as the duel mastery');
+    assert.equal(t.power, Math.round(duelStrength('student', 100, 8, 0, 8, 50)));
+    assert.equal(t.power, Math.round(duelPower(150, 1, 0)));
     const k0 = tagKey(t);
     v.mana = 64;
     const t2 = tagOf(v);

@@ -4,7 +4,7 @@
  * from the same sources the fight uses (his rank — WizardAI.WIZ_RANKS, his mana and health, the strength — WizardAI.duelStrength,
  * which is what Duel._strength gives for a wizard, without the luck). ArenaDuels sends it, ArenaTagFx draws it.
  */
-import { duelStrength } from './WizardAI.js';
+import { duelStrength, wizardMastery } from './WizardAI.js';
 
 export const RANK_TITLE = { novice: 'Младший', adept: 'Средний', teacher: 'Сильный', elder: 'Сильный', master: 'Глава башни' };
 export const RANK_COLOR = { novice: '#9fe3a0', adept: '#8ec5ff', teacher: '#ffb35c', elder: '#ffb35c', master: '#ff7ad9' };
@@ -15,12 +15,13 @@ export const tagShown = (mode) => mode === 'creative';
 /** The values of a wizard's sign: {id, rank, title, mana, max, power}. */
 export function tagOf(v) {
     const rank = v.rank || v.entry?.rank || 'adept';
+    const mastery = wizardMastery(rank, v.role); // (his duel mastery — the same points as the hero's, added to the mana in the clash)
     return {
         id: v.id, rank, title: RANK_TITLE[rank] || RANK_TITLE.adept,
         mana: Math.max(0, Math.round(v.mana ?? 0)), max: Math.round(v.maxMana ?? 0),
-        power: Math.round(duelStrength(v.role, v.mana ?? 0, v.hp ?? 0, 0, v.maxHp)),
+        mastery, power: Math.round(duelStrength(v.role, v.mana ?? 0, v.hp ?? 0, 0, v.maxHp, mastery)),
     };
 }
 
 /** What redraws the sign: only a change of these. */
-export const tagKey = (t) => `${t.rank}|${t.mana}|${t.max}|${t.power}`;
+export const tagKey = (t) => `${t.rank}|${t.mana}|${t.max}|${t.mastery}|${t.power}`;

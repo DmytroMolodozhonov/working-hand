@@ -34,7 +34,7 @@ class Sign {
         c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(30, 96, 452, 26);
         c.fillStyle = '#3d8bff'; c.fillRect(30, 96, 452 * (t.max > 0 ? Math.min(1, t.mana / t.max) : 0), 26);
         c.fillStyle = '#fff'; c.font = 'bold 30px sans-serif'; c.fillText(`Мана ${t.mana} / ${t.max}`, 256, 109);
-        c.fillStyle = '#ffe28a'; c.font = 'bold 36px sans-serif'; c.fillText(`Дуэльная сила ${t.power}`, 256, 156);
+        c.fillStyle = '#ffe28a'; c.font = 'bold 36px sans-serif'; c.fillText(`Сила ${t.power} · мастерство ${t.mastery}`, 256, 156);
         this.tex.needsUpdate = true;
     }
 

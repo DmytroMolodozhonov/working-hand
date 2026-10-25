@@ -1162,7 +1162,7 @@ export class ArenaDuels {
         const wand = (it) => it ? { power: it.power || 0, fav: it.fav || null, dir: it.dir || null } : null;
         const foe = {
             name: a.name, rank: a.entry?.rank || a.role, mana: a.mana, maxMana: a.maxMana, hp: a.hp, maxHp: a.maxHp, skill: a.W?.skill,
-            power: du?._strength?.(a.id, 0, me), wandK: du?._wandK?.(a.id, 'Stupefy'), wand: wand(wizardWandOf(a)),
+            mastery: du?._mastery?.(a.id) ?? 0, power: du?._strength?.(a.id, 0, me), wandK: du?._wandK?.(a.id, 'Stupefy'), wand: wand(wizardWandOf(a)),
         };
         const hero = {
             mana: c?.fatigue, maxMana: c?.maxFatigue, hp: c?.hp, maxHp: c?.maxHp, mastery: g.mana?.mastery ?? 0, finite: creativeFiniteMana(g),

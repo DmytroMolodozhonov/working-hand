@@ -251,6 +251,17 @@ export function strengthGap(sa, sb) {
     return t > 0 ? CLASH_SCALE * (sa - sb) / t : 0;
 }
 
+/**
+ * A wizard's «дуэльное мастерство» — the same thing as the hero's (Mana.mastery): points added to his mana in a beam clash, never spent
+ * (the author: «у NPC должно быть всё то же самое, что у игрока»). A rank has earned it by its duels: half of the rank's mana (the Master of a tower
+ * 250 on his 500, a teacher 100, a novice 25). `rank` is a WIZ_RANKS key; none (an old wizard): by the role.
+ */
+export const MASTERY_OF_MANA = 0.5;
+export function wizardMastery(rank, role = null) {
+    const R = WIZ_RANKS[rank] || WIZ_RANKS[role === 'master' ? 'master' : role === 'teacher' ? 'teacher' : role === 'adept' ? 'adept' : role === 'student' ? 'novice' : 'adept'];
+    return Math.round(R.mana * MASTERY_OF_MANA);
+}
+
 /** Typical duel strength of a rank (the same scale as duelPower: full mana, full health, no luck). */
 export const rankDuelPower = (rank) => duelPower((WIZ_RANKS[rank] || WIZ_RANKS.adept).mana, 1, 0);
 /** The weakest possible and the strongest possible wizard's strength (a novice's least mana … the Master's most). */
@@ -260,9 +271,9 @@ export const rankDuelRange = (rank) => {
 };
 
 /** A wizard's strength in a beam clash: his mana now, his health (duelPower). */
-export function duelStrength(role, mana, hp, luck = 0, maxHp = null) {
+export function duelStrength(role, mana, hp, luck = 0, maxHp = null, mastery = 0) {
     const W = WIZ[role] || WIZ.teacher;
-    return duelPower(mana, Math.max(0, hp) / (maxHp || W.hp), luck);
+    return duelPower(mana + mastery, Math.max(0, hp) / (maxHp || W.hp), luck); // (the mana he has now + his duel mastery — as the hero's)
 }
 
 /** Which duel spell to cast (a student never uses Ice, Leviosa or Avada; Avada only back at an Avada user). */

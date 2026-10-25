@@ -15,7 +15,7 @@ export const duelReport = {
     start({ foe, hero }) {
         const f = foe, h = hero;
         return `⚔️ Дуэль: против вас — ${f.name || 'волшебник'} (${RANK[f.rank] || f.rank}): мана ${n1(f.mana)}/${n1(f.maxMana)}, здоровье ${n1(f.hp)}/${n1(f.maxHp)}, меткость ${n2(f.skill)}, `
-            + `дуэльная сила ${n2(f.power)}, ${wandText(f.wand)} (×${n2(f.wandK)} к силе луча). `
+            + `дуэльное мастерство ${n1(f.mastery)}, дуэльная сила ${n2(f.power)} (мана сейчас + мастерство, с учётом здоровья), ${wandText(f.wand)} (×${n2(f.wandK)} к силе луча). `
             + `Вы: мана ${n1(h.mana)}/${n1(h.maxMana)}, здоровье ${n1(h.hp)}/${n1(h.maxHp)}, дуэльная сила ${n2(h.power)}${h.finite ? ` (мана конечная: сила — мана сейчас + дуэльное мастерство ${n1(h.mastery)}, с учётом здоровья)` : h.creative ? ` (бесконечная мана: по мане вы равны сопернику, плюс дуэльное мастерство ${n1(h.mastery)})` : ` (мана сейчас + дуэльное мастерство ${n1(h.mastery)}, с учётом здоровья)`}, ${wandText(h.wand)} (×${n2(h.wandK)}).`;
     },
     clash(r) {
