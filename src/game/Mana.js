@@ -50,7 +50,7 @@ export const MANA = {
  * It is never spent: in a duel it is added to the mana (Duel._strength — as if it were mana).
  * Death takes it (into the body: Legacy.js), as all the hero grew.
  */
-export const DUEL_MASTERY = { WIN: 5, KILL: 7, KILL_SHARE: 0.25, MAX_BEATEN: 400 }; // (the author: a duel won and the foe alive — 5 points; to the death — 7 and a quarter of the beaten one's own mastery; never halved for a known foe)
+export const DUEL_MASTERY = { WIN: 5, KILL: 7, KILL_SHARE: 0.25, SOLO_KILL: 5, SOLO_SHARE: 0.15, MAX_BEATEN: 400 }; // (the author: a duel won and the foe alive — 5 points; to the death — 7 and a quarter of the beaten one's own mastery; never halved for a known foe)
 
 export const FIRST_SPELL = {
     // simple: +1
@@ -250,10 +250,11 @@ export class Mana {
     }
 
     /** The opponent `id` killed by me without a clash won (a bomb, a sword, an ambush): 25%, once per opponent. */
-    killWon(oppMax = MANA.BASE, id = null, pos = null) {
-        if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
+    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) {
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (already paid — a duel or a kill)
         if (id != null) this.duelsWon.set(String(id), 'kill');
+        this.masteryWon(id, true, oppMax, oppMastery, false); // (a kill without a beam clash: 5 and 15% of his mastery — in every mode)
+        if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         const n = killGain(oppMax);
         this.grow(n, 'killWiz');
         this.powerFlow(pos, n, 'kill');
@@ -310,10 +311,11 @@ export class Mana {
      * a new opponent more than a known one (DUEL_MASTERY). Shown after every one, in every mode.
      * @returns {number} how much it grew
      */
-    masteryWon(id = null, kill = false, oppMax = MANA.BASE, oppMastery = 0) {
+    masteryWon(id = null, kill = false, oppMax = MANA.BASE, oppMastery = 0, clash = true) {
         const key = id != null ? String(id) : null;
         const known = key != null && this.beaten.has(key);
-        const n = kill ? DUEL_MASTERY.KILL + Math.round(Math.max(0, Number(oppMastery) || 0) * DUEL_MASTERY.KILL_SHARE) : DUEL_MASTERY.WIN;
+        const om = Math.max(0, Number(oppMastery) || 0);
+        const n = !kill ? DUEL_MASTERY.WIN : clash ? DUEL_MASTERY.KILL + Math.round(om * DUEL_MASTERY.KILL_SHARE) : DUEL_MASTERY.SOLO_KILL + Math.round(om * DUEL_MASTERY.SOLO_SHARE);
         if (key != null && !known) {
             if (this.beaten.size >= DUEL_MASTERY.MAX_BEATEN) this.beaten.delete(this.beaten.values().next().value);
             this.beaten.add(key);

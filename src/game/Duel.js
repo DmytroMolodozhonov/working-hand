@@ -1810,7 +1810,7 @@ export class Duel {
     opponentDied(id, oppMax = 30, pos = null) {
         const w = this._won;
         if (!w || w.id !== id || performance.now() - w.at > 8000) {
-            this.game.mana?.killWon(oppMax, id, pos); // (killed some other way: 25%)
+            this.game.mana?.killWon(oppMax, id, pos, this._mastery(id)); // (killed some other way: 25% of his mana as cells, and 5 + 15% of his mastery)
             return false;
         }
         this._won = null;

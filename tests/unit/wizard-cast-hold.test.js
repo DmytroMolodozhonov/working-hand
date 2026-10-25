@@ -80,6 +80,7 @@ test('«дуэльное мастерство»: +5 for a duel won, +7 and a qua
     const M = g.mana = new Mana(g);
     M.duelWonAlive(7, Math.random, 100); M.duelWonAlive(7, Math.random, 100); M.duelWon(500, 8, null, 250);
     assert.equal(M.mastery, 5 + 5 + 7 + 63, 'a duel won: +5 (the same foe again: +5); the Master (mastery 250) to the death: 7 + a quarter of 250');
+    { const M3 = new Mana(g); M3.masteryWon(9, true, 500, 250, false); assert.equal(M3.mastery, 5 + 38, 'killed without a clash: 5 + 15% of 250'); }
     const s = Duel.prototype._strength.call({ me: 'me', game: g, _npcWizard: () => null, _mastery: Duel.prototype._mastery }, 'me', 0);
     assert.equal(s, duelPower(100 + 80, 1));
     const rec = captureLegacy(g);
