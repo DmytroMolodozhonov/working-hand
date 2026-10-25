@@ -165,6 +165,7 @@ export function disarmVillager(game, v, makeWand = wizardWandOf) {
     if (v.wizard && WAND_TOOLS.has(kind) && !v.noWand && g.items) {
         if (m.getWandTip && m.tool) m.getWandTip(hand);
         const item = wizardWand(v, makeWand);
+        item.arenaWand = !!v.arena; // (an arena wizard's wand a player may win: it is gone at the next duel — ArenaDuels.dropTrophyWands)
         const f = pickFlight(g, hand);
         m.setHeldTool('none');
         v.noWand = true;

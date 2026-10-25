@@ -259,7 +259,7 @@ export class Inventory {
      * one is still lost (lying on the ground: dropped, knocked out, left there when the game was left).
      */
     heldWand(item) {
-        if (!item || item.kind !== 'wand' || !item.uid) return;
+        if (!item || item.kind !== 'wand' || !item.uid || item.arenaWand) return; // (a wand won from an arena wizard is never «my wand»)
         if (item.spare && this.ownWand && this.ownWand !== item.uid && !this.hasUid(this.ownWand)) return;
         this.ownWand = item.uid;
     }

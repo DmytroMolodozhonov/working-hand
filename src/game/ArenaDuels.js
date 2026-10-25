@@ -1072,15 +1072,33 @@ export class ArenaDuels {
         else g.sync?.arena?.({ ...m, to: id });
     }
 
+    /**
+     * (this computer's player) A wand won from an arena wizard («Акцио» after «Экспеллиармус») is no part of the next duel: a new fight,
+     * a new start — it vanishes from the hands and the slots (the author: «она мне мешает»). The player's own wand is never touched.
+     */
+    dropTrophyWands() {
+        const g = this.game, items = g.items, inv = g.inventory;
+        let n = 0;
+        for (const side of ['left', 'right']) {
+            const h = items?.held?.[side];
+            if (!h?.item?.arenaWand) continue;
+            const it = items.releaseHand(side);
+            if (inv?.inHand?.item === it) inv.inHand = null;
+            n++;
+        }
+        if (inv?.slots) for (let i = 0; i < inv.slots.length; i++) if (inv.slots[i]?.arenaWand) { inv.slots[i] = null; n++; }
+        if (n) { inv._render?.(); inv.ensureStarterWand?.(); this.log.push('trophy-wand-dropped:' + n); }
+    }
+
     /** This computer's player hears from the arena. */
     _mine(m) {
         const g = this.game, hud = g.hud;
         switch (m.e) {
             case 'ask': this.askedAt = performance.now(); break;
             case 'queued': this.myQueue = m.id; hud?.setVoice?.(m.n > 0 ? `📜 Вы записались на дуэль. Перед вами: ${m.n}` : '📜 Вы записались на дуэль — вы следующий', true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
-            case 'call': this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
+            case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
-            case 'count': this.count = { t: 0 }; break;
+            case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'end':
                 this.count = null; this.myQueue = null;
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
