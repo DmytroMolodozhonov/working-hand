@@ -256,6 +256,12 @@ export class ArmorSystem {
             // (the greaves: the camera's picture said «not the thigh» but the hero's own hand is at the thigh in front —
             // held there twice as long it goes on anyway; the author: the greaves never went on)
             const slow = !on && !gone && slot === 'legs' && !!touch && wearSpot(h.item.kind, h.item.piece, hand, null);
+            // (a swap: the piece taken off lands in this very hand, at the same place — it must not go straight back on;
+            // the hand has to leave the place first)
+            if (this._swapLock?.[side]) {
+                if (on || slow || gone) { this._wearT[side] = 0; this._edge[side].lostT = 0; continue; }
+                this._swapLock[side] = false;
+            }
             if (gone) this._wearT[side] = ARMOR.WEAR_T;
             else if (slow) this._wearT[side] += 0.5 * dt;
             else if (on) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
@@ -268,7 +274,8 @@ export class ArmorSystem {
             if (this.worn[slot]?.archmage && !h.item.archmage) { g.hud?.setVoice?.('🌟 Костюм Высшего мага не снять — он на вас', true); continue; }
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
-            if (!this.wear(item, { side })) items.takeIntoHand?.(item, side); // (not put on: it stays in the hand, never lost)
+            if (!this.wear(item, { side })) items.takeIntoHand?.(item, side);
+            else if (items.held[side]?.item && items.held[side].item !== item) (this._swapLock ||= {})[side] = true; // (the old piece is in the hand now)
         }
     }
 
