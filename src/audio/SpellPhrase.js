@@ -358,6 +358,9 @@ export function soundTrust(h) {
     const short = len <= SHORT_LEN;
     if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;
     if (h.lips === false && !like) return 'губы не двигались, и буквы не похожи на заклинание';
+    // «Акцио» in a duel (`hope`: my wand was knocked away — I call it back): the network hears it as «актер», «акце», «арте»;
+    // the word is short, but here it is what is wanted and harmless — a slight fit is enough (the lips seen still are still refused)
+    if (h.spell === 'Accio' && h.hope && h.lips !== false) return fit >= 0.3 ? null : `«Акцио» узнано неуверенно (запас ${fit.toFixed(1)}, нужно 0.3)`;
     // a short one-word spell («Sands», «Даст», «Айс», «Frozen»…) is a word said on its own — its letters must be
     // there: a lone «с» of talk to oneself, «просто», «заморозил» are no spell however the sound fits (the author:
     // «сам с собой разговаривал — прозвучала буква с, и сработал песок»); nor one word in a sentence the network wrote
