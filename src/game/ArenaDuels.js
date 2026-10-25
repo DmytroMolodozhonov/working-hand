@@ -603,6 +603,19 @@ export class ArenaDuels {
         return false;
     }
 
+    /** A duellist on the floor stays on it (the floor's capsule, a metre from the wall): the stands' steps are no place for him. */
+    _keepOnFloor(A, v) {
+        const { a, b, r } = A.def.axis, lim = r - 1;
+        const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, ((v.x - a.x) * dx + (v.z - a.z) * dz) / l2)) : 0;
+        const cx = a.x + dx * t, cz = a.z + dz * t;
+        const d = Math.hypot(v.x - cx, v.z - cz);
+        if (d <= lim) return;
+        v.x = cx + (v.x - cx) * lim / d; v.z = cz + (v.z - cz) * lim / d;
+        v.path = null;
+        this.life._ground(v);
+    }
+
     _go(v, p, speed, dt, stop = 0.6) {
         const L = this.life;
         const d = L._steer(v, p.x, p.z, speed, dt, stop);
@@ -652,6 +665,7 @@ export class ArenaDuels {
         const seat = v.arena.seat, e = v.arena.fromSeat ? this._edge(A, seat) : null;
         const legs = v.arena.home ? [A.home] : e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home]; // (the steward walks home along the road, not through the gate)
         const leg = v.arena.leg || 0;
+        if (leg === 0 && !e && !v.arena.home && !v.steward && v.arena.side != null) this._keepOnFloor(A, v); // (a duellist leaving: along the floor to the gate, not up the stands)
         if (leg < legs.length) { if (this._go(v, legs[leg], WALK * (v.arena.sad ? 0.75 : 1), dt, 1.2)) v.arena.leg = leg + 1; v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t < 120) return true; }
         v.arena = null;
         L._deactivate(v); // (home in the tower)
@@ -664,6 +678,7 @@ export class ArenaDuels {
         const marks = A.def.gates, me = marks[v.arena.side].mark;
         const other = D.a === v ? D.b : D.a;
         v.seated = false;
+        if (v.arena.leg >= 2) this._keepOnFloor(A, v); // (a duellist never climbs the stands or walks into their walls — at the fight, the bow, after it)
         switch (D.phase) {
             case 'enter': {
                 if (!this._enter(A, v, dt)) return true;

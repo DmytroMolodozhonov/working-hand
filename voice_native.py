@@ -214,6 +214,13 @@ def raise_speech_threads(before):
     except Exception:  # noqa: BLE001
         return 0
 
+def voice_threads():
+    """Threads for one look of the speech network: the author's journal showed 170–600 ms on 2 of them (a spell comes 0.5–0.8 s after
+    its last letter, and a duel is won by milliseconds). The threads sleep between the looks (no spinning); more cores — more threads."""
+    n = os.cpu_count() or 4
+    return 4 if n >= 12 else 3 if n >= 8 else 2
+
+
 # ---------------------------------------------------------------- the networks
 class CtcNet:
     """The speech network (CTC): 16 kHz sound → log-probabilities of the 34 letters, one row per 40 ms."""
@@ -798,7 +805,7 @@ class NativeVoice:
             from livekit import rtc
             ctc_dir, vad_path = self.model_paths()
             before = _thread_ids()
-            ctc = CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS", "2")))
+            ctc = CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS") or voice_threads()))
             vad = Vad(vad_path)
             self.raised = raise_speech_threads(before)  # (Windows: above normal — a call / the game no longer delay the looks)
             mic_box, ref_box = {}, {}
