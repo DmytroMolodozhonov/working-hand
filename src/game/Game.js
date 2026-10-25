@@ -186,7 +186,7 @@ import { Fireworks } from './Fireworks.js';
 import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
-import { JUMP_ASSIST } from './Jump.js';
+import { JUMP_ASSIST, ledgePush } from './Jump.js';
 import { Concentration } from './Concentration.js';
 import { CrossedShield } from './CrossedArms.js';
 import { CastHints } from './CastHints.js';
@@ -4419,18 +4419,8 @@ export class Game {
     _jumpOnto() {
         const ch = this.character, T = this.collision?.terrain, p = ch.group.position;
         if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2 || (ch.size || 1) > 1.01) return; // (a run carries it on already; a monster steps over by itself)
-        const fx = -Math.sin(ch.group.rotation.y), fz = -Math.cos(ch.group.rotation.y);
-        const feet = p.y - PLAYER_GROUND_OFFSET;
-        for (let d = PLAYER_RADIUS + 0.1; d <= PLAYER_RADIUS + 0.9; d += 0.2) {
-            const ix = Math.round(p.x + fx * d), iz = Math.round(p.z + fz * d);
-            if (ix === Math.round(p.x) && iz === Math.round(p.z)) continue;
-            const L = T.floorBelow ? T.floorBelow(ix, iz, Math.floor(feet + 3.5)) : T.topLayer(ix, iz);
-            const h = L - 0.5 - feet;
-            if (h < 0.3 || h > 2.4) continue; // (the strongest jump still falls short of three blocks)
-            if (T.solidIn && T.solidIn(ix, iz, L + 1, L + 4)) return; // (a wall, no room on its top)
-            ch.jumpVel.x = fx * 3; ch.jumpVel.z = fz * 3;
-            return;
-        }
+        const push = ledgePush(T, p.x, p.z, p.y - PLAYER_GROUND_OFFSET, ch.group.rotation.y, PLAYER_RADIUS);
+        if (push) { ch.jumpVel.x = push.x; ch.jumpVel.z = push.z; }
     }
 
     _snowSteps(ch) {

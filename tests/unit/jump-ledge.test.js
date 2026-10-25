@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET } from '../../src/entities/Character.js';
 import { CollisionWorld } from '../../src/world/Collision.js';
-import { jumpHeight, JUMP_ASSIST } from '../../src/game/Jump.js';
+import { jumpHeight, JUMP_ASSIST, ledgePush } from '../../src/game/Jump.js';
 
 const R = 0.48, DT = 1 / 60;
 
@@ -75,4 +75,55 @@ test('a low roof over the ledge cuts the jump: the head never goes into it', () 
 test('a standing jump beside a wall does not push through it', () => {
     const r = leap({ high: 3, strength: 1, run: 0 });
     assert.ok(r.z >= -1.5 + R - 1e-6, JSON.stringify(r));
+});
+
+/** Standing flush to a ledge (no run), the push Game._jumpOnto gives (ledgePush), then the real body's jump. */
+function standJump({ top, x = 0, z = -1.5 + R, yaw = 0, strength = 0.36, roof = () => null }) {
+    const T = terrain(top, roof);
+    const col = new CollisionWorld();
+    col.setTerrain(T);
+    const ch = new VoxelCharacter(new THREE.Scene());
+    ch.setIdlePose();
+    ch.group.position.set(x, -0.5 + PLAYER_GROUND_OFFSET, z);
+    ch.group.rotation.y = yaw;
+    const resolve = () => {
+        const p = ch.group.position, feet = p.y - PLAYER_GROUND_OFFSET;
+        const f = ch.onGround ? Math.max(feet, Math.min(ch.groundY, feet + 1.05)) : feet;
+        col.resolveCylinder(p, R, f, 3.5, 1.05 + (ch.jumpAir ? JUMP_ASSIST : 0), true, 3.5);
+    };
+    for (let i = 0; i < 30; i++) { ch.update(DT, col, true); resolve(); }
+    assert.ok(ch.jump(strength), 'took off');
+    const p0 = ch.group.position;
+    const push = ledgePush(T, p0.x, p0.z, p0.y - PLAYER_GROUND_OFFSET, yaw, R);
+    if (push) { ch.jumpVel.x = push.x; ch.jumpVel.z = push.z; }
+    let maxY = -1e9;
+    for (let i = 0; i < 240; i++) { ch.update(DT, col, true); resolve(); maxY = Math.max(maxY, ch.group.position.y - PLAYER_GROUND_OFFSET); }
+    const p = ch.group.position;
+    return { push, x: p.x, z: p.z, feet: p.y - PLAYER_GROUND_OFFSET, onGround: ch.onGround, maxY };
+}
+
+test('a standing jump flush to a ledge (facing it, a bit aside, at the corner): 1 and 2 blocks are got onto', () => {
+    const wall = (high) => (ix, iz) => (iz <= -2 ? high : 0);
+    const corner = (high) => (ix, iz) => (iz <= -2 && ix <= -1 ? high : 0); // (the ledge is only diagonally in front)
+    for (const high of [1, 2]) {
+        for (const yaw of [0, 0.5, -0.5, 1.0]) {
+            const r = standJump({ top: wall(high), yaw });
+            assert.ok(r.onGround && r.feet > floorTop + high - 0.05, `wall ${high} yaw ${yaw}: ${JSON.stringify(r)}`);
+        }
+        const r = standJump({ top: corner(high), x: -0.2, z: -1.0, yaw: 0.6 });
+        assert.ok(r.onGround && r.feet > floorTop + high - 0.05, `corner ${high}: ${JSON.stringify(r)}`);
+    }
+});
+
+test('a standing jump flush to a 3-block wall: no push, it lands where it stood; nothing behind the back is climbed', () => {
+    const r = standJump({ top: (ix, iz) => (iz <= -2 ? 3 : 0), strength: 1 });
+    assert.equal(r.push, null);
+    assert.ok(r.feet < floorTop + 0.05 && r.z > -1.5, JSON.stringify(r));
+    const back = standJump({ top: (ix, iz) => (iz <= -2 ? 2 : 0), yaw: Math.PI });
+    assert.equal(back.push, null);
+});
+
+test('a standing jump onto a 2-block ledge under a low roof: the head never goes into it', () => {
+    const r = standJump({ top: (ix, iz) => (iz <= -2 ? 2 : 0), roof: (ix, iz) => (iz <= -2 ? 5 : null), strength: 1 });
+    assert.ok(r.maxY < floorTop + 2.1, JSON.stringify(r));
 });

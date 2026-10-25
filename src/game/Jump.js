@@ -44,3 +44,27 @@ export function walkK(gravityK = 1) {
 export function heavySink(gravityK = 1) {
     return gravityK > 1 ? Math.min(0.35, (gravityK - 1) * 0.2) : 0;
 }
+
+const FAN = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05]; // (rays round where the body faces, radians: up to 60° to either side)
+
+/**
+ * A jump right in front of a ledge (up to two blocks, room on its top): the speed (units / s, {x, z}) the legs push the body
+ * onto it with, or null when there is nothing to jump onto. A fan of rays round the facing (a ledge at a slant or at a corner
+ * touches the body too); the push goes towards the ledge's cell. T: terrain (topLayer, floorBelow, solidIn); feet: the feet's y.
+ */
+export function ledgePush(T, x, z, feet, yaw, radius = 0.48) {
+    for (const off of FAN) {
+        const a = yaw + off, fx = -Math.sin(a), fz = -Math.cos(a);
+        for (let d = radius + 0.1; d <= radius + 0.9; d += 0.2) {
+            const ix = Math.round(x + fx * d), iz = Math.round(z + fz * d);
+            if (ix === Math.round(x) && iz === Math.round(z)) continue;
+            const L = T.floorBelow ? T.floorBelow(ix, iz, Math.floor(feet + 3.5)) : T.topLayer(ix, iz);
+            const h = L - 0.5 - feet;
+            if (h < 0.3 || h > 2.4) continue; // (the strongest jump still falls short of three blocks)
+            if (T.solidIn && T.solidIn(ix, iz, L + 1, L + 4)) break; // (a wall, no room on its top: the next ray)
+            const dx = ix - x, dz = iz - z, dl = Math.hypot(dx, dz) || 1;
+            return { x: dx / dl * 3, z: dz / dl * 3 };
+        }
+    }
+    return null;
+}
