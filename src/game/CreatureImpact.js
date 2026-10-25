@@ -65,6 +65,15 @@ function wrapPivot(group, y = 0) {
     return pivot;
 }
 
+/** A body's half-width kept from a wall when it is pushed, and the longest step of one frame's slide (m). */
+const BODY_CLEAR = 0.45, SUBSTEP = 0.3;
+
+/** Move `p` by (dx, dz) in steps of at most SUBSTEP, each one pushed out of the blocks (a hard throw never skips a wall). */
+function slide(p, dx, dz, resolve) {
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SUBSTEP));
+    for (let i = 0; i < n; i++) { p.x += dx / n; p.z += dz / n; resolve(p); }
+}
+
 // ------------------------------------------------------------------ kinds
 /**
  * A kind of creature: how to find it, which way it faces, its body, where it tips over, how its
@@ -83,7 +92,7 @@ export const KINDS = {
         centre: (c, out) => out.copy(c.group.position).add(_w.set(0, 0.6, 0)),
         pivot: (c) => ({ obj: wrapPivot(c.group, -0.6), base: -0.6, lie: 0.1 }),
         head: (c) => c.head, arms: (c) => [c.leftArm, c.rightArm], legs: (c) => [c.leftLeg, c.rightLeg],
-        move(g, c, dx, dz) { const p = c.group.position; p.x += dx; p.z += dz; g.collision?.resolveCylinder?.(p, 0.88, p.y - 1.0, 3.5, 1.05); },
+        move(g, c, dx, dz) { slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.88, p.y - 1.0, 3.5, 1.05)); },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunTimer = Math.max(c.stunTimer || 0, t); c.isAttacking = false; },
         frozen: (c) => !!c.isFrozen,
@@ -101,10 +110,19 @@ export const KINDS = {
         move(g, c, dx, dz) {
             const cl = g.castleLife;
             // (thrown up into the air: only a wall stops it — a walker's step test would hold it in place)
-            const ok = c.vy && cl?._airFree ? (x, z) => cl._airFree(x, z, c.y) : (x, z) => !cl?._walkable || cl._walkable(x, z, c.y);
-            if (ok(c.x + dx, c.z + dz)) { c.x += dx; c.z += dz; }
-            else if (ok(c.x + dx, c.z)) c.x += dx;
-            else if (ok(c.x, c.z + dz)) c.z += dz;
+            const base = c.vy && cl?._airFree ? (x, z) => cl._airFree(x, z, c.y) : (x, z) => !cl?._walkable || cl._walkable(x, z, c.y);
+            // (the whole body, not its middle point: shoulders keep BODY_CLEAR from the wall, like a walking step does)
+            const R = BODY_CLEAR * (c.role === 'knight' || c.role === 'king' ? 1.3 : 1);
+            const ok = (x, z) => base(x, z) && base(x + R, z) && base(x - R, z) && base(x, z + R) && base(x, z - R);
+            // (small steps: a hard throw never skips over a wall in one frame)
+            const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SUBSTEP));
+            const sx = dx / n, sz = dz / n;
+            for (let i = 0; i < n; i++) {
+                if (ok(c.x + sx, c.z + sz)) { c.x += sx; c.z += sz; }
+                else if (sx && ok(c.x + sx, c.z)) c.x += sx;
+                else if (sz && ok(c.x, c.z + sz)) c.z += sz;
+                else break;
+            }
             // (on its feet or lying, it goes along the ground: up a slope it climbs it, never sinks into the hill)
             if (!c.vy) cl?._ground?.(c);
         },
@@ -121,7 +139,7 @@ export const KINDS = {
         centre: (c, out) => out.copy(c.group.position).add(_w.set(0, 0.5 * (c.group.scale.y || 1), 0)),
         pivot: (c) => { const s = c.group.scale.y || 1; return { obj: wrapPivot(c.group, 0), base: 0, lie: Math.max(0, 0.45 - 0.5 / s) }; },
         head: () => null, arms: () => [], legs: (c) => c.model?.userData?.legs || [],
-        move(g, c, dx, dz) { const p = c.group.position; p.x += dx; p.z += dz; g.collision?.resolveCylinder?.(p, 0.6 * (c.group.scale.x || 1), p.y - 0.5, 2, 1.1); },
+        move(g, c, dx, dz) { slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.6 * (c.group.scale.x || 1), p.y - 0.5, 2, 1.1)); },
         toss(g, c, vy) { g.animals?.push?.(c, _w.set(0, vy, 0), 0.5); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); },
         frozen: () => false,
@@ -139,7 +157,7 @@ KINDS.T = {
     centre: (c, out) => out.copy(c.model.position).add(_w.set(0, 3 * (c.model.userData.s || 1), 0)),
     pivot: (c) => ({ obj: wrapPivot(c.model, 0), base: 0, lie: 0 }),
     head: (c) => c.model.userData.head || null, arms: () => [], legs: () => [],
-    move(g, c, dx, dz) { const p = c.model.position; p.x += dx; p.z += dz; g.collision?.resolveCylinder?.(p, 0.95 * (c.model.userData.s || 1), p.y, 3.0, 1.05); },
+    move(g, c, dx, dz) { slide(c.model.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.95 * (c.model.userData.s || 1), p.y, 3.0, 1.05)); },
     toss() {}, hold() {}, frozen: () => false, noKnock: () => true,
 };
 
