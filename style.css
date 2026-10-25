@@ -1504,6 +1504,7 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .world-badges { grid-column: 2 / 4; display: flex; gap: 6px; align-items: center; margin-top: -2px; flex-wrap: wrap; }
 .world-mode { font-size: 0.74rem; font-weight: bold; letter-spacing: 0.02em; padding: 1px 9px; border-radius: 999px; color: #c8d6e5; background: linear-gradient(180deg, rgba(84, 160, 255, 0.22), rgba(84, 160, 255, 0.08)); border: 1px solid rgba(84, 160, 255, 0.4); white-space: nowrap; }
 .world-mode.m-freeworld { background: linear-gradient(180deg, rgba(46, 204, 113, 0.22), rgba(46, 204, 113, 0.08)); border-color: rgba(46, 204, 113, 0.4); }
+.world-spot { font-size: 0.74rem; padding: 1px 9px; border-radius: 999px; color: #dfe6e9; background: linear-gradient(180deg, rgba(155, 89, 182, 0.24), rgba(155, 89, 182, 0.08)); border: 1px solid rgba(155, 89, 182, 0.45); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .world-old { font-size: 0.7rem; color: #e1b12c; padding: 1px 7px; border-radius: 999px; border: 1px solid rgba(225, 177, 44, 0.45); background: rgba(225, 177, 44, 0.08); }
 @media (max-width: 560px) { .world-row { grid-template-columns: auto 1fr auto auto; } .world-meta { display: none; } .world-badges { grid-column: 2 / -1; } }
 .world-confirm { grid-column: 1 / -1; color: #ff7675; font-weight: bold; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

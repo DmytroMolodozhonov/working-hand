@@ -20,7 +20,7 @@ import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderMagicTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
 import { PlayerSheetView } from './ui/PlayerSheet.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
-import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel, worldHoverNote } from './game/WorldSave.js';
+import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel, worldHoverNote, worldSpawnLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
@@ -1080,7 +1080,7 @@ async function renderSavedWorlds() {
             <span class="world-meta">${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
             <button class="mp-btn world-play">▶ Продолжить</button>
             <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
-            <span class="world-badges"><span class="world-mode m-${escapeHtml(w.mode || 'none')}">${(MODES[legacyMode(w.mode)]?.icon || '')} ${escapeHtml(modeLabel(w.mode) || 'Мир')}</span>${old ? '<span class="world-old">устарел</span>' : ''}</span>
+            <span class="world-badges"><span class="world-mode m-${escapeHtml(w.mode || 'none')}">${(MODES[legacyMode(w.mode)]?.icon || '')} ${escapeHtml(modeLabel(w.mode) || 'Мир')}</span>${worldSpawnLabel(w) ? `<span class="world-spot" title="Где герой появляется в этом мире">📍 ${escapeHtml(worldSpawnLabel(w))}</span>` : ''}${old ? '<span class="world-old">устарел</span>' : ''}</span>
             <span class="world-confirm hidden">${w.fav ? 'Это избранный мир! ' : ''}Удалить этот мир навсегда? <button class="mp-btn world-del-yes">Да, удалить</button> <button class="mp-btn mp-btn-grey world-del-no">Нет</button></span>
         </div>`;
     }).join('');

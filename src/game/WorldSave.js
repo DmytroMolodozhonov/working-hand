@@ -22,6 +22,7 @@ import { breaking } from '../world/EnchantedStone.js';
 import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
+import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
 import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
@@ -61,6 +62,16 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     return `${head} Мир устарел: он создан в старой версии, поэтому в нём нет ${lacks.join(', ')}. Играть в нём можно, и ваши постройки и вещи на месте.`;
 }
 
+/** Where the hero of a Creative world appears («Где появиться» in the settings), in a few words: «Дуэли на арене (Средний)», «У башни волшебников»; '' without one. */
+export function worldSpawnLabel(w) {
+    const h = w?.hero;
+    if (!h || w.mode !== 'creative') return '';
+    const id = normalizeSpawn(h.spawn);
+    if (id === 'start') return spawnLabel(id);
+    if (id === 'arena') return `Дуэли магов на арене · ${(DUEL_FOES.find((f) => f.id === normalizeFoe(h.foe))?.label || '').replace(/ \(.*\)/, '')}`.replace(/ · $/, '');
+    return spawnLabel(id).replace(/ \(.*\)$/, '');
+}
+
 let _db = null;
 function db() {
     if (_db) return _db;
@@ -89,7 +100,7 @@ function tx(mode, fn) {
 export async function listWorlds() {
     try {
         const all = await tx('readonly', (st) => st.getAll());
-        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, gen: Number.isFinite(w.gen) ? w.gen : null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
+        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, gen: Number.isFinite(w.gen) ? w.gen : null, hero: w.hero ? { spawn: w.hero.spawn, foe: w.hero.foe } : null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
             .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b.updated - a.updated); // (favourites first, then newest)
     } catch (e) { return []; }
 }
