@@ -60,6 +60,8 @@ import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const WALK = 2.3, RUN = 5.6;
+/** s a wizard stands stunned after his wand was knocked out, before he runs for it (the player's «Акцио» can take it first). */
+const SHOCK_AFTER_DISARM = 2.5;
 /** How far the world is drawn and made in the duel-only start (m): the arena's stands reach ~50 m, the levelled land 64. */
 const MODE_VIEW = 90;
 /** Mana a spell costs a duellist at the arena: they pace themselves (a long duel), lighter than in a real fight. */
@@ -765,6 +767,8 @@ export class ArenaDuels {
         // the wand knocked out: a race for it — he runs for it (the other must call it first: «Акцио»)
         if (v.noWand) {
             const it = v.lostWand && g.items?.loose?.get(v.lostWand.uid);
+            // (a moment of shock first, «Моя палочка!»: the other has time to call it with «Акцио» before he runs to it — the voice needs ~1–2 s)
+            if (it && v.lostWand && (v.lostWand.t = (v.lostWand.t || 0) + dt) < SHOCK_AFTER_DISARM) { v.speed = 0; v.mode = 'stagger'; L._ground(v); return true; }
             if (it && !(D.pull && D.pull.uid === v.lostWand.uid)) {
                 const p = it.model.position;
                 if ((this._go(v, p, RUN, dt, 0.8) || Math.hypot(p.x - v.x, p.z - v.z) < 1.1) && Math.abs(p.y - v.y) < 3) {

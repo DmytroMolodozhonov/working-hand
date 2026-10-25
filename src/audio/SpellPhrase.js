@@ -206,6 +206,7 @@ export function spellPhrase(text, { final = true, match = matchSpell } = {}) {
         if (i >= a && i <= b) continue;
         const w = words[i];
         if (w.length <= 1 || FILLER.has(w) || match(w) === name) continue;
+        if (/^максим/.test(w) && name !== 'Maxima') continue; // (the duel's shouts «Максима максима… Акцио» before the next spell: not talk)
         extra++;
     }
     out.extra = extra;
