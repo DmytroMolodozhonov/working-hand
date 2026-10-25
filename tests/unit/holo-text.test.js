@@ -37,3 +37,9 @@ test('a wand tells about its favourite spell', () => {
     const info = withSpellDescription(describeItem(it), it);
     assert.ok(info.lines.length > describeItem(it).lines.length);
 });
+
+test('the scroll reading card draws plain words too (no own tag parser left)', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(new URL('../../src/game/ScrollReading.js', import.meta.url), 'utf8');
+    assert.ok(src.includes('holoParts') && !src.includes("split(/(<b>"), 'ScrollReading must use holoParts');
+});

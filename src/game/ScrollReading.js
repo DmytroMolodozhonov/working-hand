@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import { describeItem, ITEM_SCALE } from './ItemTypes.js';
+import { holoParts, holoPlain } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
@@ -90,16 +91,16 @@ export function drawParchment(item) {
     x.fillStyle = grad; x.fillRect(0, 0, 1024, 440);
     x.strokeStyle = '#a7834a'; x.lineWidth = 4; x.strokeRect(40, 18, 944, 404);
     x.fillStyle = '#5a1a1a'; x.font = 'bold 40px serif'; x.textAlign = 'center';
-    x.fillText(info.title.replace(/<[^>]+>/g, ''), 512, 80);
+    x.fillText(holoPlain(info.title), 512, 80);
     x.textAlign = 'left';
     let y = 140;
     for (const line of info.lines) {
+        if (!holoPlain(line).trim()) continue; // (a scroll without a kind: no empty gap)
         let px = 80;
-        for (const part of line.split(/(<b>.*?<\/b>)/)) {
-            const bold = part.startsWith('<b>');
+        for (const { text: part, bold } of holoParts(line)) {
             x.font = (bold ? 'bold ' : '') + '30px serif';
             x.fillStyle = bold ? '#7a1a00' : '#3a2a1a';
-            for (const word of part.replace(/<\/?b>/g, '').split(/(\s+)/)) {
+            for (const word of part.split(/(\s+)/)) {
                 const w = x.measureText(word).width;
                 if (px + w > 950) { y += 38; px = 80; if (!word.trim()) continue; }
                 x.fillText(word, px, y);
