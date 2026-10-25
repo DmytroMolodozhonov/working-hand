@@ -192,6 +192,7 @@ export const CLASH = {
     MEET: 1.6, // m between their heads (or a head and the other's beam): the heroes are big, the hands never quite on the line
     FACING: 0.2, // their ways more against each other than this (cos; −0.2 ≈ 100° apart)
     WAIT: 1.5, // s a charge that reached me waits while my own answer flies against it (the host may see them meet a moment later)
+    VOICE_P: [0.4, 0.6], // where a game wizard's beam and a player's may first meet (0 = one hand, 1 = the other): the player's spell is voiced, so late
 };
 
 /** Where a charge goes: along the hand; a target only right on that line, and only a small correction towards it. */
@@ -1431,7 +1432,10 @@ export class Duel {
                 const hb = this._handOf(b.by, b.side, _sb, _v3) ? _sb : b.o;
                 const ab = _cd.subVectors(hb, ha);
                 const len2 = ab.lengthSq();
-                const p = Math.min(0.9, Math.max(0.1, len2 > 1e-6 ? _co.subVectors(m, ha).dot(ab) / len2 : 0.5));
+                let p = Math.min(0.9, Math.max(0.1, len2 > 1e-6 ? _co.subVectors(m, ha).dot(ab) / len2 : 0.5));
+                // (a wizard of the game against a player: the player's spell is said aloud and heard a moment late (the voice: ~0.5–1 s after the words) — the beams
+                // would meet almost at the player's hand, 80 % to 20 % before the fight began; the meeting point is kept near the middle: the fight is then won by the push)
+                if (!!a.npc !== !!b.npc) p = Math.min(CLASH.VOICE_P[1], Math.max(CLASH.VOICE_P[0], p));
                 this._startClash(a, b, p);
                 if (this.game.sync) this.game.sync.duelClash(a.id, b.id, p);
             }
