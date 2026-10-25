@@ -1,7 +1,7 @@
 /**
  * Accio.js — «Акцио»: summon a thing into your hand.
  *
- * Raise a hand, point it at a loose object (a sword, an axe…) up to 30 m away
+ * Raise a hand, point it at a loose object (a sword, an axe…) up to 60 m away
  * and say «Акцио»: the object flies to the hand and lands in it, held. It
  * stays in the hand even though the hand was open when it arrived — opening
  * the hand drops it only after it has been closed around it once.
@@ -10,11 +10,11 @@
 import * as THREE from 'three';
 
 export const ACCIO = {
-    RANGE: 30, // m
+    RANGE: 60, // m (was 30: «слишком далеко» — doubled at the author’s request)
     CONE: 0.45, // rad around the pointing direction
     SPEED: 18, // m/s the object flies at
     CATCH: 0.8, // m from the hand: caught
-    MAX_TIME: 4, // s: gives up if it can't get there (stuck behind a wall)
+    MAX_TIME: 6, // s (60 m at SPEED 18 is 3.3 s): gives up if it can't get there (stuck behind a wall)
     LIFT: 0.06, // the arm lifted this much from hanging (1 − cos: ~20°) is enough — a thing close by the feet
     NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
 };
@@ -160,7 +160,7 @@ export class Accio {
             const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
             g.lastCastWhy = 'цель не найдена: ' + why;
             const busy = !free('left') && !free('right');
-            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 30 м — и скажите «Акцио»';
+            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м — и скажите «Акцио»';
         }
         if (best.body) {
             if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
