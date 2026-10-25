@@ -16,6 +16,8 @@ export const ACCIO = {
     CATCH: 0.8, // m from the hand: caught
     MAX_TIME: 6, // s (60 m at SPEED 18 is 3.3 s): gives up if it can't get there (stuck behind a wall)
     LIFT: 0.06, // the arm lifted this much from hanging (1 − cos: ~20°) is enough — a thing close by the feet
+    WIDE_ONE: 1.05, // rad (~60°): the only thing in reach comes though the hand points off it
+    WIDE_FEW: 0.7, // rad (~40°): two or three things in reach
     NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
 };
 
@@ -78,6 +80,8 @@ export class Accio {
         const lift = g.currentPose?.armLift;
         // (the spell journal: what lay about and how near the pointing it was — why nothing came / why the wrong thing did)
         const dg = { raised: 0, loose: 0, inRange: 0, inCone: 0, nearAng: Infinity, nearD: 0, noHand: false };
+        let nearL = null, nearSide = null; // (the thing nearest the line of an arm: taken even outside the cone when there are few things about — see below)
+        const inRangeUids = new Set();
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
             dg.raised++;
@@ -130,7 +134,8 @@ export class Accio {
                 if (d > ACCIO.RANGE || d < 0.3) continue;
                 dg.inRange++;
                 const ang = dir.angleTo(to.normalize());
-                if (ang < dg.nearAng) { dg.nearAng = ang; dg.nearD = d; }
+                inRangeUids.add(L.item.uid);
+                if (ang < dg.nearAng) { dg.nearAng = ang; dg.nearD = d; nearL = L; nearSide = catcher; }
                 if (ang > ACCIO.CONE + Math.atan2(ACCIO.NEAR, d)) continue;
                 dg.inCone++;
                 const score = ang * 5 + d * 0.05;
@@ -156,6 +161,13 @@ export class Accio {
                 const score = ang * 5 + d * 0.05;
                 if (!best || score < best.score) best = { mc: c, side: catcher, score };
             }
+        }
+        // (the author: «я недостаточно чётко указываю на предмет» — one thing in reach: the hand need not be exact, ~60° round the line is enough;
+        //  two or three: ~40°; many: only the exact cone, so the one pointed at comes, not its neighbour)
+        if (!best && nearL) {
+            const few = inRangeUids.size;
+            const wide = few === 1 ? ACCIO.WIDE_ONE : few <= 3 ? ACCIO.WIDE_FEW : 0;
+            if (dg.nearAng <= wide) { best = { L: nearL, side: nearSide, score: 0 }; dg.inCone = 1; g.spellLog?.note?.(`🪄 Акцио: рука указала неточно (${Math.round(dg.nearAng * 57.3)}° в сторону), но вещей рядом ${few} — прилетела ближайшая к линии`); }
         }
         if (!best) {
             const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose}${dg.nearestAny != null ? `, ближайшая в ${Math.round(dg.nearestAny)} м` : ''}${dg.wands ? `; палочек ${dg.wands}, ближайшая в ${Math.round(dg.wandD)} м (${dg.wandNote})` : '; палочек на земле нет'})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
