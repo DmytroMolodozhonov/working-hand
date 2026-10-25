@@ -479,17 +479,17 @@ test('saved worlds menu: each world shows its game version; deleting asks in the
         const m = await import('/src/game/WorldSave.js');
         for (const w of await m.listWorlds()) await m.deleteWorld(w.id);
         const now = Date.now();
-        await m.putWorld({ id: 'wA', name: 'Первый', mode: 'creative', seed: 1, created: now, updated: now, version: { date: ver.date, sha: ver.sha }, players: {} });
+        await m.putWorld({ id: 'wA', name: 'Первый', mode: 'creative', seed: 1, gen: 99, created: now, updated: now, version: { date: ver.date, sha: ver.sha }, players: {} });
         await m.putWorld({ id: 'wB', name: 'Второй', mode: 'survival' /* old «Хардкор» world */, seed: 2, created: now - 5, updated: now - 5, players: {} }); // (saved before versions were kept)
     }, ver);
     await page.reload();
     await page.waitForFunction(() => !!window.__zns);
-    await page.waitForFunction(() => document.querySelectorAll('.world-row').length === 2 && document.querySelector('.world-row .world-ver')?.textContent.includes('версия'), null, { timeout: 20000 });
-    const vers = await page.$$eval('.world-row', (rows) => rows.map((r) => ({ id: r.dataset.id, text: r.querySelector('.world-ver').textContent, old: r.querySelector('.world-ver').classList.contains('old') })));
+    await page.waitForFunction(() => document.querySelectorAll('.world-row').length === 2 && document.querySelector('.world-row')?.title.includes('Версия игры'), null, { timeout: 20000 });
+    const vers = await page.$$eval('.world-row', (rows) => rows.map((r) => ({ id: r.dataset.id, text: r.title, old: !!r.querySelector('.world-old') })));
     const a = vers.find((v) => v.id === 'wA'), b = vers.find((v) => v.id === 'wB');
     if (ver.date) assert.ok(a.text.includes(ver.date), 'the version the world was saved by: ' + a.text);
     assert.equal(a.old, false, 'saved by this version');
-    assert.match(b.text, /неизвестна/);
+    assert.match(b.text, /неизвестна|Мир устарел/);
     assert.equal(b.old, true, 'an old save is marked');
     const count = () => page.evaluate(async () => (await (await import('/src/game/WorldSave.js')).listWorlds()).length);
     // 🗑 asks first, right in the row

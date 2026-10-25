@@ -1492,7 +1492,7 @@ body {
 /* In the menu: no minimap / empty camera box over the menu */
 body:has(#main-menu:not(.hidden)) #minimap-container,
 body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
-.world-row { display: grid; grid-template-columns: auto 1.4fr 1.2fr auto auto auto; gap: 8px; align-items: center; padding: 6px 4px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.world-row { display: grid; grid-template-columns: auto 1.4fr 1.2fr auto auto; gap: 8px; align-items: center; padding: 6px 4px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
 .world-fav { background: none; border: none; cursor: pointer; font-size: 1.3rem; line-height: 1; color: #6c7a89; padding: 0 4px; }
 .world-fav:hover { color: #ff7675; }
 .world-fav.on { color: #ff4d6d; }
@@ -1500,8 +1500,12 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .world-name-edit { background: rgba(255, 255, 255, 0.08); border: 1px solid #54a0ff; border-radius: 6px; color: #ecf0f1; font: inherit; font-weight: bold; padding: 3px 6px; min-width: 0; }
 .world-name { color: #ecf0f1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .world-meta { color: #8395a7; font-size: 0.85rem; }
-.world-ver { grid-column: 2 / 4; font-size: 0.78rem; color: #6c7a89; margin-top: -4px; }
-.world-ver.old { color: #e1b12c; }
+.world-name:focus-visible { outline: 1px solid #54a0ff; border-radius: 4px; }
+.world-badges { grid-column: 2 / 4; display: flex; gap: 6px; align-items: center; margin-top: -2px; flex-wrap: wrap; }
+.world-mode { font-size: 0.74rem; font-weight: bold; letter-spacing: 0.02em; padding: 1px 9px; border-radius: 999px; color: #c8d6e5; background: linear-gradient(180deg, rgba(84, 160, 255, 0.22), rgba(84, 160, 255, 0.08)); border: 1px solid rgba(84, 160, 255, 0.4); white-space: nowrap; }
+.world-mode.m-freeworld { background: linear-gradient(180deg, rgba(46, 204, 113, 0.22), rgba(46, 204, 113, 0.08)); border-color: rgba(46, 204, 113, 0.4); }
+.world-old { font-size: 0.7rem; color: #e1b12c; padding: 1px 7px; border-radius: 999px; border: 1px solid rgba(225, 177, 44, 0.45); background: rgba(225, 177, 44, 0.08); }
+@media (max-width: 560px) { .world-row { grid-template-columns: auto 1fr auto auto; } .world-meta { display: none; } .world-badges { grid-column: 2 / -1; } }
 .world-confirm { grid-column: 1 / -1; color: #ff7675; font-weight: bold; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .world-confirm.hidden, .world-row .hidden { display: none; }
 .world-row.confirming { background: rgba(255, 118, 117, 0.08); border-radius: 6px; }

@@ -20,7 +20,7 @@ import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderMagicTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
 import { PlayerSheetView } from './ui/PlayerSheet.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
-import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel } from './game/WorldSave.js';
+import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel, worldHoverNote } from './game/WorldSave.js';
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
 import { matchSpell, bombardoRadius } from './fx/SpellManager.js';
 import { fromGame, soundingLine } from './audio/GameVoices.js';
@@ -33,6 +33,7 @@ import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
 import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
+import { WORLD_GEN } from './world/Terrain.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { watchServer } from './ui/ServerLost.js';
@@ -1070,16 +1071,16 @@ async function renderSavedWorlds() {
     }
     if (!createTouched) showCreateWorld(false); // (worlds to continue: the choice waits for «Создать мир»)
     box.innerHTML = worlds.map((w) => {
-        const ver = worldVersionLabel(w);
+        const note = worldHoverNote(w);
+        const old = (Number.isFinite(w.gen) ? w.gen : 1) < WORLD_GEN || worldVersionLabel(w).old;
         return `
-        <div class="world-row" data-id="${w.id}">
+        <div class="world-row" data-id="${w.id}" title="${escapeHtml(note)}">
             <button class="world-fav${w.fav ? ' on' : ''}" title="${w.fav ? 'Убрать из избранного' : 'В избранное'}">${w.fav ? '♥' : '♡'}</button>
-            <span class="world-name" title="Нажмите, чтобы переименовать">${escapeHtml(w.name)}</span>
-            <span class="world-meta">${modeLabel(w.mode)} · ${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+            <span class="world-name" tabindex="0" title="Двойной щелчок — переименовать">${escapeHtml(w.name)}</span>
+            <span class="world-meta">${new Date(w.updated).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
             <button class="mp-btn world-play">▶ Продолжить</button>
-            <button class="mp-btn mp-btn-grey world-ren" title="Переименовать">✏</button>
             <button class="mp-btn mp-btn-grey world-del" title="Удалить">🗑</button>
-            <span class="world-ver${ver.old ? ' old' : ''}" title="${ver.old ? 'Сохранён другой версией игры' : 'Сохранён этой версией игры'}">${escapeHtml(ver.text)}</span>
+            <span class="world-badges"><span class="world-mode m-${escapeHtml(w.mode || 'none')}">${(MODES[legacyMode(w.mode)]?.icon || '')} ${escapeHtml(modeLabel(w.mode) || 'Мир')}</span>${old ? '<span class="world-old">устарел</span>' : ''}</span>
             <span class="world-confirm hidden">${w.fav ? 'Это избранный мир! ' : ''}Удалить этот мир навсегда? <button class="mp-btn world-del-yes">Да, удалить</button> <button class="mp-btn mp-btn-grey world-del-no">Нет</button></span>
         </div>`;
     }).join('');
@@ -1089,7 +1090,7 @@ async function renderSavedWorlds() {
         const asking = (on) => {
             ask.classList.toggle('hidden', !on);
             row.classList.toggle('confirming', on);
-            for (const b of row.querySelectorAll('.world-play, .world-del, .world-ren')) b.classList.toggle('hidden', on);
+            for (const b of row.querySelectorAll('.world-play, .world-del')) b.classList.toggle('hidden', on);
         };
         row.querySelector('.world-fav').onclick = async () => {
             const w = worlds.find((x) => x.id === id);
@@ -1114,8 +1115,10 @@ async function renderSavedWorlds() {
             inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); };
             inp.onblur = () => finish(true);
         };
-        row.querySelector('.world-ren').onclick = rename;
-        row.querySelector('.world-name').onclick = rename;
+        // a double click (a triple one too) renames; one click does nothing, so it never fights «выбрать»; Enter/F2 on the focused name for the keyboard
+        const nm = row.querySelector('.world-name');
+        nm.ondblclick = rename;
+        nm.onkeydown = (e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); rename(); } };
         row.querySelector('.world-play').onclick = async () => {
             const w = await loadWorld(id);
             if (!w) return;

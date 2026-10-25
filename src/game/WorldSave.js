@@ -22,6 +22,7 @@ import { breaking } from '../world/EnchantedStone.js';
 import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -39,6 +40,25 @@ export function worldVersionLabel(w, cur = GAME_VERSION) {
     const v = w?.version;
     if (!v || (!v.date && !v.sha)) return { text: 'версия неизвестна (сохранён до обновления)', old: true };
     return { text: `версия от ${v.date || '?'}${v.sha ? ` (${v.sha})` : ''}`, old: !!(cur?.sha && v.sha && cur.sha !== v.sha) };
+}
+
+/**
+ * The hover note of a saved world, in plain words: the game version it was saved by and what a world of its age lacks.
+ * `gen` is the world's generation (Terrain.WORLD_GEN); a record without one is the oldest kind.
+ */
+export function worldHoverNote(w, cur = GAME_VERSION) {
+    const ver = worldVersionLabel(w, cur);
+    const gen = Number.isFinite(w?.gen) ? w.gen : 1;
+    const lacks = [];
+    if (gen < 2) lacks.push('морей и морских замков');
+    if (gen < 5) lacks.push('нового ландшафта (высокие горы, каньоны, парящие острова)');
+    if (gen < 6) lacks.push('плавных склонов и скруглённых крыш');
+    if (gen < FURNISH_FROM_GEN) lacks.push('мебели и сундуков в комнатах замков');
+    if (gen < PLANTS_FROM_GEN) lacks.push('живых растений на лугах');
+    if (gen < PENT_STAND_FROM_GEN) lacks.push('рисунка пентаграммы телепортации в библиотеках волшебников');
+    const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;
+    if (!lacks.length) return `${head} Мир актуален: в нём есть всё новое.`;
+    return `${head} Мир устарел: он создан в старой версии, поэтому в нём нет ${lacks.join(', ')}. Играть в нём можно, и ваши постройки и вещи на месте.`;
 }
 
 let _db = null;
@@ -69,7 +89,7 @@ function tx(mode, fn) {
 export async function listWorlds() {
     try {
         const all = await tx('readonly', (st) => st.getAll());
-        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
+        return (all || []).map((w) => ({ id: w.id, name: w.name, mode: legacyMode(w.mode), seed: w.seed, updated: w.updated, created: w.created, version: w.version || null, gen: Number.isFinite(w.gen) ? w.gen : null, fav: !!w.fav, players: Object.entries(w.players || {}).map(([k, p]) => p?.name || k) }))
             .sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || b.updated - a.updated); // (favourites first, then newest)
     } catch (e) { return []; }
 }
