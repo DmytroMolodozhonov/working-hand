@@ -46,11 +46,11 @@ export const MANA = {
  */
 /**
  * «Дуэльное мастерство» (the author): how good one is at duels — a measure of its own, not the mana.
- * A duel won (the opponent alive): a new opponent +5, one beaten before +3; won to the death +10.
+ * A duel won (the opponent alive): +1; won to the death: +15 and a quarter of the beaten one's own mastery (a wizard's: WizardAI.wizardMastery).
  * It is never spent: in a duel it is added to the mana (Duel._strength — as if it were mana).
  * Death takes it (into the body: Legacy.js), as all the hero grew.
  */
-export const DUEL_MASTERY = { WIN_K: 0.06, KILL_K: 0.1, KNOWN: 0.5, MIN: 1, MAX_BEATEN: 400 }; // (points = a share of the beaten one's own mana: a novice (50) 3 / 5 killed, the Master (500) 30 / 50; one beaten before — half)
+export const DUEL_MASTERY = { WIN: 1, KILL: 15, KILL_SHARE: 0.25, MAX_BEATEN: 400 }; // (the author: a duel won and the foe alive — 1 point; to the death — 15 and a quarter of the beaten one's own mastery; never halved for a known foe)
 
 export const FIRST_SPELL = {
     // simple: +1
@@ -238,8 +238,8 @@ export class Mana {
     }
 
     /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
-    duelWon(oppMax = MANA.BASE, id = null, pos = null) {
-        this.masteryWon(id, true, oppMax);
+    duelWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) {
+        this.masteryWon(id, true, oppMax, oppMastery);
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
@@ -296,7 +296,7 @@ export class Mana {
 
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
     duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE) {
-        this.masteryWon(id, false, oppMax);
+        this.masteryWon(id, false, oppMax, 0);
         if (id != null && this.duelsWon.has(String(id))) return 0;
         if (id != null) this.duelsWon.set(String(id), 'win');
         const n = 1 + Math.min(2, Math.floor(rng() * 3));
@@ -310,11 +310,10 @@ export class Mana {
      * a new opponent more than a known one (DUEL_MASTERY). Shown after every one, in every mode.
      * @returns {number} how much it grew
      */
-    masteryWon(id = null, kill = false, oppMax = MANA.BASE) {
+    masteryWon(id = null, kill = false, oppMax = MANA.BASE, oppMastery = 0) {
         const key = id != null ? String(id) : null;
         const known = key != null && this.beaten.has(key);
-        const base = (Number(oppMax) || MANA.BASE) * (kill ? DUEL_MASTERY.KILL_K : DUEL_MASTERY.WIN_K);
-        const n = Math.max(DUEL_MASTERY.MIN, Math.round(known ? base * DUEL_MASTERY.KNOWN : base));
+        const n = kill ? DUEL_MASTERY.KILL + Math.round(Math.max(0, Number(oppMastery) || 0) * DUEL_MASTERY.KILL_SHARE) : DUEL_MASTERY.WIN;
         if (key != null && !known) {
             if (this.beaten.size >= DUEL_MASTERY.MAX_BEATEN) this.beaten.delete(this.beaten.values().next().value);
             this.beaten.add(key);

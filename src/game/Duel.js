@@ -1814,7 +1814,7 @@ export class Duel {
             return false;
         }
         this._won = null;
-        this.game.mana?.duelWon(oppMax, id, pos);
+        this.game.mana?.duelWon(oppMax, id, pos, this._mastery(id));
         return true;
     }
 
