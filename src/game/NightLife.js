@@ -79,6 +79,10 @@ export function nightPart(phase) {
 export const sleepTime = (part) => part === 'home' || part === 'night';
 /** The market is shut (no goods on the counters). */
 export const shopsClosed = (part) => part !== 'day';
+/** How long (s) a merchant may stay open after the closing began, to finish a deal that is under way. */
+export const DEAL_GRACE = 60;
+/** Does a deal under way hold the stall open? `busy`: coins / an offer / a paid good still on the counter; `since`: s since closing began. */
+export const dealHolds = (busy, since) => !!busy && since < DEAL_GRACE;
 /** How many of the crowd walk about (of the day's number). */
 export function crowdK(part) { return part === 'day' ? 1 : part === 'pack' ? 0.7 : part === 'dawn' ? 0.25 : 0; }
 /** Knights awake on the night watch: 1 small castle … 3 a big one. */
@@ -134,6 +138,7 @@ export class NightLife {
         if (this._tickT <= 0) {
             this._tickT = 1;
             for (const cs of this.life.castles.values()) {
+                if (cs.heldStalls?.size) this._releaseHeld(cs);
                 if (!cs.awake || cs.def.kind === 'wander' || cs.def.kind === 'stall' || cs.def.kind === 'guest') continue; // (the Creative stall's merchant works all night)
                 if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') {
                     if (cs.def.stalls?.length && cs.packPart !== part && (part === 'pack' || part === 'home')) { cs.packPart = part; this._closeStalls(cs); } // (the sellers of a settlement pack up in the evening too)
@@ -174,6 +179,7 @@ export class NightLife {
     _closeStalls(cs) {
         const g = this.game, talk = this.life.talk;
         const packers = new Set();
+        const held = cs.heldStalls || (cs.heldStalls = new Set());
         for (const v of cs.active.values()) {
             if (v.dead || v.job !== 'stall' || v.foe || v.entry?.stall == null) continue;
             packers.add(v.entry.stall);
@@ -183,11 +189,39 @@ export class NightLife {
         }
         cs.def.stalls.forEach((stall, i) => {
             if (packers.has(i)) return;
+            if (this.dealHeld(cs, i)) { held.add(i); return; } // (a deal under way: cleared when it ends — _releaseHeld)
+            this._clearStall(cs, i);
+        });
+    }
+
+    /** Is a deal at this stall under way (and the grace not spent)? Starts the grace clock at the first look after the closing. */
+    dealHeld(cs, i) {
+        const talk = this.life.talk;
+        const key = cs.def.id + ':s' + i;
+        const m = this._shut || (this._shut = new Map());
+        if (!this.closed()) { m.delete(key); return false; }
+        if (!m.has(key)) m.set(key, this._t);
+        return dealHolds(talk?.dealBusy?.(cs.def, i), this._t - m.get(key));
+    }
+
+    /** (host, each second) stalls kept open for a deal: the goods go off the counter as soon as it is over. */
+    _releaseHeld(cs) {
+        if (!cs.heldStalls?.size) return;
+        for (const i of [...cs.heldStalls]) {
+            if (this.dealHeld(cs, i)) continue;
+            cs.heldStalls.delete(i);
+            if (this.closed()) this._clearStall(cs, i);
+        }
+    }
+
+    _clearStall(cs, i) {
+        const g = this.game, talk = this.life.talk;
+        {
             const s = talk?.stalls?.get(talk._stallKey(cs.def, i));
             if (!s) return;
             for (const uid of s.goods) if (g.items?.loose.has(uid)) { g.items.removeLoose(uid); g.sync?.itemGone?.(uid, null, null); }
             s.goods = []; s.restockAt = 0;
-        });
+        }
     }
 
     /** The night watch: 1–3 knights (the gate, the walls, the village) with torches; the rest go to bed. */
@@ -575,7 +609,7 @@ export class NightLife {
             else g.sync?.villagerTalk?.(v.id);
             return true;
         }
-        if (v.role === 'merchant' && this.closed() && TRADE_WORDS.test(String(text || '').toLowerCase())) {
+        if (v.role === 'merchant' && this.closed() && !(v.entry?.stall != null && this.dealHeld(v.cs, v.entry.stall)) && TRADE_WORDS.test(String(text || '').toLowerCase())) {
             if (this.auth) { v.talking = 3; v.talkTo = g.localId; }
             this.life._say(v, LINES.nightShop, 4);
             return true;
@@ -590,6 +624,7 @@ export class NightLife {
             v.speed = 0; v.mode = 'idle';
             L._ground(v);
             if (this._t < v.packAt) return true; // (his turn has not come: he still stands at the counter)
+            if (this.dealHeld(v.cs, v.entry.stall)) return true; // (a deal under way: he finishes it first, then packs)
             const talk = L.talk, g = this.game;
             const s = talk?.stalls?.get(talk._stallKey(v.cs.def, v.entry.stall));
             if (v.packReach > 0) { // (the hand is out to the good: it goes into the bag when the hand comes back)

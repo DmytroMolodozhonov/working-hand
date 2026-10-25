@@ -51,6 +51,7 @@ import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone } from './MarketGoods.js';
+import { BODY_H } from '../entities/Character.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
 import { DealPrices, dealKey, overCounter, counterOffset } from './BuyerDeal.js';
 import { BuyerSigns } from './BuyerSigns.js';
@@ -416,11 +417,11 @@ export class CastleTalk {
         const d = Math.hypot(dx, dz, ((v.y ?? me.y) - me.y) * 0.5);
         const range = shout ? SHOUT_RANGE : VOICE;
         if (d > range) return { volume: 0 };
-        // (falls off to nothing at the limit; a shout stays louder)
+        // (falls off to nothing at the limit; a shout stays louder; the sound goes from head to head: a 2 m counter between a seller and a buyer does not muffle it)
         const k = Math.max(0, Math.min(1, 1 - (d - 4) / (range - 4)));
         let volume = shout ? Math.max(0.12, k) : k * k;
         const c = g.collision;
-        const muffled = !!(c?.lineOfSight && d > 3 && !c.lineOfSight(v.x, (v.y ?? me.y) + 1.6, v.z, me.x, me.y + 0.5, me.z, 0.6));
+        const muffled = !!(c?.lineOfSight && d > 3 && !c.lineOfSight(v.x, (v.y ?? me.y - 2) + 3.0, v.z, me.x, me.y + 1.4, me.z, 0.6));
         if (muffled) volume *= 0.45;
         const yaw = g.character.group.rotation.y;
         const pan = d > 1 ? (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d * 0.8 : 0;
@@ -980,6 +981,16 @@ export class CastleTalk {
         return out;
     }
 
+    /** A deal is under way at this stall: coins on the counter, an offer, an open choice or a paid good not yet taken. */
+    dealBusy(def, i) {
+        const key = this._stallKey(def, i);
+        if (this.offer && this.offer.stall === key) return true;
+        if (this._counterCoins(def, i).length) return true;
+        const gd = this.stalls.get(key)?.goods;
+        if (gd) for (const uid of gd) { const L = this.game.items.loose.get(uid); if (L?.item.shop?.paid) return true; }
+        return false;
+    }
+
     /** Pouches of coins lying still on this stall's counter (the loose things). */
     _counterCoins(def, i) {
         const st = def.stalls?.[i], out = [];
@@ -1002,12 +1013,32 @@ export class CastleTalk {
             for (const st of cs.def.stalls || []) {
                 const c = st.counter;
                 if (!c || Math.abs((c.x0 + c.x1) / 2 - pos.x) > 8 || Math.abs((c.z0 + c.z1) / 2 - pos.z) > 8) continue;
-                if (feetY >= c.top - 0.2 || feetY < c.top - 3) continue;
+                if (feetY < c.top - 3) continue;
+                // (on top of it only where the hero fits under the roof: a low shed over the counter would hold the head in the rock and every step back —
+                // «идёт на месте»; there the counter top is not to stand on, the body is put off it)
+                if (feetY >= c.top - 0.2 && (feetY > c.top + 3.5 || !this._counterLow(st))) continue;
                 const z = counterZone(st);
                 if (pushOutOfRect(pos, r, z.minX, z.maxX, z.minZ, z.maxZ)) moved = true;
             }
         }
         return moved;
+    }
+
+    /** Is there less room over this counter's top than a hero is tall (a shed's roof, a lintel)? Looked at again every few seconds. */
+    _counterLow(st) {
+        const now = performance.now();
+        if (st._lowAt !== undefined && now - st._lowAt < 5000) return st._low;
+        st._lowAt = now;
+        const T = this.game.terrain, c = st.counter;
+        let low = false;
+        if (T?.ceilingAbove) {
+            const reach = Math.floor(c.top + 1.05 + 0.5 + 1e-9);
+            for (let x = c.x0; x <= c.x1 && !low; x++) for (let z = c.z0; z <= c.z1 && !low; z++) {
+                const L = T.ceilingAbove(x, z, reach + 1);
+                if (L !== Infinity && L - 1.5 - c.top < BODY_H) low = true;
+            }
+        }
+        return (st._low = low);
     }
 
     _merchantOf(def, i) {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TerrainData } from '../../src/world/Terrain.js';
-import { nightPart, sleepTime, shopsClosed, crowdK, watchCount, wakesSleeper, bedPlace, NightLife, HOUR } from '../../src/game/NightLife.js';
+import { nightPart, sleepTime, shopsClosed, crowdK, watchCount, wakesSleeper, bedPlace, NightLife, HOUR, dealHolds, DEAL_GRACE } from '../../src/game/NightLife.js';
 import { VillagerModel, villagerLook, SLEEP_HALF } from '../../src/entities/VillagerModel.js';
 import { MECHANICS } from '../../src/ui/Codex.js';
 
@@ -89,4 +89,27 @@ test('night: the castles have beds — bunks in the barracks, the king\'s bed �
 test('night: the guide tells about the night (Механика игры)', () => {
     const night = MECHANICS.find((m) => m.title === 'Сон и ночь');
     assert.ok(night.points.some((p) => /стража/.test(p) && /факел/.test(p)));
+});
+
+test('night: a deal under way keeps the stall open (up to the grace), then the goods go off the counter', () => {
+    assert.ok(dealHolds(true, 5) && !dealHolds(false, 5) && !dealHolds(true, DEAL_GRACE + 1));
+    let busy = true, uids = [1, 2, 3];
+    const loose = new Set(uids);
+    const stallState = { goods: uids, restockAt: 5 };
+    const life = { talk: { stalls: new Map([['c:s0', stallState]]), _stallKey: (d, i) => d.id + ':s' + i, dealBusy: () => busy } };
+    life.game = { items: { loose, removeLoose: (u) => loose.delete(u) }, sync: null, dayCycle: true, dayPhase: () => 0.8 };
+    const n = new NightLife(life);
+    const cs = { def: { id: 'c', stalls: [{}] }, active: new Map() };
+    n._closeStalls(cs);
+    assert.equal(loose.size, 3, 'night fell in the middle of a deal: the goods stay');
+    n._t += 10; n._releaseHeld(cs);
+    assert.equal(loose.size, 3, 'still paying');
+    busy = false; n._t += 1; n._releaseHeld(cs);
+    assert.equal(loose.size, 0, 'the deal is over: the stall closes');
+    // a deal that never ends: closes after the grace
+    busy = true; stallState.goods = [4]; loose.add(4);
+    n._shut.clear(); n._closeStalls(cs);
+    assert.equal(loose.size, 1);
+    n._t += DEAL_GRACE + 1; n._releaseHeld(cs);
+    assert.equal(loose.size, 0, 'no endless extension');
 });
