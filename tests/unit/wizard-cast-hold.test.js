@@ -71,7 +71,7 @@ test('the wand counts in a duel as everywhere: ×1.15 and its own bonuses; a wiz
     assert.equal(k(null, 5, wiz), 1);
 });
 
-test('«дуэльное мастерство»: +1 for a duel won, +15 and a quarter of the beaten mastery to the death; counted as mana in a duel; death takes it into the body', async () => {
+test('«дуэльное мастерство»: +5 for a duel won, +7 and a quarter of the beaten mastery to the death; counted as mana in a duel; death takes it into the body', async () => {
     const { Mana } = await import('../../src/game/Mana.js');
     const { captureLegacy, absorbLegacy } = await import('../../src/game/Legacy.js');
     const { Duel } = await import('../../src/game/Duel.js');
@@ -79,7 +79,7 @@ test('«дуэльное мастерство»: +1 for a duel won, +15 and a qu
     const g = { combat: { enabled: true, fatigue: 100, maxFatigue: 100, hp: 20, maxHp: 20 }, hud: {}, remotes: new Map(), config: { mode: 'freeworld' } };
     const M = g.mana = new Mana(g);
     M.duelWonAlive(7, Math.random, 100); M.duelWonAlive(7, Math.random, 100); M.duelWon(500, 8, null, 250);
-    assert.equal(M.mastery, 1 + 1 + 15 + 63, 'a duel won: +1 (the same foe again: +1); the Master (mastery 250) to the death: 15 + a quarter of 250');
+    assert.equal(M.mastery, 5 + 5 + 7 + 63, 'a duel won: +5 (the same foe again: +5); the Master (mastery 250) to the death: 7 + a quarter of 250');
     const s = Duel.prototype._strength.call({ me: 'me', game: g, _npcWizard: () => null, _mastery: Duel.prototype._mastery }, 'me', 0);
     assert.equal(s, duelPower(100 + 80, 1));
     const rec = captureLegacy(g);
@@ -88,9 +88,9 @@ test('«дуэльное мастерство»: +1 for a duel won, +15 and a qu
     absorbLegacy(g, rec);
     assert.equal(M.mastery, 80);
     M.duelWonAlive(7, Math.random, 100);
-    assert.equal(M.mastery, 81);
+    assert.equal(M.mastery, 85);
     const M2 = new Mana(g); M2.restore(M.snapshot());
-    assert.equal(M2.mastery, 81);
+    assert.equal(M2.mastery, 85);
 });
 
 test('before every spell a wizard says it — about a second, standing, facing the foe — only then the charge flies', async () => {

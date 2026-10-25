@@ -46,11 +46,11 @@ export const MANA = {
  */
 /**
  * «Дуэльное мастерство» (the author): how good one is at duels — a measure of its own, not the mana.
- * A duel won (the opponent alive): +1; won to the death: +15 and a quarter of the beaten one's own mastery (a wizard's: WizardAI.wizardMastery).
+ * A duel won (the opponent alive): +5; won to the death: +7 and a quarter of the beaten one's own mastery (a wizard's: WizardAI.wizardMastery).
  * It is never spent: in a duel it is added to the mana (Duel._strength — as if it were mana).
  * Death takes it (into the body: Legacy.js), as all the hero grew.
  */
-export const DUEL_MASTERY = { WIN: 1, KILL: 15, KILL_SHARE: 0.25, MAX_BEATEN: 400 }; // (the author: a duel won and the foe alive — 1 point; to the death — 15 and a quarter of the beaten one's own mastery; never halved for a known foe)
+export const DUEL_MASTERY = { WIN: 5, KILL: 7, KILL_SHARE: 0.25, MAX_BEATEN: 400 }; // (the author: a duel won and the foe alive — 5 points; to the death — 7 and a quarter of the beaten one's own mastery; never halved for a known foe)
 
 export const FIRST_SPELL = {
     // simple: +1
