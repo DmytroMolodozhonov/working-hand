@@ -181,7 +181,7 @@ export function spellPhrase(text, { final = true, match = matchSpell } = {}) {
     const out = { name, ok: !!name, why: '', words, span: [0, Math.max(0, words.length - 1)], extra: 0, close: null };
     if (!name) { out.why = 'no'; return out; }
     if (WORDY.has(name)) return out; // («поменяй цвет на синий»: the words go on)
-    if (words.length > MAX_WORDS) return { ...out, ok: false, why: 'sentence', extra: words.length };
+    if (words.filter((w) => !/^максим/.test(w) || name === 'Maxima').length > MAX_WORDS) return { ...out, ok: false, why: 'sentence', extra: words.length }; // (the duel's shouts «Максима максима…» before the spell are not counted)
     // where the spell's own words are: one of its ways of saying it — else the fewest words in a row that
     // still name it (then they must be its Russian name, or English)
     const info = {};

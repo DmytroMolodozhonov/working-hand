@@ -29,8 +29,8 @@ import { starterWand, rollWand } from './ItemTypes.js';
 import { handLog } from './HandRelease.js';
 
 export const EXPELLIARMUS = {
-    MIN: 4, // m: how far the wand flies at least
-    MAX: 10, // … and at most
+    MIN: 5.6, // m: how far the wand flies at least (the author: 40 % farther — it landed too near the wizard, who picked it up before «Акцио»)
+    MAX: 14, // … and at most
     G: 14, // the loose things' gravity (Items.js)
     TRIES: 10, // random directions looked at (the first good one wins)
     FETCH_GIVE_UP: 20, // s: a wizard who can't reach his wand calls it back («Акцио»)
