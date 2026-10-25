@@ -289,7 +289,8 @@ export function bodyTouch(lm, side, aspect = 4 / 3, hand = null) {
         // the greaves: the hand on the thigh, in front (drawn in from the hip line — a hand hanging at
         // the side is out there and never counts), from the belt down; or bent down to the knee. Hips
         // not seen (a camera to the waist): the hand low in front, at the belt, is enough.
-        knee: wr.y > hy + 0.45 * T && Math.abs(cx) < 1.0 || Math.abs(cx) < 0.42 && cdy > (hipsSeen ? 0.8 : 0.72) || !!palm && Math.abs(px) < 0.45 && pdy > (hipsSeen ? 0.85 : 0.78),
+        // (the same as the chest, only lower: the hand in front of the belly's lower half / the belt / the thigh)
+        knee: !out && (wr.y > hy + 0.45 * T && Math.abs(cx) < 1.0 || Math.abs(cx) < 0.5 && cdy > (hipsSeen ? 0.62 : 0.6) || !!palm && Math.abs(px) < 0.5 && pdy > (hipsSeen ? 0.62 : 0.6)),
     };
 }
 

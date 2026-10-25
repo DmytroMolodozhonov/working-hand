@@ -286,7 +286,7 @@ export function wearSpot(kind, piece, hand, touch = null) {
     if (spot === 'chest') return Math.abs(x) < (touch ? 1.1 : 0.9) && y > (touch ? -0.1 : 0.2) && y < 1.9 && z < 0.4 && z > (touch ? -2.0 : -1.6); // on the chest (its front at z −0.4)
     // on the thigh / at the knee: below the belt (the hero's arm hangs to y −0.65 — it can't reach lower,
     // so the camera's picture tells the thigh from a hand at the side); unseen — the hand forward of the thigh
-    if (!(Math.abs(x) < 1.0 && y > -1.9 && y < 0.15 && z > -1.6 && z < 0.8)) return false;
+    if (!(Math.abs(x) < 1.0 && y > -1.9 && y < (touch ? 0.6 : 0.15) && z > -1.6 && z < 0.8)) return false;
     return touch ? true : z < -0.35 && Math.abs(x) < 0.75;
 }
 
