@@ -45,7 +45,7 @@ test('the hero panel shows with «Творческий» only; defaults are as t
     assert.deepEqual(realErrors(errors), []);
 });
 
-test('a Creative world made with finite mana, only the armour, the mage spells and 1.8 duel strength', async () => {
+test('a Creative world made with finite mana, only the armour, the mage spells and 150 duel points', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await openCreate(page);
     await page.click('.mode-card[data-mode="creative"]');
@@ -54,7 +54,7 @@ test('a Creative world made with finite mana, only the armour, the mage spells a
     await page.uncheck('#hero-sp-robe');
     await page.check('input[name="hero-sp-spells"][value="mage"]');
     await page.check('input[name="hero-sp-duel"][value="custom"]');
-    await page.fill('#hero-sp-duel-pct', '1.8');
+    await page.fill('#hero-sp-duel-pct', '150');
     await page.click('#start-btn');
     await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 90000 });
     await waitHudVisible(page);
@@ -64,7 +64,7 @@ test('a Creative world made with finite mana, only the armour, the mage spells a
             worn: Object.fromEntries(Object.entries(g.armor.worn).map(([k, v]) => [k, !!v && v.magic])),
             boom: g.knowsSpell('Boom'), bomb: g.knowsSpell('Bombardo'), insp: g.knowsSpell('Inspirius'), barShown: !document.getElementById('fatigue-container')?.classList.contains('hidden') };
     });
-    assert.equal(r.hero.infiniteMana, false); assert.equal(r.hero.cells, 120); assert.equal(r.hero.duelPower, 1.8);
+    assert.equal(r.hero.infiniteMana, false); assert.equal(r.hero.cells, 120); assert.equal(r.hero.duelPts, 150);
     assert.equal(r.manaOn, true); assert.equal(r.max, 120); assert.ok(r.fat <= 120 && r.fat > 0);
     assert.deepEqual(r.worn, { helmet: true, chest: true, legs: true, robe: false });
     assert.equal(r.boom, false); assert.equal(r.insp, false); assert.equal(r.bomb, true);

@@ -230,14 +230,25 @@ function villageRoster(def, idx, seed, rng) {
 }
 
 /**
- * How strong anybody is in a beam clash — a player, a tower's wizard, a wanderer: ONE scale for all.
- * Mana NOW (not the share of one's own maximum: 50 mana is 50 mana for everybody), with diminishing
- * returns (the square root: 50 → 1.29, 100 → 1.83, 200 → 2.58, 500 → 4.08), plus health (its share)
- * and a little luck. Out of mana — almost no push left.
+ * How strong anybody is in a beam clash — a player, a tower's wizard, a wanderer: ONE scale for all, in plain points.
+ * Points = the mana he has NOW (+ the duel mastery for a player): 50 mana is 50 points for everybody; health takes
+ * up to a third off (full health ×1, almost dead ×0.65); luck ±10 %. No softening: 500 against 30 is 500 against 30 —
+ * the weak one does not win a duel, he wins by cunning (the author: «никаких защитных элементов»).
  */
-export const DUEL_MANA_UNIT = 30;
+export const HEALTH_FLOOR = 0.65;
 export function duelPower(mana, hpK = 1, luck = 0) {
-    return Math.sqrt(Math.max(0, mana) / DUEL_MANA_UNIT) + 0.35 * Math.max(0, Math.min(1, hpK)) + luck;
+    const hp = HEALTH_FLOOR + (1 - HEALTH_FLOOR) * Math.max(0, Math.min(1, hpK));
+    return Math.max(0, mana) * hp * (1 + luck);
+}
+
+/**
+ * How big the meeting point's push is for two strengths: the share of the stronger's lead (so the ratio decides, not the
+ * absolute numbers) on the clash's old scale. Equal → 0; 500 against 30 → a clear win in seconds; 100 against 50 → slow.
+ */
+export const CLASH_SCALE = 4;
+export function strengthGap(sa, sb) {
+    const t = sa + sb;
+    return t > 0 ? CLASH_SCALE * (sa - sb) / t : 0;
 }
 
 /** Typical duel strength of a rank (the same scale as duelPower: full mana, full health, no luck). */

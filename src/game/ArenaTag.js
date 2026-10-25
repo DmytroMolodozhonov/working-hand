@@ -18,7 +18,7 @@ export function tagOf(v) {
     return {
         id: v.id, rank, title: RANK_TITLE[rank] || RANK_TITLE.adept,
         mana: Math.max(0, Math.round(v.mana ?? 0)), max: Math.round(v.maxMana ?? 0),
-        power: Math.round(duelStrength(v.role, v.mana ?? 0, v.hp ?? 0, 0, v.maxHp) * 10) / 10,
+        power: Math.round(duelStrength(v.role, v.mana ?? 0, v.hp ?? 0, 0, v.maxHp)),
     };
 }
 

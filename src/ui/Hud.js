@@ -446,7 +446,7 @@ export class Hud {
         }
         if (el.style.display !== 'flex') el.style.display = 'flex';
         const v = Math.max(0, Math.floor(n));
-        const pw = Number.isFinite(power) ? Math.round(power * 10) / 10 : null;
+        const pw = Number.isFinite(power) ? Math.round(power) : null;
         if (this._masteryN !== v || this._masteryP !== pw) { this._masteryN = v; this._masteryP = pw; el.textContent = `⚔️ Дуэльное мастерство: ${v}${pw != null ? ` · сила в бою: ${pw}` : ''}`; }
     }
 

@@ -4,7 +4,7 @@
  * какая у палочки — чтобы всё сравнить: почему кто победил».
  */
 const n1 = (x) => (Number.isFinite(x) ? (Math.round(x * 10) / 10).toString() : '?');
-const n2 = (x) => (Number.isFinite(x) ? (Math.round(x * 100) / 100).toString() : '?');
+const n2 = (x) => (Number.isFinite(x) ? (Math.abs(x) < 10 ? Math.round(x * 100) / 100 : Math.round(x)).toString() : '?');
 const pct = (x) => `${Math.round((x || 0) * 100)}%`;
 const wandText = (w) => (w ? `палочка: +${w.power || 0}%${w.fav ? `, любимое «${w.fav}»` : ''}${w.dir ? `, вид ${w.dir}` : ''}` : 'без палочки');
 const spells = (t) => Object.entries(t || {}).map(([k, v]) => `${k} ×${v}`).join(', ') || 'ничего';

@@ -58,7 +58,7 @@ import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
 import { SPELL_PHYSICS } from './Impact.js';
 import { kindOf } from './CreatureImpact.js';
-import { duelStrength, duelPower } from './WizardAI.js';
+import { duelStrength, duelPower, strengthGap } from './WizardAI.js';
 import { bodySpan } from './AnimalHerd.js';
 import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
@@ -1552,7 +1552,7 @@ export class Duel {
             const ow = this._npcWizard(opId);
             const mana = ow ? ow.mana : Math.max(this._playerMana(id), this._playerMana(opId));
             const full = duelPower(mana + this._mastery(id), 1, luck);
-            return id === this.me && g.hero?.duelPower != null ? duelStrengthOf(g.hero, full) + luck : full; // (the hero's «Дуэльная сила» — a number of the same scale, HeroSetup.js; none = full)
+            return id === this.me && g.hero?.duelPts != null ? duelStrengthOf(g.hero, full) * (1 + luck) : full; // (the hero's «Дуэльная сила» — points on the same scale, HeroSetup.js; none = full)
         }
         // «Выживание» and «Хардкор» (the maps too) — the same (the author): the mana LEFT now and the health now
         let mana = 30, hp = PVP.MAX_HP, maxHp = PVP.MAX_HP;
@@ -1703,7 +1703,7 @@ export class Duel {
         this._clashArcs(c, (sa + sb) / 2, dt);
         const S = c.stat || (c.stat = { n: 0, sa: 0, sb: 0, ca: 0, cb: 0 }); // (for the duel journal: what each side really pushed with)
         S.n++; S.sa += sa; S.sb += sb; S.ca += ca.ok ? 1 : 0; S.cb += cb.ok ? 1 : 0;
-        c.v = clashPush(sa - sb) + maximaPush(ca.ok ? liveShouts(c.shoutsA, c.t) : 0, cb.ok ? liveShouts(c.shoutsB, c.t) : 0);
+        c.v = clashPush(strengthGap(sa, sb)) + maximaPush(ca.ok ? liveShouts(c.shoutsA, c.t) : 0, cb.ok ? liveShouts(c.shoutsB, c.t) : 0);
         c.k = (ca.ok ? 1 : 0) | (cb.ok ? 2 : 0);
         c.p = Math.min(1, Math.max(0, c.p + c.v * dt + (Math.random() - 0.5) * 0.02));
 
@@ -1793,7 +1793,7 @@ export class Duel {
             this.game.hud.setVoice(`⚡ Вы победили в дуэли: ${DUEL_SPELLS[winnerBolt.spell].name}!`, true);
             this._manaHit(winnerBolt.spell); // (my charge reached them)
             if (winnerBolt.spell === 'Electrum') this.game.strong?.startElectrum(winnerBolt.side, lw ? 'v' : 'p', loser);
-            this._won = { id: loser, at: performance.now() }; // (mana if it kills them: a duel won)
+            this._won = { id: loser, at: performance.now(), max: lw ? Math.max(lw.mana || 0, lw.maxMana || 0) || 30 : this._playerMana(loser) }; // (mana if it kills them: a duel won; `max` — his mana: the mastery is a share of it)
         }
     }
 
@@ -1822,7 +1822,7 @@ export class Duel {
         const w = this._won;
         if (!w || performance.now() - w.at <= 8000) return;
         this._won = null;
-        this.game.mana?.duelWonAlive(w.id);
+        this.game.mana?.duelWonAlive(w.id, Math.random, w.max);
     }
 
     remoteClashEnd(m) {

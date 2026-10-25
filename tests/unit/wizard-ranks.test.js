@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WIZ_RANKS, wizardRoster, wizardStats, duelPower, duelStrength, wantsMaxima } from '../../src/game/WizardAI.js';
+import { WIZ_RANKS, wizardRoster, wizardStats, duelPower, duelStrength, strengthGap, wantsMaxima } from '../../src/game/WizardAI.js';
 import { DUEL, maximaPush, clashPush } from '../../src/game/Duel.js';
 
 const tower = (wseed, id = 'wt3_4') => ({ id, kind: 'tower', wseed, stalls: [{}, {}], teachers: 4, houses: [{}, {}, {}] });
@@ -54,7 +54,7 @@ function clash(playerMana, wizMana, rng, maxima = true, skill = 'student') {
         if (maxima && t - lastMax >= DUEL.MAXIMA_EVERY && pm >= DUEL.MAXIMA_COST) { lastMax = t; pm -= DUEL.MAXIMA_COST; boost++; }
         wizT -= dt;
         if (wizT <= 0) { wizT = DUEL.MAXIMA_EVERY; if (wantsMaxima(skill, wm, rng)) { wm -= DUEL.MAXIMA_COST; boostB++; } }
-        const v = clashPush(duelPower(pm, 1, luckA) - duelPower(wm, 1, luckB)) + maximaPush(boost, boostB);
+        const v = clashPush(strengthGap(duelPower(pm, 1, luckA), duelPower(wm, 1, luckB))) + maximaPush(boost, boostB);
         p = Math.min(1, Math.max(0, p + v * dt + (rng() - 0.5) * 0.02));
         if (p >= 1) return { won: true, t };
         if (p <= 0) return { won: false, t };
@@ -63,14 +63,16 @@ function clash(playerMana, wizMana, rng, maxima = true, skill = 'student') {
 }
 const rngOf = (s) => () => ((s = (s * 16807) % 2147483647) / 2147483647);
 
-test('a player with 50 mana: a beginner can be beaten (the duel lasts), the Master — never', () => {
-    let wins = 0;
+test('a player with 50 mana: the strongest beginner is no easier (honest points), a stronger player wins him, the Master — never', () => {
+    let wins = 0, strong = 0;
     for (let s = 1; s <= 40; s++) {
-        const r = clash(50, 57, rngOf(s)); // (the strongest beginner)
+        const r = clash(50, 57, rngOf(s)); // (the strongest beginner: a little stronger than me)
         if (r.won) wins++;
         assert.ok(r.t > 3, `a duel with a beginner lasts: ${r.t.toFixed(1)} s`);
+        if (clash(120, 57, rngOf(s)).won) strong++;
     }
-    assert.ok(wins >= 20, `wins against a beginner: ${wins}/40`);
+    assert.ok(wins <= 20, `a weaker one does not win by a root's mercy: ${wins}/40`);
+    assert.ok(strong >= 36, `120 mana against 57: ${strong}/40`);
     for (let s = 1; s <= 40; s++) {
         const r = clash(50, 450, rngOf(s), true, 'master'); // (the weakest Master)
         assert.equal(r.won, false);
@@ -86,6 +88,8 @@ test('a wizard\'s duel strength: his mana now on the player\'s scale; out of man
     assert.equal(W.regen, 1);
     assert.ok(Math.abs(duelStrength('student', 50, W.hp, 0, W.hp) - duelPower(50, 1)) < 1e-9);
     assert.ok(duelStrength('master', 0, 32, 0, 32) < duelPower(30, 1) / 2);
+    assert.equal(duelPower(500, 1, 0), 500, 'points are the mana: no root, no softening');
+    assert.ok(duelPower(500) > 10 * duelPower(30) * 0.9, 'a strong wizard is really many times stronger');
     assert.ok(duelPower(500) > duelPower(200) && duelPower(200) > duelPower(100) && duelPower(100) > duelPower(50));
 });
 

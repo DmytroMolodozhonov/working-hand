@@ -16,8 +16,8 @@ const T = {
     robe: 'Магическая мантия защищает от холода и смягчает часть сильных заклинаний. Её можно носить вместе с бронёй. Если оставить галочку, герой начнёт игру в мантии.',
     spellsAll: 'Все заклинания игры известны сразу — свитки учить не нужно.',
     spellsMage: 'Известны почти все заклинания, кроме божественных (свитки храма богов, «Flying Maxima» и другие) и «Inspirius». Их можно выучить позже, сжигая свитки.',
-    duelFull: 'В столкновении лучей герой выступает на полную силу: он не слабее соперника.',
-    duelCustom: `Сделайте дуэли честнее: впишите число — столько дуэльной силы будет у героя в столкновении лучей. Это те же числа, что показаны над соперником на арене. От ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX} (сила самого сильного мага). Работает, когда стоит галочка «Бесконечная мана». Если вы её сняли, дуэль идёт по правилам Выживания: сила луча зависит от вашей маны сейчас, дуэльного мастерства и здоровья, а это число не используется.`,
+    duelFull: 'В столкновении лучей у героя столько же очков силы, сколько у соперника: бой на равных.',
+    duelCustom: `Сделайте дуэли честнее: впишите, сколько очков дуэльной силы будет у героя в столкновении лучей. Очки — это та же мана: у кого их больше, тот и сильнее давит. Например: начинающий волшебник — около 50, продвинутый — около 100, преподаватель — 200, сильный волшебник поселения — 400, глава башни — около 500. Можно от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}. Работает, когда стоит галочка «Бесконечная мана». Если вы её сняли, дуэль идёт по правилам Выживания: сила — это мана, которая у вас есть сейчас, плюс дуэльное мастерство, а это число не используется.`,
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
     spawn: 'Где герой появится при входе в мир и после возрождения. Выберите босса, которого хотите проверить, — вы окажетесь рядом с ним, а не на начальной площадке. Если рядом с кроватью — кровать не учитывается: возрождение всегда здесь.',
@@ -29,7 +29,7 @@ const T = {
     steady: 'Устойчивость — шанс устоять на ногах, когда вас пытаются сбить заклинанием. 100 — всегда устоите, 1 — собьёт почти каждое.',
 };
 
-const f1 = (n) => (Math.round(n * 10) / 10).toLocaleString('ru-RU');
+const f1 = (n) => Math.round(n).toLocaleString('ru-RU');
 /** Подсказки «сколько силы у волшебника такого вида» — числа считаются из тех же данных, что и бой (WizardAI). */
 export const DUEL_RANK_ROWS = [
     ['novice', 'Младший (начинающий) волшебник'], ['adept', 'Средний (продвинутый) волшебник'], ['teacher', 'Преподаватель'],
@@ -38,13 +38,13 @@ export const DUEL_RANK_ROWS = [
     const [lo, hi] = rankDuelRange(rank);
     const avg = rankDuelPower(rank);
     const who = rank === 'master' ? 'Глава башни Джовалилиус Правдиус Нотан' : `Средний ${WIZ_RANK_RU[rank][0]}`;
-    return { rank, label, avg: f1(avg), lo: f1(lo), hi: f1(hi), tip: `${who} имеет около ${f1(avg)} дуэльной силы (у разных — от ${f1(lo)} до ${f1(hi)}).` };
+    return { rank, label, avg: f1(avg), lo: f1(lo), hi: f1(hi), tip: `${who} имеет около ${f1(avg)} очков дуэльной силы (у разных — от ${f1(lo)} до ${f1(hi)}).` };
 });
 /** Подпись соперника в списке: кто он и сколько у него дуэльной силы (числа — из боя, WizardAI). */
 const FOE_RANK = { weak: 'novice', mid: 'adept', strong: 'teacher', master: 'master' };
 const foeOption = (x) => {
     const row = DUEL_RANK_ROWS.find((r) => r.rank === FOE_RANK[x.id]);
-    const text = row ? `${x.label} — сила ≈ ${row.avg} (у разных от ${row.lo} до ${row.hi})` : `${x.label} — любой из четырёх`;
+    const text = row ? `${x.label} — сила ≈ ${row.avg} очков (у разных от ${row.lo} до ${row.hi})` : `${x.label} — любой из четырёх`;
     return `<option value="${x.id}" title="${row ? row.tip : 'Каждый раз новый уровень соперника.'}">${text}</option>`;
 };
 
@@ -68,9 +68,9 @@ const html = (p) => `
   <label class="world-opt" title="${T.robe}"><input type="checkbox" id="${p}-robe" checked> 🧥 Магическая мантия <span class="mp-hint">— можно вместе с бронёй</span></label>
   <div class="hero-group" role="radiogroup" aria-label="Дуэльная сила">
     <span class="hero-cap">⚔️ Дуэльная сила</span>
-    <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full"> Полная</label>
+    <label class="hero-seg" title="${T.duelFull}"><input type="radio" name="${p}-duel" value="full"> Как у соперника</label>
     <label class="hero-seg" title="${T.duelCustom}"><input type="radio" name="${p}-duel" value="custom" checked> Настроить</label>
-    <span class="hero-slide" id="${p}-duel-wrap" title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="0.1" value="2"> <span class="mp-hint">от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
+    <span class="hero-slide" id="${p}-duel-wrap" title="${T.duelCustom}"><input type="number" id="${p}-duel-pct" min="${HERO.DUEL_MIN}" max="${HERO.DUEL_MAX}" step="1" value="100"> <span class="mp-hint">очков, от ${HERO.DUEL_MIN} до ${HERO.DUEL_MAX}</span></span>
     <span class="mp-hint">Сколько силы у волшебников — смотрите в списке «Соперник на арене».</span>
   </div>
   <div class="hero-group" role="radiogroup" aria-label="Здоровье">
@@ -121,7 +121,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         infiniteMana: $('inf').checked, cells: $('cells').value === '' ? HERO.CELLS_DEFAULT : $('cells').value,
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
-        duelPower: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
+        duelPts: radio('duel') === 'custom' && $('duel-pct').value !== '' ? $('duel-pct').value : null,
         spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
@@ -130,10 +130,10 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
-        root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPower == null ? 'full' : 'custom'}"]`).checked = true;
+        root.querySelector(`input[name="${prefix}-duel"][value="${v.duelPts == null ? 'full' : 'custom'}"]`).checked = true;
         $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe; $('wand').value = v.wandBonus;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
-        $('duel-pct').value = v.duelPower ?? 2; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
+        $('duel-pct').value = v.duelPts ?? 100; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();
     };
     sync();

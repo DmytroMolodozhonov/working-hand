@@ -19,12 +19,12 @@
 import { GOD_SPELLS } from './Mana.js';
 import { isDivine } from './ProtectionGods.js';
 import { normalizeSpawn, normalizeFoe } from './SpawnSpots.js';
-import { duelPower, rankDuelRange } from './WizardAI.js';
+import { rankDuelRange } from './WizardAI.js';
 
 export const HERO = {
     CELLS_MIN: 30, CELLS_MAX: 100000, CELLS_DEFAULT: 500,
-    // (дуэльная сила — в тех же числах, что в бою: WizardAI.duelPower; от «маны нет» до самого сильного — Мастера башни)
-    DUEL_MIN: Math.ceil(duelPower(0, 1, 0) * 10) / 10, DUEL_MAX: Math.round(rankDuelRange('master')[1] * 10) / 10,
+    // (дуэльная сила — в очках, как в бою: мана, которая есть сейчас; от 1 очка до самого сильного — Мастера башни)
+    DUEL_MIN: 1, DUEL_MAX: Math.round(rankDuelRange('master')[1]),
     DARK_MAX: 100, STEADY_MIN: 1, STEADY_MAX: 100,
     WAND_MAX: 200, // добавка к силе палочки в дуэли, % (Duel._wandK)
     HP_MIN: 1, HP_MAX: 1000, HP_DEFAULT: 20,
@@ -35,7 +35,7 @@ export const DEFAULT_HERO = Object.freeze({
     infiniteMana: true, cells: HERO.CELLS_DEFAULT,
     armor: true, robe: true,
     spells: 'all', // 'all' | 'mage'
-    duelPower: 2, // число в единицах дуэльной силы игры (WizardAI.duelPower); null — полная: как у соперника (по умолчанию «Настроить» и 2)
+    duelPts: 100, // дуэльная сила героя в очках (как мана в бою: 50 — начинающий волшебник, 100 — продвинутый, 500 — глава башни); null — полная: как у соперника
     dark: 0, breakward: false, steady: 100,
     health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
     maxHp: HERO.HP_DEFAULT,
@@ -46,7 +46,7 @@ export const DEFAULT_HERO = Object.freeze({
 });
 
 /** Старые Творческие миры (без записи в сохранении): как было до настроек — брони и мантии у героя не было. */
-export const LEGACY_HERO = Object.freeze({ ...DEFAULT_HERO, armor: false, robe: false, duelPower: null });
+export const LEGACY_HERO = Object.freeze({ ...DEFAULT_HERO, armor: false, robe: false, duelPts: null });
 
 const num = (v, d) => (Number.isFinite(+v) && v !== '' && v !== null ? +v : d);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -61,7 +61,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         armor: r.armor == null ? !!b.armor : !!r.armor,
         robe: r.robe == null ? !!b.robe : !!r.robe,
         spells: r.spells === 'mage' ? 'mage' : r.spells === 'all' ? 'all' : b.spells === 'mage' ? 'mage' : 'all',
-        duelPower: normalizeDuelPower(r, b),
+        duelPts: normalizeDuelPts(r, b),
         dark: clamp(Math.round(num(r.dark, b.dark)), 0, HERO.DARK_MAX),
         breakward: r.breakward == null ? !!b.breakward : !!r.breakward,
         steady: clamp(Math.round(num(r.steady, b.steady)), HERO.STEADY_MIN, HERO.STEADY_MAX),
@@ -74,15 +74,18 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
     };
 }
 
-/** Старое сохранение хранило дуэльную силу в процентах (`duel`, 100 = полная); теперь — число (`duelPower`). */
-export const duelPercentToPower = (pct) => (pct >= 100 ? null : Math.round(clamp(pct / 100, 0, 1) * HERO.DUEL_MAX * 10) / 10);
+/** Старое сохранение хранило дуэльную силу в процентах (`duel`, 100 = полная). */
+export const duelPercentToPts = (pct) => (pct >= 100 ? null : Math.max(HERO.DUEL_MIN, Math.round(clamp(pct / 100, 0, 1) * HERO.DUEL_MAX)));
+/** Потом — числом по старой шкале (`duelPower`: √(мана/30) + 0,35): в очках это мана, равная такой силе. */
+export const oldPowerToPts = (p) => Math.max(HERO.DUEL_MIN, Math.round(30 * Math.max(0, p - 0.35) ** 2));
 
-function normalizeDuelPower(r, b) {
-    let v = r.duelPower;
-    if (v === undefined && r.duel !== undefined) v = duelPercentToPower(num(r.duel, 100)); // (миграция)
-    if (v === undefined) v = b.duelPower ?? (b.duel !== undefined ? duelPercentToPower(num(b.duel, 100)) : null);
+function normalizeDuelPts(r, b) {
+    let v = r.duelPts;
+    if (v === undefined && r.duelPower !== undefined) v = r.duelPower === null || r.duelPower === '' || !Number.isFinite(+r.duelPower) ? null : oldPowerToPts(+r.duelPower); // (миграция)
+    if (v === undefined && r.duel !== undefined) v = duelPercentToPts(num(r.duel, 100)); // (миграция)
+    if (v === undefined) v = b.duelPts ?? (b.duelPower != null ? oldPowerToPts(+b.duelPower) : null);
     if (v === null || v === '' || !Number.isFinite(+v)) return null;
-    const n = Math.round(clamp(+v, HERO.DUEL_MIN, HERO.DUEL_MAX) * 10) / 10;
+    const n = Math.round(clamp(+v, HERO.DUEL_MIN, HERO.DUEL_MAX));
     return n >= HERO.DUEL_MAX ? null : n; // (максимум = полная сила)
 }
 
@@ -115,10 +118,10 @@ export function knownInCreative(hero, spell) {
 }
 
 /** Сила героя в Творческой дуэли: заданное число (+удача); null — полная, `full` (как у соперника). */
-export const duelStrengthOf = (hero, full) => (hero?.duelPower == null ? full : hero.duelPower);
+export const duelStrengthOf = (hero, full) => (hero?.duelPts == null ? full : hero.duelPts);
 
 /** Короткое описание для журнала/отчёта. */
 export function heroSummary(h) {
     return [h.infiniteMana ? 'мана ∞' : `ячеек ${h.cells}`, h.armor ? 'броня' : 'без брони', h.robe ? 'мантия' : 'без мантии',
-        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duelPower ?? 'полная'}`, h.wandBonus ? `палочка +${h.wandBonus}%` : '', `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
+        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duelPts ?? 'полная'}`, h.wandBonus ? `палочка +${h.wandBonus}%` : '', `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
 }

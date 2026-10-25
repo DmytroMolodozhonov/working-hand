@@ -50,7 +50,7 @@ export const MANA = {
  * It is never spent: in a duel it is added to the mana (Duel._strength — as if it were mana).
  * Death takes it (into the body: Legacy.js), as all the hero grew.
  */
-export const DUEL_MASTERY = { NEW: 5, KNOWN: 3, KILL: 10, MAX_BEATEN: 400 };
+export const DUEL_MASTERY = { WIN_K: 0.06, KILL_K: 0.1, KNOWN: 0.5, MIN: 1, MAX_BEATEN: 400 }; // (points = a share of the beaten one's own mana: a novice (50) 3 / 5 killed, the Master (500) 30 / 50; one beaten before — half)
 
 export const FIRST_SPELL = {
     // simple: +1
@@ -239,7 +239,7 @@ export class Mana {
 
     /** A real duel won: the opponent `id` (his mana maximum `oppMax`) beaten in the clash and killed. */
     duelWon(oppMax = MANA.BASE, id = null, pos = null) {
-        this.masteryWon(id, true);
+        this.masteryWon(id, true, oppMax);
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (this one already counted)
         if (id != null) this.duelsWon.set(String(id), 'kill');
         const n = duelGain(oppMax);
@@ -295,8 +295,8 @@ export class Mana {
     }
 
     /** The clash won but the opponent `id` lives (lifted, stunned…): +1…+3 at random, once per opponent. */
-    duelWonAlive(id = null, rng = Math.random) {
-        this.masteryWon(id, false);
+    duelWonAlive(id = null, rng = Math.random, oppMax = MANA.BASE) {
+        this.masteryWon(id, false, oppMax);
         if (id != null && this.duelsWon.has(String(id))) return 0;
         if (id != null) this.duelsWon.set(String(id), 'win');
         const n = 1 + Math.min(2, Math.floor(rng() * 3));
@@ -310,10 +310,11 @@ export class Mana {
      * a new opponent more than a known one (DUEL_MASTERY). Shown after every one, in every mode.
      * @returns {number} how much it grew
      */
-    masteryWon(id = null, kill = false) {
+    masteryWon(id = null, kill = false, oppMax = MANA.BASE) {
         const key = id != null ? String(id) : null;
         const known = key != null && this.beaten.has(key);
-        const n = kill ? DUEL_MASTERY.KILL : known ? DUEL_MASTERY.KNOWN : DUEL_MASTERY.NEW;
+        const base = (Number(oppMax) || MANA.BASE) * (kill ? DUEL_MASTERY.KILL_K : DUEL_MASTERY.WIN_K);
+        const n = Math.max(DUEL_MASTERY.MIN, Math.round(known ? base * DUEL_MASTERY.KNOWN : base));
         if (key != null && !known) {
             if (this.beaten.size >= DUEL_MASTERY.MAX_BEATEN) this.beaten.delete(this.beaten.values().next().value);
             this.beaten.add(key);
