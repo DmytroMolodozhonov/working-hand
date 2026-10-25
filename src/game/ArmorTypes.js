@@ -33,7 +33,8 @@ export const PIECE_RU = { helmet: 'Шлем', chest: 'Нагрудник', legs:
 const PIECE_OF = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
 
 export const ARMOR = {
-    HP: { helmet: 10, chest: 20, legs: 10 }, // a plain piece's points (magic ×2)
+    HP: { helmet: 10, chest: 20, legs: 10 }, // a plain piece's points (magic × MAGIC_K)
+    MAGIC_K: 2, // magic armour (any piece) lasts this many times longer than plain: one constant for the points
     COVER: { helmet: 0.2, chest: 0.5, legs: 0.3 }, // the share of a blow at random that lands on it
     SOAK: 0.8, // where steel covers, it takes this much of the blow (the rest still hurts)
     FIRE_SOAK: 0.4, // fire heats through: steel takes less of it
@@ -105,7 +106,7 @@ const KNIGHTS = ['сэра Гаррета Стойкого', 'сэра Эдму�
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 const shuffled = (r, list) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
-export const pieceMax = (it) => (ARMOR.HP[it?.piece] || 0) * (it?.magic ? 2 : 1);
+export const pieceMax = (it) => (ARMOR.HP[it?.piece] || 0) * (it?.magic ? ARMOR.MAGIC_K : 1);
 
 /** One armour piece (a thing): plain or magic. */
 export function makePiece(piece, { magic = false } = {}) {
@@ -180,7 +181,7 @@ export function describeArmor(it) {
         return { title: it.named ? `❄️ ${it.named}` : '🧙 Волшебная мантия', color: it.named ? 0xbfe9ff : 0xb58cff, lines };
     }
     const title = it.named ? `✨ ${it.named}` : `${it.magic ? '✨ Волшебный' : '🪖'} ${it.magic ? PIECE_OF[it.piece] : PIECE_RU[it.piece]}`;
-    const lines = [`Прочность: <b>${Math.round(it.hp ?? pieceMax(it))}</b> из ${pieceMax(it)}${it.magic ? ' (сама восстанавливается)' : ''}`];
+    const lines = [`Прочность: <b>${Math.round(it.hp ?? pieceMax(it))}</b> из ${pieceMax(it)}${it.magic ? ' (магическая броня служит вдвое дольше обычной и сама восстанавливается)' : ''}`];
     if (it.magic) lines.push('Весь волшебный комплект: «Левиоса», «Остолбеней», «Айс», «Джолт» не действуют, «Инферно» — вдвое слабее, стрелы отскакивают');
     if (it.set) lines.push(`Весь «${it.set.name}» вместе: ${it.set.perks.map((p) => PERK[p]?.ru).join('; ')}`);
     for (const p of it.perks || []) lines.push(`Сам по себе: ${PERK[p]?.ru}`);

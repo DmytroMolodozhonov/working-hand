@@ -253,7 +253,11 @@ export class ArmorSystem {
             // the picture and stays there (~0.45 s); then it comes back — put on. A hand just hanging goes out at the side)
             let gone = false;
             if (slot === 'legs') gone = this._legsEdge(side, dt, g.currentPose?.bodyEdge?.[side] ?? null);
+            // (the greaves: the camera's picture said «not the thigh» but the hero's own hand is at the thigh in front —
+            // held there twice as long it goes on anyway; the author: the greaves never went on)
+            const slow = !on && !gone && slot === 'legs' && !!touch && wearSpot(h.item.kind, h.item.piece, hand, null);
             if (gone) this._wearT[side] = ARMOR.WEAR_T;
+            else if (slow) this._wearT[side] += 0.5 * dt;
             else if (on) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
             if (slot === 'legs') this._legsLog(side, dt, hand, touch, g.currentPose?.bodyEdge?.[side] ?? null, on, gone);
             if (this._wearT[side] < ARMOR.WEAR_T) continue;
