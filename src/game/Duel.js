@@ -1575,7 +1575,7 @@ export class Duel {
      */
     _wandK(id, spell) {
         const name = DUEL_SPELL_NAME[spell] || spell;
-        if (id === this.me) return wandPower(this.game.items?.wand || null, name);
+        if (id === this.me) return wandPower(this.game.items?.wand || null, name) * (1 + (this.game.hero?.wandBonus || 0) / 100); // (Creative: the «Сила палочки» added in the hero's settings, in % — HeroSetup.wandBonus)
         const w = this._npcWizard(id);
         if (w) return w.noWand ? 1 : wandPower(wizardWandOf(w), name);
         return wandPower(this.game.remotes.get(id)?.wand || null, name);

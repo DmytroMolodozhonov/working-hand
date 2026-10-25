@@ -26,6 +26,7 @@ export const HERO = {
     // (дуэльная сила — в тех же числах, что в бою: WizardAI.duelPower; от «маны нет» до самого сильного — Мастера башни)
     DUEL_MIN: Math.ceil(duelPower(0, 1, 0) * 10) / 10, DUEL_MAX: Math.round(rankDuelRange('master')[1] * 10) / 10,
     DARK_MAX: 100, STEADY_MIN: 1, STEADY_MAX: 100,
+    WAND_MAX: 200, // добавка к силе палочки в дуэли, % (Duel._wandK)
     HP_MIN: 1, HP_MAX: 1000, HP_DEFAULT: 20,
 };
 
@@ -39,6 +40,7 @@ export const DEFAULT_HERO = Object.freeze({
     health: 'immortal', // 'immortal' (as in Creative always) | 'normal' (damage and death as in the free world)
     maxHp: HERO.HP_DEFAULT,
     spawn: 'start', // where the hero appears (SpawnSpots.js)
+    wandBonus: 0, // дополнительный процент к силе палочки героя в дуэли (не сама палочка и не её красота): 0…WAND_MAX
     foe: 'mid', // who stands opposite on the arena of «Перед дуэлью» (SpawnSpots.DUEL_FOES)
     noCrew: false, // ships without sailors (and the black ship without Black Moustache and his skeletons) — Sailors.setCrewless
 });
@@ -67,6 +69,7 @@ export function normalizeHero(raw, base = DEFAULT_HERO) {
         maxHp: clamp(Math.round(num(r.maxHp, b.maxHp)), HERO.HP_MIN, HERO.HP_MAX),
         spawn: normalizeSpawn(r.spawn ?? b.spawn),
         foe: normalizeFoe(r.foe ?? b.foe),
+        wandBonus: clamp(Math.round(num(r.wandBonus, b.wandBonus ?? 0)), 0, HERO.WAND_MAX),
         noCrew: r.noCrew == null ? !!b.noCrew : !!r.noCrew,
     };
 }
@@ -117,5 +120,5 @@ export const duelStrengthOf = (hero, full) => (hero?.duelPower == null ? full : 
 /** Короткое описание для журнала/отчёта. */
 export function heroSummary(h) {
     return [h.infiniteMana ? 'мана ∞' : `ячеек ${h.cells}`, h.armor ? 'броня' : 'без брони', h.robe ? 'мантия' : 'без мантии',
-        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duelPower ?? 'полная'}`, `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
+        h.spells === 'mage' ? 'заклинания сильного мага' : 'все заклинания', `дуэль ${h.duelPower ?? 'полная'}`, h.wandBonus ? `палочка +${h.wandBonus}%` : '', `тьма ${h.dark}`, h.breakward ? 'метка слома' : '', h.health === 'normal' ? `HP ${h.maxHp}` : 'бессмертен', `устойчивость ${h.steady}`].filter(Boolean).join(', ');
 }
