@@ -666,7 +666,7 @@ export class Alohomora {
                     const p = x.getPosition();
                     if (Math.abs(p.x - me.x) + Math.abs(p.z - me.z) > 8) continue;
                     if (!this._atLidEdge(x, G)) continue;
-                    if (!x.picked) { if (!(x.shakeT > 0)) { x.rattle(); this._chestHint(x);  // (the lid only rattles: no ringing bar — the author found that tune strange) } continue; }
+                    if (!x.picked) { if (!(x.shakeT > 0)) { x.rattle(); this._chestHint(x); } continue; } // (the lid only rattles: no ringing bar — the author found that tune strange)
                     c = this.lift[side] = x;
                     break;
                 }
