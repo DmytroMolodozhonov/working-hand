@@ -630,7 +630,7 @@ export class NetSync {
 
     /** (host) Mana for player `to`: his last blow killed a magical creature / a wizard he beat in a duel. */
     manaCredit(to, m) {
-        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null });
+        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null, aw: m.aw ?? 1 });
     }
 
     /** (host) An achievement for player `to`: they took part in the kill (Achievements.js). */
@@ -1202,7 +1202,7 @@ export class NetSync {
             case 'bite': if (this.net.isHost) break; g.zombieHitsMe({ x: +m.dx || 0, z: +m.dz || 0 }); break;
             case 'achc': if (!this.net.isHost && typeof m.k === 'string') g.achievements?.onCredit(m.k); break; // (an achievement: the host saw me take part)
             case 'ach': if (m.by !== this.me) g.achievements?.onNet(m, m.by); break;
-            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos }); break; // (mana: my kill, the host decided)
+            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos, aw: m.aw }); break; // (mana: my kill, the host decided)
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;
         }

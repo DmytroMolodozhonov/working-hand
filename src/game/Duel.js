@@ -1807,10 +1807,10 @@ export class Duel {
      * Someone I killed died (a player, or an NPC wizard — the host tells me): a clash I just won
      * against them = a real duel won (mana: 45% of their maximum above 30, at least +1; without a clash: 25%).
      */
-    opponentDied(id, oppMax = 30, pos = null) {
+    opponentDied(id, oppMax = 30, pos = null, aware = true) {
         const w = this._won;
         if (!w || w.id !== id || performance.now() - w.at > 8000) {
-            this.game.mana?.killWon(oppMax, id, pos, this._mastery(id)); // (killed some other way: 25% of his mana as cells, and 5 + 15% of his mastery)
+            this.game.mana?.killWon(oppMax, id, pos, this._mastery(id), aware); // (killed some other way: 25% of his mana as cells, and 5 + 15% of his mastery)
             return false;
         }
         this._won = null;

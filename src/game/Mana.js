@@ -171,7 +171,7 @@ export function creditKill(game, by, m) {
 export function applyCredit(game, m) {
     if (!m) return;
     if (m.kind) game.mana?.magicKill(String(m.kind));
-    else if (m.wiz != null) game.duel?.opponentDied?.(m.wiz, Number(m.mm) || MANA.BASE, m.pos);
+    else if (m.wiz != null) game.duel?.opponentDied?.(m.wiz, Number(m.mm) || MANA.BASE, m.pos, m.aw !== 0);
 }
 
 export class Mana {
@@ -250,10 +250,10 @@ export class Mana {
     }
 
     /** The opponent `id` killed by me without a clash won (a bomb, a sword, an ambush): 25%, once per opponent. */
-    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0) {
+    killWon(oppMax = MANA.BASE, id = null, pos = null, oppMastery = 0, aware = true) {
         if (id != null && this.duelsWon.get(String(id)) === 'kill') return 0; // (already paid — a duel or a kill)
         if (id != null) this.duelsWon.set(String(id), 'kill');
-        this.masteryWon(id, true, oppMax, oppMastery, false); // (a kill without a beam clash: 5 and 15% of his mastery — in every mode)
+        if (aware) this.masteryWon(id, true, oppMax, oppMastery, false); // (a kill without a beam clash: 5 and 15% of his mastery — in every mode; an ambush he never noticed does not count)
         if (!this.combat?.manaOn) return 0; // (Creative: no mana rules)
         const n = killGain(oppMax);
         this.grow(n, 'killWiz');

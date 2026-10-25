@@ -2960,6 +2960,8 @@ export class CastleLife {
     }
 
     _die(v, by) {
+        // (did the wizard know who was against him — fought him, held a grudge, saw him? An ambush he never noticed is no duel: no mastery for it)
+        const aware = !!v.wizard && by != null && this._isPlayer(by) && (v.foe === by || v.grudge?.id === by || this.knowsFrom(v, by, null, null, v.cs?.castSeen));
         this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)
         v.dead = true;
         v.seated = false; // (a seated body is drawn 1.7 m lower — it sank through the floor: the dead king on his throne)
@@ -2979,7 +2981,7 @@ export class CastleLife {
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
-        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z] }); // (mana: a wizard beaten in a duel)
+        if (v.wizard && by != null) creditKill(this.game, by, { wiz: v.id, mm: v.maxMana || 30, pos: [v.x, v.y, v.z], aw: aware ? 1 : 0 }); // (mana: a wizard beaten in a duel)
         if (v.role === 'king') this._capture(v.cs, by);
         else if (v.entry?.elder && !st.kingDead) { // (a settlement's Elder: the hall's chests open; the wizards are not «captured» — WizVillages.js)
             st.kingDead = true;
