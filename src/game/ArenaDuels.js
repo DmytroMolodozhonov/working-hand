@@ -126,6 +126,7 @@ export class ArenaDuels {
         this._scanT -= dt;
         if (this._scanT <= 0) { this._scanT = 1; this._scan(); }
         if (this.mode && this.auth) this._modeStep(dt);
+        else if (this.mode?.friend) this._friendClient(dt);
         for (const A of this.list.values()) {
             if (this.auth) this._run(A, dt);
             this._signUp(A, dt);
@@ -1146,6 +1147,10 @@ export class ArenaDuels {
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
             case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
+            case 'frole': this._friendRole(m); break;
+            case 'fstart': this._friendStart(m); break;
+            case 'fgo': this._friendGo(); break;
+            case 'fend': this._friendEndShow(m); break;
             case 'end':
                 this.count = null; this.myQueue = null;
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
@@ -1189,6 +1194,9 @@ export class ArenaDuels {
     onNet(m, from) {
         const g = this.game;
         if (!m || typeof m !== 'object') return;
+        if (m.e === 'fhi') { if (this.mode?.friend && !this.auth) this.mode.said = false; return; }
+        if (m.e === 'fhello') { if (this.auth && this.fr) this.fr.hello.add(from); return; }
+        if (m.e === 'fready') { if (this.auth && this.fr && from === this.fr.friend) this.fr.ready = true; return; }
         if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from, m.tier); } return; }
         if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
         if (m.e === 'tg') { const A = this.list.get(m.id); if (A && !this.auth) A.tg = Array.isArray(m.t) ? m.t.slice(0, 2) : []; return; }
@@ -1261,13 +1269,16 @@ export class ArenaDuels {
      * погиб (`duelDeath`) — сразу новая дуэль с новым волшебником того же уровня, и так по кругу. Хост ведёт всё; остановка — `stopDuelMode`.
      */
     startDuelMode(arenaId, foe = 'mid') {
-        this.mode = { arenaId, foe, id: this.game.localId, hinted: false };
+        // in a multiplayer game the opponent is a friend, not a wizard: the one who joins; the others watch (friendStep)
+        const friend = !!(this.game.net?.active && this.game.sync);
+        this.mode = { arenaId, foe, id: this.game.localId, hinted: false, friend };
+        if (friend) { if (!this.fr && this.auth) this.game.sync?.arena?.({ e: 'fhi' }); /* (the host's book of hellos is new: everybody says hello again) */ this.fr = this.fr || { phase: 'wait', friend: null, t: 0, specs: new Set(), told: false, ready: false, hello: new Set(), placed: false, hintT: 0 }; this.my = null; }
         if (this.game.world) this.game.world.duelFar = MODE_VIEW; // (only the arena is drawn and made: the workers have nothing else to do — FPS)
     }
 
     _unpause() { if (this.mode?.paused) { this.game.paused = false; this.mode.paused = false; } }
 
-    stopDuelMode() { this._unpause(); this.mode = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
+    stopDuelMode() { this._unpause(); this.mode = null; this.fr = null; this.my = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
 
     /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
     _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
@@ -1308,6 +1319,7 @@ export class ArenaDuels {
         this._keepOnFloor(A, D);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
         if (m.hold && m.holdPin) { const p = g.character.group.position; p.x = m.holdPin.x; p.z = m.holdPin.z; g.knockback?.set?.(0, 0, 0); }
+        if (m.friend) { this._friendStep(A, dt); return; } // (a friend instead of a wizard: the host waits for him, counts, judges)
         if (D || m.hold) return;
         if (A.fans.size < Math.min(A.want, 4)) return; // (the stands must be filling up first)
         // the next duel: the opponent on his place, the player on his, the count 10…1
@@ -1362,8 +1374,8 @@ export class ArenaDuels {
     }
 
     /** The hero on his own place (the lit mark), facing the opponent's; health and mana full: a new duel is fresh. */
-    _toMark(A) {
-        const g = this.game, ch = g.character, data = g.world?.terrain?.data || g.terrain?.data, M = A.def.gates[0].mark, O = A.def.gates[1].mark;
+    _toMark(A, idx = 0) {
+        const g = this.game, ch = g.character, data = g.world?.terrain?.data || g.terrain?.data, M = A.def.gates[idx].mark, O = A.def.gates[1 - idx].mark;
         const y = data?.surfaceY ? data.surfaceY(M.x, M.z) : M.y;
         ch.group.position.set(M.x, y + PLAYER_GROUND_OFFSET + 0.1, M.z);
         g.faceYaw?.(Math.atan2(O.x - M.x, O.z - M.z) + Math.PI); // (the hero looks along −Z at 0: the bearing needs a half turn; kept for the camera too)
@@ -1431,6 +1443,141 @@ export class ArenaDuels {
         m.holdPin = { x: p.x, z: p.z }; // (the hero stays where he is while the result is shown and chosen from)
         m.hold = true; m.winT = 0; m.lost = lost; m.askAfter = lost ? AGAIN_AFTER_LOSS : AGAIN_AFTER;
         this.endUi.showWin(lost ? 'Попробуйте ещё раз — палочка вернётся к вам' : 'Трибуны ликуют', lost);
+    }
+
+    // ------------------------------------------------------------------ a duel with a friend (multiplayer, «Перед дуэлью»)
+    /**
+     * (host, every frame) The opponent is the first player who joins (the others are spectators in the stands): nothing begins until he is here and
+     * ready; then the count 10…1 and the fight; whoever falls loses (or the 5 minutes: a draw); a few seconds and the next round. The strength of the
+     * friend: the same as the host's (`friendSame`, as the world was made) — or he chose his own in his window.
+     */
+    _friendStep(A, dt) {
+        const g = this.game, m = this.mode, F = this.fr, marks = A.def.gates;
+        if (!F) return;
+        const ids = [...g.remotes.keys()];
+        if (F.friend && !ids.includes(F.friend)) { // (the friend left: the fight is off, we wait for the next one)
+            F.friend = null; F.told = false; F.ready = false;
+            if (F.phase !== 'wait') { F.phase = 'wait'; F.t = 0; this._friendHold(A, true); g.hud?.setVoice?.('🚪 Друг вышел — ждём нового соперника', true); }
+        }
+        if (!F.friend && ids.length) { F.friend = ids[0]; F.specs.delete(F.friend); F.told = false; F.ready = false; }
+        for (const id of ids) {
+            if (id === F.friend || F.specs.has(id) || !F.hello.has(id)) continue;
+            F.specs.add(id);
+            this._tell(id, { e: 'frole', role: 'spec', id: A.id, seat: this._specSpot(A, F.specs.size) });
+        }
+        if (F.friend && !F.told && F.hello.has(F.friend)) { F.told = true; this._tell(F.friend, { e: 'frole', role: 'friend', id: A.id, same: g.hero?.friendSame !== false, rematch: F.rounds > 0 }); }
+        if (!F.placed) { F.placed = true; this._toMark(A, 0); this._friendHold(A, true); }
+        F.t += dt;
+        if (F.phase === 'wait') {
+            F.hintT -= dt;
+            if (F.hintT <= 0) { F.hintT = 8; g.hud?.setVoice?.(F.friend ? '⏳ Друг входит на арену — скоро начнём' : '⏳ Ждём друга: пусть зайдёт на этот сервер. Бой начнётся, когда он будет на арене', true); }
+            if (F.friend && F.ready) {
+                F.phase = 'count'; F.t = 0; F.ready = false;
+                this._toMark(A, 0); this._resetHero(); this._wandBack();
+                this._friendHold(A, true);
+                this._tell(F.friend, { e: 'fstart', id: A.id });
+                this._mine({ e: 'count' });
+                this._fx(A, 'beep', A.def.centre);
+                g.hud?.setVoice?.('⚔️ Через 10 секунд бой с другом! За вас болеют трибуны', true);
+            }
+        } else if (F.phase === 'count') {
+            if (F.t >= ARENA_DUEL.COUNT) {
+                F.phase = 'fight'; F.t = 0;
+                this._friendHold(A, false);
+                this._tell(F.friend, { e: 'fgo', id: A.id });
+                this._fx(A, 'gong', A.def.centre);
+                this._fans(A, 'start');
+            }
+        } else if (F.phase === 'fight') {
+            const hostDead = !!(g.combat?.dead || g.isDeadLocal), r = g.remotes.get(F.friend), fDead = !!r?.dead;
+            if (hostDead || fDead || F.t > ARENA_DUEL.MAX_T) {
+                const res = hostDead && fDead ? 'draw' : hostDead ? 'friend' : fDead ? 'host' : 'draw';
+                F.phase = 'over'; F.t = 0; F.rounds = (F.rounds || 0) + 1;
+                this._tell(F.friend, { e: 'fend', id: A.id, r: res === 'draw' ? 'draw' : res === 'friend' ? 'win' : 'lose' });
+                this._mine({ e: 'fend', r: res === 'draw' ? 'draw' : res === 'host' ? 'win' : 'lose' });
+                this._fx(A, 'gong', A.def.centre); this._fans(A, res === 'draw' ? 'start' : 'win');
+                this.log.push('friend:' + res);
+            }
+        } else if (F.phase === 'over') {
+            if (F.t >= 7) { // (the next round: both on their places again, fresh)
+                F.phase = 'wait'; F.t = 0; F.told = false; F.ready = false; F.placed = false; F.hintT = 0;
+                this.endUi.hide();
+            }
+        }
+    }
+
+    /** (host) The host stays on his lit place (waiting, counting) or is let go. */
+    _friendHold(A, on) {
+        const m = this.mode, M = A.def.gates[0].mark;
+        if (!m) return;
+        m.hold = !!on; m.holdPin = on ? { x: M.x, z: M.z } : null;
+    }
+
+    /** A place in the stands for the n-th spectator. */
+    _specSpot(A, n) {
+        const seats = (A.def.seats || []).filter((s) => s.side);
+        const s = seats.length ? seats[(n * 3) % seats.length] : A.def.centre;
+        return { x: s.x, y: s.y, z: s.z };
+    }
+
+    /** (a guest, every frame) Says hello to the host once (the arena is near — the host answers with the role), holds the friend on his place. */
+    _friendClient(dt) {
+        const g = this.game, m = this.mode;
+        if (!m) return;
+        const A = this.list.get(m.arenaId) || [...this.list.values()].find((x) => !x.def.practice && x.def.desk);
+        if (!A) return;
+        if (!m.said) { m.said = true; g.sync?.arena?.({ e: 'fhello', id: A.id }); }
+        const my = this.my;
+        if (my?.hold && !my.over) { const p = g.character.group.position; p.x = my.hold.x; p.z = my.hold.z; g.knockback?.set?.(0, 0, 0); }
+        else if (my?.role === 'friend') this._keepOnFloor(A, null);
+    }
+
+    /** (this computer) The host's word: the role — the friend (on the far lit place) or a spectator (in the stands). */
+    _friendRole(m) {
+        const g = this.game, A = this.list.get(m.id) || [...this.list.values()].find((x) => x.def.desk);
+        if (!A || !this.mode) return;
+        this.endUi.hide();
+        if (m.role === 'spec') {
+            const ch = g.character, s = m.seat || A.def.centre;
+            ch.group.position.set(s.x, (s.y ?? A.def.floorY) + PLAYER_GROUND_OFFSET + 0.1, s.z);
+            ch.verticalVelocity = 0; g.knockback?.set?.(0, 0, 0); ch.airTop = null; ch.landing = null; g.knock?.reset?.();
+            this.my = { role: 'spec' };
+            g.hud?.setVoice?.('👀 Вы зритель: на арене сражаются двое друзей. Болейте за них с трибун', true);
+            return;
+        }
+        this._toMark(A, 1);
+        const M = A.def.gates[1].mark;
+        this.my = { role: 'friend', hold: { x: M.x, z: M.z } };
+        g.hud?.setVoice?.('⚔️ Вы — соперник друга на арене. Встаньте на своё место и ждите отсчёта', true);
+        const ready = () => { this.my.ready = true; g.sync?.arena?.({ e: 'fready', id: A.id }); };
+        if (!m.same && !m.rematch) { // (the friend chooses his own strength: the settings window — the same as for the host)
+            if (document.pointerLockElement) document.exitPointerLock?.();
+            this.endUi.showAgain({
+                hero: { ...(g.hero || {}) }, title: 'Выберите свою силу для дуэли с другом', go: 'Я готов',
+                onStart: (h) => { g.hero = { ...h, spawn: 'arena', friendSame: false }; if (g.config) g.config.hero = g.hero; this._resetHero(); this.endUi.hide(); ready(); },
+                onExit: () => { document.getElementById('pause-exit-btn')?.click(); },
+            });
+        } else ready();
+    }
+
+    /** (the friend) The count begins: fresh, on the place. */
+    _friendStart(m) {
+        const g = this.game, A = this.list.get(m.id) || [...this.list.values()].find((x) => x.def.desk);
+        if (!A || !this.my) return;
+        this._toMark(A, 1); this._resetHero(); this._wandBack?.();
+        this.my.hold = { x: A.def.gates[1].mark.x, z: A.def.gates[1].mark.z };
+        this.my.over = false;
+        g.hud?.setVoice?.('⚔️ Через 10 секунд бой с другом!', true);
+    }
+
+    /** (the friend) «Бой!» — let go of the place. */
+    _friendGo() { if (this.my) { this.my.hold = null; this.my.over = false; } }
+
+    /** (this computer) The round is over: the big word for the winner and the loser. */
+    _friendEndShow(m) {
+        if (this.my) this.my.hold = null;
+        if (m.r === 'draw') { this.game.hud?.setVoice?.('⏳ Время вышло — ничья. Новый бой начнётся через несколько секунд', true); return; }
+        this.endUi.showWin(m.r === 'win' ? 'Трибуны ликуют — через несколько секунд новый бой' : 'Новый бой начнётся через несколько секунд', m.r === 'lose');
     }
 
     _askAgain() {

@@ -16,6 +16,7 @@ const T = {
     robe: 'Магическая мантия защищает от холода и смягчает часть сильных заклинаний. Её можно носить вместе с бронёй. Если оставить галочку, герой начнёт игру в мантии.',
     spellsAll: 'Все заклинания игры известны сразу — свитки учить не нужно.',
     spellsMage: 'Известны почти все заклинания, кроме божественных (свитки храма богов, «Flying Maxima» и другие) и «Inspirius». Их можно выучить позже, сжигая свитки.',
+    same: `В сетевой игре «Перед дуэлью на арене» соперник — друг, который зайдёт на ваш сервер (остальные игроки смотрят с трибун). Пока он не зашёл, бой не начнётся. Галочка включена — у друга будет такая же сила, как у вас: мана, мастерство, здоровье, палочка. Уберите галочку — друг сам выберет свою силу, когда зайдёт.`,
     mastery: `Дуэльное мастерство — отдельная сила, которая прибавляется к вашей мане в столкновении лучей. В бою считается так: мана + мастерство, а дальше палочка, здоровье и «Максима». Чем больше мастерства, тем сильнее вы давите на соперника. В обычной игре оно растёт с победами: выиграли дуэль и соперник жив — +5 очков, победили насмерть в столкновении лучей — +7 и ещё четверть мастерства соперника, убили без столкновения — +5 и 15% его мастерства (если он знал, что вы рядом: внезапное убийство не считается). Здесь можно сразу дать себе нужное число. С бесконечной маной ваша мана в дуэли равна мане соперника, поэтому всё решает мастерство: 0 — бой на равных, 50 — вы сильнее на 50 очков. От 0 до ${HERO.MASTERY_MAX}.`,
     dark: 'Чёрная магия: с чем герой начинает. 0 — чистый маг, чем выше число, тем темнее кожа и тем хуже к вам относятся волшебники. Уровень можно менять уже в игре.',
     breakward: 'Метка слома защиты снимает требования ячеек маны у заклинаний: хватит той маны, что есть. Но заклинание может вырваться из-под контроля. Если поставить галочку, герой начнёт игру уже с меткой.',
@@ -56,6 +57,7 @@ const html = (p) => `
   <div class="hero-row" title="${T.spawn}"><label for="${p}-spawn">📍 Где появиться:</label> <select id="${p}-spawn">${SPAWN_SPOTS.map((x) => `<option value="${x.id}" title="${x.hint}">${x.label}</option>`).join('')}</select></div>
   <div class="hero-row" id="${p}-wand-row" hidden title="${T.wand}"><label for="${p}-wand">🪄 Сила палочки: +</label> <input type="number" id="${p}-wand" min="0" max="${HERO.WAND_MAX}" step="5" value="0"> % <span class="mp-hint">к силе ваших дуэльных заклинаний (0 — без добавки)</span></div>
   <div class="hero-row" id="${p}-foe-row" hidden title="${T.foe}"><label for="${p}-foe">⚔️ Соперник на арене:</label> <select id="${p}-foe">${DUEL_FOES.map(foeOption).join('')}</select></div>
+  <label class="world-opt" id="${p}-same-row" hidden title="${T.same}"><input type="checkbox" id="${p}-same" checked> 🤝 Дать другу такую же силу <span class="mp-hint">— соперником станет друг, который зайдёт на сервер; остальные — зрители</span></label>
   <label class="world-opt" title="${T.noCrew}"><input type="checkbox" id="${p}-nocrew"> ⚓ Корабли без моряков <span class="mp-hint">— и чёрный корабль без капитана и скелетов</span></label>
   <label class="world-opt" title="${T.mana}"><input type="checkbox" id="${p}-inf" checked> ♾️ Бесконечная мана <span class="mp-hint">— заклинания ничего не стоят</span></label>
   <div class="hero-row" id="${p}-cells-row" hidden title="${T.cells}">
@@ -92,7 +94,8 @@ export function mountHeroPanel(root, prefix = 'hero') {
     const radio = (n) => root.querySelector(`input[name="${prefix}-${n}"]:checked`)?.value;
     const sync = () => {
         $('cells-row').hidden = $('inf').checked;
-        $('foe-row').hidden = $('spawn').value !== 'arena';
+        $('foe-row').hidden = $('spawn').value !== 'arena' || prefix === 'hero-mp'; // (a server: the opponent is the friend who joins, no wizard)
+        $('same-row').hidden = $('spawn').value !== 'arena' || prefix !== 'hero-mp';
         $('wand-row').hidden = $('spawn').value !== 'arena';
         $('nocrew').closest('label').hidden = !SHIP_STARTS.includes($('spawn').value); // (ships' crews: only when the start is at the port or at sea)
         $('hp-wrap').hidden = radio('health') !== 'normal';
@@ -114,7 +117,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         armor: $('armor').checked, robe: $('robe').checked,
         spells: radio('spells'),
         duelMastery: $('mastery').value === '' ? 0 : $('mastery').value,
-        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
+        spawn: $('spawn').value, noCrew: SHIP_STARTS.includes($('spawn').value) && $('nocrew').checked, foe: $('foe').value, friendSame: $('same').checked, wandBonus: $('wand').value === '' ? 0 : $('wand').value, health: radio('health'), maxHp: $('hp').value === '' ? HERO.HP_DEFAULT : $('hp').value,
         dark: $('dark').value, breakward: $('bw').checked, steady: $('steady').value,
     });
     const set = (h) => {
@@ -122,7 +125,7 @@ export function mountHeroPanel(root, prefix = 'hero') {
         $('inf').checked = v.infiniteMana; $('cells').value = v.cells;
         $('armor').checked = v.armor; $('robe').checked = v.robe;
         root.querySelector(`input[name="${prefix}-spells"][value="${v.spells}"]`).checked = true;
-        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe; $('wand').value = v.wandBonus;
+        $('spawn').value = v.spawn; $('nocrew').checked = v.noCrew; $('foe').value = v.foe; $('same').checked = v.friendSame; $('wand').value = v.wandBonus;
         root.querySelector(`input[name="${prefix}-health"][value="${v.health}"]`).checked = true; $('hp').value = v.maxHp;
         $('mastery').value = v.duelMastery; $('dark').value = v.dark; $('bw').checked = v.breakward; $('steady').value = v.steady;
         sync();

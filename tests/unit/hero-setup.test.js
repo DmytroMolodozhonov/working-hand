@@ -18,7 +18,7 @@ const fakeGame = (hero, mode = 'creative') => {
 
 test('по умолчанию: бесконечная мана, броня и мантия, все заклинания, полная сила, тьма 0, устойчивость 100', () => {
     const d = normalizeHero({});
-    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false });
+    assert.deepEqual(d, { infiniteMana: true, cells: 500, armor: true, robe: true, spells: 'all', duelMastery: 0, dark: 0, breakward: false, steady: 100, health: 'immortal', maxHp: 20, spawn: 'start', foe: 'mid', wandBonus: 0, noCrew: false, friendSame: true });
     assert.deepEqual(d, DEFAULT_HERO);
 });
 
@@ -234,4 +234,12 @@ test('сила палочки в дуэли: 0…200 %, мусор → 0', () =>
     assert.equal(normalizeHero({ wandBonus: 999 }).wandBonus, HERO.WAND_MAX);
     assert.equal(normalizeHero({ wandBonus: -5 }).wandBonus, 0);
     assert.equal(normalizeHero({ wandBonus: 'abc' }).wandBonus, 0);
+});
+
+test('multiplayer «Перед дуэлью»: «Дать другу такую же силу» — по умолчанию включено, выключенное доходит как есть', () => {
+    assert.equal(DEFAULT_HERO.friendSame, true);
+    assert.equal(normalizeHero({}).friendSame, true);
+    assert.equal(normalizeHero({ friendSame: false }).friendSame, false);
+    assert.equal(normalizeHero(normalizeHero({ friendSame: false })).friendSame, false, 'passes through the network / the save unchanged');
+    assert.equal(heroOf({ hero: { spawn: 'arena' } }).friendSame, true, 'an old world: the default');
 });
