@@ -175,3 +175,27 @@ function siftDown(h, i) {
         [h[m], h[i]] = [h[i], h[m]]; i = m;
     }
 }
+
+/**
+ * Cornered: a trader pressed to her counter, a body in a pocket between a wall and the thing it runs from (the author's log: «пути нет», 10 s
+ * on the spot). Looks all round for the open way that is longest and not towards a threat: along a wall is fine when nothing else is free.
+ * `walk(x, z)` says where one can stand. → {x, z} (a point 3–10 m off) or null (really shut in on all sides).
+ */
+export function escapeWay(p, threats, walk, len = 10) {
+    const d0 = threatDist(p, threats);
+    let best = null, bs = -Infinity;
+    for (let k = 0; k < 24; k++) {
+        const a = k * Math.PI / 12, ux = Math.cos(a), uz = Math.sin(a);
+        let far = 0;
+        for (let r = 1; r <= len; r += 1) { if (!walk(p.x + ux * r, p.z + uz * r) || !walk(p.x + ux * (r + 0.5), p.z + uz * (r + 0.5))) break; far = r; }
+        if (far < 3) continue;
+        const q = { x: p.x + ux * far, z: p.z + uz * far };
+        const gain = threatDist(q, threats) - d0;
+        if (gain < -1.5 || passes(p, q, threats)) continue; // (never nearer them, never past them)
+        let side = 0; // (room at the sides of the way: a wide way is better than hugging a wall)
+        for (const m of [-1, 1]) if (walk(p.x + ux * far * 0.5 - uz * m * 1.2, p.z + uz * far * 0.5 + ux * m * 1.2)) side++;
+        const s = Math.min(gain, 25) + far * 0.8 + side;
+        if (s > bs) { bs = s; best = q; }
+    }
+    return best;
+}

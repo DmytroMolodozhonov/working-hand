@@ -33,8 +33,9 @@ import { crowdStep, crowdNear } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { makeWayStep } from './Crowd.js';
 import { separate } from './Pilot.js';
+import { SPACE, talkDistance } from './PersonalSpace.js';
 import { WALL, StuckWatch } from './Unstick.js';
-import { FLEE, threatDist, threatCost, pathPasses, openWay, fleeSearch } from './FleePlan.js';
+import { FLEE, threatDist, threatCost, pathPasses, openWay, escapeWay, fleeSearch } from './FleePlan.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
 import * as THREE from 'three';
@@ -1039,7 +1040,7 @@ export class CastleLife {
             const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y), rank: (v.cmd || v.order || v.follow || v.foe) ? 1 : 0 });
             if (!a) { v.speed = 0; return d; }
             if (a.unstick) { // (stuck for ~10 s among the others or the walls: set on the nearest free place — never a permanent stand)
-                if (this._walkable(a.unstick.x, a.unstick.z, v.y)) { this.alog?.decision(v, `10 с без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
+                if (this._walkable(a.unstick.x, a.unstick.z, v.y)) { this.alog?.decision(v, `долго без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
                 v.speed = 0; return d;
             }
             ux = a.x; uz = a.z; kk = a.k ?? 1;
@@ -1477,8 +1478,9 @@ export class CastleLife {
             v.mode = 'talk'; v.speed = 0;
             // (a comfortable distance for a talk: too close — a small step back, still facing me)
             const dd = tp ? Math.hypot(tp.x - v.x, tp.z - v.z) : 9;
-            if (dd < 1.9 && dd > 1e-3 && v.job !== 'stall') {
-                const s = Math.min(1.9 - dd, 0.9 * dt), nx = v.x + (v.x - tp.x) / dd * s, nz = v.z + (v.z - tp.z) / dd * s;
+            const want = v.job === 'merchant' && v.post ? SPACE.TALK_MIN : talkDistance(this.rel?.eff?.(v, v.talkTo || g.localId)); // (a trader at his counter stays at it)
+            if (dd < want && dd > 1e-3 && v.job !== 'stall') {
+                const s = Math.min(want - dd, 1.3 * dt), nx = v.x + (v.x - tp.x) / dd * s, nz = v.z + (v.z - tp.z) / dd * s;
                 if (this._walkable(nx, nz, v.y)) { v.x = nx; v.z = nz; }
             }
             this._ground(v);
@@ -1669,15 +1671,25 @@ export class CastleLife {
                     const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90 });
                     if (r) { v.path = r.path; v.pathI = 0; v.goal = r.goal; F.plan = { node: r.goal }; v.pathCost = (n) => threatCost(n, T); } else { F.plan = null; v.path = null; }
                 }
-                if (!F.plan && !indoors) { const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)); F.plan = q ? { open: q } : { watch: true }; v.path = null; }
-                if (!F.plan) F.plan = { watch: true }; // (cornered inside: it cowers where it is, away from the windows it can't reach)
+                if (!F.plan && !indoors) { const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)) || escapeWay(v, T, (x, z) => this._walkable(x, z, v.y)); F.plan = q ? { open: q } : { watch: true }; v.path = null; }
+                if (!F.plan) { const q = escapeWay(v, T, (x, z) => this._walkable(x, z, v.y), 8); F.plan = q ? { open: q } : { watch: true }; } // (cornered inside: it cowers where it is, away from the windows it can't reach)
             } else {
-                const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y));
+                const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)) || escapeWay(v, T, (x, z) => this._walkable(x, z, v.y));
                 F.plan = q ? { open: q } : { watch: true };
                 v.path = null;
             }
         }
         const P = F.plan;
+        // (running but not moving: the path / the point is shut by a counter, a wall — not the same again: another way round, out of the corner)
+        if (P && !P.watch) {
+            F.still = v.speed === 0 && (P.node != null || P.open) ? (F.still || 0) + dt : 0;
+            if (F.still > 1.2) {
+                F.still = 0; F.bad = (F.bad || 0) + 1;
+                const q = escapeWay(v, T, (x, z) => this._walkable(x, z, v.y), 6 + F.bad * 2);
+                this.alog?.decision(v, `бежит, но стоит на месте — другой путь прочь от угла: ${q ? `к (${q.x.toFixed(1)}, ${q.z.toFixed(1)})` : 'нет свободной стороны'}`);
+                F.plan = q ? { open: q } : { watch: true }; v.path = null; F.t = FLEE.REPLAN;
+            }
+        }
         if (P?.node != null && v.path && v.pathI < v.path.length) {
             if (this._followPath(v, dt, RUN)) { v.path = null; F.t = 0; }
         } else if (P?.open) {
@@ -2496,11 +2508,11 @@ export class CastleLife {
         const ch = v.follow === g.localId ? g.character?.group : g.remotes?.get(v.follow)?.character?.group || g.remotes?.get(v.follow)?.group;
         const yaw = ch?.rotation?.y;
         // rings: capacity by arc length
-        let ring = 0, k = e.i, R = 3.2, cap = 0;
+        let ring = 0, k = e.i, R = SPACE.FOLLOW_R0, cap = 0;
         for (;;) {
-            cap = Math.max(3, Math.floor((Math.PI * 2 * R * (yaw == null ? 1 : 0.5)) / 1.9));
+            cap = Math.max(3, Math.floor((Math.PI * 2 * R * (yaw == null ? 1 : 0.5)) / SPACE.FOLLOW_ARC));
             if (k < cap) break;
-            k -= cap; ring++; R = 3.2 + ring * 1.8;
+            k -= cap; ring++; R = SPACE.FOLLOW_R0 + ring * SPACE.FOLLOW_STEP;
             if (ring > 6) break;
         }
         // the angle: behind the hero (his back direction = yaw + π... his forward is (−sin y, −cos y)), a half circle; without a heading, the full circle
@@ -2538,7 +2550,8 @@ export class CastleLife {
             }
             // (only the ones round it, from the crowd's grid — never all with all)
             bodies.length = 0;
-            for (const b of crowdNear(this.game, p.x, p.y, p.z, 2.6, p, 2.5, near)) {
+            for (const b of crowdNear(this.game, p.x, p.y, p.z, SPACE.STAND_RANGE, p, 2.5, near)) {
+                b.gap = undefined;
                 if (b.kind === 'player') { b.fixed = true; bodies.push(b); continue; }
                 if (b.kind !== 'man' || b.ref === p) continue;
                 const q = b.ref;
@@ -2549,7 +2562,23 @@ export class CastleLife {
             const r = this._bodyR(p);
             // (talking with the hero or standing: he makes room more; a walker passing a standing one gives way first)
             const push = separate(p, r, bodies, { id: p.id, yield: p.talking > 0 ? false : (p.speed || 0) < 0.2, cap: 0.35 * Math.max(0.3, dt * 30) });
-            if (!push.x && !push.z) continue;
+            if (!push.x && !push.z) {
+                // personal space (SPACE.STAND_GAP): two standing in the open drift apart gently; never in a doorway / on a stair, never a post
+                if (p.talking > 0 || (p.speed || 0) > 0.2 || p.post || p.job === 'stall' || p.job === 'king' || p.fleeT > 0 || p.foe) continue;
+                let any = false;
+                for (const b of bodies) {
+                    const q = b.ref;
+                    b.gap = 0;
+                    if (b.kind !== 'man' || !q || q.talking > 0 || (q.speed || 0) > 0.2 || q.post || q.job === 'stall' || q.job === 'king' || q.foe || Math.hypot(b.x - p.x, b.z - p.z) > SPACE.STAND_RANGE) continue;
+                    b.gap = SPACE.STAND_GAP; any = true;
+                }
+                if (!any) continue;
+                const R = SPACE.OPEN_ROOM;
+                if (!(this._walkable(p.x + R, p.z, p.y) && this._walkable(p.x - R, p.z, p.y) && this._walkable(p.x, p.z + R, p.y) && this._walkable(p.x, p.z - R, p.y))) continue;
+                const soft = separate(p, r, bodies, { id: p.id, yield: true, cap: SPACE.STAND_PUSH * dt });
+                if ((soft.x || soft.z) && this._walkable(p.x + soft.x * 2, p.z + soft.z * 2, p.y)) { p.x += soft.x; p.z += soft.z; }
+                continue;
+            }
             for (const f of [1, 0.5]) {
                 if (this._walkable(p.x + push.x * f, p.z + push.z * f, p.y)) { p.x += push.x * f; p.z += push.z * f; break; }
                 if (f === 0.5) {

@@ -2,21 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulate, SCENARIOS, corridor, headOn } from '../../tools/pilotsim.mjs';
 import { separate, spanAt, pilot, newPilotState } from '../../src/game/Pilot.js';
+import { SPACE, talkDistance, standGap } from '../../src/game/PersonalSpace.js';
+import { escapeWay, threatDist } from '../../src/game/FleePlan.js';
 
 // The walking brain (Pilot.js) in the sim of tools/pilotsim.mjs: the author's complaints — knights in a heap, bodies inside each other, nobody
 // getting through a narrow passage — as numbers. The thresholds only get tighter.
 const LIMITS = {
-    'коридор 1,6 м': { stand: 20, unstick: 3 },
-    'коридор 1,6 м, давка 6+6': { stand: 25, unstick: 10 },
-    'дверь 3 м, давка 10+10': { stand: 25, unstick: 10 },
-    'коридор 2 м': { stand: 15, unstick: 3 },
+    'коридор 1,6 м': { stand: 10, unstick: 2 },
+    'коридор 1,6 м, давка 6+6': { stand: 8, unstick: 3 },
+    'дверь 3 м, давка 10+10': { stand: 7, unstick: 2 },
+    'вокруг говорящего (новое расстояние)': { stand: 8, unstick: 1 },
+    'коридор 2 м': { stand: 8, unstick: 3 },
     'коридор 3 м': { stand: 10, unstick: 1 },
-    'дверь 1,4 м': { stand: 20, unstick: 16 },
+    'дверь 1,4 м': { stand: 7, unstick: 3 },
     'дверь 3 м': { stand: 15, unstick: 6 },
-    'вокруг игрока': { stand: 8, unstick: 1 },
-    'перекрёсток': { stand: 8, unstick: 1 },
+    'вокруг игрока': { stand: 3, unstick: 0 },
+    'перекрёсток': { stand: 4, unstick: 0 },
     'встреча в проходе с карманом': { stand: 8, unstick: 0 },
-    'узкая лестница 1,3 м': { stand: 15, unstick: 2 },
+    'узкая лестница 1,3 м': { stand: 15, unstick: 1 },
     'узкая лестница 2 м': { stand: 12, unstick: 3 },
 };
 
@@ -69,4 +72,38 @@ test('the old walking is much worse in the same corridors (the reason for the ch
     assert.equal(r.arrived, 2);
     const c = simulate({ ...corridor(2.4, 14, 3), seconds: 100 });
     assert.equal(c.arrived, c.total);
+});
+
+test('личное расстояние: разговор и стояние вдвое дальше прежнего', () => {
+    assert.ok(SPACE.TALK >= 1.9 * 2, 'собеседник встаёт не ближе 3,8 м (было 1,9)');
+    assert.ok(SPACE.FOLLOW_ARC >= 3.8 && SPACE.FOLLOW_R0 >= 4.4 && SPACE.STAND_GAP >= 1.0);
+    assert.equal(talkDistance(null), SPACE.TALK);
+    assert.ok(talkDistance({ fr: 100, lv: 100 }) >= SPACE.TALK_MIN && talkDistance({ fr: 100, lv: 100 }) < SPACE.TALK, 'друзья чуть ближе, но не меньше прежней половины');
+    assert.equal(talkDistance({ fr: -50, lv: 0 }), SPACE.TALK);
+    assert.equal(standGap({}, {}, false), 0, 'в проходе дополнительного зазора нет');
+    assert.equal(standGap({ moving: true }, {}, true), 0);
+    assert.equal(standGap({}, {}, true), SPACE.STAND_GAP);
+});
+
+test('личное расстояние: двое стоящих плавно расходятся до зазора, не в стену', () => {
+    const p = { x: 0, z: 0 };
+    const o = { x: 1.2, z: 0, r: 0.5, gap: SPACE.STAND_GAP };
+    const out = separate(p, 0.5, [o], { id: 1, yield: true, cap: 0.5 });
+    assert.ok(out.x < 0, 'отходит от соседа');
+    assert.deepEqual(separate(p, 0.5, [{ ...o, x: 2.2 }], { id: 1, cap: 0.5 }), { x: 0, z: 0 }, 'на зазоре — покой');
+});
+
+test('беглец у прилавка: из угла между прилавком и стеной выход есть, и он не к угрозе', () => {
+    // прилавок x -1203…-1202, z -706…-704 (как в журнале автора); торговка вплотную к нему, угроза — сверху (z больше)
+    const counter = (x, z) => x >= -1203 && x <= -1202 && z >= -706 && z <= -704;
+    const wall = (x, z) => z < -708 || x > -1200;
+    const walk = (x, z) => !counter(x, z) && !wall(x, z);
+    const me = { x: -1204, z: -704.5 };
+    const threats = [{ x: -1204, z: -690, r: 2 }];
+    const q = escapeWay(me, threats, walk);
+    assert.ok(q, 'выход найден');
+    assert.ok(threatDist(q, threats) >= threatDist(me, threats) - 1.5, 'не ближе к угрозе');
+    assert.ok(walk(q.x, q.z), 'туда можно встать');
+    // со всех сторон закрыто — честный отказ, а не выдуманный путь
+    assert.equal(escapeWay(me, threats, () => false), null);
 });

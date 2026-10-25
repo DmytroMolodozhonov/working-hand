@@ -6,6 +6,7 @@
  */
 import { pilot, newPilotState, separate } from '../src/game/Pilot.js';
 import { steer as oldSteer } from '../src/game/Crowd.js';
+import { SPACE } from '../src/game/PersonalSpace.js';
 
 let OLD = false; // the old Avoid.js-based steer, for comparison (--old)
 export const useOld = (on) => { OLD = on; };
@@ -165,6 +166,7 @@ export const SCENARIOS = {
     'дверь 1,4 м': () => doorway(1.4),
     'дверь 3 м': () => doorway(3),
     'вокруг игрока': () => aroundPlayer(),
+    'вокруг говорящего (новое расстояние)': () => aroundPlayer(10, SPACE.FOLLOW_R0),
     'перекрёсток': () => crossing(),
     'встреча в проходе с карманом': () => headOn(),
     'узкая лестница 1,3 м': () => stairs(1.3),

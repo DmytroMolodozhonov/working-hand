@@ -37,8 +37,9 @@ export const PILOT = {
     NARROW: 2.4, // m: ground narrower than this (centre to centre of the walls) is a one-way place: a stream goes one way at a time
     LOCK_RANGE: 16, // m: how far the oncoming are looked for when a narrow place is ahead
     WAIT: 0.9, // s of not moving before yielding is thought of
-    SQUEEZE: 6, // s: stuck so long — squeezes past (smaller body)
-    UNSTICK: 10, // s: stuck so long — set on a free place
+    UNSTICK_ALONE: 2.5, // s: the same with nobody near (pressed to a wall / a counter — no queue to wait for)
+    SQUEEZE: 2, // s: stuck so long — squeezes past (smaller body)
+    UNSTICK: 6, // s: stuck so long — set on a free place (was 10: «жители застревают»)
     SPEEDS: [1, 0.6, 0.3],
     ANGLES: [0, 14, -14, 28, -28, 45, -45, 65, -65, 90, -90, 120, -120, 160, -160],
 };
@@ -421,7 +422,7 @@ function runPlan(st, p, u, near, speed, room, r, opts, dt) {
     }
     // (the way back is shut: those behind it must give way — they see it yielding and do — meanwhile it waits)
     st.vx = 0; st.vz = 0;
-    if (st.still > PILOT.UNSTICK) { const to = freeSpot(p, u, near, opts, room, r); st.still = 0; if (to) return { x: u.x, z: u.z, k: 0, unstick: to }; }
+    if (st.still > (near.length ? PILOT.UNSTICK : PILOT.UNSTICK_ALONE)) { const to = freeSpot(p, u, near, opts, room, r); st.still = 0; if (to) return { x: u.x, z: u.z, k: 0, unstick: to }; }
     return null;
 }
 
@@ -449,7 +450,7 @@ function stalled(st, p, u, near, b, me, opts, room, r) {
         }
     }
     if (t > PILOT.SQUEEZE && st.squeeze <= 0) st.squeeze = 2.5;
-    if (t > PILOT.UNSTICK && st.unstuck <= 0) {
+    if (t > (near.length ? PILOT.UNSTICK : PILOT.UNSTICK_ALONE) && st.unstuck <= 0) {
         const to = freeSpot(p, u, near, opts, room, r);
         st.unstuck = 4; st.still = 0;
         if (to) return { x: u.x, z: u.z, k: 0, unstick: to };
@@ -471,14 +472,19 @@ function backTarget(st, p, r, room, near) {
     return null;
 }
 
-/** The nearest place within 3 m where a body fits among the others. */
+/**
+ * The nearest place within 4.5 m where a body fits among the others — and not in a pocket against a wall (the author's log: a trader pressed to her
+ * counter was «set free» 0.7 m along the same wall and stuck again): the clearance round the spot counts, so an open place wins over the nearest.
+ */
 function freeSpot(p, u, near, opts, room, r) {
     let best = null, bs = Infinity;
-    for (let d = 0.8; d <= 3; d += 0.6) for (let k = 0; k < 12; k++) {
-        const a = k * Math.PI / 6, x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+    for (let d = 0.8; d <= 4.5; d += 0.6) for (let k = 0; k < 16; k++) {
+        const a = k * Math.PI / 8, x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
         if (!room(x, z)) continue;
         if (near.some((n) => Math.hypot(n.dx - (x - p.x), n.dz - (z - p.z)) < n.or + r + 0.05)) continue;
-        const score = d - ((x - p.x) * u.x + (z - p.z) * u.z) * 0.8;
+        let open = 0;
+        for (let j = 0; j < 8; j++) if (room(x + Math.cos(j * Math.PI / 4) * 1.2, z + Math.sin(j * Math.PI / 4) * 1.2)) open++;
+        const score = d - ((x - p.x) * u.x + (z - p.z) * u.z) * 0.8 + (8 - open) * 0.6;
         if (score < bs) { bs = score; best = { x, z }; }
     }
     return best;
@@ -495,7 +501,7 @@ export function separate(p, r, others, opts = {}) {
     for (const o of others) {
         const or = o.r ?? 0.55;
         const dx = p.x - o.x, dz = p.z - o.z;
-        const need = r + or + gap;
+        const need = r + or + (o.gap ?? gap);
         const d2 = dx * dx + dz * dz;
         if (d2 >= need * need) continue;
         const d = Math.sqrt(d2);
