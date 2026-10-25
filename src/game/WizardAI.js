@@ -232,7 +232,7 @@ function villageRoster(def, idx, seed, rng) {
 /**
  * How strong anybody is in a beam clash — a player, a tower's wizard, a wanderer: ONE scale for all, in plain points.
  * Points = the mana he has NOW (+ the duel mastery for a player): 50 mana is 50 points for everybody; health takes
- * up to a third off (full health ×1, almost dead ×0.65); luck ±10 %. No softening: 500 against 30 is 500 against 30 —
+ * up to a third off (full health ×1, almost dead ×0.65); luck ±2 %. No softening: 500 against 30 is 500 against 30 —
  * the weak one does not win a duel, he wins by cunning (the author: «никаких защитных элементов»).
  */
 export const HEALTH_FLOOR = 0.65;

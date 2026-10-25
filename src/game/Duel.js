@@ -24,7 +24,7 @@
  *   - answer with any duel spell aimed back: the two charges meet and push
  *     against each other. The meeting point slides towards the weaker wizard;
  *     who it reaches loses and gets the other's spell. Strength: fatigue
- *     first, then HP, plus ~10 % luck. Both must keep the hand on the
+ *     first, then HP, plus ~2 % luck. Both must keep the hand on the
  *     opponent — a hand taken off stops pushing (the point creeps to you).
  *     To leave safely: first move the hand calmly off the opponent, THEN
  *     flick it (shake the spell off) — the duel ends, nobody is hit.
@@ -155,7 +155,7 @@ export const DUEL = {
     CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
     CONTACT_GRACE: 0.25, // s off the opponent before a flick counts as "shaking it off"
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
-    LUCK: 0.1, // ±10 % random
+    LUCK: 0.02, // ±2 % random (the author: «небольшой процент, 1–2»; mana decides)
     STUN_TIME: 15,
     CLASH_FATIGUE: 1, // mana per second while pushing (free world), each side
     MAXIMA_BOOST: 0.025, // «Максима» shouted in a clash: the meeting point goes 2.5 % of the way a second faster to the opponent (they add up for the whole clash; it was 5 % — twice too much: shouts buried the strength)
