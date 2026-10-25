@@ -361,6 +361,8 @@ export function soundTrust(h) {
     // «Акцио» in a duel (`hope`: my wand was knocked away — I call it back): the network hears it as «актер», «акце», «арте»;
     // the word is short, but here it is what is wanted and harmless — a slight fit is enough (the lips seen still are still refused)
     if ((h.spell === 'Accio' || h.spell === 'Expelliarmus') && h.hope && h.lips !== false) return fit >= 0.3 ? null : `«${h.spell === 'Accio' ? 'Акцио' : 'Экспеллиармус'}» узнано неуверенно (запас ${fit.toFixed(1)}, нужно 0.3)`; // (and «Экспеллиармус» — the duel's own word: «эсплянус» is it)
+    // «Акцентрик» in a duel: the strong charge is heard from «акцио», «акце», «акцен а» (the author: «я его не вызывал») — its own «нтр» must be written, or a very clear fit
+    if (h.spell === 'Accentric' && h.hope && !/нтр|ентр|ентрик/.test(letters(h.written ?? '')) && fit < 2.2) return `«Акцентрик» узнан неуверенно (буквы «${h.written ?? ''}» без «нтр», запас ${fit.toFixed(1)}, нужно 2.2)`;
     // a short one-word spell («Sands», «Даст», «Айс», «Frozen»…) is a word said on its own — its letters must be
     // there: a lone «с» of talk to oneself, «просто», «заморозил» are no spell however the sound fits (the author:
     // «сам с собой разговаривал — прозвучала буква с, и сработал песок»); nor one word in a sentence the network wrote
