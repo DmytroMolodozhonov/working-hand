@@ -643,7 +643,7 @@ export class BookBirds {
             const me = g.character.group.position;
             for (const b of [...this.birds.values()]) if (b.state !== 'fall' && !b.imp && b.model.position.distanceTo(me) > 130) this._removeBird(b);
             this._spawnT -= dt;
-            if (this._spawnT <= 0 && this.birds.size < BIRDS) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
+            if (this._spawnT <= 0 && this.birds.size < BIRDS && !g.duelOnly) { this._spawnT = 6; if (earthly(me)) this._spawnBird(); } // (none off the Earth: Planets.earthly)
         }
         for (const b of [...this.birds.values()]) {
             if (b.imp && b.state !== 'fall' && (this.auth || b.imp.mine) && g.imperius?.step('b', b, dt)) continue; // («Империус Максима»: a mind in it — ImperiusControl.step)
