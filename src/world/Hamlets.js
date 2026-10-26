@@ -239,10 +239,23 @@ export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = fa
     const S = out.stalls.length;
     // (the roster: 0 nobody, 1…knights the watchman, then the sellers, then the people of the houses — HamletLife.hamletRoster)
     const knights = type === 'village' ? 1 : 0;
-    const population = lone ? 2 : knights + 1 + S + houses.length * 2 + Math.floor(rng() * 3);
+    const roll = lone ? 0 : rng(); // (the one roll the population always took: the rest of the world stays the same)
+    // a wizards' village (the author): every house 1 or 2 wizards, the sellers among them (they live in its
+    // houses, never counted apart); then the strangers come by — one (50 %), two (25 %) or none: they never defend it
+    let homes = null, strangers = 0;
+    if (type === 'magevillage') {
+        const r = createRng((Math.floor(roll * 4294967296) ^ 0x5eedc0de) >>> 0);
+        const occ = houses.map(() => (r() < 0.5 ? 1 : 2));
+        for (let h = 0; occ.reduce((a, b) => a + b, 0) < S && h < occ.length; h++) occ[h] = 2; // (room for every seller)
+        homes = [];
+        for (let pass = 0; pass < 2; pass++) occ.forEach((n, h) => { if (n > pass) homes.push(h); }); // (the sellers first: one a house)
+        const s = r();
+        strangers = s < 0.5 ? 1 : s < 0.75 ? 2 : 0;
+    }
+    const population = lone ? 2 : homes ? 1 + homes.length + strangers : knights + 1 + S + houses.length * 2 + Math.floor(roll * 3);
     const zone = ZONE[type];
     const def = {
-        id, kind: 'hamlet', type, mage, gx, gz, slot, x: X, z: Z, F, rot, name, king: '', population, knights, wseed: seed,
+        id, kind: 'hamlet', type, mage, gx, gz, slot, x: X, z: Z, F, rot, name, king: '', population, knights, wseed: seed, homes, strangers,
         color: mage ? 0x6a2c91 : 0x7a5a3a, colorName: mage ? 'фиолетовые' : 'бурые', stone: mage ? BLOCK.ARCANE : BLOCK.COBBLE, zone,
         style: 'hamlet', styleName: name, walls: null, inner: null, keep: null,
         gate: p.pt(0, -zone + 2), gateIn: p.pt(0, -zone + 6), gateYaw: p.yaw(0),

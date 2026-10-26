@@ -50,7 +50,7 @@ test('hamlets\' people: wizards only weak or middling, every seller weak; a folk
             assert.ok(e.wizard && (e.rank === 'novice' || e.rank === 'adept'), `${h.id}:${idx} ${e.rank}`);
             ranks[e.rank]++;
             if (e.role === 'seller') assert.equal(e.rank, 'novice');
-            assert.ok(e.home >= 0 && e.home < h.houses.length);
+            if (e.stranger) assert.equal(e.home, -1); else assert.ok(e.home >= 0 && e.home < h.houses.length);
         }
     }
     assert.ok(ranks.novice > ranks.adept && ranks.adept > 0, JSON.stringify(ranks));
@@ -66,4 +66,29 @@ test('a wizards\' seller\'s goods: a scroll, a flask or a crystal, something mor
         const g = magicStallGood(n, k);
         assert.ok(g.item?.kind && g.item.uid && g.price > 0, JSON.stringify(g));
     }
+});
+
+test('a wizards\' village: 1 or 2 wizards a house, the sellers among them; 0–2 strangers who never defend', async () => {
+    const { WizardFight } = await import('../../src/game/WizardFight.js');
+    const d = make();
+    const list = []; for (let gx = -8; gx < 8; gx++) for (let gz = -8; gz < 8; gz++) list.push(...d.hamlets.cellOf(gx, gz));
+    const mages = list.filter((h) => h.type === 'magevillage');
+    assert.ok(mages.length >= 3, `${mages.length} villages`);
+    const sizes = new Set(), visitors = new Set();
+    for (const h of mages) {
+        const live = new Map(), sellers = [], strangers = [];
+        for (let idx = 1; idx < h.population; idx++) {
+            const e = hamletRoster(h, idx);
+            if (e.stranger) { strangers.push(e); assert.equal(e.home, -1); assert.equal(WizardFight.fights({ W: {}, role: e.role, entry: e }), false); continue; }
+            assert.equal(strangers.length, 0, 'strangers come after the residents');
+            live.set(e.home, (live.get(e.home) || 0) + 1);
+            if (e.role === 'seller') sellers.push(e);
+        }
+        assert.equal(sellers.length, h.stalls.length);
+        assert.equal(live.size, h.houses.length, `${h.id}: every house lived in`);
+        for (const n of live.values()) { assert.ok(n === 1 || n === 2, `${h.id}: ${n} in a house`); sizes.add(n); }
+        assert.equal(h.population, 1 + [...live.values()].reduce((a, b) => a + b, 0) + strangers.length, 'sellers are not counted apart');
+        assert.ok(strangers.length <= 2); visitors.add(strangers.length);
+    }
+    assert.ok(sizes.has(1) && sizes.has(2), [...sizes].join());
 });

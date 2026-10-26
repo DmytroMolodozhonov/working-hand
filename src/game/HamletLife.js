@@ -67,14 +67,16 @@ export function hamletRoster(def, idx) {
         const seller = idx >= 1 && idx <= S;
         const role = seller ? 'seller' : 'mage';
         const name = (female ? FEMALE : MALE)[Math.floor(rng() * (female ? FEMALE : MALE).length)];
-        const home = !H ? -1 : seller ? (idx - 1) % H : ((idx - first) % H + H) % H;
+        // (a wizards' village: def.homes — the house of every one living there, sellers first; past them the strangers, homeless)
+        const stranger = !!def.homes && idx > def.homes.length;
+        const home = def.homes ? (stranger ? -1 : def.homes[idx - 1]) : !H ? -1 : seller ? (idx - 1) % H : ((idx - first) % H + H) % H;
         const brave = rng();
         const robe = rng() < 0.15;
         const rr = createRng((seed ^ strHash('rank:' + String(def.wseed ?? ''))) >>> 0);
         // (the author: weak or middling only; every seller weak)
         const rank = seller || rr() < HAMLET_LIFE.WEAK ? 'novice' : 'adept';
         const mana = rollMana(rank, rr);
-        return { idx, role, female, name, home, stall: seller ? idx - 1 : -1, seed, brave, wizard: true, robe, rank, mana };
+        return { idx, role, female, name, home, stall: seller ? idx - 1 : -1, seed, brave, wizard: true, robe, rank, mana, ...(stranger ? { stranger: true } : {}) };
     }
     const watch = idx >= 1 && idx <= K;
     const role = watch ? 'knight' : def.type === 'hermit' ? 'farmer' : rng() < 0.55 ? 'farmer' : 'builder';

@@ -57,7 +57,7 @@ export class WizardFight {
     }
 
     /** Does this one fight (the brave; a timid student runs)? */
-    static fights(v) { return !!v.W && (v.role !== 'student' || (v.entry?.brave ?? 0) >= 0.55); }
+    static fights(v) { return !!v.W && !v.entry?.stranger && (v.role !== 'student' || (v.entry?.brave ?? 0) >= 0.55); }
 
     // ------------------------------------------------------------ the circle
     /** (host) The wizards after one foe: plans and roles, a few times a second. */
