@@ -53,6 +53,26 @@ const changed = () => listeners.forEach((f) => f());
 /** The page's size now: the game's server measures the window's frame from it. */
 const metrics = () => ({ ...MENU_WINDOW, innerWidth: window.innerWidth, innerHeight: window.innerHeight, dpr: window.devicePixelRatio || 1 });
 
+let appPending = null;
+let wantFull = false;
+/** (sessionStorage: the window was full screen before the page was reloaded by the game itself) */
+const FULL_KEY = 'zns-keep-full';
+/** Before the game reloads its own page (a fresh Creative attempt): the window's size must not change. */
+export function rememberWindowSize(doc = document) {
+    try { if (isFull(doc)) sessionStorage.setItem(FULL_KEY, '1'); else sessionStorage.removeItem(FULL_KEY); } catch (e) { /* */ }
+}
+function takeKeptFull() {
+    try { const v = sessionStorage.getItem(FULL_KEY) === '1'; sessionStorage.removeItem(FULL_KEY); return v; } catch (e) { return false; }
+}
+/** A browser tab cannot be made full screen without a click: the first click / key after a reload does it. */
+function restoreTabFullOnGesture(doc) {
+    const go = async () => {
+        doc.removeEventListener('pointerdown', go, true); doc.removeEventListener('keydown', go, true);
+        if (appWindow || doc.fullscreenElement) return;
+        try { await doc.documentElement.requestFullscreen({ navigationUI: 'hide' }); await navigator.keyboard?.lock?.(['Escape']); } catch (e) { /* */ }
+    };
+    doc.addEventListener('pointerdown', go, true); doc.addEventListener('keydown', go, true);
+}
 const isFull = (doc) => (appWindow ? appFull : !!doc.fullscreenElement);
 
 async function setAppFull(on) {
@@ -65,6 +85,7 @@ async function setAppFull(on) {
 
 /** Full screen for the game (a click on «Играть» is the user's gesture). Escape stays the game's pause key. */
 export async function enterGameFullscreen(doc = document) {
+    if (appPending) { wantFull = true; if (!(await appPending)) wantFull = false; else return; } // (the window is still being made: it is made full at once)
     if (appWindow) { await setAppFull(true); return; }
     try {
         if (!doc.fullscreenElement && doc.documentElement.requestFullscreen) await doc.documentElement.requestFullscreen({ navigationUI: 'hide' });
@@ -112,20 +133,31 @@ function dragBy(bar) {
  * menu's size in the middle of the screen; then the menu fills the window (no empty space around it)
  * and its title bar drags the window. In a browser tab nothing changes (false).
  */
-export async function becomeAppWindow({ bar } = {}, doc = document) {
+export function becomeAppWindow(opts = {}, doc = document) {
+    appPending = becomeAppWindowInner(opts, doc);
+    appPending.finally(() => { appPending = null; });
+    return appPending;
+}
+
+async function becomeAppWindowInner({ bar } = {}, doc = document) {
+    const keepFull = takeKeptFull();
     let ok = false;
+    let full = false;
     for (let i = 0; i < 3 && !ok; i++) {
         if (i) await new Promise((r) => setTimeout(r, 600)); // (a maximised window is first restored)
-        ok = await askServer('frameless', metrics());
+        full = keepFull || wantFull; // (the game reloaded itself / starts at once: straight to full screen, never the menu's size)
+        ok = await askServer(full ? 'fullscreen' : 'frameless', metrics());
     }
     if (!ok) {
+        if (keepFull) restoreTabFullOnGesture(doc);
         doc.documentElement.classList.remove('app-window'); // (a browser tab after all: index.html guessed from the last time)
         try { sessionStorage.removeItem(APP_KEY); } catch (e) { /* */ }
         return false;
     }
     appWindow = true;
-    appFull = false;
+    appFull = full;
     doc.documentElement.classList.add('app-window');
+    doc.documentElement.classList.toggle('app-full', full);
     try { sessionStorage.setItem(APP_KEY, '1'); } catch (e) { /* */ }
     // the window was hidden while the server cut it and gave it its size: it is shown now, with the
     // page already in its final look — never a frame, a strip or a jump

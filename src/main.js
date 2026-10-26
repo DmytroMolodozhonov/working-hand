@@ -33,7 +33,7 @@ import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
 import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
-import { setupWindowControls, enterGameFullscreen, becomeAppWindow } from './ui/WindowControls.js';
+import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
 import { WORLD_GEN } from './world/Terrain.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
@@ -900,6 +900,7 @@ const ui = {
         catch { g.hud?.toast?.('Не удалось перезапустить мир. Проверьте, разрешено ли хранение данных в браузере.'); return; }
         g.stop();
         g.keeper?.dispose(); // no pagehide autosave of the discarded attempt
+        rememberWindowSize(); // (the reload must not change the window: full screen stays full screen)
         location.reload();
     },
     gameOver(kills, punches) {
