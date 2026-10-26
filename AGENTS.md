@@ -1,0 +1,1 @@
+- Short spells listed in SpellPhrase MOUTH_SURE may pass a thin sound fit only with matching letters and lips seen moving; speaker, running and echo checks stay, so talk and echo never cast.

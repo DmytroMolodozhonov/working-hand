@@ -324,6 +324,9 @@ export function trustedFar(d, r) {
 }
 export const TRUSTED_FAR = 0.3;
 
+/** Short spells trusted at a thin fit when the letters match and the lips are seen moving. */
+export const MOUTH_SURE = new Set(['Fire', 'LumosAhead']);
+
 /** Spells that cost much or do much (a castle out of nothing, a curse that kills): never from a sound only just made out. */
 export const DANGEROUS = new Set(['CreateCastle', 'IceCastle', 'IceBridge', 'CreateHouse', 'ImproveHouse', 'AvadaKedavra', 'Hellfire', 'Frozen', 'Stupefy',
     'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'LightningStrike', 'Earthquake', 'EarthquakeMaxima', 'CircleAttack', 'CircleAttackMaxima',
@@ -390,7 +393,10 @@ export function soundTrust(h) {
     let need = 0;
     const why = [];
     if (!like) { need = Math.max(need, 1); why.push('буквы не похожи'); }
-    if (short) { need = Math.max(need, 0.3); why.push('короткое'); }
+    // «Fire», «Ahead»: one-syllable words the network gives a thin fit (+0…+0.2) even said clearly («эхит» for «эхед»);
+    // with the letters like it and the camera seeing my own mouth move, that thin fit is enough (echo, speakers, running keep their checks)
+    const ownWord = MOUTH_SURE.has(h.spell) && like && h.lips === true;
+    if (short && !ownWord) { need = Math.max(need, 0.3); why.push('короткое'); }
     if (short && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
     if (short && h.running) { need = Math.max(need, 0.8); why.push('на бегу'); }
     // («Дай» asks the raised hand aimed right at the target besides: its letters said clearly are enough)
