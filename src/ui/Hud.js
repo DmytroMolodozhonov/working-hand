@@ -334,11 +334,11 @@ export class Hud {
     _ringing(k) {
         const g = k > 0.45 ? (k - 0.45) * 0.02 : 0;              // (only a hard fall rings, and faintly)
         try {
-            if (g > 0 && !this._ring && typeof AudioContext !== 'undefined') {
-                const ac = this._ringAc || (this._ringAc = new AudioContext());
+            if (g > 0 && !this._ring && this.getSound?.()?.effectsGain) {
+                const sound = this.getSound(), ac = sound.context;
                 const o = ac.createOscillator(), gain = ac.createGain();
                 o.frequency.value = 3600; gain.gain.value = 0;
-                o.connect(gain).connect(ac.destination); o.start();
+                o.connect(gain).connect(sound.effectsGain); o.start();
                 this._ring = { o, gain, ac };
             }
             if (this._ring) {

@@ -194,6 +194,7 @@ import { CrossedShield } from './CrossedArms.js';
 import { CastHints } from './CastHints.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
+import { restartsCreative } from './CreativeRestart.js';
 
 const SPELL_COOLDOWN = 1000;
 /** The duel's one-word spells: cast the moment they are heard — no wait for a «… Максима» (NativeVoice.DUEL_FAST). */
@@ -3119,6 +3120,7 @@ export class Game {
 
     /** Back into the game: full health, a new place near the start. */
     respawn() {
+        if (restartsCreative(this) && this.ui.restartCreative) return this.ui.restartCreative(this);
         const ch = this.character;
         this.bleeding?.clearCuts(ch);
         this.dismember?.resetLocal(); // (cut-off arms / legs / the head: whole again)

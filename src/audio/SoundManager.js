@@ -58,6 +58,15 @@ export class SoundManager {
         this.enabled = true;
         this.ambientEnabled = true; // "Звуки рычания" setting (zombie growls only)
         this.globalVolume = 0.2; // (all sounds start at 20%: the settings sliders)
+        // All effects, including spells, share a live master gain. Music and speech remain independent.
+        this.effectsGain = this.context.createGain();
+        this.effectsGain.gain.value = this.globalVolume;
+        this.effectsGain.connect(this.audioListener.getInput());
+        const listener = this.audioListener;
+        this.effectsListener = {
+            context: this.context, getInput: () => this.effectsGain,
+            get timeDelta() { return listener.timeDelta; },
+        };
         this.talkVolume = 0.4; // the villagers' voices: their own slider («Громкость голосов жителей», 40% — twice the old loudness)
         this.audioLoader = new THREE.AudioLoader();
         this.voices = [];
@@ -87,7 +96,7 @@ export class SoundManager {
 
         if (results.ambient) {
             for (let i = 0; i < this.maxAmbient; i++) {
-                const sound = new THREE.PositionalAudio(this.audioListener);
+                const sound = new THREE.PositionalAudio(this.effectsListener);
                 sound.setBuffer(results.ambient);
                 sound.setRefDistance(2);
                 sound.setLoop(true);
@@ -109,8 +118,8 @@ export class SoundManager {
         this.sounds.cast = this._synthWhoosh();
         this.sounds.noMana = this._synthNoMana(); // (made now, never at the first «не хватает маны»)
 
-        for (let i = 0; i < 10; i++) this.voices.push(new THREE.Audio(this.audioListener));
-        for (let i = 0; i < 6; i++) this.posVoices.push(new THREE.PositionalAudio(this.audioListener));
+        for (let i = 0; i < 10; i++) this.voices.push(new THREE.Audio(this.effectsListener));
+        for (let i = 0; i < 6; i++) this.posVoices.push(new THREE.PositionalAudio(this.effectsListener));
         if (this.scene) this.setScene(this.scene);
         this.loaded = true;
         this.prepareSpellMusic(); // (starts the worker now: ready long before the loading screen ends)
@@ -155,9 +164,8 @@ export class SoundManager {
     }
 
     setVolume(val) {
-        const gain = val / 100;
-        for (const item of this.ambientPool) item.sound.setVolume(gain);
-        this.globalVolume = gain;
+        this.globalVolume = Math.max(0, Math.min(100, Number(val) || 0)) / 100;
+        this.effectsGain.gain.setValueAtTime(this.globalVolume, this.context.currentTime);
     }
 
     /** The voices of the people (villagers, sailors, the advisor…), 0..100. */
@@ -173,11 +181,11 @@ export class SoundManager {
 
     /** Volume of the spell sounds (0..100), separate from zombies and music. */
     setSpellVolume(val) {
-        this.spellVolume = val / 100;
+        this.spellVolume = Math.max(0, Math.min(100, Number(val) || 0)) / 100;
     }
 
     _spell(buffer, volume = 1, rate = 1) {
-        this._play(buffer, volume * (this.spellVolume ?? 1), rate, true);
+        this._play(buffer, volume * (this.spellVolume ?? 1), rate);
     }
 
     async resume() {
@@ -263,14 +271,14 @@ export class SoundManager {
     }
 
     // ------------------------------------------------------------------- SFX
-    /** A sound effect (`own`: its volume is already set by its own slider, e.g. spells). */
-    _play(buffer, volume = 1, rate = 1, own = false) {
+    /** Local source intensity; the effects bus applies the general sound setting once. */
+    _play(buffer, volume = 1, rate = 1) {
         if (!this.enabled || !buffer || !this.voices.length) return;
         const v = this.voices[this._voiceIdx];
         this._voiceIdx = (this._voiceIdx + 1) % this.voices.length;
         if (v.isPlaying) v.stop();
         v.setBuffer(buffer);
-        v.setVolume(volume * (own ? 1 : this.globalVolume));
+        v.setVolume(volume);
         v.setPlaybackRate(rate);
         v.play();
     }
@@ -283,7 +291,7 @@ export class SoundManager {
         v.setBuffer(buffer);
         v.setPlaybackRate(rate);
         v.setRefDistance(refDistance);
-        v.setVolume(volume * this.globalVolume);
+        v.setVolume(volume);
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -315,7 +323,7 @@ export class SoundManager {
             slot.sound.position.copy(z.group.position);
             slot.sound.updateMatrixWorld(true);
             if (!slot.sound.isPlaying) slot.sound.play();
-            slot.sound.setVolume(this.globalVolume);
+            slot.sound.setVolume(1);
         }
         for (const slot of this.ambientPool) {
             if (!slot.activeObject || !active.has(slot.activeObject) || slot.activeObject.isDead) {
@@ -460,13 +468,13 @@ export class SoundManager {
             }
             // (no click where the loop wraps)
             for (let i = 0; i < 2000; i++) { const a = i / 2000; d[i] = d[i] * a + d[len - 2000 + i] * (1 - a); }
-            this._rain = new THREE.Audio(this.audioListener);
+            this._rain = new THREE.Audio(this.effectsListener);
             this._rain.setBuffer(buf);
             this._rain.setLoop(true);
             this._rain.setVolume(0);
         }
         const r = this._rain;
-        r.setVolume(Math.min(1, k) * 0.9 * this.globalVolume);
+        r.setVolume(Math.min(1, k) * 0.9);
         if (k > 0.01 && !r.isPlaying) { try { r.play(); } catch (e) { /* not resumed yet */ } }
         else if (k <= 0.01 && r.isPlaying) r.stop();
     }
@@ -633,11 +641,11 @@ export class SoundManager {
         let a = loops[kind];
         if (!a) {
             if (k <= 0.01) return;
-            a = loops[kind] = new THREE.Audio(this.audioListener);
+            a = loops[kind] = new THREE.Audio(this.effectsListener);
             a.setBuffer(this.sounds[kind]);
             a.setLoop(true);
         }
-        a.setVolume(Math.min(1.2, k) * this.globalVolume);
+        a.setVolume(Math.min(1.2, k));
         if (k > 0.01 && !a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
         else if (k <= 0.01 && a.isPlaying) a.stop();
     }
@@ -684,7 +692,7 @@ export class SoundManager {
         v.setBuffer(buffer);
         v.setPlaybackRate(rate);
         v.setRefDistance(refDistance);
-        v.setVolume(volume * (this.spellVolume ?? this.globalVolume));
+        v.setVolume(volume * (this.spellVolume ?? 1));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -723,13 +731,13 @@ export class SoundManager {
         if (e.cast && this.sounds[e.cast]) this._spellAt(this.sounds[e.cast], position, 1, 8, rate * (0.97 + Math.random() * 0.06));
         const buf = e.theme && this.sounds[e.theme];
         if (buf) {
-            if (!this._spellTheme) { this._spellTheme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._spellTheme); }
+            if (!this._spellTheme) { this._spellTheme = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._spellTheme); }
             const v = this._spellTheme;
             if (v.isPlaying) v.stop();
             v.setBuffer(buf);
             v.setPlaybackRate(rate);
             v.setRefDistance(22);
-            v.setVolume(Math.min(1.1, 1.5 * (this.spellVolume ?? this.globalVolume)));
+            v.setVolume(Math.min(1.1, 1.5 * (this.spellVolume ?? 1)));
             if (position) { v.position.copy(position); v.updateMatrixWorld(true); }
             v.play();
         }
@@ -762,9 +770,9 @@ export class SoundManager {
         const loops = this._loops || (this._loops = {});
         let a = loops[slot];
         if (!key || !this.sounds[key]) { if (a?.isPlaying) a.stop(); return; }
-        if (!a) { a = loops[slot] = new THREE.Audio(this.audioListener); a.setLoop(true); }
+        if (!a) { a = loops[slot] = new THREE.Audio(this.effectsListener); a.setLoop(true); }
         if (a._key !== key) { if (a.isPlaying) a.stop(); a.setBuffer(this.sounds[key]); a._key = key; }
-        a.setVolume(k * (this.spellVolume ?? this.globalVolume));
+        a.setVolume(k * (this.spellVolume ?? 1));
         if (a.playbackRate !== rate) a.setPlaybackRate(rate);
         if (!a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
     }
@@ -1086,12 +1094,12 @@ export class SoundManager {
         if (!this.enabled || !this.context || !this.loaded) return;
         const key = 'houseHum' + Math.round(seconds * 10);
         if (!this.sounds[key]) this.sounds[key] = this._synthHum(seconds);
-        if (!this._hum) { this._hum = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._hum); }
+        if (!this._hum) { this._hum = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._hum); }
         const v = this._hum;
         if (v.isPlaying) v.stop();
         v.setBuffer(this.sounds[key]);
         v.setRefDistance(12);
-        v.setVolume(0.9 * this.globalVolume);
+        v.setVolume(0.9);
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -1126,8 +1134,8 @@ export class SoundManager {
             const want = this.enabled && this.loaded ? k : 0;
             if (want <= 0.01) { if (a?.isPlaying) a.stop(); continue; }
             if (!this.sounds[key]) continue; // (not made yet: comes a moment later)
-            if (!a) { a = amb[key] = new THREE.Audio(this.audioListener); a.setBuffer(this.sounds[key]); a.setLoop(true); }
-            a.setVolume(want * 0.45 * this.globalVolume);
+            if (!a) { a = amb[key] = new THREE.Audio(this.effectsListener); a.setBuffer(this.sounds[key]); a.setLoop(true); }
+            a.setVolume(want * 0.45);
             if (!a.isPlaying) a.play();
         }
     }
@@ -1231,9 +1239,9 @@ export class SoundManager {
         const v = this._wardHumV;
         if (!(k > 0) || !this.enabled || !this.loaded) { if (v?.isPlaying) v.stop(); return; }
         if (!this.sounds.wardHum) this.sounds.wardHum = this._synthWardHum();
-        if (!v) { this._wardHumV = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._wardHumV); return this.wardHum(position, k, rate); }
+        if (!v) { this._wardHumV = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._wardHumV); return this.wardHum(position, k, rate); }
         if (!v.isPlaying) { v.setBuffer(this.sounds.wardHum); v.setLoop(true); v.setRefDistance(10); v.play(); }
-        v.setVolume(0.7 * k * this.globalVolume);
+        v.setVolume(0.7 * k);
         v.setPlaybackRate(rate);
         if (position) { v.position.copy(position); v.updateMatrixWorld(true); }
     }
@@ -1312,7 +1320,7 @@ export class SoundManager {
         const L = Math.max(1, Math.min(5, level | 0)), key = 'houseTheme' + Math.round(seconds * 10) + '_' + L;
         let buf = this.sounds[key];
         if (!buf) { if (L > 1) this.prepareHouseTheme(seconds, L); buf = this._houseTheme(seconds, 1); }
-        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._theme); }
+        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._theme); }
         const v = this._theme;
         this._themeRun = (this._themeRun || 0) + 1;
         if (v.isPlaying) v.stop();
@@ -1321,7 +1329,7 @@ export class SoundManager {
         // (louder than at first — the author: «it's quiet»: ~+4 dB, and loud as far as 26 m from the house;
         // capped so the loudest setting never clips)
         v.setRefDistance(26);
-        v.setVolume(Math.min(1.15, 1.8 * this.globalVolume));
+        v.setVolume(Math.min(1.15, 1.8));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -1335,14 +1343,14 @@ export class SoundManager {
         if (!this.enabled || !this.context || !this.loaded) return;
         const buf = this.sounds['castleTheme' + seconds];
         if (!buf) { this.prepareCastleTheme(seconds); this.playHouseTheme(position, 10, 1); return; } // (the house's tune, made ahead)
-        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.audioListener); this.scene?.add(this._theme); }
+        if (!this._theme) { this._theme = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._theme); }
         const v = this._theme;
         this._themeRun = (this._themeRun || 0) + 1;
         if (v.isPlaying) v.stop();
         v.gain.gain.cancelScheduledValues(this.context.currentTime);
         v.setBuffer(buf);
         v.setRefDistance(40); // (a castle: loud far round it)
-        v.setVolume(Math.min(1.15, 1.8 * this.globalVolume));
+        v.setVolume(Math.min(1.15, 1.8));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();

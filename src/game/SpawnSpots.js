@@ -26,7 +26,9 @@ export const SPAWN_SPOTS = Object.freeze([
     { id: 'port', label: 'В порту', hint: 'На причале порта у замка Творческой площадки: рядом стоят корабли с командой. Удобно проверять моряков и корабли.' },
     { id: 'tower', label: 'У башни волшебников', hint: 'У входа в башню волшебников — единственную в мире. Внутри живёт её глава. Если до башни далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'arena', label: 'Перед дуэлью на арене (10 секунд до начала)', hint: 'Режим «только дуэли»: вы стоите на своём месте на арене, трибуны полны болельщиков, напротив уже ждёт соперник, идёт отсчёт 10…1 — и бой. Проиграли или погибли — сразу новая дуэль с новым волшебником того же уровня. Соперника выбираете ниже. На сервере (мультиплеер) волшебника нет: соперником станет друг, который зайдёт на ваш сервер, — пока он не зашёл, бой не начнётся; остальные игроки смотрят с трибун.' },
-    { id: 'village', label: 'В поселении волшебников', hint: 'На площади ближнего поселения волшебников: жители, библиотека и магазин свитков.' },
+    { id: 'village', label: 'В городе волшебников', hint: 'На площади большого города волшебников: жители, библиотека и магазин свитков.' },
+    { id: 'magevillage', label: 'В поселении волшебников', hint: 'У небольшого поселения: 4–9 домов волшебников вокруг костра, торговцы живут в этих домах.' },
+    { id: 'magehut', label: 'У одинокого волшебника', hint: 'Рядом с домом одинокого волшебника.' },
     { id: 'spider', label: 'У логова паучихи', hint: 'Рядом с логовом ближайшей гигантской паучихи. Она выходит из логова ночью — днём вы увидите только паутину и пещеру.' },
     { id: 'blackship', label: 'На корабле в море (встреча с Чёрными Усами)', hint: 'Вы на палубе обычного корабля посреди открытого моря. Через какое-то время рядом появится чёрный корабль капитана Чёрные Усы. Хотите без капитана и скелетов — включите «Корабли без моряков».' },
 ]);
@@ -98,6 +100,23 @@ export function farTarget(id, data, ctx = {}) {
     if (id === 'port') {
         const p = ctx.port?.();
         return fin(p) ? { x: Math.round(p.x), z: Math.round(p.z), yaw: Math.PI } : null; // (the sea lies to −z: Castles.testSeaCastleSpot)
+    }
+    if (id === 'magevillage' || id === 'magehut') {
+        const index = S?.hamlets;
+        if (!index?.cellOf) return null;
+        // Search complete nearby rings, keeping the real indexed site (terrain and people use it too).
+        for (let ring = 0; ring <= 12; ring++) {
+            let best = null, distance = Infinity;
+            for (let gz = -ring; gz <= ring; gz++) for (let gx = -ring; gx <= ring; gx++) {
+                if (Math.max(Math.abs(gx), Math.abs(gz)) !== ring) continue;
+                for (const h of index.cellOf(gx, gz)) {
+                    if (h.kind !== 'hamlet' || h.type !== id || !fin(h.gate)) continue;
+                    const d = Math.hypot(h.x, h.z);
+                    if (d < distance) { best = h; distance = d; }
+                }
+            }
+            if (best) return { x: Math.round(best.gate.x), z: Math.round(best.gate.z), yaw: best.gateYaw || 0, siteId: best.id };
+        }
     }
     return null;
 }

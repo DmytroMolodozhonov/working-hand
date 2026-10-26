@@ -7,10 +7,11 @@
  * Герой, начавший мир у босса (гора дракона, Ледяная Королева, замок короля, башня волшебников, логово паучихи, чёрный корабль), падает в бою —
  * смерти нет (ни экрана смерти, ни тела, ни потерянных вещей): мир на паузе, окно «Хотите попробовать ещё раз?» с теми же настройками героя,
  * что при создании мира (мана, броня, здоровье, дуэльная сила…). «Начать заново» — настройки применены, мана и здоровье полные, герой снова
- * на месте старта рядом с боссом (`HeroApply.requestSpawn`), дракон — новый (остальных боссов мир возвращает сам: Ледяная Королева
- * оживает, чёрный корабль плывёт дальше; их здоровье этим не сбрасывается). «Выйти в меню» — как в паузе: мир сохраняется.
+ * на месте старта рядом с боссом. Одиночная попытка перезапускает мир целиком с тем же семенем:
+ * здания, боссы и память жителей — с нуля. «Выйти в меню» — как в паузе: мир сохраняется.
  */
 import { DuelEndUi } from '../ui/DuelEndUi.js';
+import { restartsCreative } from './CreativeRestart.js';
 
 /** Места старта, где работает повтор боя (дуэли — своя система, ArenaDuels). */
 export const BOSS_STARTS = Object.freeze(['dragon', 'queen', 'castle', 'tower', 'spider', 'blackship']);
@@ -43,6 +44,7 @@ export class BossRetry {
         const g = this.game;
         g.hero = hero;
         if (g.config) g.config.hero = hero; // (kept with the world)
+        if (restartsCreative(g) && g.ui?.restartCreative) return g.ui.restartCreative(g);
         g.heroApply?.resetToSettings?.();
         this._resetBoss(hero.spawn);
         g.heroApply?.requestSpawn?.(); // (back to the place by the boss)

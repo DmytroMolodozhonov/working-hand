@@ -54,7 +54,7 @@ export class HeroApply {
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
         if (id === 'spider') { this.pending.cells = lairCells(SPIDER_LAIR.CELL, 6, g.character.group.position); return; }
-        const t = id === 'tower' || id === 'arena' || id === 'village' || id === 'port' ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate });
+        const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate });
         if (!t) { this._fail(`в этом мире такого места нет — вы на начальной площадке`, id); return; }
         this.pending.t = t;
         this._far(t);
@@ -209,7 +209,10 @@ export class HeroApply {
         if (!this.on) return;
         this.applyMana();
         this.applyHealth();
-        if (!this.game._playerRestored) { this.initial(); this.requestSpawn(); }
+        if (!this.game._playerRestored) {
+            if (creativeFiniteMana(this.game) && this.game.combat) this.game.combat.fatigue = this.game.combat.maxFatigue;
+            this.initial(); this.requestSpawn();
+        }
     }
 
     respawn() {

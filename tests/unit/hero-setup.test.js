@@ -172,7 +172,7 @@ import { SPAWN_SPOTS, SPAWN_IDS, spotTarget, safeNear, normalizeSpawn, pointTowa
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../../src/world/Terrain.js';
 
 test('точки появления: список, по умолчанию «Начальная площадка», безопасность, сохранение', () => {
-    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'spider', 'blackship']);
+    assert.deepEqual(SPAWN_IDS, ['start', 'dragon', 'queen', 'castle', 'port', 'tower', 'arena', 'village', 'magevillage', 'magehut', 'spider', 'blackship']);
     assert.equal(normalizeHero({}).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'nope' }).spawn, 'start');
     assert.equal(normalizeHero({ spawn: 'dragon' }).spawn, 'dragon');

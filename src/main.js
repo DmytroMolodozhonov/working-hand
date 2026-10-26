@@ -40,6 +40,7 @@ import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
 import { watchServer } from './ui/ServerLost.js';
 import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
+import { CREATIVE_RESTART_KEY, creativeRestartConfig, takeCreativeRestart } from './game/CreativeRestart.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -103,6 +104,7 @@ window.addEventListener('resize', () => {
 const poseService = new PoseService({ faceSolver: KalidoFace });
 const voice = new VoiceService();
 const hud = new Hud();
+hud.getSound = () => sound;
 const net = new Network();
 // this player's own lasting id: a server keeps their things under it (not under a name others may have too)
 net.pid = (() => {
@@ -458,6 +460,8 @@ updateGameMapList();
 // Shown in the menu so everyone can see at a glance that the game is up to date
 // (a friend's server is being joined with its version, just downloaded: keep that one)
 const rejoinNow = pendingRejoin(true);
+let creativeRestartNow = null;
+try { creativeRestartNow = takeCreativeRestart(sessionStorage); } catch { /* no pending attempt */ }
 fetch('/api/version').then((r) => r.json()).then((v) => {
     if (v?.sha) net.version = v.sha; // (players must play the same version together)
     if (v?.full) net.fullVersion = v.full;
@@ -468,7 +472,7 @@ fetch('/api/version').then((r) => r.json()).then((v) => {
     if (el) el.innerHTML = `Версия от <b>${v.date}</b>` + (v.sha ? ` <span class="ver-sha">(${v.sha})</span>` : '');
     // a newer version is out: it is downloaded right now (a loading window), then the menu opens again
     fetch('/api/update?fresh=1').then((r) => r.json()).then(async (u) => {
-        if (game?.active || starting || rejoinNow) return; // (never in the middle of a game)
+        if (game?.active || starting || rejoinNow || creativeRestartNow) return; // (never in the middle of a game)
         await updateIfNewer(u);
     }).catch(() => {});
 }).catch(() => {});
@@ -889,6 +893,15 @@ window.addEventListener('keydown', (e) => {
 
 // ------------------------------------------------------------------ game start
 const ui = {
+    restartCreative(g) {
+        // A new document also cancels every old worker, timer, conversation and module-level cache.
+        const config = creativeRestartConfig(g);
+        try { sessionStorage.setItem(CREATIVE_RESTART_KEY, JSON.stringify(config)); }
+        catch { g.hud?.toast?.('Не удалось перезапустить мир. Проверьте, разрешено ли хранение данных в браузере.'); return; }
+        g.stop();
+        g.keeper?.dispose(); // no pagehide autosave of the discarded attempt
+        location.reload();
+    },
     gameOver(kills, punches) {
         hud.show(false);
         $('go-kills').textContent = kills;
@@ -1017,6 +1030,7 @@ async function startGameInner(config, welcome) {
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
             hud.show(true);
+            if (creativeRestartNow) game.keeper?.save(); // replace the old saved attempt with the pristine world
             applyFps();
         };
         const started = performance.now(), frame0 = game.frameCount;
@@ -1661,3 +1675,4 @@ if (!window.__ZNS_NO_WORLD_PROBE__) setTimeout(() => {
 }, 1500);
 window.__zns = Object.defineProperties(window.__zns || {}, Object.getOwnPropertyDescriptors({ THREE, bombardoRadius, get game() { return game; }, poseService, net, voice, startGame, readConfig, get pendingWelcome() { return pendingWelcome; } }));
 console.log(GAME_NAME + ': готово.');
+if (creativeRestartNow) startGame(creativeRestartNow);
