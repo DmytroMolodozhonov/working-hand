@@ -281,6 +281,10 @@ export function lateInSpeech(spell, command, meta, now) {
     if (!(lag > LATE_IN_SPEECH_MS)) return null;
     const said = norm(meta.written || '').split(' ').filter(Boolean).length, own = norm(command || '').split(' ').filter(Boolean).length;
     if (said < own + 2) return null;
+    // the spell said again and again («инферно инферно инферно»): every word is the spell — slow, not talk
+    const words = norm(meta.written || '').split(' ').filter(Boolean), cmd = letters(command || '');
+    const repeated = own === 1 && words.every((w) => Math.abs(letters(w).length - cmd.length) <= 2 && lettersLike(w, command || ''));
+    if (repeated) return null;
     return `слово из длинной речи, дошло через ${Math.round(lag)} мс — это не сказанное заклинание`;
 }
 
