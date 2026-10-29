@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { buildTree, ATLAS_CELLS, BARK_CELL } from './TreeBuild.js';
 import { drawLeafAtlas, bleedLeafPixels, LEAF_ATLAS } from './TreeLeaves.js';
 import { applySkyComp } from './VoxelShading.js';
+import { bakeRenderer, bakeTarget, runPasses, bakeFailed } from '../core/GpuTexture.js';
 
 export const TREE_WIND = { time: { value: 0 }, strength: { value: 1 } };
 /** The golden apple tree's light (Animals.js pulses it: soft by day, bright by night). */
@@ -27,6 +28,10 @@ export function leafAtlas() {
     const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
     const ctx = cv.getContext('2d');
     drawLeafAtlas(ctx);
+    const r = bakeRenderer('листва деревьев');
+    if (r) {
+        try { return (_atlas = bakeLeafAtlas(r, cv, W, H)); } catch (e) { bakeFailed('листва деревьев', e); }
+    }
     const px = bleedLeafPixels(ctx.getImageData(0, 0, W, H).data, W, H);
     // (rows flipped: v = 0 at a card's bottom — the picture's bottom row)
     const data = new Uint8Array(px.length);
@@ -38,6 +43,116 @@ export function leafAtlas() {
     tex.anisotropy = 4;
     tex.needsUpdate = true;
     return (_atlas = tex);
+}
+
+/**
+ * The atlas made on the video card (no getImageData: reading a card-drawn canvas back made the processor wait for
+ * the card — 0.1 s on a real card, seconds on a weak one — and then grew the colours in a loop over every pixel).
+ * The sprigs are drawn as before (the browser draws a 2D canvas on the card), the canvas goes up as a texture
+ * (card to card), and bleedLeafPixels' work is done by shaders, pixel for pixel the same: the clear pixels take the
+ * colour of the nearest leaf, a ring a pass (24 passes, as there), the rest the cell's average leaf colour (summed in
+ * whole numbers, as there); the leaves' own pixels are copied untouched.
+ * Which leaf a clear pixel takes when two touch it: there, the one met first in its ring's list — the list's order is
+ * the leaves' order in the picture (row by row), then the way each ring grew (+x, −x, +y, −y). So each grown pixel
+ * carries its «place in the list»: the leaf it came from (its index in the picture) and its path (2 bits a ring),
+ * whole numbers in float targets (exact below 2²⁴: the index < 590 000, 12 rings in each of two channels), and the
+ * smallest place wins — the very pixel the loop would pick.
+ * Rows: the canvas texture is flipped on upload (v = 0 at the picture's bottom row) — as the processor's copy.
+ * Mipmaps are made by the card.
+ */
+const RINGS = 24;
+/** A pixel's state: r — its leaf's index in the picture + 1 (0: nothing yet), g, b — its path, a — its colour (r·65536 + g·256 + b). */
+const BLEED_INIT = /* glsl */`
+uniform sampler2D src;
+uniform ivec2 size;
+out highp vec4 o;
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 c = round(texelFetch(src, p, 0) * 255.0);
+    // (a leaf's pixel: alpha over 8; its index in the picture — rows from the top, as the processor reads them)
+    o = c.a > 8.5 ? vec4(float((size.y - 1 - p.y) * size.x + p.x) + 1.0, 0.0, 0.0, c.r * 65536.0 + c.g * 256.0 + c.b) : vec4(0.0);
+}`;
+const BLEED_RING = /* glsl */`
+uniform sampler2D prev;
+uniform ivec2 size;
+uniform int ring;
+out highp vec4 o;
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 c = texelFetch(prev, p, 0);
+    if (c.r > 0.0) { o = c; return; }
+    // the neighbours, and the way from each to here in the picture's terms (its y down: the texture's flipped)
+    ivec2 d[4] = ivec2[4](ivec2(-1, 0), ivec2(1, 0), ivec2(0, 1), ivec2(0, -1));
+    float way[4] = float[4](0.0, 1.0, 2.0, 3.0); // (from the left neighbour: +x … from the one above in the picture: +y)
+    vec4 best = vec4(0.0);
+    float bestWay = 0.0;
+    for (int k = 0; k < 4; k++) {
+        ivec2 q = p + d[k];
+        if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) continue;
+        vec4 n = texelFetch(prev, q, 0);
+        if (n.r == 0.0) continue;
+        if (best.r == 0.0 || n.r < best.r || (n.r == best.r && (n.g < best.g || (n.g == best.g && n.b < best.b)))) { best = n; bestWay = way[k]; }
+    }
+    if (best.r == 0.0) { o = vec4(0.0); return; }
+    o = ring <= 12 ? vec4(best.r, best.g * 4.0 + bestWay, 0.0, best.a) : vec4(best.r, best.g, best.b * 4.0 + bestWay, best.a);
+}`;
+const BLEED_AVG = /* glsl */`
+uniform sampler2D src;
+uniform int cell;
+out highp vec4 o;
+// a cell's average leaf colour (alpha over 128), in whole numbers: no rounding of its own
+void main() {
+    int x0 = int(gl_FragCoord.x) * cell;
+    uint r = 0u, g = 0u, b = 0u, n = 0u;
+    for (int y = 0; y < cell; y++) for (int x = 0; x < cell; x++) {
+        uvec4 c = uvec4(round(texelFetch(src, ivec2(x0 + x, y), 0) * 255.0));
+        if (c.a > 128u) { r += c.r; g += c.g; b += c.b; n++; }
+    }
+    o = n == 0u ? vec4(0.0) : vec4(vec3(float(r / n), float(g / n), float(b / n)) / 255.0, 1.0);
+}`;
+const BLEED_DONE = /* glsl */`
+uniform sampler2D src, grown, avg;
+uniform int cell;
+out highp vec4 o;
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 s = texelFetch(src, p, 0);
+    if (round(s.a * 255.0) > 8.5) { o = s; return; } // (a leaf's own pixel)
+    vec4 c = texelFetch(grown, p, 0);
+    if (c.r > 0.0) { float k = c.a; o = vec4(floor(k / 65536.0), mod(floor(k / 256.0), 256.0), mod(k, 256.0), 0.0) / 255.0; return; } // (grown from a leaf: clear)
+    vec4 m = texelFetch(avg, ivec2(p.x / cell, 0), 0);
+    o = m.a > 0.0 ? vec4(m.rgb, 0.0) : s; // (too far: the cell's average; a cell with no leaf: as drawn)
+}`;
+
+export function bakeLeafAtlas(renderer, canvas, W, H) {
+    if (!renderer.extensions.has('EXT_color_buffer_float')) throw new Error('нет EXT_color_buffer_float');
+    const src = new THREE.CanvasTexture(canvas);
+    src.minFilter = src.magFilter = THREE.NearestFilter;
+    src.generateMipmaps = false;
+    src.flipY = true;
+    src.premultiplyAlpha = false;
+    const a = bakeTarget(W, H, { type: THREE.FloatType }), b = bakeTarget(W, H, { type: THREE.FloatType }), avg = bakeTarget(LEAF_ATLAS.KINDS, 1);
+    const out = bakeTarget(W, H, { minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true });
+    out.texture.anisotropy = 4;
+    const size = [W, H];
+    const passes = [{ target: a, fragmentShader: BLEED_INIT, uniforms: { src: { value: src }, size: { value: size } } }];
+    let from = a, to = b;
+    for (let i = 1; i <= RINGS; i++) {
+        passes.push({ target: to, fragmentShader: BLEED_RING, uniforms: { prev: { value: from.texture }, size: { value: size }, ring: { value: i } } });
+        const t = from; from = to; to = t;
+    }
+    passes.push({ target: avg, fragmentShader: BLEED_AVG, uniforms: { src: { value: src }, cell: { value: H } } });
+    passes.push({ target: out, fragmentShader: BLEED_DONE, uniforms: { src: { value: src }, grown: { value: from.texture }, avg: { value: avg.texture }, cell: { value: H } } });
+    try {
+        runPasses(renderer, passes, { once: true });
+    } catch (e) {
+        out.dispose();
+        throw e;
+    } finally {
+        src.dispose(); a.dispose(); b.dispose(); avg.dispose();
+    }
+    out.texture.userData = { keep: true, gpu: true };
+    return out.texture;
 }
 
 /** The wind in the vertex shader: `sway` (0 at the foot … 1 at the top) moves a point, each tree its own way. */

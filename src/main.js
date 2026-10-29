@@ -44,6 +44,7 @@ import { watchServer } from './ui/ServerLost.js';
 import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
 import { CREATIVE_RESTART_KEY, creativeRestartConfig, takeCreativeRestart } from './game/CreativeRestart.js';
+import { setTextureRenderer } from './core/GpuTexture.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,6 +70,7 @@ const antialias = (() => {
 })();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
+setTextureRenderer(renderer); // (pictures made on the video card at loading: src/core/GpuTexture.js)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
 // soft shadows sample the shadow map many times per pixel: only at the highest level

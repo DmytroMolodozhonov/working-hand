@@ -23,6 +23,7 @@
 
 import * as THREE from 'three';
 import { runningBookModel } from './RunningBook.js';
+import { bakeRenderer, bakeTarget, runPasses, bakeFailed } from '../core/GpuTexture.js';
 
 // ------------------------------------------------------------ materials
 const _mats = new Map();
@@ -475,6 +476,43 @@ function hideTexture(key, L, seed) {
     // value noise on a wrapping grid (so the picture closes round the body)
     const grid = (n) => { const a = new Float32Array(n * n * 2); for (let i = 0; i < a.length; i++) a[i] = r(); return a; };
     const g1 = grid(8), g2 = grid(16), g3 = grid(32);
+    const spots = [];
+    const [s0, s1] = L.spotR || [0.06, 0.16];
+    for (let i = 0; i < L.spots; i++) { const ru = s0 + r() * (s1 - s0); spots.push({ u: 0.06 + r() * 0.88, v: r(), ru, rv: ru * (0.6 + r() * 0.5) }); }
+    let tex = null;
+    const gpu = spots.length <= HIDE_SPOTS ? bakeRenderer('шкуры зверей') : null;
+    if (gpu) {
+        try { tex = bakeHide(gpu, W, H, L, r, g1, g2, g3, spots); } catch (e) { bakeFailed('шкуры зверей', e); }
+    }
+    if (!tex) {
+        tex = hideOnCpu(W, H, L, r, g1, g2, g3, spots);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.magFilter = THREE.LinearFilter;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = true;
+        tex.needsUpdate = true;
+    }
+    tex.userData = { keep: true };
+    _skins.set(key, tex);
+    return tex;
+}
+
+/** Pores (tiny darker dots) and bristles (short hairs along the body, pale ones catch the light): mark(p, kr, kg, kb) per touch, in order. */
+function hideMarks(W, H, L, r, mark) {
+    for (let i = 0; i < 2600; i++) { const p = Math.floor(r() * W * H); mark(p, 0.9, 0.88, 0.88); }
+    const [h0, h1] = L.hairLen || [2, 5];
+    for (let i = 0; i < (L.hairs ?? 1500); i++) {
+        const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = h0 + Math.floor(r() * (h1 - h0 + 1));
+        const pale = r() < (L.pale ?? 0.6), k = pale ? 1.07 + r() * 0.05 : 0.86;
+        for (let j = 0; j < len; j++) {
+            const p = y0 * W + ((x0 + j) % W), f = 1 + (k - 1) * (1 - j / (len + 1));
+            mark(p, f, f, pale ? f * 0.99 : f);
+        }
+    }
+}
+
+/** The processor's way (no video card): the picture pixel by pixel. */
+export function hideOnCpu(W, H, L, r, g1, g2, g3, spots) {
     const vn = (gr, n, u, v) => {
         const x = u * n, y = v * n * 2, xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
         const at = (i, j) => gr[(((j % (n * 2)) + n * 2) % (n * 2)) * n + (((i % n) + n) % n)];
@@ -482,9 +520,6 @@ function hideTexture(key, L, seed) {
         return (at(xi, yi) * (1 - sx) + at(xi + 1, yi) * sx) * (1 - sy) + (at(xi, yi + 1) * (1 - sx) + at(xi + 1, yi + 1) * sx) * sy;
     };
     const R = new Float32Array(W * H), G = new Float32Array(W * H), B = new Float32Array(W * H);
-    const spots = [];
-    const [s0, s1] = L.spotR || [0.06, 0.16];
-    for (let i = 0; i < L.spots; i++) { const ru = s0 + r() * (s1 - s0); spots.push({ u: 0.06 + r() * 0.88, v: r(), ru, rv: ru * (0.6 + r() * 0.5) }); }
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
         const u = x / W, v = y / H;
         const n = vn(g1, 8, u, v) * 0.55 + vn(g2, 16, u, v) * 0.3 + vn(g3, 32, u, v) * 0.15;
@@ -501,30 +536,88 @@ function hideTexture(key, L, seed) {
         const i = y * W + x;
         R[i] = cr; G[i] = cg; B[i] = cb;
     }
-    // pores (tiny darker dots) and bristles: short hairs along the body, pale ones catch the light
-    for (let i = 0; i < 2600; i++) { const p = Math.floor(r() * W * H); R[p] *= 0.9; G[p] *= 0.88; B[p] *= 0.88; }
-    const [h0, h1] = L.hairLen || [2, 5];
-    for (let i = 0; i < (L.hairs ?? 1500); i++) {
-        const x0 = Math.floor(r() * W), y0 = Math.floor(r() * H), len = h0 + Math.floor(r() * (h1 - h0 + 1));
-        const pale = r() < (L.pale ?? 0.6), k = pale ? 1.07 + r() * 0.05 : 0.86;
-        for (let j = 0; j < len; j++) {
-            const p = y0 * W + ((x0 + j) % W), f = 1 + (k - 1) * (1 - j / (len + 1));
-            R[p] *= f; G[p] *= f; B[p] *= pale ? f * 0.99 : f;
-        }
-    }
+    hideMarks(W, H, L, r, (p, kr, kg, kb) => { R[p] *= kr; G[p] *= kg; B[p] *= kb; });
     const data = new Uint8Array(W * H * 4);
     for (let i = 0; i < W * H; i++) {
         data[i * 4] = Math.min(255, R[i] * 255); data[i * 4 + 1] = Math.min(255, G[i] * 255); data[i * 4 + 2] = Math.min(255, B[i] * 255); data[i * 4 + 3] = 255;
     }
-    const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.generateMipmaps = true;
-    tex.needsUpdate = true;
-    tex.userData = { keep: true };
-    _skins.set(key, tex);
-    return tex;
+    return new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+}
+
+/**
+ * The same picture made on the video card (the author: «всё сложное — на видеокарту»; on the processor a hide took
+ * 7–215 ms of the loading screen, all of them ~0.7 s — the dapple grey's 90 spots most). The random numbers are drawn
+ * here in the very same order (the grids, the spots, the pores and the bristles: the same look on every computer);
+ * the mottling and the spots — the loop over every pixel — are worked out by a shader, the same formulas; the pores
+ * and bristles, a few thousand touches, are multiplied into a small picture of factors here and applied there.
+ * (Float on the card vs double here: a pixel in ~10 000 may differ by one step of 255 — not to be seen.)
+ */
+const HIDE_SPOTS = 96;
+const HIDE_FRAG = /* glsl */`
+uniform sampler2D g1, g2, g3, marks;
+uniform vec4 spots[${HIDE_SPOTS}];
+uniform int nSpots;
+uniform vec3 spotC;
+uniform float mottle, warmK;
+uniform ivec2 size;
+out highp vec4 o;
+float at(sampler2D g, int n, int i, int j) { return texelFetch(g, ivec2(i % n, j % (n * 2)), 0).r; }
+float vn(sampler2D g, int n, float u, float v) {
+    float x = u * float(n), y = v * float(n) * 2.0, xi = floor(x), yi = floor(y), fx = x - xi, fy = y - yi;
+    int i = int(xi), j = int(yi);
+    float sx = fx * fx * (3.0 - 2.0 * fx), sy = fy * fy * (3.0 - 2.0 * fy);
+    return (at(g, n, i, j) * (1.0 - sx) + at(g, n, i + 1, j) * sx) * (1.0 - sy) + (at(g, n, i, j + 1) * (1.0 - sx) + at(g, n, i + 1, j + 1) * sx) * sy;
+}
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    float u = float(p.x) / float(size.x), v = float(p.y) / float(size.y);
+    float n3 = vn(g3, 32, u, v);
+    float n = vn(g1, 8, u, v) * 0.55 + vn(g2, 16, u, v) * 0.3 + n3 * 0.15;
+    float m = 0.94 - mottle * (n - 0.5) * 1.6;
+    float warm = (vn(g2, 16, u + 0.37, v + 0.21) - 0.5) * warmK * 2.0;
+    vec3 c = vec3(m * (1.0 + warm), m * (1.0 - warm * 0.5), m * (1.0 - warm));
+    for (int k = 0; k < ${HIDE_SPOTS}; k++) {
+        if (k >= nSpots) break;
+        vec4 s = spots[k];
+        float dv = abs(v - s.y); dv = min(dv, 1.0 - dv);
+        float d = length(vec2((u - s.x) / s.z, dv / s.w)) + (n3 - 0.5) * 0.5;
+        float q = 1.0 - min(1.0, max(0.0, (d - 0.75) / 0.3));
+        if (q > 0.0) c *= 1.0 + (spotC - 1.0) * q;
+    }
+    c *= texelFetch(marks, p, 0).rgb;
+    o = vec4(floor(min(vec3(255.0), c * 255.0)) / 255.0, 1.0);
+}`;
+
+function floatTex(data, w, h, format = THREE.RedFormat) {
+    const t = new THREE.DataTexture(data, w, h, format, THREE.FloatType);
+    t.minFilter = t.magFilter = THREE.NearestFilter;
+    t.generateMipmaps = false;
+    t.needsUpdate = true;
+    return t;
+}
+
+export function bakeHide(renderer, W, H, L, r, g1, g2, g3, spots) {
+    const marks = new Float32Array(W * H * 4).fill(1);
+    hideMarks(W, H, L, r, (p, kr, kg, kb) => { marks[p * 4] *= kr; marks[p * 4 + 1] *= kg; marks[p * 4 + 2] *= kb; });
+    const sp = [];
+    for (let i = 0; i < HIDE_SPOTS; i++) { const s = spots[i]; sp.push(s ? new THREE.Vector4(s.u, s.v, s.ru, s.rv) : new THREE.Vector4(0, 0, 1, 1)); }
+    const T = [floatTex(g1, 8, 16), floatTex(g2, 16, 32), floatTex(g3, 32, 64), floatTex(marks, W, H, THREE.RGBAFormat)];
+    const out = bakeTarget(W, H, { wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: true });
+    try {
+        runPasses(renderer, [{
+            target: out, fragmentShader: HIDE_FRAG, uniforms: {
+                g1: { value: T[0] }, g2: { value: T[1] }, g3: { value: T[2] }, marks: { value: T[3] },
+                spots: { value: sp }, nSpots: { value: spots.length }, spotC: { value: new THREE.Vector3(...(L.spotC || [1, 1, 1])) },
+                mottle: { value: L.mottle }, warmK: { value: L.warm }, size: { value: [W, H] },
+            },
+        }]);
+    } catch (e) {
+        out.dispose();
+        throw e;
+    } finally {
+        for (const t of T) t.dispose();
+    }
+    return out.texture;
 }
 /** The pig's skin material of a look: the picture × vertex shading × the look's pink (shared). */
 function pigMat(look, tint = PIG_LOOKS[look].tint) {

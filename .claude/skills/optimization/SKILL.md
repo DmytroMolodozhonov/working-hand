@@ -7,7 +7,7 @@ description: ОБЯЗАТЕЛЬНЫЙ для любой задачи, где п�
 
 Принцип автора: «FPS не должен проседать», «всё сложное — на видеокарту, даже если только кажется, что сложно». Код сразу пишется не «браузерным», а под видеокарту.
 
-1. **Тяжёлое — на видеокарту:** нейросети и расчёты — llama.cpp Vulkan/Metal (`llm_native.py`, `-ngl 99`), ONNX в браузере — WebGPU (`src/audio/tts.worker.js`), в Python на Windows — DirectML. Процессор — только запасной путь, причина — в журнал.
+1. **Тяжёлое — на видеокарту:** нейросети и расчёты — llama.cpp Vulkan/Metal (`llm_native.py`, `-ngl 99`), ONNX в браузере — WebGPU (`src/audio/tts.worker.js`), в Python на Windows — DirectML. Процессор — только запасной путь, причина — в журнал. Картинки при загрузке (цикл по пикселям, `getImageData` с холста) — шейдером в render target через `src/core/GpuTexture.js` (`bakeRenderer`/`runPasses`, запасной путь на процессоре), страж `tests/e2e/gpu-textures.test.mjs`; генерация мира, свет и меш чанков — в воркерах, не на видеокарте (почему — CLAUDE.md, замер `node tools/loadbench.mjs`).
 2. **Ничего долгого в кадре (> 2–3 мс):** воркеры (`src/world/terrain.worker.js`, чистые модули без THREE, детерминированно — `tests/unit/terrain-worker.test.js`) или по кусочку за кадр с бюджетом `performance.now()`; много объектов разом — по одному-нескольку за кадр, ближние первыми.
 3. **Землю в кадре не делать:** вдали сначала `TerrainData.landMade(x, z)`, не `data.chunk()`.
 4. **Шейдеры и звуки — на загрузке:** новый материал/модель — образец в `Game.prewarm`/`prewarmAsync` (список `zoo`), звуки синтезируются заранее. Свет: один общий на систему (`intensity = 0`, когда не нужен), не `PointLight` на объект и не `light.visible`.
