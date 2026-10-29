@@ -47,6 +47,11 @@ const PLAZA_R = 18;
 export const TELEPORT = { LOCAL: [-7, -7], R: 3.5, WINDOW: 2 };
 /** The arena's place (another module builds the arena): local centre and radius. */
 export const ARENA_SPOT = { u: 40, v: -40, r: 22 };
+/**
+ * The place of the twice-as-big arena (generation ARENA_X2_FROM_GEN): the whole south-east quarter of the town beyond the fire — the arena (floor radius 20, 6 rows),
+ * the stall of the figures, the visitors' stair and the way round them. The two ring roads, the lots and the obelisk that lay there are left out.
+ */
+export const ARENA_SPOT_X2 = { u: 72, v: -72, r: 56 };
 const SHOP_V = [-27, -38, -49, -60]; // the market's shops along the lane (their middles)
 const LANE_END = -68;
 /** The trades of the market (src/game/WizardMarket.js): the cauldrons first (west, by the plaza), the pawnshop last (east, at the end). */
@@ -62,8 +67,19 @@ const ELDER_B = ['Седой', 'Рассудительный', 'Многозна
 
 // ------------------------------------------------------------- the middle
 /** The plaza, the fire, the statue, the roads, the gates and lamps; the walking graph of the roads. */
-function buildCore(p, rng, out) {
-    const B = BLOCK, Z = VILLAGE_ZONE;
+function buildCore(p, rng, out, x2 = false) {
+    const B = BLOCK, Z = VILLAGE_ZONE, SP = x2 ? ARENA_SPOT_X2 : null;
+    const inSpot = (u, v, m = 0) => !!SP && Math.hypot(u - SP.u, v - SP.v) < SP.r + m;
+    // (the part of a straight road line outside the arena's place: [from, to] pieces)
+    const pieces = (axis, fixed, from, to) => {
+        if (!SP) return [[from, to]];
+        const c = axis === 'u' ? SP.v : SP.u, a = axis === 'u' ? SP.u : SP.v, d = Math.abs(fixed - c);
+        if (d >= SP.r) return [[from, to]];
+        const h = Math.sqrt(SP.r * SP.r - d * d), out_ = [];
+        if (a - h > from) out_.push([from, a - h]);
+        if (a + h < to) out_.push([a + h, to]);
+        return out_;
+    };
     // ---- the plaza: cobbles, a ring of runes, violet lamp pillars
     p.cyl(0, 0, PLAZA_R, -1, -1, B.COBBLE);
     p.cyl(0, 0, PLAZA_R - 2, -1, -1, B.RUNE, PLAZA_R - 3);
@@ -90,14 +106,17 @@ function buildCore(p, rng, out) {
         road(-R - 1, R + 1, -R - 1, -R + 1); road(-R - 1, R + 1, R - 1, R + 1);
         road(-R - 1, -R + 1, -R - 1, R + 1); road(R - 1, R + 1, -R - 1, R + 1);
     }
+    if (SP) p.cyl(SP.u, SP.v, SP.r, -1, -1, B.GRASS); // (the arena's place: the roads that crossed it are gone, the land is bare)
     road(PLAZA_R - 1, Z - 2, -1, 1); road(-(Z - 2), -(PLAZA_R - 1), -1, 1); // east, west
     road(-18, -16, 6, 53); road(16, 18, 6, 53); road(-18, 18, 51, 53); road(-1, 1, 52, Z - 2); // north round the hall
     road(-3, 3, LANE_END, -(PLAZA_R - 2), B.COBBLE); road(-1, 1, -(Z - 2), LANE_END); // the market lane, the south road
     // ---- the walking graph of the roads
     const roadNodes = (axis, fixed, from, to, step = 12) => {
-        p.roadLine(axis, fixed, from, to);
-        for (let t = from; t <= to; t += step) p.node(axis === 'u' ? t : fixed, axis === 'u' ? fixed : t, 0);
-        p.node(axis === 'u' ? to : fixed, axis === 'u' ? fixed : to, 0);
+        for (const [f0, t0] of pieces(axis, fixed, from, to)) {
+            p.roadLine(axis, fixed, f0, t0);
+            for (let t = f0; t <= t0; t += step) p.node(axis === 'u' ? t : fixed, axis === 'u' ? fixed : t, 0);
+            p.node(axis === 'u' ? t0 : fixed, axis === 'u' ? fixed : t0, 0);
+        }
     };
     for (const R of [R1, R2]) {
         roadNodes('u', -R, -R, R); roadNodes('u', R, -R, R);
@@ -124,7 +143,7 @@ function buildCore(p, rng, out) {
         p.box(u, u, 8, 8, v, v, B.ARCANE_LAMP_VIOLET);
     }
     // ---- lamp posts along the roads (between the lots: the doors' paths stay free)
-    const post = (u, v) => { p.box(u, u, 0, 2, v, v, B.FENCE); p.box(u, u, 3, 3, v, v, B.ARCANE_LAMP); };
+    const post = (u, v) => { if (inSpot(u, v)) return; p.box(u, u, 0, 2, v, v, B.FENCE); p.box(u, u, 3, 3, v, v, B.ARCANE_LAMP); };
     for (const R of [R1, R2]) {
         for (let t = -R + 16; t <= R - 16; t += 32) {
             if (Math.abs(t) < 8) continue;
@@ -139,12 +158,13 @@ function buildCore(p, rng, out) {
     // the obelisks at the inner ring's corners
     for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         const u = su * (R1 - 5), v = sv * (R1 - 5);
+        if (inSpot(u, v)) continue;
         p.cyl(u, v, 2.5, -1, -1, B.RUNE, 1.5);
         p.box(u, u, 0, 6, v, v, B.ARCANE_DARK);
         p.box(u, u, 7, 7, v, v, B.ARCANE_LAMP);
     }
     // ---- the arena's place: kept level and empty (a faint ring of stones round it)
-    const A = ARENA_SPOT;
+    const A = x2 ? ARENA_SPOT_X2 : ARENA_SPOT;
     p.cyl(A.u, A.v, A.r + 1.5, -1, -1, B.COBBLE, A.r + 0.5);
     p.link(p.node(A.u, A.v + A.r + 4, 0, 'arena'), p.node(A.u, 0, 0)); // (its north edge, joined to the east road: the arena's builders put the way in)
     const ac = p.pt(A.u, A.v, 0);
@@ -456,7 +476,7 @@ function buildMarket(p, rng, out) {
 
 // ------------------------------------------------------------- the houses
 /** Reserved places of the middle: no lot may come near them. */
-function lotFree(u, v, r) {
+function lotFree(u, v, r, x2 = false) {
     if (Math.abs(u) < 5 + r || Math.abs(v) < 5 + r) return false; // the spokes
     if (Math.hypot(u, v) < PLAZA_R + 4 + r) return false;
     const inRect = (a0, a1, b0, b1, m = 3) => u + r > a0 - m && u - r < a1 + m && v + r > b0 - m && v - r < b1 + m;
@@ -464,20 +484,21 @@ function lotFree(u, v, r) {
     if (inRect(-52, -30, 10, 32)) return false; // the cauldron hall
     if (inRect(28, 46, 10, 28)) return false; // the library
     if (inRect(-14, 14, LANE_END - 2, -16)) return false; // the market
-    if (Math.hypot(u - ARENA_SPOT.u, v - ARENA_SPOT.v) < ARENA_SPOT.r + 4 + r) return false; // the arena's place
+    const AS = x2 ? ARENA_SPOT_X2 : ARENA_SPOT;
+    if (Math.hypot(u - AS.u, v - AS.v) < AS.r + 4 + r) return false; // the arena's place
     for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) if (Math.abs(u - su * (R1 - 5)) < r + 4 && Math.abs(v - sv * (R1 - 5)) < r + 4) return false; // the obelisks
     return true;
 }
 
 /** Up to MAX_HOUSES wizards' houses on lots facing the roads; the other lots: gardens, fountains, obelisks. */
-function buildHouses(p, rng, out) {
+function buildHouses(p, rng, out, x2 = false) {
     const B = BLOCK;
     const lots = [];
     const addLots = (along, fixed, from, to, side, face) => {
         for (let t = from; t <= to; t += 16) {
             const u = along === 'u' ? t : fixed + side * 9;
             const v = along === 'u' ? fixed + side * 9 : t;
-            if (!lotFree(u, v, 7)) continue;
+            if (!lotFree(u, v, 7, x2)) continue;
             lots.push({ u, v, face });
         }
     };
@@ -558,16 +579,16 @@ function garden(p, lot, road, rng) {
 
 // ------------------------------------------------------------- the whole site
 /** The whole settlement. Returns the castle-shaped record. */
-export function buildVillageSite(seed, gx, gz, X, Z, F, rng) {
+export function buildVillageSite(seed, gx, gz, X, Z, F, rng, x2 = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], pens: [], chests: [], civic: [], stalls: [], spots: [] };
-    buildCore(p, rng, out);
+    buildCore(p, rng, out, x2);
     buildHall(p, rng, out);
     buildCauldronHall(p, rng, out);
     buildLibrary(p, rng, out);
     buildMarket(p, rng, out);
-    buildHouses(p, rng, out);
+    buildHouses(p, rng, out, x2);
     p.joinRoads();
     const id = 'wv' + gx + '_' + gz;
     const name = `${NAMES_A[Math.floor(rng() * NAMES_A.length)]} ${NAMES_B[Math.floor(rng() * NAMES_B.length)]}`;
@@ -616,7 +637,8 @@ export function villageGround(raw, X, Z) {
 
 /** Finds and remembers the settlements (the same shape of answers as CastleIndex / TowerIndex). */
 export class VillageIndex {
-    constructor(seed, raw, castles, towers) {
+    constructor(seed, raw, castles, towers, arenaX2 = false) {
+        this.arenaX2 = arenaX2;
         this.seed = seed; this.raw = raw; this.castles = castles; this.towers = towers;
         this.cells = new Map();
         this._lastCell = null;
@@ -696,7 +718,7 @@ export class VillageIndex {
     _make(gx, gz) {
         const at = this._site(gx, gz);
         if (!at) return null;
-        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng);
+        return buildVillageSite(this.seed, gx, gz, at.X, at.Z, at.F, at.rng, this.arenaX2);
     }
 
     /**

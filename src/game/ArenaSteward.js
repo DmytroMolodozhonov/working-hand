@@ -190,7 +190,8 @@ export function dollSpots(def) {
     const yaw = (x, z) => Math.atan2(-(x - def.x), -(z - def.z)); // (the model looks along −Z at yaw 0: this turns it away from the arena's middle)
     const st = def.desk.stall;
     if (st?.slots) return st.slots.map((q) => ({ tier: q.tier, x: q.x, y: q.y, z: q.z, yaw: yaw(q.x, q.z), onCounter: true }));
-    const { a, b } = def.axis;
+    // (the gates' line is the arena's axis: a round arena has a == b on the floor — its axis is a point, the figures then all stood on ONE spot; the gates are always apart)
+    const ga = def.gates?.[0]?.out, gb = def.gates?.[1]?.out, a = ga && gb ? ga : def.axis.a, b = ga && gb ? gb : def.axis.b;
     const al = Math.hypot(b.x - a.x, b.z - a.z) || 1, ax = (b.x - a.x) / al, az = (b.z - a.z) / al; // (the axis: the gates' line)
     let lx = -az, lz = ax; // (across it)
     const B = def.desk.book || def.desk.front;

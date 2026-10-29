@@ -15,12 +15,15 @@
 
 /** The dome's measures: R = the floor's radius + MARGIN (m). */
 export const DOME = { MARGIN: 0.6, NEAR: 4, FLASH: 1.4 };
+const CAGE_H = 30; // m: the dome is never lower than this over the floor (CAGE.H)
 
 /** The dome of an arena: {ax, az, bx, bz, R, y0} or null (a training field has none). */
 export function domeOf(def) {
     if (!def || def.practice || !def.axis) return null;
     const { a, b, r } = def.axis;
-    return { ax: a.x, az: a.z, bx: b.x, bz: b.z, R: r + DOME.MARGIN, y0: def.floorY ?? a.y ?? 0 };
+    const R = r + DOME.MARGIN;
+    // K: a vertical stretch, so that the dome is at least CAGE_H high over the floor (a narrow floor's half-sphere is lower)
+    return { ax: a.x, az: a.z, bx: b.x, bz: b.z, R, y0: def.floorY ?? a.y ?? 0, K: Math.max(1, CAGE_H / R) };
 }
 
 /** Flat distance of (x, z) to the dome's axis segment. */
@@ -35,7 +38,7 @@ export function insideDome(D, x, y, z) {
     const d = flat(D, x, z);
     if (d >= D.R) return false;
     const h = y - D.y0;
-    return h <= Math.sqrt(D.R * D.R - d * d) && h > -6;
+    return h <= (D.K || 1) * Math.sqrt(D.R * D.R - d * d) && h > -6;
 }
 
 /**
@@ -57,7 +60,7 @@ export function domeCross(D, f, t) {
 
 /** How near a point is to the skin (m, ≥ 0; far inside / outside → large): the dome shows itself to someone this close. */
 export function skinDistance(D, x, y, z) {
-    const d = flat(D, x, z), h = Math.max(0, y - D.y0);
+    const d = flat(D, x, z), h = Math.max(0, y - D.y0) / (D.K || 1);
     return Math.abs(Math.hypot(d, h) - D.R);
 }
 
@@ -81,13 +84,50 @@ export function domeGeometry(D, nt = 10, nr = 16, ne = 8) {
         }
     };
     // the long side: along the axis, over the half-circle from one side to the other
-    grid(nt, nr, (t, f) => { const a = f * Math.PI, c = Math.cos(a) * R, h = Math.sin(a) * R; return [D.ax + ux * L * t + nx * c, D.y0 + h, D.az + uz * L * t + nz * c]; });
+    grid(nt, nr, (t, f) => { const a = f * Math.PI, c = Math.cos(a) * R, h = Math.sin(a) * R; return [D.ax + ux * L * t + nx * c, D.y0 + h * (D.K || 1), D.az + uz * L * t + nz * c]; });
     // the ends: a half-sphere round each end of the axis
     for (const [cx, cz, s] of [[D.bx, D.bz, 1], [D.ax, D.az, -1]]) {
         grid(ne, nr, (la, f) => {
             const lam = la * Math.PI / 2, psi = f * Math.PI, ch = Math.cos(lam) * R;
-            return [cx + ch * (Math.cos(psi) * nx + Math.sin(psi) * ux * s), D.y0 + Math.sin(lam) * R, cz + ch * (Math.cos(psi) * nz + Math.sin(psi) * uz * s)];
+            return [cx + ch * (Math.cos(psi) * nx + Math.sin(psi) * ux * s), D.y0 + Math.sin(lam) * R * (D.K || 1), cz + ch * (Math.cos(psi) * nz + Math.sin(psi) * uz * s)];
         });
     }
     return { pos: new Float32Array(pos), idx: new Uint32Array(idx) };
+}
+
+/**
+ * The cage: the dome as a wall for BODIES while a duel is on (the author: «Если волшебник отскакивает от моего Wind, он не должен перелетать через арену… Пока идёт бой
+ * ты находишься в таком МАГИЧЕСКОМ ВАКУУМЕ: не защита, но чтобы нельзя было свалить оттуда»). The duellists, a wand knocked out of a hand, anything thrown by a shove / a blast /
+ * a lift stays inside the floor's capsule (a half metre from the stands' first step) and under the roof (`H` above the floor): the wall gives back a little of the speed (`BOUNCE`),
+ * it never lets a body through, however fast it comes (80 m/s is one clamp). Spells are stopped by the dome's skin (domeCross); bodies by this wall.
+ */
+export const CAGE = { PAD: 0.5, H: 30, BOUNCE: 0.3, FLASH_EVERY: 0.35 };
+
+/** The cage of an arena: {ax, az, bx, bz, R (what a body keeps within), skin (the dome's R), y0, top} or null (a training field has none). */
+export function cageOf(def) {
+    const D = domeOf(def);
+    return D ? { ...D, skin: D.R, R: def.axis.r - CAGE.PAD, top: D.y0 + CAGE.H } : null; // (the dome's crest is CAGE.H or more: the roof of the cage lies inside it)
+}
+
+/**
+ * Keep a body in the cage: `p` {x, y, z} and its velocity `v` {x, y, z} (m/s; any may be null) are changed in place.
+ * → null (inside), or {x, y, z, wall: 'side' | 'roof'} the point on the dome's skin where the body struck (for the flash).
+ */
+export function cageClamp(C, p, v = null) {
+    let hit = null;
+    const dx = C.bx - C.ax, dz = C.bz - C.az, l2 = dx * dx + dz * dz;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((p.x - C.ax) * dx + (p.z - C.az) * dz) / l2)) : 0;
+    const cx = C.ax + dx * t, cz = C.az + dz * t, d = Math.hypot(p.x - cx, p.z - cz);
+    if (d > C.R) {
+        const nx = d > 1e-6 ? (p.x - cx) / d : 1, nz = d > 1e-6 ? (p.z - cz) / d : 0;
+        p.x = cx + nx * C.R; p.z = cz + nz * C.R;
+        if (v) { const vn = (v.x || 0) * nx + (v.z || 0) * nz; if (vn > 0) { v.x -= (1 + CAGE.BOUNCE) * vn * nx; v.z -= (1 + CAGE.BOUNCE) * vn * nz; } }
+        hit = { x: cx + nx * C.skin, y: p.y, z: cz + nz * C.skin, wall: 'side' };
+    }
+    if (p.y > C.top) {
+        p.y = C.top;
+        if (v && v.y > 0) v.y = -v.y * CAGE.BOUNCE;
+        hit = hit || { x: p.x, y: C.top, z: p.z, wall: 'roof' };
+    }
+    return hit;
 }

@@ -56,7 +56,7 @@ import { foeRanks } from './SpawnSpots.js';
 import { wizardWandOf } from './Expelliarmus.js';
 import { creativeFiniteMana } from './HeroSetup.js';
 import { starterWand } from './ItemTypes.js';
-import { domeOf, domeCross } from './ArenaDome.js';
+import { domeOf, domeCross, cageOf, cageClamp, CAGE } from './ArenaDome.js';
 import { duelReport } from './DuelReport.js';
 import { ArenaDomeFx } from '../fx/ArenaDomeFx.js';
 import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
@@ -144,6 +144,7 @@ export class ArenaDuels {
         this._board(dt);
         this._lit(dt);
         this._dome(dt);
+        this._cage(dt);
         this._tags(dt);
     }
 
@@ -1868,6 +1869,92 @@ export class ArenaDuels {
             if (c) { this.domeFx.hit(c.x, c.y, c.z); this.game.sound?.playArena?.({ x: c.x, y: c.y, z: c.z }, 'beep', 0.5, 0.6); return c; }
         }
         return null;
+    }
+
+    // ------------------------------------------------------------------ the cage (the dome as a wall for bodies while a duel is on)
+    /** Is a duel at this arena on (the fighters are on the floor: from the count to the end)? Guests: the host's phase. */
+    _cageOn(A) {
+        if (A.def.practice) return false;
+        const ph = this.auth ? A.duel?.phase : A.ph;
+        return ph === 'marks' || ph === 'call' || ph === 'count' || ph === 'fight' || ph === 'over';
+    }
+
+    /** The cage of the arena (made once). */
+    _cageOf(A) { return A.cage || (A.cage = cageOf(A.def)); }
+
+    /** A wall struck: the flash on the dome's skin and its ring (not more than every CAGE.FLASH_EVERY s at one arena). */
+    _cageFlash(A, h) {
+        const now = performance.now();
+        if (now - (A.cageFlashAt || 0) < CAGE.FLASH_EVERY * 1000) return;
+        A.cageFlashAt = now;
+        this.domeFx.hit(h.x, h.y, h.z);
+        this.game.sound?.playArena?.({ x: h.x, y: h.y, z: h.z }, 'beep', 0.5, 0.6);
+    }
+
+    /**
+     * (the duellist `v` of a duel on — CreatureImpact's slide, every frame) A wizard of the arena who is pushed, thrown, lifted stays in the cage: his place and his slide / toss
+     * velocity are held by the wall (cageClamp). Not a duellist, or not yet on the floor: nothing.
+     */
+    cageNpc(v) {
+        const a = v?.arena;
+        if (!a || a.kind !== 'duel' || a.leg < 2) return false;
+        const A = this.list.get(a.id);
+        if (!A || !this._cageOn(A)) return false;
+        const C = this._cageOf(A);
+        if (!C) return false;
+        const e = this.game.impact?.active?.get('v|' + v.id), s = e?.s;
+        const p = { x: v.x, y: v.y, z: v.z }, vel = { x: s?.vx || 0, y: v.vy || 0, z: s?.vz || 0 };
+        const h = cageClamp(C, p, vel);
+        if (!h) return false;
+        v.x = p.x; v.z = p.z; v.y = p.y;
+        if (s) { s.vx = vel.x; s.vz = vel.z; }
+        if (v.vy != null) v.vy = vel.y;
+        v.path = null;
+        this._cageFlash(A, h);
+        return true;
+    }
+
+    /** (every frame) The bodies of the duel at each arena: the wizards, this computer's hero, the loose wands and things. */
+    _cage(dt) {
+        const g = this.game, me = g.character?.group?.position;
+        if (!me) return;
+        for (const A of this.list.values()) {
+            if (!this._cageOn(A)) { if (A.cageItems) { A.cageItems = false; for (const L of g.items?.loose?.values?.() || []) if (L.arenaIn === A.id) L.arenaIn = null; } continue; }
+            const C = this._cageOf(A);
+            if (!C) continue;
+            if (this.auth && A.duel) for (const v of [A.duel.a, A.duel.b]) if (v && !v.dead) this.cageNpc(v);
+            // this computer's hero, when he is the one fighting (the duel mode and the friend's too: _keepPlayerOnFloor holds the floor's edge)
+            const pl = this.auth ? A.duel?.p : A.pl, ph = this.auth ? A.duel?.phase : A.ph;
+            if ((pl === g.localId && (ph === 'count' || ph === 'fight' || ph === 'over')) || this.mode?.arenaId === A.id) this._cagePlayer(A, C);
+            // things on the wing: a wand knocked out of a hand, a thing the blast threw — once inside the cage, never out (a thing outside the cage when the duel began is not held)
+            const loose = g.items?.loose;
+            if (loose?.size && Math.hypot(me.x - A.def.x, me.z - A.def.z) < A.def.reach + 80) {
+                A.cageItems = true;
+                for (const L of loose.values()) {
+                    const m = L.model?.position;
+                    if (!m || L.hover) continue;
+                    if (L.arenaIn !== A.id) { if (Math.abs(m.y - C.y0) < 6 && cageClamp(C, { x: m.x, y: C.y0, z: m.z }, null) === null) L.arenaIn = A.id; continue; }
+                    const h = cageClamp(C, m, L.vel);
+                    if (h) this._cageFlash(A, h);
+                }
+            }
+        }
+    }
+
+    /** The hero's own body: the knock (g.knockback), a lift, a jump — held by the wall of the cage. */
+    _cagePlayer(A, C) {
+        const g = this.game, ch = g.character, p = ch.group.position;
+        const feet = p.y - PLAYER_GROUND_OFFSET;
+        // (a hero who is far off — walked away from his call, flew over — is no prisoner: the wall holds the ones at the floor, it does not snatch from afar)
+        const probe = { x: p.x, y: feet, z: p.z };
+        if (cageClamp(C, probe, null) && Math.hypot(probe.x - p.x, probe.z - p.z) > 6) return;
+        const q = { x: p.x, y: feet, z: p.z }, kb = g.knockback, vel = { x: kb?.x || 0, y: ch.verticalVelocity || 0, z: kb?.z || 0 };
+        const h = cageClamp(C, q, vel);
+        if (!h) return;
+        p.x = q.x; p.z = q.z; p.y = q.y + PLAYER_GROUND_OFFSET;
+        if (kb) { kb.x = vel.x; kb.z = vel.z; }
+        ch.verticalVelocity = vel.y;
+        this._cageFlash(A, h);
     }
 
     prewarm() { this.marks.prewarm(); this.domeFx.prewarm(); }

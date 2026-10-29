@@ -78,7 +78,7 @@ test('купол над ареной: внутри пола — внутри, т
     const D = domeOf(def);
     assert.ok(insideDome(D, 0, 12, 0) && insideDome(D, 20, 12, 5));
     assert.ok(!insideDome(D, 28, 12, 0), 'ряд трибуны (27 м от оси) — снаружи'); // (the first row lies beyond the floor's edge + margin)
-    assert.ok(!insideDome(D, 0, 40, 0), 'над куполом снаружи');
+    assert.ok(!insideDome(D, 0, 50, 0), 'над куполом снаружи');
     // Авада с середины пола вдоль пола к зрителю на трибуне: перехвачена на коже купола (~23,4 м от оси), не у зрителя
     const c = domeCross(D, { x: 0, y: 13, z: 0 }, { x: 40, y: 13, z: 0 });
     assert.ok(c && Math.abs(c.x - 23.41) < 0.1, `перехват на ${c?.x}`);

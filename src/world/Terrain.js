@@ -260,7 +260,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 18;
+export const WORLD_GEN = 19;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -340,6 +340,13 @@ export const ARENA_ENTRIES_FROM_GEN = 16;
  */
 export const GHOST_CASTLE_FROM_GEN = 18;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
+/**
+ * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
+ * stands, the marks at the far end from the fighters' gate; a settlement's round arena has its own big place (WizardVillages.ARENA_SPOT_X2) and, like the others, the
+ * stall of the figures. One number: an older world keeps its arenas as they were built.
+ */
+export const ARENA_X2_FROM_GEN = 19;
+// 19: the duel arenas twice as large (ARENA_X2_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -626,7 +633,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -654,7 +661,7 @@ export class TerrainData {
             this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
-            this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
+            this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };
@@ -662,7 +669,7 @@ export class TerrainData {
             if (ice && this.apart && !ice.plan) ice = new IceCastleSite(seed, raw, busy, testIce); // (a world with no summit for it: on the test mountain as before)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * ((ice ? !!ice.testAt : this.test) ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
-            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries); // (the duel arenas: DuelArenas.js)
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
             // (generation 11: the spider's den has a butte of its own, away from every site — SpiderDens.js)

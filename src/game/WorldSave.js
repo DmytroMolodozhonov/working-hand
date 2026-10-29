@@ -24,7 +24,7 @@ import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
 import { retireScrollsIn } from './ItemTypes.js';
-import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, BUILDINGS_FROM_GEN, GHOST_CASTLE_FROM_GEN } from '../world/Terrain.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, BUILDINGS_FROM_GEN, GHOST_CASTLE_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -66,6 +66,7 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     if (gen < HOUSE_SIZE_FROM_GEN) lacks.push('просторных домов жителей (у богатых — в два этажа)');
     if (gen < DUNGEON_FROM_GEN) lacks.push('данжей (развалин и подземелий с сундуками)');
     if (gen < ARENA_ENTRIES_FROM_GEN) lacks.push('входа для зрителей и лавки распорядителя у арен дуэлей');
+    if (gen < ARENA_X2_FROM_GEN) lacks.push('вдвое большего колизея дуэлей');
     if (gen < GHOST_CASTLE_FROM_GEN) lacks.push('Замка призраков (его видит тот, кто видит невидимое)');
     if (gen < BUILDINGS_FROM_GEN) lacks.push('разных зданий в поселениях (церкви, кузницы, таверны, мельницы, колодца…)');
     const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;

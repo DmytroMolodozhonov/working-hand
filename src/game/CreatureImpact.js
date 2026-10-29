@@ -125,6 +125,7 @@ export const KINDS = {
             }
             // (on its feet or lying, it goes along the ground: up a slope it climbs it, never sinks into the hill)
             if (!c.vy) cl?._ground?.(c);
+            if (c.arena) g.arenaDuels?.cageNpc?.(c); // (a duellist pushed at an arena in a duel: the dome's wall holds him, however hard the shove)
         },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },

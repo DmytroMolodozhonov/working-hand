@@ -43,6 +43,13 @@ export const ARENA = {
 export const ARENA_BIG = { ...ARENA, W: 23, S: 15, MARK: 14, ZONE: 58, AWAY: TOWER_ZONE + 58 + 26, AWAYS: [TOWER_ZONE + 58 + 26, TOWER_ZONE + 58 + 56, TOWER_ZONE + 58 + 8] };
 
 export const ARENA_ROUND = { W: 10, S: 0, TIERS: 4, STEP: 2, MARK: 8, ZONE: 0 };
+/**
+ * Generation ARENA_X2_FROM_GEN: «Колизей должен быть раза в два больше» — every arena twice as wide (radius ×2) and its stands higher (8 rows: ~3× the seats).
+ * The marks stay inside a duel charge's reach (2·MARK < Duel.DUEL.RANGE 30); the wider gate (7 blocks) suits the wider lane; ZONE holds the stall and the stair.
+ */
+export const ARENA_X2 = { ...ARENA, W: 26, S: 26, TIERS: 8, GATE: 3, MARK: 14, ZONE: 84, AWAY: TOWER_ZONE + 84 + 26, SIDES: [0, -70, 70, -140, 140] };
+export const ARENA_BIG_X2 = { ...ARENA_BIG, W: 46, S: 30, TIERS: 8, GATE: 3, MARK: 14, ZONE: 116, AWAY: TOWER_ZONE + 116 + 26, AWAYS: [TOWER_ZONE + 116 + 26, TOWER_ZONE + 116 + 56, TOWER_ZONE + 116 + 8], SIDES: [0, -70, 70, -140, 140] };
+export const ARENA_ROUND_X2 = { W: 20, S: 0, TIERS: 6, STEP: 2, GATE: 3, MARK: 12, ZONE: 0 };
 const dims = (d) => ({ ...ARENA, ...d });
 
 /** A stadium (a rectangle with round ends) of half-width r round the long axis (half-length A.S), layers l0…l1. */
@@ -84,7 +91,9 @@ export function buildArena(p, d = ARENA) {
         }
         p.box(-A.GATE - 1, A.GATE + 1, T + 4, T + 4, s * (END - 1), s * END, B.ENCHANTED);
         p.box(0, 0, T + 5, T + 5, s * (END - 1), s * (END - 1), B.ARCANE_LAMP_VIOLET);
-        out.gates.push({ out: p.pt(0, s * (END + 4)), in: p.pt(0, s * (A.S + A.W - 3)), mark: p.pt(0, s * A.MARK) });
+        // (the marks are crossed: the hero's, gates[0].mark, is at the FAR end, the wizard's, gates[1].mark, by the fighters' gate — the foe never walks past the hero's circle;
+        //  the author: «кружок игрока — напротив входа»)
+        out.gates.push({ out: p.pt(0, s * (END + 4)), in: p.pt(0, s * (A.S + A.W - 3)), mark: p.pt(0, -s * A.MARK) });
     }
     // the place to sign up: a lectern with the book of duels by the front gate (outside, on the right)
     p.box(6, 7, 0, 1, -(END + 3), -(END + 3), B.ENCHANTED);
@@ -95,7 +104,7 @@ export function buildArena(p, d = ARENA) {
     const book = p.pt(6.5, -(END + 3), 3); // (its top: y = L(2) top)
     // (the steward's place: beside the gate's lane, outside — he is a living man of the tower, ArenaDuels.js; no blocks)
     out.desk = { book: { x: book.x, y: book.y + 0.5, z: book.z }, front: p.pt(6.5, -(END + 5)), stand: p.pt(4.5, -(END + 4)), yaw: p.yaw(Math.PI) };
-    if (A.ENTRIES && A.S > 0) entries(p, A, out, OUT_W, END, T);
+    if (A.ENTRIES) entries(p, A, out, OUT_W, END, T);
     // the seats: along the middle of every row, never in the gates
     out.seats = [];
     for (let k = 1; k <= T; k++) {
@@ -198,7 +207,9 @@ export function inArena(def, x, z) {
 const DIRS = [[1, 0, 3], [-1, 0, 1], [0, 1, 0], [0, -1, 2]];
 
 /** Level, dry ground for an arena at (X, Z)? → the height its land is levelled to (F), or null. (raw: the world's height field) */
-function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false) {
+function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false, wide = false) {
+    // (the arena twice as large: the land is levelled all the same, so only the heart of it — the floor, the stands, the stall — must be nearly level, and a little more may differ)
+    if (wide) { Z0 = Math.round(Z0 * 0.62); loose = loose || 'wide'; }
     let wet = 0, all = 0;
     const hs = [];
     for (let dz = -Z0; dz <= Z0; dz += 8) for (let dx = -Z0; dx <= Z0; dx += 8) {
@@ -210,7 +221,7 @@ function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false) {
     }
     if (wet > all * (loose ? 0.45 : 0.12) || hs.length < (loose ? 6 : 10)) return null;
     hs.sort((a, b) => a - b);
-    if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > (loose ? 30 : 8)) return null;
+    if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > (loose === true ? 30 : loose ? 12 : 8)) return null;
     return Math.max(0, Math.round(hs[hs.length >> 1])); // (the middle of its ground: a low hill levelled, never dug deep)
 }
 
@@ -219,9 +230,15 @@ function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false) {
  * and any a settlement adds. landAt / partsForChunk the castles' way (Sites.js).
  */
 export class ArenaIndex {
-    constructor(seed, raw, towers, villages = null, dims = ARENA, entries = false) {
+    constructor(seed, raw, towers, villages = null, dims = ARENA, entries = false, x2 = false) {
         this.big = dims !== ARENA; // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
-        this.d = entries ? { ...dims, ENTRIES: true } : dims; // the arena's measures: ARENA, or ARENA_BIG in the duel-only mode (+ the visitors' stair and the steward's stall: generation ARENA_ENTRIES_FROM_GEN)
+        this.x2 = !!x2;
+        if (x2) dims = this.big ? ARENA_BIG_X2 : ARENA_X2; // (generation ARENA_X2_FROM_GEN: twice the radius)
+        this.round = x2 ? { ...ARENA_ROUND_X2, ENTRIES: !!entries } : ARENA_ROUND; // (a settlement's round arena: the stall and the stair too — in the new generation only)
+        this.d = entries ? { ...dims, ENTRIES: true } : dims;
+        const plain = this.big ? ARENA_BIG : ARENA;
+        this.tries = x2 ? [this.d, entries ? { ...plain, ENTRIES: true } : plain] : [this.d]; // (the ordinary one when the twice-as-large has no room: DuelArenas.ofTower)
+        this.maxZone = Math.max(...this.tries.map((q) => q.ZONE)); // the arena's measures: ARENA, or ARENA_BIG in the duel-only mode (+ the visitors' stair and the steward's stall: generation ARENA_ENTRIES_FROM_GEN)
         this.seed = seed; this.raw = raw; this.towers = towers; this.villages = villages;
         this.byVillage = new Map(); // settlement id → its round arena (WizardVillages: `def.arena`, its place)
         this.byTower = new Map(); // tower id → arena def or null
@@ -237,18 +254,26 @@ export class ArenaIndex {
         if (!t || t.kind !== 'tower') return null;
         if (this.byTower.has(t.id)) return this.byTower.get(t.id);
         let def = null;
-        const x0 = t.gx * CASTLE_CELL, z0 = t.gz * CASTLE_CELL, need = this.d.ZONE + BLEND + 4;
+        const x0 = t.gx * CASTLE_CELL, z0 = t.gz * CASTLE_CELL;
         // the side with the most room in the cell first (the same order on every computer)
         const order = DIRS.map((d) => ({ d, room: d[0] > 0 ? x0 + CASTLE_CELL - t.x : d[0] < 0 ? t.x - x0 : d[1] > 0 ? z0 + CASTLE_CELL - t.z : t.z - z0 }))
             .sort((a, b) => b.room - a.room || a.d[2] - b.d[2]);
-        for (const away of this.d.AWAYS || [this.d.AWAY, this.d.AWAY + 30]) {
-            for (const { d } of order) {
-                const X = t.x + d[0] * away, Z = t.z + d[1] * away;
-                if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
-                const F = arenaGround(this.raw, X, Z, this.d.ZONE, this.big); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
-                if (F == null) continue;
-                def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, this.d);
-                break;
+        // (the twice-as-large arena is wide: it may stand to the side of the tower's line, in a corner of the cell; where even that has no room, the ordinary arena stands)
+        for (const dims of this.tries) {
+            const need = dims.ZONE + BLEND + 4;
+            for (const away of dims.AWAYS || [dims.AWAY, dims.AWAY + 30]) {
+                for (const side of dims.SIDES || [0]) {
+                    for (const { d } of order) {
+                        const X = t.x + d[0] * away - d[1] * side, Z = t.z + d[1] * away + d[0] * side;
+                        if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
+                        const F = arenaGround(this.raw, X, Z, dims.ZONE, this.big, this.x2 && dims === this.d); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
+                        if (F == null) continue;
+                        def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, dims);
+                        break;
+                    }
+                    if (def) break;
+                }
+                if (def) break;
             }
             if (def) break;
         }
@@ -264,14 +289,14 @@ export class ArenaIndex {
         if (!vd?.arena) return null;
         if (this.byVillage.has(vd.id)) return this.byVillage.get(vd.id);
         const a = vd.arena;
-        const def = arenaSite('ar' + vd.id, Math.round(a.x), Math.round(a.z), vd.F, ((vd.rot | 0) + 2) % 4, { tower: vd.id, village: true }, ARENA_ROUND);
+        const def = arenaSite('ar' + vd.id, Math.round(a.x), Math.round(a.z), vd.F, ((vd.rot | 0) + 2) % 4, { tower: vd.id, village: true }, this.round);
         this.byVillage.set(vd.id, def);
         return def;
     }
 
     /** Arenas whose land reaches within `r` of a point (a tower's / a settlement's arena never leaves its cell). */
     near(x, z, r = 0) {
-        const out = [], m = this.d.ZONE + BLEND + r;
+        const out = [], m = this.maxZone + BLEND + r;
         const g0x = Math.floor((x - m) / CASTLE_CELL), g1x = Math.floor((x + m) / CASTLE_CELL);
         const g0z = Math.floor((z - m) / CASTLE_CELL), g1z = Math.floor((z + m) / CASTLE_CELL);
         for (let gz = g0z; gz <= g1z; gz++) for (let gx = g0x; gx <= g1x; gx++) {
