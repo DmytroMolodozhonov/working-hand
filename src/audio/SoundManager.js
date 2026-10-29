@@ -16,6 +16,7 @@ import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
+import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
 import * as THREE from 'three';
@@ -641,6 +642,8 @@ export class SoundManager {
             ...GHOST_SOUND_IDS.map((k) => ['ghost_' + k, () => synthGhost(this.context, k)]),
             // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
+            // (the dragon in a fight — Dragons.js: steps, the landing, wing-beats, the roar, bite, claws, tail)
+            ...DRAGON_SOUNDS.map((k) => ['drg_' + k, () => synthDragon(this.context, k)]),
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
             // (the Canaries — Canaries.js: snarls, shouts, grunts, a boulder's thud and the air it cuts)
             ...CANARY_SOUNDS.map((k) => ['canary_' + k, () => synthCanary(this.context, k)]),
@@ -1933,6 +1936,15 @@ export class SoundManager {
         if (!this.sounds[key]) { if (!GARGOYLE_SOUNDS.includes(kind)) return; this.sounds[key] = synthGargoyle(this.context, kind); }
         const far = kind === 'ignite' || kind === 'burst' ? 60 : kind === 'screech' || kind === 'roar' ? 22 : kind === 'crumble' ? 16 : 10;
         this._playAt(this.sounds[key], position, volume, far, 0.94 + Math.random() * 0.12);
+    }
+
+    /** The dragon in a fight (Dragons.js): 'step' | 'land' | 'wing' | 'roar' | 'bite' | 'claw' | 'tail' at a place — made ahead (prewarmStep). */
+    playDragon(position, kind = 'roar', volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'drg_' + kind;
+        if (!this.sounds[key]) { if (!DRAGON_SOUNDS.includes(kind)) return; this.sounds[key] = synthDragon(this.context, kind); }
+        const far = kind === 'roar' || kind === 'land' ? 40 : kind === 'step' ? 22 : 16;
+        this._playAt(this.sounds[key], position, volume, far, rate * (0.95 + Math.random() * 0.1));
     }
 
     /** The plant creatures (Plants.js): 'rustle' | 'prick' | 'lash' | 'snap' | 'chomp' | 'gulp' | 'spit' | 'burn' | 'fall' at a place — made ahead (prewarmStep). */

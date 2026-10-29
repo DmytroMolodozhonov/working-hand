@@ -219,25 +219,30 @@ export function poseDragon(m, p) {
     const t = p.t;
     const fly = p.fly || 0, walk = p.walk || 0, sleep = p.sleep || 0;
     // wings: folded on the ground (along the body), spread and flapping in the air
-    const flap = fly > 0 ? Math.sin(t * (p.flap || 3)) : 0;
+    // (a wing gust on its feet — DragonMind.moveAnim: `wingFlare` spreads them, `beat` is the stroke (+1 up … −1 down))
+    const flare = p.wingFlare || 0;
+    const flap = flare > 0 ? (p.beat || 0) : fly > 0 ? Math.sin(t * (p.flap || 3)) : 0;
     for (let i = 0; i < 2; i++) {
         const s = i ? 1 : -1, w = u.wings[i];
-        const fold = 1 - Math.max(fly, p.spread || 0);
+        const fold = 1 - Math.max(fly, p.spread || 0, flare);
         // (folded: swept back and down along the flank; spread: out to the side, beating up and down)
         w.rotation.y = s * (-fold * 1.25);
         w.rotation.z = s * (fold * 0.9 + (1 - fold) * (0.15 + flap * 0.65));
         w.rotation.x = fold * 0.25;
     }
     // the body sinks when it sleeps, sways a little as it walks, bobs with the wing-beats
-    u.body.position.y = 2.9 - sleep * 1.1 + Math.sin(t * 6) * 0.08 * walk - flap * 0.25 * fly;
+    // (a move on its feet: `crouch` — the squat before a take-off / after a landing; `rise` — rearing up; `lunge` — the head's thrust, < 0 drawn back)
+    const crouch = p.crouch || 0, rise = p.rise || 0, lunge = p.lunge || 0;
+    u.body.position.y = 2.9 - sleep * 1.1 - crouch * 0.9 + rise * 0.45 + Math.sin(t * 6) * 0.08 * walk - flap * 0.25 * Math.max(fly, flare * 0.4);
+    u.body.rotation.x = rise * 0.2 - lunge * 0.07;
     // the neck: up, the head looking; down to breathe or to bite; laid on the ground asleep
     const lower = Math.max(p.lower || 0, sleep);
-    u.neck[0].rotation.x = 0.5 - lower * 0.65 + Math.sin(t * 1.3) * 0.04;
+    u.neck[0].rotation.x = 0.5 - lower * 0.65 - lunge * 0.9 + rise * 0.25 + Math.sin(t * 1.3) * 0.04;
     u.neck[0].rotation.y = (p.look || 0) * 0.45;
     u.neck[1].rotation.y = (p.look || 0) * 0.35;
-    u.neck[1].rotation.x = -0.2 + lower * 0.15;
+    u.neck[1].rotation.x = -0.2 + lower * 0.15 - lunge * 0.5;
     u.head.rotation.y = (p.look || 0) * 0.2;
-    u.head.rotation.x = -0.45 + lower * 0.35 - fly * 0.2;
+    u.head.rotation.x = -0.45 + lower * 0.35 - fly * 0.2 - lunge * 0.3;
     u.jaw.rotation.x = (p.mouth || 0) * 0.7;
     // the tail: a slow sway; stretched out behind in flight; a sweep
     for (let i = 0; i < u.tail.length; i++) {
@@ -248,6 +253,8 @@ export function poseDragon(m, p) {
     u.legs.forEach((l, i) => {
         const ph = t * 5 + (i === 0 || i === 3 ? 0 : Math.PI);
         l.rotation.x = Math.sin(ph) * 0.45 * walk + fly * (i < 2 ? -0.9 : 0.9) + sleep * (i < 2 ? -0.7 : 0.7);
+        // (the claws: one fore leg lifted forward and swept down; rearing: both fore legs come up)
+        if (i < 2) l.rotation.x += (i === (p.clawLeg || 0) ? (p.claw || 0) * 1.25 : 0) + rise * 0.55;
     });
 }
 

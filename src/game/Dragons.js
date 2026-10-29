@@ -44,6 +44,8 @@ import { earthly } from '../world/Planets.js';
 import { confusedMiss } from './StrongSpells.js';
 import { DragonSmash } from './DragonSmash.js';
 import { TAME, tameVerdict, LOWER_ANGER, attackVerdict, angryAt } from './DragonTame.js';
+import { MIND, MOVES, MOVE_IDS, LANDING, COOL, decide, targetClass, crowdAround, staminaStep, tiredK, pickMove, aimedAt, moveAnim, strikesDue, spotOk, landCandidates, liftPhase, waveAt } from './DragonMind.js';
+import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -54,7 +56,7 @@ const BONES_R = 5.2;
 const WANDER = { EVERY: 60, CHANCE: 0.02, FIRST: 600, /* (rare: about one in 50 minutes of play, none in the first 10 — «dragons fly too often», the author) */ FAR: 340, ALT: 50, LAND: 0.3, REST: [25, 50], SEE: 22, GONE: 520 };
 /** Lairs: their dragons come out when a player is this near (m); go back to rest beyond FAR. */
 const LAIR_NEAR = 170, LAIR_FAR = 320;
-const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead', 'ride']; // ('ride': under a rider — «Brain Rot Maxima», DragonTame.js; only ever appended: the index goes over the net)
+const STATES = ['sleep', 'watch', 'chase', 'exit', 'air', 'enter', 'landed', 'dead', 'ride', 'land', 'fight']; // ('ride': under a rider — «Brain Rot Maxima», DragonTame.js; only ever appended: the index goes over the net)
 
 /** A dragon's body as a capsule {a, b, r} in the world. */
 export function dragonBody(d, out = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }) {
@@ -147,6 +149,9 @@ export class Dragons {
             t: Math.random() * 10, fly: mode === 'air' ? 1 : 0, sleep: mode === 'sleep' ? 1 : 0, walk: 0, mouth: 0, look: 0, lower: 0, sweep: 0, spread: 0,
             vel: new THREE.Vector3(), target: null, aggro: null, wakeT: 0, calmT: 0, breath: null, breathCd: 2, blowCd: 0, stun: 0, blind: 0, slow: 0,
             path: null, purpose: null, home: null, dest: null, landAt: null, restT: 0, damageCooldown: 0, burnT: 0, meT: 0,
+            // (the fighting mind — DragonMind.js: stamina, how long in this posture, the move under way, the take-off / landing)
+            stam: 1, stay: 0, move: null, lastMove: null, gustCd: 3, roarCd: 0, diveCd: 3, wantRoar: false, roared50: false, retreatT: 0, cornered: false, smashT: 0,
+            landFail: 0, landSpot: null, landFor: null, landCheckT: 0, landT: 0, liftT: 0, landCrouch: 0, stuckT: 0, stuckDist: 1e9, highT: 0, clawLeg: 0, stepT: 0, wingT: 0,
             grudge: {}, tame: null, order: null, rideWalk: 0, // (grudge: who struck / robbed it, when; tame: {by, rider} — «Brain Rot Maxima»; order: «Атак» at one it is already angry at)
         };
         this.list.push(d);
@@ -198,6 +203,7 @@ export class Dragons {
         if (n <= 0) return 0;
         d.hp = Math.max(0, d.hp - n);
         d.lastBy = who;
+        if (!d.roared50 && d.hp <= DRAGON_HP * 0.5) { d.roared50 = true; d.wantRoar = true; } // (halfway: it roars at its next chance on its feet)
         this.log.push(`hit:${kind}:${Math.round(n)}`);
         const c = dragonCenter(d, _v3);
         for (let i = 0; i < 8; i++) g.fx?.spark(c, i % 2 ? 0xffd27a : 0x8a0f14, 0.2, _v2.set((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6), 0.6);
@@ -291,11 +297,16 @@ export class Dragons {
     _anger(d, who, offended = false, thief = false) {
         if (offended) this._offend(d, who, thief, false);
         else if (d.tame && d.tame.by === who) return;
+        if (d.retreatT > 0) return; // (it is flying away hurt: the grudge is written, but it does not turn back until it has got away — DragonMind.MIND.HURT)
         d.aggro = who;
         d.target = who;
         if (d.mode === 'sleep' || d.mode === 'watch') { d.mode = 'watch'; d.sleepGoal = 0; d.wakeT = Math.min(d.wakeT || 9, 0.4); }
-        else if (d.mode === 'landed') this._takeOff(d, 'chase');
-        else if (d.mode === 'air') d.purpose = 'chase';
+        else if (d.mode === 'landed') {
+            // (sitting already: it fights from where it sits if they are near on the ground — it need not fly up; else it takes off after them)
+            const tp = this._playerPos(who), p = d.model.position;
+            if (tp && this._targetClass(tp) === 'ground' && Math.hypot(tp.x - p.x, tp.z - p.z) < MIND.LEAVE_FAR - 8) { d.mode = 'fight'; d.stay = 0; d.wantRoar = true; d.roarCd = 0; this.log.push('fight-from-rest'); }
+            else this._takeOff(d, 'chase');
+        } else if (d.mode === 'air') { if (d.purpose !== 'chase') d.stay = 0; d.purpose = 'chase'; }
         if (!d.chaseFrom) d.chaseFrom = d.home ? new THREE.Vector3(d.home.x, 0, d.home.z) : d.model.position.clone();
     }
 
@@ -327,7 +338,7 @@ export class Dragons {
         if (d.tame) this.breakTame(d, 'dead'); // (its rider comes down gently — DragonRide.onBroken)
         d.dead = true;
         d.mode = 'dead';
-        d.breath = null;
+        d.breath = null; d.move = null; d.liftT = 0;
         const g = this.game;
         d.killer = killer || null;
         const c = dragonCenter(d, new THREE.Vector3());
@@ -362,7 +373,7 @@ export class Dragons {
         d.tame = { by: who, rider: null, at: this._t };
         if (d.target === who) { // (a neutral stare — an intruder, not a quarrel: it settles)
             d.target = null; d.breath = null;
-            if (d.mode === 'chase' || d.mode === 'exit') { d.mode = 'watch'; d.wakeT = 0; d.calmT = 0; } else if (d.mode === 'air' && d.purpose === 'chase') d.purpose = d.lair ? 'home' : 'cruise';
+            if (d.mode === 'chase' || d.mode === 'exit' || d.mode === 'fight') { d.mode = 'watch'; d.wakeT = 0; d.calmT = 0; d.move = null; } else if (d.mode === 'land') { d.mode = 'air'; d.purpose = d.lair ? 'home' : 'cruise'; } else if (d.mode === 'air' && d.purpose === 'chase') d.purpose = d.lair ? 'home' : 'cruise';
         }
         // flying past (or high over it): it comes down near them, to be got on
         if (d.mode === 'air' && d.purpose === 'cruise') {
@@ -521,7 +532,7 @@ export class Dragons {
         if (c.enabled) c.damage(dmg, null, kind === 'fire' ? 'Inferno' : 'bite'); else g.damageLocalPlayer?.(dmg);
         if (kind === 'fire') g.burning?.ignite('p', g.localId, null); // (the dragon's flame sets me alight)
         if (push) g.knockback?.add(push);
-        g.hud?.setVoice?.(kind === 'fire' ? `🔥 Пламя дракона: −${Math.round(dmg * 10) / 10}` : kind === 'tail' ? `🐉 Удар хвостом: −${dmg}` : `🐉 Укус дракона: −${dmg}`, true);
+        g.hud?.setVoice?.(kind === 'fire' ? `🔥 Пламя дракона: −${Math.round(dmg * 10) / 10}` : kind === 'tail' ? `🐉 Удар хвостом: −${dmg}` : kind === 'claw' || kind === 'dive' ? `🐉 Когти дракона: −${dmg}` : kind === 'gust' ? `🐉 Порыв крыльев: −${dmg}` : kind === 'quake' ? `🐉 Приземление дракона: −${dmg}` : `🐉 Укус дракона: −${dmg}`, true);
     }
 
     // ================================================================ lairs
@@ -889,7 +900,8 @@ export class Dragons {
             else { d.mode = 'ride'; d.target = null; this._rideCombat(d, dt); this._animate(d, dt, d.rideWalk); return; }
         }
         const calm = d.tame ? ((q) => q.id !== d.tame.by) : null; // (the one it is calmed to is no intruder, nobody to wake for)
-        if (d.stun > 0) { d.breath = null; this._animate(d, dt, 0); return; }
+        this._mindTick(d, dt);
+        if (d.stun > 0) { d.breath = null; d.move = null; this._animate(d, dt, 0); return; }
         const tp = d.target ? this._playerPos(d.target) : null;
         if (d.target && !tp) { d.target = null; d.aggro = null; }
         switch (d.mode) {
@@ -913,7 +925,7 @@ export class Dragons {
                 const near = this._nearest(p, calm);
                 if (near) this._lookAt(d, near.p, dt * 0.5);
                 if (d.wakeT > 0) { this._animate(d, dt, 0); return; }
-                const intr = this._intruder(d, L, calm);
+                const intr = d.retreatT > 0 ? null : this._intruder(d, L, calm); // (it flew away hurt: it does not turn back yet)
                 if (d.aggro && tp) { d.target = d.aggro; d.mode = 'chase'; d.calmT = 0; }
                 else if (intr) { d.target = intr.id; d.mode = 'chase'; d.calmT = 0; d.chaseFrom = null; }
                 else {
@@ -956,6 +968,16 @@ export class Dragons {
             case 'air': {
                 this._fly(d, tp, dt, quick, L);
                 this._animate(d, dt, 0);
+                return;
+            }
+            case 'land': { // (coming down by its target: DragonMind → `_landStep`)
+                this._landStep(d, tp, dt, quick, L);
+                this._animate(d, dt, 0);
+                return;
+            }
+            case 'fight': { // (on its feet in the open: it bites, claws, sweeps its tail, beats its wings, breathes, roars)
+                const k = this._fightStep(d, tp, dt, quick, L);
+                this._animate(d, dt, k);
                 return;
             }
             case 'enter': {
@@ -1001,26 +1023,37 @@ export class Dragons {
     _goHome(d, L) {
         d.breath = null;
         d.target = null; d.aggro = null; d.chaseFrom = null;
-        if (!L) { if (d.mode === 'chase') this._takeOff(d, 'cruise'); else d.purpose = 'cruise'; return; }
+        if (!L) { if (d.mode === 'chase' || d.mode === 'fight' || d.mode === 'land') this._takeOff(d, 'cruise'); else d.purpose = 'cruise'; return; }
         if (d.fly > 0.3) { d.mode = 'air'; d.purpose = 'home'; return; }
+        // (on its feet far from its hall — after a fight on the ground: it does not walk through the mountain; it flies home)
+        if (!this.lairAt(d.model.position, 2)) { this._takeOff(d, 'home'); return; }
         d.mode = 'enter'; d.enterStep = 2;
     }
 
     _takeOff(d, purpose) {
+        const grounded = d.fly < 0.3;
         d.mode = 'air';
         d.purpose = purpose;
         d.sleep = 0;
-        d.vel.set(-Math.sin(d.model.rotation.y), 0.6, -Math.cos(d.model.rotation.y)).multiplyScalar(6);
+        d.stay = 0; d.move = null; d.breath = null; d.landSpot = null; d.stuckT = 0; d.stuckDist = 1e9; d.dec = null;
+        // (from the ground: a crouch, a run-up, wing-beats, the climb — `_lift`; already flying: it just goes on)
+        d.liftT = grounded ? 0.001 : 0;
+        if (grounded) d.vel.set(0, 0, 0);
+        else d.vel.set(-Math.sin(d.model.rotation.y), 0.6, -Math.cos(d.model.rotation.y)).multiplyScalar(6);
         if (purpose === 'chase' && !d.chaseFrom) d.chaseFrom = d.model.position.clone();
         this.log.push('takeoff:' + purpose);
     }
 
-    /** On its feet after somebody (in its hall): breathes, bites, sweeps its tail. → how much it walks (0–1). */
+    /** On its feet after somebody (in its hall, or in the open after landing): walks up, then bites / claws / sweeps its tail / beats its wings / breathes. → how much it walks (0–1). */
     _groundChase(d, tp, dt, quick, L) {
         const p = d.model.position, s = d.size;
         const to = _v.set(tp.x - p.x, 0, tp.z - p.z);
         const dist = to.length();
         const ang = this._angleTo(d, tp);
+        if (d.move) { // (a move under way: the feet are planted; the head follows the target a little, a tail sweep and a roar do not)
+            if (d.move.kind !== 'tail' && d.move.kind !== 'roar') this._lookAt(d, tp, dt * 0.4);
+            return 0;
+        }
         let walk = 0;
         if (dist > 7 * s && !d.breath) walk = this._walkTo(d, tp.x, tp.z, DRAGON.WALK * quick, dt, L, false, 6 * s) > 0 ? 1 : 0;
         else this._lookAt(d, tp, dt);
@@ -1028,31 +1061,32 @@ export class Dragons {
         return walk;
     }
 
-    /** Bite / tail / fire at the target when it can. */
+    /** How many players are within `r` m (flat) of the dragon. */
+    _nearCount(d, r) {
+        const p = d.model.position;
+        let n = 0;
+        for (const q of this._players()) if (Math.hypot(q.p.x - p.x, q.p.z - p.z) < r) n++;
+        return n;
+    }
+
+    /** What it does on its feet (DragonMind.pickMove): a move is begun (it winds up, then strikes — `_moveTick`), or its fire. */
     _attack(d, tp, dist, ang, dt) {
         const s = d.size;
         const centre = _v2.copy(tp).add(_q.set(0, 0.6, 0));
         if (d.iceHeadT > 0) return; // (its head in the ice: no bite, no fire)
-        if (d.blowCd <= 0 && !d.breath && d.fly < 0.3) {
-            if ((dist < 7.5 * s || dist < 10 * s) && confusedMiss(d)) { d.blowCd = DRAGON.BLOW_REST; d.sweep = Math.random() - 0.5; return; } // (a wild snap at nothing)
-            if (dist < 7.5 * s && Math.abs(ang) < FACE.BITE) { // («лицом к цели»: the jaws bite only what is right in front)
-                d.blowCd = DRAGON.BLOW_REST; d.mouthT = 0.5; d.lowerT = 0.5;
-                const push = _v.set(tp.x - d.model.position.x, 0, tp.z - d.model.position.z).normalize().multiplyScalar(6).setY(3);
-                this._hurt(d.target, DRAGON.BITE, 'bite', dragonCenter(d, _v3), push.clone());
-                this.log.push('bite');
-                return;
-            }
-            if (dist < 10 * s && Math.abs(ang) > 1.9) {
-                d.blowCd = DRAGON.BLOW_REST; d.sweepT = 0.6;
-                const push = _v.set(tp.x - d.model.position.x, 0, tp.z - d.model.position.z).normalize().multiplyScalar(11).setY(5);
-                this._hurt(d.target, DRAGON.TAIL, 'tail', dragonCenter(d, _v3), push.clone());
-                this.log.push('tail');
+        if (d.fly < 0.3 && !d.move && !d.breath) {
+            if (d.wantRoar && d.roarCd <= 0) { this._startMove(d, 'roar', ang); return; }
+            const kind = pickMove({ dist, ang, size: s, blowCd: d.blowCd, gustCd: d.gustCd, crowd: this._nearCount(d, MOVES.gust.reach * s), last: d.lastMove, rnd: Math.random(),
+                breathReady: d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < flameReach(d.flame) });
+            if (kind) {
+                if (kind !== 'gust' && confusedMiss(d)) { d.blowCd = DRAGON.BLOW_REST; d.sweep = Math.random() - 0.5; return; } // (a wild snap at nothing)
+                this._startMove(d, kind, ang);
                 return;
             }
         }
         // its fire: in reach, turned fully to them («лицом к цели»), nothing solid between (and it can see)
         const reach = flameReach(d.flame);
-        if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < reach && Math.abs(ang) < FACE.BREATH) {
+        if (!d.breath && !d.move && d.breathCd <= 0 && d.blind <= 0 && dist > 4 * s && dist < reach && Math.abs(ang) < FACE.BREATH) {
             const mouth = this._mouth(d, _v3);
             if (confusedMiss(d)) d.breathCd = DRAGON.FLAME_REST; // (lost: the breath goes nowhere)
             else if (this.game.collision?.lineOfSight?.(mouth.x, mouth.y, mouth.z, centre.x, centre.y, centre.z, 1.5) !== false) {
@@ -1139,6 +1173,7 @@ export class Dragons {
 
     /** In the air: chasing (circling over them, breathing down), going home, cruising, landing. */
     _fly(d, tp, dt, quick, L) {
+        if (d.liftT > 0) { this._lift(d, tp, dt); return; } // (from the ground: a crouch, the wing-beats, the climb)
         d.fly = Math.min(1, d.fly + dt * 1.5);
         d.spread = 1;
         const p = d.model.position;
@@ -1146,16 +1181,26 @@ export class Dragons {
             const home = L ? _v2.set(L.x, p.y, L.z) : d.chaseFrom;
             if (!tp || (home && Math.hypot(tp.x - home.x, tp.z - home.z) > DRAGON.GIVE_UP)) { d.target = null; d.aggro = null; d.breath = null; d.purpose = L ? 'home' : 'cruise'; this.log.push('giveup'); return; }
             if (L && this.lairAt(tp, 3)) { d.mode = 'enter'; d.enterStep = 0; return; } // (after them, into its lair)
+            // the posture (DragonMind): hurt — away; the target on the ground and near — it comes down and fights on its feet; else it circles and dives
+            const dec = this._decision(d, tp, L, 'air', dt);
+            if (dec.act === 'retreat') { this._retreat(d, L, tp); return; }
+            if (dec.act === 'land') { this._beginLanding(d, tp, dec.why); return; }
+            const qk = quick * tiredK(d.stam, !!d.landSpot); // (tired and nowhere to sit: slower)
             // circle over them, a little above, then swoop and breathe
-            d.orbit = (d.orbit ?? Math.random() * TAU) + dt * 0.35 * quick;
+            d.orbit = (d.orbit ?? Math.random() * TAU) + dt * 0.35 * qk;
             const R = 16 * d.size;
             const dist = p.distanceTo(tp);
             // its fire ready and they are near: it swoops at them head first («лицом к цели»), not sideways from the circle
             const swoop = d.breathCd <= 0 && d.blind <= 0 && dist < flameReach(d.flame) * 1.4;
-            if (swoop) d.orbit = Math.atan2(p.z - tp.z, p.x - tp.x); // (the circle goes on from where it is)
+            // (fire not ready: a low pass with its talons — the dive)
+            const dive = !swoop && d.diveCd <= 0 && !d.move && d.iceHeadT <= 0 && dist < 30 * d.size && d.stay > 2;
+            if (swoop || dive) d.orbit = Math.atan2(p.z - tp.z, p.x - tp.x); // (the circle goes on from where it is)
             const goal = swoop ? _v3.set(tp.x + Math.cos(d.orbit) * 4 * d.size, tp.y + 7 * d.size, tp.z + Math.sin(d.orbit) * 4 * d.size)
-                : _v3.set(tp.x + Math.cos(d.orbit) * R, tp.y + 9 * d.size, tp.z + Math.sin(d.orbit) * R);
-            this._flyTo(d, goal, DRAGON.FLY * quick, dt);
+                : dive ? _v3.set(tp.x + Math.cos(d.orbit) * 1.5 * d.size, tp.y + 1.6 * d.size, tp.z + Math.sin(d.orbit) * 1.5 * d.size)
+                    : _v3.set(tp.x + Math.cos(d.orbit) * R, tp.y + 9 * d.size, tp.z + Math.sin(d.orbit) * R);
+            this._flyTo(d, goal, DRAGON.FLY * qk * (dive ? 1.15 : 1), dt);
+            if (dive && dist < 9 * d.size && !confusedMiss(d)) this._startMove(d, 'dive', 0);
+            else if (dive && dist < 9 * d.size) d.diveCd = COOL.DIVE;
             // (in flight it breathes at them as it passes: its head turned down to them)
             if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && d.iceHeadT <= 0 && dist < flameReach(d.flame) && confusedMiss(d)) d.breathCd = DRAGON.FLAME_REST; // (lost: no breath this pass)
             if (!d.breath && d.breathCd <= 0 && d.blind <= 0 && d.iceHeadT <= 0 && dist < flameReach(d.flame)) {
@@ -1203,6 +1248,299 @@ export class Dragons {
             if (!near || near.d > WANDER.GONE * 0.6) { d.gone = true; return; }
             d.dest = null;
         }
+    }
+
+    // ================================================================ the fighting mind (host; DragonMind.js has the table)
+    /** (host, every frame) the clocks: how long in this posture, the cool-downs, the stamina, the move under way. */
+    _mindTick(d, dt) {
+        d.stay += dt;
+        d.landFail = Math.max(0, d.landFail - dt); d.retreatT = Math.max(0, d.retreatT - dt);
+        d.gustCd -= dt * d.react; d.roarCd -= dt; d.diveCd -= dt * d.react; d.smashT = Math.max(0, d.smashT - dt);
+        d.stam = staminaStep(d.stam, d.fly > 0.5, d.mode === 'sleep', dt);
+        if (d.move) this._moveTick(d, dt);
+    }
+
+    /** How high the target's feet are above the ground under it: 'ground' (it can sit down and fight) or 'high' (flying, on a tower, a roof, a deck, the sea). */
+    _targetClass(tp) {
+        const data = this.game.terrain?.data;
+        const feet = tp.y - PLAYER_GROUND_OFFSET;
+        const top = data?.heightAt ? data.heightAt(Math.round(tp.x), Math.round(tp.z)) - 0.5 : this.game.collision?.groundY?.(tp.x, tp.z) ?? feet;
+        return targetClass(feet - top);
+    }
+
+    /** The posture's verdict, looked at 4 times a second (DragonMind.decide). `posture`: 'air' | 'ground'. */
+    _decision(d, tp, L, posture, dt) {
+        d.postT = (d.postT || 0) - dt;
+        if (d.dec && d.postT > 0 && d.decFor === posture) return d.dec;
+        d.postT = 0.25; d.decFor = posture;
+        const p = d.model.position;
+        let crowd = 1, canLand = false;
+        if (tp) {
+            crowd = 0;
+            for (const q of this._players()) if (Math.hypot(q.p.x - tp.x, q.p.z - tp.z) <= MIND.CROWD_R) crowd++;
+            if (posture === 'air') canLand = !!this._landingFor(d, tp);
+        }
+        d.dec = decide({ posture, stay: d.stay, dist: tp ? Math.hypot(tp.x - p.x, tp.z - p.z) : null, cls: tp ? this._targetClass(tp) : 'ground', hp: d.hp / DRAGON_HP, stam: d.stam, crowd, canLand, failT: d.landFail, cornered: d.cornered });
+        return d.dec;
+    }
+
+    /** (host) Hurt: it flies away (to its lair, or far off) and keeps away a while; once — then it fights to the end. */
+    _retreat(d, L, tp) {
+        d.cornered = true;
+        d.retreatT = MIND.RETREAT_T[0] + Math.random() * (MIND.RETREAT_T[1] - MIND.RETREAT_T[0]);
+        const p = d.model.position;
+        const away = tp ? _v.set(p.x - tp.x, 0, p.z - tp.z) : _v.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+        if (away.lengthSq() < 1e-3) away.set(1, 0, 0);
+        away.normalize();
+        d.target = null; d.aggro = null; d.breath = null; d.move = null; d.landSpot = null; d.dec = null;
+        if (d.fly < 0.3) this._takeOff(d, L ? 'home' : 'cruise'); else { d.mode = 'air'; d.purpose = L ? 'home' : 'cruise'; }
+        if (!L) { d.dest = p.clone().addScaledVector(away, WANDER.FAR * 2); d.cruiseY = p.y + 20; }
+        this.log.push('retreat');
+        this._bellow(d);
+    }
+
+    // ---- landing
+    /** A place to come down near the target (cached a few seconds): {x, y, z} or null. Never makes land in a frame; never water, a roof, a tree-top, a steep slope, under cover. */
+    _landingFor(d, tp) {
+        if (d.landFor && this._t - d.landCheckT < 3 && Math.hypot(tp.x - d.landFor.x, tp.z - d.landFor.z) < 12) return d.landSpot;
+        d.landCheckT = this._t;
+        d.landFor = { x: tp.x, z: tp.z };
+        d.landSpot = this._findLanding(d, tp);
+        return d.landSpot;
+    }
+
+    _findLanding(d, tp) {
+        const g = this.game, data = g.terrain?.data, col = g.collision, p = d.model.position;
+        if (!data?.heightAt || !col?.groundAt) return null;
+        const H = (x, z) => data.heightAt(Math.round(x), Math.round(z)) - 0.5;
+        const from = Math.atan2(p.z - tp.z, p.x - tp.x);
+        for (const c of landCandidates(from, d.size)) {
+            const x = tp.x + Math.cos(c.a) * c.r, z = tp.z + Math.sin(c.a) * c.r;
+            if (data.landMade && !data.landMade(Math.round(x), Math.round(z))) continue; // (the land is not made there yet: never make it in a frame)
+            const terrain = H(x, z), surface = col.groundAt(x, z, terrain + 45);
+            if (surface == null) continue;
+            const hs = [H(x + 5, z), H(x - 5, z), H(x, z + 5), H(x, z - 5)];
+            const slope = Math.max(terrain, ...hs) - Math.min(terrain, ...hs);
+            const water = g._flameBlock?.(x, surface + 0.6, z) === 'water' || g._flameBlock?.(x, surface - 0.4, z) === 'water';
+            const open = col.lineOfSight ? col.lineOfSight(x, surface + 26, z, x, surface + 1.5, z, 1.5) !== false : true;
+            if (spotOk({ made: true, water, terrain, surface, slope, open, toTarget: Math.hypot(x - tp.x, z - tp.z) })) return { x, y: surface, z };
+        }
+        return null;
+    }
+
+    _beginLanding(d, tp, why) {
+        const spot = this._landingFor(d, tp);
+        if (!spot) { d.landFail = MIND.LAND_FAIL; return; }
+        d.mode = 'land'; d.landT = 0; d.stay = 0; d.highT = 0; d.breath = null; d.dec = null;
+        this.log.push('land:' + why);
+    }
+
+    /** (host) Coming down on the place by its target: a gliding approach, a flare with the wings beating hard, the touchdown. */
+    _landStep(d, tp, dt, quick, L) {
+        const p = d.model.position, s = d.size;
+        d.landT += dt;
+        d.fly = Math.min(1, d.fly + dt * 1.5); d.spread = 1;
+        const giveUp = (why) => { d.mode = 'air'; d.purpose = tp ? 'chase' : (L ? 'home' : 'cruise'); d.landFail = MIND.LAND_FAIL; d.stay = 0; d.landSpot = null; this.log.push('land-abort:' + why); };
+        if (!tp) { d.target = null; giveUp('lost'); this._goHome(d, L); return; }
+        if (d.landT > MIND.LAND_TIMEOUT) return giveUp('timeout');
+        if (this._targetClass(tp) === 'high') { d.highT += dt; if (d.highT > 1.5) return giveUp('high'); } else d.highT = 0;
+        const spot = this._landingFor(d, tp);
+        if (!spot) return giveUp('nowhere');
+        const hd = Math.hypot(p.x - spot.x, p.z - spot.z);
+        d.spread = 1;
+        if (hd > 9) {
+            // the glide: lower as it nears, never under the ground in front of it
+            const goal = _v3.set(spot.x, spot.y + Math.min(30 * s, hd * 0.5), spot.z);
+            this._flyTo(d, goal, DRAGON.FLY * quick * (hd < 25 ? 0.6 : 0.9), dt, hd > 30);
+        } else {
+            // the flare: slow, nose up, wings beating, set down on the spot — facing the target
+            const sink = Math.max(1.4, (p.y - spot.y) * 1.2);
+            p.y = Math.max(spot.y, p.y - sink * dt);
+            const k = Math.min(1, dt * 1.6), dx = spot.x - p.x, dz = spot.z - p.z;
+            p.x += dx * k; p.z += dz * k;
+            d.vel.set(dx * k / dt, -sink, dz * k / dt);
+            this._lookAt(d, tp, dt * 1.3);
+            d.model.rotation.x = -0.3 * Math.min(1, (p.y - spot.y) / 6); // (nose up as it flares)
+            if (p.y - spot.y < 0.15) { this._touchdown(d, spot, tp); return; }
+        }
+        d.flapRate = hd < 9 ? 7 : 3.4;
+    }
+
+    /** It is down: dust, a shock wave through the creatures, the players near it hurt and flung, the roar. */
+    _touchdown(d, spot, tp) {
+        const p = d.model.position, s = d.size;
+        p.set(spot.x, spot.y, spot.z);
+        d.mode = 'fight'; d.fly = 0; d.vel.set(0, 0, 0); d.stay = 0; d.landSpot = null; d.dec = null; d.stuckT = 0; d.stuckDist = 1e9; d.flapRate = 0;
+        d.model.rotation.x = 0; d.model.rotation.z = 0; d.bank = 0;
+        d.blowCd = Math.max(d.blowCd, 0.6); // (it has to find its feet)
+        d.wantRoar = Math.random() < 0.7; d.roarCd = Math.min(d.roarCd, 0);
+        this._landFx(d);
+        // the wave: the creatures round it (CreatureImpact), the players (their own computer counts the hurt)
+        this._wash(d, LANDING.R * s, LANDING.PUSH, { toss: LANDING.TOSS, down: 2.6 });
+        const from = dragonCenter(d, new THREE.Vector3());
+        for (const q of this._players()) {
+            if (d.tame && q.id === d.tame.by) continue;
+            const dx = q.p.x - p.x, dz = q.p.z - p.z, dist = Math.hypot(dx, dz);
+            if (dist > LANDING.R * s * 0.55 || q.p.y - p.y > 6 * s) continue;
+            const v = new THREE.Vector3(dx, 0, dz);
+            if (v.lengthSq() < 1e-3) v.set(1, 0, 0);
+            v.normalize().multiplyScalar(waveAt(dist, s, 1)).setY(LANDING.TOSS + 1);
+            this._hurt(q.id, LANDING.DMG, 'quake', from, v);
+        }
+        this.game.castleLife?.alarm?.(p.clone(), 'monster', null, 40);
+        this.log.push('touchdown');
+    }
+
+    /** (every computer) The look and the sound of a landing: a thud, a ring of dust, the ground shaking under me. */
+    _landFx(d) {
+        const g = this.game, p = d.model.position, s = d.size;
+        d.landCrouch = 1;
+        g.sound?.playDragon?.(p, 'land', 1.2);
+        this._dust(p, 46, 7 * s, 1.0);
+        const me = g.character?.group.position;
+        if (me && g.fx) { const k = 1 - Math.hypot(me.x - p.x, me.z - p.z) / (60 * s); if (k > 0) g.fx.shake = Math.max(g.fx.shake || 0, 0.7 * k); }
+    }
+
+    /** Dust kicked up round `at` (a ring of soft brown sparks). */
+    _dust(at, n, radius, up) {
+        const fx = this.game.fx;
+        if (!fx?.spark) return;
+        for (let i = 0; i < n; i++) {
+            const a = Math.random() * TAU, r = radius * (0.4 + Math.random() * 0.6);
+            _v2.set(Math.cos(a) * r * 0.9, up * (1 + Math.random() * 2.2), Math.sin(a) * r * 0.9);
+            _v3.set(at.x + Math.cos(a) * r * 0.25, at.y + 0.4, at.z + Math.sin(a) * r * 0.25);
+            fx.spark(_v3, i % 3 ? 0x9a8a72 : 0xb8a888, 0.5 + Math.random() * 0.6, _v2, 1.1 + Math.random() * 0.8);
+        }
+    }
+
+    /** (host) A gust of its wings / a landing's wave through the creatures round it (CreatureImpact: shoved, tossed, maybe knocked down). `opts.cone`: only in front (rad). */
+    _wash(d, R, power, opts = {}) {
+        const g = this.game;
+        if (!this.auth || !g.creatureImpact?.spellArea) return;
+        const p = d.model.position, ry = d.model.rotation.y, fx = -Math.sin(ry), fz = -Math.cos(ry);
+        g.creatureImpact.spellArea('DragonSmash', null, (c) => {
+            const dx = c.x - p.x, dz = c.z - p.z, dist = Math.hypot(dx, dz);
+            if (dist > R || dist < 0.01) return null;
+            if (opts.cone && (dx * fx + dz * fz) / dist < Math.cos(opts.cone)) return null;
+            if (c.y - p.y > R * 0.6) return null;
+            const w = power * (1 - dist / R * 0.7);
+            return opts.cone ? new THREE.Vector3(fx * w, 0, fz * w) : new THREE.Vector3(dx / dist * w, 0, dz / dist * w);
+        }, { from: p.clone(), toss: opts.toss ?? 3, down: opts.down ?? 2.4, skip: (c) => c === d });
+    }
+
+    // ---- take-off
+    /** (host) The run-up: a crouch, the wings spread and beating, a short hop forward, the climb. Ends in the air. */
+    _lift(d, tp, dt) {
+        const prev = d.liftT;
+        d.liftT += dt;
+        const ph = liftPhase(d.liftT), p = d.model.position, ry = d.model.rotation.y, s = d.size / 1.25;
+        const fx = -Math.sin(ry), fz = -Math.cos(ry);
+        d.spread = ph.spread; d.flapRate = ph.flap;
+        if (tp) this._lookAt(d, tp, dt * 0.6);
+        if (prev < 0.45 && d.liftT >= 0.45) this._wash(d, 12 * d.size, 6, { toss: 2, down: 3 }); // (the first down-stroke: dust and wind)
+        p.y += 15 * s * ph.climb * dt; p.x += fx * 4 * ph.climb * dt; p.z += fz * 4 * ph.climb * dt;
+        d.fly = Math.max(d.fly, Math.min(1, ph.climb * 1.3));
+        if (d.liftT >= MIND.LIFT_T) { d.liftT = 0; d.fly = 1; d.vel.set(fx * 9, 8 * s, fz * 9); d.flapRate = 0; }
+    }
+
+    // ---- the moves
+    /** (host) Begins a move: it winds up (`moveAnim` shows it), the blow lands at MOVES[kind].hit (`_strike`). */
+    _startMove(d, kind, ang = 0) {
+        const M = MOVES[kind];
+        d.moveId = ((d.moveId || 0) + 1) % 1000;
+        d.move = { kind, t: 0, side: ang >= 0 ? 1 : -1, id: d.moveId, snd: false };
+        d.lastMove = kind;
+        if (kind === 'claw') d.clawLeg = ang >= 0 ? 0 : 1; // (the model's left fore leg is legs[0])
+        if (kind === 'bite' || kind === 'claw' || kind === 'tail') d.blowCd = DRAGON.BLOW_REST;
+        if (kind === 'gust') d.gustCd = COOL.GUST;
+        if (kind === 'roar') { d.roarCd = COOL.ROAR; d.wantRoar = false; this.game.castleLife?.alarm?.(d.model.position.clone(), 'monster', null, 45); } // (it frightens the people)
+        if (kind === 'dive') d.diveCd = COOL.DIVE;
+        if (kind === 'tail') this._smashOn(d, M.end); // (the tail breaks what it sweeps through — DragonSmash)
+        this._sendSoon = true;
+        this.log.push('move:' + kind);
+    }
+
+    _moveTick(d, dt) {
+        const m = d.move, M = MOVES[m.kind], prev = m.t;
+        m.t += dt;
+        for (let n = strikesDue(m.kind, prev, m.t); n > 0; n--) this._strike(d, m);
+        if (m.t >= M.end) d.move = null;
+    }
+
+    /** (host) The blow lands: who is where NOW (a step aside dodges it). Players are hurt by their own computers; the creatures by DragonSmash / `_wash`. */
+    _strike(d, m) {
+        const M = MOVES[m.kind], s = d.size, p = d.model.position, ry = d.model.rotation.y;
+        const from = dragonCenter(d, new THREE.Vector3());
+        if (m.kind === 'gust') this._wash(d, MOVES.gust.reach * s, M.push, { cone: MOVES.gust.face, toss: 3, down: 2.8 });
+        let n = 0;
+        for (const q of this._players()) {
+            if (d.tame && q.id === d.tame.by) continue; // (the one it is calmed to is never hurt)
+            const dx = q.p.x - p.x, dz = q.p.z - p.z, dist = Math.hypot(dx, dz), ang = this._angleTo(d, q.p);
+            if (q.p.y - p.y > (m.kind === 'gust' ? 12 : 7) * s) continue; // (too high above it: out of reach)
+            let ok = false;
+            if (m.kind === 'bite' || m.kind === 'claw') ok = q.id === d.target && aimedAt(m.kind, ang, dist, s);
+            else if (m.kind === 'tail' || m.kind === 'gust') ok = aimedAt(m.kind, ang, dist, s);
+            else if (m.kind === 'dive') ok = q.id === d.target && p.distanceTo(q.p) < M.reach * s + 2.5;
+            if (!ok) continue;
+            const v = new THREE.Vector3(dx, 0, dz);
+            if (m.kind === 'gust') v.set(-Math.sin(ry), 0, -Math.cos(ry)); else if (v.lengthSq() < 1e-3) v.set(-Math.sin(ry), 0, -Math.cos(ry));
+            v.normalize().multiplyScalar(M.push).setY(M.up);
+            this._hurt(q.id, M.dmg, M.kind, from, v);
+            n++;
+        }
+        this.log.push(m.kind + (n ? '' : '-miss'));
+    }
+
+    /** (host) The tail / wings / body strike through DragonSmash (blocks, ships, trees, creatures) for the next `t` s. */
+    _smashOn(d, t) {
+        if (d.smashT <= 0) this.smash?.forget(d.id); // (a fresh look: the parts' old places are no «speed»)
+        d.smashT = Math.max(d.smashT, t);
+    }
+
+    /** (every computer) Sound of a move at its moment, once (the host plays what it starts; the guests what the host's state shows). */
+    _moveSound(d) {
+        const m = d.move;
+        if (!m || m.snd) return;
+        const M = MOVES[m.kind];
+        if (m.t < M.snd) return;
+        m.snd = true;
+        const g = this.game, p = d.model.position;
+        const me = g.character?.group.position;
+        if (me && me.distanceTo(p) > 170) return;
+        switch (m.kind) {
+            case 'bite': g.sound?.playDragon?.(p, 'bite', 1); break;
+            case 'claw': case 'dive': g.sound?.playDragon?.(p, 'claw', 0.9); break;
+            case 'tail': g.sound?.playDragon?.(p, 'tail', 1); break;
+            case 'gust': g.sound?.playDragon?.(p, 'wing', 1.2); this._dust(p, 18, 6 * d.size, 0.8); break;
+            case 'roar': g.sound?.playDragon?.(p, 'roar', 1.1); d.mouthT = 1.2; break;
+            default: break;
+        }
+    }
+
+    /** (host) A roar (a retreat, a wake): the sound and the people's fear. */
+    _bellow(d) {
+        this.game.sound?.playDragon?.(d.model.position, 'roar', 1.1);
+        d.mouthT = 1.2;
+        this.game.castleLife?.alarm?.(d.model.position.clone(), 'monster', null, 45);
+    }
+
+    /** On its feet in the open: the posture's verdict, the walk, the moves. → how much it walks (0–1). */
+    _fightStep(d, tp, dt, quick, L) {
+        if (!tp) { d.target = null; d.aggro = null; this._goHome(d, L); return 0; }
+        const p = d.model.position, s = d.size;
+        const far = L ? Math.hypot(tp.x - L.x, tp.z - L.z) > DRAGON.GIVE_UP : (d.chaseFrom && tp.distanceTo(d.chaseFrom) > DRAGON.GIVE_UP);
+        if (far) { d.target = null; d.aggro = null; d.breath = null; this._goHome(d, L); return 0; }
+        const dec = this._decision(d, tp, L, 'ground', dt);
+        if (dec.act === 'retreat') { this._retreat(d, L, tp); return 0; }
+        if (dec.act === 'takeoff' && !d.move) { this._takeOff(d, 'chase'); this.log.push('takeoff-why:' + dec.why); return 0; }
+        const dist = Math.hypot(tp.x - p.x, tp.z - p.z);
+        const walk = this._groundChase(d, tp, dt, quick, null);
+        // (stuck behind a rock / a wall / a cliff: it takes off over it)
+        if (walk > 0 && dist > 8 * s) {
+            if (dist < d.stuckDist - 1) { d.stuckDist = dist; d.stuckT = 0; }
+            else if ((d.stuckT += dt) > MIND.STUCK_T) { d.landFail = MIND.LAND_FAIL * 1.5; this._takeOff(d, 'chase'); this.log.push('stuck'); return 0; }
+        } else { d.stuckT = 0; d.stuckDist = dist; }
+        return walk;
     }
 
     _mouth(d, out) {
@@ -1317,15 +1655,51 @@ export class Dragons {
         d.sweepT = Math.max(0, (d.sweepT || 0) - dt);
         d.lower += ((d.lowerT > 0 ? 1 : 0) - d.lower) * Math.min(1, dt * 8);
         d.sweep += ((d.sweepT > 0 ? Math.sign(d.look || 1) * 1 : 0) - d.sweep) * Math.min(1, dt * 7);
-        if (d.mode !== 'air') d.spread = Math.max(0, d.spread - dt * 0.7);
+        if (d.mode !== 'air' && d.mode !== 'land' && !(d.liftT > 0)) d.spread = Math.max(0, d.spread - dt * 0.7);
         d.look *= Math.max(0, 1 - dt * 0.5);
-        poseDragon(d.model, { t: d.t, walk: d.walk, fly: d.fly, flap: 3.2 + (d.vel.y > 0.5 ? 2 : 0), mouth: d.mouth, look: d.look, lower: d.lower, sleep: d.sleep, sweep: d.sweep, spread: d.spread });
+        // the guests: the move and the take-off run on here from what the host last said (the host runs them in `_mindTick` / `_lift`)
+        if (!this.auth) {
+            if (d.move) { d.move.t += dt; if (d.move.t > MOVES[d.move.kind].end + 0.3) d.move = null; }
+            if (d.liftT > 0) d.liftT = Math.min(MIND.LIFT_T, d.liftT + dt);
+        }
+        this._moveSound(d);
+        // a move on its feet (DragonMind.moveAnim), the squat of a take-off / landing
+        const ma = d.move ? moveAnim(d.move.kind, d.move.t, d.move.side) : null;
+        const lp = d.liftT > 0 ? liftPhase(d.liftT) : null;
+        d.landCrouch = Math.max(0, d.landCrouch - dt * 2.2);
+        const crouch = lp ? lp.crouch : d.landCrouch;
+        if (lp && d.liftT < 1.0) { // (dust under the beating wings, the wing-beats' sound)
+            d.dustT = (d.dustT || 0) - dt;
+            if (d.dustT <= 0 && d.liftT > 0.35) { d.dustT = 0.1; this._dust(d.model.position, 7, 6 * d.size, 1.2); }
+        }
+        this._sounds(d, dt, lp);
+        poseDragon(d.model, { t: d.t, walk: d.walk, fly: d.fly, flap: lp ? lp.flap : d.flapRate || (3.2 + (d.vel.y > 0.5 ? 2 : 0)), mouth: Math.max(d.mouth, ma?.mouth || 0), look: d.look, lower: Math.max(d.lower, ma?.lower || 0), sleep: d.sleep,
+            sweep: ma && ma.sweep ? ma.sweep : d.sweep, spread: lp ? Math.max(d.spread, lp.spread) : d.spread,
+            lunge: ma?.lunge || 0, claw: ma?.claw || 0, clawLeg: d.clawLeg, rise: ma?.rise || 0, crouch, wingFlare: ma?.wingFlare || 0, beat: ma?.beat || 0 });
         // banking into its turns in the air, nose up as it climbs
         d.model.rotation.z = (d.bank || 0) * d.fly;
         // («Империус Максима»: the nose follows its path — down in a dive, as the hero's head is bowed)
         if (d.imp) d.model.rotation.x = Math.max(-0.75, Math.min(0.5, Math.atan2(d.vel.y, Math.max(4, Math.hypot(d.vel.x, d.vel.z))))) * d.fly;
         else d.model.rotation.x = Math.max(-0.3, Math.min(0.3, d.vel.y * 0.03)) * d.fly;
         d.bank = (d.bank || 0) * Math.max(0, 1 - dt * 2);
+    }
+
+    /** (every computer) Footfalls on the ground, the slow wing-beats in the air — near me only. */
+    _sounds(d, dt, lp) {
+        const g = this.game, p = d.model.position, me = g.character?.group.position;
+        if (!me || d.dead || d.mode === 'sleep') return;
+        const near = Math.abs(me.x - p.x) < 150 && Math.abs(me.z - p.z) < 150;
+        if (d.walk > 0.3 && d.fly < 0.2 && d.mode !== 'ride') {
+            d.stepT -= dt * (0.5 + d.walk);
+            if (d.stepT <= 0) {
+                d.stepT = 0.63 * 1.5 / Math.max(0.8, d.react);
+                if (near) { g.sound?.playDragon?.(p, 'step', 0.9); const k = 1 - me.distanceTo(p) / 45; if (k > 0 && g.fx) g.fx.shake = Math.max(g.fx.shake || 0, 0.12 * k); }
+            }
+        } else d.stepT = Math.min(d.stepT, 0.1);
+        if (lp ? d.liftT > 0.3 : d.fly > 0.6 && d.mode !== 'ride') {
+            d.wingT -= dt;
+            if (d.wingT <= 0) { d.wingT = lp ? 0.45 : 2 * Math.PI / (d.flapRate || 3.4); if (near) g.sound?.playDragon?.(p, 'wing', lp ? 1.1 : 0.55); }
+        } else d.wingT = 0;
     }
 
     /** Its shadow on the ground under it in the air (a soft dark patch). */
@@ -1379,7 +1753,7 @@ export class Dragons {
                 this._animate(d, dt, d.netWalk || 0);
             }
         }
-        for (const d of this.list) { this._breathe(d, dt); this._shadow(d); if (d.imp && this.auth) this.smash.update(d, dt); }
+        for (const d of this.list) { this._breathe(d, dt); this._shadow(d); if (this.auth && (d.imp || d.smashT > 0)) this.smash.update(d, dt); }
         this._pushMeOut();
         this._updateHands(dt);
         this._bar();
@@ -1424,7 +1798,8 @@ export class Dragons {
         const l = this.list.map((d) => {
             const p = d.model.position, b = d.breath;
             return [d.id, KIND_IDS.indexOf(d.kind), r2(p.x), r2(p.y), r2(p.z), r2(d.model.rotation.y), Math.round(d.hp), STATES.indexOf(d.mode), b ? 1 : 0,
-                b ? r2(b.dir.x) : 0, b ? r2(b.dir.y) : 0, b ? r2(b.dir.z) : 0, Math.round(d.fly * 100), d.lair || 0, d.slot || 0, r2(d.flame), r2(d.react), Math.round(d.walk * 10)];
+                b ? r2(b.dir.x) : 0, b ? r2(b.dir.y) : 0, b ? r2(b.dir.z) : 0, Math.round(d.fly * 100), d.lair || 0, d.slot || 0, r2(d.flame), r2(d.react), Math.round(d.walk * 10),
+                d.move ? d.move.id : 0, d.move ? MOVE_IDS.indexOf(d.move.kind) + 1 : 0, d.move ? Math.round(d.move.t * 100) : 0, (d.move && d.move.side > 0 ? 1 : 0) | (d.clawLeg << 1), Math.round(d.liftT * 100)];
         });
         const h = [];
         for (const [id, e] of this.lairs) if (this.state[id]) h.push([id, this.state[id].loose]);
@@ -1459,18 +1834,23 @@ export class Dragons {
     _applyState(m) {
         const seen = new Set();
         for (const row of m.l || []) {
-            const [id, ki, x, y, z, ry, hp, si, br, bx, by, bz, fly, lair, slot, flame, react, walk] = row;
+            const [id, ki, x, y, z, ry, hp, si, br, bx, by, bz, fly, lair, slot, flame, react, walk, mid, mv, mt, mf, lt] = row;
             seen.add(id);
             let d = this.list.find((q) => q.id === id);
             const kind = KIND_IDS[ki] || 'emerald';
             if (!d) d = this.spawn({ id, kind, react, flame, hp, lair: lair || null, slot, pos: new THREE.Vector3(x, y, z), yaw: ry, mode: STATES[si] || 'sleep' });
             d.hp = hp;
+            const was = d.mode;
             d.mode = STATES[si] || d.mode;
+            if (was === 'land' && d.mode === 'fight') this._landFx(d); // (it has come down: the thud, the dust, the shake — on every computer)
             if (this.game.dragonRide?.riding === d || d.imp?.mine) { seen.add(id); continue; } // (I fly it — on its back, or my mind in it)
             (d.net || (d.net = new THREE.Vector3())).set(x, y, z);
             d.netYaw = ry;
             d.fly = fly / 100;
             d.netWalk = (walk || 0) / 10;
+            // (the move and the take-off the host is in: the guests play them on from here — `_animate`)
+            if (mv && MOVE_IDS[mv - 1]) { if (d.lastMid !== mid) { d.lastMid = mid; d.move = { kind: MOVE_IDS[mv - 1], t: (mt || 0) / 100, side: mf & 1 ? 1 : -1, id: mid, snd: false }; } d.clawLeg = (mf >> 1) & 1; } else if (!mv) { d.move = null; d.lastMid = null; }
+            if (lt) { if (!(d.liftT > 0) || lt / 100 > d.liftT) d.liftT = lt / 100; } else d.liftT = 0;
             if (d.mode === 'dead' && !d.dead) this._die(d, null);
             if (br) {
                 if (!d.breath) d.breath = { t: 0, dir: new THREE.Vector3() };

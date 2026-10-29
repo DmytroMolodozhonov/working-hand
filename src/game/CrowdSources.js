@@ -63,7 +63,7 @@ export function crowdOf(g) {
         }
         // dragons on their feet (flying ones are above everybody)
         for (const d of g.dragons?.list || []) {
-            if (d.dead || !d.model || d.mode === 'air') continue;
+            if (d.dead || !d.model || d.mode === 'air' || d.mode === 'land') continue;
             const p = d.model.position;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.dragon * (d.size || 1) / 1.25, ref: d, id: d.id, kind: 'dragon' });
         }
