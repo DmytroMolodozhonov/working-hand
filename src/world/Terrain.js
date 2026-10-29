@@ -1473,9 +1473,7 @@ export class TerrainData {
     /** The dungeons (ruins, halls under the ground) whose chests or walls are within `r` of a point (generation 15; Dungeons.js). */
     dungeonsNear(x, z, r, lazy = false) {
         const out = [];
-        if (offEarth(x + r)) return out;
-        for (const g of this.ghostNear(x, z, r)) if (!lazy || g.isBuilt || !this._cellLater(false)) out.push(g); // (the Castle of Ghosts, while it is in this computer's land: its chests — GhostCastle.js)
-        if (!this.dungeons) return out;
+        if (!this.dungeons || offEarth(x + r)) return out;
         for (const d of this.dungeons.near(x, z, r)) {
             if (lazy && !d.isBuilt && this._cellLater(false)) continue; // (building one — 1–5 ms — at most every 30 ms with the workers on)
             out.push(d);

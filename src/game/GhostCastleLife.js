@@ -16,6 +16,8 @@
  * edits of a seer inside the castle do not reach the ones who do not see it (Builder.applyEdits); the hero in a duel / on the arena / on a ship / in space /
  * off the Earth — nothing is asked, and nothing of the castle is kept loaded beyond a few hundred metres (the chunks leave as all chunks do).
  */
+import * as THREE from 'three';
+import { Chest } from '../entities/Chest.js';
 import { seesInvisible, registerInvisibleStructure } from './Invisibles.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 import { GHOST_CASTLE as GC } from './GhostRules.js';
@@ -80,6 +82,7 @@ export class GhostCastleLife {
         // the cells round the seers on the other computers are wanted too: to hide them when they walk into a castle I do not see
         if (!d.ghost.on && g.remotes?.size) for (const r of g.remotes.values()) if (r.sees && r.position) v.ghostAsk?.(r.position.x, r.position.z);
         this._site(p);
+        this._chests(p);
         this._haze(p);
         this._hide();
         this._deeds(p);
@@ -106,6 +109,31 @@ export class GhostCastleLife {
         const G = this.data?.ghost;
         if (!G?.on) { this.site = null; return; }
         this.site = this.data.ghostNear(p.x, p.z, 140)[0] || null;
+    }
+
+    /**
+     * The four chests, each made on its own when the hero is within 90 m of it and the ground round it is made (the castle is far wider than a cave: one look
+     * for all four at once — as the caves' chests are made, Game._updateCaves — would wait for ground 90 m away). Each seer's own: `localOnly`.
+     */
+    _chests(p) {
+        const g = this.game, t = this.data, s = this.site;
+        if (!s || !g.chests || !g.scene) return;
+        const spots = s.chests;
+        for (let k = 0; k < spots.length; k++) {
+            const sp = spots[k], id = k ? s.id + ':' + k : s.id;
+            if (Math.hypot(sp.x - p.x, sp.z - p.z) > 90 || g.chests.some((c) => c.id === id)) continue;
+            if (t.landMade && !(t.landMade(sp.x - 4, sp.z - 4) && t.landMade(sp.x + 4, sp.z + 4) && t.landMade(sp.x - 4, sp.z + 4) && t.landMade(sp.x + 4, sp.z - 4))) continue;
+            const chest = new Chest(g.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id, { style: sp.look || 'rich' });
+            chest.localOnly = true; // (each seer opens his own, for himself — Game._updateChests / openChest)
+            chest.dungeonFlavor = sp.flavor || 'ghost'; // (ItemTypes.rollGhostLoot)
+            chest.mesh.updateMatrixWorld(true);
+            chest.boxId = g.collision.addBox(chest.getCollisionBox());
+            chest.cave = s.id; // (put away with the castle — _putAway — or when the hero is far: Game._unloadCaves)
+            g.chests.push(chest);
+            if (g._openedChests?.has(id)) chest.setOpenInstant();
+            this._note({ ev: 'chest', id });
+            return; // (one a look)
+        }
     }
 
     /** The haze of the place (a cold mist round the castle, thickest inside): only for a hero who has the castle in his land. */
