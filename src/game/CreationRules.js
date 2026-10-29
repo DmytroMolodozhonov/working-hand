@@ -365,9 +365,11 @@ export function sizeFactor(s0) {
     const s = String(s0).replace(/(?:^|\s)(?:с|со|и|а|но|у|где|которого|которой|у него|у нее)\s+(?:очень\s+)?(огромн|гигантск|больш|маленьк|крошечн|длинн|высок|широк|коротк|толст|тонк)\S*\s+(\S+\s+)?(глаз|ног|лап|крыл|хвост|уш|рог|голов|зуб|окн|двер|ше[йяию]|клюв|щупал|нос|грив|мор|ствол|лист|цвет|плод|ягод|шляпк|корн|лепест|бутон|шип|игл|лап)\S*/g, '');
     const very = (s.match(/очень|оч\.|невероятно|необычайно|ну очень|супер|мега|ультра/g) || []).length;
     let k = 1;
-    if (/(исполинск|гигантск|колоссальн|громадн|титаническ|размером с (гору|замок|дом|башню))/.test(s)) k = 3.8;
-    else if (/огромн|здоровенн|высоченн/.test(s)) k = 2.8;
-    else if (/(большой|большая|большое|больших|крупн|высок|рослый|рослая)/.test(s)) k = 1.7;
+    // (the greatest: «самый большой в истории», «величайший», «крупнейший на свете», «размером с гору»)
+    if (/(сам\S*\s+(больш|огромн|крупн|гигантск|высок)|величайш|крупнейш|огромнейш|больш\S* всех|в истории|на свете|во всем мире|в мире|размером с (гору|замок|башню))/.test(s)) k = 5;
+    else if (/(исполинск|гигантск|колоссальн|громадн|титаническ|размером с (дом|дерево))/.test(s)) k = 3.8;
+    else if (/огромн|здоровенн|высоченн|громадин/.test(s)) k = 2.8;
+    else if (/(больш(ой|ая|ое|ие|ого|ую|ому|им|ими|их)(?![а-яё])|крупн|высок|рослый|рослая)/.test(s)) k = 1.7;
     else if (/(крошечн|малюсеньк|миниатюрн|игрушечн|карликов)/.test(s)) k = 0.35;
     else if (/(маленьк|небольш|мелк|низк)/.test(s)) k = 0.6;
     if (k > 1) k *= Math.pow(1.35, Math.min(3, very));
@@ -471,7 +473,9 @@ function guessCreature(s, r, name) {
     // the size: the kind's own (medium when no kind: the hero's size about), the words multiply it
     const sizeSaid = /(\d+(?:[.,]\d+)?)\s*(м|метр)/.exec(s);
     const base = S?.h ?? { quadruped: 3, biped: 3.4, bird: 1.8, insect: 1.2, spider: 1.8, serpent: 1.6, fish: 1.6, blob: 1.6, dragon: 6 }[plan];
-    const size = clamp(sizeSaid ? parseFloat(sizeSaid[1].replace(',', '.')) : base * sizeFactor(s), CAPS.SIZE_MIN, CAPS.SIZE_MAX);
+    // (big said: never smaller than the hero — the hero is 3.5 m; huge — far over him; the greatest — like a house)
+    const sk = sizeFactor(s), floor = sk >= 5 ? 12 : sk >= 3.8 ? 9 : sk >= 2.8 ? 6.5 : sk >= 1.7 ? 4.5 : 0;
+    const size = clamp(sizeSaid ? parseFloat(sizeSaid[1].replace(',', '.')) : Math.max(base * sk, floor), CAPS.SIZE_MIN, CAPS.SIZE_MAX);
     const hp = clamp(countBefore(s, /здоров|жизн|хп|hp/) ?? CAPS.HP_DEFAULT, CAPS.HP_MIN, CAPS.HP_MAX);
     const walk = WALK_KEYS.find((w) => WALK[w].ru.test(s)) || S?.walk || PLANS[plan].walk;
     const fly = flies ? FLY_KEYS.find((f) => FLY[f].ru.test(s)) || (S?.fly && wings === S.wings ? S.fly : wings === 'none' ? 'float' : wings === 'butterfly' ? 'flutter' : wings === 'insect' ? 'hover' : wings === 'dragon' ? 'dragon' : wings === 'bat' ? 'bat' : 'flap') : null;

@@ -258,6 +258,7 @@ export class DivineCreation extends HouseMagic {
         if (L) { L.until = Math.max(L.until, now + (fresh ? CREATION.LISTEN : 8)); return; }
         if (this.mine || this.magic) return;
         this.listening = { until: now + (fresh ? CREATION.LISTEN : 12), parts: [], tail: '', pending: false, partAt: 0, quiet: 0, t: 0, aimT: 0, at: null };
+        this.game.sound?.playSpellFx?.('fxCreationBloom', this.game.character?.group?.position, 0.9); // (the start heard: a chime of bells as the tune rises)
         this._log(`начало: слушаю описание (${fresh ? 'сказано «Да пусть создастся» отдельно — жду описание до ' + CREATION.LISTEN + ' с' : 'описание идёт в той же фразе'})`);
     }
 
@@ -312,7 +313,7 @@ export class DivineCreation extends HouseMagic {
                 } catch (e) { /* (no hands yet) */ }
             }
             if (M.at) this.fx2.seed({ x: M.at.x, y: M.at.y, z: M.at.z, t: M.t, u: 0, wand: M.wand || null, listen: true }, dt);
-            this._hum = Math.max(this._hum || 0, 0.75); // (the epic tune from the first word)
+            this._hum = Math.max(this._hum || 0, 0.9); // (the epic tune from the first word)
         }
         // (another player's gods listening: their small seed where their wand points)
         if (this._lisOf?.size) for (const [k, o] of this._lisOf) {
