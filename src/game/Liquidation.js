@@ -558,7 +558,7 @@ export class Liquidation {
         if (bk === 'b') { g.books?.hitBird(c, LIQ.DMG, 'Liquidation'); return; }
         if (bk === 't') { g.livingTrees?.hit(c, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'a') { g.animals?.hit(c, LIQ.DMG, dir.clone(), by); return; }
-        if (bk === 'c') { g.ships?.crew.hit(c, LIQ.DMG, dir.clone(), by, { spell: true, magic: true, kind: 'Liquidation' }); return; }
+        if (bk === 'c') { g.ships?.crew.hit(c, LIQ.DMG, dir.clone(), by, { spell: true, magic: true, kind: name === 'LiquidationMaxima' ? 'LiquidationMaxima' : 'Liquidation' }); return; }
         if (bk === 'v') {
             if (g.castleLife?.wardOff?.(c, origin, 'Liquidation')) return true; // (a raised shield / the Master's dome took it)
             g.castleLife?.hit(c, LIQ.DMG, dir.clone(), by, { spell: true, magic: true });

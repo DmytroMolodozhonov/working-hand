@@ -1164,7 +1164,7 @@ export class Duel {
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
         // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
-        if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
+        if (c.isSailor && c.role === 'skeleton') { if (spell === 'AvadaKedavra' && (byId === 'local' || byId === g.localId)) g.hud?.setVoice?.('☠️ Авада Кедавра не действует на скелетов: они и так мертвы', true); this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
             hit(DAMAGE.AvadaKedavra, { pierce: true, dark: true }); // (dark: a body killed by it fits the rite of monstrous vitality — VitalityRules.js) // (not a killing curse: −25 HP at once, no armour stops it)

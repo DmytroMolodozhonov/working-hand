@@ -133,6 +133,8 @@ export class HeroApply {
             if (!g.terrain?.data?.landMade(x, z)) { this._hover(x, z); return; }
             p.mine = S.spawn('fluyt', Math.round(x), Math.round(z), Math.atan2(-Math.sin(a), -Math.cos(a)) + Math.PI, { wake: false });
             if (!p.mine) { this._fail('корабль не удалось поставить — вы на начальной площадке'); return; }
+            // (the hero is the master of this ship: her crew serves and defends him, never turns on him; her chests are not the captain's locked ones — Ships.loyalTo)
+            p.mine.owner = g.localId; p.mine.ownerName = g.keeper?.myName || g.net?.name || null; p.mine.changed = true; p.mine.hostile.clear();
         }
         const s = p.mine, st = s.st;
         if (!s.awake || !s.model) { this._hover(st.x, st.z); return; } // (it wakes itself when the hero is near: no ship built in one frame)

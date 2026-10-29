@@ -40,6 +40,7 @@ import { numId, makeWayStep, askWay } from './Crowd.js';
 import { TACTICS, assignRoles, canSwing, spotAt, shareFoes } from './CrewTactics.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { skeletonDamage } from './Skeletons.js';
+import { isFireDamage } from './LivingTrees.js';
 import { SHADOW_NEAR } from '../core/Shadows.js';
 import { DRAW } from './DrawRange.js';
 import { STARTLE, segDist2 } from './Startle.js';
@@ -107,7 +108,20 @@ export const SKELETON_AVADA = 'they are dead already: no life in them to take �
  * kind undefined: a blow (not a spell) — it breaks bones.
  */
 const CRUSH = new Set(['crush', 'fall', 'Cauldron', 'thrown', 'Boom']); // («Бум»: torn apart with the rock — every bone breaks)
-export const pirateBoneDamage = (kind, dmg, spell = false) => (kind == null ? (spell ? 0 : dmg) : CRUSH.has(kind) ? dmg : skeletonDamage(kind, dmg));
+/**
+ * The author's table for the black ship's skeletons: «Liquidation Maxima» works (a plain «Liquidation» does not); fire works at HALF of
+ * what it does to a player (FIRE_K); the gusts «Wind»/«Wind Maxima» and «Overgrown»/«Overgrown Maxima» break bones (GUST: HP per gust;
+ * Captain Black Moustache is immune to «Overgrown» — Sailors kind `immune`); «Авада Кедавра» does nothing (SKELETON_AVADA).
+ */
+export const FIRE_K = 0.5;
+export const GUST = { Wind: 2, WindMaxima: 5, Overgrown: 3, OvergrownMaxima: 6 };
+export const pirateBoneDamage = (kind, dmg, spell = false) => {
+    if (kind == null) return spell ? 0 : dmg;
+    if (CRUSH.has(kind) || kind === 'LiquidationMaxima') return dmg;
+    if (kind in GUST) return dmg;
+    if (isFireDamage(kind)) return dmg * FIRE_K;
+    return skeletonDamage(kind, dmg);
+};
 const SKELETON_NAMES = ['Костлявый', 'Гремучий', 'Беззубый', 'Ржавый', 'Одноглазый', 'Хромой', 'Трухлявый', 'Шептун', 'Безносый', 'Сухарь', 'Пустоглазый', 'Утопленник'];
 const NAMES = ['Яков', 'Гаврила', 'Фома', 'Тимофей', 'Матвей', 'Савелий', 'Никита', 'Еремей', 'Захар', 'Остап', 'Мирон', 'Лука', 'Демьян', 'Аким', 'Гордей', 'Игнат', 'Кузьма', 'Прохор', 'Тарас', 'Ефим'];
 const SHOUT = {
@@ -720,6 +734,46 @@ export class Sailors {
         }
     }
 
+    /**
+     * (host) Who stands at the ship's wheel: the same man while he can (not fighting, asleep, swimming, saving a mate, talking);
+     * else the captain, the boatswain, then any sailor who is free. Nobody while a player holds the wheel or the king sent him away
+     * (`s.helmOff`, FleetOrders 'leaveHelm'). The choice is written to the journal («решение:»).
+     */
+    _helmsman(s) {
+        if (s.helmBy || s.helmOff) { s.helmId = null; return null; }
+        const list = this.crews.get(s.id);
+        if (!list) return null;
+        const free = (x) => x && !x.dead && !x.overboard && x.ship === s && !x.foe && !x.rescue && !x.nsleep && !(x.stunT > 0) && !x.vy && !(x.talking > 0) && !x.lev && x.mode !== 'sleepMat';
+        const cur = s.helmId ? list.find((x) => x.id === s.helmId) : null;
+        if (free(cur)) return cur;
+        let best = null, rank = 9;
+        for (const x of list) {
+            if (!free(x)) continue;
+            const r = isCaptain(x) ? 0 : x.role === 'boatswain' ? 1 : 2;
+            if (r < rank) { best = x; rank = r; }
+        }
+        const prev = s.helmId;
+        s.helmId = best ? best.id : null;
+        if (s.helmId !== prev && best) this.game.castleLife?.alog?.decision?.(best, `встаёт к штурвалу «${s.name}» (${best.role})${cur ? ' — прежний рулевой занят' : ''}`);
+        return best;
+    }
+
+    /** (host) The helmsman goes to his place behind the wheel and stands there, facing the bow. */
+    _atHelm(v, s, dt) {
+        const P = s.layout.helm.stand, d = Math.hypot(P.x - v.l.x, P.z - v.l.z);
+        if (d > 0.45) {
+            if (d > 3) {
+                const n = s.layout.nodes.find((x) => x.tag === 'helm');
+                const p = n && n.id !== v.node ? this._route(s, v.node, n.id) : null;
+                if (p) { v.path = p; v.pathI = 0; return; }
+            }
+            this._steer(v, s, P.x, P.z, d > 3 ? WALK : 1.4, dt);
+            v.mode = 'walk';
+            return;
+        }
+        v.mode = 'idle'; v.speed = 0; v.lyaw = 0; v.waitT = 1; v.path = null;
+    }
+
     /** Masts, guns, the wheel: never inside them. */
     _solids(v, L) { pushOut(L, v.l); }
 
@@ -1196,6 +1250,8 @@ export class Sailors {
             } else { this._steer(v, s, n.x, n.z, WALK, dt); v.mode = 'walk'; }
             return;
         }
+        // the helmsman: somebody of the crew is always at the wheel (unless a player holds it, or the king sent him away: «отойди от штурвала»)
+        if (this._helmsman(s) === v) { this._atHelm(v, s, dt); return; }
         v.waitT -= dt;
         if (isCaptain(v)) {
             const n = s.layout.nodes.find((x) => x.tag === 'captain');
@@ -1407,7 +1463,7 @@ export class Sailors {
         // he is on another deck (or can't get round something to him): by the walking graph first
         if ((v.lostT || 0) >= 3) { v.graphT = 3; v.lostT = 0; }
         if (v.graphT > 0) v.graphT -= dt;
-        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && d > 2.5)) { if (fs.st !== 'swing') { fs.st = 'close'; this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; } }
+        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && d > 2.5) || this._onStairTo(v, s, foe)) { if (fs.st !== 'swing') { fs.st = 'close'; this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; } }
         else v.fpath = null;
         switch (fs.st) {
             case 'close': {
@@ -1450,9 +1506,11 @@ export class Sailors {
         v.fs = null; v.busy = false;
         if ((v.lostT || 0) >= 3) { v.graphT = 3; v.lostT = 0; }
         if (v.graphT > 0) v.graphT -= dt;
-        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && Math.hypot(foe.x - v.l.x, foe.z - v.l.z) > v.tac.r + 1)) { this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; }
+        if (Math.abs(foe.y - v.l.y) > 2 || (v.graphT > 0 && Math.hypot(foe.x - v.l.x, foe.z - v.l.z) > v.tac.r + 1) || this._onStairTo(v, s, foe)) { this._goTo(v, s, foe, RUN, dt); v.mode = 'run'; return; }
         v.fpath = null;
         let p = spotAt(foe, v.tac.slot, v.tac.r);
+        // (never waits his turn ON a stair or at its foot/top: the ones behind him could not get up — the boarders jammed on the quarterdeck stairs)
+        for (let k = 0; k < 8 && this._stairZone(s.layout, p.x, p.z); k++) { const dx = foe.x - p.x, dz = foe.z - p.z, dl = Math.hypot(dx, dz) || 1; p = { x: p.x + dx / dl * 0.8, z: p.z + dz / dl * 0.8 }; }
         // his place is on the other side: round the foe along the ring, never past his blade
         const df = Math.hypot(v.l.x - foe.x, v.l.z - foe.z), cur = Math.atan2(v.l.z - foe.z, v.l.x - foe.x);
         let da = v.tac.slot - cur;
@@ -1467,18 +1525,84 @@ export class Sailors {
         if (!isCaptain(v) && v.sayT <= 0 && engage.length && Math.random() < dt * 0.08) this._say(v, pick(SHOUT.cheer).replace('{n}', pick(engage).name));
     }
 
+    /** The stair (ramp) whose foot, flight or head (a body's width round it) this ship-local point is in, or null. */
+    _stairZone(L, x, z) {
+        for (const r of L.ramps) {
+            if (Math.abs(x - r.ax) < 1.6 && z > Math.min(r.az, r.bz) - 1.8 && z < Math.max(r.az, r.bz) + 1.8) return r;
+        }
+        return null;
+    }
+
+    /** On a flight of stairs (or in its foot / head) and the foe not on this level: go on up by the graph, never stop on the stair. */
+    _onStairTo(v, s, foe) {
+        const L = s.layout;
+        if (stairUnder(L, v.l.x, v.l.y, v.l.z)) return true;
+        const r = this._stairZone(L, v.l.x, v.l.z);
+        return !!r && Math.abs(foe.y - v.l.y) > 0.8;
+    }
+
     /** To the foe on another deck: by the walking graph (the ladders, the hatches). */
     _goTo(v, s, foe, speed, dt) {
         const N = s.layout.nodes;
         const goal = this._nearestNode(s, foe);
         if (!v.fpath || v.fpathGoal !== goal || (v.fpathT -= dt) <= 0) {
-            v.fpath = this._route(s, this._nearestNode(s, v.l), goal) || [goal];
+            v.fpath = this._routeFrom(v, s, goal) || [goal];
             v.fpathGoal = goal; v.fpathI = 0; v.fpathT = 1.5;
         }
         let n = N[v.fpath[v.fpathI]];
         if (n && Math.hypot(n.x - v.l.x, n.z - v.l.z) < 0.7 && Math.abs(n.y - v.l.y) < 1.5 && v.fpathI < v.fpath.length - 1) n = N[v.fpath[++v.fpathI]];
+        // (on a stair, a node he has already passed — it lies behind him, down the flight: next; he never turns back for it)
+        else if (n && v.fpathI < v.fpath.length - 1 && stairUnder(s.layout, v.l.x, v.l.y, v.l.z)) {
+            const nx = N[v.fpath[v.fpathI + 1]];
+            if (nx && Math.hypot(nx.x - v.l.x, nx.y - v.l.y, nx.z - v.l.z) < Math.hypot(n.x - v.l.x, n.y - v.l.y, n.z - v.l.z) && Math.abs(nx.y - v.l.y) > Math.abs(n.y - v.l.y) - 0.01 && (nx.y - n.y) * (n.y - v.l.y) < 0) n = N[v.fpath[++v.fpathI]];
+        }
+        // (a node he cannot reach — in the narrow hull aft, behind a gun — is given up after a few seconds: the next one)
+        const cur = v.fpath[v.fpathI];
+        if (v.nodeLast === cur) v.nodeT = (v.nodeT || 0) + dt; else { v.nodeLast = cur; v.nodeT = 0; }
+        if (n && v.nodeT > 3 && v.fpathI < v.fpath.length - 1) { n = N[v.fpath[++v.fpathI]]; v.nodeT = 0; v.nodeLast = v.fpath[v.fpathI]; }
         if (!n) { this._steer(v, s, foe.x, foe.z, speed, dt); return; }
         this._steer(v, s, n.x, n.z, speed, dt);
+    }
+
+    /**
+     * The walking route to node `goal` from where he is. On a stair / ladder the nearest node is as likely at its FOOT as at its head, and
+     * a man halfway up was sent back down to the foot, then up again (the boarders «stuck» on the hatch ladder): the route is tried from the
+     * nearest node and from both ends of the flight he stands on, and the shortest way wins.
+     */
+    _routeFrom(v, s, goal) {
+        const L = s.layout, N = L.nodes;
+        const near = this._nearestNode(s, v.l);
+        const r = stairUnder(L, v.l.x, v.l.y, v.l.z);
+        if (!r) return this._trimRoute(v, N, this._route(s, near, goal));
+        const end = (y, x, z) => this._nearestNode(s, { x, y, z });
+        const starts = [near, end(r.ay, r.ax, r.az), end(r.by, r.bx, r.bz)];
+        let best = null, bc = Infinity;
+        for (const a of starts) {
+            const p = this._route(s, a, goal);
+            if (!p) continue;
+            let c = Math.hypot(N[a].x - v.l.x, N[a].y - v.l.y, N[a].z - v.l.z);
+            for (let i = 1; i < p.length; i++) c += Math.hypot(N[p[i]].x - N[p[i - 1]].x, N[p[i]].y - N[p[i - 1]].y, N[p[i]].z - N[p[i - 1]].z);
+            if (c < bc) { bc = c; best = p; }
+        }
+        return this._trimRoute(v, N, best);
+    }
+
+    /**
+     * The route without its first nodes when he is already past them: standing on the way from node 0 to node 1 (not at node 0),
+     * he must not go back to node 0 — the next re-route started from the nearest node and sent him back and forth in the hold forever.
+     */
+    _trimRoute(v, N, p) {
+        while (p && p.length > 1) {
+            const a = N[p[0]], b = N[p[1]];
+            const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z, len2 = abx * abx + aby * aby + abz * abz;
+            if (len2 < 1e-6) break;
+            const k = ((v.l.x - a.x) * abx + (v.l.y - a.y) * aby + (v.l.z - a.z) * abz) / len2;
+            if (k < 0.02) break;
+            const cx = a.x + abx * Math.min(1, k), cy = a.y + aby * Math.min(1, k), cz = a.z + abz * Math.min(1, k);
+            if (Math.hypot(v.l.x - cx, (v.l.y - cy) * 0.5, v.l.z - cz) > 2.2) break; // (not on that leg at all)
+            p.shift();
+        }
+        return p;
     }
 
     _nearestNode(s, p) {
@@ -1520,7 +1644,11 @@ export class Sailors {
             if (Math.abs(q.y - v.l.y) < 2.5) out.push({ x: q.x, z: q.z, r: 1.1 });
         }
         // (and the masts, the guns, the wheel: round them, not stuck against them)
+        const onRamp = !!stairUnder(s.layout, v.l.x, v.l.y, v.l.z), onStair = onRamp || !!this._stairZone(s.layout, v.l.x, v.l.z); // (on / by a stair: its underside and rail are no round «thing» — he walks UP it)
         for (const b of s.layout.solids) {
+            if ((b.kind === 'helmspace' || b.kind === 'wheel') && s.helmId === v.id) continue; // (the wheel and the room behind it: the helmsman stands there — a round «thing» of 1.9 m would keep him off his own place; _tryMove keeps him off the real boxes)
+            if (b.kind === 'coaming' || Math.max(b.x1 - b.x0, b.z1 - b.z0) > 4) continue; // (a long frame — a hatch's coaming — is no round «thing»: its disc covered the whole hatch and the ladder under it; _tryMove keeps him off the real box)
+            if ((b.kind === 'stair' && onStair) || (b.kind === 'handrail' && (onRamp || (onStair && v.fpath)))) continue; // (a stair's own underside and rail are no «thing» to walk round: he walks UP it — the boarders stuck on the quarterdeck stairs)
             if (b.y1 <= v.l.y + 0.6 || b.y0 >= v.l.y + 3.5) continue;
             const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
             if (Math.abs(cx - v.l.x) > 4 || Math.abs(cz - v.l.z) > 4) continue;
@@ -2010,9 +2138,13 @@ registerKind('c', {
     toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
     hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
     frozen: () => false,
+    // Captain Black Moustache: «Overgrown» does not work on him (the author)
+    immune: (g, c, o) => c.role === 'blackbeard' && String(o.spell || '').startsWith('Overgrown'),
     struck(g, c, o) {
         if (!o.by) return;
         const by = o.by === 'local' ? g.localId : o.by;
+        // a gust breaks a skeleton's bones (it holds its feet: BRACE; the damage is the gust's — GUST)
+        if (c.role === 'skeleton' && o.spell in GUST) g.ships?.crew.hit(c, GUST[o.spell], null, by, { spell: true, kind: o.spell });
         c.hitBy = { id: by, t: performance.now() };
         // (a body thrown by «Левиоса» into him: whose — only if the crew saw, Blame.js)
         const via = o.kind === 'fall' || o.kind === 'thrown' ? 'leviosa' : null;

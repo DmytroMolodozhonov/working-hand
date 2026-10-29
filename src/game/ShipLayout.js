@@ -191,7 +191,7 @@ function makeLayout(C) {
             // (the tack) low, lashed down forward of the mast, the after end high over the stern; the
             // cloth a triangle down to the clew aft, its foot above the heads at the wheel, fore-and-aft
             const w = 0.62 * m.h, ang = 0.75, x = 1.15; // (beside the mast, not through it)
-            const foot = deckY + 4.2;
+            const foot = deckY + 5.6; // (well above the wheel's rim and the helmsman's raised hand — it was 4.2: the cloth touched the wheel on the small ships)
             let z0 = m.z - 0.3 * w * Math.cos(ang);
             z0 -= Math.max(0, z0 + w * Math.cos(ang) - (C.L / 2 - 1.5)); // (the high end stays over the stern)
             const tack = { x, y: foot, z: z0 }, head = { x, y: foot + w * Math.sin(ang), z: z0 + w * Math.cos(ang) };

@@ -75,7 +75,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const res = [];
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) res.push(judge(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))));
-    const order = ['clean', 'chat', 'overlap', 'loud', 'friendspell'];
+    const order = ['clean', 'chat', 'overlap', 'loud', 'friendspell', 'ship'];
     res.sort((a, b) => order.indexOf(a.scene) - order.indexOf(b.scene));
     if (args.includes('--json')) console.log(JSON.stringify(res, null, 1));
     else {

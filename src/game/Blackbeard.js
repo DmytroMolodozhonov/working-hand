@@ -536,7 +536,9 @@ export class Blackbeard {
             const guards = Math.min(BB.GUARDS, Math.max(0, free.length - 2));
             free.slice(guards).forEach((v) => { if (!v.board) v.board = T.id; });
             const cap = this._captain();
-            if (cap && !cap.board && this._phaseT > 6 && foes) { cap.board = T.id; this.crew._say(cap, 'За мной, кости! Шпаги наголо!'); }
+            // (the captain never leaves his ship while one skeleton lives — the author: «ТОЛЬКО если все его скелеты уничтожены»)
+            const skeletons = list.some((v) => v.role === 'skeleton' && !v.dead);
+            if (cap && !cap.board && this._phaseT > 6 && foes && !skeletons) { cap.board = T.id; this.crew._say(cap, 'Мои кости пали… Сам разберусь! Шпаги наголо!'); this.game.castleLife?.alog?.decision?.(cap, 'Чёрные Усы идёт на чужой корабль: все скелеты уничтожены'); }
             return;
         }
         // nobody left: back aboard, the lines off
@@ -579,7 +581,13 @@ export class Blackbeard {
             // to the gangway, then over the gap
             const gw = this._gangways(this.lash, this._gw || (this._gw = {}));
             const tx = gw.a.x - Math.sign(gw.a.x) * 0.6, tz = gw.a.z + ((v.idx % 3) - 1) * 1.2;
-            if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) { C._steer(v, s, tx, tz, 5.2, dt); v.mode = 'run'; return true; }
+            if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) {
+                // (from another deck — the forecastle, the quarterdeck, below: by the walking graph, up and down the stairs; straight only on his own level near the gangway.
+                // Straight across the whole ship he stuck against a bulkhead or a stair's side and never got to the plank)
+                if (Math.abs(gw.a.y - v.l.y) > 1.2 || Math.hypot(tx - v.l.x, tz - v.l.z) > 9) { C._goTo(v, s, { x: gw.a.x, y: gw.a.y, z: gw.a.z }, 5.2, dt); }
+                else C._steer(v, s, tx, tz, 5.2, dt);
+                v.mode = 'run'; return true;
+            }
             const T = this.lash.T;
             const to = { x: gw.b.x - Math.sign(gw.b.x) * (1.4 + Math.random() * 2.5), y: T.layout.deck, z: gw.b.z + (Math.random() - 0.5) * 8 };
             to.y = floorAt(T.layout, to.x, to.z, T.layout.deck + 1) ?? T.layout.deck;
@@ -642,7 +650,11 @@ export class Blackbeard {
         // back: to her gangway, over the gap
         const gw = this._gangways(L, this._gw || (this._gw = {}));
         const tx = gw.b.x - Math.sign(gw.b.x) * 0.6, tz = gw.b.z + ((v.idx % 3) - 1) * 1.2;
-        if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) { C._steer(v, T, tx, tz, 5.2, dt); v.mode = 'run'; return true; }
+        if (Math.hypot(tx - v.l.x, tz - v.l.z) > 1.2) {
+            if (Math.abs(gw.b.y - v.l.y) > 1.2 || Math.hypot(tx - v.l.x, tz - v.l.z) > 9) C._goTo(v, T, { x: gw.b.x, y: gw.b.y, z: gw.b.z }, 5.2, dt);
+            else C._steer(v, T, tx, tz, 5.2, dt);
+            v.mode = 'run'; return true;
+        }
         const to = { x: gw.a.x - Math.sign(gw.a.x) * (1.5 + Math.random() * 3), y: B.layout.deck, z: gw.a.z + (Math.random() - 0.5) * 8 };
         to.y = floorAt(B.layout, to.x, to.z, B.layout.deck + 1) ?? B.layout.deck;
         this._leap(v, T, B, to);
@@ -701,7 +713,7 @@ export class Blackbeard {
             }
             return true;
         }
-        if (v.role !== 'skeleton') return false;
+        if (v.role !== 'skeleton' && v.role !== 'blackbeard') return false; // (the captain too: fallen off his ship, he walks the bottom to a ladder and climbs back — the author: «сам поднимется обратно»)
         const g = this.game;
         o.t += dt;
         if (o.vx || o.vz) { o.x += o.vx * dt; o.z += o.vz * dt; const kk = Math.exp(-dt * 3); o.vx *= kk; o.vz *= kk; if (Math.abs(o.vx) + Math.abs(o.vz) < 0.05) o.vx = o.vz = 0; }
@@ -727,7 +739,15 @@ export class Blackbeard {
             const k = Math.hypot(_l.x - o.x, _l.z - o.z);
             if (k < d) { d = k; ship = sh; lad = ld; dx = _l.x - o.x; dz = _l.z - o.z; }
         }
-        if (!lad || d > BB.BOTTOM_MAX || o.t > 150) { this.crew._die(v, home.lastBy); return true; } // (lost on the bottom: it falls apart)
+        if (!lad || d > BB.BOTTOM_MAX || o.t > 150) {
+            if (v.role === 'blackbeard' && !v.dead) { // (the captain is never lost: set back on his own deck at the gangway)
+                const gw = home.layout.nodes.find((n) => n.tag && n.tag.startsWith('gangway')) || home.layout.nodes[0];
+                v.ship = home; v.l.x = gw.x; v.l.y = gw.y; v.l.z = gw.z; v.node = gw.id; v.vy = 0; v.overboard = null; v.leapYaw = null; v.mode = 'idle'; v.path = null; v.board = null;
+                this.game.castleLife?.alog?.decision?.(v, 'Чёрные Усы потерялся в воде — снова на своей палубе');
+                return true;
+            }
+            this.crew._die(v, home.lastBy); return true; // (lost on the bottom: it falls apart)
+        }
         if (d < 2.5 && Math.abs(ship.st.u) < BB.CLIMB_U) {
             // takes the ladder: up it, rung by rung (_climb), aboard at its gangway
             o.climb = { ship, lad, y: Math.max(lad.bottom - 2, ship.pose.toLocal(o.x, o.y, o.z, _l).y) };

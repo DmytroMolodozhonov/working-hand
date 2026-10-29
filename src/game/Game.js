@@ -1269,7 +1269,7 @@ export class Game {
             for (let i = 0; i < players.length; i++) {
                 const p = players[i];
                 const dx = p.x - cp.x, dz = p.z - cp.z;
-                if (dx * dx + dz * dz < 4.5 * 4.5 + 9) {
+                if (dx * dx + dz * dz < (chest.ship ? 2.6 * 2.6 : 4.5 * 4.5 + 9)) { // (a ship's chest: only when you really stand by it — walking past the deck did «open» it and the crew cried «thief»)
                     this.openChest(chest, null, ids[i]);
                     break;
                 }

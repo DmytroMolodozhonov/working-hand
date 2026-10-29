@@ -49,6 +49,7 @@ const SLEEP_FAR = 640; // (the black ship: Blackbeard.BB.LOSE)
 const SCAN = 650; // m: ports this far are looked at
 const PREBUILD = WAKE + 220; // m: a sleeping ship's model is built ahead (a little a frame) this near
 const UNFURL_RATE = 1 / 3; // sails unroll in 3 s
+const SAIL_HAND = 20000; // ms: after somebody set the sails by hand the crew leaves them as they are
 const WIND_PLAIN = 21; // m/s into the sails while «Вайнд» blows (3× the old gust)
 const WIND_MAXIMA = 42; // «Вайнд Максима» (6× the old «Вайнд»)
 const MAXIMA_KICK = 1.5; // m/s: the jerk forward when «Вайнд Максима» slams into the sails (a pinnace; less for a big ship)
@@ -526,12 +527,34 @@ export class Ships {
         if (g.sync) this._net(dt);
     }
 
+    /**
+     * (host) The crew sets the sails: a ship that goes under way has them full open (the author: «когда плывёт — паруса полностью
+     * раскрыты»), a ship that stands still has them rolled up. A player's own order wins for a while (`SAIL_HAND`): then the crew
+     * does it again; a ship without a living crew is the player's to sail by hand.
+     */
+    _autoSails(s, dt) {
+        if (s.state !== 'free' || s.lifted || s.sinkY > 0.5 || this.crew.alive(s) <= 0) { s.stillT = 0; return; }
+        if (s.lines.some((l) => l.state === 'tied')) { s.stillT = 0; return; }
+        const sp = Math.hypot(s.st.u || 0, s.st.v || 0), now = performance.now();
+        if (now - (s.sailHandT || -1e9) < SAIL_HAND) return;
+        const sails = s.sails.filter((sl) => sl.burnt < 1);
+        if (!sails.length) return;
+        if (sp > 1.2) {
+            s.stillT = 0;
+            if (sails.some((sl) => sl.target < 1)) this.setSails(s, 'all', 1, null);
+        } else if (sp < 0.25 && !s.helmBy && this.game.fleet?.state?.(s)?.mode !== 'battle') {
+            s.stillT = (s.stillT || 0) + dt;
+            if (s.stillT > 12 && sails.some((sl) => sl.target > 0)) this.setSails(s, 'all', 0, null);
+        } else s.stillT = 0;
+    }
+
     /** (host) One step of a ship: wind, sails, the wheel, the lines, the ground; damage, fire, sinking. */
     _simulate(s, dt) {
         const st = s.st;
         const g = this.game;
         if (s.state === 'wreck' || s.lifted) { st.u = st.v = st.r = 0; return; } // (in the air: «Левиоса Максима» carries it)
         if (s.lashTo && (g.fleet?.lashStep(s, dt) || g.blackbeard?.lashStep(s, dt))) { this._damageStep(s, dt); return; } // (held alongside the black ship by its grapnels)
+        this._autoSails(s, dt);
         const open = this._openFrac(s);
         const data = g.terrain?.data;
         const env = {
@@ -935,6 +958,7 @@ export class Ships {
         if (!s) return 0;
         const list = ids === 'all' ? s.sails : s.sails.filter((sl) => ids.includes(sl.id));
         let n = 0;
+        if (by) s.sailHandT = performance.now(); // (somebody's order, even «as they are already»: the crew leaves the sails alone a while — _autoSails)
         for (const sl of list) if (sl.burnt < 1 && sl.target !== open) { sl.target = open; n++; }
         if (!n) return 0;
         s.changed = true;

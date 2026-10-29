@@ -31,9 +31,13 @@ export function mouthOpenness(face) {
     if (!face || face.length < 292) return null;
     const up = face[13], lo = face[14], l = face[61], r = face[291];
     if (!up || !lo || !l || !r) return null;
-    const w = Math.hypot(l.x - r.x, l.y - r.y);
+    // (in 3D, z when the network gives it: a head tipped up at the sails or down at the wheel, or turned to an enemy, squeezes the mouth's
+    // gap or its width in the flat picture — the same words then opened it less than MOVED, and «губы не двигались» refused a spell cast
+    // in a fight on a ship. Both the gap and the width are measured along the face itself.)
+    const dz = (a, b) => (Number.isFinite(a.z) && Number.isFinite(b.z) ? a.z - b.z : 0);
+    const w = Math.hypot(l.x - r.x, l.y - r.y, dz(l, r));
     if (w < 1e-4) return null;
-    return Math.hypot(up.x - lo.x, up.y - lo.y) / w;
+    return Math.hypot(up.x - lo.x, up.y - lo.y, dz(up, lo)) / w;
 }
 
 /** The base spell («Бомбардо Максима» is still «Бомбардо» for the echo). */
