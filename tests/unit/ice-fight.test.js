@@ -8,6 +8,7 @@ import { IceCastleLife, ICE, ICE_TARGETS, FIRE_K } from '../../src/game/IceQueen
 import { MELT, MELT_K, MELT_STEPS, meltStats, meltScale, meltGain, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds, QUEEN_VS } from '../../src/game/IceGiants.js';
 import { shieldHitCost } from '../../src/game/Combat.js';
 import { ICE_CASTLE } from '../../src/world/IceCastle.js';
+import { iceQueenModel } from '../../src/game/IceModels.js';
 import { WORLD_GEN, ICE_ARENA_FROM_GEN, TerrainData } from '../../src/world/Terrain.js';
 import { measure, walkRound, GIANT_R } from '../../tools/icearenabench.mjs';
 
@@ -408,3 +409,15 @@ test('giants and snowmen walk all round the arena with the game\'s walking brain
     assert.ok(r.unsticks <= 0, `put back ${r.unsticks} times`);
     assert.ok(r.deepestOverlap <= 0.05, `bodies inside each other: ${r.deepestOverlap} m`);
 });
+
+test('sizes: the queen\'s blade, measured on the model (Box3): hair-thin as a rod, then about as long as she is tall; the guard not wider than 3 m', () => {
+    const m = iceQueenModel(); m.scale.setScalar(ICE.QUEEN.S); m.updateMatrixWorld(true);
+    const box = (o) => new THREE.Box3().setFromObject(o);
+    const u = m.userData;
+    const sheathed = box(u.blade), h0 = box(m).max.y;
+    assert.ok(sheathed.max.y - sheathed.min.y < 0.5, 'the sheathed blade is a hair-thin line');
+    u.blade.scale.y = QUEEN_AI.BLADE_LEN; m.updateMatrixWorld(true);
+    const out = box(u.blade), len = out.max.y - out.min.y;
+    assert.ok(len > 5 && len < h0 * 1.2, `the blade is ${len.toFixed(1)} m (the queen ${h0.toFixed(1)} m)`);
+    assert.ok(out.max.x - out.min.x < 3, 'the guard');
+}) ;
