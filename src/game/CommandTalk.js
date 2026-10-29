@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { newUid } from './ItemTypes.js';
 import { detectOrder } from '../ai/TalkActions.js';
 import { titleFor, vizierLine, RANK_KEYS } from './Ranks.js';
+import { pickHouse } from './HouseAim.js';
 import { classOf, REFUSE_CLASS, GO_CLASS, mayArrest } from './Justice.js';
 import { parseCommand, parseCommands, canDo, COMMANDS, ONLY_ACTIVE, commandAck, sayReply, pickGroup, pickTarget, formationSlots, SPAR_REFUSALS } from '../ai/TalkCommands.js';
 
@@ -90,8 +91,58 @@ export class CommandTalk {
         if (!ch?.isArmRaised || !(ch.isArmRaised('right') || ch.isArmRaised('left'))) return;
         const ray = this.pointRay();
         if (!ray?.hand) return;
+        const now = performance.now();
+        const h = this._hist || (this._hist = []);
+        h.push({ at: now, ray }); // (a few seconds of the hand: it falls while the words are recognised — the house is read from the best moment)
+        while (h.length > 24 || (h.length && now - h[0].at > 5000)) h.shift();
         const p = this._ground(ray);
-        if (p) this._shown = { ...p, at: performance.now(), ray };
+        if (p) this._shown = { ...p, at: now, ray };
+    }
+
+    /** How far the world lets the ray go (a wall, the ground, a fence), or null. */
+    _blockT(ray) {
+        const t = this.game.terrain;
+        if (!t?.raycast) return null;
+        try { const hit = t.raycast(ray.o, ray.d, 160); return hit ? hit.dist : null; } catch (_) { return null; }
+    }
+
+    /**
+     * The house I show: { i, h, ... } (kind hit / blocker / near, dist m, angle °, ambiguous) or { none: why }.
+     * The live hand first; the hand already down → the last 4 s of it (the best moment: a direct hit beats a near miss); no hand → the gaze.
+     */
+    pointHouse(cs) {
+        const houses = cs?.def?.houses || [];
+        if (!houses.length) return { none: 'в этом месте нет домов' };
+        const rays = [];
+        const live = this.pointRay();
+        const now = performance.now();
+        if (live?.hand) rays.push({ ray: live, src: 'рука' });
+        else {
+            const hist = (this._hist || []).filter((e) => now - e.at < 4000);
+            for (let i = hist.length - 1; i >= 0; i--) rays.push({ ray: hist[i].ray, src: `рука ${((now - hist[i].at) / 1000).toFixed(1)} с назад` });
+            if (live) rays.push({ ray: live, src: 'взгляд' });
+        }
+        if (!rays.length) return { none: 'не вижу, куда вы показываете' };
+        let best = null, bestRank = 9;
+        for (const r of rays) {
+            const pk = pickHouse(houses, r.ray, { blockT: this._blockT(r.ray) });
+            if (!pk) continue;
+            const rank = pk.kind === 'hit' ? 0 : pk.kind === 'blocker' ? 1 : pk.ambiguous ? 3 : 2;
+            if (rank < bestRank) { best = { ...pk, src: r.src, ray: r.ray }; bestRank = rank; }
+            if (rank <= 1) break; // (the newest sure moment)
+        }
+        if (!best) return { none: 'на дом рука не указывает' };
+        best.h = houses[best.i];
+        return best;
+    }
+
+    /** The journal line of a house choice: «указали на дом №.., расстояние .. м, угол .. °, взяли дверь ..». */
+    _houseLine(me, pk) {
+        if (!pk || pk.none) return `дом не выбран: ${pk?.none || '?'}`;
+        const h = pk.h, door = h.door || h.c;
+        const dm = Math.round(Math.hypot(h.c.x - pk.ray.o.x, h.c.z - pk.ray.o.z));
+        const how = pk.kind === 'hit' ? 'луч вошёл в дом' : pk.kind === 'blocker' ? `луч упёрся в преграду в ${Math.round(pk.dist)} м рядом с домом` : `луч мимо на ${pk.angle.toFixed(1)}°`;
+        return `указали на дом №${pk.i} (${h.kind || 'дом'}), расстояние ${dm} м, ${how} (${pk.src}), дверь (${Math.round(door.x)}, ${Math.round(door.z)})${pk.ambiguous ? `; но рядом и дом №${pk.alt}` : ''}`;
     }
 
     /** Where on the ground I point (a march along the ray until it meets the ground), or null. */
@@ -231,9 +282,11 @@ export class CommandTalk {
                 return this._done(text, cmd, lead);
             }
             case 'enter_house': {
-                const point = this.pointGround();
-                const h = point ? life.justice._houseFor(lead.cs, { point }, lead) : -1;
-                if (h < 0) { reply(point ? 'Там нет дома, Ваше Величество.' : 'В какой дом? Покажите рукой.'); this._log(text, cmd, lead, point ? `в точке (${Math.round(point.x)}, ${Math.round(point.z)}) дома нет` : 'не показали'); return true; }
+                const pk = this.pointHouse(lead.cs);
+                life.alog?.decision(lead, this._houseLine(null, pk));
+                if (pk.none) { reply(/не вижу/.test(pk.none) ? 'Не вижу, куда вы показываете, Ваше Величество. Поднимите руку.' : 'Там нет дома, Ваше Величество.'); this._log(text, cmd, lead, pk.none); return true; }
+                if (pk.ambiguous) { reply('Какой из двух домов, Ваше Величество? Покажите точнее.'); this._log(text, cmd, lead, `два дома рядом с лучом: №${pk.i} и №${pk.alt}`); return true; }
+                const h = pk.i, point = { x: pk.h.c.x, z: pk.h.c.z };
                 const brk = /(выломай|выбей|взломай|вскрой|вломись|ворвись|снеси)/.test(text);
                 const who = doers.slice(0, 4);
                 who.forEach((k) => life.orders.run(k, 'cmd', { id: 'enter_house', house: h, point, breakIn: brk }, by));
@@ -241,7 +294,11 @@ export class CommandTalk {
                 return this._done(text, cmd, lead);
             }
             case 'go_there': case 'look_there': {
-                const point = this.pointGround(/(?:^| )(за|через)(?: |$)/.test(text) ? 25 : 0); // («за ту гору»: past the mountain)
+                let point = this.pointGround(/(?:^| )(за|через)(?: |$)/.test(text) ? 25 : 0); // («за ту гору»: past the mountain)
+                if (cmd.id === 'go_there' && lead.cs && !/(?:^| )(за|через)(?: |$)/.test(text)) { // («иди туда» with the hand on a house: to its door)
+                    const pk = this.pointHouse(lead.cs);
+                    if (pk.h && !pk.ambiguous && pk.kind !== 'near') { const d = pk.h.door || pk.h.c; point = { x: d.x, z: d.z }; life.alog?.decision(lead, this._houseLine(null, pk) + ' — иду к двери'); }
+                }
                 if (cmd.id === 'go_there' && !point) { reply(pick(['Куда? Покажите рукой.', 'Не понял, куда идти — покажите.'])); return true; }
                 sendAll(() => ({ point }));
                 if (cmd.id === 'go_there') reply(ack());
@@ -280,7 +337,14 @@ export class CommandTalk {
         const shown = this._shown && performance.now() - this._shown.at < 4000;
         const pg = pr?.hand || shown ? this.pointGround() : null;
         this.life.alog?.decision(v, `указание: ${pr?.hand ? 'рука/палочка поднята' : shown ? 'рука уже опущена, помню где была' : 'руки нет, только взгляд'}; луч (${pr ? `${(+pr.d.x).toFixed(2)}, ${(+pr.d.y).toFixed(2)}, ${(+pr.d.z).toFixed(2)}` : 'нет'}); точка на земле ${pg ? `(${Math.round(pg.x)}, ${Math.round(pg.z)}), ${Math.round(Math.hypot(pg.x - me.x, pg.z - me.z))} м от героя` : 'не найдена'}`);
-        if (pg && !v.foe && POINTING.has(this._cmdId)) { v.glance = { x: pg.x, z: pg.z, t: 4 }; v.yaw = Math.atan2(-(pg.x - v.x), -(pg.z - v.z)); }
+        let gx = pg?.x, gz = pg?.z;
+        if (v.cs && POINTING.has(this._cmdId) && (this._cmdId === 'enter_house' || this._cmdId === 'search_house' || /(^| )(дом|дома|доме|избу|избе|здани|башн|там|внутри)/.test(this._text || ''))) {
+            // a house shown: he turns to IT (its middle), not to the ground behind it
+            const pk = this.pointHouse(v.cs);
+            this.life.alog?.decision(v, this._houseLine(me, pk));
+            if (pk.h && !pk.ambiguous) { gx = pk.h.c.x; gz = pk.h.c.z; }
+        }
+        if (gx != null && !v.foe && POINTING.has(this._cmdId)) { v.glance = { x: gx, z: gz, t: 4 }; v.yaw = Math.atan2(-(gx - v.x), -(gz - v.z)); }
     }
 
     /** The people the command is for: the one I speak to, or a group by the scope words. */
@@ -325,10 +389,12 @@ export class CommandTalk {
         this._houseScope = false;
         if (t.ref === 'player') return { line: null, v: null };
         // «убейте того, кто в доме», «арестуй там всех»: the people inside the house I point at
-        if (/(в|во|из|внутри) (этом |том |вон том |его |тот |этот )?(доме|избе|хижине|здании|башне|жилище|хате)|кто (там )?внутри|там внутри|кто в нём|кто в нем|арестуй там всех|арестуйте там всех/.test(this._text || '')) {
-            const point = this.pointGround();
-            const hi = point ? life.justice._houseFor(lead.cs, { point }, lead) : -1;
-            if (hi < 0) return { line: 'В какой дом? Покажите рукой.', why: 'дом не показан' };
+        if (/(в|во|из|внутри) (этом |том |вон том |его |тот |этот )?(доме|избе|хижине|здании|башне|жилище|хате)|кто (там )?внутри|там внутри|кто в нём|кто в нем|кто там( |$)|кто в этом|кто в том|арестуй там всех|арестуйте там всех|арестуй(те)? (всех )?там/.test(this._text || '')) {
+            const pk = this.pointHouse(lead.cs);
+            life.alog?.decision(lead, this._houseLine(me, pk));
+            if (pk.none) return { line: /не вижу/.test(pk.none) ? 'Не вижу, куда вы показываете, Ваше Величество. Поднимите руку.' : 'Там нет дома, Ваше Величество.', why: pk.none };
+            if (pk.ambiguous) return { line: 'Какой из двух домов, Ваше Величество? Покажите точнее.', why: `два дома рядом с лучом: №${pk.i} и №${pk.alt}` };
+            const hi = pk.i;
             const house = lead.cs.def.houses[hi];
             const occ = [...life.byId.values()].filter((k) => !k.dead && k !== lead && !doers.includes(k) && k.cs === lead.cs && (Math.hypot(k.x - house.c.x, k.z - house.c.z) <= (house.r || 6) + 1.5 || (k.entry?.home === hi && k.job === 'home' && Math.hypot(k.x - house.c.x, k.z - house.c.z) < 25)));
             life.alog?.decision(lead, `в доме №${hi} (${Math.round(house.c.x)}, ${Math.round(house.c.z)}): ${occ.map((k) => (k.name || k.id) + (k.sleep ? ' (спит)' : '')).join(', ') || 'никого'}`);
@@ -623,7 +689,13 @@ export class CommandTalk {
             const t = cmd.args.house || { ref: 'none' };
             let house = null, point = null;
             if (t.ref === 'name') { const v = [...life.byId.values()].find((x) => x.name === t.name); house = v?.entry?.home; }
-            else if (t.ref === 'point') point = this.pointGround();
+            else {
+                const pk = this.pointHouse(lead.cs);
+                life.alog?.decision(lead, this._houseLine(null, pk));
+                if (pk.h && !pk.ambiguous) house = pk.i;
+                else if (pk.ambiguous) { reply('Какой из двух домов, Ваше Величество? Покажите точнее.'); return done(`два дома рядом с лучом: №${pk.i} и №${pk.alt}`); }
+                else if (t.ref === 'point') { reply(/не вижу/.test(pk.none) ? 'Не вижу, куда вы показываете, Ваше Величество. Поднимите руку.' : 'Там нет дома, Ваше Величество.'); return done(pk.none); }
+            }
             const k = doers[0] || lead;
             const ok = life.orders.run(k, 'cmd', { id: 'search_house', house: house >= 0 ? house : null, point }, by);
             void ok;
