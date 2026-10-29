@@ -1770,7 +1770,7 @@ export class Game {
         // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
         if (this.planetMagic?._naming && this.planetMagic.tryName(text, isFinal)) return null;
         // (the phrase after a lone «Да пусть создастся»: what the gods are to make — DivineCreation.hearDesc)
-        if (this.divine?.listening && !matchSpell(text) && this.divine.hearDesc(text, isFinal)) return null;
+        if (this.divine?.listening && !matchSpell(text)) { const heard = this.divine.hearDesc(text, isFinal); if (heard) return heard === true ? null : heard; }
         let name = matchSpell(text);
         // «Айс Максима» with water in the hands: the water's «Frozen» (one spell, both words — StrongSpells.js)
         if (name === 'IceMaxima' && (this.water?.active || this.vortex?.state)) name = 'Frozen';

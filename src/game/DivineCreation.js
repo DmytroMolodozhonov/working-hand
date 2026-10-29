@@ -183,13 +183,13 @@ export class DivineCreation extends HouseMagic {
         const now = Date.now();
         if (now - this._lastCast < 1500) return null;
         if (!w.desc || w.desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) {
-            this.listening = { until: now + 10000 };
+            this.listening = { until: now + CREATION.LISTEN * 1000 }; // (a long description ends long after it begins)
             return say('🙏 Боги слушают — опишите, что создать (например: «замок из белого камня с шестью башнями», «существо с крыльями», «дерево с синими листьями»)');
         }
         return this._begin(w.desc, say);
     }
 
-    /** The phrase after a lone «Да пусть создастся» (within 10 s): the description. true — it was taken. */
+    /** The phrase after a lone «Да пусть создастся» (within LISTEN s): the description. 'DivineCreation' — begun, true — taken (refused or still being said), false — not a description. */
     hearDesc(text, isFinal) {
         if (!this.listening) return false;
         if (Date.now() > this.listening.until) { this.listening = null; return false; }
@@ -198,8 +198,7 @@ export class DivineCreation extends HouseMagic {
         const desc = String(text || '').trim();
         if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) return false;
         const g = this.game;
-        this._begin(desc, (t) => { if (t) g.hud?.setVoice?.(t, true); return null; });
-        return true;
+        return this._begin(desc, (t) => { if (t) g.hud?.setVoice?.(t, true); return null; }) || true;
     }
 
     /** Checks, then the host is asked (the mana is paid when it says yes). */
@@ -424,6 +423,8 @@ export class DivineCreation extends HouseMagic {
     _hostRecipe(id, raw, by) {
         const g = this.game, m = this.magic;
         if (!m || m.id !== id || m.phase !== 'seed' || m.by !== by) return;
+        // (the seed of light grows its GESTATE_MIN seconds however fast the answer came: the rules answer at once)
+        if (m.t < CREATION.GESTATE_MIN) { m.held = { raw, by }; return; }
         const recipe = sanitizeRecipe(raw, m.desc, m.seed); // (the host cleans it again: a guest's recipe is only a wish)
         m.recipe = recipe;
         g.sync?.net?.send({ t: this.netType, a: 'bloom', id, kind: recipe.type, name: recipe.name });
@@ -701,7 +702,8 @@ export class DivineCreation extends HouseMagic {
                 if (m.phase === 'grow') this.fx2.grow(m, dt, this.look);
             }
             if (this.auth && this.magic === m) {
-                if (m.phase === 'seed' && m.t > CREATION.THINK_MAX + 6 && m.by !== g.localId) this._hostFade(m.id, '🌫️ Боги не дождались ответа', false);
+                if (m.phase === 'seed' && m.held) { if (m.t >= CREATION.GESTATE_MIN) { const h = m.held; m.held = null; this._hostRecipe(m.id, h.raw, h.by); } }
+                else if (m.phase === 'seed' && m.t > CREATION.THINK_MAX + 6 && m.by !== g.localId) this._hostFade(m.id, '🌫️ Боги не дождались ответа', false);
                 else if (m.phase === 'site') this._siteStep(m);
                 else if (m.phase === 'plan') { const P = this.plan(m.rec); if (P) this._growStart(m, P); else if (m.t > CREATION.THINK_MAX + 60) this._hostFade(m.id, '🌫️ Боги не смогли задумать эту постройку. Мана возвращена', true); }
                 else if (m.phase === 'grow') this._build(m);

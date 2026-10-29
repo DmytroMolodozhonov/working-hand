@@ -42,6 +42,7 @@ export const CREATION = {
     MAX_PLANTS: 900, // plants of one's own in the world
     PLANTS_PER_SPECIES: 160,
     COOLDOWN: 20, // s between two creations of one player
+    LISTEN: 30, // s: after a lone «Да пусть создастся» the gods wait for the description this long
     DESC_MAX: 600, // letters of a description read
 };
 
@@ -358,6 +359,8 @@ export function guessRecipe(desc, seed = 1) {
 export function nameOf(desc) {
     const t = String(desc ?? '').replace(/\s+/g, ' ').trim().replace(/^(с|со|из|в|на)\s/i, '');
     const words = t.split(' ').slice(0, 5);
+    const cut = words.findIndex((x, i) => i > 0 && /^(котор\S*|что|чтобы|где|когда|умеющ\S*|способн\S*)$/i.test(x.replace(/[,.;:!?]+$/, '')));
+    if (cut > 0) words.length = cut; // (a name, not a sentence: «Дерево с синими листьями, которое…» → «Дерево с синими листьями»)
     while (words.length > 1 && /^(с|со|и|из|в|на|по|для|к|у|о|а|но)$/i.test(words[words.length - 1].replace(/[,.;:!?]+$/, ''))) words.pop();
     const w = words.join(' ').replace(/[,.;:!?]+$/, '');
     return (w.charAt(0).toUpperCase() + w.slice(1)).slice(0, 40) || 'Творение';

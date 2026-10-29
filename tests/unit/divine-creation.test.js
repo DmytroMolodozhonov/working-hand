@@ -163,7 +163,7 @@ test('the gods fail: no network and nonsense → the words are read; too long �
     d.dc.testAsk = async () => null;
     assert.equal(d.dc.cast(true, 'да пусть создастся'), null);
     assert.ok(d.dc.listening);
-    assert.equal(d.dc.hearDesc('маленький колодец', true), true);
+    assert.equal(d.dc.hearDesc('маленький колодец', true), 'DivineCreation', 'the description begins it');
     assert.equal(d.g.combat.fatigue, 500);
     // a saved world while the gods think: the mana back on load
     const e = world();

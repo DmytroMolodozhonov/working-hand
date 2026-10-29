@@ -31,7 +31,7 @@ export class DivineCreationFx {
     constructor(game) {
         this.game = game;
         this.flashT = 0;
-        this._sz = { x: 0, y: 0, set(x, y) { this.x = x; this.y = y; return this; } };
+        this._sz = new THREE.Vector2(); // (three's getDrawingBufferSize sets and floors a real Vector2)
     }
 
     get pool() { return this.game.fx?.fireworks || null; }
