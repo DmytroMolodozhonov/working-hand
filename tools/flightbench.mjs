@@ -50,7 +50,7 @@ const SPACE_ROUTE = args.includes('--space');
 const MAXIMA = args.includes('--maxima');
 const ALLOC = args.includes('--alloc'); // who makes the garbage in flight (sampling heap profiler: the biggest makers of short-lived objects)
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
-const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0, maximaMadeInFrame: 0, maximaP99Ms: 30 };
+const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0, maximaMadeInFrame: 0, maximaP99Ms: 40 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
 const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' } };
 

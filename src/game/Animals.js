@@ -280,7 +280,7 @@ export class Animals {
     _siteLand(r) {
         const t = this.game.terrain?.data;
         if (!t) return false;
-        if (t.landMade && !t.landMade(r.x, r.z)) return null; // (not yet: ask later)
+        if (t.landMade && !t.landMade(Math.round(r.x), Math.round(r.z))) return null; // (not yet: ask later)
         const x = Math.round(r.x), z = Math.round(r.z);
         const top = t.topLayer(x, z);
         if (t.get(x, top, z) !== BLOCK.GRASS || t.get(x, top + 1, z) === BLOCK.WATER) return false;
@@ -620,6 +620,7 @@ export class Animals {
             if (!kind) { this.trees.set(key, null); continue; }
             const x = Math.round(gx * CELL + 15 + h(gx, gz) * (CELL - 30)), z = Math.round(gz * CELL + 15 + h(gz + 5, gx - 3) * (CELL - 30));
             if (Math.hypot(x, z) < 40) { this.trees.set(key, null); continue; }
+            if (t.landMade && !t.landMade(x, z)) continue; // (the workers have not brought that land yet: asked again in 2 s — never made here in the frame, 20–50 ms in a fast flight)
             const top = t.topLayer(x, z);
             if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
             const y = top - 0.5;
