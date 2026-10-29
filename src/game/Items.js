@@ -95,6 +95,12 @@ const GRIPPED = {
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
     apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
     redApple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    baksadi_pear: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    glowcap_mushroom: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    fern_frond: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    azure_berry: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    sun_herb: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    frost_shard: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
     potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     web: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a skein in the cupped hand)
@@ -161,7 +167,7 @@ export function backpackSpot(hand, other, shoulder) {
     return null;
 }
 
-export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, telewilpinLeaf: 0.5, carnivoreHead: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, telewilpinLeaf: 0.5, carnivoreHead: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {

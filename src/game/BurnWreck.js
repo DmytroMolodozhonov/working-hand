@@ -46,7 +46,7 @@ export const BURN = {
 };
 
 /** Kinds of things that burn in a burning chest (the rest falls out of its ashes). */
-const FLAMMABLE = new Set(['bread', 'cheese', 'pie', 'steak', 'meat', 'redApple', 'wool', 'arrows', 'bow', 'backpack', 'logs', 'web']);
+const FLAMMABLE = new Set(['bread', 'cheese', 'pie', 'steak', 'meat', 'redApple', 'baksadi_pear', 'fern_frond', 'azure_berry', 'sun_herb', 'glowcap_mushroom', 'wool', 'arrows', 'bow', 'backpack', 'logs', 'web']);
 
 /** Does this thing burn in a house fire? (magic keeps magic things whole; metal, stone, glass don't burn) */
 export function burnsInFire(it) {

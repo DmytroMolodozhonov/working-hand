@@ -475,3 +475,23 @@ test('the conductor of things («Левиоса Максима» на вещь):
     assert.match(body(cb, '    shieldFactor(from) {'), /swarm\?\.faces/);
     assert.match(body(cb, '    _blocked(from, kind = null) {'), /swarm\.took/);
 });
+
+test('the wild magic plants (MagicFlora.js: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees): every place that burns / blasts / gathers knows them; their tables say what acts on them', async () => {
+    const g = src('src/game/Game.js');
+    const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
+    assert.match(blast, /flora\?\.hitAt/, 'a blast (Bombardo, Maxima, the gods\' blasts) reaches the plants');
+    assert.match(body(g, '            lightningAt:'), /flora\?\.hitAt/, 'lightning burns them');
+    assert.match(body(g, '            birdRay:'), /flora\?\.hitRay/, 'rays (Inferno, Thunderwave) reach them');
+    assert.match(body(g, '    _burnRay('), /flora\?\.hitRay/, 'the Inferno stream burns them');
+    assert.match(g, /flora\?\.gatherAt/, '«Gather» takes the ripe parts');
+    const { floraHarm, FLORA_ORDER, FLORA_SPELLS, FLORA_TARGETS } = await import('../../src/game/MagicFlora.js');
+    for (const k of FLORA_ORDER) {
+        assert.equal(floraHarm(k, 'Inferno') === 'burn' || floraHarm(k, 'Inferno') === 'melt', true, `${k}: fire`);
+        assert.equal(floraHarm(k, 'Bombardo'), 'destroy', `${k}: blast`);
+        assert.equal(floraHarm(k, 'Frozen'), 'none', `${k}: cold`);
+        assert.equal(floraHarm(k, 'Alive'), 'none', `${k}: Alive`);
+        assert.equal(floraHarm(k, 'Overgrown'), 'none', `${k}: Overgrown`);
+    }
+    assert.ok(FLORA_SPELLS.alive && FLORA_SPELLS.overgrown && FLORA_SPELLS.avada, '«не действует» is written with its reason');
+    for (const k of Object.keys(KINDS)) assert.ok(Object.keys(FLORA_TARGETS).length >= 14, k);
+});

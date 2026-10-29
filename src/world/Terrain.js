@@ -249,7 +249,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 11;
+export const WORLD_GEN = 12;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -269,9 +269,12 @@ export const PENT_STAND_FROM_GEN = 10;
  * Older worlds keep the palace and the dragon on the test mountain (their saves lie on that ground).
  */
 export const SPAWN_MAPS_FROM_GEN = 11;
+/** The first generation with the Baksadi (the huge violet magic tree with pears: AppleTrees.js, Animals.js) and the new wild plants (MagicFlora.js: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees). Older worlds have none. */
+export const BAKSADI_FROM_GEN = 12;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 11: the Creative bosses' places apart (SPAWN_MAPS_FROM_GEN): the dragon in its lair, the ice castle far off, the spider's den.
+// 12: the Baksadi and the new wild plants (BAKSADI_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).

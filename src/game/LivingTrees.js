@@ -345,7 +345,7 @@ export class LivingTrees {
             graves = maxima ? (grave.castle?.graves || [grave.grave]).filter((q) => !open(q)) : open(grave.grave) ? [] : [grave.grave];
             if (!graves.length) return say(maxima ? '💀 На этом кладбище все могилы уже разрыты' : '💀 Эта могила уже разрыта — в ней никого нет');
         } else {
-            if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
+            if (aim?.golden) return say(aim.golden.baksadi ? '🌳 Баксади не оживает — это древнее магическое дерево, его корни слишком глубоки' : aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
             if (!aim) return say(`🌳 Направьте руку на дерево или могилу (не дальше ${ALIVE.AIM} м) и скажите «Alive»`);
             trees = maxima ? [aim, ...this._treesRound(aim)] : [aim];
         }

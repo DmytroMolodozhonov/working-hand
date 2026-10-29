@@ -34,6 +34,9 @@ import { woolModel, logsModel } from './BedModels.js';
 import { LORE_BY_ID } from './LoreBooks.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
+import { pearGeometry } from './AppleTrees.js';
+import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
+import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
@@ -126,6 +129,8 @@ export const ITEM_INFO = {
     hammer: { name: 'Молот Тора', icon: '🔨', weight: 4 },
     apple: { name: 'Золотое яблоко', icon: '🍏', weight: 0.2, stack: 10 },
     redApple: { name: 'Яблоко', icon: '🍎', weight: 0.2, stack: 10, heal: 3 }, // (an ordinary apple from an apple tree)
+    ...FLORA_ITEMS, // (the wild plants' things: glowcap_mushroom, fern_frond, azure_berry, sun_herb, frost_shard — MagicFlora.js)
+    baksadi_pear: { name: 'Груша Баксади', icon: '🍐', weight: 0.3, stack: 10, heal: 12 }, // (the Baksadi's pear: more than a golden apple's 10; an ingredient of the potion that lifts a dark mage's curse — its id is fixed)
     meat: { name: 'Сырое мясо', icon: '🥩', weight: 0.4, stack: 10 },
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
@@ -204,6 +209,9 @@ function baseValue(it) {
         case 'book': return 50;
         case 'apple': return 12 * (it.count || 1);
         case 'redApple': return 1 * (it.count || 1);
+        case 'baksadi_pear': return 18 * (it.count || 1);
+        case 'glowcap_mushroom': case 'fern_frond': case 'frost_shard': return 4 * (it.count || 1);
+        case 'azure_berry': case 'sun_herb': return 2 * (it.count || 1);
         case 'meat': return 1 * (it.count || 1);
         case 'steak': return 3 * (it.count || 1);
         case 'arrows': return Math.max(1, Math.round((it.count || 1) * 0.6));
@@ -652,6 +660,8 @@ function describeItemBase(it) {
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 40% за золотое яблоко'] };
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': return { title: `${FLORA_ITEMS[it.kind].icon} ${FLORA_ITEMS[it.kind].name}`, color: FLORA_ITEM_TEXT[it.kind].color, lines: FLORA_ITEM_TEXT[it.kind].lines };
+        case 'baksadi_pear': return { title: '🍐 Груша Баксади', color: 0xb98cff, lines: ['Поднесите ко рту: +12 HP — больше, чем даёт золотое яблоко', 'Растёт на огромном фиолетовом дереве Баксади', 'Нужна для зелья, снимающего проклятие тёмного мага'] };
         case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 9% за яблоко'] };
         case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
         case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
@@ -970,6 +980,17 @@ function appleModel(it, red = false) {
     return g;
 }
 
+/** A Baksadi pear in the hand: the tree's pear (AppleTrees.pearGeometry — the same shape), a faint lilac glow, a little leaf on the stalk. */
+function pearModel() {
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(pearGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.38, metalness: 0.1, emissive: 0x8a4cd8, emissiveIntensity: 0.4, vertexColors: true }));
+    m.scale.setScalar(0.42);
+    m.position.y = -0.02;
+    g.add(m);
+    g.add(box(0.07, 0.008, 0.032, mat(0x7a3fb8), 0.045, 0.1)).rotation.z = 0.35;
+    return g;
+}
+
 function breadModel() {
     const g = new THREE.Group();
     g.add(box(0.3, 0.12, 0.15, mat(0xc68a3e)));
@@ -1005,7 +1026,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1027,6 +1048,8 @@ function buildItemModel(it) {
         case 'iceRod': return iceRodModel();
         case 'apple': return appleModel(it);
         case 'redApple': return appleModel(it, true);
+        case 'baksadi_pear': return pearModel();
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': return floraItemModel(FLORA_OF_ITEM[it.kind]);
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);

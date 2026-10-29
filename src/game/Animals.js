@@ -37,7 +37,8 @@ import { setNearShadow, SHADOW_NEAR } from '../core/Shadows.js';
 import { FarShape } from '../core/FarShape.js';
 import { animalMagicKind, creditKill } from './Mana.js';
 import { newUid } from './ItemTypes.js';
-import { BLOCK } from '../world/Terrain.js';
+import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
+import { FLORA_ITEMS } from './MagicFlora.js';
 import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, PEGASUS_COLOR } from './AnimalModels.js';
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
@@ -49,7 +50,7 @@ import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
 import { sitesNear, siteAt } from './HerdSites.js';
 import { animalBonesModel, hasSkeleton } from './AnimalBones.js';
-import { appleTreeModel, pulseGolden } from './AppleTrees.js';
+import { appleTreeModel, baksadiTreeModel, pulseGolden } from './AppleTrees.js';
 /** Animals far off (Animals._lookFar): drawn as one shape, posed rarely. */
 export const FAR = { LOD: 45, DISTANT: 130, STEP: 0.12, DISTANT_STEP: 0.3, BUILDS: 4, THINK: 0.05, THINK_DISTANT: 0.1 };
 const _farF = new THREE.Frustum(), _farM = new THREE.Matrix4(), _farS = new THREE.Sphere();
@@ -147,12 +148,18 @@ function bx(g, w, h, d, c, x, y, z) {
 export { sampleBones as bonesModels } from './AnimalBones.js';
 
 /** The odds of an apple tree in a 110 m cell: golden (rare), an ordinary apple tree with red apples (common). */
-export const APPLE_TREES = { CELL: 110, GOLDEN: 0.15, RED: 0.65 };
-/** What grows in the cell (gx, gz) of a world (seed): 'golden' | 'red' | null — the same on every computer. */
-export function appleTreeAt(gx, gz, seed) {
+export const APPLE_TREES = { CELL: 110, GOLDEN: 0.15, RED: 0.65, BAKSADI: 0.195 };
+/**
+ * What grows in the cell (gx, gz) of a world (seed, generation gen): 'golden' | 'red' | 'baksadi' | null — the same on every computer.
+ * The Baksadi (worlds of BAKSADI_FROM_GEN and newer) grows 30% more often than the golden tree: 0.195 = 0.15 × 1.3 — in the cells that
+ * held nothing (the top of the same roll: nothing else in the world moves).
+ */
+export function appleTreeAt(gx, gz, seed, gen = 1) {
     const h = (a, b) => { let x = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 1442695041)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
     const r = h(gx * 3 + 1, gz * 7 + 2);
-    return r < APPLE_TREES.GOLDEN ? 'golden' : r < APPLE_TREES.GOLDEN + APPLE_TREES.RED ? 'red' : null;
+    if (r < APPLE_TREES.GOLDEN) return 'golden';
+    if (r < APPLE_TREES.GOLDEN + APPLE_TREES.RED) return 'red';
+    return gen >= BAKSADI_FROM_GEN && r >= 1 - APPLE_TREES.BAKSADI - 0.005 && r < 1 - 0.005 ? 'baksadi' : null;
 }
 
 /**
@@ -161,6 +168,10 @@ export function appleTreeAt(gx, gz, seed) {
  */
 export function goldenTreeModel(red = false, pick = 0) {
     return appleTreeModel(red, pick);
+}
+/** The Baksadi (AppleTrees.js): a huge violet tree with pears. */
+export function baksadiModel(pick = 0) {
+    return baksadiTreeModel(pick);
 }
 
 // =================================================================== system
@@ -528,7 +539,7 @@ export class Animals {
         const g = this.game;
         if (side && !g.items.held[side] && !g.weapons.hands[side].held) g.items.takeIntoHand(item, side);
         else g.inventory.storeItem(item);
-        g.hud.setVoice?.({ steak: '🍖 Стейк взят', apple: '🍏 Золотое яблоко взято', redApple: '🍎 Яблоко взято' }[item.kind] || '🥩 Мясо взято', true);
+        g.hud.setVoice?.({ steak: '🍖 Стейк взят', apple: '🍏 Золотое яблоко взято', redApple: '🍎 Яблоко взято', baksadi_pear: '🍐 Груша Баксади взята' }[item.kind] || (FLORA_ITEMS[item.kind] ? `${FLORA_ITEMS[item.kind].icon} ${FLORA_ITEMS[item.kind].name} — взято` : '🥩 Мясо взято'), true);
     }
 
     /** A night slept through: carcasses are older by that much. */
@@ -571,7 +582,7 @@ export class Animals {
             if (to.length() > 12 || d.angleTo(to.normalize()) > 0.35) continue;
             let n = 0;
             tr.apples.forEach((ap, i) => { if (ap.until <= Date.now()) { this._pickApple(tr, i, g.localId, null); n++; } });
-            return n ? `✨ Gather: ${n} ${tr.red ? 'яблок' : 'золотых яблок'}` : '🍏 Яблок пока нет — вырастут через несколько минут';
+            return n ? `✨ Gather: ${n} ${tr.baksadi ? 'груш Баксади' : tr.red ? 'яблок' : 'золотых яблок'}` : tr.baksadi ? '🍐 Груш пока нет — вырастут через несколько минут' : '🍏 Яблок пока нет — вырастут через несколько минут';
         }
         return null;
     }
@@ -604,14 +615,15 @@ export class Animals {
             const key = gx + ',' + gz;
             if (this.trees.has(key)) continue;
             const h = (a, b) => { let x = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(seed, 1442695041)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
-            const kind = appleTreeAt(gx, gz, seed); // (golden — rare; an ordinary apple tree — common)
+            const kind = appleTreeAt(gx, gz, seed, this.game.gen ?? 1); // (golden — rare; an ordinary apple tree — common; the Baksadi — a little commoner than the golden)
             if (!kind) { this.trees.set(key, null); continue; }
             const x = Math.round(gx * CELL + 15 + h(gx, gz) * (CELL - 30)), z = Math.round(gz * CELL + 15 + h(gz + 5, gx - 3) * (CELL - 30));
             if (Math.hypot(x, z) < 40) { this.trees.set(key, null); continue; }
             const top = t.topLayer(x, z);
             if (t.get(x, top, z) !== BLOCK.GRASS) { this.trees.set(key, null); continue; }
             const y = top - 0.5;
-            const model = goldenTreeModel(kind === 'red', h(gx + 17, gz - 11));
+            const baksadi = kind === 'baksadi';
+            const model = baksadi ? baksadiModel(h(gx + 17, gz - 11)) : goldenTreeModel(kind === 'red', h(gx + 17, gz - 11));
             model.position.set(x, y, z);
             model.rotation.y = h(gx - 7, gz + 29) * Math.PI * 2;
             this.game.scene.add(model);
@@ -619,10 +631,11 @@ export class Animals {
             model.updateMatrixWorld(true);
             model.userData.farRadius = new THREE.Box3().setFromObject(model).getSize(_v2).length() * 0.6 + 1;
             const one = new FarShape(model);
-            const boxId = this.game.collision.addBox({ minX: x - 0.45, maxX: x + 0.45, minY: y, maxY: y + 4, minZ: z - 0.45, maxZ: z + 0.45, kind: 'tree', noSupport: true });
+            const rr = baksadi ? Math.max(0.9, model.userData.trunkR * 1.05) : 0.45; // (the Baksadi's trunk is thick: you walk round it)
+            const boxId = this.game.collision.addBox({ minX: x - rr, maxX: x + rr, minY: y, maxY: y + (baksadi ? 9 : 4), minZ: z - rr, maxZ: z + rr, kind: 'tree', noSupport: true });
             const was = picked.get(key);
             picked.delete(key);
-            const tr = { key, x, y, z, model, boxId, red: kind === 'red', one, apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) };
+            const tr = { key, x, y, z, model, boxId, red: kind === 'red', baksadi, one, apples: model.userData.apples.map((_, i) => ({ until: was?.[i] || 0 })) };
             const A = model.userData.apples, now = Date.now();
             for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; A[i].userData.noFar = !grown; A[i].visible = grown; }
             one.set(true);
@@ -638,7 +651,7 @@ export class Animals {
         am.visible = false; am.userData.noFar = true;
         tr.one?.check();
         if (this.game.sync && this.auth) this.game.sync.appleGone?.(tr.key, i, ap.until);
-        const item = { kind: tr.red ? 'redApple' : 'apple', uid: newUid(), count: 1 };
+        const item = { kind: tr.baksadi ? 'baksadi_pear' : tr.red ? 'redApple' : 'apple', uid: newUid(), count: 1 };
         if (toId === this.game.localId) this._give(item, side);
         else this.game.sync?.animalMeatTo?.(toId, item, side);
     }
@@ -1715,8 +1728,24 @@ export class Animals {
             let changed = false;
             for (let i = 0; i < A.length; i++) { const grown = tr.apples[i].until <= now; if (!!A[i].userData.noFar === grown) { A[i].userData.noFar = !grown; A[i].visible = grown && !tr.one; changed = true; } }
             if (changed && tr.one) tr.one.check();
+            // the Baksadi: pollen and little lights drift about the crown and rise from the pears (near enough to be seen; the shared pool)
+            if (tr.baksadi && g.fx?.glow && Math.abs(tr.x - me.x) + Math.abs(tr.z - me.z) < 70) {
+                const cr = tr.model.userData.crown;
+                if (Math.random() < dt * 5) {
+                    const a = Math.random() * 6.283, d = Math.sqrt(Math.random()) * cr.rx * 0.9;
+                    g.fx.glow.spawn(tr.x + Math.cos(a) * d, tr.y + cr.cy + (Math.random() - 0.5) * (cr.top - cr.cy) * 1.4, tr.z + Math.sin(a) * d, (Math.random() - 0.5) * 0.4, 0.15 + Math.random() * 0.35, (Math.random() - 0.5) * 0.4,
+                        [0xd6b0ff, 0xb98cff, 0x9fe8ff, 0xf0d8ff][Math.floor(Math.random() * 4)], 0.14 + Math.random() * 0.18, 3 + Math.random() * 2.5, { shrink: 0.5 });
+                }
+                if (Math.random() < dt * 2) {
+                    const ap = A[Math.floor(Math.random() * A.length)];
+                    if (ap && !ap.userData.noFar) {
+                        ap.getWorldPosition(_v2);
+                        g.fx.glow.spawn(_v2.x + (Math.random() - 0.5) * 0.3, _v2.y + 0.2, _v2.z + (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.15, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.15, 0xe2c4ff, 0.12 + Math.random() * 0.1, 1.8 + Math.random(), { shrink: 0.6 });
+                    }
+                }
+            }
             // golden sparkles rise from its apples now and then (near enough to be seen)
-            if (!tr.red && g.fx?.glow && Math.random() < dt * 3 && Math.abs(tr.x - me.x) + Math.abs(tr.z - me.z) < 90) {
+            if (!tr.red && !tr.baksadi && g.fx?.glow && Math.random() < dt * 3 && Math.abs(tr.x - me.x) + Math.abs(tr.z - me.z) < 90) {
                 const ap = A[Math.floor(Math.random() * A.length)];
                 if (ap && !ap.userData.noFar) {
                     ap.getWorldPosition(_v2);

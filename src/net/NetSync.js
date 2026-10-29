@@ -729,6 +729,9 @@ export class NetSync {
     animalGather(id) { this.net.send({ t: 'agath', id }); }
     applePick(key, i, side) { this.net.send({ t: 'apick', key, i, side }); }
     appleGone(key, i, until) { if (this.net.isHost) this.net.send({ t: 'agone', key, i, until }, true); }
+    floraPick(id, i, side) { this.net.send({ t: 'flpick', id, i, side }); }
+    floraGone(id, i, until) { if (this.net.isHost) this.net.send({ t: 'flgone', id, i, until }, true); }
+    floraKill(id, how) { if (this.net.isHost) this.net.send({ t: 'flkill', id, how }, true); }
     animalFeed(id) { this.net.send({ t: 'afeed', id }); }
     animalRide(id, on) { this.net.send({ t: 'aride', id, on: on ? 1 : 0, by: this.me }, true); }
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
@@ -1066,6 +1069,9 @@ export class NetSync {
             case 'agive': if (m.to === this.me && m.item) g.animals?._give(m.item, m.side); break;
             case 'apick': if (this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr) g.animals._pickApple(tr, m.i, m.from, m.side); } break;
             case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
+            case 'flpick': if (this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) g.flora.pick(pl, m.i, m.from, m.side); } break;
+            case 'flgone': if (!this.net.isHost) g.flora?.netGone(m.id, m.i, m.until); break;
+            case 'flkill': if (!this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) { if (m.how === 'burn') g.flora.ignite(pl, true); else g.flora.kill(pl, m.how, true); } } break;
             case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
             case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on && !a.pegasus) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; a.flyCode = m.p[4] || 0; } } break; // (a Pegasus in flight: its wings)

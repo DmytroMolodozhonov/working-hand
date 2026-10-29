@@ -52,7 +52,7 @@ import { WandMagic } from './WandMagic.js';
 import { Gear } from './Gear.js';
 import { Bleeding } from './Bleeding.js';
 import { Dismemberment } from './Dismember.js';
-import { Animals, animalModel, goldenTreeModel, bonesModels } from './Animals.js';
+import { Animals, animalModel, goldenTreeModel, baksadiModel, bonesModels } from './Animals.js';
 import { PEGASUS_COLOR } from './AnimalModels.js';
 import { FarShape, skinnedSamples } from '../core/FarShape.js';
 import { installSceneMatrices } from '../core/SceneMatrices.js';
@@ -129,6 +129,7 @@ import { DRAGON_WAND_FIRE } from './DragonKinds.js';
 import { Phoenixes, phoenixModel } from './Phoenixes.js';
 import { Owls } from './Owls.js';
 import { Plants } from './Plants.js';
+import { MagicFloraLife } from './MagicFloraLife.js';
 import { plantSamples } from '../fx/PlantModels.js';
 import { Gargoyles } from './Gargoyles.js';
 import { LivingTrees } from './LivingTrees.js';
@@ -400,7 +401,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
             roofAt: (x, y, z) => roofAbove(this, x, y, z), // («Thunderwave»: a roof over the point takes the bolt)
@@ -419,6 +420,7 @@ export class Game {
                 if (this.authority) this.spiders?.hitRay(o, d, len, width, name === 'Inferno' ? 8 : name === 'Thunderwave' ? 8 : 5, name);
                 if (this.authority) { this.dragons?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); if (name === 'Thunderwave') this.dragons?.noise(o); } // (dragons: fire does nothing — DragonKinds.ON_DRAGON)
                 if (this.authority) this.phoenixes?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (fire and ice: no harm to a phoenix — Phoenixes.TARGETS)
+                if (this.authority) this.flora?.hitRay(o, d, len, width, 5, name); // (wild plants: fire burns, cold does nothing — MagicFlora.floraHarm)
                 if (this.authority) this.plants?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (plants: a ray cuts them; cold kills a flower, freezes a head)
                 if (this.authority) this.owls?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); this.gargoyles?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (an owl: only a scroll's ray hurts it — «Тандервейв»; the rest it darts away from — Owls.TARGETS)
                 if (this.authority) this.iceCastle?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the Ice Castle: by IceQueen.iceDamage — fire melts, the plain spells nothing on the queen)
@@ -600,6 +602,7 @@ export class Game {
         this.temple = new Temple(this); // the abandoned Temple of the Gods (Venus — GodsTemple.js; Creative test on Earth: temple.placeTest())
         this.zombieSpawn = new ZombieSpawn(this); // zombies come out of the dark: caves, the night (ZombieSpawn.js)
         this.gargoyles = new Gargoyles(this); // the infernal gargoyles of the pentagram: not met anywhere else; 30 at a ritual (Gargoyles.js)
+        this.flora = new MagicFloraLife(this); // wild magic plants: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees (MagicFlora.js; worlds of BAKSADI_FROM_GEN and newer)
         this.plants = new Plants(this); // plant creatures: telewilpins (thorny red glowing flowers) and carnivorous heads (Plants.js)
         this.owls = new Owls(this); // clever owls: curious, fed with meat they love you and lead you to a boss once (Owls.js)
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
@@ -1171,7 +1174,7 @@ export class Game {
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
         if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
-        if (authoritative) { this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
+        if (authoritative) { this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -2761,6 +2764,8 @@ export class Game {
                 this._lastBuild = now;
                 return 'Gather';
             }
+            const flo = this.flora?.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
+            if (flo) { this.hud.setVoice(flo, true); if (flo.startsWith('✨')) this._lastBuild = now; return flo.startsWith('✨') ? 'Gather' : null; }
             const got = this.animals.gatherAt(this.character.getHandWorldPosition(side), this.character.getHandDirection(side));
             if (got && !got.startsWith('🍏')) { this.hud.setVoice(got, true); this._lastBuild = now; return 'Gather'; }
             if (got) { if (isFinal) this.hud.setVoice(got, true); return null; }
@@ -2940,6 +2945,7 @@ export class Game {
             this.phoenixes?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId); // (fire: no harm to a phoenix, but an attack)
             this.owls?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId);
             this.plants?.hitRay(o, d, len, 0.6, 4, 'Inferno', casterId); // (fire: plants burn fast)
+            this.flora?.hitRay(o, d, len, 0.6, 4, 'Inferno'); // (the wild plants burn too)
             this.gargoyles?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId); // (hellish: fire does not touch a gargoyle, but it is an attack) // (an owl: no scroll's spell — it darts away)
             if (this.iceCastle?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId)) hit = true; // (the Ice Castle's creatures: fire is what they fear — ×2)
             if (this.castleLife?.hitRay(o, d, len, 0.4, 1, casterId)) hit = true; // villagers, knights, wizards
@@ -3286,7 +3292,7 @@ export class Game {
         const out = [];
         for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
         out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'), { kind: 'scroll', stat: 'hp' }, { kind: 'scroll', stat: 'fatigue' });
-        for (const kind of ['apple', 'redApple', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'telewilpinLeaf', 'carnivoreHead']) out.push({ kind });
+        for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'telewilpinLeaf', 'carnivoreHead']) out.push({ kind });
         out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
         for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
@@ -3336,7 +3342,7 @@ export class Game {
         // (every look of a pig and a cow: each paints its own hide picture the first time — a herd
         // met in flight made the frame wait for them)
         for (let k = 1; k <= 4; k++) zoo.add(animalModel('pig', k), animalModel('cow', k));
-        zoo.add(...[goldenTreeModel(), goldenTreeModel(true)].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
+        zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
@@ -3642,6 +3648,7 @@ export class Game {
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
         if (earth && !duelOnly) this.plants.update(dt);
+        if (earth && !duelOnly) this.flora?.update(dt);
         if (earth && !duelOnly) { // (one system's fault must not end the game: the full stack goes to the console, the game goes on)
             try { this.gargoyles.update(dt); } catch (e) { if ((this._gargErr = (this._gargErr || 0) + 1) <= 5) console.error('[Gargoyles] update error', e); }
         }
@@ -4609,6 +4616,7 @@ export class Game {
         this.phoenixes?.dispose();
         this.owls?.dispose();
         this.plants?.dispose();
+        this.flora?.dispose();
         this.gargoyles?.dispose();
         this.livingTrees?.dispose();
         this.servants?.dispose();
