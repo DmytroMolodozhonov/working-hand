@@ -142,6 +142,20 @@ export function chooseShield(sit, rng = Math.random) {
     return 'hand';
 }
 
+/**
+ * A gust («Wind» / «Wind Maxima») is coming at him from `dist` m: the strong ones (the Master, 300+ mana) raise «Protection Maxima» —
+ * not even the air gets through it (Steadiness.windShieldRule); the simple ones (novice, adept, teacher) only the hand «Protection»,
+ * which does not hold a Wind Maxima (only the Master's 100 stays on his feet behind it). Closer than WIND_FAR he has no time.
+ * sit: {spell, dist, mana, maxMana, rank, domeReady} → 'dome' | 'hand' | null
+ */
+export const WIND_SHIELD = { FAR: 8, IN_TIME: 1.2 }; // m: the least distance to see it coming; s: a reaction at most this long is in time for the gust itself
+export function windShield(sit) {
+    if (sit.spell !== 'Wind' && sit.spell !== 'WindMaxima') return null;
+    if ((sit.dist ?? 0) < WIND_SHIELD.FAR || sit.mana < SHIELD.COST_HAND) return null;
+    if (canDome(sit.maxMana ?? sit.mana, sit.rank) && sit.domeReady !== false && sit.mana >= SHIELD.COST_DOME + 6) return 'dome';
+    return 'hand';
+}
+
 // ------------------------------------------------------------------ 5. hunt
 /**
  * How the people of a place go after a criminal, by the (hidden) wanted level 0…3 (Wanted.js).

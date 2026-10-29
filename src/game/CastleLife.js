@@ -3601,7 +3601,7 @@ export class CastleLife {
      * CreatureImpact). The ones it hit only protest now and then; a wizard now and then takes it as a challenge (one fighter
      * against the one who blew — nobody else joins, nobody is called).
      */
-    windRay(o, d, len, width, by) {
+    windRay(o, d, len, width, by, name = 'Wind') {
         if (!this.auth || !this._isPlayer(by)) return;
         const now = Date.now();
         for (const v of this.byId.values()) {
@@ -3610,6 +3610,7 @@ export class CastleLife {
             const along = to.dot(d);
             if (along < 0 || along > len || to.addScaledVector(d, -along).length() > width + 1.2) continue;
             v.windAt = now;
+            if (v.wizard) this.wizards.windWatch(v, name, Math.hypot(v.x - o.x, v.z - o.z), o); // (a wizard sees it coming: a shield — before the push)
             if (this.game.arenaDuels?.calm(v, by) || v.foe || by === this.state(v.cs.def.id).owner) continue;
             // (a gust is never punished: no duel, no alarm, no hostility — only a grumble now and then, once a minute at most)
             if (now - (v.windSaid || 0) > LESSON.WIND_TALK_MS && Math.random() < 0.4) { v.windSaid = now; this._say(v, pick(v.wizard ? SHOUT.windedWiz : SHOUT.winded), 3); }

@@ -298,3 +298,16 @@ test('a great fire: the wizard runs for a safe place (shelter), the shield goes 
     const small = mk(); wl.fireRun(small, 50, 0, 20, 0.01);
     assert.ok(!small.shelter, 'only the heat of a far edge: nothing yet');
 });
+
+import { windShield } from '../../src/game/WizardMind.js';
+test('ветер издалека: глава и сильные (300+ маны) ставят Protection Maxima, адепт — только Protection; вблизи не успевают', () => {
+    const base = { spell: 'WindMaxima', dist: 12, mana: 500, maxMana: 500, domeReady: true };
+    assert.equal(windShield({ ...base, rank: 'master' }), 'dome');
+    assert.equal(windShield({ ...base, rank: 'elder' }), 'dome');
+    assert.equal(windShield({ ...base, rank: 'adept', mana: 150, maxMana: 150 }), 'hand');
+    assert.equal(windShield({ ...base, rank: 'novice', mana: 80, maxMana: 80 }), 'hand');
+    assert.equal(windShield({ ...base, rank: 'master', dist: 5 }), null);
+    assert.equal(windShield({ ...base, rank: 'master', spell: 'Bombardo' }), null);
+    assert.equal(windShield({ ...base, rank: 'master', domeReady: false }), 'hand');
+    assert.equal(windShield({ ...base, rank: 'adept', mana: 2, maxMana: 150 }), null);
+});

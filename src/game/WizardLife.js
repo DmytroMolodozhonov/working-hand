@@ -16,13 +16,14 @@
  * as `v.fx` bits and is drawn by src/fx/WizardFx.js on every computer.
  */
 
-import { WIZ, WIZ_ROLE_RU, wizardRoster, wizardStats, rollMana } from './WizardAI.js';
+import { WIZ, WIZ_ROLE_RU, NPC_COST, wizardRoster, wizardStats, rollMana } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
 import { WizardFx, FX } from '../fx/WizardFx.js';
+import { turnToward, yawTo } from './FaceTarget.js';
 import { WizardFight } from './WizardFight.js';
 import { DANGERS } from './Danger.js';
 import { staffVillage, crowdVillage, villageTrip } from './WizVillages.js';
-import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntRole, huntStart, huntStep, huntLeash, seededRng, LONERS, npcSweeps, SMOKE, MAGIC_REACT, reaction, chooseShield } from './WizardMind.js';
+import { reactLag, reactLagText, knowsFirefighting, canDome, SHIELD, HUNT, huntRole, huntStart, huntStep, huntLeash, seededRng, LONERS, npcSweeps, SMOKE, MAGIC_REACT, reaction, chooseShield, windShield, WIND_SHIELD } from './WizardMind.js';
 import { hashString } from '../core/math.js';
 
 export { FX };
@@ -289,6 +290,28 @@ export class WizardLife {
         if (to) v.yaw = turn(v.yaw, Math.atan2(-(to.x - v.x), -(to.z - v.z)), dt * 4);
         v.mode = 'idle';
         this.life._ground(v);
+    }
+
+    /**
+     * (host) A wizard stands in the cone of a «Wind» / «Wind Maxima» (CastleLife.windRay, which runs before the push): a strong one
+     * raises «Protection Maxima», a simple one the hand «Protection» — if his reaction time (REACT_LAG) is in time for the gust;
+     * slower, and the gust takes him unprepared (the log says so).
+     */
+    windWatch(v, name, dist, from) {
+        if (v.dead || v.noWand || v.sleep || (v.fx & (FX.DOME | FX.SHIELD)) === (FX.DOME | FX.SHIELD)) return;
+        const pick = windShield({ spell: name, dist, mana: v.mana, maxMana: v.maxMana, rank: v.rank, domeReady: !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME) });
+        if (!pick) return;
+        const lag = v.reactLag || { t: 0.5, level: 2 };
+        const ready = (v.cs?.alertUntil || 0) > Date.now() || (v.readyUntil || 0) > Date.now() || !!(v.fx & FX.SHIELD);
+        if ((ready ? lag.t * 0.4 : lag.t) > WIND_SHIELD.IN_TIME) { this.life.alog?.decision(v, `ветер ${name} с ${Math.round(dist)} м: ${reactLagText(lag)} — не успел поставить щит`); return; }
+        if (from) v.yaw = turnToward(v.yaw, yawTo(v.x, v.z, from.x, from.z), 3.2); // (turns to the caster: the hand shield covers the front only)
+        if (pick === 'dome') {
+            this.fight._dome(v);
+            if (v.fx & FX.DOME) { this.life.alog?.decision(v, `поставил Protection Maxima: на него идёт ${name} (${Math.round(dist)} м)`); return; }
+        }
+        if (!(v.fx & FX.SHIELD)) v.mana -= NPC_COST.Protection;
+        v.shieldT = Math.max(v.shieldT || 0, 1.4); v.fx |= FX.SHIELD;
+        this.life.alog?.decision(v, `поставил Protection: на него идёт ${name} (${Math.round(dist)} м)`);
     }
 
     /** (host) Do it after his own reaction time; the log says how long and why («решение:»). */
