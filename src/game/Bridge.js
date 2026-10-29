@@ -63,6 +63,7 @@ export const BRIDGE_TARGETS = {
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
     spencer: { does: 'none', why: 'не касается' },
+    ghost: { does: 'none', why: 'не касается: призрак бестелесный' },
     custom: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
     blocks: { does: 'build', why: 'кладёт блоки того же материала, что и края (камень, земля, песок, снег, лёд, блок замка), только в пустоту и воду; землю, стены, чужие блоки не трогает' },

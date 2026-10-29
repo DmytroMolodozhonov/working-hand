@@ -20,6 +20,7 @@ const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
 const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
+const _ghostFog = new THREE.Color(0x474c63); // (the haze round the Castle of Ghosts: a cold grey-violet mist)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
 export const NIGHT_START = 0.75;
@@ -128,7 +129,7 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle);
             this.createSkybox();
         }
     }
@@ -213,6 +214,14 @@ export class VoxelWorld {
         this.setStorm(this.storm || 0);
     }
 
+    /** The haze round the Castle of Ghosts (0 = none, 1 = in the castle): a cold mist, the sky dimmer, the view shorter (GhostCastleLife). */
+    setGhostHaze(k) {
+        if (Math.abs(k - (this.ghostHaze || 0)) < 0.01) return;
+        this.ghostHaze = k;
+        if (!this._base) this._rememberBase(this._night ?? 0);
+        this.setStorm(this.storm || 0);
+    }
+
     /** Inside a castle / house (0..1): no sun, but warm light from lanterns and windows. */
     setIndoor(k) {
         if (Math.abs(k - (this.indoor || 0)) < 0.01) return;
@@ -237,13 +246,15 @@ export class VoxelWorld {
         // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
         const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
         const boost = lightBoost(nv, darkness(b.night, cv)); // (the night gift: ×1…1.5 as dark as it is — the same lights, no new ones)
-        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost;
-        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind) * (1 + (boost - 1) * 0.6);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * fill * boost;
+        const gh = this.ghostHaze || 0, ghd = 1 - 0.3 * gh; // (the Castle of Ghosts' haze: a dimmer day)
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost * ghd;
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind) * (1 + (boost - 1) * 0.6) * (1 - 0.5 * gh);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * fill * boost * ghd;
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
             this.scene.fog.color.lerp(_caveFog, 0.7 * cv); // (far down a tunnel: the dark, not a bright haze)
+            if (gh > 0) { this.scene.fog.color.lerp(_ghostFog, 0.6 * gh); if (this.scene.background && this.scene.background.isColor) this.scene.background.lerp(_ghostFog, 0.35 * gh); }
         }
         this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
         this.sky?.setOvercast?.(k); // (the clouds cover the sunset and the stars)
@@ -313,9 +324,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);
@@ -973,7 +984,7 @@ export class VoxelWorld {
             // How far is drawn (settings) × what the graphics level allows; in flight the
             // view opens up by the same metres at every distance, so the land below is visible
             const q = this.viewScale ?? 1, d = this.viewDistance ?? 1;
-            let far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
+            let far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear * d + viewBoost * 40, far * 0.5);

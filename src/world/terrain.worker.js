@@ -44,6 +44,23 @@ self.onmessage = (e) => {
         data.skipSeaTop = !!m.skipSeaTop;
         return;
     }
+    if (m.type === 'ghostOn' && data?.ghost) {
+        // the Castle of Ghosts in / out of this computer's land (a seer's): the next chunks are made the new way (GhostCastle.js)
+        data.ghost.on = !!m.on;
+        data.ghost.passive = false;
+        return;
+    }
+    if (m.type === 'ghostDrop' && data) {
+        // the castle's chunks made the old way are forgotten (here and what the main thread shared) — made again when wanted
+        for (const k of m.keys || []) { data.chunks.delete(k); shared.delete(k); }
+        data._last = null;
+        return;
+    }
+    if (m.type === 'ghost' && data?.ghost) {
+        // the Castle of Ghosts' cells round a hero (a worker decides them: the main thread must not)
+        self.postMessage({ type: 'ghost', id: m.id, key: m.key, cells: data.ghost.export9(m.x, m.z, !!m.lite) });
+        return;
+    }
     if (m.type === 'planets' && data) {
         // the planets changed (made, terraformed…: Planets.js) — their ground is made by the new recipe
         data.setPlanets(m.s);

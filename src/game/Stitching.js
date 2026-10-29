@@ -274,6 +274,7 @@ export const STITCH_TARGETS = {
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
     spencer: { does: 'none', why: 'не касается' },
+    ghost: { does: 'none', why: 'не касается: призрак бестелесный' },
     custom: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
     blocks: { does: 'build', why: 'проход закладывается блоками того же камня / кирпича / дерева, что вокруг; это обычная твёрдая стена — Бомбардо и другие её ломают' },

@@ -78,6 +78,7 @@ export const PENTAGRAM_USE_TARGETS = {
     owl: { does: 'none', why: 'не действует' },
     canary: { does: 'none', why: 'не действует' },
     spencer: { does: 'none', why: 'не действует' },
+    ghost: { does: 'none', why: 'не действует: призрак бестелесный' },
     custom: { does: 'none', why: 'не действует' },
     items: { does: 'mend', why: 'починка брони — только той, что надета на герое; вещи на земле не трогает' },
     ground: { does: 'stay', why: 'постоянные: остаются навсегда (сохраняются), гаснут, если землю под ними изменили; не больше PERM_MAX на мир — самая старая гаснет' },

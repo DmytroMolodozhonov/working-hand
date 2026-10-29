@@ -36,6 +36,7 @@ const KINDS = {
     owls: /owls/,
     'the swamp canaries': /canaries/,
     'the invisible bird of Spencer': /spencers/,
+    'the ghosts of the Castle of Ghosts': /ghosts/,
     'the Ice Castle (queen, snowmen, ice monsters)': /iceCastle/,
     'creatures of one\'s own («Да пусть создастся»)': /customCreatures/,
 };
@@ -61,14 +62,14 @@ test('duel charges («Авада Кедавра», «Остолбеней», «�
 test('blasts, rays and lightning reach every creature', () => {
     const g = src('src/game/Game.js');
     const blast = g.slice(g.indexOf('    explode('), g.indexOf('this.combat.explosion(', g.indexOf('    explode(')));
-    check('Game.explode (Bombardo and other blasts)', blast, ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
-    check('the «birdRay» hook (Sapira, Thunderwave, Ice… rays)', body(g, 'birdRay: (o, d, len, width, name) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
-    check('the «lightningAt» hook', body(g, 'lightningAt: (point, casterId) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
+    check('Game.explode (Bombardo and other blasts)', blast, ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
+    check('the «birdRay» hook (Sapira, Thunderwave, Ice… rays)', body(g, 'birdRay: (o, d, len, width, name) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
+    check('the «lightningAt» hook', body(g, 'lightningAt: (point, casterId) =>'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
     check('the «Инферно» stream (Game._burnRay)', body(g, '    _burnRay(o, d, len, casterId) {'), ['the giant spider', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
 });
 
 test('«Thunderwave» zone (ThunderWave.js) hits every creature kind', () => {
-    check('ThunderWave.strike', src('src/game/ThunderWave.js'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'living trees', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
+    check('ThunderWave.strike', src('src/game/ThunderWave.js'), ['castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'living trees', 'book-birds', 'dragons', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)', 'the ghosts of the Castle of Ghosts']);
 });
 
 test('pushes, knockdowns and gusts («Вайнд», blasts, blows) know every creature (CreatureImpact kinds)', async () => {
@@ -117,23 +118,23 @@ test('«Reveal» and «Акцио» see the running book (a creature and a book 
 test('«Алохомора» decides every creature and every lock (Alohomora.js TARGETS — «не действует» is written too, with why)', async () => {
     const { TARGETS } = await import('../../src/game/Alohomora.js');
     // (the creatures of KINDS, as TARGETS names them; and the players themselves)
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(TARGETS[names[k]]?.why, `Alohomora forgets: ${k}`);
     for (const k of ['players', 'settlementChest', 'caveChest', 'shipChest', 'villagerDoor', 'throneGate', 'playerDoor', 'world']) assert.ok(TARGETS[k]?.why, k);
 });
 
 test('«Вингардиум Левиоса Максима» decides every creature and thing (LevitationMaxima.MAXIMA_TARGETS) and lifts every kind it says it lifts', async () => {
     const { MAXIMA_TARGETS: T } = await import('../../src/game/LevitationMaxima.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(T[names[k]]?.why, `«Левиоса Максима» forgets: ${k}`);
     const m = src('src/game/LevitationMaxima.js');
-    check('LevitationMaxima._bodies (who rises in a group)', body(m, '    _bodies() {'), ALL.filter((k) => !/book-birds|dragons|phoenixes|owls|Spencer|Ice Castle/.test(k)));
+    check('LevitationMaxima._bodies (who rises in a group)', body(m, '    _bodies() {'), ALL.filter((k) => !/book-birds|dragons|phoenixes|owls|Spencer|ghosts|Ice Castle/.test(k)));
     check('LevitationMaxima.crush (who is under what falls)', body(m, '    crush(b, dmg, by, kind, ship = null) {'), ['zombies', 'castle people (villagers, knights, the king, wizards)', 'animals', 'sailors (ships\' crews)', 'the giant spider', 'phoenixes', 'owls', 'the Ice Castle (queen, snowmen, ice monsters)']);
 });
 
 test('«Джолт» decides every creature and thing (Duel.JOLT_TARGETS — «не действует» is written too, with why)', async () => {
     const { JOLT_TARGETS } = await import('../../src/game/Duel.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(JOLT_TARGETS[names[k]], `«Джолт» forgets: ${k}`);
     for (const k of ['me', 'players', 'servants', 'looseThings', 'heldThings', 'world']) assert.ok(JOLT_TARGETS[k], k);
     assert.match(src('src/game/Spider.js'), /spell === 'Jolt'/, 'the spider answers «Джолт» itself');
@@ -159,7 +160,7 @@ test('dragons: every other place spells and blows look for targets knows them (C
 
 test('«Firefighting» decides every creature and thing (Firefighting.FIREFIGHT_TARGETS — «не действует» is written too, with why)', async () => {
     const { FIREFIGHT_TARGETS: T } = await import('../../src/game/Firefighting.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     assert.match(src('src/game/Firefighting.js'), /dragons\?\.list/, 'the dragons\' breath goes out');
     for (const k of ALL) assert.ok(T[names[k]]?.why, `«Firefighting» forgets: ${k}`);
     for (const k of ['me', 'players', 'servants', 'campfires', 'trees', 'blocks', 'inferno', 'fireMaxima', 'hellfire', 'hellfireLeft', 'ships', 'items', 'water', 'ground']) assert.ok(T[k]?.why, k);
@@ -167,7 +168,7 @@ test('«Firefighting» decides every creature and thing (Firefighting.FIREFIGHT_
 
 test('burning on the body decides every creature and thing (Burning.BURN_TARGETS)', async () => {
     const { BURN_TARGETS: T } = await import('../../src/game/Burning.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(T[names[k]]?.why, `burning forgets: ${k}`);
     for (const k of ['me', 'players', 'servants', 'blackship', 'items', 'ships', 'water', 'ground', 'space']) assert.ok(T[k]?.why, k);
 });
@@ -251,7 +252,7 @@ test('«Create a House» waits for every kind of body before it puts a block whe
 });
 
 test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibility», «Fireworks», «Visible Godi», «Ground Vortex», «Пентаграниум» decide every creature and thing (their TARGETS — «не действует» is written too, with why)', async () => {
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     const tables = {
         'Wind Impulse': [(await import('../../src/game/WindImpulse.js')).IMPULSE_TARGETS, ['me', 'players', 'servants', 'looseThings', 'heldThings', 'doors', 'ships', 'world']],
         'Wind Maxima up': [(await import('../../src/game/WindRing.js')).WIND_RING_TARGETS, ['me', 'players', 'servants', 'campfires', 'trees', 'blocks', 'inferno', 'fireMaxima', 'hellfire', 'hellfireLeft', 'carts', 'ships', 'doors', 'items', 'water', 'ground', 'godGifts', 'space', 'burningBodies']],
@@ -269,7 +270,7 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
         'Ice Castle / Ice Bridge': [(await import('../../src/game/IceMagic.js')).ICE_MAGIC_TARGETS, ['me', 'players', 'blocks', 'trees', 'water', 'houses', 'ships', 'fire', 'looseThings', 'ward']],
     };
     for (const [spell, [T, things]] of Object.entries(tables)) {
-        for (const k of ALL) assert.ok(T[names[k]]?.why, `«${spell}» forgets: ${k}`);
+        for (const k of ALL) assert.ok((T[names[k]] || (names[k] === 'ghost' && T.ghosts))?.why, `«${spell}» forgets: ${k}`); // (the Nihilis table names them «ghosts»)
         for (const k of things) assert.ok(T[k]?.why, `«${spell}» forgets: ${k}`);
     }
     // where they look for their targets: every creature (CreatureImpact for the push, Duel._bodies for the splash)
@@ -284,7 +285,7 @@ test('«Wind Impulse», «Drawdown», «Liquidation», «Stitching», «Invisibi
 
 test('«Disarmor» decides every creature and thing (ArmorTypes.DISARMOR_TARGETS — «не действует» is written too, with why)', async () => {
     const { DISARMOR_TARGETS: T } = await import('../../src/game/ArmorTypes.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const k of ALL) assert.ok(T[names[k]]?.why, `«Disarmor» forgets: ${k}`);
     for (const k of ['me', 'players', 'servants', 'looseThings', 'world']) assert.ok(T[k]?.why, k);
     assert.match(src('src/game/Spider.js'), /spell === 'Disarmor'/, 'the spider answers «Disarmor» itself');
@@ -394,7 +395,7 @@ test('«Protection Gods» (… Maxima): its table decides who and what; every pl
 
 test('the strong duel spells and the new ice decide every creature and thing (StrongSpells — «не действует» is written too, with why); every place a charge lands asks StrongMagic', async () => {
     const S = await import('../../src/game/StrongSpells.js');
-    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
+    const names = { zombies: 'zombies', 'castle people (villagers, knights, the king, wizards)': 'castlePeople', animals: 'animals', 'sailors (ships\' crews)': 'sailors', 'the giant spider': 'spider', 'living trees': 'livingTrees', 'book-birds': 'bookBirds', dragons: 'dragon', phoenixes: 'phoenix', owls: 'owl', 'the invisible bird of Spencer': 'spencer', 'the ghosts of the Castle of Ghosts': 'ghost', 'the swamp canaries': 'canary', 'the Ice Castle (queen, snowmen, ice monsters)': 'iceCastle', 'creatures of one\'s own («Да пусть создастся»)': 'custom' };
     for (const [spell, T] of Object.entries({ Accentric: S.ACCENTRIC_TARGETS, Pilbidrio: S.PILBIDRIO_TARGETS, Die: S.DIE_TARGETS, Electrum: S.ELECTRUM_TARGETS, Ice: S.ICE_SPELL_TARGETS })) {
         for (const k of ALL) assert.ok(T[names[k]]?.why, `«${spell}» forgets: ${k}`);
         for (const k of ['me', 'players', 'servants', 'world', 'space']) assert.ok(T[k]?.why, `«${spell}» forgets: ${k}`);
@@ -443,17 +444,17 @@ test('a living creature stays a target in every STATE (thrown, lying, stunned, f
 });
 
 test('«Империус» / «… Максима» (Imperius.js): every kind of creature is decided — taken by the plain one, only by the Maxima, or why not; the code that must know it knows it', async () => {
-    const { IMPERIUS_TARGETS, kindOf } = await import('../../src/game/Imperius.js');
+    const { IMPERIUS_TARGETS, IMPERIUS_NO, kindOf } = await import('../../src/game/Imperius.js');
     // every creature of the game has its row (KINDS above — and the players)
     const rows = {
         zombies: ['zombie'], 'castle people (villagers, knights, the king, wizards)': ['villager', 'knight', 'king', 'wizard', 'towerHead'], animals: ['cow', 'sheep', 'horse', 'pig', 'pegasus', 'runbook', 'guardBeast'],
         'sailors (ships\' crews)': ['sailor', 'blackbeard', 'pirateSkeleton'], 'the giant spider': ['spider'], 'living trees': ['tree', 'skeleton'], 'book-birds': ['bookbird'], dragons: ['dragon'],
-        phoenixes: ['phoenix'], owls: ['owl'], 'the invisible bird of Spencer': ['spencer'], 'the swamp canaries': ['canary'], 'the Ice Castle (queen, snowmen, ice monsters)': ['snowman', 'iceMonster', 'iceQueen'],
+        phoenixes: ['phoenix'], owls: ['owl'], 'the invisible bird of Spencer': ['spencer'], 'the ghosts of the Castle of Ghosts': ['ghost'], 'the swamp canaries': ['canary'], 'the Ice Castle (queen, snowmen, ice monsters)': ['snowman', 'iceMonster', 'iceQueen'],
         'creatures of one\'s own («Да пусть создастся»)': ['custom'],
     };
     for (const k of ALL) {
         assert.ok(rows[k], `Imperius: no rows for ${k}`);
-        for (const r of rows[k]) assert.ok(IMPERIUS_TARGETS[r], `IMPERIUS_TARGETS forgets ${r} (${k})`);
+        for (const r of rows[k]) assert.ok(IMPERIUS_TARGETS[r] || IMPERIUS_NO[r], `IMPERIUS_TARGETS / IMPERIUS_NO forgets ${r} (${k})`);
     }
     assert.ok(IMPERIUS_TARGETS.player?.player, 'another player: only the Maxima');
     for (const s of ['z', 'v', 'a', 's', 'D', 'sp', 'b', 'o', 'sx', 'f', 't', 'I', 'pl']) assert.ok(kindOf(s, {}), `kindOf knows the system «${s}»`);

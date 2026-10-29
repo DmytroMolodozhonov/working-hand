@@ -44,10 +44,10 @@ const POOL_MAX = 64; // idle chunk shells kept for reuse
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings });
+        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
@@ -68,7 +68,7 @@ export class Terrain {
         this._frame = 0;
         this.stats = { built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
         this.flushAround(0, 0);
-        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, dungeons, arenaEntries, buildings }; // (the world's recipe: space.worker.js makes the Earth's globe from it)
+        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, dungeons, arenaEntries, buildings, ghostCastle }; // (the world's recipe: space.worker.js makes the Earth's globe from it)
         this._startWorkers(this.opts);
     }
 
@@ -183,9 +183,47 @@ export class Terrain {
             }
             this._workers = ws;
             this.data.workersOn = true; // (the ground comes from them: TerrainData.landMade)
+            if (this.data.ghost) this.data.ghost.passive = true; // (the Castle of Ghosts' cells are decided by the workers: GhostCastle.js)
         } catch (e) {
             this._workers = null;
         }
+    }
+
+    /**
+     * The Castle of Ghosts (GhostCastle.js) in / out of this computer's land (`on`: the hero sees the invisible), with the land of its chunks made to agree:
+     * called often (it does nothing when nothing changes). The flag goes to the workers first (their next jobs make the land the new way), then each castle
+     * whose chunks are not as the flag says has them forgotten here and in the workers and drawn again, the nearest first as the planner asks.
+     * (x, z): where the hero is — the cells round it are asked from a worker (the main thread never decides one).
+     */
+    ghostSync(on, x, z) {
+        const d = this.data, G = d.ghost;
+        if (!G) return;
+        on = !!on;
+        if (d.setGhostSeen(on) && this._workers) for (const w of this._workers) w.postMessage({ type: 'ghostOn', on });
+        if (!on && !G.list().some((s) => s.shown)) return;
+        if (on) this.ghostAsk(x, z);
+        for (const s of G.list()) {
+            if (s.shown === G.on) continue;
+            const keys = d.ghostApply(s);
+            if (this._workers) for (const w of this._workers) { w.postMessage({ type: 'ghostDrop', keys }); w.sent?.clear?.(); }
+            for (const k of keys) { this._inFlight.delete(k); this._rebuilding?.delete(k); this._floraAsked?.delete(k); }
+            for (const k of keys) { const e = this.meshes.get(k); if (e) this._unload(k, e); }
+            d._last = null;
+            this._center = null; // (plan again: what was put away is wanted again, made the new way)
+        }
+    }
+
+    /** Ask a worker for the Castle of Ghosts' cells round a point (the main thread never decides one itself: GhostCastle.js) — once until they come. */
+    ghostAsk(x, z) {
+        const G = this.data.ghost;
+        if (!G || !this._workers || G.has9(x, z, G.on)) return;
+        const C = 1536, key = Math.floor(x / C) * 65536 + Math.floor(z / C) + (G.on ? 0.5 : 0), asked = this._ghostAsked || (this._ghostAsked = new Set());
+        if (asked.has(key) || asked.size >= 2) return;
+        let w = this._workers[0];
+        for (const o of this._workers) if (o.load < w.load) w = o;
+        w.load++;
+        asked.add(key);
+        w.postMessage({ type: 'ghost', id: ++this._jobId, key, x, z, lite: !!G.on });
     }
 
     /** Can the workers make the tall grass of a chunk (Flora.js)? */
@@ -244,6 +282,8 @@ export class Terrain {
         for (const w of this._workers) w.terminate();
         this._workers = null;
         this.data.workersOn = false;
+        if (this.data.ghost) this.data.ghost.passive = false;
+        this._ghostAsked?.clear();
         this._inFlight.clear();
         this._done.length = 0;
         this._floraAsked.clear();
@@ -270,6 +310,12 @@ export class Terrain {
             if (S?.villages && !S.villages.cells.has(m.key)) S.villages.cells.set(m.key, m.village || null);
             if (S?.hamlets && m.hamlets && !S.hamlets.cells.has(m.key)) S.hamlets.cells.set(m.key, m.hamlets);
             if (S?.dungeons && m.dungeons) S.dungeons.adopt(m.dungeons); // (the dungeons of the wild: Dungeons.js)
+            return;
+        }
+        if (m.type === 'ghost') {
+            w.load--;
+            this._ghostAsked?.delete(m.key);
+            if (this.data.ghost && m.cells) this.data.ghost.adopt(m.cells); // (the castles of the cells round the hero: GhostCastle.js)
             return;
         }
         if (m.type === 'flora') {

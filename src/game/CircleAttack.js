@@ -58,6 +58,7 @@ export const CIRCLE_TARGETS = {
     customCreatures: 'волна ранит и отбрасывает созданное существо (CustomCreatures.hit)',
     canaries: 'не со свитка: волна ранит и толкает канарика; лагерь сердится на того, кто бил (Canaries.hit)',
     spencers: 'убивает: маленькая птичка Спенсера падает, остаётся её перо',
+    ghosts: 'пугает: призраки исчезают, потом возвращаются; не гибнут, ведь они бестелесны',
     gargoyles: 'урон по зоне и толчок (Gargoyles.hit через MagicWave.hitBody)',
     livingTrees: 'ожившее дерево: урон по зоне и отбрасывает — такое мощное заклинание ломает и живое дерево (не только огонь)',
     bookBirds: 'книги-птицы сбивает на землю',
@@ -170,7 +171,7 @@ export class CircleAttack {
     _pickRays(p, f) {
         const g = this.game, all = [];
         const inCircle = (q) => { const d = Math.hypot(q.x - p.x, q.z - p.z); return d >= f.island && d <= f.R && Math.abs(q.y - p.y) < 25; };
-        eachBody(g, (kind, c, q) => { if (inCircle(q)) all.push({ p: [q.x, q.y + 0.3, q.z].map((v) => Math.round(v * 100) / 100) }); });
+        eachBody(g, (kind, c, q) => { if (kind !== 'ghost' && inCircle(q)) all.push({ p: [q.x, q.y + 0.3, q.z].map((v) => Math.round(v * 100) / 100) }); });
         for (const [id, r] of g.remotes || []) if (r.position && inCircle(r.position)) all.push({ pl: id });
         for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
         const n = f.rays[0] + Math.floor(Math.random() * (f.rays[1] - f.rays[0] + 1));

@@ -444,11 +444,67 @@ function storeThing(r, flavor) {
  * (A dungeon UNDER the ground has no flavor: its chests are as a cave's — rollLoot with `deep`.)
  */
 export function rollDungeonLoot(r = Math.random, flavor = 'ruin', count = 0, size = 'S') {
+    if (flavor === 'ghost') return rollGhostLoot(r, count);
     const n = count > 0 ? count : CHEST_THINGS;
     const big = size === 'L' ? 1 : size === 'M' ? 0.5 : 0;
     const out = [];
     while (out.length < n) out.push(flavor === 'magic' ? magicDungeonThing(r, big, size) : ruinDungeonThing(r, big));
     return out;
+}
+
+/**
+ * The strong pentagrams, by colour (the Castle of Ghosts' chests hold nothing weaker): the ones that cost 100 mana or more, or whose price is a formula
+ * (the circle of enchanting takes a share of all the mana, the circle of mending a sum by the armour), and the devil's — the strongest black one.
+ * `{ dark: [ids], white: [ids] }`, in the order of the table.
+ */
+export function strongPentagrams() {
+    const out = { dark: [], white: [] };
+    for (const id of figureIds()) {
+        const f = figureOf(id)?.def;
+        if (!f) continue;
+        const strong = typeof f.cost !== 'number' || f.cost >= 100 || id === 'devil';
+        if (strong) (f.dark ? out.dark : out.white).push(id);
+    }
+    return out;
+}
+
+/**
+ * A chest of the Castle of Ghosts (GhostRules.GHOST_CHESTS): only what is bound up with pentagrams — scrolls of the strongest WHITE and BLACK pentagrams
+ * (never one the opener already knows: LOOT_FOR.known) — and now and then a magic thing (an axe, a sword, a shield, armour, a wand, a robe; always magic).
+ * No ordinary spell scrolls, no potions. At least one scroll in every chest, the colours taking turns by chance.
+ */
+export function rollGhostLoot(r = Math.random, count = 0) {
+    const n = Math.max(3, count); // (a ghosts' chest is never poorer than three things)
+    const pool = strongPentagrams(), known = LOOT_FOR.known;
+    const out = [];
+    const takeScroll = (dark) => {
+        const ids = (dark ? pool.dark : pool.white).concat(dark ? pool.white : pool.dark); // (the other colour if every one of this colour is known)
+        const s = Math.floor(r() * ids.length);
+        for (let i = 0; i < ids.length; i++) {
+            const it = pentagramScroll(ids[(s + i) % ids.length], newUid());
+            if (!known || !known(it)) { if (!out.some((o) => o.pent === it.pent)) return it; }
+        }
+        return null;
+    };
+    let dark = r() < 0.5;
+    for (let i = 0; i < n; i++) {
+        const wantScroll = i === 0 || r() < 0.62;
+        let it = wantScroll ? takeScroll(dark) : null;
+        if (wantScroll) dark = !dark;
+        out.push(it || ghostMagicThing(r));
+    }
+    return out;
+}
+
+/** A magic thing from the ghosts' hoard: always magic. */
+function ghostMagicThing(r) {
+    const x = r() * 100;
+    if (x < 26) return { kind: 'weapon', type: 'axe', magic: true, bonus: randInt(r, 20, 90), uid: newUid() };
+    if (x < 52) return { kind: 'weapon', type: 'sword', magic: true, bonus: randInt(r, 20, 90), uid: newUid() };
+    if (x < 68) return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 2), magic: true, max: randInt(r, 30, 60) };
+    if (x < 82) return makePiece(pick(r, PIECES), { magic: true });
+    if (x < 92) return rollWand(r);
+    return makeRobe(true, r);
 }
 
 function magicDungeonThing(r, big, size) {

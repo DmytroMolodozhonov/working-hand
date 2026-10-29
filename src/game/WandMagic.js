@@ -238,6 +238,7 @@ export class WandMagic {
             if (tired) { g.hud.setVoice(tired, true); return null; }
             g.combat.pay(name);
             this._lumos(name === 'LumosMaxima');
+            if (name === 'LumosMaxima') g.ghosts?.scare?.(g.character.group.position, 14, true); // (the ghosts of the Castle of Ghosts shy from the great light — GhostRules.GHOST_SPELLS.Lumos)
             return name;
         }
         if (name === 'LumosFlashlight' || name === 'LumosAhead') return this._lumosMode(name, isFinal);
@@ -386,6 +387,8 @@ export class WandMagic {
         // the infernal gargoyles flee the beam (no harm — GargoyleRules.TARGETS.LumosFlashlight): four times a second is enough
         const now = performance.now();
         if (now - (this._scareAt || 0) > 250) { this._scareAt = now; this.game.gargoyles?.lightCone?.(tip, dir, reach, LUMOS.BEAM_ANGLE, this.game.localId); }
+        // the ghosts of the Castle of Ghosts shy from a bright beam a few metres ahead (they vanish for a while — GhostRules.GHOST_SPELLS.Lumos): once a second
+        if (now - (this._ghostScareAt || 0) > 1000) { this._ghostScareAt = now; this.game.ghosts?.scare?.(_v.copy(tip).addScaledVector(dir, Math.min(reach * 0.3, 5)), 3.5, false); }
     }
 
     /** Another player put out their thrown light. */

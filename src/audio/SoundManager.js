@@ -14,6 +14,7 @@
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
 import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
+import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
@@ -636,6 +637,8 @@ export class SoundManager {
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
             // (the invisible bird of Spencer — SpencerBirds.js: a chirp, a trill, small wings)
             ...SPENCER_SOUNDS.map((k) => ['spencer_' + k, () => synthSpencer(this.context, k)]),
+            // (the Castle of Ghosts — Ghosts.js: steps, whispers, a cry, knocks, a chair's scrape, the wail, a child's laugh, the chill, a far bell, a door, the hum)
+            ...GHOST_SOUND_IDS.map((k) => ['ghost_' + k, () => synthGhost(this.context, k)]),
             // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
@@ -1897,6 +1900,30 @@ export class SoundManager {
         const key = 'spencer_' + kind;
         if (!this.sounds[key]) { if (!SPENCER_SOUNDS.includes(kind)) return; this.sounds[key] = synthSpencer(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.5 : 0.9, kind === 'wings' ? 5 : 14, 0.96 + Math.random() * 0.1);
+    }
+
+    /**
+     * The Castle of Ghosts (Ghosts.js): one of GhostRules.GHOST_SOUNDS at a place — made ahead (prewarmStep). Only a seer ever asks for it.
+     * The whisper and the chill are close (a short reach), the bell and the cry carry far through the halls.
+     */
+    playGhost(position, id = 'whisper', volume = 1) {
+        if (!this.enabled || !this.context || !position || id === 'drone') return;
+        const key = 'ghost_' + id;
+        if (!this.sounds[key]) { if (!GHOST_SOUND_IDS.includes(id)) return; this.sounds[key] = synthGhost(this.context, id); }
+        const far = { bell: 40, cry: 18, wail: 14, laugh: 12, steps: 10, knock: 10, door: 10, scrape: 7, fade: 6, whisper: 4, chill: 3 }[id] || 8;
+        this._playAt(this.sounds[key], position, volume, far, (id === 'bell' ? 0.97 : 0.92) + Math.random() * (id === 'bell' ? 0.06 : 0.16));
+    }
+
+    /** The castle's low hum while the hero is inside (`k` 0…1; 0 — stopped). One looping voice, never more (made ahead: until then silent). */
+    ghostDrone(k) {
+        if (!this.context) return;
+        const want = this.enabled && this.loaded ? k : 0;
+        let a = this._ghostDrone;
+        if (want <= 0.01) { if (a?.isPlaying) a.stop(); return; }
+        if (!this.sounds.ghost_drone) return;
+        if (!a) { a = this._ghostDrone = new THREE.Audio(this.effectsListener); a.setBuffer(this.sounds.ghost_drone); a.setLoop(true); }
+        a.setVolume(want * 0.5);
+        if (!a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
     }
 
     /** The infernal gargoyles (Gargoyles.js): 'roar' | 'screech' | 'wings' | 'bite' | 'crumble' | 'shatter' | 'ignite' | 'burst' — made ahead (prewarmStep). */

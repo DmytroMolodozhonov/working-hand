@@ -445,8 +445,11 @@ export class Builder {
         // (done already where they came from — the enchanted stone obeys them: EnchantedStone.applyingDone)
         const prev = data.enchantFree;
         data.enchantFree = true;
+        // (a seer's work inside the Castle of Ghosts is not for the ones who do not see it: for them it is an empty place — GhostCastleLife.js)
+        const G = data.ghost, shut = G && !G.on ? G.list() : null;
         for (const e of list) {
             if (!Array.isArray(e) || e.length < 4) continue;
+            if (shut?.length && shut.some((s) => s.covers(e[0] | 0, e[2] | 0, 0))) continue;
             data.set(e[0] | 0, e[1] | 0, e[2] | 0, e[3] | 0, e[4] | 0); // (e[4]: a slab's / a ramp's shape — BlockShapes.js; old edits have none: whole)
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }

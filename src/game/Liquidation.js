@@ -82,6 +82,7 @@ export const LIQUIDATION_TARGETS = {
     owl: { does: 'none', why: 'не со свитка: сова увёртывается и улетает (Owls.TARGETS)' },
     canary: { does: 'hurt', why: 'обычный урон; лагерь сердится на колдующего (Canaries.hit)' },
     spencer: { does: 'hurt', why: 'урон «Ликвидации» убивает маленькую птичку Спенсера — падает её перо' },
+    ghost: { does: 'none', why: 'не действует: призрак бестелесный — урон «Ликвидации» его не берёт' },
     custom: { does: 'hurt', why: 'обычный урон созданному существу (CustomCreatures.hit)' },
     gargoyle: { does: 'hit', why: 'обычный урон: камень берёт, горгулья летит дальше (Gargoyles.hit)' },
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
@@ -291,6 +292,7 @@ export class Liquidation {
         // living bodies (every kind of creature and the players — Duel._bodies), not the caster
         for (const e of g.duel?._bodies(casterId) || []) {
             if (e.kind === 'p' && e.id === casterId) continue;
+            if (e.kind === 'G') continue; // (a ghost: the splash flies through it)
             if (segSegDist(a, b, e.a, e.b) > e.r + 0.2) continue;
             take(segT(a, b, _c.lerpVectors(e.a, e.b, 0.5)), { kind: 'body', bk: e.kind, id: e.id });
         }
@@ -555,6 +557,7 @@ export class Liquidation {
         if (bk === 'g') { const o = g.gargoyles?.byId(id); if (o) g.gargoyles.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (an infernal gargoyle: plain damage)
         if (bk === 'C') { const cc = g.customCreatures?.byId(id); if (cc) g.customCreatures.hit(cc, LIQ.DMG, 'Liquidation', by); return; } // (a creature of one's own: plain damage)
         if (bk === 'N') { const cn = g.canaries?.byId(id); if (cn) g.canaries.hit(cn, LIQ.DMG, 'Liquidation', by); return; } // (a swamp canary: plain damage; the camp turns on the caster)
+        if (bk === 'G') { const o = g.ghosts?.byId(id); if (o) g.ghosts.hit(o, 0, 'Liquidation', by); return; } // (a ghost: nothing — GhostRules)
         if (bk === 'S') { const o = g.spencers?.byId(id); if (o) g.spencers.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (the invisible bird: plain damage kills it)
         if (bk === 'o') { const o = g.owls?.byId(id); if (o) g.owls.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (no scroll's: the owl darts away)
         if (bk === 'I') { const ic = g.iceCastle?.byId(id); if (ic) g.iceCastle.hit(ic, LIQ.DMG, ic.type === 'snowman' ? 'melee' : 'Liquidation', by); return; }

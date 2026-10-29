@@ -1,7 +1,7 @@
 /**
  * Achievements.js — the player's achievements («ачивки») and the status «Высший маг».
  *
- * Six deeds (ACHIEVEMENTS): kill a castle's king, the Ice Queen, the giant spider, a dragon,
+ * Seven deeds (ACHIEVEMENTS; the last one is not a boss: to find the Castle of Ghosts and walk in — GhostCastleLife._deeds): kill a castle's king, the Ice Queen, the giant spider, a dragon,
  * Captain Black Moustache (the pirate on his black ship), and destroy a wizards' tower (its Master killed AND the tower itself really pulled down —
  * TOWER.LEFT: no more than a third of its walls still standing).
  *   • Each one: + to the mana maximum by its own number (ACHIEVEMENTS `mana` — the author: the king
@@ -58,6 +58,7 @@ export const ACHIEVEMENTS = [
     { id: 'dragon', mana: 150, icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
     { id: 'blackbeard', mana: 75, icon: '🏴‍☠️', title: 'Убить капитана Чёрные Усы', desc: 'Победить пирата капитана Чёрные Усы на его чёрном корабле' },
     { id: 'tower', mana: 200, icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
+    { id: 'ghostCastle', mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
 ];
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
 export const ACH_BY_ID = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));

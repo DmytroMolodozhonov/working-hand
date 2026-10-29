@@ -39,6 +39,7 @@ export function eachBody(g, fn) {
     for (const c of g.customCreatures?.list || []) if (!c.dead && c.born >= 1) fn('custom', c, g.customCreatures.centre(c)); // (creatures of one's own — CustomCreatures.TARGETS)
     for (const c of g.canaries?.list || []) if (!c.dead && c.model) fn('canary', c, new THREE.Vector3(c.model.position.x, c.model.position.y + 1.2, c.model.position.z)); // (the swamp Canaries: Canaries.hit)
     for (const o of g.spencers?.list || []) if (!o.dead && o.group) fn('spencer', o, spencerCenter(o)); // (the invisible bird: the wave kills it)
+    for (const o of g.ghosts?.targets?.() || []) fn('ghost', o, new THREE.Vector3(o.position.x, o.position.y + 1.7, o.position.z)); // (the ghosts of the Castle of Ghosts: Circle Attack / Inspirius frighten them, the gods' spells scatter them — GhostRules)
     for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o)); // (the infernal gargoyles: GargoyleRules.TARGETS)
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
@@ -64,6 +65,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break; // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
         case 'canary': g.canaries?.hit(c, dmg, spell, by); break;
         case 'spencer': g.spencers?.hit(c, dmg, spell, by); break;
+        case 'ghost': g.ghosts?.hit(c, dmg, spell, by); break; // (never hurt: GhostRules.ghostSpell — scared / scattered / nothing)
         case 'custom': g.customCreatures?.hit(c, dmg, spell, by); break; // (a creature of one's own: its own immunities — CustomCreatures.hit) // (a canary: the wave hurts it; the camp turns on the caster)
         case 'owl': g.owls?.hit(c, dmg, spell, by); break; // (Inspirius — a scroll's — kills it; Circle Attack it darts away from: Owls.TARGETS)
         case 'tree': if (treeKind) g.livingTrees?.hit(c, dmg, treeKind, by); break;
@@ -80,7 +82,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
  * hitBody; the rest fly (CreatureImpact).
  */
 export function throwBody(g, kind, c, v, toss, spell, by, from) {
-    if (kind === 'spider' || kind === 'book' || kind === 'plant') return; // (rooted plants are not thrown)
+    if (kind === 'spider' || kind === 'book' || kind === 'plant' || kind === 'ghost') return; // (a ghost is not thrown: it has no body) // (rooted plants are not thrown)
     if (kind === 'ice') { g.iceCastle?.push(spell, by, (_p, x) => (x === c ? v : null)); return; }
     if (kind === 'dragon') { g.dragons?.push?.(spell, by, (_p, d) => (d === c ? v : null), { from }); return; }
     g.creatureImpact?.apply(c, { v: v.clone(), by, spell, jolt: 4, from, always: { down: 3 }, down: 3, toss, fly: true });

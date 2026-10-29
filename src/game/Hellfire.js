@@ -608,7 +608,7 @@ export class Hellfire {
             // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
             const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat * K : 0;
             const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);
-            if (inside) g.burning?.ignite(b.kind, b.id, by, undefined, true); // (in the blaze itself the fire sticks to the body: Burning.js)
+            if (inside && b.kind !== 'G') g.burning?.ignite(b.kind, b.id, by, undefined, true); // (in the blaze itself the fire sticks to the body: Burning.js)
             if (dmg > 0) {
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
@@ -629,6 +629,7 @@ export class Hellfire {
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (hellish itself: the hellfire does not touch an infernal gargoyle)
                     else if (b.kind === 'C') g.customCreatures?.hit?.(cr, dmg, 'Hellfire', by); // (a creature of one's own burns, if not a fire-breather)
                     else if (b.kind === 'N') g.canaries?.hit?.(cr, dmg, 'Hellfire', by); // (a canary burns and runs; the camp turns on the caster)
+                    else if (b.kind === 'G') g.ghosts?.hit?.(cr, 0, 'Hellfire', by); // (a ghost: the hellfire passes through it — GhostRules)
                     else if (b.kind === 'S') g.spencers?.hit?.(cr, Math.max(dmg, 3), HELLFIRE.NAME, by); // (the invisible bird: burnt)
                     else if (b.kind === 'o') g.owls?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (an owl: no scroll's fire — it darts away)
                 }

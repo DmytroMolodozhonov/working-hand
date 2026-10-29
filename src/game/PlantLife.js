@@ -197,6 +197,7 @@ export const PLANT_TARGETS = {
     owls: { does: 'none', why: 'умная сова улетает от растения' },
     canaries: { does: 'none', why: 'канарики растения не трогают и обходят Ярколето' },
     spencers: { does: 'none', why: 'птичка Спенсера улетает от растения' },
+    ghosts: { does: 'none', why: 'призрак бестелесный: растение его не касается' },
     iceCastle: { does: 'none', why: 'ледяные существа не едят и холодные' },
     gargoyle: { does: 'none', why: 'каменная горгулья несъедобна' },
     items: { does: 'none', why: 'вещи растение не берёт' },

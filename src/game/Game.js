@@ -146,7 +146,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -193,7 +193,9 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
+import { GhostCastleLife } from './GhostCastleLife.js';
 import { SpencerBirds } from './SpencerBirds.js';
+import { Ghosts } from './Ghosts.js';
 import { BeslanGrass } from './BeslanGrass.js';
 import { UnitedPower } from './UnitedPower.js';
 import { Vitality } from './Vitality.js';
@@ -371,6 +373,7 @@ export class Game {
             apart: this.gen >= SPAWN_MAPS_FROM_GEN, // (the Creative bosses' places apart: the dragon's lair, the far ice castle, the spider's den — Terrain.SPAWN_MAPS_FROM_GEN)
             bigHouses: this.gen >= HOUSE_SIZE_FROM_GEN, // (the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig)
             dungeons: this.gen >= DUNGEON_FROM_GEN, // (the ruins and the underground dungeons — Dungeons.js)
+            ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
             meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)
@@ -417,7 +420,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.ghosts?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); if (this.authority) { this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.customPlants?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); } this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
             roofAt: (x, y, z) => roofAbove(this, x, y, z), // («Thunderwave»: a roof over the point takes the bolt)
@@ -441,6 +444,7 @@ export class Game {
                 if (this.authority) this.customCreatures?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (creatures of one's own: CustomCreatures.hit)
                 if (this.authority) this.canaries?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the swamp Canaries: a ray hurts them; the camp turns on the caster — Canaries.js)
                 if (this.authority) this.plants?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (plants: a ray cuts them; cold kills a flower, freezes a head)
+                this.ghosts?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (a ghost of the Castle of Ghosts: nothing but the wind / the scares act on it — GhostRules.ghostSpell)
                 if (this.authority) this.spencers?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (the invisible bird: any real harm kills it — SpencerRules.verdict)
                 if (this.authority) this.owls?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); this.gargoyles?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (an owl: only a scroll's ray hurts it — «Тандервейв»; the rest it darts away from — Owls.TARGETS)
                 if (this.authority) this.iceCastle?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the Ice Castle: by IceQueen.iceDamage — fire melts, the plain spells nothing on the queen)
@@ -466,6 +470,8 @@ export class Game {
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },
             doors: (vAt, from) => this.doors?.blow(vAt, from), // (a gust / a burst swings the doors' leaves: Doors.blow)
             windShips: (o, d, power, casterId) => this.ships?.windGust(o, d, power, casterId), // (Wind fills the sails)
+            windGhosts: (o, d, power, casterId) => { this.ghosts?.blow(o, d, power, casterId === 'local' ? this.localId : casterId, power > 1); }, // («Wind» / «Wind Maxima» blow the ghosts of the Castle of Ghosts away — Ghosts.blow; they come back later)
+            ghostsAim: (o, d, range, name, casterId) => { this.ghosts?.hitRay(o, d, range, 1.2, 0, name, casterId === 'local' ? this.localId : casterId); }, // («Overgrown» at a ghost: does not work — GhostRules; the caster is told once)
             windRingBegin: (o, by) => this.windRing?.begin(o, by), // («Вайнд Максима» up: the wave that puts fires out — WindRing.js)
             windRingStep: (sp, dt) => this.windRing?.step(sp, dt),
             impulseWorld: (name, origin, r, pushAt, casterId) => this._impulseWorld(name, origin, r, pushAt, casterId), // («Wind Impulse»: things, book-birds)
@@ -536,6 +542,7 @@ export class Game {
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
+        this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
@@ -632,6 +639,7 @@ export class Game {
         this.customCreatures = new CustomCreatures(this); // creatures of one's own («Да пусть создастся существо …»: CustomCreatures.js)
         this.canaries = new Canaries(this); // the swamp Canaries: small strong people who hurl boulders at trespassers (Canaries.js)
         this.spencers = new SpencerBirds(this); // the invisible bird of Spencer: pink and glowing, seen only by one who sees the invisible (SpencerBirds.js)
+        this.ghosts = new Ghosts(this); // the ghosts of the Castle of Ghosts: scares for one who sees the invisible, each seer's own, never over the network (Ghosts.js)
         this.beslan = new BeslanGrass(this); // Beslan's grass: grows for one who sees the invisible (BeslanGrass.js)
         this.owls = new Owls(this); // clever owls: curious, fed with meat they love you and lead you to a boss once (Owls.js)
         this.phoenixes = new Phoenixes(this); // phoenixes: rare fire birds in the sky; they heal the wounded (Phoenixes.js)
@@ -1207,6 +1215,7 @@ export class Game {
         this.houses?.hitAt(pos, radius);
         if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
         if (authoritative) { this.customCreatures?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.customPlants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.spencers?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.canaries?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
+        this.ghosts?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); // (a ghost of the Castle of Ghosts: local to every seer's computer, so not only the host — GhostRules)
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -1299,9 +1308,9 @@ export class Game {
                 chest.awayT = far ? (chest.awayT || 0) + dt : 0;
                 if (chest.awayT > 4) { chest.awayT = 0; chest.close(); }
             }
-            if (chest.isOpen || chest.locked || !this.authority) continue; // (castle chests: locked while the king lives)
+            if (chest.isOpen || chest.locked || (!this.authority && !chest.localOnly)) continue; // (castle chests: locked while the king lives)
             const cp = chest.getPosition();
-            for (let i = 0; i < players.length; i++) {
+            for (let i = 0; i < (chest.localOnly ? 1 : players.length); i++) { // (a ghosts' chest: only my own hero opens it — the first of `players` is mine)
                 const p = players[i];
                 const dx = p.x - cp.x, dz = p.z - cp.z;
                 if (dx * dx + dz * dz < (chest.ship ? 2.6 * 2.6 : 4.5 * 4.5 + 9)) { // (a ship's chest: only when you really stand by it — walking past the deck did «open» it and the crew cried «thief»)
@@ -1379,7 +1388,7 @@ export class Game {
         const id = rewardId || `c${chest.id}`;
         if (chest.itemType === 'loot') {
             // a cave chest: wands, scrolls, shields… float up out of it
-            if (this.authority) {
+            if (this.authority || chest.localOnly) {
                 chest.mesh.updateMatrixWorld(true);
                 const rp = chest.getRewardPosition(new THREE.Vector3());
                 // (who opens it: his mana maximum — «Inspirius»' scroll is only for 500+)
@@ -1398,7 +1407,7 @@ export class Game {
                 } // (a port chest: the sailors' stores; all in one row along the chest, within reach)
                 // (a house chest opening is no theft by itself: taking a thing out of it is — Items.pickUp)
                 LOOT_FOR.maxMana = 0; LOOT_FOR.known = null;
-                if (this.sync) this.sync.chestOpenedLoot?.(chest);
+                if (this.sync && !chest.localOnly) this.sync.chestOpenedLoot?.(chest);
             }
             return;
         }
@@ -1427,7 +1436,7 @@ export class Game {
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             let built = false;
             for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [], t.densNear ? t.densNear(p.x, p.z, 90) : [], t.dungeonsNear ? t.dungeonsNear(p.x, p.z, 90, true) : [])) {
-                if (cv.x0 != null ? (cv.kind !== 'dungeon' || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
+                if (cv.x0 != null ? ((cv.kind !== 'dungeon' && cv.kind !== 'ghostcastle') || cv.under) && p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
                 const spots = cv.chests || [{ x: cv.kx + 0.5, y: cv.F, z: cv.kz + 0.5, a: Math.atan2(cv.ex - cv.kx, cv.ez - cv.kz) }];
@@ -1442,6 +1451,7 @@ export class Game {
                     const id = k ? cv.id + ':' + k : cv.id;
                     const chest = new Chest(this.scene, new THREE.Vector3(sp.x, sp.y, sp.z), 'loot', sp.a, id, { style: sp0.look || (sp0.boss ? 'rich' : 'plain') });
                     if (sp0.boss) chest.room = sp0.boss; // (a dragon's chest: the hoard's treasure — Items.lootChest)
+                    if (cv.kind === 'ghostcastle') chest.localOnly = true; // (the Castle of Ghosts exists only in a seer's land: each seer opens his own chest, for himself — GhostCastleLife.js)
                     if (sp0.flavor) { chest.dungeonFlavor = sp0.flavor; chest.dungeonSize = cv.size; } // (a ruin's chest: magical or plain things — ItemTypes.rollDungeonLoot)
                     chest.mesh.updateMatrixWorld(true);
                     chest.boxId = this.collision.addBox(chest.getCollisionBox());
@@ -3008,7 +3018,7 @@ export class Game {
             this.phoenixes?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId); // (fire: no harm to a phoenix, but an attack)
             this.owls?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId);
             this.canaries?.hitRay(o, d, len, 0.6, 2, 'Inferno', casterId); // (a canary burns and runs: Canaries.hit — fire)
-            this.spencers?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (fire burns the invisible bird: its feather falls)
+            this.spencers?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); this.ghosts?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (a ghost: fire does nothing — GhostRules) // (fire burns the invisible bird: its feather falls)
             this.customCreatures?.hitRay(o, d, len, 0.6, 2, 'Inferno', casterId);
             this.customPlants?.hitRay(o, d, len, 0.6, 2, 'Inferno'); // (a plant of one's own burns) // (a creature of one's own burns, unless it breathes fire)
             this.plants?.hitRay(o, d, len, 0.6, 4, 'Inferno', casterId); // (fire: plants burn fast)
@@ -3452,6 +3462,7 @@ export class Game {
         for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
         for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
         for (const m of this.spencers?.sampleModels?.() || []) zoo.add(m); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
+        for (const m of this.ghosts?.sampleModels?.() || []) zoo.add(m); // (the sheet-ghost's outside and inside, the castle's chairs and candles, the flame — GhostFx.js, GhostProps.js)
         for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
         zoo.add(this.plants.sampleModels()); // (the Brightflower: stems, petals that open in the shader, flame, heart — BrightFlowerFx)
@@ -3778,6 +3789,7 @@ export class Game {
         if (earth && !duelOnly) this.owls.update(dt);
         if (earth && !duelOnly) this.canaries.update(dt);
         if (earth && !duelOnly) { this.spencers.update(dt); this.beslan.update(dt); }
+        this.ghosts?.update(dt); // (everywhere: off the Earth / in the duel-only start it puts its ghosts away by itself)
         if (!duelOnly) { this.customCreatures?.update(dt); this.customPlants?.update(dt); } // (creatures of one's own: on the Earth and the planets with air)
         if (earth && !duelOnly) this.plants.update(dt);
         if (earth && !duelOnly) this.flora?.update(dt);
@@ -3793,6 +3805,7 @@ export class Game {
         if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);
         this.sight?.update(dt);
+        this.ghostCastle?.update(dt);
         this.groundVortex?.update(dt);
         this.visibleGodi?.update(dt);
         this.pentagranium?.update(dt);
@@ -3820,6 +3833,7 @@ export class Game {
         this.water.update(dt);
         this.crossedShield.update(dt);
         this.combat.update(dt);
+        this.ghosts?.afterCombat(); // (a ghost's chill slows the legs: after Combat set their speed for this frame)
         this.vortex.update(dt);
         this.hellfire?.update(dt);
         this.smokeSwipe?.update(dt);
@@ -4754,8 +4768,10 @@ export class Game {
         this.owls?.dispose();
         this.canaries?.dispose();
         this.spencers?.dispose();
+        this.ghosts?.dispose();
         this.beslan?.dispose();
         this.sight?.dispose();
+        this.ghostCastle?.dispose();
         this.customCreatures?.dispose();
         this.customPlants?.dispose();
         this.plants?.dispose();

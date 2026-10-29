@@ -275,6 +275,7 @@ export class StrongMagic {
             case 'D': g.dragons?.hit?.(c, dmg, spell, by); return;
             case 'I': g.iceCastle?.hit?.(c, dmg, spell, by); return;
             case 'f': g.phoenixes?.hit?.(c, dmg, spell, by); return;
+            case 'G': g.ghosts?.hit?.(c, dmg, spell, by); return; // (a ghost: the charge passes through — GhostRules.ghostSpell)
             case 'S': g.spencers?.hit?.(c, dmg, spell, by); return; // (the invisible bird: its rules decide — SpencerRules.verdict)
             case 'o': g.owls?.hit?.(c, dmg, spell, by); return;
             case 'N': g.canaries?.hit?.(c, dmg, spell, by); return;

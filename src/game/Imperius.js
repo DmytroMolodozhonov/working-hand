@@ -113,10 +113,11 @@ export const IMPERIUS_NO = {
     brightflower: { ru: 'Ярколето', why: 'Ярколето — растение: у цветка нет разума, в который можно вселиться (даже «Империус Максима» его не берёт)' },
     telewilpin: { ru: 'телевильпин', why: 'Телевильпин — растение: у цветка нет разума, в который можно вселиться' },
     carnivore: { ru: 'плотоядная голова', why: 'Плотоядная голова — растение: в ней нет разума, только голод' },
+    ghost: { ru: 'призрак', icon: '👻', why: 'В призрака нельзя вселиться: у него нет тела и своей воли — он лишь морок замка призраков (не действует даже «Империус Максима»)' },
 };
 export function canTake(kind, maxima, ctx = {}) {
     const t = IMPERIUS_TARGETS[kind];
-    if (!t) return { ok: false, say: IMPERIUS_NO[kind] ? '🌱 ' + IMPERIUS_NO[kind].why : '🌀 В это не вселиться' };
+    if (!t) return { ok: false, say: IMPERIUS_NO[kind] ? (IMPERIUS_NO[kind].icon || '🌱') + ' ' + IMPERIUS_NO[kind].why : '🌀 В это не вселиться' };
     if (t.player) {
         if (!maxima) return { ok: false, say: '🧠 Не действует: чужой разум слишком упорный — игрока подчиняет только «Империус Максима»' };
         if (ctx.shield) return { ok: false, say: '🛡️ Чужой разум упёрся в щит — сквозь защиту не вселиться' };

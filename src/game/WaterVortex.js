@@ -107,6 +107,7 @@ export const VORTEX_TARGETS = {
     o: { push: 'none', bubble: false, fill: false, carry: false, why: 'сова — вода не её враг: уворачивается' },
     N: { push: 'knock', bubble: false, fill: false, carry: false, why: 'канарик тяжёл и упрям: шар его не заберёт, но вода сбивает с ног, тушит на нём огонь, лагерь сердится на колдующего (Canaries.hit)' },
     S: { push: 'none', bubble: false, fill: false, carry: false, why: 'птичка Спенсера слишком мала для шара: вода лишь вспугивает её (SpencerRules.SPENCER_TARGETS.water)' },
+    G: { push: 'none', bubble: false, fill: false, carry: false, why: 'призрак бестелесный: вода проходит сквозь него, шар его не берёт — не действует' },
     C: { push: 'knock', bubble: false, fill: false, carry: false, why: 'своё существо: вода сбивает с ног и тушит, шар его не берёт — у каждого своё тело (CustomCreatures.watered)' },
     b: { push: 'none', bubble: false, fill: false, carry: false, why: 'книги-птицы — не существа для воды' },
     D: { push: 'none', bubble: false, fill: false, carry: false, why: 'дракон: вода лишь плещет по огромному телу (DragonKinds.ON_DRAGON)' },
@@ -829,6 +830,7 @@ export class WaterVortex {
         }
         const cr = g.duel?._creature?.(tk, tid);
         if (!cr) return;
+        if (tk === 'G') { g.ghosts?.hit?.(cr, 0, 'Water', by); return; } // (a ghost: water passes through it — GhostRules)
         if (tk === 'a') g.animals?.push?.(cr, _b.copy(dir).multiplyScalar(speed).setY(knock ? 6 : 3.5), knock ? 2.5 : 0.8);
         else if (tk === 'v') {
             cr.vx = (cr.vx || 0) + dir.x * speed * 0.7;
@@ -1393,6 +1395,7 @@ export class WaterVortex {
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, CD, 'FireMaxima', e.by); // (hellish: fire does not touch an infernal gargoyle)
                     else if (b.kind === 'C') g.customCreatures?.hit?.(cr, CD, 'FireMaxima', e.by);
                     else if (b.kind === 'N') g.canaries?.hit?.(cr, CD, 'FireMaxima', e.by); // (a canary burns and runs)
+                    else if (b.kind === 'G') g.ghosts?.hit?.(cr, 0, 'Fire', e.by); // (a ghost: fire passes through it — GhostRules)
                     else if (b.kind === 'S') g.spencers?.hit?.(cr, 3, 'FireMaxima', e.by); // (the invisible bird: burnt)
                     else if (b.kind === 'o') g.owls?.hit?.(cr, 0, 'FireMaxima', e.by); // (an owl: not a scroll's — it darts away)
                 }

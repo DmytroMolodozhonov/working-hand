@@ -29,6 +29,7 @@ import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
 import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
 import { DungeonIndex } from './Dungeons.js';
+import { GhostCastleIndex } from './GhostCastle.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
@@ -67,6 +68,9 @@ export const BLOCK = {
     // the enchanted stone (EnchantedStone.js — no spell breaks or deforms it but three, and those only near
     // their middle): the duel arenas' floor and stands (DuelArenas.js), the wizards' towers' walls
     ENCHANTED: 70, ENCHANTED_SEAT: 71, ARCANE_WARD: 72,
+    // the Castle of Ghosts (GhostCastle.js; only a hero who sees the invisible has it in his land): black stone, black brick, a floor of black tiles,
+    // the slate of the spires, a pale candle-glow set in the walls. Enchanted stone's kind: weak, but no ordinary spell breaks it (EnchantedStone.js)
+    GHOST_STONE: 73, GHOST_BRICK: 74, GHOST_TILE: 75, GHOST_ROOF: 76, GHOST_LAMP: 77,
 };
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
@@ -77,7 +81,7 @@ export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -206,6 +210,11 @@ export const BASE_COLORS = {
     [BLOCK.ENCHANTED]: 0xd9d0bb,
     [BLOCK.ENCHANTED_SEAT]: 0xb4a78c,
     [BLOCK.ARCANE_WARD]: 0x56597f,
+    [BLOCK.GHOST_STONE]: 0x1b1a22,
+    [BLOCK.GHOST_BRICK]: 0x211f29,
+    [BLOCK.GHOST_TILE]: 0x2a2833,
+    [BLOCK.GHOST_ROOF]: 0x17161d,
+    [BLOCK.GHOST_LAMP]: 0xa9b8ff,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -220,6 +229,7 @@ Object.assign(PATTERN_OF, {
     [BLOCK.POTION]: PATTERN.GLOW, [BLOCK.RUNE]: PATTERN.RUNES, [BLOCK.GRAVEL]: PATTERN.COBBLE,
     [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE, [BLOCK.SNOW]: PATTERN.SNOW,
     [BLOCK.ENCHANTED]: PATTERN.ASHLAR, [BLOCK.ENCHANTED_SEAT]: PATTERN.ASHLAR, [BLOCK.ARCANE_WARD]: PATTERN.ASHLAR,
+    [BLOCK.GHOST_STONE]: PATTERN.GHOST_STONE, [BLOCK.GHOST_BRICK]: PATTERN.GHOST_BRICK, [BLOCK.GHOST_TILE]: PATTERN.GHOST_TILE, [BLOCK.GHOST_ROOF]: PATTERN.GHOST_ROOF, [BLOCK.GHOST_LAMP]: PATTERN.GHOST_LAMP,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -250,7 +260,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 17;
+export const WORLD_GEN = 18;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -323,6 +333,13 @@ export const ARENA_ENTRIES_FROM_GEN = 16;
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 16: the duel arenas' visitors' stair and the steward's stall with the figures (ARENA_ENTRIES_FROM_GEN).
 // 17: different buildings in the settlements (BUILDINGS_FROM_GEN).
+/**
+ * The first generation with the Castle of Ghosts (GhostCastle.js): a huge black castle with spires, one in a few cells of the world, that a hero finds only
+ * when he SEES THE INVISIBLE (the pentagram «Spectris»). Until then it is not in the land at all (no blocks, no collisions): `data.ghost.on` puts it in and takes
+ * it out again (TerrainData.setGhostSeen). Older worlds have none.
+ */
+export const GHOST_CASTLE_FROM_GEN = 18;
+// 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -609,7 +626,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -630,7 +647,7 @@ export class TerrainData {
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = this.ghost = null;
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
@@ -667,6 +684,9 @@ export class TerrainData {
             // the dungeons of the wild (Dungeons.js; generation 15): ruins on the ground, halls under it — never on another site's land
             const dgNear = (x, z, r) => hnear(x, z, r) || this.hamlets.near(x, z, r).length > 0;
             this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear) : null;
+            // the Castle of Ghosts (GhostCastle.js; generation 18): in the land only while the hero sees the invisible (`ghost.on`); never on another site's land
+            this.ghost = ghostCastle && this.lush ? new GhostCastleIndex(seed, raw, (x, z, r) => dgNear(x, z, r) || (this.dungeons?.near(x, z, r).length > 0) || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL)) : null;
+            if (this.ghost && ghostSeen) this.ghost.on = true;
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
             const den = this.den;
@@ -1055,6 +1075,7 @@ export class TerrainData {
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue;
                 if (this.iceCastle?.rocky(tx, tz)) continue; // (the Ice Castle's peak: bare rock)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue;
+                if (this.ghost?.on && (this.ghost.insideAt(tx, tz, 6) || this.ghost.insideAt(tx + 1, tz + 1, 6))) continue; // (the Castle of Ghosts has no trees on its terrace)
                 const wide = kind === 0 || kind === 4; // (oak and dark oak: a 2×2 trunk)
                 let ok = true;
                 for (let dz = -1; dz <= 2 && ok; dz++) for (let dx = -1; dx <= 2; dx++) {
@@ -1225,7 +1246,8 @@ export class TerrainData {
 
     /** Castle, village and market blocks that fall into this chunk. */
     _buildCastles(c) {
-        const lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        let lists = this.sites.partsForChunk(c.cx, c.cz, CHUNK);
+        if (this.ghost?.on) { const g = this.ghost.partsForChunk(c.cx, c.cz, CHUNK); if (g.length) lists = lists.length ? lists.concat(g) : g; } // (the Castle of Ghosts: only in a seer's land — GhostCastle.js)
         if (!lists.length) return;
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK;
         const blocks = c.blocks;
@@ -1451,12 +1473,91 @@ export class TerrainData {
     /** The dungeons (ruins, halls under the ground) whose chests or walls are within `r` of a point (generation 15; Dungeons.js). */
     dungeonsNear(x, z, r, lazy = false) {
         const out = [];
-        if (!this.dungeons || offEarth(x + r)) return out;
+        if (offEarth(x + r)) return out;
+        for (const g of this.ghostNear(x, z, r)) if (!lazy || g.isBuilt || !this._cellLater(false)) out.push(g); // (the Castle of Ghosts, while it is in this computer's land: its chests — GhostCastle.js)
+        if (!this.dungeons) return out;
         for (const d of this.dungeons.near(x, z, r)) {
             if (lazy && !d.isBuilt && this._cellLater(false)) continue; // (building one — 1–5 ms — at most every 30 ms with the workers on)
             out.push(d);
         }
         return out;
+    }
+
+    // ------------------------------------------------------------ the Castle of Ghosts (GhostCastle.js; generation 18)
+    /**
+     * The castle in / out of THIS computer's land (a hero who sees the invisible has it; one who does not, has not: no blocks, no collisions).
+     * Only flips the flag — the land already made is put right by ghostApply (TerrainView.ghostSync calls both). Returns true when it changed.
+     */
+    setGhostSeen(on) {
+        if (!this.ghost || !!this.ghost.on === !!on) return false;
+        this.ghost.on = !!on;
+        return true;
+    }
+
+    /** The shown castles (in the land) whose chests or walls are within `r` of a point. */
+    ghostNear(x, z, r) {
+        if (!this.ghost?.on || offEarth(x + r)) return [];
+        return this.ghost.near(x, z, r).filter((s) => s.shown && (s.hasLite || !this.ghost.passive)); // (with the workers: once their light part came — never built here in a frame)
+    }
+
+    /**
+     * Make the land of the castle's chunks agree with the flag (`ghost.on`): the chunks nobody changed are forgotten (made again, the new way, when wanted); a chunk a player
+     * changed keeps its changes — the castle's blocks are put into its AIR (on) or taken out of it where they still stand untouched, above the ground (off) —
+     * nothing under the ground is ever taken. Returns the keys of every chunk that must be drawn again.
+     */
+    ghostApply(site) {
+        const on = !!this.ghost?.on, keys = [];
+        for (const { cx, cz } of site.chunkKeys(CHUNK, 1)) {
+            const key = chunkKey(cx, cz), c = this.chunks.get(key);
+            keys.push(key);
+            if (!c) continue;
+            if (!c.modified) { this.chunks.delete(key); if (this._last === c) this._last = null; continue; }
+            if (this._ghostPatch(c, site, on)) { c.ver = (c.ver || 0) + 1; this.dirtyChunks.add(key); }
+        }
+        site.shown = on;
+        this.version++;
+        return keys;
+    }
+
+    /** A chunk a player changed: the castle's final blocks put into its air (on) / its untouched ones taken out above the ground (off). */
+    _ghostPatch(c, site, on) {
+        const lists = this.ghost.partsForChunkOf(site, c.cx, c.cz, CHUNK);
+        if (!lists.length) return false;
+        const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, N = CHUNK * CHUNK, fin = new Int16Array((MAX_LAYER - MIN_LAYER + 1) * N).fill(-1);
+        for (const p of lists) {
+            if (p.k === 3) continue;
+            const ax = Math.max(p.x0, x0), bx = Math.min(p.x1, x0 + CHUNK - 1), az = Math.max(p.z0, z0), bz = Math.min(p.z1, z0 + CHUNK - 1);
+            const L0 = Math.max(p.L0, MIN_LAYER + 1), L1 = Math.min(p.L1, MAX_LAYER);
+            if (ax > bx || az > bz || L0 > L1) continue;
+            const cyl = p.k === 1 || p.k === 2, r2 = cyl ? p.r * p.r + p.r * 0.6 : 0, h2 = cyl && p.hr >= 0 ? p.hr * p.hr + p.hr * 0.6 : -1;
+            for (let z = az; z <= bz; z++) for (let x = ax; x <= bx; x++) {
+                if (cyl) {
+                    const d2 = (x - p.cx) * (x - p.cx) + (z - p.cz) * (z - p.cz);
+                    if (d2 > r2 || d2 <= h2) continue;
+                    if (p.k === 2) { let a = Math.atan2(z - p.cz, x - p.cx) - p.a0w; a -= Math.floor(a / TAU) * TAU; if (a >= p.span) continue; }
+                }
+                const col = (z - z0) * CHUNK + (x - x0);
+                for (let L = L0; L <= L1; L++) fin[(L - MIN_LAYER) * N + col] = p.t;
+            }
+        }
+        let changed = false;
+        const B = c.blocks;
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+            const col = lz * CHUNK + lx;
+            let ground = null;
+            for (let L = MIN_LAYER + 1; L <= MAX_LAYER; L++) {
+                const f = fin[(L - MIN_LAYER) * N + col];
+                if (f < 0) continue;
+                const bi = (L - MIN_LAYER) * N + col;
+                if (on) { if (B[bi] === BLOCK.AIR && f !== BLOCK.AIR) { B[bi] = f; changed = true; if (L > c.maxTop) c.maxTop = L; } }
+                else if (f !== BLOCK.AIR && B[bi] === f) {
+                    if (ground === null) ground = this.heightAt(x0 + lx, z0 + lz);
+                    if (L > ground) { B[bi] = BLOCK.AIR; changed = true; }
+                }
+            }
+            if (changed) this._refreshTop(c, lx, lz);
+        }
+        return changed;
     }
 
     /**
@@ -1674,6 +1775,7 @@ export class TerrainData {
                 if (Math.hypot(tx, tz) < TREE_MIN_DIST) continue;
                 if (this.seas && this.seas.signedDist(tx, tz) > -SEA.BEACH - 6) continue; // not on a beach (nor its crown)
                 if (this.sites && (this.sites.landAt(tx, tz) || this.sites.landAt(tx + 1, tz + 1))) continue; // no trees in villages
+                if (this.ghost?.on && this.ghost.insideAt(tx, tz, 6)) continue;
                 const h = this.heightAt(tx, tz);
                 if (h < 0 || h > 8) continue;
                 // Only on level dry ground (the 2×2 trunk and its surroundings)

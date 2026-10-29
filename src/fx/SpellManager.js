@@ -1153,6 +1153,8 @@ export class SpellManager {
         if (this.hooks.blowMe) this.hooks.blowMe(casterId, origin, (pos) => body(push(pos)), power > 1 ? 'WindMaxima' : 'Wind');
         // Ships: the wind fills the sails it reaches (src/game/Ships.js)
         this.hooks.windShips?.(origin, direction, power, casterId);
+        // Ghosts: the gust blows them away (they fly off frightened and come back — Ghosts.blow)
+        this.hooks.windGhosts?.(origin, direction, power, casterId);
         // Doors: the gust swings the leaves it reaches (every computer the same — Doors.blow; a locked one only rattles)
         this.hooks.doors?.((p) => push(p), origin);
     }
@@ -1186,6 +1188,7 @@ export class SpellManager {
         const push = (pos) => windRingPush(origin, pos);
         // (twice on bodies, as «Вайнд Максима» ahead; the lift only a little more)
         const body = (pos) => { const v = push(pos); return v && v.multiplyScalar(WIND_BODY_K).setY(v.y * 1.25); };
+        this.hooks.windGhosts?.(origin, _a.set(0, 1, 0), 3, casterId); // (the ring blows the ghosts away too)
         if (this.auth && this.hooks.creatures) this.hooks.creatures('WindMaxima', casterId, (pos) => { const v = body(pos); return v && v.clone(); }, { from: origin });
         else if (this.auth) {
             for (const z of this.zombies) {
@@ -1339,6 +1342,7 @@ export class SpellManager {
                 { from: origin, fly: true, each: (c, ck, res) => { if (res !== 'none') this.hooks.fallWatch?.(ck, c, casterId); } });
             this.hooks.scatterCrew?.(origin, (pos) => push(pos), casterId);
         }
+        this.hooks.ghostsAim?.(origin, direction, range, name, casterId); // (a ghost has no body to throw: «Overgrown» does not work on it)
         // Loose things (where their physics runs)
         for (const w of this.hooks.weapons ? this.hooks.weapons() : []) {
             if (w.holder || w.remoteTarget) continue;

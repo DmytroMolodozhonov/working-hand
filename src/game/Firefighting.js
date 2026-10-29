@@ -76,6 +76,7 @@ export const FIREFIGHT_TARGETS = {
     owl: { does: 'не действует (не со свитка): сова чует, как уходит воздух, увёртывается и улетает', why: 'на умную сову действуют только заклинания со свитка (Owls.TARGETS)' },
     canary: { does: 'толчок водой, без урона; пламя на нём гаснет', why: 'канарик — обычное живое существо: вода и ветер его отталкивают, лагерь сердится на того, кто облил (Canaries.hit)' },
     spencer: { does: 'не действует: птичка Спенсера вспугивается водой и улетает', why: 'вода птичку лишь вспугивает (SpencerRules.SPENCER_TARGETS.water)' },
+    ghost: { does: 'не действует: призрак бестелесный — вода проходит сквозь него', why: 'вода призрака не берёт (GhostRules.GHOST_SPELLS.Water)' },
     custom: { does: 'толчок водой, без урона; пламя на нём гаснет', why: 'созданное существо — живое: вода его не ранит' },
     gargoyle: { does: 'none', why: 'вода и ветер только отталкивают горгулью, урона нет' },
     // ---- things and the world
@@ -296,6 +297,7 @@ export class Firefighting {
             this._pushed.set(key, now);
             const body = b.kind === 'z' ? g.zombieById?.get(b.id) : g.duel?._creature?.(b.kind, b.id);
             if (!body) continue;
+            if (b.kind === 'G') { g.ghosts?.hit?.(body, 0, 'Water', sp.by); continue; } // (a ghost: water passes through it — GhostRules)
             const v = _a.subVectors(b.mid, sp.o).setY(0);
             if (v.lengthSq() < 1e-4) v.set(sp.d.x, 0, sp.d.z);
             v.normalize().multiplyScalar(sp.max ? FIREFIGHT.MAX_PUSH : FIREFIGHT.PUSH);

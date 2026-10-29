@@ -525,7 +525,7 @@ export class GroundVortex {
         }
         if (!g.authority || !duel) return null;
         for (const b of duel._bodies(null)) {
-            if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 'f' || b.kind === 'o') continue;
+            if (b.kind === 'p' || b.kind === 'b' || b.kind === 't' || b.kind === 'f' || b.kind === 'o' || b.kind === 'G') continue; // (a ghost: the blocks fly through it)
             if (b.kind === 'D') { if (this._near(b, f, _c)) { g.dragons?.hit?.(duel._creature('D', b.id), 0, GV.NAME, f.by); return 'hit'; } continue; }
             if (!this._near(b, f, _c)) continue;
             const key = b.kind + ':' + b.id;

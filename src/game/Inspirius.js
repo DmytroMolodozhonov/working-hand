@@ -50,7 +50,8 @@ export const INSP = {
  * capsules (Duel._bodies), the same bodies every spell charge hits.
  */
 export function inspiriusBodies(g, skip = null) {
-    return g.duel?._bodies ? g.duel._bodies(skip) : [];
+    const all = g.duel?._bodies ? g.duel._bodies(skip) : [];
+    return g.ghosts?.targets?.().length ? all.filter((b) => b.kind !== 'G') : all; // (a ghost is no wall for the ball: the wave frightens it — eachBody)
 }
 
 /** Who and what it touches — and how (CLAUDE.md). «Не действует» is written too, with why. */
@@ -71,6 +72,7 @@ export const INSPIRIUS_TARGETS = {
     customCreatures: 'созданное существо: со свитка — убивает почти всегда (урон больше здоровья)',
     canaries: 'канарик: со свитка — убивает; остаются кожа и кость',
     spencers: 'птичка Спенсера: убивает; падает её перо',
+    ghosts: 'призрак: пугается взрывной волны и исчезает на время; не ранен — он бестелесный',
     gargoyles: 'горгулья: −100 / −50 / −25 — камни и угли; падает горстью обломков',
     livingTrees: 'ожившее дерево: −100 / −50 / −25 — такая сила ломает и живое дерево (не только огонь)',
     bookBirds: 'книги-птицы сбивает на землю',

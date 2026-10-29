@@ -538,6 +538,15 @@ export class Gear {
                     a.hit.add(o);
                     g.spencers.hit(o, a.dmg, 'arrow', a.by);
                 }
+                // a ghost of the Castle of Ghosts: the arrow flies through it and does nothing (GhostRules.GHOST_SPELLS.Arrow; the shooter is told once)
+                for (const o of g.ghosts?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const c = o.bodyCapsule(_spCap);
+                    _spV.copy(c.a).lerp(c.b, 0.5);
+                    if (_spV.distanceTo(p) > c.r + 0.2) continue;
+                    a.hit.add(o);
+                    g.ghosts.hit(o, a.dmg, 'arrow', a.by);
+                }
                 // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
                 if (g.authority) for (const o of g.gargoyles?.targets() || []) {
                     if (a.hit.has(o) || gargoyleDist(o, p) > 0.2) continue;

@@ -6,7 +6,7 @@
  * infernal gargoyles, a monstrous form (the man inside lives), the black pentagrams and the marks on the ground, an «Империус» mind in a body. The
  * black mages (level 60+) it does NOT break — it hurts them badly (not a duel) and they FEAR it; lesser black mages take a lighter wound. A black
  * mage's «Protection Maxima» dome it shatters (a plain mage's — never). Everything else (people, animals, zombies, bosses, things) it does not touch.
- * The ghosts (a ghost castle comes later) have a hook: `exorcise`.
+ * The ghosts of the Castle of Ghosts it drives out for a long time: Ghosts.exorcise (the hook in Nihilis.js).
  *
  * ON WHOM / ON WHAT (CLAUDE.md): `NIHILIS_TARGETS` below says it for every creature and thing.
  */
@@ -68,7 +68,7 @@ export const NIHILIS_TARGETS = {
     gargoyles: { does: 'scatter', why: 'адские горгульи (пентаграмма чёрного мага) рассыпаются в прах' },
     monster: { does: 'scatter', why: 'форма страшного монстра (пентаграмма чёрной магии) распадается — человек внутри жив; на чужом компьютере — так же' },
     imperius: { does: 'scatter', why: 'разум «Империуса» (обычного, чёрная магия) возвращается в своё тело; «Империус Максима» — заклинание богов, не чёрная магия — держится' },
-    ghosts: { does: 'hook', why: 'призраки (замок призраков будет позже): хук `exorcise(cone)` — изгоняются' },
+    ghosts: { does: 'exorcise', why: 'призраки замка призраков: «Nihilis Atra» изгоняет их — они воют и растворяются надолго (Ghosts.exorcise); уничтожить насовсем нельзя' },
     bodies: { does: 'none', why: 'тела и кости лежат обычными останками — чёрной магии в них нет (даже кости героя с силой не рассыпаются)' },
     marks: { does: 'scatter', why: 'чёрные пентаграммы в конусе (горгульи, объединённой силы, живучести, слом защиты, монстр, дьявольской силы) гаснут; хорошие (телепортации, жизни, починки) и зачарования не задеты' },
     items: { does: 'none', why: 'вещи на земле не трогает' },

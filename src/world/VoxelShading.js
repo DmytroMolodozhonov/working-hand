@@ -331,6 +331,53 @@ float snowflakeAt(vec2 uv) {
         // runes: a faint glowing circle cut into dark stone
         float ring = 1.0 - smoothstep(0.02, 0.04, abs(length(f - 0.5) - 0.32));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.75, 1.0), ring * 0.7);
+    } else if (pat >= 18.0 && pat < 23.0) {
+        // the Castle of Ghosts: black stone with a faint chill of violet in it, see-through by 15 % (the dither below)
+        if (pat == 18.0) {
+            // black ashlar: big stones in half-metre rows, pale hairline cracks, rain streaks down the sides, a few glints
+            vec2 s = n.y > 0.5 ? uv : uv * vec2(1.0, 2.0);
+            s.x += mod(floor(s.y), 2.0) * 0.5;
+            vec2 g = fract(s), id = floor(s);
+            float m = min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y) * (n.y > 0.5 ? 1.0 : 0.5));
+            float t2 = vhash(vec3(id, layerId + 9.0));
+            diffuseColor.rgb *= (0.8 + t2 * 0.55) * (m < 0.045 ? 0.5 : 1.0);
+            float ck = abs(fract(g.x * 0.8 + g.y * 1.9 + t2 * 3.0) - 0.5);
+            if (t2 > 0.72 && ck < 0.025) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.37, 0.48), 0.6 * kFine);
+            if (n.y < 0.5) diffuseColor.rgb *= 0.88 + 0.24 * vnoise(vec2((q.x + q.z) * 2.6, q.y * 0.3));
+            if (r > 0.985) diffuseColor.rgb += vec3(0.07, 0.06, 0.15) * kFine;
+        } else if (pat == 19.0) {
+            // black brick: four courses a block, grey-violet mortar, here and there a lighter or scorched brick
+            vec2 s = uv * vec2(2.0, 4.0);
+            s.x += mod(floor(s.y), 2.0) * 0.5;
+            vec2 g = fract(s);
+            float m = min(min(g.x, 1.0 - g.x) * 0.5, min(g.y, 1.0 - g.y) * 0.25);
+            float t2 = vhash(vec3(floor(s), layerId + 4.0));
+            diffuseColor.rgb *= 0.75 + t2 * 0.6;
+            if (m < 0.02) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.2, 0.27), 0.9);
+            if (t2 > 0.93) diffuseColor.rgb += vec3(0.05, 0.04, 0.08);
+        } else if (pat == 20.0) {
+            // a floor of black and dark-violet tiles, worn in the middle of each, with pale seams
+            vec2 g = fract(uv), id = floor(uv);
+            float chk = mod(id.x + id.y, 2.0);
+            float wear = vnoise(uv * 3.0 + layerId) * 0.25;
+            diffuseColor.rgb *= (chk < 0.5 ? 0.78 : 1.18) + wear - 0.1;
+            float m = min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y));
+            if (m < 0.035) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.3, 0.4), 0.7);
+            if (n.y > 0.5 && vhash(vec3(id, layerId + 17.0)) > 0.9) diffuseColor.rgb *= 0.8; // (dusty tiles)
+        } else if (pat == 21.0) {
+            // slate: rows of pointed scales, each row darker below, a green-grey chill in the shade
+            vec2 s = uv * vec2(3.0, 3.0);
+            s.x += mod(floor(s.y), 2.0) * 0.5;
+            vec2 g = fract(s);
+            float tip = smoothstep(0.0, 0.5, g.y) * (1.0 - 0.35 * pow(abs(g.x - 0.5) * 2.0, 2.0));
+            diffuseColor.rgb *= (0.62 + 0.55 * tip) * (0.85 + 0.3 * vhash(vec3(floor(s), layerId + 1.0)));
+        } else {
+            // candle-glow / mirror panel: a pale cold glow in a dark frame, with a cross of mullions
+            vec2 g = fract(uv);
+            float fr = min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y));
+            float mull = min(abs(g.x - 0.5), abs(g.y - 0.5));
+            diffuseColor.rgb *= fr < 0.1 ? 0.2 : (mull < 0.025 ? 0.35 : 0.75 + 0.25 * vnoise(uv * 4.0 + layerId));
+        }
     }
     // soft edge darkening (fake ambient occlusion along block borders)
     vec2 e = min(f, 1.0 - f);
@@ -340,11 +387,15 @@ float snowflakeAt(vec2 uv) {
     diffuseColor.rgb *= 1.0 - edgeAmt * mix(0.1, 1.0 - edge, kFine); // (far: the edges' average)
     // far: the patterned blocks (stone, planks, bricks…) take their average tone
     if (pat > 0.5) diffuseColor.rgb = mix(voxBase * 0.86, diffuseColor.rgb, kCoarse);
+    // the Castle of Ghosts is ~15 % see-through (the author): every seventh pixel or so of its black stone is left out, in an even, fine scatter — near enough to see it
+    if (pat >= 18.0 && pat < 23.0 && kCoarse > 0.5 && fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < 0.15) discard;
 }`)
             .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 {
     float vp = floor(vVoxPat + 0.5);
     if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
+    else if (vp >= 17.5 && vp < 21.5) totalEmissiveRadiance += vec3(0.032, 0.03, 0.058) + diffuseColor.rgb * 0.1; // the Castle of Ghosts: a cold glimmer from within, so its black stone is never quite lost in the dark
+    else if (vp >= 21.5 && vp < 22.5) totalEmissiveRadiance += diffuseColor.rgb * 1.1; // candle-glow and mirror panels shine pale
     else if (vp == 15.0) totalEmissiveRadiance += diffuseColor.rgb * 0.16; // glacier ice glows from within
     else if (vp == 16.0) {
         vec3 sn = abs(vVoxNormal);

@@ -155,6 +155,7 @@ export const ICE_TARGETS = {
     owl: { does: 'none', why: 'ледяные существа сову не трогают; холод и «Frozen» (не со свитка) — она увёртывается и улетает' },
     canary: { does: 'none', why: 'ледяные существа канарика не трогают; холод и «Frozen» (не со свитка) замораживают его на несколько секунд' },
     spencer: { does: 'none', why: 'ледяные существа птичку Спенсера не трогают; холод («Айс», «Frozen») убивает её' },
+    ghost: { does: 'none', why: 'ледяные существа призраков не видят и не трогают; холод призрака не берёт — не действует: призрак бестелесный' },
     custom: { does: 'none', why: 'ледяные существа созданных не трогают; холод (не со свитка) замедляет и ранит, кроме дышащих холодом' },
     gargoyle: { does: 'none', why: 'ледяные существа и горгульи друг друга не трогают (Королева и её слуги не «подряд»); холод замедляет горгулью' },
     bookBirds: { does: 'down', why: 'замёрзшая книга падает' },
@@ -1660,6 +1661,7 @@ export class IceCastleLife {
         if (k === 'g') { const o = g.gargoyles?.byId(id); if (o) g.gargoyles.hit(o, 0, 'Ice', by); return; } // (an infernal gargoyle: the cold slows it — no harm, no freezing)
         if (k === 'C') { const cc = g.customCreatures?.byId(id); if (cc) g.customCreatures.hit(cc, 2, 'Frozen', by); return; } // (a creature of one's own: slowed, unless it breathes cold)
         if (k === 'N') { const cn = g.canaries?.byId(id); if (cn) g.canaries.hit(cn, 0, 'Frozen', by); return; } // (a canary: the cold stops it for a few seconds)
+        if (k === 'G') { const o = g.ghosts?.byId(id); if (o) g.ghosts.hit(o, 0, 'Ice', by); return; } // (a ghost: cold does nothing — GhostRules)
         if (k === 'S') { const o = g.spencers?.byId(id); if (o) g.spencers.boltHit(o, 'IceDuel', by); return; } // (the invisible bird: cold kills it)
         if (k === 'o') { const o = g.owls?.byId(id); if (o) g.owls.boltHit(o, 'IceDuel', by); return; } // (an owl: no scroll's — it darts away)
         if (k === 'b') { const b = g.books?.birds?.get(id); if (b) g.books.hitBird(b, 99, 'ice'); return; }

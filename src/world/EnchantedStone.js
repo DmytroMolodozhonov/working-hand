@@ -16,8 +16,8 @@
  */
 
 // (the block ids — Terrain.BLOCK.ENCHANTED / ENCHANTED_SEAT / ARCANE_WARD: written here as numbers, no import cycle)
-export const ENCHANTED_BLOCKS = { ENCHANTED: 70, ENCHANTED_SEAT: 71, ARCANE_WARD: 72 };
-const LO = 70, HI = 72;
+export const ENCHANTED_BLOCKS = { ENCHANTED: 70, ENCHANTED_SEAT: 71, ARCANE_WARD: 72, GHOST_STONE: 73, GHOST_BRICK: 74, GHOST_TILE: 75, GHOST_ROOF: 76, GHOST_LAMP: 77 };
+const LO = 70, HI = 77; // (70–72 the arenas' and the towers' stone; 73–77 the Castle of Ghosts' black stone: GhostCastle.js — weak, but not broken by an ordinary spell)
 
 /** A block of the enchanted stone (the arena's floor and stands, the towers' walls)? */
 export const isEnchanted = (t) => t >= LO && t <= HI;
