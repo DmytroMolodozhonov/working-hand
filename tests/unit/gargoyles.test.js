@@ -797,3 +797,10 @@ test('the net: the beam on the clouds and the break of the sky reach the other c
     G2.onNet({ op: 's', l: [['gx', 5, 20, 5, 0, 0, 0, 0, 40, 0, 1, 0, 1, 0, 3, 0.4]] }, false);
     assert.deepEqual(o.net.burn, 3); assert.equal(o.net.burnK, 0.4);
 });
+
+test('a gargoyle bites a sailor: the relations code asks for his «brain» — a sailor has no castle, so nothing is thrown (the «reading def» window)', async () => {
+    const { CastleTalk } = await import('../../src/game/CastleTalk.js');
+    assert.equal(CastleTalk.prototype.brain.call({ brains: new Map() }, { id: 's1' }), null);
+    assert.equal(CastleTalk.prototype.brain.call({ brains: new Map() }, undefined), null);
+    assert.match(src('src/game/RelationsLife.js'), /v\.cs \? this\.life\.talk\?\.brain/);
+});

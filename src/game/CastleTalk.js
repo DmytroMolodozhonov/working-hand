@@ -194,6 +194,7 @@ export class CastleTalk {
 
     // ---------------------------------------------------------- brains
     brain(v) {
+        if (!v?.cs) return null; // (not a castle's person — a sailor: nothing to think with)
         let b = this.brains.get(v.id);
         if (!b) {
             const def = v.cs.def;

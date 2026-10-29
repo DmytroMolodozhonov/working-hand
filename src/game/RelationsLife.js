@@ -80,7 +80,7 @@ export class RelationsLife {
 
     /** The bars as they are now: {sub, fr, lv}. */
     eff(v, pid = this.game.localId) {
-        const ch = this.life.talk?.brain?.(v)?.character;
+        const ch = v.cs ? this.life.talk?.brain?.(v)?.character : null; // (a sailor, a ship's captain: no castle, no talk brain — Gargoyles biting a sailor once threw «reading 'def'»)
         return effective(this.relOf(v, pid), baseSub(this.statusOf(v, pid), ch?.obedience ?? 50));
     }
 
