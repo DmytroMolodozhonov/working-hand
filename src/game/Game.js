@@ -3378,6 +3378,33 @@ export class Game {
      * middle of a fight and freeze the game for a moment.
      */
     prewarm() {
+        const run = this._prewarmRun();
+        for (;;) { const r = run.next(); if (r.done) break; }
+    }
+
+    /**
+     * The same warm-up, in pieces on the loading screen (the author, 29.10: «при заходе в Творческий страница не отвечала ~3 минуты»:
+     * every shader and buffer of the game went to the video card in ONE task of the main thread — on a slower card or driver
+     * minutes, and the browser offered to kill the page). Now each group of samples is compiled and drawn by itself, and the
+     * thread is given back (the loading screen moves, the page answers) after every group.
+     */
+    async prewarmAsync(progress = () => {}) {
+        if (this._prewarmed) return;
+        const run = this._prewarmRun();
+        let steps = 0;
+        for (;;) {
+            const r = run.next();
+            if (r.done) break;
+            steps++;
+            progress(Math.min(0.99, steps / (r.value?.of || 40)));
+            await new Promise((res) => setTimeout(res, 0));
+        }
+        progress(1);
+    }
+
+    *_prewarmRun() {
+        if (this._prewarmed) return;
+        this._prewarmed = true;
         const hidden = [];
         this.scene.traverse((o) => {
             if ((o.isMesh || o.isPoints || o.isSprite) && !o.visible) { hidden.push(o); o.visible = true; }
@@ -3474,29 +3501,54 @@ export class Game {
         zoo.add(new THREE.LineSegments(box, new THREE.LineBasicMaterial({ color: 0x5b4630 })));
         zoo.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, depthWrite: false })));
         zoo.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(document.createElement('canvas')), transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
-        this.scene.add(zoo);
-        this.renderer.compile(this.scene, this.camera);
-        // draw once to each side (behind the loading screen): every chunk's and model's buffers and
-        // textures go to the graphics card now, not in the first seconds of play
+        // the samples in groups of a few: each group alone on the scene (the rest hidden, the lights stay: the same shaders) is
+        // compiled and drawn to each side, then the thread is given back; first the world itself (its hidden things made visible)
         const q = this.camera.quaternion.clone(), cp = this.camera.position.clone();
-        this.camera.position.copy(this.character.group.position).y += 1.7;
-        for (let k = 0; k < 4; k++) {
-            this.camera.quaternion.setFromEuler(new THREE.Euler(-0.15, k * Math.PI / 2, 0, 'YXZ'));
+        const hideRest = [];
+        const sides = () => {
+            this.camera.position.copy(this.character.group.position).y += 1.7;
+            for (let k = 0; k < 4; k++) {
+                this.camera.quaternion.setFromEuler(new THREE.Euler(-0.15, k * Math.PI / 2, 0, 'YXZ'));
+                this.camera.updateMatrixWorld(true);
+                this.renderer.render(this.scene, this.camera);
+            }
+        };
+        const PER = 4; // (samples in a group)
+        const parts = [...zoo.children];
+        const of = this._pwOf = 6 + Math.ceil(parts.length / PER); // (+ the world's own and the last few)
+        try {
+            this.renderer.compile(this.scene, this.camera);
+            sides(); // (the world: every chunk's and model's buffers and textures)
+            yield { of };
+            this.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isSprite || o.isLine) && o.visible) { o.visible = false; hideRest.push(o); } }); // (not the groups: a light inside one must stay on, or the shaders differ)
+            this.scene.add(zoo);
+            zoo.remove(...parts);
+            for (let i = 0; i < parts.length; i += PER) {
+                const part = parts.slice(i, i + PER);
+                zoo.add(...part);
+                sides();
+                zoo.remove(...part);
+                yield { of };
+            }
+        } finally {
+            for (const c of hideRest) c.visible = true;
+            this.camera.quaternion.copy(q);
+            this.camera.position.copy(cp);
             this.camera.updateMatrixWorld(true);
-            this.renderer.render(this.scene, this.camera);
+            this.scene.remove(zoo);
         }
-        this.camera.quaternion.copy(q);
-        this.camera.position.copy(cp);
-        this.camera.updateMatrixWorld(true);
-        this.scene.remove(zoo);
         // (geometries only: many of these materials are shared caches used later — disposing them would recompile)
         zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep && !o.geometry.userData?.shared) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
         this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
+        yield { of: this._pwOf };
         this.seeFx?.prewarm(); // («Visible Godi»: the cloud's shader)
+        yield { of: this._pwOf };
         this.arenaDuels?.prewarm(); // (the lit places of a duel: three small shaders)
+        yield { of: this._pwOf };
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
+        yield { of: this._pwOf };
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
 
@@ -3522,7 +3574,7 @@ export class Game {
     async warmUp(progress = () => {}) {
         try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
         // the slots' pictures of the things met most (and of what the hero carries now): made on the loading screen
-        try { this.itemIcons?.warm(this._iconSamples()); } catch (e) { console.warn('[Game] icons warm-up', e); }
+        try { await this.itemIcons?.warmAsync(this._iconSamples()); } catch (e) { console.warn('[Game] icons warm-up', e); }
         // the ships of a harbour by the start: made and woken now (in play — up to 50 ms a frame each)
         try {
             const sh = this.ships;
@@ -3560,7 +3612,7 @@ export class Game {
             if (!this._playerRestored && this.inventory.coins() === 0) { this.inventory.purse.add(100); this.inventory._render?.(); }
         }
         this.heroApply.start(); // (Creative: the mana cells, the armour and robe, the dark level… from the world's settings)
-        this.prewarm();
+        this.prewarm(); // (already done on the loading screen — prewarmAsync — then this does nothing)
         this.lastTime = performance.now(); // (the shaders compiled behind the loading screen are not the first frame's time)
         // The microphone listens all game long: shield (arm forward), water
         // (hand towards a river) and flight (arms up) don't raise a hand to

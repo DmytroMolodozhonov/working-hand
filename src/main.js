@@ -1101,6 +1101,8 @@ async function startGameInner(config, welcome) {
 
         updateProgress(90, 'Компиляция шейдеров...');
         await new Promise((r) => requestAnimationFrame(r));
+        // every shader and picture sent to the video card in pieces (the page keeps answering; the bar moves)
+        await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
         game.revealed = false;
         game.start();
         if (poseService._noticed) setTimeout(() => game.hud?.notify?.('✋ ' + poseService._noticed, 9000), 1500); // (said before the game was on)

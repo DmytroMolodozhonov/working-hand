@@ -115,6 +115,15 @@ export class ItemIcons {
         this.update(Infinity);
     }
 
+    /** The same, a few pictures at a time with the thread given back between (the loading screen stays alive). */
+    async warmAsync(items, budget = 12) {
+        for (const it of items) this.url(it);
+        while (this.queue.length) {
+            this.update(budget);
+            await new Promise((r) => setTimeout(r, 0));
+        }
+    }
+
     _setup() {
         if (this._scene) return;
         const scene = new THREE.Scene();
