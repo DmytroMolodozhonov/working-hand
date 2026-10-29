@@ -307,6 +307,7 @@ export const DUNGEON_FROM_GEN = 15;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 15: dungeons (DUNGEON_FROM_GEN).
+/**
  * The first generation whose duel arenas have the visitors' stair (a separate way up to the stands) and the steward's stall with the three small
  * figures of wizards on its counter (DuelArenas.entries). One number: an older world keeps its arenas as they were built (the visitors then
  * use the front gate, the figures stand on little stones by the steward).
