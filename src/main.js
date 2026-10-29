@@ -557,6 +557,8 @@ const talkKey = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replac
 const spellRu = (n) => (n ? SPELL_RU[n] || n : null);
 let lastJournal = null;
 let lastCast = null; // the last spell the voice cast {spell, at, seg} (SpellPhrase.afterCast)
+const letterCount = (t) => String(t || '').replace(/[^a-zа-яё]/gi, '').length;
+
 function journal(command, isFinal, meta, spell, ok, why, source = '') {
     const log = game?.spellLog;
     if (!log || !command) return;
@@ -632,6 +634,19 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (game?.active && game.duel?.clashes?.some((c) => c.a.by === game.localId || c.b.by === game.localId)) command = collapseMaxima(command);
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
+    // the gods listen to a description («Да пусть создастся» said): every word is theirs — even what the sound took for
+    // a spell («существо стой» heard as «стоп»): the letters written go to them (DivineCreation.hearDesc); a spell said
+    // on its own before any description (a «Бомбардо») stops the listening and is cast
+    if (game?.active && game.divine?.listening) {
+        const written = meta?.written && letterCount(meta.written) > letterCount(command) ? String(meta.written) : command;
+        const sp = matchSpell(written);
+        const solo = sp && sp !== 'DivineCreation' && sp !== 'Stand' && !game.divine.listening.parts.length && spellPhrase(written, { final: true }).ok && written.trim().split(/\s+/).length <= 3;
+        if (solo) game.divine._unlisten(null);
+        else if (sp !== 'DivineCreation' && game.divine.hearDesc(written, isFinal)) {
+            if (isFinal) journal(written, true, meta, null, false, 'описание для «Да пусть создастся» — боги слушают', 'микрофон игрока');
+            return;
+        }
+    }
     // words (no spell) that are only a friend's voice from my speakers: no talk of mine to a villager (EchoGuard)
     if (game?.active && game.voiceChat && !matchSpell(command)) {
         const fe = friendEcho(null, meta, performance.now());

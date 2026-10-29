@@ -111,6 +111,8 @@ test('a building, start to end: −1000 mana, the gods\' answer (the network\'s 
     const { g, data, dc } = world();
     dc.testAsk = async () => ({ type: 'build', name: 'Белый дом', build: { style: { wall: 'white', roof: 'blueroof' }, parts: [{ kind: 'house', size: [16, 12, 11] }] } });
     assert.equal(dc.cast(true, 'Да пусть создастся белый дом с синей крышей'), 'DivineCreation');
+    assert.ok(dc.listening, 'the gods listen till the speaker is quiet (the description may go on)');
+    await run(dc, 2);
     assert.equal(g.combat.fatigue, 500);
     await run(dc, 60);
     assert.equal(dc.magic, null);
@@ -149,6 +151,7 @@ test('the gods fail: no network and nonsense → the words are read; too long �
     const b = world();
     b.dc.testAsk = () => new Promise(() => {});
     b.dc.cast(true, 'да пусть создастся башня');
+    await run(b.dc, 2);
     assert.equal(b.g.combat.fatigue, 500);
     await run(b.dc, CREATION.THINK_MAX + 2);
     assert.equal(b.g.combat.fatigue, 1500, 'the mana back');
@@ -163,12 +166,23 @@ test('the gods fail: no network and nonsense → the words are read; too long �
     d.dc.testAsk = async () => null;
     assert.equal(d.dc.cast(true, 'да пусть создастся'), null);
     assert.ok(d.dc.listening);
-    assert.equal(d.dc.hearDesc('маленький колодец', true), 'DivineCreation', 'the description begins it');
+    assert.equal(d.dc.hearDesc('маленький', false), true, 'still being said');
+    assert.equal(d.dc.hearDesc('маленький колодец', true), true, 'the description is taken');
+    assert.equal(d.dc.hearDesc('из белого камня', true), true, 'and its next phrase too');
+    await run(d.dc, 2);
     assert.equal(d.g.combat.fatigue, 500);
+    assert.match(d.dc.magic?.desc || '', /колодец из белого камня/, 'one description of both phrases');
+    // a lone opener and nothing said: the gods stop listening, nothing paid
+    const q = world();
+    q.dc.cast(true, 'да пусть создастся');
+    await run(q.dc, CREATION.LISTEN + 1);
+    assert.equal(q.dc.listening, null);
+    assert.equal(q.g.combat.fatigue, 1500);
     // a saved world while the gods think: the mana back on load
     const e = world();
     e.dc.testAsk = () => new Promise(() => {});
     e.dc.cast(true, 'да пусть создастся башня');
+    await run(e.dc, 2);
     const snap = e.dc.snapshot();
     assert.equal(snap.refund, CREATION.COST);
 });

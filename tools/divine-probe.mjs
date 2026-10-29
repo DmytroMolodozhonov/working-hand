@@ -16,7 +16,7 @@ try {
         await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 400000 });
     }
     await waitHudVisible(page, 300000);
-    const descs = process.argv[2] ? [process.argv[2]] : ['существо с большими глазами и большими усами летающее с шестью ногами', 'дерево с синими листьями которое светится', 'башня из белого камня с синей крышей'];
+    const descs = process.argv[2] ? [process.argv[2]] : ['будет оно белое | и шерсть пушистая', 'дерево с синими листьями которое светится', 'башня из белого камня с синей крышей'];
     const shots = path.resolve(arg('--out', '/tmp/divine-shots'));
     fs.mkdirSync(shots, { recursive: true });
     for (const [n, desc] of descs.entries()) {
@@ -27,9 +27,12 @@ try {
             d._lastCast = 0;
             out.push(['lone', g._castLocalSpell('да пусть создастся', true), d.listening ? 'listening' : '']);
             await new Promise((r) => setTimeout(r, 1700));
-            out.push(['desc', g._castLocalSpell(desc, true), !!d.magic, !!d.mine]);
+            // (the description in two phrases, as the recognizer cuts a long one: the gods keep both till the quiet)
+            const parts = desc.split(' | ');
+            for (const p of parts) { out.push(['part', g._castLocalSpell(p, false), g._castLocalSpell(p, true)]); await new Promise((r) => setTimeout(r, 300)); }
+            out.push(['listening', !!d.listening, d.listening?.at ? 'seed at the wand' : 'no seed yet']);
             let i = 0;
-            for (; i < 3000 && (d.magic || d.mine); i++) { if (i % 3) d.update(0.1); await frame(); if (i % 100 === 0) out.push(['t', i, d.magic?.phase, d.magic?.t?.toFixed?.(1)]); }
+            for (; i < 3000 && (d.listening || d.magic || d.mine); i++) { if (i % 3) d.update(0.1); await frame(); if (i % 100 === 0) out.push(['t', i, d.listening ? 'listening' : '', d.magic?.phase, d.magic?.desc]); }
             for (let k = 0; k < 60; k++) await frame();
             g.hud.setVoice = sv;
             return { out, frames: i, said, creatures: g.customCreatures?.list.length, plants: g.customPlants?.list.length, builds: d.list?.size };

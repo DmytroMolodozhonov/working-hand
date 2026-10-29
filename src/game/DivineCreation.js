@@ -99,7 +99,8 @@ export class DivineCreation extends HouseMagic {
         this.netType = 'dcr';
         this.fx2 = new DivineCreationFx(game);
         this.mine = null; // (the caster's computer) my creation the gods are thinking over: {id, desc, t, u, ctl}
-        this.listening = null; // «Да пусть создастся» said alone: the next phrase is the description {until}
+        this.listening = null; // the gods listen to the description: {until, parts, tail, quiet} (s of _clock)
+        this._clock = 0; // s: the listening's own clock (the game's time)
         this._plans = new Map(); // id → plan | 'wait'
         this._worker = null;
         this._repairQ = [];
@@ -179,40 +180,132 @@ export class DivineCreation extends HouseMagic {
         const w = creationWords(text);
         if (!w) return null;
         const say = (t) => { if (isFinal && t) g.hud?.setVoice?.(t, true); return null; };
-        if (!isFinal) { if (w.desc.length < 3) g.hud?.setVoice?.('🙏 Боги слушают…', true); return null; }
+        // (the words are still being said: the gods listen at once — the seed of light shows at the wand from the first word)
+        if (!isFinal) { this._listen(); if (w.desc.length < 3) g.hud?.setVoice?.('🙏 Боги слушают…', true); return null; }
         const now = Date.now();
         if (now - this._lastCast < 1500) return null;
         if (!w.desc || w.desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) {
-            this.listening = { until: now + CREATION.LISTEN * 1000 }; // (a long description ends long after it begins)
+            this._listen(true);
             return say('🙏 Боги слушают — опишите, что создать (например: «замок из белого камня с шестью башнями», «существо с крыльями», «дерево с синими листьями»)');
         }
-        return this._begin(w.desc, say);
+        // (the description may go on in the next phrase — the recognizer cuts a long one: the gods wait for the quiet)
+        const no = this._check(w.desc);
+        if (no) { if (this.listening) this._unlisten(null); return say(no); }
+        this._listen();
+        const L = this.listening;
+        if (!L) return this._begin(w.desc, say);
+        L.parts = [w.desc];
+        L.tail = '';
+        L.quiet = this._clock + CREATION.DESC_QUIET;
+        L.until = Math.max(L.until, this._clock + 8);
+        g._manaLater = true; // (paid when the gods say yes — DivineCreation._think)
+        return 'DivineCreation';
     }
 
     /** The phrase after a lone «Да пусть создастся» (within LISTEN s): the description. 'DivineCreation' — begun, true — taken (refused or still being said), false — not a description. */
     hearDesc(text, isFinal) {
-        if (!this.listening) return false;
-        if (Date.now() > this.listening.until) { this.listening = null; return false; }
-        if (!isFinal) return true; // (the description is still being said)
+        const L = this.listening;
+        if (!L) return false;
+        if (this._clock > L.until && !L.parts.length) { this._unlisten('🌫️ Боги не услышали описания'); return false; }
+        const words = String(text || '').trim();
+        if (words.replace(/[^a-zа-яё0-9]/gi, '').length < 2) return false;
+        // («стоп» alone: the gods stop listening)
+        if (isFinal && !L.parts.length && /^(стоп|стой|отмена|не надо|хватит)[.!]?$/i.test(words)) { this._unlisten('🌫️ Боги больше не слушают'); return true; }
+        if (!isFinal) { L.tail = words; L.quiet = this._clock + CREATION.DESC_QUIET; L.until = Math.max(L.until, this._clock + 8); return true; } // (the description is still being said)
+        // (the recognizer cuts a long description into phrases: all of them are kept until the speaker is quiet)
+        L.parts.push(words);
+        L.tail = '';
+        L.quiet = this._clock + CREATION.DESC_QUIET;
+        L.until = Math.max(L.until, this._clock + 8);
+        if (L.parts.join(' ').length >= CREATION.DESC_MAX) this._heard();
+        return true;
+    }
+
+    /** The gods begin to listen (the seed of light at the wand at once). `fresh` — a lone «Да пусть создастся»: the description may come later. */
+    _listen(fresh = false) {
+        const now = this._clock;
+        const L = this.listening;
+        if (L) { L.until = Math.max(L.until, now + (fresh ? CREATION.LISTEN : 8)); return; }
+        if (this.mine || this.magic) return;
+        this.listening = { until: now + (fresh ? CREATION.LISTEN : 12), parts: [], tail: '', quiet: 0, t: 0, aimT: 0, at: null };
+        this.game.sound?.spellCast?.('DivineCreation', this.game.character?.group?.position);
+    }
+
+    _unlisten(msg) {
+        const L = this.listening;
         this.listening = null;
-        const desc = String(text || '').trim();
-        if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) return false;
+        if (L?.at) this.game.sync?.net?.send({ t: this.netType, a: 'lis', on: 0 });
+        if (msg) this.game.hud?.setVoice?.(msg, true);
+    }
+
+    /** The speaker fell quiet: what was heard is the description. */
+    _heard() {
+        const L = this.listening;
+        if (!L) return;
+        const desc = [...L.parts, L.tail].filter(Boolean).join(' ').trim();
+        this._unlisten(null);
+        if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) { this.game.hud?.setVoice?.('🌫️ Боги не услышали описания', true); return; }
         const g = this.game;
-        return this._begin(desc, (t) => { if (t) g.hud?.setVoice?.(t, true); return null; }) || true;
+        this._begin(desc, (t) => { if (t) g.hud?.setVoice?.(t, true); return null; });
+    }
+
+    /** (every frame) The listening: its light at where the wand points, the description taken when the speaker is quiet. */
+    _listenStep(dt) {
+        const L = this.listening, g = this.game;
+        const now = (this._clock += dt);
+        if (L) {
+            if ((L.parts.length || L.tail) && (now > L.quiet || now > L.until)) this._heard();
+            else if (now > L.until) this._unlisten('🌫️ Боги не услышали описания');
+        }
+        const M = this.listening;
+        if (M) {
+            M.t += dt;
+            M.aimT -= dt;
+            if (M.aimT <= 0 && g.character?.getHandWorldPosition) {
+                M.aimT = 0.2;
+                try {
+                    const at = this._aim();
+                    if (at) {
+                        const moved = !M.at || Math.hypot(at.x - M.at.x, at.z - M.at.z) > 1.5;
+                        M.at = { x: at.x, y: at.y, z: at.z };
+                        if (moved) g.sync?.net?.send({ t: this.netType, a: 'lis', on: 1, x: r2(at.x), y: r2(at.y), z: r2(at.z) });
+                    }
+                    const side = g.wandSide?.() || g.magicHand || 'right';
+                    const h = g.character.getHandWorldPosition(side, new THREE.Vector3());
+                    M.wand = { x: h.x, y: h.y, z: h.z };
+                } catch (e) { /* (no hands yet) */ }
+            }
+            if (M.at) this.fx2.seed({ x: M.at.x, y: M.at.y, z: M.at.z, t: M.t, u: 0, wand: M.wand || null, listen: true }, dt);
+        }
+        // (another player's gods listening: their small seed where their wand points)
+        if (this._lisOf?.size) for (const [k, o] of this._lisOf) {
+            o.t += dt;
+            if (o.t > CREATION.LISTEN + 10) { this._lisOf.delete(k); continue; }
+            this.fx2.seed({ x: o.x, y: o.y, z: o.z, t: o.t, u: 0, wand: null, listen: true }, dt);
+        }
     }
 
     /** Checks, then the host is asked (the mana is paid when it says yes). */
+    /** Why it can't begin now (null — it can). */
+    _check(desc) {
+        const g = this.game;
+        const bad = forbidden(desc);
+        if (bad) return `🚫 ${bad}`;
+        if (this.mine) return '✨ Боги ещё думают над вашим прошлым творением — подождите';
+        if (this.magic) return '✨ Боги заняты другим творением — подождите, пока оно закончится';
+        if (!this.free && !g.items?.heldOf?.('wand') && !this.testAim) return '🪄 Возьмите палочку в руку и направьте её туда, где боги должны создать';
+        if (manaRules(g) && !this.free && g.combat.fatigue < CREATION.COST) return `😮‍💨 Не хватает маны: нужно ${CREATION.COST}, есть ${Math.floor(g.combat.fatigue)}`;
+        const kind = kindOfDesc(desc);
+        if (kind !== 'build' && !this._air()) return `🌌 Здесь нет воздуха — ${kind === 'plant' ? 'растение' : 'существо'} здесь не выживет. Постройку создать можно`;
+        return null;
+    }
+
     _begin(desc, say) {
         const g = this.game;
         desc = desc.slice(0, CREATION.DESC_MAX);
-        const bad = forbidden(desc);
-        if (bad) return say(`🚫 ${bad}`);
-        if (this.mine) return say('✨ Боги ещё думают над вашим прошлым творением — подождите');
-        if (this.magic) return say('✨ Боги заняты другим творением — подождите, пока оно закончится');
-        if (!this.free && !g.items?.heldOf?.('wand') && !this.testAim) return say('🪄 Возьмите палочку в руку и направьте её туда, где боги должны создать');
-        if (manaRules(g) && !this.free && g.combat.fatigue < CREATION.COST) return say(`😮‍💨 Не хватает маны: нужно ${CREATION.COST}, есть ${Math.floor(g.combat.fatigue)}`);
+        const no = this._check(desc);
+        if (no) return say(no);
         const kind = kindOfDesc(desc);
-        if (kind !== 'build' && !this._air()) return say(`🌌 Здесь нет воздуха — ${kind === 'plant' ? 'растение' : 'существо'} здесь не выживет. Постройку создать можно`);
         const at = this._aim();
         if (!at) return say('🪄 Направьте палочку на землю, где боги должны создать');
         const me = g.character.group.position;
@@ -711,7 +804,7 @@ export class DivineCreation extends HouseMagic {
                 if (m.progT <= 0 && g.sync && this.magic === m) { m.progT = 0.5; g.sync.net?.send({ t: this.netType, a: 'prog', id: m.id, u: r2(m.u || 0) }); }
             }
         }
-        if (this.listening && Date.now() > this.listening.until) this.listening = null;
+        this._listenStep(dt);
         if (this._pendingFurnish?.size) for (const id of [...this._pendingFurnish]) { const rec = this.list.get(id); if (!rec) { this._pendingFurnish.delete(id); continue; } if (this.plan(rec)) { this._pendingFurnish.delete(id); this._furnish(rec, this.auth); } }
         if (this.auth) {
             this._sweepT -= dt;
@@ -880,6 +973,14 @@ export class DivineCreation extends HouseMagic {
         const g = this.game;
         const from = m.from;
         switch (m.a) {
+            case 'lis': { // (another player's gods listen: their seed of light where their wand points)
+                if (from == null || from === g.localId) break;
+                const map = this._lisOf || (this._lisOf = new Map());
+                if (!m.on) map.delete(from);
+                else if ([m.x, m.y, m.z].every((v) => Number.isFinite(+v))) { const o = map.get(from); map.set(from, { x: +m.x, y: +m.y, z: +m.z, t: o?.t || 0 }); }
+                if (map.size > 8) map.delete(map.keys().next().value);
+                break;
+            }
             case 'ask': {
                 if (!isHost || typeof m.desc !== 'string') break;
                 const res = this._hostAsk({ desc: m.desc, at: m.at, c: m.c, wand: m.wand, kind: m.kind }, from);

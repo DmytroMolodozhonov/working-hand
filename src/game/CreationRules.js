@@ -43,6 +43,7 @@ export const CREATION = {
     PLANTS_PER_SPECIES: 160,
     COOLDOWN: 20, // s between two creations of one player
     LISTEN: 30, // s: after a lone «Да пусть создастся» the gods wait for the description this long
+    DESC_QUIET: 1.6, // s of quiet after the last words: the description is over (a long one comes in several phrases)
     DESC_MAX: 600, // letters of a description read
 };
 
@@ -320,17 +321,32 @@ export function kindOfDesc(desc) {
     const s = lower(desc);
     if (STATUE_RE.test(s) || /из (камня|кирпича|дерева|мрамора|золота|блоков)/.test(s)) return 'build';
     const creature = /существ|животн|зверь|звер[яеок]|чудищ|чудовищ|монстр|тварь|питом|создани|зверек|зверушк|птиц|насеком|дракон|рыб[ау]|паук|змея|змей(?!ка)|жук|слизень|слизн|котик|кот[ае]?\b|кошк|собак|лошадк|кролик|заяц|ящер|гриффон|единорог|бабочк|голем|тролл|гоблин|великан|ёж|еж\b|пчел|муравей|сова|лиса|волк|медвед|олен|мышь|мышк/.test(s)
+        || /шерст|пушист|лап(ы|ами|ах|ой)\b|копыт|клюв|клык|хвост|крыль|чешу|щупальц|усами|усы\b|ушами|перья|перьями|рычит|мурлыч|летающ|летает|бегает|ползает|плавает|кусается|ест |питается/.test(s)
         || /(с|со) (\S+ ){0,2}(глазами|глазом|ногами|лапами|крыльями|хвостом|рогами|рогом|ушами|клювом|щупальцами|чешуёй|чешуей|шерстью|перьями|панцирем)|умеющ(ее|ий|ая) (летать|плавать|ходить)|летающ(ее|ий|ая)|здоровья|двуног|четвероног|шестиног|многоног/.test(s);
     const plant = /растени|растенье|цвет(ок|ы|ов|ами)|дерев(о|ья|ьев|ца|ом|е)|куст|гриб|трав[аыу]|лиан|тростник|камыш|бамбук|водоросл|кактус|плющ|мох|папоротник|цветущ|семена|размножа(ется|ются) (быстро|медленно|часто|редко)|распространя/.test(s);
     const build = PART_KEYS.some((k) => PARTS[k].ru.test(s)) && !/дом(ашн|овит)/.test(s);
     // (a plant named first wins over a building word further on: «кристаллическое растение», «тростник у воды»)
     if (plant && !creature && /^(\S+ ){0,2}(растени|растенье|цвет(ок|ы)|дерев|куст|гриб|кактус|тростник|камыш|бамбук|лиан|плющ|папоротник|водоросл)/.test(s.replace(/^(да |пусть |ну )+/, ''))) return 'plant';
     if (plant && !creature && !build) return 'plant';
+    // (a building named first — «замок с драконом на башне» — is a building with a dragon on it, not a dragon)
+    if (creature && build && /^(\S+ ){0,1}(\S+)/.test(s)) {
+        const first = s.replace(/^(да |пусть |ну )+/, '').split(/\s+/).slice(0, 2).join(' ');
+        if (PART_KEYS.some((k) => PARTS[k].ru.test(first)) && !/существ|животн|зверь|дракон|монстр|птиц|рыб|паук|кот|кошк|собак/.test(first)) return 'build';
+    }
     if (creature) return 'creature';
     if (plant && !build) return 'plant';
     return 'build';
 }
 const STATUE_RE = PARTS.statue.ru;
+
+/** The kind named straight out in the description (null — not named): «существо …», «растение …», «дом …». */
+export function saidKind(desc) {
+    const s = lower(desc);
+    if (STATUE_RE.test(s)) return 'build';
+    if (/существ|животн|зверь|звер[яеоюи]|зверушк|зверек|чудищ|чудовищ|монстр|тварь|питом/.test(s)) return 'creature';
+    if (/растени|растенье|^(\S+ ){0,2}(дерев|цвет(ок|ы)|куст|гриб|кактус|тростник|лиан)/.test(s.replace(/^(да |пусть |ну )+/, ''))) return 'plant';
+    return null;
+}
 
 // ---------------------------------------------------------------------------------------------- the guess (no network)
 const has = (s, re) => re.test(s);
@@ -345,9 +361,9 @@ const sizeWord = (s0) => {
  * The recipe read from the words alone (no network; the network's recipe is laid over it — its gaps filled from here).
  * @returns {object} a recipe (sanitizeRecipe's shape)
  */
-export function guessRecipe(desc, seed = 1) {
+export function guessRecipe(desc, seed = 1, as = null) {
     const s = lower(desc).slice(0, CREATION.DESC_MAX);
-    const type = kindOfDesc(s);
+    const type = as || saidKind(s) || kindOfDesc(s);
     const r = createRng((seed >>> 0) ^ hashString(s));
     const name = nameOf(desc);
     if (type === 'creature') return guessCreature(s, r, name);
@@ -357,7 +373,7 @@ export function guessRecipe(desc, seed = 1) {
 
 /** A short name from the description (its first words). */
 export function nameOf(desc) {
-    const t = String(desc ?? '').replace(/\s+/g, ' ').trim().replace(/^(с|со|из|в|на)\s/i, '');
+    const t = String(desc ?? '').replace(/\s+/g, ' ').trim().replace(/^((пусть|будет|было|была|были|оно|она|он|это|чтобы|и)\s+)+/i, '').replace(/^(с|со|из|в|на)\s/i, '');
     const words = t.split(' ').slice(0, 5);
     const cut = words.findIndex((x, i) => i > 0 && /^(котор\S*|что|чтобы|где|когда|умеющ\S*|способн\S*)$/i.test(x.replace(/[,.;:!?]+$/, '')));
     if (cut > 0) words.length = cut; // (a name, not a sentence: «Дерево с синими листьями, которое…» → «Дерево с синими листьями»)
@@ -514,9 +530,12 @@ export function sanitizeRecipe(raw, desc = '', seed = 1) {
     const guess = guessRecipe(desc, seed);
     const R = raw && typeof raw === 'object' ? raw : {};
     let type = ['build', 'creature', 'plant'].includes(R.type) ? R.type : guess.type;
+    // (said straight out — «существо», «животное», «растение», «дерево» — the words decide, whatever the network thought)
+    const said = saidKind(desc);
+    if (said) type = said;
     // (a statue «of a pig» is a building — the words decide when they say «статуя», whatever the network thought)
     if (STATUE_RE.test(lower(desc)) && type !== 'build') type = 'build';
-    const base = type === guess.type ? guess : guessRecipe(type === 'creature' ? `существо ${desc}` : type === 'plant' ? `растение ${desc}` : `дом ${desc}`, seed);
+    const base = type === guess.type ? guess : guessRecipe(desc, seed, type);
     const name = (typeof R.name === 'string' && R.name.trim() ? R.name.trim() : base.name).replace(/[<>{}]/g, '').slice(0, 40);
     if (forbidden(name)) return { ...base, name: base.name };
     const body = R[type] && typeof R[type] === 'object' ? R[type] : R;
