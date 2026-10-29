@@ -146,7 +146,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -374,6 +374,7 @@ export class Game {
             bigHouses: this.gen >= HOUSE_SIZE_FROM_GEN, // (the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig)
             dungeons: this.gen >= DUNGEON_FROM_GEN, // (the ruins and the underground dungeons — Dungeons.js)
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
+            iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
             arenaX2: this.gen >= ARENA_X2_FROM_GEN, // (the duel arenas twice as wide — DuelArenas.ARENA_X2)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)

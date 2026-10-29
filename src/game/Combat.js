@@ -205,6 +205,8 @@ export const PROTECTION_TARGETS = {
 const HIT_SPELL = {
     IceBall: 'Ice', IceDuel: 'Ice', IceDuelMaxima: 'IceMaxima', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
+    // the Ice Queen's own blows (IceQueen.js; IceGiants.QUEEN_VS): the freeze, the spikes and the blade are as dear as «Айс Максима», shards and the gust as «Айс»
+    QueenFreeze: 'IceMaxima', QueenSpikes: 'IceMaxima', QueenBlade: 'IceMaxima', QueenShard: 'Ice', QueenGust: 'Ice',
 };
 /** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
 const NOT_A_SPELL = new Set(['Bounce', 'melee', 'arrow', 'web', 'poison', 'bite', 'dragonFire', 'phoenixFire', 'Cannon']);
@@ -920,6 +922,7 @@ export class Combat {
         if (this.shield?.gods) return this.godsHit(kind, null, 1) <= 0; // (the gods' shield: held — only the gods' own spells cost: ProtectionGods.js)
         if (!this.manaOn || !this.shield) return true;
         let cost = shieldHitCost(kind);
+        if (cost > 0 && this.shield.type === 2 && kind.startsWith?.('Queen')) cost *= 0.5; // (the dome holds the Ice Queen's blows for half the price — «Максима выдерживает дольше»)
         if (cost > 0 && BEAM_KINDS.has(kind)) {
             // (a flame / a beam keeps touching it: one spell, paid once, while it doesn't stop)
             const now = performance.now(), m = this._beamAt || (this._beamAt = {});
@@ -1149,8 +1152,10 @@ export class Combat {
             ? `🖤 «Дай». ${name ? `${name} испепелил вас` : 'Вас испепелило'} — ни тела, ни вещей, прежняя сила потеряна навсегда`
             : how === 'shatter'
             ? `🧊💥 ${name ? `${name} разбил вас` : 'Вас разбили'}, пока вы были заморожены`
+            : how === 'iceQueen'
+            ? '🧊💥 Вас разбил жезл Ледяной Королевы, пока вы были заморожены'
             : `💀 ${name ? `Вас победил ${name}` : 'Вы погибли'}`;
-        if (how === 'shatter') {
+        if (how === 'shatter' || how === 'iceQueen') {
             const c = this.center(_v1);
             for (let i = 0; i < 60; i++) this.game.fx.spark(c, 0xd6f3ff, 0.25, _v2.set((Math.random() - 0.5) * 12, Math.random() * 8, (Math.random() - 0.5) * 12), 1.0);
         }

@@ -34,10 +34,13 @@ import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
 import { segmentSegmentDistSq } from '../core/math.js';
 import { creditKill, GOD_SPELLS, hellKilled } from './Mana.js';
+import { shieldHitCost } from './Combat.js';
 import { hitBody } from './MagicWave.js';
 import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
+import { MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
+export { QUEEN_VS, MELT_STEPS } from './IceGiants.js'; // (the tables of the fight: «кто/что × как действует»)
 
 export const ICE = {
     ACTIVE: 220, // m from the castle: a player this near wakes it (its creatures come out)
@@ -61,7 +64,7 @@ export const ICE = {
 };
 
 /** Fire and how strong each kind is on the ice (the author: «чем сильнее огненное заклятие, тем сильнее урон»). */
-export const FIRE_K = { fire: 1.5, burn: 1.5, Fire: 1.5, Campfire: 1.5, Inferno: 2, FireMaxima: 2.5, Hellfire: 3.5, heat: 0.5 };
+export const FIRE_K = { fire: 1.5, burn: 1.5, Fire: 1.5, Campfire: 1.5, Inferno: 2, FireMaxima: 2.5, Hellfire: 3.5, heat: 0.5, dragonFire: 2.5, phoenixFire: 1.5, torch: 1 };
 /**
  * Every cold kind of harm — ice, frost, snow, the rod, frozen water (the author: «у Ледяной Королевы
  * иммунитет к холоду и к холодным заклинаниям любого вида»). One list for every place where cold acts on
@@ -133,6 +136,8 @@ export function iceBolt(type, spell) {
 export const ICE_TARGETS = {
     // ---- what acts on the queen / the monsters / the snowmen
     fire: { does: 'damage', why: 'огонь — их слабость: «Инферно» ×2, «Fire Maxima» ×2,5, «Адский огонь» ×3,5 (снеговик тает сразу); замок тоже тает' },
+    melt: { does: 'shrink', why: 'ледяные великаны и злые снеговики ТАЮТ от огня (Инферно, Fire, Fire Maxima, огонь дракона, «Адский огонь» вдвое сильнее Инферно): с каждым попаданием меньше (до 30 % роста) и слабее бьют (урон, досягаемость, шаг — IceGiants.MELT_STEPS); убить огнём можно только когда он уже наименьший; размер идёт хосту и в снапшот, на коллизию и ходьбу (радиус, рост); Королева не тает — огонь на неё действует уроном' },
+    queenVsPlayer: { does: 'see QUEEN_VS', why: 'удары Королевы по игроку: «Protection» и «Protection Maxima» держат всё (заморозка, льдины, шипы, вьюга, клинок — IceGiants.QUEEN_VS); магическая мантия и доспехи не держат, но платят запасом прочности и укорачивают заморозку' },
     scrollSpells: { does: 'damage', why: 'заклинания со свитка (молния, «Авада Кедавра» −25, «Тотальное разрушение», «Inspirius», «Бомбардо Максима»…) действуют как на всех' },
     plainSpells: { does: 'none', why: 'простые заклинания без свитка (Бомбардо, Сапира, Остолбеней, Айс, Джолт, Вайнд, вода…) на королеву не действуют — иней гасит их; монстра Бомбардо лишь трескает (½); снеговиков бьёт всё' },
     blade: { does: 'damage', why: 'меч и топор: королеве — полный урон, монстру — половина (лёд крошится), снеговику — полный' },
@@ -209,7 +214,7 @@ export class IceCastleLife {
         this.byIdMap = new Map();
         this.shots = [];
         this.fxs = []; // spikes, beams, gusts in flight
-        this.state = { queenDead: false, queenHp: ICE.QUEEN.HP, monsters: [ICE.MONSTER.HP, ICE.MONSTER.HP], monsterDeadAt: [0, 0], seen: false };
+        this.state = { queenDead: false, queenHp: ICE.QUEEN.HP, monsters: [ICE.MONSTER.HP, ICE.MONSTER.HP], monsterMelt: [0, 0], monsterDeadAt: [0, 0], seen: false };
         this.active = false;
         this._netT = 0;
         this._spawnT = 3;
@@ -260,6 +265,7 @@ export class IceCastleLife {
             r: T.R, h: T.H, speed: T.SPEED, turn: T.TURN || 3, slot,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
             bodyCapsule: (out) => iceBody(c, out),
+            base: { r: T.R, h: T.H, speed: T.SPEED, S }, melt: 0, sz: 1, blade: 0, bladeV: 0, bladeT: 0, sheathT: 0, charge: null, dmgK: 1, reachK: 1, meltAt: -1e9, meltHot: 0, // (a giant / a snowman melts: IceGiants.js)
             damageCooldown: 0, vy: 0, stunT: 0, frozenT: 0, walkT: Math.random() * 6, castT: 2 + Math.random() * 2, throwT: 1 + Math.random() * 2,
             home: pos.clone(), target: null, wp: null, anim: 0, act: null, actT: 0, hurtT: 0, lastBy: null,
         };
@@ -283,7 +289,7 @@ export class IceCastleLife {
         if (!c || c.dead) return 0;
         const g = this.game;
         const who = by === undefined ? g.localId : by;
-        const n = iceDamage(c.type, kind, dmg);
+        let n = iceDamage(c.type, kind, dmg);
         if (n <= 0 && dmg > 0) this._noEffect(c, kind, who);
         if (!this.auth) { if (dmg > 0) g.sync?.ice?.({ e: 'hit', id: c.id, dmg: r2(dmg), kind, by: who }); this._flash(c, n > 0); return n; }
         this._flash(c, n > 0);
@@ -302,12 +308,52 @@ export class IceCastleLife {
         // (struck: it turns on whoever did it — a creature of the castle defends itself)
         if (who != null && (who === g.localId || g.remotes?.has(who))) c.foe = who;
         if (n <= 0) { if (c.type === 'queen' && (c.mockT || 0) <= 0) { c.mockT = 8; this._say(c, 'Твоя магия здесь бессильна!'); } return 0; }
+        // (fire melts a giant / a snowman: smaller with every flame, weaker with every size — and it cannot die before it is the least: IceGiants.js)
+        if ((c.type === 'monster' || c.type === 'snowman') && FIRE_K[kind]) { n = this._melt(c, kind, dmg, n); if (n <= 0) { c.hurtT = 0.1; return 0; } }
         c.hp = Math.max(0, c.hp - n);
         c.hurtT = 0.25;
         c.lastKind = kind; // (the last blow: the Queen killed by the Hellfire darkens the caster — HellKills.js)
         if (c.type === 'snowman' && FIRE_K[kind]) for (let i = 0; i < 6; i++) g.fx?.spark?.(iceCenter(c, _v), 0xdfefff, 0.2, _v2.set((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
         if (c.hp <= 0) this._die(c, who);
         return n;
+    }
+
+    /**
+     * (host) The fire on a giant / an evil snowman: it melts a step (at most every MELT.TICK s — a stream of flame calls every frame),
+     * shrinks, hits weaker; the HP the fire takes from it meanwhile → returned (0 between the steps).
+     */
+    _melt(c, kind, raw, n) {
+        const now = this._clock ? this._clock() : performance.now();
+        c.meltHot = MELT.HOT;
+        if (now - c.meltAt < MELT.TICK * 1000) return 0;
+        c.meltAt = now;
+        const r = applyFire(c.type, kind, raw, n, c.melt, c.hp);
+        const hp = c.hp - r.hp;
+        c.melt = r.melt;
+        this._resize(c);
+        this._sendSoon = true;
+        return hp > 0 ? hp : 0;
+    }
+
+    /** A creature's size, reach, pace and blow follow its melting (every computer, from `c.melt`). */
+    _resize(c) {
+        const st = meltStats(c.melt), B = c.base;
+        const stage = meltStage(c.melt);
+        c.sz = st.scale; c.dmgK = st.dmg; c.reachK = st.reach;
+        c.r = B.r * st.scale; c.h = B.h * st.scale; c.speed = B.speed * st.speed;
+        if (!c.dead) c.model.scale.setScalar(B.S * st.scale * (c.rise > 0 ? Math.max(0.05, 1 - c.rise) : 1));
+        c.model.userData.farRadius = (c.type === 'queen' ? 5 : 3.5) * B.S * st.scale;
+        if (stage > (c.stage || 0)) { c.stage = stage; this._meltStageFx(c); }
+        else c.stage = stage;
+    }
+
+    /** A step of the melting: a crack of ice, a puff of steam, a splash of water, a word to whoever did it. */
+    _meltStageFx(c) {
+        const g = this.game, p = iceCenter(c, _v);
+        const big = c.type === 'monster';
+        for (let i = 0; i < (big ? 26 : 10); i++) g.fx?.spark?.(p, i % 3 ? 0xeaf8ff : 0x8fd6ff, big ? 0.34 : 0.2, _v2.set((Math.random() - 0.5) * (big ? 7 : 4), 1 + Math.random() * (big ? 6 : 3), (Math.random() - 0.5) * (big ? 7 : 4)), big ? 1.4 : 0.9); // (steam and drops)
+        g.sound?.playIce?.('iceCrack', c.model.position, big ? 1.1 : 0.6, 0.8 + 0.15 * (c.stage || 0)); // (the ice cracks, a little higher with every step)
+        if (big) { g.fx.shake = Math.max(g.fx.shake || 0, 0.25); if ((c.stage || 0) >= 5) g.hud?.setVoice?.('💧 Ледяной великан растаял до обломка — теперь он слаб', true); }
     }
 
     _flash(c, real) {
@@ -441,6 +487,7 @@ export class IceCastleLife {
             }
         } else if (c.type === 'monster') {
             this.state.monsters[c.slot] = 0;
+            this.state.monsterMelt[c.slot] = 0;
             this.state.monsterDeadAt[c.slot] = Date.now();
             if (this.auth) creditKill(g, killer, { kind: 'iceMonster' });
         } else if (this.auth && killer && c.type === 'snowman') creditKill(g, killer, { kind: 'snowman' }); // (the friendly one: no reward for it)
@@ -453,6 +500,7 @@ export class IceCastleLife {
     update(dt) {
         const g = this.game;
         const P = this.plan;
+        this._t = (this._t || 0) + dt; // (the castle's clock, seconds: the queen's freezes and charges)
         const me = g.character?.group.position;
         if (!me) return;
         if (!P && !this.list.length && !this.puddles?.length && !this._friendsToLoad) { this._netSend(dt); return; } // (no castle here, no snowman: nothing to do)
@@ -600,10 +648,12 @@ export class IceCastleLife {
                 // (a monster killed comes back after a long while — while the queen lives)
                 if (this.state.queenDead || Date.now() - (this.state.monsterDeadAt[i] || 0) < ICE.MONSTER.RESPAWN * 1000) continue;
                 this.state.monsters[i] = ICE.MONSTER.HP;
+                this.state.monsterMelt[i] = 0;
             }
             const q = P.guard[i];
             const m = this._spawn('monster', new THREE.Vector3(q.x, this._floor(q.x, q.z, q.y + 4), q.z), { hp: this.state.monsters[i], yaw: iceYaw(P) + Math.PI, slot: i });
             m.home.copy(m.model.position);
+            if (this.state.monsterMelt[i] > 0) { m.melt = this.state.monsterMelt[i]; this._resize(m); } // (it left as small as it was)
         }
         for (let i = 0; i < 8; i++) this._spawnSnowman();
     }
@@ -616,7 +666,7 @@ export class IceCastleLife {
             // (the snowmen following the rod's holder go on with him)
             if (c.type === 'snowman' && h && this.state.queenDead && Math.hypot(h.p.x - c.model.position.x, h.p.z - c.model.position.z) < ICE.ROD.FOLLOW) continue;
             if (c.type === 'queen' && !c.dead) this.state.queenHp = c.hp;
-            if (c.type === 'monster' && !c.dead) this.state.monsters[c.slot] = c.hp;
+            if (c.type === 'monster' && !c.dead) { this.state.monsters[c.slot] = c.hp; this.state.monsterMelt[c.slot] = c.melt; }
             this._remove(c);
         }
         this._sendSoon = true;
@@ -639,7 +689,7 @@ export class IceCastleLife {
             const me = g.character.group.position;
             let ok = false;
             for (let i = 0; i < 8 && !ok; i++) {
-                const a = Math.random() * Math.PI * 2, d = P.R * (0.6 + Math.random() * 0.32);
+                const a = Math.random() * Math.PI * 2, d = (P.A || P.R) * (0.6 + Math.random() * 0.32); // (the arena: inside its wall)
                 x = P.x + Math.cos(a) * d; z = P.z + Math.sin(a) * d;
                 ok = Math.hypot(x - P.hall.x, z - P.hall.z) > P.hall.r + 4 && Math.hypot(me.x - x, me.z - z) > 10;
             }
@@ -795,28 +845,54 @@ export class IceCastleLife {
         return best;
     }
 
+    /**
+     * The queen's tactics (the author: «заморозить издалека, как только ты достаточно близко — она подходит и разбивает»): she keeps 10…22 m from
+     * her foe and throws her spells (the rod's freeze first of all, from 10…24 m, never point blank); when the freeze TOOK (his shield did not hold
+     * it) she skates up fast, the rod grows into a blade in her hand, she turns to face him, raises it — and strikes; then the blade is a rod
+     * again. One who holds «Protection» / «Protection Maxima» before him is not frozen and not cut (_shieldTakes). Cornered with the foe close, she
+     * strikes with the blade anyway.
+     */
     _thinkQueen(c, dt) {
-        const g = this.game, P = this.plan, Q = ICE.QUEEN;
+        const g = this.game, P = this.plan, Q = ICE.QUEEN, A = QUEEN_AI;
         const p = c.model.position;
         const hall = P.hall;
+        if (c.sheathT > 0) c.sheathT -= dt;
         // her foes: anyone in her castle's land, anyone who struck her
         const e = this._enemy(c, Q.SIGHT, _v3.set(P.x, p.y, P.z));
         c.target = e;
         if (!e) {
             // back to her throne
+            if (c.charge) this._chargeEnd(c, false);
             const t = this._wayTo(c, P.throne);
             if (!this._step(c, t.x, t.z, dt, 0.6, 0.7)) this._face(c, _v.set(P.gate.x, 0, P.gate.z), dt);
             c.castT = Math.max(c.castT, 1.5);
+            this._bladeStep(c, dt, 99);
             return;
         }
         if (!c.greeted) { c.greeted = true; this._say(c, e.giant ? 'Что за чудовище ломится в мой замок?! Заморозить его!' : 'Кто посмел войти в мой ледяной замок?!'); }
         const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
         const see = e.giant || this._sees(c, e.p);
-        // she keeps her distance: close enough to strike with her rod, never further than her leash
         const leash = Math.hypot(p.x - P.x, p.z - P.z) > Q.LEASH;
-        if ((!see || d > Q.REACH * 0.7) && !leash) { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, 6 + (e.rad || 0)); }
-        else if (leash) { const t = this._wayTo(c, hall); this._step(c, t.x, t.z, dt, 2); }
-        else { c.moving = false; this._face(c, e.p, dt); }
+        // a frozen foe: run up, the blade, the blow (the freeze is over, he is gone, or she is too far from her hall — it ends)
+        if (c.charge && (c.charge.id !== e.id || this._t > c.charge.until || leash)) this._chargeEnd(c, false);
+        if (c.charge) { this._queenChase(c, e, d, dt); return; }
+        // she keeps her distance: closer than KEEP_MIN she steps back (cornered with him near: the blade), further than KEEP_MAX she goes closer
+        const band = rangeBand(d);
+        if (leash) { const t = this._wayTo(c, hall); this._step(c, t.x, t.z, dt, 2); }
+        else if (!see || band === 'far') { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, t === e.p ? A.KEEP_MAX * 0.7 + (e.rad || 0) : 1.2); c.cornerT = 0; } // (the stop is for the foe, not for the gate on the way to him)
+        else if (band === 'near' && !c.act) {
+            const dx = p.x - e.p.x, dz = p.z - e.p.z, L = Math.hypot(dx, dz) || 1;
+            this._step(c, p.x + (dx / L) * 8, p.z + (dz / L) * 8, dt, 0.3, 1.35);
+            c.cornerT = c.moving ? 0 : (c.cornerT || 0) + dt;
+            if (c.cornerT > 1.4 && d < 12 && see) { c.charge = { id: e.id, until: this._t + 4, t0: this._t, corner: true }; c.bladeT = 0; c.cornerT = 0; this._say(c, 'Не уйдёшь!'); return; }
+        } else {
+            // (at her distance: she sidesteps now and then, facing him)
+            c.cornerT = 0;
+            if ((c.evadeT = (c.evadeT || 0) - dt) <= 0 && Math.random() < A.EVADE * dt * 4) { c.evadeT = 0.9 + Math.random() * 0.8; c.evadeDir = Math.random() < 0.5 ? -1 : 1; }
+            if (c.evadeT > 0 && !c.act) { const dx = e.p.x - p.x, dz = e.p.z - p.z, L = Math.hypot(dx, dz) || 1; this._step(c, p.x + (-dz / L) * c.evadeDir * 6, p.z + (dx / L) * c.evadeDir * 6, dt, 0.3, 1.2); if (!c.act) this._face(c, e.p, dt * 0.5); }
+            else { c.moving = false; this._face(c, e.p, dt); }
+        }
+        this._bladeStep(c, dt, d);
         c.castT -= dt;
         if (c.castT > 0 || !see || d > Q.REACH || c.act) return;
         // «лицом к цели»: she casts only facing her foe
@@ -824,12 +900,51 @@ export class IceCastleLife {
         c.castT = Q.CAST * (0.75 + Math.random() * 0.5);
         const nSnow = this.list.filter((s) => s.type === 'snowman' && !s.dead).length;
         const roll = Math.random();
-        // (a giant: first of all the rod's freeze — the ice that takes everybody; then the rest)
-        const spell = e.giant && (!c.giantFrozen || Date.now() > c.giantFrozen) && roll < 0.8 ? 'freeze'
+        // (the rod's freeze first of all, at her range and not too often; a giant: the same; then the rest)
+        const since = c.lastFreeze == null ? null : this._t - c.lastFreeze;
+        const spell = mayFreeze(d, since) && (e.giant ? (!c.giantFrozen || Date.now() > c.giantFrozen) : true) && roll < 0.85 ? 'freeze'
             : nSnow < 5 && roll < 0.2 ? 'summon' : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
+        if (spell === 'freeze' && !mayFreeze(d, since)) return; // (point blank or too soon: not the freeze — the next turn is another spell)
         c.act = spell; c.actT = 0.7; c.actTo = e;
         if (spell === 'freeze' && e.giant) c.actT = Math.min(ICE.GIANT.WIND_MAX, 0.7 + ICE.GIANT.WIND_K * Math.max(0, (e.size || 1) - 1) * (e.size > 4 ? 1.6 : 1)); // (the greater the body, the longer the rod gathers its cold)
         this._say(c, { freeze: 'Замри навеки!', spikes: 'Лёд, пронзи их!', shards: 'Осколки зимы!', blizzard: 'Вьюга, прогони их!', summon: 'Снеговики, ко мне!' }[spell]);
+    }
+
+    /** The blade follows what she is doing: out while she charges (grown by time and by how near she is), out for a while after, then the rod again. */
+    _bladeStep(c, dt, d) {
+        const A = QUEEN_AI;
+        const want = c.charge ? bladeGrow(c.bladeT || 0, d) : c.sheathT > 0 ? 1 : 0;
+        const k = dt / (want > c.blade ? A.GROW : 0.45);
+        c.blade = Math.max(0, Math.min(1, c.blade + Math.max(-k, Math.min(k, want - c.blade))));
+    }
+
+    /** (host) She runs at a frozen foe (fast), grows the blade, faces him within reach, raises it and — the blow comes in _queenCast('slash'). */
+    _queenChase(c, e, d, dt) {
+        const A = QUEEN_AI, p = c.model.position;
+        c.bladeT = (c.bladeT || 0) + dt;
+        this._bladeStep(c, dt, d);
+        if (c.act) { c.moving = false; return; } // (the blade is raised)
+        if (d > A.STRIKE - 0.5) { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, t === e.p ? A.STRIKE - 1.5 + (e.rad || 0) : 1.2, A.CHARGE_SPEED / c.speed); }
+        else { c.moving = false; this._face(c, e.p, dt); }
+        if (c.blade < 0.9 || d > A.STRIKE) return;
+        // «лицом к цели»: she raises the blade only facing him
+        if (!facesTarget(c.model.rotation.y, p.x, p.z, e.p.x, e.p.z, FACE.MELEE)) { this._face(c, e.p, dt); return; }
+        c.act = 'slash'; c.actT = A.WINDUP; c.actTo = e;
+    }
+
+    /** (host) The charge is over: the blade turns back into the rod after the blow (1.5 s) or after SHEATH s if she never struck. */
+    _chargeEnd(c, struck) {
+        c.charge = null;
+        c.sheathT = struck ? 1.5 : QUEEN_AI.SHEATH;
+    }
+
+    /** (host) A player's computer answered whether the queen's freeze took him (a shield held it: she does not chase). */
+    _frozeAnswer(id, ok, T) {
+        const c = this.queen;
+        if (!c?.charge || c.charge.id !== id) return;
+        if (!ok) { this._chargeEnd(c, false); c.sheathT = 0; return; }
+        c.charge.until = this._t + Math.max(0.8, T - 0.3);
+        c.charge.pend = false;
     }
 
     /** (host) Her spell leaves the rod (after the wind-up). */
@@ -839,8 +954,29 @@ export class IceCastleLife {
         const tp = e.k === 'p' ? this._playerCentre(e.id, new THREE.Vector3()) : null;
         if (!tp && spell !== 'summon') return;
         if (spell === 'summon') { for (let i = 0; i < 3; i++) this._spawnSnowman(c.model.position); this._fx({ e: 'fx', k: 'summon', o: [r2(from.x), r2(from.y), r2(from.z)] }); return; }
-        if (spell === 'freeze') { this._fx({ e: 'fx', k: 'beam', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] }); this._freezePlayer(e.id, 'iceQueen', 6); if (e.giant) c.giantFrozen = Date.now() + 9000; return; }
-        if (spell === 'spikes') { const f = _feet(tp, new THREE.Vector3()); this._fx({ e: 'fx', k: 'spikes', t: [r2(f.x), r2(this._floor(f.x, f.z, f.y + 2)), r2(f.z)] }); return; }
+        if (spell === 'freeze') {
+            this._fx({ e: 'fx', k: 'beam', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] });
+            c.lastFreeze = this._t;
+            const r = this._freezePlayer(e.id, 'iceQueen', QUEEN_AI.FREEZE_T);
+            const q = c.model.position, d = Math.max(0, Math.hypot(tp.x - q.x, tp.z - q.z) - (e.rad || 0));
+            // (it took: she runs at him before he thaws — a guest's computer answers `frzr`; a shield held it: she goes on with her spells)
+            if ((r === null || r.ok) && chargeOn(d, r ? r.T : QUEEN_AI.FREEZE_T)) { c.charge = { id: e.id, until: this._t + (r ? r.T : QUEEN_AI.FREEZE_T * 0.85) - 0.3, t0: this._t, pend: r === null }; c.bladeT = 0; c.sheathT = 0; }
+            if (e.giant) c.giantFrozen = Date.now() + 9000;
+            return;
+        }
+        if (spell === 'slash') {
+            // the blow: the foe must still be within the blade's reach (he may have been thrown, have fled, thawed)
+            const q = c.model.position, feet = e.k === 'p' ? this._playerFeet(e.id) : null;
+            const reach = QUEEN_AI.STRIKE + 1.6 + (e.rad || 0);
+            this._chargeEnd(c, true);
+            if (!feet || Math.hypot(feet.x - q.x, feet.z - q.z) > reach) { c.sheathT = QUEEN_AI.SHEATH; return; }
+            this._fx({ e: 'fx', k: 'slash', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] });
+            const push = _v3.set(tp.x - q.x, 0, tp.z - q.z).normalize().multiplyScalar(7).setY(3);
+            this._hurtPlayer(e.id, QUEEN_AI.BLADE_DMG, 'blade', _v2.set(q.x, q.y + 3, q.z), push);
+            this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.6);
+            return;
+        }
+        if (spell === 'spikes') { const f = _feet(tp, new THREE.Vector3()); this._fx({ e: 'fx', k: 'spikes', t: [r2(f.x), r2(this._floor(f.x, f.z, f.y + 2)), r2(f.z)], q: [r2(from.x), r2(from.y), r2(from.z)] }); return; }
         if (spell === 'shards') { for (let i = 0; i < 5; i++) this._fire('shard', from, tp, { spread: 1.2, by: c.id, delay: i * 0.12, to: e }); return; }
         if (spell === 'blizzard') { const p = c.model.position; this._fx({ e: 'fx', k: 'gust', o: [r2(p.x), r2(p.y + 3), r2(p.z)], y: r2(c.model.rotation.y) }); }
     }
@@ -859,12 +995,13 @@ export class IceCastleLife {
             return;
         }
         const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
+        const REACH = M.REACH * c.reachK * (0.6 + 0.4 * c.sz); // (a melted giant is smaller: its arm reaches less)
         c.castT -= dt;
-        if (d > M.REACH - 0.6) this._step(c, e.p.x, e.p.z, dt, M.REACH - 1 + (e.rad || 0));
+        if (d > REACH - 0.6) this._step(c, e.p.x, e.p.z, dt, REACH - 1 + (e.rad || 0));
         else { c.moving = false; this._face(c, e.p, dt); }
         // («лицом к цели»: it strikes / throws only facing its foe)
         if (!facesTarget(c.model.rotation.y, p.x, p.z, e.p.x, e.p.z, FACE.MELEE)) return;
-        if (d <= M.REACH && c.castT <= 0) { c.castT = 1.6; c.act = 'punch'; c.actT = 0.55; c.actTo = e; }
+        if (d <= REACH && c.castT <= 0) { c.castT = 1.6; c.act = 'punch'; c.actT = 0.55; c.actTo = e; }
         else if (d > 9 && d < 30 && c.castT <= -4 && (e.giant || this._sees(c, e.p))) { c.castT = 2; c.act = 'boulder'; c.actT = 0.8; c.actTo = e; }
     }
 
@@ -890,7 +1027,7 @@ export class IceCastleLife {
         if (!e) {
             // wandering round the palace
             if (!c.roam || Math.hypot(c.roam.x - p.x, c.roam.z - p.z) < 1.5 || (c.roamT -= dt) <= 0) {
-                const a = Math.random() * Math.PI * 2, r = P.R * (0.4 + Math.random() * 0.5);
+                const a = Math.random() * Math.PI * 2, r = (P.A || P.R) * (0.4 + Math.random() * 0.5);
                 c.roam = { x: P.x + Math.cos(a) * r, z: P.z + Math.sin(a) * r }; c.roamT = 8 + Math.random() * 8;
                 if (Math.hypot(c.roam.x - P.hall.x, c.roam.z - P.hall.z) < P.hall.r + 4) c.roam = null;
             }
@@ -1083,18 +1220,19 @@ export class IceCastleLife {
         if (confusedMiss(c)) return; // (lost in Accentric's haze: the blow / the spell goes nowhere — StrongSpells)
         if (act === 'punch') {
             const tp = e.k === 'p' ? this._playerFeet(e.id) : this._bodyPos(e.k, e.id, new THREE.Vector3());
-            if (!tp || Math.hypot(tp.x - c.model.position.x, tp.z - c.model.position.z) > ICE.MONSTER.REACH + 0.8) return;
+            if (!tp || Math.hypot(tp.x - c.model.position.x, tp.z - c.model.position.z) > ICE.MONSTER.REACH * c.reachK * (0.6 + 0.4 * c.sz) + 0.8 + (e.rad || 0)) return;
             // thrown back — away from the gates when it is at them (nobody gets in)
             const P = this.plan, p = c.model.position;
             const away = _v.set(tp.x - p.x, 0, tp.z - p.z);
             if (Math.hypot(tp.x - P.gate.x, tp.z - P.gate.z) < 12) away.set(P.gate.out.x - P.gate.x, 0, P.gate.out.z - P.gate.z);
-            away.normalize().multiplyScalar(16).setY(7);
-            if (e.k === 'p') this._hurtPlayer(e.id, ICE.MONSTER.PUNCH, 'punch', p, away);
-            else this._hurtBody(e.k, e.id, ICE.MONSTER.PUNCH, c.id);
+            away.normalize().multiplyScalar(16 * (0.4 + 0.6 * c.dmgK)).setY(7 * (0.4 + 0.6 * c.dmgK)); // (a melted giant strikes weaker and throws less far)
+            const pd = Math.max(1, Math.round(ICE.MONSTER.PUNCH * c.dmgK));
+            if (e.k === 'p') this._hurtPlayer(e.id, pd, 'punch', p, away);
+            else this._hurtBody(e.k, e.id, pd, c.id);
             this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.5);
         } else if (act === 'boulder') {
             const tp = e.k === 'p' ? this._playerCentre(e.id, new THREE.Vector3()) : this._bodyPos(e.k, e.id, new THREE.Vector3());
-            if (tp) this._fire('boulder', this._hand(c, new THREE.Vector3()), tp, { by: c.id, to: e });
+            if (tp) this._fire('boulder', this._hand(c, new THREE.Vector3()), tp, { by: c.id, to: e, dm: c.dmgK });
         }
     }
 
@@ -1107,7 +1245,7 @@ export class IceCastleLife {
     _hand(c, out) {
         const p = c.model.position, ry = c.model.rotation.y;
         const fx = -Math.sin(ry), fz = -Math.cos(ry), sx = Math.cos(ry), sz = -Math.sin(ry);
-        const k = c.type === 'monster' ? 2 : 1;
+        const k = (c.type === 'monster' ? 2 : 1) * (c.sz || 1);
         return out.set(p.x + fx * 0.9 * k + sx * 0.6 * k, p.y + c.h * 0.75, p.z + fz * 0.9 * k + sz * 0.6 * k);
     }
 
@@ -1164,20 +1302,60 @@ export class IceCastleLife {
 
     // ================================================================ players: what reaches me
     /** (host) Hurt a player: my own self here; another's on his computer. */
-    _hurtPlayer(id, dmg, kind, from = null, push = null) {
+    _hurtPlayer(id, dmg, kind, from = null, push = null, qk = null) {
         const g = this.game;
-        if (id === g.localId) this._hurtMe(dmg, kind, from, push);
-        else g.sync?.ice?.({ e: 'hurt', to: id, dmg, kind, f: from ? [r2(from.x), r2(from.y), r2(from.z)] : null, v: push ? [r2(push.x), r2(push.y), r2(push.z)] : null });
+        if (id === g.localId) this._hurtMe(dmg, kind, from, push, qk);
+        else g.sync?.ice?.({ e: 'hurt', to: id, dmg, kind, q: qk, f: from ? [r2(from.x), r2(from.y), r2(from.z)] : null, v: push ? [r2(push.x), r2(push.y), r2(push.z)] : null });
     }
 
-    _hurtMe(dmg, kind, from = null, push = null) {
+    /**
+     * (my computer) Does my shield stop an ice blow of the castle coming from `from`? «Protection» (facing it) and «Protection Maxima» (the dome,
+     * all round, and half the price) hold the queen's freeze, shards, spikes, gust and blade — flash, mana paid; out of mana the shield
+     * shatters and the blow goes on (QUEEN_VS). → true: held.
+     */
+    _shieldTakes(from, kind) {
+        const c = this.game.combat;
+        if (!from || !c?.shieldFactor) return false;
+        return c.shieldFactor(from) >= 1 && !!c._blocked?.(from, kind);
+    }
+
+    /**
+     * (my computer) A blow that got past the shield: the magic robe / armour do NOT stop it (QUEEN_VS.magicRobe) — they only pay for it, the
+     * reserve going down by the spell's price (Armor.pierce). → true if a magic reserve paid (the freeze is shorter then).
+     */
+    _pierce(qk) {
+        const g = this.game;
+        if (!qk || !g.armor?.pierce) return false;
+        return !!g.armor.pierce('Frozen', shieldHitCost(qk) * 2);
+    }
+
+    _hurtMe(dmg, kind, from = null, push = null, qk = null) {
         const g = this.game, c = g.combat;
         if (!c || g.isDeadLocal || c.dead) return;
         if (kind === 'snow') { this._snowOnMe(from, push); return; }
-        if (from && c.shieldFactor?.(from) >= 1 && c._blocked?.(from, kind === 'punch' ? 'punch' : 'ice')) return; // (my «Protection» takes it)
+        if (kind === 'blade') { this._bladeOnMe(dmg, from, push); return; }
+        if (this._shieldTakes(from, qk || (kind === 'punch' ? 'punch' : 'ice'))) return; // (my «Protection» takes it)
+        if (qk) this._pierce(qk); // (the robe is not a shield: the blow comes through, the robe's reserve pays)
         if (c?.enabled) c.damage(dmg, null, kind === 'punch' ? 'iceMonster' : 'ice'); else g.damageLocalPlayer?.(dmg);
         if (push) g.knockback?.add(push);
         if (kind === 'punch') g.hud?.setVoice?.(`🧊 Удар ледяного монстра: −${dmg} HP`, true);
+    }
+
+    /**
+     * (my computer) The queen's blade falls on me. The shield (Protection / Maxima) stops it; one who is FROZEN is broken to pieces («Вас разбил
+     * жезл Королевы»; the monster form's ice is not shattered by blows — it takes the blade as a blow); one who is not takes BLADE_DMG through
+     * the armour (the robe's reserve pays).
+     */
+    _bladeOnMe(dmg, from, push) {
+        const g = this.game, c = g.combat;
+        if (this._shieldTakes(from, 'QueenBlade')) { g.hud?.setVoice?.('🛡️ Щит удержал клинок Королевы', true); return; }
+        if (c.godsKeepsOff?.('iceBlade')) { c._godsFx?.(null); return; }
+        const mon = g.monster?.active;
+        const magic = this._pierce('QueenBlade');
+        if (c.frozen && !mon && c.enabled) { c.die(null, 'iceQueen'); return; } // (the fight modes only: where combat is off — «Айс» too — a frozen one is only hurt)
+        if (c?.enabled) c.damage(dmg, null, 'iceBlade'); else g.damageLocalPlayer?.(dmg);
+        if (push) g.knockback?.add(push);
+        g.hud?.setVoice?.(magic ? `🧊 Клинок Королевы рассёк защиту мантии: −${dmg} HP` : `🧊 Клинок Королевы: −${dmg} HP`, true);
     }
 
     /**
@@ -1193,38 +1371,46 @@ export class IceCastleLife {
         g.impact?.apply({ v: push.clone(), from: from ? from.clone() : null, by: null, kind: 'snow', stand: true, noShield: true });
     }
 
-    /** (host / the caster's computer) Freeze a player in ice (the rod's ice: through any armour). */
+    /** (host / the caster's computer) Freeze a player in ice (the rod's ice: through any armour, but not through a shield). → {ok, T} for me; null: asked of his computer (it answers `frzr`). */
     _freezePlayer(id, by, T) {
         const g = this.game;
-        if (id === g.localId) this._frozenMe(by, T);
-        else g.sync?.ice?.({ e: 'frz', to: id, by, T });
+        if (id === g.localId) return this._frozenMe(by, T);
+        g.sync?.ice?.({ e: 'frz', to: id, by, T });
+        return null;
     }
 
-    /** (my computer) The rod's / the queen's ice reached me: no armour helps; a raised shield does. */
+    /**
+     * (my computer) The rod's / the queen's ice reached me. A raised «Protection» (facing it) or the dome holds it (QUEEN_VS); a magic set / robe do
+     * not — they only shorten the queen's freeze (×0.6) and pay for it; the gods' dome keeps it off. → {ok, T, held}
+     */
     _frozenMe(by, T) {
         const g = this.game, c = g.combat;
-        if (!c || g.isDeadLocal || c.dead) return;
-        const src = by === 'iceQueen' ? this.queen?.model.position : this._casterPos(by, { model: g.character.group });
-        if (src && c.shieldFactor?.(src) >= 1 && c._blocked?.(src, 'Frozen')) return;
+        if (!c || g.isDeadLocal || c.dead) return { ok: false, T: 0 };
+        const queen = by === 'iceQueen';
+        const src = queen ? this.queen?.model.position : this._casterPos(by, { model: g.character.group });
+        if (src && this._shieldTakes(src, queen ? 'QueenFreeze' : 'Frozen')) { if (queen) g.hud?.setVoice?.('🛡️ Щит удержал заморозку Ледяной Королевы', true); return { ok: false, T: 0, held: true }; }
         // (the Ice Rod is a gift of the gods: it freezes anybody — even the pentagram's monster, even a rider on a dragon; the others' cold does not)
         const mon = g.monster?.active;
+        const magic = queen ? this._pierce('QueenFreeze') : false;
+        if (queen) T = freezeSeconds(T, magic);
         c.freeze(by, T, { rod: true });
-        if (!c.frozen) return; // (the gods' dome kept it off)
+        if (!c.frozen) return { ok: false, T: 0 }; // (the gods' dome kept it off)
         g.hud?.flashColor?.('rgba(150, 220, 255, 0.6)');
-        g.hud?.setVoice?.(mon ? '🧊 Вы заморожены посохом Ледяной Королевы — даже монстр не устоял перед божественным льдом' : '🧊 Ледяной Жезл заморозил вас — магические доспехи не спасают', true);
+        g.hud?.setVoice?.(queen ? (magic ? '🧊 Вы заморожены! Магия доспехов укоротила лёд — вставайте скорее, Королева бежит с клинком' : '🧊 Вы заморожены! Королева бежит к вам с клинком — вам нечем защититься') : mon ? '🧊 Вы заморожены посохом Ледяной Королевы — даже монстр не устоял перед божественным льдом' : '🧊 Ледяной Жезл заморозил вас — магические доспехи не спасают', true);
         if (g.dragonRide?.riding) g.dragonRide.iced?.(T);
+        return { ok: true, T };
     }
 
     // ================================================================ shots
     /** (host) A shot leaves `from` for `to` (snow: a snowflake −1; shard −3; boulder −10), sent to all. */
-    _fire(kind, from, to, { spread = 0, by = null, delay = 0, to: target = null } = {}) {
+    _fire(kind, from, to, { spread = 0, by = null, delay = 0, to: target = null, dm = 1 } = {}) {
         const speed = kind === 'boulder' ? 17 : kind === 'shard' ? 26 : 19;
         const tp = _v.copy(to).add(_v2.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread * 0.5, (Math.random() - 0.5) * spread));
         const d = Math.max(0.5, from.distanceTo(tp));
         const t = d / speed;
         const v = new THREE.Vector3().subVectors(tp, from).divideScalar(t);
         v.y += 0.5 * ICE.G * t; // (lobbed: it falls onto its target)
-        const m = { e: 'shot', k: kind, o: [r2(from.x), r2(from.y), r2(from.z)], v: [r2(v.x), r2(v.y), r2(v.z)], by, d: delay, to: target ? [target.k, target.id] : null };
+        const m = { e: 'shot', k: kind, o: [r2(from.x), r2(from.y), r2(from.z)], v: [r2(v.x), r2(v.y), r2(v.z)], by, d: delay, to: target ? [target.k, target.id] : null, dm: r2(dm) };
         this._addShot(m);
         this.game.sync?.ice?.(m);
     }
@@ -1232,11 +1418,11 @@ export class IceCastleLife {
     _addShot(m) {
         const kind = m.k;
         const mesh = kind === 'shard' ? shardModel() : snowflakeShotModel();
-        if (kind === 'boulder') mesh.scale.setScalar(3.2);
+        if (kind === 'boulder') mesh.scale.setScalar(3.2 * (0.5 + 0.5 * Math.max(0.2, Math.min(1, +m.dm || 1))));
         mesh.position.copy(vec(m.o));
         mesh.visible = !(m.d > 0);
         this.game.scene.add(mesh);
-        this.shots.push({ kind, mesh, v: vec(m.v), by: m.by, delay: +m.d || 0, life: 5, to: m.to, dmg: kind === 'boulder' ? ICE.MONSTER.BOULDER : kind === 'shard' ? 3 : 0, r: kind === 'boulder' ? 1.0 : 0.35 });
+        this.shots.push({ kind, mesh, v: vec(m.v), by: m.by, delay: +m.d || 0, life: 5, to: m.to, dmg: (kind === 'boulder' ? ICE.MONSTER.BOULDER : kind === 'shard' ? 3 : 0) * Math.max(0.2, Math.min(1, +m.dm || 1)), r: kind === 'boulder' ? 1.0 : 0.35 });
     }
 
     _updateShots(dt) {
@@ -1256,9 +1442,11 @@ export class IceCastleLife {
             if (!end && meC && s.to?.[0] !== 'I' && meC.distanceTo(p) < s.r + 0.8) {
                 end = true;
                 const from = _v2.copy(p).addScaledVector(s.v, -0.05);
-                if (g.combat?.shieldFactor?.(from) >= 1 && g.combat._blocked?.(from, 'snow')) { this._burst(p, 8); }
-                else if (s.kind === 'snow') this._hurtMe(0, 'snow', from, _v3.copy(s.v).setY(0).normalize().multiplyScalar(ICE.SNOW.PUSH));
-                else this._hurtMe(s.dmg, 'ice', from, s.kind === 'boulder' ? _v3.copy(s.v).setY(0).normalize().multiplyScalar(9).setY(5) : null);
+                if (s.kind === 'snow') {
+                    // (a snowball is no spell: a shield stops its shove for nothing — 'Bounce' costs no mana)
+                    if (g.combat?.shieldFactor?.(from) >= 1 && g.combat._blocked?.(from, 'Bounce')) this._burst(p, 8);
+                    else this._hurtMe(0, 'snow', from, _v3.copy(s.v).setY(0).normalize().multiplyScalar(ICE.SNOW.PUSH));
+                } else this._hurtMe(s.dmg, 'ice', from, s.kind === 'boulder' ? _v3.copy(s.v).setY(0).normalize().multiplyScalar(9).setY(5) : null, s.kind === 'shard' ? 'QueenShard' : null); // (the shield asks inside: the shard's price, the boulder's)
             }
             // (host) the creature it was thrown at, when it is not a player
             if (!end && this.auth && s.to && s.to[0] !== 'p') {
@@ -1295,12 +1483,18 @@ export class IceCastleLife {
             const n = Math.ceil(o.distanceTo(t) / 0.6);
             for (let i = 0; i <= n; i++) g.fx?.spark?.(_v.lerpVectors(o, t, i / n), i % 2 ? 0xffffff : 0x9fe3ff, 0.18, _v2.set(0, 0.2, 0), 0.5);
             g.sound?.playIce?.();
+        } else if (m.k === 'slash') {
+            // the blade's blow: an arc of ice sparks from raised to low, a crack of ice
+            const o = vec(m.o), t = vec(m.t);
+            for (let i = 0; i <= 22; i++) { const k = i / 22, a = k * Math.PI; g.fx?.spark?.(_v.set(o.x + (t.x - o.x) * k, o.y + (t.y - o.y) * k + Math.sin(a) * 2.2, o.z + (t.z - o.z) * k), i % 2 ? 0xffffff : 0x9fe3ff, 0.22, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.6); }
+            g.sound?.playIce?.('iceCrack', t, 1.2, 1.1);
+            g.sound?.playFrozenHit?.();
         } else if (m.k === 'summon') {
             const o = vec(m.o);
             for (let i = 0; i < 30; i++) g.fx?.spark?.(o, 0xe8fbff, 0.2, _v2.set((Math.random() - 0.5) * 8, Math.random() * 6, (Math.random() - 0.5) * 8), 1);
         } else if (m.k === 'spikes') {
             // a frost ring on the ground, then the spikes burst up out of it
-            this.fxs.push({ k: 'spikes', p: vec(m.t), t: 0, hit: false, meshes: [] });
+            this.fxs.push({ k: 'spikes', p: vec(m.t), from: m.q ? vec(m.q) : null, t: 0, hit: false, meshes: [] });
         } else if (m.k === 'gust') {
             this.fxs.push({ k: 'gust', p: vec(m.o), y: +m.y || 0, t: 0, hit: false });
         }
@@ -1331,7 +1525,7 @@ export class IceCastleLife {
                 if (!f.hit && f.t >= 0.85) {
                     f.hit = true;
                     const me = g.character?.group.position;
-                    if (me && Math.hypot(me.x - f.p.x, me.z - f.p.z) < 1.9 && Math.abs(me.y - 1.95 - f.p.y) < 2.5) this._hurtMe(9, 'ice', null, _v.set(0, 9, 0));
+                    if (me && Math.hypot(me.x - f.p.x, me.z - f.p.z) < 1.9 && Math.abs(me.y - 1.95 - f.p.y) < 2.5) this._hurtMe(9, 'ice', f.from || f.p, _v.set(0, 9, 0), 'QueenSpikes'); // (from the queen: «Protection» facing her / the dome holds the spikes too)
                 }
                 if (f.t > 3.2) { for (const s of f.meshes) g.scene.remove(s.m); this.fxs.splice(i, 1); }
             } else if (f.k === 'gust') {
@@ -1345,7 +1539,7 @@ export class IceCastleLife {
                     const me = g.character?.group.position;
                     if (me) {
                         const dx = me.x - f.p.x, dz = me.z - f.p.z, d = Math.hypot(dx, dz);
-                        if (d < 18 && (dx * fx + dz * fz) / Math.max(0.01, d) > Math.cos(0.6)) this._hurtMe(3, 'ice', f.p, _v.set(fx * 15, 4, fz * 15));
+                        if (d < 18 && (dx * fx + dz * fz) / Math.max(0.01, d) > Math.cos(0.6)) this._hurtMe(3, 'ice', f.p, _v.set(fx * 15, 4, fz * 15), 'QueenGust');
                     }
                 }
                 if (f.t > 1.2) this.fxs.splice(i, 1);
@@ -1363,14 +1557,17 @@ export class IceCastleLife {
         if (c.hurtT > 0) c.hurtT -= dt * (this.auth ? 0 : 1);
         if (c.sway) { c.model.rotation.z = Math.sin(t * 6) * c.sway; c.sway = Math.max(0, c.sway - dt * 0.5); } else c.model.rotation.z = 0;
         if (c.type === 'queen') {
-            u.armR.rotation.x = -0.25 - actK * 1.6 + Math.sin(t * 0.8) * 0.04;
+            if (c.act) c.lastAct = c.act;
+            c.bladeV = this.auth ? c.blade : c.bladeV + (c.blade - c.bladeV) * Math.min(1, dt * 10); // (a guest sees the blade grow smoothly)
+            u.armR.rotation.x = -0.25 - actK * (c.lastAct === 'slash' ? 2.9 : 1.6) - c.bladeV * 0.5 + Math.sin(t * 0.8) * 0.04; // (the blade raised high before the blow, then it falls with the actLook's decay)
             u.armL.rotation.x = -0.15 - actK * 0.6 + (c.moving ? Math.sin(t) * 0.25 : 0);
             u.armL.rotation.z = -0.15 - actK * 0.5;
             u.cape.rotation.x = 0.06 + (c.moving ? 0.1 + Math.sin(t * 2) * 0.03 : Math.sin(t) * 0.02);
             u.skirt.rotation.y = Math.sin(t * 2) * (c.moving ? 0.05 : 0.01);
             ICE_MATERIALS.sparkle.opacity = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 160));
             const cr = u.rod.userData.crystal;
-            if (cr) cr.scale.setScalar(1 + actK * 0.5 + Math.sin(t * 3) * 0.05);
+            if (cr) cr.scale.setScalar(1 + actK * 0.5 + c.bladeV * 0.8 + Math.sin(t * 3) * 0.05);
+            if (u.blade) this._bladeLook(c, u);
         } else if (c.type === 'monster') {
             const w = c.moving ? Math.sin(t) : 0;
             u.legL.rotation.x = w * 0.45; u.legR.rotation.x = -w * 0.45;
@@ -1385,7 +1582,7 @@ export class IceCastleLife {
             u.body.position.y = hop; u.head.position.y = 2.6 + hop + Math.sin(t * 0.9) * 0.03;
             u.armR.rotation.x = c.act === 'throw' ? -2.4 * actK : Math.sin(t) * 0.2;
             u.armL.rotation.x = -Math.sin(t) * 0.2;
-            if (c.rise > 0) { c.model.scale.setScalar(Math.max(0.05, 1 - c.rise)); } else if (c.model.scale.x !== 1 && !c.dead) c.model.scale.setScalar(1);
+            if (c.rise > 0) { c.model.scale.setScalar(Math.max(0.05, 1 - c.rise) * c.sz); } else if (Math.abs(c.model.scale.x - c.sz) > 1e-3 && !c.dead) c.model.scale.setScalar(c.sz);
         }
         // hurt: a flash of red
         const hurt = c.hurtT > 0;
@@ -1395,6 +1592,34 @@ export class IceCastleLife {
             c.one?.check(); // (the one shape in the new colour at once)
         }
         if (c.one && (c.oneT += dt) > 0.5) { c.oneT = 0; c.one.check(); } // (a part shown / hidden by the game)
+        if ((c.type === 'monster' || c.type === 'snowman') && (c.meltHot > 0 || c.melt > 0)) this._meltLook(c, dt);
+    }
+
+    /** The queen's rod grows into a blade (scale), with a ringing of ice and a flurry of sparks; it turns back the same way. */
+    _bladeLook(c, u) {
+        const g = this.game, v = c.bladeV;
+        u.blade.scale.set(1, Math.max(0.001, v * QUEEN_AI.BLADE_LEN), 1);
+        if (v > 0.06 && !c._bladeOut) { c._bladeOut = true; g.sound?.playIce?.('iceChime', c.model.position, 1.1, 1); g.sound?.playIce?.('iceCrack', c.model.position, 0.8, 1.5); }
+        else if (v < 0.02) c._bladeOut = false;
+        if (v > 0.06 && v < 0.97 && Math.random() < 0.6) { // (ice growing along it)
+            const tip = this._rodTip(c, _v);
+            for (let i = 0; i < 2; i++) g.fx?.spark?.(tip, i ? 0xffffff : 0x9fe3ff, 0.16, _v2.set((Math.random() - 0.5) * 3, 1 + Math.random() * 2, (Math.random() - 0.5) * 3), 0.5);
+        }
+    }
+
+    /** A melting giant / snowman: steam while the fire is on it, drips and a crackle while it is smaller than it was (near the player only). */
+    _meltLook(c, dt) {
+        const g = this.game, me = g.character?.group?.position, p = c.model.position;
+        if (c.meltHot > 0) c.meltHot -= dt;
+        if (!me || (me.x - p.x) ** 2 + (me.z - p.z) ** 2 > 130 * 130) return;
+        c._dripAcc = (c._dripAcc || 0) + ((c.meltHot > 0 ? 16 : 0) + c.melt * 4) * dt * (c.type === 'monster' ? 1 : 0.5);
+        for (let n = 0; c._dripAcc >= 1 && n < 6; n++, c._dripAcc -= 1) {
+            const a = Math.random() * Math.PI * 2, rr = c.r * 0.8 * Math.random(), y = p.y + c.h * (0.15 + 0.8 * Math.random());
+            const steam = c.meltHot > 0 && Math.random() < 0.65;
+            g.fx?.spark?.(_v.set(p.x + Math.cos(a) * rr, y, p.z + Math.sin(a) * rr), steam ? 0xeef9ff : 0x9fd8ff, steam ? 0.3 * c.sz + 0.1 : 0.12, steam ? _v2.set(Math.cos(a) * 0.4, 1.6 + Math.random() * 1.6, Math.sin(a) * 0.4) : _v2.set(0, -1 - Math.random(), 0), steam ? 1.2 : 0.7);
+        }
+        c._dripAcc = Math.min(c._dripAcc, 2);
+        if (c.meltHot > 0 && Math.random() < dt * 1.6) g.sound?.playIce?.('iceCrack', p, 0.35, 1.3 + Math.random() * 0.6); // (the ice crackles in the heat)
     }
 
     /**
@@ -1760,7 +1985,7 @@ export class IceCastleLife {
         this._sendSoon = false;
         // (no castle here and nobody to send: one empty list, then quiet)
         if (!this.plan && !this.list.length) { if (this._sentEmpty) return; this._sentEmpty = true; } else this._sentEmpty = false;
-        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0]);
+        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0, r2(c.melt || 0), r2(c.blade || 0)]);
         g.sync.ice?.({ e: 's', l, st: { qd: this.state.queenDead ? 1 : 0, ...this.fixtures.netState() } });
     }
 
@@ -1769,8 +1994,9 @@ export class IceCastleLife {
         switch (m.e) {
             case 's': if (!this.auth) this._applyState(m); break;
             case 'hit': if (this.auth) { const c = this.byId(m.id); if (c) this.hit(c, Math.min(300, +m.dmg || 0), m.kind, m.by ?? from); } break;
-            case 'hurt': if (m.to === this.me) this._hurtMe(Math.min(40, +m.dmg || 0), m.kind, m.f ? vec(m.f) : null, m.v ? vec(m.v) : null); break;
-            case 'frz': if (m.to === this.me) this._frozenMe(m.by, Math.min(20, +m.T || 6)); break;
+            case 'hurt': if (m.to === this.me) this._hurtMe(Math.min(40, +m.dmg || 0), m.kind, m.f ? vec(m.f) : null, m.v ? vec(m.v) : null, typeof m.q === 'string' ? m.q : null); break;
+            case 'frz': if (m.to === this.me) { const r = this._frozenMe(m.by, Math.min(20, +m.T || 6)); if (m.by === 'iceQueen') g.sync?.ice?.({ e: 'frzr', id: this.me, ok: r.ok ? 1 : 0, T: r.T || 0 }); } break;
+            case 'frzr': if (this.auth) this._frozeAnswer(m.id, !!m.ok, +m.T || 0); break; // (a guest answers whether the queen's ice took him)
             case 'shot': if (!this.auth || from !== this.me) this._addShot(m); break;
             case 'fx': this._applyFx(m); break;
             case 'say': { const c = this.byIdMap.get(m.id); if (c && typeof m.text === 'string') this._say(c, m.text.slice(0, 80), false); break; }
@@ -1787,7 +2013,7 @@ export class IceCastleLife {
     _applyState(m) {
         const seen = new Set();
         for (const row of m.l || []) {
-            const [id, ti, x, y, z, ry, hp, dead, fl, act, slot, bt] = row;
+            const [id, ti, x, y, z, ry, hp, dead, fl, act, slot, bt, melt, blade] = row;
             seen.add(id);
             let c = this.byIdMap.get(id);
             const type = TYPES[ti] || 'snowman';
@@ -1797,6 +2023,8 @@ export class IceCastleLife {
                 if (type === 'friend') { c.buildT = +bt || 0; if (c.buildT < 1) this._born(c); }
             }
             c.melting = !!(fl & 4);
+            if (type === 'queen') c.blade = Math.max(0, Math.min(1, +blade || 0));
+            if ((+melt || 0) !== c.melt && (type === 'monster' || type === 'snowman')) { c.melt = Math.max(0, Math.min(1, +melt || 0)); c.meltHot = MELT.HOT; this._resize(c); }
             (c.net || (c.net = new THREE.Vector3())).set(x, y, z);
             c.netYaw = ry;
             if (hp < c.hp) c.hurtT = 0.2;
@@ -1814,10 +2042,11 @@ export class IceCastleLife {
     snapshot() {
         const q = this.list.find((c) => c.type === 'queen' && !c.dead);
         const mons = this.state.monsters.slice();
-        for (const c of this.list) if (c.type === 'monster' && !c.dead) mons[c.slot] = Math.round(c.hp);
+        const melts = this.state.monsterMelt.slice();
+        for (const c of this.list) if (c.type === 'monster' && !c.dead) { mons[c.slot] = Math.round(c.hp); melts[c.slot] = Math.round(c.melt * 100) / 100; }
         // the friendly snowmen stay in the world till they melt: [x, y, z, yaw, hp, homeX, homeZ]
         const friends = this.list.filter((c) => c.type === 'friend' && !c.dead).map((c) => [r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, r2(c.home.x), r2(c.home.z)]);
-        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen, friends, gateHp: Math.round(this.state.gateHp ?? 0), gateBroken: !!this.state.gateBroken, chandFallen: !!this.state.chandFallen };
+        return { queenDead: !!this.state.queenDead, queenHp: Math.round(q ? q.hp : this.state.queenHp), monsters: mons, monsterMelt: melts, monsterDeadAt: this.state.monsterDeadAt.slice(), seen: !!this.state.seen, friends, gateHp: Math.round(this.state.gateHp ?? 0), gateBroken: !!this.state.gateBroken, chandFallen: !!this.state.chandFallen };
     }
 
     restore(s) {
@@ -1826,6 +2055,7 @@ export class IceCastleLife {
         this.state.queenDead = !!s.queenDead;
         this.state.queenHp = s.queenHp != null ? n(s.queenHp, ICE.QUEEN.HP) : ICE.QUEEN.HP;
         if (Array.isArray(s.monsters)) this.state.monsters = [0, 1].map((i) => (s.monsters[i] == null ? ICE.MONSTER.HP : n(s.monsters[i], ICE.MONSTER.HP)));
+        if (Array.isArray(s.monsterMelt)) this.state.monsterMelt = [0, 1].map((i) => n(s.monsterMelt[i], 1));
         if (Array.isArray(s.monsterDeadAt)) this.state.monsterDeadAt = [0, 1].map((i) => +s.monsterDeadAt[i] || 0);
         this.state.seen = !!s.seen;
         // the gates' strength, broken or not; the chandelier fallen (IceFixtures.js)

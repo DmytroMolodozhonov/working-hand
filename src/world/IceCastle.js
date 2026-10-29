@@ -33,9 +33,17 @@ export const ICE_CASTLE = {
     MOUNT: { TOP: 38, BACK: 78, E: 1.15, JAG: 16, GORGE: [3, 14], DEEP: 38, LEDGE: [15, 24], LEDGE_U: 8, LEDGE_DROP: 10, SPAN: 48, ROCK: 175, SPUR_END: 90, SPUR_FALL: 0.9 },
     TEST_PEAK: 40, // (the creative test ground: the castle on its mountain by the pedestals, a smaller peak behind)
     TEST_MOUNT: { TOP: 34, BACK: 52, E: 1.15, JAG: 9, GORGE: [3, 11], DEEP: 18, LEDGE: [12, 15], LEDGE_U: 5, LEDGE_DROP: 8, SPAN: 30, ROCK: 80, SPUR_END: 20, SPUR_FALL: 2.5 },
+    // The great ice ARENA (generation ICE_ARENA_FROM_GEN; the author: «ледяные гиганты застревают в горе… нужна БОЛЬШАЯ ЛЕДЯНАЯ ПЛОЩАДКА у замка, где гиганты могут
+    // сражаться»): the palace's shelf is R 92 instead of 30 — a levelled terrace of snow and ice, a ring wall of glacier ice with teeth on its
+    // rim (inside it `A` m of clear floor from the middle: every giant, wide as it is, walks all of it), a wide gateway in the wall at the front
+    // and a causeway of 18 m to the gorge, over which the ice stair climbs to it. The mountain behind and the gorge in front are the same, moved out.
+    ARENA: { R: 92, GATE_W: 9, TOOTH: 5, BACK: 130, ROCK: 280, SPAN: 74, SPUR_END: 112 },
     HALL_R: 15, // m: the round hall (outer radius)
     PODIUM: 3, // layers: the palace stands on a podium this high above the plateau
 };
+
+/** The mountain's numbers for a castle (the test ground's smaller one, the arena's moved-out one, or the ordinary). */
+export const iceMount = (S) => (S.test ? ICE_CASTLE.TEST_MOUNT : S.arena ? { ...ICE_CASTLE.MOUNT, ...ICE_CASTLE.ARENA } : ICE_CASTLE.MOUNT);
 
 /** The ice blocks' ids (Terrain.BLOCK keeps the same numbers). */
 export const ICE_BLOCK = { WALL: 59, GLOW: 60, FLOOR: 61, DARK: 62 };
@@ -63,7 +71,7 @@ const TAU = Math.PI * 2;
  * @param busy (x, z) → a castle / tower stands there
  * @param test the creative test ground: {x, z} where its mountain is
  */
-export function iceCastleSpot(seed, raw, busy, test = null) {
+export function iceCastleSpot(seed, raw, busy, test = null, arena = false) {
     const H = (x, z) => raw(Math.round(x), Math.round(z));
     const wet = (x, z) => { raw(Math.round(x), Math.round(z)); return !!(raw.water || raw.sea); };
     const climb = (p) => {
@@ -92,7 +100,7 @@ export function iceCastleSpot(seed, raw, busy, test = null) {
         // the gates look toward the spawn
         const ax = -x, az = -z;
         const rot = Math.abs(az) >= Math.abs(ax) ? (az > 0 ? 0 : 2) : (ax > 0 ? 1 : 3);
-        return { x, z, F, rot, test: !!test };
+        return { x, z, F, rot, test: !!test, arena: !!arena && !test };
     };
     if (test) return finish(climb({ x: test.x, z: test.z, h: H(test.x, test.z) }), ICE_CASTLE.TEST_R);
     const rng = createRng(((seed * 7349) ^ 0x1ce0c457) >>> 0);
@@ -108,7 +116,7 @@ export function iceCastleSpot(seed, raw, busy, test = null) {
         }
     }
     cands.sort((p, q) => q.h - p.h || p.x - q.x);
-    const R = ICE_CASTLE.R;
+    const R = arena ? ICE_CASTLE.ARENA.R : ICE_CASTLE.R;
     for (let i = 0; i < Math.min(12, cands.length); i++) {
         const p = climb(cands[i]);
         const d = Math.hypot(p.x, p.z);
@@ -140,7 +148,7 @@ export function iceUV(S, dx, dz) {
  * → {h, lifted} (lifted: the mountain's rock there — bare, no grass).
  */
 export function mountainAt(S, u, v, h, n, r, spur = 0) {
-    const M = S.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT, R = S.R;
+    const M = iceMount(S), R = S.R;
     const top = Math.min(S.F + M.TOP, ICE_CASTLE.TOP_MAX);
     const dp = Math.hypot(u * 0.85, v + M.BACK); // (the peak behind the castle; the mountain a little wider than deep)
     // the peak falling away: convex, through the castle's floor at the castle
@@ -203,11 +211,13 @@ export function iceCastlePlan(S) {
         parts.push({ k: 1, cx: c.x, cz: c.z, r, hr, x0: Math.floor(c.x - q), x1: Math.ceil(c.x + q), z0: Math.floor(c.z - q), z1: Math.ceil(c.z + q), L0, L1, t });
     };
     const rng = createRng(((S.x * 92821) ^ (S.z * 68917) ^ 0x5a0f) >>> 0);
-    const R = S.test ? ICE_CASTLE.TEST_R : ICE_CASTLE.R;
+    const R = S.test ? ICE_CASTLE.TEST_R : S.arena ? ICE_CASTLE.ARENA.R : ICE_CASTLE.R;
+    const R0 = S.arena ? ICE_CASTLE.R : R; // (the palace's own ground: its crystals stand as before)
     const HV = -2, HR = ICE_CASTLE.HALL_R; // the hall's centre (v) and radius
     const { WALL, GLOW, FLOOR, DARK } = ICE_BLOCK;
-    // the snowy plateau
-    cyl(0, 0, R * 0.8, -1, F, F, SNOW);
+    // the snowy plateau (the arena: all the floor inside its wall)
+    const WALL_R = Math.floor(R * 0.84) - 1; // (the ring wall: the shelf's ragged edge is never inside R·0.84)
+    cyl(0, 0, S.arena ? WALL_R + 1 : R * 0.8, -1, F, F, SNOW);
     // the podium and the hall's floor (the snowflake floor)
     cyl(0, HV, HR + 2, -1, F + 1, P, DARK);
     cyl(0, HV, HR - 1, -1, P, P, FLOOR);
@@ -295,7 +305,7 @@ export function iceCastlePlan(S) {
     // the ice staircase over the gorge (as in the film): from the ledge beyond the gorge up to the castle's
     // shelf — a deck of ice one block thick, a keel under it, lace railings of glowing ice
     {
-        const MM = S.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+        const MM = iceMount(S);
         const end = MM.LEDGE[0], drop = MM.LEDGE_DROP;
         for (let k = 0; k <= end; k++) {
             const v = R + k, L = F - Math.round((k / end) * drop);
@@ -309,15 +319,54 @@ export function iceCastlePlan(S) {
     }
     // crystals of ice standing in the snow round the palace (not on the way to the gates)
     for (let i = 0; i < 12; i++) {
-        const a = rng() * TAU, d = R * (0.55 + rng() * 0.22);
+        const a = rng() * TAU, d = R0 * (0.55 + rng() * 0.22);
         const u = Math.round(Math.sin(a) * d), v = Math.round(Math.cos(a) * d);
         if (Math.abs(u) < 7 && v > 0) continue;
         const h = 2 + Math.floor(rng() * 4);
         cyl(u, v, 0.8 + rng() * 0.5, -1, F + 1, F + h, rng() < 0.5 ? GLOW : WALL);
     }
+    // THE ARENA (S.arena): rings and spokes of glacier ice laid in the snow, the ring wall with its teeth and buttresses, the gateway and the causeway
+    let A = R;
+    if (S.arena) {
+        const AR = ICE_CASTLE.ARENA, GW = AR.GATE_W, W = WALL_R;
+        A = W - 6; // (the clear floor: inside the buttresses — every giant walks all of it)
+        // rings and spokes in the floor (ice tiles in the snow; a glowing stud now and then)
+        for (const r of [34, 50, A - 3]) cyl(0, 0, r + 0.5, r - 0.5, F, F, FLOOR);
+        for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * TAU + TAU / 16, cu = Math.sin(a), cv = Math.cos(a);
+            for (let d = 24; d <= A - 2; d++) {
+                const u = Math.round(cu * d), v = Math.round(cv * d);
+                box(u, u, v, v, F, F, d % 9 === 0 ? GLOW : FLOOR);
+            }
+        }
+        // the causeway to the gorge (flat, snowy, between low ice posts) from the gateway to the stair
+        box(-GW, GW, W - 3, R, F, F, SNOW);
+        for (let v = W + 2; v <= R; v += 3) for (const sd of [-GW, GW]) { box(sd, sd, v, v, F + 1, F + 3, DARK); box(sd, sd, v, v, F + 4, F + 4, GLOW); }
+        // the ring wall, 8 m of glacier ice and a glowing band; teeth on its rim; buttresses along its inside
+        cyl(0, 0, W, W - 2, F + 1, F + 8, WALL);
+        cyl(0, 0, W + 0.5, W - 2.5, F + 6, F + 6, GLOW);
+        for (let k = 0; k < 96; k++) {
+            const a = (k / 96) * TAU, cu = Math.sin(a), cv = Math.cos(a);
+            const u = Math.round(cu * (W - 1)), v = Math.round(cv * (W - 1));
+            if (v > 0 && Math.abs(u) < GW + 3) continue; // (the gateway)
+            if (k % 2 === 0) box(u - 1, u, v - 1, v, F + 9, F + 10 + (k % 4 === 0 ? 1 : 0), WALL); // (a tooth 2×2)
+        }
+        for (let k = 0; k < 14; k++) {
+            const a = (k / 14) * TAU + TAU / 28, cu = Math.sin(a), cv = Math.cos(a);
+            const u = Math.round(cu * (W - 3)), v = Math.round(cv * (W - 3));
+            if (v > 0 && Math.abs(u) < GW + 6) continue;
+            box(u - 1, u + 1, v - 1, v + 1, F + 1, F + 13, WALL); // (a buttress 3×3, taller than the wall)
+            box(u, u, v, v, F + 14, F + 15, GLOW);
+        }
+        // the gateway: the wall opened wide in front (the way the stair arrives); a pointed arch of glowing ice over it
+        box(-GW, GW, W - 3, W + 1, F + 1, F + 14, AIR);
+        for (const sd of [-GW - 2, GW + 2]) { box(sd - 1, sd + 1, W - 3, W + 1, F + 9, F + 16, WALL); box(sd, sd, W - 3, W + 1, F + 17, F + 18, GLOW); } // (the gate towers)
+        box(-GW - 2, GW + 2, W - 2, W, F + 15, F + 16, WALL); // (the lintel)
+        box(-GW + 3, GW - 3, W - 2, W, F + 17, F + 17, GLOW);
+    }
     const at = (u, v, L) => { const p = iceLocal(S, u, v); return { x: p.x, y: L - 0.5, z: p.z }; };
     return {
-        id: 'ice', ...S, R, parts,
+        id: 'ice', ...S, R, A, parts,
         floor: P, // the hall's floor layer (its walking height: P − 0.5)
         hall: { ...at(0, HV, P), r: HR - 2, top: W1 + 10 },
         throne: at(0, tv + 0.5, P + 2),
@@ -336,8 +385,8 @@ export function iceCastlePlan(S) {
  * the land it levels (landAt, like a castle's) and its parts in a chunk.
  */
 export class IceCastleSite {
-    constructor(seed, raw, busy, test = null) {
-        this.seed = seed; this.raw = raw; this.busy = busy; this.testAt = test;
+    constructor(seed, raw, busy, test = null, arena = false) {
+        this.seed = seed; this.raw = raw; this.busy = busy; this.testAt = test; this.arena = !!arena && !test;
         this._crag = createNoise2D((seed ^ 0x1ce5ea) >>> 0);
         this._plan = undefined;
         this._byChunk = new Map();
@@ -346,7 +395,7 @@ export class IceCastleSite {
     /** The plan (null: no castle in this world). */
     get plan() {
         if (this._plan === undefined) {
-            const S = iceCastleSpot(this.seed, this.raw, this.busy, this.testAt);
+            const S = iceCastleSpot(this.seed, this.raw, this.busy, this.testAt, this.arena);
             this._plan = S ? iceCastlePlan(S) : null;
         }
         return this._plan;
@@ -357,7 +406,10 @@ export class IceCastleSite {
         if (!k) return null;
         // (only the plateau: round it the massif of rock falls away by itself — liftAt)
         const dx = ix - k.x, dz = iz - k.z;
-        if (Math.abs(dx) > k.R || Math.abs(dz) > k.R || dx * dx + dz * dz > k.R * k.R) return null;
+        if (Math.abs(dx) > k.R || Math.abs(dz) > k.R) return null;
+        // (the arena's causeway: the strip in front, from the wall's gateway to the gorge, is always on the shelf)
+        if (k.arena) { const { u, v } = iceUV(k, dx, dz); if (v > 0 && v <= k.R && Math.abs(u) <= ICE_CASTLE.ARENA.GATE_W + 1) return { castle: k, w: 1, ice: true }; }
+        if (dx * dx + dz * dz > k.R * k.R) return null;
         // (the shelf's edge ragged, not a drawn circle; the hall, the stair and the gates always on it)
         const a = Math.atan2(dz, dx), rr = k.R * (0.84 + 0.16 * this._crag(Math.cos(a) * 1.8 - 21, Math.sin(a) * 1.8 + 33));
         if (dx * dx + dz * dz > rr * rr && Math.hypot(dx, dz) > ICE_CASTLE.HALL_R + 10) return null;
@@ -372,7 +424,7 @@ export class IceCastleSite {
         const k = this.plan;
         this.lifted = false;
         if (!k) return h;
-        const M = k.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+        const M = iceMount(k);
         const dx = ix - k.x, dz = iz - k.z, L = M.BACK * 2.4;
         if (Math.abs(dx) > L || Math.abs(dz) > L) return h;
         const { u, v } = iceUV(k, dx, dz);
@@ -390,7 +442,7 @@ export class IceCastleSite {
     rocky(ix, iz) {
         const k = this.plan;
         if (!k) return false;
-        const dx = ix - k.x, dz = iz - k.z, R = (k.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).ROCK * 0.45;
+        const dx = ix - k.x, dz = iz - k.z, R = iceMount(k).ROCK * 0.45;
         return dx * dx + dz * dz <= R * R;
     }
 
@@ -412,7 +464,12 @@ export class IceCastleSite {
  * @returns {{x:number,z:number,yaw:number}} yaw is a bearing atan2(dx, dz) to the palace
  */
 export function iceApproach(P) {
-    const M = P.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+    if (P.arena) {
+        // the arena: the hero stands in the great ice yard just inside its gateway, facing the palace (the whole terrace before him)
+        const q = iceLocal(P, 0, P.A + 2), c = iceLocal(P, 0, 0);
+        return { x: Math.round(q.x), z: Math.round(q.z), yaw: Math.atan2(c.x - q.x, c.z - q.z) };
+    }
+    const M = iceMount(P);
     const a = iceLocal(P, 0, P.R + M.LEDGE[0] + 4), c = iceLocal(P, 0, 0);
     return { x: Math.round(a.x), z: Math.round(a.z), yaw: Math.atan2(c.x - a.x, c.z - a.z) };
 }

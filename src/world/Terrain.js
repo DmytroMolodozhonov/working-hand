@@ -34,7 +34,7 @@ import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
-import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE } from './IceCastle.js';
+import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE, iceMount } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
@@ -260,7 +260,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 19;
+export const WORLD_GEN = 20;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -339,6 +339,12 @@ export const ARENA_ENTRIES_FROM_GEN = 16;
  * it out again (TerrainData.setGhostSeen). Older worlds have none.
  */
 export const GHOST_CASTLE_FROM_GEN = 18;
+/**
+ * The first generation whose Ice Queen's palace stands on the GREAT ICE ARENA (IceCastle.js ICE_CASTLE.ARENA: a levelled terrace of 92 m round the palace
+ * with a ring wall, a gateway and a causeway to the ice stair) — the author: «гиганты застревают в горе, нужна большая ледяная площадка».
+ * An older world keeps its small shelf (the test ground's too).
+ */
+export const ICE_ARENA_FROM_GEN = 20;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -633,7 +639,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -665,10 +671,10 @@ export class TerrainData {
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
             const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };
-            let ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test && !this.apart ? testIce : null) : null;
+            let ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test && !this.apart ? testIce : null, !!iceArena) : null;
             if (ice && this.apart && !ice.plan) ice = new IceCastleSite(seed, raw, busy, testIce); // (a world with no summit for it: on the test mountain as before)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
-            const iceL = 2.4 * ((ice ? !!ice.testAt : this.test) ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
+            const iceL = 2.4 * iceMount({ test: ice ? !!ice.testAt : this.test, arena: !!iceArena }).BACK;
             const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);

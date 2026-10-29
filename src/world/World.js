@@ -129,7 +129,7 @@ export class VoxelWorld {
             this.mapResult = this.loadFromMap(opts.map);
         } else {
             this.meshTrees = !!opts.meshTrees; // (a world of real trees, not blocks — `realTrees`, Trees.js)
-            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2);
+            this.createTerrain(!!opts.mountains, !!opts.seas, !!opts.testGround, !!opts.deepCaves, !!opts.lush, !!opts.slopes, !!opts.wizHuts, !!opts.furnish, !!opts.bigArena, !!opts.apart, !!opts.bigHouses, !!opts.dungeons, !!opts.arenaEntries, !!opts.buildings, !!opts.ghostCastle, !!opts.arenaX2, !!opts.iceArena);
             this.createSkybox();
         }
     }
@@ -324,9 +324,9 @@ export class VoxelWorld {
     }
 
     // ----------------------------------------------------------------- terrain
-    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false) {
+    createTerrain(mountains, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigArena = false, apart = false, bigHouses = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false) {
         const rng = createRng(this.seed);
-        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, meshTrees: !!this.meshTrees });
+        this.terrain = new Terrain(this.scene, { seed: this.seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, meshTrees: !!this.meshTrees });
         if (this.terrain.data.lush) this.terrain.flora = new Flora(this.terrain); // (tall grass and flowers)
         if (this.terrain.data.meshTrees) this.forest = new WorldTrees(this); // (real trees — drawn, hit, burnt like the start area's always were)
         this.collision.setTerrain(this.terrain);

@@ -258,6 +258,23 @@ export class ArmorSystem {
         return true;
     }
 
+    /**
+     * A blow of the Ice Queen that the shield did NOT stop (QUEEN_VS.magicRobe): the magic set / robe do not turn it away — the harm goes on —
+     * but they pay for it: the reserve goes down by the spell's price `cost`. → true if a magic reserve was there and paid.
+     */
+    pierce(spell, cost) {
+        this.fx = wornEffects(this.worn);
+        if (!(this.fx.magicSet || this.fx.robe === 'magic') || this.fx.archmage || !(cost > 0)) return false;
+        const { spent } = guardSpend(this.worn, this.fx, spell, cost);
+        const n = Object.values(spent).reduce((a, b) => a + b, 0);
+        if (!(n > 0)) return false;
+        this._spendMag(spent);
+        const g = this.game, c = g.character?.group?.position;
+        if (c) for (let i = 0; i < 12; i++) g.fx?.spark(_v.set(c.x, c.y + 1.2, c.z), 0x9fd8ff, 0.1, _v2.set((Math.random() - 0.5) * 5, Math.random() * 3, (Math.random() - 0.5) * 5), 0.5);
+        g.hud?.setVoice?.('✨ Магия доспехов ослабила ледяной удар, но не остановила его — запас прочности уменьшился', true);
+        return true;
+    }
+
     /** Turned away: its mana comes off the reserve (a flame / a beam on me: once in MAG.BEAM_T, not every frame). */
     _payGuard(spell) {
         const now = performance.now();

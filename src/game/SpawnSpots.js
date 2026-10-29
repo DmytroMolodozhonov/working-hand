@@ -224,7 +224,8 @@ export function denSpot(L, free = null) {
 /** Перед дворцом Ледяной Королевы (мир с раздельными местами): уступ за ущельем у начала ледяной лестницы. Королева в зале — от 40 м. */
 export function queenApproach(plan) {
     const a = iceApproach(plan);
-    return { ...a, layer: plan.F - 10, up: 4, down: 8, boss: { x: plan.hall.x, z: plan.hall.z }, need: [{ x: plan.hall.x, z: plan.hall.z }], dist: [38, 120] };
+    return { ...a, layer: plan.arena ? plan.F : plan.F - 10, up: 4, down: 8, // (the arena: inside the wall's gateway, on the level terrace — the ledge below the stair otherwise)
+        boss: { x: plan.hall.x, z: plan.hall.z }, need: [{ x: plan.hall.x, z: plan.hall.z }], dist: [38, 120] };
 }
 
 /**

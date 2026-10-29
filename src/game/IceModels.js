@@ -102,6 +102,21 @@ export function iceRodModel() {
     return g;
 }
 
+/**
+ * The blade the Ice Queen's rod grows into (IceQueen.js): a long double-edged blade of glacier ice up out of the crown, a silver cross-guard with
+ * icicle quillons, frost teeth along both edges, a glowing fuller. Built one rod-unit long (y 0…1; the guard and the teeth are thin — they
+ * stretch with it a little), the pivot at the crown; the game scales `y` from ~0 (a rod) to BLADE_LEN (a blade). userData: {tip} (the point, in its units).
+ */
+export function bladeModel() {
+    const E = [['box', 0.13, 0.74, 0.05, 0, 0.37, 0, ROD_ICE], ['cone', 0.13, 0.26, 0.05, 0, 0.87, 0, ROD_ICE], ['box', 0.09, 0.5, 0.06, 0, 0.3, 0, ROD_DEEP]];
+    for (let i = 0; i < 6; i++) for (const sd of [-1, 1]) E.push(['oct', 0.05, 0.07, 0.04, sd * 0.07, 0.08 + i * 0.12, 0, i % 2 ? SILVER : ROD_ICE, 0, 0, sd * 0.5]); // (frost teeth along both edges)
+    const G = [['box', 0.62, 0.025, 0.1, 0, 0.0, 0, SILVER], ['cone', 0.06, 0.2, 0.06, -0.34, -0.03, 0, ROD_DEEP, 0, 0, Math.PI / 2], ['cone', 0.06, 0.2, 0.06, 0.34, -0.03, 0, ROD_DEEP, 0, 0, -Math.PI / 2], ['box', 0.03, 0.62, 0.065, 0, 0.36, 0, ROD_GLOW]];
+    const b = new THREE.Group();
+    b.add(mesh(E, MAT.ice, false), mesh(G, MAT.glow, false));
+    b.userData.tip = 1;
+    return b;
+}
+
 // ================================================================== the Ice Queen
 const DRESS = 0xf4fbff, DRESS2 = 0xdff2fc, DRESS3 = 0xc9e9fa, SKIN = 0xf3dccd, HAIR = 0xf6f0dc, LIP = 0xc76a7a, EYE = 0x3a7fc0;
 /**
@@ -147,6 +162,11 @@ export function iceQueenModel() {
     rod.scale.setScalar(1.9);
     rod.position.set(0, -1.25 - 0.55 * 1.9, 0);
     armR.children[0].add(rod);
+    // the blade the rod grows into (hidden as a hair-thin line: scale y ≈ 0 — IceQueen scales it up when she runs at a frozen foe)
+    const blade = bladeModel();
+    blade.position.set(0, 1.2, 0);
+    blade.scale.set(1, 0.001, 1);
+    rod.add(blade);
     // the cape: long, see-through, from the shoulders to the ground and trailing behind
     const C = [['box', 0.9, 2.9, 0.04, 0, 1.6, 0.4, 0x9fd6f2, 0.12, 0, 0], ['box', 1.2, 0.5, 0.04, 0, 0.2, 0.62, 0x8fcdee, 0.4, 0, 0]];
     for (let i = 0; i < 5; i++) C.push(['oct', 0.12, 0.12, 0.02, (i - 2) * 0.18, 0.8 + (i % 2) * 0.6, 0.43, 0xffffff]);
@@ -163,7 +183,7 @@ export function iceQueenModel() {
     const sg = _cache.get('sparkle') || (() => { const q = new THREE.BufferGeometry(); q.setAttribute('position', new THREE.BufferAttribute(sp, 3)); q.userData.shared = true; _cache.set('sparkle', q); return q; })();
     const sparkle = new THREE.Points(sg, MAT.sparkle);
     g.add(sparkle);
-    g.userData = { armL, armR, head, skirt, cape, rod, sparkle };
+    g.userData = { armL, armR, head, skirt, cape, rod, sparkle, blade };
     return g;
 }
 
@@ -350,5 +370,5 @@ export function iceSpikeModel() { const m = new THREE.Mesh(merged([['cone', 1, 1
 export function sampleIceModels() {
     const hurt = snowmanModel();
     hurt.traverse((o) => { if (o.isMesh && o.material === MAT.solid) o.material = MAT.hit; }); // (the red flash of a hurt one)
-    return [iceQueenModel(), snowmanModel(), hurt, friendSnowmanModel(), puddleModel(), iceMonsterModel(), chandelierModel(), iceChainModel(4), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel()];
+    return [iceQueenModel(), snowmanModel(), hurt, friendSnowmanModel(), puddleModel(), iceMonsterModel(), chandelierModel(), iceChainModel(4), snowflakeShotModel(), shardModel(), iceSpikeModel(), iceRodModel(), bladeModel()];
 }
