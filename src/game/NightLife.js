@@ -86,7 +86,7 @@ export const dealHolds = (busy, since) => !!busy && since < DEAL_GRACE;
 /** How many of the crowd walk about (of the day's number). */
 export function crowdK(part) { return part === 'day' ? 1 : part === 'pack' ? 0.7 : part === 'dawn' ? 0.25 : 0; }
 /** Knights awake on the night watch: 1 small castle … 3 a big one. */
-export function watchCount(knights) { return Math.max(1, Math.min(3, 1 + (knights > 30 ? 1 : 0) + (knights > 60 ? 1 : 0))); }
+export function watchCount(knights, capped = false) { if (capped) return knights >= 14 ? 3 : 2; /* (10–15 knights: two or three out at night, the rest asleep) */ return Math.max(1, Math.min(3, 1 + (knights > 30 ? 1 : 0) + (knights > 60 ? 1 : 0))); }
 /** Does a danger of `kind` (Danger.js) `dist` m away wake a sleeper? (asleep you hear less: a blast still wakes the village) */
 export function wakesSleeper(kind, dist, r = 0) {
     const D = DANGERS[kind];
@@ -229,7 +229,7 @@ export class NightLife {
         const L = this.life, def = cs.def;
         if (def.kind === 'hamlet' && def.mage) { L.hamlets.mageWatch(cs); return; } // (a wizard with «Люмос» round the fire)
         const st = L.state(def.id);
-        const W = watchCount(def.knights);
+        const W = watchCount(def.knights, def.capped);
         const watch = [];
         for (const v of cs.active.values()) if (v.watch && !v.dead) watch.push(v);
         const slot = (n) => {

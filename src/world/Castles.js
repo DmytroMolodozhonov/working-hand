@@ -29,6 +29,7 @@ import { roofShapes } from './PlanSlopes.js';
 import { furnishRoom } from './CastleFurniture.js';
 import { SHAPE } from './BlockShapes.js';
 import { placeTownBuildings } from './Buildings.js';
+import { knightCount } from './KnightPosts.js';
 
 export const CASTLE_CELL = 480;
 /** A cell holds a castle this often (before its land is checked): the giant spider's lairs are rarer by it (SpiderLairs.js). */
@@ -898,10 +899,12 @@ function buildCastle(p, s, rng, out) {
     // the wall walk: a loop over the walls
     const mw = -W + 1, me = W - 1, mn = D - 1, ms = -D + 1;
     const loop = [];
-    loop.push(...p.line(mw, ms, me, ms, walk + 1, 10));
-    loop.push(...p.line(me, ms, me, mn, walk + 1, 10).slice(1));
-    loop.push(...p.line(me, mn, mw, mn, walk + 1, 10).slice(1));
+    const corners4 = []; // (the loop's corners: the guard's posts on four different towers — KnightPosts.js)
+    loop.push(...p.line(mw, ms, me, ms, walk + 1, 10)); corners4.push(0, loop.length - 1);
+    loop.push(...p.line(me, ms, me, mn, walk + 1, 10).slice(1)); corners4.push(loop.length - 1);
+    loop.push(...p.line(me, mn, mw, mn, walk + 1, 10).slice(1)); corners4.push(loop.length - 1);
     loop.push(...p.line(mw, mn, mw, ms, walk + 1, 10).slice(1));
+    out.towerPosts = corners4.slice(0, 4);
     p.link(loop[loop.length - 1], loop[0]);
     out.wallWalk = loop;
     // stairs to the walk
@@ -2188,8 +2191,9 @@ export class CastleIndex {
      * @param {number} seed
      * @param {(ix:number, iz:number) => number} rawHeight the wild height field (with .water)
      */
-    constructor(seed, rawHeight, seas = null, test = false, furnish = false, bigHouses = false, buildings = false) {
+    constructor(seed, rawHeight, seas = null, test = false, furnish = false, bigHouses = false, buildings = false, knightCap = false) {
         this.seed = seed;
+        this.knightCap = !!knightCap; // generation 21: 10–15 knights a castle, each at a post (KnightPosts.js; KNIGHT_CAP_FROM_GEN, Terrain.js)
         this.bigHouses = !!bigHouses; // generation 14: roomy homes, the rich in two floors (HOUSE_SIZE_FROM_GEN, Terrain.js)
         this.buildings = !!buildings; // generation 17: different buildings in the villages (Buildings.js; BUILDINGS_FROM_GEN, Terrain.js)
         this.furnish = furnish; // generation 8: the castles' rooms furnished, more chests (FURNISH_FROM_GEN, Terrain.js)
@@ -2385,12 +2389,15 @@ export class CastleIndex {
         const king = `${KING_NAMES[Math.floor(rng() * KING_NAMES.length)]} ${KING_EPITHETS[Math.floor(rng() * KING_EPITHETS.length)]}`;
         const popBase = s.style === 'grand' ? 600 : s.style === 'fortress' ? 300 : 100;
         const population = popBase + Math.floor(rng() * (s.style === 'grand' ? 400 : 300));
-        const knights = Math.round(population * (s.style === 'fortress' ? 0.12 : 0.07));
+        // (generation 21: 10–15 knights by the castle's size — its own numbers, the castle's others go on as before)
+        const knights = this.knightCap
+            ? knightCount(s.style, createRng((this.seed * 8461 + gx * 70001 + gz * 1000033 + 0x4b17) >>> 0)())
+            : Math.round(population * (s.style === 'fortress' ? 0.12 : 0.07));
         // world bounds of the flat land and of the castle walls
         const walls = p.rect(-s.W - s.towerSize - 1, s.W + s.towerSize + 1, -s.D - s.towerSize - 1, s.D + s.towerSize + 1);
         const castle = {
             id: 'cs' + gx + '_' + gz, gx, gz, x: X, z: Z, F, rot, style: s.style, styleName: STYLE_NAMES[s.style],
-            name, king, population, knights, color: s.color, colorName: s.colorName, stone: s.stone,
+            name, king, population, knights, capped: !!this.knightCap, color: s.color, colorName: s.colorName, stone: s.stone,
             zone, walls, inner: p.rect(-s.W + s.T, s.W - s.T, -s.D + s.T, s.D - s.T),
             keep: p.rect(-s.KW, s.KW, s.keepBox.v0, s.keepBox.v1),
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
@@ -2398,7 +2405,7 @@ export class CastleIndex {
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
             fx: out.fx || [], wells: out.wells || [], buildings: out.buildings || [],
             stalls: out.stalls, fields: out.fields, market: out.market, graveyards: out.graveyards || [], graves: (out.graves || []).map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_g' + i })), posts: out.posts, beds: out.beds,
-            nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
+            nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk, towerPosts: out.towerPosts || [],
             parts: p.parts,
             topL: F + 1 + s.H + s.towerExtra + 30,
         };

@@ -36,6 +36,7 @@ import { separate } from './Pilot.js';
 import { SPACE, talkDistance } from './PersonalSpace.js';
 import { WALL, StuckWatch } from './Unstick.js';
 import { FLEE, threatDist, threatCost, pathPasses, openWay, escapeWay, fleeSearch } from './FleePlan.js';
+import { staffKnights } from './KnightStaff.js';
 import { KT, LINES, choosePlan, reviewPlan, remember, begin, newMemory, castRoles, meleeStyle, planSteps, aimArrow } from './KnightTactics.js';
 import { BLOCK, CHUNK, chunkKey } from '../world/Terrain.js';
 import * as THREE from 'three';
@@ -211,7 +212,7 @@ export function roleTitle(e) {
 /** One key for the way between two nodes (either direction). */
 export const edgeKey = (a, b) => (a < b ? a * 65536 + b : b * 65536 + a);
 
-class Graph {
+export class Graph {
     constructor(def) {
         this.nodes = def.nodes;
         this.adj = def.nodes.map(() => []);
@@ -573,17 +574,8 @@ export class CastleLife {
             // the king's advisor: by the throne, a little to the side (serves whoever is king)
             if (side === 1) { const a = { ...at, x: at.x - sx / 2, z: at.z - sz / 2 }; this._activate(cs, ADVISOR_IDX, a, 'guard', { post: a }); }
         }
-        for (const post of def.posts) knight(post, 'guard', post);
-        const loop = def.wallWalk || [];
-        for (let i = 0; i < Math.min(2, Math.floor(loop.length / 6)); i++) {
-            const n = cs.graph.nodes[loop[Math.floor(i * loop.length / 2)]];
-            const v = knight({ x: n.x, y: n.y, z: n.z }, 'patrol');
-            if (v) v.loopI = Math.floor(i * loop.length / 2);
-        }
-        for (const id of cs.graph.tagged('yard').concat(cs.graph.tagged('well')).slice(0, 2)) {
-            const n = cs.graph.nodes[id];
-            knight({ x: n.x, y: n.y, z: n.z }, 'yard');
-        }
+        if (def.capped) staffKnights(this, cs, knight); // (generation 21+: 10–15 knights, each at his post — KnightStaff.js)
+        else this._staffOld(cs, knight);
         // the merchants at their stalls
         settlePawn(this.game.world?.terrain?.data, def);
         def.stalls.forEach((s, i) => (!s.probe || s.settled) && !s.off && this._activate(cs, def.knights + 1 + i, { ...s.back, yaw: s.yaw }, 'stall', { post: { ...s.back, yaw: s.yaw } }));
@@ -594,6 +586,22 @@ export class CastleLife {
             if (idx < 0) break;
             const v = this._activate(cs, idx, { x: field.x, y: field.y, z: field.z }, 'farm');
             if (v) { v.fieldNode = field.node; f++; }
+        }
+    }
+
+    /** The old crowd's places (worlds before generation 21): four at the gate, two on the walls, two in the yard. */
+    _staffOld(cs, knight) {
+        const def = cs.def;
+        for (const post of def.posts) knight(post, 'guard', post);
+        const loop = def.wallWalk || [];
+        for (let i = 0; i < Math.min(2, Math.floor(loop.length / 6)); i++) {
+            const n = cs.graph.nodes[loop[Math.floor(i * loop.length / 2)]];
+            const v = knight({ x: n.x, y: n.y, z: n.z }, 'patrol');
+            if (v) v.loopI = Math.floor(i * loop.length / 2);
+        }
+        for (const id of cs.graph.tagged('yard').concat(cs.graph.tagged('well')).slice(0, 2)) {
+            const n = cs.graph.nodes[id];
+            knight({ x: n.x, y: n.y, z: n.z }, 'yard');
         }
     }
 
@@ -1585,7 +1593,7 @@ export class CastleLife {
                 break;
             }
             case 'patrol': {
-                const loop = v.cs.def.wallWalk;
+                const loop = v.loopIds || v.cs.def.wallWalk; // (a yard / quay round — KnightStaff.js — or the wall walk)
                 if (!v.path || v.pathI >= v.path.length) {
                     v.loopI = ((v.loopI ?? 0) + 1) % loop.length;
                     this._goTo(v, loop[v.loopI]);

@@ -260,7 +260,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 20;
+export const WORLD_GEN = 21;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -345,6 +345,11 @@ export const GHOST_CASTLE_FROM_GEN = 18;
  * An older world keeps its small shelf (the test ground's too).
  */
 export const ICE_ARENA_FROM_GEN = 20;
+/**
+ * The first generation whose castles keep 10–15 knights (a small one 10, a middle 12–13, a big 14–15), each at a post: two at the gate, two by the king,
+ * four on the towers, two on patrol, the rest at the quay / barracks / treasury / kitchen (KnightPosts.js). Older worlds keep their crowds.
+ */
+export const KNIGHT_CAP_FROM_GEN = 21;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -639,7 +644,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -664,7 +669,7 @@ export class TerrainData {
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings, !!knightCap);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers, !!arenaX2);
