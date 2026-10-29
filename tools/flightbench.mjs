@@ -118,7 +118,7 @@ async function flyRoute(MAXIMA) {
         p.x += fx * SPEED * step; p.z += fz * SPEED * step;
         // terrain following: 18 m over the highest ground just ahead
         let gy = -1e9;
-        for (const a of (MAXIMA ? [0, 40, 100, 200] : [0, 10, 25, 45])) gy = Math.max(gy, g.collision.groundY(p.x + fx * a, p.z + fz * a));
+        for (const a of (MAXIMA ? [0, 40, 100, 200] : [0, 10, 25, 45])) { const qx = p.x + fx * a, qz = p.z + fz * a; if (a && !data.landMade(Math.round(qx), Math.round(qz))) continue; gy = Math.max(gy, g.collision.groundY(qx, qz)); } // (the route itself never makes land in a frame: only what the workers brought is looked at)
         const want = Math.min(MAXIMA ? 300 : 105, gy + (MAXIMA ? 40 : 18));
         p.y += (want - p.y) * Math.min(1, step * 1.5);
         if (p.y < gy + 4) p.y = gy + 4;

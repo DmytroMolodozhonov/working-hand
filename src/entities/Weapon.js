@@ -111,7 +111,13 @@ export class Weapon {
         if (!this.magic || this._glow) return;
         this.model.traverse((o) => {
             if (!o.isMesh || !o.material) return;
+            // (Material.clone() copies userData through JSON — a texture in it is then written out as a picture, toDataURL: 19 s in a
+            //  flight profile when a dragon's hoard woke. The same userData is handed over by reference instead.)
+            const ud = o.material.userData;
+            o.material.userData = {};
             const m = o.material.clone();
+            o.material.userData = ud;
+            m.userData = ud ? { ...ud } : {};
             if (m.emissive) { m.emissive.setHex(0x2a5cff); m.emissiveIntensity = 0.35; }
             if (m.color) m.color.lerp(new THREE.Color(0x9fd8ff), 0.25);
             o.material = m;
