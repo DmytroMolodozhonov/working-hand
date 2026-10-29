@@ -348,7 +348,7 @@ function furnishTower(p, room, rng, legs, o) {
      */
     const loreStands = (max) => {
         const free = (u, v) => !occ.has(u + ',' + v) && !o.res.has(l + ':' + u + ',' + v) && clear(u, u, v, v, 1.0);
-        const crowded = (u, v) => { for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) if (o.res.has('p' + l + ':' + (u + a) + ',' + (v + c))) return true; return false; }; // (a stand next to it, even a corner: the boards would meet)
+        const crowded = (u, v) => { for (let a = -2; a <= 2; a++) for (let c = -2; c <= 2; c++) if (o.res.has('p' + l + ':' + (u + a) + ',' + (v + c))) return true; return false; }; // (a stand next to it, even a corner: the boards would meet)
         for (let b = 3; b <= 10 && max > 0 && o.lore.length < 7; b++) {
             for (let u = -10; u <= 10 && max > 0 && o.lore.length < 7; u++) {
                 const v = H * b;

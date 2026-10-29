@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { TerrainData } from '../../src/world/Terrain.js';
 import { LORE_BOOKS, loreForSite } from '../../src/game/LoreBooks.js';
 import { STAND, postCell, boardBox } from '../../src/world/LoreStand.js';
-import { LoreLibrary, makeStandModel, bookPoseOnStand } from '../../src/game/LoreLibrary.js';
+import { LoreLibrary, makeStandModel, bookPoseOnStand, loreScale } from '../../src/game/LoreLibrary.js';
 import { makeItemModel, ITEM_SCALE } from '../../src/game/ItemTypes.js';
 import { loreItem } from '../../src/game/LoreBooks.js';
 import { BOOK, setBookAngle } from '../../src/game/BookModel.js';
@@ -56,21 +56,21 @@ test('castle libraries have no chests', () => {
 test('sizes: a stand fits a hero (3.5 m): the board 2.0–2.6 m up, the open book lies on it, the stand a little wider than the book', () => {
     const m = makeStandModel();
     const book = makeItemModel(loreItem('coprus', 'u'));
-    book.scale.setScalar(ITEM_SCALE.book);
+    book.scale.setScalar(loreScale());
     bookPoseOnStand(book.position, book.quaternion);
     setBookAngle(book, Math.PI);
     m.add(book);
     m.updateMatrixWorld(true);
     const bb = new THREE.Box3().setFromObject(m), bk = new THREE.Box3().setFromObject(book);
     const wb = bk.max.x - bk.min.x;
-    assert.ok(wb > 1.4 && wb < 1.6, `an open book ${wb.toFixed(2)} m wide`);
+    assert.ok(wb > 1.95 && wb < 2.25, `an open book ${wb.toFixed(2)} m wide`);
     assert.ok(bb.max.x - bb.min.x > wb + 0.1 && bb.max.x - bb.min.x < wb + 0.6, `the stand ${(bb.max.x - bb.min.x).toFixed(2)} m wide`);
-    assert.ok(bk.min.y > 2.0 && bk.max.y < 2.75, `the book at ${bk.min.y.toFixed(2)}–${bk.max.y.toFixed(2)} m`);
-    assert.ok(bb.min.y >= 1.99 && bb.max.y < 2.85, `the stand over its post: ${bb.min.y.toFixed(2)}–${bb.max.y.toFixed(2)} m`);
-    assert.ok(STAND.BOARD_Y >= 2.2 && STAND.BOARD_Y <= 2.5 && Math.round(STAND.TILT * 180 / Math.PI) >= 25 && Math.round(STAND.TILT * 180 / Math.PI) <= 35);
+    assert.ok(bk.min.y > 2.3 && bk.max.y < 3.45, `the book at ${bk.min.y.toFixed(2)}–${bk.max.y.toFixed(2)} m`);
+    assert.ok(bb.min.y >= 1.99 && bb.max.y < 3.5, `the stand over its post: ${bb.min.y.toFixed(2)}–${bb.max.y.toFixed(2)} m`);
+    assert.ok(STAND.BOARD_Y >= 2.6 && STAND.BOARD_Y <= 3.1 && Math.round(STAND.TILT * 180 / Math.PI) >= 25 && Math.round(STAND.TILT * 180 / Math.PI) <= 35);
     assert.ok(BOOK.W > 0);
     const box = boardBox({ x: 10, y: 5, z: 20, face: 0 });
-    assert.ok(box.maxX - box.minX >= 1.79 && box.minY === 7);
+    assert.ok(box.maxX - box.minX >= 2.29 && box.minY === 7);
 });
 
 test('a book on a stand is no loose thing; the post gone — the stand falls, the book drops as an ordinary book', () => {
@@ -96,7 +96,7 @@ test('a book on a stand is no loose thing; the post gone — the stand falls, th
     assert.equal(spawned.length, 1);
     assert.equal(spawned[0].item.kind, 'book');
     assert.equal(spawned[0].item.lore, loreForSite(w)[0].id, 'its own book falls');
-    assert.ok(Math.abs(spawned[0].p.y - (w.lore[0].y + 2.3)) < 0.6, 'from the board');
+    assert.ok(Math.abs(spawned[0].p.y - (w.lore[0].y + 2.8)) < 0.6, 'from the board');
     // asleep and awake again: the broken stand does not come back
     lib.sleep(w); assert.equal(game.scene.children.length, 0); assert.equal(boxes.size, 0);
     lib.wake(w); assert.equal(game.scene.children.length, loreForSite(w).length - 1);

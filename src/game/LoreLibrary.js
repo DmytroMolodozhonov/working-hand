@@ -30,6 +30,8 @@ const READ_NEAR = 3.4; // m: a stand this near the eyes may have its pages turne
 const SHOW_R = 12; // m: a stand this near has its pages painted (one a frame); farther: given back
 
 const HINT_R = 26; // m: walking up this near the door, once a word on what the library is
+/** The scale of a book on a stand (bigger than in the hands). */
+export const loreScale = () => (ITEM_SCALE.book || 1.6) * STAND.BOOK_K;
 const _v = new THREE.Vector3();
 let _shared = null;
 let _sign = null;
@@ -82,7 +84,8 @@ function sharedStand() {
     ]);
     const stone = mergeParts([
         { geo: new THREE.BoxGeometry(1.1, 0.12, 1.1), pos: [0, POST_H + 0.06, 0] }, // the cap over the post
-        { geo: new THREE.BoxGeometry(0.46, 0.2, 0.46), pos: [0, POST_H + 0.2, 0] }, // the neck under the board
+        { geo: new THREE.BoxGeometry(0.5, BOARD_Y - POST_H - 0.12 - 0.1, 0.5), pos: [0, (POST_H + 0.12 + BOARD_Y - 0.1) / 2, 0] }, // the neck up to the board
+        { geo: new THREE.BoxGeometry(0.8, 0.14, 0.8), pos: [0, BOARD_Y - 0.17, 0] }, // the collar under the board
     ]);
     for (const g of [wood, stone]) g.userData.shared = true;
     _shared = {
@@ -104,7 +107,7 @@ export function makeStandModel() {
 
 /** Where the open book lies on the board (the stand's frame): its middle and its turn (spine up the slope, pages up). */
 export function bookPoseOnStand(pos = new THREE.Vector3(), quat = new THREE.Quaternion()) {
-    const sc = ITEM_SCALE.book || 1.6, { TILT, BOARD_Y, BOARD_T } = STAND;
+    const sc = loreScale(), { TILT, BOARD_Y, BOARD_T } = STAND;
     const lift = BOARD_T / 2 + BOOK.B * sc + 0.004; // (the covers' back rests on the board)
     pos.set(0, BOARD_Y + Math.cos(TILT) * lift, Math.sin(TILT) * lift);
     quat.setFromAxisAngle(_v.set(1, 0, 0), TILT - Math.PI / 2);
@@ -197,19 +200,18 @@ export class LoreLibrary {
                 group.add(pic);
                 g.scene.add(group);
                 group.updateMatrixWorld(true);
-                S.stands[i] = { key, id: pent, pent, spot: at, group, book: pic, item: null, s: null, boxId: g.collision?.addBox ? g.collision.addBox({ ...boardBox({ ...at, face: at.face || 0 }), kind: 'table' }) : null };
+                S.stands[i] = { key, id: pent, pent, spot: at, group, book: pic, item: null, s: null, boxId: g.collision?.addBox ? g.collision.addBox({ ...boardBox({ ...at, face: at.face || 0 }), kind: 'stand' }) : null };
                 return;
             }
             const item = loreItem(id, 'lore:' + key);
             const book = makeItemModel(item);
-            const sc = ITEM_SCALE.book || 1.6;
-            book.scale.setScalar(sc);
+            book.scale.setScalar(loreScale());
             bookPoseOnStand(book.position, book.quaternion);
             setBookAngle(book, Math.PI);
             group.add(book);
             g.scene.add(group);
             group.updateMatrixWorld(true);
-            const st = { key, id, spot: at, group, book, item, s: null, boxId: g.collision?.addBox ? g.collision.addBox({ ...boardBox({ ...at, face: at.face || 0 }), kind: 'table' }) : null };
+            const st = { key, id, spot: at, group, book, item, s: null, boxId: g.collision?.addBox ? g.collision.addBox({ ...boardBox({ ...at, face: at.face || 0 }), kind: 'stand' }) : null };
             S.stands[i] = st;
         });
         S.complete = S.done.every(Boolean);
@@ -294,7 +296,7 @@ export class LoreLibrary {
         if (figureOf('teleport')) { const pic = makeStandPicture('teleport'); pic.position.x = 3; m.add(pic); }
         const b = makeItemModel(loreItem('coprus', 'sample'));
         bookPoseOnStand(b.position, b.quaternion);
-        b.scale.setScalar(ITEM_SCALE.book || 1.6);
+        b.scale.setScalar(loreScale());
         setBookAngle(b, Math.PI);
         m.add(b);
         return [m];

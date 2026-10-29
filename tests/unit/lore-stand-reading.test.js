@@ -9,7 +9,7 @@ const ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? () => ({ width
 globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
 
 const { BookReading } = await import('../../src/game/BookReading.js');
-const { makeStandModel, bookPoseOnStand } = await import('../../src/game/LoreLibrary.js');
+const { makeStandModel, bookPoseOnStand, loreScale } = await import('../../src/game/LoreLibrary.js');
 const { makeItemModel, ITEM_SCALE } = await import('../../src/game/ItemTypes.js');
 const { loreItem } = await import('../../src/game/LoreBooks.js');
 const { BOOK, setBookAngle } = await import('../../src/game/BookModel.js');
@@ -22,13 +22,13 @@ function setup() {
     stand.position.set(10, 5, 20);
     stand.rotation.y = Math.PI / 2;
     const book = makeItemModel(loreItem('coprus', 'u'));
-    book.scale.setScalar(ITEM_SCALE.book);
+    book.scale.setScalar(loreScale());
     bookPoseOnStand(book.position, book.quaternion);
     setBookAngle(book, Math.PI);
     stand.add(book);
     stand.updateMatrixWorld(true);
     const head = new THREE.Object3D();
-    head.position.set(12.5, 8.4, 20);
+    head.position.set(12.8, 8.9, 20);
     const g = {
         items: { held: { left: null, right: null } },
         weapons: { hands: { left: { held: null }, right: { held: null } } },

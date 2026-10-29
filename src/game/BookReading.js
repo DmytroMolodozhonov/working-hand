@@ -621,7 +621,7 @@ export class BookReading {
     _finger(s, fh, dt) {
         const tip = fh.tip;
         const { W, H, T } = BOOK;
-        const sc = ITEM_SCALE.book || 1.6;
+        const sc = s.model.scale?.x || ITEM_SCALE.book || 1.6; // (a book on a stand is bigger than one in the hands)
         const sh = s.sheet;
         if (sh) {
             if (!tip) { sh.touch(null, dt); return; }

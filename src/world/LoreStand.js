@@ -11,10 +11,11 @@
  */
 export const STAND = {
     POST_H: 2, // m: the post's height (two blocks)
-    BOARD_Y: 2.3, // m: the board's middle above the floor
+    BOARD_Y: 2.8, // m: the board's middle above the floor (a hand held up reaches it; the eyes, 3.4 m, look down on it)
+    BOOK_K: 1.35, // the open book on the stand is this much bigger than a book in the hands: easy to see, read and turn
     TILT: 25 * Math.PI / 180, // rad: the reader's edge is the lower one
-    BOARD_W: 1.8, // m across
-    BOARD_L: 1.25, // m along the slope
+    BOARD_W: 2.3, // m across
+    BOARD_L: 1.6, // m along the slope
     BOARD_T: 0.1, // m thick
 };
 

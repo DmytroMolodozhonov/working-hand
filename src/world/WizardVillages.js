@@ -280,7 +280,7 @@ function buildCauldronHall(p, rng, out) {
  */
 function buildLibrary(p, rng, out) {
     const B = BLOCK;
-    const u0 = 27, u1 = 47, v0 = 12, v1 = 29, h = 10, du = 37;
+    const u0 = 26, u1 = 48, v0 = 12, v1 = 29, h = 10, du = 37;
     p.box(u0, u1, -1, -1, v0, v1, B.PLANKS_DARK);
     p.walls(u0, u1, v0, v1, 0, h - 1, B.ARCANE);
     p.walls(u0, u1, v0, v1, 0, 0, B.ARCANE_DARK); // (a dark plinth round the walls)
@@ -305,8 +305,8 @@ function buildLibrary(p, rng, out) {
     for (const b of [17, 22, 26]) { windowHole(p, windows, false, u0, b - 1, b, 2, 6); windowHole(p, windows, false, u1, b - 1, b, 2, 6); }
     // the shelves: the back wall and both side walls (a gap at the windows)
     p.box(u0 + 1, u1 - 1, 0, 6, v1 - 1, v1 - 1, B.BOOKS);
-    p.box(u0 + 1, u0 + 1, 0, 6, v0 + 4, v1 - 2, B.BOOKS);
-    p.box(u1 - 1, u1 - 1, 0, 6, v0 + 4, v1 - 2, B.BOOKS);
+    p.box(u0 + 1, u0 + 1, 0, 6, v0 + 4, 21, B.BOOKS); // (the side shelves stop before the lecterns: the boards are 2.3 m wide)
+    p.box(u1 - 1, u1 - 1, 0, 6, v0 + 4, 21, B.BOOKS);
     for (const b of [17, 22, 26]) { // (the window slots: no books in front of the glass)
         p.box(u0 + 1, u0 + 1, 1, 6, b - 1, b, 0); p.box(u1 - 1, u1 - 1, 1, 6, b - 1, b, 0);
     }
@@ -314,7 +314,7 @@ function buildLibrary(p, rng, out) {
     p.box(du - 3, du + 3, -1, -1, v0 + 1, 23, B.CARPET_PURPLE);
     p.box(du - 2, du + 2, 0, 1, 20, 21, B.PLANKS_DARK);
     p.box(du, du, h - 1, h - 1, 20, 21, B.ARCANE_LAMP);
-    for (const [a, b] of [[31, 24], [43, 24], [31, 16], [43, 16], [37, 25]]) p.box(a, a, h - 1, h - 1, b, b, B.ARCANE_LAMP);
+    for (const [a, b] of [[31, 24], [43, 24], [31, 16], [43, 16], [37, 25], [34, 24], [40, 24]]) p.box(a, a, h - 1, h - 1, b, b, B.ARCANE_LAMP);
     // the scrolls of simple spells on the table: 2–5, different from place to place (repeats between places are fine)
     const n = 2 + Math.floor(rng() * 4);
     const pool = LIBRARY_SPELLS.slice();
@@ -326,7 +326,7 @@ function buildLibrary(p, rng, out) {
     // between them pedestals with candles (lamp blocks), behind them out of the readers' way
     const lore = [];
     for (let i = 0; i < 7; i++) {
-        const u = 31 + i * 2, q = p.pt(u, 25, 0), r = p.pt(u, 24, 0); // (the reader stands at the door side, v 24)
+        const u = du - 9 + i * 3, q = p.pt(u, 25, 0), r = p.pt(u, 24, 0); // (the reader stands at the door side, v 24)
         p.box(u, u, 0, 1, 25, 25, B.PLANKS_DARK);
         lore.push({ x: q.x, y: q.y, z: q.z, face: faceYaw(r.x - q.x, r.z - q.z) });
     }
