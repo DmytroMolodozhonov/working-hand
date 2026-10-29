@@ -324,23 +324,17 @@ export class GhostKit {
         }
         // the windows (lancets 2 wide × 4 high through the wall) and candle niches, never over a stair
         const free = (i, a, h = 0.12) => !occ(i, th).some(([a0, s]) => arcsMeet(a0, s, a - h, 2 * h)) && !need[i].some(([b, hb]) => arcsMeet(b - hb, 2 * hb, a - h, 2 * h));
+        // (windows along the four axes: one box each; `windows(i, a)` false → a candle niche there instead; 'lamps' → niches only)
         if (windows) floors.forEach((l, i) => {
-            const k = Math.max(4, Math.round(R / 2.5));
-            for (let j = 0; j < k; j++) {
-                const a = (j + 0.5) / k * TAU + i * 0.4;
-                if (!free(i, a, 0.22)) continue;
-                const c = Math.cos(a), s = Math.sin(a);
-                if (windows === 'lamps' || (typeof windows === 'function' && !windows(i, a))) {
-                    const wu = Math.round(u + c * (Rin + 0.6)), wv = Math.round(v + s * (Rin + 0.6));
-                    p.box(wu, wu, l + 3, l + 3, wv, wv, B.GHOST_LAMP);
-                    continue;
-                }
-                for (let r = Rin - 0.5; r <= R + 0.6; r += 0.5) for (const w of [-0.5, 0.5]) {
-                    const wu = Math.round(u + c * r - s * w), wv = Math.round(v + s * r + c * w);
-                    p.box(wu, wu, l + 2, l + 5, wv, wv, 0);
-                }
-                const tu = Math.round(u + c * (R - 0.5)), tv = Math.round(v + s * (R - 0.5));
-                p.box(tu, tu, l + 6, l + 6, tv, tv, 0); // (the pointed head)
+            for (let j = 0; j < 4; j++) {
+                const a = j * Math.PI / 2 + (i % 2 ? 0 : 0);
+                if (!free(i, a, 0.25)) continue;
+                const du = Math.round(Math.cos(a)), dv = Math.round(Math.sin(a));
+                const lampOnly = windows === 'lamps' || (typeof windows === 'function' && !windows(i, a));
+                if (lampOnly) { p.box(u + du * Math.round(Rin + 1), u + du * Math.round(Rin + 1), l + 3, l + 3, v + dv * Math.round(Rin + 1), v + dv * Math.round(Rin + 1), B.GHOST_LAMP); continue; }
+                const r0 = Rin - 1, r1 = R + 1;
+                if (du) { const a0 = u + du * r0, a1 = u + du * r1; p.box(Math.min(a0, a1), Math.max(a0, a1), l + 2, l + 5, v, v + 1, 0); p.box(Math.min(a0, a1), Math.max(a0, a1), l + 6, l + 6, v, v, 0); }
+                else { const a0 = v + dv * r0, a1 = v + dv * r1; p.box(u, u + 1, l + 2, l + 5, Math.min(a0, a1), Math.max(a0, a1), 0); p.box(u, u, l + 6, l + 6, Math.min(a0, a1), Math.max(a0, a1), 0); }
             }
         });
         return { flights, free, th, D };
