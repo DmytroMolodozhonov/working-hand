@@ -231,7 +231,7 @@ export class HeroApply {
                 : safeNear(t, dry);
             if (!at) { this._fail('рядом нет сухой земли — вы остались на месте'); return; }
             this._land(at, t);
-        } catch (e) { this.pending = null; }
+        } catch (e) { this.pending = null; console.error('HeroApply:', p.id, e); this._fail(`ошибка при переносе (${e?.message || e}) — вы остались на месте`, p.id); }
     }
 
     /** Обычное здоровье в Творческом: своё число HP (+ свитки здоровья); урон и смерть — как в Свободном мире (Combat.enabled). */

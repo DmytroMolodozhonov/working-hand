@@ -70,6 +70,9 @@ const antialias = (() => {
 })();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
+// (the video card dropped the drawing context — a driver reset under a heavy scene: three.js then dies on «null.trim()» in the shader log;
+//  the journal says why, and the loading screen says it in words instead of «Cannot read properties of null»)
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__glLost = true; netLog('🎮 видеокарта сбросила графику (WebGL context lost) — игра не может продолжать'); try { updateProgress(100, 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.'); } catch (err) { /* the screen is not built yet */ } });
 setTextureRenderer(renderer); // (pictures made on the video card at loading: src/core/GpuTexture.js)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
@@ -1148,8 +1151,9 @@ async function startGameInner(config, welcome) {
             }
         }, 100);
     } catch (error) {
-        console.error('INIT ERROR:', error);
-        updateProgress(100, 'Ошибка: ' + (error?.message || error));
+        console.error('INIT ERROR:', error, error?.stack);
+        netLog(`❌ вход в мир (место «${config?.hero?.spawn || 'start'}», поколение ${config?.gen ?? '—'}): ${error?.message || error}${window.__glLost ? ' [контекст WebGL потерян]' : ''} | ${String(error?.stack || '').split('\n').slice(0, 4).join(' ← ')}`);
+        updateProgress(100, window.__glLost ? 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.' : 'Ошибка: ' + (error?.message || error));
         setTimeout(() => location.reload(), 4000);
     }
 }

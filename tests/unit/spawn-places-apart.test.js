@@ -133,3 +133,13 @@ test('места врозь: тестового дракона старой пл
     // Game._updateTestDragon выходит при data.apart: у старта и на тестовой горе логова нет
     assert.equal(t.lairsNear(TEST_CAVE.X, TEST_CAVE.Z, 300).length, 0);
 });
+
+test('Ледяная Королева: в любом сиде, с ледяной ареной (поколение 20) и без — твёрдое место с воздухом над головой', () => {
+    for (const iceArena of [true, false]) for (let seed = 1; seed <= 12; seed++) {
+        const t = new TerrainData();
+        t.generate({ seed, mountains: true, seas: true, lush: true, deepCaves: true, test: true, slopes: true, wizHuts: true, furnish: true, apart: true, iceArena });
+        const tt = queenApproach(t.iceCastle.plan);
+        const at = safeNear(tt, (x, z) => stand(t, x, z, tt.layer, tt.up, tt.down) != null, { rings: [0, 2, 4, 6, 10], around: 8 });
+        assert.ok(at, `seed ${seed}, арена ${iceArena}: нет твёрдого места`);
+    }
+});
