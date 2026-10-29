@@ -212,7 +212,7 @@ export class VillagerCommands {
         if (what === 'spar' || what === 'him') {
             const foe = a.foe ? life.byId.get(a.foe) : null;
             if (!foe || foe.dead || foe === v) return;
-            if (a.mode === 'deadly' || what === 'him') { foe.byOrder = base.by; life.alog?.decision(v, `убивает ${foe.title || ''} ${foe.name || foe.id} по приказу — его смерть законна, тревоги не будет`); }
+            if (a.mode === 'deadly' || what === 'him') { foe.byOrder = base.by; foe.rebelOrder = !!a.rebel; life.alog?.decision(v, `убивает ${foe.title || ''} ${foe.name || foe.id} по приказу — его смерть законна, тревоги не будет`); }
             this._clear(v, true); v.sheath = false;
             v.cmd = { ...base, kind: 'spar', foe: foe.id, mode: a.mode === 'deadly' ? 'deadly' : 'spar', t: a.mode === 'deadly' ? 120 : 45, touches: 0, swingT: 0.6 + Math.random() * 0.6, walkT: 0 };
             return;

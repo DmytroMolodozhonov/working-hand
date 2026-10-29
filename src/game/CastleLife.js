@@ -44,6 +44,7 @@ import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
+import { RebellionLife } from './RebellionLife.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
 import { JusticeLife } from './JusticeLife.js';
@@ -306,6 +307,7 @@ export class CastleLife {
         this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
+        this.reb = new RebellionLife(this); // the hidden unrest of a place toward its owner (Rebellion.js)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
@@ -362,6 +364,7 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         const before = levelOf(st.ranks, pid);
         st.ranks = withRank(st.ranks, pid, level, title, name);
+        if (level && level > before) this.reb?.note(cs, st.owner, 'rank'); // (an office given: a sign of the king's care)
         if (level) { const h = cs.hostile; h.delete(pid); for (const k of cs.active.values()) if (k.foe === pid) { k.foe = null; k.grudge = null; } } // (the friend is forgiven at once)
         this._sendState(cs);
         const p = this._playerPos(pid);
@@ -3015,6 +3018,7 @@ export class CastleLife {
             v.darkKill = hellRecent(v.darkT, Date.now()); // (killed by black magic: the body keeps it — Death.villagerDied → the rite of monstrous vitality)
             if (hellRecent(v.hellT, Date.now())) hellKilled(this.game, by, 'v', v.role, v.id); // (the Hellfire killed a humanoid: +1 black magic to the caster)
             this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
+            if (v.byOrder != null && !v.rebelOrder) this.reb?.note(v.cs, v.byOrder, 'execution'); // (a man put to death on the king's order: the people do not forget)
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
@@ -3248,6 +3252,7 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         st.kingDead = true;
         st.owner = by || null;
+        if (by && this._isPlayer(by) && cs.def.kind !== 'tower' && cs.def.kind !== 'wizvillage') this.reb?.note(cs, by, 'slainKing'); // (the people obey him — and hate him: Rebellion.js)
         st.ownerName = by ? g.playerName(by) : null;
         this.news?.add(cs.def.id, 'captured', { by, byName: st.ownerName, seen: !!by });
         cs.hostile.clear();
@@ -3312,7 +3317,7 @@ export class CastleLife {
             const cs = this._runtime(def);
             if (!cs.awake) continue;
             const st = this.state(def.id);
-            if (by && by === st.owner) continue; // (the king may pull down his own walls)
+            if (by && by === st.owner) { if (isPlayer && blocks > 0) this.reb?.note(cs, by, kind === 'fire' ? 'arson' : 'wreck', kind === 'fire' ? 1 : blocks); continue; } // (the king may pull down his own walls — and the people take it ill: Rebellion.js)
             const bp = isPlayer ? this._playerPos(by) : null;
             // a quiet little damage (a pane, a block or two): whoever sees it grumbles at that player — no guards
             if (!loud && isPlayer && blocks > 0 && !via && this._petty(cs, by, blocks, bp, pos)) continue;
@@ -3536,6 +3541,7 @@ export class CastleLife {
     tookFromHome(home, by) {
         if (!home || !by || !this.enabled || !this.auth) return false;
         const cs = this.castles.get(home.c) || this._runtimeById(home.c);
+        if (cs) this.reb?.note(cs, by, 'theft'); // (the owner robbing his people: Rebellion.js)
         if (cs && home.h < 0) { this.forced(cs.def.id, by, this._playerPos(by)); return true; } // (a chest of the castle itself)
         if (!cs || !cs.def.houses?.[home.h]) return false;
         if (this.rel?.homeAllows?.(cs, home, by, 'take')) return false; // (the family likes him enough to let him take it — Relations.mayTakeThing)
@@ -3700,6 +3706,7 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
             this.rel?.update(dt);
+            this.reb?.update(dt);
             this.alog?.update(dt);
             this.social?.update(dt);
             this.court?.update(dt);
@@ -3949,9 +3956,9 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length) {
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
                 const cs = this.castles.get(id);
-                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;

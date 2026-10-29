@@ -609,6 +609,7 @@ export class NightLife {
             else g.sync?.villagerTalk?.(v.id);
             return true;
         }
+        if (TRADE_WORDS.test(String(text || '').toLowerCase()) && this.life.reb?.refusesTrade(v)) { if (this.auth) { v.talking = 3; v.talkTo = g.localId; } return true; } // (the unrest of the place: the merchant will not sell to its king — Rebellion.js)
         if (v.role === 'merchant' && this.closed() && !(v.entry?.stall != null && this.dealHeld(v.cs, v.entry.stall)) && TRADE_WORDS.test(String(text || '').toLowerCase())) {
             if (this.auth) { v.talking = 3; v.talkTo = g.localId; }
             this.life._say(v, LINES.nightShop, 4);
