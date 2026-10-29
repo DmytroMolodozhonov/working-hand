@@ -1188,12 +1188,12 @@ export class ItemSystem {
         const g = this.game;
         let food = null;
         for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || h.item.kind === 'potion' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
-        if (!food) { this._eatT = 0; return; }
+        if (!food) { this._eatT = 0; g.darkLord?.mouthFree?.(); return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         // the food at the mouth: the model's hand there, or the camera sees the hand cover the mouth
         // (the arm's depth is the camera's guess: the picture is surer)
         const atMouth = food.h.model.position.distanceTo(mouth) < 0.75 || !!g.currentPose?.mouthHand?.[food.side];
-        if (atMouth) this._eatT += dt; else this._eatT = 0;
+        if (atMouth) this._eatT += dt; else { this._eatT = 0; g.darkLord?.mouthFree?.(); }
         if (this._eatT < 0.6) return;
         this._eatT = 0;
         if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }
@@ -1219,6 +1219,12 @@ export class ItemSystem {
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
         const said = [];
+        let silent = false;
+        if (fx.lordCure) { // «Зелье снятия проклятия тёмного мага» (DarkLord.js): the first time at the mouth — the warning (the flask stays); the second — drunk, the cells go
+            const res = g.darkLord?.drinkCure(h.item);
+            if (res !== 'drink') return;
+            silent = true;
+        }
         if (fx.skin) { // «Зелье светлого ума»: пятна на теле светлеют; сам уровень чёрного мага остаётся (DarkMagic.cleanSkin)
             if (!(skinOf(g.dark) > 0)) { g.hud.setVoice?.('🧪 Тело и так чистое — зелье не нужно', true); return; }
             const got = cleanSkin(g.dark, fx.skin);
@@ -1234,7 +1240,7 @@ export class ItemSystem {
             said.push(`+${fx.hp} HP`);
         }
         if (fx.mana && g.combat) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + fx.mana); said.push(`+${fx.mana} маны`); }
-        g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
+        if (!silent) g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
         const col = h.item.color ?? 0x9fd8ff;
         for (let i = 0; i < 14; i++) g.fx?.spark(mouth, col, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
         g.sound?.playSplash?.();

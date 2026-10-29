@@ -247,6 +247,11 @@ function shared() {
     const goldShieldMat = gold(PGODS.GOLD, 0.4), goldRingMat = gold(PGODS.GOLD_LIGHT, 0.9), goldDomeMat = gold(PGODS.GOLD, 0.2), goldHaloMat = gold(PGODS.GOLD_DEEP, 0.12);
     const goldRayMat = gold(PGODS.GOLD_LIGHT, 0.55);
     const goldGridMat = new THREE.LineBasicMaterial({ color: 0xffe28a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+    // the true dark mage's shield (DarkLord.js): the same shape, painted dark — an ink-black violet veil (normal blending, so it is dark and not light), a bright violet rim
+    const darkShieldMat = new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.62, side: THREE.DoubleSide, depthWrite: false });
+    const darkRingMat = new THREE.MeshBasicMaterial({ color: 0x8a3be8, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    const darkDomeMat = new THREE.MeshBasicMaterial({ color: 0x140626, transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false });
+    const darkGridMat = new THREE.LineBasicMaterial({ color: 0x9a5cff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
     // (the rays: 12 thin spikes round the disc, one shape)
     const rays = [];
     for (let i = 0; i < 12; i++) {
@@ -265,7 +270,7 @@ function shared() {
         domeGrid: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 1)),
         shell: new THREE.IcosahedronGeometry(1, 1),
         spike: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
-        shieldMat, ringMat, domeMat, gridMat, iceMat,
+        shieldMat, ringMat, domeMat, gridMat, iceMat, darkShieldMat, darkRingMat, darkDomeMat, darkGridMat,
     };
     return SHARED;
 }
@@ -308,7 +313,7 @@ function mergeFlat(list) {
 /** One small mesh of each of the shields' materials (Game.prewarm: compiled at loading, never in a frame). */
 export function sampleShieldModels() {
     const S = shared();
-    return [S.shieldMat, S.ringMat, S.domeMat, S.goldShieldMat, S.goldRingMat, S.goldDomeMat, S.goldHaloMat, S.goldRayMat, S.iceMat].map((m) => new THREE.Mesh(S.disc, m))
+    return [S.shieldMat, S.ringMat, S.domeMat, S.goldShieldMat, S.goldRingMat, S.goldDomeMat, S.goldHaloMat, S.goldRayMat, S.iceMat, S.darkShieldMat, S.darkRingMat, S.darkDomeMat].map((m) => new THREE.Mesh(S.disc, m))
         .concat([new THREE.LineSegments(S.hex, S.gridMat), new THREE.LineSegments(S.hex, S.goldGridMat)]);
 }
 
@@ -324,8 +329,10 @@ export class CombatVisuals {
         this.hand.add(disc, ring, hex);
         this.handRing = ring;
         this.handHex = hex;
+        this.handDisc = disc;
         this.dome = new THREE.Group();
-        this.dome.add(new THREE.Mesh(S.dome, S.domeMat));
+        this.domeBall = new THREE.Mesh(S.dome, S.domeMat);
+        this.dome.add(this.domeBall);
         this.domeGrid = new THREE.LineSegments(S.domeGrid, S.gridMat);
         this.domeGrid.scale.setScalar(1.01);
         this.dome.add(this.domeGrid);
@@ -382,7 +389,7 @@ export class CombatVisuals {
         const geo = S.shard || (S.shard = new THREE.CircleGeometry(0.22, 3)); // (pieces: flat triangles)
         const n = type === 2 ? 26 : 16;
         for (let i = 0; i < n; i++) {
-            const m = new THREE.Mesh(geo, (gods ? S.goldShieldMat : S.shieldMat).clone()); // (the gods' one: golden pieces)
+            const m = new THREE.Mesh(geo, (gods ? S.goldShieldMat : this._dark ? S.darkRingMat : S.shieldMat).clone()); // (the gods' one: golden pieces; a dark mage's: violet)
             m.material.opacity = 0.75;
             const u = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
             if (type === 2) m.position.copy(at).addScaledVector(u, PVP.DOME_R * 0.95);
@@ -417,6 +424,7 @@ export class CombatVisuals {
     update(dt, st, body) {
         this._t += dt;
         if (this.shards.length) this._updateShards(dt);
+        if (!!st.dark !== !!this._dark) this._paint(!!st.dark);
         if (st.gods) this.hand.visible = this.dome.visible = false;
         else this.gHand.visible = this.gDome.visible = false;
         if (st.gods) { this._updateGods(dt, st, body); this._shell(dt, st, body); return; }
@@ -442,6 +450,17 @@ export class CombatVisuals {
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
         this._shell(dt, st, body);
+    }
+
+    /** The true dark mage's shield / dome are painted dark, the plain ones blue (the gods' one stays gold: divine magic is not his). */
+    _paint(dark) {
+        const S = shared();
+        this._dark = dark;
+        this.handDisc.material = dark ? S.darkShieldMat : S.shieldMat;
+        this.handRing.material = dark ? S.darkRingMat : S.ringMat;
+        this.handHex.material = dark ? S.darkGridMat : S.gridMat;
+        this.domeBall.material = dark ? S.darkDomeMat : S.domeMat;
+        this.domeGrid.material = dark ? S.darkGridMat : S.gridMat;
     }
 
     /** The gods' shield / dome: golden, breathing light, its rings and rays turning (ProtectionGods.js). */
@@ -1082,6 +1101,7 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.game.darkLord?.lifting) return; // (the rite of a true dark mage: the ball of darkness is round the body — nothing gets in, nothing is half-done; DarkLord.js)
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         if (BLAST_HARM.has(kind) && this.blastProof()) return; // (a dome: no blast, no falling pieces get in — mine either)
         // the monster form (MonsterForm.js): simple spells and fire do nothing, blades a quarter, strong spells a half…
@@ -1241,6 +1261,7 @@ export class Combat {
             side: this.shield ? this.shield.side : 'right',
             shieldLeft: this.shield ? Math.min(this.shield.left, 1e6) : 0, // (Creative's endless one: a number the network can carry)
             gods: !!this.shield?.gods, // (the gods' shield: gold — ProtectionGods.js)
+            dark: !!this.game.darkLord?.on, // (a true dark mage's shields are dark — DarkLord.js)
             frozen: this.frozen,
         };
     }

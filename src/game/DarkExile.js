@@ -6,6 +6,7 @@
  */
 
 import { expelled, EXPEL_LINE } from './DarkMagic.js';
+import { effectiveSkin } from './DarkLord.js';
 
 export const EXILE = { EVERY: 0.5, GRACE: 10, SAY_EVERY: 6, LOOK: 40, HOSTILE_MS: 90000 };
 
@@ -14,7 +15,7 @@ export class DarkExile {
 
     update(dt) {
         const g = this.game, L = g.castleLife;
-        const lvl = g.dark?.skin || 0; // (по пятнам на теле: DarkMagic.js)
+        const lvl = effectiveSkin(g.dark?.skin || 0, g.darkLord?.on); // (по пятнам на теле: DarkMagic.js; у настоящего тёмного мага — всегда 100: DarkLord.js)
         if (lvl <= 80 || !L?.castles) { this.inside = 0; return; }
         this._t -= dt;
         if (this._t > 0) return;

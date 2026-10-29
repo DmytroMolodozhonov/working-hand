@@ -126,13 +126,14 @@ export function darkNotice(was, now) {
 export class DarkHero {
     constructor(game) { this.game = game; this.level = 0; this.skin = 0; }
     get stage() { return darkStage(this.skin); } // (по коже: её видят волшебники)
-    onGrow(was, now) { // (was/now — кожа; слово на порогах только по ней)
+    onGrow(was, now, why, lvlWas = 0, lvlNow = 0) { // (was/now — кожа; слово на порогах только по ней; lvl* — настоящий уровень: на 100 — «настоящий тёмный маг», DarkLord.js)
+        if (lvlNow >= DARK.MAX && lvlWas < DARK.MAX) this.game?.darkLord?.onMax?.();
         const text = darkNotice(was, now);
         if (text) this.game?.hud?.setVoice?.(`🜏 <span style="color:#9a6bd1">${text}</span>`, true);
         this.game?.net?.sendDark?.(this.skin); // (виден другим игрокам)
     }
     onClean() { this.game?.net?.sendDark?.(this.skin); }
-    onDeath() { this.level = 0; this.skin = 0; }
+    onDeath() { this.level = 0; this.skin = 0; this.game?.darkLord?.onDeath?.(); }
     snapshot() { return this.level > 0 || this.skin > 0 ? { level: this.level, skin: this.skin } : null; }
     restore(s) { this.level = clampDark(s?.level); this.skin = s?.skin == null ? this.level : Math.min(this.level, clampDark(s.skin)); this.game?.net?.sendDark?.(this.skin); }
 }

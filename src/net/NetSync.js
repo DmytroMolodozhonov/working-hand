@@ -486,6 +486,11 @@ export class NetSync {
         this.net.send({ t: 'nhl', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
     }
 
+    /** «Настоящий тёмный маг» (DarkLord.js): my rite of turning — {k: 'begin' | 'at' | 'end', id, p, t}: the others see the ball of darkness round me. */
+    darkLord(m) {
+        this.net.send({ t: 'dlord', by: this.me, ...m }, true);
+    }
+
     fireworks(origin, dir, seed) {
         this.net.send({ t: 'fwk', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], s: seed >>> 0 }, true);
     }
@@ -993,6 +998,7 @@ export class NetSync {
             case 'nhl': if (m.by !== this.me) g.nihilis?.onNet(m.by, m); break; // (a cone of «Nihilis Atra»: Nihilis.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
+            case 'dlord': if (m.by !== this.me) g.darkLord?.onNet(m.by, m); break; // (the rite of a true dark mage: DarkLordLife.js)
             case 'tdes': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)

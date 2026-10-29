@@ -457,6 +457,19 @@ const TUNES = {
         noise(o, sr, 0, 8, 0.05, () => 0.05, swell(0.3, 0.3), r); // (the roar under it)
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Настоящий тёмный маг» (DarkLord.js): a slow toll, a black choir sinking into D minor, a roar that swells and a last deep chord. */
+    thDarkLord(sr) {
+        const o = buf(sr, 11), r = rng(167);
+        pad(o, sr, ['D2', 'A2', 'D3', 'F3'], 0, 3.4, 0.42, { att: 1.2, rel: 0.9, vib: 0.006, harm: 3 });
+        pad(o, sr, ['Bb1', 'F2', 'Bb2', 'Db3'], 3.4, 6.2, 0.46, { att: 0.5, rel: 0.9, vib: 0.006, harm: 4 });
+        pad(o, sr, ['A1', 'E2', 'A2', 'C3', 'Eb3'], 6.2, 9.4, 0.5, { att: 0.4, rel: 1.4, vib: 0.007, harm: 4 });
+        pad(o, sr, ['D1', 'A1', 'D2', 'F2', 'A2'], 9.0, 10.9, 0.5, { att: 0.2, rel: 1.4, harm: 3 });
+        for (let k = 0; k < 6; k++) bell(o, sr, hz(k % 2 ? 'A3' : 'D3'), 0.4 + k * 1.5, 0.2, 3.2, 0.2); // (the toll)
+        melody([[0, 'D4', 2], [2, 'F4', 1], [3, 'E4', 1], [4, 'Db4', 2], [6, 'D4', 2], [8, 'A3', 4]], 0.7, 0.8, (f, t, l) => brass(o, sr, f, t, l, 0.11));
+        for (let k = 0; k < 9; k++) drum(o, sr, 3 + k * 0.82, 0.38 + k * 0.02, 46, 1.0, r);
+        noise(o, sr, 1, 8.8, 0.06, (u) => 0.03 + 0.07 * u, (u) => Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.5), r); // (the roar, rising)
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Ground Vortex»: low strings in C minor, stone thuds of the drums, brass over the grinding of earth. */
     thEarth(sr) {
         const o = buf(sr, 7), r = rng(139);

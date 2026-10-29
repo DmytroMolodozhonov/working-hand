@@ -185,6 +185,7 @@ export class RemoteAvatar {
             if (this.combat.shieldLeft > 0) this.combat.shieldLeft = Math.max(0, this.combat.shieldLeft - dt);
             const hp = this.handPose(this.combat.side);
             if (this.combat.atWand) hp.origin.addScaledVector(hp.dir, WAND_LEN); // (at the wand's tip, as on their own screen)
+            this.combat.dark = !!this.character?.darkLord; // (a true dark mage in his outfit: dark shields — DarkLord.js)
             this.visuals.update(dt, this.combat, { center: this.position.clone().add(_d.set(0, 0.6, 0)), hand: hp.origin, dir: hp.dir });
         }
     }

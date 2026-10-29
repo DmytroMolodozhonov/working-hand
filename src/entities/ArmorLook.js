@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { addBodyGlow } from '../fx/EnchantGlow.js';
 import { ROBE_TIERS } from '../game/ArmorTypes.js';
+import { lordParts } from './DarkLordLook.js';
 
 const STEEL = 0xb8c2cc, STEEL_DARK = 0x8a94a0, STEEL_MAGIC = 0xcfdcff, GOLD = 0xd4af37, LEATHER = 0x5a3a1e;
 
@@ -42,8 +43,8 @@ const trim = (code) => (code === 3 ? mat(GOLD, 0x6a4a00) : code === 2 ? mat(0x9f
 
 // ------------------------------------------------------------------ the pieces (parts)
 /** A helmet round a head box 1.2 (its middle at 0): the crown, cheek and neck plates, a nasal. */
-function helmetParts(p, code, list) {
-    const s = steel(code), t = trim(code);
+function helmetParts(p, code, list, dk = false) {
+    const s = steel(code, dk), t = trim(code, dk);
     box(p, 1.44, 0.5, 1.44, s, 0, 0.45, 0, list); // the crown (over the hair)
     box(p, 0.12, 0.85, 1.36, s, 0.7, 0.0, 0.04, list); // cheek plates
     box(p, 0.12, 0.85, 1.36, s, -0.7, 0.0, 0.04, list);
@@ -55,8 +56,8 @@ function helmetParts(p, code, list) {
 }
 
 /** A breastplate round the body box 1.2×1.5×0.8 (torso space), the pauldrons on the shoulders. */
-function chestParts(ch, p, code, list) {
-    const s = steel(code), t = trim(code);
+function chestParts(ch, p, code, list, dk = false) {
+    const s = steel(code, dk), t = trim(code, dk);
     box(p, 1.32, 1.3, 0.12, s, 0, 0.08, -0.46, list); // front
     box(p, 1.32, 1.3, 0.1, s, 0, 0.08, 0.46, list); // back
     box(p, 0.1, 1.3, 0.92, s, 0.66, 0.08, 0, list); // sides
@@ -73,8 +74,8 @@ function chestParts(ch, p, code, list) {
 }
 
 /** Greaves on a leg pivot (the leg 0.5 thick hangs down to −1.95): thigh, knee, shin, sabaton. */
-function legParts(p, code, list) {
-    const s = steel(code), t = trim(code);
+function legParts(p, code, list, dk = false) {
+    const s = steel(code, dk), t = trim(code, dk);
     box(p, 0.6, 0.85, 0.6, s, 0, -0.5, 0, list);
     box(p, 0.64, 0.22, 0.68, t, 0, -1.0, -0.02, list); // the knee cop
     box(p, 0.58, 0.68, 0.58, s, 0, -1.45, 0, list);
@@ -184,10 +185,13 @@ export function dressArmor(ch, code) {
     const c = code || {};
     ch.armorWorn = { helmet: c.h | 0, chest: c.c | 0, legs: c.l | 0, robe: c.r | 0 };
     const list = ch._armorParts;
-    if (c.h && ch.head) helmetParts(ch.head, c.h, list);
-    if (c.c && ch.torso) chestParts(ch, ch.torso, c.c, list);
-    if (c.l) for (const p of [ch.leftLegPivot, ch.rightLegPivot]) if (p) legParts(p, c.l, list);
-    if (c.r === 4 && ch.torso) archmageParts(ch, list);
+    const dk = c.dk | 0; // (the pieces a dark mage's curse blackened: 1 helmet, 2 breastplate, 4 greaves)
+    if (c.h && ch.head) helmetParts(ch.head, c.h, list, !!(dk & 1));
+    if (c.c && ch.torso) chestParts(ch, ch.torso, c.c, list, !!(dk & 2));
+    if (c.l) for (const p of [ch.leftLegPivot, ch.rightLegPivot]) if (p) legParts(p, c.l, list, !!(dk & 4));
+    ch.darkLord = c.r === 5; // (the true dark mage's outfit: DarkLordLook.js — it replaces the clothes and the robe)
+    if (c.r === 5 && ch.torso) lordParts(ch, list, !c.h);
+    else if (c.r === 4 && ch.torso) archmageParts(ch, list);
     // (all the magic armour on: the magic robe is not drawn — it poked through the plates; it is still worn)
     else if (c.r && ch.torso && !(c.r >= 2 && c.h >= 2 && c.c >= 2 && c.l >= 2)) robeParts(ch, c.r, c.rc, !c.h, list, c.rt | 0);
     // (first person: what is on the head is not seen from inside — as the head itself; on the
@@ -232,9 +236,10 @@ export function armorItemModel(it) {
         loop(0.98);
         return g;
     }
-    if (it.piece === 'helmet') { helmetParts(g, code, null); loop(0.78); }
+    const dk = !!it.cursed;
+    if (it.piece === 'helmet') { helmetParts(g, code, null, dk); loop(0.78); }
     else if (it.piece === 'chest') {
-        const s = steel(code), t = trim(code);
+        const s = steel(code, dk), t = trim(code, dk);
         box(g, 1.32, 1.3, 0.12, s, 0, 0, -0.46); box(g, 1.32, 1.3, 0.1, s, 0, 0, 0.46);
         box(g, 0.1, 1.3, 0.92, s, 0.66, 0, 0); box(g, 0.1, 1.3, 0.92, s, -0.66, 0, 0);
         box(g, 0.9, 0.16, 0.9, t, 0, 0.7, 0); box(g, 0.5, 0.3, 0.06, t, 0, 0.27, -0.53);
@@ -242,7 +247,7 @@ export function armorItemModel(it) {
         loop(0.86);
     } else {
         // the two greaves side by side, strapped together at the top
-        for (const sx of [-1, 1]) { const p = new THREE.Group(); p.position.set(sx * 0.34, 0.95, 0); g.add(p); legParts(p, code, null); }
+        for (const sx of [-1, 1]) { const p = new THREE.Group(); p.position.set(sx * 0.34, 0.95, 0); g.add(p); legParts(p, code, null, dk); }
         box(g, 1.0, 0.1, 0.2, mat(LEATHER), 0, 0.9, 0);
         loop(1.04);
     }

@@ -106,6 +106,9 @@ import { monsterSamples } from '../entities/MonsterBody.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
 import { darkSamples } from '../entities/DarkSkin.js';
+import { DarkLordLife } from './DarkLordLife.js';
+import { darkLordSamples } from '../fx/DarkLordFx.js';
+import { lordSamples } from '../entities/DarkLordLook.js';
 import { CaveMemory, CaveExplorer } from './CaveMap.js';
 import { IceCastleLife } from './IceQueen.js';
 import { Temple } from './Temple.js';
@@ -492,6 +495,7 @@ export class Game {
         this.steady = new Steadiness(this); // the skill «Устойчивость» 1…100: grows by running over rough ground (Steadiness.js)
         this.darkExile = new DarkExile(this); // башня гонит чёрного мага 81+ (DarkExile.js)
         this.dark = new DarkHero(this); // уровень чёрной магии 0…100 (DarkMagic.js)
+        this.darkLord = new DarkLordLife(this); // «настоящий тёмный маг»: на 100 уровне превращение, наряд, проклятие на доспехах, зелье (DarkLord.js)
         this.bossRetry = new BossRetry(this); // a fall in a fight with a boss at the chosen start: the window to try again (BossRetry.js)
         this.heroApply = new HeroApply(this); // «Настройки героя» Творческого мира (HeroApply.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
@@ -3359,6 +3363,7 @@ export class Game {
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
+        for (const m of [...darkLordSamples(), ...lordSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
         for (const m of this.beds?.sampleModels?.() || []) zoo.add(m);
         for (const m of this.enchantCircles?.sampleModels?.() || []) zoo.add(m); // (the enchanting circle, its column and rune rings)
@@ -3609,6 +3614,7 @@ export class Game {
         if (!isTest) this._checkVictory();
         mark('игрок');
 
+        this.darkLord.update(dt); // (the turning into a true dark mage: the rite holds the body in the air — before the character moves)
         this.levitation.update(dt);
         if (earth) this.levMax?.update(dt);
         else if (this.levMax?.swarm?.active) { this.levMax.swarm.release(false); this.levMax.mine = null; } // (off the Earth the things are let go)
@@ -3874,7 +3880,7 @@ export class Game {
         if (this.dark.skin !== this._darkShown) { this._darkShown = this.dark.skin; this.character?.setDarkLevel?.(this.dark.skin); } // (метки тьмы на моём теле)
         this.imperius?.input(dt); // («Империус»: the walk, the turn, a jump, a blow — the creature's; the body's own legs stop)
         const walkFromX = ch.group.position.x, walkFromZ = ch.group.position.z;
-        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
+        ch.update(dt, this.collision, !flight.active && !this.animals?.riding && !this.dragonRide?.busy && !this.spiders?.held && !this.beds?.lying && !this.levitation.lifted && !this.darkLord.lifting && !this.boards?.mounted && !this.ships?.rigging.climbing && !this.ledge?.active); // (on a rope ladder, on a ledge's edge the hands hold the body)
         this._snowSteps(ch);
         // a fast run on a slow frame: the step is walked in short pieces against the walls, so a
         // thin wall or a door is never jumped over between two frames (the push-out below decides the rest)

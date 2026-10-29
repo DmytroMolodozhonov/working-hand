@@ -60,6 +60,7 @@ import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
 import { Attention, ATT, inSight, mayNotice, WaveDetector } from './Attention.js';
 import { wizardDetects, placeOf, shopRefuses, expelled, attitude, wizardLine, REFUSE_LINE, EXPEL_LINE } from './DarkMagic.js';
+import { effectiveSkin } from './DarkLord.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -457,7 +458,9 @@ export class CastleTalk {
      * — у кого какая терпимость); изгой в башне и городе — «Уходи». Ответ: true — слова приняты, дальше не идёт.
      */
     _darkGate(v, tradeOnly = false) {
-        const g = this.game, lvl = g.dark?.skin || 0; // (по чёрным пятнам на теле, не по настоящему уровню)
+        const g = this.game;
+        if (g.darkLord?.on && this._lordGate(v, tradeOnly)) return true; // (настоящий тёмный маг: все смотрят на него по-своему — DarkLord.js)
+        const lvl = effectiveSkin(g.dark?.skin || 0, g.darkLord?.on); // (по чёрным пятнам на теле, не по настоящему уровню; у настоящего тёмного мага — всегда 100)
         if (!v.wizard || !wizardDetects(lvl)) return false;
         const place = placeOf(v.cs?.def, v.entry), now = performance.now();
         const memo = (this._dark = this._dark || new Map());
@@ -468,6 +471,31 @@ export class CastleTalk {
         if (m.refuse && this._trader(v)) { this._sayReply(v, REFUSE_LINE, 4); return true; }
         if (!tradeOnly && attitude(lvl, place, v.id) === 'scorn' && now - m.scornAt > 90000) { m.scornAt = now; this._sayReply(v, wizardLine(lvl, place, v.id), 5); return true; }
         return false;
+    }
+
+    /**
+     * A true dark mage (DarkLord.js): who runs, who strikes, who refuses to trade, who sells for 1.5–2 times the price (that one says a word and talks on).
+     * True: the words are taken and the talk goes no further.
+     */
+    _lordGate(v, tradeOnly = false) {
+        const sh = this.game.darkLord.shuns(v);
+        if (!sh) return false;
+        const now = performance.now(), memo = (this._lordMemo = this._lordMemo || new Map());
+        if (sh.soft) { // (agrees to deal — dearer; a line once in a while)
+            if (tradeOnly || now - (memo.get(v.id) || -1e9) < 90000) return false;
+            memo.set(v.id, now);
+            this._sayReply(v, sh.say, 5);
+            return false;
+        }
+        if (memo.size > 200) memo.clear();
+        this._sayReply(v, sh.say, 4);
+        return true;
+    }
+
+    /** What a dark mage pays at this trader (DarkLord.js: 1.5–2 times; for everybody else the price as it is). */
+    _lp(v, price, by = null) {
+        const d = this.game.darkLord;
+        return d && v ? d.priceFor(v, this._trader(v), price, by) : price;
     }
 
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
@@ -1129,11 +1157,12 @@ export class CastleTalk {
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
         if (!v || v.foe) return false;
-        this.offer = { v, kind: 'buy', price: c.shop.price, cauldron: c.id, item: { kind: 'cauldron' }, stall: c.shop.stall };
-        const line = this.brain(v).priceLine({ name: 'котёл' }, c.shop.price, 'buy', this._ctx(v));
+        const cprice = this._lp(v, c.shop.price);
+        this.offer = { v, kind: 'buy', price: cprice, cauldron: c.id, item: { kind: 'cauldron' }, stall: c.shop.stall };
+        const line = this.brain(v).priceLine({ name: 'котёл' }, cprice, 'buy', this._ctx(v));
         v.talking = 4;
         this._sayReply(v, line, 6);
-        this.game.hud.setVoice?.(`💰 Котёл — ${c.shop.price} монет: скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
+        this.game.hud.setVoice?.(`💰 Котёл — ${cprice} монет: скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
         return true;
     }
 
@@ -1162,11 +1191,12 @@ export class CastleTalk {
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
         if (!v) { delete item.shop; return; } // (nobody sells it any more)
-        this.offer = { v, kind: 'buy', price: item.shop.price, uid: item.uid, item, stall: key };
-        const line = this.brain(v).priceLine({ name: nameOf(item) }, item.shop.price, 'buy', this._ctx(v));
+        const iprice = this._lp(v, item.shop.price);
+        this.offer = { v, kind: 'buy', price: iprice, uid: item.uid, item, stall: key };
+        const line = this.brain(v).priceLine({ name: nameOf(item) }, iprice, 'buy', this._ctx(v));
         v.talking = 4;
         this._sayReply(v, line, 6);
-        this.game.hud.setVoice?.(`💰 ${item.shop.price} монет. «Да» — купить (у вас ${this.game.inventory.coins()})`, true);
+        this.game.hud.setVoice?.(`💰 ${iprice} монет. «Да» — купить (у вас ${this.game.inventory.coins()})`, true);
     }
 
     _tradeYes(v, res = null) {
@@ -1279,7 +1309,7 @@ export class CastleTalk {
         if (!v || v.dead || v.foe) return;
         // (all the pouches lying on his counter count: a second one put to add what was missing)
         const purses = [C, ...this._counterCoins(cs.def, +s).filter((L) => L !== C)];
-        const price = G.item.shop.price, have = purses.reduce((n, L) => n + (L.item.count || 0), 0), name = nameOf(G.item);
+        const price = this._lp(v, G.item.shop.price, by), have = purses.reduce((n, L) => n + (L.item.count || 0), 0), name = nameOf(G.item);
         v.yaw = Math.atan2(-(C.model.position.x - v.x), -(C.model.position.z - v.z));
         if (have < price) {
             this._sayForGuestOrMe(v, by, `${name[0].toUpperCase() + name.slice(1)} стоит ${price}, а тут только ${have}. Добавь ещё ${price - have} — или выбери что-нибудь другое.`);

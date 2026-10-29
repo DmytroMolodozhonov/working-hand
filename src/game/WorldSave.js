@@ -168,6 +168,7 @@ export function playerSnapshot(game) {
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         dark: game.dark?.snapshot() || null, // чёрная магия: уровень тьмы
+        dl: game.darkLord?.snapshot() || null, // «настоящий тёмный маг» (DarkLord.js): наряд надет
         bw: game.breakward?.snapshot() || null, // метка «слом защиты» и выученный рисунок пентаграммы
         pentMarks: game.pentagranium?.marksSnapshot() || null, // the good pentagrams on the ground (permanent: teleport, life, mend…)
         pentBare: game.pentagranium?.bareSnapshot() || null, // the bare-hand power (BareHand.js: the rite of «Palmaris» done)
@@ -223,6 +224,7 @@ export function applyPlayerSnapshot(game, s) {
         inv._render?.();
     }
     if (s.dark) game.dark?.restore(s.dark);
+    if (s.dl) game.darkLord?.restore(s.dl);
     if (s.bw) game.breakward?.restore(s.bw);
     if (s.steady) game.steady?.restore(s.steady);
     if (s.pentSeen) game.pentagranium?.restore(s.pentSeen);

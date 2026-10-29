@@ -135,7 +135,7 @@ export class Cauldrons {
         if ('shop' in rec) c.shop = rec.shop ? { stall: String(rec.shop.stall), price: Math.max(1, +rec.shop.price || CAULDRON.PRICE) } : null;
         if ('fire' in rec) c.fire = rec.fire ?? null;
         if ('home' in rec) c.home = rec.home && Number.isFinite(+rec.home.x) ? { x: +rec.home.x, z: +rec.home.z } : null;
-        if (rec.st) c.st = { ...newBrew(), ...rec.st, ings: { ...(rec.st.ings || {}) } };
+        if (rec.st) c.st = { ...newBrew(), ...rec.st, ings: { ...(rec.st.ings || {}) }, seq: Array.isArray(rec.st.seq) ? rec.st.seq.slice(0, 20) : [] };
         if (Array.isArray(rec.q) && Array.isArray(rec.c)) {
             // (lifted by magic or falling: as it is in the air)
             c.q = (c.q || new THREE.Quaternion()).fromArray(rec.q);
@@ -240,7 +240,7 @@ export class Cauldrons {
                 // (the host's clock comes now and then; in between, the same clock here)
                 const st = c.st, f = c.fire ? g.campfires?.list.get(c.fire) : null;
                 st.heat = f && f.left > 0 && st.water >= 0.3 ? Math.min(1, (st.heat || 0) + dt / CAULDRON.BOIL_TIME) : Math.max(0, (st.heat || 0) - dt / CAULDRON.COOL_TIME);
-                if (st.phase === 'brewing') st.t += dt;
+                if (st.phase === 'brewing' || st.phase === 'crumble') st.t += dt;
                 if (st.phase === 'water' && st.win > 0) st.win = Math.max(0, st.win - dt);
             }
             this._holder(c);
@@ -733,7 +733,7 @@ export class Cauldrons {
         const ph = c.st.phase;
         if (ph !== 'ready') {
             this._dip.t = -1.5; // (says it once a while)
-            const why = ph === 'brewing' ? '🫧 Ещё варится — подождите' : ph === 'sludge' ? '💨 Это не зелье, а жижа — опрокиньте котёл и налейте воды заново' : '💧 Это просто вода — сначала сварите зелье';
+            const why = ph === 'crumble' ? '🌑 Остальное зелье осыпалось: бутылочка бывает только одна' : ph === 'brewing' ? '🫧 Ещё варится — подождите' : ph === 'sludge' ? '💨 Это не зелье, а жижа — опрокиньте котёл и налейте воды заново' : '💧 Это просто вода — сначала сварите зелье';
             g.hud.setVoice?.(why, true);
             return;
         }
@@ -907,6 +907,12 @@ export class Cauldrons {
             bubbles = 2;
             glow = 0.35 + 0.1 * Math.sin(c.churn * 2);
             if (Math.random() < dt * 3) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r, this.fy(c) + sy + 0.15, c.z + (Math.random() - 0.5) * r), st.color || 0x9fd8ff, 0.07, _v2.set(0, 0.8, 0), 0.9);
+        } else if (st.phase === 'crumble') { // (the rest of a one-flask potion darkens and falls apart into ash)
+            const k = Math.min(1, st.t / Math.max(1, recipeById(st.rec)?.crumble ?? 6));
+            _col.setHex(st.color || 0x9fd8ff).lerp(_col2.setHex(0x0a0810), k);
+            bubbles = Math.round(3 * (1 - k));
+            glow = 0.3 * (1 - k);
+            if (Math.random() < dt * (4 + 14 * k)) g.fx?.spark(_v.set(c.x + (Math.random() - 0.5) * r * 1.4, this.fy(c) + sy + 0.1, c.z + (Math.random() - 0.5) * r * 1.4), Math.random() < 0.5 ? 0x15101c : 0x3a2a4a, 0.1, _v2.set((Math.random() - 0.5) * 0.7, 0.5 + Math.random() * 1.3, (Math.random() - 0.5) * 0.7), 1.4);
         } else if (st.phase === 'sludge') {
             _col.setHex(SLUDGE);
             bubbles = 4;
@@ -960,7 +966,7 @@ export class Cauldrons {
                 break;
             }
             case 'brew': {
-                const [b0, b1] = matchRecipe(st.ings)?.brew || [CAULDRON.BREW_MIN, CAULDRON.BREW_MAX];
+                const [b0, b1] = matchRecipe(st.ings, st.seq)?.brew || [CAULDRON.BREW_MIN, CAULDRON.BREW_MAX];
                 g.hud?.notify?.(`🫧 Котёл бурлит — зелье варится (подождите, от ${b0 >= 60 ? Math.round(b0 / 60) + ' до ' + Math.round(b1 / 60) + ' минут' : b0 + ' секунд до ' + (b1 >= 60 ? 'минуты' : b1 + ' секунд')})`);
                 break;
             }
@@ -977,6 +983,7 @@ export class Cauldrons {
             case 'out': g.hud?.notify?.('🔥 Огонь погас (или котёл сняли с костра) — зелье испорчено. Опрокиньте котёл и начните заново'); break;
             case 'sludge': g.hud?.notify?.('💨 Фу… Ничего не вышло — серая вонючая жижа. Опрокиньте котёл руками, чтобы вылить, и налейте воды заново'); break;
             case 'spoil': this._hint(c, '💨 Зелье испорчено — в котле жижа', 'spoil'); break;
+            case 'crumbled': this._hint(c, '🌑 Остаток зелья осыпался прахом — котёл пуст', 'crumbled', 1500); break;
             case 'spill': this._hint(c, '💦 Всё вылилось из котла', 'spill'); break;
             default: break;
         }

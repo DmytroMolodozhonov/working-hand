@@ -65,11 +65,12 @@ export function captureLegacy(g) {
         bare: g.pentagranium?.bare ? 1 : null, // (колдовать без палочки: обряд «Palmaris» — BareHand.js)
         pent: g.pentagranium?.snapshot() || null, // (the pentagrams' drawings learnt by burning their scrolls — PentagramRules.js)
         dark: g.dark?.snapshot() || null, // (чёрная магия: уровень тьмы — DarkMagic.js)
+        lord: g.darkLord?.legacy() || null, // («настоящий тёмный маг»: наряд, поглощённая мантия, проклятие — DarkLord.js; доспехи в нём не нужны: они падают у тела)
         bw: g.breakward?.marked ? { m: 1 } : null, // (метка «слом защиты»: умирает с прокачками, «Give Me My Power» возвращает)
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.bw && !rec.pent && !rec.bare;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare;
     return empty ? null : rec;
 }
 
@@ -93,7 +94,8 @@ export function wipeHero(g) {
     g.bonus = { hp: 0, fatigue: 0 };
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
-    g.dark?.onDeath(); // (тьма уходит в тело)
+    g.dark?.onDeath(); // (тьма уходит в тело; а с ней и наряд тёмного мага — DarkLordLife.onDeath)
+    g.darkLord?.onDeath();
     g.pentagranium?.onDeath(); // (the bare-hand power goes too)
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
@@ -123,6 +125,7 @@ export function absorbLegacy(g, rec) {
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);
+    if (rec.lord) g.darkLord?.restore(rec.lord, { fromLegacy: true }); // (the outfit comes back; the robe he had is absorbed again, its reserve as it was)
     if (rec.pent) g.pentagranium?.restore(rec.pent);
     if (rec.bare) g.pentagranium?.bareRestore(1);
     if (rec.steady) g.steady?.restore(rec.steady);

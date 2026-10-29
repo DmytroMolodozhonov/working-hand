@@ -60,6 +60,13 @@ export const RECIPES = [
         id: 'clearmind', name: 'Зелье светлого ума', ingredients: { owlFeather: 1, phoenixFeather: 1, apple: 1 }, window: 30, brew: [120, 180],
         effect: { skin: 30 }, desc: 'Выпейте: чёрные пятна на теле светлеют (до 30 за колбу). Уровень чёрного мага не снижается',
     },
+    {
+        // (the author: the only cure of a true dark mage — DarkLord.js. The ORDER matters: the phoenix's feather → the golden apple → the Baksadi pear;
+        // it gives ONE flask only: after the first is scooped the rest goes dark and crumbles)
+        id: 'lordcure', name: 'Зелье снятия проклятия тёмного мага', ingredients: { phoenixFeather: 1, apple: 1, baksadi_pear: 1 }, order: ['phoenixFeather', 'apple', 'baksadi_pear'],
+        window: 30, brew: [150, 210], portions: 1, crumble: 6,
+        effect: { lordCure: true }, desc: 'Выпейте: снимает проклятие тёмного мага полностью (цена — ячейки маны)',
+    },
 ];
 
 /** Things that never dissolve: they sink to the bottom and lie there (a hand can fish them out). */
@@ -70,6 +77,7 @@ export const INGREDIENT_RU = {
     apple: 'золотое яблоко', crystal: 'кристалл маны', wool: 'шерсть', meat: 'сырое мясо', steak: 'стейк',
     bread: 'хлеб', cheese: 'сыр', pie: 'пирог', scroll: 'свиток', fish: 'рыба',
     web: 'связка паутины', minotaurHorn: 'рог Минотавра', glass: 'осколки стекла', owlFeather: 'перо совы', phoenixFeather: 'перо феникса',
+    baksadi_pear: 'груша Баксади',
 };
 
 export const recipeById = (id) => RECIPES.find((r) => r.id === id) || null;
@@ -79,17 +87,22 @@ export const brewWindow = () => Math.max(CAULDRON.WINDOW, ...RECIPES.map((r) => 
 
 /** A fresh cauldron's insides: dry, cold and inert. */
 export function newBrew() {
-    return { phase: 'empty', water: 0, heat: 0, ings: {}, win: 0, t: 0, dur: 0, rec: null, color: 0, por: 0 };
+    return { phase: 'empty', water: 0, heat: 0, ings: {}, seq: [], win: 0, t: 0, dur: 0, rec: null, color: 0, por: 0 };
 }
 
-/** Which recipe these things are (exactly: the same kinds, the same counts, nothing more; any order) — or null. */
-export function matchRecipe(ings) {
+/**
+ * Which recipe these things are (exactly: the same kinds, the same counts, nothing more; any order) — or null.
+ * A recipe with `order` also wants them thrown in that order (`seq`: the kinds in the order they fell in; no `seq` given — the order is not checked).
+ */
+export function matchRecipe(ings, seq) {
     const kinds = Object.keys(ings || {}).filter((k) => ings[k] > 0);
     if (!kinds.length) return null;
     for (const r of RECIPES) {
         const want = Object.keys(r.ingredients);
         if (want.length !== kinds.length) continue;
-        if (want.every((k) => (ings[k] || 0) === r.ingredients[k])) return r;
+        if (!want.every((k) => (ings[k] || 0) === r.ingredients[k])) continue;
+        if (r.order && Array.isArray(seq) && (seq.length !== r.order.length || !r.order.every((k, i) => seq[i] === k))) continue;
+        return r;
     }
     return null;
 }
@@ -132,14 +145,16 @@ export function addWater(st, vol) {
 export function addIngredient(st, kind, n = 1) {
     if (st.phase === 'empty' || st.water < 0.3) return 'dry';
     if (DURABLE.has(kind)) return 'sink';
-    if (st.phase === 'ready' || st.phase === 'sludge') {
+    if (st.phase === 'ready' || st.phase === 'sludge' || st.phase === 'crumble') {
         st.phase = 'sludge'; st.rec = null; st.por = 0; st.color = SLUDGE;
         return 'spoil';
     }
     if (st.phase === 'brewing') { st.ings[kind] = (st.ings[kind] || 0) + Math.max(1, n | 0); return 'spoil'; }
     if (!boiling(st)) return 'cold';
-    if (!ingCount(st)) st.win = brewWindow();
-    st.ings[kind] = (st.ings[kind] || 0) + Math.max(1, n | 0);
+    if (!ingCount(st)) { st.win = brewWindow(); st.seq = []; }
+    const add = Math.max(1, n | 0);
+    st.ings[kind] = (st.ings[kind] || 0) + add;
+    (st.seq || (st.seq = [])).push(...Array(add).fill(kind));
     return 'in';
 }
 
@@ -159,7 +174,7 @@ export function randomColor(rng = Math.random) {
 }
 
 function toSludge(st) {
-    st.phase = 'sludge'; st.rec = null; st.color = SLUDGE; st.por = 0; st.ings = {}; st.win = 0; st.t = 0;
+    st.phase = 'sludge'; st.rec = null; st.color = SLUDGE; st.por = 0; st.ings = {}; st.seq = []; st.win = 0; st.t = 0;
 }
 
 /**
@@ -179,7 +194,7 @@ export function stepBrew(st, dt, rng = Math.random, fire = false) {
     if (st.phase === 'water') {
         if (ingCount(st)) {
             if (!boils) { toSludge(st); return 'out'; }
-            const rc = matchRecipe(st.ings);
+            const rc = matchRecipe(st.ings, st.seq);
             if (rc) {
                 st.phase = 'brewing'; st.t = 0; st.win = 0;
                 const [b0, b1] = rc.brew || [CAULDRON.BREW_MIN, CAULDRON.BREW_MAX];
@@ -192,16 +207,22 @@ export function stepBrew(st, dt, rng = Math.random, fire = false) {
         }
         return boils && !wasBoiling ? 'boil' : null;
     }
+    if (st.phase === 'crumble') { // (the one flask is gone: the rest goes dark and crumbles to dust, then the cauldron is empty)
+        st.t += dt;
+        if (st.t < (recipeById(st.rec)?.crumble ?? 6)) return null;
+        Object.assign(st, newBrew());
+        return 'crumbled';
+    }
     if (st.phase === 'brewing') {
         if (!boils) { toSludge(st); return 'out'; }
         st.t += dt;
         if (st.t < st.dur) return null;
-        const r = matchRecipe(st.ings);
-        st.ings = {};
+        const r = matchRecipe(st.ings, st.seq);
+        st.ings = {}; st.seq = [];
         st.t = 0;
         if (r) {
-            // (a full cauldron: ten flasks; less water, fewer)
-            st.phase = 'ready'; st.rec = r.id; st.color = randomColor(rng); st.por = Math.max(1, Math.round(CAULDRON.PORTIONS * fullness(st)));
+            // (a full cauldron: ten flasks; less water, fewer; some potions give a fixed number — `portions`)
+            st.phase = 'ready'; st.rec = r.id; st.color = randomColor(rng); st.por = r.portions ?? Math.max(1, Math.round(CAULDRON.PORTIONS * fullness(st)));
             return 'ready';
         }
         toSludge(st);
@@ -214,6 +235,10 @@ export function stepBrew(st, dt, rng = Math.random, fire = false) {
 export function takePortion(st) {
     if (st.phase !== 'ready' || st.por <= 0) return null;
     const rec = st.rec;
+    if (recipeById(rec)?.crumble) { // (a potion of one flask: the level stays, the rest goes dark and crumbles — stepBrew 'crumble')
+        st.por = 0; st.phase = 'crumble'; st.t = 0;
+        return rec;
+    }
     st.water -= st.water / st.por; // (the level goes down a step)
     st.por--;
     if (st.por <= 0) Object.assign(st, newBrew());

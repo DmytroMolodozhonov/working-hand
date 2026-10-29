@@ -257,6 +257,14 @@ export function armorValue(it) {
 
 /** «Раскрой свои секреты»: what the hologram says. */
 export function describeArmor(it) {
+    if (it.lord) {
+        const mag = it.magic ? ` Запас магической прочности — ${Math.round(it.mag ?? 0)} из ${it.magMax ?? 0}: наряд поглотил вашу мантию и несёт её силу.` : '';
+        return { title: '🜏 Облачение тёмного мага', color: 0x8a3be8, lines: [
+            'Тёмная накидка и капюшон, в тени которого не видно лица. Это часть вас самих: снять её нельзя, пока на вас проклятие.' + mag,
+            'Любой доспех, который вы наденете, почернеет и сломается: обычный через 10 минут носки, волшебный через 20.',
+            'Снять проклятие может только зелье снятия проклятия тёмного мага.',
+        ] };
+    }
     if (it.archmage) {
         return { title: '🌟 Костюм Высшего мага', color: 0xffd36e, lines: [
             'Даётся только за статус «Высший маг» — за все ачивки',
@@ -291,6 +299,7 @@ export function describeArmor(it) {
 export function armorName(it) {
     if (!it) return '';
     if (it.archmage) return 'Костюм Высшего мага';
+    if (it.lord) return it.magic ? 'Облачение тёмного мага ✨' : 'Облачение тёмного мага';
     if (it.kind === 'robe') return it.named || (it.magic ? 'Волшебная мантия' : 'Мантия');
     return it.named || (it.magic ? `Волшебный ${PIECE_OF[it.piece]}` : PIECE_RU[it.piece]);
 }
@@ -367,10 +376,13 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
 
 /** The four armour cells and what is in them, for the screen / the network (0 none, 1 plain, 2 magic, 3 named). */
 export function wornCode(worn = {}) {
-    const c = (it) => (!it ? 0 : it.archmage ? 4 : it.named ? 3 : it.magic ? 2 : 1); // (4: the High Mage's suit — a robe)
+    const c = (it) => (!it ? 0 : it.archmage ? 4 : it.named ? 3 : it.magic ? 2 : 1); // (4: the High Mage's suit — a robe; 5: the dark mage's outfit — see below)
     const e = Math.max(0, ...['helmet', 'chest', 'legs', 'robe'].map((k) => (worn[k]?.ench ? worn[k].ench.tier + 1 : 0))); // (enchanted: the best level worn, 0 none — the body's glow)
     const rt = worn.robe?.magic && !worn.robe.archmage ? ROBE_TIERS[ensureMag(worn.robe).tier]?.n ?? 0 : 0; // (the robe's kind: how fine it looks)
-    return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0, rt, e };
+    const dk = (worn.helmet?.cursed ? 1 : 0) | (worn.chest?.cursed ? 2 : 0) | (worn.legs?.cursed ? 4 : 0); // (blackened by a dark mage's curse — DarkLord.js)
+    const out = { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: worn.robe?.lord ? 5 : c(worn.robe), rc: worn.robe?.color ?? 0, rt, e };
+    if (dk) out.dk = dk;
+    return out;
 }
 
 /**
