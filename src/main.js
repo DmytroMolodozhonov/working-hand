@@ -28,6 +28,9 @@ import { fromGame, soundingLine } from './audio/GameVoices.js';
 import { spellPhrase, PHRASE_WHY_RU, afterCast, lateInSpeech, bodyNoise, soundTrust, TRUSTED_FAR, wordsOfLine, stopFirst } from './audio/SpellPhrase.js';
 import { SPELL_RU } from './game/ItemTypes.js';
 import { GATE } from './game/VoiceGate.js';
+import { VoiceChat } from './net/VoiceChat.js';
+import { decide as echoDecide, clearFit, ECHO } from './audio/EchoGuard.js';
+import { setupVoiceChatUi } from './ui/VoiceChatUi.js';
 import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
 import { startCamera } from './ui/CameraPanel.js';
 import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
@@ -505,6 +508,44 @@ function holdSpell(command, isFinal) {
     setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true); }, GATE.HOLD);
 }
 
+// A friend's echo (EchoGuard.js): a spell heard while a friend spoke too — the game waits a moment for his own word
+// (his game tells which spells HE said) before it casts; one wait per spell, the later looks of the same phrase join it.
+const echoHolds = new Map(); // spell → {command, isFinal, meta}
+function holdEcho(spell, command, isFinal, meta) {
+    const h = echoHolds.get(spell);
+    if (h) { h.command = command; h.isFinal = h.isFinal || isFinal; return; }
+    echoHolds.set(spell, { command, isFinal, meta });
+    setTimeout(() => { const x = echoHolds.get(spell); echoHolds.delete(spell); if (x) voice.onResult(x.command, x.isFinal, false, { ...(x.meta || {}), echoHeld: true }); }, ECHO.HOLD);
+}
+
+/**
+ * When the words heard were said (ms): the native voice tells it; the browser's recognizer does not — then the microphone's
+ * last burst of sound (EchoGuard.lastBurst), or the last 2.5 s.
+ */
+function heardWindow(meta, t) {
+    if (Number.isFinite(meta?.from)) return [meta.from, Number.isFinite(meta.to) ? meta.to : t];
+    return game?.voiceChat?.guard.lastBurst(t) || [t - 2500, t];
+}
+
+/**
+ * Is it a friend's voice from my speakers (the game's voice chat, Discord…)? → the guard's decision for this phrase, or
+ * null (no friends / nothing to compare with). My own voice is never let go because of an echo (EchoGuard.decide).
+ */
+function friendEcho(spell, meta, t) {
+    const vc = game?.voiceChat;
+    if (!vc || !(game.remotes?.size > 0)) return null;
+    const [from, to] = heardWindow(meta, t);
+    const j = vc.guard.judge(from, to);
+    const said = spell ? vc.guard.friendSaid(spell, from, to) : null;
+    const spoke = vc.guard.friendSpoke(from, to);
+    const lips = game.voiceGate.lipsSync(t, voice._levels, voice.noiseFloor);
+    const talking = !!vc.guard.friendTalking(t, 700);
+    // (how clearly the native voice heard the spell: a friend's talk from the speakers is never this clear a spell)
+    const clear = meta?.native && meta.sure && !meta.byWords ? clearFit(meta.fit, meta.len) : null;
+    const d = echoDecide(j, { said, spoke, lips, clear, talking, held: !!meta?.echoHeld });
+    return { ...d, j, from, to, said, lips };
+}
+
 // Talking to a villager (the author: «отвечать МОМЕНТАЛЬНО, как человек»): the words go to the villagers as
 // soon as they are surely over — not when the voice program closes the phrase (0.85 s of quiet: it waits for a
 // spell's «… Хаус»). The native voice tells the quiet after the words (TalkFlow: an order after 0.12 s, a finished
@@ -569,6 +610,7 @@ function talkNow(command, info = {}) {
 
 const talkFlow = new TalkFlow({ fire: (text, info) => talkNow(text, info), players: () => game?.castleLife?.talk?._players?.() || [] });
 voice.onQuiet = (q) => talkFlow.quiet(q);
+voice.onNativeLevels = (d, off) => game?.voiceChat?.nativeLevels(d, off);
 // («Империус Максима» in a dragon: its fire is the caster's long «У» — the letters heard and the microphone's level: DragonHowl)
 voice.native.onLetters = (written) => game?.imperius?.voiceLetters(written);
 { const lv = voice.native.onLevel; voice.native.onLevel = (d) => { lv?.(d); if (game?.imperius?.active) for (const db of d.db || []) game.imperius.voiceLevel(db); }; }
@@ -590,6 +632,11 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (game?.active && game.duel?.clashes?.some((c) => c.a.by === game.localId || c.b.by === game.localId)) command = collapseMaxima(command);
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager
     if (game?.active && !$('pause-menu')?.classList.contains('hidden')) { journal(command, isFinal, meta, matchSpell(command), false, 'открыто меню паузы — голос не слушается'); return; }
+    // words (no spell) that are only a friend's voice from my speakers: no talk of mine to a villager (EchoGuard)
+    if (game?.active && game.voiceChat && !matchSpell(command)) {
+        const fe = friendEcho(null, meta, performance.now());
+        if (fe?.block && fe.j.verdict === 'echo') { journal(command, isFinal, meta, null, false, `не ваши слова: ${fe.why}`, 'голос друга'); return; }
+    }
     // (the words go on / are final: the early answer waits for them, or is already given)
     if (talkWait && (isFinal || talkKey(command) !== talkWaitKey)) { clearTimeout(talkWait); talkWait = null; talkWaitKey = null; }
     // (the native voice: the phrase answered as soon as I stopped — its end is no second question; a different
@@ -678,6 +725,19 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 return;
             }
         }
+        // A friend's voice from my speakers (the game's voice chat — the game plays it and knows it exactly; Discord — his own
+        // game sends what his voice was like and which spells HE said): never my spell. My own voice is never let go for it.
+        let mineWin = null;
+        if (spoken && game.voiceChat && game.remotes?.size > 0) {
+            const fe = friendEcho(spoken, meta, performance.now());
+            if (fe?.block) {
+                if (isFinal) netLog(`заклинание «${command}» не моё: ${fe.why}`);
+                journal(command, isFinal, meta, spoken, false, `отсеяно: ${fe.why}`, 'голос друга');
+                return;
+            }
+            if (fe?.hold) { holdEcho(spoken, command, isFinal, meta); return; }
+            if (fe) { mineWin = [fe.from, fe.to]; if (meta && fe.why) meta.echoWhy = fe.why; }
+        }
         // right after a spell of mine: its explosion, its echo, the end of the same phrase are no new spell
         if (spoken) {
             const no = afterCast(lastCast, spoken, meta, performance.now());
@@ -711,6 +771,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
             if (name) {
                 if (game.remotes?.size > 0) game.sync?.say?.(said);
+                if (mineWin) game.voiceChat?.said(name, mineWin[0], mineWin[1]); // (my voice in their speakers is not theirs)
                 voice.learnOwnVoice();
                 hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
                 if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
@@ -758,6 +819,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         }
         if (name) {
             voice.learnOwnVoice();
+            if (mineWin) game.voiceChat?.said(name, mineWin[0], mineWin[1]); // (my voice in their speakers is not theirs)
             hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
             if (voiceTestText && isMenuVoiceActive) voiceTestText.innerHTML = `✨ ${name.toUpperCase()} ✨`;
         }
@@ -991,6 +1053,11 @@ async function startGameInner(config, welcome) {
         game.settings.leftHanded = !!config.leftHanded;
         await game.init(config, updateProgress);
         if (welcome && game.sync) game.sync.applyWelcome(welcome);
+        // the players' voice chat (the host's choice at creation; the guests get it from the host) and the friend's-echo guard
+        if (net.active) {
+            game.voiceChat = new VoiceChat({ net, game, voice, serverMode: config.voiceChat });
+            voiceChatUi?.attach(game.voiceChat);
+        }
         // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
         await game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`));
         // the sounds and the spells' looks otherwise made in the first seconds of play (each a hitch): now
@@ -1209,6 +1276,8 @@ $('show-fps-toggle')?.addEventListener('change', (e) => {
 applyFps();
 // «🔊 Звук» in the pause menu: the sound settings without leaving the game
 const pauseAudio = setupPauseAudio($('pause-audio'));
+// «🎙 Голосовой чат»: in «Создать сервер» (the mode for everybody) and in Escape → «🔊 Звук» (VoiceChatUi.js)
+const voiceChatUi = setupVoiceChatUi({ pane: $('pause-audio'), create: $('mp-create') });
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
 const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
 // «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
@@ -1305,7 +1374,7 @@ function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
     $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player'); // (the spell book and the bosses need room)
-    if (id === 'pause-audio') pauseAudio.sync();
+    if (id === 'pause-audio') { pauseAudio.sync(); voiceChatUi.sync(); }
     if (id === 'pause-graphics') pauseGraphics.sync();
     if (id === 'pause-creative') pauseCreative.sync();
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
@@ -1324,6 +1393,7 @@ function togglePauseMenu(show) {
     if (open) {
         applyFps();
         pauseAudio.sync();
+        voiceChatUi.sync();
         pauseGraphics.sync();
         pauseHands.sync();
         // «✨ Заклинания»: in Creative all of them (not on a map); in the other modes the ones the hero can say now
@@ -1469,7 +1539,7 @@ async function joinRoom(code, byCode = false) {
 }
 
 /** A new multiplayer world's choices: «Гладкий мир» (ramps) and «Божественные заклинания на Земле» (both off by default). */
-const mpWorldOpts = () => ({ smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked, ...($('mp-mode')?.value === 'creative' ? { hero: heroMp.read() } : {}) }); // (Creative: the hero's settings — HeroSettingsUi.js; guests get the host's)
+const mpWorldOpts = () => ({ voiceChat: voiceChatUi.createMode(), smooth: !!$('mp-smooth')?.checked, godsOnEarth: !!$('mp-gods')?.checked, ...($('mp-mode')?.value === 'creative' ? { hero: heroMp.read() } : {}) }); // (Creative: the hero's settings — HeroSettingsUi.js; guests get the host's)
 const heroMp = mountHeroPanel($('hero-settings-mp'), 'hero-mp');
 { const showHeroMp = () => { $('hero-settings-mp').hidden = $('mp-mode').value !== 'creative'; }; $('mp-mode')?.addEventListener('change', showHeroMp); showHeroMp(); }
 
@@ -1493,7 +1563,7 @@ $('mp-host-btn').addEventListener('click', async () => {
         selectedMode = mode;
         selectedMap = null;
         pickingMap = false;
-        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: srvName, ...mpWorldOpts() });
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved, voiceChat: voiceChatUi.createMode() } : { ...readConfig(), mode, map: null, worldName: srvName, ...mpWorldOpts() });
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));
     } finally {
@@ -1520,7 +1590,7 @@ $('mp-private-btn').addEventListener('click', async () => {
         selectedMode = mode;
         selectedMap = null;
         pickingMap = false;
-        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code, ...mpWorldOpts() });
+        startGame(saved ? { ...readConfig(), mode, map: null, seed: saved.seed, saved, voiceChat: voiceChatUi.createMode() } : { ...readConfig(), mode, map: null, worldName: 'Игра ' + code, ...mpWorldOpts() });
         showCodeInGame(code);
     } catch (e) {
         setMpStatus('❌ ' + escapeHtml(e.message));

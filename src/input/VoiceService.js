@@ -77,6 +77,7 @@ export class VoiceService {
 
     /** The native voice's levels (10 ms each, the echo already out) → the same list as the browser's meter. */
     _nativeLevel(d) {
+        this.onNativeLevels?.(d, this.native.off); // (the microphone as it is and the speakers' copy: the friend's-echo guard — VoiceChat)
         const now = performance.now();
         const n = d.db?.length || 0;
         for (let j = 0; j < n; j++) {

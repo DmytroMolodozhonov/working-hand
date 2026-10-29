@@ -1792,11 +1792,14 @@ export class Sailors {
         const yaw = g.character.group.rotation.y;
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
         let best = null, bs = Infinity;
+        // (talking with friends in the voice chat: only the sailor I look at hears me — VoiceChat.chatting)
+        const chat = !!g.voiceChat?.chatting?.();
         for (const v of this.byId.values()) {
             if (v.dead || v.overboard || v.role === 'skeleton') continue;
             const dx = v.x - me.x, dz = v.z - me.z, d = Math.hypot(dx, dz);
             // (a ship's deck stands well above the pier: one on the pier talks up to the sailors at the rail)
             if (d > HEAR || Math.abs(v.y - (me.y - 1.95)) > 5) continue;
+            if (chat && d > 1.5 && (dx * fx + dz * fz) / d < 0.85) continue;
             const sc = d - 2.5 * (d > 0.01 ? (dx * fx + dz * fz) / d : 1);
             if (sc < bs) { bs = sc; best = v; }
         }

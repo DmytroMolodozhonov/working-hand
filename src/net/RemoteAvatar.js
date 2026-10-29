@@ -211,27 +211,62 @@ export class RemoteAvatar {
         this._title = title || null;
         const map = this.tag?.material?.map;
         if (!map?.image) return;
-        drawNameTag(map.image, this.name, this._title);
+        drawNameTag(map.image, this.name, this._title, !!this._speaking);
+        map.needsUpdate = true;
+    }
+
+    /** The voice chat: he speaks now (VoiceChat.js) — a green glow and sound waves by his name (redrawn only on a change). */
+    setSpeaking(on) {
+        if (!!this._speaking === !!on) return;
+        this._speaking = !!on;
+        const map = this.tag?.material?.map;
+        if (!map?.image) return;
+        drawNameTag(map.image, this.name, this._title, this._speaking);
         map.needsUpdate = true;
     }
 }
 
 /** The tag's picture: the name; a High Mage's — gold, with a star (Achievements.js). */
-function drawNameTag(canvas, name, title = null) {
+function drawNameTag(canvas, name, title = null, speaking = false) {
     const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const text = title ? `★ ${name} ★` : name;
     ctx.font = 'bold 30px sans-serif';
     ctx.fillStyle = title ? 'rgba(21,24,63,0.8)' : 'rgba(0,0,0,0.55)';
-    const w = Math.min(250, 30 + ctx.measureText(text).width);
+    const w = Math.min(250, 30 + ctx.measureText(text).width + (speaking ? 34 : 0));
     roundRect(ctx, (256 - w) / 2, 8, w, 48, 12);
     ctx.fill();
     if (title) { ctx.strokeStyle = '#e7c25a'; ctx.lineWidth = 3; ctx.stroke(); }
+    if (speaking) {
+        // (speaks in the voice chat: a soft green rim, and a mouth's sound waves before the name)
+        ctx.save();
+        ctx.shadowColor = 'rgba(85,239,140,0.9)';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = 'rgba(110,240,160,0.95)';
+        ctx.lineWidth = 3;
+        roundRect(ctx, (256 - w) / 2 + 1.5, 9.5, w - 3, 45, 11);
+        ctx.stroke();
+        ctx.restore();
+        const x = (256 - w) / 2 + 16, y = 32;
+        ctx.fillStyle = '#7dffb0';
+        ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#7dffb0';
+        ctx.lineCap = 'round';
+        for (let k = 1; k <= 3; k++) {
+            ctx.globalAlpha = 1 - k * 0.22;
+            ctx.lineWidth = 3 - k * 0.5;
+            ctx.beginPath(); ctx.arc(x, y, 4.5 + k * 5, -Math.PI / 3.2, Math.PI / 3.2); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.translate(17, 0); // (the name moves over to make room)
+    }
     ctx.font = 'bold 30px sans-serif';
     ctx.fillStyle = title ? '#ffd36e' : '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 128, 33, 240);
+    ctx.fillText(text, 128, 33, speaking ? 206 : 240);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 function makeNameTag(name) {

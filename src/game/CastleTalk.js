@@ -939,7 +939,11 @@ export class CastleTalk {
         // (the one I address — looked at, walked to, just talked with; across a yard if I shout — Attention.js;
         // in a crowd the one I look at, not whoever stands nearest)
         const id = this.attention?.addressee((i) => { const v = this.life.byId.get(i); return !!v && !v.dead && Math.abs(v.y - (this.game.character.group.position.y - 1.95)) < 8; }, this._shouting());
-        const best = (id && this.life.byId.get(id)) || this._nearest();
+        // (talking with friends in the voice chat: my words are not to whoever stands nearest — only to the one I address:
+        // looked at, walked to, talk with already, called by his trade — the author: «голос игрока не принимается жителем
+        // как разговор с ним без обращения»)
+        const chat = !!this.game.voiceChat?.chatting?.();
+        const best = (id && this.life.byId.get(id)) || (chat ? (this.inTalk?.() && this._partner && !this._partner.dead ? this._partner : null) : this._nearest());
         if (!text) return best;
         const t = normalizeText(text);
         const role = ROLE_CALL.find(([re]) => re.test(t))?.[1];

@@ -1,0 +1,73 @@
+{
+ "_": "echobench.py --seed 1 --n 16 (без копии колонок; «+loop» — с ней: --loopback). Пороги только ужесточать: ok — не меньше, falseCasts (ложные от голоса друга) и mineLetGo (мои отсеяны) — не больше.",
+ "ingame": {
+  "ok": 3,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "ingamespell": {
+  "ok": 0,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "discord": {
+  "ok": 3,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "discordspell": {
+  "ok": 0,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "noise": {
+  "ok": 4,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "delay": {
+  "ok": 3,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "doubletalk": {
+  "ok": 0,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "ingame+loop": {
+  "ok": 9,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "ingamespell+loop": {
+  "ok": 0,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "discord+loop": {
+  "ok": 8,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "discordspell+loop": {
+  "ok": 0,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "noise+loop": {
+  "ok": 5,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "delay+loop": {
+  "ok": 5,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ },
+ "doubletalk+loop": {
+  "ok": 5,
+  "falseCasts": 0,
+  "mineLetGo": 0
+ }
+}

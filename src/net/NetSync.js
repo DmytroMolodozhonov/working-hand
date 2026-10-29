@@ -39,6 +39,8 @@
  *   duel     caster→all   a duel charge flies (dend: it hit / was blocked / fizzled)
  *   clash    host→all     two charges are pushing (meeting point p); clashend: result
  *   dmcut / dmlimb / dmst / dmresc   a blade cut off a limb / the head (see Dismember.js)
+ *   vcm / vcq / vcf / vcs / vce / vcw   the voice chat: the server's mode, asked; a pair through the host; a player's state;
+ *                    his own voice's 10 ms levels and the spells he said (the friend's-echo guard) — VoiceChat.js
  */
 
 import { breaking } from '../world/EnchantedStone.js';
@@ -924,6 +926,8 @@ export class NetSync {
                 break;
             }
             case 'z': if (!this.net.isHost) this._applyZombies(m.l, m.rm); break;
+            // the voice chat (VoiceChat.js): the server's mode, each player's state, his own voice's levels and spells (the echo guard)
+            case 'vcm': case 'vcq': case 'vcf': case 'vcs': case 'vce': case 'vcw': g.voiceChat?.onNet(m); break;
             // ships (src/game/Ships.js): the host's ships and crews; guests' wheel, sails, blows, guns
             case 'ships': case 'shipev': case 'screw': case 'shelm': case 'smoor': case 'sblow': case 'sunf': case 'shit': case 'sfire': case 'scan': g.ships?.onNet(m, this.net.isHost); break;
             case 'zhit': if (!this.net.isHost) this._applyZombieHit(m); break;

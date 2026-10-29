@@ -535,6 +535,31 @@ export class Hud {
         return this.el.voice ? this.el.voice.innerHTML : '';
     }
 
+    /**
+     * The voice chat's small box under the players' list (VoiceChat.js, 4× a second; redrawn only on a change):
+     * who speaks now, my own voice going out, the «talk» key. null — gone.
+     */
+    voiceChat(st) {
+        let box = this._vcBox;
+        if (!st || st.mode === 'off' || (st.mode === 'own' && !st.speakers.length)) { if (box) box.classList.add('hidden'); return; }
+        if (!box) {
+            box = this._vcBox = document.createElement('div');
+            box.id = 'vc-hud';
+            (this.el.mp?.parentNode || document.body).insertBefore(box, this.el.mp?.nextSibling || null);
+        }
+        const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const rows = [];
+        if (st.mode !== 'own') {
+            if (st.mic === 'denied' || st.mic === 'busy' || st.mic === 'absent') rows.push('<div class="vc-row vc-warn">🎙✖ ваш голос не идёт</div>');
+            else if (st.ptt) rows.push(`<div class="vc-row ${st.down ? 'vc-me' : 'vc-dim'}">${st.down ? '🎙 говорите' : `🎙 зажмите ${esc(st.key || 'T')} — говорить`}</div>`);
+            else if (st.me) rows.push('<div class="vc-row vc-me">🎙 вас слышат</div>');
+        }
+        for (const n of st.speakers) rows.push(`<div class="vc-row vc-talk"><span class="vc-wave"></span>${esc(n)}</div>`);
+        const html = rows.join('');
+        box.classList.toggle('hidden', !html);
+        if (box.innerHTML !== html) box.innerHTML = html;
+    }
+
     /** «Подключился: Имя» at the bottom left (above the minimap); fades after a few seconds. */
     notify(text, ms = 5000) {
         let box = this._notifyBox;

@@ -624,6 +624,10 @@ class NativeVoice:
         self.mic_fallback = False  # the chosen one is not there: the default listens
         self._mic_change = threading.Event()
         self.aec = False
+        # the friends' voices of the game's voice chat, sent by the page (/api/voice/ref): where there is no «loopback»
+        # (macOS, Linux) the echo canceller gets them as its copy of the speakers — the exact sound the game plays
+        self._page = None
+        self.page_last = 0.0
         self.cost = 0.0  # ms the last look at a phrase took
         self.events = collections.deque(maxlen=400)
         self.seq = 0
@@ -684,6 +688,7 @@ class NativeVoice:
             "micFallback": self.mic_fallback,
             "speakers": self.ref_name,
             "aec": self.aec,
+            "pageRef": self._page is not None,  # (the game's voice chat is taken out of the microphone: its copy comes from the page)
             "cost": round(self.cost, 1),
             "raised": getattr(self, "raised", 0),  # (Windows: the speech threads above normal priority)
         }
@@ -778,6 +783,15 @@ class NativeVoice:
     def stop(self):
         self._stop.set()
 
+    def page_ref(self, data):
+        """50 ms of the game's voice chat as played (16 kHz int16 mono, from the page): into the echo canceller's copy."""
+        page = self._page
+        if page is None or not data:
+            return
+        import numpy as np
+        page.push(np.frombuffer(data, dtype=np.int16), time.perf_counter())
+        self.page_last = time.time()
+
     def set_mic(self, key):
         """The microphone chosen in the settings ("" / "default" — the system's): taken at once, the
         capture opens again on it (the networks stay loaded)."""
@@ -835,12 +849,17 @@ class NativeVoice:
                     cap = SdCapture(on_mic, on_ref, self.mic_wanted)
                 try:  # (whatever happens from here on, the microphone is let go)
                     mic_box["s"] = Stream(cap.mic_rate, "mic")
+                    self._page = None
                     if cap.ref_rate:
                         ref_box["s"] = Stream(cap.ref_rate, "ref", continuous=False)
+                    elif os.environ.get("ZNS_VOICE_AEC", "1") != "0":
+                        # (no copy of the speakers here: the game's voice chat is the one sound the page can give — silence
+                        # otherwise, and with silence the canceller changes nothing)
+                        self._page = ref_box["s"] = Stream(SR, "page", continuous=False)
                     self.mic_name, self.ref_name = cap.mic_name, cap.ref_name
                     self.mic_key, self.mic_fallback = cap.mic_key, bool(cap.fell_back)
                     self.aec = bool(cap.ref_rate) and os.environ.get("ZNS_VOICE_AEC", "1") != "0"
-                    apm = rtc.AudioProcessingModule(echo_cancellation=self.aec, noise_suppression=False, high_pass_filter=True)
+                    apm = rtc.AudioProcessingModule(echo_cancellation=self.aec or self._page is not None, noise_suppression=False, high_pass_filter=True)
                     self.state = "running"
                     self._emit({"type": "status", **self.status()})
                     print(f"  Голос: нейросеть на компьютере работает (микрофон: {self.mic_name or '?'}"
@@ -849,6 +868,7 @@ class NativeVoice:
                     self._loop(np, rtc, ctc, vad, apm, mic_box["s"], ref_box.get("s"), cap)
                 finally:
                     cap.close()
+                    self._page = None
                     print("  Голос: микрофон отпущен")
                 if not self._mic_change.is_set() or self._stop.is_set():
                     break
@@ -862,7 +882,7 @@ class NativeVoice:
         self.state = "idle"
 
     def _loop(self, np, rtc, ctc, vad, apm, mic, ref, cap):
-        pipe = Pipeline(np, rtc, ctc, vad, apm, self.aec, vad_far=Vad(self.model_paths()[1]) if ref is not None else None,
+        pipe = Pipeline(np, rtc, ctc, vad, apm, self.aec or self._page is not None, vad_far=Vad(self.model_paths()[1]) if ref is not None else None,
                         vad_raw=Vad(self.model_paths()[1]))
         jobs = collections.deque()
         busy = threading.Event()
@@ -1182,6 +1202,7 @@ def offline(mic, ref=None, aec=True, partial_every=SEG["partial"], threads=2):
             if j:
                 out.append(pipe.look(j, to_ms))
             next_look = k + int(partial_every * SR)
+    offline.levels = {"db": list(pipe.lv), "raw": list(pipe.lv_raw), "far": list(pipe.lv_far)}  # (the 10 ms levels: voicebench's echo guard)
     return out
 
 

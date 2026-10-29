@@ -1146,6 +1146,32 @@ body {
 #mp-hud .mp-hud-row.me { color: #9ff3ff; }
 #mp-hud .mp-hud-row i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; border: 1px solid #fff; }
 
+/* the voice chat: who speaks now (VoiceChat.js) — under the players' list */
+#vc-hud {
+    margin-top: 6px;
+    background: rgba(10, 14, 20, 0.72);
+    border: 1px solid rgba(125, 255, 176, 0.45);
+    padding: 5px 9px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #e8fff1;
+    line-height: 1.5;
+    min-width: 150px;
+    text-align: left;
+    pointer-events: none;
+}
+#vc-hud.hidden { display: none; }
+#vc-hud .vc-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+#vc-hud .vc-me { color: #7dffb0; }
+#vc-hud .vc-dim { color: rgba(232, 255, 241, 0.55); }
+#vc-hud .vc-warn { color: #ffb38a; }
+#vc-hud .vc-wave {
+    width: 12px; height: 12px; border-radius: 50%; flex: none;
+    background: radial-gradient(circle, #7dffb0 0 30%, rgba(125, 255, 176, 0.35) 31% 55%, transparent 56%);
+    animation: vc-pulse 0.9s ease-in-out infinite;
+}
+@keyframes vc-pulse { 0%, 100% { transform: scale(0.8); opacity: 0.75; } 50% { transform: scale(1.15); opacity: 1; } }
+
 /* «Подключился: Имя» — bottom left, above the minimap */
 #hud-notify {
     position: fixed;

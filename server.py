@@ -26,6 +26,7 @@ API:
   GET    /api/voice/stream    — что она услышала (Server-Sent Events)
   GET    /api/voice/devices   — микрофоны, которые она может слушать
   POST   /api/voice/mic       — выбрать микрофон для заклинаний ({"key": …}; "" — как в системе)
+  POST   /api/voice/ref       — голоса друзей из голосового чата игры (16 кГц, int16): эхоподавителю, где нет копии колонок
   POST   /api/record          — запись руки (F9 в игре) → папка recordings/
 """
 
@@ -623,6 +624,19 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not is_own_page(self.client_address[0], self.headers):
                     return self._json(403, {"status": "error", "message": "only the game on this computer"})
                 return self._llm(path)
+
+            if path == "/api/voice/ref":
+                # the friends' voices as the game's voice chat plays them (16 kHz int16 mono, 50 ms a request): the echo
+                # canceller's exact copy where the speakers' own copy («loopback») is not to be had — never kept, never logged
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                length = int(self.headers.get("Content-Length") or 0)
+                if length <= 0 or length > 64000 or length % 2:
+                    raise ValueError("Bad request body size")
+                data = self.rfile.read(length)
+                from voice_native import VOICE
+                VOICE.page_ref(data)
+                return self._json(200, {"ok": True})
 
             if path == "/api/voice/mic":
                 # the microphone for the spells, chosen in the settings: taken at once (this computer's game only)

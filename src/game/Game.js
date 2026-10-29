@@ -3791,6 +3791,7 @@ export class Game {
         if (!isTest && earth && !duelOnly) this._spawnWaves(dt);
 
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
+        this.voiceChat?.frame(dt); // (the players' voice chat: where each friend is heard, the «говорит» marks — VoiceChat.js)
         this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
         this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
@@ -4656,6 +4657,8 @@ export class Game {
     // ================================================================ cleanup
     dispose() {
         this.stop();
+        this.voiceChat?.dispose(); // (the calls end, the microphone is let go)
+        this.voiceChat = null;
         this.monster?.dispose(); // (leaving: the form taken off first — the man's place and health are saved)
         this.ships?.dispose();
         this.inventory?.dispose();
