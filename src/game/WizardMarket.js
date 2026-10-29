@@ -63,12 +63,13 @@ export function wizardGood(trade, k, n = 0) {
         }
         case 'robes': {
             const magic = k !== 1 || r() < 0.5;
-            const it = makeRobe(magic, r);
-            return { item: it, price: Math.round(armorValue(it) * 1.4) };
+            // (the three kinds: the cheap simple one, the middle, the strong — a stall's last place mostly the strong; price by its reserve)
+            const it = makeRobe(magic, r, k === 0 ? 'simple' : k === 1 ? 'mid' : r() < 0.5 ? 'strong' : 'mid');
+            return { item: it, price: magic ? armorValue(it) : Math.round(armorValue(it) * 1.4) };
         }
         case 'armor': {
             const it = makePiece(PIECES[(k + n) % 3], { magic: k !== 2 || r() < 0.7 });
-            return { item: it, price: Math.round(armorValue(it) * 1.6) };
+            return { item: it, price: it.magic ? armorValue(it) : Math.round(armorValue(it) * 1.6) };
         }
         case 'wands': {
             const [a, b] = k === 2 ? WAND_POWER.middle : r() < 0.4 ? WAND_POWER.middle : WAND_POWER.small;

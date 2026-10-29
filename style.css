@@ -1719,6 +1719,9 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .armor-cell .ac-bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 4px; background: rgba(0, 0, 0, 0.6); border-radius: 2px; overflow: hidden; }
 .armor-cell .ac-bar i { display: block; height: 100%; width: 100%; background: #b8c2cc; }
 .armor-cell.magic .ac-bar i { background: #6fb8ff; }
+/* the magic reserve («запас прочности»): small digits beside the icon, on the screen's side */
+.armor-cell .ac-mag { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 5px; font: 700 12px/1 system-ui, sans-serif; color: #bfe4ff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
+.armor-cell .ac-mag:empty { display: none; }
 
 /* ---------------------------------------------------------------- achievements (Achievements.js) */
 #ach-banner {

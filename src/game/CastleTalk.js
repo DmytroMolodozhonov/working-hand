@@ -37,7 +37,7 @@ import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
 import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
-import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
+import { ARMOR, PIECES, makePiece, makeRobe, armorName, armorValue } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
 import { CommandTalk } from './CommandTalk.js';
 import { parseCourt } from './Court.js';
@@ -1075,11 +1075,12 @@ export class CastleTalk {
                         : stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
                     const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
-                    const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
+                    // (the wizards' magic robe / armour piece: made first — its price is by its magic reserve, ArmorTypes.magPrice)
+                    const gear = !wiz && pick.kind === 'robe' ? makeRobe(true) : !wiz && pick.kind === 'armor' ? makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }) : null;
+                    const price = gear ? armorValue(gear) : pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
                     const item = wiz ? { ...wiz.item, shop: { stall: key, price } }
-                                        : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
-                        : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
+                                        : gear ? { ...gear, shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (wiz && item.kind === 'book') item.spells = bookSpells(item.id);
                     if (!wiz && pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }

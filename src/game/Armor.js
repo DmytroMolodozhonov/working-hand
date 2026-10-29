@@ -24,7 +24,8 @@
 
 import * as THREE from 'three';
 import { logLine } from './BumpRules.js';
-import { PIECES, ARMOR, pieceMax, wornEffects, spellGuard, soakBlow, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
+import { PIECES, ARMOR, MAG, pieceMax, wornEffects, spellGuard, soakBlow, guardSpend, ensureMag, hasMag, magOf, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
+import { shieldHitCost } from './Combat.js';
 import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
 import { pickFlight } from './Expelliarmus.js';
@@ -35,6 +36,8 @@ const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const SLOTS = ['helmet', 'chest', 'legs', 'robe'];
+const BEAMS = new Set(['chill', 'Inferno', 'Fire', 'cold', 'Ice']); // (kept on me while they burn: paid by time)
+const COST_OF = { chill: 'Ice', cold: 'Ice', Sapira: 'Sapira', Sands: 'Sands', Disarmor: 'Disarmor', Levitation: 'Levitation', Stupefy: 'Stupefy' };
 const slotOf = (it) => (it?.kind === 'robe' ? 'robe' : it?.kind === 'armor' ? it.piece : null);
 const score = (it) => (!it ? 0 : it.archmage ? 9 : (it.named ? 4 : it.magic ? 3 : 2) + (it.kind === 'armor' ? 0.5 * (it.hp ?? 0) / Math.max(1, pieceMax(it)) : 0));
 
@@ -81,6 +84,7 @@ export class ArmorSystem {
             return false;
         }
         if (item.kind === 'armor' && item.hp == null) item.hp = pieceMax(item);
+        ensureMag(item); // (an old thing without a reserve gets one)
         const old = this.worn[slot];
         this.worn[slot] = item;
         // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
@@ -171,6 +175,7 @@ export class ArmorSystem {
             if (it.hp <= 0 && !it.magic) this._broken(slot);
         }
         if (Object.keys(res.wear).length) this._renderCells();
+        if (res.mag) this._spendMag(res.mag); // («Авада Кедавра»: the reserves cut it)
         return res.hp * enchantSoak(this.worn); // (enchanted pieces and robe soften it further)
     }
 
@@ -196,8 +201,10 @@ export class ArmorSystem {
      * (it bounces off the magic steel / the robe; I see sparks and a word).
      */
     guard(spell, { quiet = false } = {}) {
+        this.fx = wornEffects(this.worn); // (the reserves change as they are spent)
         const r = spellGuard(this.fx, spell);
         if (!r.block) return false;
+        if (r.why !== 'perk') this._payGuard(spell);
         if (!quiet) {
             const g = this.game, c = g.character.group.position;
             const col = r.why === 'robe' ? 0xc39bff : 0x9fd8ff;
@@ -209,6 +216,37 @@ export class ArmorSystem {
             }
         }
         return true;
+    }
+
+    /** Turned away: its mana comes off the reserve (a flame / a beam on me: once in MAG.BEAM_T, not every frame). */
+    _payGuard(spell) {
+        const now = performance.now();
+        const beam = BEAMS.has(spell);
+        if (beam && now - (this._beamAt?.[spell] ?? -1e9) < MAG.BEAM_T * 1000) return;
+        if (beam) (this._beamAt ||= {})[spell] = now;
+        const cost = Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2); // (shieldHitCost is half the spell's mana)
+        const { spent } = guardSpend(this.worn, this.fx, spell, cost);
+        this._spendMag(spent);
+    }
+
+    /** Reserve off the worn things ({slot: n}). A magic robe at 0 falls apart; a piece at 0 stays on and turns nothing. */
+    _spendMag(spent) {
+        let changed = false;
+        for (const [slot, n] of Object.entries(spent)) {
+            const it = this.worn[slot];
+            if (!hasMag(it)) continue;
+            it.mag = Math.max(0, Math.round((magOf(it) - n) * 100) / 100);
+            changed = true;
+            if (it.mag > 0) continue;
+            if (slot === 'robe' && !it.named) {
+                this.worn.robe = null;
+                this._changed();
+                this.game.hud?.setVoice?.('💥 Запас прочности мантии кончился — она рассыпалась', true);
+                changed = false;
+            } else this.game.hud?.setVoice?.(`✨ Запас прочности кончился: ${armorName(it)} больше ничего не отбивает`, true);
+        }
+        this.fx = wornEffects(this.worn);
+        if (changed) this._renderCells();
     }
 
     /** How strong a spell's harm still is on me (the whole magic set: «Инферно» half). */
@@ -520,7 +558,7 @@ export class ArmorSystem {
         const g = this.game;
         if (m.a === 'worn' && from && from !== g.localId) {
             const w = m.w || {};
-            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0, e: Math.min(4, w.e | 0) };
+            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0, rt: Math.min(2, w.rt | 0), e: Math.min(4, w.e | 0) };
             this.remote.set(from, clean);
             const r = g.remotes?.get(from);
             if (r?.character) { dressArmor(r.character, clean); r.character._armorKey = JSON.stringify(clean); }
@@ -571,7 +609,7 @@ export class ArmorSystem {
         if (!el) {
             el = document.createElement('div');
             el.id = 'armor-cells';
-            el.innerHTML = SLOTS.map((s) => `<div class="armor-cell" data-slot="${s}"><div class="ac-icon"></div><div class="ac-bar"><i></i></div></div>`).join('');
+            el.innerHTML = SLOTS.map((s) => `<div class="armor-cell" data-slot="${s}"><div class="ac-icon"></div><div class="ac-mag"></div><div class="ac-bar"><i></i></div></div>`).join('');
             document.body.appendChild(el);
         }
         el.style.display = 'flex';
@@ -585,6 +623,9 @@ export class ArmorSystem {
             cell.classList.toggle('magic', c >= 2);
             cell.querySelector('.ac-icon').innerHTML = armorIcon(s, c || 1, s === 'robe' ? code.rc : 0);
             cell.title = it ? armorName(it) : { helmet: 'Шлем — не надет', chest: 'Нагрудник — не надет', legs: 'Поножи — не надеты', robe: 'Мантия — не надета' }[s];
+            const mag = cell.querySelector('.ac-mag'); // (the magic reserve: small digits at the icon)
+            mag.textContent = hasMag(it) ? String(Math.round(magOf(it))) : '';
+            mag.title = hasMag(it) ? `Запас магической прочности: ${Math.round(magOf(it))} из ${it.magMax}` : '';
             const bar = cell.querySelector('.ac-bar');
             const show = it?.kind === 'armor';
             bar.style.visibility = show ? 'visible' : 'hidden';

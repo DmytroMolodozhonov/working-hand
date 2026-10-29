@@ -14,7 +14,7 @@
 import { regenCellsK, regenTier, REGEN_PER_100 } from '../game/ManaRegen.js';
 import { darkStage } from '../game/DarkMagic.js';
 import { ACHIEVEMENTS, ACH_IDS, achBonus } from '../game/Achievements.js';
-import { armorName, describeArmor, wornCode, pieceMax } from '../game/ArmorTypes.js';
+import { armorName, describeArmor, wornCode, pieceMax, hasMag, magOf } from '../game/ArmorTypes.js';
 import { describeEnchant } from '../game/Enchant.js';
 import { PENTAGRAMS } from '../game/Pentagrams.js';
 
@@ -86,7 +86,8 @@ export const FIELDS = [
 
     ...SLOTS.map((slot) => ({ id: 'worn-' + slot, section: 'armor', get: (g) => {
         const it = g.armor?.worn?.[slot]; if (!it) return null;
-        const hp = it.kind === 'armor' ? `${Math.round(it.hp ?? pieceMax(it))} / ${pieceMax(it)}` : (it.magic ? 'волшебная' : 'обычная');
+        const mag = hasMag(it) ? `запас прочности ${Math.round(magOf(it))} / ${it.magMax}` : '';
+        const hp = it.kind === 'armor' ? [`${Math.round(it.hp ?? pieceMax(it))} / ${pieceMax(it)}`, mag].filter(Boolean).join(' · ') : (it.magic ? (mag || 'волшебная') : 'обычная');
         return row(SLOT_RU[slot], armorName(it), { icon: slot === 'helmet' ? '🪖' : slot === 'chest' ? '🛡' : slot === 'legs' ? '🦵' : '🧥', value2: hp, item: it, itemType: 'armor', ench: !!it.ench });
     } })),
     { id: 'held', section: 'armor', get: (g) => {

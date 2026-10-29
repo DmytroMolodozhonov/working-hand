@@ -302,7 +302,7 @@ export function rollIceQueenLoot(r = Math.random, first = true) {
     out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 2, 4) });
     out.push(spellScroll(pick(r, ICE_SCROLLS))); // (her ice magic: an ice castle, an ice bridge, «Айс Максима», a snowman)
     out.push({ kind: 'potion', uid: newUid(), rec: 'heal', color: 0x9fe8ff }, { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xc8f4ff });
-    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', strong: ['Hellfire', 'LightningStrike'] });
+    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', tier: 'strong', mag: 1000, magMax: 1000, strong: ['Hellfire', 'LightningStrike'] });
     else if (r() < 0.5) out.push(rollKeyItem(r));
     return out;
 }

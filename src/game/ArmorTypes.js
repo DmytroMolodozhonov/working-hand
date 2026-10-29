@@ -15,6 +15,11 @@
  *   named   a dragon's lair always hides one: a whole magic set of a dead knight
  *           («Доспех сэра …»), with its own perks (PERKS) — on the set and on the pieces.
  * The High Mage's suit (makeArchmageSuit, at the end): a robe given only for the status «Высший маг».
+ * MAGIC DURABILITY («запас магической прочности», in mana — the author): a magic robe and a magic piece each hold a
+ * reserve `mag` (of `magMax`). A simple spell turned away costs the spell's own mana off it (guardSpend: the armour
+ * first, then the robe); «Авада Кедавра» is cut by the reserve, not turned away (avadaCut). A magic piece at 0 stays on
+ * and turns nothing; a magic robe at 0 falls apart. Plain armour has no reserve (it only takes blows). Robe kinds:
+ * simple 100…300, middle 301…600, strong 601…1000 (ROBE_TIERS); armour 100…500 (MAG.ARMOR) — no kinds.
  * Robe (мантия): plain — only clothes; magic — never cold, and the simplest magic
  * (ROBE_BLOCKS — «Инферно», «Остолбеней», «Левиоса», «Айс»…) does nothing; it may have
  * half the harm from 2–3 strong spells (ROBE_STRONG).
@@ -29,6 +34,92 @@ let _n = 0;
 export const armorUid = () => 'a' + (++_n).toString(36) + Math.floor(Math.random() * 1296).toString(36);
 
 export const PIECES = ['helmet', 'chest', 'legs'];
+
+// ================================================================ magic durability
+/** Robe kinds: simple (cheap, modest to look at), middle, strong. `w`: how often a chest/loot roll gives it. */
+export const ROBE_TIERS = {
+    simple: { n: 0, ru: 'простая', range: [100, 300], w: 0.6 },
+    mid: { n: 1, ru: 'средняя', range: [301, 600], w: 0.3 },
+    strong: { n: 2, ru: 'сильная', range: [601, 1000], w: 0.1 },
+};
+export const MAG = {
+    ARMOR: [100, 500], // a magic armour piece's reserve (no kinds; never above 500)
+    ROBE_COIN: 10, // coins per point of a magic robe's reserve: 1000 points = 10 000 coins
+    PIECE_COIN: 2, // … per point of a magic piece's reserve: 500 points = 1000 coins
+    AVADA_K: 8, // «Авада Кедавра»: every HP it is cut by costs this many points of reserve (25 HP = 200)
+    AVADA_CAP: 0.8, // … and the reserves never cut more than this share of it: the rest hurts (at full health: wounded, not dead)
+    ORDER: ['chest', 'helmet', 'legs'], // the armour pays in this order (then the robe)
+    BEAM_T: 0.6, // s: a flame / a beam on the armour is paid once in this time, not every frame
+};
+const hashOf = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 100003) / 100003; };
+const spanInt = (r, [a, b]) => a + Math.min(b - a, Math.floor(r * (b - a + 1)));
+export function rollRobeTier(r = Math.random) {
+    const x = r();
+    return x < ROBE_TIERS.simple.w ? 'simple' : x < ROBE_TIERS.simple.w + ROBE_TIERS.mid.w ? 'mid' : 'strong';
+}
+/** The tier a reserve belongs to. */
+export const tierOfMag = (m) => (m <= ROBE_TIERS.simple.range[1] ? 'simple' : m <= ROBE_TIERS.mid.range[1] ? 'mid' : 'strong');
+/**
+ * A magic thing with no reserve yet (an old save, a bare literal) gets one by its own id — the same on every computer.
+ * The High Mage's suit has none (it never wears out). Idempotent. → the thing.
+ */
+export function ensureMag(it) {
+    if (!it || !it.magic || it.archmage || it.mag != null) return it;
+    const u = hashOf(String(it.uid || it.piece || 'x'));
+    if (it.kind === 'robe') {
+        it.tier = ROBE_TIERS[it.tier] ? it.tier : u < 0.6 ? 'simple' : u < 0.9 ? 'mid' : 'strong';
+        it.mag = it.magMax = spanInt(hashOf(String(it.uid) + 'm'), ROBE_TIERS[it.tier].range);
+    } else if (it.kind === 'armor') {
+        it.mag = it.magMax = spanInt(u, MAG.ARMOR);
+    }
+    return it;
+}
+/** Does it hold a magic reserve at all? (a magic robe / piece, not the High Mage's suit) */
+export const hasMag = (it) => !!it && !!it.magic && !it.archmage && (it.kind === 'robe' || it.kind === 'armor');
+/** Its reserve right now. */
+export const magOf = (it) => (hasMag(it) ? Math.max(0, ensureMag(it).mag) : 0);
+/** What a magic robe / piece costs at the wizards' market: by its reserve (the author: 1000 → 10 000 coins). */
+export const magPrice = (it) => (it.kind === 'robe' ? it.mag * MAG.ROBE_COIN : it.mag * MAG.PIECE_COIN);
+
+/** Take `amount` of reserve from these slots in turn. Fills `spent` {slot: n}; → what is still unpaid. */
+function takeMag(worn, slots, amount, spent) {
+    let left = amount;
+    for (const s of slots) {
+        const it = worn[s];
+        if (!(left > 0) || !hasMag(it)) continue;
+        const n = Math.min(left, magOf(it));
+        if (n > 0) { spent[s] = (spent[s] || 0) + n; left -= n; }
+    }
+    return left;
+}
+/**
+ * A spell turned away (spellGuard said block): what it costs in reserve — `cost` is the spell's own mana. The whole
+ * magic set pays first; what it cannot pay goes to the robe. → {spent: {slot: n}} (the High Mage's suit pays nothing).
+ */
+export function guardSpend(worn, fx, spell, cost) {
+    const spent = {};
+    if (!fx || fx.immune.has(spell) || !(cost > 0)) return { spent };
+    let left = cost;
+    if (fx.magicSet && MAGIC_SET_BLOCKS.has(spell)) left = takeMag(worn, MAG.ORDER, left, spent);
+    if (left > 0 && fx.robe === 'magic' && ROBE_BLOCKS.has(spell)) takeMag(worn, ['robe'], left, spent);
+    return { spent };
+}
+/**
+ * «Авада Кедавра» of `a` HP on the wearer: not turned away — the magic armour and then the robe cut it (AVADA_K reserve
+ * per HP, together at most AVADA_CAP of it). → {hp, spent}
+ */
+export function avadaCut(worn, a) {
+    const spent = {};
+    let cap = a * MAG.AVADA_CAP, left = a;
+    for (const s of [...MAG.ORDER, 'robe']) {
+        const it = worn[s];
+        if (!(cap > 0) || !hasMag(it)) continue;
+        const cut = Math.min(cap, magOf(it) / MAG.AVADA_K);
+        if (!(cut > 0)) continue;
+        spent[s] = cut * MAG.AVADA_K; cap -= cut; left -= cut;
+    }
+    return { hp: Math.max(0, left), spent };
+}
 export const PIECE_RU = { helmet: 'Шлем', chest: 'Нагрудник', legs: 'Поножи' };
 const PIECE_OF = { helmet: 'шлем', chest: 'нагрудник', legs: 'поножи' };
 
@@ -43,8 +134,8 @@ export const ARMOR = {
     SUIT_UP_R: 9, // m: «Suit Up» takes armour lying this near
     GIVE_UP: 3, // arrows bounced off a magic armour: the knights stop shooting at it (a while)
     GIVE_UP_T: 60, // s they don't try again
-    ROBE_PRICE: 1000, // coins: a magic robe at the wizards' stall
-    PIECE_PRICE: 450, // … a magic armour piece
+    ROBE_PRICE: 1000, // (old fixed price; now by the reserve — MAG.ROBE_COIN / PIECE_COIN, magPrice)
+    PIECE_PRICE: 450,
 };
 
 /**
@@ -109,15 +200,17 @@ const shuffled = (r, list) => { const a = list.slice(); for (let i = a.length - 
 export const pieceMax = (it) => (ARMOR.HP[it?.piece] || 0) * (it?.magic ? ARMOR.MAGIC_K : 1);
 
 /** One armour piece (a thing): plain or magic. */
-export function makePiece(piece, { magic = false } = {}) {
+export function makePiece(piece, { magic = false } = {}, r = Math.random) {
     const it = { kind: 'armor', uid: armorUid(), piece, magic: !!magic };
     it.hp = pieceMax(it);
+    if (it.magic) it.mag = it.magMax = spanInt(r(), MAG.ARMOR);
     return it;
 }
 
 /** A robe (a thing): plain (clothes) or magic (with maybe 2–3 strong spells it softens). */
-export function makeRobe(magic = false, r = Math.random) {
+export function makeRobe(magic = false, r = Math.random, tier = null) {
     const it = { kind: 'robe', uid: armorUid(), magic: !!magic, color: magic ? pick(r, [0x4b2a7a, 0x1f2f6b, 0x5a1d4e, 0x123f4a]) : pick(r, [0x2c3e7a, 0x6b2b2b, 0x2f5a3a, 0x5a4632]) };
+    if (magic) { it.tier = ROBE_TIERS[tier] ? tier : rollRobeTier(r); it.mag = it.magMax = spanInt(r(), ROBE_TIERS[it.tier].range); }
     if (magic && r() < 0.5) it.strong = shuffled(r, Object.keys(ROBE_STRONG)).slice(0, 2 + (r() < 0.4 ? 1 : 0));
     return it;
 }
@@ -156,10 +249,10 @@ export function rollChestArmor(r = Math.random, { royal = false, wizard = false 
 /** What a thing of armour is worth at a market. */
 export function armorValue(it) {
     if (it.archmage) return 0; // (the High Mage's suit: not for sale — it is earned)
-    if (it.kind === 'robe') return it.magic ? 700 + 80 * (it.strong?.length || 0) : 25;
-    if (it.named) return 900;
+    if (it.kind === 'robe') return it.magic ? magPrice(ensureMag(it)) + 80 * (it.strong?.length || 0) : 25;
+    if (it.named) return Math.max(900, magPrice(ensureMag(it)));
     const base = { helmet: 40, chest: 70, legs: 45 }[it.piece] || 40;
-    return it.magic ? base * 6 : base;
+    return it.magic ? magPrice(ensureMag(it)) : base;
 }
 
 /** «Раскрой свои секреты»: what the hologram says. */
@@ -175,13 +268,18 @@ export function describeArmor(it) {
     }
     if (it.kind === 'robe') {
         if (!it.magic) return { title: '🧥 Мантия', color: it.color ?? 0x2c3e7a, lines: ['Обычная мантия: просто красивый наряд, без волшебства', 'Надевается на всё тело — приложите её к груди'] };
-        const lines = ['Холод не берёт', 'Простейшие заклинания на вас не действуют: «Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст», «Экспеллиармус»'];
+        ensureMag(it);
+        const lines = [`Запас прочности: <b>${Math.round(it.mag)}</b> из ${it.magMax ?? it.mag} (${ROBE_TIERS[it.tier]?.ru || ''} мантия)`,
+            'Каждое отбитое заклинание тратит запас — столько маны, сколько оно стоит; когда запас кончится, мантия рассыплется',
+            'Пока есть запас: холод не берёт, простейшие заклинания на вас не действуют («Инферно», «Остолбеней», «Левиоса», «Айс», «Сапира», «Даст»)',
+            'Если надеты и волшебные доспехи, запас сначала тратят они, потом мантия. «Авада Кедавра» не отбивается, но запас срезает её удар'];
         for (const s of it.strong || []) lines.push(`«${STRONG_RU[s]}» ранит вдвое слабее`);
         lines.push('Надевается на всё тело, с колпаком — приложите её к груди');
         return { title: it.named ? `❄️ ${it.named}` : '🧙 Волшебная мантия', color: it.named ? 0xbfe9ff : 0xb58cff, lines };
     }
     const title = it.named ? `✨ ${it.named}` : `${it.magic ? '✨ Волшебный' : '🪖'} ${it.magic ? PIECE_OF[it.piece] : PIECE_RU[it.piece]}`;
     const lines = [`Прочность: <b>${Math.round(it.hp ?? pieceMax(it))}</b> из ${pieceMax(it)}${it.magic ? ' (магическая броня служит вдвое дольше обычной и сама восстанавливается)' : ''}`];
+    if (it.magic) lines.push(`Запас магической прочности: <b>${Math.round(ensureMag(it).mag)}</b> из ${it.magMax}. Волшебный комплект целиком отбивает простейшие заклинания и тратит на это запас (столько маны, сколько стоит заклинание); на нуле доспех остаётся на вас, но ничего не отбивает`);
     if (it.magic) lines.push('Весь волшебный комплект: «Левиоса», «Остолбеней», «Айс», «Джолт» не действуют, «Инферно» — вдвое слабее, стрелы отскакивают');
     if (it.set) lines.push(`Весь «${it.set.name}» вместе: ${it.set.perks.map((p) => PERK[p]?.ru).join('; ')}`);
     for (const p of it.perks || []) lines.push(`Сам по себе: ${PERK[p]?.ru}`);
@@ -204,8 +302,12 @@ export function armorName(it) {
  */
 export function wornEffects(worn = {}) {
     const pieces = PIECES.map((p) => worn[p]).filter(Boolean);
-    const magicSet = pieces.length === 3 && pieces.every((it) => it.magic);
-    const fx = { magicSet, robe: worn.robe ? (worn.robe.magic ? 'magic' : 'plain') : null, archmage: !!worn.robe?.archmage, immune: new Set(), dmg: {}, stat: {}, perks: [] };
+    for (const it of pieces) ensureMag(it);
+    ensureMag(worn.robe);
+    // (a spent reserve turns nothing away: the set with all three at 0, a robe at 0 — only clothes)
+    const magicSet = pieces.length === 3 && pieces.every((it) => it.magic) && pieces.some((it) => magOf(it) > 0);
+    const robeLive = !!worn.robe?.magic && (!!worn.robe.archmage || magOf(worn.robe) > 0);
+    const fx = { magicSet, robe: worn.robe ? (robeLive ? 'magic' : 'plain') : null, archmage: !!worn.robe?.archmage, immune: new Set(), dmg: {}, stat: {}, perks: [] };
     const perkIds = [];
     for (const it of pieces) perkIds.push(...(it.perks || []));
     // a named set's own perks: only when all three of the same set are worn
@@ -219,7 +321,7 @@ export function wornEffects(worn = {}) {
         for (const [k, m] of Object.entries(P.dmg || {})) fx.dmg[k] = (fx.dmg[k] ?? 1) * m;
         for (const [k, v] of Object.entries(P.stat || {})) fx.stat[k] = k === 'maxMana' || k === 'maxHp' || k === 'heal' ? (fx.stat[k] || 0) + v : k === 'noFall' ? 1 : (fx.stat[k] ?? 1) * v;
     }
-    if (worn.robe?.magic) {
+    if (robeLive) {
         for (const s of worn.robe.strong || []) { const k = ROBE_STRONG[s]; if (k) fx.dmg[k] = (fx.dmg[k] ?? 1) * 0.5; }
         fx.dmg.cold = 0;
     }
@@ -242,7 +344,7 @@ export function spellGuard(fx, spell) {
 /**
  * A blow of `amount` (damage kind `kind`) on the wearer: how much reaches the health, and
  * what each worn piece loses. `r` picks where it lands (a piece's COVER share).
- * → {hp, wear: {helmet: n, …}}
+ * → {hp, wear: {helmet: n, …}, mag?: {slot: reserve spent}}
  */
 export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     let a = amount * (fx?.dmg?.[kind] ?? 1);
@@ -250,6 +352,7 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
     if (fx?.magicSet && FIRE.has(kind)) a *= 0.5; // (the whole magic set: fire does half)
     if (fx?.archmage && SPELL_DAMAGE.has(kind)) a *= ARCHMAGE.SPELL_K; // (the High Mage's suit: −40 % from any spell, on top of the rest)
     const wear = {};
+    if (kind === 'AvadaKedavra' && a > 0) { const c = avadaCut(worn, a); return { hp: c.hp, wear, mag: c.spent }; } // (it goes through steel; the reserves cut it)
     if (a <= 0 || NOT_SOAKED.has(kind)) return { hp: Math.max(0, a), wear };
     // where it lands: a piece by its share of the body (bare where nothing is worn)
     let x = r(), on = null;
@@ -266,7 +369,8 @@ export function soakBlow(worn, fx, amount, kind, r = Math.random) {
 export function wornCode(worn = {}) {
     const c = (it) => (!it ? 0 : it.archmage ? 4 : it.named ? 3 : it.magic ? 2 : 1); // (4: the High Mage's suit — a robe)
     const e = Math.max(0, ...['helmet', 'chest', 'legs', 'robe'].map((k) => (worn[k]?.ench ? worn[k].ench.tier + 1 : 0))); // (enchanted: the best level worn, 0 none — the body's glow)
-    return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0, e };
+    const rt = worn.robe?.magic && !worn.robe.archmage ? ROBE_TIERS[ensureMag(worn.robe).tier]?.n ?? 0 : 0; // (the robe's kind: how fine it looks)
+    return { h: c(worn.helmet), c: c(worn.chest), l: c(worn.legs), r: c(worn.robe), rc: worn.robe?.color ?? 0, rt, e };
 }
 
 /**
