@@ -5,6 +5,7 @@ description: Чек-лист добавления нового существа 
 
 # Новое существо — чек-лист (сверяй с CLAUDE.md)
 
+0а. **Воспользуйся скиллом `optimization`** — код сразу под видеокарту и без просадок FPS.
 0. **Сначала продумай:** кто это (тип, размер от мерок мира: блок 1 м, герой ~3,5 м, глаза ≈ 3,4 м, ноги = `group.y − PLAYER_GROUND_OFFSET`), где живёт (мир, ночь, вода, воздух), что умеет, чем опасно. Список «а если» — ДО кода (сон, смерть, сеть, хост ушёл, старое сохранение, корабль, космос, два игрока на одно существо).
 1. **Модель — без примитива:** настоящая анатомия, детали, вариации окраса/размера, текстура с зерном; много частей — через `src/core/FarShape.js` (кости, запечённые цвета) и `src/core/MergeGeometry.js`, общие геометрии в кэше, образец в `Game.prewarm`. Чужие образцы: `src/entities/` (`VillagerModel.js`, `Zombie.js`, `MonsterBody.js`), снимок — `tools/creature-screenshots.mjs`. Сверь с соседними моделями числами (Box3).
 2. **Заклинания «кто/что»:** строка во ВСЕ места поиска целей — `Duel._bodies/_creature`, `Game.explode`, `birdRay/lightningAt`, `CreatureImpact.js`, `Levitation.js`, `WaterVortex.js` (+ `Overgrown.js`, `Liquidation.js`, `TotalDestruction.js`, `Burning.js` по смыслу). «Не действует» — с причиной. Тест `tests/unit/spell-targets.test.js` (допиши вид), `creature-impact.test.js`.
