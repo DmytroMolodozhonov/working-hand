@@ -50,8 +50,10 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  */
 export function ledgeWide(floorOf, ax, az, nx, nz, f) {
     const sx = Math.abs(nx) >= Math.abs(nz) ? Math.sign(nx) : 0, sz = sx ? 0 : Math.sign(nz);
-    if (floorOf(ax + sx, az + sz) !== f) return false; // (nothing further ahead on top: a post or a thin wall)
-    return floorOf(ax + sz, az + sx) === f || floorOf(ax - sz, az - sx) === f; // (and a neighbour to the side)
+    // (the ground of a hill is rough: a cell a block higher or lower is still the same top; a drop of 2+ is the edge of a post or a thin wall)
+    const same = (x, z) => Math.abs(floorOf(x, z) - f) <= 1;
+    if (!same(ax + sx, az + sz)) return false; // (nothing further ahead on top: a post or a thin wall)
+    return same(ax + sz, az + sx) || same(ax - sz, az - sx); // (and a neighbour to the side)
 }
 
 export function trackSlope(v) {
