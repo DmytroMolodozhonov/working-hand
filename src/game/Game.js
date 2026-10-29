@@ -93,6 +93,7 @@ import { Settling } from '../world/Collapse.js';
 import { prepareStructure } from '../world/Structure.js';
 import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
+import { SunContest } from './SunContest.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
 import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
@@ -394,7 +395,7 @@ export class Game {
             quakeGround: (x, z, power, side) => this.quake.breakGround(x, z, power, side), // (Quake.js: the ground breaks along the crack)
             quakeShake: (front, power, casterId) => { this.quake.shake(front, power); this.crystals?.hitAt(front, power > 1 ? 5 : 3.5, casterId, 'Earthquake', 30); /* (the rock shakes: crystals in a cave under the wave crack) */ if (this.authority && (this._quakeAlarmT || 0) < performance.now() - 500) { this._quakeAlarmT = performance.now(); this.castleLife?.alarm(front, 'quake', null, power > 1 ? 9 : 6); } }, // (…and shakes under whoever is near the wave; the people near take fright)
             storm: (origin) => this.storm?.start(origin, 13),
-            sun: (origin) => this.sun?.cast(origin),
+            sun: (origin, by, side) => this.sun?.cast(origin, by, side),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
             lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
@@ -518,6 +519,7 @@ export class Game {
         this.accio = new Accio(this); // «Акцио»: a thing flies into the hand
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
+        this.sunContest = new SunContest(this); // …and against the black clouds of the gargoyle ritual it fights them (SunContest.js)
         this.inventory = new Inventory(this); // five slots under the fatigue bar
         this.inventory._buildWeapon = buildWeapon; // (models of the weapons seen on the back)
         this.inventory._makeItemModel = makeItemModel;
@@ -2108,6 +2110,7 @@ export class Game {
         if (this.invis?.stop()) done.push('невидимость');
         if (this.groundVortex?.stop('stop')) done.push('Ground Vortex');
         if (this.visibleGodi?.stop('stop')) done.push('Visible Godi');
+        if (this.sunContest?.stop('stop')) done.push('To the Sun');
         if (this.fireworks?.stop('stop')) done.push('салют');
         if (this.iceMagic?.stopMine('stop')) done.push('ледяная магия'); // (what has grown stays)
         if (!done.length) return false;
@@ -2546,10 +2549,16 @@ export class Game {
     }
 
     // ============================================================ To the Sun
-    /** «To the Sun»: a hand raised to the sky, in the rain — the clouds part and the rain stops. */
+    /**
+     * «To the Sun»: a hand raised to the sky, in the rain — the clouds part and the rain stops; the beam goes with the wand.
+     * Under the BLACK CLOUDS of the gargoyle ritual (raining or not) it fights them instead (SunContest.js): held, the wand on the clouds.
+     */
     _castSun(isFinal) {
         const raining = this.storm && (this.storm.k > 0.2 || performance.now() < this.storm.until);
-        if (!raining) { if (isFinal) this.hud.setVoice('☀️ «To the Sun» работает только во время дождя', true); return null; }
+        const here = this.character?.group?.position;
+        const black = !!(here && this.gargoyles?.cloudsOver(here));
+        if (this.sunContest?.active) { if (isFinal) this.hud.setVoice('☀️ Луч уже борется с тучами — «стоп», чтобы закончить', true); return null; }
+        if (!raining && !black) { if (isFinal) this.hud.setVoice('☀️ «To the Sun» работает во время дождя и против чёрных туч горгулий', true); return null; }
         const ch = this.character;
         let side = null;
         for (const s of ['right', 'left']) {
@@ -2567,7 +2576,9 @@ export class Game {
         const o = this.castOrigin(side);
         this.spells.cast('ToTheSun', o, _v1.set(0, 1, 0), side, this.localId);
         if (this.sync) this.sync.spell('ToTheSun', o, _v1.set(0, 1, 0), side);
-        this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
+        if (black && this.sunContest?.start()) {
+            this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Луч бьёт в чёрные тучи — они сопротивляются. Держите палочку на них', true);
+        } else this.hud.setVoice('☀️ <span style="color:#ffd36b">To the Sun!</span> Тучи расходятся, дождь стихает', true);
         return 'ToTheSun';
     }
 
@@ -3646,6 +3657,7 @@ export class Game {
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)
         this.storm.update(dt);
         this.sun.update(dt);
+        this.sunContest?.update(dt);
         this._updateLightning(dt);
         this.waves.update(dt);
         this._updateBreakthrough(dt);

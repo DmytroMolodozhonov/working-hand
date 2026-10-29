@@ -383,6 +383,9 @@ export class WandMagic {
         this.beamCone.quaternion.setFromUnitVectors(_v.set(0, -1, 0), dir);
         this.beamCone.scale.set(Math.tan(LUMOS.BEAM_ANGLE) * len, len, Math.tan(LUMOS.BEAM_ANGLE) * len);
         this.beamCone.visible = true;
+        // the infernal gargoyles flee the beam (no harm — GargoyleRules.TARGETS.LumosFlashlight): four times a second is enough
+        const now = performance.now();
+        if (now - (this._scareAt || 0) > 250) { this._scareAt = now; this.game.gargoyles?.lightCone?.(tip, dir, reach, LUMOS.BEAM_ANGLE, this.game.localId); }
     }
 
     /** Another player put out their thrown light. */

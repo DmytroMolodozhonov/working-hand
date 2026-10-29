@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as THREE from 'three';
 import {
-    GARGOYLE, PHASE, phaseAt, fireStrength, ringAngle, skyStrength, skyReach, canStart, sparesSummoner, releasePlan, boltPlan, mayHunt, biteDamage, harmOf,
+    GARGOYLE, PHASE, phaseAt, fireStrength, ringAngle, skyStrength, skyNow, skyReach, canStart, sparesSummoner, releasePlan, boltPlan, mayHunt, biteDamage, harmOf,
     TARGETS, roomFor, outOfLeash, atLimit, FIRE_KINDS, ENEMIES, IGNORED,
 } from '../../src/game/GargoyleRules.js';
 import { DIVINE_SPELLS } from '../../src/game/ProtectionGods.js';
@@ -100,7 +100,8 @@ test('a bite 3–5 on people, ×1.4 on beasts', () => {
 });
 
 test('who and what hurts a gargoyle (GargoyleRules.TARGETS, harmOf): fire never, cold slows, Avada no, the gods kill, stone takes blows less', () => {
-    for (const k of ['Inferno', 'Hellfire', 'FireMaxima', 'fire']) assert.equal(harmOf(k, 30).does, 'immune', k);
+    for (const k of ['Inferno', 'FireMaxima', 'fire']) assert.equal(harmOf(k, 30).does, 'immune', k);
+    assert.equal(harmOf('Inferno', 30).scare, 0, 'plain fire does not frighten it at all');
     assert.equal(harmOf('Ice', 9).does, 'slow');
     assert.equal(harmOf('Ice', 9).dmg, 0, 'no damage and no freezing');
     assert.equal(harmOf('AvadaKedavra', 25).does, 'none', 'not alive: a decision, written down');
@@ -166,7 +167,7 @@ async function bareGame(over = {}) {
     return g;
 }
 
-test('the ritual on a bare game: 149 mana — nothing taken, nothing starts; 150 — taken, +1 to the black level, 5 s of fire, then 30', async () => {
+test('the ritual on a bare game: 149 mana — nothing taken, nothing starts; 150 — taken, +25 to the black level, 5 s of fire, then 30', async () => {
     const g = await bareGame({ combat: { enabled: true, fatigue: 149, dead: false } });
     const G = g.gargoyles;
     const c = new THREE.Vector3(10, 0, 10);
@@ -181,7 +182,7 @@ test('the ritual on a bare game: 149 mana — nothing taken, nothing starts; 150
     const r1 = G.startRitual(c);
     assert.equal(r1.ok, true);
     assert.equal(g.combat.fatigue, 110, '150 taken at once');
-    assert.equal(g.dark.level, 1, '+1 to the black level (addDark ritual)');
+    assert.equal(g.dark.level, 25, '+25 to the black level (addDark ritual)');
     assert.equal(G.rituals.length, 1);
     for (let t = 0; t < 4.9; t += 0.05) G.update(0.05);
     assert.equal(G.list.length, 0, 'five seconds of fire first: nobody yet');
@@ -499,7 +500,8 @@ test('the flock really hunts: a target chosen is kept in that very frame (it was
     G.startRitual(new THREE.Vector3(0, 0, 0));
     for (let t = 0; t < 14; t += 0.05) G.update(0.05);
     const hunting = G.list.filter((o) => o.mode === 'hunt' && o.target);
-    assert.ok(hunting.length >= 5, `hunters: ${hunting.length}`);
+    const busy = G.list.filter((o) => (o.mode === 'hunt' && o.target) || o.mode === 'carry'); // (a bite may turn into a grip: one in the claws is no less «on the prey»)
+    assert.ok(busy.length >= 5, `hunters: ${hunting.length}, carrying: ${busy.length - hunting.length}`);
     for (const o of hunting) assert.ok(o.target.v, 'the target carries its victim');
 });
 
@@ -542,4 +544,256 @@ test('a guest gets the packets in any order (state before the ritual, a hit and 
     send({ op: 'bolt' });
     send({});
     for (let t = 0; t < 1; t += 0.05) assert.doesNotThrow(() => G.update(0.05));
+});
+
+// ================================================================ the author's gargoyle changes: fire, weak spots, the sun, +25 dark
+test('fire: plain fire neither hurts nor scares; the hellfire gives only 30 % of its damage but frightens most; the gods still kill (the author)', async () => {
+    const { harmOf, GARGOYLE: G0, FIRE_KINDS } = await import('../../src/game/GargoyleRules.js');
+    for (const k of ['Inferno', 'FireMaxima', 'fire', 'Burning', 'Lava']) { const h = harmOf(k, 50); assert.equal(h.does, 'immune', k); assert.equal(h.dmg, 0, k); assert.equal(h.scare, 0, `${k}: plain fire does not frighten it`); }
+    assert.ok(!FIRE_KINDS.has('Hellfire'), 'the hellfire is no longer «nothing»');
+    const hell = harmOf('Hellfire', 10);
+    assert.equal(hell.does, 'hit');
+    assert.equal(hell.dmg, 3, '30 % of the real damage');
+    assert.equal(G0.HELL_K, 0.3);
+    assert.equal(harmOf('Hellfire', 0).does, 'none', 'no damage — only fear');
+    assert.ok(hell.scare >= 10 && hell.scare > harmOf('CircleAttack', 30).scare, 'the hellfire frightens more than the others');
+    assert.equal(harmOf('Boom', 5).does, 'kill');
+});
+
+test('weak spots: «Circle Attack» and «Circle Attack Maxima» twice as hard as on the others, «Inspirius» twice; «Lumos»\' flashlight scares and never hurts', async () => {
+    const { harmOf } = await import('../../src/game/GargoyleRules.js');
+    assert.equal(harmOf('CircleAttack', 30).dmg, 60);
+    assert.equal(harmOf('CircleAttack', 10).dmg, 20);
+    assert.equal(harmOf('CircleAttackMaxima', 45).dmg, 90, 'Maxima twice as strong as the plain Maxima');
+    assert.equal(harmOf('CircleAttackMaxima', 15).dmg, 30);
+    assert.equal(harmOf('Inspirius', 25).dmg, 50);
+    assert.equal(harmOf('Inspirius', 100).dmg, 200);
+    assert.ok(harmOf('CircleAttack', 30).scare > 0 && harmOf('CircleAttackMaxima', 30).scare >= harmOf('CircleAttack', 30).scare && harmOf('Inspirius', 25).scare > 0, 'they flee from these');
+    for (const k of ['Lumos', 'LumosFlashlight']) { const h = harmOf(k, 99); assert.equal(h.does, 'scare', k); assert.equal(h.dmg, 0, `${k}: no damage at all`); assert.ok(h.scare > 0); }
+    assert.equal(harmOf('Jolt', 8).dmg, 8, 'others as before');
+    assert.equal(harmOf('Jolt', 8).scare, 0);
+});
+
+test('a gargoyle that is scared drops its prey and its victim, flies AWAY from the thing, and is back to hunting after; the Lumos beam scares only inside its cone, no damage', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} } });
+    const G = g.gargoyles;
+    const o = G.spawn(new THREE.Vector3(0, 30, 0), {});
+    o.mode = 'roam';
+    const v = { id: 'v1', x: 0, y: 0, z: 0, dead: false, role: 'farmer', carriedBy: o.id };
+    o.carry = { c: v, t: 0, hold: 3, up: 18, hit: 1, said: false }; o.mode = 'carry';
+    const p0 = o.model.position.clone();
+    G.hit(o, 3, 'Hellfire', 'me', new THREE.Vector3(0, 30, 10)); // the fire is 10 m to the +z side
+    assert.equal(v.carriedBy, null, 'the person in its claws is let go');
+    assert.ok(o.flee >= 10, 'frightened for ≥ 10 s');
+    assert.equal(o.hp, 40 - 0.9, '30 % of 3');
+    for (let i = 0; i < 40; i++) G.update(0.05);
+    assert.ok(o.model.position.z < p0.z - 8, `flew away from the fire (z ${o.model.position.z})`);
+    assert.equal(o.mode, 'flee');
+    // the flashlight: a narrow cone
+    const hpWas = o.hp;
+    const a = G.spawn(new THREE.Vector3(0, 20, 20), {}), b = G.spawn(new THREE.Vector3(30, 20, 20), {});
+    a.mode = b.mode = 'roam';
+    G.lightCone(new THREE.Vector3(0, 20, 0), new THREE.Vector3(0, 0, 1), 26, 0.2, 'me');
+    assert.ok(a.flee > 0, 'inside the beam');
+    assert.ok(!(b.flee > 0), 'beside it: nothing');
+    assert.equal(a.hp, 40, 'light does no damage');
+    assert.equal(o.hp, hpWas);
+    for (let i = 0; i < 100; i++) G.update(0.1); // (11 s: the fright is over)
+    assert.ok(o.mode !== 'flee' && o.flee <= 0, 'back to its business');
+});
+
+test('«To the Sun» against the clouds: the chances and the mana are the author\'s — P0 15 %, then 5 s of defence, then 30 % +10 % a second, 20 mana a second, out of mana the beam goes out', async () => {
+    const R = await import('../../src/game/GargoyleRules.js');
+    const S = R.GARGOYLE.SUN;
+    assert.equal(S.P0, 0.15); assert.equal(S.WAIT, 5); assert.equal(S.COST, 20); assert.equal(S.P1, 0.3); assert.equal(S.STEP, 0.1);
+    assert.equal(R.sunChanceAt(0), 0.15);
+    for (const s of [1, 2, 3, 4]) assert.equal(R.sunChanceAt(s), 0, `second ${s}: the defence, no roll`);
+    assert.deepEqual([5, 6, 7, 8, 9, 10, 11, 12, 13].map(R.sunChanceAt), [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1]);
+    for (const s of [0, 1, 4]) assert.equal(R.sunCostAt(s), 0);
+    for (const s of [5, 6, 20]) assert.equal(R.sunCostAt(s), 20);
+    // all rolls fail until the sure one: 8 ticks × 20 = 160 mana, won at second 12
+    const st = R.sunStart(); let paid = 0; const secs = [];
+    for (let t = 0; t < 30 && !st.won && !st.lost; t += 0.1) { const o = R.sunStep(st, 0.1, 1e9, () => 0.9999); paid += o.cost; for (const x of o.rolls) secs.push(x.sec); }
+    assert.ok(st.won, 'at 100 % it always breaks');
+    assert.deepEqual(secs, [0, 5, 6, 7, 8, 9, 10, 11, 12]);
+    assert.equal(paid, 160);
+    // a lucky first moment: no mana spent at all
+    const s1 = R.sunStart(); const o1 = R.sunStep(s1, 0.016, 5, () => 0.1);
+    assert.ok(s1.won && o1.cost === 0);
+    // 70 mana: ticks at 5, 6, 7 are paid (60), the one at 8 cannot be — the beam goes out
+    const s2 = R.sunStart(); let m = 70;
+    for (let t = 0; t < 20 && !s2.won && !s2.lost; t += 0.1) m -= R.sunStep(s2, 0.1, m, () => 0.9999).cost;
+    assert.equal(s2.lost, 'mana'); assert.equal(m, 10); assert.ok(!s2.won);
+    // the time runs only in the steps given: a long pause between frames still rolls every second once
+    const s3 = R.sunStart(); const o3 = R.sunStep(s3, 6.5, 1e9, () => 0.9999);
+    assert.deepEqual(o3.rolls.map((x) => x.sec), [0, 5, 6]);
+    assert.equal(o3.cost, 40);
+});
+
+test('burning in the sun: 5–10 s, four different ways, nobody at the same moment', async () => {
+    const { burnPlan, BURN_STYLES } = await import('../../src/game/GargoyleRules.js');
+    assert.equal(BURN_STYLES.length, 4);
+    const seen = new Set();
+    for (let i = 0; i < 400; i++) { const p = burnPlan(Math.random(), Math.random(), Math.random()); assert.ok(p.dur >= 5 && p.dur <= 10, `dur ${p.dur}`); assert.ok(p.delay >= 0 && p.delay <= 0.8); seen.add(p.style); }
+    assert.equal(seen.size, 4, 'all four ways are met');
+    assert.ok(burnPlan(0.6, 1, 0).dur <= 7, 'the blaze is quick');
+    assert.ok(burnPlan(0.1, 1, 0).dur === 10 && burnPlan(0.1, 0, 0).dur === 5);
+});
+
+test('the sun breaks the clouds: the sky clears, no more strikes, EVERY gargoyle of the ritual burns for 5–10 s and is gone; the person in its claws is let go; the ritual ends', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    assert.equal(G.list.length, 30);
+    const r = G.rituals[0];
+    assert.ok(skyNow(r) > 0.9, 'black clouds are up');
+    assert.equal(G.cloudsOver(new THREE.Vector3(5, 0, 5)), r);
+    assert.equal(G.cloudsOver(new THREE.Vector3(400, 0, 0)), null, 'far from the storm: no clouds to fight');
+    assert.ok(G.cloudHit(new THREE.Vector3(3, 1.5, 3), new THREE.Vector3(0, 1, 0))?.r === r, 'the wand straight up meets the deck');
+    assert.equal(G.cloudHit(new THREE.Vector3(3, 1.5, 3), new THREE.Vector3(1, 0.02, 0)), null, 'along the horizon: no');
+    const victim = { id: 'v1', x: 0, y: 5, z: 0, dead: false, role: 'farmer', carriedBy: G.list[0].id };
+    G.list[0].carry = { c: victim, t: 0, hold: 50, up: 18, hit: 1, said: false }; G.list[0].mode = 'carry';
+    const boltsBefore = r.boltI;
+    assert.ok(G.requestDispel(r, 'me'));
+    assert.ok(r.broken);
+    assert.equal(victim.carriedBy, null, 'dropped');
+    assert.ok(G.list.every((o) => o.burn && o.burn.dur >= 5 && o.burn.dur <= 10), 'every one is burning');
+    assert.equal(new Set(G.list.map((o) => o.burn.style)).size, 4, 'four ways at once in a flock of thirty');
+    const t0 = skyNow(r);
+    for (let t = 0; t < 2.4; t += 0.1) G.update(0.1);
+    assert.ok(skyNow(r) < t0 * 0.6, 'the sky is clearing');
+    assert.ok(G.list.some((o) => !o.dead), 'not all gone at once: it takes seconds');
+    for (let t = 0; t < 8.6; t += 0.1) G.update(0.1); // (11 s in all: the longest burning is 10 + 0,8 s of lateness)
+    for (let t = 0; t < 2; t += 0.1) G.update(0.1);
+    assert.equal(G.list.filter((o) => !o.dead).length, 0, 'the whole flock burned up');
+    assert.equal(r.boltI, boltsBefore, 'no strikes after the clouds are broken');
+    assert.equal(G.rituals.length, 0, 'the ritual is over');
+    assert.ok(G.log.some((e) => e.ev === 'dispel'));
+    assert.equal(G.requestDispel(r, 'me') && false, false);
+});
+
+test('a second dispel is nothing; gargoyles of ANOTHER ritual are not burned by the first one\'s sun', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 5000, dead: false, damage() {} } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    G.startRitual(new THREE.Vector3(500, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    const [r1, r2] = G.rituals;
+    assert.equal(G.list.length, 60);
+    assert.ok(G.dispel(r1, 'me'));
+    assert.equal(G.dispel(r1, 'me'), false);
+    assert.equal(G.list.filter((o) => o.burn).length, 30);
+    assert.ok(G.list.filter((o) => !o.burn).every((o) => o.rit === r2.id));
+});
+
+test('+25 to the black level, 100 at most, for the gargoyles; the same for the monster pentagram', async () => {
+    const { GARGOYLE: G0 } = await import('../../src/game/GargoyleRules.js');
+    const { MONSTER } = await import('../../src/game/MonsterForm.js');
+    assert.equal(G0.DARK, 25); assert.equal(MONSTER.DARK, 25);
+    const g = await bareGame({ dark: { level: 90 } });
+    g.combat.fatigue = 500;
+    assert.equal(g.gargoyles.startRitual(new THREE.Vector3(0, 0, 0)).ok, true);
+    assert.equal(g.dark.level, 100, '90 + 25 stops at 100');
+});
+
+test('SunContest on the caster\'s computer: the struggle runs only while the wand is on the clouds; mana 20 a second after 5 s; a win breaks the clouds; «стоп» / a lowered wand end it', async () => {
+    const { SunContest } = await import('../../src/game/SunContest.js');
+    const hand = { raised: true, dir: new THREE.Vector3(0.1, 1, 0).normalize() };
+    const ch = {
+        group: new THREE.Group(), isArmRaised: () => hand.raised, getHandDirection: (s, out) => out.copy(hand.dir),
+        getHandWorldPosition: (s, out) => out.set(0, 3, 0),
+    };
+    const g = await bareGame({ combat: { enabled: true, manaOn: true, fatigue: 500, dead: false, damage() {} }, character: ch, perf: { note() {} } });
+    g.sun = { fights: 0, fight() { this.fights++; } };
+    g.sync = null;
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    g.combat.fatigue = 500;
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    const C = new SunContest(g);
+    assert.equal(C.active, false);
+    assert.equal(C.start(), true);
+    assert.equal(C.active, true);
+    // pointed at the sky beside the storm: nothing runs
+    hand.dir.set(1, 0.3, 0).normalize();
+    const was = g.combat.fatigue;
+    for (let t = 0; t < 2; t += 0.1) C.update(0.1);
+    assert.equal(g.combat.fatigue, was, 'not on the clouds: no mana, no time');
+    assert.equal(C.st.t, 0);
+    // on the clouds: time runs, 20 a second after 5 s (rolls always fail until the sure one)
+    hand.dir.set(0.1, 1, 0).normalize();
+    const rnd0 = Math.random; Math.random = () => 0.99999;
+    try {
+        for (let t = 0; t < 4.9; t += 0.1) C.update(0.1);
+        assert.equal(g.combat.fatigue, was, 'the first 5 s are free');
+        for (let t = 0; t < 1.9; t += 0.1) C.update(0.1);
+        assert.equal(g.combat.fatigue, was - 40, 'ticks 5 and 6 paid: 2 × 20');
+        assert.ok(G.rituals[0].sunFx?.on, 'everybody sees the beam on the clouds');
+        assert.ok(g.sun.fights > 10, 'the beam is told to fight (it stays on)');
+        assert.ok(!G.rituals[0].broken);
+        // a lowered wand for 3 s ends it
+        hand.raised = false;
+        for (let t = 0; t < 3.3; t += 0.1) C.update(0.1);
+        assert.equal(C.active, false, 'a lowered wand ends the beam');
+        hand.raised = true;
+        // again: runs out of mana
+        g.combat.fatigue = 30;
+        assert.equal(C.start(), true);
+        for (let t = 0; t < 9; t += 0.1) C.update(0.1);
+        assert.equal(C.active, false, 'out of mana: the beam goes out');
+        assert.ok(!G.rituals[0].broken, 'the clouds held');
+        assert.match(g.said.at(-1), /Не хватило маны/);
+        // again with mana enough: the sure roll at second 12 breaks them (160 mana)
+        g.combat.fatigue = 500;
+        assert.equal(C.start(), true);
+        for (let t = 0; t < 13 && C.active; t += 0.1) C.update(0.1);
+        assert.equal(C.active, false);
+        assert.ok(G.rituals[0].broken, 'the sun won');
+        assert.equal(g.combat.fatigue, 500 - 160);
+    } finally { Math.random = rnd0; }
+    // «стоп» on a fresh struggle (another ritual's clouds): ends it at once, true once
+    const g2 = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false }, character: ch, perf: { note() {} } });
+    g2.sun = { fight() {} };
+    g2.gargoyles.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) g2.gargoyles.update(0.05);
+    const C2 = new SunContest(g2);
+    assert.equal(C2.start(), true);
+    assert.equal(C2.stop('stop'), true);
+    assert.equal(C2.stop('stop'), false);
+    // no clouds over me: the struggle does not start
+    ch.group.position.set(900, 0, 0);
+    assert.equal(new SunContest(g2).start(), false);
+});
+
+test('the net: the beam on the clouds and the break of the sky reach the other computers; a guest\'s sun asks the host; ids are checked', async () => {
+    const g = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} } });
+    const G = g.gargoyles;
+    G.startRitual(new THREE.Vector3(0, 0, 0));
+    for (let t = 0; t < 12; t += 0.05) G.update(0.05);
+    const r = G.rituals[0];
+    G.onNet({ op: 'sunfx', rid: r.id, o: [0, 3, 0], d: [0, 1, 0], s: 0.5, on: 1 }, false);
+    assert.equal(r.sunFx.on, true); assert.equal(r.sunFx.s, 0.5);
+    G.onNet({ op: 'sunfx', rid: 'nope', o: [0, 3, 0], d: [0, 1, 0], s: 0.5, on: 1 }, false); // (an unknown ritual: ignored)
+    G.onNet({ op: 'sunfx', rid: r.id, o: 'x', d: null }, false);
+    G.onNet({ op: 'sunreq', rid: r.id, by: 'friend' }, false); // (a guest does not decide)
+    assert.ok(!r.broken);
+    G.onNet({ op: 'sunreq', rid: r.id, by: 'friend' }, true); // (the host does)
+    assert.ok(r.broken && r.broken.by === 'friend');
+    assert.ok(G.list.every((o) => o.burn), 'burning: the host has set them on fire');
+    // a guest hears 'sun' and clears the sky; it never sets creatures on fire itself
+    const g2 = await bareGame({ combat: { enabled: false, fatigue: 0, dead: false, damage() {} }, authority: false });
+    const G2 = g2.gargoyles;
+    G2.onNet({ op: 'rit', id: 'rtx', c: [0, 0, 0], by: 'me', seed: 5, n: 30 }, false);
+    for (let t = 0; t < 12; t += 0.05) G2.update(0.05);
+    const o = G2.spawn(new THREE.Vector3(5, 20, 5), { id: 'gx' });
+    const rg = G2.rituals[0];
+    G2.onNet({ op: 'sun', rid: 'rtx', by: 'me' }, false);
+    assert.ok(rg.broken);
+    assert.equal(o.burn, undefined, 'the guest only follows the host\'s list');
+    for (let t = 0; t < 5.2; t += 0.1) G2.update(0.1);
+    assert.ok(skyNow(rg) < 0.01, 'the sky is clear on the guest\'s computer too');
+    // a burning gargoyle on the guest\'s screen: the host\'s snapshot carries the style and the progress
+    G2.onNet({ op: 's', l: [['gx', 5, 20, 5, 0, 0, 0, 0, 40, 0, 1, 0, 1, 0, 3, 0.4]] }, false);
+    assert.deepEqual(o.net.burn, 3); assert.equal(o.net.burnK, 0.4);
 });

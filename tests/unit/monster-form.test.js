@@ -195,11 +195,11 @@ function fakeGame({ mana = 300, mode = 'freeworld' } = {}) {
 // (Character.update keeps the body on its feet as it grows and shrinks: the feet on the ground at y 0)
 const run = (g, s, dt = 0.1) => { for (let t = 0; t < s; t += dt) { g.monster.update(dt); g.character.group.position.y = PLAYER_GROUND_OFFSET * g.character.size; } };
 
-test('standing on it: 200 mana, +1 dark, everything held stops, the wand hidden, 500 HP; ×7 after the change', () => {
+test('standing on it: 200 mana, +25 dark, everything held stops, the wand hidden, 500 HP; ×7 after the change', () => {
     const { g, ch, sent, sounds } = fakeGame();
     assert.equal(g.monster.begin(), true);
     assert.equal(g.combat.fatigue, 100);
-    assert.equal(g.dark.level, 1);
+    assert.equal(g.dark.level, 25);
     assert.equal(g._stopped, true);
     assert.equal(g.monster.hidesWand, true);
     assert.equal(g.items.held.right.model.visible, false);

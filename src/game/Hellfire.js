@@ -628,8 +628,9 @@ export class Hellfire {
                 }
                 this._note({ ev: inside ? 'burn' : 'heat', kind: b.kind, id: b.id, by, dmg: Math.round(dmg * 100) / 100 });
             }
-            // the fear: people and animals back off or run (zombies, the spider, living trees know no fear)
-            if (cr && b.kind === 'v') g.castleLife?.fear?.(cr, fx, fz, heat, HELLFIRE.TICK);
+            // the fear: people and animals back off or run (zombies, the spider, living trees know no fear); the infernal gargoyle flees the hellfire — the only fire it fears
+            if (cr && b.kind === 'g') g.gargoyles?.scare?.(cr, { x: fx, y: mid.y, z: fz }, 10 * Math.min(1, 0.4 + heat));
+            else if (cr && b.kind === 'v') g.castleLife?.fear?.(cr, fx, fz, heat, HELLFIRE.TICK);
             else if (cr && b.kind === 'a') g.animals?.fear?.(cr, fx, fz);
             // its surge throws them back (CreatureImpact: a hard surge knocks down)
             if (pushNow && (inside || heat > 0.5)) {

@@ -14,7 +14,11 @@
  *  - The gargoyle: 40 HP, quick (`SPEED`, a dive `DIVE`), bites and claws 3–5 (people), a shove (CreatureImpact); no
  *    bleeding (stone claws). A magical creature: fire does not touch it (hellish); cold slows it; «Protection» holds it;
  *    the gods' spells shatter it; «Авада» does not act (not alive: stone and hellfire); a blow, an arrow, a simple blast
- *    hurt. Lives `LIFE` 5–10 min, then crumbles into stone and ash. At most `MAX` 60 in the world.
+ *    hurt. Fire does not scare it at all — except the hellfire («Let the Hellfire Come»): it takes only 30 % of its damage but the
+ *    hellfire frightens it away (more than the others). Weak spots: «Circle Attack» and «Circle Attack Maxima» hurt it twice as much
+ *    (and scare it), «Inspirius» twice as much; the flashlight of «Lumos» scares it (no harm). The ONLY way to destroy the whole flock for
+ *    good: «To the Sun» (SUN below) — it fights the ritual's black clouds and, when they are gone, every gargoyle of the ritual burns in
+ *    the sunlight (5–10 s, each in its own way). Lives `LIFE` 5–10 min, then crumbles into stone and ash. At most `MAX` 60 in the world.
  *  - Whom they hunt (`ENEMIES`): players (the summoner only after `GRACE`), castle people, animals, zombies, sailors.
  *    They leave alone: dragons, the spider, the Ice Castle, living trees, the birds. They keep inside `LEASH` 120 m of
  *    the pentagram; farther they turn back.
@@ -26,6 +30,7 @@ export const GARGOYLE = {
     HP: 40,
     COUNT: 30, // one ritual
     MANA: 150, // taken when the ritual starts
+    DARK: 25, // the black level: +25 at once when the ritual starts (the author; 100 at most — DarkMagic.addDark clamps)
     MAX: 60, // all the gargoyles of the world
     // ---- the ritual
     FIRE_T: 5, // s of the hellfire before they come out
@@ -58,6 +63,22 @@ export const GARGOYLE = {
     GRAB: { VILLAGER: 0.5, KNIGHT: 0.3, WIZARD: 0.35, UP: [14, 24], HOLD: [2.5, 4], SPEED: 8, DROP_BELOW: 3.4, FREE: { knight: 0.22, wizard: 0.08, villager: 0 }, KNIGHT_BLOW: 3, KNIGHT_EVERY: 1.3 },
     // ---- the breath: now and then fire comes out of the mouth and sets things alight
     FIRE: { CD: [7, 16], RANGE: [5, 20], T: 1.0, LEN: 18, TICK: 0.12, HURT: 1.5, PLAYER_EVERY: 0.5 },
+    // ---- «To the Sun» against the storm clouds of the ritual (the author: P0 15 %, after 5 s 20 mana a second and 30 % growing by 10 % a second)
+    SUN: {
+        P0: 0.15, // chance at the very first moment (the cast itself pays the spell's own mana)
+        WAIT: 5, // s of the clouds' defence: only the picture, no rolls and no extra mana
+        COST: 20, // mana a second after WAIT (paid at every tick; none left — the spell ends, the clouds win)
+        P1: 0.3, // the chance at the first tick after WAIT …
+        STEP: 0.1, // … and + this each following second, until 1
+        CLEAR_T: 4.5, // s the sky takes to clear once the clouds break
+        BURN: [5, 10], // s: how long a gargoyle takes to burn up in the sun (each its own)
+        BURN_KINDS: 4, // the ways to burn (BURN_STYLES)
+        HOLE_R: 9, // m: the bright hole the beam burns in the cloud deck while it fights
+        AIM_UP: 0.25, // the wand must point at least this much above the horizon (sine) and at the cloud disc to fight it
+    },
+    // ---- what scares it, and for how long (s): the author's list
+    SCARE: { Hellfire: 10, CircleAttack: 6, CircleAttackMaxima: 10, Inspirius: 6, Lumos: 3.5 },
+    HELL_K: 0.3, // the hellfire's real damage is taken only this much (30 %)
     // ---- the spent pentagram: once all have flown out it never works again and stays scorched black
     SCORCH_R: 9, SCORCH_MAX: 12, SCORCH_IN: 6, SPENT_R: 9,
     // ---- the picture on the ground
@@ -95,6 +116,11 @@ export function ringAngle(t) {
 export function skyStrength(t) {
     if (t <= 0 || t >= GARGOYLE.STORM_T) return 0;
     return Math.min(smooth(t / GARGOYLE.CLOUD_IN), smooth((GARGOYLE.STORM_T - t) / 12));
+}
+
+/** The darkness of ritual `r`'s clouds NOW (0…1): its sky by time, cleared by «To the Sun» once the clouds are broken (`r.clear` 0…1). */
+export function skyNow(r) {
+    return skyStrength(r.t) * (1 - smooth(r.clear || 0));
 }
 
 /** How much of the ritual's gloom reaches a point `d` m from the pentagram: full inside SKY_R, fading over SKY_FADE. */
@@ -182,8 +208,10 @@ export function biteDamage(k, u = 0.5) {
     return Math.round(d * x * 10) / 10;
 }
 
-/** Kinds of harm that are fire (a hellish creature: they do nothing), cold (they slow it). */
-export const FIRE_KINDS = new Set(['Inferno', 'InfernoMaxima', 'Fire', 'FireMaxima', 'Hellfire', 'fire', 'burn', 'flame', 'Burning', 'Lava', 'lava', 'Ritual', 'Pentagram']);
+/** Kinds of harm that are fire (a hellish creature: they do nothing; the hellfire alone — `Hellfire`, below — is felt), cold (they slow it). */
+export const FIRE_KINDS = new Set(['Inferno', 'InfernoMaxima', 'Fire', 'FireMaxima', 'fire', 'burn', 'flame', 'Burning', 'Lava', 'lava', 'Ritual', 'Pentagram']);
+/** Harm it takes this many times over (a weak spot: it fears these). */
+export const VULNERABLE = Object.freeze({ CircleAttack: 2, CircleAttackMaxima: 2, Inspirius: 2 });
 export const COLD_KINDS = new Set(['Ice', 'IceDuel', 'Frozen', 'Snow', 'cold', 'chill', 'freeze', 'FreezeRay', 'IceTrap']);
 /** Shields the stone: a blow / arrow loses a little. */
 export const BLOW_FACTOR = { melee: 1, punch: 0.8, arrow: 0.6, crush: 1.2, blade: 1, fist: 0.8 };
@@ -209,8 +237,8 @@ export const TARGETS = {
     LevitateDuel: { does: 'none', why: 'вырывается из невидимой руки — не действует' },
     Bombardo: { does: 'hit', why: '«Бомбардо» и пушки: взрыв дробит камень — полный урон, толчок' },
     BombardoMaxima: { does: 'hit', why: '«Бомбардо Максима»: полный урон (×2)' },
-    Inferno: { does: 'immune', why: 'огонь «Инферно», «Fire», «Fire Maxima», «Hellfire»: горгулья — адская, огонь её не берёт' },
-    Hellfire: { does: 'immune', why: '«Let the Hellfire Come»: свой огонь — не берёт' },
+    Inferno: { does: 'immune', why: 'огонь «Инферно», «Fire», «Fire Maxima»: горгулья — адская, огонь её не берёт и не пугает' },
+    Hellfire: { does: 'hit', why: '«Let the Hellfire Come»: адский огонь — иммунитет, она получает только 30 % настоящего урона; зато пугается его сильнее всего и улетает прочь (10 с)' },
     FireMaxima: { does: 'immune', why: 'адская — огонь не берёт' },
     Burning: { does: 'immune', why: 'горящий дом, дерево, лава — не загорается, не получает урона' },
     Ice: { does: 'slow', why: 'холод («Ice», «Frozen», снег, ледяные ловушки): замедляет вдвое на 5 с, урона нет, не замораживает' },
@@ -219,7 +247,9 @@ export const TARGETS = {
     Levitation: { does: 'none', why: '«Левиоса» не удерживает — вырывается и летит дальше' },
     WaterVortex: { does: 'push', why: 'вода толкает, урона нет (камень не тонет, не боится воды)' },
     WaterStorm: { does: 'push', why: 'водяная буря, волна: толкает' },
-    CircleAttack: { does: 'hit', why: '«Circle Attack»: урон по зоне и толчок' },
+    CircleAttack: { does: 'hit', why: '«Circle Attack» и «Circle Attack Maxima»: урон по зоне и толчок ВДВОЕ сильнее, чем по другим существам (горгульи его боятся), и горгулья убегает прочь (6 с; Максима — 10 с)' },
+    LumosFlashlight: { does: 'scare', why: '«Lumos» в виде фонарика («Flashlight»): луч света отпугивает горгулий (3,5 с), урона не наносит совсем' },
+    ToTheSun: { does: 'sun', why: '«To the Sun» — единственный способ уничтожить горгулий насовсем: луч, направленный на чёрные тучи ритуала, вступает с ними в борьбу (15 % сразу; через 5 с — по 20 маны в секунду, шанс 30 % и +10 % за секунду, пока не 100 %); когда тучи развеяны, все горгульи ритуала сгорают на солнце за 5–10 с (каждая по-своему)' },
     Firefighting: { does: 'none', why: 'не действует' },
     Liquidation: { does: 'hit', why: '«Liquidation»: обычный урон' },
     Brainrot: { does: 'none', why: '«Брейнрот»: горгульи подчиняются пентаграмме, не заклинателю — не действует' },
@@ -248,7 +278,7 @@ export const TARGETS = {
     Lightning: { does: 'hit', why: 'молния со свитка: −20 (молнии самой бури ритуала их не бьют — свои)' },
     Thunderwave: { does: 'hit', why: 'громовая волна: −8' },
     TotalDestruction: { does: 'hit', why: 'взрыв: насмерть' },
-    Inspirius: { does: 'hit', why: '«Inspirius»: −100 / −50 / −25 — насмерть' },
+    Inspirius: { does: 'hit', why: '«Inspirius»: −100 / −50 / −25, а у горгульи ВДВОЕ больше (аллергия, страх) — насмерть; она убегает (6 с)' },
     WindImpulse: { does: 'push', why: 'отбрасывает волной воздуха' },
     LevitationMaxima: { does: 'none', why: 'не держит — улетает' },
     Boom: { does: 'kill', why: '«Бум» и все заклинания богов (ProtectionGods.isDivine): горгулья разбивается на камни — в зоне насмерть' },
@@ -276,15 +306,17 @@ export const TARGETS = {
 export function harmOf(kind, dmg = 0) {
     dmg = Math.max(0, +dmg || 0);
     const k = String(kind || '');
-    if (isDivine(k) || TARGETS[k]?.does === 'kill') return { does: 'kill', dmg: 1e9, slow: 0 };
-    if (FIRE_KINDS.has(k)) return { does: 'immune', dmg: 0, slow: 0 };
-    if (COLD_KINDS.has(k)) return { does: 'slow', dmg: 0, slow: 5 };
-    if (k === 'AvadaKedavra') return { does: 'none', dmg: 0, slow: 0 };
+    if (isDivine(k) || TARGETS[k]?.does === 'kill') return { does: 'kill', dmg: 1e9, slow: 0, scare: 0 };
+    if (k === 'Hellfire') return { does: dmg > 0 ? 'hit' : 'none', dmg: Math.round(dmg * GARGOYLE.HELL_K * 10) / 10, slow: 0, scare: GARGOYLE.SCARE.Hellfire }; // (immune: 30 % of the real damage — and the one fire it flees from)
+    if (FIRE_KINDS.has(k)) return { does: 'immune', dmg: 0, slow: 0, scare: 0 };
+    if (COLD_KINDS.has(k)) return { does: 'slow', dmg: 0, slow: 5, scare: 0 };
+    if (k === 'AvadaKedavra') return { does: 'none', dmg: 0, slow: 0, scare: 0 };
+    if (k === 'Lumos' || k === 'LumosFlashlight') return { does: 'scare', dmg: 0, slow: 0, scare: GARGOYLE.SCARE.Lumos }; // (a light: it only drives it away)
     const row = TARGETS[k];
-    if (row && (row.does === 'none' || row.does === 'blind')) return { does: 'none', dmg: 0, slow: 0 };
-    if (row && row.does === 'push') return { does: 'push', dmg: Math.min(dmg, 0), slow: 0 };
-    const f = BLOW_FACTOR[k] ?? 1;
-    return { does: dmg > 0 ? 'hit' : 'none', dmg: Math.round(dmg * f * 10) / 10, slow: 0 };
+    if (row && (row.does === 'none' || row.does === 'blind' || row.does === 'sun')) return { does: 'none', dmg: 0, slow: 0, scare: 0 };
+    if (row && row.does === 'push') return { does: 'push', dmg: Math.min(dmg, 0), slow: 0, scare: 0 };
+    const f = (BLOW_FACTOR[k] ?? 1) * (VULNERABLE[k] ?? 1);
+    return { does: dmg > 0 ? 'hit' : 'none', dmg: Math.round(dmg * f * 10) / 10, slow: 0, scare: GARGOYLE.SCARE[k] || 0 };
 }
 
 /** Is the world's count at the limit? */
@@ -346,4 +378,57 @@ export function breakFree(role, wizard = false) {
 export function isSpent(spent, x, z) {
     for (const s of spent) if (Math.hypot(s.x - x, s.z - z) < GARGOYLE.SPENT_R) return true;
     return false;
+}
+
+// ----------------------------------------------------------------- «To the Sun» against the clouds of the ritual (pure)
+/**
+ * The chance that the sun breaks the clouds at second `sec` of the struggle (the author's numbers): the cast itself (sec 0) —
+ * `SUN.P0` (15 %); then for `SUN.WAIT` (5) s the clouds defend (no rolls); from second 5 every whole second — 30 %, 40 % … up to 100 %.
+ */
+export function sunChanceAt(sec) {
+    const S = GARGOYLE.SUN;
+    if (sec <= 0) return S.P0;
+    if (sec < S.WAIT) return 0;
+    return Math.round(Math.min(1, S.P1 + S.STEP * (sec - S.WAIT)) * 100) / 100;
+}
+
+/** Mana the spell takes at second `sec`: nothing before `SUN.WAIT`, then `SUN.COST` (20) at every tick. */
+export const sunCostAt = (sec) => (sec >= GARGOYLE.SUN.WAIT ? GARGOYLE.SUN.COST : 0);
+
+/** A fresh struggle: `t` seconds aimed at the clouds, `tick` the last second already rolled (-1: the cast itself not yet). */
+export const sunStart = () => ({ t: 0, tick: -1, won: false, lost: null });
+
+/**
+ * One step of the struggle (pure; the caster's computer calls it while the beam is on the clouds). `mana` — what the caster has now
+ * (Infinity: nothing is counted — Creative with endless mana); `roll()` — a number in 0…1. Returns `{cost, rolls: [{sec, chance, won}]}`;
+ * `st.won` / `st.lost` ('mana') are set when it is over. The ticks are whole seconds: 0 (the cast), then WAIT, WAIT+1 …
+ */
+export function sunStep(st, dt, mana, roll) {
+    const out = { cost: 0, rolls: [] };
+    if (st.won || st.lost) return out;
+    st.t += Math.max(0, dt);
+    const S = GARGOYLE.SUN;
+    while (!st.won && !st.lost) {
+        const next = st.tick < 0 ? 0 : st.tick < S.WAIT ? S.WAIT : st.tick + 1;
+        if (st.t < next) break;
+        const cost = sunCostAt(next);
+        if (cost > mana) { st.lost = 'mana'; break; } // (no mana for the next second: the beam goes out, the clouds hold)
+        mana -= cost; out.cost += cost; st.tick = next;
+        const chance = sunChanceAt(next), won = roll() < chance;
+        out.rolls.push({ sec: next, chance, won });
+        if (won) st.won = true;
+    }
+    return out;
+}
+
+/** The ways a gargoyle burns up in the sun (the author: «кому-то плохо, кто-то падает на землю, кто-то умирает быстрее»). */
+export const BURN_STYLES = Object.freeze(['smoulder', 'sick', 'blaze', 'petrify']);
+
+/** How a gargoyle burns: `{style, dur, delay}` from a number in 0…1 three times (each its own, 5–10 s in all, the quick ones 5–7). */
+export function burnPlan(u1, u2, u3) {
+    const [a, b] = GARGOYLE.SUN.BURN;
+    const style = Math.min(BURN_STYLES.length - 1, Math.floor(u1 * BURN_STYLES.length));
+    let dur = a + (b - a) * u2;
+    if (BURN_STYLES[style] === 'blaze') dur = a + (Math.min(b, a + 2) - a) * u2; // (quick: it flares up and goes)
+    return { style, dur: Math.round(dur * 10) / 10, delay: Math.round(u3 * 8) / 10 }; // (they do not all catch in the same moment: up to 0,8 s apart)
 }

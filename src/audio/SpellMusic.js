@@ -708,6 +708,8 @@ const LOOPS = {
     /** «Пентаграниум» held: a low uneasy hum (E and B-flat), a whisper of embers, a far drum. */
     loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
+    /** «To the Sun» on the black clouds held: a bright golden chord straining against a low rumble of the storm, a bell ringing through it now and then. */
+    loopSunFight(sr) { const o = buf(sr, 3.3), r = rng(211); pad(o, sr, [220, 277.2, 329.6, 440], 0, 3.3, 0.24, { att: 0.01, rel: 0, harm: 2, vib: 0.006 }); noise(o, sr, 0, 3.2, 0.12, (u) => 0.05 + 0.04 * Math.sin(u * 6.28 * 2), (u) => 0.6 + 0.4 * Math.sin(u * 6.28 * 3), r); for (const [t, n] of [[0.2, 'A6'], [1.1, 'E7'], [2.2, 'C#7']]) bell(o, sr, hz(n), t, 0.05, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.36 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** «Электром» held: the hum of a live wire and its crackle. */
@@ -815,6 +817,7 @@ export const HELD_SOUND = {
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
+    SunClouds: { loop: 'loopSunFight', end: 'fxStop' }, // («To the Sun» on the gargoyles' black clouds held: SunContest.js)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

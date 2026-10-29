@@ -2,7 +2,7 @@
  * MonsterTransform.js — игровая часть «Пентаграммы страшного монстра» (правила и числа — MonsterForm.js, тело —
  * entities/MonsterBody.js). `game.monster`.
  *
- *  begin()     — встал на нарисованную пентаграмму: 200 маны (в Творческом даром), +1 тьмы, всё удерживаемое
+ *  begin()     — встал на нарисованную пентаграмму: 200 маны (в Творческом даром), +25 тьмы, всё удерживаемое
  *                прекращается (концентрация, Империус, полёт, щит), вещи из рук падают, палочка прячется (слот тот же),
  *                здоровье человека запоминается — у монстра своё, 500. Превращение 5 с: судороги, рост толчками ×1 → ×7,
  *                рёв (мелодия thMonster + fxMonsterRoar — у всех рядом).
@@ -89,7 +89,7 @@ export class MonsterTransform {
         if (why) { g.hud?.setVoice?.(`🐺 ${why}`, true); return false; }
         const c = g.combat;
         if (!this.prepaid && !free && c?.enabled && g.config?.mode !== 'creative') c.fatigue = Math.max(0, c.fatigue - MONSTER.COST);
-        addDark(g.dark || g, MONSTER.DARK, 'ritual'); // (чёрная магия: +1 за каждое превращение)
+        addDark(g.dark || g, MONSTER.DARK, 'ritual'); // (чёрная магия: +25 за каждое превращение, не выше 100)
         // всё удерживаемое прекращается; ничего другого держать огромные лапы не будут
         try { g.imperius?.active && g.imperius.stop('stop'); } catch { /* (не вселён) */ }
         g.stopSpells?.();

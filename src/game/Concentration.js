@@ -13,7 +13,7 @@
  *   knocks it down, Combat.castFrom), «Up» (getting up is the body's), «Паузин» and «Флайн» in the air
  *   (the flight's own words: flying is moving, not holding).
  *   Not held (they don't take concentration, but casting them is an ordinary spell): «Акцио» (it flies by
- *   itself), «To the Sun» (the beam lives on by itself), the flight,
+ *   itself), «To the Sun» (the beam lives on by itself — except against the black clouds of the gargoyle ritual: there it is held, SunContest.js), the flight,
  *   «Invisibility» (your spells are seen under it — so you cast under it; «Visible Godi», unlike it, is HELD: its cloud takes the whole look), the air bubble under water,
  *   the shield and the dome, Lumos, drawing, charges, blasts and every other spell that is cast and gone.
  *   Held, unlike the ordinary shield: «Protection Gods» / «… Maxima» (ProtectionGods.js) — under the gods' shield
@@ -58,6 +58,7 @@ export const HELD = {
     GodsShield: { ru: 'Божественная защита', icon: '✨', own: ['ProtectionGods', 'ProtectionGodsMaxima', 'Maxima'] }, // (the gods' shield: held — ProtectionGods.js)
     DragonTame: { ru: 'Дракон (Брейнрот Максима)', icon: '🐉', own: ['BrainrotMaxima', 'Attack'] }, // (the calmed dragon: 0,5 mana a second — DragonRide.js; «Атак» sends it at one it is already angry at)
     GroundVortex: { ru: 'Вихрь земли', icon: '🌪️', own: ['GroundVortex', 'GroundShield', 'Attack'] }, // (blocks circling the hero: 0,5 mana a second — GroundVortex.js)
+    SunClouds: { ru: 'To the Sun (тучи горгулий)', icon: '☀️', own: [] }, // (the beam on the black clouds of the gargoyle ritual: 20 mana a second after 5 s — SunContest.js; «стоп» ends it)
     VisibleGodi: { ru: 'Visible Godi', icon: '👁️', own: [] }, // (the cloud on the screen: 1 mana a second — VisibleGodi.js; «стоп» closes it)
     Fireworks: { ru: 'Салют', icon: '🎆', own: [] }, // (10 s of salvos over the wand: Fireworks.js — «стоп» ends it)
     Electrum: { ru: 'Электром', icon: '⚡', own: ['Electrum'] }, // (the lightning held on its target — StrongMagic.js)
@@ -116,6 +117,7 @@ export class Concentration {
         if (g.imperius?.active) return 'Imperius';
         if (g.groundVortex?.busy) return 'GroundVortex';
         if (g.visibleGodi?.on) return 'VisibleGodi';
+        if (g.sunContest?.active) return 'SunClouds';
         if (g.dragonRide?.active) return 'DragonTame';
         if (g.ships?.blowing) return 'SailWind';
         const sp = g.spells?.heldBy?.(g.localId);
@@ -176,6 +178,7 @@ export class Concentration {
         if (g.fireworks?.stop?.('focus')) done.push('салют');
         if (g.groundVortex?.stop?.('down')) done.push('Ground Vortex');
         if (g.visibleGodi?.stop?.('focus')) done.push('Visible Godi');
+        if (g.sunContest?.stop?.('focus')) done.push('To the Sun');
         if (g.dragonRide?.stop?.(why === 'dead' ? 'dead' : 'thrown')) done.push('дракон');
         if (g.imperius?.stop?.(why === 'dead' ? 'dead' : 'hurt')) done.push('Империус');
         if (g.livingTrees?.stopMine?.('focus')) done.push('живое дерево');

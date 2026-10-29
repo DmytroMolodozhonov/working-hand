@@ -516,7 +516,7 @@ export class SpellManager {
             case 'Imperius': case 'ImperiusMaxima': this.castImperius(o, direction.clone(), name === 'ImperiusMaxima'); break; // (the mind's light from the eyes to the creature — ImperiusControl draws the rest)
             case 'BrainrotMaxima': this.castBrainrot(o, direction.clone(), true); break; // (the same rings, golden and wider: at a dragon)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
-            case 'ToTheSun': this.hooks.sun?.(o); break;
+            case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;
