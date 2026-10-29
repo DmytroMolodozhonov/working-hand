@@ -54,6 +54,10 @@ export const ICE = {
     // напасть на обидчика, защищая замок»): the snowmen and the monsters go out after whoever did it — this far, this long
     DEFEND: { R: 240, T: 120 }, // (R: past ICE.ACTIVE — from wherever the castle is awake)
     G: 14, // the shots' gravity
+    // a giant in the castle (the monster of the pentagram, a dragon under its rider, a mind in a great creature): the queen and her people
+    // see it by its edge from far, cannot lose it behind a wall, and the whole castle goes out against it; the rod's ice takes it —
+    // the longer the wind-up and the ice, the greater it is (the queen's always works — the author: «посох может кого угодно»)
+    GIANT: { SIZE: 2.5, RIDER_R: 5, RIDER_H: 12, SEE: 140, WIND_K: 0.18, WIND_MAX: 2.4, WATCH: 0.5, GREET: 12 },
 };
 
 /** Fire and how strong each kind is on the ice (the author: «чем сильнее огненное заклятие, тем сильнее урон»). */
@@ -470,6 +474,7 @@ export class IceCastleLife {
         }
         if (this.auth) {
             if (this._friendsToLoad) this._loadFriends();
+            if (this.active || P) this._watchGiants(dt);
             // (a snowman or a monster far from every player, with nobody to fight: thinks every few frames, the time added up —
             // the castle's guards on their rounds cost ~0.5 ms a frame seen from Creative's start)
             this._tick = (this._tick || 0) + 1;
@@ -554,6 +559,28 @@ export class IceCastleLife {
         for (const c of this.list) if (c.type === 'snowman' || c.type === 'monster') { c.foe = by; c.roam = null; }
         const q = this.queen;
         if (q) this._say(q, 'Кто посмел напасть на мой замок?! Слуги, схватите его!');
+    }
+
+    /**
+     * (host, twice a second) A giant — the pentagram's monster, a dragon under its rider, a mind in a great creature — in the
+     * palace's land: the castle wakes and goes out against it at once (nobody needs to see it strike first: it is a tower walking
+     * through the hall), the queen cries out.
+     */
+    _watchGiants(dt) {
+        const P = this.plan;
+        if (!P || (this._gwT = (this._gwT || 0) - dt) > 0) return;
+        this._gwT = ICE.GIANT.WATCH;
+        for (const q of this._players()) {
+            if (!q.giant || this._offender(q.id)) continue;
+            const m = ICE.GIANT.GREET + q.rad;
+            if (q.p.x < P.x0 - m || q.p.x > P.x1 + m || q.p.z < P.z0 - m || q.p.z > P.z1 + m) continue;
+            if (!this.active) this._wake();
+            this.offender = { id: q.id, until: Date.now() + ICE.DEFEND.T * 1000 };
+            for (const c of this.list) if (c.type === 'snowman' || c.type === 'monster') { c.foe = q.id; c.roam = null; }
+            const qn = this.queen;
+            if (qn) this._say(qn, 'Что за чудовище ломится в мой замок?! Слуги, остановите его!');
+            this.game.castleLife?.alarm?.(_v.set(q.p.x, q.p.y, q.p.z), 'monster', q.id, 30);
+        }
     }
 
     /** (host) A player came near: the queen on her throne, the monsters at the gates, snowmen about. */
@@ -648,16 +675,28 @@ export class IceCastleLife {
         const qn = boss ? this.list.find((c) => c.type === 'queen' && !c.dead) : null;
         const bossInfo = qn ? { key: 'iceQueen', x: qn.model.position.x, z: qn.model.position.z, say: (t) => this._say(qn, t) } : null;
         const seen = (id, p) => (g.invis ? g.invis.aiPos(id, p, bossInfo) : p);
-        const put = (id, p, rod) => {
-            const e = pool[out.length] || (pool[out.length] = { id: null, p: new THREE.Vector3(), rod: false });
-            e.id = id; _feet(p, e.p); e.rod = rod;
+        const put = (id, p, rod, size = 1, big = false) => {
+            const e = pool[out.length] || (pool[out.length] = { id: null, p: new THREE.Vector3(), rod: false, size: 1, rad: 0.5, h: 3.5, giant: false });
+            e.id = id; e.size = size; e.p.set(p.x, p.y - 1.95 * size, p.z); e.rod = rod;
+            e.giant = big || size >= ICE.GIANT.SIZE;
+            e.rad = Math.max(0.5, 0.48 * size, big && size < 3 ? ICE.GIANT.RIDER_R : 0); // (a body this wide: it is seen by its edge, not its middle)
+            e.h = Math.max(3.5 * size, big && size < 3 ? ICE.GIANT.RIDER_H : 0);
             out.push(e);
         };
-        if (!g.isDeadLocal && !g.combat?.dead) { const p = seen(g.localId, g.character.group.position); if (p) put(g.localId, p, !!g.items?.heldOf('iceRod')); }
+        if (!g.isDeadLocal && !g.combat?.dead) {
+            // (the mind in a creature — «Империус»: the queen sees the creature; a dragon under its rider: the rider is as great as the dragon)
+            const imp = g.imperius?.active && g.imperius.phase === 'on' ? g.imperius.creature : null;
+            const ip = imp ? (imp.model?.position || imp.group?.position) : null;
+            const ridden = !!g.dragonRide?.riding;
+            const mine = ip || g.character.group.position;
+            const p = seen(g.localId, mine);
+            if (p) put(g.localId, p, !!g.items?.heldOf('iceRod'), ip ? Math.max(1, (imp.size || imp.scale || 1)) : (g.character.size || 1), !!ip || ridden);
+        }
         for (const [id, r] of g.remotes || []) {
             if (r.dead || !r.position) continue;
             const p = seen(id, r.position);
-            if (p) put(id, p, this._remoteRod(id));
+            const onDragon = !!g.dragons?.list?.some((d) => d.tame?.rider === id);
+            if (p) put(id, p, this._remoteRod(id), r.character?.size || 1, onDragon);
         }
         return out;
     }
@@ -745,9 +784,10 @@ export class IceCastleLife {
         let best = null;
         for (const q of this._players(c.type === 'queen')) {
             if (q.rod && c.type === 'snowman' && this.state.queenDead) continue; // (the rod's holder: the snowmen obey him)
-            const d = Math.hypot(q.p.x - from.x, q.p.z - from.z);
-            const r = c.type !== 'queen' && this._offender(q.id) ? Math.max(range, ICE.DEFEND.R) : q.id === c.foe ? range * 1.6 : range;
-            if (d < r && (!best || d < best.d)) best = { k: 'p', id: q.id, p: q.p.clone(), d };
+            const d = Math.max(0, Math.hypot(q.p.x - from.x, q.p.z - from.z) - q.rad); // (by its edge: a great body is nearer than its middle)
+            let r = c.type !== 'queen' && this._offender(q.id) ? Math.max(range, ICE.DEFEND.R) : q.id === c.foe ? range * 1.6 : range;
+            if (q.giant) r = Math.max(r, Math.min(ICE.GIANT.SEE, range * 2.5 + q.rad * 2)); // (a giant cannot be missed: it is seen from far)
+            if (d < r && (!best || d < best.d)) best = { k: 'p', id: q.id, p: q.p.clone(), d, rad: q.rad, size: q.size, giant: q.giant };
         }
         return best;
     }
@@ -766,12 +806,12 @@ export class IceCastleLife {
             c.castT = Math.max(c.castT, 1.5);
             return;
         }
-        if (!c.greeted) { c.greeted = true; this._say(c, 'Кто посмел войти в мой ледяной замок?!'); }
-        const d = Math.hypot(e.p.x - p.x, e.p.z - p.z);
-        const see = this._sees(c, e.p);
+        if (!c.greeted) { c.greeted = true; this._say(c, e.giant ? 'Что за чудовище ломится в мой замок?! Заморозить его!' : 'Кто посмел войти в мой ледяной замок?!'); }
+        const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
+        const see = e.giant || this._sees(c, e.p);
         // she keeps her distance: close enough to strike with her rod, never further than her leash
         const leash = Math.hypot(p.x - P.x, p.z - P.z) > Q.LEASH;
-        if ((!see || d > Q.REACH * 0.7) && !leash) { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, 6); }
+        if ((!see || d > Q.REACH * 0.7) && !leash) { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, 6 + (e.rad || 0)); }
         else if (leash) { const t = this._wayTo(c, hall); this._step(c, t.x, t.z, dt, 2); }
         else { c.moving = false; this._face(c, e.p, dt); }
         c.castT -= dt;
@@ -781,8 +821,11 @@ export class IceCastleLife {
         c.castT = Q.CAST * (0.75 + Math.random() * 0.5);
         const nSnow = this.list.filter((s) => s.type === 'snowman' && !s.dead).length;
         const roll = Math.random();
-        const spell = nSnow < 5 && roll < 0.2 ? 'summon' : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
+        // (a giant: first of all the rod's freeze — the ice that takes everybody; then the rest)
+        const spell = e.giant && (!c.giantFrozen || Date.now() > c.giantFrozen) && roll < 0.8 ? 'freeze'
+            : nSnow < 5 && roll < 0.2 ? 'summon' : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
         c.act = spell; c.actT = 0.7; c.actTo = e;
+        if (spell === 'freeze' && e.giant) c.actT = Math.min(ICE.GIANT.WIND_MAX, 0.7 + ICE.GIANT.WIND_K * Math.max(0, (e.size || 1) - 1) * (e.size > 4 ? 1.6 : 1)); // (the greater the body, the longer the rod gathers its cold)
         this._say(c, { freeze: 'Замри навеки!', spikes: 'Лёд, пронзи их!', shards: 'Осколки зимы!', blizzard: 'Вьюга, прогони их!', summon: 'Снеговики, ко мне!' }[spell]);
     }
 
@@ -793,7 +836,7 @@ export class IceCastleLife {
         const tp = e.k === 'p' ? this._playerCentre(e.id, new THREE.Vector3()) : null;
         if (!tp && spell !== 'summon') return;
         if (spell === 'summon') { for (let i = 0; i < 3; i++) this._spawnSnowman(c.model.position); this._fx({ e: 'fx', k: 'summon', o: [r2(from.x), r2(from.y), r2(from.z)] }); return; }
-        if (spell === 'freeze') { this._fx({ e: 'fx', k: 'beam', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] }); this._freezePlayer(e.id, 'iceQueen', 6); return; }
+        if (spell === 'freeze') { this._fx({ e: 'fx', k: 'beam', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] }); this._freezePlayer(e.id, 'iceQueen', 6); if (e.giant) c.giantFrozen = Date.now() + 9000; return; }
         if (spell === 'spikes') { const f = _feet(tp, new THREE.Vector3()); this._fx({ e: 'fx', k: 'spikes', t: [r2(f.x), r2(this._floor(f.x, f.z, f.y + 2)), r2(f.z)] }); return; }
         if (spell === 'shards') { for (let i = 0; i < 5; i++) this._fire('shard', from, tp, { spread: 1.2, by: c.id, delay: i * 0.12, to: e }); return; }
         if (spell === 'blizzard') { const p = c.model.position; this._fx({ e: 'fx', k: 'gust', o: [r2(p.x), r2(p.y + 3), r2(p.z)], y: r2(c.model.rotation.y) }); }
@@ -812,14 +855,14 @@ export class IceCastleLife {
             if (!this._step(c, c.home.x, c.home.z, dt, 0.8, 0.6)) this._face(c, _v.set(P.gate.out.x * 2 - P.gate.x, 0, P.gate.out.z * 2 - P.gate.z), dt);
             return;
         }
-        const d = Math.hypot(e.p.x - p.x, e.p.z - p.z);
+        const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
         c.castT -= dt;
-        if (d > M.REACH - 0.6) this._step(c, e.p.x, e.p.z, dt, M.REACH - 1);
+        if (d > M.REACH - 0.6) this._step(c, e.p.x, e.p.z, dt, M.REACH - 1 + (e.rad || 0));
         else { c.moving = false; this._face(c, e.p, dt); }
         // («лицом к цели»: it strikes / throws only facing its foe)
         if (!facesTarget(c.model.rotation.y, p.x, p.z, e.p.x, e.p.z, FACE.MELEE)) return;
         if (d <= M.REACH && c.castT <= 0) { c.castT = 1.6; c.act = 'punch'; c.actT = 0.55; c.actTo = e; }
-        else if (d > 9 && d < 30 && c.castT <= -4 && this._sees(c, e.p)) { c.castT = 2; c.act = 'boulder'; c.actT = 0.8; c.actTo = e; }
+        else if (d > 9 && d < 30 && c.castT <= -4 && (e.giant || this._sees(c, e.p))) { c.castT = 2; c.act = 'boulder'; c.actT = 0.8; c.actTo = e; }
     }
 
     _thinkSnowman(c, dt) {
@@ -851,7 +894,7 @@ export class IceCastleLife {
             if (c.roam) this._step(c, c.roam.x, c.roam.z, dt, 1, 0.45);
             return;
         }
-        const d = Math.hypot(e.p.x - p.x, e.p.z - p.z);
+        const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
         const t = this._wayTo(c, e.p);
         if (t !== e.p || d > S.RANGE * 0.6) this._step(c, t.x, t.z, dt, 6);
         else if (d < 5) this._step(c, p.x - (e.p.x - p.x), p.z - (e.p.z - p.z), dt, 0.2, 0.6); // (keeps a throw away)
@@ -1053,6 +1096,7 @@ export class IceCastleLife {
     }
 
     _sees(c, tp) {
+        if (tp.giant) return true; // (a body as great as a tower: no wall hides it)
         const col = this.game.collision, p = c.model.position;
         return !col?.lineOfSight || col.lineOfSight(p.x, p.y + c.h * 0.8, p.z, tp.x, tp.y + 1.5, tp.z, 1.0);
     }
@@ -1078,6 +1122,8 @@ export class IceCastleLife {
 
     _playerCentre(id, out) {
         const g = this.game;
+        out.giant = false;
+        for (const q of this._players()) if (q.id === id) { out.giant = q.giant; break; }
         if (id === g.localId) return g.combat?.center ? g.combat.center(out) : out.copy(g.character.group.position);
         const r = g.remotes?.get(id);
         return r?.position ? out.copy(r.position).add(_v2.set(0, 0.6, 0)) : null;
@@ -1157,9 +1203,13 @@ export class IceCastleLife {
         if (!c || g.isDeadLocal || c.dead) return;
         const src = by === 'iceQueen' ? this.queen?.model.position : this._casterPos(by, { model: g.character.group });
         if (src && c.shieldFactor?.(src) >= 1 && c._blocked?.(src, 'Frozen')) return;
-        c.freeze(by, T);
+        // (the Ice Rod is a gift of the gods: it freezes anybody — even the pentagram's monster, even a rider on a dragon; the others' cold does not)
+        const mon = g.monster?.active;
+        c.freeze(by, T, { rod: true });
+        if (!c.frozen) return; // (the gods' dome kept it off)
         g.hud?.flashColor?.('rgba(150, 220, 255, 0.6)');
-        g.hud?.setVoice?.('🧊 Ледяной Жезл заморозил вас — магические доспехи не спасают', true);
+        g.hud?.setVoice?.(mon ? '🧊 Вы заморожены посохом Ледяной Королевы — даже монстр не устоял перед божественным льдом' : '🧊 Ледяной Жезл заморозил вас — магические доспехи не спасают', true);
+        if (g.dragonRide?.riding) g.dragonRide.iced?.(T);
     }
 
     // ================================================================ shots
@@ -1797,7 +1847,7 @@ export class IceCastleLife {
 }
 
 /** A hero's group position (at the hips) → the feet. */
-function _feet(p, out) { return out.set(p.x, p.y - 1.95, p.z); }
+function _feet(p, out, size = 1) { return out.set(p.x, p.y - 1.95 * size, p.z); }
 
 // pushes, gusts, knockdowns (CreatureImpact): a snowman is thrown and falls over; the queen and her
 // monsters are too heavy (and full of magic) — they only sway (IceCastleLife.push does that)

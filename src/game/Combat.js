@@ -510,7 +510,7 @@ export class CombatVisuals {
             // (the ice grows round the body in a quarter of a second)
             const k = Math.min(1, this._iceAge / 0.25);
             this.shell.position.copy(body.center);
-            this.shell.scale.setScalar(0.3 + 0.7 * (1 - (1 - k) * (1 - k)));
+            this.shell.scale.setScalar((0.3 + 0.7 * (1 - (1 - k) * (1 - k))) * (body.size || 1)); // (the monster form: the shell is as great as the body)
         }
     }
 
@@ -1030,9 +1030,15 @@ export class Combat {
         return true;
     }
 
-    freeze(byId, time = PVP.FREEZE_TIME) {
+    /** @param {{rod?:boolean}} opts rod: the Ice Rod's ice (a gift of the gods — takes anybody, even the monster form) */
+    freeze(byId, time = PVP.FREEZE_TIME, opts = null) {
         if (this.godsKeepsOff('Frozen')) return; // (the gods' dome: no ice takes me)
-        if (this.game.monster?.active) return; // (the monster form: «Айс», «Frozen» — the ice cracks off its fur, as off a dragon's scales)
+        const mon = this.game.monster;
+        if (mon?.active) {
+            if (!opts?.rod) return; // (the monster form: «Айс», «Frozen» — the ice cracks off its fur, as off a dragon's scales; only the Rod's ice takes it)
+            time = mon.frozenTime(time);
+            mon.onFrozen?.(time);
+        }
         this.chill = 0;
         this.frozenLeft = Math.max(this.frozenLeft, time);
         this.frozenBy = byId;
@@ -1108,8 +1114,8 @@ export class Combat {
         const mon = this.game.monster?.active ? this.game.monster : null;
         if (mon) { amount = mon.filterDamage(amount, kind, byId); if (!(amount > 0)) return; }
         // Any hit on a frozen player shatters them, whatever their HP
-        // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic)
-        if (this.frozen && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
+        // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic; the monster form's ice does not shatter: it takes the filtered harm)
+        if (this.frozen && !mon && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.game.imperius?.interruptByDamage?.(amount, kind); // («Империус»: ANY harm to the body left standing brings the mind back at once — the author)
@@ -1227,6 +1233,7 @@ export class Combat {
         const side = this.shield?.side || 'right';
         this.visuals.update(dt, this.state(), {
             center: this.center(_v1).clone(),
+            size: ch.size || 1,
             hand: this.shieldAt(side, new THREE.Vector3()), // (at the wand's tip when it is in that hand)
             dir: this.shieldDir(side, new THREE.Vector3()),
         });
@@ -1249,7 +1256,7 @@ export class Combat {
         if (this.manaOn) hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE); else hud.hideMana?.(); // (Creative with endless mana: no bar)
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
-            ? `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`
+            ? (this.game.monster?.active ? `🧊 Вы заморожены посохом Ледяной Королевы! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`)
             : this.chill > 0.05 ? `❄️ Вас замораживают: ${Math.round(this.chill * 100)}% — убегайте из луча!` : '');
         hud.setFrozenOverlay(this.frozen ? 1 : this.chill);
     }

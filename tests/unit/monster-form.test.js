@@ -360,10 +360,10 @@ test('a paw closed at a wall takes a piece of it; opened — the piece flies and
     assert.equal(blocks.get(`${Math.round(at.x)},${Math.round(at.y) + 1},${Math.round(at.z)}`), BLOCK.AIR);
     curl = 0; g.monster.update(0.016);
     assert.equal(g.monster.carry.right, null);
-    assert.ok(g.monster.flying.length >= 9);
+    assert.ok(g.monster.chunks.length === 1 && g.monster.chunks[0].blocks.length >= 9, 'the piece flies whole');
     // the ground: a floor at y 0 (layer 1)
     g.terrain.data.get = (x, L, z) => (L <= 0 ? BLOCK.STONE : blocks.get(`${x},${L},${z}`) || 0);
-    for (let i = 0; i < 300 && g.monster.flying.length; i++) g.monster.update(0.016);
-    assert.equal(g.monster.flying.length, 0);
+    for (let i = 0; i < 600 && (g.monster.chunks.length || g.monster.flying.length); i++) g.monster.update(0.016);
+    assert.equal(g.monster.chunks.length + g.monster.flying.length, 0);
     assert.ok([...blocks.values()].filter((t) => t === BLOCK.BRICK).length >= 9, 'lying again as blocks: ' + [...blocks.entries()].filter(([, t]) => t).map(([k, t]) => k + '=' + t).join(' '));
 });
