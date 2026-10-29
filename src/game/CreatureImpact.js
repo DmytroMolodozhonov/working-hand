@@ -245,7 +245,8 @@ export class CreatureImpact {
         // may find it on its feet — the same chance and exceptions as the hero's: it reels in the «устоял» pose, the shove
         // is halved, nothing flips it over (a hand, a horn, a sword, a ball are no spells: not resisted)
         let held = false;
-        if (res === 'knockdown' && o.spell && creatureHolds(ck, c, o.spell, { cause: o.cause })) {
+        if (o.stand && res !== 'shatter') { held = true; res = 'stagger'; } // (a snowball: a shove that never fells — the «устоял» pose, the push as given)
+        else if (res === 'knockdown' && o.spell && creatureHolds(ck, c, o.spell, { cause: o.cause })) {
             held = true; res = 'stagger';
             o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 };
         }

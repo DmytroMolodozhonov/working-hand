@@ -50,3 +50,10 @@ export function withSpellDescription(info, item) {
     const head = item.kind === 'wand' ? `Особое заклинание — <b>${card.name}</b>:` : `<b>${card.name}</b>:`;
     return { ...info, lines: [...info.lines, `${head} ${card.desc}`] };
 }
+
+/** The hologram card's width in metres: HOLO_SCREEN of the screen width seen from `dist` (author: clear, not the whole screen). */
+export const HOLO_SCREEN = 0.28;
+export function holoWidth(dist, fov = 75, aspect = 16 / 9) {
+    const screenW = 2 * Math.tan((fov * Math.PI) / 360) * aspect * Math.max(0.3, dist);
+    return Math.min(4.5, Math.max(0.45, screenW * HOLO_SCREEN));
+}

@@ -37,7 +37,7 @@ import * as THREE from 'three';
 import { WAND_DIRS, baseSpell, describeItem } from './ItemTypes.js';
 import { wandPowerMul } from './Enchant.js';
 import { pickRevealTarget } from './RevealTarget.js';
-import { holoParts, holoPlain, withSpellDescription } from './HoloText.js';
+import { holoParts, holoWidth, holoPlain, withSpellDescription } from './HoloText.js';
 import { FIRE_SPELLS, DRAGON_WAND_FIRE } from './DragonKinds.js';
 
 const _v = new THREE.Vector3();
@@ -630,10 +630,10 @@ export class WandMagic {
         }
         const tex = new THREE.CanvasTexture(c);
         tex.anisotropy = g.renderer?.capabilities?.getMaxAnisotropy?.() || 1;
-        // (2.5 times bigger than it was, more when seen from afar, never filling the screen close by)
-        const cam = g.camera?.position;
-        const dist = cam ? cam.distanceTo(at) : 2.5;
-        const PW = Math.min(7, Math.max(3.6, dist * 2.4)) * (inHand ? 0.5 : 1), PH = PW * H / W;
+        // (a middle size: ~28% of the screen width at any distance — clear, but not the whole screen)
+        const cam = g.camera;
+        const dist = cam?.position ? cam.position.distanceTo(at) : 2.5;
+        const PW = holoWidth(dist, cam?.fov, cam?.aspect), PH = PW * H / W;
         const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({
             map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide,
             depthWrite: false, depthTest: false, // (a wall, the hand or a tree never cut through the words)

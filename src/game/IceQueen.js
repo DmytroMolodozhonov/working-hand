@@ -43,7 +43,9 @@ export const ICE = {
     ACTIVE: 220, // m from the castle: a player this near wakes it (its creatures come out)
     SLEEP: 300, // …and when every player is this far, they go to rest (their state kept)
     QUEEN: { HP: 350, S: 1.5, H: 7.0, R: 1.0, SPEED: 2.6, TURN: 2.4, SIGHT: 55, LEASH: 75, CAST: 3.0, REACH: 34 },
-    SNOW: { HP: 10, H: 3.0, R: 0.85, SPEED: 3.3, TURN: 5, MAX: 14, RESPAWN: 16, THROW: 2.4, RANGE: 26, SIGHT: 34, ROAM: 48, DMG: 1 },
+    SNOW: { HP: 10, H: 3.0, R: 0.85, SPEED: 3.3, TURN: 5, MAX: 14, RESPAWN: 16, THROW: 2.4, RANGE: 26, SIGHT: 34, ROAM: 48,
+        DMG: 1, // (only against ANOTHER evil snowman — the rod's war; the snowball hurts nobody else)
+        PUSH: 4 }, // m/s: the snowball only shoves, ≈ 1 m back (friction 4/s); no damage, no wear — it is there to get in the way
     MONSTER: { HP: 180, S: 2, H: 7.6, R: 1.6, SPEED: 3.4, TURN: 1.8, PUNCH: 14, REACH: 4.6, BOULDER: 10, GUARD: 28, LEASH: 36, RESPAWN: 1200 },
     // the friendly snowman of the spell «Snowman» (nobody's: it only wanders and fears the heat)
     FRIEND: { HP: 10, H: FRIEND_H, R: 0.65, SPEED: 1.2, TURN: 3, MAX: 12, BUILD: 3.6, RANGE: 16, ROAM: 12, FLEE: 13, MELT: 4.5, MELT_DPS: 1.6, FLEE_K: 2.4, AWAKE: 150 },
@@ -1089,9 +1091,9 @@ export class IceCastleLife {
     }
 
     /** (host) A creature of any kind takes damage from the castle's creatures (MagicWave.hitBody knows each kind's rules). */
-    _hurtBody(k, id, dmg, by) {
+    _hurtBody(k, id, dmg, by, shove = null) {
         const g = this.game;
-        if (k === 'I') { const c = this.byId(id); if (c) this.hit(c, dmg, 'snow', null); return; }
+        if (k === 'I') { const c = this.byId(id); if (c && dmg > 0) this.hit(c, dmg, 'snow', null); return; }
         if (k === 'p') { this._hurtPlayer(id, dmg, 'snow'); return; }
         const kinds = { z: 'zombie', v: 'villager', a: 'animal', c: 'sailor', s: 'spider', D: 'dragon', f: 'phoenix', t: 'tree', b: 'book' };
         let obj = null;
@@ -1101,6 +1103,10 @@ export class IceCastleLife {
         else obj = g.duel?._creature?.(k, id);
         if (!obj || !kinds[k]) return;
         const p = this._bodyPos(k, id, new THREE.Vector3()) || new THREE.Vector3();
+        if (shove) { // (a snowball: no damage, no anger — a shove ≈ 1 m, the creature reels but keeps its feet)
+            g.creatureImpact?.apply(obj, { v: shove.clone(), from: p.clone().sub(shove), by, kind: 'snow', stand: true, noSlide: false });
+            return;
+        }
         hitBody(g, kinds[k], obj, p, dmg, new THREE.Vector3(0, 0, 1), 'snow', by, 'snow');
     }
 
@@ -1115,11 +1121,24 @@ export class IceCastleLife {
     _hurtMe(dmg, kind, from = null, push = null) {
         const g = this.game, c = g.combat;
         if (!c || g.isDeadLocal || c.dead) return;
+        if (kind === 'snow') { this._snowOnMe(from, push); return; }
         if (from && c.shieldFactor?.(from) >= 1 && c._blocked?.(from, kind === 'punch' ? 'punch' : 'ice')) return; // (my «Protection» takes it)
         if (c?.enabled) c.damage(dmg, null, kind === 'punch' ? 'iceMonster' : 'ice'); else g.damageLocalPlayer?.(dmg);
         if (push) g.knockback?.add(push);
         if (kind === 'punch') g.hud?.setVoice?.(`🧊 Удар ледяного монстра: −${dmg} HP`, true);
-        else if (kind === 'snow') g.hud?.flashColor?.('rgba(230, 245, 255, 0.35)');
+    }
+
+    /**
+     * (my computer) An evil snowman's snowball reached me (the author: it takes no HP, wears no armour / robe / shield /
+     * magic durability, costs no mana; it only shoves me ≈ 1 m back — to get in the way). A shield in front stops the
+     * shove for free; BodyImpact: the «устоял» pose (`stand`), a house's / the gods' ward still hold.
+     */
+    _snowOnMe(from, push) {
+        const g = this.game, c = g.combat;
+        if (!push || push.lengthSq() < 1e-6) return;
+        if (from && c.shieldFactor?.(from) >= 1) return;
+        g.hud?.flashColor?.('rgba(230, 245, 255, 0.35)');
+        g.impact?.apply({ v: push.clone(), from: from ? from.clone() : null, by: null, kind: 'snow', stand: true, noShield: true });
     }
 
     /** (host / the caster's computer) Freeze a player in ice (the rod's ice: through any armour). */
@@ -1161,7 +1180,7 @@ export class IceCastleLife {
         mesh.position.copy(vec(m.o));
         mesh.visible = !(m.d > 0);
         this.game.scene.add(mesh);
-        this.shots.push({ kind, mesh, v: vec(m.v), by: m.by, delay: +m.d || 0, life: 5, to: m.to, dmg: kind === 'boulder' ? ICE.MONSTER.BOULDER : kind === 'shard' ? 3 : ICE.SNOW.DMG, r: kind === 'boulder' ? 1.0 : 0.35 });
+        this.shots.push({ kind, mesh, v: vec(m.v), by: m.by, delay: +m.d || 0, life: 5, to: m.to, dmg: kind === 'boulder' ? ICE.MONSTER.BOULDER : kind === 'shard' ? 3 : 0, r: kind === 'boulder' ? 1.0 : 0.35 });
     }
 
     _updateShots(dt) {
@@ -1182,15 +1201,24 @@ export class IceCastleLife {
                 end = true;
                 const from = _v2.copy(p).addScaledVector(s.v, -0.05);
                 if (g.combat?.shieldFactor?.(from) >= 1 && g.combat._blocked?.(from, 'snow')) { this._burst(p, 8); }
-                else this._hurtMe(s.dmg, s.kind === 'snow' ? 'snow' : 'ice', from, s.kind === 'boulder' ? _v3.copy(s.v).setY(0).normalize().multiplyScalar(9).setY(5) : null);
+                else if (s.kind === 'snow') this._hurtMe(0, 'snow', from, _v3.copy(s.v).setY(0).normalize().multiplyScalar(ICE.SNOW.PUSH));
+                else this._hurtMe(s.dmg, 'ice', from, s.kind === 'boulder' ? _v3.copy(s.v).setY(0).normalize().multiplyScalar(9).setY(5) : null);
             }
             // (host) the creature it was thrown at, when it is not a player
             if (!end && this.auth && s.to && s.to[0] !== 'p') {
                 const tp = this._bodyPos(s.to[0], s.to[1], _v3);
-                if (tp && tp.distanceTo(p) < s.r + (s.to[0] === 'I' ? 1.6 : 1.0)) { end = true; this._hurtBody(s.to[0], s.to[1], s.dmg, s.by); }
+                if (tp && tp.distanceTo(p) < s.r + (s.to[0] === 'I' ? 1.6 : 1.0)) { end = true; this._shotHits(s); }
             }
-            if (end) { this._burst(p, s.kind === 'boulder' ? 26 : 8); this._dropShot(i); }
+            if (end) { if (s.kind === 'snow' && s.life > 0) g.sound?.playSnowStep?.(1.6); this._burst(p, s.kind === 'boulder' ? 26 : 8); this._dropShot(i); }
         }
+    }
+
+    /** (host) A shot reached the creature it was thrown at. Snowball: against another evil snowman it breaks it (the rod's war); on anything else it only shoves. */
+    _shotHits(s) {
+        const k = s.to[0];
+        if (s.kind !== 'snow') { this._hurtBody(k, s.to[1], s.dmg, s.by); return; }
+        if (k === 'I') { this._hurtBody(k, s.to[1], ICE.SNOW.DMG, s.by); return; }
+        this._hurtBody(k, s.to[1], 0, s.by, _v3.copy(s.v).setY(0).normalize().multiplyScalar(ICE.SNOW.PUSH));
     }
 
     _burst(p, n) { for (let i = 0; i < n; i++) this.game.fx?.spark?.(p, i % 2 ? 0xffffff : 0xcfeeff, 0.12 + Math.random() * 0.1, _v2.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.6); }

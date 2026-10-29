@@ -403,8 +403,12 @@ export class Inventory {
     _storeWeapon(w, slot = null) {
         const g = this.game;
         const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined };
+        // (room first: with no free cell the weapon STAYS in the hand — it used to be let out of the hand's records
+        // but kept its holder, and floated about «held» by nobody: it vanished, turned up behind walls, came back)
+        const own = slot != null && !this.slots[slot];
+        if (!own && !this.canStore(item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
         for (const side of ['left', 'right']) if (g.weapons.hands[side].held === w) g.weapons._forget(side, g.character.getActiveHands()[side]);
-        if (slot != null && !this.slots[slot]) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) return false;
+        if (own) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) { this._regrip(w); return false; }
         if (g.sync) g.sync.weaponGone?.(w);
         g.weapons.remove(w);
         return true;
