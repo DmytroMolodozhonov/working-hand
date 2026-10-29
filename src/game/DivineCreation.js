@@ -44,7 +44,7 @@ import { isEnchanted } from '../world/EnchantedStone.js';
 import { faceTowards } from '../world/MagicHouse.js';
 import { HouseMagic, HOUSE_MAGIC } from './HouseMagic.js';
 import { Chest } from '../entities/Chest.js';
-import { creationWords } from './CreationWords.js';
+import { creationWords, stitchWords, dropOpener } from './CreationWords.js';
 import { CREATION, MATERIALS, sanitizeRecipe, forbidden, kindOfDesc, saidKind } from './CreationRules.js';
 import { CREATION_SYSTEM, CREATION_SCHEMA, creationUser, creationRetry, parseAnswer, answerProblem } from './CreationPrompt.js';
 import { creationPlan, recipeExtent, recipeRect } from '../world/CreationBuild.js';
@@ -229,14 +229,19 @@ export class DivineCreation extends HouseMagic {
         if (isFinal && !L.parts.length && /^(стоп|стой|отмена|не надо|хватит)[.!]?$/i.test(words)) { this._unlisten('🌫️ Творение отменено', `сказано «${words}»`); return true; }
         if (!isFinal) {
             // (the phrase still being said: its final words are waited for — a look's words may miss its start)
+            // (the recognizer's overlapping looks at a long phrase — its end may never come as a whole: they are sewn)
             L.pending = true;
             L.partAt = this._clock;
-            if (!o.cut && words.length >= (L.tail || '').length) L.tail = words;
+            L.stream = stitchWords(L.stream || '', words);
             L.until = Math.max(L.until, this._clock + 8);
-            if (this._clock - (L.partLog ?? -9) > 1.5) { L.partLog = this._clock; this._log(`по ходу фразы${o.cut ? ' (кусок без начала — не берётся)' : ''}: «${words.slice(0, 120)}»`); }
+            this._log(`по ходу фразы: «${words.slice(0, 120)}» → собрано: «${dropOpener(L.stream).slice(0, 240)}»`);
             return true;
         }
-        L.parts.push(words);
+        // (the phrase's whole words: they replace what was sewn from its looks — or go on after them)
+        const sewn = L.stream ? dropOpener(L.stream) : '';
+        const whole = sewn && words.split(' ').length < sewn.split(' ').length * 0.7 ? dropOpener(stitchWords(L.stream, words)) : dropOpener(words) || words;
+        L.parts.push(whole);
+        L.stream = '';
         L.tail = '';
         L.pending = false;
         L.quiet = this._clock + CREATION.DESC_QUIET;
@@ -268,7 +273,7 @@ export class DivineCreation extends HouseMagic {
     _heard(why = 'вы замолчали') {
         const L = this.listening;
         if (!L) return;
-        const desc = [...L.parts, L.tail].filter(Boolean).join(' ').trim();
+        const desc = [...L.parts, L.stream ? dropOpener(L.stream) : ''].filter(Boolean).join(' ').trim();
         const at = L.at;
         this._unlisten(null);
         if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) { this.game.hud?.setVoice?.('🌫️ Описание не услышано — творение не началось', true); this._log(`описания нет (${why})`); return; }
@@ -285,8 +290,8 @@ export class DivineCreation extends HouseMagic {
         if (L) {
             // (quiet after a final phrase; a phrase still being said is waited for — its final words come up to a few seconds later)
             if (L.parts.length && !L.pending && now > L.quiet) this._heard();
-            else if (L.pending && now - L.partAt > CREATION.FINAL_WAIT) this._heard('конец фразы не пришёл — взято, что было');
-            else if (now > L.until) { if (L.parts.length || L.tail) this._heard('время слушания вышло'); else this._unlisten('🌫️ Описание не услышано — творение не началось', 'не было слов описания'); }
+            else if (L.pending && now - L.partAt > CREATION.FINAL_WAIT) this._heard('вы замолчали — описание собрано из кусков фразы');
+            else if (now > L.until) { if (L.parts.length || L.stream) this._heard('время слушания вышло'); else this._unlisten('🌫️ Описание не услышано — творение не началось', 'не было слов описания'); }
         }
         const M = this.listening;
         if (M) {
@@ -302,7 +307,7 @@ export class DivineCreation extends HouseMagic {
                         if (moved) g.sync?.net?.send({ t: this.netType, a: 'lis', on: 1, x: r2(at.x), y: r2(at.y), z: r2(at.z) });
                     }
                     const side = g.wandSide?.() || g.magicHand || 'right';
-                    const h = g.character.getHandWorldPosition(side, new THREE.Vector3());
+                    const h = this._tip(side);
                     M.wand = { x: h.x, y: h.y, z: h.z };
                 } catch (e) { /* (no hands yet) */ }
             }
@@ -342,13 +347,19 @@ export class DivineCreation extends HouseMagic {
         if (!at) return say('🪄 Направьте палочку на землю, где боги должны создать');
         const me = g.character.group.position;
         const side = g.wandSide?.() || g.magicHand || 'right';
-        const hand = g.character.getHandWorldPosition?.(side, new THREE.Vector3()) || me.clone();
+        const hand = this._tip(side) || me.clone();
         const ask = { desc, at: [r2(at.x), r2(at.y), r2(at.z)], c: [r2(me.x), r2(me.y), r2(me.z)], wand: [r2(hand.x), r2(hand.y), r2(hand.z)], kind };
         if (!this.auth) { g.sync?.net?.send({ t: this.netType, a: 'ask', ...ask }); say('🙏 …'); }
         else { const res = this._hostAsk(ask, g.localId); if (res !== true) return say(res); }
         this._lastCast = Date.now();
         g._manaLater = true; // (the cells grow when it is made — mana.success in _made)
         return 'DivineCreation';
+    }
+
+    /** Where the magic leaves: the wand's tip when the wand is held (Game.castOrigin), else the hand. */
+    _tip(side) {
+        const g = this.game, v = new THREE.Vector3();
+        try { return g.castOrigin ? g.castOrigin(side, v) : g.character.getHandWorldPosition(side, v); } catch (e) { return g.character?.getHandWorldPosition?.(side, v) || null; }
     }
 
     /** Is there air here (a creature, a plant: Earth, or a planet one can breathe on)? */
@@ -364,7 +375,7 @@ export class DivineCreation extends HouseMagic {
         const g = this.game;
         if (this.testAim) return new THREE.Vector3(this.testAim.x, this.testAim.y ?? g.collision.groundY(this.testAim.x, this.testAim.z), this.testAim.z);
         const side = g.wandSide?.() || g.magicHand || 'right';
-        const hand = g.character.getHandWorldPosition(side, new THREE.Vector3());
+        const hand = this._tip(side);
         const dir = g.character.getHandDirection(side, new THREE.Vector3());
         for (let k = 1; k < CREATION.REACH; k += 0.5) {
             const p = _v.copy(hand).addScaledVector(dir, k);
@@ -833,6 +844,8 @@ export class DivineCreation extends HouseMagic {
                 // (the light keeps growing while the place is sampled and planned)
                 if (m.phase !== 'seed') m.u = Math.min(1, (m.u || 0.9) + dt * 0.05);
                 else if (!m.u || m.u < Math.min(0.6, m.t / 25)) m.u = Math.max(m.u || 0, Math.min(0.6, m.t / 25) * 0.6);
+                // (my own seed: its stream of light from the wand's tip as the wand moves)
+                if (m.by === g.localId && (m.tipT = (m.tipT || 0) - dt) <= 0) { m.tipT = 0.15; const side = g.wandSide?.() || g.magicHand || 'right'; const h = this._tip(side); if (h) m.wand = { x: h.x, y: h.y, z: h.z }; }
                 this.fx2.seed(m, dt);
                 g.sound?.creationHum?.(0.85 * Math.max(0, 1 - d / 160)); // (the epic tune louder: the words heard)
             } else {

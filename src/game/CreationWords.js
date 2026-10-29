@@ -60,3 +60,38 @@ function cutOpener(raw, n) {
     for (; k < parts.length && seen < n; k++) if (norm(parts[k])) seen++;
     return parts.slice(k).join(' ').replace(/^[\s,.:;—-]+/, '').trim();
 }
+
+/**
+ * The recognizer's looks at a long phrase still being said overlap and miss its start («тво с большими глазами двумя»,
+ * then «глазами двумя крыльями и»…): their words are sewn into one text — the next look goes on after the words they
+ * share (a word may be cut at a look's start, or written a little otherwise: «большим» / «большими»).
+ *   stitchWords(«…существо за большими», «тво с большими глазами двумя») → «…существо за большими глазами двумя»
+ */
+export function stitchWords(stream, piece) {
+    const A = norm(stream).split(' ').filter(Boolean), B = norm(piece).split(' ').filter(Boolean);
+    if (!B.length) return A.join(' ');
+    if (!A.length) return B.join(' ');
+    const like = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b.slice(0, Math.max(4, b.length - 2))) || b.startsWith(a.slice(0, Math.max(4, a.length - 2)))));
+    const W = Math.min(B.length, 7); // (the shared words are at the look's start)
+    // the last word said (a long one; a little word «и», «с» — the one before it too) found among the look's first words
+    for (let back = 0; back < Math.min(3, A.length); back++) {
+        const last = A[A.length - 1 - back];
+        if (last.length < 3 && back < Math.min(2, A.length - 1)) continue;
+        for (let i = W - 1; i >= 0; i--) {
+            if (!like(last, B[i])) continue;
+            // (the word before it agrees too, or the look begins right there: the place is sure)
+            const prev = A[A.length - 2 - back];
+            if (i > 0 && prev && !like(prev, B[i - 1]) && !(i === 1 && prev.endsWith(B[0])) && last.length < 5) continue;
+            return [...A, ...B.slice(i + 1 + back)].join(' ');
+        }
+    }
+    // nothing shared: the look goes after (its first word dropped when it is only the end of a cut word)
+    const first = B[0];
+    const cutWord = first.length <= 4 && A.some((a) => a.length > first.length && a.endsWith(first));
+    return [...A, ...B.slice(cutWord ? 1 : 0)].join(' ');
+}
+
+/** The opener's words left at the start of sewn looks («создастся существо …» → «существо …»). */
+export function dropOpener(text) {
+    return norm(text).replace(/^((?:да|дай|до|пусть|пуст|пускай|будет|создаст\S*|создат\S*|сотвор\S*|появ\S*)\s+)+/, '').trim();
+}

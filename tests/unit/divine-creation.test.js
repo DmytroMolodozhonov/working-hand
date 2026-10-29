@@ -172,6 +172,14 @@ test('the gods fail: no network and nonsense → the words are read; too long �
     await run(d.dc, 2);
     assert.equal(d.g.combat.fatigue, 500);
     assert.match(d.dc.magic?.desc || '', /колодец из белого камня/, 'one description of both phrases');
+    // the author's journal: «Да пусть создастся» heard as a phrase of its own, the description only in the recognizer's
+    // overlapping looks (each missing its start), its end never coming whole — the looks sewn into the description
+    const f = world();
+    f.dc.testAsk = async () => null;
+    f.dc.cast(true, 'да пусть создастся');
+    for (const p of ['создастся существо за большими', 'тво с большими глазами двумя', 'глазами двумя крыльями и', 'крыльями и невероятно большим', 'невероятно большим носом и четырьмя', 'и четырьмя ногами']) { f.dc.hearDesc(p, false, { cut: true }); await run(f.dc, 0.5); }
+    await run(f.dc, CREATION.FINAL_WAIT + 1);
+    assert.equal(f.dc.magic?.desc, 'существо за большими глазами двумя крыльями и невероятно большим носом и четырьмя ногами');
     // a lone opener and nothing said: the gods stop listening, nothing paid
     const q = world();
     q.dc.cast(true, 'да пусть создастся');
