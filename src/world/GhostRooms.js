@@ -62,17 +62,17 @@ export class GhostRoom {
         return true;
     }
 
-    /** The cells whose 3 × 3 is free, flooded from the first key: do all keys meet? */
-    joined() {
-        if (this.keys.length < 2) return true;
+    /** The cells whose 3 × 3 is free (no piece), flooded from the first key: the seen cells (null when the first key is not wide). */
+    flood() {
         const W = this.W, D = this.D, wide = new Uint8Array(W * D), seen = new Uint8Array(W * D);
         for (let v = this.v0 + 1; v < this.v1; v++) for (let u = this.u0 + 1; u < this.u1; u++) {
             let ok = true;
             for (let dv = -1; dv <= 1 && ok; dv++) for (let du = -1; du <= 1; du++) if (this.occ[this.at(u + du, v + dv)] === 1) { ok = false; break; }
             if (ok) wide[this.at(u, v)] = 1;
         }
+        if (!this.keys.length) { for (let i = 0; i < W * D; i++) seen[i] = wide[i]; return seen; }
         const [su, sv] = this.keys[0];
-        if (!this.in(su, sv) || !wide[this.at(su, sv)]) return false;
+        if (!this.in(su, sv) || !wide[this.at(su, sv)]) return null;
         const st = [this.at(su, sv)]; seen[st[0]] = 1;
         while (st.length) {
             const i = st.pop(), u = i % W, v = (i - u) / W;
@@ -83,7 +83,14 @@ export class GhostRoom {
                 if (wide[j] && !seen[j]) { seen[j] = 1; st.push(j); }
             }
         }
-        return this.keys.every(([u, v]) => this.in(u, v) && seen[this.at(u, v)]);
+        return seen;
+    }
+
+    /** Do all keys (the doorways) meet by ways 3 wide? */
+    joined() {
+        if (this.keys.length < 2) return true;
+        const seen = this.flood();
+        return !!seen && this.keys.every(([u, v]) => this.in(u, v) && seen[this.at(u, v)]);
     }
 
     /** Take a footprint for a piece: only when it is free and the room stays passable; then lay it (fn). */
@@ -126,20 +133,22 @@ export class GhostRoom {
         return out;
     }
 
-    /** Ghost spots: the middle (or the nearest wide cell), corners behind which a ghost lurks. */
+    /** Ghost spots: the middle (or the nearest cell reached by the doors' wide ways), corners behind which a ghost lurks. */
     spots(n = 3) {
         const K = this.K, got = [];
+        const seen = this.flood();
         const ok = (u, v) => {
-            if (!this.in(u, v) || this.occ[this.at(u, v)] === 1) return false;
-            for (let dv = -1; dv <= 1; dv++) for (let du = -1; du <= 1; du++) if (this.in(u + du, v + dv) && this.occ[this.at(u + du, v + dv)] === 1) return false;
+            if (!this.in(u, v) || !seen || !seen[this.at(u, v)]) return false;
             return !got.some(([a, b]) => Math.abs(a - u) + Math.abs(b - v) < 4);
         };
         const tryAt = (u, v) => { if (ok(u, v)) { got.push([u, v]); K.spot(u, v, this.l, this.id); return true; } return false; };
-        // the middle, or near it
         let done = false;
-        for (let r = 0; r < 6 && !done; r++) for (let dv = -r; dv <= r && !done; dv++) for (let du = -r; du <= r && !done; du++) if (Math.max(Math.abs(du), Math.abs(dv)) === r) done = tryAt(this.cu + du, this.cv + dv);
+        for (let r = 0; r < 8 && !done; r++) for (let dv = -r; dv <= r && !done; dv++) for (let du = -r; du <= r && !done; du++) if (Math.max(Math.abs(du), Math.abs(dv)) === r) done = tryAt(this.cu + du, this.cv + dv);
         const cs = [[this.u0 + 1, this.v0 + 1], [this.u1 - 1, this.v1 - 1], [this.u1 - 1, this.v0 + 1], [this.u0 + 1, this.v1 - 1]];
-        for (const [u, v] of cs) { if (got.length >= n) break; if (!tryAt(u, v)) tryAt(u + Math.sign(this.cu - u), v + Math.sign(this.cv - v)); }
+        for (const [u, v] of cs) {
+            if (got.length >= n) break;
+            for (let r = 0; r < 3; r++) if (tryAt(u + Math.sign(this.cu - u) * r, v + Math.sign(this.cv - v) * r)) break;
+        }
         return got;
     }
 
