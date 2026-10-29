@@ -814,8 +814,18 @@ const LOOPS = {
     loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
     /** «To the Sun» on the black clouds held: a bright golden chord straining against a low rumble of the storm, a bell ringing through it now and then. */
-    loopSunFight(sr) { const o = buf(sr, 3.3), r = rng(211); pad(o, sr, [220, 277.2, 329.6, 440], 0, 3.3, 0.24, { att: 0.01, rel: 0, harm: 2, vib: 0.006 }); noise(o, sr, 0, 3.2, 0.12, (u) => 0.05 + 0.04 * Math.sin(u * 6.28 * 2), (u) => 0.6 + 0.4 * Math.sin(u * 6.28 * 3), r); for (const [t, n] of [[0.2, 'A6'], [1.1, 'E7'], [2.2, 'C#7']]) bell(o, sr, hz(n), t, 0.05, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.36 }); },
-    /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
+    /** «To the Sun» held on the black clouds: the hum of a column of light (a low fifth with a slow tremolo, a bright shimmer above), the crackle of the air along it, a deep pulse like a heart under strain, a few bells climbing — and a rough moan of the clouds beneath. */
+    loopSunFight(sr) {
+        const o = buf(sr, 3.3), r = rng(211);
+        pad(o, sr, [110, 165, 220, 277.2, 440], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 3, vib: 0.006 });
+        pad(o, sr, [880, 1108.7, 1318.5], 0, 3.3, 0.05, { att: 0.01, rel: 0, harm: 1, vib: 0.012 }); // (the shimmer of the light)
+        noise(o, sr, 0, 3.2, 0.12, (u) => 0.05 + 0.04 * Math.sin(u * 6.28 * 2), (u) => 0.6 + 0.4 * Math.sin(u * 6.28 * 3), r);
+        for (let k = 0; k < 4; k++) drum(o, sr, k * 0.825, 0.3, 52, 0.3, r); // (the pulse)
+        for (let k = 0; k < 40; k++) noise(o, sr, r() * 3.1, 0.012 + r() * 0.02, 0.1 + r() * 0.15, () => 0.5 + 0.5 * r(), () => 1, r); // (the crackle of the air)
+        glide(o, sr, 0, 3.3, 0.09, (u) => 82 - 10 * Math.sin(u * 6.28), (u) => 0.7 + 0.3 * Math.sin(u * 6.28 * 3), 4); // (the moan under it, a whole cycle: no seam)
+        for (const [t, n] of [[0.2, 'A6'], [1.1, 'E7'], [2.2, 'C#7']]) bell(o, sr, hz(n), t, 0.05, 1, 0.1);
+        return finish(loopSeam(o, sr), sr, { peak: 0.38 });
+    },    /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** «Электром» held: the hum of a live wire and its crackle. */
     loopElectrum(sr) { const o = buf(sr, 2.3), r = rng(197); glide(o, sr, 0, 2.3, 0.3, () => 100, () => 1, 9); glide(o, sr, 0, 2.3, 0.08, () => 150, () => 1, 5); for (let k = 0; k < 30; k++) noise(o, sr, Math.abs(r()) * 2.2, 0.02, 0.6, () => 0.95, (u) => 1 - u, r); return finish(loopSeam(o, sr), sr, { peak: 0.45 }); },

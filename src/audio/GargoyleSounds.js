@@ -9,10 +9,13 @@
  *   shatter  a crack and the debris                                          (one is killed)
  *   ignite   the ritual: the hellfire kindles — a dark drone, a rising noise and a minor-chord theme, a boom at the end (5.4 s)
  *   burst    the release: a roar of fire, thirty screeches, a deep boom      (2.8 s)
+ *   groan    «To the Sun» on the black clouds: the cloud's deep moan, a voice sliding down under a wind (2.6 s)
+ *   thunder  a crack and a long rolling rumble                               (2.8 s)
+ *   sunBang  the clouds are broken: a blinding crack, a boom, then a rising choir and bells of victory (5.2 s)
  */
 
-export const GARGOYLE_SOUNDS = ['roar', 'screech', 'wings', 'bite', 'crumble', 'shatter', 'ignite', 'burst'];
-const DUR = { roar: 1.4, screech: 1.0, wings: 0.9, bite: 0.4, crumble: 2.6, shatter: 1.3, ignite: 5.6, burst: 2.9 };
+export const GARGOYLE_SOUNDS = ['roar', 'screech', 'wings', 'bite', 'crumble', 'shatter', 'ignite', 'burst', 'groan', 'thunder', 'sunBang'];
+const DUR = { roar: 1.4, screech: 1.0, wings: 0.9, bite: 0.4, crumble: 2.6, shatter: 1.3, ignite: 5.6, burst: 2.9, groan: 2.6, thunder: 2.8, sunBang: 5.2 };
 
 const TAU = Math.PI * 2;
 
@@ -116,6 +119,29 @@ export function synthGargoyle(ctx, kind) {
             for (let i = 0; i < 9; i++) voice(d, sr, i * 0.22 + Math.random() * 0.1, 0.8, 620 + Math.random() * 500, 1300 + Math.random() * 600, 0.22, { rasp: 0.5, vib: 0.05, form: [1400 + Math.random() * 400, 2500] });
             voice(d, sr, 0.2, 1.8, 95, 60, 0.5, { rasp: 0.4, form: [500, 800] });
             break;
+        case 'groan': { // the clouds cry: two low voices sliding down against each other, a howl of wind under them
+            voice(d, sr, 0, 2.4, 118, 64, 0.55, { rasp: 0.5, vib: 0.05, form: [380, 640] });
+            voice(d, sr, 0.15, 2.3, 93, 51, 0.45, { rasp: 0.45, vib: 0.07, form: [300, 520] });
+            let lp = 0, lp2 = 0;
+            for (let i = 0; i < d.length; i++) { const t = i / sr; lp += ((Math.random() * 2 - 1) - lp) * 0.03; lp2 += (lp - lp2) * 0.2; d[i] += lp2 * 3.2 * Math.sin(Math.PI * Math.min(1, t / 2.6)) * (0.6 + 0.4 * Math.sin(t * 7)); }
+            break;
+        }
+        case 'thunder': {
+            noiseBurst(d, sr, 0, 0.14, 1.6, 0.7, 24); // (the crack)
+            tone(d, sr, 0.02, 0.5, 70, 0.8, { attack: 0.004, decay: 7, sub: 0.5 });
+            for (let k = 0; k < 7; k++) { const at = 0.12 + k * 0.28 + Math.random() * 0.12; noiseBurst(d, sr, at, 0.7, 0.75 * Math.exp(-at * 0.9), 0.05 + 0.03 * Math.random(), 2.6); } // (the rolling)
+            break;
+        }
+        case 'sunBang': {
+            noiseBurst(d, sr, 0, 0.22, 1.7, 0.8, 18); // (the blinding crack)
+            tone(d, sr, 0, 1.6, 44, 1.0, { attack: 0.004, decay: 2.4, sub: 0.7 });
+            noiseBurst(d, sr, 0.02, 1.8, 0.8, 0.05, 1.6);
+            // the sun comes out: a choir of D major rising from the boom, bells over it (the victory)
+            const chord = [[0.5, [146.8, 220, 293.7, 370]], [1.5, [196, 246.9, 392, 493.9]], [2.6, [146.8, 220, 293.7, 440, 587.3]]];
+            for (const [at, fs] of chord) for (const f of fs) tone(d, sr, at, 2.4, f, 0.12, { attack: 0.35, decay: 0.9, sub: 0.3 });
+            for (const [at, f] of [[0.7, 587.3], [1.1, 740], [1.5, 880], [1.9, 987.8], [2.4, 1175], [3.0, 1480]]) tone(d, sr, at, 1.8, f, 0.1, { attack: 0.004, decay: 2.3 });
+            break;
+        }
         default: break;
     }
     // (never above the full scale)

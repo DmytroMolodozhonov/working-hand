@@ -1934,7 +1934,7 @@ export class SoundManager {
         if (!this.enabled || !this.context || !position) return;
         const key = 'garg_' + kind;
         if (!this.sounds[key]) { if (!GARGOYLE_SOUNDS.includes(kind)) return; this.sounds[key] = synthGargoyle(this.context, kind); }
-        const far = kind === 'ignite' || kind === 'burst' ? 60 : kind === 'screech' || kind === 'roar' ? 22 : kind === 'crumble' ? 16 : 10;
+        const far = kind === 'sunBang' ? 180 : kind === 'thunder' || kind === 'groan' ? 130 : kind === 'ignite' || kind === 'burst' ? 60 : kind === 'screech' || kind === 'roar' ? 22 : kind === 'crumble' ? 16 : 10;
         this._playAt(this.sounds[key], position, volume, far, 0.94 + Math.random() * 0.12);
     }
 

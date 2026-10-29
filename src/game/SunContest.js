@@ -101,10 +101,7 @@ export class SunContest {
             this._send = SEND_T;
             this._tellFx(r, hand.origin, hand.dir, stress, true);
         } else G.sunFx(r, hand.origin, hand.dir, stress, true);
-        g.sun?.fight(hit.dist, stress);
-        // the clouds try to hit back: flashes inside them, harder and harder (light only — nobody is struck)
-        this._flashT -= dt;
-        if (this._flashT <= 0) { this._flashT = 0.7 + Math.random() * 1.6 - stress * 0.6; G.fx.bolt(0.35 + 0.5 * stress); }
+        // (the beam's look and the clouds' answer — rings of shock, their own bolts, the moan — are drawn by sunFx on every computer: Gargoyles.sunFx, RitualFx)
         if (st.won) {
             G.sunFx(r, hand.origin, hand.dir, 1, false);
             this.stop('won');

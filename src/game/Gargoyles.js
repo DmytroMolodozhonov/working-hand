@@ -265,6 +265,29 @@ export class Gargoyles {
         if (!r) return;
         const f = r.sunFx || (r.sunFx = { o: new THREE.Vector3(), d: new THREE.Vector3(0, 1, 0), s: 0, on: false, at: 0 });
         f.o.copy(o); f.d.copy(d); f.s = stress; f.on = on; f.at = performance.now();
+        // the beam itself (its look is the same on every computer): as long as it is from the hand to the deck
+        if (on && d.y > 0.05) this.game.sun?.fight((r.c.y + GARGOYLE.SKY_H - o.y) / d.y, stress, o, d);
+    }
+
+    /** (host) While the beam presses the clouds the gargoyles in the air are frightened and dart about — the more, the closer the break (a carrier is left alone: no one is dropped). */
+    _sunScare(dt) {
+        this._sunScareT = (this._sunScareT || 0) - dt;
+        if (this._sunScareT > 0) return;
+        this._sunScareT = 1.4;
+        const now = performance.now();
+        for (const r of this.rituals) {
+            const f = r.sunFx;
+            if (r.broken || !f || !f.on || now - f.at > 700 || !(f.d.y > 0.05)) continue;
+            const t = (r.c.y + GARGOYLE.SKY_H - f.o.y) / f.d.y;
+            const hole = _v3.set(f.o.x + f.d.x * t, r.c.y + GARGOYLE.SKY_H, f.o.z + f.d.z * t);
+            let n = 0;
+            for (const o of this.list) {
+                if (o.dead || o.mode === 'crumble' || o.burn || o.carry || n >= 4) continue;
+                if (o.rit !== r.id && hdist(o.home, r.c) > 3) continue;
+                if (Math.random() > 0.35 + 0.5 * f.s) continue;
+                this.scare(o, hole, 0.9 + 1.8 * f.s); n++;
+            }
+        }
     }
 
     /** The caster's side: the sun broke the clouds — the host does it (a guest asks). */
@@ -283,8 +306,11 @@ export class Gargoyles {
         if (!r || r.broken) return false;
         const g = this.game;
         r.broken = { t: r.t, by }; r.clear = 0;
+        r.burstAt = performance.now();
         this.fx.bolt(1);
-        const top = _v3.set(r.c.x, r.c.y + GARGOYLE.SKY_H, r.c.z);
+        const hole = r._hole ? { x: r._hole[0], z: r._hole[1] } : { x: r.c.x, z: r.c.z };
+        g.sun?.burst?.(hole, r.c.y + GARGOYLE.SKY_H, r.c.y); // (the blinding flash, the ring of light over the sky, the shafts of the sun down to the earth)
+        const top = _v3.set(hole.x, r.c.y + GARGOYLE.SKY_H, hole.z);
         g.fx?.lightFlash?.(top, 0xfff0b0, 9, 1.6, 160);
         g.sound?.playMagic?.();
         g.hud?.setVoice?.('☀️ <span style="color:#ffd36b">Солнце прорвало чёрные тучи!</span> Горгульи горят', true);
@@ -1144,6 +1170,7 @@ export class Gargoyles {
         this.fx.sky(this.rituals, dt, cam);
         this.fx.scorchStep(cam);
         if (this.auth) {
+            if (this.rituals.length) this._sunScare(dt);
             if (this.list.length) {
                 this._scan();
                 for (const o of this.victims) o.claims = 0;
