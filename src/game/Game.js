@@ -1342,6 +1342,7 @@ export class Game {
             chest.mesh.updateMatrixWorld(true);
             const pos = chest.getRewardPosition(new THREE.Vector3());
             pos.y += 2.2;
+            if (this.inventory?.hasWeaponId(id) || this.weapons.byId.has(id)) return; // (its weapon is already taken — in a cell or lying about)
             const w = this.weapons.spawnHovering(chest.itemType, pos, id);
             if (this.sync) this.sync.chestOpened(chest, w);
         }

@@ -269,6 +269,7 @@ export class ItemSystem {
             const p = pos.clone().addScaledVector(across, (i - (items.length - 1) / 2) * gap).addScaledVector(front, 0.3);
             p.y += 1.1;
             if (it.kind === 'weapon') {
+                if (this.game.inventory?.hasWeaponId(it.uid)) return; // (already in a cell on someone's back: never a second one from the chest)
                 const w = this.game.weapons.spawnHovering(it.type, p.clone().setY(p.y + 0.2), it.uid, { byHandle: true }); // (its handle at the hand)
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();

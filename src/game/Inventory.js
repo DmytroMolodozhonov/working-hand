@@ -116,7 +116,7 @@ export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonE
 
 /** The hand is over the shoulder, behind the head, and keeps still there. */
 export function behindBack(local, speed) {
-    return local.y > 1.55 && local.z > -0.15 && Math.abs(local.x) < 1.05 && speed < 2.2;
+    return local.y > 1.4 && local.z > -0.3 && Math.abs(local.x) < 1.2 && speed < 2.8; // (a long axe in the hand shakes the wrist: a bit of slack)
 }
 const _inv = new THREE.Matrix4();
 
@@ -360,7 +360,7 @@ export class Inventory {
             if (g.weapons.hands[D].held) return; // the hand is busy
             const ch = g.character;
             const p = ch.getGripObject(D).getWorldPosition(new THREE.Vector3());
-            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
+            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), this._freeWeaponId(s.id)), s.magic ? s.bonus : 0);
             if (s.ench) w.ench = s.ench;
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
@@ -408,7 +408,7 @@ export class Inventory {
         const own = slot != null && !this.slots[slot];
         if (!own && !this.canStore(item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
         for (const side of ['left', 'right']) if (g.weapons.hands[side].held === w) g.weapons._forget(side, g.character.getActiveHands()[side]);
-        if (own) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) { this._regrip(w); return false; }
+        if (own) { this.slots[slot] = item; this._render(); } else if (!this.store(item)) return false;
         if (g.sync) g.sync.weaponGone?.(w);
         g.weapons.remove(w);
         return true;
@@ -754,7 +754,8 @@ export class Inventory {
             // on the back (and into a slot)
             if (t.kind === 'weapon') {
                 if (this.inHand?.weapon === t.w) this.inHand = null;
-                if (this._storeWeapon(t.w)) this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
+                if (!this._storeWeapon(t.w)) return; // (no free cell: it stays in the hand, the toast says why)
+                this._fx((t.w.type === 'axe' ? '🪓 Топор' : '🗡️ Меч') + ' за спиной', side);
             } else {
                 if (!this.canStore(t.h.item)) { g.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return; } // (it stays in the hand)
                 const it = g.items.releaseHand(side);
@@ -774,6 +775,16 @@ export class Inventory {
         this._render();
     }
 
+    /** The weapon's own id, unless another weapon of the world has it (two with one id: one's removal took the other's record). */
+    _freeWeaponId(id) {
+        return id && !this.game.weapons.byId.has(id) ? id : undefined;
+    }
+
+    /** Is a weapon with this id kept in a cell? (a chest or a save must not put a second one into the world) */
+    hasWeaponId(id) {
+        return !!id && this.slots.some((s) => s && s.kind === 'weapon' && s.id === id);
+    }
+
     /** A slot's thing into a hand (weapon, bow, shield, hammer…). */
     _fromSlot(i, side) {
         const g = this.game;
@@ -782,7 +793,7 @@ export class Inventory {
         if (s.kind === 'weapon') {
             if (g.weapons.hands[side].held) return false;
             const p = g.character.getGripObject(side).getWorldPosition(new THREE.Vector3());
-            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), s.id), s.magic ? s.bonus : 0);
+            const w = g.weapons.markMagic(g.weapons.spawn(s.type, p, new THREE.Quaternion(), this._freeWeaponId(s.id)), s.magic ? s.bonus : 0);
             if (s.ench) w.ench = s.ench;
             if (g.sync) g.sync.weaponAppeared?.(w);
             w.wake();
