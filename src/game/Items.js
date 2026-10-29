@@ -40,7 +40,7 @@ function oneShape(model) {
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { seesInvisible, isGhostItem } from './Invisibles.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -202,6 +202,7 @@ export class ItemSystem {
     // ----------------------------------------------------------- the world
     /** A thing appears lying / hovering (authority; the others are told). */
     spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null, rise = false } = {}) {
+        retireScroll(item); // (an old health / mana scroll: an apple now)
         if (this.loose.has(item.uid)) return this.loose.get(item.uid);
         const model = makeItemModel(item);
         model.position.copy(pos);
@@ -272,7 +273,7 @@ export class ItemSystem {
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
-        const items = (bossItems || (chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
+        const items = (bossItems || (chest?.dungeonFlavor ? rollDungeonLoot(rng, chest.dungeonFlavor, want, chest.dungeonSize) : chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
         freshScrolls(items, rng); // (a scroll the opener already knows never comes again)
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
@@ -327,6 +328,7 @@ export class ItemSystem {
     // ------------------------------------------------------------ the hands
     /** A thing (from a slot / the ground / another player) into a hand. */
     takeIntoHand(item, side = 'right', { closed = false } = {}) {
+        retireScroll(item);
         if (this.held[side]) return false;
         const other = this.held[side === 'right' ? 'left' : 'right'];
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
@@ -1297,6 +1299,7 @@ export class ItemSystem {
     burnHeldScroll() {
         const s = this.heldOf('scroll');
         if (!s) return false;
+        if (retireScroll(s.item)?.kind !== 'scroll') return false; // (an old health / mana scroll: there are none now — it is an apple)
         const item = this.releaseHand(s.side);
         this.applyScroll(item);
         return true;
@@ -1328,24 +1331,7 @@ export class ItemSystem {
             }
             return;
         }
-        if (item.stat === 'hp') {
-            g.bonus.hp += item.amount;
-            g.maxHP += item.amount;
-            g.playerHP += item.amount;
-            // (the free world counts its own health: the scroll heals there too)
-            if (g.combat?.enabled) { g.combat.addMaxHp(item.amount); g.maxHP = g.combat.maxHp; g.playerHP = g.combat.hp; }
-        } else {
-            g.bonus.fatigue += item.amount;
-            g.combat.addMaxFatigue?.(item.amount);
-        }
-        if (!g.combat?.enabled) g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
-        g.hud.setVoice?.(item.stat === 'hp' ? `📜🔥 Свиток сгорел: здоровье +${item.amount}` : `📜🔥 Свиток сгорел: сила +${item.amount}`, true);
-        // the magic of the scroll swirls around the hero
-        const c = g.character.group.position;
-        for (let i = 0; i < 60; i++) {
-            const a = (i / 60) * Math.PI * 6;
-            g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), item.stat === 'hp' ? 0xff6b6b : 0x9fd8ff, 0.12, _v2.set(-Math.sin(a) * 2, 1.5, Math.cos(a) * 2), 1.2);
-        }
+        // (no scroll of health or of mana cells any more — retireScroll: an old one is an apple)
     }
 
     // ------------------------------------------------------- hand to hand

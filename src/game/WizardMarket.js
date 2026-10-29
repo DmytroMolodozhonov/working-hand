@@ -10,7 +10,7 @@
  *  - wands      small and middling wands (power 3–30: ~210–510 coins). The strongest (31–50) are NOT
  *               sold anywhere — only found in chests (the author: «их никто не продаст»);
  *  - armor      magic armour pieces (a helmet, a breastplate, greaves), now and then a plain one;
- *  - scrolls    health and mana scrolls and scrolls of simple spells (no strong spell: those are found);
+ *  - scrolls    scrolls of simple spells (no strong spell: those are found);
  *  - curios     mana crystals, the magic pouch, a magic shield, a spell book, feathers;
  *  - pawn       the pawnshop sells nothing: it BUYS anything, plain or magic, 40 % under the price
  *               (PAWN_RATE of itemValue). The other sellers of the lane only sell.
@@ -80,8 +80,7 @@ export function wizardGood(trade, k, n = 0) {
             return { item: it, price: wandValue(it) }; // (= wandPrice: its wands always have a direction — the same rule the pawnshop pays 60 % of)
         }
         case 'scrolls': {
-            const it = k === 0 ? (r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) })
-                : freshShopScroll(spellScroll(pick(r, SHOP_SIMPLE_SPELLS)), r, SHOP_SIMPLE_SPELLS);
+            const it = freshShopScroll(spellScroll(pick(r, SHOP_SIMPLE_SPELLS)), r, SHOP_SIMPLE_SPELLS);
             return { item: it, price: scrollShopPrice(it) };
         }
         case 'curios': {

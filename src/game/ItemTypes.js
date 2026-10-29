@@ -15,7 +15,7 @@
  *             breaks an ordinary «Protection» it touches.
  *   shield  — wooden / iron / magic; a magic one has its own strength 20–50
  *             that comes back by itself; strong spells break weak shields.
- *   scroll  — burn it: +1–5 max health or +1–10 max strength, for good;
+ *   scroll  — burn it: learn the spell (or the pentagram) written on it, for good (the old scrolls of health / mana cells are gone: retireScroll);
  *             or it teaches a scroll-only spell (Lightning Strike,
  *             Thunderwave, To the Sun, Авада Кедавра — a rare one, Total Destruction —
  *             the rarest).
@@ -267,6 +267,28 @@ const SHIELD_KINDS = [
 const BOW_KINDS = ['Простой лук', 'Охотничий лук', 'Длинный лук'];
 
 let _uid = Math.floor(Math.random() * 1e6);
+/**
+ * The scrolls that raised the health or the mana cells are gone from the game (the author: «не вижу смысла»). One that an old save
+ * (or an old client) still holds is turned into a plain apple, in place (the same uid, so a hand/slot/chest keeps its place). Returns the item.
+ */
+export function retireScroll(it) {
+    if (it && it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue')) {
+        for (const k of Object.keys(it)) if (k !== 'uid') delete it[k];
+        it.kind = 'apple'; it.count = 1;
+    }
+    return it;
+}
+
+/** Turn every retired scroll found anywhere inside a saved structure (a save, an inventory, a chest, a body…) into an apple; how many were turned. */
+export function retireScrollsIn(node, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 14) return 0;
+    let n = 0;
+    if (Array.isArray(node)) { for (const x of node) n += retireScrollsIn(x, depth + 1); return n; }
+    if (node.kind === 'scroll' && (node.stat === 'hp' || node.stat === 'fatigue')) { retireScroll(node); return 1; }
+    for (const k of Object.keys(node)) { const v = node[k]; if (v && typeof v === 'object') n += retireScrollsIn(v, depth + 1); }
+    return n;
+}
+
 export const newUid = () => 'i' + (++_uid).toString(36) + Math.floor(Math.random() * 1296).toString(36);
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
@@ -379,7 +401,7 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
 /**
  * What a castle's store chest holds by what it is for (generation 8, CastleFurniture.js; CLAUDE.md: «не крутые предметы»):
  * 'food' — bread, cheese, meat, pies, apples; 'clothes' — wool, a plain robe now and then; 'arms' — arrows, a plain sword, axe,
- * bow or shield; 'scrolls' — scrolls of health and strength, now and then a plain spell. Plain things, and only now and then ONE
+ * bow or shield; 'scrolls' — plain spell scrolls. Plain things, and only now and then ONE
  * precious one — less often than the general rule (KEY_CHANCE) — the coins come apart, in their pouch (CastleTreasure.js).
  */
 export function rollStoreLoot(r = Math.random, flavor = 'food', count = 0) {
@@ -403,8 +425,6 @@ function storeThing(r, flavor) {
             if (x < 0.8) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: false, bonus: 0, arrows: randInt(r, 5, 12) };
             return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 1), magic: false, max: 0 };
         case 'scrolls':
-            if (x < 0.35) return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
-            if (x < 0.75) return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
             return rollScroll(r, true);
         default: // 'food'
             if (x < 0.3) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
@@ -413,6 +433,47 @@ function storeThing(r, flavor) {
             if (x < 0.92) return { kind: 'pie', uid: newUid(), count: 1 };
             return { kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) };
     }
+}
+
+/**
+ * A chest of a dungeon on the ground (Dungeons.js; the author: in the magical ones «магические вещи, в основном свитки: практически нет
+ * немагических», in the plain ones «обычные вещи и оружие, изредка магическое»). `flavor` 'magic' — the ruined chapels, temples and citadels
+ * of the mages: spell scrolls and pentagram scrolls (a scroll is the only way a spell or a pentagram is learned), wands, magic robes, magic
+ * weapons and armour; a plain thing hardly ever. `flavor` 'ruin' — the fallen towers, manors and forts: weapons, shields, armour, bows and
+ * arrows, food; a magic thing now and then. `size` ('S' | 'M' | 'L'): the great ones hold the mightier scrolls and more precious things.
+ * (A dungeon UNDER the ground has no flavor: its chests are as a cave's — rollLoot with `deep`.)
+ */
+export function rollDungeonLoot(r = Math.random, flavor = 'ruin', count = 0, size = 'S') {
+    const n = count > 0 ? count : CHEST_THINGS;
+    const big = size === 'L' ? 1 : size === 'M' ? 0.5 : 0;
+    const out = [];
+    while (out.length < n) out.push(flavor === 'magic' ? magicDungeonThing(r, big, size) : ruinDungeonThing(r, big));
+    return out;
+}
+
+function magicDungeonThing(r, big, size) {
+    if (r() < 0.2 * big) return rollKeyItem(r); // (a great ruin: a precious thing more often)
+    const x = r() * 100;
+    if (x < 58) { for (let i = 0; i < 30; i++) { const it = rollScroll(r, size !== 'L'); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); }
+    if (x < 70) { const ids = figureIds(); return pentagramScroll(ids[Math.floor(r() * ids.length) % ids.length], newUid()); }
+    if (x < 79) return rollWand(r);
+    if (x < 86) return makeRobe(true, r);
+    if (x < 92) return rollKeyItem(r);
+    if (x < 96) return makePiece(pick(r, PIECES), { magic: true });
+    return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 2) };
+}
+
+function ruinDungeonThing(r, big) {
+    if (r() < 0.06 + 0.1 * big) return rollKeyItem(r); // (now and then a precious thing)
+    const x = r() * 100, mg = (p) => r() < p;
+    if (x < 26) { const m = mg(0.1); return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; }
+    if (x < 38) { const m = mg(0.08); return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 }; }
+    if (x < 50) return makePiece(pick(r, PIECES), mg(0.06) ? { magic: true } : undefined);
+    if (x < 62) { const m = mg(0.1); return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; }
+    if (x < 70) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+    if (x < 84) return storeThing(r, 'food');
+    if (x < 90) return makeRobe(false, r);
+    return rollScroll(r, true);
 }
 
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
@@ -468,7 +529,7 @@ export const KEY_CHANCE = 0.25;
  */
 export const LOOT_FOR = { maxMana: 0, known: null }; // (known: (scroll) => bool — the opener already knows it: SpellBook.scrollKnown; Game.openChest sets it)
 
-/** A scroll of a chest (health, strength, a spell…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
+/** A scroll of a chest (a spell, a pentagram…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
 export function rollScroll(r = Math.random, mild = false) {
     const it = _rollScroll(r);
     return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
@@ -476,11 +537,10 @@ export function rollScroll(r = Math.random, mild = false) {
 const MIGHTY = new Set(['Imperius', 'AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower', 'CircleAttack', 'WaterVortexSuperMaxima', 'CreateCastle']);
 /**
  * The scrolls of a chest by weight (the author: the simple ones more often, the strong ones rarer). `hp` / `fatigue`:
- * health and mana scrolls. Every spell a beginner does not know has a scroll somewhere (tests/unit/spell-book.test.js):
+ * (no health or mana scrolls any more). Every spell a beginner does not know has a scroll somewhere (tests/unit/spell-book.test.js):
  * here, or the bosses' own (rollIceQueenLoot, rollPirateLoot, a royal chest), the towers' shops, the book-birds.
  */
 export const SCROLL_WEIGHTS = [
-    ['hp', 17], ['fatigue', 2.3],
     // simple
     ['LightningStrike', 12], ['Thunderwave', 12], ['ToTheSun', 5], ['AlohomoraMaxima', 6], ['ImproveHouse', 4], ['CreateBoard', 4.5],
     ['Brainrot', 3], ['Unfurl', 3], ['Waterball', 3], ['Overgrown', 3], ['Snowman', 2.5], ['AirBubble', 2.5], ['WaveAttack', 2.5],
@@ -517,7 +577,7 @@ export function freshScrolls(items, r = Math.random, known = LOOT_FOR.known) {
 
 /**
  * A scroll for a SHOP's counter (the author: the shops too): if the buyer (LOOT_FOR.known) already knows it, another simple spell of `pool` he does not
- * know, else a scroll of health or strength. Pure with `r`. A shop's counter is one for everybody, so the filter is the knowledge of the computer that
+ * know, else a plain apple (the scrolls of health / strength are gone). Pure with `r`. A shop's counter is one for everybody, so the filter is the knowledge of the computer that
  * stocks it (the host's, in a game with friends).
  */
 export function freshShopScroll(it, r = Math.random, pool = null) {
@@ -527,7 +587,7 @@ export function freshShopScroll(it, r = Math.random, pool = null) {
         const s = Math.floor(r() * pool.length);
         for (let i = 0; i < pool.length; i++) { const c = spellScroll(pool[(s + i) % pool.length]); if (!known(c)) return c; }
     }
-    return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    return { kind: 'apple', uid: newUid(), count: 1 };
 }
 
 /** A scroll that teaches this spell. */
@@ -540,12 +600,10 @@ function _rollScroll(r) {
     let y = r() * SCROLL_TOTAL;
     for (const [k, w] of SCROLL_WEIGHTS) {
         if ((y -= w) >= 0) continue;
-        if (k === 'hp') return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
-        if (k === 'fatigue') return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
         if (k.startsWith('pent:')) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
         return spellScroll(k);
     }
-    return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    return spellScroll('LightningStrike');
 }
 
 /** The sea's scrolls (a pirate's plunder, a ship's or a port's chest): the sails and the water. */
@@ -595,9 +653,9 @@ export function rollPlainItem(r = Math.random, deep = false) {
  * happen now and then — the shares are the author's, thing by thing.)
  */
 export const CAVE_LOOT = [
-    ['spellScroll', 53.5], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5], ['hpScroll', 4.1],
+    ['spellScroll', 57.6], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5],
     ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['hammer', 0.3],
-]; // (no mana scroll: the author — «useless»; its share went to the spell scrolls)
+]; // (no mana scroll and no health scroll: the author — «не вижу смысла»; their shares went to the spell scrolls)
 const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
 const CAVE_MAKE = {
     spellScroll: (r) => { for (let i = 0; i < 30; i++) { const it = rollScroll(r, true); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); },
@@ -608,7 +666,6 @@ const CAVE_MAKE = {
     bow: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; },
     arrows: (r) => ({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) }),
     wand: (r) => rollWand(r),
-    hpScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }),
     robe: (r) => makeRobe(false, r),
     magicRobe: (r) => makeRobe(true, r),
     backpack: (r) => ({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }),
@@ -694,7 +751,7 @@ function describeItemBase(it) {
             if (it.stat === 'pentagram') return { title: `📜 ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: figureOf(it.pent)?.ink ?? 0xc01830, lines: [kindLine(it), `Сожгите свиток («Инферно») — и вы выучите эту пентаграмму навсегда. Чтобы её создать, направьте палочку на землю и скажите <b>«${pentagramSpell(it.pent) || 'Pentagranium'}»</b>: рисунок нарисуется сам. Пока свиток не сожжён, пентаграмма не получится`, ...(it.pent === 'devil' ? ['Чем полезна: позволяет получить ещё 25% силы убитого вами волшебника — тело должно лежать внутри круга'] : [])] };
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b>'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), `Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
-            return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b>` : `Сожгите его: мана +<b>${it.amount}</b>`] };
+            return { title: '📜 Свиток', color: 0xffe9a8, lines: ['Сожгите его («Инферно»), чтобы узнать, что в нём'] };
         case 'book':
             if (it.lore && LORE_BY_ID.has(it.lore)) return { title: `📗 «${LORE_BY_ID.get(it.lore).title}»`, color: LORE_BY_ID.get(it.lore).trim, lines: ['Книга из летописи мира: ' + LORE_BY_ID.get(it.lore).sub.toLowerCase(), 'Раскройте двумя руками и листайте пальцем', 'Это не книга заклинаний — её просто читают'] };
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };

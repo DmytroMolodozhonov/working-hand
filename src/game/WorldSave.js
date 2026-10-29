@@ -23,7 +23,8 @@ import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
-import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN } from '../world/Terrain.js';
+import { retireScrollsIn } from './ItemTypes.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -63,6 +64,7 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     if (gen < CANARIES_FROM_GEN) lacks.push('канариков на болотах');
     if (gen < GATE_METAL_FROM_GEN) lacks.push('кованых железных ворот в замках');
     if (gen < HOUSE_SIZE_FROM_GEN) lacks.push('просторных домов жителей (у богатых — в два этажа)');
+    if (gen < DUNGEON_FROM_GEN) lacks.push('данжей (развалин и подземелий с сундуками)');
     const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;
     if (!lacks.length) return `${head} Мир актуален: в нём есть всё новое.`;
     return `${head} Мир устарел: он создан в старой версии, поэтому в нём нет ${lacks.join(', ')}. Играть в нём можно, и ваши постройки и вещи на месте.`;
@@ -191,6 +193,7 @@ export function playerSnapshot(game) {
 /** Give a player their things back. */
 export function applyPlayerSnapshot(game, s) {
     if (!s) return;
+    retireScrollsIn(s); // (the scrolls of health and of mana cells are gone from the game: an old one is an apple)
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     const inv = game.inventory;
     let owed = 0; // coins of an old save that wait for the pouch
@@ -391,6 +394,7 @@ export class WorldKeeper {
 
 /** Put a saved world back into a freshly generated game (same seed). */
 export function restoreWorld(game, save, THREE) {
+    retireScrollsIn(save); // (the loose things, the bodies, the chests… of an old save: the retired scrolls become apples)
     const g = game;
     if (!save) return;
     if (Array.isArray(save.edits) && save.edits.length) {

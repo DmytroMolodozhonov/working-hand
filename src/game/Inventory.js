@@ -27,7 +27,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { ITEM_INFO, starterWand } from './ItemTypes.js';
+import { ITEM_INFO, starterWand, retireScroll } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
 import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
@@ -320,6 +320,7 @@ export class Inventory {
 
     /** Put an item (weapon / book) into a free slot (the chosen one first). */
     store(item) {
+        retireScroll(item); // (an old health / mana scroll from an old save or client: an apple now)
         if (item && (this.slots.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
         if (i < 0) { this.game.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
