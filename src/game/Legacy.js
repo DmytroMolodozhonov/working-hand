@@ -62,13 +62,14 @@ export function captureLegacy(g) {
         // (and «дуэльное мастерство»: the duels won, and whom — Mana.masteryWon)
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length || mana.mastery > 0) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [], mastery: mana.mastery || 0, beaten: mana.beaten || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
+        bare: g.pentagranium?.bare ? 1 : null, // (колдовать без палочки: обряд «Palmaris» — BareHand.js)
         pent: g.pentagranium?.snapshot() || null, // (the pentagrams' drawings learnt by burning their scrolls — PentagramRules.js)
         dark: g.dark?.snapshot() || null, // (чёрная магия: уровень тьмы — DarkMagic.js)
         bw: g.breakward?.marked ? { m: 1 } : null, // (метка «слом защиты»: умирает с прокачками, «Give Me My Power» возвращает)
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.bw && !rec.pent;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.bw && !rec.pent && !rec.bare;
     return empty ? null : rec;
 }
 
@@ -93,6 +94,7 @@ export function wipeHero(g) {
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
     g.dark?.onDeath(); // (тьма уходит в тело)
+    g.pentagranium?.onDeath(); // (the bare-hand power goes too)
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
     g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
@@ -122,6 +124,7 @@ export function absorbLegacy(g, rec) {
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);
     if (rec.pent) g.pentagranium?.restore(rec.pent);
+    if (rec.bare) g.pentagranium?.bareRestore(1);
     if (rec.steady) g.steady?.restore(rec.steady);
     if (rec.bw && g.breakward) { g.breakward.marked = true; g.breakward._shown = ''; g.breakward._hud(); }
     if (rec.caves) g.caveMap?.merge(rec.caves);

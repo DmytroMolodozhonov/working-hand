@@ -7,7 +7,7 @@
  */
 
 import { MONSTER_PENTAGRAM } from './PentagramMonster.js';
-import { BREAKWARD_LINES, GARGOYLE_LINES, UNITY_LINES } from './PentagramFigures.js';
+import { BREAKWARD_LINES, GARGOYLE_LINES, UNITY_LINES, BARE_LINES } from './PentagramFigures.js';
 
 export const PENTAGRAMS = {
     // «Пентаграмма страшного монстра»: круг и оскаленная пасть (четыре клыка, челюсть дугой); встал в круг — 200 маны — ×7 на 10 минут (PentagramMonster.js, MonsterTransform.js)
@@ -48,6 +48,21 @@ export const PENTAGRAMS = {
         lines: UNITY_LINES,
         effect: 'Объединяет силы двух одинаковых вещей в одну новую: все бафы складываются.',
     },
+};
+
+// «Пентаграмма колдовства без палочки» (БЕЛАЯ магия, BareHand.js): создать — палочку на землю и «Pentagranium Palmaris»; встать в круг — 50 маны (берётся при входе,
+// не при слове) — и до смерти можно колдовать любые заклинания рукой. Одноразовая: после обряда рисунок гаснет (учится герой один раз).
+PENTAGRAMS.bare = {
+    id: 'bare',
+    title: 'Пентаграмма колдовства без палочки',
+    dark: false, // белая магия: тьмы не прибавляет, жителей не пугает
+    glow: 0xfff2c8, // тёплый белый свет ладоней
+    cost: 50, // маны, когда встаёшь в круг
+    once: true,
+    scroll: 'PentagramBare',
+    lines: BARE_LINES,
+    effect: 'Встаньте в круг (50 маны) — и вы сможете колдовать любые заклинания без палочки, рукой.',
+    stand: (g, m, dt, inside) => !!g.pentagranium?.bareStand?.(m, dt, inside),
 };
 
 export const registerPentagram = (def) => { PENTAGRAMS[def.id] = def; };

@@ -32,6 +32,7 @@ import { PentagramFx } from '../fx/PentagramFx.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
+import { BARE } from './BareHand.js';
 
 /** ms: a pentagram's name still being said must hold this long unchanged before it casts (the author: «после Pentagranium подождать полсекунды»). */
 export const PAUSE_MS = 500;
@@ -56,6 +57,7 @@ const USE_TEXT = {
     life: 'Встаньте на неё (50 маны) — здоровье восстановится целиком',
     mend: 'Встаньте на неё — надетая броня будет починена (у каждой части своя цена)',
     monster: 'Встаньте в круг — и на 10 минут вы огромный монстр',
+    bare: 'Встаньте в круг (50 маны) — и вы сможете колдовать любые заклинания без палочки',
 };
 
 export class Pentagranium {
@@ -73,6 +75,7 @@ export class Pentagranium {
         this._pending = []; // permanent pentagrams of the save not made yet (their land is not here)
         this._jobs = new Map(); // settlement id → {def, search, spot, partner} (the world's ready pairs: PentagramWorld.js)
         this._worldGone = new Set(); // settlements whose pentagram was spoilt (the ground changed): not made again while the place is awake
+        this.bare = false; // the rite of the bare hand is done: every spell may be cast without a wand (BareHand.js; saved, death takes it, Legacy brings it back)
         this._use = new Map(); // mark id → what standing on it does now {in, t, cd, hinted, from}
     }
 
@@ -93,6 +96,11 @@ export class Pentagranium {
         const g = this.game;
         return figureIds().filter((k) => this.creative || this.seen.has(k) || !!g.bonus?.spells?.[TABLE[k]?.scroll] || (k === 'breakward' && !!g.breakward?.known)); // (a drawing seen on a drawing-scroll, or learnt by the other pentagrams' own scrolls)
     }
+
+    /** The bare-hand power (BareHand.js): saved apart from the drawings; the dead lose it (Legacy.wipeHero → onDeath). */
+    bareSnapshot() { return this.bare ? 1 : null; }
+    bareRestore(v) { this.bare = !!v; }
+    onDeath() { this.bare = false; }
 
     snapshot() { return this.seen.set.size ? this.seen.snapshot() : null; }
     restore(list) { this.seen.restore(list); }
@@ -125,6 +133,7 @@ export class Pentagranium {
         if (aim) this.aim = aim;
         const hand = this.aim ? { side: 'right', origin: this.aim.origin, dir: this.aim.dir } : castingHand(g);
         if (!this.known().includes(id)) return hint(`🩸 Вы не знаете «${figureOf(id).ru}» — найдите её свиток и сожгите («Инферно»): тогда её можно будет создать`);
+        if (id === 'bare' && this.bare && !this.creative) return hint('🙌 Вы уже умеете колдовать без палочки — пентаграмма второй раз не нужна');
         if (!hand) return hint(`🩸 Поднимите палочку (руку), направьте на землю и скажите «${name}»`);
         if (g.swim?.underwater) return hint('🩸 Под водой пентаграмма не держится');
         const p = this.groundAt();
@@ -328,6 +337,77 @@ export class Pentagranium {
         }
     }
 
+    // ------------------------------------------------------------ the rite of the bare hand (BareHand.js)
+    /**
+     * (the table's `stand`, every frame while MY white pentagram «Palmaris» burns) Standing in the circle BARE.STAND s: 50 mana are taken, the power
+     * is given at once (so no interruption leaves it half done), and the rite plays (every computer: 'pgm' k 'bare'). Never true: the drawing goes out
+     * itself when the rite ends. A refusal waits for a step out of the circle and back in.
+     */
+    bareStand(m, dt, inside) {
+        const g = this.game;
+        if (!inside || m.bareRite) { if (!inside) { m._bareT = 0; m._bareHint = false; } return false; }
+        if (m._bareT < 0) return false; // (tried, refused: step out and in again)
+        m._bareT = (m._bareT || 0) + dt;
+        if (m._bareT < BARE.STAND) return false;
+        m._bareT = -1;
+        const no = (t) => { g.hud?.setVoice?.(t, true); return false; };
+        if (g.combat?.dead || g.isDeadLocal) return false;
+        if (g.imperius?.active) return no('🙌 В чужом теле обряд не идёт — сначала «стоп»');
+        if (g.monster?.active) return no('🙌 В облике монстра обряд не идёт');
+        if (g._inDuel?.()) return no('🙌 Во время дуэли обряд не идёт');
+        if (this.bare && !this.creative) return no('🙌 Вы уже умеете колдовать без палочки');
+        if (manaRules(g) && (g.combat?.fatigue || 0) < BARE.COST) return no(`🙌 Нужно ${BARE.COST} маны — у вас ${Math.floor(g.combat?.fatigue || 0)}. Выйдите из круга и войдите снова, когда наберёте`);
+        if (manaRules(g) && g.combat) { g.combat.fatigue -= BARE.COST; g.combat._hudKey = ''; }
+        this.bare = true;
+        this._bareBegin(m, true);
+        g.sync?.pentagram?.({ k: 'bare', id: m.id });
+        g.mana?.success?.('Pentagranium');
+        return false;
+    }
+
+    /** (every computer) The rite plays on mark `m`: light from the palms, runes round the hands, a ring spreading. */
+    _bareBegin(m, mine) {
+        if (m.bareRite) return;
+        m.bareRite = { t: 0, mine, ring: 0 };
+        m.life = Math.min(m.life, BARE.RITE + 6); // (the drawing burns out after the rite)
+        this.game.sound?.playSpellFxAt?.('fxBare', _o.set(m.x, m.y, m.z), 1, 1, 24);
+        this.game.perf?.note?.('🙌 Пентаграмма колдовства без палочки');
+        if (mine) this.game.hud?.setVoice?.('🙌 Свет собирается в ваших ладонях…', true);
+    }
+
+    _bareStep(m, dt) {
+        const R = m.bareRite, g = this.game, fx = g.fx;
+        R.t += dt;
+        const u = Math.min(1, R.t / BARE.RITE);
+        m.bareHell = u >= 1 ? 0 : 0.35 + 0.65 * Math.sin(u * Math.PI); // (the lines flare up and settle)
+        if (fx) {
+            const hx = m.x, hz = m.z, y = m.y;
+            // layer 1: a ring of light spreading from the middle to the edge, again and again
+            R.ring += dt * 1.1;
+            if (R.ring > 1) R.ring = 0;
+            const rr = m.r * R.ring;
+            for (let i = 0; i < 10; i++) { const a = Math.random() * Math.PI * 2; fx.spark(_o.set(hx + Math.cos(a) * rr, y + 0.2, hz + Math.sin(a) * rr), i % 2 ? 0xfff2c8 : 0xffd98a, 0.14, _d.set(0, 0.8 + Math.random(), 0), 0.8); }
+            // layer 2: runes — slow bright sparks orbiting the hero at hand height, two rings turning opposite ways, rising with the rite
+            const spin = R.t * 2.2;
+            for (let k = 0; k < 8; k++) {
+                const a = spin + (k / 8) * Math.PI * 2, b = -spin * 0.7 + (k / 8) * Math.PI * 2, h = 1.2 + 1.6 * u;
+                fx.spark(_o.set(hx + Math.cos(a) * 1.5, y + h, hz + Math.sin(a) * 1.5), 0xfff7e0, 0.22, _d.set(0, 0.2, 0), 0.5);
+                fx.spark(_o.set(hx + Math.cos(b) * 2.1, y + h * 0.7, hz + Math.sin(b) * 2.1), 0xffc860, 0.18, _d.set(0, 0.3, 0), 0.5);
+            }
+            // layer 3: light from the palms (mine: from my real hands; others see it at the hero's sides), gathering into a pillar
+            const me = g.character?.group?.position, mineHere = R.mine && me;
+            for (const side of [-1, 1]) {
+                let px = hx + side * 0.7, py = y + 2.2, pz = hz;
+                if (mineHere) { const h = g.character.getHandWorldPosition?.(side < 0 ? 'left' : 'right', _o); if (h) { px = h.x; py = h.y; pz = h.z; } }
+                fx.spark(_o.set(px, py, pz), 0xfffbe8, 0.3 + 0.3 * u, _d.set(0, 0.5, 0), 0.4);
+                if (Math.random() < 0.6) fx.spark(_o.set(px, py, pz), 0xffd98a, 0.16, _d.set((Math.random() - 0.5) * 1.5, 1 + Math.random() * 2, (Math.random() - 0.5) * 1.5), 0.9);
+            }
+            if ((R._f = (R._f || 0) - dt) <= 0) { R._f = 0.1; fx.lightFlash?.(_o.set(hx, y + 2, hz), 0xffe9b0, 1.4 + 2.4 * u, 0.2, m.r * 4 + 10); }
+            if (u >= 1 && !R.done) { R.done = true; for (let i = 0; i < 90; i++) { const a = (i / 90) * Math.PI * 2; fx.spark(_o.set(hx + Math.cos(a) * m.r * 0.9, y + 0.3, hz + Math.sin(a) * m.r * 0.9), i % 2 ? 0xfff2c8 : 0xffd98a, 0.2, _d.set(-Math.cos(a) * 1.4, 2 + Math.random() * 3, -Math.sin(a) * 1.4), 1.4); } }
+        } else if (u >= 1) R.done = true;
+        if (R.done && !R.said) { R.said = true; if (R.mine) this.game.hud?.setVoice?.('🙌 Готово! Теперь вы можете колдовать любые заклинания без палочки', true); }
+    }
+
     // ------------------------------------------------------------ standing on a good pentagram
     _useStep(m, dt) {
         const g = this.game, me = g.character.group.position;
@@ -457,14 +537,15 @@ export class Pentagranium {
         m.life -= dt;
         // lit: it comes up in a second, flares on a rite, goes out in its last 6 s
         const rite = m.rites.find((r) => !r.done);
-        const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
+        const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0, m.bareHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
         m.hell += (hellWant - m.hell) * Math.min(1, dt * (hellWant ? 3 : 1.2));
         if (m.anim) this._animStep(m, dt);
+        if (m.bareRite) this._bareStep(m, dt);
         m.fade = Math.min(1, Math.max(0, (m.t - m.drawT) / 1.2), Math.max(0, m.life / 6));
         this.fx.set(m.id, m.fade, m.hell, this._t);
         const near = Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < PENT.FAR;
         if (near) this.fx.ambient(m, dt, m.hell);
-        if (m.hell > 0.2 && near && (m._flashT = (m._flashT || 0) - dt) <= 0) { m._flashT = 0.12; g.fx?.lightFlash?.(_o.set(m.x, m.y + 1.2, m.z), 0xff3a12, 3.2 * m.hell * (0.7 + 0.3 * Math.random()), 0.25, m.r * 4 + 10); }
+        if (m.hell > 0.2 && near && !m.bareRite && (m._flashT = (m._flashT || 0) - dt) <= 0) { m._flashT = 0.12; g.fx?.lightFlash?.(_o.set(m.x, m.y + 1.2, m.z), 0xff3a12, 3.2 * m.hell * (0.7 + 0.3 * Math.random()), 0.25, m.r * 4 + 10); }
         for (const r of m.rites) if (!r.done) this._riteStep(m, r, dt);
         // (a pentagram that works when its drawer stands in it — the monster one: PentagramMonster.stand)
         const stand = TABLE[m.pent]?.stand;
@@ -593,6 +674,9 @@ export class Pentagranium {
             }
         } else if (m.k === 'fx') {
             if (['teleport', 'life', 'mend'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
+        } else if (m.k === 'bare') {
+            const mk = this.marks.get(m.id);
+            if (mk && mk.pent === 'bare') this._bareBegin(mk, false);
         } else if (m.k === 'uni') {
             this.game.united?.onNet(m);
         } else if (m.k === 'rite') {

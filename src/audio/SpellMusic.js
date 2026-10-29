@@ -533,6 +533,15 @@ const FX = {
         noise(o, sr, 0, 1.2, 0.04, () => 0.7, swell(0.3, 0.5), r);
         return finish(o, sr, { peak: 0.7 });
     },
+    /** The rite of the bare hand: a bright swell like light gathering in the palms, a rising tune of bells (D – F# – A – D – F# – A) and a soft airy shimmer over it (short: an effect under 2 s — the rite's light plays longer). */
+    fxBare(sr) {
+        const o = buf(sr, 1.95), r = rng(337);
+        pad(o, sr, ['D3', 'A3', 'F#4'], 0, 1.9, 0.2, { att: 0.35, rel: 0.6, harm: 3, vib: 0.004 });
+        glide(o, sr, 0.05, 1.0, 0.1, (u) => 330 + 990 * u * u, swell(0.3, 0.5), 2);
+        ['D6', 'F#6', 'A6', 'D7', 'F#7', 'A7'].forEach((n, k) => bell(o, sr, hz(n), 0.35 + k * 0.2, 0.15, 0.9, 0.3));
+        noise(o, sr, 0.1, 1.5, 0.05, (u) => 0.4 + 0.6 * u, swell(0.4, 0.5), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** A mend: ringing hammer taps on steel, then a silver chime. */
     fxMend(sr) {
         const o = buf(sr, 1.7), r = rng(335);

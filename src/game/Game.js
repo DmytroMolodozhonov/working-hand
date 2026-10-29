@@ -190,6 +190,7 @@ import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
 import { JUMP_ASSIST, ledgePush } from './Jump.js';
 import { Concentration } from './Concentration.js';
+import { bareGate, BARE_HINT } from './BareHand.js';
 import { CrossedShield } from './CrossedArms.js';
 import { CastHints } from './CastHints.js';
 import { netLog } from '../net/Network.js';
@@ -1736,6 +1737,12 @@ export class Game {
         // the rule of concentration: while a spell is held no other works — first «стоп» (Concentration.js;
         // the held spell's own words, Lumos, Nox, «стоп», the shield are free; Creative too)
         if (this.focus.gate(name, isFinal, !!BUILD_SPELLS[name])) return null;
+        // no wand in the hand: only «Акцио» and «Protection» (BareHand.js) — until the white pentagram «Pentagranium Palmaris» is done; Creative is free
+        if (!bareGate(name, { hasWand: !!this.wandSide(), creative: this.config.mode === 'creative' || this.config.mode === 'test', bareMaster: !!this.pentagranium?.bare }).ok) {
+            this.lastCastWhy = BARE_HINT;
+            if (isFinal && !this._bareHinted) { this._bareHinted = true; this.hud.setVoice(BARE_HINT, true, true); } // (large, once a session)
+            return null;
+        }
         // «Water Vortex», its «Bubble» / «Frozen», «Fire Maxima» (and nothing else from inside its ice)
         const gvx = this.groundVortex.voice(name, text, isFinal);
         if (gvx !== undefined) return gvx;
