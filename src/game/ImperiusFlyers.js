@@ -147,6 +147,7 @@ const dragons = {
     release(g, d) {
         d.mode = d.fly > 0.5 ? 'air' : 'landed'; d.target = null; d.rideWalk = 0;
         if (d.breath?.imp) d.breath = null;
+        g.dragons?.smash?.forget(d.id);
         d.restT = 5;
     },
     net(d) {

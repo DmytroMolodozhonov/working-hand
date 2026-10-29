@@ -1196,6 +1196,31 @@ export class Ships {
         }
     }
 
+    /**
+     * (host) A great body's strike at `pos` (a dragon's wing, tail or flank — DragonSmash.js): the planks crack (`hard` 0…: how
+     * hard), a strong blow breaches the hull; no fire. The black ship only flares (its curse), its crew is provoked.
+     * → true if a hull was struck.
+     */
+    smash(pos, r, hard, by) {
+        if (!this.auth) return false;
+        let hit = false;
+        for (const s of this.awake) {
+            if (s.state === 'wreck') continue;
+            s.pose.toLocal(pos.x, pos.y, pos.z, _l);
+            const L = s.layout;
+            if (_l.z < -L.L / 2 - r - 3 || _l.z > L.L / 2 + r + 3) continue;
+            const half = hullHalfWidth(L, Math.max(-L.L / 2, Math.min(L.L / 2, _l.z)), Math.max(-L.draft + 0.1, Math.min(L.deck, _l.y)));
+            const top = L.railTopAt(_l.z);
+            const dHull = Math.hypot(Math.max(0, Math.abs(_l.x) - half), Math.max(0, _l.y - top, keelY(L, _l.z) - _l.y), Math.max(0, Math.abs(_l.z) - L.L / 2));
+            if (dHull > r) continue;
+            if (isCursed(s)) { this.curseSpark(s, _l.x, _l.y, _l.z); if (by && !this.loyalTo(s, by)) this.crew.provoke(s, by, null); continue; }
+            this.damage(s, Math.round(6 * hard), by);
+            if (hard >= 1.5 && dHull < 2) this._breach(s, _l, Math.min(3, 1 + hard * 0.4), half, by);
+            hit = true;
+        }
+        return hit;
+    }
+
     /** Inferno along a ray: a sail or the deck catches fire (every computer asks; the host lights it). */
     igniteAlong(o, d, len, casterId) {
         if (!this.auth || !this.awake.size) return false;

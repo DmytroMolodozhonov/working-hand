@@ -42,6 +42,7 @@ import { FACE, facesTarget, facingError } from './FaceTarget.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { earthly } from '../world/Planets.js';
 import { confusedMiss } from './StrongSpells.js';
+import { DragonSmash } from './DragonSmash.js';
 import { TAME, tameVerdict, LOWER_ANGER, attackVerdict, angryAt } from './DragonTame.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
@@ -99,6 +100,7 @@ export class Dragons {
         this.state = {}; // lair id → {loose, spawned, items: [uids], d: [{hp, dead}]} (saved with the world)
         this.hands = { right: { open: false, n: 0, model: null, was: 0 }, left: { open: false, n: 0, model: null, was: 0 } };
         this._t = 0;
+        this.smash = new DragonSmash(game); // («Империус Максима»: the wings and the body break what they strike)
         this._lairT = 0;
         this._wanderT = WANDER.FIRST;
         this._netT = 0;
@@ -154,6 +156,7 @@ export class Dragons {
     _remove(d) {
         const i = this.list.indexOf(d);
         if (i >= 0) this.list.splice(i, 1);
+        this.smash?.forget(d.id);
         this.game.scene.remove(d.model);
         d.one?.dispose();
         this.game.scene.remove(d.shadow);
@@ -213,7 +216,7 @@ export class Dragons {
     hitRay(o, dir, len, width, dmg, kind, by = undefined) {
         let any = false;
         for (const d of this.list) {
-            if (d.dead) continue;
+            if (d.dead || d === this._flameOf) continue; // (its own flame never wounds it)
             const b = dragonBody(d, _c);
             let hit = false;
             for (let k = 0; k <= 4 && !hit; k++) {
@@ -1241,7 +1244,7 @@ export class Dragons {
         // my player in it (every computer: its own)
         const c = g.combat;
         d.meT -= dt;
-        if (c && !c.dead && !g.isDeadLocal && d.meT <= 0 && g.dragonRide?.riding?.id !== d.id) { // (a rider on its back is never in its flame)
+        if (c && !c.dead && !g.isDeadLocal && d.meT <= 0 && g.dragonRide?.riding?.id !== d.id && !d.imp?.mine) { // (a rider on its back is never in its flame)
             const me = c.center ? c.center(_v) : _v.copy(g.character.group.position);
             if (inFlame(o, dir, b.len, me, 0.45)) {
                 d.meT = DRAGON.FLAME_TICK;
@@ -1255,7 +1258,11 @@ export class Dragons {
             d.burnT -= dt;
             if (d.burnT <= 0) {
                 d.burnT = 0.25 / Math.max(0.5, d.flame);
-                g._burnRay?.(o, dir, b.len, null);
+                this._flameOf = d;
+                g._burnRay?.(o, dir, b.len, null); // (the people blame the dragon, not its master: Imperius is a servant's family — only a seen cast names the master)
+                this._flameOf = null;
+                // (a mind in it: the flame sets alight whom it touches — people, beasts, sailors, zombies — DragonImperius.FLAME_TARGETS)
+                if (b.imp) g.burning?.igniteRay?.(o, dir, b.len, 0.7 + 0.085 * b.len, null);
                 for (const z of g.zombies || []) {
                     if (z.isDead) continue;
                     _v.copy(z.group.position); _v.y += 1;
@@ -1361,7 +1368,7 @@ export class Dragons {
                 this._animate(d, dt, d.netWalk || 0);
             }
         }
-        for (const d of this.list) { this._breathe(d, dt); this._shadow(d); }
+        for (const d of this.list) { this._breathe(d, dt); this._shadow(d); if (d.imp && this.auth) this.smash.update(d, dt); }
         this._pushMeOut();
         this._updateHands(dt);
         this._bar();

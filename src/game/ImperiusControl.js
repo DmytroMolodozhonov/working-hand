@@ -27,6 +27,7 @@ import './ImperiusWalkers.js'; // (… the spider, the living trees, the Ice Cas
 import { IMPERIUS_MAXIMA } from './Imperius.js';
 import { FlapReader, armsOf } from './ImperiusFlight.js';
 import { HowlReader } from './DragonHowl.js';
+import { WalkGate } from './DragonImperius.js';
 import { ImperiusGuards } from './ImperiusGuards.js';
 import { flies } from './Imperius.js';
 import { castingHand } from './WandAim.js';
@@ -85,6 +86,7 @@ export class ImperiusControl {
         this.I = { yaw: 0, walk: 0, run: false, jump: false, strike: false, strikeNow: false, stroke: 0, arms: '', maxima: false, fly: null, look: new THREE.Vector3(0, 0, -1), fire: null, wings: animalWings, say: (t, key) => this._say(t, key || t, 4000) };
         this.flaps = new FlapReader(); // (the arms' strokes: flying a winged creature in the Maxima — ImperiusFlight.js)
         this.howl = new HowlReader(); // (the dragon's fire: the long «У» — DragonHowl.js)
+        this.gate = new WalkGate(); // (it walks only while the legs step, freshly: DragonImperius.WalkGate)
         this._armsDownT = 0;
         this.guards = new ImperiusGuards(game); // (a castle's guard and a taken creature walking about it — ImperiusGuards.js)
         this.dark = 0; // the screen's darkness (the link fading)
@@ -303,8 +305,11 @@ export class ImperiusControl {
         const g = this.game, ch = g.character, pose = g.currentPose;
         const I = this.I;
         I.yaw = this._yaw0 + (ch.group.rotation.y - this._heroYaw);
-        I.walk = ch.isRunning ? Math.max(0.2, ch.runIntensity || 0) : 0;
-        I.run = (ch.runIntensity || 0) > 0.45;
+        // (standing is standing: the camera's old «бегу» — it sent no pose for a while —, a blip of the shoulders and a pause do not walk it)
+        const lastPose = g.poseSmoother?.lastPushAt;
+        const age = lastPose ? (performance.now() - lastPose) / 1000 : null;
+        I.walk = this.phase === 'on' ? this.gate.step({ running: ch.isRunning, intensity: ch.runIntensity, age, paused: !!g.paused, lost: pose?.hasPose === false }, dt) : (this.gate.reset(), 0);
+        I.run = I.walk > 0 && (ch.runIntensity || 0) > 0.45;
         const J = pose?.jump;
         I.jump = false;
         if (J && J.jumps !== this._jumpSeen) { if (this._jumpSeen != null) I.jump = true; this._jumpSeen = J.jumps; }
