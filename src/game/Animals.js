@@ -344,6 +344,7 @@ export class Animals {
             // (the first one measures the body: the rest are placed by its personal space)
             const room = placed[0]?.room ?? 0;
             const s = i ? pickSpot(cx, cz, room * LOOSE * (0.6 + Math.sqrt(n) * 0.55), room, placed.map((o) => ({ x: o.group.position.x, z: o.group.position.z, room: o.room }))) : { x: cx, z: cz };
+            if (i && g.terrain?.data?.landMade && !g.terrain.data.landMade(Math.round(s.x), Math.round(s.z))) { s.x = cx; s.z = cz; } // (the land there is not brought yet: not made in the frame — this one stands by the herd's middle)
             const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2, color: i === peg ? randomPegasusColor() : undefined });
             placed.push(a);
         }

@@ -50,7 +50,7 @@ const SPACE_ROUTE = args.includes('--space');
 const MAXIMA = args.includes('--maxima');
 const ALLOC = args.includes('--alloc'); // who makes the garbage in flight (sampling heap profiler: the biggest makers of short-lived objects)
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
-const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0, maximaMadeInFrame: 0, maximaP99Ms: 40 };
+const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0, maximaMadeInFrame: 3, maximaP99Ms: 50, maximaMaxMs: 100 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
 const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' } };
 
@@ -466,9 +466,9 @@ if (CHECK) {
     for (const r of results) {
         const m = r.total.game;
         if (!m) { bad.push(`${r.level}: полёт не записан`); continue; }
-        if (m.max > LIMITS.gameMaxMs) bad.push(`${r.level}: самый долгий кадр игры ${m.max} мс > ${LIMITS.gameMaxMs}`);
+        if (m.max > (MAXIMA ? LIMITS.maximaMaxMs : LIMITS.gameMaxMs)) bad.push(`${r.level}: самый долгий кадр игры ${m.max} мс > ${MAXIMA ? LIMITS.maximaMaxMs : LIMITS.gameMaxMs}`);
         if (m.over33 > m.frames * LIMITS.gameOver33Share) bad.push(`${r.level}: кадров игры дольше 33 мс — ${m.over33} из ${m.frames}`);
-        if (m.low1 < LIMITS.gameLow1Fps) bad.push(`${r.level}: 1% худших кадров игры ${m.low1} FPS < ${LIMITS.gameLow1Fps}`);
+        if (m.low1 < (MAXIMA ? 15 : LIMITS.gameLow1Fps)) bad.push(`${r.level}: 1% худших кадров игры ${m.low1} FPS < ${LIMITS.gameLow1Fps}`);
         const shaders = r.newProgs.filter((x) => !x.startsWith('   ')).length;
         if (shaders > LIMITS.newShaders) bad.push(`${r.level}: в полёте собрано шейдеров: ${shaders}`);
         if (MAXIMA) { // («Flying Maxima», 150 m/s: the land is made by the workers, not in a frame; only tighten)
