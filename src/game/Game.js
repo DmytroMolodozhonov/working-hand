@@ -89,6 +89,7 @@ import { WindRing } from './WindRing.js';
 import { Burning } from './Burning.js';
 import { WaterStorm } from './WaterStorm.js';
 import { FallingBlocks } from '../fx/FallingBlocks.js';
+import { SmokeSwipe } from './SmokeSwipe.js';
 import { Settling } from '../world/Collapse.js';
 import { prepareStructure } from '../world/Structure.js';
 import { setNearShadow } from '../core/Shadows.js';
@@ -575,6 +576,7 @@ export class Game {
         this.planetDestroy = new PlanetDestroy(this); // «Planet Liquidation»: a planet blown up — the sixth scroll of the gods' library
         this.boom = new Boom(this); // «Бум»: a mountain (a castle) torn apart from inside — the fifth scroll of the gods' library
         this.hellfire = new Hellfire(this); // «Let the Hellfire Come»: a huge fire held and steered by the wand
+        this.smokeSwipe = new SmokeSwipe(this); // a stroke of the wand (down, aslant) turns a wave of smoke aside: 3 mana, no words, from the start
         this.windRing = new WindRing(this);
         this.burning = new Burning(this); // a creature ON FIRE: burns for a while, put out by «Firefighting» up / water (Burning.js)
         this.firefighting = new Firefighting(this); // «Firefighting» / «… Maxima»: water from the hand puts fire out (the Hellfire too)
@@ -3673,6 +3675,7 @@ export class Game {
         this.combat.update(dt);
         this.vortex.update(dt);
         this.hellfire?.update(dt);
+        this.smokeSwipe?.update(dt);
         this.burning?.update(dt);
         this.waterStorm?.update(dt);
         this.planetMagic?.update(dt); // (a planet held by «Wingardium Leviosa Super Maxima» follows the hand)

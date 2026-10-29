@@ -566,7 +566,10 @@ export class Hellfire {
         // creatures of every kind (players: every computer burns its own — _burnMe): in the fire they
         // burn hard; near it the heat burns them too (through a shield, through armour); they fear it
         // — the brave back off behind their shields step by step, the rest run; its surge throws them back
-        const bodies = g.duel?._bodies?.(null) || [];
+        // (bodies near the fire, wherever the hero is: a fire far from him burns the wizards of a far town too — `_bodies` looks only a box round the hero)
+        const hp = g.character?.group.position;
+        const reach = hp ? Math.max(Math.hypot(f.c.x - hp.x, f.c.z - hp.z) + f.R, Math.hypot(body.x - hp.x, body.z - hp.z) + (f.rr || 0) + 6) + HELLFIRE.HEAT_R + f.R * HELLFIRE.HEAT_PER_R + HELLFIRE.FEAR_R + 8 : 55;
+        const bodies = g.duel?._bodies?.(null, Math.min(400, Math.max(55, reach))) || [];
         const auth = !!g.authority;
         const K = g.fireBoost?.(by) ?? 1; // (the dragon's wand in the caster's hand: 60% hotter)
         const D = HELLFIRE.CREATURE_DMG * K;
@@ -630,7 +633,7 @@ export class Hellfire {
             }
             // the fear: people and animals back off or run (zombies, the spider, living trees know no fear); the infernal gargoyle flees the hellfire — the only fire it fears
             if (cr && b.kind === 'g') g.gargoyles?.scare?.(cr, { x: fx, y: mid.y, z: fz }, 10 * Math.min(1, 0.4 + heat));
-            else if (cr && b.kind === 'v') g.castleLife?.fear?.(cr, fx, fz, heat, HELLFIRE.TICK);
+            else if (cr && b.kind === 'v') g.castleLife?.fear?.(cr, fx, fz, heat, HELLFIRE.TICK, { r: f.R + (f.rr ? f.rr * 0.3 : 0), big: true }); // (big: the wizards run for a safe place, spread out — WizardLife.fireRun)
             else if (cr && b.kind === 'a') g.animals?.fear?.(cr, fx, fz);
             // its surge throws them back (CreatureImpact: a hard surge knocks down)
             if (pushNow && (inside || heat > 0.5)) {

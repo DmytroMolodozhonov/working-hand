@@ -36,7 +36,7 @@ function scrollsFound() {
 
 test('the author\'s list: what a beginner knows outside Creative — and the Maximas only from a scroll', () => {
     const me = survival();
-    for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio'])
+    for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio', 'GiveMyPower'])
         assert.ok(knows(n, me), `${n}: known from the start`);
     for (const n of ['BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
         'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'Waterball', 'WaterForming', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',

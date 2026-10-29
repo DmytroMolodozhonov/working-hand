@@ -45,7 +45,7 @@ const ALL = Object.keys(KINDS);
 
 test('duel charges («Авада Кедавра», «Остолбеней», «Сапира»…) can touch every creature', () => {
     const d = src('src/game/Duel.js');
-    check('Duel._bodies (what a charge can hit)', body(d, '    _bodies(skip = null) {'), ALL);
+    check('Duel._bodies (what a charge can hit)', body(d, '    _bodies(skip = null, reach = DUEL.RANGE_DIE + 5) {'), ALL);
     check('Duel._creature (a hit creature found again)', body(d, '    _creature(kind, id) {'), ALL.filter((k) => !/zombies|spider|dragons|Ice Castle/.test(k)));
     // (an Ice Castle creature is found again as its own kind 'I', and answers a charge itself)
     assert.match(body(d, '    _bodyOf(kind, id, e) {'), /iceCastle\?\.byId/);
@@ -430,9 +430,10 @@ test('«Brain Rot Maxima» (DragonTame.js): every kind of creature and thing is 
 
 test('a living creature stays a target in every STATE (thrown, lying, stunned, far): the body follows the tipped model (Duel._tipped), the people list reaches «Дай»', () => {
     const d = src('src/game/Duel.js');
-    const bodies = body(d, '    _bodies(skip = null) {');
+    const bodies = body(d, '    _bodies(skip = null, reach = DUEL.RANGE_DIE + 5) {');
     for (const k of ["this._tipped(z, this._zombieBody", "this._tipped(v, this._villagerBody(v, put('v'", "this._tipped(v, this._villagerBody(v, put('c'"]) assert.ok(bodies.includes(k), `_bodies forgets the tipped body: ${k}`);
-    assert.match(bodies, /castleLife\?\.targets\(DUEL\.RANGE_DIE/, 'castle people as far as «Дай» reaches');
+    assert.match(bodies, /castleLife\?\.targets\(reach\)/, 'castle people as far as «Дай» reaches (or as far as the caller asks: the Hellfire)');
+    assert.match(d, /reach = DUEL\.RANGE_DIE \+ 5/, 'by default as far as «Дай» reaches');
     assert.match(src('src/game/CastleLife.js'), /targets\(reach = 40\)/);
     // (the real matrix, with real models: tests/unit/duel-creature-states.test.js)
 });

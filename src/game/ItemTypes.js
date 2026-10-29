@@ -462,7 +462,7 @@ export const SCROLL_WEIGHTS = [
     ['Drawdown', 2.5], ['Groundprud', 3], ['Breakthrough', 2.5], ['LetItRain', 2], ['CreateHouse', 2], ['LumosFollowing', 3],
     // the Maximas and the medium ones
     ['BombardoMaxima', 4], ['OvergrownMaxima', 3], ['FirefightingMaxima', 3], ['Alive', 3], ['EarthquakeMaxima', 2], ['FireMaxima', 2], ['LiquidationMaxima', 2],
-    ['ProtectionMaxima', 2], ['JoltMaxima', 2], ['BrainrotMaxima', 1.2], ['IceMaxima', 1.5], ['WindImpulse', 1.5], ['Invisibility', 1.5], ['VisibleGodi', 2.5], ['GroundVortex', 2], ['GiveMyPower', 2.5],
+    ['ProtectionMaxima', 2], ['JoltMaxima', 2], ['BrainrotMaxima', 1.2], ['IceMaxima', 1.5], ['WindImpulse', 1.5], ['Invisibility', 1.5], ['VisibleGodi', 2.5], ['GroundVortex', 2],
     // strong and rare
     ['AvadaKedavra', 4], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],

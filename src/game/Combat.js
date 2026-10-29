@@ -409,7 +409,7 @@ export class CombatVisuals {
 
     /**
      * @param {number} dt
-     * @param {object} st {shield: 0|1|2, shieldLeft, frozen:boolean}
+     * @param {object} st {shield: 0|1|2, shieldLeft, frozen:boolean, handScale?, domeR? (a castle wizard's own sizes: his shield is the same picture)}
      * @param {object} body {center:Vector3, hand:Vector3, dir:Vector3}
      */
     update(dt, st, body) {
@@ -426,7 +426,7 @@ export class CombatVisuals {
             const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.25 + 0.2));
             this.hand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
             this.hand.lookAt(_v1.copy(this.hand.position).add(body.dir));
-            this.hand.scale.setScalar(PVP.SHIELD_SCALE * k);
+            this.hand.scale.setScalar((st.handScale ?? PVP.SHIELD_SCALE) * k);
             this.handRing.rotation.z = this._t * 2;
             this.handHex.rotation.z = -this._t * 1.3;
         }
@@ -436,7 +436,7 @@ export class CombatVisuals {
         if (showDome) {
             const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._domeAge / 0.25 + 0.2));
             this.dome.position.copy(body.center);
-            this.dome.scale.setScalar(PVP.DOME_R * k * (1 + 0.03 * Math.sin(this._t * 6)));
+            this.dome.scale.setScalar((st.domeR ?? PVP.DOME_R) * k * (1 + 0.03 * Math.sin(this._t * 6)));
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
         this._shell(dt, st, body);

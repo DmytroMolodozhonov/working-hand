@@ -12,7 +12,7 @@
  *    a part of the mana's growth and its list of firsts: they go into the body with it and come back with it
  *    (until then they can be earned again).
  *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — the spell
- *    «Give Me My Power» (the author: 50 mana, learned only from its scroll — the dark-gold ribbon)
+ *    «Give Me My Power» (the author: 50 mana, known from the very start, no scroll — SpellBook.START_SPELLS)
  *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again — and it REPLACES
  *    what they have grown since (the author: «Ты возвращаешь свою силу — и у тебя столько, сколько было
  *    при той силе… Забираешь свою силу — и от второй итерации отказываешься. А то так можно обойти игру»):

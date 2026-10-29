@@ -364,7 +364,7 @@ export class NetSync {
         let n = 0;
         for (const f of list) {
             if ((n += f.cells.length) > 4000) break; // (a whole castle: the rest is just there)
-            out.push({ c: f.cells, d: f.d, l: f.landed, b: f.broken, s: f.stage || 0, ...(f.crushed ? { x: 1 } : {}) });
+            out.push({ c: f.cells, d: f.d, l: f.landed, b: f.broken, s: f.stage || 0, ...(f.crushed ? { x: 1 } : {}), ...(f.tilt ? { tl: f.tilt } : {}) });
         }
         if (out.length) this.net.send({ t: 'fal', f: out }, true);
     }
@@ -908,7 +908,7 @@ export class NetSync {
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
             case 'fal': if (m.by !== this.me && Array.isArray(m.f)) { // (a building's pieces seen falling: its blocks are where they landed already — 'blk')
                 const list = m.f.slice(0, 200).filter((f) => Array.isArray(f?.c) && Array.isArray(f.l) && Array.isArray(f.b))
-                    .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}) }));
+                    .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}), ...(f.tl && (f.tl.axis === 'x' || f.tl.axis === 'z') ? { tilt: { axis: f.tl.axis, sg: f.tl.sg > 0 ? 1 : -1, edge: +f.tl.edge || 0, Lb: +f.tl.Lb || 0, d2: Math.min(300, +f.tl.d2 || 0) } } : {}) }));
                 for (const f of list) g.falling?.add(f);
                 break;
             }

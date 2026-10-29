@@ -27,6 +27,8 @@ export const START_SPELLS = new Set([
     'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'Gather', 'CreateBridge',
     // the fireworks over the wand (the author: «изначально известно без свитка»)
     'Fireworks',
+    // «забрать свою силу» со своего скелета (слова автора: «известно с начала, без свитка»)
+    'GiveMyPower',
     // a thing in the hand is the key (the Ice Rod, Thor's hammer)
     'RodFrozen', 'RodIce', 'Hammer',
 ]);

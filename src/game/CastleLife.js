@@ -1690,7 +1690,7 @@ export class CastleLife {
                 const g2 = cs.graph;
                 if (!(F.plan?.node != null && v.path && v.pathI < v.path.length && !pathPasses(v.path.slice(v.pathI), g2.nodes, v, T))) {
                     const from = v.node != null && v.node >= 0 && Math.hypot(g2.nodes[v.node].x - v.x, g2.nodes[v.node].z - v.z) < 3 ? v.node : g2.nearest(v.x, v.y, v.z);
-                    const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90 });
+                    const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90, ...(v.shelter ? this._fleeExtras(v, T) : {}) });
                     if (r) { v.path = r.path; v.pathI = 0; v.goal = r.goal; F.plan = { node: r.goal }; v.pathCost = (n) => threatCost(n, T); } else { F.plan = null; v.path = null; }
                 }
                 if (!F.plan && !indoors) { const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)) || escapeWay(v, T, (x, z) => this._walkable(x, z, v.y)); F.plan = q ? { open: q } : { watch: true }; v.path = null; }
@@ -1727,6 +1727,33 @@ export class CastleLife {
         // (standing near it, nowhere farther to go: cowering — ducked, the arms over the head)
         v.mode = v.speed > 0 ? 'flee' : d < FLEE.SAFE * 0.6 ? 'flinch' : 'idle';
         this._ground(v);
+    }
+
+    /**
+     * For a great fire: which places are SAFE (behind a wall from the fire, under a roof) and how many runners already head for each
+     * (FleePlan: the score of a place goes down for every other one going there — they spread out, no heap). Walls looked at once a few
+     * seconds for the whole place (the cache), not for every runner.
+     */
+    _fleeExtras(v, T) {
+        const cs = v.cs, now = Date.now(), col = this.game.collision, data = this.game.world?.terrain?.data;
+        const fires = T.filter((t) => t.pid == null);
+        const key = fires.map((t) => `${Math.round(t.x / 3)},${Math.round(t.z / 3)}`).join('|');
+        let C = cs.shelterCache;
+        if (!C || C.key !== key || now - C.t > 4000) C = cs.shelterCache = { key, t: now, m: new Map() };
+        const loads = new Map();
+        for (const o of cs.active.values()) { if (o === v || o.dead) continue; const nd = o.flee?.plan?.node; if (nd != null) loads.set(nd, (loads.get(nd) || 0) + 1); }
+        const bonus = (n, id) => {
+            let b = C.m.get(id);
+            if (b !== undefined) return b;
+            b = 0;
+            for (const t of fires) {
+                if (col?.lineOfSight && !col.lineOfSight(t.x, n.y + 2.5, t.z, n.x, n.y + 2.5, n.z, 0.45)) b += 16; // (a wall between: the fire does not reach, the heat is held)
+            }
+            if (data?.solidIn) { const L = Math.round(n.y + 1.5); if (data.solidIn(Math.round(n.x), Math.round(n.z), L + 4, L + 14)) b += 6; } // (under a roof)
+            C.m.set(id, b);
+            return b;
+        };
+        return { bonus, load: (id) => loads.get(id) || 0 };
     }
 
     /** A roof over it (inside a house, the tower, a gate): the ways of the building lead out. */
@@ -2831,8 +2858,10 @@ export class CastleLife {
             if (r === 'fight') { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : v.role === 'king' ? SHOUT.king : SHOUT.knight), 3); }
             else { const bp = this._playerPos(by); this.fright?.scare?.(v, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : from, by); this._say(v, pick(SHOUT.help), 3); }
         } else if (r === 'search') {
-            v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; // (nobody saw whose: he looks at the place, not for a man — Blame.js)
-            v.path = null; v.lookT = 0;
+            if (v.wizard && this.wizards?.answerShot?.(v, by, from)) { /* (a wizard who saw where the shot came from: shield up, and after it — WizardLife.answerShot) */ } else {
+                v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; // (nobody saw whose: he looks at the place, not for a man — Blame.js)
+                v.path = null; v.lookT = 0;
+            }
             this._say(v, pick(v.wizard ? SHOUT.startledWiz : SHOUT.startled), 3);
         } else {
             v.fleeAt = { x: from.x, z: from.z }; v.fleeFrom = null; v.fleeT = STARTLE.FLEE_S; v.fleeing = false;
@@ -3058,11 +3087,13 @@ export class CastleLife {
      * knights, the king, wizards — back off step by step facing it behind their shields (some panic and
      * run; a shield gone hot in it makes them drop back); everyone else runs from it.
      */
-    fear(v, x, z, heat = 0, dt = 0.25) {
+    fear(v, x, z, heat = 0, dt = 0.25, opt = {}) {
         if (!v || v.dead || v.lev || v.servantOf != null) return;
         const brave = v.role === 'knight' || v.role === 'king' || !!v.wizard;
+        // a great fire (the Hellfire) and a wizard: not a step back in a heap — to a SAFE place (behind a wall, in a building), spread out (WizardLife.fireRun)
+        if (v.wizard && opt.big && !opt.panic) { this.wizards.fireRun(v, x, z, opt.r ?? 12, heat); return; }
         if (!(v.fireT > 0)) {
-            v.firePanic = !brave || Math.random() < 0.15 + 0.35 * heat;
+            v.firePanic = opt.panic || !brave || Math.random() < 0.15 + 0.35 * heat;
             if (v.firePanic) this._say(v, pick(SHOUT.help));
         }
         if (brave && !v.firePanic && (v.shieldHeat || 0) > 2.5) { v.firePanic = true; v.shieldHeat = 0; } // (the shield too hot to hold)

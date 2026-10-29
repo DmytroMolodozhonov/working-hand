@@ -216,8 +216,8 @@ export const AIM = {
 };
 
 /** Random small lightning from a clash: none from weak wizards (as it was), more and more from the strong — arcs per second for a mean strength. */
-export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5 };
-export const arcRate = (power) => Math.max(0, (power - ARC.FROM) * ARC.RATE);
+export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5, ON: false }; // (ON: false — the author: «молнии в дуэли лучей не нравятся», OFF; the spell «Lightning Strike» is another thing)
+export const arcRate = (power) => (ARC.ON ? Math.max(0, (power - ARC.FROM) * ARC.RATE) : 0);
 
 /** Body sizes (metres) as a charge touches them: a line a–b and a radius around it. */
 export const BODY = {
@@ -516,7 +516,7 @@ export class Duel {
      * Every body a charge can touch (`skip`: the caster — never his own), as capsules
      * {kind, id, a, b, r}. (The entries are reused: read them before the next call.)
      */
-    _bodies(skip = null) {
+    _bodies(skip = null, reach = DUEL.RANGE_DIE + 5) {
         const g = this.game;
         const pool = this._bpool || (this._bpool = []);
         const out = [];
@@ -532,7 +532,7 @@ export class Duel {
         for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
-        for (const v of g.castleLife?.targets(DUEL.RANGE_DIE + 5) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
+        for (const v of g.castleLife?.targets(reach) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
         for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._tipped(v, this._villagerBody(v, put('c', v.id))); // (never Captain Black Moustache by the charge he beat back himself)
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));

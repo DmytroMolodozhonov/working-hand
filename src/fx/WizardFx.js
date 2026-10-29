@@ -15,11 +15,15 @@
 import * as THREE from 'three';
 import { makeBookModel } from '../game/BookBirds.js';
 import { makeItemModel } from '../game/ItemTypes.js';
+import { CombatVisuals } from '../game/Combat.js';
+import { NPC_SHIELD } from '../game/ShieldBounce.js';
+import { SmokeSwipe } from '../game/SmokeSwipe.js';
 
-export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024, NOWAND: 2048 };
+export const FX = { LUMOS: 1, SHIELD: 2, DOME: 4, LEV: 8, SPARK: 16, DRAW: 32, CAST: 64, BLINK: 128, OFFER: 256, BREW: 512, LEVFAIL: 1024, NOWAND: 2048, SWIPE: 4096 };
 const NEAR = 40; // m: farther wizards' small magic is not drawn
 const PROPS = 6;
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
+const _c1 = new THREE.Vector3(), _c2 = new THREE.Vector3(), _c3 = new THREE.Vector3();
 
 function glowTexture() {
     if (typeof document === 'undefined') return null;
@@ -57,14 +61,11 @@ export class WizardFx {
             scene.add(m);
             this.props.push({ model: m, by: null });
         }
-        // shields of light and the Master's dome (pooled)
-        this.shieldMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-        this.shieldGeo = new THREE.CircleGeometry(1.82, 24); // (30 % bigger than it was: 1.4 — as a player's; ShieldBounce.NPC_SHIELD)
-        this.domeMat = new THREE.MeshBasicMaterial({ color: 0xc58bff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
-        this.domeGeo = new THREE.SphereGeometry(3.2, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2);
-        this.shields = [];
-        this.domes = [];
-        for (let i = 0; i < 2; i++) { this._shield(); this._dome(); this._glow(); }
+        // the wizards' shield and dome are the very same picture as a player's «Protection» / «Protection Maxima» (Combat.CombatVisuals,
+        // its geometries and materials shared and compiled at the start): a few pooled sets, one per wizard holding a shield
+        this.vis = [];
+        for (let i = 0; i < 3; i++) this._vis();
+        for (let i = 0; i < 2; i++) this._glow();
         this._t = 0;
     }
 
@@ -77,20 +78,10 @@ export class WizardFx {
         return s;
     }
 
-    _shield() {
-        const m = new THREE.Mesh(this.shieldGeo, this.shieldMat);
-        m.visible = false;
-        this.game.scene.add(m);
-        this.shields.push(m);
-        return m;
-    }
-
-    _dome() {
-        const m = new THREE.Mesh(this.domeGeo, this.domeMat);
-        m.visible = false;
-        this.game.scene.add(m);
-        this.domes.push(m);
-        return m;
+    _vis() {
+        const c = new CombatVisuals(this.game.scene);
+        this.vis.push(c);
+        return c;
     }
 
     /** A puff of violet smoke (a blink: the Master vanishes here and appears there). */
@@ -106,7 +97,7 @@ export class WizardFx {
         const t = this._t;
         const me = this.game.character?.group.position;
         if (!me) return;
-        let gi = 0, si = 0, di = 0;
+        let gi = 0, si = 0;
         for (const p of this.props) p.used = false;
         const fx = this.game.fx;
         for (const v of wizards) {
@@ -158,6 +149,15 @@ export class WizardFx {
                 const to = dm ? _w.set(dm.x, dm.top - 1.5, dm.z) : _w.copy(tip).addScaledVector(dir, 4);
                 this.game.duel?._drawBolt?.('Stupefy', tip, to, v.id);
             }
+            // a stroke of the wand turns a wave of smoke aside (SmokeSwipe): every computer throws ITS smoke once, when the stroke begins
+            if (f & FX.SWIPE) {
+                if (!v._swipeFx) {
+                    v._swipeFx = true;
+                    const fxx = -Math.sin(v.yaw), fzz = -Math.cos(v.yaw), sg = (v.idx | 0) % 2 ? 1 : -1;
+                    SmokeSwipe.sweep(fx, tip.x, tip.y - 0.3, tip.z, { sx: -fzz * sg, sz: fxx * sg, speed: 9 });
+                }
+                if (fx) for (let k = 0; k < 2; k++) fx.spark(tip, 0xbfe9ff, 0.08, _w.set(0, -0.6, 0), 0.5);
+            } else v._swipeFx = false;
             if (f & FX.DRAW && fx) {
                 // a glowing line drawn in the air
                 for (let k = 0; k < 2; k++) fx.spark(tip, 0x9ff3ff, 0.09, _w.set(0, 0.05, 0), 0.9);
@@ -167,27 +167,21 @@ export class WizardFx {
                 _w.y -= 1.8;
                 fx.spark(_w, Math.random() < 0.5 ? 0x5dff8a : 0xb6ffcb, 0.12, _u.set((Math.random() - 0.5) * 0.4, 1.2 + Math.random(), (Math.random() - 0.5) * 0.4), 0.8);
             }
-            if (f & FX.SHIELD) {
-                const s = this.shields[si] || this._shield();
+            if (f & (FX.SHIELD | FX.DOME)) {
+                // (the same picture as a player's: the dome wins when both are up; the hand shield is before the free left hand — ShieldBounce.NPC_SHIELD)
+                const cv = this.vis[si] || this._vis();
                 si++;
-                const yaw = v.yaw;
-                // (before the free left hand: the wand hand goes on casting — ShieldBounce.NPC_SHIELD)
-                s.position.set(v.x - Math.sin(yaw) * 1.3 - Math.cos(yaw) * 0.35, v.y + 2.6, v.z - Math.cos(yaw) * 1.3 + Math.sin(yaw) * 0.35);
-                s.rotation.set(0, yaw, 0);
-                s.material.opacity = 0.3 + 0.08 * Math.sin(t * 12);
-                s.visible = true;
-            }
-            if (f & FX.DOME) {
-                const dmh = this.domes[di] || this._dome();
-                di++;
-                dmh.position.set(v.x, v.y - 0.2, v.z);
-                dmh.scale.setScalar(1 + 0.03 * Math.sin(t * 6));
-                dmh.visible = true;
+                const yaw = v.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+                const dome = !!(f & FX.DOME);
+                _c1.set(v.x, v.y + NPC_SHIELD.DOME_UP, v.z);
+                _c2.set(v.x + fx * NPC_SHIELD.FWD - Math.cos(yaw) * NPC_SHIELD.SIDE - fx * 0.45, v.y + NPC_SHIELD.UP, v.z + fz * NPC_SHIELD.FWD + Math.sin(yaw) * NPC_SHIELD.SIDE - fz * 0.45);
+                _c3.set(fx, 0, fz);
+                const left = dome ? (v.domeT > 0 ? Math.min(1, v.domeT) : 1) : (v.shieldT > 0 ? Math.min(1, v.shieldT) : 1);
+                cv.update(dt, { shield: dome ? 2 : 1, shieldLeft: left, frozen: false, handScale: NPC_SHIELD.R, domeR: NPC_SHIELD.DOME_R }, { center: _c1, hand: _c2, dir: _c3 });
             }
         }
+        for (let i = si; i < this.vis.length; i++) this.vis[i].update(dt, { shield: 0, shieldLeft: 0, frozen: false }, { center: _c1, hand: _c2, dir: _c3 });
         for (let i = gi; i < this.glows.length; i++) this.glows[i].visible = false;
-        for (let i = si; i < this.shields.length; i++) this.shields[i].visible = false;
-        for (let i = di; i < this.domes.length; i++) this.domes[i].visible = false;
         for (const p of this.props) if (!p.used) { p.model.visible = false; p.by = null; }
     }
 }
