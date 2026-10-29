@@ -74,8 +74,13 @@ try {
     for (const e of lt.slice(0, 8)) console.log(`   +${((e.t - t0) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
     console.log(`ПОСЛЕ ЗАКРЫТИЯ ЭКРАНА (${AFTER} с): кадров ${post.frames}, очередь чанков ${post.queue}, долгих задач ${post.lt.length}, самая долгая ${(post.lt[0]?.d || 0).toFixed(0)} мс, сумма ${(post.lt.reduce((a, b) => a + b.d, 0) / 1000).toFixed(1)} с`);
     for (const e of post.lt.slice(0, 8)) console.log(`   +${((e.t - window0(e)) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
-    const inf = await page.evaluate(() => { const g = window.__zns.game, i = g.renderer.info; const by = {}; for (const p of i.programs) by[p.name] = (by[p.name] || 0) + 1; return { programs: i.programs.length, geometries: i.memory.geometries, textures: i.memory.textures, by, prewarmed: g.prewarmedPrograms }; });
+    const inf = await page.evaluate(() => { const g = window.__zns.game, i = g.renderer.info; const by = {}; for (const p of i.programs) by[p.name] = (by[p.name] || 0) + 1; return { programs: i.programs.length, geometries: i.memory.geometries, textures: i.memory.textures, by, prewarmed: g.prewarmedPrograms, late: i.programs.slice(g.prewarmedPrograms).map((p) => `${p.name} | ${String(p.cacheKey).slice(0, 160)}`) }; });
     console.log(`шейдеров: ${inf.programs} (после прогрева ${inf.prewarmed}), геометрий ${inf.geometries}, текстур ${inf.textures}`, JSON.stringify(inf.by));
+    const who = await page.evaluate(() => { const g = window.__zns.game, r = g.renderer, late = new Set(r.info.programs.slice(g.prewarmedPrograms).map((p) => p.cacheKey)), out = [];
+        g.scene.traverse((o) => { const ms = o.material ? [].concat(o.material) : []; for (const m of ms) { const pr = r.properties.get(m)?.currentProgram; if (pr && late.has(pr.cacheKey)) { const chain = []; for (let q = o; q && chain.length < 6; q = q.parent) chain.push(q.name || q.type); out.push(`${o.type} «${o.name}» verts ${o.geometry?.attributes?.position?.count} mat ${m.type} ${m.name} color ${m.color?.getHexString?.()} map ${!!m.map} flat ${m.flatShading} vc ${m.vertexColors} | ${chain.join(' < ')}`); } } });
+        return out.slice(0, 6); }).catch((e) => [String(e)]);
+    for (const w of who) console.log('   кто собрал: ' + w);
+    for (const l of inf.late) console.log('   после прогрева собран шейдер: ' + l);
     if (PROFILE) {
         const { profile } = await cdp.send('Profiler.stop');
         const self = new Map(), byId = new Map(profile.nodes.map((n) => [n.id, n]));
