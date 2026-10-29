@@ -69,7 +69,7 @@ import { Bodyguard, isLord } from './Bodyguard.js';
 import { CastleWatch } from './CastleWatch.js';
 import { kingFights, guardRadius, guardsKilled } from './KingNerve.js';
 import { slowFactor, tickSlow } from './Slow.js';
-import { trackSlope, slopePace } from './HillWay.js';
+import { trackSlope, slopePace, ledgeWide } from './HillWay.js';
 import { creditKill } from './Mana.js';
 import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
@@ -1187,6 +1187,8 @@ export class CastleLife {
         const rise = f - (L - 1);
         if (rise < 2 || rise > 3) return false;
         if (t.solidIn(ax, az, f + 1, f + 5)) return false; // (no room on top)
+        // (a post, a pillar, a fence is no ledge: the top must be as wide as steps are — HillWay.ledgeWide)
+        if (!ledgeWide((x, z) => t.floorBelow(x, z, f + 1), ax, az, nx, nz, f)) return false;
         v.climb = { t: 0, dur: 0.7 + rise * 0.45, x0: v.x, y0: v.y, z0: v.z, x1: ax, y1: f - 0.5, z1: az };
         v.yaw = Math.atan2(-nx, -nz);
         return true;

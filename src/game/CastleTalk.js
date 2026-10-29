@@ -58,7 +58,7 @@ import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
-import { Attention, ATT, inSight } from './Attention.js';
+import { Attention, ATT, inSight, mayNotice, WaveDetector } from './Attention.js';
 import { wizardDetects, placeOf, shopRefuses, expelled, attitude, wizardLine, REFUSE_LINE, EXPEL_LINE } from './DarkMagic.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
@@ -174,6 +174,8 @@ export class CastleTalk {
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
+        this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
+        this._calledAt = -1e9; // when I last called out / waved
         this.attention = new Attention(); // whom I look at, walk to, talk with — he hears my words, he notices me (Attention.js)
         this._attT = 0;
         this._attPrev = null;
@@ -359,15 +361,35 @@ export class CastleTalk {
             near.push({ id: v.id, x: v.x, y: v.y + 1.3, z: v.z });
         }
         this.attention.update(eye, look, vel, near, dt, now);
+        // (a call, a wave, or coming up and standing: only then do strangers take notice of me — a plain look is not an address)
+        const ray = this.commands?.pointRay?.();
+        if (this.wave.step(ray?.hand ? Math.atan2(ray.d.x, ray.d.z) : 0, !!ray?.hand, now / 1000)) { this._calledAt = now; this.wave.reset(); }
+        this._still = vel && Math.hypot(vel.x, vel.z) < 0.4 ? (this._still || 0) + dt : 0;
         // he notices me: stops what he does a moment and looks at me (not in a fight, asleep, busy at a task for the king)
         for (const [id, a] of this.attention.of) {
             if (a.score < ATT.NOTICE || a.d > ATT.TALK + 3) continue;
             const v = this.life.byId.get(id);
             if (!v || v.dead || v.foe || v.sleep || v.follow || v.order || v.fleeT > 0 || v.job === 'king') continue;
+            if (!this._mayNotice(v, a.d, now)) continue;
             if (!(v.talking > 0)) v.talkTo = g.localId;
             if (v.talkTo === g.localId) v.talking = Math.max(v.talking || 0, 1.2);
             v.noticedAt = now;
         }
+    }
+
+    /** Does he know me (a friend, a subject, a foe, the king, one I talked with, one who heard of me)? */
+    _knowsMe(v) {
+        if (v.metMe || v.follow || v.role === 'king' || v.job === 'king' || v.guard || v.foe != null) return true;
+        try {
+            const e = this.life.rel?.eff?.(v);
+            if (e && (e.fr !== 0 || e.lv > 0 || e.sub >= 20 || e.sub < 0)) return true; // (a base of 2–10 is only the post a stranger holds)
+            if ((v.role === 'knight' || v.role === 'advisor') && (this.life.wantedLevel?.(this.game.localId) || 0) >= 1) return true; // (the guard looks for the wanted)
+        } catch (_) { /* (no numbers yet: a stranger) */ }
+        return false;
+    }
+
+    _mayNotice(v, d, now) {
+        return mayNotice({ known: this._knowsMe(v), calledAt: this._calledAt, now, d, stillClose: this._still >= ATT.STILL });
     }
 
     /** Something I did changed how this villager takes me (a blow: −12) — Attitude.js. */
@@ -614,8 +636,10 @@ export class CastleTalk {
         text = this._unecho(text); // (and his words caught with mine in one phrase: «я человек простой… а ты можешь со мной пойти»)
         if (!text) return false;
         if (isApology(text) && this.life.forgive?.(g.localId)) return true; // («извините» to the one I knocked: calmed)
+        this._calledAt = performance.now(); // (a word aloud — strangers near take notice: Attention.mayNotice)
         const v = this._listener(text);
         if (!v) return false;
+        v.metMe = true; // (I spoke to him: he knows me from now on)
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
         if (this._darkGate(v)) return true; // (чёрный маг: волшебник презирает, не продаёт, гонит — DarkMagic.js)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
@@ -1633,7 +1657,8 @@ export class CastleTalk {
             if (v.dead || v.foe || (v.talking > 0 && !noticed) || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)
-            if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3)) continue;
+            if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3 && this._mayNotice(v, d, now))) continue;
+            if (d <= 5 && !this._mayNotice(v, d, now) && v.role !== 'merchant' && v.job !== 'home') continue; // (a stranger passing close by does not greet: I must come up, call or wave)
             // (a wall between us: he does not know I am here — no «привет» through it)
             if (g.collision?.lineOfSight && this._losOf && !inSight(v, this._losOf, this._losCache, now)) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;
