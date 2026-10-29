@@ -15,6 +15,10 @@
  *  - Creative: no skill is needed there — counts as 100 (nothing knocks the hero over but the exceptions above).
  *  - Death takes it like the other growth (Legacy: captureLegacy / wipeHero / absorbLegacy); «Give Me My Power»
  *    brings back the body's value (REPLACES, not adds). Saved with the hero (WorldSave `steady`).
+ * «Абсолютная устойчивость» (the white pentagram `Pentagranium Firmitas`: FirmRules.js, Firmitas.js): `absolute` — a gift for good (until death) that
+ * overrides ALL of the above: whatever the skill was, the hero is never knocked down — by any spell (Wind, Wind Maxima, Inspirius, the gods'), any
+ * fall (the damage of the fall stays), any blow; a push moves the body only `FIRM.PUSH_K` of the usual and never throws it into the air
+ * (BodyImpact, Knockdown.knock). Death takes it with the rest (Legacy: snapshot `ab`), «Give Me My Power» brings it back, saved with the hero.
  * Each player has their own, counted on their own computer (the knockdown is local to its owner anyway).
  * EVERY other creature that can be knocked down has a fixed one (`creatureSteady`, the table `NPC_STEADY` — the author):
  * it never grows, it is drawn from the creature's id (the same on every computer, no Math.random in the world),
@@ -26,6 +30,7 @@
 import { isDivine } from './ProtectionGods.js';
 import { IMPACT, SPELL_PHYSICS } from './Impact.js';
 import { hashString } from '../core/math.js';
+import { absoluteStops } from './FirmRules.js';
 
 export const STEADY = {
     MIN: 1, MAX: 100,
@@ -91,17 +96,21 @@ export class Steadiness {
     constructor(game) {
         this.game = game;
         this.skill = STEADY.MIN;
+        this.absolute = false; // «Pentagranium Firmitas»: never knocked down by anything (FirmRules.js)
         this.acc = 0; // metres of rough running towards the next +1
         this.rough = 0; // smoothed roughness under the feet now, 0 … 1
         this._x = null; this._z = null; this._gy = null;
     }
 
     /** The skill as the rules see it (Creative: the hero's setting «Устойчивость», 100 by default — HeroSetup.js). */
-    get effective() { return this.game.monster?.active ? STEADY.MAX : this.game.config?.mode === 'creative' ? (this.game.hero?.steady ?? STEADY.MAX) : this.skill; } // (the monster form: 100 — MonsterForm.STEADY)
+    get effective() { return this.absolute ? STEADY.MAX : this._plain; }
+    /** The skill without the gift of the pentagram Firmitas (the stun and death still use it: they are no matter of balance). */
+    get _plain() { return this.game.monster?.active ? STEADY.MAX : this.game.config?.mode === 'creative' ? (this.game.hero?.steady ?? STEADY.MAX) : this.skill; } // (the monster form: 100 — MonsterForm.STEADY)
 
     /** Does the hero stay on their feet? opts: see holdChance. */
     holds(kind, opts = {}, rnd = Math.random) {
-        const p = holdChance(this.effective, kind, opts);
+        if (this.absolute && absoluteStops(kind)) return true; // (a firm body: whatever the spell, whatever the drop — FirmRules.js)
+        const p = holdChance(this._plain, kind, opts); // (absolute: only what absoluteStops lets through reaches here — the stun)
         return p > 0 && rnd() < p;
     }
 
@@ -150,13 +159,22 @@ export class Steadiness {
         return true;
     }
 
-    onDeath() { this._windAt = null; this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; }
+    onDeath() { this._windAt = null; this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; this.absolute = false; }
 
-    snapshot() { return this.skill > STEADY.MIN || this.acc > 0 ? { skill: this.skill, acc: Math.round(this.acc) } : null; }
+    /** The gift of the pentagram Firmitas is given (true) / taken (false). */
+    setAbsolute(on) { this.absolute = !!on; }
+
+    snapshot() {
+        if (!(this.skill > STEADY.MIN || this.acc > 0 || this.absolute)) return null;
+        const o = { skill: this.skill, acc: Math.round(this.acc) };
+        if (this.absolute) o.ab = 1; // (the pentagram Firmitas's gift)
+        return o;
+    }
 
     /** Put a saved / legacy value on (REPLACES: the new life's growth is given up). */
     restore(s) {
         this.skill = clampSkill(s?.skill);
+        this.absolute = !!s?.ab;
         this.acc = this.skill >= STEADY.MAX ? 0 : clamp(Number(s?.acc) || 0, 0, needFor(this.skill) - 1);
     }
 }

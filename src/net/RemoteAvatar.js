@@ -95,6 +95,7 @@ export class RemoteAvatar {
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)
+        this.firm = !!s.ab; // (absolute steadiness: FirmRules.js)
         this.sees = !!s.sg; // (they see the invisible: Invisibles.seesInvisible)
         if (Array.isArray(s.sk)) this.known = new Set(s.sk.slice(0, 400).map(String)); // (the scrolls they already know: a chest they open gives none of them)
         this.imperius = !!s.im; // («Империус»: their mind is in another body — their eyes burn white)

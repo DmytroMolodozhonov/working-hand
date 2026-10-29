@@ -13,7 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
-import { NIGHT_LINES, SIGHT_LINES } from './PentagramFigures.js';
+import { NIGHT_LINES, SIGHT_LINES, FIRM_LINES } from './PentagramFigures.js';
 
 export const PENT = {
     COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
@@ -107,6 +107,12 @@ registerPentagram({
 registerPentagram({
     id: 'sight', title: 'Пентаграмма видения невидимых', dark: false, glow: 0xff7ad9, cost: 150, permanent: true, scroll: 'PentagramSight', lines: SIGHT_LINES,
     effect: 'Встаньте в круг с пером птички Спенсера (или травой Беслана) и заплатите 150 маны — вы навсегда (до смерти) начнёте видеть всё невидимое.',
+});
+
+// «Абсолютная устойчивость» (FirmRules.js, Firmitas.js): a gift for good (until death); costs 300 mana and a magic pebble (a swamp canary's) lying on the circle.
+registerPentagram({
+    id: 'firm', title: 'Пентаграмма абсолютной устойчивости', dark: false, glow: 0xf0b25a, cost: 300, permanent: true, scroll: 'PentagramFirm', lines: FIRM_LINES,
+    effect: 'Положите на круг волшебный камушек, встаньте в него и заплатите 300 маны — вас навсегда (до смерти) больше не повалит ни ветер, ни заклинание, ни падение с любой высоты.',
 });
 
 registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its circle is laid by EnchantCircles — Pentagranium._others)

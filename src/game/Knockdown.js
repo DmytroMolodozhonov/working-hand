@@ -25,6 +25,7 @@
 import { KD, fallDir, IMPACT } from './Impact.js';
 import { braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { knockMessage, lyingMessage } from './Hints.js';
+import { absoluteStops } from './FirmRules.js';
 
 export const KNOCK = { MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: a fall from a blow or a spell keeps one down 5 s at least + 1…5 s by chance — nobody jumps up at once)
     FALL_T: 0.45, RISE_T: 0.7, SQUAT_T: 0.14, BOW_LOW: 0.3, BOW_UP: 0.4, NO_POSE_T: 2, AUTO_RISE: 6, STAGGER_MAX: 0.8,
@@ -115,6 +116,8 @@ export class Knockdown {
         const g = this.game, ch = g.character;
         // the monster form: nothing but the gods' spells, «Инспириус», «Total Destruction Максима» throw it down (MonsterForm.js)
         if (g.monster?.active && !g.monster.knocks(kind, cause)) { this.held?.({ dir, v: toss }); return false; }
+        // «Абсолютная устойчивость» (Pentagranium Firmitas, FirmRules.js): nothing fells the hero — whoever calls (vortices, falls, thrown things…); the stun and death are not a loss of balance
+        if (g.steady?.absolute && absoluteStops(kind)) { this.held?.({ dir, v: Math.min(toss || 0, 8) }); return false; }
         // (the author: 5 s at least + 1…5 s by chance; «Up» or a friend's hand still lift one earlier)
         if (down !== Infinity) down = Math.max(down ?? KNOCK.MIN_DOWN, KNOCK.MIN_DOWN) + KNOCK.EXTRA_DOWN[0] + Math.random() * (KNOCK.EXTRA_DOWN[1] - KNOCK.EXTRA_DOWN[0]);
         if (kind !== 'Stupefy' && !g.combat?.stunned && !g.combat?.frozen) this.daze(strength); // (not the stun's or the ice's stiff fall)

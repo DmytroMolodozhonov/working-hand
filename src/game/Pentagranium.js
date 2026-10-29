@@ -61,6 +61,7 @@ const USE_TEXT = {
     vitality: 'Положите в круг тело человека, убитого чёрной магией, и встаньте рядом: максимум вашего здоровья вырастет на максимум здоровья жертвы (250 маны, +10 к тёмной магии)',
     night: 'Встаньте в круг (50 маны) — вы навсегда начнёте лучше видеть в темноте',
     sight: 'Встаньте в круг с пером птички Спенсера (150 маны) — вы начнёте видеть невидимое',
+    firm: 'Положите на круг волшебный камушек, встаньте в него (300 маны) — вас больше не повалит ничто, до самой смерти',
 };
 
 export class Pentagranium {
@@ -459,6 +460,10 @@ export class Pentagranium {
             if (s.cd > 0) return;
             const done = g.sight?.useCircle(m.pent, { m, pays, hint, mana, fx: () => this._useFx(m.pent, m, true) });
             if (done) s.cd = 30; // (a gift given once: standing on in the circle gives no more)
+        } else if (m.pent === 'firm') {
+            if (s.cd > 0) return;
+            const done = g.firm?.useCircle({ m, pays, hint, mana, fx: () => this._useFx('firm', m, true) });
+            if (done) s.cd = 30; // (a gift given once: standing on in the circle gives no more)
         } else if (m.pent === 'teleport') {
             const to = (m.pair && this.marks.get(m.pair)) || (m.pairSpot && { id: 'virtual', x: m.pairSpot.x, z: m.pairSpot.z, y: null, r: m.r }); // (a settlement's ready pair: the other end may not be made here yet)
             if (!to) return hint('🌀 ' + USE_HINT.noPair);
@@ -494,7 +499,7 @@ export class Pentagranium {
 
     /** The glow of a use: a pillar of sparks, a ring spreading, a flash (the shared flash light) and a sound; shown to everybody (`pgm` fx). */
     _useFx(kind, m, send = false) {
-        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4] }[kind] || [0xffffff, 0xffe9a8];
+        const g = this.game, fx = g.fx, col = { teleport: [0xe8f4ff, 0x9fd0ff], life: [0xb8f5a0, 0xffe58a], mend: [0xeef2f8, 0xffd36e], night: [0x9fb4ff, 0xe8eeff], sight: [0xff7ad9, 0xffe0f4], firm: [0xf0b25a, 0xfff0c8] }[kind] || [0xffffff, 0xffe9a8];
         if (fx) {
             for (let i = 0; i < 60; i++) {
                 const a = (i / 60) * Math.PI * 2;
@@ -503,7 +508,7 @@ export class Pentagranium {
             for (let i = 0; i < 40; i++) fx.spark(_o.set(m.x + (Math.random() - 0.5) * 1.6, m.y + 0.2, m.z + (Math.random() - 0.5) * 1.6), col[i % 2], 0.2, _d.set((Math.random() - 0.5) * 0.6, 4 + Math.random() * 6, (Math.random() - 0.5) * 0.6), 1.6);
             fx.lightFlash?.(_o.set(m.x, m.y + 1.5, m.z), col[1], 3, 0.5, m.r * 4 + 10);
         }
-        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
+        g.sound?.playSpellFxAt?.(kind === 'teleport' ? 'fxTeleport' : kind === 'life' ? 'fxLife' : kind === 'night' ? 'fxNight' : kind === 'sight' ? 'fxSight' : kind === 'firm' ? 'fxFirm' : 'fxMend', _o.set(m.x, m.y, m.z), 1, 1, 18);
         if (send) g.sync?.pentagram?.({ k: 'fx', kind, x: m.x, y: m.y, z: m.z, r: m.r });
     }
 
@@ -689,7 +694,7 @@ export class Pentagranium {
                 if (m.perm && TABLE[m.pent]?.permanent) { mk.perm = true; mk.life = Infinity; mk.t = 5; mk.pair = typeof m.pair === 'string' ? m.pair : null; const o = mk.pair && this.marks.get(mk.pair); if (o) o.pair = mk.id; }
             }
         } else if (m.k === 'fx') {
-            if (['teleport', 'life', 'mend', 'night', 'sight'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
+            if (['teleport', 'life', 'mend', 'night', 'sight', 'firm'].includes(m.kind)) this._useFx(m.kind, { x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.min(PENT.R_MAX, +m.r || 3.5) });
         } else if (m.k === 'bare') {
             const mk = this.marks.get(m.id);
             if (mk && mk.pent === 'bare') this._bareBegin(mk, false);

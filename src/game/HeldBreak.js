@@ -22,7 +22,7 @@ import { isMagicItem, isGodGift } from './ItemTypes.js';
 import { WAND_TOOLS } from './Expelliarmus.js';
 
 /** Things that are magic by their kind (the plain splash cannot take them; the Maxima can). */
-export const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'telewilpinLeaf', 'carnivoreHead', 'brightCore']);
+export const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'magicPebble']);
 export function liquidationNeedsMaxima(it) {
     if (!it) return false;
     return isMagicItem(it) || MAGIC_KINDS.has(it.kind);

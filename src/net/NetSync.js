@@ -346,6 +346,7 @@ export class NetSync {
                 dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
                 dk: g.dark?.skin || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
+                ab: g.steady?.absolute ? 1 : undefined, // (absolute steadiness — Pentagranium Firmitas: the others see me stand firm)
                 sg: g.sight?.netFlag(), // (I see the invisible: the others draw me as they draw anyone — and draw their invisible players to me see-through)
                 sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)

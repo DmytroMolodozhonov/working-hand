@@ -19,6 +19,7 @@ import { fallStrength } from './Knockdown.js';
 import { GOT_UP_T } from './HandRelease.js';
 import { STEADY, windShieldRule } from './Steadiness.js';
 import { isMagicKind, isDivine, ALL_ROUND } from './ProtectionGods.js';
+import { FIRM, absoluteStops } from './FirmRules.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -71,6 +72,12 @@ export class BodyImpact {
         else if (!swim && !frozen && res !== 'none' && this._windShield(o, dome, facing) === 'held') { res = 'stagger'; held = true; k = Math.max(k, 1) * STEADY.HELD_PUSH_K; this._windHint('held'); }
         else if (!swim && !frozen && res !== 'none' && this._windShield(o, dome, facing) === 'fall') { res = 'knockdown'; k = 1; }
         else if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; held = true; k *= STEADY.HELD_PUSH_K; }
+        // «Абсолютная устойчивость» (Pentagranium Firmitas, FirmRules.js): nothing fells or throws me — not a spell, not a blast, not a beast; the body
+        // only reels in the «устоял» pose and the push is a fraction of what it was (no toss into the air). The stun and death are no loss of balance.
+        if (g.steady?.absolute && (res === 'knockdown' || res === 'stagger') && !swim && !frozen && absoluteStops(o.spell || o.kind)) {
+            res = 'stagger'; held = true; k *= FIRM.PUSH_K; o.toss = 0; o.fly = false; o.tumble = 0;
+            if (o.v.y > 0) o.v.y = 0;
+        }
         // the push itself
         if (k > 0) {
             if (g.flight?.active) g.knockback.addScaledVector(o.v, k);

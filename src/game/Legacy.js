@@ -101,6 +101,7 @@ export function wipeHero(g) {
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
     g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
+    g.firm?.onDeath(); // (absolute steadiness goes with the life — Steadiness.onDeath; the rite's picture stops)
     g.sight?.onDeath(); // (the night eyes and the sight of the invisible go with the life)
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }

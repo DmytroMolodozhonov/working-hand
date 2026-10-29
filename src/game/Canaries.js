@@ -17,7 +17,7 @@
  *               the same boulder), a landing, a death; a guest's blow goes to the host.
  */
 import * as THREE from 'three';
-import { CANARIES as C, hash, campLuck, campCandidate, campMembers, campRocks, solveThrow, spreadAt } from './CanaryRules.js';
+import { CANARIES as C, hash, campLuck, campCandidate, campMembers, campRocks, solveThrow, spreadAt, pebbleDrop } from './CanaryRules.js';
 import { canaryModel, canaryLook, canaryMaterial, poseCanary, rockGeometry, ROCK_VARIANTS, campGeometry, campLayout, reedGeometry, POSE_T } from '../fx/CanaryModel.js';
 import { BLOCK, CANARIES_FROM_GEN } from '../world/Terrain.js';
 import { FarShape } from '../core/FarShape.js';
@@ -912,6 +912,7 @@ export class Canaries {
             const at = _v.set(c.model.position.x, c.model.position.y + 1.2, c.model.position.z);
             g.items?.spawnLoose?.({ kind: 'canaryHide', uid: newUid(), count: 1 + (Math.random() < 0.4 ? 1 : 0) }, at.clone(), { vel: _w.set((Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2) });
             g.items?.spawnLoose?.({ kind: 'bone', uid: newUid(), count: 1 + Math.floor(Math.random() * 3) }, at.clone(), { vel: _w.set((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2) });
+            if (pebbleDrop(c.leader)) g.items?.spawnLoose?.({ kind: 'magicPebble', uid: newUid(), count: 1 }, at.clone(), { vel: _w.set((Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2) }); // (the price of the pentagram Firmitas — FirmRules.js)
             this._send({ op: 'die', id: c.id });
             if (c.leader && camp) { camp.leaderDown = true; camp.fleeT = C.FLEE_T; for (const m of camp.members) if (!m.dead) this._flee(m, C.FLEE_T); }
             else if (camp && camp.members.filter((m) => !m.dead).length <= 1) { camp.fleeT = C.FLEE_T; for (const m of camp.members) if (!m.dead) this._flee(m, C.FLEE_T); }

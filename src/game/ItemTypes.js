@@ -30,7 +30,7 @@ import { addEnchantGlow } from '../fx/EnchantGlow.js';
 import { irMaterial } from '../fx/Iridescent.js';
 import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.js';
 import { brightCoreModel } from '../fx/BrightFlowerModel.js';
-import { canaryHideModel, boneModel } from '../fx/CanaryModel.js';
+import { canaryHideModel, boneModel, magicPebbleModel } from '../fx/CanaryModel.js';
 import { spencerFeatherItem, beslanBundleItem } from '../fx/InvisibleModels.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
@@ -177,6 +177,7 @@ export const ITEM_INFO = {
     // the Canaries (Canaries.js): the plain spoils of a swamp people — hide and bones (for crafting later)
     canaryHide: { name: 'Кожа канарика', icon: '🟫', weight: 0.5, stack: 10 },
     bone: { name: 'Кость', icon: '🦴', weight: 0.3, stack: 20 },
+    magicPebble: { name: 'Волшебный камушек', icon: '🔮', weight: 0.15, stack: 10 }, // (a canary's rare find: the price of the pentagram of absolute steadiness — FirmRules.js)
     // the invisible world (Invisibles.js, SecondSight.js): only a hero who sees the invisible sees them lying on the ground
     spencerFeather: { name: 'Перо птички Спенсера', icon: '🪶', weight: 0.03, stack: 10, ghost: true },
     beslanGrass: { name: 'Трава Беслана', icon: '🌾', weight: 0.04, stack: 20, ghost: true },
@@ -243,6 +244,7 @@ function baseValue(it) {
         case 'carnivoreHead': return 140 * (it.count || 1);
         case 'brightCore': return 180 * (it.count || 1);
         case 'canaryHide': return 20 * (it.count || 1);
+        case 'magicPebble': return 150 * (it.count || 1);
         case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
@@ -608,7 +610,8 @@ export const SCROLL_WEIGHTS = [
     ['AvadaKedavra', 4], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
     ['pent:devil', 0.9], ['pent:*', 0.7], // (the pentagrams' scrolls — rare, Pentagrams.js)
-    ['pent:night', 0.6], ['pent:sight', 0.6], // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
+    ['pent:night', 0.6], ['pent:sight', 0.6], ['pent:firm', 0.6], // (…and the white pentagram of absolute steadiness — FirmRules.js)
+    // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];
 const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
@@ -846,6 +849,7 @@ function describeItemBase(it) {
         case 'spencerFeather': return { title: '🪶 Перо птички Спенсера', color: 0xff7ab8, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Светящееся розовое перо невидимой птички. Видно его только тому, кто видит невидимое', 'Чтобы получить это зрение навсегда, положите перо в инвентарь (или в круг) и встаньте в круг «Pentagranium Spectris» — перо сгорит'] };
         case 'beslanGrass': return { title: '🌾 Трава Беслана', color: 0x7ff2e0, lines: [`Пучков: <b>${it.count || 1}</b>`, 'Сияющая трава невидимого мира. Видна только тем, кто видит невидимое', 'Заменяет перо птички Спенсера в пентаграмме видения невидимых'] };
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'magicPebble': return { title: '🔮 Волшебный камушек', color: 0xf0b25a, lines: [`Камушков: <b>${it.count || 1}</b>`, 'Гладкий тёмный камушек с янтарной руной, тёплый на ощупь. Его носят болотные карлики — канарики', 'Нужен для пентаграммы абсолютной устойчивости («Pentagranium Firmitas»): положите его на круг — при обряде он растворится светом'] };
         case 'canaryHide': return { title: '🟫 Кожа канарика', color: 0x8a6a44, lines: [`Кож: <b>${it.count || 1}</b>`, 'Грубая плотная кожа болотного жителя, с жёлтой бахромой из перьев', 'Её можно продать на рынке; позже из неё будут делать вещи'] };
         case 'bone': return { title: '🦴 Кость', color: 0xe6dcba, lines: [`Костей: <b>${it.count || 1}</b>`, 'Крепкая жёлтая кость. Её можно продать на рынке; позже из костей будут делать украшения и инструменты'] };
         case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
@@ -1195,7 +1199,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, spencerFeather: 2, beslanGrass: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1240,6 +1244,7 @@ function buildItemModel(it) {
         case 'carnivoreHead': return carnivoreHeadItemModel();
         case 'brightCore': return brightCoreModel();
         case 'canaryHide': return canaryHideModel();
+        case 'magicPebble': return magicPebbleModel();
         case 'bone': return boneModel();
         case 'owlFeather': return owlFeatherModel();
         case 'spencerFeather': return spencerFeatherItem();

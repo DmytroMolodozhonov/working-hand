@@ -30,7 +30,7 @@ export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычно�
 export const pawnPrice = (it) => Math.max(1, Math.round(itemValue(it) * PAWN_RATE));
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
-const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore']);
+const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'magicPebble']);
 export const fenceTakes = (it) => !!it && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
 
 /** The wands: small (power 3–15), middling (16–30); never stronger. Price: 180 + 11 × power. */
@@ -95,6 +95,7 @@ export function wizardGood(trade, k, n = 0) {
             if (x < 0.65) return { item: { kind: 'phoenixFeather', uid: newUid(), count: 1 }, price: 380 };
             if (x < 0.79) return { item: { kind: 'owlFeather', uid: newUid(), count: 1 }, price: 90 };
             if (x < 0.86) return { item: { kind: 'spencerFeather', uid: newUid(), count: 1 }, price: 240 }; // (rare: the invisible bird's feather — SecondSight.js)
+            if (x < 0.92) return { item: { kind: 'magicPebble', uid: newUid(), count: 1 }, price: 320 }; // (rare: a canary's magic pebble — FirmRules.js)
             return { item: { kind: 'apple', uid: newUid(), count: 1 }, price: 35 };
         }
         default: return null; // the pawnshop (and an unknown trade): nothing on the counter

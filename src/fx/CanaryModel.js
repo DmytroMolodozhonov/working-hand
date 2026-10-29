@@ -487,3 +487,54 @@ export function boneModel() {
     }
     const g = new THREE.Group(); const m = _bone.clone(); m.position.z = 0.25; g.add(m); return g;
 }
+
+let _pebble = null;
+/**
+ * «Волшебный камушек» (what a canary now and then carries in its pouch: the price of the pentagram of absolute steadiness — FirmRules.js): a smooth, slightly
+ * lumpy river-stone of dark slate-blue with veins of white quartz and fine speckles, flat on the underside; on its top a rune carved in a ring and glowing
+ * amber from within (a ring of twelve points, a diamond in the middle, four spokes). ~0.25 m long (the item scale makes it a handful for the hero).
+ * Two shared shapes: the stone (lit by the world) and the glowing rune (unlit, so it shines in the dark).
+ */
+export function magicPebbleModel() {
+    if (!_pebble) {
+        const RX = 0.125, RY = 0.085, RZ = 0.1;
+        const stone = cached('pebble-stone', () => {
+            const g = new THREE.SphereGeometry(1, 30, 22), P = g.getAttribute('position'), c = [];
+            const base = hex(0x465068), light = hex(0x6a7590), quartz = hex(0xece6d6), warm = hex(0x7a6a58);
+            for (let i = 0; i < P.count; i++) {
+                const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+                const lump = 1 + 0.09 * (nz(x * 2.6, y * 2.6, z * 2.6, 1) - 0.5) + 0.05 * (nz(x * 6, y * 6, z * 6, 2) - 0.5);
+                const flat = y < -0.55 ? 1 + (y + 0.55) * 0.5 : 1; // the underside rests flat
+                P.setXYZ(i, x * RX * lump, Math.max(y * RY * lump * flat, -RY * 0.62), z * RZ * lump);
+                const patch = nz(Math.floor(x * 4), Math.floor(y * 4), Math.floor(z * 4), 3); // big soft patches of tone
+                let k = mixc(base, light, 0.25 + 0.55 * patch);
+                if (nz(x * 5, y * 5, z * 5, 4) > 0.78) k = mixc(k, warm, 0.5); // rusty stain
+                const vein = Math.abs(Math.sin(x * 7.5 + y * 4.2 - z * 3.1 + 2.2 * nz(x * 2, y * 2, z * 2, 5)));
+                if (vein < 0.09) k = mixc(k, quartz, 0.85 - vein * 6); // a vein of quartz
+                const sp = nz(x * 40, y * 40, z * 40, 6); // fine speckles
+                const f = 0.9 + 0.2 * sp + 0.1 * smooth(-1, 1, y);
+                c.push(k[0] * f, k[1] * f, k[2] * f);
+            }
+            g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+            g.computeVertexNormals();
+            return g;
+        });
+        const rune = cached('pebble-rune', () => {
+            const parts = [], top = (x, z) => RY * Math.sqrt(Math.max(0, 1 - (x / RX) ** 2 - (z / RZ) ** 2)) + 0.003;
+            const dot = (x, z, s, col) => parts.push(placed(solid('sphere', s * 1.25, s * 0.55, s, col, { seg: 6, mottle: 0.06, seed: 9 }), x, top(x, z), z));
+            const amber = hex(0xffb347), hot = hex(0xfff0c0);
+            for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; dot(Math.cos(a) * 0.062, Math.sin(a) * 0.05, 0.0085, i % 3 ? amber : hot); } // the ring
+            for (let k = 0; k < 4; k++) { const a = (k / 4) * TAU + 0.4; for (const d of [0.02, 0.038]) dot(Math.cos(a) * d, Math.sin(a) * d * 0.8, 0.0065, amber); } // the spokes
+            parts.push(placed(solid('box', 0.014, 0.005, 0.014, hot, { seg: 4, mottle: 0.03 }), 0, top(0, 0) + 0.002, 0, 0, Math.PI / 4, 0)); // the diamond
+            return merge(parts);
+        });
+        const body = new THREE.Mesh(stone, new THREE.MeshLambertMaterial({ vertexColors: true }));
+        const glow = new THREE.Mesh(rune, new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }));
+        body.castShadow = true;
+        _pebble = { body, glow };
+    }
+    const g = new THREE.Group();
+    g.add(_pebble.body.clone(), _pebble.glow.clone());
+    g.children[0].position.y = 0.054; g.children[1].position.y = 0.054; // (rests on its flat side)
+    return g;
+}

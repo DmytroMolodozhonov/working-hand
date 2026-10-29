@@ -193,6 +193,7 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
+import { Firmitas } from './Firmitas.js';
 import { GhostCastleLife } from './GhostCastleLife.js';
 import { SpencerBirds } from './SpencerBirds.js';
 import { Ghosts } from './Ghosts.js';
@@ -549,6 +550,7 @@ export class Game {
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
+        this.firm = new Firmitas(this); // the gift of the white pentagram of absolute steadiness: the rite's picture (Firmitas.js; the flag is Steadiness.absolute)
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
@@ -3379,7 +3381,7 @@ export class Game {
         const out = [];
         for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
         out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'));
-        for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'bone']) out.push({ kind });
+        for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'bone']) out.push({ kind });
         out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
         for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
@@ -3850,6 +3852,7 @@ export class Game {
         if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);
         this.sight?.update(dt);
+        this.firm?.update(dt);
         this.ghostCastle?.update(dt);
         this.groundVortex?.update(dt);
         this.visibleGodi?.update(dt);
@@ -4826,6 +4829,7 @@ export class Game {
         this.ghosts?.dispose();
         this.beslan?.dispose();
         this.sight?.dispose();
+        this.firm?.dispose();
         this.ghostCastle?.dispose();
         this.customCreatures?.dispose();
         this.customPlants?.dispose();

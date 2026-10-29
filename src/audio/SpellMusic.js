@@ -611,6 +611,17 @@ const FX = {
         noise(o, sr, 0.8, 0.9, 0.04, () => 0.9, swell(0.2, 0.6), r);
         return finish(o, sr, { peak: 0.7 });
     },
+    /** The rite of absolute steadiness: a deep earth-rumble taking root, a warm low chord rising, then amber bells settling like stones (a firm, grounded tune: C – G – C). */
+    fxFirm(sr) {
+        const o = buf(sr, 2.0), r = rng(347);
+        drum(o, sr, 0, 0.9, 48, 0.9, r);
+        glide(o, sr, 0, 1.3, 0.14, (u) => 70 + 60 * u, swell(0.3, 0.5), 3);
+        pad(o, sr, ['C3', 'G3', 'C4', 'E4'], 0.1, 1.9, 0.2, { att: 0.4, rel: 0.7, harm: 3, vib: 0.003 });
+        ['C5', 'G5', 'C6', 'E6', 'G6'].forEach((n, k) => bell(o, sr, hz(n), 0.5 + k * 0.18, 0.15, 1.1, 0.26));
+        drum(o, sr, 1.45, 0.4, 70, 0.7, r); // the settling thud when the light is taken in
+        noise(o, sr, 0.2, 1.3, 0.04, (u) => 0.3 + 0.7 * u, swell(0.4, 0.5), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** A mend: ringing hammer taps on steel, then a silver chime. */
     fxMend(sr) {
         const o = buf(sr, 1.7), r = rng(335);

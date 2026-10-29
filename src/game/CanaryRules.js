@@ -6,7 +6,7 @@
  * marked by bone totems at its edge): then the whole camp rages, every canary takes a big boulder in BOTH hands (the camp is full of them), winds up and hurls it —
  * a physical shot: ~8 HP, a hard shove, an arc you can sidestep or hold off with a «Protection». Out of rocks, or with the trespasser up close, a canary punches (−4, a
  * heavy shove). They also throw at whatever else is in their territory (villagers, animals, zombies). They do not leave the camp's neighbourhood (LEASH), do not
- * follow, cannot be tamed. The leader (the first of the camp) dead → the rest flee. They leave hide and bones.
+ * follow, cannot be tamed. The leader (the first of the camp) dead → the rest flee. They leave hide and bones, and now and then a magic pebble (PEBBLE).
  *
  * NUMBERS are here once; Canaries.js uses them.
  */
@@ -121,6 +121,15 @@ export function solveThrow(from, to, speed = CANARIES.THROW_SPEED, g = CANARIES.
 export const spreadAt = (d) => CANARIES.SPREAD * d;
 
 // ============================================================ who / what
+/**
+ * «Волшебный камушек» — what a canary now and then carries in its pouch (the author: «камушек выпадает из существ, которые живут на болотах»): the price of the
+ * pentagram of absolute steadiness (FirmRules.js, Pentagranium Firmitas). Every killed canary drops one with the chance `CHANCE` (~30 %); the camp's leader
+ * ALWAYS does (so a camp of three or more gives at least one for sure). Pure: `rnd` is the random source.
+ */
+export const PEBBLE = { CHANCE: 0.3, LEADER: 1 };
+/** How many pebbles a killed canary leaves (0 or 1). */
+export const pebbleDrop = (leader, rnd = Math.random) => (leader ? PEBBLE.LEADER : rnd() < PEBBLE.CHANCE ? 1 : 0);
+
 /**
  * ON WHOM AND ON WHAT (CLAUDE.md «кто/что»). Columns: `is` — how a canary treats the kind, `hit` — how the kind's things act on a canary.
  * Spells / blows: «не действует» is written with its reason.
