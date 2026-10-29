@@ -85,7 +85,7 @@ export class CustomPlants {
         for (let i = 0; i < n; i++) {
             const a = (i / n) * Math.PI * 2 + Math.random(), rr = n > 1 ? 1 + Math.sqrt(i) * Math.max(1.2, recipe.height * 0.6) : 0;
             const x = at.x + Math.cos(a) * rr, z = at.z + Math.sin(a) * rr;
-            const p = this._plant(key, x, z, { age: 0.25, born: 0 });
+            const p = this._plant(key, x, z, { age: 1, born: 0 }); // (made by the gods: whole at once — its seedlings grow by themselves)
             if (p) added.push(p);
         }
         if (!added.length) return 'Здесь ему негде вырасти';

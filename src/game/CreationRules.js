@@ -37,7 +37,7 @@ export const CREATION = {
     NEAR_OTHER: 6, // m between two creations' footprints
     MAX_BUILDS: 40, // creations of buildings in one world (records; the blocks themselves stay anyway)
     MAX_SPECIES: 16, // creatures of one's own: kinds in the world
-    MAX_CREATURES: 28, // all of them alive at once (a kind breeds only under this)
+    MAX_CREATURES: 40, // all of them alive at once (a kind breeds only under this)
     MAX_HOSTILE: 6, // hostile ones alive at once
     MAX_PLANT_SPECIES: 16,
     MAX_PLANTS: 900, // plants of one's own in the world
@@ -56,7 +56,8 @@ export const CAPS = {
     SPEED: { slow: 2.2, normal: 4.2, fast: 7.5 }, // m/s on the ground (the hero runs ~8)
     DMG_MAX: 8, // a blow / a breath of a creature at most (a zombie's blow ~5)
     LEGS_MAX: 8, EYES_MAX: 8, HORNS_MAX: 6,
-    PLANT_H_MIN: 0.3, PLANT_H_MAX: 40,
+    PLANT_H_MIN: 0.3, PLANT_H_MAX: 60,
+    GROUP_CREATURES: 12, GROUP_PLANTS: 80, // (one creation: a herd, a forest — within the world's limits and the frame)
 };
 
 // ---------------------------------------------------------------------------------------------- materials
@@ -270,18 +271,30 @@ export function colourOf(v) {
     if (m) return parseInt(m[1], 16);
     const m3 = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(s);
     if (m3) return parseInt(m3[1] + m3[1] + m3[2] + m3[2] + m3[3] + m3[3], 16);
-    for (const [re, c] of COLOURS) if (re.test(s)) return c;
+    for (const [re, c] of COLOURS) { const m = re.exec(s); if (m) return toned(c, s.slice(0, m.index)); }
     return null;
 }
 
 /** Every colour word of a description, in order. */
+/** A colour's shade by the word before it, joined or not: «ярко-красный», «тёмно-синий», «светло-зелёный», «кроваво-красный». */
+export function toned(c, before) {
+    const b = String(before || '');
+    const rgb = [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+    const out = (f) => ((Math.round(Math.max(0, Math.min(255, f(rgb[0])))) << 16) | (Math.round(Math.max(0, Math.min(255, f(rgb[1])))) << 8) | Math.round(Math.max(0, Math.min(255, f(rgb[2]))))) >>> 0;
+    if (/кровав/.test(b) && rgb[0] > rgb[2]) return 0x9a0a12;
+    if (/темно|густо|глубок/.test(b)) return out((v) => v * 0.55);
+    if (/светло|бледно|нежно|пастельн/.test(b)) return out((v) => v + (255 - v) * 0.45);
+    if (/ярко|насыщенн|сочно|огненно|ослепительно/.test(b)) { const m = (rgb[0] + rgb[1] + rgb[2]) / 3; return out((v) => m + (v - m) * 1.45 + 12); }
+    return c;
+}
+
 export function coloursIn(desc) {
     const s = lower(desc), out = [];
     const found = [];
     for (const [re, c] of COLOURS) {
         const g = new RegExp(re.source, 'g');
         let m;
-        while ((m = g.exec(s))) found.push([m.index, c]);
+        while ((m = g.exec(s))) found.push([m.index, toned(c, s.slice(Math.max(0, m.index - 11), m.index))]);
     }
     found.sort((a, b) => a[0] - b[0]);
     for (const [, c] of found) if (!out.includes(c)) out.push(c);
@@ -292,7 +305,46 @@ export function coloursIn(desc) {
 const NUMS = { один: 1, одна: 1, одну: 1, одним: 1, одной: 1, два: 2, две: 2, двух: 2, двумя: 2, пара: 2, три: 3, трех: 3, тремя: 3, четыре: 4, четырех: 4, четырьмя: 4,
     пять: 5, пяти: 5, пятью: 5, шесть: 6, шести: 6, шестью: 6, семь: 7, семи: 7, семью: 7, восемь: 8, восьми: 8, восемью: 8, девять: 9, девяти: 9,
     десять: 10, десяти: 10, двенадцать: 12, двенадцати: 12, пятнадцать: 15, двадцать: 20, двадцати: 20, тридцать: 30, сорок: 40, пятьдесят: 50, сто: 100, двести: 200, триста: 300,
-    много: 6, несколько: 3, дюжин: 12 };
+    много: 20, несколько: 4, дюжин: 12, одиннадцать: 11, тринадцать: 13, четырнадцать: 14, шестнадцать: 16, семнадцать: 17, восемнадцать: 18, девятнадцать: 19, шестьдесят: 60, семьдесят: 70, восемьдесят: 80, девяносто: 90, сорока: 40, тридцати: 30, пятнадцати: 15, сотня: 100 };
+
+/** How tall the words say it is, m (null — not said): «30 метров», «высотой тридцать метров», «в 2 раза выше человека / дома». */
+export function heightSaid(desc) {
+    const s = lower(desc);
+    const n = (w) => (/^\d+(?:[.,]\d+)?$/.test(w) ? parseFloat(w.replace(',', '.')) : NUMS[w] ?? null);
+    const m = /(\d+(?:[.,]\d+)?|[а-я]+)\s*(?:м|метр\S*)(?![а-яё])/.exec(s);
+    if (m && n(m[1]) != null) return n(m[1]);
+    const t = /(?:в\s+)?(\d+(?:[.,]\d+)?|[а-я]+)\s+раз\S*\s+(?:выше|больше|крупнее|длиннее)\s+(человека|героя|меня|людей|дома|домов|дерева|деревьев|замка|башни|горы)/.exec(s);
+    if (t && n(t[1]) != null) return n(t[1]) * ({ дома: 11, домов: 11, дерева: 15, деревьев: 15, замка: 30, башни: 26, горы: 60 }[t[2]] || 3.5);
+    if (/(выше|больше) (человека|героя|меня)/.test(s)) return 5;
+    if (/(выше|больше) (дома|домов)/.test(s)) return 14;
+    if (/(выше|больше) (дерев|деревьев)/.test(s)) return 20;
+    return null;
+}
+
+/**
+ * One or many (the author: «различай одно и множество»): a number said («пять», «десять», «20»), «пара» 2, «несколько» 4,
+ * «группа / стая / рощица / заросли» 9, «много» 20, «лес / поле / стадо / табун / рой / армия» 50; a word in the plural
+ * («деревья», «волки») — a few (4). @returns {number|null} null — not said (one)
+ */
+export function groupCount(desc, nouns) {
+    const s = lower(desc);
+    const said = countBefore(s, nouns);
+    if (said != null && said > 0) return said;
+    if (/(?:^|\s)пар[ауы](?![а-яё])/.test(s)) return 2;
+    if (/(лес|лесом|поле|полем|стад|табун|ро[йяе](?![а-яё])|роем|армия|армию|орд[ау]|полчищ|чащ[ау]|джунгл|плантац)/.test(s)) return 50;
+    if (/(много|множеств|толп[ау]|кучу|полно|сотн)/.test(s)) return 20;
+    if (/(групп|стай|стая|стаю|рощ|заросл|клумб|семейств|кучк|кольц\S* из|аллея|аллею|ряд\S* из|стайк|выводок|колони|сад(?![а-яё]))/.test(s)) return 9;
+    if (/(несколько|немного)/.test(s)) return 4;
+    // «десять ромашек», «20 тюльпанов»: a number before any thing named (not a size, a part or a count of the body)
+    const w = s.replace(/[^a-zа-я0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+    for (let i = 0; i < w.length - 1; i++) {
+        const v = /^\d+$/.test(w[i]) ? +w[i] : NUMS[w[i]];
+        if (v == null || v < 2 || /^(много|несколько)$/.test(w[i])) continue;
+        if (/^(м|метр|раз|глаз|ног|лап|крыл|рог|хвост|уш|голов|здоров|жизн|хп|этаж|башн|окон|окн|двер|комнат|лепест|лист|ветв|сантиметр|километр)/.test(w[i + 1])) continue;
+        return v;
+    }
+    return null;
+}
 
 /** The number said just before a word matching `re` («с шестью башнями», «3 дома», «20 здоровья»). null: none. */
 export function countBefore(desc, re) {
@@ -475,7 +527,8 @@ function guessCreature(s, r, name) {
     const base = S?.h ?? { quadruped: 3, biped: 3.4, bird: 1.8, insect: 1.2, spider: 1.8, serpent: 1.6, fish: 1.6, blob: 1.6, dragon: 6 }[plan];
     // (big said: never smaller than the hero — the hero is 3.5 m; huge — far over him; the greatest — like a house)
     const sk = sizeFactor(s), floor = sk >= 5 ? 12 : sk >= 3.8 ? 9 : sk >= 2.8 ? 6.5 : sk >= 1.7 ? 4.5 : 0;
-    const size = clamp(sizeSaid ? parseFloat(sizeSaid[1].replace(',', '.')) : Math.max(base * sk, floor), CAPS.SIZE_MIN, CAPS.SIZE_MAX);
+    const hs = heightSaid(s);
+    const size = clamp(hs ?? Math.max(base * sk, floor), CAPS.SIZE_MIN, CAPS.SIZE_MAX);
     const hp = clamp(countBefore(s, /здоров|жизн|хп|hp/) ?? CAPS.HP_DEFAULT, CAPS.HP_MIN, CAPS.HP_MAX);
     const walk = WALK_KEYS.find((w) => WALK[w].ru.test(s)) || S?.walk || PLANS[plan].walk;
     const fly = flies ? FLY_KEYS.find((f) => FLY[f].ru.test(s)) || (S?.fly && wings === S.wings ? S.fly : wings === 'none' ? 'float' : wings === 'butterfly' ? 'flutter' : wings === 'insect' ? 'hover' : wings === 'dragon' ? 'dragon' : wings === 'bat' ? 'bat' : 'flap') : null;
@@ -533,8 +586,9 @@ function guessCreature(s, r, name) {
         diet: has(/хищн|мясо|ест мяс/) ? 'meat' : has(/магией|ест ману/) ? 'magic' : has(/всеяд/) ? 'anything' : 'plants',
         habitat: HABITAT_KEYS.find((h) => HABITATS[h].test(s)) || (plan === 'fish' ? 'water' : 'any'),
         breed: has(/не размножа|единствен/) ? 0 : has(/быстро размножа|плодовит|много потомства/) ? 2 : has(/размножа/) ? 1 : 0,
-        count: clamp(countBefore(s, /существ|зверюш|зверь|звер[яе]|птиц|созда|кон[ейя]|лошад|кошек|собак|волк/) ?? 1, 1, 6),
-        sizeSaid: !!sizeSaid || sizeFactor(s) !== 1,
+        count: clamp(groupCount(s, /существ|зверюш|зверь|звер[яеей]|птиц|созда|кон[ейяи]|лошад|кошек|собак|волк|драконов|пауков|жуков|бабочек|рыб|зайц|кролик|овец|коров|олен/)
+            ?? (/(существа|животные|звери|птицы|кони|волки|собаки|кошки|пауки|драконы|жуки|бабочки|рыбы|олени|зайцы|кролики|овцы|коровы)(?![а-яё])/.test(s) ? 4 : 1), 1, CAPS.GROUP_CREATURES),
+        sizeSaid: hs != null || sk !== 1,
     };
 }
 
@@ -545,18 +599,19 @@ function colourBy(s, part) {
 }
 
 function guessPlant(s, r, name) {
-    const form = PLANT_FORM_KEYS.find((f) => PLANT_FORMS[f].ru.test(s)) || 'flower';
+    const formSaid = PLANT_FORM_KEYS.find((f) => PLANT_FORMS[f].ru.test(s)) || null;
+    const form = formSaid || 'bush'; // (a bare «растение»: a bush — as tall as the hero)
     const fruitWord = 'ягод|яблок|плод|орех|шишк|вишн', flowerWord = 'цвет(?:ами|ы|ок|ков|ки)|лепестк|бутон|соцвет', leafWord = 'лист|игол|иглам|хво|крон|шляпк';
     const cFruit = colourBy(s, fruitWord), cFlower = colourBy(s, flowerWord), cLeaf = colourBy(s, leafWord);
     const cols = coloursIn(s).filter((c) => c !== cFruit && c !== cFlower);
     const glowWhere = new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${fruitWord})`).test(s) ? 'fruit' : new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${flowerWord})`).test(s) ? 'flowers' : 'all';
     const k = sizeFactor(s);
-    const hSaid = /(\d+(?:[.,]\d+)?)\s*(м|метр)/.exec(s);
+    const hSaid = heightSaid(s);
     const spread = SPREAD_KEYS.find((q) => SPREAD[q].ru.test(s)) || 'normal';
     const habitat = HABITAT_KEYS.filter((h) => HABITATS[h].test(s));
     return {
-        type: 'plant', name, form,
-        height: clamp(hSaid ? parseFloat(hSaid[1].replace(',', '.')) : PLANT_FORMS[form].h * k, CAPS.PLANT_H_MIN, CAPS.PLANT_H_MAX),
+        type: 'plant', name, form, formSaid: !!formSaid,
+        height: clamp(hSaid ?? Math.max(PLANT_FORMS[form].h * k, k >= 5 ? 40 : k >= 3.8 ? 30 : k >= 2.8 ? 22 : k >= 1.7 ? PLANT_FORMS[form].h * 1.7 : 0), CAPS.PLANT_H_MIN, CAPS.PLANT_H_MAX),
         trunk: { color: /бел\S* ствол|берез/.test(s) ? 0xe8e4dc : /черн\S* ствол/.test(s) ? 0x2a2420 : null, thick: /толст/.test(s) ? 1.5 : /тонк/.test(s) ? 0.6 : 1, twist: /кривой|извилист|скрюч|спирал/.test(s) ? 1 : 0 },
         crown: /плакуч|свисаю|ив[аы]/.test(s) ? 'weeping' : /конус|ель|елк|пирамидальн/.test(s) ? 'cone' : /зонт|плоск\S* крон|акаци/.test(s) ? 'umbrella' : /спирал|винт/.test(s) ? 'spiral' : /колонн|тополь|кипарис/.test(s) ? 'columnar' : form === 'tree' || form === 'bush' ? 'round' : 'none',
         leaves: /игл|игол|хво/.test(s) ? 'needle' : /папоротн|резн/.test(s) ? 'fern' : /сердечк|в форме сердц/.test(s) ? 'heart' : /перист/.test(s) ? 'feather' : form === 'cactus' || form === 'crystal' || form === 'mushroom' ? 'none' : 'broad',
@@ -568,8 +623,9 @@ function guessPlant(s, r, name) {
         glowOn: glowWhere,
         spread, habitat: habitat.length ? habitat.slice(0, 3) : ['any'],
         grow: /быстро раст|мгновенно/.test(s) ? 'fast' : /медленно раст/.test(s) ? 'slow' : 'normal',
-        count: clamp(countBefore(s, /растени|дерев|куст|цвет|гриб/) ?? (form === 'tree' ? 1 : 5), 1, 20),
-        sizeSaid: !!hSaid || k !== 1,
+        count: clamp(groupCount(s, /растени|дерев|куст|цвет|гриб|кактус|тростник|лиан|кристалл/)
+            ?? (/(растения|деревья|кусты|цветы|грибы|кактусы|лианы|кристаллы|травы|цветочки|кустики)(?![а-яё])/.test(s) ? 6 : 1), 1, CAPS.GROUP_PLANTS),
+        sizeSaid: hSaid != null || k !== 1,
     };
 }
 
@@ -698,7 +754,7 @@ function cleanCreature(c, base, name) {
         abilities: abil.slice(0, 4), flaws: flaws.slice(0, 3),
         temper: base.temper !== 'neutral' ? base.temper : pickKey(c.temper, TEMPERS, 'neutral'),
         diet: pickKey(c.diet, DIETS, base.diet), habitat: pickKey(c.habitat, HABITAT_KEYS, base.habitat),
-        breed: clamp(Math.round(num(c.breed, base.breed)), 0, 2), count: clamp(Math.round(num(c.count, base.count)), 1, 6),
+        breed: clamp(Math.round(num(c.breed, base.breed)), 0, 2), count: base.count !== 1 ? base.count : clamp(Math.round(num(c.count, 1)), 1, CAPS.GROUP_CREATURES), // (the words say how many; the network only when they did not)
     };
     if (out.flaws.includes('fragile')) out.hp = Math.max(1, Math.round(out.hp / 2));
     return out;
@@ -709,9 +765,9 @@ function cleanPlant(p, base, name) {
     const flowers = p.flowers && typeof p.flowers === 'object' ? p.flowers : {};
     const hab = (Array.isArray(p.habitat) ? p.habitat : [p.habitat]).filter((h) => HABITAT_KEYS.includes(h));
     return {
-        type: 'plant', name, form: pickKey(p.form, PLANT_FORM_KEYS, base.form),
+        type: 'plant', name, form: base.formSaid ? base.form : pickKey(p.form, PLANT_FORM_KEYS, base.form), // (said «дерево» — a tree, whatever the network thought)
         // (the words / the form's own medium height decide; the network's kept near it — never a tiny thing unasked)
-        height: base.sizeSaid ? base.height : clamp(num(p.height, base.height), Math.max(CAPS.PLANT_H_MIN, base.height * 0.7), Math.min(CAPS.PLANT_H_MAX, base.height * 2)),
+        height: base.sizeSaid ? base.height : clamp(num(p.height, base.height), Math.max(CAPS.PLANT_H_MIN, base.height * 0.85), Math.min(CAPS.PLANT_H_MAX, base.height * 2)),
         trunk: { color: base.trunk.color ?? colourOf(trunk.color), thick: clamp(num(trunk.thick, base.trunk.thick), 0.3, 2.5), twist: clamp(num(trunk.twist, base.trunk.twist), 0, 1) },
         crown: pickKey(p.crown, CROWNS, base.crown), leaves: pickKey(p.leaves, LEAVES, base.leaves),
         leafColor: base.leafColor ?? colourOf(p.leafColor),
@@ -722,7 +778,7 @@ function cleanPlant(p, base, name) {
         spread: base.spread !== 'normal' ? base.spread : pickKey(p.spread, SPREAD_KEYS, 'normal'),
         habitat: base.habitat[0] !== 'any' ? base.habitat : hab.length ? hab.slice(0, 3) : ['any'],
         grow: pickKey(p.grow, ['slow', 'normal', 'fast'], base.grow),
-        count: clamp(Math.round(num(p.count, base.count)), 1, 20),
+        count: base.count !== 1 ? base.count : clamp(Math.round(num(p.count, 1)), 1, CAPS.GROUP_PLANTS),
     };
 }
 

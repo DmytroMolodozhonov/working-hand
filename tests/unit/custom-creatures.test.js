@@ -135,3 +135,21 @@ test('a creature like a horse is a horse; «очень-очень большой
         assert.ok(Number.isFinite(D.H) && D.legs.every((L) => Number.isFinite(L.upper)), d);
     }
 });
+
+test('a herd: «стая волков» — one leader, the others keep their places by it and go where it goes', () => {
+    const { g, C } = world();
+    const r = sanitizeRecipe(null, 'стая волков', 1);
+    assert.equal(C.create(r, { x: 0, y: 0, z: 0 }, 'me'), true);
+    const pack = C.list.filter((c) => !c.dead);
+    assert.equal(pack.length, r.count);
+    const lead = pack.find((c) => !c.leader);
+    assert.ok(lead && pack.filter((c) => c.leader === lead.id).length === pack.length - 1, 'one leader, the rest follow it');
+    for (let i = 0; i < 40; i++) C.update(0.1);
+    lead.model.position.set(60, 0, 0); lead.home.set(60, 0, 0);
+    for (let i = 0; i < 400; i++) C.update(0.1);
+    for (const c of pack) assert.ok(Math.hypot(c.model.position.x - lead.model.position.x, c.model.position.z - lead.model.position.z) < 30, 'the pack came along');
+    // saved and loaded: still a pack
+    const snap = JSON.parse(JSON.stringify(C.snapshot()));
+    assert.ok(snap.list.filter((e) => e.ld === lead.id).length === pack.length - 1);
+    void g;
+});

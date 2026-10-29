@@ -117,12 +117,15 @@ export class CustomCreatures {
             this._send({ op: 'sp', sp: [this._spNet(this.species.get(key))] });
         }
         const n = Math.min(recipe.count || 1, CREATION.MAX_CREATURES - alive.length);
+        // (a herd: rings round the first — its leader; the others keep their places by it and go where it goes)
+        let leader = null;
         for (let i = 0; i < n; i++) {
-            const a = (i / n) * TAU, rr = n > 1 ? 1.5 + recipe.size * 0.6 : 0;
+            const ring = i === 0 ? 0 : 1 + Math.floor(Math.sqrt(i - 1)), a = i * 2.4, rr = ring * (1.4 + recipe.size * 0.75);
             const x = at.x + Math.cos(a) * rr, z = at.z + Math.sin(a) * rr;
             const y = this._floor(x, z, at.y + 3);
-            const c = this.spawn(key, new THREE.Vector3(x, y, z), { born: 0, owner: opts.key || this._key(by) });
+            const c = this.spawn(key, new THREE.Vector3(x, y, z), { born: 0, owner: opts.key || this._key(by), leader: leader?.id, slot: i });
             if (c && opts.dir) c.yaw = Math.atan2(opts.dir[0], opts.dir[1]); // (its face to the one who made it)
+            if (c && !leader) leader = c;
         }
         this._note({ ev: 'create', key, n, by });
         if (recipe.temper === 'hostile') g.castleLife?.alarm?.({ x: at.x, y: at.y, z: at.z }, 'beast', by, 20);
@@ -151,7 +154,7 @@ export class CustomCreatures {
             id: o.id ?? 'cc' + Math.floor(Math.random() * 1e9).toString(36), ck: 'C', isCustom: true, sp: key, recipe, seed, model, group: model,
             hp: o.hp ?? hp, maxHp: hp, dead: false, born: o.born ?? 1, scale: o.scale ?? 1, owner: o.owner ?? S.owner,
             get isDead() { return this.dead; }, get position() { return this.model.position; },
-            yaw: o.yaw ?? Math.random() * TAU, vel: new THREE.Vector3(), vy: 0, home: o.home ? new THREE.Vector3(o.home[0], 0, o.home[1]) : pos.clone(),
+            yaw: o.yaw ?? Math.random() * TAU, vel: new THREE.Vector3(), vy: 0, home: o.home ? new THREE.Vector3(o.home[0], 0, o.home[1]) : pos.clone(), leader: o.leader || null, slot: o.slot || 0,
             state: 'idle', t: rnd(1, 4), goal: null, foe: null, foeT: 0, flying: false, alt: 0, flyT: rnd(10, 30), a: { mode: 'idle', walk: recipe.walk, fly: recipe.fly, speed: 0, k: 0 },
             cd: {}, invisT: 0, stunT: 0, slowT: 0, sleepT: 0, calmT: 0, tripT: 0, D, r: Math.max(0.25, D.radius * (o.scale ?? 1)), h: D.top * (o.scale ?? 1),
             speeds: creatureSpeed(recipe), canFly: !!recipe.fly, swim: !!recipe.swim,
@@ -420,6 +423,15 @@ export class CustomCreatures {
         if (R.temper === 'friendly' && mine) {
             const d = hd(mine.pos, p);
             if (d < 70 && d > 13) { this._go(c, mine.pos.x, mine.pos.z, c.speeds.ground * (d > 25 ? 1.4 : 1), dt, 8); return; }
+        }
+        // a herd: the others go with their leader — each its own place round it (rings behind and beside), never in a heap
+        const L = c.leader ? this.byId(c.leader) : null;
+        if (L && !L.dead && L !== c && !c.flying) {
+            const lp = L.model.position, step = 1.4 + c.D.H * 0.75, ring = 1 + Math.floor(Math.sqrt(Math.max(0, c.slot - 1))), a = L.yaw + Math.PI + (c.slot * 2.4) % TAU * 0.5 - 0.6;
+            const sx = lp.x + Math.sin(a) * ring * step, sz = lp.z + Math.cos(a) * ring * step;
+            const d = Math.hypot(sx - p.x, sz - p.z);
+            if (d > 2 + c.D.H * 0.4) { this._go(c, sx, sz, c.speeds.ground * (d > 14 ? 1.5 : 0.9), dt, 1); return; }
+            c.home.set(lp.x, 0, lp.z);
         }
         // flight: now and then it takes off, flies about and lands
         if (c.canFly) {
@@ -764,7 +776,7 @@ export class CustomCreatures {
     snapshot() {
         return {
             species: [...this.species.values()].map((S) => this._spNet(S)),
-            list: this.list.filter((c) => !c.dead).map((c) => ({ id: c.id, sp: c.sp, p: [r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z)], hp: Math.round(c.hp), home: [r2(c.home.x), r2(c.home.z)], owner: c.owner, scale: r2(c.scale), seed: c.seed, yaw: r2(c.yaw) })),
+            list: this.list.filter((c) => !c.dead).map((c) => ({ id: c.id, sp: c.sp, p: [r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z)], hp: Math.round(c.hp), home: [r2(c.home.x), r2(c.home.z)], owner: c.owner, scale: r2(c.scale), seed: c.seed, yaw: r2(c.yaw), ld: c.leader || undefined, sl: c.slot || undefined })),
         };
     }
 
@@ -774,7 +786,7 @@ export class CustomCreatures {
         if (!this.auth) return;
         for (const e of (s.list || []).slice(0, CREATION.MAX_CREATURES)) {
             if (!this.species.has(e.sp) || !Array.isArray(e.p)) continue;
-            this.spawn(e.sp, new THREE.Vector3(+e.p[0] || 0, (+e.p[1] || 0) + 0.5, +e.p[2] || 0), { id: e.id, hp: e.hp, home: e.home, owner: e.owner, scale: e.scale, seed: e.seed, yaw: e.yaw, born: 1 });
+            this.spawn(e.sp, new THREE.Vector3(+e.p[0] || 0, (+e.p[1] || 0) + 0.5, +e.p[2] || 0), { id: e.id, hp: e.hp, home: e.home, owner: e.owner, scale: e.scale, seed: e.seed, yaw: e.yaw, born: 1, leader: e.ld, slot: e.sl });
         }
     }
 
