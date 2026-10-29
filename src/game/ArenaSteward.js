@@ -23,28 +23,51 @@ export const STEWARD = {
     MARK_AWAY: 5.5, // m: a player stepping this far off his lit place before «3-2-1» has gone — struck off
 };
 
-/** What he says (all made in his voice in advance: CastleTalk._prepareFillers). */
+/**
+ * What he says (all made in his voice in advance: CastleTalk._prepareFillers).
+ * The fee (the author: «платные бои… победил — тебе возвращают сумму и добавляют столько же; проиграл — деньги пропали»): the stake is the
+ * coins of the opponent's tier (50 / 100 / 150), paid to him when the player chooses; a win — the stake back and as much again; a loss — gone;
+ * a draw / the arena's trouble / the queue left before the turn — the stake back. In Creative nothing is paid (a win gives the tier's coins).
+ */
 export const STEWARD_LINES = {
     ask: ['Хотите сразиться?', 'Желаете выйти на арену?', 'Хотите попробовать свои силы в дуэли?'],
-    choose: 'С кем хотите сразиться? Младший волшебник — 50 монет за победу, средний — 100, сильный преподаватель — 150. Скажите «младший», «средний» или «сильный» — или коснитесь нужной куклы. С главой башни сражаться нельзя.',
+    choose: 'С кем хотите сразиться? Младший волшебник — ставка 50 монет, средний — 100, сильный преподаватель — 150. Скажите «младший», «средний» или «сильный» — или коснитесь нужной фигурки на прилавке. С главой башни сражаться нельзя.',
     master: 'С главой башни сражаться нельзя. Выберите младшего, среднего или сильного волшебника.',
-    terms_novice: 'Младший волшебник. В случае победы — 50 монет.',
-    terms_adept: 'Средний волшебник. В случае победы — 100 монет.',
-    terms_teacher: 'Сильный преподаватель. В случае победы — 150 монет.',
-    wait: 'Сейчас идёт бой — подождите, я позову вас, когда арена освободится.',
+    terms_novice: 'Хорошо! Младший волшебник. Ставка 50 монет: победите — получите 100, проиграете — ставка пропадёт.',
+    terms_adept: 'Хорошо! Средний волшебник. Ставка 100 монет: победите — получите 200, проиграете — ставка пропадёт.',
+    terms_teacher: 'Хорошо! Сильный преподаватель. Ставка 150 монет: победите — получите 300, проиграете — ставка пропадёт.',
+    terms_free_novice: 'Хорошо! Младший волшебник. В случае победы — 50 монет.',
+    terms_free_adept: 'Хорошо! Средний волшебник. В случае победы — 100 монет.',
+    terms_free_teacher: 'Хорошо! Сильный преподаватель. В случае победы — 150 монет.',
+    full: 'Очередь на арену полна — подойдите чуть позже.',
+    poor: 'Не хватает монет для ставки. Младший — 50, средний — 100, сильный преподаватель — 150.',
+    wait: 'Сейчас идёт бой — вы в очереди, она на табло. Я позову вас, когда арена освободится.',
     soon: 'Арена свободна — скоро позову вас на арену.',
     again: 'Вы уже записаны — ждите.',
-    off: 'Хорошо, запись снята.',
+    off: 'Хорошо, запись снята, ставка возвращена.',
     none: 'Вы ни на что не записаны.',
     night: 'Ночью дуэлей нет — приходите днём.',
     wand: 'Возьмите палочку в руку — без неё дуэль не начать.',
     call: 'Ваш черёд! Встаньте на светящееся место на арене.',
     go: 'Соперник на месте — отсчёт!',
-    missed: 'Вы не вышли на арену — запись снята.',
-    left: 'Вы ушли с места — запись снята.',
-    win: 'Победа! Вот ваша награда.',
-    info: 'Выберите соперника — младшего (за победу 50 монет), среднего (100) или сильного преподавателя (150), встаньте на светящееся место — и бой. Платить за участие не нужно. С главой башни сражаться нельзя.',
+    missed: 'Вы не вышли на арену — запись снята, ставка возвращена.',
+    left: 'Вы ушли с места — запись снята, ставка возвращена.',
+    win: 'Победа! Вот ваша награда — ваша ставка и столько же сверху.',
+    info: 'Выберите соперника на прилавке — младшего (ставка 50 монет), среднего (100) или сильного преподавателя (150) и заплатите ставку. Победите — вам вернут ставку и добавят столько же, проиграете — ставка пропадёт. Дуэль одна за раз, очередь на табло. Встаньте на светящееся место — и бой. С главой башни сражаться нельзя.',
 };
+
+/**
+ * What the duel does with the stake (pure; ArenaDuels._end). `stake`: the coins the player paid (0 — nothing, Creative), `tier`: whom he chose,
+ * `who`: 'p' the player won, 'a' he lost (the wizard won), null — nobody won; `why`: how it ended.
+ *   win     → the stake back and as much again (a free entry: the tier's coins, as ever)
+ *   lost    → nothing (he lost the duel, gave it up by walking off the floor, or killed the wizard — a foul)
+ *   refund  → the stake back (a draw at 5 minutes, the wizard gone, he did not come out to the mark)
+ */
+export function settleStake({ tier, stake = 0, who = null, why = null } = {}) {
+    if (who === 'p') return { kind: 'win', coins: stake > 0 ? stake * 2 : tierCoins(tier) };
+    if (who === 'a' || why === 'foul') return { kind: 'lost', coins: 0 };
+    return { kind: stake > 0 ? 'refund' : 'none', coins: stake };
+}
 
 /**
  * The opponents he offers (the author: «как продавец… куколки: младший, средний, сильный; с главой башни нельзя; за победу 50, 100, 150»):
@@ -154,17 +177,27 @@ export const onPlace = (d, phase) => (phase === 'call' ? true : d <= STEWARD.MAR
 
 
 /**
- * Where the three dolls stand (the author: «такие куколки, фактически»): in a row by the steward's place, along the
- * line across the arena's axis, on the side away from the lectern (the path to the book stays free). → [{tier, x, y, z, yaw}].
+ * Where the three small figures stand (the author: «как крытый рынок/прилавок продавца, а вместо товаров — МАЛЕНЬКИЕ ФИГУРКИ волшебников
+ * (не во весь рост), подписанные: младший / средний / сильный… они накладываются друг на друга — взаимодействовать нельзя»).
+ * A world of generation ARENA_ENTRIES_FROM_GEN: on the stall's counter (DuelArenas.entries — `desk.stall.slots`, 1,6 m apart, each its own slot).
+ * An older world / the round arena: in a row on little stones past the lectern, on the side AWAY from the gate's lane (the lane stays free), 1,8 m apart.
+ * → [{tier, x, y, z, yaw, onCounter}], every one at its own point (`FIG.GAP` m from the next at least).
  */
+export const FIG = { H: 1.0, GAP: 1.4, TOUCH_R: 0.55 };
 export function dollSpots(def) {
     const S = def?.desk?.stand;
     if (!S || !def.axis) return [];
+    const yaw = (x, z) => Math.atan2(-(x - def.x), -(z - def.z)); // (the model looks along −Z at yaw 0: this turns it away from the arena's middle)
+    const st = def.desk.stall;
+    if (st?.slots) return st.slots.map((q) => ({ tier: q.tier, x: q.x, y: q.y, z: q.z, yaw: yaw(q.x, q.z), onCounter: true }));
     const { a, b } = def.axis;
     const al = Math.hypot(b.x - a.x, b.z - a.z) || 1, ax = (b.x - a.x) / al, az = (b.z - a.z) / al; // (the axis: the gates' line)
     let lx = -az, lz = ax; // (across it)
     const B = def.desk.book || def.desk.front;
-    if (B && (B.x - S.x) * lx + (B.z - S.z) * lz > 0) { lx = -lx; lz = -lz; } // (away from the lectern)
-    const out = def.desk.yaw ?? 0;
-    return TIER_ORDER.map((tier, i) => ({ tier, x: S.x + lx * (3.2 + i * 2.8), y: S.y, z: S.z + lz * (3.2 + i * 2.8), yaw: out }));
+    if (B && (B.x - S.x) * lx + (B.z - S.z) * lz < 0) { lx = -lx; lz = -lz; } // (towards the lectern's side, away from the lane)
+    const ox = S.x - def.x, oz = S.z - def.z, ol = Math.hypot(ox, oz) || 1; // (a little further out from the arena)
+    return TIER_ORDER.map((tier, i) => {
+        const x = S.x + lx * (3.6 + i * 1.8) + ox / ol * 2, z = S.z + lz * (3.6 + i * 1.8) + oz / ol * 2;
+        return { tier, x, y: S.y, z, yaw: yaw(x, z), onCounter: false };
+    });
 }

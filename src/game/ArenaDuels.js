@@ -44,7 +44,9 @@ import { PVP } from './Combat.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { newUid } from './ItemTypes.js';
 import { CappedLog } from '../core/CappedLog.js';
-import { ArenaQueue, STEWARD, STEWARD_LINES, TIERS, tierCoins, dollSpots, duelSpots, stewardIntent, stewardTier } from './ArenaSteward.js';
+import { ArenaQueue, STEWARD, STEWARD_LINES, TIERS, tierCoins, dollSpots, duelSpots, stewardIntent, stewardTier, settleStake, FIG } from './ArenaSteward.js';
+import { ArenaBoardFx } from '../fx/ArenaBoardFx.js';
+import { boardKey } from './ArenaBoard.js';
 import { ArenaMarkFx } from '../fx/ArenaMarkFx.js';
 import { ArenaDollsFx } from '../fx/ArenaDollsFx.js';
 import { ArenaTagFx } from '../fx/ArenaTagFx.js';
@@ -61,12 +63,14 @@ import { DuelEndUi, AGAIN_AFTER, AGAIN_AFTER_LOSS } from '../ui/DuelEndUi.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const WALK = 2.3, RUN = 5.6;
+/** How many players may wait in an arena's line (the board shows four, the rest «и ещё N»). */
+const ARENA_QUEUE_MAX = 8;
 /** s a wizard stands stunned after his wand was knocked out, before he runs for it (the player's «Акцио» can take it first). */
 const SHOCK_AFTER_DISARM = 2.5;
 /** How far the world is drawn and made in the duel-only start (m): the arena's stands reach ~50 m, the levelled land 64. */
 const MODE_VIEW = 90;
 /** Mana a spell costs a duellist at the arena: they pace themselves (a long duel), lighter than in a real fight. */
-const arenaCost = (spell) => Math.max(2, Math.round((NPC_COST[spell] ?? 10) * 0.6));
+const arenaCost = (spell) => Math.max(2, Math.round((NPC_COST[spell] ?? 10) * 0.5));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 /**
@@ -104,7 +108,9 @@ export class ArenaDuels {
         this.count = null; // (the «10…1» shown to this player: {at, n})
         this.choosingAt = -1e9; // (the steward asked «С кем хотите сразиться?» — a named opponent counts after it)
         this.askedAt = -1e9; // (the steward asked this computer's player «Хотите сразиться?» — a bare «да» counts after it)
-        this.dollsFx = new ArenaDollsFx(game); // the three dolls by the steward: whom to fight (ArenaDollsFx.js)
+        this.dollsFx = new ArenaDollsFx(game); // the three small figures on the steward's counter: whom to fight (ArenaDollsFx.js)
+        this.boardFx = new ArenaBoardFx(game); // the magic board over the road: the duel now, the queue, the result (ArenaBoardFx.js)
+        this._boardT = 0;
         this.marks = new ArenaMarkFx(game); // the lit places of a player's duel (ArenaMarkFx.js)
         this._markT = 0;
         this.tagFx = new ArenaTagFx(game); // the sign over a duellist (Creative only: ArenaTag.js)
@@ -135,6 +141,7 @@ export class ArenaDuels {
         this._dollsT = (this._dollsT || 0) - dt;
         if (this._dollsT <= 0) { this._dollsT = 1; this.dollsFx.update([...this.list.values()]); }
         this.dollsFx.face();
+        this._board(dt);
         this._lit(dt);
         this._dome(dt);
         this._tags(dt);
@@ -170,7 +177,7 @@ export class ArenaDuels {
         // the seats on the long sides only (a charge flies along the floor's axis — never into the crowd)
         const seats = def.seats.map((s, i) => ({ ...s, i })).filter((s) => s.side);
         const restT = def.practice ? ARENA_DUEL.PRACTICE_REST[0] * Math.random() : 4;
-        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: new ArenaQueue(), tiers: new Map(), owed: null, sayT: 0, netT: 0, steward: null, stewT: 0, asked: new Map(), ph: 'idle', pl: null };
+        return { id: def.id, def, home, seats, taken: new Map(), fans: new Set(), want: 0, spawnT: 0, phase: 'idle', restT, duel: null, queue: new ArenaQueue(), tiers: new Map(), stakes: new Map(), owed: [], board: null, boardAt: 0, qKey: '', sayT: 0, netT: 0, steward: null, stewT: 0, asked: new Map(), ph: 'idle', pl: null };
     }
 
     /**
@@ -201,7 +208,28 @@ export class ArenaDuels {
             if (A.steward) { this._release(A.steward, true); A.steward = null; }
         }
         A.fans.clear();
+        if (this.auth) { // (the arena is left behind: the prizes and the stakes of the ones waiting go to their pouches — nothing is lost with the arena)
+            for (const o of [...A.owed]) this._payAway(A, o);
+            for (const id of [...A.queue.list]) { A.queue.cancel(id); A.tiers.delete(id); this._refund(A, id, 'left'); }
+            const D = A.duel;
+            if (D?.p != null && A.stakes.has(D.p)) this._refund(A, D.p, 'gone');
+        }
         A.duel = null;
+    }
+
+    /** (host) A stake given back to the player at once (his pouch): the queue left, the duel off. */
+    _refund(A, id, why) {
+        const n = A.stakes.get(id) || 0;
+        A.stakes.delete(id);
+        if (n > 0) { this._tell(id, { e: 'pay', id: A.id, coins: n, why }); this.log.push('refund:' + id + ':' + n); }
+    }
+
+    /** (host) A prize paid at once into the pouch of the winner (he is away from the steward). */
+    _payAway(A, o) {
+        const i = A.owed.indexOf(o);
+        if (i >= 0) A.owed.splice(i, 1);
+        this._tell(o.id, { e: 'pay', id: A.id, coins: o.coins, why: 'win' });
+        this.log.push('paid-away:' + o.id + ':' + o.coins);
     }
 
     // ------------------------------------------------------------------ the host: the arena's life
@@ -250,25 +278,28 @@ export class ArenaDuels {
             A.restT -= dt;
             if (live && A.restT <= 0 && this.mode?.arenaId !== A.id && this._ready(A, dt)) this._nextDuel(A, cs); // (the duel mode makes its own: _modeStep)
         } else this._referee(A, D, dt);
-        // the reward: the winner at the lectern
-        if (A.owed) {
-            const p = L._playerPos(A.owed.id), S = A.def.desk.stand || A.def.desk.front;
-            if (p && Math.hypot(p.x - S.x, p.z - S.z) < 4.5) {
-                // (the steward gives the 100 coins from his hand — or, with nobody there, they lie on the book as ever)
+        // the reward: the winner at the steward's counter — his stake back and as much again (a winner who walks off is paid at once: _payAway)
+        for (const o of [...A.owed]) {
+            const p = L._playerPos(o.id), S = A.def.desk.stand || A.def.desk.front, F = A.def.desk.front;
+            const near = p && Math.min(Math.hypot(p.x - S.x, p.z - S.z), F ? Math.hypot(p.x - F.x, p.z - F.z) : 1e9) < 4.5;
+            if (near) {
+                // (the steward gives the coins from his hand — or, with nobody there, they lie on the book as ever)
                 const w = A.steward && !A.steward.dead ? A.steward : null, b = A.def.desk.book;
                 const at = w ? new THREE.Vector3(w.x + (p.x - w.x) * 0.35, w.y + 2.6, w.z + (p.z - w.z) * 0.35) : new THREE.Vector3(b.x, b.y + 0.7, b.z);
-                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: A.owed.coins ?? ARENA_DUEL.REWARD }, at, { hover: true });
+                this.game.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: o.coins }, at, { hover: true });
                 if (w) this._say(A, 'win');
                 this._fx(A, 'fanfare', b);
-                this._tell(A.owed.id, { e: 'paid', id: A.id, coins: A.owed.coins });
-                this.log.push('paid:' + A.owed.id);
-                A.owed = null;
-            } else if (!p) A.owed = null;
+                this._tell(o.id, { e: 'paid', id: A.id, coins: o.coins });
+                this.log.push('paid:' + o.id + ':' + o.coins);
+                A.owed.splice(A.owed.indexOf(o), 1);
+            } else if (!p) A.owed.splice(A.owed.indexOf(o), 1);
+            else if (Math.hypot(p.x - S.x, p.z - S.z) > STEWARD.LEAVE_R) { this._payAway(A, o); } // (he walked off without his prize: it follows him into his pouch)
         }
         A.sayT -= dt;
         // a player signed up who has walked away is struck off
         for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) {
             A.tiers.delete(id);
+            this._refund(A, id, 'left');
             this._tell(id, { e: 'off', id: A.id, why: 'left' });
         }
     }
@@ -357,7 +388,8 @@ export class ArenaDuels {
         }
         if (it === 'info') return { reply: L.info };
         const asked = now - this.askedAt < STEWARD.ANSWER_T * 1000, choosing = now - this.choosingAt < STEWARD.ANSWER_T * 1000;
-        const tier = stewardTier(text);
+        let tier = stewardTier(text);
+        if (!tier && (it === 'want' || (it === 'yes' && (asked || choosing)))) tier = this.aimedTier(A); // («хочу сразиться с таким» — the hand or the wand on a figure)
         // whom he fights: «младший / средний / сильный» (right after «с кем?», or at once: «хочу со средним»); the Master of the tower — never
         if (tier && (it === 'want' || it === 'yes' || asked || choosing)) {
             if (tier === 'master') return { reply: L.master };
@@ -376,7 +408,7 @@ export class ArenaDuels {
 
     /** (every computer) This computer's player cancels his sign-up. */
     _cancel(A, id) {
-        if (this.auth) { A.tiers.delete(id); if (A.queue.cancel(id)) this.log.push('cancel:' + id); const D = A.duel; if (D?.p === id && D.phase !== 'fight' && D.phase !== 'over') this._end(A, D, null, 'noshow'); } else { this.myQueue = null; this.game.sync?.arena?.({ e: 'cancel', id: A.id }); }
+        if (this.auth) { A.tiers.delete(id); if (A.queue.cancel(id)) { this._refund(A, id, 'cancel'); this.log.push('cancel:' + id); this._send(A); } const D = A.duel; if (D?.p === id && D.phase !== 'fight' && D.phase !== 'over') this._end(A, D, null, 'noshow'); } else { this.myQueue = null; this.game.sync?.arena?.({ e: 'cancel', id: A.id }); }
     }
 
     /**
@@ -389,8 +421,9 @@ export class ArenaDuels {
         let busy = false;
         for (const v of L.byId.values()) if (v.arena?.id === A.id && !v.dead && (v.arena.kind === 'leave' || (v.arena.kind === 'fan' && !v.seated)) && onArenaFloor(A.def, v.x, v.z, -1)) busy = true;
         if (busy) return false;
-        if (!A.def.practice && A.fans.size < A.want && A.readyT < 90) return false;
-        for (const v of A.fans) if (!v.seated && A.readyT < 90) return false;
+        const cap = A.def.visit ? 170 : 90; // (the visitors' way round the corner and up the stair is long: they are given time to sit before the duellists come out)
+        if (!A.def.practice && A.fans.size < A.want && A.readyT < cap) return false;
+        for (const v of A.fans) if (!v.seated && A.readyT < cap) return false;
         A.readyT = 0;
         return true;
     }
@@ -440,7 +473,7 @@ export class ArenaDuels {
         const fromSeat = !!v.seated; v.seated = false; v.arenaFight = false; v.fx = (v.fx | 0) & ~FX.SHIELD;
         if (v.noWand) { v.noWand = false; v.lostWand = null; v.model?.setHeldTool?.('wand'); } // (the duel is over: the wand given back)
         if (now || v.dead || !A) { v.arena = null; if ((!v.dead || this.mode) && L.byId.has(v.id)) L._deactivate(v); return; } // (the duel mode: a fallen wizard is taken away, no body left lying)
-        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat, home: !!v.steward };
+        v.arena = { id: A.id, kind: 'leave', leg: 0, sad: v.arena.sad, seat: v.arena.seat, fromSeat, home: !!v.steward, vleg: v.arena.vleg, side: v.arena.side };
     }
 
     _freeSeat(A, v) { for (const [i, w] of A.taken) if (w === v) A.taken.delete(i); }
@@ -470,7 +503,7 @@ export class ArenaDuels {
         if (p == null) { b = this._recruit(A, cs, 'duel'); if (!b) { this._release(a, true); A.restT = 10; return; } }
         A.duel = { a, b, p, tier, phase: 'enter', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0 };
         a.arena.side = 1; // (the far mark)
-        if (b) b.arena.side = 0;
+        if (b) { b.arena.side = 0; if (Math.random() < 0.5) { a.arena.side = 0; b.arena.side = 1; } } // (two wizards: the marks by lot — neither has the first shot always)
         this.log.push('duel:' + a.id + (b ? ':' + b.id : ':player ' + p));
         if (p != null) { this._tell(p, { e: 'call', id: A.id, name: a.name }); this._say(A, 'call'); }
         this._send(A);
@@ -533,7 +566,8 @@ export class ArenaDuels {
             }
             const n = Math.floor(D.t);
             if (n > D.said && n < ARENA_DUEL.COUNT) { D.said = n; this._fx(A, 'beep', A.def.centre); }
-            if (D.t >= ARENA_DUEL.COUNT) { D.phase = 'fight'; D.t = 0; D.go = 0; this._fx(A, 'gong', A.def.centre); this._send(A); }
+            if (D.t >= ARENA_DUEL.COUNT) { D.phase = 'fight'; D.t = 0; D.go = 0; for (const v of [D.a, D.b]) if (v) v.castCd = Math.max(v.castCd ?? 0, Math.random() * 1.2); // (the gong: nobody always shoots first)
+                this._fx(A, 'gong', A.def.centre); this._send(A); }
             return;
         }
         // ---- the fight
@@ -602,8 +636,17 @@ export class ArenaDuels {
             this.game.items?.spawnLoose(D.trophy.item, at, { vel: new THREE.Vector3(dx / dl * 3.2, 2.2, dz / dl * 3.2), spin: new THREE.Vector3(2, 6, 1) });
             this.life._say(w, 'Держите свою палочку.', 3);
         }
-        if (who === 'p') A.owed = { id: D.p, coins: tierCoins(D.tier) };
-        if (D.p != null) this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why, coins: tierCoins(D.tier) });
+        // the stake (ArenaSteward.settleStake): a win — back and as much again (at the counter); a draw / trouble — back at once; a loss — gone
+        if (D.p != null) {
+            const stake = A.stakes.get(D.p) || 0;
+            A.stakes.delete(D.p);
+            const S = settleStake({ tier: D.tier, stake, who, why });
+            D.pay = S;
+            if (S.kind === 'win') A.owed.push({ id: D.p, coins: S.coins });
+            else if (S.kind === 'refund') this._tell(D.p, { e: 'pay', id: A.id, coins: S.coins, why });
+            this._tell(D.p, { e: 'end', id: A.id, r: who === 'p' ? 'win' : who === 'a' ? 'lose' : why === 'time' ? 'draw' : why, coins: S.coins, stake, kind: S.kind });
+            this.log.push(`settle:${D.p}:${S.kind}:${S.coins}`);
+        }
         this._logEnd(A, D, who, why);
         this.log.push((A.def.practice ? 'train:' : 'end:') + (who || 'none') + ':' + why + ':' + Math.round(D.go));
         this._send(A);
@@ -652,12 +695,25 @@ export class ArenaDuels {
         return true;
     }
 
+    /**
+     * The visitors' way (a world of generation ARENA_ENTRIES_FROM_GEN: `def.visit`): from the road round the arena's corner to the foot of the stair,
+     * up it and through the gap in the rim onto the top row — never through the front gate, which is the fighters'. true: on the top row.
+     */
+    _enterVisit(A, v, dt) {
+        const V = A.def.visit, a = v.arena, legs = [V.via0, V.via, V.out, V.top, V.in];
+        a.vleg = a.vleg || 0;
+        if (a.vleg >= legs.length) return true;
+        if (this._go(v, legs[a.vleg], WALK, dt, a.vleg < 3 ? 1.5 : 0.9)) a.vleg++;
+        return a.vleg >= legs.length;
+    }
+
     _fan(A, v, dt) {
-        if (!this._enter(A, v, dt)) return true;
+        const V = A.def.visit;
+        if (V ? !this._enterVisit(A, v, dt) : !this._enter(A, v, dt)) return true;
         if (!v.arena.seat) { v.arena.seat = this._seat(A, v); if (!v.arena.seat) { this._release(v); return true; } }
         const s = v.arena.seat;
         if (!v.seated) {
-            if (v.arena.edge === undefined) v.arena.edge = this._edge(A, s);
+            if (v.arena.edge === undefined) v.arena.edge = V ? null : this._edge(A, s); // (the visitors come in over the rim: no walk across the floor)
             if (v.arena.edge && !v.arena.edged) { if (this._go(v, v.arena.edge, WALK, dt, 0.8)) v.arena.edged = true; return true; }
             if (!this._go(v, s, WALK, dt, 0.35)) { v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t > 60) { v.x = s.x; v.z = s.z; } else return true; }
             v.seated = true;
@@ -682,8 +738,10 @@ export class ArenaDuels {
     _leave(A, v, dt) {
         const L = this.life, G = A.def.gates[0];
         v.seated = false;
-        const seat = v.arena.seat, e = v.arena.fromSeat ? this._edge(A, seat) : null;
-        const legs = v.arena.home ? [A.home] : e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home]; // (the steward walks home along the road, not through the gate)
+        const V = A.def.visit, fan = !!V && !v.arena.home && !v.steward && v.arena.side == null;
+        const seat = v.arena.seat, e = v.arena.fromSeat && !fan ? this._edge(A, seat) : null;
+        // (a fan of a world with the stair goes back the way he came: top row → down the stair → round the corner → home)
+        const legs = v.arena.home ? [A.home] : fan ? ((v.arena.vleg | 0) >= 4 ? [V.in, V.top, V.out, V.via, V.via0, A.home] : (v.arena.vleg | 0) >= 2 ? [V.via, V.via0, A.home] : [A.home]) : e ? [e, A.def.gates[0].in, G.out, A.home] : [A.def.gates[0].in, G.out, A.home]; // (the steward walks home along the road, not through the gate)
         const leg = v.arena.leg || 0;
         if (leg === 0 && !e && !v.arena.home && !v.steward && v.arena.side != null) this._keepNpcOnFloor(A, v); // (a duellist leaving: along the floor to the gate, not up the stands)
         if (leg < legs.length) { if (this._go(v, legs[leg], WALK * (v.arena.sad ? 0.75 : 1), dt, 1.2)) v.arena.leg = leg + 1; v.arena.t = (v.arena.t || 0) + dt; if (v.arena.t < 120) return true; }
@@ -744,11 +802,11 @@ export class ArenaDuels {
      * towards (tx, tz) but face to the foe all the time — a side-step, a step back, a step in — never the back turned. Slower than a walk, on the
      * floor, where a man can stand. true: he moved.
      */
-    _strafe(A, v, fp, tx, tz, dt) {
+    _strafe(A, v, fp, tx, tz, dt, fast = false) {
         const L = this.life;
         this._face(v, fp, dt);
         const dx = tx - v.x, dz = tz - v.z, d = Math.hypot(dx, dz);
-        const speed = WALK * 0.85 * (v.legK ?? 1);
+        const speed = (fast ? RUN * 0.8 : WALK * 0.85) * (v.legK ?? 1); // (a dash across the floor, or the wary side-step)
         if (d < 0.15) { v.speed = 0; return false; }
         const s = Math.min(d, speed * dt);
         const nx = v.x + dx / d * s, nz = v.z + dz / d * s;
@@ -856,17 +914,19 @@ export class ArenaDuels {
         const stance = arenaStance({ mana: v.mana, maxMana: v.maxMana, foeMana: ov?.mana ?? 30, foeMaxMana: ov?.maxMana ?? 30, t: D.go });
         if (!ready || d > (ready ? Math.max(stance.max, 29) : stance.max) || d < stance.min) { // (ready and in the beam's reach: he stops and casts — he does not walk on)
             v.arena.turnT = (v.arena.turnT || 0) - dt;
-            if (v.arena.turnT <= 0) { v.arena.turnT = 2.5 + Math.random() * 3.5; v.arena.dir = Math.random() < 0.5 ? -1 : 1; }
+            if (v.arena.turnT <= 0) { v.arena.turnT = 2.5 + Math.random() * 3.5; v.arena.dir = Math.random() < 0.5 ? -1 : 1; v.arena.dash = Math.random() < 0.4 ? 1.2 + Math.random() * 1.2 : 0; } // (now and then a dash: he changes his place across the floor)
             const ux = (v.x - fp.x) / (d || 1), uz = (v.z - fp.z) / (d || 1);
             const want = d > stance.max ? -1 : d < stance.min ? 1 : 0; // (closer / farther)
-            let tx = v.x + (-uz * v.arena.dir + ux * want) * 2.5, tz = v.z + (ux * v.arena.dir + uz * want) * 2.5;
+            v.arena.dash = Math.max(0, (v.arena.dash || 0) - dt);
+            const reach = v.arena.dash > 0 ? 7 : 2.5;
+            let tx = v.x + (-uz * v.arena.dir + ux * want) * reach, tz = v.z + (ux * v.arena.dir + uz * want) * reach;
             if (!onArenaFloor(A.def, tx, tz, 2)) { tx = v.x + (A.def.centre.x - v.x) * 0.3; tz = v.z + (A.def.centre.z - v.z) * 0.3; v.arena.dir = -v.arena.dir; }
-            moving = this._strafe(A, v, fp, tx, tz, dt); // (a duellist never turns his back or walks off: he side-steps, face to the foe, wary)
+            moving = this._strafe(A, v, fp, tx, tz, dt, v.arena.dash > 0); // (a duellist never turns his back or walks off: he side-steps, face to the foe, wary)
         }
         if (!moving) { v.speed = 0; this._face(v, fp, dt); }
         // cast: facing him, the shot clear
-        if (ready && !moving && facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL) && F.clearShot(v, fp)) {
-            const spell = arenaSpell({ role: v.skillRole || v.role, foeHp: ov ? ov.hp : 20, finish, player: !ov, last: v.arena.last });
+        if (ready && !moving && facesTarget(v.yaw, v.x, v.z, fp.x, fp.z, FACE.SPELL) && F.clearShot(v, fp, ov)) { // (the foe himself is a wizard of the same tower: he is the target, not «one of his own» in the line — WizardFight._friendInLine)
+            const spell = arenaSpell({ role: v.skillRole || v.role, foeHp: ov ? ov.hp : 20, finish, player: !ov, last: v.arena.last, foeFresh: ov ? arenaFresh(ov.mana, ov.maxMana, D.go) : 1, t: D.go });
             v.arena.last = spell;
             const cost = arenaCost(spell);
             if (v.mana >= cost) {
@@ -1008,7 +1068,7 @@ export class ArenaDuels {
     _foul(A, D, by) {
         const L = this.life;
         this._end(A, D, null, 'foul');
-        A.owed = null;
+        A.owed = A.owed.filter((o) => o.id !== by);
         if (!L._isPlayer(by)) return; // (a wizard's accident between two wizards: a grief, not a crime anyone answers)
         const cs = this._tower(A);
         const cand = [];
@@ -1075,19 +1135,47 @@ export class ArenaDuels {
             g.hud?.setVoice?.('📜 Выберите соперника: коснитесь куклы (младший 50 монет, средний 100, сильный 150) или скажите распорядителю. С главой башни сражаться нельзя.', true);
             return;
         }
-        // a doll touched: that opponent is chosen (the hand on it, as on the book)
-        const dolls = dollSpots(A.def);
+        // a figure on the counter: the hand (or the wand's tip) held on it for a moment chooses that opponent (a hand merely passing by does not: it costs coins);
+        // the figure the wand points at is lit
+        const dolls = A.dolls || (A.dolls = dollSpots(A.def)); // (the figures' places: once per arena)
+        const aim = this.aimedTier(A);
+        if (aim !== A.glowTier) { A.glowTier = aim; this.dollsFx.glow(A.id, aim); }
+        let on = null;
         for (const side of ['right', 'left']) {
             const h = ch.getHandWorldPosition(side, _h);
             if (!h) continue;
-            for (const d of dolls) {
-                if (Math.hypot(h.x - d.x, h.z - d.z) > 1.1 || h.y < d.y - 0.5 || h.y > d.y + 4.4) continue;
-                A.touchT = 3;
-                const r = this.choose(A, d.tier);
-                g.hud?.setVoice?.(typeof r === 'string' ? r : r.reply, true);
-                return;
-            }
+            for (const d of dolls) if (Math.hypot(h.x - d.x, h.z - d.z) <= FIG.TOUCH_R && h.y >= d.y - 0.2 && h.y <= d.y + FIG.H + 0.3) on = d.tier;
         }
+        if (on) { A.dwell = (A.dwell || 0) + dt; if (A.dwell >= 0.6) { A.dwell = 0; A.touchT = 3; const r = this.choose(A, on); g.hud?.setVoice?.(typeof r === 'string' ? r : r.reply, true); } } else A.dwell = 0;
+    }
+
+    /**
+     * (this computer's player) Which figure the raised hand / the wand points at, or null: the ray from the hand against a ball round each figure
+     * (within 9 m of the counter). Pointing only lights it; «этого» / «хочу сразиться с таким» to the steward (stewardHear) chooses it.
+     */
+    aimedTier(A) {
+        const g = this.game, ch = g.character;
+        if (!ch?.isArmRaised || !A.def.desk) return null;
+        const dolls = A.dolls || (A.dolls = dollSpots(A.def));
+        if (!dolls.length) return null;
+        const me = ch.group.position;
+        if (Math.hypot(dolls[1].x - me.x, dolls[1].z - me.z) > 9) return null; // (far from the counter: nothing is pointed at)
+        const wand = g.wandSide?.();
+        for (const side of wand ? [wand] : ['right', 'left']) {
+            if (!ch.isArmRaised(side)) continue;
+            try { g.duel?._myRay?.(side, _a, _b); } catch (_) { continue; }
+            if (_b.lengthSq() < 0.01) continue;
+            _b.normalize();
+            let best = null, bd = 1e9;
+            for (const d of dolls) {
+                const cx = d.x - _a.x, cy = d.y + FIG.H * 0.5 - _a.y, cz = d.z - _a.z, t = cx * _b.x + cy * _b.y + cz * _b.z;
+                if (t < 0.3 || t > 12) continue;
+                const px = cx - _b.x * t, py = cy - _b.y * t, pz = cz - _b.z * t;
+                if (Math.hypot(px, py, pz) < 0.6 && t < bd) { bd = t; best = d.tier; }
+            }
+            if (best) return best;
+        }
+        return null;
     }
 
     /**
@@ -1101,17 +1189,30 @@ export class ArenaDuels {
         if (mine) return L.again;
         if (g.isNight) return L.night;
         if (!g.items?.wand) return L.wand;
+        // the stake (Creative: free — everything there is)
+        const free = g.config?.mode === 'creative' || !!this.mode, fee = tierCoins(tier);
+        if (!free && (g.inventory?.coins?.() ?? 0) < fee) return L.poor;
+        if (this.auth && A.queue.length >= ARENA_QUEUE_MAX) return L.full;
+        if (!free && !g.inventory.spendCoins(fee)) return L.poor;
         this.choosingAt = -1e9; this.askedAt = -1e9;
-        if (this.auth) this._join(A, g.localId, tier); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier }); }
+        const stake = free ? 0 : fee;
+        if (this.auth) this._join(A, g.localId, tier, stake); else { this.myQueue = A.id; g.sync?.arena?.({ e: 'join', id: A.id, tier, stake }); }
+        g.sound?.playCoins?.();
         const busy = this.auth ? !!A.duel : A.ph !== 'idle';
-        return `${L['terms_' + tier]} ${busy ? L.wait : L.soon}`;
+        return `${L[(free ? 'terms_free_' : 'terms_') + tier]} ${busy ? L.wait : L.soon}`;
     }
 
     /** (host) A player signs up. */
-    _join(A, id, tier = null) {
-        if (!TIERS[tier]) return; // (nobody is signed up without choosing whom he fights: the dolls / the steward's «с кем?»)
-        if (A.duel?.p === id || A.queue.sign(id) < 0) return;
+    _join(A, id, tier = null, stake = 0) {
+        stake = stake > 0 ? tierCoins(tier) : 0; // (a stake is the tier's coins or nothing — a message cannot make it up)
+        const back = (why) => { if (stake > 0) this._tell(id, { e: 'pay', id: A.id, coins: stake, why }); };
+        if (!TIERS[tier]) return back('bad'); // (nobody is signed up without choosing whom he fights: the figures / the steward's «с кем?»)
+        if (A.duel?.p === id || A.queue.has(id)) return back('twice');
+        if (A.queue.length >= ARENA_QUEUE_MAX) { this._tell(id, { e: 'full', id: A.id }); return back('full'); }
+        A.queue.sign(id);
         A.tiers.set(id, tier);
+        if (stake > 0) A.stakes.set(id, stake);
+        this._send(A);
         this._tell(id, { e: 'queued', id: A.id, n: A.queue.ahead(id, !!A.duel), tier });
         this.log.push('join:' + id);
     }
@@ -1148,6 +1249,8 @@ export class ArenaDuels {
             case 'ask': this.askedAt = performance.now(); break;
             case 'queued': this.myQueue = m.id; hud?.setVoice?.(`📜 Вы записались на дуэль: ${TIERS[m.tier]?.who || 'соперник'}, награда за победу — ${tierCoins(m.tier)} монет. ` + (m.n > 0 ? `Перед вами: ${m.n}` : 'Вы следующий'), true); g.sound?.playArena?.(g.character.group.position, 'beep', 0.6, 0.8); break;
             case 'call': this.dropTrophyWands(); this.myQueue = m.id; hud?.setVoice?.(`⚔️ Ваш черёд! Выходите на арену и встаньте на светящееся место. Соперник: ${m.name || 'волшебник'}`, true); break;
+            case 'pay': this._credit(m.coins | 0, m.why); break;
+            case 'full': this.myQueue = null; hud?.setVoice?.('📜 Очередь на арену полна — подойдите позже, ставка возвращена', true); break;
             case 'off': this.myQueue = null; this.count = null; hud?.setVoice?.(m.why === 'left' ? '🚪 Вы ушли от распорядителя — запись снята' : m.why === 'moved' ? '🚪 Вы сошли с места — запись снята' : '📜 Запись снята', true); break;
             case 'count': this.dropTrophyWands(); this.count = { t: 0 }; break;
             case 'frole': this._friendRole(m); break;
@@ -1157,13 +1260,26 @@ export class ArenaDuels {
             case 'end':
                 this.count = null; this.myQueue = null;
                 if (this.mode) { if (m.r === 'win') this._modeWin(); else if (m.r === 'lose') this._modeWin(true); return; } // (the duel mode has its own end: no lectern, no coins)
-                hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он отдаст ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? '😔 Поражение. Победитель бросил вашу палочку на землю — подберите её' : m.r === 'draw' ? '⏳ Пять минут прошло — ничья' : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
+                hud?.setVoice?.(m.r === 'win' ? `🏆 Победа! Подойдите к распорядителю — он вернёт ставку и добавит столько же: ${m.coins ?? ARENA_DUEL.REWARD} монет` : m.r === 'lose' ? `😔 Поражение${m.stake > 0 ? ` — ставка ${m.stake} монет пропала` : ''}. Победитель бросил вашу палочку на землю — подберите её` : m.r === 'draw' ? `⏳ Пять минут прошло — ничья${m.stake > 0 ? `, ставка ${m.stake} монет возвращена` : ''}` : m.r === 'off' ? '🚪 Вы ушли с арены — дуэль проиграна' : '⚔️ Дуэль окончена', true);
                 break;
             case 'paid': hud?.setVoice?.(`💰 Ваша награда — ${m.coins ?? ARENA_DUEL.REWARD} монет`, true); break;
             case 'missed': this.myQueue = null; hud?.setVoice?.('⌛ Вы не вышли на арену — очередь прошла', true); break;
             case 'foul': hud?.setVoice?.('☠️ Вы убили соперника — это против правил арены!', true); break;
             default: break;
         }
+    }
+
+    /** (this computer's player) Coins from the arena straight into the pouch (a stake given back, a prize paid away): what does not fit falls at his feet. */
+    _credit(n, why) {
+        if (!(n > 0)) return;
+        const g = this.game, inv = g.inventory;
+        let rest = n;
+        if (inv?.purse?.magic) rest = inv.purse.add(n);
+        else if (inv?.slots) { const s = inv.slots.find((x) => x && x.kind === 'coins' && !x.shop); if (s) { s.count = (s.count || 0) + n; rest = 0; } }
+        inv?._render?.();
+        if (rest > 0) { const p = g.character.group.position; g.items?.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, new THREE.Vector3(p.x, p.y - PLAYER_GROUND_OFFSET + 1.2, p.z), { hover: true }); }
+        g.sound?.playCoins?.();
+        g.hud?.setVoice?.(why === 'win' ? `💰 Ваша награда — ${n} монет` : `💰 Вам вернули ставку — ${n} монет`, true);
     }
 
     /** The big «3 — 2 — 1 — Бой!» for this computer's player in a duel. */
@@ -1189,8 +1305,43 @@ export class ArenaDuels {
     /** (host) The arena's state to everybody (the phase: guests show the count to their player). */
     _send(A) {
         const g = this.game, D = A.duel;
-        if (D?.p != null && D.phase === 'count') this._tell(D.p, { e: 'count', id: A.id });
-        if (g.sync) g.sync.arena?.({ e: 'st', id: A.id, ph: D ? D.phase : 'idle', pl: D?.p ?? null });
+        if (D?.p != null && D.phase === 'count' && !D.countSent) { D.countSent = true; this._tell(D.p, { e: 'count', id: A.id }); } // (once: a later «send» for the queue must not restart the player's count)
+        A.board = this._boardState(A); A.boardAt = performance.now(); A.qKey = this._qKey(A);
+        if (g.sync) g.sync.arena?.({ e: 'st', id: A.id, ph: D ? D.phase : 'idle', pl: D?.p ?? null, b: A.board });
+    }
+
+    /** (host) What the magic board says: the numbers of ArenaBoard.boardView (names, the phase, the minutes, the queue, the result). */
+    _boardState(A) {
+        const g = this.game, D = A.duel, nm = (id) => g.playerName?.(id) || 'Игрок';
+        const st = {
+            ph: D ? D.phase : 'idle', pn: D?.p != null ? nm(D.p) : null, fn: D?.a?.name || null, fn2: D?.b?.name || null, tr: D?.tier || null,
+            go: D?.phase === 'fight' ? D.go : 0, maxT: this._maxT(A), night: !!g.isNight,
+            q: A.queue.list.slice(0, 6).map((id) => ({ n: nm(id), tr: A.tiers.get(id) || null })),
+        };
+        if (A.queue.length > 6) st.more = A.queue.length - 6;
+        if (D?.phase === 'over') {
+            const w = D.result === 'a' ? D.a : D.result === 'b' ? D.b : null;
+            st.res = D.p != null ? (D.result === 'p' ? 'win' : D.result === 'a' ? 'lose' : D.why === 'time' ? 'draw' : 'other') : (w ? 'bot' : D.why === 'time' ? 'draw' : 'other');
+            st.co = D.pay?.coins || 0; st.wn = w?.name || null;
+        }
+        return st;
+    }
+
+    /** The line's key: the board is sent again when the queue or the night changes (not every frame). */
+    _qKey(A) { return A.queue.list.join(',') + '|' + (this.game.isNight ? 'n' : 'd') + '|' + (A.duel ? A.duel.phase : 'idle'); }
+
+    /** (every computer, once a second) The board over the road: the host builds it from its arena, a guest has what the host told. */
+    _board(dt) {
+        this._boardT -= dt;
+        if (this._boardT > 0) return;
+        this._boardT = 0.5;
+        const list = [];
+        for (const A of this.list.values()) {
+            if (A.def.practice || !A.def.desk) continue;
+            if (this.auth && (!A.board || A.qKey !== this._qKey(A))) this._send(A);
+            if (A.board) list.push({ id: A.id, def: A.def, st: A.board, at: A.boardAt });
+        }
+        this.boardFx.update(list);
     }
 
     /** A message about the arenas (m.from: who sent it). */
@@ -1203,7 +1354,7 @@ export class ArenaDuels {
         if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from, m.tier); } return; }
         if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
         if (m.e === 'tg') { const A = this.list.get(m.id); if (A && !this.auth) A.tg = Array.isArray(m.t) ? m.t.slice(0, 2) : []; return; }
-        if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; } return; }
+        if (m.e === 'st') { const A = this.list.get(m.id); if (A) { A.ph = m.ph || 'idle'; A.pl = m.pl ?? null; if (!this.auth && m.b && typeof m.b === 'object') { A.board = m.b; A.boardAt = performance.now(); } } return; }
         if (m.to != null) { if (m.to === g.localId) this._mine(m); return; }
         if (m.e === 'fx') { const A = this.list.get(m.id); if (A) g.sound?.playArena?.(A.def.centre, m.k, m.v ?? 1); }
     }
@@ -1699,5 +1850,5 @@ export class ArenaDuels {
 
     prewarm() { this.marks.prewarm(); this.domeFx.prewarm(); }
 
-    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.dollsFx.dispose(); this.tagFx.dispose(); this.domeFx.dispose(); }
+    dispose() { for (const A of this.list.values()) this._close(A); this.list.clear(); this.marks.dispose(); this.dollsFx.dispose(); this.boardFx.dispose(); this.tagFx.dispose(); this.domeFx.dispose(); }
 }

@@ -28,7 +28,7 @@ export const ARENA_DUEL = {
     OFF_FLOOR: 12, // s: a duellist off the floor that long — gave the duel up
     FAR_FLOOR: 2.5, // m a duellist may step out over the floor's edge
     FALL_COST: 0.18, // a duellist knocked down loses this share of his mana (rounds: worn down fall by fall)
-    FINISH_FRESH: 0.75, // only one this worn out (or down the 4th time) is disarmed while down; a fresher one is let up
+    FINISH_FRESH: 0.6, // only one this worn out (or down the 4th time) is disarmed while down; a fresher one is let up
     PRACTICE_T: 120, // s: a training fight on the field by a tower (not to the end — a training)
     PRACTICE_REST: [180, 480], // s between two trainings («иногда»)
 };
@@ -97,13 +97,16 @@ export const duelClock = (t) => (t >= ARENA_DUEL.MAX_T ? 'draw' : 'on');
  * lift; «Айс» and «Сапира» only now and then and never at one already weak (`foeHp` ≤ 15 — «главное не
  * убить»). `finish`: the opponent can't answer now (stunned, frozen, down) — «Экспеллиармус».
  */
-export function arenaSpell({ role = 'student', foeHp = 20, finish = false, player = false, last = null, rng = Math.random } = {}) {
+export function arenaSpell({ role = 'student', foeHp = 20, finish = false, player = false, last = null, foeFresh = 1, t = 0, rng = Math.random } = {}) {
     if (finish) return 'Expelliarmus';
     const strong = role === 'teacher' || role === 'master' || role === 'adept';
+    // (two wizards of the arena: a disarm that hits ends the duel, so it is not thrown at a fresh one in the first minute — the author: «не так, что кинул магию,
+    //  другой, и за 5 секунд всё закончилось»; the stuns, shoves, the lift and the shields make the fight, the disarm comes when the other is worn down)
+    const disarm = player ? 0.22 : (foeFresh < 0.6 || t > 70 ? 0.2 : 0.03);
     // (against a player: never the hurting ones — the wizard keeps the rules better than anyone)
     const table = [
         // (the disarm mostly when the other is down — `finish`: a duel is fought first, won after)
-        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', player ? 0.22 : 0.18], ['LevitateDuel', 0.12],
+        ['Stupefy', 0.3], ['Jolt', strong ? 0.12 : 0.16], ['JoltMaxima', strong && !player ? 0.08 : 0], ['Expelliarmus', disarm], ['LevitateDuel', 0.12],
         ['IceDuel', strong ? 0.1 : 0.05], ['SapiraDuel', foeHp > 15 && !player ? 0.06 : 0],
         // (more of a show: «Даст» slows, «Disarmor» strips the armour, the strong ones' «Айс Максима»)
         ['SandsDuel', 0.1], ['Disarmor', 0.06], ['IceDuelMaxima', strong && !player && foeHp > 15 ? 0.06 : 0],

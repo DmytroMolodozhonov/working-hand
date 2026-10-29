@@ -91,5 +91,6 @@ test('the opponent named to the steward: младший / средний / си�
     const d = dollSpots(def);
     assert.deepEqual(d.map((x) => x.tier), ['novice', 'adept', 'teacher']);
     assert.ok(d.every((x) => Math.hypot(x.x - 4.5, x.z + 40) >= 3), 'not on the steward');
-    assert.ok(d.every((x) => x.x < 4.5), 'on the side away from the lectern');
+    assert.ok(d.every((x) => x.x > 4.5), 'on the lectern\'s side, away from the gate\'s lane (the lane stays free)');
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(Math.hypot(d[i].x - d[j].x, d[i].z - d[j].z) >= 1.6, 'every figure its own place');
 });

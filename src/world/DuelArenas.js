@@ -95,6 +95,7 @@ export function buildArena(p, d = ARENA) {
     const book = p.pt(6.5, -(END + 3), 3); // (its top: y = L(2) top)
     // (the steward's place: beside the gate's lane, outside — he is a living man of the tower, ArenaDuels.js; no blocks)
     out.desk = { book: { x: book.x, y: book.y + 0.5, z: book.z }, front: p.pt(6.5, -(END + 5)), stand: p.pt(4.5, -(END + 4)), yaw: p.yaw(Math.PI) };
+    if (A.ENTRIES && A.S > 0) entries(p, A, out, OUT_W, END, T);
     // the seats: along the middle of every row, never in the gates
     out.seats = [];
     for (let k = 1; k <= T; k++) {
@@ -115,6 +116,50 @@ export function buildArena(p, d = ARENA) {
     return out;
 }
 
+/**
+ * The two entrances and the steward's stall (worlds of generation ARENA_ENTRIES_FROM_GEN; the author: «должен быть вход для посетителей и
+ * вход для тех, кто сражается, чтобы не мешали друг другу» and «как крытый рынок… вместо товаров — маленькие фигурки волшебников»).
+ *   The fighters   the front gate (−v) with its lane |u| ≤ 2 straight to the floor, as ever.
+ *   The visitors   a stair of 6 steps outside the long side (u = +): 5 wide, a rail on both sides, a lamp on top, the gap in the rim at the top row's level
+ *                  (the rim's top layer carved out) — they come out onto the top row and go down the rows to their seats. Their way from the road
+ *                  (`via`) runs round the arena's corner, never past the front gate or the stall.
+ *   The stall      a market counter 5 × 2 blocks, 2 high (Castles' market stalls), four posts 7 high and a striped canopy 7 × 5, on the right of the
+ *                  gate's lane, beyond the lectern; the steward behind it; on the counter three small figures (slots 1,6 m apart — a block-and-a-half
+ *                  each, none on another): `desk.stall.slots` (the figures' feet are on the counter's top).
+ * Every part is a block: nothing is walked through (the counter is a wall to a man, the posts are pillars).
+ */
+function entries(p, A, out, OUT_W, END, T) {
+    const B = BLOCK;
+    // the stall: the counter, the posts, the canopy
+    p.box(11, 15, 0, 1, -(END + 4), -(END + 3), B.PLANKS);
+    p.box(11, 15, 1, 1, -(END + 4), -(END + 3), B.PLANKS_DARK);
+    for (const [u, v] of [[10, -(END + 1)], [16, -(END + 1)], [10, -(END + 5)], [16, -(END + 5)]]) p.box(u, u, 0, 6, v, v, B.PLANKS_DARK);
+    for (let k = 0; k < 5; k++) p.box(10, 16, 7, 7, -(END + 1) - k, -(END + 1) - k, k % 2 ? B.CLOTH_WHITE : B.CARPET_PURPLE);
+    const top = p.pt(13, -(END + 3.5), 2); // (standing on the counter's top: layer 1)
+    out.desk.stand = p.pt(13, -(END + 2)); // (the steward behind his counter)
+    out.desk.front = p.pt(13, -(END + 7)); // (the customer's side)
+    out.desk.stall = {
+        slots: ['novice', 'adept', 'teacher'].map((tier, i) => { const q = p.pt(11.4 + i * 1.6, -(END + 3.5), 2); return { tier, x: q.x, y: top.y, z: q.z }; }),
+        board: p.pt(6, -(END + 9), 0), // (the magic board hangs over the road to the gates: BoardFx)
+    };
+    // the visitors' stair, on the side AWAY from the stall (−u): 6 steps outwards from the rim, a rail on both sides, the gap in the rim at the top row's level
+    const R = OUT_W + 1;
+    p.box(-R, -R, T, T, -2, 2, B.AIR);
+    for (let i = 0; i < T; i++) {
+        const u0 = -(OUT_W + 2 + 2 * (T - 1 - i)), u1 = u0 - 1;
+        p.box(u0, u1, 0, i, -2, 2, B.ENCHANTED);
+        for (const sv of [-3, 3]) p.box(u0, u1, 0, i + 1, sv, sv, B.ENCHANTED);
+    }
+    for (const sv of [-3, 3]) p.box(-(OUT_W + 2), -(OUT_W + 2), T + 1, T + 1, sv, sv, B.ARCANE_LAMP);
+    out.visit = {
+        via0: p.pt(-12, -(END + 14)), // (off the road to the gate, in the tower's corridor, well before the gate's lane)
+        via: p.pt(-(OUT_W + 14), -(END + 3)), // (the corner, inside the levelled land: round the arena, far from the front gate and the stall)
+        out: p.pt(-(OUT_W + 13), 0), // (the foot of the stair)
+        top: p.pt(-(OUT_W + 2.5), 0, T), // (the top step — the row's level)
+        in: p.pt(-(OUT_W - 1), 0, T), // (on the top row, inside the rim)
+    };
+}
+
 /** An arena's record at (X, Z) on land levelled to F (`rot`: its front gate towards −v turned by rot·90°). */
 export function arenaSite(id, X, Z, F, rot, extra = {}, d = ARENA) {
     const A = dims(d), OUT_W = A.W + A.TIERS * A.STEP;
@@ -126,7 +171,7 @@ export function arenaSite(id, X, Z, F, rot, extra = {}, d = ARENA) {
         centre: c, floorY: c.y, // (the floor's top: the duellists stand here)
         // the floor (local u ±W, v ±(S+W)) for «who is on it»: its axis and radius in world terms
         axis: { a: p.pt(0, -A.S), b: p.pt(0, A.S), r: A.W }, outer: OUT_W + 1,
-        gates: out.gates, desk: out.desk, seats: out.seats,
+        gates: out.gates, desk: out.desk, seats: out.seats, visit: out.visit || null,
         parts: p.parts, _byChunk: new Map(),
         ...extra,
     };
@@ -174,8 +219,9 @@ function arenaGround(raw, X, Z, Z0 = ARENA.ZONE, loose = false) {
  * and any a settlement adds. landAt / partsForChunk the castles' way (Sites.js).
  */
 export class ArenaIndex {
-    constructor(seed, raw, towers, villages = null, dims = ARENA) {
-        this.d = dims; // the arena's measures: ARENA, or ARENA_BIG in the duel-only mode
+    constructor(seed, raw, towers, villages = null, dims = ARENA, entries = false) {
+        this.big = dims !== ARENA; // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
+        this.d = entries ? { ...dims, ENTRIES: true } : dims; // the arena's measures: ARENA, or ARENA_BIG in the duel-only mode (+ the visitors' stair and the steward's stall: generation ARENA_ENTRIES_FROM_GEN)
         this.seed = seed; this.raw = raw; this.towers = towers; this.villages = villages;
         this.byVillage = new Map(); // settlement id → its round arena (WizardVillages: `def.arena`, its place)
         this.byTower = new Map(); // tower id → arena def or null
@@ -199,7 +245,7 @@ export class ArenaIndex {
             for (const { d } of order) {
                 const X = t.x + d[0] * away, Z = t.z + d[1] * away;
                 if (X - need < x0 || X + need > x0 + CASTLE_CELL || Z - need < z0 || Z + need > z0 + CASTLE_CELL) continue;
-                const F = arenaGround(this.raw, X, Z, this.d.ZONE, this.d !== ARENA); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
+                const F = arenaGround(this.raw, X, Z, this.d.ZONE, this.big); // (the duel-only arena: it must stand — a low hill levelled, a pond filled)
                 if (F == null) continue;
                 def = arenaSite('ar' + t.id, X, Z, F, d[2], { tower: t.id, towerAt: { x: t.x, z: t.z }, train: trainingField(t, d) }, this.d);
                 break;

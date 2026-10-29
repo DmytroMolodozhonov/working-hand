@@ -548,9 +548,9 @@ export class WizardFight {
         if (v.dead || v.noWand || v.stunT > 0 || v.lev || v.vy) return lost();
         if (this.game.duel?.clashes?.some((x) => x.a.by === v.id || x.b.by === v.id)) return lost();
         P.t -= dt; P.age += dt;
-        let fp = null;
+        let fp = null, target = null;
         if (P.at) {
-            const c = this.game.duel?._creature?.(P.at.k, P.at.id);
+            const c = target = this.game.duel?._creature?.(P.at.k, P.at.id);
             if (c) { const at = this.game.duel._creaturePoint(c, _ch); fp = { x: at.x, y: at.y - 0.3, z: at.z }; }
         } else fp = this.life._playerPos(P.foe);
         if (!fp || P.age > CAST_PREP.GIVE_UP) return lost();
@@ -561,7 +561,7 @@ export class WizardFight {
         v.mode = 'cast';
         if (P.t > 0) return true;
         if (v.mana < P.cost) return lost();
-        if (!this.clearShot(v, fp)) return true; // (a moment more: the line may clear)
+        if (!this.clearShot(v, fp, target)) return true; // (a moment more: the line may clear; the target himself is never «in the way»)
         if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
         v.prep = null;
         v.mana -= P.cost;
@@ -586,9 +586,9 @@ export class WizardFight {
      * A clear shot from this wizard's wand at the foe: the line from the wand's height to the foe's
      * body free of any block, door or wall (sampled finely: a wall one block thick is never missed).
      */
-    clearShot(v, fp) {
+    clearShot(v, fp, foe = null) {
         const c = this.game.collision;
-        if (this._friendInLine(v, fp)) return false;
+        if (this._friendInLine(v, fp, foe)) return false;
         if (!c?.lineOfSight) return true;
         return c.lineOfSight(v.x, v.y + 3.4, v.z, fp.x, fp.y + 0.3, fp.z, 0.35);
     }
@@ -597,12 +597,12 @@ export class WizardFight {
      * One of his own between his wand and the foe (a charge hits whatever it touches first — Duel.js):
      * he doesn't cast through a friend's back; he waits or steps aside for a clear line.
      */
-    _friendInLine(v, fp) {
+    _friendInLine(v, fp, foe = null) {
         const dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz);
         if (L < 1.5) return false;
         const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;
         for (const o of v.cs.active.values()) {
-            if (o === v || o.dead) continue;
+            if (o === v || o === foe || o.dead) continue; // (the arena's duel: the foe is a wizard of the same tower — he is the target, not «one of his own» in the way)
             const ox = o.x - v.x, oz = o.z - v.z;
             const f = ox * ux + oz * uz;
             if (f < 0.6 || f > L + 1.5) continue; // (one right by the foe too: a charge that misses him by a hand finds the friend)

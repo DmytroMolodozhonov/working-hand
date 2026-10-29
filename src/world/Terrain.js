@@ -250,7 +250,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 15;
+export const WORLD_GEN = 16;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -307,6 +307,14 @@ export const DUNGEON_FROM_GEN = 15;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 15: dungeons (DUNGEON_FROM_GEN).
+ * The first generation whose duel arenas have the visitors' stair (a separate way up to the stands) and the steward's stall with the three small
+ * figures of wizards on its counter (DuelArenas.entries). One number: an older world keeps its arenas as they were built (the visitors then
+ * use the front gate, the figures stand on little stones by the steward).
+ */
+export const ARENA_ENTRIES_FROM_GEN = 16;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 16: the duel arenas' visitors' stair and the steward's stall with the figures (ARENA_ENTRIES_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -593,7 +601,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -628,7 +636,7 @@ export class TerrainData {
             if (ice && this.apart && !ice.plan) ice = new IceCastleSite(seed, raw, busy, testIce); // (a world with no summit for it: on the test mountain as before)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * ((ice ? !!ice.testAt : this.test) ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
-            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined); // (the duel arenas: DuelArenas.js)
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
             // (generation 11: the spider's den has a butte of its own, away from every site — SpiderDens.js)
