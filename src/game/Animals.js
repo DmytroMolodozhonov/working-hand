@@ -39,7 +39,7 @@ import { animalMagicKind, creditKill } from './Mana.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
 import { FLORA_ITEMS } from './MagicFlora.js';
-import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, PEGASUS_COLOR } from './AnimalModels.js';
+import { animalModel, animateLegs, animateWings, HORSE_COLORS, PIG_LOOKS, isPegasusColor, randomPegasusColor } from './AnimalModels.js';
 import { FLY, takeOff, stepFlight, wingTick, pickMigration, flockSlot } from './PigFlight.js';
 import { HerdGuards, rollGuard, GUARD } from './HerdGuards.js';
 import { runBookColor, RUNNER } from './RunningBook.js';
@@ -66,7 +66,7 @@ export const SPECIES = {
     runbook: { name: 'Бегущая книга', hp: 4, speed: 2.2, run: 9.5, dmg: 0, meat: 0, size: RUNNER.SIZE }, // (rare; its mind is RunningBook.js)
 };
 /**
- * The Pegasus (one in 21% of horse herds, the only black horse): he defends his herd in the air;
+ * The Pegasus (one in 21% of horse herds, winged, in a coat of his own): he defends his herd in the air;
  * an apple fed by hand makes him let that player on (9% for an ordinary apple, 40% for a golden one) — he is never anybody's;
  * ridden, a slap on his head and he takes off with the rider.
  */
@@ -207,7 +207,7 @@ export class Animals {
             : type === 'pig' || type === 'cow' ? (opts.color || 1 + Math.floor(Math.random() * 4)) : null; // (a pig's / a cow's look 1…4)
         const model = animalModel(type, color);
         model.scale.setScalar(S.size * (type === 'pig' ? pigSize(id) : 1));
-        if (type === 'pig' || color === PEGASUS_COLOR) model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
+        if (type === 'pig' || isPegasusColor(color)) model.rotation.order = 'YXZ'; // (in flight: rolls into a turn, pitches, then faces its way)
         // the real body (from the model's bounding box) gives its personal space; a pivot for the head
         const dims = measureBody(model);
         if (ROOM[type]) rigHead(model, dims); // (herd animals only: the running book has its own parts)
@@ -225,7 +225,7 @@ export class Animals {
             home: { x: pos.x, z: pos.z }, lie: 0, headP: 0, headY: 0,
             fly: null, flyCode: 0, wingOpen: 0, bank: 0, pitch: 0, // (pigs: their flight — PigFlight.js)
             baseHp: S.hp, guard: null, form: 0, formK: 0, act: 0, // (a herd's guardian: HerdGuards.js)
-            pegasus: type === 'horse' && color === PEGASUS_COLOR, // (the winged black horse)
+            pegasus: type === 'horse' && isPegasusColor(color), // (the winged horse, in any coat)
         };
         this.list.push(a);
         this.byId.set(id, a);
@@ -344,7 +344,7 @@ export class Animals {
             // (the first one measures the body: the rest are placed by its personal space)
             const room = placed[0]?.room ?? 0;
             const s = i ? pickSpot(cx, cz, room * LOOSE * (0.6 + Math.sqrt(n) * 0.55), room, placed.map((o) => ({ x: o.group.position.x, z: o.group.position.z, room: o.room }))) : { x: cx, z: cz };
-            const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2, color: i === peg ? PEGASUS_COLOR : undefined });
+            const a = this._spawn(type, new THREE.Vector3(s.x, g.collision.groundY(s.x, s.z) + 0.5, s.z), { herd, yaw: yaw + (Math.random() - 0.5) * 1.2, color: i === peg ? randomPegasusColor() : undefined });
             placed.push(a);
         }
         herd.leader = placed[0]?.id ?? null;

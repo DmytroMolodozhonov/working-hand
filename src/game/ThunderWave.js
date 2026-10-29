@@ -29,6 +29,7 @@ export const THUNDER_TARGETS = {
     castlePeople: '−10 to villagers, knights, the king, wizards, merchants, servants; their ordinary armour does not soak it, a magic piece does; a wizard\'s hand shield does not stop it, the Master\'s dome does',
     animals: '−10 and thrown back',
     sailors: '−10; a black ship\'s skeleton by Sailors.pirateBoneDamage (the kind is passed); the black ship itself is not hurt (Ships.isCursed)',
+    canaries: '−10, thrown back (the knight\'s mass); the camp turns on the caster (Canaries.hit)',
     spider: '−10', dragons: '−10 (DragonKinds.ON_DRAGON)', phoenixes: '−10 (Phoenixes.TARGETS)', owls: '−10 (a scroll\'s spell hurts it — Owls.TARGETS)',
     livingTrees: '−10 (thunder is like lightning: MIGHTY_ON_TREES)', bookBirds: 'knocked down',
     iceCastle: '−10 to the queen, her monsters and every snowman (a scroll spell: IceQueen.iceDamage)',
@@ -101,6 +102,7 @@ function strike(game, kind, id, at, o, by) {
         case 'D': { const d = game.dragons?.byId(id); if (d) { game.dragons.hit(d, dmg, K, by); game.dragons.noise?.(o); } break; }
         case 'f': { const f = game.phoenixes?.byId(id); if (f) game.phoenixes.hit(f, dmg, K, by); break; }
         case 'o': { const w = game.owls?.byId(id); if (w) game.owls.hit(w, dmg, K, by); break; }
+        case 'N': { const w = game.canaries?.byId(id); if (w) game.canaries.hit(w, dmg, K, by); break; } // (a swamp canary)
         case 'g': { const w = game.gargoyles?.byId(id); if (w) game.gargoyles.hit(w, dmg, K, by); break; } // (an infernal gargoyle: stone — hurt by it, GargoyleRules.TARGETS.Thunderwave)
         case 'I': { const c = game.iceCastle?.byId(id); if (c) game.iceCastle.hit(c, dmg, K, by); break; }
         default: break;

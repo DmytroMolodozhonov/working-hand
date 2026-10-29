@@ -5,9 +5,10 @@
  *   chomp   wet crunching bites                                         gulp   a thick swallow, the throat swelling
  *   spit    a wet burst and a cough of leaves                           burn   leaves crackling in fire
  *   fall    the stem cracking and the plant toppling
+ *   whoosh  the Brightflower's fire breath (a roaring rush)  flare  its cup opening with a soft flame  hush  the flame going out
  */
-export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall'];
-const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4 };
+export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall', 'whoosh', 'flare', 'hush'];
+const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4, whoosh: 0.9, flare: 0.8, hush: 0.7 };
 const TAU = Math.PI * 2;
 
 function noise(d, sr, at, dur, amp, lpK, decay, att = 400) {
@@ -41,6 +42,9 @@ export function synthPlant(ctx, kind) {
         case 'spit': noise(d, sr, 0, 0.35, 0.8, 0.35, 9); tone(d, sr, 0.02, 0.35, 420, 140, 0.35, 9); break;
         case 'burn': for (let k = 0; k < 24; k++) noise(d, sr, Math.random() * 1.05, 0.02 + Math.random() * 0.03, 0.55, 0.7, 80); noise(d, sr, 0, 1.1, 0.25, 0.08, 3.5, 20); break;
         case 'fall': noise(d, sr, 0, 0.1, 1.0, 0.5, 40); tone(d, sr, 0.02, 0.5, 90, 40, 0.65, 5); noise(d, sr, 0.5, 0.6, 0.4, 0.12, 5); tone(d, sr, 0.52, 0.4, 70, 38, 0.5, 8); break;
+        case 'whoosh': noise(d, sr, 0, 0.85, 0.75, 0.22, 3.2, 60); noise(d, sr, 0.05, 0.7, 0.4, 0.5, 5); tone(d, sr, 0, 0.8, 130, 70, 0.3, 3.5); break;
+        case 'flare': noise(d, sr, 0, 0.6, 0.45, 0.3, 4.5, 30); tone(d, sr, 0, 0.6, 220, 330, 0.18, 4); tone(d, sr, 0.05, 0.5, 440, 660, 0.07, 5); break;
+        case 'hush': noise(d, sr, 0, 0.6, 0.5, 0.18, 6, 80); tone(d, sr, 0, 0.5, 260, 90, 0.2, 7); break;
         default: break;
     }
     // soften the clicks

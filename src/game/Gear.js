@@ -511,6 +511,15 @@ export class Gear {
                     a.hit.add(o);
                     g.owls.hit(o, a.dmg, 'arrow', a.by);
                 }
+                // a swamp canary (Canaries.js): an arrow hurts it; its camp turns on the shooter
+                if (g.authority) for (const o of g.canaries?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const cp = o.model.position;
+                    if (Math.hypot(cp.x - p.x, cp.z - p.z) > 0.7 || p.y < cp.y || p.y > cp.y + 2.2) continue;
+                    a.hit.add(o);
+                    g.canaries.hit(o, a.dmg, 'arrow', a.by);
+                    if (!o.dead) this._stick(a, o.model);
+                }
                 // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
                 if (g.authority) for (const o of g.gargoyles?.targets() || []) {
                     if (a.hit.has(o) || gargoyleDist(o, p) > 0.2) continue;

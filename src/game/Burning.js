@@ -59,7 +59,8 @@ export const BURN_TARGETS = {
     blackship: { does: 'burn', why: 'капитан Чёрные Усы и скелеты горят как моряки; сам корабль заклинаниями не повреждается (Ships.isCursed)' },
     phoenix: { does: 'none', why: 'феникс рождён из огня' },
     owl: { does: 'none', why: 'сова не горит — слишком магическая (слова автора); чует огонь и улетает от него (Owls.TARGETS)' },
-    plant: { does: 'own', why: 'телевильпины и плотоядные головы горят своим способом, быстро: −12 HP/с (Plants.js, PlantLife.BURN); на теле существа не горят' },
+    canary: { does: 'own', why: 'канарик горит своим способом: Canaries.hit (огонь) — горит 6 с, −2 HP в секунду, бежит прочь; лагерь злится на того, кто поджёг' },
+    plant: { does: 'own', why: 'телевильпины и плотоядные головы горят своим способом, быстро: −12 HP/с (Plants.js, PlantLife.BURN); на теле существа не горят; Ярколето огнём не вредит и не злится — оно само из огня (PlantLife.BRIGHT_TARGETS)' },
     gargoyle: { does: 'none', why: 'горгулья адская: огонь её не берёт и не поджигает (GargoyleRules.FIRE_KINDS)' },
     items: { does: 'none', why: 'свитки и книги в огне горят уже своим способом (Game.burnHeldBook/Items); горение на теле их не трогает' },
     ships: { does: 'none', why: 'горящий корабль и повозка сами поджигают тех, кто стоит в их огне (stand), но не горят «на теле»' },
@@ -248,6 +249,7 @@ export class Burning {
 
     /** «Firefighting» held up: whoever burns within `r` of `o` (3D) stops burning. */
     douseAround(o, r) {
+        this.game.plants?.bright?.douse?.(o, r); // (water on a Brightflower: it falls asleep)
         return this.douseWhere((c, rr) => Math.hypot(c.x - o.x, c.y - o.y, c.z - o.z) - rr <= r);
     }
 

@@ -3,6 +3,7 @@
  *
  *   Телевильпин        groups of ~5 big red glowing flowers, 0.6× as often as apple trees. Prick whoever stands at one
  *                      (1 HP, once a second per flower) unless the visitor wears a full steel set. Broken → «Листок телевильпина».
+ *   Ярколето           a fire flower that breathes open and shut; angered, it turns on the offender and breathes fire (BrightFlower.js). Sleeps from cold and water.
  *   Плотоядная голова  groups of 2–5, 0.5× as often as apple trees. See a living thing near → tendrils grab a leg, pull it
  *                      to the jaws, three bites, a swallow. An animal is eaten; a man without armour too (−1 HP a second inside,
  *                      spat out after ~10 s); a breastplate: it tries ~7 s and spits him out; a MAGIC robe: spat out at once.
@@ -14,12 +15,14 @@
  * the tendrils are written by the CPU only near the player (20 Hz while idle). Far groups are not drawn / are put away.
  */
 import * as THREE from 'three';
-import { BLOCK, PLANTS_FROM_GEN } from '../world/Terrain.js';
+import { BLOCK, PLANTS_FROM_GEN, BRIGHTFLOWER_FROM_GEN } from '../world/Terrain.js';
+import { BIOMES } from '../world/Landscape.js';
+import { BrightFlowers } from './BrightFlower.js';
 import { newUid } from './ItemTypes.js';
 import { crowdNear } from './CrowdSources.js';
 import {
     PLANT_KINDS, APPLE, EAT, FREEZE, BURN, plantGroupIn, plantId, plantHeight, plantGear, thornsPrick, swallowVerdict,
-    plantDamage, FIRE_KINDS, COLD_KINDS, DROP_STACK,
+    plantDamage, FIRE_KINDS, COLD_KINDS, DROP_STACK, WET_KINDS, BRIGHT,
 } from './PlantLife.js';
 import {
     PLANT_CLOCK, plantMaterials, telewilpinVariant, TELE_VARIANTS, buildLobe, buildHeadStem, bulgeGeometry, VineSet, VINES, HEAD, mergePlaced,
@@ -28,7 +31,9 @@ import {
 export const PLANT_RANGE = { LOAD: 170, KEEP: 330, DRAW: 150, ANIM: 90, SIM: 85, IDLE_VINES: 45 };
 const STATES = ['idle', 'grab', 'pull', 'bite', 'gulp', 'digest', 'spit', 'cool', 'frozen'];
 const NO_EFFECT = new Set(['AvadaKedavra', 'Avada', 'Stupefy', 'LevitateDuel', 'Levitation', 'Jolt', 'Expelliarmus', 'Disarmor']);
-const TELE_H0 = 5.4, HEAD_H0 = 8.4;
+const TELE_H0 = 5.4, HEAD_H0 = 8.4, BRIGHT_H0 = 2.2;
+/** Half-width of a plant's body (m, at size 1): its collision box and the reach of a blow. */
+const bodyR = (kind) => (kind === 'carnivore' ? 0.6 : kind === 'brightflower' ? 0.3 : 0.2);
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _o = new THREE.Vector3(1, 1, 1);
 const r2 = (x) => Math.round(x * 100) / 100;
 const ease = (t) => t * t * (3 - 2 * t);
@@ -52,6 +57,7 @@ export class Plants {
         this._sendT = 0; this._out = [];
         this.mine = null; // the plant holding ME (or null)
         this.enabled = true;
+        this.bright = new BrightFlowers(this); // the Brightflower's mind and its instanced look (BrightFlower.js)
     }
 
     get active() { const g = this.game; return (g.gen ?? 1) >= PLANTS_FROM_GEN; }
@@ -74,6 +80,7 @@ export class Plants {
         this._experimentHeads(p, t);
         let built = 0;
         for (let gz = gz0; gz <= gz1 && built < 2; gz++) for (let gx = gx0; gx <= gx1 && built < 2; gx++) for (const kind of Object.keys(PLANT_KINDS)) {
+            if (kind === 'brightflower' && (g.gen ?? 1) < BRIGHTFLOWER_FROM_GEN) continue; // (older worlds have no Brightflowers)
             const key = kind + '|' + gx + ',' + gz;
             if (this.groups.has(key)) continue;
             const def = plantGroupIn(kind, gx, gz, seed);
@@ -87,6 +94,7 @@ export class Plants {
                 const top = t.topLayer(x, z);
                 if (t.get(x, top, z) !== BLOCK.GRASS || t.get(x, top + 1, z) === BLOCK.WATER) continue;
                 if ((t.sites || t.castles)?.landAt?.(x, z) || t.isIsland?.(x, z)) continue; // (not in castles, villages, towers; not on islands)
+                if (PLANT_KINDS[kind].biomes && !PLANT_KINDS[kind].biomes.includes(BIOMES[t.biomeAt?.(x, z) ?? 0]?.id)) continue; // (the Brightflower: warm meadows, steppes, emerald hills)
                 const id = plantId(kind, gx, gz, m.i);
                 if (this._gone.has(id)) continue;
                 ok.push({ ...m, x, z, y: top - 0.5, id });
@@ -134,18 +142,21 @@ export class Plants {
     _load(kind, gx, gz, members) {
         const g = this.game, K = PLANT_KINDS[kind];
         const grp = { key: kind + '|' + gx + ',' + gz, kind, gx, gz, plants: [], root: new THREE.Group(), vis: true };
+        const bright = kind === 'brightflower';
         grp.root.position.set(members[0].x, members[0].y, members[0].z);
         for (const m of members) {
             const p = {
-                id: m.id, kind, x: m.x, y: m.y, z: m.z, yaw: m.yaw, s: plantHeight(kind, m.h) / (kind === 'telewilpin' ? TELE_H0 : HEAD_H0), variant: Math.floor(m.h * 997) % (kind === 'telewilpin' ? TELE_VARIANTS : 3),
+                id: m.id, kind, x: m.x, y: m.y, z: m.z, yaw: m.yaw, s: plantHeight(kind, m.h) / (kind === 'telewilpin' ? TELE_H0 : bright ? BRIGHT_H0 : HEAD_H0), variant: Math.floor(m.h * 997) % (kind === 'telewilpin' ? TELE_VARIANTS : 3),
                 isPlantBody: true, hp: K.hp, maxHp: K.hp, dead: false, grp, st: 0, t: 0, prey: null, pT: 0, burnT: 0, freezeT: 0, cool: 0, phase: m.h * 40, hy: 0, hpit: 0, jaw: 0.12, boxId: null, bites: 0, tire: 0, digest: 0,
             };
             p.H = plantHeight(kind, m.h);
-            p.boxId = g.collision?.addBox({ minX: m.x - (kind === 'carnivore' ? 0.6 : 0.2) * p.s, maxX: m.x + (kind === 'carnivore' ? 0.6 : 0.2) * p.s, minY: m.y, maxY: m.y + p.H * 0.7, minZ: m.z - (kind === 'carnivore' ? 0.6 : 0.2) * p.s, maxZ: m.z + (kind === 'carnivore' ? 0.6 : 0.2) * p.s, kind: 'tree', noSupport: true });
+            const hw = bodyR(kind) * p.s;
+            p.boxId = g.collision?.addBox({ minX: m.x - hw, maxX: m.x + hw, minY: m.y, maxY: m.y + p.H * 0.7, minZ: m.z - hw, maxZ: m.z + hw, kind: 'tree', noSupport: true });
+            if (bright) this.bright.init(p);
             p.proxy = this._makeProxy(p);
             grp.plants.push(p); this.byId.set(p.id, p);
         }
-        if (kind === 'telewilpin') this._buildTele(grp); else for (const p of grp.plants) this._buildHead(p, grp);
+        if (kind === 'telewilpin') this._buildTele(grp); else if (!bright) for (const p of grp.plants) this._buildHead(p, grp); // (the Brightflowers are drawn all together: BrightFlowerFx)
         g.scene.add(grp.root);
         return grp;
     }
@@ -203,7 +214,7 @@ export class Plants {
     // ============================================================ hits (a proxy lets the weapons see a plant like any creature)
     _makeProxy(p) {
         const pos = new THREE.Vector3(p.x, p.y, p.z), rot = { y: p.yaw };
-        const r = p.kind === 'carnivore' ? 1.0 * p.s : 0.55 * p.s;
+        const r = p.kind === 'carnivore' ? 1.0 * p.s : p.kind === 'brightflower' ? 0.65 * p.s : 0.55 * p.s;
         return {
             isPlant: true, plant: p, group: { position: pos, rotation: rot }, damageCooldown: 0,
             get isDead() { return p.dead; },
@@ -213,6 +224,7 @@ export class Plants {
     /** World point of a plant's top (the bloom / the hinge of the jaws). */
     _top(p, out) {
         if (p.kind === 'carnivore' && p.pivot) return p.pivot.getWorldPosition(out);
+        if (p.kind === 'brightflower') return this.bright.top(p, out);
         return out.set(p.x, p.y + p.H * (p.kind === 'carnivore' ? 0.7 : 0.95), p.z);
     }
     targets() { return this._proxies; }
@@ -224,20 +236,25 @@ export class Plants {
         const abx = bx - ax, aby = by - ay, abz = bz - az, l2 = abx * abx + aby * aby + abz * abz || 1;
         let t = ((pt.x - ax) * abx + (pt.y - ay) * aby + (pt.z - az) * abz) / l2; t = Math.max(0, Math.min(1, t));
         const dx = pt.x - (ax + abx * t), dy = pt.y - (ay + aby * t), dz = pt.z - (az + abz * t);
-        return Math.sqrt(dx * dx + dy * dy + dz * dz) - (p.kind === 'carnivore' ? 0.6 : 0.2) * p.s;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz) - (p.kind === 'brightflower' ? 0.6 : bodyR(p.kind)) * p.s;
     }
 
     /** A blow / a spell / fire on a plant (any computer: a guest asks the host). */
     hit(p, dmg, kind = 'melee', by = null) {
         if (!p || p.dead) return;
-        if (!this.auth) { this._send({ op: 'hit', id: p.id, dmg: r2(+dmg || 0), kind }); this._flinch(p); return; }
+        if (!this.auth) { this._send({ op: 'hit', id: p.id, dmg: r2(+dmg || 0), kind, by: this.game.localId }); this._flinch(p); return; }
+        if (p.kind === 'brightflower') { // (made of fire: fire does nothing and angers nothing; cold and water put it to sleep; any other blow hurts AND angers it)
+            if (FIRE_KINDS.has(kind)) return;
+            if (COLD_KINDS.has(kind) || WET_KINDS.has(kind)) { this.bright.sleep(p); return; }
+        }
         if (COLD_KINDS.has(kind)) { this._cold(p); return; }
         if (FIRE_KINDS.has(kind)) this.ignite(p);
         const d = plantDamage(kind, dmg);
-        if (!(d > 0)) return;
+        if (!(d > 0)) { if (p.kind === 'brightflower' && !NO_EFFECT.has(kind)) this.bright.anger(p, by); return; }
         p.hp -= d;
         this._flinch(p);
         if (p.hp <= 0) this.die(p, kind, by);
+        else if (p.kind === 'brightflower') this.bright.anger(p, by);
     }
     hitAt(pos, radius, dmg, kind, by = null) {
         for (const p of this.near) if (!p.dead && this._dist(p, pos) < radius) this.hit(p, dmg, kind, by);
@@ -278,7 +295,7 @@ export class Plants {
         g.collision?.removeBox(p.boxId); p.boxId = null;
         this._release(p, true);
         this._top(p, _v);
-        for (let i = 0; i < 18; i++) g.fx?.spark?.(_v, p.kind === 'telewilpin' ? 0xff3a1c : 0x6fb83a, 0.12, _w.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
+        for (let i = 0; i < 18; i++) g.fx?.spark?.(_v, p.kind === 'telewilpin' ? 0xff3a1c : p.kind === 'brightflower' ? 0xffa21f : 0x6fb83a, 0.12, _w.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
         g.sound?.playPlant?.(_v, 'fall', 1);
         if (this.auth) {
             g.items?.spawnLoose?.({ kind: K.drop, uid: newUid(), count: K.dropCount }, _v.clone().setY(p.y + 1.2), { vel: _w.set((Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2) });
@@ -309,8 +326,9 @@ export class Plants {
         }
         const heads = [];
         for (const p of this.near) {
-            if (p.kind === 'telewilpin') this._tele(p, dt, me); else heads.push(p);
+            if (p.kind === 'telewilpin') this._tele(p, dt, me); else if (p.kind === 'carnivore') heads.push(p);
         }
+        this.bright.update(dt, me);
         for (const p of heads) this._head(p, dt, me);
         for (const grp of this.groups.values()) if (grp) for (const p of grp.plants) if (p.dead && p.kind === 'carnivore') this._fall(p, dt);
         this._holdMe(dt);
@@ -658,8 +676,9 @@ export class Plants {
     }
     onNet(m, isHost) {
         if (!m) return;
+        if (m.op === 'b' || m.op === 'anger' || m.op === 'sleep') { this.bright.onNet(m); return; }
         if (m.op === 'bolt' && isHost) { const p = this.byId.get(m.id); if (p) this.boltHit(p, m.spell, null); }
-        else if (m.op === 'hit' && isHost) { const p = this.byId.get(m.id); if (p) this.hit(p, +m.dmg || 0, m.kind || 'melee', null); }
+        else if (m.op === 'hit' && isHost) { const p = this.byId.get(m.id); if (p) this.hit(p, +m.dmg || 0, m.kind || 'melee', m.by || null); }
         else if (m.op === 'die' && !isHost) { const p = this.byId.get(m.id); if (p) this.die(p, 'net', null); else this._gone.set(m.id, true); }
         else if (m.op === 's' && !isHost) {
             const seen = new Set();
@@ -676,9 +695,10 @@ export class Plants {
 
     // ============================================================ the rest
     /** Samples for the shader warm-up (Game.prewarm). */
-    sampleModels() { return null; }
+    sampleModels() { return this.bright.sampleModel(); }
     dispose() {
         for (const grp of this.groups.values()) if (grp) this._unload(grp);
         this.groups.clear(); this.byId.clear(); this.near.length = 0;
+        this.bright.dispose();
     }
 }

@@ -146,6 +146,7 @@ export const JOLT_TARGETS = {
     blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
+    canary: 'a stocky heavy body (the knight\'s mass): it reels back a step or two, drops its boulder, may be thrown down; no damage; the camp turns on the caster (Canaries.boltHit)',
     gargoyle: 'a stone body of the infernal gargoyle: «Остолбеней» −6, «Джолт» −8 and a shove, the strong charges hurt, «Айс» slows it, «Авада» does not act (not alive) — Gargoyles.boltHit; a body in every charge\'s way (_bodies)',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
@@ -543,6 +544,8 @@ export class Duel {
         for (const dr of g.dragons?.targets() || []) dragonBody(dr, put('D', dr.id));
         // phoenixes (in the air or on the ground): their body from the tail to the breast
         for (const f of g.phoenixes?.targets() || []) phoenixBody(f, put('f', f.id));
+        // the swamp Canaries: a stocky body (Canaries.boltHit says what a charge does: «Авада» kills, «Остолбеней» stuns, the rest hurts)
+        for (const c of g.canaries?.targets() || []) this._canaryBody(c, put('N', c.id));
         // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
         for (const o of g.owls?.targets() || []) owlBody(o, put('o', o.id));
         // infernal gargoyles: a big body (a charge is no match for a flier that dodges — it hits as it hits: Gargoyles.boltHit)
@@ -571,12 +574,21 @@ export class Duel {
         if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
+        if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? this._canaryBody(c, e) : null; }
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._tipped(c, this._villagerBody(c, e)) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
+    }
+
+    /** A canary's body for a charge: a short stout line from its feet to its crown. */
+    _canaryBody(c, e) {
+        const p = c.model.position, k = c.look?.size || 1;
+        e.a.set(p.x, p.y + 0.35, p.z); e.b.set(p.x, p.y + 1.85 * k, p.z);
+        e.r = 0.55 * k;
+        return e;
     }
 
     /** A plant's body for a charge: the line from its foot to its top (the head's hinge), as thick as the stem and the bloom/jaws. */
@@ -695,6 +707,7 @@ export class Duel {
         if (c.isBird) return out.copy(c.model.position);
         if (c.isPhoenix) return phoenixCenter(c, out);
         if (c.isOwl) return owlCenter(c, out);
+        if (c.isCanary) return out.set(c.model.position.x, c.model.position.y + 1.2, c.model.position.z);
         if (c.isGargoyle) return gargoyleCenter(c, out);
         if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
@@ -720,6 +733,7 @@ export class Duel {
         if (kind === 'c') { const c = g.ships?.crew.byId.get(id); return c && !c.dead ? c : null; }
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
         if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
+        if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? c : null; } // (a swamp canary)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
         return null;
@@ -727,7 +741,7 @@ export class Duel {
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o' || b.tk === 'N') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
@@ -1151,6 +1165,8 @@ export class Duel {
         if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
         // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
+        // a swamp canary: «Авада» kills, a stun stuns, the others hurt and anger the camp (Canaries.boltHit)
+        if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
         // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
         if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
         // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)

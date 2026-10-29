@@ -271,22 +271,59 @@ function finish(g, parts) {
 // ================================================================ horse
 // (no black: the only black horse in the world is the Pegasus)
 export const HORSE_COLORS = [0x4a3022, 0x33241a, 0x5e3a26, 0x7d7a75, 0xb3aea4, 0x8c7756];
-/** The Pegasus: jet-black, glossy, with great black feathered wings (one in some herds — Animals.js). */
-export const PEGASUS_COLOR = 0x0b0a0c;
+/**
+ * The Pegasus (one in some herds — Animals.js): a horse with great feathered wings, every one in his own coat — white,
+ * dapple grey, bay, chestnut, golden, and rarely a matte black with a soft sheen. The coat is a hair picture (short hairs,
+ * mottling, dapples) times the tint; mane, tail, feathers and a faint glow of the feathers go with the coat.
+ * `color` of the animal: 0xFE0000 + the coat's number (0xFE0005, matte black, is also the name `PEGASUS_COLOR`).
+ */
+export const PEGASUS_COATS = [
+    { name: 'white', w: 5, tint: 0xf1eee7, mane: 0xd9d7d1, feather: 0xf7f4ee, glow: 0xfff3d6, legs: null, mottle: 0.07, warm: 0.03, spots: 0, hairs: 2600, pale: 0.7 },
+    { name: 'dapple grey', w: 5, tint: 0xa6aab0, mane: 0x61656c, feather: 0xc6cad0, glow: 0xdfe8ff, legs: 0x54575d, mottle: 0.12, warm: 0.02, spots: 90, spotR: [0.012, 0.026], spotC: [0.74, 0.75, 0.78], hairs: 2600, pale: 0.55 },
+    { name: 'bay', w: 4, tint: 0x7d4a2a, mane: 0x16100d, feather: 0x4a3023, glow: 0, legs: 0x1b1310, mottle: 0.12, warm: 0.07, spots: 0, hairs: 2600, pale: 0.5 },
+    { name: 'chestnut', w: 4, tint: 0x93502a, mane: 0x5c2c14, feather: 0x9a5632, glow: 0xffc27a, legs: null, mottle: 0.13, warm: 0.08, spots: 0, hairs: 2600, pale: 0.5 },
+    { name: 'golden', w: 3, tint: 0xd8b068, mane: 0xf3ead2, feather: 0xf2e2b4, glow: 0xffe39a, legs: null, mottle: 0.1, warm: 0.06, spots: 0, hairs: 2600, pale: 0.65 },
+    { name: 'black', w: 1, tint: 0x4a4744, mane: 0x15141a, feather: 0x34323a, glow: 0, legs: null, mottle: 0.1, warm: 0.02, spots: 0, hairs: 3000, pale: 0.8 }, // (matte: pale hairs catch the light)
+];
+const PEG_BASE = 0xFE0000;
+export const PEGASUS_COLOR = PEG_BASE + 5;
+const _OLD_PEGASUS = 0x0b0a0c; // (older saves: the one black Pegasus)
+/** Is this horse colour a Pegasus' coat? */
+export const isPegasusColor = (c) => c === _OLD_PEGASUS || (c >= PEG_BASE && c < PEG_BASE + PEGASUS_COATS.length);
+/** The number of the coat (older saves' black one: matte black). */
+export const pegasusCoat = (c) => (c === _OLD_PEGASUS ? 5 : c - PEG_BASE);
+/** A coat by chance (rnd 0…1): common ones often, the black one rarely. */
+export function randomPegasusColor(rnd = Math.random()) {
+    const total = PEGASUS_COATS.reduce((a, k) => a + k.w, 0);
+    let x = rnd * total;
+    for (let i = 0; i < PEGASUS_COATS.length; i++) { x -= PEGASUS_COATS[i].w; if (x < 0) return PEG_BASE + i; }
+    return PEG_BASE;
+}
+function pegasusMat(i) {
+    const k = 'pegasus' + i;
+    if (!_mats.has(k)) {
+        const C = PEGASUS_COATS[i];
+        _mats.set(k, new THREE.MeshLambertMaterial({ color: C.tint, vertexColors: true, map: hideTexture(k, { ...C, spotC: C.spotC || [1, 1, 1], hairLen: [3, 7] }, 7001 + i * 104729) }));
+    }
+    return _mats.get(k);
+}
 
 function horse(color) {
     const c = color ?? HORSE_COLORS[0];
     const base = new THREE.Color(c);
-    const pegasus = c === PEGASUS_COLOR;
-    const hair = pegasus ? 0x08080c : base.clone().multiplyScalar(base.getHSL({}).l > 0.6 ? 0.72 : 0.42).getHex(); // mane, tail, forelock
-    // (the Pegasus: a glossy coat that shines blue-black in the light)
-    const skin = pegasus ? (_mats.get('pegasus') || _mats.set('pegasus', new THREE.MeshPhongMaterial({ color: 0x17161c, specular: 0x5a6a8a, shininess: 38, vertexColors: true })).get('pegasus')) : lamV(c);
+    const pegasus = isPegasusColor(c);
+    const coat = pegasus ? PEGASUS_COATS[pegasusCoat(c)] : null;
+    const U = pegasus ? { uv: [1, 1] } : {}; // (the Pegasus has a hair picture: texture coordinates on every shape)
+    const K = pegasus ? 'P' : '';
+    const hair = pegasus ? coat.mane : base.clone().multiplyScalar(base.getHSL({}).l > 0.6 ? 0.72 : 0.42).getHex(); // mane, tail, forelock
+    // (the Pegasus: a matte hair picture of his own coat, no gloss)
+    const skin = pegasus ? pegasusMat(pegasusCoat(c)) : lamV(c);
     const g = new THREE.Group();
     g.name = pegasus ? 'pegasus' : 'horse';
     const legs = [];
 
     // trunk: rump (+Z) → chest (−Z); top / bottom line and half-width keyed along it
-    const body = mesh(g, cached('horseBody', () => {
+    const body = mesh(g, cached('horseBody' + K, () => {
         const k = keys([
             [0.00, 1.74, 1.50, 0.10],
             [0.06, 1.88, 1.30, 0.27],
@@ -300,7 +337,7 @@ function horse(color) {
             [1.00, 1.62, 1.42, 0.10],
         ]);
         return sweep([v3(0, 0, 0.98), v3(0, 0, -0.95)], (t) => { const [top, bot, w] = k(t); return [w, (top - bot) / 2, (top + bot) / 2]; },
-            { rings: 28, sides: 14, color: bellyShade([0.9, 0.9, 0.9], [1.04, 1.04, 1.04]) });
+            { rings: 28, sides: pegasus ? 18 : 14, color: bellyShade([0.9, 0.9, 0.9], [1.04, 1.04, 1.04]), ...U });
     }), skin);
 
     // neck: from the withers up and forward to the poll, a crest on top
@@ -308,14 +345,14 @@ function horse(color) {
     const neck = group(g, 'neck', 0, 1.56, -0.56);
     const neckPath = [v3(0, 0, 0), v3(0, 0.42, -0.34), v3(0, 0.78, -0.51), v3(0, 0.94, -0.54)];
     const neckK = keys([[0, 0.24, 0.34, 0], [0.35, 0.16, 0.24, 0.02], [0.75, 0.105, 0.16, 0.015], [1, 0.095, 0.12, 0]]);
-    mesh(neck, cached('horseNeck', () => sweep(neckPath, neckK, { rings: 14, sides: 10, color: bellyShade([0.92, 0.92, 0.92], [1.03, 1.03, 1.03]) })), skin);
+    mesh(neck, cached('horseNeck' + K, () => sweep(neckPath, neckK, { rings: 14, sides: 10, color: bellyShade([0.92, 0.92, 0.92], [1.03, 1.03, 1.03]), ...(pegasus ? { uv: [0.4, 0.6] } : {}) })), skin);
     // mane along the crest
     mesh(neck, cached('horseMane', () => sweep(neckPath, (t) => { const [, ry, dy] = neckK(t); const h = 0.05 + 0.035 * Math.sin(Math.PI * Math.min(1, t * 1.1)); return [0.05 * (1 - 0.3 * t), h, dy + ry - h * 0.15]; }, { rings: 14, sides: 6 })), lamV(hair));
 
     // head: hangs from the poll nose-down; a deep jowl, a long narrow face, a soft muzzle
     const head = group(neck, 'head', 0, 0.92, -0.56);
     head.rotation.x = -1.0;
-    mesh(head, cached('horseHead', () => sweep([v3(0, 0, 0.1), v3(0, -0.02, -0.25), v3(0, 0, -0.66)], keys([
+    mesh(head, cached('horseHead' + K, () => sweep([v3(0, 0, 0.1), v3(0, -0.02, -0.25), v3(0, 0, -0.66)], keys([
         [0.00, 0.06, 0.07, -0.01],
         [0.07, 0.11, 0.13, -0.02],
         [0.16, 0.13, 0.16, -0.04],
@@ -324,7 +361,7 @@ function horse(color) {
         [0.84, 0.08, 0.1, 0],
         [0.94, 0.09, 0.105, -0.01],
         [1.00, 0.05, 0.06, -0.01],
-    ]), { rings: 16, sides: 10, color: (t) => { const m = 1 - 0.45 * smooth(0.78, 0.92, t); return [m, m * 0.97, m * 0.95]; } })), skin);
+    ]), { rings: 16, sides: 10, color: (t) => { const m = 1 - 0.45 * smooth(0.78, 0.92, t); return [m, m * 0.97, m * 0.95]; }, ...(pegasus ? { uv: [0.3, 0.4] } : {}) })), skin);
     // ears, pricked up and a little forward
     for (const s of [1, -1]) {
         const ear = mesh(head, cone(0.005, 0.05, 0.18, 7), skin, 0.065 * s, 0.14, 0.05);
@@ -356,11 +393,12 @@ function horse(color) {
     const low = [[0, 0.065, 0.075], [0.15, 0.052, 0.065], [0.62, 0.05, 0.062], [0.75, 0.068, 0.08], [0.88, 0.052, 0.06], [1, 0.07, 0.075]];
     const hoof = [0.085, 0.11, 0x2a2420];
     // (a bay or a dark coat: black lower legs; a light one: its own colour a shade darker)
-    const points = base.getHSL({}).l < 0.45 ? lamV(hair) : lamV(base.clone().multiplyScalar(0.8).getHex());
+    const points = pegasus ? (coat.legs ? lamV(coat.legs) : skin) : base.getHSL({}).l < 0.45 ? lamV(hair) : lamV(base.clone().multiplyScalar(0.8).getHex());
+    const legPaint = pegasus ? { uv: [0.3, 0.5] } : null;
     for (const [x, z, front] of [[0.15, -0.6, true], [-0.15, -0.6, true], [0.15, 0.6, false], [-0.15, 0.6, false]]) {
         const name = (front ? 'front' : 'hind') + (x > 0 ? 'Right' : 'Left') + 'Leg';
-        if (front) leg(g, legs, name, x, 1.3, z, true, 'horseF', [0, 0.6, fUp], [0, 0.7, low], hoof, skin, points);
-        else leg(g, legs, name, x, 1.3, z, false, 'horseH', [0.13, 0.6, hUp], [-0.1, 0.7, low], hoof, skin, points);
+        if (front) leg(g, legs, name, x, 1.3, z, true, 'horseF' + K, [0, 0.6, fUp], [0, 0.7, low], hoof, skin, points, legPaint);
+        else leg(g, legs, name, x, 1.3, z, false, 'horseH' + K, [0.13, 0.6, hUp], [-0.1, 0.7, low], hoof, skin, points, legPaint);
     }
 
     // saddle (shown while ridden): a blanket, the seat rising to the pommel and the cantle, the flaps
@@ -381,13 +419,13 @@ function horse(color) {
     g.userData.grazePitch = -1.8; // (the long neck right down: the muzzle at the grass)
     let wings;
     if (pegasus) {
-        // great black wings on the withers, folded along the sides (the pig's wing shape, much bigger)
+        // great feathered wings on the withers, folded along the sides (the pig's wing shape, much bigger; the feathers in the coat's colour)
         wings = [];
         for (const s of [1, -1]) {
-            const w = group(g, s > 0 ? 'wingRight' : 'wingLeft', 0.3 * s, 1.92, -0.5);
-            w.scale.set(1.75 * s, 1.75, 1.75);
+            const w = group(g, s > 0 ? 'wingRight' : 'wingLeft', 0.3 * s, 1.93, -0.42);
+            w.scale.set(1.7 * s, 1.7, 1.7);
             w.userData.side = s;
-            const m = mesh(w, pigWingGeo(), wingMat(0x1a1a22));
+            const m = mesh(w, pigWingGeo(), wingMat(coat.feather, coat.glow));
             m.name = 'wing';
             w.userData.mesh = m;
             wings.push(w);
@@ -622,9 +660,13 @@ function pigWingGeo() {
         return g;
     });
 }
-function wingMat(c) {
-    const k = 'wing' + c;
-    if (!_mats.has(k)) _mats.set(k, new THREE.MeshLambertMaterial({ color: c, vertexColors: true, side: THREE.DoubleSide, morphTargets: true, morphNormals: true }));
+function wingMat(c, glow = 0) {
+    const k = 'wing' + c + ':' + glow;
+    if (!_mats.has(k)) {
+        const m = new THREE.MeshLambertMaterial({ color: c, vertexColors: true, side: THREE.DoubleSide, morphTargets: true, morphNormals: true });
+        if (glow) { m.emissive = new THREE.Color(glow); m.emissiveIntensity = 0.1; } // (a faint glow of the feathers, never a shine)
+        _mats.set(k, m);
+    }
     return _mats.get(k);
 }
 

@@ -76,6 +76,7 @@ export const PENTAGRAM_USE_TARGETS = {
     dragon: { does: 'none', why: 'не действует' },
     phoenix: { does: 'none', why: 'не действует' },
     owl: { does: 'none', why: 'не действует' },
+    canary: { does: 'none', why: 'не действует' },
     items: { does: 'mend', why: 'починка брони — только той, что надета на герое; вещи на земле не трогает' },
     ground: { does: 'stay', why: 'постоянные: остаются навсегда (сохраняются), гаснут, если землю под ними изменили; не больше PERM_MAX на мир — самая старая гаснет' },
     spells: { does: 'none', why: 'заклинания и удары сквозь пентаграмму идут как обычно' },

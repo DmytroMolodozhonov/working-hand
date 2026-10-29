@@ -29,6 +29,8 @@ import { enchantValueMul, describeEnchant } from './Enchant.js';
 import { addEnchantGlow } from '../fx/EnchantGlow.js';
 import { irMaterial } from '../fx/Iridescent.js';
 import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.js';
+import { brightCoreModel } from '../fx/BrightFlowerModel.js';
+import { canaryHideModel, boneModel } from '../fx/CanaryModel.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { LORE_BY_ID } from './LoreBooks.js';
@@ -168,6 +170,10 @@ export const ITEM_INFO = {
     // the plant creatures (Plants.js, PlantLife.js): what a broken telewilpin / a killed carnivorous head leaves — for potions later (no use yet)
     telewilpinLeaf: { name: 'Листок телевильпина', icon: '🍁', weight: 0.05, stack: 10 },
     carnivoreHead: { name: 'Головка плотоядной', icon: '🌿', weight: 0.6, stack: 10 },
+    brightCore: { name: 'Сердцевина Ярколета', icon: '🔥', weight: 0.4, stack: 10 },
+    // the Canaries (Canaries.js): the plain spoils of a swamp people — hide and bones (for crafting later)
+    canaryHide: { name: 'Кожа канарика', icon: '🟫', weight: 0.5, stack: 10 },
+    bone: { name: 'Кость', icon: '🦴', weight: 0.3, stack: 20 },
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
@@ -227,6 +233,9 @@ function baseValue(it) {
         case 'phoenixFeather': return 250 * (it.count || 1);
         case 'telewilpinLeaf': return 60 * (it.count || 1);
         case 'carnivoreHead': return 140 * (it.count || 1);
+        case 'brightCore': return 180 * (it.count || 1);
+        case 'canaryHide': return 20 * (it.count || 1);
+        case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
@@ -680,6 +689,9 @@ function describeItemBase(it) {
         case 'armor': case 'robe': return describeArmor(it);
         case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами. Остаётся от убитой совы, реже — слетает с испуганной', 'Ингредиент зелья светлого ума'] };
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'canaryHide': return { title: '🟫 Кожа канарика', color: 0x8a6a44, lines: [`Кож: <b>${it.count || 1}</b>`, 'Грубая плотная кожа болотного жителя, с жёлтой бахромой из перьев', 'Её можно продать на рынке; позже из неё будут делать вещи'] };
+        case 'bone': return { title: '🦴 Кость', color: 0xe6dcba, lines: [`Костей: <b>${it.count || 1}</b>`, 'Крепкая жёлтая кость. Её можно продать на рынке; позже из костей будут делать украшения и инструменты'] };
+        case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
         case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
         case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелья светлого ума'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
@@ -1026,7 +1038,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1069,6 +1081,9 @@ function buildItemModel(it) {
         case 'phoenixFeather': return phoenixFeatherModel();
         case 'telewilpinLeaf': return telewilpinLeafModel();
         case 'carnivoreHead': return carnivoreHeadItemModel();
+        case 'brightCore': return brightCoreModel();
+        case 'canaryHide': return canaryHideModel();
+        case 'bone': return boneModel();
         case 'owlFeather': return owlFeatherModel();
         case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);

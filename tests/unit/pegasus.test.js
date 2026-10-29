@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Animals, HERDS, PEGASUS, SPECIES } from '../../src/game/Animals.js';
-import { HORSE_COLORS, PEGASUS_COLOR } from '../../src/game/AnimalModels.js';
+import { HORSE_COLORS, PEGASUS_COLOR, PEGASUS_COATS, isPegasusColor, randomPegasusColor, animalModel } from '../../src/game/AnimalModels.js';
 
 /** The Pegasus on a fake meadow: the only black horse, defends his herd, lets you on after apples, flies with you. */
 function fakeGame() {
@@ -45,8 +45,8 @@ test('the only black horse: 21% of horse herds have one Pegasus, ordinary horses
         herds++;
         const p = h.filter((a) => a.pegasus);
         assert.ok(p.length <= 1, 'one at most');
-        if (p.length) { withP++; assert.equal(p[0].color, PEGASUS_COLOR); assert.ok(p[0].model.userData.wings?.length === 2, 'he has wings'); }
-        for (const a of h) if (!a.pegasus) assert.notEqual(a.color, PEGASUS_COLOR);
+        if (p.length) { withP++; assert.ok(isPegasusColor(p[0].color)); assert.ok(p[0].model.userData.wings?.length === 2, 'he has wings'); }
+        for (const a of h) if (!a.pegasus) assert.ok(!isPegasusColor(a.color));
         for (const a of h) A._remove(a);
     }
     assert.ok(Math.abs(withP / herds - PEGASUS.CHANCE) < 0.06, `${withP}/${herds}`);
@@ -130,4 +130,31 @@ test('ridden: a slap on his head and he takes off; looking up he climbs; crouch 
     run(A, 15, () => (!peg.riderFly ? false : undefined));
     assert.ok(!peg.riderFly, 'landed');
     assert.ok(Math.abs(peg.group.position.y - 0.5) < 0.2, 'on his hooves');
+});
+
+test('the Pegasus is no oil-black horse: many coats, a hair picture, feathers in the coat, wings ~2× the body', () => {
+    const seen = new Set();
+    for (let i = 0; i < 400; i++) seen.add(randomPegasusColor(Math.random()));
+    assert.ok(seen.size >= 5, 'every coat comes up');
+    for (let i = 0; i < PEGASUS_COATS.length; i++) {
+        const m = animalModel('horse', PEGASUS_COLOR - 5 + i);
+        const body = m.userData.body;
+        assert.ok(body.material.map, `${PEGASUS_COATS[i].name}: a hair picture, not a plain colour`);
+        assert.ok(!body.material.isMeshPhongMaterial, 'no gloss');
+        assert.ok(new THREE.Color(PEGASUS_COATS[i].tint).getHSL({}).l > 0.15, 'not black tar');
+        assert.equal(m.userData.wings.length, 2);
+    }
+    // wings spread: span about twice the body's length
+    const m = animalModel('horse', PEGASUS_COLOR - 5);
+    m.userData.wings.forEach((w) => { w.userData.mesh.morphTargetInfluences[0] = 1; });
+    m.updateMatrixWorld(true);
+    const wing = new THREE.Box3();
+    for (const w of m.userData.wings) {
+        const pos = w.userData.mesh.geometry.getAttribute('position'), d = w.userData.mesh.geometry.morphAttributes.position[0];
+        const v = new THREE.Vector3();
+        for (let i = 0; i < pos.count; i++) { v.set(pos.getX(i) + d.getX(i), pos.getY(i) + d.getY(i), pos.getZ(i) + d.getZ(i)); w.localToWorld(v); wing.expandByPoint(v); }
+    }
+    const body = new THREE.Box3().setFromObject(m.userData.body);
+    const span = wing.max.x - wing.min.x, len = body.max.z - body.min.z;
+    assert.ok(span / len > 1.8 && span / len < 3.2, `span ${span.toFixed(2)} / body ${len.toFixed(2)}`);
 });

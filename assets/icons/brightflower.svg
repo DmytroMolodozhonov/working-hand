@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="bf-glow" cx="0.5" cy="0.38" r="0.6"><stop offset="0" stop-color="#ffb02e" stop-opacity="0.8"/><stop offset="1" stop-color="#ff5a10" stop-opacity="0"/></radialGradient>
+    <linearGradient id="bf-p" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#7a0c06"/><stop offset="0.55" stop-color="#e0480a"/><stop offset="1" stop-color="#ffc43a"/></linearGradient>
+    <linearGradient id="bf-f" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#fff3b0"/><stop offset="0.45" stop-color="#ffa020"/><stop offset="1" stop-color="#d4360a" stop-opacity="0.2"/></linearGradient>
+    <linearGradient id="bf-s" x1="0" x2="1"><stop offset="0" stop-color="#1f4a1e"/><stop offset="1" stop-color="#5f9a34"/></linearGradient>
+  </defs>
+  <circle cx="64" cy="48" r="44" fill="url(#bf-glow)"/>
+  <path d="M64 122 C58 104 70 88 62 70 C60 64 62 62 64 60" fill="none" stroke="url(#bf-s)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M62 108 C44 100 30 106 24 118 C40 118 54 116 62 108 Z" fill="#3c7a24" stroke="#1d4a1f" stroke-width="1.4"/>
+  <path d="M64 100 C82 92 98 98 104 112 C88 112 72 108 64 100 Z" fill="#3c7a24" stroke="#1d4a1f" stroke-width="1.4"/>
+  <path d="M64 56 C56 40 58 22 64 6 C70 22 72 40 64 56 Z" fill="url(#bf-f)"/>
+  <path d="M64 56 C46 46 44 34 50 22 C54 36 60 44 64 56 Z" fill="url(#bf-f)" opacity="0.9"/>
+  <path d="M64 56 C82 46 84 34 78 22 C74 36 68 44 64 56 Z" fill="url(#bf-f)" opacity="0.9"/>
+  <g stroke="#7a1a08" stroke-width="1.2" stroke-linejoin="round">
+    <path d="M64 62 C46 62 28 54 22 38 C40 36 56 46 64 62 Z" fill="url(#bf-p)"/>
+    <path d="M64 62 C82 62 100 54 106 38 C88 36 72 46 64 62 Z" fill="url(#bf-p)"/>
+    <path d="M64 62 C52 56 46 44 50 32 C60 40 64 50 64 62 Z" fill="url(#bf-p)"/>
+    <path d="M64 62 C76 56 82 44 78 32 C68 40 64 50 64 62 Z" fill="url(#bf-p)"/>
+  </g>
+  <g stroke="#ffe9a0" stroke-width="1" fill="none" opacity="0.8"><path d="M62 60 C48 54 38 46 30 40"/><path d="M66 60 C80 54 90 46 98 40"/><path d="M64 60 L56 38"/><path d="M64 60 L72 38"/></g>
+</svg>

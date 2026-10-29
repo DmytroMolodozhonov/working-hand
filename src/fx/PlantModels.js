@@ -16,14 +16,14 @@ import * as THREE from 'three';
 
 // ------------------------------------------------------------------ small tools
 export const rng = (seed) => { let s = seed >>> 0 || 1; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-const mix = (a, b, t) => a + (b - a) * t;
-const clamp01 = (t) => Math.max(0, Math.min(1, t));
-const hexRGB = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
-const lerpC = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+export const mix = (a, b, t) => a + (b - a) * t;
+export const clamp01 = (t) => Math.max(0, Math.min(1, t));
+export const hexRGB = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+export const lerpC = (a, b, t) => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3();
 
 /** Geometry assembled from tubes, surfaces and cones: position + colour (+ sway weight); normals computed at the end. */
-class Builder {
+export class Builder {
     constructor() { this.p = []; this.c = []; this.s = []; this.i = []; }
     get n() { return this.p.length / 3; }
     vert(x, y, z, c, sw = 0) { this.p.push(x, y, z); this.c.push(c[0], c[1], c[2]); this.s.push(sw); return this.n - 1; }

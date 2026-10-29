@@ -47,7 +47,6 @@ const THING_DUST = { cauldron: 0x5a5856, chest: 0x8a6a3a, bed: 0xc8b8a0, door: 0
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
 export { liquidationNeedsMaxima };
-
 /** The wizards' arcane stone, lamps, runes, potion shelves: magic blocks. */
 export const isMagicBlock = (t) => t >= BLOCK.ARCANE && t <= BLOCK.RUNE;
 const LIVING_BLOCKS = new Set(TREE_KINDS.flatMap((k) => [k.wood, k.leaves]).concat([BLOCK.WHEAT, BLOCK.VEG, BLOCK.FLOWERS]));
@@ -81,6 +80,7 @@ export const LIQUIDATION_TARGETS = {
     blackship: { does: 'hurt', why: 'капитану −урон, как человеку; скелетов не берёт (их разрушает только то, что живое дерево, и то, что ломает кости)' },
     phoenix: { does: 'hurt', why: '−3, это нападение' },
     owl: { does: 'none', why: 'не со свитка: сова увёртывается и улетает (Owls.TARGETS)' },
+    canary: { does: 'hurt', why: 'обычный урон; лагерь сердится на колдующего (Canaries.hit)' },
     gargoyle: { does: 'hit', why: 'обычный урон: камень берёт, горгулья летит дальше (Gargoyles.hit)' },
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
     looseThings: { does: 'dust', why: 'любая неживая вещь на земле (еда, оружие, щит, лук, мешочек…) рассыпается в прах; волшебная — только «Максимой»' },
@@ -551,6 +551,7 @@ export class Liquidation {
         if (bk === 'D') { const dr = g.dragons?.byId(id); if (dr) g.dragons.hit(dr, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'f') { const f = g.phoenixes?.byId(id); if (f) g.phoenixes.hit(f, LIQ.DMG, 'Liquidation', by); return; }
         if (bk === 'g') { const o = g.gargoyles?.byId(id); if (o) g.gargoyles.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (an infernal gargoyle: plain damage)
+        if (bk === 'N') { const cn = g.canaries?.byId(id); if (cn) g.canaries.hit(cn, LIQ.DMG, 'Liquidation', by); return; } // (a swamp canary: plain damage; the camp turns on the caster)
         if (bk === 'o') { const o = g.owls?.byId(id); if (o) g.owls.hit(o, LIQ.DMG, 'Liquidation', by); return; } // (no scroll's: the owl darts away)
         if (bk === 'I') { const ic = g.iceCastle?.byId(id); if (ic) g.iceCastle.hit(ic, LIQ.DMG, ic.type === 'snowman' ? 'melee' : 'Liquidation', by); return; }
         const c = g.duel?._creature(bk, id);

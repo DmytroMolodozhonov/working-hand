@@ -1022,6 +1022,7 @@ export class NetSync {
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)
             case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)
             case 'plant': g.plants?.onNet(m, this.net.isHost); break; // (telewilpins and carnivorous heads: Plants.js)
+            case 'canary': g.canaries?.onNet(m, this.net.isHost); break; // (the swamp Canaries: Canaries.js)
             case 'owl': g.owls?.onNet(m, this.net.isHost); break; // (clever owls: Owls.js)
             case 'garg': g.gargoyles?.onNet(m, this.net.isHost); break; // (the infernal gargoyles and their ritual: Gargoyles.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;

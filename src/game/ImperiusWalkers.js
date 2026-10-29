@@ -171,11 +171,37 @@ const sailors = {
     net(v) { return [v.l.x, v.l.y, v.l.z, v.lyaw || 0, v._impWalk || 0, v.mode === 'attack' ? 1 : 0]; },
 };
 
+// ============================================================ the swamp canaries (plain «Империус»: not magical)
+const canaries = modelBody('ca', (g) => g.canaries?.list || [], (g, id) => g.canaries?.byId(id) || null, {
+    free: (c) => !c.dead && c.model && !c.lev,
+    up: () => 2.2,
+    head: (c) => c.model.userData?.head || null,
+    drive(g, c, I, dt) {
+        const C = g.canaries;
+        c.target = null; c.wander = null; c.flee = null;
+        if (c.stun > 0) { c.stun -= dt; c.mode = 'flinch'; c.speed = 0; return; }
+        const speed = I.walk > 0.02 ? (I.run ? 5.2 : 2.0) * (0.4 + 0.6 * Math.min(1, I.walk * 1.4)) : 0;
+        const w = walk(g, c, c.model.position, I, speed, BODY_R.canary, 2.2, dt, 4);
+        c.speed = w > 0 ? speed / 5.2 : 0;
+        c.walk += w * 4.2;
+        c.mode = w > 0 ? (I.run ? 'run' : 'walk') : 'idle';
+        if (I.strikeNow && !(c._impCd > 0)) { c._impCd = 1.1; c._impAtk = 0.55; c.stT = 0; }
+        c._impCd = Math.max(0, (c._impCd || 0) - dt);
+        if (c._impAtk > 0) { c._impAtk -= dt; c.stT += dt; c.mode = 'shove'; }
+        c._impWalk = w > 0 ? 1 : 0;
+        C?._animate?.(c, dt, 0);
+    },
+    anim(g, c, dt, v, atk) { c.speed = Math.min(1.4, v / 5.2); c.mode = atk ? 'shove' : v > 3 ? 'run' : v > 0.2 ? 'walk' : 'idle'; c.walk += v * dt * 4.2; if (atk) c.stT = (c.stT || 0) + dt; g.canaries?._animate?.(c, dt, 0); },
+    struck: (g, c, I) => (I?.strikeNow ? { reach: 2.7, dmg: 4 } : null), // (its fist — Canaries SHOVE)
+    release(g, c) { c.speed = 0; c.mode = 'idle'; c._impAtk = 0; g.canaries?._set?.(c, 'idle'); },
+});
+
 BODIES.sp = spiders;
 BODIES.t = trees;
 BODIES.I = ice;
 BODIES.s = sailors;
+BODIES.ca = canaries;
 
 /** (tests) the walkers added here. */
-export const WALKER_SYSTEMS = ['sp', 't', 'I', 's'];
+export const WALKER_SYSTEMS = ['sp', 't', 'I', 's', 'ca'];
 export { THREE };

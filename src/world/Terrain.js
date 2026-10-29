@@ -249,7 +249,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 12;
+export const WORLD_GEN = 13;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -275,6 +275,13 @@ export const BAKSADI_FROM_GEN = 12;
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 11: the Creative bosses' places apart (SPAWN_MAPS_FROM_GEN): the dragon in its lair, the ice castle far off, the spider's den.
 // 12: the Baksadi and the new wild plants (BAKSADI_FROM_GEN).
+/** The first generation with Brightflowers («Ярколето»: a fire flower that breathes flames) in the warm meadows and hills (BrightFlower.js). Older worlds have none. */
+export const BRIGHTFLOWER_FROM_GEN = 13;
+/** The first generation with Canaries (small, very strong people of the swamps who throw boulders at trespassers — Canaries.js) and the marshy lowlands round lakes they live in. Older worlds have none. */
+export const CANARIES_FROM_GEN = 13;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 13: the Brightflower in the warm meadows (BRIGHTFLOWER_FROM_GEN) and the Canaries of the swamps (CANARIES_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).

@@ -9,6 +9,10 @@
  *                Groups of 2–5, 0.5× as often as apple trees. Stands where it grows; a living thing coming near is grabbed by the
  *                tendrils, bitten and swallowed — an animal in three bites, a man without armour too. Armour is indigestible.
  *                Destroyed → «Головка плотоядной».
+ *   Ярколето     a magic fire flower, twice a tulip (2–2.5 m, a cup ~1.2 m): breathes open and shut; open, it burns with a tongue of flame.
+ *                Groups of 3–10 in the warm meadows, steppes and emerald hills, rarely. Touched / struck / hit by a spell it takes offence:
+ *                turns its petals on the offender and breathes fire at them (~11 m, a cone) for ~8 s. Cold and water put it to sleep.
+ *                Killed → «Сердцевина Ярколета». Only worlds of generation ≥ BRIGHTFLOWER_FROM_GEN have them.
  *
  * ADDING A KIND = one row in PLANT_KINDS (id, height, rate relative to apple trees, group, HP, drop, the «who/what» table).
  */
@@ -44,6 +48,44 @@ export const PLANT_KINDS = {
         reach: 6.5, // m: how far the tendrils throw
     },
 };
+PLANT_KINDS.brightflower = {
+    id: 'brightflower', name: 'Ярколето', nameMany: 'Ярколето', icon: '🔥',
+    height: [2.0, 2.5], // m (twice a tulip); the cup is ~1.2 m across when open
+    rel: 0.3, // «редко»: apple trees × this
+    group: { min: 3, max: 10, mode: 6, spread: 9, gap: 2.6 },
+    hp: 14, drop: 'brightCore', dropCount: 1,
+    salt: 3301, letter: 'b',
+    fromGenKey: 'BRIGHTFLOWER_FROM_GEN',
+    biomes: ['meadow', 'steppe', 'emerald'], // warm meadows and hills
+    // who/what: fire is its own element (no harm, no offence); cold and water put it to sleep; a blow / a blast / a bolt hurts AND offends it
+    harm: { blade: 'hurts + angers', fist: 'weak + angers', fire: 'immune (no offence)', blast: 'kills', cold: 'sleeps 12 s (flame out, no damage)', arrow: 'hurts + angers', lightning: 'hurts + angers', alive: 'none' },
+};
+/** The Brightflower's numbers (s, m, HP). */
+export const BRIGHT = {
+    CYCLE: 22, OPEN_SHARE: 0.64, // a breath: closed ~8 s, open ~14 s (smooth in between)
+    FIRE_OPEN: 0.6, // the flame burns while the cup is at least this open
+    TOUCH_R: 0.95, // m from the stem: whoever stands this near has touched it
+    ANGRY_T: 8, // s it stays angry after the last offence
+    BREATH_R: 11.5, // m the fire breath reaches
+    CONE: 0.2, // tan of the cone's half-angle (+ BREATH_W m wide at the mouth)
+    BREATH_W: 1.1,
+    DPS: 1.5, // HP a second of the breath itself (+ burning 2 HP/s from Burning — 3.5 together)
+    TICK: 0.5, // s between two breath ticks
+    SEE_R: 13, // m: a foe farther than this is let go (it calms, breath stops)
+    SLEEP_T: 12, // s asleep after cold / water
+    IGNITE_R: 3, // m round the flame: trees and dry blocks catch (Fire.ignite; spreads by the fire's own rules)
+    IGNITE_EVERY: 3,
+};
+/** Water and cold: they put a Brightflower to sleep. */
+export const WET_KINDS = new Set(['Water', 'WaterBall', 'WaterVortex', 'WaterWave', 'Aguamenti', 'Frozen', 'Ice', 'IceDuel', 'IceBall', 'Snowman', 'chill', 'cold', 'water']);
+/** How open the cup is (0 closed … 1 open) at time t (s) for a flower with `phase`: a slow smooth breath. */
+export function brightOpen(t, phase) {
+    const c = ((t + phase * BRIGHT.CYCLE) % BRIGHT.CYCLE) / BRIGHT.CYCLE; // 0…1
+    const on = BRIGHT.OPEN_SHARE, ramp = 0.08;
+    const up = Math.min(1, Math.max(0, c / ramp)), down = Math.min(1, Math.max(0, (on - c) / ramp));
+    const k = Math.min(up, down);
+    return c < on ? k * k * (3 - 2 * k) : 0;
+}
 export const PLANT_ORDER = Object.keys(PLANT_KINDS);
 
 /** The numbers of the carnivorous head's meal (s). */
@@ -104,7 +146,7 @@ export function plantGroupIn(kind, gx, gz, seed) {
 }
 
 /** The stable id of a member: the same on every computer (for the network and for what is remembered). */
-export const plantId = (kind, gx, gz, i) => `${kind === 'telewilpin' ? 't' : 'c'}${gx},${gz}.${i}`;
+export const plantId = (kind, gx, gz, i) => `${PLANT_KINDS[kind]?.letter || (kind === 'telewilpin' ? 't' : 'c')}${gx},${gz}.${i}`;
 
 /** Height of a member (m). */
 export const plantHeight = (kind, h01) => { const [a, b] = PLANT_KINDS[kind].height; return a + (b - a) * h01; };
@@ -153,9 +195,35 @@ export const PLANT_TARGETS = {
     dragons: { does: 'none', why: 'драконы слишком велики; щупальца не держат' },
     phoenixes: { does: 'none', why: 'феникс в небе' },
     owls: { does: 'none', why: 'умная сова улетает от растения' },
+    canaries: { does: 'none', why: 'канарики растения не трогают и обходят Ярколето' },
     iceCastle: { does: 'none', why: 'ледяные существа не едят и холодные' },
     gargoyle: { does: 'none', why: 'каменная горгулья несъедобна' },
     items: { does: 'none', why: 'вещи растение не берёт' },
+    brightflower: { does: 'fire', why: 'Ярколето (отдельная таблица в BRIGHT_TARGETS): оно не ловит и не колет — оно дышит огнём на обидчика; животные и жители в конусе горят, как от любого огня' },
+};
+
+/** ON WHOM AND ON WHAT — the Brightflower («Ярколето»). `does`: how the flower acts on / is acted on by each. */
+export const BRIGHT_TARGETS = {
+    me: { does: 'burns', why: 'я: коснулся / ударил / колдуйнул — цветок сердится и дышит огнём (−1,5 HP/с и горение −2 HP/с, броня с огнестойкостью режет); мой компьютер решает про меня сам' },
+    players: { does: 'burns', why: 'другие игроки — то же, каждый компьютер решает про своего; сердится на того, кто тронул (иначе на ближайшего)' },
+    zombies: { does: 'burns', why: 'зомби в конусе горят; коснувшийся зомби тоже злит цветок' },
+    castlePeople: { does: 'burns', why: 'жители и рыцари в конусе горят и бегут (Burning); рыцарь рубит цветок как врага' },
+    animals: { does: 'burns', why: 'животные в конусе горят и бегут; коснувшееся животное злит цветок' },
+    sailors: { does: 'burns', why: 'моряки — как жители (на суше)' },
+    spider: { does: 'none', why: 'паучиха слишком велика, цветок до неё не достаёт' },
+    livingTrees: { does: 'none', why: 'ожившие деревья не замечают цветок; «Alive» на цветок не действует — это не дерево, он уже живой' },
+    bookBirds: { does: 'none', why: 'летают выше конуса' },
+    dragons: { does: 'none', why: 'огонь на драконов не действует; цветок их не замечает' },
+    phoenixes: { does: 'none', why: 'феникс рождён из огня' },
+    owls: { does: 'none', why: 'сова чует огонь и держится дальше' },
+    canaries: { does: 'none', why: 'канарик чует огонь и обходит цветок' },
+    iceCastle: { does: 'melts', why: 'ледяные существа в конусе тают (огонь — слабость Королевы); сама Королева — как от любого огня' },
+    gargoyle: { does: 'none', why: 'горгулья адская: огонь её не берёт' },
+    canaries: { does: 'burns', why: 'канарики в конусе горят и бегут; камнем канарик может сбить цветок' },
+    items: { does: 'none', why: 'вещи цветок не жжёт; горючее рядом (трава, деревья) загорается по правилам огня' },
+    fire: { does: 'immune', why: 'огонь и огненные заклинания ему не вредят и его не злят — он сам из огня' },
+    cold: { does: 'sleeps', why: 'холод, лёд, Frozen, снег, вода гасят пламя и усыпляют цветок на 12 с (урона нет); пока он спит, он закрыт и не дышит' },
+    gods: { does: 'kills', why: 'заклинания богов (Inspirius, Total Destruction) уничтожают любое растение' },
 };
 
 /**
