@@ -13,6 +13,8 @@
  */
 
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { iceApproach } from '../world/IceCastle.js';
+import { denSpots, denAxisPoints } from '../world/SpiderDens.js';
 
 /** Сколько метров от босса: безопасно (не внутри него, не в его зоне поражения), но видно. */
 export const SPOT_DIST = { dragon: 55, queen: 40, castleGate: 0 };
@@ -20,8 +22,8 @@ export const SPOT_DIST = { dragon: 55, queen: 40, castleGate: 0 };
 /** Точки появления. `where`: 'start' | 'dragon' | 'queen' | 'castle'. */
 export const SPAWN_SPOTS = Object.freeze([
     { id: 'start', label: 'Начальная площадка', hint: 'Как раньше: рядом с постаментами, где лежат оружие и свитки.' },
-    { id: 'dragon', label: 'У горы дракона', hint: 'Рядом со спящим драконом на вершине Творческой горы — в 55 метрах от него. Удобно проверять дракона отдельно.' },
-    { id: 'queen', label: 'У Ледяной Королевы', hint: 'Перед дворцом Ледяной Королевы у подножия горы. Удобно проверять Королеву, снеговиков и ледяных монстров.' },
+    { id: 'dragon', label: 'У горы дракона', hint: 'Настоящее логово дракона: огромная пещера в большой горе, вы у её входа, дракон спит внутри на своём сокровище. Рядом больше никого — ни Ледяной Королевы, ни замков. Удобно проверять дракона отдельно. Если до логова далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
+    { id: 'queen', label: 'У Ледяной Королевы', hint: 'Далеко от начальной площадки, на ледяной горе: уступ перед дворцом Ледяной Королевы и ледяная лестница к нему. Рядом больше никого — ни дракона, ни замков. Удобно проверять Королеву, снеговиков и ледяных монстров. Если далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'castle', label: 'У замка короля', hint: 'У ворот ближнего замка Творческой площадки: король, рыцари, жители и торговцы.' },
     { id: 'port', label: 'В порту', hint: 'На причале порта у замка Творческой площадки: рядом стоят корабли с командой. Удобно проверять моряков и корабли.' },
     { id: 'tower', label: 'У башни волшебников', hint: 'У входа в башню волшебников — единственную в мире. Внутри живёт её глава. Если до башни далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
@@ -29,7 +31,7 @@ export const SPAWN_SPOTS = Object.freeze([
     { id: 'village', label: 'В городе волшебников', hint: 'На площади большого города волшебников: жители, библиотека и магазин свитков.' },
     { id: 'magevillage', label: 'В поселении волшебников', hint: 'У небольшого поселения: 4–9 домов волшебников вокруг костра, торговцы живут в этих домах.' },
     { id: 'magehut', label: 'У одинокого волшебника', hint: 'Рядом с домом одинокого волшебника.' },
-    { id: 'spider', label: 'У логова паучихи', hint: 'Рядом с логовом ближайшей гигантской паучихи. Она выходит из логова ночью — днём вы увидите только паутину и пещеру.' },
+    { id: 'spider', label: 'Логово паучихи (тёмная пещера)', hint: 'Тёмная пещера в горе: вы стоите у входа, а гигантская паучиха лежит в глубине зала — в 20–25 метрах, и её видно. Света почти нет: скажите «Люмос». Она не нападёт, пока вы не нападёте первым. Сундуков у неё нет. Если до пещеры далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'blackship', label: 'На корабле в море (встреча с Чёрными Усами)', hint: 'Вы на палубе обычного корабля посреди открытого моря. Через какое-то время рядом появится чёрный корабль капитана Чёрные Усы. Хотите без капитана и скелетов — включите «Корабли без моряков».' },
 ]);
 
@@ -55,10 +57,13 @@ export function pointToward(anchor, from = { x: 0, z: 0 }, dist = 40) {
  */
 export function spotTarget(id, ctx = {}) {
     if (id === 'dragon') {
+        if (ctx.apart) return null; // (the places apart: a real lair — HeroApply finds it, `lairSpot`)
         const p = pointToward(TEST_DRAGON_SPOT, { x: 0, z: 0 }, SPOT_DIST.dragon);
         return { ...p, yaw: Math.atan2(TEST_DRAGON_SPOT.x - p.x, TEST_DRAGON_SPOT.z - p.z) };
     }
     if (id === 'queen') {
+        const far = ctx.iceApproach?.(); // (the places apart — gen 11: the world's own ice castle, far off)
+        if (far) return far;
         const c = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 }; // (the palace's centre: Terrain.IceCastleSite)
         const p = pointToward(c, { x: 0, z: 0 }, 26 + SPOT_DIST.queen * 0.5);
         return { ...p, yaw: Math.atan2(c.x - p.x, c.z - p.z) };
@@ -119,6 +124,60 @@ export function farTarget(id, data, ctx = {}) {
         }
     }
     return null;
+}
+
+/**
+ * Твёрдое место для героя в столбце (x, z): слой пола `L` (блок твёрдый), над ним `clear` слоёв свободного воздуха (не камень, не вода) —
+ * голова не в потолке, ноги не в камне. Ищет сверху вниз от `hi` до `lo` (в пещере — рядом с полом зала, не на вершине горы над ней).
+ * `solid(ix, L, iz)` и `free(ix, L, iz)` — блоки мира (`free` — воздух). Герой стоит на y = L − 0.5.
+ * @returns {number|null} слой пола или null, если такого места нет
+ */
+export function standLayer(solid, free, x, z, lo, hi, clear = 6) {
+    const ix = Math.round(x), iz = Math.round(z);
+    for (let L = Math.floor(hi); L >= Math.floor(lo); L--) {
+        if (!solid(ix, L, iz)) continue;
+        let ok = true;
+        for (let k = 1; k <= clear && ok; k++) ok = free(ix, L + k, iz);
+        if (ok) return L;
+    }
+    return null;
+}
+
+/** Дальше этого от дворца Королевы и от пещеры паучихи (м) должно быть логово, к которому ставим героя «У горы дракона»: места — врозь. */
+export const APART = 400;
+
+/** Годится ли логово `L` для «У горы дракона» в мире с раздельными местами (`data`: Terrain): не у дворца Королевы и не у пещеры паучихи. */
+export function lairUsable(L, data) {
+    const P = data?.iceCastle?.plan, d = data?.den?.spot;
+    if (P && Math.hypot(L.x - P.x, L.z - P.z) < APART) return false;
+    if (d && Math.hypot(L.x - d.x, L.z - d.z) < APART) return false;
+    return true;
+}
+
+/** Настоящее логово дракона `L` (Terrain.lairOf().lair): герой на уступе у входа, лицом в зал; дракон на сокровище — в 25–30 м. */
+export function lairSpot(L) {
+    return { x: Math.round(L.mouth.x + L.dx * 4), z: Math.round(L.mouth.z + L.dz * 4), yaw: Math.atan2(-L.dx, -L.dz), layer: L.F, up: 2, down: 6, boss: { x: L.hoard.x, z: L.hoard.z }, need: [{ x: L.x, z: L.z }, { x: L.hoard.x, z: L.hoard.z }], cave: true, dist: [18, 60] };
+}
+
+/**
+ * Пещера паучихи (Terrain.spiderDen().lair): герой внутри зала под сводом, паучиха в глубине — в ~22 м, лицом ко входу. Точные места
+ * считаются, когда земля зала готова (`refine`: нужна высота свода над полом) — до этого цель приблизительная, на оси зала.
+ * @param {(x:number,z:number)=>number} free  сколько слоёв воздуха над полом зала в столбце (читает блоки; земля там уже есть)
+ */
+export function denSpot(L, free = null) {
+    const pts = denAxisPoints(L);
+    const spots = denSpots(L, free || (() => 99));
+    const h = spots.hero;
+    return {
+        x: Math.round(h.x), z: Math.round(h.z), yaw: h.yaw, layer: L.F, up: 2, down: 6, boss: spots.spider, need: pts, cave: true, dist: [18, 45],
+        refine: (freeNow) => denSpot(L, freeNow),
+    };
+}
+
+/** Перед дворцом Ледяной Королевы (мир с раздельными местами): уступ за ущельем у начала ледяной лестницы. Королева в зале — от 40 м. */
+export function queenApproach(plan) {
+    const a = iceApproach(plan);
+    return { ...a, layer: plan.F - 10, up: 4, down: 8, boss: { x: plan.hall.x, z: plan.hall.z }, need: [{ x: plan.hall.x, z: plan.hall.z }], dist: [38, 120] };
 }
 
 /**

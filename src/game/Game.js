@@ -137,7 +137,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, SPAWN_MAPS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -350,6 +350,7 @@ export class Game {
             slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
             wizHuts: this.gen >= 7, // (the lone wizards' houses roomy — Hamlets.js)
             furnish: this.gen >= FURNISH_FROM_GEN, // (the castles' rooms furnished, more chests — CastleFurniture.js)
+            apart: this.gen >= SPAWN_MAPS_FROM_GEN, // (the Creative bosses' places apart: the dragon's lair, the far ice castle, the spider's den — Terrain.SPAWN_MAPS_FROM_GEN)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
             meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)
         });
@@ -786,6 +787,7 @@ export class Game {
     _updateTestDragon(dt) {
         const D = this.dragons;
         if (!D?.enabled || this.config.mode !== 'creative' || !this.world?.terrain?.data?.test) return; // (a world with the test ground: generation 3+)
+        if (this.world.terrain.data.apart) return; // (generation 11: the dragon sleeps in its own lair, far from the Ice Queen — Terrain.SPAWN_MAPS_FROM_GEN)
         this._tdT = (this._tdT ?? 3) - dt;
         if (this._tdT > 0) return;
         this._tdT = 5;
@@ -1363,7 +1365,7 @@ export class Game {
             this._caveChests = this._caveChests || new Set();
             this._caveSys = false; // (a cave system round the hero: the cave map may be wanted — _updateCaveMap)
             let built = false;
-            for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [])) {
+            for (const cv of t.cavesNear(p.x, p.z, 90, true).concat(t.lairsNear ? t.lairsNear(p.x, p.z, 90, true) : [], t.densNear ? t.densNear(p.x, p.z, 90) : [])) {
                 if (cv.x0 != null ? p.x > cv.x0 - 8 && p.x < cv.x1 + 8 && p.z > cv.z0 - 8 && p.z < cv.z1 + 8 : Math.hypot(cv.kx - p.x, cv.kz - p.z) < cv.r + 30) this._caveSys = true;
                 if (this._caveChests.has(cv.id)) continue;
                 // (a cave system: a chest in each of its chambers that has one; an old cave: one in its chamber)
@@ -3437,6 +3439,7 @@ export class Game {
         // the first frames of play froze on it)
         // (the world's one tower and the settlement by the start: found now — the minimap always shows them)
         try { const st = this.world?.terrain?.data; st?.towers?.only?.(); st?.villages?.spawnVillage?.(); } catch (e) { /* (only a head start) */ }
+        try { this.world?.terrain?.data?.spiderDen?.(); } catch (e) { /* (the spider's cave in worlds with the places apart: made now, not in a frame of play) */ }
         try { void this.world?.terrain?.data?.iceCastle?.plan; } catch (e) { /* (only a head start) */ }
         try { if (this.circleAttack && !this.circleAttack._warmed) this.circleAttack._warm(); } catch (e) { /* (only a head start) */ }
         try { if (this.inspirius && !this.inspirius._warmed) this.inspirius._warm(); } catch (e) { /* (only a head start) */ }

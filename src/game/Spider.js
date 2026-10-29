@@ -38,6 +38,8 @@ import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
 import { earthly } from '../world/Planets.js';
 import { isGodSpell } from './DragonKinds.js';
 import { spiderLairOf, spiderLairsNear } from '../world/SpiderLairs.js';
+import { denSpots, denAxisPoints } from '../world/SpiderDens.js';
+import { BLOCK } from '../world/Terrain.js';
 
 const HP = 200;
 /** How big it is against the first (smaller) spider: everything below scales with it. */
@@ -88,13 +90,15 @@ export function spiderDist(s, p) {
  * Where the body stands on the ground: the highest ground under its body (not only
  * under its middle), so on a slope or in a hollow the big body never sinks into earth.
  */
-export function spiderGroundY(collision, x, z, ry = 0) {
-    let y = collision.groundY(x, z);
+export function spiderGroundY(collision, x, z, ry = 0, reach = null) {
+    // (`reach`: in her den — the cave's floor under her, never the mountain's top above it: Collision.groundAt)
+    const gy = reach == null || !collision.groundAt ? (a, b) => collision.groundY(a, b) : (a, b) => collision.groundAt(a, b, reach);
+    let y = gy(x, z);
     const fx = Math.sin(ry) * SIZE, fz = Math.cos(ry) * SIZE;
     const sx = Math.cos(ry) * SIZE, sz = -Math.sin(ry) * SIZE;
     // (under the head, the tail and both flanks: the body's own footprint)
     for (const [l, w] of [[BODY.z0 - 1, 0], [BODY.z1 + 1.5, 0], [0.8, 1.6], [0.8, -1.6]]) {
-        y = Math.max(y, collision.groundY(x + fx * l + sx * w, z + fz * l + sz * w) - 0.5 * SIZE);
+        y = Math.max(y, gy(x + fx * l + sx * w, z + fz * l + sz * w) - 0.5 * SIZE);
     }
     return y;
 }
@@ -150,6 +154,7 @@ export class Spiders {
         this._lairFn = (gx, gz) => this._lairOf(gx, gz);
         this._near = [];
         this._lairT = 0;
+        this._denT = 0;
         this._left = new Map(); // (host, this night) lair → {hp, angry} of a spider taken away because everyone went far
         this.held = null; // (me) seized by a spider: {spider, biteT}
         this.webbed = 0;
@@ -437,7 +442,7 @@ export class Spiders {
             moving = true;
         } else if (tp) s.model.rotation.y = turnToward(s.model.rotation.y, yawTo(p.x, p.z, tp.x, tp.z), SPIDER_TURN * dt); // (a big body: it turns, never spins round at once)
         else if (!s.angry) moving = this._wander(s, dt, slowK);
-        p.y += (spiderGroundY(g.collision, p.x, p.z, s.model.rotation.y) - p.y) * Math.min(1, dt * 6);
+        p.y += (spiderGroundY(g.collision, p.x, p.z, s.model.rotation.y, s.den ? p.y + 3 : null) - p.y) * Math.min(1, dt * 6);
         // («не видит — не нападает»: rock, a wall, a hill between them — no tricks; checked 4 times a second)
         s.seeT = (s.seeT || 0) - dt;
         if (!tp) s.sees = false;
@@ -502,11 +507,13 @@ export class Spiders {
         const night = g.isNight;
         // at night she is out at her lairs near the players (the host decides)
         if (this.auth) {
+            this._denT -= dt;
+            if (this._denT <= 0) { this._denT = 1; this._visitDens(); } // (her cave is dark day and night: she is there at any hour)
             if (night) {
                 this._lairT -= dt;
                 if (this._lairT <= 0) { this._lairT = 1; this._visitLairs(); } // (once a second is plenty)
             } else {
-                for (const s of [...this.list]) if (!s.dead && !s.imp) this._remove(s); // hides at dawn (not while a mind is in her: «Империус Максима»)
+                for (const s of [...this.list]) if (!s.dead && !s.imp && !s.den) this._remove(s); // hides at dawn (not while a mind is in her: «Империус Максима»)
                 this._left.clear();
             }
             for (const s of this.list) if (!s.dead && !s.lev && !(s.imp && g.imperius?.step('sp', s, dt))) this._think(s, dt); // (held up by «Левиоса Максима»: it carries her; a mind in her — ImperiusControl.step)
@@ -577,6 +584,42 @@ export class Spiders {
         }
         for (const s of [...this.list]) {
             if (s.dead || !s.lair || s.holding) continue;
+            const q = s.model.position;
+            if (ps.some((p) => Math.hypot(p.x - q.x, p.z - q.z) < LAIR_GONE)) continue;
+            if (s.hp < HP || s.angry) this._left.set(s.lair, { hp: s.hp, angry: s.angry });
+            this._remove(s);
+        }
+    }
+
+    /**
+     * (host) Her cave (worlds with the places apart — SpiderDens.js): the spider lies at the back of the hall whenever a player is
+     * near, day or night (the cave is dark either way); far from everybody she is put away again with her health kept.
+     * Never made in the rock or before the ground is there (no ground made in a frame).
+     */
+    _visitDens() {
+        const g = this.game, t = g.terrain?.data;
+        if (!t?.densNear) return;
+        const ps = [];
+        if (g.character?.group) ps.push(g.character.group.position);
+        for (const [, r] of g.remotes || []) if (r?.position) ps.push(r.position);
+        for (const p of ps) {
+            if (!earthly(p)) continue;
+            for (const D of t.densNear(p.x, p.z, LAIR_NEAR)) {
+                const L = D.lair;
+                if (this.slain.has(L.id) || this.list.some((s) => s.lair === L.id)) continue;
+                if (!denAxisPoints(L).every((q) => t.landMade(q.x, q.z)) || !t.landMade(L.mouth.x, L.mouth.z)) continue; // (the whole hall's ground here first)
+                const at = denSpots(L, (x, z) => { let n = 0; while (n < 16 && t.get(Math.round(x), L.F + 1 + n, Math.round(z)) === BLOCK.AIR) n++; return n; }).spider; // (under the dome's high middle: she is ~9 m tall)
+                const was = this._left.get(L.id);
+                this._left.delete(L.id);
+                const pos = new THREE.Vector3(at.x, spiderGroundY(g.collision, at.x, at.z, 0, L.F + 1.5), at.z);
+                const s = this.spawn(pos, 'sp' + L.id, was?.hp ?? HP);
+                s.lair = L.id; s.den = true;
+                s.angry = !!was?.angry;
+                s.model.rotation.y = Math.atan2(-L.dx, -L.dz); // (her face to the mouth: she sees who comes in)
+            }
+        }
+        for (const s of [...this.list]) {
+            if (s.dead || !s.den || s.holding) continue;
             const q = s.model.position;
             if (ps.some((p) => Math.hypot(p.x - q.x, p.z - q.z) < LAIR_GONE)) continue;
             if (s.hp < HP || s.angry) this._left.set(s.lair, { hp: s.hp, angry: s.angry });

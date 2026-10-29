@@ -55,7 +55,7 @@ export class BossRetry {
     /** Босс — заново, где это просто: дракон горы убирается, и через несколько секунд на пике ложится новый. */
     _resetBoss(spawn) {
         const g = this.game;
-        if (spawn !== 'dragon' || !g.dragons) return;
+        if (spawn !== 'dragon' || !g.dragons || g.world?.terrain?.data?.apart) return; // (generation 11: the dragon is a lair's, not the mountain's)
         const d = g.dragons.list?.find((q) => q.id === 'ctest-dragon'); // (Game.TEST_DRAGON)
         if (d && !d.dead) g.dragons._remove?.(d);
         g._tdGone = 60; g._tdT = 0; // (Game._updateTestDragon: no dragon of the mountain now — a new one at once)

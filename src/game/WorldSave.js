@@ -23,7 +23,7 @@ import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
-import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN } from '../world/Terrain.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -57,6 +57,7 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     if (gen < FURNISH_FROM_GEN) lacks.push('мебели и сундуков в комнатах замков');
     if (gen < PLANTS_FROM_GEN) lacks.push('живых растений на лугах');
     if (gen < PENT_STAND_FROM_GEN) lacks.push('рисунка пентаграммы телепортации в библиотеках волшебников');
+    if (gen < SPAWN_MAPS_FROM_GEN) lacks.push('отдельных мест для дракона, Ледяной Королевы и пещеры паучихи в Творческом режиме');
     const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;
     if (!lacks.length) return `${head} Мир актуален: в нём есть всё новое.`;
     return `${head} Мир устарел: он создан в старой версии, поэтому в нём нет ${lacks.join(', ')}. Играть в нём можно, и ваши постройки и вещи на месте.`;
