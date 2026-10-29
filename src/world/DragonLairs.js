@@ -35,6 +35,12 @@ export const LAIR = {
     NEED: 8, // layers of rock over the hall's floor all round it (it is inside the mountain)
 };
 
+/** m: «Where to appear → dragon's mountain» — and the lairs of the places-apart worlds — keep this far from every Ice Queen's castle (the author: «в помине нет»). */
+export const DRAGON_LAIR_MIN_FROM_QUEEN = 2500;
+/** m: …and this far from castles, villages and towers (the small hamlets of wizards: DRAGON_LAIR_MIN_FROM_HAMLETS). */
+export const DRAGON_LAIR_MIN_FROM_SITES = 600;
+export const DRAGON_LAIR_MIN_FROM_HAMLETS = 250;
+
 const TAU = Math.PI * 2;
 
 /**

@@ -11,7 +11,7 @@
 import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
-import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT, standLayer, lairSpot, denSpot, queenApproach, lairUsable } from './SpawnSpots.js';
+import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT, standLayer, lairApproach, denSpot, queenApproach, lairUsable } from './SpawnSpots.js';
 import { LAIR } from '../world/DragonLairs.js';
 import { isCrewless } from './Sailors.js';
 import { SPIDER_LAIR } from '../world/SpiderLairs.js';
@@ -54,8 +54,8 @@ export class HeroApply {
         const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed, data.bigHouses) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
-        if (id === 'dragon' && data?.apart) { // (the places apart: the nearest real lair, found cell by cell — _stepLair)
-            this.pending.cells = lairCells(LAIR.CELL, 16, { x: 0, z: 0 });
+        if (id === 'dragon' && data?.deepCaves) { // (any Creative world: the nearest real lair far from the Ice Queen, found cell by cell — _stepLair)
+            this.pending.cells = lairCells(LAIR.CELL, 20, { x: 0, z: 0 });
             return;
         }
         if (id === 'spider' && data?.apart) { // (the spider's den under its own butte: one place per world — SpiderDens.js)
@@ -181,8 +181,10 @@ export class HeroApply {
             const { gx, gz } = p.cells.shift();
             const S = data.lairOf(gx, gz);
             if (!S?.lair || !lairUsable(S.lair, data)) continue; // (not by the Ice Queen's palace nor by the spider's cave: the places are apart)
+            const t = lairApproach(S.lair, data.heightAt); // (open ground 60–120 m off, the cave's mouth in plain sight)
+            if (!t) continue;
             p.cells.length = 0;
-            p.t = lairSpot(S.lair);
+            p.t = t;
             this._far(p.t);
             return;
         }
@@ -211,7 +213,7 @@ export class HeroApply {
         if (p.age > (p.far || p.id === 'blackship' ? 60 : 25)) { this._fail('место не загрузилось — вы остались на месте'); return; }
         try {
             if (p.id === 'blackship') { this._stepShip(p, dt); return; }
-            if (!p.t && p.cells && data.apart && p.id === 'dragon') { this._stepLair(p); return; }
+            if (!p.t && p.cells && p.id === 'dragon') { this._stepLair(p); return; }
             if (p.id === 'spider' && !p.t) { this._stepSpider(p); return; }
             const t = p.t;
             if (!t) return;

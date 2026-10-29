@@ -15,6 +15,9 @@
 import { TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { iceApproach } from '../world/IceCastle.js';
 import { denSpots, denAxisPoints } from '../world/SpiderDens.js';
+import { DRAGON_LAIR_MIN_FROM_QUEEN, DRAGON_LAIR_MIN_FROM_SITES, DRAGON_LAIR_MIN_FROM_HAMLETS } from '../world/DragonLairs.js';
+
+export { DRAGON_LAIR_MIN_FROM_QUEEN, DRAGON_LAIR_MIN_FROM_SITES, DRAGON_LAIR_MIN_FROM_HAMLETS };
 
 /** Сколько метров от босса: безопасно (не внутри него, не в его зоне поражения), но видно. */
 export const SPOT_DIST = { dragon: 55, queen: 40, castleGate: 0 };
@@ -22,7 +25,7 @@ export const SPOT_DIST = { dragon: 55, queen: 40, castleGate: 0 };
 /** Точки появления. `where`: 'start' | 'dragon' | 'queen' | 'castle'. */
 export const SPAWN_SPOTS = Object.freeze([
     { id: 'start', label: 'Начальная площадка', hint: 'Как раньше: рядом с постаментами, где лежат оружие и свитки.' },
-    { id: 'dragon', label: 'У горы дракона', hint: 'Настоящее логово дракона: огромная пещера в большой горе, вы у её входа, дракон спит внутри на своём сокровище. Рядом больше никого — ни Ледяной Королевы, ни замков. Удобно проверять дракона отдельно. Если до логова далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
+    { id: 'dragon', label: 'У горы дракона', hint: 'Другая местность, где Ледяной Королевы нет совсем (дальше 2,5 км): вы стоите на открытом месте в 60–120 м от огромной пещеры в склоне горы — вход виден сразу. Дракон спит внутри на своём сокровище: подойдите и сразитесь. Замков и деревень рядом нет. Удобно проверять дракона отдельно. Если до логова далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'queen', label: 'У Ледяной Королевы', hint: 'Далеко от начальной площадки, на ледяной горе: уступ перед дворцом Ледяной Королевы и ледяная лестница к нему. Рядом больше никого — ни дракона, ни замков. Удобно проверять Королеву, снеговиков и ледяных монстров. Если далеко, вас перенесёт туда: подождите несколько секунд, пока загрузится земля.' },
     { id: 'castle', label: 'У замка короля', hint: 'У ворот ближнего замка Творческой площадки: король, рыцари, жители и торговцы.' },
     { id: 'port', label: 'В порту', hint: 'На причале порта у замка Творческой площадки: рядом стоят корабли с командой. Удобно проверять моряков и корабли.' },
@@ -146,15 +149,59 @@ export function standLayer(solid, free, x, z, lo, hi, clear = 6) {
 /** Дальше этого от дворца Королевы и от пещеры паучихи (м) должно быть логово, к которому ставим героя «У горы дракона»: места — врозь. */
 export const APART = 400;
 
-/** Годится ли логово `L` для «У горы дракона» в мире с раздельными местами (`data`: Terrain): не у дворца Королевы и не у пещеры паучихи. */
+/** Годится ли логово `L` для «У горы дракона» (любой Творческий мир): не ближе 2500 м к Ледяной Королеве, не у пещеры паучихи, не ближе 600 м к замкам, деревням и башням. */
 export function lairUsable(L, data) {
     const P = data?.iceCastle?.plan, d = data?.den?.spot;
-    if (P && Math.hypot(L.x - P.x, L.z - P.z) < APART) return false;
+    if (P && Math.hypot(L.x - P.x, L.z - P.z) < DRAGON_LAIR_MIN_FROM_QUEEN) return false;
+    if (P && Math.hypot(L.mouth.x - P.x, L.mouth.z - P.z) < DRAGON_LAIR_MIN_FROM_QUEEN) return false;
     if (d && Math.hypot(L.x - d.x, L.z - d.z) < APART) return false;
+    try { // (big places 600 m, small hamlets 250 m)
+        for (const q of data?.sites?.near?.(L.mouth.x, L.mouth.z, DRAGON_LAIR_MIN_FROM_SITES) || []) {
+            const lim = String(q.id).startsWith('hm') ? DRAGON_LAIR_MIN_FROM_HAMLETS : DRAGON_LAIR_MIN_FROM_SITES;
+            if (Math.hypot(q.x - L.mouth.x, q.z - L.mouth.z) < lim + (q.r || 0) * 0) return false;
+        }
+    } catch (e) { /* (no sites yet: the land check in lairOf stays) */ }
     return true;
 }
 
-/** Настоящее логово дракона `L` (Terrain.lairOf().lair): герой на уступе у входа, лицом в зал; дракон на сокровище — в 25–30 м. */
+/** Расстояния (м) от устья до героя и повороты от «наружу» — что перебираем, ища открытое место перед пещерой. */
+const APPROACH_D = [75, 90, 65, 105, 120, 60];
+const APPROACH_A = [0, 0.26, -0.26, 0.52, -0.52, 0.78, -0.78];
+const EYE = 3.4;
+
+/**
+ * Место перед логовом дракона `L`: открытая твёрдая земля в 60–120 м от устья, откуда устье пещеры видно по прямой (склон не закрывает), лицом к пещере.
+ * `H(x, z)` — верхний слой земли столбца (`data.heightAt`, у него флаги `water`/`sea`). Нет такого места — null (логово не берём).
+ * @returns {{x:number,z:number,yaw:number,layer:number,...}|null}
+ */
+export function lairApproach(L, H) {
+    const cx = L.mouth.x, cz = L.mouth.z, ty = L.F + 5.5; // (the mouth's middle: 13 m wide, ~10 m high)
+    const dry = (x, z) => { const h = H(Math.round(x), Math.round(z)); return !H.water && !H.sea ? h : null; };
+    for (const a of APPROACH_A) {
+        const ca = Math.cos(a), sa = Math.sin(a), ox = L.dx * ca - L.dz * sa, oz = L.dx * sa + L.dz * ca;
+        for (const d of APPROACH_D) {
+            const x = Math.round(cx + ox * d), z = Math.round(cz + oz * d), h = dry(x, z);
+            if (h == null) continue;
+            let flat = true; // (a level patch 7 × 7 m: a stand, not a ledge)
+            for (let k = 0; k < 8 && flat; k++) {
+                const q = dry(x + Math.cos(k * 0.785) * 3.5, z + Math.sin(k * 0.785) * 3.5);
+                flat = q != null && Math.abs(q - h) <= 2;
+            }
+            if (!flat) continue;
+            const ey = h + EYE;
+            let clear = true; // (the line from the eyes to the mouth: the ground never above it)
+            for (let t = 3; t < d - 5 && clear; t += 3) {
+                const f = t / d, px = x + (cx - x) * f, pz = z + (cz - z) * f, gh = dry(px, pz);
+                clear = gh != null && gh + 1 < ey + (ty - ey) * f;
+            }
+            if (!clear) continue;
+            return { x, z, yaw: Math.atan2(cx - x, cz - z), layer: h, up: 4, down: 6, boss: { x: L.hoard.x, z: L.hoard.z }, need: [{ x: cx, z: cz }, { x: L.x, z: L.z }, { x: L.hoard.x, z: L.hoard.z }], mouth: { x: cx, z: cz }, dist: [60, 160] };
+        }
+    }
+    return null;
+}
+
+/** Старое место у входа (на уступе, лицом в зал) — только для сравнения и совместимости тестов. */
 export function lairSpot(L) {
     return { x: Math.round(L.mouth.x + L.dx * 4), z: Math.round(L.mouth.z + L.dz * 4), yaw: Math.atan2(-L.dx, -L.dz), layer: L.F, up: 2, down: 6, boss: { x: L.hoard.x, z: L.hoard.z }, need: [{ x: L.x, z: L.z }, { x: L.hoard.x, z: L.hoard.z }], cave: true, dist: [18, 60] };
 }

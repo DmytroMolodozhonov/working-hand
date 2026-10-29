@@ -32,7 +32,7 @@ import { DungeonIndex } from './Dungeons.js';
 import { GhostCastleIndex } from './GhostCastle.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
-import { LAIR, lairOf } from './DragonLairs.js';
+import { LAIR, lairOf, DRAGON_LAIR_MIN_FROM_QUEEN } from './DragonLairs.js';
 import { DenSite } from './SpiderDens.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
@@ -1427,8 +1427,8 @@ export class TerrainData {
         const H = this.heightAt;
         const top = (x, z) => H(Math.round(x), Math.round(z));
         const dn = this.den?.spot; // (the spider's butte is not a dragon's mountain: its own cave is under it)
-        const ip = this.apart ? this.iceCastle?.plan : null; // (nor is the Ice Queen's: no dragon's lair on her mountain)
-        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz) || (dn && Math.hypot(ix - dn.x, iz - dn.z) < 140) || (ip && Math.hypot(ix - ip.x, iz - ip.z) < 230)); };
+        const ip = this.apart ? this.iceCastle?.plan : null; // (nor is the Ice Queen's land: no dragon's lair within 2500 m of her — a different region)
+        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz) || (dn && Math.hypot(ix - dn.x, iz - dn.z) < 140) || (ip && Math.hypot(ix - ip.x, iz - ip.z) < DRAGON_LAIR_MIN_FROM_QUEEN)); };
         const s = lairOf(gx, gz, this.seed, top, blocked);
         m.set(key, s);
         return s;
