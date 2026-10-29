@@ -172,6 +172,7 @@ export const SPELL_PHYSICS = {
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     Pentagranium: null, // («Pentagranium <Name>»: a drawing on the ground — pushes nobody, Pentagranium.js)
+    Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)
     VisibleGodi: null, // («Visible Godi»: a look through a wall — pushes nobody, VisibleGodi.js)
     Fireworks: null, // («Fireworks»: sparks high up — they push and hurt nobody, Fireworks.js)
     Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)

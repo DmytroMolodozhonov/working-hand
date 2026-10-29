@@ -479,6 +479,11 @@ export class NetSync {
         this.net.send({ t: 'pgm', by: this.me, ...m }, true);
     }
 
+    /** «Nihilis Atra»: my cone of light (the same cone on every computer — Nihilis.js). */
+    nihilis(origin, dir) {
+        this.net.send({ t: 'nhl', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
+    }
+
     fireworks(origin, dir, seed) {
         this.net.send({ t: 'fwk', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], s: seed >>> 0 }, true);
     }
@@ -624,13 +629,13 @@ export class NetSync {
         this.net.send({ t: 'cut', by: this.me, h }, true);
     }
 
-    died(killer, mm = null) {
-        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm }, true);
+    died(killer, mm = null, how = null) {
+        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm, ...(how === 'Hellfire' ? { k: 'Hellfire' } : null) }, true);
     }
 
     /** (host) Mana for player `to`: his last blow killed a magical creature / a wizard he beat in a duel. */
     manaCredit(to, m) {
-        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null, aw: m.aw ?? 1 });
+        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null, aw: m.aw ?? 1, ...(m.dark ? { dark: m.dark } : null) });
     }
 
     /** (host) An achievement for player `to`: they took part in the kill (Achievements.js). */
@@ -979,6 +984,7 @@ export class NetSync {
             }
             case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
+            case 'nhl': if (m.by !== this.me) g.nihilis?.onNet(m.by, m); break; // (a cone of «Nihilis Atra»: Nihilis.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
             case 'tdes': {
@@ -1190,6 +1196,7 @@ export class NetSync {
                 const who = r ? r.name : 'Игрок';
                 const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
                 if (m.killer === this.me) g.killCount++;
+                if (m.killer === this.me && m.k === 'Hellfire') applyCredit(g, { dark: 1 }); // (чёрная магия: человек убит моим Hellfire — HellKills.js)
                 if (m.killer === this.me) g.duel?.opponentDied?.(m.by, Number(m.mm) || 30, r?.group?.position ? [r.group.position.x, r.group.position.y - 2, r.group.position.z] : null); // (mana: a duel won for real, or a kill)
                 g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
                 break;
@@ -1202,7 +1209,7 @@ export class NetSync {
             case 'bite': if (this.net.isHost) break; g.zombieHitsMe({ x: +m.dx || 0, z: +m.dz || 0 }); break;
             case 'achc': if (!this.net.isHost && typeof m.k === 'string') g.achievements?.onCredit(m.k); break; // (an achievement: the host saw me take part)
             case 'ach': if (m.by !== this.me) g.achievements?.onNet(m, m.by); break;
-            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos, aw: m.aw }); break; // (mana: my kill, the host decided)
+            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos, aw: m.aw, dark: m.dark }); break; // (mana: my kill, the host decided)
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;
         }

@@ -603,6 +603,8 @@ const FX = {
     fxLiquidDuelMax(sr) { const o = buf(sr, 0.9), r = rng(29); glide(o, sr, 0, 0.6, 0.3, (u) => 520 - 260 * u + 30 * Math.sin(u * 50), swell(0.05, 0.55), 3); glide(o, sr, 0.05, 0.7, 0.18, (u) => 130 - 40 * u, swell(0.1, 0.6), 2); noise(o, sr, 0.02, 0.6, 0.55, (u) => 0.8 - 0.5 * u, (u) => (1 - u) * (0.6 + 0.4 * Math.sin(u * 60)), r); for (const t of [0.4, 0.5, 0.6]) noise(o, sr, t, 0.07, 0.4, () => 0.45, (u) => 1 - u, r); bell(o, sr, 880, 0.02, 0.5, 0.12, 0.8); return finish(o, sr, { peak: 0.66 }); },
     /** «Disarmor»: a zap and the steel ringing loose. */
     fxDisarmor(sr) { const o = buf(sr, 0.8), r = rng(19); glide(o, sr, 0, 0.3, 0.3, (u) => 900 - 400 * u, swell(0.05, 0.6), 4); for (const [t, f] of [[0.12, 2300], [0.24, 1900], [0.33, 2700]]) bell(o, sr, f, t, 0.18, 0.4, 0.8); noise(o, sr, 0, 0.05, 0.4, () => 0.9, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
+    /** «Nihilis Atra»: a clear rising chord of light, a bell shimmer and a soft airy rush — dark things unmade (a white, clean sound). */
+    fxNihilis(sr) { const o = buf(sr, 1.5), r = rng(211); pad(o, sr, ['D5', 'A5', 'D6', 'F#6'], 0, 0.9, 0.3, { att: 0.05, rel: 0.6, harm: 2 }); glide(o, sr, 0, 0.7, 0.22, (u) => 500 + 1700 * u, swell(0.06, 0.5), 2); for (const [t, f] of [[0.18, 1880], [0.3, 2350], [0.42, 2800], [0.56, 3300], [0.72, 3750]]) bell(o, sr, f, t, 0.16, 0.9, 0.8); noise(o, sr, 0.02, 1.0, 0.22, (u) => 0.35 + 0.5 * u, swell(0.12, 0.55), r); return finish(o, sr, { peak: 0.68 }); },
     /** «Акцентрик»: a woozy, wobbling glissando and a ringing that bends out of tune. */
     fxAccentric(sr) { const o = buf(sr, 1), r = rng(181); glide(o, sr, 0, 0.9, 0.3, (u) => 700 + 400 * Math.sin(u * 18) * (1 - u), swell(0.05, 0.5), 3); bell(o, sr, 1480, 0.1, 0.15, 0.8, 0.3); noise(o, sr, 0, 0.3, 0.3, () => 0.6, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
     /** Accentric's haze heard from inside: a far, slow, warped hum and whispers (played now and then, pitched at random). */
@@ -774,6 +776,7 @@ export const SPELL_SOUND = {
     Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] }, LiquidationDuel: { own: ['fxLiquidDuel'] }, LiquidationMaximaDuel: { own: ['fxLiquidDuelMax'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
+    Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },

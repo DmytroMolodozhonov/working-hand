@@ -32,6 +32,8 @@ import { WATER_LEVEL_Y } from '../world/Terrain.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { matchSpell } from '../fx/SpellManager.js';
+import { hellKilled } from './Mana.js';
+import { hellRecent, HELL } from './HellKills.js';
 import { registerKind } from './CreatureImpact.js';
 import { avoidStep } from './Avoid.js';
 import { numId, makeWayStep, askWay } from './Crowd.js';
@@ -486,6 +488,7 @@ export class Sailors {
             dmg = pirateBoneDamage(opts.kind, dmg, !!opts.spell);
             if (dmg <= 0) { if (by) this.provoke(v.crew || v.ship, by === 'local' ? g.localId : by, null); return; }
         }
+        v.hellT = opts.hell || opts.kind === HELL.NAME ? Date.now() : 0; // (the last blow was the Hellfire's: HellKills.js)
         if (opts.pierce) v.hp = 0;
         else if (v.armor > 0 && opts.kind !== 'Thunderwave') { // (plain steel does not hold Thunderwave: it comes from above)
             const a = Math.min(v.armor, dmg);
@@ -994,6 +997,7 @@ export class Sailors {
     }
 
     _die(v, by) {
+        if (!v.dead && hellRecent(v.hellT, Date.now())) hellKilled(this.game, by, 'c', v.role, v.id); // (a sailor killed by the Hellfire: +1 black magic; a skeleton — no)
         if (!v.dead && isBlackbeard(v)) this.game.achievements?.killed('blackbeard', v.id, by, v.model?.group?.getWorldPosition?.(v.model.group.position.clone()) || null); // (the captain: everyone who fought him)
         v.dead = true; this.game.castleLife?.talk?.speech?.cancelKey?.(v.id);
         v.hp = 0;

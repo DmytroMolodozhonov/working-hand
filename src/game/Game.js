@@ -183,10 +183,12 @@ import { Invisibility } from './Invisibility.js';
 import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { UnitedPower } from './UnitedPower.js';
+import { Vitality } from './Vitality.js';
 import { GroundVortex } from './GroundVortex.js';
 import { SeeThroughFx } from '../fx/SeeThroughFx.js';
 import { SteamBodies } from '../fx/SteamFx.js';
 import { Fireworks } from './Fireworks.js';
+import { Nihilis } from './Nihilis.js';
 import { EnchantCircles } from './EnchantCircles.js';
 import { glowSamples } from '../fx/EnchantGlow.js';
 import { LedgeClimb } from './LedgeClimb.js';
@@ -512,8 +514,10 @@ export class Game {
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
+        this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
         this.united = new UnitedPower(this); // «Пентаграмма объединённой силы» (`Pentagranium Unitas`): two things of one kind into one (UnitedPower.js)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
+        this.nihilis = new Nihilis(this); // «Nihilis Atra»: a cone of light scatters black magic (Nihilis.js)
         this.fireworks = new Fireworks(this); // «Fireworks»: 10 s of salvos over the wand, seen from far (Fireworks.js, FireworksFx.js)
         this.levitation = new Levitation(this); // «Вингардиум Левиоса»
         this.levMax = new LevitationMaxima(this); // «Вингардиум Левиоса Максима» (houses, trees, ships, groups)
@@ -1928,6 +1932,7 @@ export class Game {
         if (name === 'VisibleGodi') return this.visibleGodi.cast(isFinal);
         if (name === 'Pentagranium') return this.pentagranium.cast(isFinal, text); // («Pentagranium <Name>»: the pentagram named in the phrase, laid where the wand points — Pentagranium.js)
         if (name === 'Fireworks') return this.fireworks.cast(isFinal);
+        if (name === 'Nihilis') return this.nihilis.cast(isFinal); // (a cone of light against black magic — Nihilis.js; instant, white magic)
         // Levitation: point the hand at an object or a living body (a wizard: a duel spell)
         if (name === 'Levitation') {
             // The same phrase heard again — the microphone repeats an unfinished phrase many times
@@ -3130,7 +3135,8 @@ export class Game {
         }
         this.runner?.onDeath(); // (the running book's quickness is lost)
         this.death?.playerDied(byId, text, legacy); // the body stays (with the legacy), everything drops (Death.js); game.onDeath hooks
-        if (this.sync) this.sync.died(byId, manaMax);
+        if (this.sync) this.sync.died(byId, manaMax, this._deathKind);
+        this._deathKind = null;
         this.castleLife?.playerDied(this.localId);
         this.ships?.onLocalDeath(); // (lets go of a ship's wheel)
         this.hud.setStatus('');
@@ -3654,6 +3660,7 @@ export class Game {
         this.fireworks?.update(dt);
         this.enchantCircles?.update(dt);
         this.united?.update(dt);
+        this.vitality?.update(dt);
         if (earth && !duelOnly) this._updateCaves(dt);
         this.keeper?.update(dt);
         this.heroApply?.step(dt); // (Creative: the hero's chosen place to appear at — HeroApply.requestSpawn)

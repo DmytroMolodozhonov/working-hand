@@ -58,6 +58,7 @@ const USE_TEXT = {
     mend: 'Встаньте на неё — надетая броня будет починена (у каждой части своя цена)',
     monster: 'Встаньте в круг — и на 10 минут вы огромный монстр',
     bare: 'Встаньте в круг (50 маны) — и вы сможете колдовать любые заклинания без палочки',
+    vitality: 'Положите в круг тело человека, убитого чёрной магией, и встаньте рядом: максимум вашего здоровья вырастет на максимум здоровья жертвы (250 маны, +10 к тёмной магии)',
 };
 
 export class Pentagranium {
@@ -679,13 +680,15 @@ export class Pentagranium {
             if (mk && mk.pent === 'bare') this._bareBegin(mk, false);
         } else if (m.k === 'uni') {
             this.game.united?.onNet(m);
+        } else if (m.k === 'vit') {
+            this.game.vitality?.onNet(by, m); // (the rite of monstrous vitality: Vitality.js)
         } else if (m.k === 'rite') {
             const mk = this.marks.get(m.id), b = this.game.death?.bodies.get(m.body);
             if (mk && b && !mk.rites.some((r) => r.id === b.id)) this._riteBegin(mk, b, false);
         }
     }
 
-    sampleModels() { return [...this.fx.sampleModels(), ...(this.game.united?.sampleModels?.() || [])]; }
+    sampleModels() { return [...this.fx.sampleModels(), ...(this.game.united?.sampleModels?.() || []), ...(this.game.vitality?.sampleModels?.() || [])]; }
 
     /** Death / world change: nothing stays lit. */
     clear() { this.fx.trailEnd(); for (const id of [...this.marks.keys()]) this._remove(id, 'old'); }

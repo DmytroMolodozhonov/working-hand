@@ -61,7 +61,7 @@ import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
-import { teaches, placeOf, darkOfEntry } from './DarkMagic.js';
+import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
@@ -70,7 +70,9 @@ import { CastleWatch } from './CastleWatch.js';
 import { kingFights, guardRadius, guardsKilled } from './KingNerve.js';
 import { slowFactor, tickSlow } from './Slow.js';
 import { trackSlope, slopePace, ledgeWide } from './HillWay.js';
-import { creditKill } from './Mana.js';
+import { creditKill, hellKilled } from './Mana.js';
+import { hellRecent } from './HellKills.js';
+import { darkHit } from './VitalityRules.js';
 import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
 import { NightLife } from './NightLife.js';
@@ -2727,6 +2729,8 @@ export class CastleLife {
         this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
+        v.hellT = opts.hell ? Date.now() : 0; // (the last blow was the Hellfire's: a kill darkens the caster — HellKills.js)
+        v.darkT = darkHit(opts, isDark) ? Date.now() : 0; // (the last blow was black magic: the body fits the rite of monstrous vitality — VitalityRules.js)
         if (v.wizard) v.hurtAt = Date.now();
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
         // (a spell: half its mana from his — an unnamed one as an ordinary 10; a blow: nothing. Out of mana it shatters)
@@ -3008,6 +3012,8 @@ export class CastleLife {
         const quiet = !!this.game.arenaDuels?.quietKill?.(v, by);
         if (!quiet) {
             st.killed.add(v.idx);
+            v.darkKill = hellRecent(v.darkT, Date.now()); // (killed by black magic: the body keeps it — Death.villagerDied → the rite of monstrous vitality)
+            if (hellRecent(v.hellT, Date.now())) hellKilled(this.game, by, 'v', v.role, v.id); // (the Hellfire killed a humanoid: +1 black magic to the caster)
             this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);

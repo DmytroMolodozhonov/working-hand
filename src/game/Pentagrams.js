@@ -7,7 +7,7 @@
  */
 
 import { MONSTER_PENTAGRAM } from './PentagramMonster.js';
-import { BREAKWARD_LINES, GARGOYLE_LINES, UNITY_LINES, BARE_LINES } from './PentagramFigures.js';
+import { BREAKWARD_LINES, GARGOYLE_LINES, UNITY_LINES, BARE_LINES, VITALITY_LINES } from './PentagramFigures.js';
 
 export const PENTAGRAMS = {
     // «Пентаграмма страшного монстра»: круг и оскаленная пасть (четыре клыка, челюсть дугой); встал в круг — 200 маны — ×7 на 10 минут (PentagramMonster.js, MonsterTransform.js)
@@ -47,6 +47,18 @@ export const PENTAGRAMS = {
         darkBonus: 30, // сразу +30 уровней тёмной магии (в сумме не больше 100)
         lines: UNITY_LINES,
         effect: 'Объединяет силы двух одинаковых вещей в одну новую: все бафы складываются.',
+    },
+    // «Пентаграмма чудовищной живучести»: тело убитого чёрной магией человекоподобного растворяется кровью — максимум ХП жертвы прибавляется герою (VitalityRules.js, Vitality.js); чёрная магия
+    vitality: {
+        id: 'vitality',
+        title: 'Чудовищная живучесть',
+        dark: true,
+        glow: 0xb0102a, // кровавый
+        cost: 250, // маны при слове
+        once: false,
+        scroll: 'PentagramVitality',
+        lines: VITALITY_LINES,
+        effect: 'Увеличивает ваш максимум здоровья на максимум здоровья жертвы.',
     },
 };
 

@@ -94,6 +94,8 @@ export class ImperiusControl {
     }
 
     get active() { return !!this.name; }
+    /** Where the creature I am in stands (null: none) — «Nihilis Atra» sends the mind home if it is hit (Nihilis.js). */
+    bodyPosition(out) { const c = this.creature; return c && BODIES[this.sys] ? BODIES[this.sys].pos(c, out) : null; }
     get maxima() { return this.name === 'ImperiusMaxima'; }
     /** The hero's body is left (no walking, no jumping of its own). */
     get busy() { return !!this.name; }

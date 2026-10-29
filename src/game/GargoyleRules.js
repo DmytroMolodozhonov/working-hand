@@ -259,6 +259,7 @@ export const TARGETS = {
     Groundprud: { does: 'none', why: 'не касается' },
     GroundVortex: { does: 'hit', why: '«Ground Vortex»: летящие блоки бьют, залп −3 и толчок' },
     VisibleGodi: { does: 'none', why: 'тучка только на экране колдующего' },
+    Nihilis: { does: 'kill', why: '«Nihilis Atra»: свет рассеивает чёрную магию — адская горгулья рассыпается в прах' },
     Fireworks: { does: 'none', why: 'искры высоко над головой' },
     Invisibility: { does: 'blind', why: 'невидимого игрока не замечает, пока рядом не коснётся (как Дракон)' },
     Alohomora: { does: 'none', why: 'живое существо без замков' },

@@ -131,7 +131,7 @@ export class Burning {
      * Only the creature's own computer decides about a player (me: here; others: ignored); the host — about the rest.
      * @returns true if it burns now
      */
-    ignite(kind, id, by = null, time = BURN.TIME) {
+    ignite(kind, id, by = null, time = BURN.TIME, hell = false) {
         const g = this.game;
         if (!BURNS.has(kind)) return false;
         if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time); }
@@ -148,6 +148,7 @@ export class Burning {
         }
         b.left = Math.min(BURN.TIME, Math.max(b.left, time));
         if (by) b.by = by;
+        b.hell = !!hell; // (the last fire to touch it: a death by the Hellfire's burn counts for the caster — HellKills.js)
         return true;
     }
 
@@ -365,10 +366,10 @@ export class Burning {
             if (a) { a.damageCooldown = 0; g.animals?.hit?.(a, d, dir, by, true); }
         } else if (b.kind === 'v') {
             const v = g.duel._creature('v', b.id);
-            if (v) g.castleLife?.hit?.(v, d, dir, by, { fire: true, kind: 'burn' });
+            if (v) g.castleLife?.hit?.(v, d, dir, by, { fire: true, kind: 'burn', hell: !!b.hell });
         } else if (b.kind === 'c') {
             const v = g.duel._creature('c', b.id);
-            if (v) g.ships?.crew?.hit?.(v, d, dir, by, { fire: true, kind: 'burn' }); // (a skeleton: Sailors.pirateBoneDamage decides how much)
+            if (v) g.ships?.crew?.hit?.(v, d, dir, by, { fire: true, kind: 'burn', hell: !!b.hell }); // (a skeleton: Sailors.pirateBoneDamage decides how much)
         }
         g.sound?.playSpellFx?.('fxCrackle', mid, 0.5, 0.9 + Math.random() * 0.2);
     }

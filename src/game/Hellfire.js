@@ -608,7 +608,7 @@ export class Hellfire {
             // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
             const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat * K : 0;
             const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);
-            if (inside) g.burning?.ignite(b.kind, b.id, by); // (in the blaze itself the fire sticks to the body: Burning.js)
+            if (inside) g.burning?.ignite(b.kind, b.id, by, undefined, true); // (in the blaze itself the fire sticks to the body: Burning.js)
             if (dmg > 0) {
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
@@ -623,7 +623,7 @@ export class Hellfire {
                     if (ic) g.iceCastle.hit(ic, dmg, HELLFIRE.NAME, by);
                 } else if (cr) {
                     if (b.kind === 'a') { cr.damageCooldown = 0; g.animals?.hit?.(cr, dmg, dir, by, true); }
-                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true });
+                    else if (b.kind === 'v') g.castleLife?.hit?.(cr, dmg, dir, by, { spell: true, magic: true, fire: true, hell: true }); // (hell: a killed humanoid darkens the caster — HellKills.js)
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, dmg, HELLFIRE.NAME); // (fire: the only thing that kills a living tree)
                     else if (b.kind === 'f') g.phoenixes?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (a phoenix: born of fire — no harm, but an attack)
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (hellish itself: the hellfire does not touch an infernal gargoyle)

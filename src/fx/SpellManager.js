@@ -28,6 +28,7 @@ import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
 import { groundprudWords } from '../game/GroundprudWords.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
+import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords } from '../game/PentagramWords.js';
@@ -144,6 +145,8 @@ export function matchSpell(text) {
     if (boomWords(s)) return 'Boom';
     // «Pentagranium <Name>» («Пентаграниум Телепортис»…): ONE pentagram per phrase — the first word AND its own English name (PentagramWords.js); the lone «Пентаграниум» is no spell
     if (pentagramWords(s)) return 'Pentagranium';
+    // «Nihilis Atra» («нихилис атра»): BOTH words — never «нигилист» in talk (NihilisWords.js)
+    if (nihilisWords(s)) return 'Nihilis';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
     if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
         'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';

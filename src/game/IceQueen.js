@@ -33,7 +33,7 @@ import { IceFixtures, GATE } from './IceFixtures.js';
 import { BLOCK, isPalaceIce, isSolid } from '../world/Terrain.js';
 import { newUid } from './ItemTypes.js';
 import { segmentSegmentDistSq } from '../core/math.js';
-import { creditKill, GOD_SPELLS } from './Mana.js';
+import { creditKill, GOD_SPELLS, hellKilled } from './Mana.js';
 import { hitBody } from './MagicWave.js';
 import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
@@ -296,6 +296,7 @@ export class IceCastleLife {
         if (n <= 0) { if (c.type === 'queen' && (c.mockT || 0) <= 0) { c.mockT = 8; this._say(c, 'Твоя магия здесь бессильна!'); } return 0; }
         c.hp = Math.max(0, c.hp - n);
         c.hurtT = 0.25;
+        c.lastKind = kind; // (the last blow: the Queen killed by the Hellfire darkens the caster — HellKills.js)
         if (c.type === 'snowman' && FIRE_K[kind]) for (let i = 0; i < 6; i++) g.fx?.spark?.(iceCenter(c, _v), 0xdfefff, 0.2, _v2.set((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
         if (c.hp <= 0) this._die(c, who);
         return n;
@@ -423,6 +424,7 @@ export class IceCastleLife {
             this.fixtures.queenFell(); // (her magic leaves the gates: plain ice now)
             if (this.auth) {
                 creditKill(g, killer, { kind: 'iceQueen' });
+                if (c.lastKind === 'Hellfire') hellKilled(g, killer, 'I', 'queen', c.id); // (the Queen is humanoid: +1 black magic to the caster of the Hellfire)
                 g.achievements?.killed('iceQueen', c.id, killer, p); // (the achievement: to all who fought her)
                 // her rod falls where she stood (one in the world: she never comes back)
                 const at = c.model.position.clone().add(_v.set(0, 2.5, 0));

@@ -867,6 +867,9 @@ export class WizardFight {
         else if (v.stunT > 0 || v.lev || v.vy) this._shatter(v, FX.SHIELD);
     }
 
+    /** «Nihilis Atra» shatters a black mage's «Protection Maxima» dome (Nihilis.js). */
+    breakDome(v) { this._shatter(v, FX.DOME); }
+
     /** The wizard's shield / dome breaks: its light flies apart in pieces. */
     _shatter(v, bits) {
         if (!(v.fx & bits)) return;
