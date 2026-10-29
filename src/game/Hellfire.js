@@ -247,7 +247,7 @@ export class Hellfire {
         if (g.breakward?.afterPay(HELLFIRE.NAME, HELLFIRE.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
         g._manaLater = true; // (mana: it counts as working when it really burns something)
         const ch = g.character;
-        const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
+        const o = g.spellStart ? g.spellStart(side) : g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side); // (a body right at the wand: the fire leaves before it)
         const d = ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side);
         this.meter.reset();
         this.state = {
@@ -355,7 +355,7 @@ export class Hellfire {
         if (s.t > HELLFIRE.MAX_LIFE) { this.stop('time'); return; }
         // the wand: where it is, where it points, how far the arm is stretched
         const side = s.side;
-        if (g.castOrigin) g.castOrigin(side, s.o); else ch.getHandWorldPosition(side, s.o);
+        if (g.spellStart) g.spellStart(side, s.o); else if (g.castOrigin) g.castOrigin(side, s.o); else ch.getHandWorldPosition(side, s.o);
         (ch.getPointingDirection ? ch.getPointingDirection(side, s.d) : ch.getHandDirection(side, s.d)).normalize();
         const reach = blazeReach(this._stretch(side));
         // the hands spread apart: a bigger fire

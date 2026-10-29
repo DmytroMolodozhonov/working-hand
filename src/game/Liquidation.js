@@ -200,7 +200,7 @@ export class Liquidation {
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay(name);
         this._lastAt = now;
-        const origin = g.castOrigin(side);
+        const origin = g.spellStart ? g.spellStart(side) : g.castOrigin(side); // (a body right at the wand: the splash leaves before it — Game.spellStart)
         const dir = ch.getHandDirection(side);
         g.spells.cast(name, origin, dir, side, g.localId);
         g.sync?.spell(name, origin, dir, side);

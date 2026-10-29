@@ -20,7 +20,8 @@
 
 import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
-import { EXPELLIARMUS } from './Expelliarmus.js';
+import { EXPELLIARMUS, flightVelocity } from './Expelliarmus.js';
+import { DISARM, knockable, fetchStep } from './SailorDisarm.js';
 import { parseCrewOrder } from './FleetMath.js';
 import { parseCommand, canDo, COMMANDS, sayReply, commandAck } from '../ai/TalkCommands.js';
 import * as THREE from 'three';
@@ -84,6 +85,8 @@ export const BRACE = { T: 0.8, SLIDE: 0.5, GIVE: 0.1 };
 const isCaptain = (v) => v?.role === 'captain' || v?.role === 'blackbeard';
 /** Captain Black Moustache's parry of duel charges (parryBolt). */
 export const PARRY = { ARC: 1.2, GAP: 1.1, COST: 0.34, REST: 0.12, CHANCE: 0.85 };
+/** The tip when a blade is knocked out of the crews' hands («Экспеллиармус»). */
+export const DISARM_HINT = { captain: '⚔️ Сабля капитана выбита — теперь он беззащитен: атакуйте!', skeleton: '🦴 Оружие скелета выбито — он безоружен', sailor: '⚔️ Матрос выронил саблю — он безоружен' };
 /** What a skeleton says (it has no tongue: it rattles and hisses). */
 const RATTLE = ['Кх-х-х…', '*стук костей*', 'Х-р-р-р…', '*скрежет зубов*', 'С-с-с…'];
 /** The black ship's captain: his orders and his taunts. */
@@ -92,6 +95,8 @@ const PIRATE = {
     command: ['Руби канаты!', 'Не дай ему уйти к борту!', 'Шевелитесь, кости!'],
     taunt: ['Ха! Ещё один храбрец на корм рыбам!', 'Тысяча чертей! Ты на моём корабле!', 'Мою шпагу не обманешь, сухопутная крыса!', 'Сдавайся — и, может, станешь юнгой. Мёртвым юнгой!'],
     parry: ['Ха! Мимо!', 'Колдуй, колдуй — шпага быстрее!', 'Отбил! Ещё?'],
+    disarmed: ['Моя шпага! Проклятье!', 'Ах ты, крыса! Верни шпагу!', 'Тысяча чертей — шпага!'],
+    rearmed: ['Вот она, красавица!', 'Ну, теперь держись!'],
 };
 /**
  * The black ship's skeletons and the duel charges (CLAUDE.md «на кого и на что»): they are dead already — there is
@@ -148,6 +153,8 @@ const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _view = new THREE.Frustum(), _viewM = new THREE.Matrix4(), _viewS = new THREE.Sphere(); // (the camera's picture: far sailors out of it are not posed)
 const _l = { x: 0, y: 0, z: 0 };
+const _fl = { x: 0, y: 0, z: 0 }; // (where his knocked-out blade lies, in the deck's frame)
+const _hand = new THREE.Vector3();
 const _o = { x: 0, y: 0, z: 0 };
 const _w2 = { x: 0, y: 0, z: 0 };
 const _set = function (x, y, z) { this.x = x; this.y = y; this.z = z; return this; };
@@ -345,7 +352,7 @@ export class Sailors {
                 dead: false, get isDead() { return this.dead; }, damageCooldown: 0,
                 l: { x: home.x, y: home.y, z: home.z }, lyaw: Math.PI, home: home.id, node: home.id, path: null, pathI: 0,
                 mode: 'idle', speed: 0, waitT: 2 + Math.random() * 6, foe: null, strikeT: 0, sayT: 0, vy: 0,
-                overboard: null, x: 0, y: 0, z: 0, net: null, deadT: 0,
+                overboard: null, x: 0, y: 0, z: 0, net: null, deadT: 0, tool0: model.toolKind,
                 entry: { female: false, seed: e.seed }, talking: 0, chatT: 8 + Math.random() * 20,
             };
             list.push(v);
@@ -577,7 +584,7 @@ export class Sailors {
      * Spells that are not duel charges (rays, blasts, fire, «Инспириус»…), blades, arrows — never parried this way.
      */
     parryBolt(v, from, now = performance.now()) {
-        if (!v || v.role !== 'blackbeard' || v.dead || v.overboard || v.lev || v.vy || v.stunT > 0 || v.frozenT > 0) return false;
+        if (!v || v.role !== 'blackbeard' || v.dead || v.disarmed || v.overboard || v.lev || v.vy || v.stunT > 0 || v.frozenT > 0) return false; // (disarmed — «Экспеллиармус»/«Liquidation»: no blade to beat a charge aside with)
         if (v.fs?.st === 'swing') return false;
         const P = PARRY;
         const wind = Math.min(1, (v.wind ?? 1) + ((now - (v.windT ?? now)) / 1000) * P.REST);
@@ -597,9 +604,93 @@ export class Sailors {
         return true;
     }
 
+    /**
+     * (host) «Экспеллиармус» reached sailor `v`: his blade (the captain's rapier, a cutlass, an axe) flies out of his hand across the
+     * deck and lies there as a real weapon anybody may take (SailorDisarm.js). → 'sword' | 'axe' | 'gun' (a pistol: clattered away,
+     * nothing to fetch) | null (nothing in the hand to knock out, or he is in the sea / in the air).
+     */
+    disarm(v, src, by) {
+        const g = this.game;
+        if (!this.auth || !v || v.dead || v.disarmed || v.overboard || v.lev) return null;
+        const tool = v.model?.toolKind, def = knockable(tool);
+        if (!def) return null;
+        const d = v.ship || v.crew;
+        const hand = _hand.set(v.x, v.y + 2.6, v.z);
+        v.disarmed = true;
+        v.parryShow = 0;
+        v.model.setHeldTool('none');
+        if (v.gun) v.gun = null; // (a pistol knocked out mid-aim)
+        let out = 'gun';
+        if (def.item) {
+            // across the deck, away from whoever cast it, where there is floor to land on (not over the side)
+            const away = src ? Math.atan2(v.x - src.x, v.z - src.z) : Math.random() * Math.PI * 2;
+            let yaw = away, dist = 0.8, found = false;
+            for (let i = 0; i < 8 && !found; i++) {
+                const y = away + (i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.6);
+                const k = DISARM.FLY_MIN + Math.random() * (DISARM.FLY_MAX - DISARM.FLY_MIN);
+                d.pose.toLocal(hand.x + Math.sin(y) * k, hand.y, hand.z + Math.cos(y) * k, _o);
+                const f = floorAt(d.layout, _o.x, _o.z, v.l.y + 1.1);
+                if (f !== null && Math.abs(f - v.l.y) < 1 && Math.abs(_o.x) < hullHalfWidth(d.layout, _o.z, Math.max(0.2, v.l.y)) - 1) { yaw = y; dist = k; found = true; }
+            }
+            if (!found) yaw = Math.random() * Math.PI * 2;
+            const f = flightVelocity(dist, yaw);
+            const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ'));
+            const w = g.weapons.markMagic(g.weapons.spawn(def.item, hand.clone(), q), def.bonus);
+            w.velocity?.copy(f.vel);
+            w.angularVelocity?.copy(f.spin).multiplyScalar(0.6);
+            w.wake?.();
+            if (g.sync) { g.sync.weaponAppeared?.(w, true); g.sync._localRelease?.(w); }
+            v.lostArm = { id: w.id, t: -0.7, grab: 0, tool }; // (-0.7: it is still in the air)
+            v.droppedId = w.id;
+            out = def.item;
+        }
+        if (v.role === 'blackbeard') this._say(v, pick(PIRATE.disarmed), 3);
+        else if (v.role === 'skeleton') this._say(v, pick(RATTLE), 2);
+        if ((by === 'local' || by === g.localId) && g.hud?.setVoice) g.hud.setVoice(v.role === 'blackbeard' ? DISARM_HINT.captain : v.role === 'skeleton' ? DISARM_HINT.skeleton : DISARM_HINT.sailor, true);
+        return out;
+    }
+
+    /** (host, _think) A disarmed sailor goes for his blade and bends for it; true: busy with it this frame. */
+    _fetchArm(v, s, dt) {
+        const g = this.game, a = v.lostArm;
+        const end = () => { v.lostArm = null; v.mode = 'idle'; v.speed = 0; return false; };
+        const w = g.weapons?.byId?.get(a.id);
+        const taken = !w || w.holder || w.remoteTarget || !!g.sync?.weaponOwners?.get(a.id) || !!w.hover;
+        let dist = Infinity;
+        const d = v.ship || s;
+        if (w && !taken) {
+            d.pose.toLocal(w.position.x, w.position.y, w.position.z, _o);
+            _fl.x = _o.x; _fl.z = _o.z; _fl.y = _o.y;
+            if (Math.abs(_o.y - v.l.y) < 2.5) dist = Math.hypot(_o.x - v.l.x, _o.z - v.l.z);
+        }
+        // a player at his throat: he fights with his fists and the blade waits (the grab starts over)
+        const fp = v.fp;
+        const melee = !!(fp && Math.hypot(fp.x - v.l.x, fp.z - v.l.z) < 3);
+        if (a.t < 0) { a.t += dt; return false; } // (in the air still)
+        const r = fetchStep(a, dt, { taken, dist, busy: melee || v.stunT > 0 || v.vy });
+        if (r === 'giveup') { if (w && !taken && w.position.y < WATER_LEVEL_Y) v.droppedId = null; return end(); }
+        if (r === 'wait') return false;
+        v.foe = null; v.fp = null; v.fs = null; v.busy = false; v.tac = null; v.fpath = null; v.path = null;
+        if (r === 'walk') {
+            const f = floorAt(d.layout, _fl.x, _fl.z, v.l.y + 1.1);
+            this._toSpot(v, s, { x: _fl.x, y: f ?? v.l.y, z: _fl.z }, RUN, dt);
+            return true;
+        }
+        v.lyaw = Math.atan2(-(_fl.x - v.l.x), -(_fl.z - v.l.z));
+        v.mode = 'work'; v.speed = 0;
+        if (r === 'done') {
+            g.weapons.remove(w); g.sync?.weaponGone?.(w);
+            v.disarmed = false; v.droppedId = null; v.lostArm = null;
+            v.model.setHeldTool(a.tool);
+            if (v.role === 'blackbeard') this._say(v, pick(PIRATE.rearmed), 3);
+            v.mode = 'idle';
+        }
+        return true;
+    }
+
     /** A guard up, facing the blade (dir: the way the blow goes, world): turned aside? */
     _parries(v, dir) {
-        if (v.mode !== 'block' || v.stunT > 0 || v.overboard) return false;
+        if (v.mode !== 'block' || v.stunT > 0 || v.overboard || v.disarmed) return false;
         const yaw = v.ship.st.yaw + v.lyaw;
         const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
         const dl = Math.hypot(dir.x, dir.z) || 1;
@@ -1164,6 +1255,7 @@ export class Sailors {
             if (v.fs) v.fs.st = 'close';
             return;
         }
+        if (v.lostArm && this._fetchArm(v, s, dt)) return; // (his knocked-out blade lies near: he goes for it)
         // (the rapier up — a duel charge just beaten aside: the guard a moment)
         if (v.parryShow > 0) { v.parryShow -= dt; v.mode = 'block'; v.speed = 0; return; }
         // the foe: a hostile player aboard (or on the pier near the gangway)
@@ -2092,7 +2184,8 @@ export class Sailors {
             if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); v.model?.setHeldTool?.('none'); } // (what was in his hand lies on the deck now: the host's Death.dropHeld)
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
             v.buoyNet = Array.isArray(a[10]) ? { x: +a[10][0] || 0, y: +a[10][1] || 0, z: +a[10][2] || 0 } : null; // (the lifebuoy he threw)
-            if (a[12] && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); } // (his weapon crumbled in his hand)
+            if (a[12] && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); } // (his weapon crumbled in his hand, or «Экспеллиармус» knocked it out)
+            else if (!a[12] && v.disarmed && v.tool0) { v.disarmed = false; v.model?.setHeldTool?.(v.tool0); } // (he picked his blade up again)
             const deck = (a[11] && this.ships.list.get(a[11])) || s;
             if (deck && deck !== v.ship) { v.ship = deck; v.net.x = v.l.x = a[1]; v.l.y = a[2]; v.net.z = v.l.z = a[3]; } // (he went over to another deck: no sliding across)
         }

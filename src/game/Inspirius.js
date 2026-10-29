@@ -201,7 +201,7 @@ export class Inspirius {
         if (tired) { g.hud?.setVoice(tired, true); return null; }
         c?.pay(INSP.NAME);
         if (g.breakward?.afterPay(INSP.NAME, INSP.MIN_MAX_MANA, null)) return null; // (метка «слом защиты»: ячеек не хватало — 23 % беды)
-        const o = g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side);
+        const o = g.spellStart ? g.spellStart(side) : g.castOrigin ? g.castOrigin(side) : ch.getHandWorldPosition(side); // (a body right at the wand: the orb starts before it)
         const d = (ch.getPointingDirection ? ch.getPointingDirection(side) : ch.getHandDirection(side)).clone().normalize();
         const orb = this._launch(o, d, g.localId, true, side);
         g.sync?.inspirius?.({ e: 'go', o: [r3(o.x), r3(o.y), r3(o.z)], d: [r3(d.x), r3(d.y), r3(d.z)] });

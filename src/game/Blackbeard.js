@@ -791,6 +791,7 @@ export class Blackbeard {
         const g = this.game;
         if (v.role !== 'blackbeard' || !this.auth) return;
         v.board = null;
+        if (v.droppedId && v.disarmed) return; // (his rapier was knocked out by «Экспеллиармус» and he never got it back: it is that rapier that is the loot — no second one)
         const p = new THREE.Vector3(v.x, v.y + 3, v.z);
         try {
             const w = g.weapons?.spawnHovering?.('sword', p, newUid());
