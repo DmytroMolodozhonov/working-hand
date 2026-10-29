@@ -175,6 +175,7 @@ export const MAXIMA_TARGETS = {
     owl: { why: 'не действует: сова вспархивает раньше — она летит сама; то, что падает, её не накроет (увёртывается)' },
     canary: { why: 'поднимается группой, дрыгает ногами, роняет валун; отпущенный с высоты падает и ушибается; лагерь сердится на колдующего' },
     spencer: { why: 'не действует: птичка Спенсера вспархивает раньше — она летит сама; то, что падает, её не накроет' },
+    custom: { why: 'созданное существо до 4 м поднимается группой и бьётся в воздухе; большее — не поднимается; отпущенное с высоты падает и ранится' },
     gargoyle: { why: 'не действует: тяжёлая каменная горгулья рвётся из невидимой руки и улетает; то, что падает, её только ранит (×1,2)' },
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
     iceCastle: { why: 'не действует: ледяная магия королевы держит её, монстров и снеговиков на земле' },
@@ -621,7 +622,8 @@ export class LevitationMaxima {
         for (const v of g.ships?.crew?.byId?.values?.() || []) if (!v.dead && !v.lev) out.push({ ck: 's', c: v, pos: centre('s', v), r: 1.2 });
         for (const t of g.livingTrees?.targets?.() || []) if (!t.lev && !t.isDead) out.push({ ck: 't', c: t, pos: centre('t', t), r: 2.5 });
         for (const s of g.spiders?.targets?.() || []) if (!s.lev) out.push({ ck: 'sp', c: s, pos: spiderCenter(s, new THREE.Vector3()), r: 3 });
-        for (const n of g.canaries?.targets?.() || []) if (!n.lev) out.push({ ck: 'N', c: n, pos: centre('N', n), r: 1.3 }); // (the swamp canaries: carried like a living tree)
+        for (const n of g.canaries?.targets?.() || []) if (!n.lev) out.push({ ck: 'N', c: n, pos: centre('N', n), r: 1.3 });
+        for (const n of g.customCreatures?.targets?.() || []) if (!n.lev && n.D.H * n.scale <= 4) out.push({ ck: 'C', c: n, pos: g.customCreatures.centre(n), r: n.r }); // (a creature of one's own up to 4 m) // (the swamp canaries: carried like a living tree)
         for (const [id, r] of g.remotes || []) if (!r.dead) out.push({ ck: 'p', c: { id }, pos: new THREE.Vector3(r.position.x, r.position.y - 0.5, r.position.z), r: 1 });
         return out;
     }
@@ -767,6 +769,7 @@ export class LevitationMaxima {
         if (ck === 's') { const v = g.ships?.crew?.byId?.get(id); return v && !v.dead ? v : null; }
         if (ck === 't') { const t = g.livingTrees?.byId?.get(id); return t && !t.isDead ? t : null; }
         if (ck === 'N') { const n = g.canaries?.byId?.(id); return n && !n.dead ? n : null; }
+        if (ck === 'C') return g.customCreatures?.byId?.(id) || null;
         if (ck === 'sp') { const s = g.spiders?.list?.find((x) => x.id === id); return s && !s.dead ? s : null; }
         return g.levitation?._creature(ck, id) || null;
     }
@@ -1604,7 +1607,8 @@ export class LevitationMaxima {
         g.phoenixes?.hitAt?.(c, r, dmg, 'crush', by);
         g.gargoyles?.hitAt?.(c, r, dmg, 'crush', by); // (an infernal gargoyle: stone, a house falling on it hurts — GargoyleRules.TARGETS.cauldron)
         g.owls?.hitAt?.(c, r, dmg, 'crush', by); // (an owl: quicker than a falling house — it darts away)
-        g.canaries?.hitAt?.(c, r, dmg, 'crush', by); // (a canary under it: crushed; the camp turns on the caster)
+        g.canaries?.hitAt?.(c, r, dmg, 'crush', by);
+        g.customCreatures?.hitAt?.(c, r, dmg, 'crush', by); // (a creature of one's own under it) // (a canary under it: crushed; the camp turns on the caster)
         g.iceCastle?.hitAt?.(c, r, dmg, 'crush', by); // (a house falling on the queen: it is no spell — it hurts)
         // (a living tree is hurt only by fire; a dragon is never under it — it flies; book-birds fly)
         // knocked down

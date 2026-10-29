@@ -202,6 +202,30 @@ BODIES.I = ice;
 BODIES.s = sailors;
 BODIES.ca = canaries;
 
+// ============================================================ creatures of one's own («Да пусть создастся»: «Империус Максима» only)
+const customs = modelBody('C', (g) => g.customCreatures?.list || [], (g, id) => g.customCreatures?.byId(id) || null, {
+    free: (c) => !c.dead && c.born >= 1 && !c.lev,
+    up: (c) => c.D.top * c.scale,
+    head: (c) => c.model.userData?.head || null,
+    drive(g, c, I, dt) {
+        c.foe = null; c.goal = null; c.state = 'idle'; c.flying = false;
+        if (c.stunT > 0) { c.a.speed = 0; c.a.mode = 'idle'; return; }
+        const top = c.speeds.ground * (c.slowT > 0 ? 0.45 : 1);
+        const speed = I.walk > 0.02 ? top * (I.run ? 1.3 : 0.6) * (0.4 + 0.6 * Math.min(1, I.walk * 1.4)) : 0;
+        const w = walk(g, c, c.model.position, I, speed, c.r, Math.max(0.5, c.h), dt, 4);
+        c.yaw = c.model.rotation.y;
+        c.a.mode = w > 0 ? 'walk' : 'idle'; c.a.speed = w > 0 ? speed : 0;
+        c._impWalk = w > 0 ? 1 : 0;
+        if (I.strikeNow && !(c._impCd > 0)) { c._impCd = 1.2; c._impAtk = 0.5; c.a.bite = 1; }
+        c._impCd = Math.max(0, (c._impCd || 0) - dt);
+        if (c._impAtk > 0) c._impAtk -= dt;
+    },
+    anim(g, c, dt, v, atk) { c.a.mode = v > 0.2 ? 'walk' : 'idle'; c.a.speed = v; if (atk) c.a.bite = 1; c.yaw = c.model.rotation.y; },
+    struck: (g, c, I) => (I?.strikeNow ? { reach: c.r + 1.6, dmg: Math.max(1, Math.min(8, Math.round(2 + c.D.H * 1.2))) } : null), // (its bite — CustomCreatures._hunt)
+    release(g, c) { c.a.speed = 0; c.a.mode = 'idle'; c._impAtk = 0; c.state = 'idle'; },
+});
+BODIES.C = customs;
+
 /** (tests) the walkers added here. */
 export const WALKER_SYSTEMS = ['sp', 't', 'I', 's', 'ca'];
 export { THREE };

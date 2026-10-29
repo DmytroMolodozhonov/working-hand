@@ -34,6 +34,7 @@ export const BODY_R = {
     plant: 1.1, // (telewilpins and carnivorous heads: Plants.js — set by the source)
     owl: 0.3, // (a clever owl hopping on the ground: Owls.js)
     canary: 0.55, // (a swamp canary: Canaries.js)
+    custom: 0.6, // (a creature of one's own: its own radius — CustomCreatures c.r)
     gargoyle: 0.9, // (an infernal gargoyle hunting low: Gargoyles.js — the body's width, the wings are above heads)
 };
 

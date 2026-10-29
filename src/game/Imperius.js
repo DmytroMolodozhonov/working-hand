@@ -75,6 +75,7 @@ export const IMPERIUS_TARGETS = {
     sheep: { ru: 'баран', plain: true },
     horse: { ru: 'конь', plain: true },
     canary: { ru: 'канарик', plain: true }, // (a swamp canary: not magical — the plain spell takes it; it walks on its own short legs, can lift a boulder and throw it — Canaries.js)
+    custom: { ru: 'существо, созданное богами', magic: true }, // («Да пусть создастся»: the gods' own making — only «Империус Максима» takes it; CustomCreatures.js, adapter BODIES.C)
     pig: { ru: 'свинья', plain: true }, // (the farm pig; its wings are another thing: walking with the plain one, flying only with «Максима»)
     sailor: { ru: 'моряк', plain: true },
     // the magic ones: «Максима» only
@@ -191,6 +192,7 @@ export function kindOf(sys, c = {}) {
         case 'o': return 'owl';
         case 'ca': return 'canary';
         case 'sx': return 'spencer';
+        case 'C': return 'custom'; // (a creature of one's own: CustomCreatures.js)
         case 'g': return 'gargoyle';
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';

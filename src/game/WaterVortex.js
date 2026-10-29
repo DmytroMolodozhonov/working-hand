@@ -836,6 +836,7 @@ export class WaterVortex {
             cr.stunT = Math.max(cr.stunT || 0, knock ? 2.5 : 0.8);
         } else if (tk === 'f') g.phoenixes?.watered?.(cr, _b.copy(dir).multiplyScalar(speed * 0.6).setY(knock ? 5 : 3), by); // (a phoenix: thrown, its flame put out — no harm)
         else if (tk === 'g') g.gargoyles?.watered?.(cr, null, by); // (an infernal gargoyle: water pushes it, no harm)
+        else if (tk === 'C') g.customCreatures?.watered?.(cr, null, by); // (a creature of one's own)
         else if (tk === 'N') g.canaries?.hit?.(cr, 0, 'Water', by); // (a canary: water shoves it and angers the camp)
         else if (tk === 'S') { g.spencers?.hit?.(cr, 0, 'Water', by); return; } // (the invisible bird: water startles it, no harm)
         else if (tk === 'o') { g.owls?.watered?.(cr, null, by); return; } // (an owl: water is no scroll's spell — it darts away untouched)
@@ -1389,6 +1390,7 @@ export class WaterVortex {
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, CD, 'FireMaxima'); // (a living tree: fire is the only thing that hurts it)
                     else if (b.kind === 'f') g.phoenixes?.hit?.(cr, 0, 'FireMaxima', e.by); // (a phoenix: fire doesn't harm it — an attack)
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, CD, 'FireMaxima', e.by); // (hellish: fire does not touch an infernal gargoyle)
+                    else if (b.kind === 'C') g.customCreatures?.hit?.(cr, CD, 'FireMaxima', e.by);
                     else if (b.kind === 'N') g.canaries?.hit?.(cr, CD, 'FireMaxima', e.by); // (a canary burns and runs)
                     else if (b.kind === 'S') g.spencers?.hit?.(cr, 3, 'FireMaxima', e.by); // (the invisible bird: burnt)
                     else if (b.kind === 'o') g.owls?.hit?.(cr, 0, 'FireMaxima', e.by); // (an owl: not a scroll's — it darts away)

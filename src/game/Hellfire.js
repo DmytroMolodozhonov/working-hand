@@ -627,6 +627,7 @@ export class Hellfire {
                     else if (b.kind === 't') g.livingTrees?.hit?.(cr, dmg, HELLFIRE.NAME); // (fire: the only thing that kills a living tree)
                     else if (b.kind === 'f') g.phoenixes?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (a phoenix: born of fire — no harm, but an attack)
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (hellish itself: the hellfire does not touch an infernal gargoyle)
+                    else if (b.kind === 'C') g.customCreatures?.hit?.(cr, dmg, 'Hellfire', by); // (a creature of one's own burns, if not a fire-breather)
                     else if (b.kind === 'N') g.canaries?.hit?.(cr, dmg, 'Hellfire', by); // (a canary burns and runs; the camp turns on the caster)
                     else if (b.kind === 'S') g.spencers?.hit?.(cr, Math.max(dmg, 3), HELLFIRE.NAME, by); // (the invisible bird: burnt)
                     else if (b.kind === 'o') g.owls?.hit?.(cr, dmg, HELLFIRE.NAME, by); // (an owl: no scroll's fire — it darts away)

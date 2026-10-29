@@ -742,6 +742,33 @@ const FX = {
     endLev(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.6, 0.25, (u) => 700 - 450 * u, swell(0.05, 0.7), 2); return finish(o, sr, { peak: 0.4 }); },
     /** The living tree is a tree again: a long wood groan and a dull thud. */
     endAlive(sr) { const o = buf(sr, 1.4), r = rng(89); glide(o, sr, 0, 1.1, 0.25, (u) => 120 - 60 * u + 6 * Math.sin(u * 70), swell(0.1, 0.3), 6); drum(o, sr, 1, 0.5, 55, 0.4, r); return finish(o, sr, { peak: 0.6 }); },
+    /** A creature of one's own calls (CustomCreatures: pitched by its size — the playback rate): a two-note chirp-and-coo. */
+    fxCreatureCall(sr) {
+        const o = buf(sr, 0.9);
+        glide(o, sr, 0, 0.32, 0.5, (u) => 620 + 380 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI), 3);
+        glide(o, sr, 0.38, 0.42, 0.45, (u) => 760 - 260 * u, (u) => Math.sin(u * Math.PI) * (1 - u * 0.3), 3);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** …growls (a hostile one biting): a low rough snarl. */
+    fxCreatureGrowl(sr) {
+        const o = buf(sr, 1.1), r = rng(229);
+        glide(o, sr, 0, 1.0, 0.55, (u) => 95 + 30 * Math.sin(u * 23) + 20 * u, (u) => Math.min(1, u * 8) * (1 - u), 6);
+        noise(o, sr, 0, 1.0, 0.35, () => 0.12, (u) => Math.min(1, u * 6) * (1 - u), r);
+        return finish(o, sr, { peak: 0.75 });
+    },
+    /** …sings (its song stills the hostile): a short gentle trill of three notes. */
+    fxCreatureSong(sr) {
+        const o = buf(sr, 1.6);
+        [[0, 'E6'], [0.35, 'G6'], [0.7, 'B6'], [1.0, 'E7']].forEach(([t, n]) => { glide(o, sr, t, 0.42, 0.3, (u) => hz(n) * (1 + 0.012 * Math.sin(u * 60)), (u) => Math.sin(u * Math.PI), 2); bell(o, sr, hz(n) / 2, t, 0.05, 0.8); });
+        return finish(o, sr, { peak: 0.65 });
+    },
+    /** …breathes (fire, cold, water, poison): a rushing roar. */
+    fxCreatureBreath(sr) {
+        const o = buf(sr, 1.2), r = rng(233);
+        noise(o, sr, 0, 1.15, 0.6, (u) => 0.25 + 0.3 * Math.sin(u * Math.PI), (u) => Math.min(1, u * 10) * Math.pow(1 - u, 0.7), r);
+        glide(o, sr, 0, 1.0, 0.15, (u) => 140 - 50 * u, (u) => Math.min(1, u * 6) * (1 - u), 4);
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** «Да пусть создастся»: the creation is whole — a bright chord blooming with a shimmer. */
     fxCreationBloom(sr) {
         const o = buf(sr, 1.9);

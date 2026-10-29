@@ -36,6 +36,7 @@ export function eachBody(g, fn) {
     for (const d of g.dragons?.list || []) if (!d.dead) fn('dragon', d, dragonCenter(d));
     for (const f of g.phoenixes?.list || []) if (!f.dead && f.group) fn('phoenix', f, phoenixCenter(f));
     for (const o of g.owls?.list || []) if (!o.dead && o.group) fn('owl', o, owlCenter(o));
+    for (const c of g.customCreatures?.list || []) if (!c.dead && c.born >= 1) fn('custom', c, g.customCreatures.centre(c)); // (creatures of one's own — CustomCreatures.TARGETS)
     for (const c of g.canaries?.list || []) if (!c.dead && c.model) fn('canary', c, new THREE.Vector3(c.model.position.x, c.model.position.y + 1.2, c.model.position.z)); // (the swamp Canaries: Canaries.hit)
     for (const o of g.spencers?.list || []) if (!o.dead && o.group) fn('spencer', o, spencerCenter(o)); // (the invisible bird: the wave kills it)
     for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o)); // (the infernal gargoyles: GargoyleRules.TARGETS)
@@ -61,8 +62,9 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'dragon': g.dragons?.hit(c, dmg, spell, by); break;
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;
         case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break; // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
-        case 'canary': g.canaries?.hit(c, dmg, spell, by); break; // (a canary: the wave hurts it; the camp turns on the caster)
+        case 'canary': g.canaries?.hit(c, dmg, spell, by); break;
         case 'spencer': g.spencers?.hit(c, dmg, spell, by); break;
+        case 'custom': g.customCreatures?.hit(c, dmg, spell, by); break; // (a creature of one's own: its own immunities — CustomCreatures.hit) // (a canary: the wave hurts it; the camp turns on the caster)
         case 'owl': g.owls?.hit(c, dmg, spell, by); break; // (Inspirius — a scroll's — kills it; Circle Attack it darts away from: Owls.TARGETS)
         case 'tree': if (treeKind) g.livingTrees?.hit(c, dmg, treeKind, by); break;
         case 'book': g.books?.hitAt(pos, 0.3, by, null); break;

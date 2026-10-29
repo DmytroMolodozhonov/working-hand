@@ -177,6 +177,7 @@ import { ZombieSpawn, worldLights, litAt, inSunlight, ZSPAWN, lightLevel } from 
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
 import { DivineCreation } from './DivineCreation.js';
+import { CustomCreatures } from './CustomCreatures.js';
 import { IceMagic } from './IceMagic.js';
 import { Space } from './Space.js';
 import { PlanetMagic, PLANET_SPELLS } from './PlanetMagic.js';
@@ -411,7 +412,7 @@ export class Game {
             storm: (origin) => this.storm?.start(origin, 13),
             sun: (origin, by, side) => this.sun?.cast(origin, by, side),
             rain: () => this.storm?.startRain(), // («Let it rain»: the whole world, everybody sees it)
-            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
+            lightningAt: (point, casterId) => { if (this.temple?.wards(point, 3)) { this.temple.wardHit(point, 3); return; } point = this._wardLightning(point, casterId); this.storm?.endIn(3); this.books?.hitAt(point, 3); this.houses?.hitAt(point, 3); if (this.authority) this.customCreatures?.hitAt(point, 3, LIGHTNING, 'LightningStrike', casterId); this.animals?.hitAt(point, 3, LIGHTNING, casterId); if (this.authority) { this.castleLife?.alarm(point, 'blast', casterId, 3); this.crystals?.hitAt(point, 3, casterId, 'Lightning'); this.spiders?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.phoenixes?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.owls?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.spencers?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.plants?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.canaries?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.flora?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.gargoyles?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.dragons?.noise(point, casterId); this.iceCastle?.hitAt(point, 3, LIGHTNING, 'Lightning', casterId); this.iceCastle?.attacked?.(point, 3, casterId); this.castleLife?.hitAt(point, 3, LIGHTNING, casterId); this.livingTrees?.hitAt(point, 3, LIGHTNING, 'Lightning'); this.ships?.lightningAt(point, casterId); this.ships?.crew.hitAt(point, 3, LIGHTNING, casterId, 'Lightning'); this.carriages?.hitAt(point, 3, 30, casterId, 'lightning'); } },
             thunder: (o, d, casterId, deal) => thunderZone(this, o, d, casterId, deal), // («Thunderwave»: the creatures in its zone — ThunderWave.js)
             clearWay: (a, b) => clearWay(this, a, b),
             roofAt: (x, y, z) => roofAbove(this, x, y, z), // («Thunderwave»: a roof over the point takes the bolt)
@@ -431,6 +432,7 @@ export class Game {
                 if (this.authority) { this.dragons?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); if (name === 'Thunderwave') this.dragons?.noise(o); } // (dragons: fire does nothing — DragonKinds.ON_DRAGON)
                 if (this.authority) this.phoenixes?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (fire and ice: no harm to a phoenix — Phoenixes.TARGETS)
                 if (this.authority) this.flora?.hitRay(o, d, len, width, 5, name); // (wild plants: fire burns, cold does nothing — MagicFlora.floraHarm)
+                if (this.authority) this.customCreatures?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (creatures of one's own: CustomCreatures.hit)
                 if (this.authority) this.canaries?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name, this.localId); // (the swamp Canaries: a ray hurts them; the camp turns on the caster — Canaries.js)
                 if (this.authority) this.plants?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (plants: a ray cuts them; cold kills a flower, freezes a head)
                 if (this.authority) this.spencers?.hitRay(o, d, len, width, name === 'Thunderwave' ? 8 : 5, name); // (the invisible bird: any real harm kills it — SpencerRules.verdict)
@@ -619,6 +621,7 @@ export class Game {
         this.gargoyles = new Gargoyles(this); // the infernal gargoyles of the pentagram: not met anywhere else; 30 at a ritual (Gargoyles.js)
         this.flora = new MagicFloraLife(this); // wild magic plants: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees (MagicFlora.js; worlds of BAKSADI_FROM_GEN and newer)
         this.plants = new Plants(this); // plant creatures: telewilpins (thorny red glowing flowers) and carnivorous heads (Plants.js)
+        this.customCreatures = new CustomCreatures(this); // creatures of one's own («Да пусть создастся существо …»: CustomCreatures.js)
         this.canaries = new Canaries(this); // the swamp Canaries: small strong people who hurl boulders at trespassers (Canaries.js)
         this.spencers = new SpencerBirds(this); // the invisible bird of Spencer: pink and glowing, seen only by one who sees the invisible (SpencerBirds.js)
         this.beslan = new BeslanGrass(this); // Beslan's grass: grows for one who sees the invisible (BeslanGrass.js)
@@ -1042,6 +1045,7 @@ export class Game {
         if (z.isPhoenix) { this.phoenixes.hit(z, dmg, isWeapon ? 'melee' : 'punch', this.localId); return; }
         if (z.isGargoyle) { this.gargoyles.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (stone: a blow hurts it, a fist less — GargoyleRules.TARGETS)
         if (z.isPlant) { this.plants.hit(z.plant, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a telewilpin / a carnivorous head: a blade hurts, a fist hardly — PlantLife.plantDamage)
+        if (z.isCustom) { this.customCreatures.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a creature of one's own: CustomCreatures.hit)
         if (z.isCanary) { this.canaries.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a canary: a blade hurts, a fist little — the camp turns on you: Canaries.hit)
         if (z.isSpencer) { this.spencers.hit(z, dmg, isWeapon ? 'melee' : 'punch', this.localId); return; } // (a blow kills the little bird — SpencerRules.verdict)
         if (z.isOwl) { this.owls.hit(z, dmg, isWeapon ? 'melee' : 'punch', this.localId); return; } // (quicker than a hand: it dodges — Owls.TARGETS)
@@ -1194,7 +1198,7 @@ export class Game {
         this.books?.hitAt(pos, radius + 1);
         this.houses?.hitAt(pos, radius);
         if (authoritative && power >= 1) this.livingTrees?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); // (a burst tears a living tree apart — not a cannonball)
-        if (authoritative) { this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.spencers?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.canaries?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
+        if (authoritative) { this.customCreatures?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.animals?.hitAt(pos, radius, BLAST * power, casterId); this.spiders?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.phoenixes?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.owls?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.spencers?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.plants?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.canaries?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.flora?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.gargoyles?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.dragons?.hitAt(pos, radius, BLAST * power, 'Bombardo', casterId); this.dragons?.noise(pos, casterId); this.iceCastle?.hitAt(pos, radius, BLAST * power, power > 1 ? 'BombardoMaxima' : 'Bombardo', casterId); this.iceCastle?.attacked?.(pos, radius, casterId); this.castleLife?.hitAt(pos, radius, BLAST * power, casterId); this.ships?.blast(pos, radius, power, casterId); this.ships?.crew.hitAt(pos, radius, BLAST * power, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); this.carriages?.hitAt(pos, radius, 25 * power, casterId, 'blast'); this.crystals?.hitAt(pos, radius, casterId, power > 1 ? 'BombardoMaxima' : 'Bombardo'); }
         if (!meSafe) this.combat.explosion(pos, radius, power, casterId === 'local' ? this.localId : casterId);
         this.fx.debrisFrom(debris, pos, power > 1 ? 480 : 260);
         if (this.sound) this.sound.playExplosion(pos, this.character.group.position, power);
@@ -2444,6 +2448,9 @@ export class Game {
         if (best?.k === 'o') { if (isFinal) this.hud.setVoice('🦉 Сова слишком умна — «Брейнрот» на неё не действует', true); return null; }
         // (the swamp Canaries: a stubborn mind — «Брейнрот» does not take it)
         for (const c of this.canaries?.targets() || []) consider('N', c.id, c.model.position, 1.2);
+        // (a creature of one's own: «Брейнрот» calms a hostile one for a minute — CustomCreatures.calm)
+        for (const c of this.customCreatures?.targets() || []) consider('C', c.id, c.model.position, c.D.H * 0.5);
+        if (best?.k === 'C') { const cc = this.customCreatures.byId(best.id); if (cc) { if (this.authority) this.customCreatures.calm(cc, 60); if (isFinal) this.hud.setVoice(`🌀 «${cc.recipe.name}» успокоилось на минуту`, true); } return 'Brainrot'; }
         if (best?.k === 'N') { if (isFinal) this.hud.setVoice('🪨 Упрямый разум канарика «Брейнрот» не берёт', true); return null; }
         // (the Ice Castle's creatures: the queen's will holds them — the rod alone commands the snowmen)
         for (const c of this.iceCastle?.targets() || []) consider('I', c.id, c.model.position, c.h * 0.5);
@@ -2993,6 +3000,7 @@ export class Game {
             this.owls?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId);
             this.canaries?.hitRay(o, d, len, 0.6, 2, 'Inferno', casterId); // (a canary burns and runs: Canaries.hit — fire)
             this.spencers?.hitRay(o, d, len, 0.6, 3, 'Inferno', casterId); // (fire burns the invisible bird: its feather falls)
+            this.customCreatures?.hitRay(o, d, len, 0.6, 2, 'Inferno', casterId); // (a creature of one's own burns, unless it breathes fire)
             this.plants?.hitRay(o, d, len, 0.6, 4, 'Inferno', casterId); // (fire: plants burn fast)
             this.flora?.hitRay(o, d, len, 0.6, 4, 'Inferno'); // (the wild plants burn too)
             this.gargoyles?.hitRay(o, d, len, 0.6, 0, 'Inferno', casterId); // (hellish: fire does not touch a gargoyle, but it is an attack) // (an owl: no scroll's spell — it darts away)
@@ -3403,7 +3411,7 @@ export class Game {
         for (const m of glowSamples()) zoo.add(m); // (the rune shell of an enchanted thing)
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
-        for (const m of this.canaries?.sampleModels?.() || []) zoo.add(m); // (a canary and its boulder, the camp's props and reeds)
+        for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)
         for (const m of this.spencers?.sampleModels?.() || []) zoo.add(m); // (the rose bird, its halo and the see-through material — only a seer ever has them in play, but the shader is compiled now)
         for (const m of this.beslan?.sampleModels?.() || []) zoo.add(m); // (Beslan's grass: its shader)
         for (const m of this.owls?.sampleModels?.() || []) zoo.add(m); // (the owl's shimmering plumage; its feather shares it)
@@ -3706,6 +3714,7 @@ export class Game {
         if (earth && !duelOnly) this.owls.update(dt);
         if (earth && !duelOnly) this.canaries.update(dt);
         if (earth && !duelOnly) { this.spencers.update(dt); this.beslan.update(dt); }
+        if (!duelOnly) this.customCreatures?.update(dt); // (creatures of one's own: on the Earth and the planets with air)
         if (earth && !duelOnly) this.plants.update(dt);
         if (earth && !duelOnly) this.flora?.update(dt);
         if (earth && !duelOnly) { // (one system's fault must not end the game: the full stack goes to the console, the game goes on)
@@ -3759,7 +3768,7 @@ export class Game {
         if (this.playerAttackCooldown > 0) this.playerAttackCooldown -= dt;
         if (earth) this._updateZombies(dt);
         this.creatureImpact.update(dt); // (after every creature moved: their falls and staggers are drawn on top)
-        this.weapons.checkHits(this.zombies.concat(this.plants.targets(), this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.dragons.targets(), this.phoenixes.targets(), this.castleLife.targets(), this.spencers.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : [], this.owls.targets(), this.iceCastle.targets(), this.gargoyles.targets(), this.canaries.targets()), dt);
+        this.weapons.checkHits(this.zombies.concat(this.plants.targets(), this.combat.enabled ? this.combat.meleeTargets() : [], this.animals.targets(), this.spiders.targets(), this.dragons.targets(), this.phoenixes.targets(), this.castleLife.targets(), this.spencers.targets(), this.livingTrees.targets(), this.ships ? this.ships.crew.targets() : [], this.owls.targets(), this.iceCastle.targets(), this.gargoyles.targets(), this.canaries.targets(), this.customCreatures.targets()), dt);
         this.dismember.update(dt);
         this.hurtFlash?.update(dt); // (a creature that lost HP glows red a moment — every computer sees it)
         mark('зомби');
@@ -4679,6 +4688,7 @@ export class Game {
         this.spencers?.dispose();
         this.beslan?.dispose();
         this.sight?.dispose();
+        this.customCreatures?.dispose();
         this.plants?.dispose();
         this.flora?.dispose();
         this.gargoyles?.dispose();

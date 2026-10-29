@@ -44,3 +44,63 @@ test('the skin: a picture of its colours and pattern, made the same each time', 
     for (let i = 0; i < a.length; i += 4) if (a[i + 2] > a[i] + 20) blue++;
     assert.ok(blue > a.length / 4 * 0.3, 'mostly blue');
 });
+
+// ---- the creatures in a small world without a screen
+import { CustomCreatures } from '../../src/game/CustomCreatures.js';
+import { CREATION, recipeKey } from '../../src/game/CreationRules.js';
+function world() {
+    const hurt = [];
+    const g = {
+        config: { mode: 'freeworld' }, authority: true, localId: 'me', scene: new THREE.Scene(), remotes: new Map(),
+        character: { group: { position: new THREE.Vector3(30, 3.5, 0), rotation: { y: 0 } } },
+        collision: { groundAt: () => 0, groundY: () => 0, resolveCylinder() {} },
+        terrain: { data: { get: () => 0 } },
+        combat: { enabled: true, dead: false, damage(n, by, kind) { hurt.push([n, kind]); }, heal() {} },
+        hud: { setVoice() {} }, fx: { spark() {}, lightFlash() {} }, isNight: false,
+        divine: { _key: (id) => 'k:' + id, fx2: { birth() {}, born() {} } },
+    };
+    g.customCreatures = new CustomCreatures(g);
+    return { g, C: g.customCreatures, hurt };
+}
+const step = (C, s) => { for (let t = 0; t < s; t += 0.05) C.update(0.05); };
+
+test('born out of light, it lives: walks about, a hostile one hunts and bites a stranger (never its maker), dies of wounds; fire-breathers do not burn', () => {
+    const { C, hurt } = world();
+    const r = sanitizeRecipe(null, 'злой огнедышащий зверь, 30 здоровья', 1);
+    assert.equal(r.temper, 'hostile'); assert.equal(r.hp, 30); assert.ok(r.abilities.includes('fireBreath'));
+    assert.equal(C.create(r, { x: 0, y: 0, z: 0 }, 'other', { key: 'k:other' }), true);
+    const c = C.list[0];
+    assert.equal(c.born, 0);
+    step(C, CREATION.BIRTH_T + 0.5);
+    assert.equal(c.born, 1, 'grown out of its cocoon');
+    step(C, 20);
+    assert.ok(hurt.length > 0, 'the stranger was bitten or burnt');
+    assert.ok(hurt.every(([n]) => n <= 8), 'never more than the cap');
+    const before = c.hp;
+    C.hit(c, 10, 'Inferno', 'me');
+    assert.equal(c.hp, before, 'a fire-breather does not burn');
+    C.hit(c, 1000, 'blade', 'me');
+    assert.ok(c.dead);
+});
+
+test('its maker is never its prey; a friendly one follows its maker; the limits hold; saved and loaded', () => {
+    const { g, C, hurt } = world();
+    const evil = sanitizeRecipe(null, 'злое существо', 2);
+    assert.equal(C.create(evil, { x: 0, y: 0, z: 0 }, 'me', { key: 'k:me' }), true);
+    step(C, CREATION.BIRTH_T + 15);
+    assert.equal(hurt.length, 0, 'it never bites its own maker');
+    let made = 1;
+    while (C.create(sanitizeRecipe(null, 'злое существо номер ' + made, made + 3), { x: made * 3, y: 0, z: 0 }, 'other') === true) made++;
+    assert.ok(C.list.filter((c) => !c.dead && c.recipe.temper === 'hostile').length <= CREATION.MAX_HOSTILE);
+    const friend = sanitizeRecipe(null, 'добрый пушистый зверёк', 9);
+    C.create(friend, { x: -25, y: 0, z: 0 }, 'me', { key: 'k:me' });
+    const f = C.list.find((c) => c.recipe === C.species.get(recipeKey(friend))?.recipe);
+    step(C, CREATION.BIRTH_T + 20);
+    assert.ok(Math.hypot(f.model.position.x - 30, f.model.position.z) < 40, 'it came towards its maker');
+    const snap = JSON.parse(JSON.stringify(C.snapshot()));
+    const w2 = world();
+    w2.C.restore(snap);
+    assert.equal(w2.C.list.length, C.list.filter((c) => !c.dead).length);
+    assert.equal(w2.C.species.size, C.species.size);
+    void g;
+});

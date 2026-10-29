@@ -169,6 +169,7 @@ export class Levitation {
         for (const o of g.owls?.targets() || []) out.push({ kind: 'owl', obj: o, pos: o.model.position, r: 0.5 });
         // a swamp canary: heavy and very strong — it tears free of «Левиоса» (the camp turns on the caster)
         for (const o of g.canaries?.targets() || []) out.push({ kind: 'canary', obj: o, pos: o.model.position, r: 1.1 });
+        for (const o of g.customCreatures?.targets() || []) out.push({ kind: 'custom', obj: o, pos: o.model.position, r: o.r });
         // an infernal gargoyle: a heavy stone body that tears free of «Левиоса» at once (GargoyleRules.TARGETS.Levitation)
         for (const o of g.gargoyles?.targets() || []) out.push({ kind: 'gargoyle', obj: o, pos: o.model.position, r: 1.2 });
         // living bodies (not wizards: a charge flies at them — see Game)

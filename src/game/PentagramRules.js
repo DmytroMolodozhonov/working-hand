@@ -203,6 +203,7 @@ export const PENTAGRAM_TARGETS = {
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
     spencer: { does: 'none', why: 'не касается' },
+    custom: { does: 'none', why: 'не касается' },
     bodies: { does: 'rite', why: 'тело убитого волшебника (не кости), с которого герой забрал силу, на пентаграмме сгорает в пепел: +25 % силы убитого, один раз на тело' },
     items: { does: 'none', why: 'вещи на земле не трогает' },
     blocks: { does: 'none', why: 'блоков не ломает; если земля под рисунком изменилась — пентаграмма гаснет' },

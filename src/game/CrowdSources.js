@@ -86,6 +86,12 @@ export function crowdOf(g) {
             const p = c.model.position;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.canary, ref: c, id: c.id, kind: 'canary' });
         }
+        // creatures of one's own («Да пусть создастся»: CustomCreatures.js) on the ground (a flying one is above everybody), as big as each is
+        for (const c of g.customCreatures?.list || []) {
+            if (c.dead || c.born < 1 || c.flying) continue;
+            const p = c.model.position;
+            push({ x: p.x, y: p.y, z: p.z, r: c.r, ref: c, id: c.id, kind: 'custom' });
+        }
         // infernal gargoyles flying low (a hunt at the people's height: nobody walks through one — Gargoyles.js; high up they are above everybody)
         for (const o of g.gargoyles?.list || []) {
             if (o.dead || !o.model) continue;

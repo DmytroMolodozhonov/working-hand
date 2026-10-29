@@ -647,7 +647,7 @@ export class CustomCreatures {
             fx.spark?.(from, col[i % 2], k === 'fireBreath' ? 0.22 : 0.14, _v2.set(dir.x * sp + rnd(-1.2, 1.2), dir.y * sp + rnd(-0.6, 1), dir.z * sp + rnd(-1.2, 1.2)), Math.min(1.6, L / sp + 0.2));
         }
         if (k === 'fireBreath') fx.lightFlash?.(from, 0xff8a2a, 3, 0.4, 25);
-        this.game.sound?.playSpellFxAt?.(k === 'fireBreath' ? 'fxFire' : k === 'lightning' ? 'fxElectrum' : k === 'iceBreath' ? 'fxIce' : 'fxCreatureCall', from, 0.7, 1, 10);
+        this.game.sound?.playSpellFxAt?.(k === 'lightning' ? 'fxElectrum' : k === 'heal' ? 'fxHeal' : k === 'sing' ? 'fxCreatureSong' : 'fxCreatureBreath', from, 0.7, k === 'iceBreath' || k === 'waterSpit' ? 1.3 : 1, 10);
     }
 
     /** The helpful abilities: water on a fire near, healing its kind and its maker, a song stilling the hostile. */

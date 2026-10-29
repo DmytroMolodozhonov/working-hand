@@ -470,6 +470,7 @@ export class ImperiusControl {
         for (const d of g.dragons?.list || []) if (!d.dead) consider('D', d.id, d.model.position.x, d.model.position.y, d.model.position.z);
         for (const sp of g.spiders?.list || []) if (!sp.dead) consider('s', sp.id, sp.model.position.x, sp.model.position.y, sp.model.position.z); // (the spider: a servant's key)
         for (const t of g.livingTrees?.list || []) if (!t.isDead) consider('t', t.id, t.model.position.x, t.model.position.y, t.model.position.z);
+        for (const cc of g.customCreatures?.list || []) if (!cc.dead && cc.born >= 1) consider('C', cc.id, cc.model.position.x, cc.model.position.y, cc.model.position.z); // (a creature of one's own: only the Maxima)
         for (const cn of g.canaries?.list || []) if (!cn.dead) consider('ca', cn.id, cn.model.position.x, cn.model.position.y, cn.model.position.z); // (a swamp canary)
         for (const ic of g.iceCastle?.list || []) if (!ic.dead) consider('I', ic.id, ic.model.position.x, ic.model.position.y, ic.model.position.z);
         for (const sv of g.ships?.crew?.byId?.values?.() || []) if (!sv.dead) consider('sl', sv.id, sv.x, sv.y, sv.z);
@@ -489,6 +490,7 @@ export class ImperiusControl {
         if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
         d.normalize();
         const n = Math.max(1, Math.min(20, dmg | 0)); // (a dragon's bite 14 at most — DRAGON.BITE)
+        if (tk === 'C') { const cc = g.customCreatures?.byId(tid); if (cc) g.customCreatures.hit(cc, n, 'melee', by); return; }
         if (tk === 'ca') { const cn = g.canaries?.byId(tid); if (cn && !cn.dead) g.canaries.hit(cn, n, 'melee', by); return; } // (a canary struck by a possessed creature)
         if (tk === 'sl') { const v = g.ships?.crew?.byId?.get(tid); if (v && !v.dead) g.ships.crew.hit(v, n, d, by, { via: 'servant' }); return; } // (a sailor)
         g.servants?.damage?.({ k: tk, id: tid }, n, d, by, 'servant', src);

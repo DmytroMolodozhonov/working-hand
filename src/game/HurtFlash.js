@@ -54,6 +54,7 @@ export class HurtFlash {
         for (const f of g.phoenixes?.list || []) this.watch(f, f.model, f.hp, f.dead, me);
         for (const o of g.owls?.list || []) this.watch(o, o.model, o.hp, o.dead, me);
         for (const o of g.canaries?.list || []) this.watch(o, o.model, o.hp, o.dead, me);
+        for (const o of g.customCreatures?.list || []) this.watch(o, o.model, o.hp, o.dead, me);
         for (const c of g.iceCastle?.list || []) this.watch(c, c.model, c.hp, c.dead, me);
         this._restore();
     }

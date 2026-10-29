@@ -43,6 +43,7 @@ import { iceBody } from './IceQueen.js';
 import { segmentSegmentDistSq } from '../core/math.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
 
+const _cc = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -512,6 +513,12 @@ export class Gear {
                     if (a.hit.has(o) || owlDist(o, p) > 0.2) continue;
                     a.hit.add(o);
                     g.owls.hit(o, a.dmg, 'arrow', a.by);
+                }
+                // a creature of one's own («Да пусть создастся»): an arrow hurts it (CustomCreatures.hit)
+                if (g.authority) for (const o of g.customCreatures?.targets() || []) {
+                    if (a.hit.has(o) || g.customCreatures.centre(o, _cc).distanceTo(p) > o.r + 0.3) continue;
+                    a.hit.add(o);
+                    g.customCreatures.hit(o, a.dmg, 'arrow', a.by);
                 }
                 // a swamp canary (Canaries.js): an arrow hurts it; its camp turns on the shooter
                 if (g.authority) for (const o of g.canaries?.targets() || []) {
