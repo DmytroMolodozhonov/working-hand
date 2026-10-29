@@ -38,11 +38,17 @@ export class DivineCreationFx {
 
     get pool() { return this.game.fx?.fireworks || null; }
 
+    /** The biggest point the video card draws — asked ONCE, on the loading screen (Game.prewarm): the question waits for the card (seconds on a busy one, found in a flight profile). */
+    warm() {
+        if (this._maxPx != null) return;
+        try { const gl = this.game.renderer.getContext(); this._maxPx = Math.min(256, gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64); } catch (e) { this._maxPx = 64; }
+    }
+
     /** How big a metre looks now (the points are sized in metres). */
     _view() {
         const g = this.game, pool = this.pool;
         if (!pool?.view || !g.renderer || !g.camera) return;
-        if (this._maxPx == null) { try { const gl = g.renderer.getContext(); this._maxPx = Math.min(256, gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64); } catch (e) { this._maxPx = 64; } }
+        this.warm();
         const h = g.renderer.getDrawingBufferSize?.(this._sz)?.y || g.renderer.domElement?.height || 720;
         pool.view(h, g.camera.fov || 75, this._maxPx);
     }

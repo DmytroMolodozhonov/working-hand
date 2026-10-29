@@ -256,7 +256,7 @@ export class CustomPlants {
         const night = Math.max(0, Math.min(1, g.fireLights?.darkness?.() ?? (g.dayCycle ? g.world?.nightAmount || 0 : g.isNight ? 1 : 0)));
         this._gt = (this._gt || 0) + dt;
         for (const S of this.species.values()) if (S.haloMesh) S.haloMesh.material.opacity = (0.06 + 0.34 * night) * (0.85 + 0.15 * Math.sin(this._gt * 1.7));
-        if (night < 0.25) return;
+        if (night < 0.25 || !this.list.length) return;
         this._moteT = (this._moteT || 0) - dt;
         if (this._moteT > 0) return;
         this._moteT = 0.12;

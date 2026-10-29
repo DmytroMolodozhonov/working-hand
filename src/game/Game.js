@@ -3560,6 +3560,7 @@ export class Game {
         yield { of: this._pwOf };
         this.arenaDuels?.prewarm(); // (the lit places of a duel: three small shaders)
         yield { of: this._pwOf };
+        this.divine?.fx2?.warm?.(); // (the card's point size: asked once here, not in a night flight)
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         yield { of: this._pwOf };
         this.prewarmedPrograms = this.renderer.info.programs.length;
