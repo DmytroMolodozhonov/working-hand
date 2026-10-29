@@ -1842,11 +1842,15 @@ export class TerrainData {
         }
     }
 
-    /** Drop generated-but-untouched chunks far from (cx, cz); they regenerate identically. */
-    evictFar(cx, cz, radius) {
+    /**
+     * Drop generated-but-untouched chunks far from (cx, cz); they regenerate identically. `keep` {cx, cz}: a second place
+     * whose chunks stay too (the hero's body while the eyes are elsewhere — «Империус»: the creatures, ships and the body
+     * round it still ask for that ground every frame; dropped, it was made again on this thread, 20–50 ms a chunk).
+     */
+    evictFar(cx, cz, radius, keep = null) {
         for (const [key, c] of this.chunks) {
             if (c.modified) continue;
-            if (Math.max(Math.abs(c.cx - cx), Math.abs(c.cz - cz)) > radius) {
+            if (Math.max(Math.abs(c.cx - cx), Math.abs(c.cz - cz)) > radius && !(keep && Math.max(Math.abs(c.cx - keep.cx), Math.abs(c.cz - keep.cz)) <= radius)) {
                 this.chunks.delete(key);
                 if (this._last === c) this._last = null;
             }

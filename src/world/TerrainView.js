@@ -600,7 +600,9 @@ export class Terrain {
         if (this.flora) this.flora.update(focus);
 
         // 3) Forget far, untouched chunk data now and then (it regenerates identically)
-        if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4);
+        // (`keepAt`: the hero's body while the land streams round another place — «Империус»: its ground stays, see evictFar)
+        const k = this.keepAt;
+        if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4, k ? (this._keepC || (this._keepC = { cx: 0, cz: 0 }), this._keepC.cx = Math.floor(k.x / CHUNK), this._keepC.cz = Math.floor(k.z / CHUNK), this._keepC) : null);
     }
 
     /**

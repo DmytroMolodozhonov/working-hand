@@ -3876,6 +3876,8 @@ export class Game {
         // (in space no ground is streamed: the land is where it was — Space.js streams the place it falls to)
         // («Империус»: the eyes are in the creature, up to 1800 m off — the world streams round it, not round the body left standing)
         const focus = this.imperius?.focusPos?.(this._focusV || (this._focusV = new THREE.Vector3())) || this.character.group.position;
+        // (…while the ground round the body stays known: the body, the ships and the creatures near it still stand on it — TerrainView.keepAt)
+        if (this.world.terrain) this.world.terrain.keepAt = focus !== this.character.group.position ? this.character.group.position : null;
         if (!this.space?.inSpace) this.world.update(focus, this._viewBoost);
         this.world.forest?.update(dt, this.character.group.position, this.camera); // (the real trees — Trees.js)
         this.swim.applyFog(); // (under the water: murky and blue)

@@ -193,7 +193,8 @@ export class ArenaMarkFx {
     prewarm() {
         const r = this.game.renderer, cam = this.game.camera;
         if (!r) return;
-        const sc = new THREE.Scene();
+        // (in the game's own scene: its lights and fog are in a program's key — an empty scene made other programs)
+        const sc = this.game.scene;
         for (const p of [this.mine, this.foe]) { p.set(0, 0, -5, 1, 0, true); sc.add(p.group); }
         try { r.compile(sc, cam); } catch (_) { /* (made on the first frame instead) */ }
         for (const p of [this.mine, this.foe]) { sc.remove(p.group); this.root.add(p.group); p.set(0, 0, 0, 0, 0); }

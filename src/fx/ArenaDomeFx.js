@@ -95,9 +95,11 @@ export class ArenaDomeFx {
     prewarm() {
         const r = this.game.renderer, cam = this.game.camera;
         if (!r) return;
-        const sc = new THREE.Scene(), geo = new THREE.SphereGeometry(1, 6, 4), m = new THREE.Mesh(geo, this.mat);
+        // (in the game's own scene: a program's key holds the scene's lights and fog — compiled in an empty scene it was
+        // another program, and the real one was made at the first charge bursting on the dome, in the middle of a duel)
+        const sc = this.game.scene, geo = new THREE.SphereGeometry(1, 6, 4), m = new THREE.Mesh(geo, this.mat);
         m.position.set(0, 0, -5); sc.add(m);
-        try { r.compile(sc, cam); } catch (_) { /* (made on the first frame instead) */ }
+        try { r.compile(sc, cam); } catch (_) { /* (made on the first frame instead) */ } finally { sc.remove(m); }
         geo.dispose();
     }
 

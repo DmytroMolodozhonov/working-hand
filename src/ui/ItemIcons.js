@@ -94,25 +94,59 @@ export class ItemIcons {
         return null;
     }
 
-    /** Make the queued pictures, `budget` ms at most this frame (at least one). */
+    /**
+     * Make the queued pictures, `budget` ms at most this frame (at least one). In play a picture is made in two steps
+     * (WebGL2): this frame it is drawn and its pixels are asked for — without waiting (a pixel buffer and a fence); a
+     * later frame, when the video card has done it, they are taken and the picture is packed by the browser off the
+     * frame (toBlob). Read at once (readRenderTargetPixels) the processor waited for the card to finish everything it
+     * had — the frame's whole picture too — and then packed a PNG: a frame of 46–140 ms each time a new wand came into
+     * the hand (a duel's «Акцио»), in «магия и оружие».
+     */
     update(budget = 2) {
+        if (this._pending && !this._poll()) return 0; // (the card has not done the last one yet: nothing new meanwhile)
         if (!this.queue.length) return 0;
         const t0 = performance.now();
         let n = 0;
-        while (this.queue.length && (n === 0 || performance.now() - t0 < budget)) {
+        while (this.queue.length && !this._pending && (n === 0 || performance.now() - t0 < budget)) {
             const { k, it } = this.queue.shift();
-            this.queued.delete(k);
             if (!this.cache.has(k)) this._make(k, it);
+            if (!this._pending) this.queued.delete(k);
             n++;
         }
-        if (n) this.onReady?.();
+        if (n && !this._pending) this.onReady?.();
         return n;
     }
 
-    /** The loading screen: these things' pictures made now, all of them (Game.warmUp). */
+    /** The loading screen: these things' pictures made now, all of them (Game.warmUp) — read at once, it may wait. */
     warm(items) {
         for (const it of items) this.url(it);
-        this.update(Infinity);
+        this._sync = true;
+        try { this.update(Infinity); } finally { this._sync = false; }
+    }
+
+    /** The asked-for pixels of the picture being made: ready → taken, the picture packed (→ true: the next may start). */
+    _poll() {
+        const P = this._pending, gl = this.renderer.getContext();
+        if (gl.isContextLost()) { this._pending = null; this.queued.delete(P.k); return true; } // (the card's buffers are gone: made again when asked)
+        if (gl.getSyncParameter(P.sync, gl.SYNC_STATUS) !== gl.SIGNALED) return false; // (never read before: that is the very wait this avoids)
+        this._pending = null;
+        gl.deleteSync(P.sync);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, P.pbo);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this._buf);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        gl.deleteBuffer(P.pbo);
+        this.queued.delete(P.k);
+        try { this._pack(P.k, true); } catch (e) { console.warn('[ItemIcons]', P.k, e); this.failed.add(P.k); }
+        return true;
+    }
+
+    _store(k, url) {
+        this.cache.set(k, url);
+        if (this.cache.size > ICON_CACHE_MAX) {
+            const old = this.cache.keys().next().value, u = this.cache.get(old);
+            this.cache.delete(old);
+            if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u); // (a picture already shown stays shown)
+        }
     }
 
     /** The same, a few pictures at a time with the thread given back between (the loading screen stays alive). */
@@ -138,8 +172,6 @@ export class ItemIcons {
         this._cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
         this._rt = new THREE.WebGLRenderTarget(SIZE, SIZE, { format: THREE.RGBAFormat });
         this._buf = new Uint8Array(SIZE * SIZE * 4);
-        this._big = document.createElement('canvas');
-        this._big.width = this._big.height = SIZE;
         this._out = document.createElement('canvas');
         this._out.width = this._out.height = OUT;
     }
@@ -162,10 +194,7 @@ export class ItemIcons {
             this._setup();
             made = this._model(it);
             if (!made?.m) { this.failed.add(k); return; }
-            const url = this._draw(made.m);
-            if (!url) { this.failed.add(k); return; }
-            this.cache.set(k, url);
-            if (this.cache.size > ICON_CACHE_MAX) this.cache.delete(this.cache.keys().next().value);
+            if (!this._draw(made.m, k)) { this.failed.add(k); return; }
         } catch (e) {
             console.warn('[ItemIcons]', k, e);
             this.failed.add(k);
@@ -174,8 +203,11 @@ export class ItemIcons {
         }
     }
 
-    /** One model into a picture: turned so its long side goes across the cell, a little from above. */
-    _draw(m) {
+    /**
+     * One model into a picture: turned so its long side goes across the cell, a little from above. → false: nothing to
+     * draw. The picture comes into the cache at once (the loading screen, no WebGL2) or a few frames later (_poll).
+     */
+    _draw(m, k) {
         const r = this.renderer, scene = this._scene, cam = this._cam;
         const pivot = new THREE.Group();
         const pos = m.position.clone(), quat = m.quaternion.clone();
@@ -185,7 +217,7 @@ export class ItemIcons {
         const box = new THREE.Box3();
         pivot.updateMatrixWorld(true);
         seenBox(m, box);
-        if (box.isEmpty()) { pivot.remove(m); m.position.copy(pos); m.quaternion.copy(quat); return null; }
+        if (box.isEmpty()) { pivot.remove(m); m.position.copy(pos); m.quaternion.copy(quat); return false; }
         const s = box.getSize(new THREE.Vector3());
         // a long thing (a wand, a sword, a scroll, a staff) lies aslant; the rest — a little turned, seen from above
         const long = Math.max(s.x, s.y, s.z), across = Math.max(1e-3, Math.min(s.x, s.y, s.z));
@@ -206,13 +238,25 @@ export class ItemIcons {
         cam.updateProjectionMatrix();
         const prevRT = r.getRenderTarget(), prevColor = r.getClearColor(new THREE.Color()), prevAlpha = r.getClearAlpha();
         const prevAuto = r.autoClear;
+        const gl = r.getContext();
+        const later = !this._sync && r.capabilities?.isWebGL2 && typeof gl.fenceSync === 'function';
         try {
             r.setRenderTarget(this._rt);
             r.setClearColor(0x000000, 0);
             r.autoClear = true;
             r.clear();
             r.render(scene, cam);
-            r.readRenderTargetPixels(this._rt, 0, 0, SIZE, SIZE, this._buf);
+            if (later) {
+                // (asked for, not waited for: the pixels go into a buffer of the card's; a fence says when they are there)
+                const pbo = gl.createBuffer();
+                gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+                gl.bufferData(gl.PIXEL_PACK_BUFFER, SIZE * SIZE * 4, gl.STREAM_READ);
+                gl.readPixels(0, 0, SIZE, SIZE, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+                gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+                const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+                gl.flush();
+                this._pending = { k, pbo, sync, t: performance.now() };
+            } else r.readRenderTargetPixels(this._rt, 0, 0, SIZE, SIZE, this._buf);
         } finally {
             r.setRenderTarget(prevRT);
             r.setClearColor(prevColor, prevAlpha);
@@ -222,19 +266,42 @@ export class ItemIcons {
             m.position.copy(pos);
             m.quaternion.copy(quat);
         }
-        // (the GL picture is upside down)
-        const ctx = this._big.getContext('2d'), img = ctx.createImageData(SIZE, SIZE), row = SIZE * 4;
-        for (let y = 0; y < SIZE; y++) img.data.set(this._buf.subarray((SIZE - 1 - y) * row, (SIZE - y) * row), y * row);
-        ctx.putImageData(img, 0, 0);
-        const out = this._out.getContext('2d');
-        out.clearRect(0, 0, OUT, OUT);
-        out.imageSmoothingEnabled = true;
-        out.imageSmoothingQuality = 'high';
-        out.drawImage(this._big, 0, 0, OUT, OUT);
-        return this._out.toDataURL('image/png');
+        if (!later) this._pack(k, false);
+        return true;
+    }
+
+    /**
+     * The read pixels (this._buf) into the cell's picture. `later`: packed by the browser off the frame (toBlob — the
+     * canvas is copied at the call), the cache and the slots get it when it is ready; else at once (a data URL).
+     */
+    _pack(k, later) {
+        // (made half as big here, on the processor, each picture's pixel the mean of four — weighed by how opaque they are, as a
+        // smooth scale draws it — and turned up the right way (the GL picture is upside down); the small canvas lives in the
+        // processor's memory (willReadFrequently): no call waits on the video card, as a card-backed canvas's drawImage did)
+        const out = this._ctx || (this._ctx = this._out.getContext('2d', { willReadFrequently: true }));
+        const img = this._img || (this._img = out.createImageData(OUT, OUT)), d = img.data, b = this._buf, row = SIZE * 4;
+        for (let y = 0; y < OUT; y++) {
+            const r0 = (SIZE - 1 - 2 * y) * row, r1 = r0 - row;
+            for (let x = 0; x < OUT; x++) {
+                const i0 = r0 + x * 8, i1 = r1 + x * 8;
+                const a0 = b[i0 + 3], a1 = b[i0 + 7], a2 = b[i1 + 3], a3 = b[i1 + 7], a = a0 + a1 + a2 + a3, o = (y * OUT + x) * 4;
+                if (a === 0) { d[o] = d[o + 1] = d[o + 2] = d[o + 3] = 0; continue; }
+                for (let c = 0; c < 3; c++) d[o + c] = (b[i0 + c] * a0 + b[i0 + 4 + c] * a1 + b[i1 + c] * a2 + b[i1 + 4 + c] * a3) / a;
+                d[o + 3] = (a + 2) >> 2;
+            }
+        }
+        out.putImageData(img, 0, 0);
+        if (!later || typeof this._out.toBlob !== 'function') { this._store(k, this._out.toDataURL('image/png')); if (later) this.onReady?.(); return; }
+        this._out.toBlob((blob) => {
+            if (!blob) { this.failed.add(k); return; }
+            this._store(k, URL.createObjectURL(blob));
+            this.onReady?.();
+        }, 'image/png');
     }
 
     dispose() {
+        const P = this._pending;
+        if (P) { const gl = this.renderer.getContext(); gl.deleteSync(P.sync); gl.deleteBuffer(P.pbo); this._pending = null; }
         this._rt?.dispose();
         this.cache.clear();
         this.queue.length = 0;
