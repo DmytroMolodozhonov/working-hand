@@ -35,7 +35,7 @@ try {
             for (; i < 3000 && (d.listening || d.magic || d.mine); i++) { if (i % 3) d.update(0.1); await frame(); if (i % 100 === 0) out.push(['t', i, d.listening ? 'listening' : '', d.magic?.phase, d.magic?.desc]); }
             for (let k = 0; k < 60; k++) await frame();
             g.hud.setVoice = sv;
-            return { out, frames: i, said, creatures: g.customCreatures?.list.length, plants: g.customPlants?.list.length, builds: d.list?.size };
+            return { out, frames: i, said, journal: [...(g.spellLog?.lines || [])].filter((l) => /создастся/.test(l)).slice(-14), sounds: ['loopGenesisEpic', 'stCreationHeard', 'thCreation'].map((k) => k + ':' + !!g.sound?.sounds?.[k]), creatures: g.customCreatures?.list.length, plants: g.customPlants?.list.length, builds: d.list?.size };
         }, desc);
         console.log(desc, JSON.stringify(r));
         await page.screenshot({ path: path.join(shots, `divine-${n}.png`) });

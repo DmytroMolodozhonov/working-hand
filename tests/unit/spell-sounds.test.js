@@ -40,6 +40,7 @@ test('the sounds: tunes 5–15 s, effects short, all sounding and finite, the sa
         const d = gen(SPELL_SR), s = d.length / SPELL_SR;
         if (TUNE_KEYS.includes(k)) assert.ok(s >= 5 && s <= 15, `${k}: ${s.toFixed(1)} s`);
         else if (k.startsWith('fx') || k.startsWith('end')) assert.ok(s <= 2, `${k}: ${s.toFixed(1)} s`);
+        else if (k.startsWith('st')) assert.ok(s <= 4, `${k}: ${s.toFixed(1)} s`); // (a stinger: a great spell's one musical moment — «Да пусть создастся»: the words heard)
         let p = 0;
         for (const x of d) { assert.ok(Number.isFinite(x), k); p = Math.max(p, Math.abs(x)); }
         assert.ok(p > 0.1 && p <= 0.96, `${k}: peak ${p}`);

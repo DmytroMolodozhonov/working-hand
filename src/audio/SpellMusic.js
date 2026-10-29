@@ -3,6 +3,7 @@
  *
  *   th*    tunes (5–15 s) for the great, rare spells: each its own melody, never looped
  *   fx*    short effects for the everyday spells (Lumos, charges, Accio…): no melody that tires
+ *   st*    stingers (≤ 4 s): one musical moment of a great spell (the words of «Да пусть создастся» heard)
  *   loop*  quiet loops while a spell is held (Concentration.HELD), end* — the sound when it stops
  *
  * Pure: (sample rate) → samples, deterministic (the same on every computer). Made ahead in a worker
@@ -540,6 +541,22 @@ const FX = {
      * «Visible Godi»: an eye opening — a soft breath rustling up, a veiled glassy glide rising through it, then a little
      * wondering tune of four bells (B, D#, F#, B) and a bloom of pad under the last one.
      */
+    /**
+     * «Да пусть создастся»: the words are heard — a timpani roll swelling under a rising cymbal, then the whole choir and the
+     * brass strike D major at once with a crash, and bells fall like sparks (3.8 s).
+     */
+    stCreationHeard(sr) {
+        const o = buf(sr, 3.8), r = rng(233);
+        for (let q = 0; q < 22; q++) drum(o, sr, q * 0.058, 0.12 + 0.5 * (q / 22) ** 2, 58, 0.5, r); // the roll
+        noise(o, sr, 0, 1.3, 0.2, (u) => 0.05 + 0.6 * u, (u) => u * u, r); // the cymbal rising
+        drum(o, sr, 1.28, 1, 46, 2.2, r);
+        noise(o, sr, 1.28, 2.4, 0.32, (u) => 0.7 - 0.5 * u, (u) => Math.min(1, u * 40) * (1 - u) ** 2, r); // the crash
+        pad(o, sr, ['D3', 'A3', 'D4', 'F#4', 'A4', 'D5', 'F#5'], 1.28, 2.9, 0.75, { att: 0.04, rel: 0.9, vib: 0.007, harm: 4 }); // the choir
+        for (const n of ['D3', 'A3', 'D4', 'F#4', 'A4']) brass(o, sr, hz(n), 1.28, 1.3, 0.09);
+        for (let k = 0; k < 10; k++) bell(o, sr, hz(['D7', 'A6', 'F#6', 'D6', 'A5'][k % 5]), 1.35 + k * 0.09, 0.06, 1.5, 0.3);
+        reverb(o, sr, 0.25, 0.5);
+        return finish(o, sr, { peak: 0.8 });
+    },
     /** A pentagram is lit: a low thud, a dark rising chord, a cold bell. */
     fxPentagram(sr) {
         const o = buf(sr, 1.9), r = rng(317);
@@ -820,12 +837,31 @@ const LOOPS = {
         for (const [t, n] of [[1.5, 'G6'], [4.2, 'D7'], [7.7, 'Eb6'], [10.3, 'Bb6']]) bell(o, sr, hz(n), t, 0.05, 2.5, 0.1);
         return finish(loopSeam(o, sr, 0.5), sr, { rms: 0.05 });
     },
-    /** «Да пусть создастся»: the gods read the words — a soft far choir and a slow shimmer of bells (looped while they think). */
-    loopGenesis(sr) {
-        const o = buf(sr, 4.6), r = rng(223);
-        pad(o, sr, ['F3', 'C4', 'A4'], 0, 4.6, 0.3, { att: 0.01, rel: 0, harm: 2, vib: 0.007 });
-        for (let k = 0; k < 8; k++) bell(o, sr, hz(['C6', 'A5', 'F6', 'G6'][k % 4]) * (1 + 0.002 * r()), 0.2 + k * 0.55, 0.05, 1.6);
-        return finish(loopSeam(o, sr), sr, { peak: 0.4 });
+    /**
+     * «Да пусть создастся»: the epic tune under the whole creation — the words said, read, the thing built (looped,
+     * louder as it goes: DivineCreation sets it). D minor, 8 bars at 100 beats a minute (19.2 s): a choir on Dm – Bb – F – C
+     * – Dm – Bb – Gm – A, low strings pulsing in eighths, great drums (a taiko beat, a fill each fourth bar), a heroic
+     * brass tune over the second half, bells above, a cymbal swelling into the loop's head. Reverb of a great hall.
+     */
+    loopGenesisEpic(sr) {
+        const bar = 2.4, B = bar / 4, o = buf(sr, bar * 8), r = rng(229);
+        const CH = [['D3', 'A3', 'D4', 'F4'], ['Bb2', 'F3', 'Bb3', 'D4'], ['F3', 'C4', 'F4', 'A4'], ['C3', 'G3', 'C4', 'E4'],
+            ['D3', 'A3', 'D4', 'F4'], ['Bb2', 'F3', 'Bb3', 'D4'], ['G2', 'D3', 'G3', 'Bb3'], ['A2', 'E3', 'A3', 'C#4']];
+        const ROOT = ['D2', 'Bb1', 'F2', 'C2', 'D2', 'Bb1', 'G1', 'A1'], FIFTH = ['A2', 'F2', 'C3', 'G2', 'A2', 'F2', 'D2', 'E2'];
+        CH.forEach((c, k) => {
+            const t = k * bar;
+            pad(o, sr, c, t, t + bar, 0.34 + (k >= 4 ? 0.08 : 0), { att: 0.25, rel: 0.35, vib: 0.006, harm: 3 }); // the choir
+            for (let e = 0; e < 8; e++) brass(o, sr, hz(e % 2 ? FIFTH[k] : ROOT[k]), t + e * B / 2, B * 0.32, 0.075 + (e === 0 ? 0.03 : 0)); // the low strings
+            for (const [b, f, a] of [[0, 52, 0.55], [1.5, 52, 0.35], [2, 78, 0.4], [3, 52, 0.45], [3.5, 96, 0.3]]) drum(o, sr, t + b * B, a, f, 1.1, r); // the taiko beat
+            if (k % 4 === 3) for (let q = 0; q < 6; q++) drum(o, sr, t + 3 * B + q * B / 6, 0.22 + q * 0.06, 110 - q * 6, 0.5, r); // a fill
+            for (let q = 0; q < 4; q++) bell(o, sr, hz(c[(q + k) % c.length]) * 4, t + q * B + B / 2, 0.035, 1.4, 0.25); // stars above
+        });
+        // the heroic brass over the second half (doubled an octave down)
+        melody([[0, 'D4', 1.5], [1.5, 'A4', 0.5], [2, 'A4', 2], [4, 'Bb4', 1], [5, 'A4', 1], [6, 'F4', 2], [8, 'C5', 1.5], [9.5, 'Bb4', 0.5], [10, 'A4', 1], [11, 'G4', 1],
+            [12, 'A4', 1.5], [13.5, 'G4', 0.5], [14, 'F4', 1], [15, 'E4', 1]], B, 4 * bar, (f, t, l) => { brass(o, sr, f, t, l * 0.92, 0.1); brass(o, sr, f / 2, t, l * 0.92, 0.07); });
+        noise(o, sr, 8 * bar - 1.6, 1.6, 0.16, (u) => 0.05 + 0.5 * u, (u) => u * u, r); // the cymbal swelling into the head
+        reverb(o, sr, 0.22, 0.5);
+        return finish(loopSeam(o, sr, 0.25), sr, { rms: 0.08 });
     },
 };
 
@@ -842,7 +878,7 @@ export const SPELL_SOUND = {
     // the great spells: their own tunes
     CreateHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] }, ImproveHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] },
     CreateCastle: { own: ['castleTheme', 'houseHum', 'rumble'] },
-    DivineCreation: { own: ['loopGenesis', 'fxCreationBloom', 'houseHum'], theme: 'thCreation' }, // («Да пусть создастся»: the gods think — loopGenesis; the creation whole — fxCreationBloom; DivineCreation.js)
+    DivineCreation: { own: ['loopGenesisEpic', 'stCreationHeard', 'fxCreationBloom'], theme: 'thCreation' }, // («Да пусть создастся»: the epic tune from the first word to the end — loopGenesisEpic; the words heard — stCreationHeard; made — thCreation + fxCreationBloom; DivineCreation.js)
     IceCastle: { own: ['iceBell', 'iceFloor', 'iceDone'] }, IceBridge: { own: ['iceBell', 'iceFloor', 'iceChime'] },
     CircleAttack: { own: ['circleAttack', 'rumble'] }, CircleAttackMaxima: { own: ['circleAttack', 'rumble'] },
     Inspirius: { own: ['inspCast', 'inspZap', 'inspBlast'] },

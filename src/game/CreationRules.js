@@ -43,6 +43,7 @@ export const CREATION = {
     PLANTS_PER_SPECIES: 160,
     COOLDOWN: 20, // s between two creations of one player
     LISTEN: 30, // s: after a lone «Да пусть создастся» the gods wait for the description this long
+    FINAL_WAIT: 6, // s: a phrase still being said — its final words waited for this long after its last look
     DESC_QUIET: 1.6, // s of quiet after the last words: the description is over (a long one comes in several phrases)
     DESC_MAX: 600, // letters of a description read
 };

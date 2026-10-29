@@ -45,7 +45,7 @@ import { faceTowards } from '../world/MagicHouse.js';
 import { HouseMagic, HOUSE_MAGIC } from './HouseMagic.js';
 import { Chest } from '../entities/Chest.js';
 import { creationWords } from './CreationWords.js';
-import { CREATION, MATERIALS, sanitizeRecipe, forbidden, kindOfDesc } from './CreationRules.js';
+import { CREATION, MATERIALS, sanitizeRecipe, forbidden, kindOfDesc, saidKind } from './CreationRules.js';
 import { CREATION_SYSTEM, CREATION_SCHEMA, creationUser, creationRetry, parseAnswer, answerProblem } from './CreationPrompt.js';
 import { creationPlan, recipeExtent, recipeRect } from '../world/CreationBuild.js';
 import { DivineCreationFx, BLOCK_COLOR } from '../fx/DivineCreationFx.js';
@@ -58,6 +58,14 @@ const TREE_WOOD = new Set(TREE_KINDS.map((k) => k.wood));
 const NATURAL = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.SAND, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.ICE, BLOCK.WATER, BLOCK.REGOLITH, BLOCK.PLANET_ROCK, BLOCK.PLANET_ICE, BLOCK.PLANET_DARK, BLOCK.PLANET_GRASS, BLOCK.PLANET_WOOD, BLOCK.PLANET_LEAF]);
 const natural = (t) => NATURAL.has(t) || TREE_WOOD.has(t) || isLeaves(t);
 const KIND_RU = { build: 'постройка', creature: 'существо', plant: 'растение' };
+/** A recipe in one line of the journal (what will be made, in short). */
+function recipeLine(r) {
+    try {
+        if (r.type === 'creature') return `скелет ${r.plan}, ${r.size} м, ног ${r.legs}, ходьба ${r.walk}, полёт ${r.fly || 'нет'}, крылья ${r.wings}, шкура ${r.skin}/${r.pattern}, здоровье ${r.hp}, нрав ${r.temper}, умения ${(r.abilities || []).join(', ') || 'нет'}, слабости ${(r.flaws || []).join(', ') || 'нет'}, сколько ${r.count || 1}`;
+        if (r.type === 'plant') return `${r.form}, ${r.height} м, крона ${r.crown}, листья ${r.leaves}, плоды ${r.fruit}, свечение ${r.glow != null ? r.glowOn : 'нет'}, расселяется ${r.spread}, места ${(r.habitat || []).join(', ')}, рост ${r.grow}, сколько ${r.count}`;
+        return `стены ${r.style?.wall}, крыша ${r.style?.roof}, части: ${(r.parts || []).map((p) => `${p.kind} ${(p.size || []).map((v) => Math.round(v)).join('×')}`).join(', ')}`;
+    } catch (e) { return ''; }
+}
 
 /** The ground's heights round the place, packed for the record (deltas from G in one byte, base64). */
 export function packGrid(grid, G) {
@@ -111,6 +119,8 @@ export class DivineCreation extends HouseMagic {
     }
 
     _note(s) { this.log.push(s); if (this.log.length > 40) this.log.shift(); this.game.netLog?.(`✨ Да пусть создастся: ${s}`); }
+    /** A line of the spell's own story in the spells' journal (Settings → Журнал): what was heard, read, decided, made. */
+    _log(s) { this._note(s); this.game.spellLog?.note?.(`✨ Да пусть создастся: ${s}`); }
 
     // ============================================================== the plan
     /** A record's plan (null until the worker made it). */
@@ -181,72 +191,91 @@ export class DivineCreation extends HouseMagic {
         if (!w) return null;
         const say = (t) => { if (isFinal && t) g.hud?.setVoice?.(t, true); return null; };
         // (the words are still being said: the gods listen at once — the seed of light shows at the wand from the first word)
-        if (!isFinal) { this._listen(); if (w.desc.length < 3) g.hud?.setVoice?.('🙏 Боги слушают…', true); return null; }
+        if (!isFinal) { this._listen(); if (w.desc.length < 3) g.hud?.setVoice?.('✨ Говорите, что создать…', true); return null; }
         const now = Date.now();
         if (now - this._lastCast < 1500) return null;
         if (!w.desc || w.desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) {
             this._listen(true);
-            return say('🙏 Боги слушают — опишите, что создать (например: «замок из белого камня с шестью башнями», «существо с крыльями», «дерево с синими листьями»)');
+            return say('✨ Опишите, что создать (например: «замок из белого камня с шестью башнями», «существо с крыльями», «дерево с синими листьями»)');
         }
         // (the description may go on in the next phrase — the recognizer cuts a long one: the gods wait for the quiet)
         const no = this._check(w.desc);
-        if (no) { if (this.listening) this._unlisten(null); return say(no); }
+        if (no) { if (this.listening) this._unlisten(null); this._log(`не началось: ${no}`); return say(no); }
         this._listen();
         const L = this.listening;
         if (!L) return this._begin(w.desc, say);
         L.parts = [w.desc];
         L.tail = '';
+        L.pending = false;
+        this._log(`фраза с описанием: «${String(text).slice(0, 200)}»`);
         L.quiet = this._clock + CREATION.DESC_QUIET;
         L.until = Math.max(L.until, this._clock + 8);
         g._manaLater = true; // (paid when the gods say yes — DivineCreation._think)
         return 'DivineCreation';
     }
 
-    /** The phrase after a lone «Да пусть создастся» (within LISTEN s): the description. 'DivineCreation' — begun, true — taken (refused or still being said), false — not a description. */
-    hearDesc(text, isFinal) {
+    /**
+     * The words while the description is being said (after «Да пусть создастся»): every phrase kept till the speaker is quiet.
+     * `o.cut` — a look of the recognizer missing the phrase's start (never the description: its final words come later).
+     * true — taken, false — not a description.
+     */
+    hearDesc(text, isFinal, o = {}) {
         const L = this.listening;
         if (!L) return false;
-        if (this._clock > L.until && !L.parts.length) { this._unlisten('🌫️ Боги не услышали описания'); return false; }
+        if (this._clock > L.until && !L.parts.length) { this._unlisten('🌫️ Описание не услышано — творение не началось', 'не было слов описания'); return false; }
         const words = String(text || '').trim();
         if (words.replace(/[^a-zа-яё0-9]/gi, '').length < 2) return false;
-        // («стоп» alone: the gods stop listening)
-        if (isFinal && !L.parts.length && /^(стоп|стой|отмена|не надо|хватит)[.!]?$/i.test(words)) { this._unlisten('🌫️ Боги больше не слушают'); return true; }
-        if (!isFinal) { L.tail = words; L.quiet = this._clock + CREATION.DESC_QUIET; L.until = Math.max(L.until, this._clock + 8); return true; } // (the description is still being said)
-        // (the recognizer cuts a long description into phrases: all of them are kept until the speaker is quiet)
+        // («стоп» alone: the listening ends)
+        if (isFinal && !L.parts.length && /^(стоп|стой|отмена|не надо|хватит)[.!]?$/i.test(words)) { this._unlisten('🌫️ Творение отменено', `сказано «${words}»`); return true; }
+        if (!isFinal) {
+            // (the phrase still being said: its final words are waited for — a look's words may miss its start)
+            L.pending = true;
+            L.partAt = this._clock;
+            if (!o.cut && words.length >= (L.tail || '').length) L.tail = words;
+            L.until = Math.max(L.until, this._clock + 8);
+            if (this._clock - (L.partLog ?? -9) > 1.5) { L.partLog = this._clock; this._log(`по ходу фразы${o.cut ? ' (кусок без начала — не берётся)' : ''}: «${words.slice(0, 120)}»`); }
+            return true;
+        }
         L.parts.push(words);
         L.tail = '';
+        L.pending = false;
         L.quiet = this._clock + CREATION.DESC_QUIET;
         L.until = Math.max(L.until, this._clock + 8);
+        this._log(`фраза описания: «${words.slice(0, 200)}»${o.command && o.command !== words ? ` (распознавание думало: «${String(o.command).slice(0, 60)}»)` : ''}`);
         if (L.parts.join(' ').length >= CREATION.DESC_MAX) this._heard();
         return true;
     }
 
-    /** The gods begin to listen (the seed of light at the wand at once). `fresh` — a lone «Да пусть создастся»: the description may come later. */
+    /** The listening begins (the seed of light at the wand at once, the epic tune). `fresh` — a lone «Да пусть создастся»: the description may come later. */
     _listen(fresh = false) {
         const now = this._clock;
         const L = this.listening;
         if (L) { L.until = Math.max(L.until, now + (fresh ? CREATION.LISTEN : 8)); return; }
         if (this.mine || this.magic) return;
-        this.listening = { until: now + (fresh ? CREATION.LISTEN : 12), parts: [], tail: '', quiet: 0, t: 0, aimT: 0, at: null };
-        this.game.sound?.spellCast?.('DivineCreation', this.game.character?.group?.position);
+        this.listening = { until: now + (fresh ? CREATION.LISTEN : 12), parts: [], tail: '', pending: false, partAt: 0, quiet: 0, t: 0, aimT: 0, at: null };
+        this._log(`начало: слушаю описание (${fresh ? 'сказано «Да пусть создастся» отдельно — жду описание до ' + CREATION.LISTEN + ' с' : 'описание идёт в той же фразе'})`);
     }
 
-    _unlisten(msg) {
+    _unlisten(msg, why = '') {
         const L = this.listening;
         this.listening = null;
         if (L?.at) this.game.sync?.net?.send({ t: this.netType, a: 'lis', on: 0 });
         if (msg) this.game.hud?.setVoice?.(msg, true);
+        if (why) this._log(`слушание закончено: ${why}`);
     }
 
-    /** The speaker fell quiet: what was heard is the description. */
-    _heard() {
+    /** The speaker fell quiet: what was heard is the description — the light and the music answer «heard». */
+    _heard(why = 'вы замолчали') {
         const L = this.listening;
         if (!L) return;
         const desc = [...L.parts, L.tail].filter(Boolean).join(' ').trim();
+        const at = L.at;
         this._unlisten(null);
-        if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) { this.game.hud?.setVoice?.('🌫️ Боги не услышали описания', true); return; }
+        if (desc.replace(/[^a-zа-яё0-9]/gi, '').length < 3) { this.game.hud?.setVoice?.('🌫️ Описание не услышано — творение не началось', true); this._log(`описания нет (${why})`); return; }
         const g = this.game;
-        this._begin(desc, (t) => { if (t) g.hud?.setVoice?.(t, true); return null; });
+        const said = saidKind(desc), byWords = kindOfDesc(desc);
+        this._log(`описание услышано (${why}): «${desc.slice(0, 300)}» → по словам: ${KIND_RU[said || byWords]}${said ? ' (названо прямо)' : ''}`);
+        this._begin(desc, (t) => { if (t) { g.hud?.setVoice?.(t, true); this._log(`не началось: ${t}`); } return null; });
     }
 
     /** (every frame) The listening: its light at where the wand points, the description taken when the speaker is quiet. */
@@ -254,8 +283,10 @@ export class DivineCreation extends HouseMagic {
         const L = this.listening, g = this.game;
         const now = (this._clock += dt);
         if (L) {
-            if ((L.parts.length || L.tail) && (now > L.quiet || now > L.until)) this._heard();
-            else if (now > L.until) this._unlisten('🌫️ Боги не услышали описания');
+            // (quiet after a final phrase; a phrase still being said is waited for — its final words come up to a few seconds later)
+            if (L.parts.length && !L.pending && now > L.quiet) this._heard();
+            else if (L.pending && now - L.partAt > CREATION.FINAL_WAIT) this._heard('конец фразы не пришёл — взято, что было');
+            else if (now > L.until) { if (L.parts.length || L.tail) this._heard('время слушания вышло'); else this._unlisten('🌫️ Описание не услышано — творение не началось', 'не было слов описания'); }
         }
         const M = this.listening;
         if (M) {
@@ -276,6 +307,7 @@ export class DivineCreation extends HouseMagic {
                 } catch (e) { /* (no hands yet) */ }
             }
             if (M.at) this.fx2.seed({ x: M.at.x, y: M.at.y, z: M.at.z, t: M.t, u: 0, wand: M.wand || null, listen: true }, dt);
+            g.sound?.creationHum?.(0.6); // (the epic tune from the first word)
         }
         // (another player's gods listening: their small seed where their wand points)
         if (this._lisOf?.size) for (const [k, o] of this._lisOf) {
@@ -291,8 +323,8 @@ export class DivineCreation extends HouseMagic {
         const g = this.game;
         const bad = forbidden(desc);
         if (bad) return `🚫 ${bad}`;
-        if (this.mine) return '✨ Боги ещё думают над вашим прошлым творением — подождите';
-        if (this.magic) return '✨ Боги заняты другим творением — подождите, пока оно закончится';
+        if (this.mine) return '✨ Ваше прошлое творение ещё не закончено — подождите';
+        if (this.magic) return '✨ Сейчас идёт другое творение — подождите, пока оно закончится';
         if (!this.free && !g.items?.heldOf?.('wand') && !this.testAim) return '🪄 Возьмите палочку в руку и направьте её туда, где боги должны создать';
         if (manaRules(g) && !this.free && g.combat.fatigue < CREATION.COST) return `😮‍💨 Не хватает маны: нужно ${CREATION.COST}, есть ${Math.floor(g.combat.fatigue)}`;
         const kind = kindOfDesc(desc);
@@ -350,15 +382,15 @@ export class DivineCreation extends HouseMagic {
     /** (host) Someone asks the gods: one at a time, a pause between a player's creations. @returns {true|string} */
     _hostAsk(ask, by) {
         const g = this.game;
-        if (this.magic) return '✨ Боги заняты другим творением — подождите, пока оно закончится';
+        if (this.magic) return '✨ Сейчас идёт другое творение — подождите, пока оно закончится';
         const key = this._key(by);
         const last = this._lastBy.get(key) || 0;
-        if (!this.free && Date.now() - last < CREATION.COOLDOWN * 1000) return `⏳ Боги отдыхают — следующее творение через ${Math.ceil(CREATION.COOLDOWN - (Date.now() - last) / 1000)} с`;
+        if (!this.free && Date.now() - last < CREATION.COOLDOWN * 1000) return `⏳ Следующее творение — через ${Math.ceil(CREATION.COOLDOWN - (Date.now() - last) / 1000)} с`;
         const at = (ask.at || []).map(Number), c = (ask.c || []).map(Number);
         if (at.length < 3 || !at.every(Number.isFinite) || c.length < 2 || !c.every(Number.isFinite)) return '✨ …';
         if (Math.hypot(at[0] - c[0], at[2] - c[2]) > CREATION.REACH + 20) return '🪄 Слишком далеко — подойдите ближе';
         const desc = String(ask.desc || '').slice(0, CREATION.DESC_MAX);
-        if (forbidden(desc)) return '🚫 Боги не создают такого';
+        if (forbidden(desc)) return '🚫 Такое создать нельзя';
         if (g.terrain?.data?.godGiftAt?.(Math.round(at[0]), Math.round(at[1]), Math.round(at[2]))) return '✨ Это храм богов — здесь творят только они сами';
         const id = 'dc' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
         const y = g.collision?.groundY?.(at[0], at[2]) ?? at[1];
@@ -371,14 +403,15 @@ export class DivineCreation extends HouseMagic {
         g.castleLife?.alarm?.({ x: at[0], y, z: at[2] }, 'creation', by, 20);
         if (by === g.localId) this._think(id, desc);
         else g.sync?.net?.send({ t: this.netType, a: 'think', to: by, id, desc });
-        this._note(`«${desc.slice(0, 80)}» — боги читают`);
+        this._log(`творение принято (${by === g.localId ? 'моё' : 'игрока ' + by}): точка (${Math.round(at[0])}, ${Math.round(at[2])}), ${Math.round(Math.hypot(at[0] - c[0], at[2] - c[2]))} м от колдующего`);
         return true;
     }
 
     /** (every computer) The seed of light appears; the gods' choir. */
     _seedStart(m) {
-        this.game.fx?.lightFlash?.({ x: m.x, y: m.y + 4, z: m.z }, 0xffd98a, 4, 0.8, 60);
-        this.game.sound?.spellCast?.('DivineCreation', new THREE.Vector3(m.x, m.y + 4, m.z));
+        // («we heard you»: the seed flares, the music strikes — on every computer)
+        this.fx2.heard({ x: m.x, y: m.y, z: m.z });
+        this.game.sound?.playSpellFx?.('stCreationHeard', new THREE.Vector3(m.x, m.y + 3, m.z), 1.3);
     }
 
     // ============================================================ the caster: the gods think
@@ -393,7 +426,7 @@ export class DivineCreation extends HouseMagic {
         }
         const ctl = { stop: false, ac: null };
         this.mine = { id, desc, t: 0, u: 0, ctl, paid: manaRules(g) && !this.free ? CREATION.COST : 0, sentU: 0 };
-        g.hud?.setVoice?.('✨ Боги читают ваши слова…', true);
+        g.hud?.setVoice?.('✨ Творение рождается…', true);
         this._ask(desc, (u) => { if (this.mine?.id === id) this.mine.u = Math.max(this.mine.u, u); }, ctl).then((res) => this._answered(id, res)).catch((e) => this._answered(id, { recipe: null, why: String(e?.message || e) }));
     }
 
@@ -415,14 +448,20 @@ export class DivineCreation extends HouseMagic {
             via = 'rules';
             return null;
         };
-        try { text = await once(creationUser(desc)); } catch (e) { why = String(e?.message || e); }
+        const sec = () => ((Date.now() - t0) / 1000).toFixed(1) + ' с';
+        try { text = await once(creationUser(desc)); } catch (e) { why = String(e?.message || e); this._log(`нейросеть: ошибка — ${why} (${sec()})`); }
         if (ctl.stop) return { recipe: null, via, why: 'остановлено' };
+        if (via !== 'rules') this._log(`ответ нейросети (${via}, ${sec()}): ${text == null ? 'нет' : '«' + String(text).replace(/\s+/g, ' ').slice(0, 600) + '»'}`);
         let obj = parseAnswer(text), prob = text == null ? 'нет ответа' : answerProblem(obj);
         if (prob && via !== 'rules' && deadline - Date.now() > 9000) {
-            try { text = await once(creationRetry(desc, prob)); obj = parseAnswer(text); prob = text == null ? 'нет ответа' : answerProblem(obj); } catch (e) { why = String(e?.message || e); }
+            this._log(`ответ не годится (${prob}) — прошу ещё раз`);
+            try { text = await once(creationRetry(desc, prob)); obj = parseAnswer(text); prob = text == null ? 'нет ответа' : answerProblem(obj); this._log(`второй ответ (${sec()}): ${text == null ? 'нет' : '«' + String(text).replace(/\s+/g, ' ').slice(0, 600) + '»'}`); } catch (e) { why = String(e?.message || e); this._log(`нейросеть: ошибка — ${why}`); }
         }
-        if (prob) { why = why || prob; obj = null; if (via !== 'rules') via = 'rules (нейросеть: ' + why + ')'; }
-        return { recipe: sanitizeRecipe(obj, desc, seed), via, why, ms: Date.now() - t0 };
+        if (prob) { why = why || prob; obj = null; if (via !== 'rules') via = 'rules (нейросеть: ' + why + ')'; this._log(`нейросеть не помогла (${why}) — описание читается по словам`); }
+        else if (via === 'rules') this._log('нейросети нет — описание читается по словам');
+        const recipe = sanitizeRecipe(obj, desc, seed);
+        if (obj && ['build', 'creature', 'plant'].includes(obj.type) && obj.type !== recipe.type) this._log(`нейросеть сказала «${KIND_RU[obj.type]}», но в словах названо «${KIND_RU[recipe.type]}» — решают слова`);
+        return { recipe, via, why, ms: Date.now() - t0 };
     }
 
     /** Is the program on this computer there and ready (started with the best model it has, if not running)? */
@@ -431,21 +470,23 @@ export class DivineCreation extends HouseMagic {
         const base = location.href;
         try {
             let st = await (await fetch(new URL('api/llm/status', base), { cache: 'no-store' })).json();
+            this._log(`нейросеть на компьютере: ${st.available ? `есть, состояние ${st.state || '?'}${st.model ? ', модель ' + st.model : ''}, скачано: ${(st.have || []).join(', ') || 'ничего'}` : 'программы нет'}`);
             if (!st.available) return false;
             if (st.state !== 'ready' && st.state !== 'loading' && st.state !== 'downloading') {
                 const model = (st.have || []).includes('gemma4big') ? 'gemma4big' : 'gemma4';
                 // (only a model already on this computer: a 3 GB download in the middle of a spell is no answer)
-                if (!(st.have || []).length) return false;
+                if (!(st.have || []).length) { this._log('модель не скачана — скачайте её в настройках нейросети жителей'); return false; }
                 await fetch(new URL('api/llm/load', base), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) });
-                this._note(`запускаю нейросеть на видеокарте (${model === 'gemma4big' ? 'Gemma 4 E4B' : 'Gemma 4 E2B'})`);
+                this._log(`запускаю нейросеть на видеокарте (${model === 'gemma4big' ? 'Gemma 4 E4B' : 'Gemma 4 E2B'})`);
             }
             while (st.state !== 'ready' && Date.now() < deadline - 8000 && !ctl.stop) {
-                if (st.state === 'error') return false;
+                if (st.state === 'error') { this._log(`нейросеть не запустилась: ${st.error || st.message || 'ошибка'}`); return false; }
                 await new Promise((r) => setTimeout(r, 700));
                 st = await (await fetch(new URL('api/llm/status', base), { cache: 'no-store' })).json();
             }
+            if (st.state !== 'ready') this._log(`нейросеть не успела запуститься (${st.state})`);
             return st.state === 'ready';
-        } catch (e) { return false; }
+        } catch (e) { this._log(`нейросеть не отвечает: ${e?.message || e}`); return false; }
     }
 
     /** One answer of the program (streamed: its words make the seed grow). */
@@ -486,11 +527,11 @@ export class DivineCreation extends HouseMagic {
     _answered(id, res) {
         const g = this.game, me = this.mine;
         if (!me || me.id !== id) return;
-        if (!res?.recipe) { this._giveBack(me, `🌫️ Боги не поняли описание — мана возвращена${res?.why ? ` (${res.why})` : ''}`); return; }
+        if (!res?.recipe) { this._giveBack(me, `🌫️ Описание не понято — мана возвращена${res?.why ? ` (${res.why})` : ''}`); return; }
         me.done = true;
-        this._note(`рецепт «${res.recipe.name}» (${KIND_RU[res.recipe.type]}) — ${res.via}${res.ms ? `, ${(res.ms / 1000).toFixed(1)} с` : ''}`);
-        if (/^rules \(/.test(res.via)) g.hud?.setVoice?.(`✨ Нейросеть не ответила как надо — боги поняли вас по словам: «${res.recipe.name}»`, true);
-        else g.hud?.setVoice?.(`✨ Боги поняли: «${res.recipe.name}» — ${KIND_RU[res.recipe.type]}`, true);
+        this._log(`решено: «${res.recipe.name}» — ${KIND_RU[res.recipe.type]} (${res.via}${res.ms ? `, ${(res.ms / 1000).toFixed(1)} с` : ''}): ${recipeLine(res.recipe)}`);
+        if (/^rules \(/.test(res.via)) g.hud?.setVoice?.(`✨ Нейросеть не ответила как надо — описание прочитано по словам: «${res.recipe.name}»`, true);
+        else g.hud?.setVoice?.(`✨ «${res.recipe.name}» — ${KIND_RU[res.recipe.type]}`, true);
         if (this.auth) this._hostRecipe(id, res.recipe, g.localId);
         else g.sync?.net?.send({ t: this.netType, a: 'recipe', id, recipe: res.recipe });
     }
@@ -520,12 +561,13 @@ export class DivineCreation extends HouseMagic {
         if (m.t < CREATION.GESTATE_MIN) { m.held = { raw, by }; return; }
         const recipe = sanitizeRecipe(raw, m.desc, m.seed); // (the host cleans it again: a guest's recipe is only a wish)
         m.recipe = recipe;
+        m.kind = recipe.type;
         g.sync?.net?.send({ t: this.netType, a: 'bloom', id, kind: recipe.type, name: recipe.name });
         this._bloom(m);
         const at = { x: m.x, y: m.y, z: m.z };
         if (recipe.type === 'creature' || recipe.type === 'plant') {
             const sys = recipe.type === 'creature' ? g.customCreatures : g.customPlants;
-            const res = sys ? sys.create(recipe, at, by, { dir: m.dir, key: m.key }) : 'Боги не могут создать это здесь';
+            const res = sys ? sys.create(recipe, at, by, { dir: m.dir, key: m.key }) : 'Здесь это создать нельзя';
             if (res !== true) { this._hostFade(id, `🌫️ ${res} — мана возвращена`, true); return; }
             this.magic = null;
             this._made(by, recipe);
@@ -634,7 +676,7 @@ export class DivineCreation extends HouseMagic {
         g.sync?.net?.send({ t: this.netType, a: 'grow', id: m.id, rect: P.rect, G: rec.G, top: P.top, colors: m.colors, T: m.T });
         g.sound?.playHouseHum?.(new THREE.Vector3(rec.x, rec.G + 4, rec.z), m.T);
         g.castleLife?.alarm?.({ x: rec.x, y: rec.G, z: rec.z }, 'creation', m.by, Math.max(20, (P.rect.x1 - P.rect.x0) / 2 + 10));
-        this._note(`строится «${m.recipe.name}»: ${P.n} блоков, ${m.T.toFixed(0)} с`);
+        this._log(`строится «${m.recipe.name}»: ${P.n} блоков, ${m.T.toFixed(0)} с`);
     }
 
     /**
@@ -717,6 +759,7 @@ export class DivineCreation extends HouseMagic {
         if (rec?.rect) this.fx2.whole(rec.rect, rec.G, rec.top ?? rec.G + 20);
         g.sound?.stopHouseHum?.();
         g.sound?.playSpellFx?.('fxCreationBloom', new THREE.Vector3(rec.x, rec.G + 6, rec.z), 1.2);
+        g.sound?.spellCast?.('DivineCreation', new THREE.Vector3(rec.x, rec.G + 6, rec.z)); // (the finale: its tune)
         if (by === g.localId) g.hud?.setVoice?.(`🏛️ «${rec.recipe?.name || 'Творение'}» создано! Двери открываются рукой, в сундуки можно складывать вещи`, true);
     }
 
@@ -748,7 +791,7 @@ export class DivineCreation extends HouseMagic {
             else if (this.mine?.id === id) this.mine = null;
             if (msg) g.hud?.setVoice?.(msg, true);
         } else g.sync?.net?.send({ t: this.netType, a: 'back', to: m.by, id, refund: !!refund, msg: msg ? String(msg).slice(0, 200) : '' });
-        this._note(`не создано: ${msg || 'отменено'}`);
+        this._log(`не создано: ${msg || 'отменено'}`);
     }
 
     _faded(m) {
@@ -761,6 +804,8 @@ export class DivineCreation extends HouseMagic {
     _bloom(m) {
         this.fx2.bloom(m);
         this.game.sound?.playSpellFx?.('fxCreationBloom', new THREE.Vector3(m.x, m.y + 6, m.z), 1.4);
+        // (a creature, a plant is born right now: its finale here; a building's when it is whole — _finished)
+        if (m.kind && m.kind !== 'build') this.game.sound?.spellCast?.('DivineCreation', new THREE.Vector3(m.x, m.y + 6, m.z));
     }
 
     // =================================================================== frame
@@ -774,7 +819,7 @@ export class DivineCreation extends HouseMagic {
         if (me?.done) { me.t += dt; if (me.t > CREATION.THINK_MAX + CREATION.BUILD_MAX + 90) this.mine = null; } // (the host never told: not waited for ever)
         else if (me) {
             me.t += dt;
-            if (me.t > CREATION.THINK_MAX) this._giveBack(me, '🌫️ Боги думали слишком долго — творение не случилось, мана возвращена');
+            if (me.t > CREATION.THINK_MAX) this._giveBack(me, '🌫️ Описание читалось слишком долго — творение не случилось, мана возвращена');
             else if (this.auth && this.magic?.id === me.id) this.magic.u = me.u;
             else if (!this.auth && me.u - me.sentU > 0.08) { me.sentU = me.u; g.sync?.net?.send({ t: this.netType, a: 'u', id: me.id, u: r2(me.u) }); }
         }
@@ -789,14 +834,14 @@ export class DivineCreation extends HouseMagic {
                 if (m.phase !== 'seed') m.u = Math.min(1, (m.u || 0.9) + dt * 0.05);
                 else if (!m.u || m.u < Math.min(0.6, m.t / 25)) m.u = Math.max(m.u || 0, Math.min(0.6, m.t / 25) * 0.6);
                 this.fx2.seed(m, dt);
-                g.sound?.creationHum?.(Math.max(0, 1 - d / 140));
+                g.sound?.creationHum?.(0.85 * Math.max(0, 1 - d / 160)); // (the epic tune louder: the words heard)
             } else {
-                g.sound?.creationHum?.(0);
+                g.sound?.creationHum?.(m.phase === 'grow' ? Math.max(0, 1 - d / 200) : 0); // (the loudest while it is built)
                 if (m.phase === 'grow') this.fx2.grow(m, dt, this.look);
             }
             if (this.auth && this.magic === m) {
                 if (m.phase === 'seed' && m.held) { if (m.t >= CREATION.GESTATE_MIN) { const h = m.held; m.held = null; this._hostRecipe(m.id, h.raw, h.by); } }
-                else if (m.phase === 'seed' && m.t > CREATION.THINK_MAX + 6 && m.by !== g.localId) this._hostFade(m.id, '🌫️ Боги не дождались ответа', false);
+                else if (m.phase === 'seed' && m.t > CREATION.THINK_MAX + 6 && m.by !== g.localId) this._hostFade(m.id, '🌫️ Творение не дождалось ответа', false);
                 else if (m.phase === 'site') this._siteStep(m);
                 else if (m.phase === 'plan') { const P = this.plan(m.rec); if (P) this._growStart(m, P); else if (m.t > CREATION.THINK_MAX + 60) this._hostFade(m.id, '🌫️ Боги не смогли задумать эту постройку. Мана возвращена', true); }
                 else if (m.phase === 'grow') this._build(m);
@@ -994,7 +1039,7 @@ export class DivineCreation extends HouseMagic {
             case 'fade': if (isHost && this.magic?.id === m.id && this.magic.by === from) this._hostFade(m.id, null, false); break;
             case 'seed': if (!isHost) { this.magic = { id: m.id, by: m.by, phase: 'seed', t: 0, u: 0, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, wand: Array.isArray(m.wand) ? { x: m.wand[0], y: m.wand[1], z: m.wand[2] } : null, progT: 0 }; this._seedStart(this.magic); } break;
             case 'prog': if (!isHost && this.magic?.id === m.id) this.magic.u = Math.min(1, +m.u || 0); break;
-            case 'bloom': if (!isHost && this.magic?.id === m.id) { this._bloom(this.magic); if (m.kind !== 'build') this.magic = null; else this.magic.phase = 'site'; } break;
+            case 'bloom': if (!isHost && this.magic?.id === m.id) { this.magic.kind = m.kind; this._bloom(this.magic); if (m.kind !== 'build') this.magic = null; else this.magic.phase = 'site'; } break;
             case 'grow': if (!isHost && this.magic?.id === m.id && m.rect) Object.assign(this.magic, { phase: 'grow', t: 0, u: 0, rect: m.rect, G: +m.G || 0, top: +m.top || 0, colors: Array.isArray(m.colors) ? m.colors.slice(0, 6) : [], T: +m.T || 20 }); break;
             case 'faded': if (!isHost && this.magic?.id === m.id) { const mm = this.magic; this.magic = null; this._faded(mm); } break;
             case 'back': if (m.to === g.localId && this.mine?.id === m.id) { const me = this.mine; me.ctl.stop = true; this.mine = null; if (m.refund && me.paid && g.combat) g.combat.fatigue = Math.min(g.combat.maxFatigue || Infinity, g.combat.fatigue + me.paid); if (m.msg) g.hud?.setVoice?.(m.msg, true); } break;

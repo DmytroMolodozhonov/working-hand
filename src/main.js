@@ -642,7 +642,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         const sp = matchSpell(written);
         const solo = sp && sp !== 'DivineCreation' && sp !== 'Stand' && !game.divine.listening.parts.length && spellPhrase(written, { final: true }).ok && written.trim().split(/\s+/).length <= 3;
         if (solo) game.divine._unlisten(null);
-        else if (sp !== 'DivineCreation' && game.divine.hearDesc(written, isFinal)) {
+        else if (sp !== 'DivineCreation' && game.divine.hearDesc(written, isFinal, { cut: !!meta?.cut, command })) {
             if (isFinal) journal(written, true, meta, null, false, 'описание для «Да пусть создастся» — боги слушают', 'микрофон игрока');
             return;
         }

@@ -818,7 +818,7 @@ export class SoundManager {
     }
 
     /** «Да пусть создастся»: the gods think — their soft choir, as loud as `k` (0…1: near the place; 0 — silent). */
-    creationHum(k) { if (this.context && this.loaded) this._loop('creation', this.enabled && k > 0.01 ? 'loopGenesis' : null, 0.55 * Math.min(1, k)); }
+    creationHum(k) { if (this.context && this.loaded) this._loop('creation', this.enabled && k > 0.01 ? 'loopGenesisEpic' : null, 1.05 * Math.min(1, k)); } // («Да пусть создастся»: its epic tune, louder as the creation goes — DivineCreation)
 
     /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
     _loop(slot, key, k, rate = 1) {

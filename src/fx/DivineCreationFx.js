@@ -105,6 +105,30 @@ export class DivineCreationFx {
     }
 
     /** The recipe is ready: the seed bursts into light. */
+    /**
+     * The words are heard (the speaker fell quiet): the seed flares — a shock ring of light along the ground, a column
+     * of sparks rising from it, a slow spiral drawn inward to the seed (the words gathered), a flash. At {x, y, z}.
+     */
+    heard(at) {
+        const pool = this.pool, fx = this.game.fx;
+        if (!pool || !at) return;
+        this._view();
+        const cy = at.y + 4.5;
+        for (let k = 0; k < 180; k++) { // the ring along the ground
+            const a = (k / 180) * Math.PI * 2;
+            pool.spawn(at.x + Math.cos(a) * 1.2, at.y + 0.4, at.z + Math.sin(a) * 1.2, Math.cos(a) * 15, 0.6, Math.sin(a) * 15, k % 3 ? GOLD : WHITE, 0.45, 1.3, { shrink: 0.6, drag: 1.4 });
+        }
+        for (let k = 0; k < 120; k++) { // the column of sparks
+            const a = Math.random() * Math.PI * 2, r = Math.random() * 1.4;
+            pool.spawn(at.x + Math.cos(a) * r, at.y + 0.5 + Math.random() * 2, at.z + Math.sin(a) * r, Math.cos(a) * 0.6, 9 + Math.random() * 12, Math.sin(a) * 0.6, PALETTE[k % PALETTE.length], 0.4 + Math.random() * 0.4, 1.4 + Math.random() * 0.8, { shrink: 0.5, drag: 0.8 });
+        }
+        for (let k = 0; k < 90; k++) { // the words gathered: a spiral drawn inward to the seed
+            const a = k * 0.42, r = 9 - (k / 90) * 7;
+            pool.spawn(at.x + Math.cos(a) * r, cy - 2 + (k / 90) * 3, at.z + Math.sin(a) * r, -Math.cos(a) * r * 0.9 - Math.sin(a) * 4, 0.5, -Math.sin(a) * r * 0.9 + Math.cos(a) * 4, k % 2 ? GOLD : 0xfff6d8, 0.5, 1.1, { shrink: 0.4, drag: 0.6 });
+        }
+        fx?.lightFlash?.({ x: at.x, y: cy, z: at.z }, 0xfff2c0, 7, 0.9, 110);
+    }
+
     bloom(m) {
         const pool = this.pool, fx = this.game.fx;
         if (!pool) return;
