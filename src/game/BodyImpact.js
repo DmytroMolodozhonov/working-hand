@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import { IMPACT, classify, fallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush } from './Impact.js';
 import { fallStrength } from './Knockdown.js';
 import { GOT_UP_T } from './HandRelease.js';
-import { STEADY } from './Steadiness.js';
+import { STEADY, windShieldRule } from './Steadiness.js';
 import { isMagicKind, isDivine, ALL_ROUND } from './ProtectionGods.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -66,7 +66,10 @@ export class BodyImpact {
         // (not the gods' spells, Wind Maxima, Inspirius; Bombardo Maxima takes 60 % of it). Held: no fall, the body only
         // reels and the shove / toss are halved. A hand, a horn, a sword, a ball are no spells: they are not resisted.
         let held = false;
+        if (dome && windShieldRule(o.spell, { shield: 'dome' }) === 'none') this._windHint('none'); // (not even the air gets through the dome)
         if (o.stand && res !== 'shatter' && !swim && !frozen) { res = 'stagger'; held = true; } // (a snowball: a shove that never fells — the «устоял» pose, the push as given)
+        else if (!swim && !frozen && res !== 'none' && this._windShield(o, dome, facing) === 'held') { res = 'stagger'; held = true; k = Math.max(k, 1) * STEADY.HELD_PUSH_K; this._windHint('held'); }
+        else if (!swim && !frozen && res !== 'none' && this._windShield(o, dome, facing) === 'fall') { res = 'knockdown'; k = 1; }
         else if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; held = true; k *= STEADY.HELD_PUSH_K; }
         // the push itself
         if (k > 0) {
@@ -92,6 +95,20 @@ export class BodyImpact {
         } else if (res === 'stagger') { if (held) g.knock.held({ dir, v: v * k }); else g.knock.stagger({ dir, v: v * k }); }
         if (facing) this._recoil(o);
         return (facing || dome) && res === 'none' ? 'blocked' : res;
+    }
+
+    /** «Wind» against my shield (Steadiness.windShieldRule): 'held' | 'fall' | 'none' | null. */
+    _windShield(o, dome, facing) {
+        const c = this.game.combat;
+        const shield = dome ? 'dome' : facing && c.shield?.left > 0 ? 'hand' : null;
+        return windShieldRule(o.spell, { shield, facing, steady: this.game.steady?.effective });
+    }
+
+    _windHint(what) {
+        const g = this.game, now = performance.now();
+        if (now - (this._hintAt || 0) < 4000) return;
+        this._hintAt = now;
+        g.hud?.setVoice?.(what === 'none' ? '🛡️ Protection Maxima остановил даже воздух' : '🛡️ Вы устояли за щитом', true);
     }
 
     /**

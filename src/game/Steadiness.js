@@ -24,7 +24,7 @@
  */
 
 import { isDivine } from './ProtectionGods.js';
-import { IMPACT } from './Impact.js';
+import { IMPACT, SPELL_PHYSICS } from './Impact.js';
 import { hashString } from '../core/math.js';
 
 export const STEADY = {
@@ -60,6 +60,29 @@ export function holdChance(skill, kind = null, { drop = 0, cause = null, spell =
     const p = clampSkill(skill) / STEADY.MAX;
     return kind === 'BombardoMaxima' ? p * STEADY.BOMBARDO_MAXIMA_K : p;
 }
+
+/**
+ * «Wind» / «Wind Maxima» against a raised «Protection» (the author). Without a shield the usual rules stand (Wind Maxima
+ * always fells: STEADY.NEVER). `shield`: 'dome' (Protection Maxima, the gods' dome — the house sphere is HouseWards) | 'hand'
+ * (the ordinary Protection) | null; `facing`: the hand shield covers the front only, the dome covers every side.
+ *  - dome: not even the air gets through — 'none' (no push, no fall, no throw) for Wind and Wind Maxima alike;
+ *  - hand shield, facing, Wind Maxima: no dice — it holds only a body steadier than the push (steady > 78): 'held', else 'fall';
+ *  - hand shield, facing, Wind: as before (the chance of steadiness) → null; from behind or none: null.
+ */
+export function windShieldRule(kind, { shield = null, facing = false, steady = 1 } = {}) {
+    if (!STEADY.WIND_KINDS.has(kind) || !shield) return null;
+    if (shield === 'dome') return 'none';
+    if (kind !== 'WindMaxima' || !facing) return null;
+    return clampSkill(steady) > SPELL_PHYSICS.WindMaxima.push ? 'held' : 'fall';
+}
+
+/** ON WHOM AND WHAT (CLAUDE.md): «Wind» / «Wind Maxima» (cone, ring up, duel, net) against a shield. The host decides for creatures, each computer for its own player. */
+export const WIND_SHIELD_TARGETS = {
+    hero: { does: 'rule', why: 'купол — ничего; обычный Protection спереди + Wind Maxima — устойчивость > 78 устоит, иначе упадёт; сзади — как без щита (BodyImpact)' },
+    friends: { does: 'rule', why: 'каждый компьютер решает за своего игрока тем же правилом (гость — по своему щиту)' },
+    wizards: { does: 'rule', why: 'FX.DOME — ничего; FX.SHIELD спереди + Wind Maxima — по их устойчивости (глава башни 100 устоит, остальные ≤ 60 упадут); сзади — падают (CreatureImpact)' },
+    others: { does: 'unchanged', why: 'у остальных существ нет Protection: без щита Wind Maxima валит всех, Wind — по шансу устойчивости' },
+};
 
 /** How rough the ground is for a step: 0 flat … 1 steep (rise over run). */
 export const roughOf = (rise, run) => (run > 1e-3 ? clamp((Math.abs(rise) / run) / STEADY.STEEP_AT, 0, 1) : 0);

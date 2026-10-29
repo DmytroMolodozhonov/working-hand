@@ -27,8 +27,9 @@
  */
 
 import * as THREE from 'three';
+import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
-import { creatureHolds, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
+import { creatureHolds, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
 export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
@@ -237,6 +238,14 @@ export class CreatureImpact {
             K.brace(this.game, c, o.v.x / B.mass, o.v.z / B.mass);
             return 'stagger';
         }
+        // «Wind» / «Wind Maxima» against a wizard's raised «Protection» (Steadiness.windShieldRule): the dome — not even the air gets
+        // through; the hand shield, from the front — a Wind Maxima fells all but the steadier than its push (the Master: 100)
+        const wind = ck === 'v' && STEADY.WIND_KINDS.has(o.spell) ? this._windShield(c, o) : null;
+        if (wind === 'none') {
+            this._note(ck, c, o, 'none');
+            if (o.by != null && o.by === this.game.localId) this.game.hud?.setVoice?.('🛡️ Protection Maxima остановил даже воздух', true);
+            return 'none';
+        }
         const v = Math.hypot(o.v.x, o.v.z);
         let res = classify(v, { mass: B.mass, quad: B.quad, frozen: K.frozen(c) });
         if (o.always && res !== 'shatter') res = 'knockdown';
@@ -251,6 +260,8 @@ export class CreatureImpact {
             held = true; res = 'stagger';
             o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 };
         }
+        if (wind === 'held' && res !== 'shatter') { held = true; res = 'stagger'; o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 }; }
+        else if (wind === 'fall' && res !== 'none' && res !== 'shatter') res = 'knockdown';
         const vHeld = Math.hypot(o.v.x, o.v.z);
         this._note(ck, c, o, held ? 'held' : res);
         if (res === 'knockdown' && ck === 'v' && (o.spell === 'Wind' || o.spell === 'WindMaxima')) this.game.castleLife?.windKnocked?.(c, o.by); // (a wizard knocked down twice by the wind may teach a lesson — nothing else)
@@ -419,6 +430,20 @@ export class CreatureImpact {
         // dragons: a great heavy body — it only sways a little, never knocked off its feet (Dragons.push)
         if (!opts.kinds) n += this.game.dragons?.push?.(name, casterId, pushAt, opts) || 0;
         return n;
+    }
+
+    /** The wizard's shield against a wind: 'none' (dome) | 'held' | 'fall' | null (no shield / not facing / not Wind Maxima). */
+    _windShield(c, o) {
+        const fx = c.fx | 0;
+        const dome = !!(fx & FX.DOME), hand = !!(fx & FX.SHIELD);
+        if (!dome && !hand) return null;
+        let facing = false;
+        if (hand && o.from && c.group) { // (the hand shield covers the front: the wind from behind finds no shield)
+            const dx = o.from.x - c.group.position.x, dz = o.from.z - c.group.position.z, d = Math.hypot(dx, dz) || 1;
+            const yaw = c.yaw ?? c.group.rotation.y;
+            facing = (-Math.sin(yaw) * dx - Math.cos(yaw) * dz) / d > 0.25;
+        }
+        return windShieldRule(o.spell, { shield: dome ? 'dome' : 'hand', facing, steady: creatureSteady('v', c) });
     }
 
     /** (host) A spell from `from` hit this one creature (the push from SPELL_PHYSICS along from → it). */
