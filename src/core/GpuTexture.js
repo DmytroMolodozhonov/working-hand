@@ -13,13 +13,19 @@
 import * as THREE from 'three';
 
 let _renderer = null;
+const MARK = 'zns-bake-running'; // (set while the card bakes: a driver reset in the middle leaves it — the next start bakes on the processor)
+const mark = (on) => { try { if (on) localStorage.setItem(MARK, String(Date.now())); else localStorage.removeItem(MARK); } catch (e) { /* no storage */ } };
 let _why = 'нет рендерера'; // (why the card is not used: the journal says it once)
 let _told = false;
+let _baked = false; // (the first bake is told in the journal: where a driver reset happened shows)
 
 /** The game's WebGL renderer (main.js, right after it is made). */
 export function setTextureRenderer(renderer) {
     _renderer = null;
     try {
+        let died = null;
+        try { died = localStorage.getItem(MARK); } catch (e) { /* no storage */ }
+        if (died) { mark(false); _why = 'прошлый запуск оборвался во время запекания (видеокарта сбросила графику) — запекаем на процессоре'; return; }
         if (!renderer?.capabilities?.isWebGL2) { _why = 'нет WebGL2'; return; }
         if (renderer.getContext().isContextLost()) { _why = 'контекст видеокарты потерян'; return; }
         _renderer = renderer;
@@ -108,6 +114,9 @@ export function runPasses(renderer, passes, { once = false } = {}) {
     if (renderer.xr) renderer.xr.enabled = false;
     renderer.shadowMap.autoUpdate = false;
     const used = new Set();
+    const t0 = performance.now();
+    if (!_baked) gpuTexLog(`запекание на видеокарте: старт (${passes.length} проходов)`);
+    mark(true);
     try {
         for (const p of passes) {
             const m = passMaterial(p);
@@ -118,10 +127,12 @@ export function runPasses(renderer, passes, { once = false } = {}) {
             // (a shader the card would not build draws nothing: a black picture on the trees — the processor's path instead)
             if (_checked.has(m)) continue;
             const prog = renderer.properties.get(m).currentProgram;
-            if (!prog || prog.diagnostics?.runnable === false) throw new Error('шейдер не собрался');
-            if (!prog.diagnostics) { const gl = renderer.getContext(); if (!gl.getProgramParameter(prog.program, gl.LINK_STATUS)) throw new Error('шейдер не собрался'); }
+            if (!prog || prog.diagnostics?.runnable === false) { mark(false); throw new Error('шейдер не собрался'); }
+            if (!prog.diagnostics) { const gl = renderer.getContext(); if (!gl.getProgramParameter(prog.program, gl.LINK_STATUS)) { mark(false); throw new Error('шейдер не собрался'); } }
             _checked.add(m);
         }
+        mark(false);
+        if (!_baked) { _baked = true; gpuTexLog(`запекание на видеокарте: готово, ${Math.round(performance.now() - t0)} мс`); }
     } finally {
         renderer.setRenderTarget(was.target);
         renderer.autoClear = was.auto;
