@@ -3751,7 +3751,7 @@ export class CastleLife {
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)
-                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { mode: choreMoving ? 'walk' : v.mode, speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { mode: choreMoving ? 'walk' : v.mode, speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);

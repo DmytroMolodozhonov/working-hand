@@ -7,6 +7,7 @@
  */
 
 import { emotionOf } from '../entities/Emotions.js';
+import { accentsOf, accentPulse, breathAfter } from '../entities/Charisma.js';
 
 /** An intent of the talk (Relations.TONE keys, TalkMind intents) → an event of the face. */
 const INTENT_EVENT = { insult: 'insult', threat: 'threat', compliment: 'compliment', thanks: 'thanks', joke: 'joke', flirt: 'flirt', greet: 'greet', bow: 'nice', help: 'thanks' };
@@ -53,6 +54,7 @@ export function sayCtx(v, text, secs = 4) {
     v.gctx = ctxOfLine(text);
     v.gctxUntil = performance.now() + Math.max(2500, secs * 1000);
     v.saidAt = performance.now();
+    v.accents = accentsOf(text, secs); // (the stressed words and their times: the hand strikes, the head nods and the brows rise on them)
 }
 
 const MEMO = new WeakMap();
@@ -60,9 +62,14 @@ const MEMO = new WeakMap();
 /** → { emo, gctx, talk } (the same object each call: no garbage). */
 export function stateOf(life, v, now = performance.now()) {
     let m = MEMO.get(v);
-    if (!m) { m = { emo: 'neutral', gctx: 'listen', talk: false, at: -1e9 }; MEMO.set(v, m); }
+    if (!m) { m = { emo: 'neutral', gctx: 'listen', talk: false, at: -1e9, acc: 0, breath: 0, listen: false, emoAt: now }; MEMO.set(v, m); }
     m.talk = (v.sayT > 0 || (v.saidAt && now - v.saidAt < 3500));
+    const since = v.saidAt ? (now - v.saidAt) / 1000 : -1;
+    m.acc = v.accents && since >= 0 && since < v.accents.end + 0.5 ? accentPulse(v.accents, since) : 0;
+    m.breath = v.accents && since >= 0 ? breathAfter(v.accents, since) : 0;
+    m.listen = v.talking > 0 && !m.talk; // (the hero speaks to him: he nods and looks at him)
     m.gctx = v.gctxUntil > now ? v.gctx : (v.talking > 0 ? 'listen' : 'answer');
+    m.since = (now - m.emoAt) / 1000;
     if (now - m.at < 250) return m;
     m.at = now;
     const ev = v.emoUntil > now ? v.emoEv : null;
@@ -78,6 +85,9 @@ export function stateOf(life, v, now = performance.now()) {
     }
     const fear = v.fleeT > 0 || v.fleeing ? 2 : v.fear ? Math.min(2, (v.fear.level ?? 1)) : 0;
     const hp = v.maxHp ? v.hp / v.maxHp : 1;
+    const was = m.emo;
     m.emo = emotionOf({ mood, eff: eff || { sub: 0, fr: 0, lv: 0 }, ev, c: c || {}, fear, hp, night: !!life.game?.isNight });
+    if (m.emo !== was) m.emoAt = now; // (a new feeling: the body jerks, the face changes quickly)
+    m.since = 0;
     return m;
 }

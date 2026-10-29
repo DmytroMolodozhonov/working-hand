@@ -22,6 +22,7 @@ import { ARENA_MODES, arenaPose } from './ArenaPoses.js';
 import { COMMAND_MODES, commandPose } from './CommandPoses.js';
 import { EMOTIONS, newFace, easeFace, quantFace, faceKey } from './Emotions.js';
 import { pickGesture, gesturePose, GESTURES } from './Gestures.js';
+import { ARCHETYPES, archetypeOf, bodyLayer, newLayer } from './Charisma.js';
 import * as THREE from 'three';
 import { FarShape } from '../core/FarShape.js';
 import { SKIN_TONES } from './Appearance.js';
@@ -1107,6 +1108,8 @@ export class VillagerModel {
             this._faceMesh.userData.noFar = true; // (drawn on its own near the hero: the one far shape would be made again at each look of the face)
             this._faceKey = faceKey(fq);
         }
+        this._ch = ARCHETYPES[archetypeOf(look.role, look.seed)] || ARCHETYPES.plain; // (the character: how wide, how quick, which gestures he likes)
+        this._lay = newLayer();
         this._gest = null; this._gestT = 0; this._gestWait = 1 + (look.seed & 7) * 0.2; this._gestLast = null; this._gestId = null;
         this._grng = (((look.seed | 0) * 2654435761) >>> 0) || 1;
         // a wizard's pointed hat: its own two meshes (it folds back under a low ceiling)
@@ -1458,8 +1461,20 @@ export class VillagerModel {
     /** The bearing of the feeling and the gestures of the talk (state.emo: an emotion key; state.gctx: the situation; state.gest: a gesture to play now). */
     _feel(dt, state, mode, T) {
         const E = EMOTIONS[state.emo] || EMOTIONS.neutral, bd = E.body;
-        T.headX += bd.headX; T.headZ += bd.headZ; T.hx += bd.lean;
+        const ch = this._ch, Ly = this._lay;
+        T.headX += bd.headX * ch.amp; T.headZ += bd.headZ * ch.amp; T.hx += bd.lean * ch.step;
         if (bd.shoulders) { T.aLZ -= bd.shoulders; T.aRZ += bd.shoulders; }
+        // the whole body: weight on one leg, the trunk's turns, a lean or a start, laughter / trembling, the beat on the stressed word, a breath, a listener's nod
+        bodyLayer(Ly, { t: this._t, ch, emo: state.emo || 'neutral', seed: this.look.seed, talk: mode === 'talk' && !!state.talk, listen: !!state.listen, acc: state.acc || 0, breath: state.breath || 0, since: state.since ?? 9, look: mode === 'talk' ? 1 : 0 });
+        T.hx += Ly.hx; T.hy += Ly.hy; T.hz += Ly.hz; T.headX += Ly.headX; T.headY += Ly.headY; T.headZ += Ly.headZ;
+        T.lL += Ly.lL; T.lR += Ly.lR; T.kL += Ly.kL; T.kR += Ly.kR; T.bounce += Ly.bounce;
+        this._brow = Ly.brow; this._blink = Ly.blink; this._mouthAcc = Ly.mouth;
+        // the free hand beats on the stress (the sword hand and the shield arm stay as they are)
+        if (Ly.beat) {
+            const sword = this.toolKind && this.toolKind !== 'none' && !this._sheath;
+            if (!sword) { T.aRX += Ly.beat; T.aRZ += Ly.beat * 0.3; }
+            if (!this.shield) { T.aLX += Ly.beat * 0.8; T.aLZ -= Ly.beat * 0.25; }
+        }
         if (state.gest !== this._gestId) {
             this._gestId = state.gest || null;
             const g = this._gestId && GESTURES[this._gestId];
@@ -1471,13 +1486,13 @@ export class VillagerModel {
             if (this._gestWait > 0) return;
             this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0;
             const rnd = () => { this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0; return this._grng / 4294967296; };
-            const g = pickGesture({ ctx: state.gctx || 'answer', emo: state.emo || 'neutral', role: this.look.role, rng: rnd, last: this._gestLast, lively: 0.7 + (this.look.seed & 15) / 20 });
+            const g = pickGesture({ ctx: state.gctx || 'answer', emo: state.emo || 'neutral', role: this.look.role, rng: rnd, last: this._gestLast, lively: 0.7 + (this.look.seed & 15) / 20, like: ch.like, more: ch.gestMax, wideK: ch.wide });
             if (!g) { this._gestWait = 0.8 + rnd() * 1.4; return; }
             this._startGest(g);
         }
         if (!this._gest) return;
         this._gestT += dt;
-        const e = gesturePose(T, this._gest, this._gestT, E.amp, E.tempo);
+        const e = gesturePose(T, this._gest, this._gestT, E.amp * ch.amp, E.tempo * ch.tempo);
         if (e <= 0 && this._gestT > 0.2) {
             this._gestLast = this._gest.id; this._gest = null;
             this._grng = (Math.imul(this._grng, 1664525) + 1013904223) >>> 0;
@@ -1504,8 +1519,12 @@ export class VillagerModel {
         const F = (EMOTIONS[state.emo] || EMOTIONS.neutral).face, g = this._ftgt;
         g.brow.y = F.brow.y; g.brow.tilt = F.brow.tilt; g.brow.asym = F.brow.asym;
         g.mouth.curve = F.mouth.curve; g.mouth.open = F.mouth.open; g.mouth.wide = F.mouth.wide; g.mouth.asym = F.mouth.asym; g.lid = F.lid;
-        if (mode === 'talk' || state.talk) g.mouth.open = Math.max(F.mouth.open, Math.max(0, Math.sin(t * 10) + Math.sin(t * 6.3) * 0.6) * 0.55);
-        easeFace(this._face, g, dt, 9);
+        const ch = this._ch, br = this._brow || 0, ac = this._mouthAcc || 0;
+        // (the character works the face: a merry one smiles wider, a grim one frowns deeper; the stressed word lifts the brows and opens the mouth)
+        g.brow.y = F.brow.y * ch.brow + 0.05 * br; g.brow.tilt = F.brow.tilt * ch.brow; g.mouth.curve = F.mouth.curve * ch.mouth;
+        g.mouth.wide = 1 + (F.mouth.wide - 1) * ch.mouth; g.lid = Math.min(1, F.lid + (this._blink || 0) * (1 - F.lid)); // (a blink: the lid drops for a moment)
+        if (mode === 'talk' || state.talk) g.mouth.open = Math.max(F.mouth.open, Math.max(0, Math.sin(t * 10) + Math.sin(t * 6.3) * 0.6) * 0.45 + ac * 0.35 * ch.mouth);
+        easeFace(this._face, g, dt, (mode === 'talk' || state.talk ? 12 : 9) * (0.8 + 0.2 * ch.tempo));
         this._faceAt -= dt;
         if (this._faceAt > 0) return;
         this._faceAt = 0.08;
@@ -1841,6 +1860,7 @@ export class VillagerModel {
                 break;
         }
         // ---- what he feels shows in the bearing, and in the hands when he talks (Emotions.js, Gestures.js)
+        this._brow = 0; this._blink = 0; this._mouthAcc = 0; // (set again by _feel: walking, fighting or working leaves the face as it was)
         if (!own && !loco && (mode === 'idle' || mode === 'talk')) this._feel(dt, state, mode, T);
         this._faceStep(dt, state, mode, t);
         if (this.chore && mode !== 'chore') carryBody(this, this.chore, T); // (a bucket, a sack carried home)
