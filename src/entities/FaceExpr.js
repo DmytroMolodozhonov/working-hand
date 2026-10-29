@@ -128,7 +128,7 @@ export class FaceReader {
         // the neutral face: learnt slowly, only from pictures near it (the open eyes: from the open ones)
         const dt = this._t == null ? 0.05 : clamp(t - this._t, 0, 0.5);
         this._t = t;
-        if (!this.base) this.base = { openR: m.openR, openL: m.openL, browR: m.browR, browL: m.browL, inR: m.inR, inL: m.inL, knit: m.knit, jaw: Math.min(m.jaw, 0.05), width: m.width, smR: m.smR, smL: m.smL, lip: m.lip };
+        if (!this.base) this.base = { openR: m.openR, openL: m.openL, browR: m.browR, browL: m.browL, inR: m.inR, inL: m.inL, knit: m.knit, jaw: Math.min(m.jaw, 0.05), width: m.width, smR: Math.min(m.smR, 0), smL: Math.min(m.smL, 0), lip: m.lip }; // (a face smiling from the first picture: its calm corners are not that high)
         const b = this.base, k = 1 - Math.exp(-dt / 6);
         const learn = (key, band) => { if (Math.abs(m[key] - b[key]) < band) b[key] += (m[key] - b[key]) * k; };
         for (const [key, band] of [['browR', 0.05], ['browL', 0.05], ['inR', 0.05], ['inL', 0.05], ['knit', 0.05], ['width', 0.06], ['smR', 0.03], ['smL', 0.03], ['lip', 0.04]]) learn(key, band);

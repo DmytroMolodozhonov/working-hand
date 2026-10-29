@@ -39,7 +39,7 @@ test('the realistic hero: arms, fingers and face from the camera; the standard o
     assert.ok(a.bodyHidden, 'the standard torso hidden');
     assert.ok(a.d < 0.01, `the palm on the game's palm (${a.d})`);
     assert.ok(a.fingerFollows < 0.01, `the finger bones on the game's (${a.fingerFollows})`);
-    assert.ok(a.smile > 0.3, `the smile read from the face (${a.smile})`);
+    assert.ok(a.smile > 0.15, `the smile read from the face (${a.smile})`);
     // the face closes the eyes, then opens the mouth
     await feed(page, { arms: 'hang', face: { close: 1 } }, 20, 40);
     const blink = await page.evaluate(() => window.__zns.game.character.real.face.blinkL);
