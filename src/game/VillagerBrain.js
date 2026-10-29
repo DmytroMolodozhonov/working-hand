@@ -822,6 +822,7 @@ export class VillagerBrain {
     get roleName() {
         const r = this.villager.wizardRank;
         if (WIZARD_RANK_RU[r]) return WIZARD_RANK_RU[r][this.villager.female ? 1 : 0];
+        if (this.villager.entry?.trade && this.villager.title) return this.villager.title.toLowerCase(); // (a smith, a baker, a priest — Trades.js)
         return ROLE_RU[this.role][this.villager.female ? 1 : 0];
     }
 

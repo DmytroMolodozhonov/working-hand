@@ -13,8 +13,9 @@
  *
  * Sizes are from the world (1 block = 1 m; the hero ~3.5 m, 4.6 with a hat): a door 3 wide × 6 high, a room 7–8 m to the
  * eaves, a way through a room 3 wide, a counter 2 high (a market stall), a table top at the waist (2 m), a seat at the knee
- * (1.5 m), a bed 2.5 × 5.5 (Beds.js). A normal lot is 15 × 13 (the houses' 17 m grid, back to back with the next row);
- * a BIG lot (`big`: the church, the stable) is 25 × 25 — the lots round it are left empty, as round the graveyard.
+ * (1.5 m), a bed 2.5 × 5.5 (Beds.js). A normal lot is 17 × 14 (the houses' 17 m grid, back to back with the next row: a building
+ * is up to 15 × 13 with its eaves one block over, nothing before b = −7 — the road's edge is at −8);
+ * a BIG lot (`big`: the church, the stable) is 26 × 26 — the lots round it are left empty, as round the graveyard.
  * The door always looks at the road (local −b), the door node 8 m before the lot's middle joins the road's node.
  *
  * Lot coordinates (a across, b deep; the door side is −b) are turned by `rotLot`; layer 0 is the floor, −1 the floor's blocks.
@@ -41,7 +42,7 @@ export const BUILDING_KINDS = {
 };
 export const BUILDING_IDS = Object.keys(BUILDING_KINDS);
 
-/** Who lives in a building (a person's trade: CastleLife `e.trade`; the look — entities/TradeLooks.js). */
+/** Who lives in a building (a person's trade: CastleLife `e.trade`; the clothes — game/Trades.js). */
 export const TRADE_OF = {
     granary: 'keeper', smithy: 'smith', tavern: 'innkeeper', chapel: 'priest', church: 'priest',
     mill: 'miller', bakery: 'baker', herbalist: 'herbalist', stable: 'stableman',
@@ -149,12 +150,6 @@ function gable(K, o) {
     return top;
 }
 
-/** A tie beam across the room and a lantern hanging under it. */
-function beamLamp(K, a, b0, b1, l, timber, lampAt = null) {
-    K.box(a, a, l, l, b0, b1, timber);
-    if (lampAt != null) K.box(a, a, l - 1, l - 1, lampAt, lampAt, K.B.LANTERN);
-}
-
 /** A table: legs at the corners, a top half a block thick at the waist (2 m). Cells a0…a1 × b0…b1. */
 function table(K, a0, a1, b0, b1, top, leg) {
     for (const [a, b] of [[a0, b0], [a1, b0], [a0, b1], [a1, b1]]) K.box(a, a, 0, 0, b, b, leg);
@@ -167,14 +162,6 @@ function bench(K, a0, a1, b0, b1, mat) {
     K.box(a0, a1, 0, 0, b0, b1, mat);
     K.box(a0, a1, 1, 1, b0, b1, mat);
     for (let a = a0; a <= a1; a++) for (let b = b0; b <= b1; b++) K.slab(a, b, 1, SHAPE.SLAB);
-}
-
-/** A bed in the back (pillow to the wall at b = backFace), a = its middle. */
-function bed(K, a, backFace) {
-    const bc = backFace - 2.85;
-    K.house.bedSpots.push({ ...K.pt(a, bc, 0), yaw: K.yaw(0, 1) });
-    K.beds.push([a - 1.25, a + 1.25, bc - 2.75, bc + 2.75]);
-    K.house.beds++;
 }
 
 /** Chests against the walls of a room (the floor a0…a1 × b0…b1, cell edges); `wants`: [a, b] spots. */
@@ -219,12 +206,13 @@ function buildWell(K) {
     // the square, 11 × 11, a ring of darker stones
     K.box(-5, 5, -1, -1, -5, 5, B.COBBLE);
     K.box(-4, 4, -1, -1, -4, -4, B.CS_GREY); K.box(-4, 4, -1, -1, 4, 4, B.CS_GREY); K.box(-4, -4, -1, -1, -4, 4, B.CS_GREY); K.box(4, 4, -1, -1, -4, 4, B.CS_GREY);
-    // the basin: 3 × 3, the water a block under the floor, a ring 1 high round it (a climber gets out), steps on one side
-    K.box(-1, 1, -3, -1, -1, 1, 0);
-    K.box(-1, 1, -3, -2, -1, 1, B.WATER);
-    K.box(-2, 2, 0, 0, -2, 2, B.CS_GREY);
-    K.box(-1, 1, 0, 0, -1, 1, 0);
-    K.box(-2, 2, 1, 1, -2, -2, B.COBBLE); K.box(-2, 2, 1, 1, 2, 2, B.COBBLE); // (the front and back of the rim 2 high; the sides stay low to sit on)
+    // the basin: 3 × 3, a metre of water (its surface a metre under the ground), stone steps along the front to wade in and out, a low rim of
+    // stone on the other three sides (the front is open: the way to the steps)
+    K.box(-1, 1, -2, -1, -1, 1, 0);
+    K.box(-1, 1, -2, -2, 0, 1, B.WATER);
+    K.box(-1, 1, -2, -2, -1, -1, B.CS_GREY); // the steps (their top is the water's surface)
+    K.box(-2, 2, 0, 0, 2, 2, B.CS_GREY); K.box(-2, -2, 0, 0, -1, 1, B.CS_GREY); K.box(2, 2, 0, 0, -1, 1, B.CS_GREY);
+    K.box(-2, 2, 1, 1, 2, 2, B.COBBLE); // (the back of the rim is a block higher: a place to lean)
     // four posts, a beam with the windlass, a small gable roof
     for (const [a, b] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) K.box(a, a, 1, 7, b, b, B.PLANKS_DARK);
     K.box(-2, 2, 7, 7, -2, -2, B.PLANKS_DARK); K.box(-2, 2, 7, 7, 2, 2, B.PLANKS_DARK);
@@ -574,6 +562,8 @@ function buildChurch(K, big) {
         win(K, -c.W, -c.W, b0, b1, 3, big ? 7 : 5, STAINED[i % STAINED.length], 'b');
         win(K, c.W, c.W, b0, b1, 3, big ? 7 : 5, STAINED[(i + 2) % STAINED.length], 'b');
     });
+    // buttresses between the tall windows of a church (a step-in of stone against each side wall)
+    if (big) for (const b of [2, 5, 9, 13 - 0]) for (const sgn of [-1, 1]) { const a0 = sgn * (c.W + 1); K.box(a0, a0, 0, 5, b, b, trim); K.box(a0, a0, 6, 6, b, b, trim); K.slab(a0, b, 6, SHAPE.SLAB); }
     // ---- the roofs and the spire
     gable(K, { a0: -c.W, a1: c.W, b0: nb0 + (big ? 0 : 0), b1: c.nb1, h: c.nh, roof, wall: stone, ridge: 'b' });
     if (big) gable(K, { a0: -c.C, a1: c.C, b0: c.nb1, b1: c.cb1, h: c.ch, roof, wall: stone, ridge: 'b' });
@@ -614,7 +604,8 @@ function buildChurch(K, big) {
     }
     // outside: a lamp each side of the door (frontDoor), steps, flowers
     for (const a of [-c.T - 1, c.T + 1]) K.box(a, a, 0, 0, c.tb0 - 1, c.tb0 - 1, B.FLOWERS);
-    K.keep.push([-1.5, 1.5, c.tb0 - 0.5, c.tb0 + 3]);
+    K.keep.push([-1.5, 1.5, c.tb0 - 0.5, c.tb0 + 2]); // the doorway's swing
+    chests(K, -c.T + 0.5, c.T - 0.5, c.tb0 + 0.5, c.tb1 - 0.5, [[-c.T + 1, c.tb1 - 1], [c.T - 1, c.tb1 - 1]]); // in the tower's foot, against its side walls
     K.out.fx.push({ k: 'bell', ...K.pt(0, mid, c.th - 4), ax: K.pt(1, mid).x - K.pt(0, mid).x, az: K.pt(1, mid).z - K.pt(0, mid).z, big });
     return finish(K, 0, c.tb0, c.tb0 + 2, { r: big ? 16 : 10 });
 }

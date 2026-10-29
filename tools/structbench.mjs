@@ -119,7 +119,7 @@ if (args.includes('--magic')) {
 
 for (const seed of args.includes('--magic') && !args.includes('--seeds') ? [] : SEEDS) {
     const data = new TerrainData();
-    data.generate({ seed, mountains: true, seas: true, test: TEST, deepCaves: true, lush: true, slopes: true, wizHuts: true, furnish: !args.includes('--no-furnish') }); // (the newest generation; --no-furnish: the castles' rooms empty, as before generation 8)
+    data.generate({ seed, mountains: true, seas: true, test: TEST, deepCaves: true, lush: true, slopes: true, wizHuts: true, furnish: !args.includes('--no-furnish'), buildings: !args.includes('--no-buildings') }); // (the newest generation; --no-furnish: the castles' rooms empty, as before generation 8)
     data.skipSeaTop = true;
     const tallies = new Map();
     const tallyOf = (k) => { if (!tallies.has(k)) tallies.set(k, { n: 0, built: 0, lost: 0, crushed: 0, torn: 0, floating: 0, fell: 0, ex: [], fex: [], fallEx: [] }); return tallies.get(k); };

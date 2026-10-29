@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * buildbench.mjs — the settlement buildings (src/world/Buildings.js) as plans seen from above, layer by layer, and their checks.
- *     node tools/buildbench.mjs [kind ...] [--layers 0,2,5] [--face 0] [--top]
+ *     node tools/buildbench.mjs [kind ...] [--layers 0,2,5] [--face 0] [--top] [--fits]
+ *     node tools/buildbench.mjs --world [--seeds 20261015,7,99] [--cells 3]   (a summary of the buildings of generated worlds)
  * Each building is built alone on a flat plan (floor layer 0): the blocks of each layer in ASCII (x →, z ↓: the door is at the top),
  * what the checks say (a way 3 wide from the door to everything that is used).
  */
@@ -17,7 +18,31 @@ const kinds = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1
 const layers = opt('layers', '0,1,2,3,5,8').split(',').map(Number);
 const face = Number(opt('face', 0));
 const TOP = args.includes('--top');
+const WORLD = args.includes('--world');
 void new TerrainData();
+if (WORLD) {
+    const seeds = opt('seeds', '20261015,7,99,1234,555').split(',').map(Number), R = Number(opt('cells', 3));
+    const by = {}, kindsBy = {};
+    for (const seed of seeds) {
+        const d = new TerrainData();
+        d.generate({ seed, mountains: true, seas: true, lush: true, slopes: true, wizHuts: true, furnish: true, buildings: true });
+        for (let gz = -R; gz <= R; gz++) for (let gx = -R; gx <= R; gx++) {
+            const list = [d.castles.cellOf(gx, gz), ...d.hamlets.cellOf(gx, gz).filter((h) => h.type === 'village')].filter(Boolean);
+            for (const site of list) {
+                const key = site.kind === 'hamlet' ? 'деревня' : site.style;
+                const row = by[key] || (by[key] = { n: 0, houses: 0, stalls: 0, shops: 0, chests: 0, pens: 0, fx: 0 });
+                row.n++; row.houses += site.houses.length; row.stalls += site.stalls.length; row.shops += site.stalls.filter((q) => q.shop).length; row.pens += (site.pens || []).length; row.fx += (site.fx || []).length;
+                row.chests += site.houses.filter((h) => h.trade).reduce((a, h) => a + h.chests.length, 0);
+                for (const b of site.buildings || []) { const k = kindsBy[key] || (kindsBy[key] = {}); k[b.kind] = (k[b.kind] || 0) + 1; }
+            }
+        }
+    }
+    for (const [key, r] of Object.entries(by)) {
+        console.log(`${key.padEnd(10)} мест ${String(r.n).padStart(3)}  домов в среднем ${(r.houses / r.n).toFixed(1)}  лавок ${(r.shops / r.n).toFixed(1)}  сундуков в зданиях ${(r.chests / r.n).toFixed(1)}  загонов/стойл ${(r.pens / r.n).toFixed(1)}  эффектов ${(r.fx / r.n).toFixed(1)}`);
+        console.log('   ' + Object.entries(kindsBy[key] || {}).map(([k, v]) => `${k} ${(v / r.n).toFixed(2)}`).join('  '));
+    }
+    process.exit(0);
+}
 const CH = {};
 const set = (names, ch) => { for (const n of names.split(' ')) if (BLOCK[n] != null) CH[BLOCK[n]] = ch; };
 set('PLANKS', 'p'); set('PLANKS_DARK', 'P'); set('FENCE', 'f'); set('BOOKS', 'B'); set('LANTERN', '*'); set('CLOTH_WHITE', 'w'); set('CARPET_RED CARPET_BLUE CARPET_GREEN CARPET_PURPLE', 'c'); set('CLOTH_YELLOW', 'y');
