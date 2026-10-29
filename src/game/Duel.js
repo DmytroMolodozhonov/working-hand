@@ -165,6 +165,7 @@ export const DUEL = {
     RANGE: 30, // m
     RANGE_DIE: 50, // m: «Дай» (1000 mana, one charge in a fight) reaches farther than the rest
     CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
+    DEFLECT_MIN_SHARE: 0.2, // a share of the beam clash (my side of the whole fight) at or below it: no breaking away — a losing wizard cannot just turn the spell aside (the author)
     CONTACT_GRACE: 0.25, // s off the opponent before a flick counts as "shaking it off"
     PUSH: 0.16, // how fast the meeting point moves per unit of strength difference
     LUCK: 0.02, // ±2 % random (the author: «небольшой процент, 1–2»; mana decides)
@@ -219,6 +220,15 @@ export const AIM = {
     MEET_BEND: 0.5, // rad: how far it may turn off the hand's line for it
     MEET_TURN: 6, // rad/s
 };
+
+/**
+ * May a hand break away from a beam clash (a sharp jerk = the duel ends / gives up)? Only a clash that has really started
+ * (a charge still flying is never turned aside) and only with a share above `DUEL.DEFLECT_MIN_SHARE`; `forced`
+ * (dead, stunned, no wand, out of mana) is not a choice and is never refused. Pure — the tests use it.
+ */
+export function deflectAllowed(share, forced = false) {
+    return forced || share > DUEL.DEFLECT_MIN_SHARE;
+}
 
 /** Random small lightning from a clash: none from weak wizards (as it was), more and more from the strong — arcs per second for a mean strength. */
 export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5, ON: false }; // (ON: false — the author: «молнии в дуэли лучей не нравятся», OFF; the spell «Lightning Strike» is another thing)
@@ -1636,7 +1646,7 @@ export class Duel {
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
     _contact(id, bolt, opponentId) {
         if (id === this.me) {
-            if (this.game.combat?.dead || this.game.isDeadLocal) return { ok: false, jerk: true }; // (dead: my hand holds nothing — as a remote's `r.dead`)
+            if (this.game.combat?.dead || this.game.isDeadLocal) return { ok: false, jerk: true, forced: true }; // (dead: my hand holds nothing — as a remote's `r.dead`)
             // (own vectors: _playerPos writes into _v2 — the hand's direction must survive it)
             const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
             // (the one I push against: another player, or a wizard of a tower / the arena — his place, not «nobody» — else my hand would be off him and push for nothing)
@@ -1652,7 +1662,7 @@ export class Duel {
             return this.game.castleLife.wizards.fight.clashHold(w, share);
         }
         const r = this.game.remotes.get(id);
-        if (!r || r.dead) return { ok: false, jerk: true };
+        if (!r || r.dead) return { ok: false, jerk: true, forced: true };
         return { ok: r.duelContact !== 0, jerk: r.duelJerk === 1 };
     }
 
@@ -1722,6 +1732,14 @@ export class Duel {
             // («Дай» in a clash: +10 mana a second while its beam fights)
             g.combat.fatigue = Math.max(0, g.combat.fatigue - (DUEL.CLASH_FATIGUE + (mine.spell === 'Die' ? STRONG.Die.drain : 0)) * dt);
         }
+        // my own sharp jerk while I am too weak to break away: it does nothing — told once per clash
+        if ((a.by === this.me || b.by === this.me) && !c.hintedWeak) {
+            const mineA = a.by === this.me;
+            if (!deflectAllowed(mineA ? c.p : 1 - c.p) && this._jerked((mineA ? a : b).side)) {
+                c.hintedWeak = true;
+                g.hud.setVoice?.('🌀 Вы слишком слабы, чтобы отвести заклинание: усильте натиск — держите палочку на сопернике и крикните «Максима», пока ваша доля луча не вырастет', true);
+            }
+        }
         if (!this._referee()) return;
 
         c.luckT -= dt;
@@ -1731,6 +1749,13 @@ export class Duel {
             c.luckB = (Math.random() * 2 - 1) * DUEL.LUCK;
         }
         const ca = this._contact(a.by, a, b.by), cb = this._contact(b.by, b, a.by);
+        // (breaking away only with a share above the limit: a losing side cannot turn the beam aside — the journal says why)
+        for (const [x, who, share, o] of [[ca, a.by, c.p, a], [cb, b.by, 1 - c.p, b]]) {
+            if (x.jerk && !deflectAllowed(share, x.forced)) {
+                x.jerk = false;
+                if (!o.denyNoted) { o.denyNoted = true; this._note({ ev: 'deflectDenied', by: who, share: Math.round(share * 100), why: `отвод запрещён: доля ${Math.round(share * 100)} %` }); }
+            }
+        }
         c.lostA = ca.ok ? 0 : c.lostA + dt;
         c.lostB = cb.ok ? 0 : c.lostB + dt;
         // A hand off the opponent doesn't push at all

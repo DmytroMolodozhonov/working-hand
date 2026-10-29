@@ -685,8 +685,8 @@ export class WizardFight {
      * A student out of mana and losing gives up (jerk: the other's spell hits him).
      */
     clashHold(v, share) {
-        if (!v || v.dead || v.noWand || v.lev || v.stunT > 0 || v.vy) return { ok: false, jerk: true };
-        if ((v.skillRole || v.role) === 'student' && share < 0.2 && v.mana < 5) return { ok: false, jerk: true };
+        if (!v || v.dead || v.noWand || v.lev || v.stunT > 0 || v.vy) return { ok: false, jerk: true, forced: true };
+        if ((v.skillRole || v.role) === 'student' && share < 0.2 && v.mana < 5) return { ok: false, jerk: true, forced: true };
         return { ok: true, jerk: false };
     }
 
