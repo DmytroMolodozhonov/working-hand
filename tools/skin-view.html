@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { VoxelCharacter } from '../src/entities/Character.js';
 import { RealisticBody, realLibrary } from '../src/entities/RealisticBody.js';
+import { dressArmor } from '../src/entities/ArmorLook.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 640), H = +(q.get('h') || 640);
@@ -40,6 +41,7 @@ ch.setShowHands(true);
 ch.setHandVersion('v4');
 const look = { skin: +(q.get('skin') || 0xf1c27d), face: +(q.get('lookface') || 0), eyes: 0x3b6ea5, brows: 0x4a3728, hair: +(q.get('hair') || 0), hairColor: 0x4a3728, hat: +(q.get('hat') || 0), hatColor: 0x8e2b2b, top: +(q.get('top') || 0), topColor: +(q.get('topc') || 0x3d7ab8), bottom: +(q.get('bottom') || 0), bottomColor: 0x2c3e50, shoes: +(q.get('shoes') || 0), shoesColor: 0x333333 };
 ch.setLook(look);
+if (q.get('armor')) { const [h, c, l, r] = q.get('armor').split('.').map(Number); dressArmor(ch, { h, c, l, r, rc: 0x4b2a7a, rt: +(q.get('rt') || 1) }); }
 const pose = q.get('pose') || 'idle';
 const model = q.get('model') || 'real';
 

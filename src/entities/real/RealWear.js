@@ -22,10 +22,14 @@ const skull = (t, o) => ellipsoid(SKULL.c, [SKULL.r[0] + t, SKULL.r[1] + t, SKUL
 const hairline = (front = 4.3, back = 4.04) => plane([0, -1, -(front - back) / 0.45], -(Y((front + back) / 2) + 0.025 * (front - back) / 0.45));
 
 /** The pieces a look needs, as a key (the same key: the same meshes). */
-export function wearKey(look = {}) {
+export function wearKey(look = {}, armor = null) {
     const f = look.face | 0;
     const hat = [5, 9].includes(look.hat) ? 0 : look.hat | 0;
-    return [look.hair | 0, hat, f % 9 === 5 ? 1 : 0, f % 10 === 8 ? 1 : 0, [2, 6].includes(look.bottom) ? look.bottom : 0, [1, 8].includes(look.top) ? look.top : 0].join('.');
+    const a = armor || {};
+    const robe = a.r | 0, helm = a.h | 0;
+    // (a robe's hood or a helmet instead of the look's hat; a robe over the skirt; the cloak's and hoodie's pieces under a robe gone)
+    return [look.hair | 0, helm ? 0 : robe ? 0 : hat, f % 9 === 5 ? 1 : 0, f % 10 === 8 ? 1 : 0, robe ? 0 : [2, 6].includes(look.bottom) ? look.bottom : 0, robe ? 0 : [1, 8].includes(look.top) ? look.top : 0,
+        helm, a.c | 0, a.l | 0, robe].join('.');
 }
 
 // ------------------------------------------------------------------ the hair
@@ -96,7 +100,7 @@ function hairShape(style, hat) {
 }
 /** Under a hat no hair is seen (it only shows below it). */
 function hatInside(hat) {
-    const low = { 1: 4.27, 2: 4.24, 3: 4.36, 4: 4.38, 6: 3.9, 7: 4.28, 8: 4.36 }[hat] ?? 4.3;
+    const low = { 1: 4.27, 2: 4.24, 3: 4.36, 4: 4.38, 6: 3.9, 7: 4.28, 8: 4.36, 20: 4.12, 21: 3.9 }[hat] ?? 4.3; // (20 a helmet, 21 a robe's hood)
     return ellipsoid([0, Y(low + 0.5), 0.03], [0.32, 0.5, 0.34], I3, { part: PART.head });
 }
 
@@ -155,6 +159,54 @@ function hatShape(hat) {
             .cut([ellipsoid([0, Y(4.67), 0.03], [0.05, 0.05, 0.16], I3, m), skull(0.012, m)], 0, 0.02);
     } else return null;
     return sh;
+}
+
+// ------------------------------------------------------------------ armour (zone 16: steel, 17: its trim) and the robe (zone 9)
+/** A helmet (ArmorLook: 1 plain, 2 magic with a crest, 3 named — a crest and a plume): the bowl, cheek plates, the neck guard, a nasal. */
+function helmetShape(code) {
+    const st = { part: PART.head, zone: 16 }, tr = { part: PART.head, zone: 17 }, plume = { part: PART.head, zone: 8 };
+    const sh = new Shape();
+    const bowl = [skull(0.05, st)];
+    for (const s of [1, -1]) bowl.push(ellipsoid([0.19 * s, Y(4.04), -0.07], [0.03, 0.13, 0.12], I3, st)); // the cheek plates
+    bowl.push(ellipsoid([0, Y(4.0), 0.2], [0.2, 0.14, 0.07], I3, st)); // the neck guard
+    sh.union(bowl, 0.03)
+        .cut([skull(0.022, st), ellipsoid([0, Y(4.05), -0.3], [0.13, 0.16, 0.2], I3, st), plane([0, 1, 0], Y(3.88))], 0, 0.012)
+        .union([etorus([0, Y(4.25), 0.03], 0.235, 0.28, 0.014, [[1, 0, 0], [0, 0, 1], [0, 1, 0]], tr), cone([0, Y(4.25), -0.268], [0, Y(4.13), -0.29], 0.012, 0.01, tr)], 0, 0.006);
+    if (code >= 2) sh.union([ellipsoid([0, Y(4.5), 0.04], [0.02, 0.07, 0.24], I3, tr)], 0, 0.01); // the crest
+    if (code === 3) sh.union([cone([0, Y(4.52), 0.1], [0, Y(4.75), 0.32], 0.05, 0.09, plume), sphere([0, Y(4.7), 0.3], 0.09, plume)], 0.04, 0.01); // the plume
+    return sh;
+}
+/** A mage's hood: soft, round the head, its tip falling back (zone 9: the robe's colour). */
+function robeHoodShape() {
+    const m = { part: PART.head, zone: 9 };
+    return new Shape().union([skull(0.065, m), ellipsoid([0, Y(3.78), 0.06], [0.28, 0.2, 0.28], I3, m), cone([0, Y(4.45), 0.18], [0, Y(4.2), 0.42], 0.09, 0.02, m)], 0.06)
+        .cut([skull(0.035, m), ellipsoid([0, Y(3.75), 0.05], [0.24, 0.2, 0.24], I3, m), ellipsoid([0, Y(4.05), -0.3], [0.16, 0.27, 0.2], I3, m), plane([0, 1, 0], Y(3.62))], 0, 0.015);
+}
+/** The robe's skirt to the ankles (with soft folds), the pauldrons on the shoulders. */
+function armourBodyShape(chest, robe) {
+    const sh = new Shape();
+    let any = false;
+    if (robe) {
+        const o = { part: PART.torso, zone: 9 }, f = [[1, 0, 0], [0, 1, 0], [0, 0, 1.2]];
+        const folds = [];
+        for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2; folds.push(bump([Math.sin(a) * 0.56, Y(0.9), Math.cos(a) * 0.46 + 0.02], [0.03, 0.6, 0.03], 0.018)); }
+        sh.union([hcone([0, Y(0.28), 0.02], f, 2.42, 0.58, 0.37, 0.01, o)], 0).bumps(folds)
+            .cut([hcone([0, Y(0.26), 0.02], f, 2.5, 0.53, 0.33, 0, o)], 0, 0.004);
+        any = true;
+    }
+    if (chest) {
+        const st = { part: PART.torso, zone: 16 }, tr = { part: PART.torso, zone: 17 };
+        const list = [], cuts = [];
+        for (const s of [1, -1]) {
+            const c = [0.6 * s, Y(3.52), 0.02];
+            list.push(ellipsoid(c, [0.24, 0.17, 0.23], I3, st));
+            for (let k = 1; k <= 2; k++) list.push(ellipsoid([0.63 * s + 0.04 * k * s, Y(3.52) - 0.09 * k, 0.02], [0.2, 0.12, 0.2], I3, k === 2 ? tr : st)); // the lames below
+            cuts.push(ellipsoid(c, [0.2, 0.14, 0.19], I3, st), plane([0, 1, 0], Y(3.16)), ellipsoid([0.3 * s, Y(3.4), 0.02], [0.14, 0.3, 0.3], I3, st));
+        }
+        sh.union(list, 0.02).cut(cuts, 0, 0.01);
+        any = true;
+    }
+    return any ? sh : null;
 }
 
 function glassesShape() {
@@ -277,12 +329,12 @@ function lashes(pack) {
  * `lod` 0 near / 1 far (coarser, one hair layer).
  */
 export function buildRealWear(key, lod = 0) {
-    const [hair, hat, glasses, beard, bottom, top] = String(key).split('.').map(Number);
+    const [hair, hat, glasses, beard, bottom, top, helm = 0, chest = 0, legs = 0, robe = 0] = String(key).split('.').map(Number);
     const cell = lod ? 0.018 : 0.0085, layers = lod ? [0] : [0, 1, 2];
     const hairPack = new Pack(), headPack = new Pack(), bodyPack = new Pack();
     const head = headShape();
     const aoOf = (sh) => ({ dist: (x, y, z) => Math.min(sh.dist(x, y, z), head.dist(x, y, z)) });
-    const hs = hairShape(hair, hat);
+    const hs = hairShape(hair, helm ? 20 : robe ? 21 : hat);
     if (hs) {
         const m = meshSdf(hs, [-0.34, Y(3.55), -0.4], [0.34, Y(4.65), 0.42], cell, { aoShape: aoOf(hs) });
         add3(hairPack, m, (p, n, zone, layer) => { const f = flowAt(p, n); return { w: headW(p), info: [13, 1, 0, 0], mix: [f[0], f[1], f[2], layer], limb: [0, 0, 0, 0] }; }, lod ? 0.6 : 0.35, layers);
@@ -295,19 +347,20 @@ export function buildRealWear(key, lod = 0) {
         }, lod ? 0.6 : 0.4, layers);
     }
     if (!lod) lashes(hairPack);
-    const hatS = hat ? hatShape(hat) : null;
+    const hatS = helm ? helmetShape(helm) : robe ? robeHoodShape() : hat ? hatShape(hat) : null;
     if (hatS) {
-        const m = meshSdf(hatS, [-0.47, Y(3.5), -0.47], [0.47, Y(5.1), 0.47], lod ? 0.02 : 0.009, { aoShape: aoOf(hatS) });
-        add3(headPack, m, (p, n, zone) => ({ w: headW(p), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.6 : 0.4);
+        const big = helm || robe || hat === 6;
+        const m = meshSdf(hatS, [-0.47, Y(3.5), -0.47], [0.47, Y(5.1), 0.47], lod ? 0.022 : big ? 0.011 : 0.009, { aoShape: aoOf(hatS) });
+        add3(headPack, m, (p, n, zone) => ({ w: headW(p), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.6 : big ? 0.3 : 0.4);
     }
     if (glasses) {
         const m = meshSdf(glassesShape(), [-0.22, Y(4.1), -0.28], [0.22, Y(4.22), 0.05], lod ? 0.008 : 0.0032, { ao: false });
         add3(headPack, m, () => ({ w: { [B.head]: 1 }, info: [11, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), 0.5);
     }
-    const bs = bodyAccShape(bottom, top);
-    if (bs) {
-        const m = meshSdf(bs, [-0.68, Y(1.3), -0.5], [0.68, Y(3.8), 0.52], lod ? 0.03 : 0.014, { ao: true });
-        add3(bodyPack, m, (p, n, zone) => ({ w: accW(p, zone), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.7 : 0.5);
+    for (const [bs, lo, hi, cell, keep] of [[bodyAccShape(bottom, top), [-0.68, Y(1.3), -0.5], [0.68, Y(3.8), 0.52], 0.014, 0.5], [armourBodyShape(chest, robe), [-0.95, Y(0.2), -0.62], [0.95, Y(3.78), 0.62], 0.02, 0.35]]) {
+        if (!bs) continue;
+        const m = meshSdf(bs, lo, hi, lod ? cell * 2.2 : cell, { ao: true });
+        add3(bodyPack, m, (p, n, zone) => ({ w: accW(p, zone), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.7 : keep);
     }
     return { hair: hairPack.done(), headAcc: headPack.done(), bodyAcc: bodyPack.done() };
 }
@@ -315,6 +368,8 @@ export function buildRealWear(key, lod = 0) {
 /** A skirt goes with the hips and, lower, with each thigh; a cloak with the spine, its collar with the chest. */
 function accW(p, zone) {
     const h = H(p[1]), w = {};
+    if (zone >= 16 && h > 3.1) { const s = p[0] < 0 ? 'L' : 'R'; w[B['upperArm' + s]] = 0.6; w[B['clav' + s]] = 0.4; return w; } // (a pauldron rides the shoulder)
+    if (zone >= 8.5 && zone < 9.5 && h < 2.6) zone = 10; // (a robe's skirt: as a skirt)
     if (zone >= 9.5 && zone < 10.5) {
         const low = sm(2.55, 1.9, h), side = sm(-0.05, 0.12, Math.abs(p[0])) * 0.5;
         w[B.hips] = 1 - low * (0.35 + side);

@@ -144,6 +144,37 @@ export function applyLookUniforms(u, look) {
     u.uFx.value.w = f % 4 === 1 ? 1 : 0; // a blush
 }
 
+/**
+ * The armour and the robe the hero wears (ArmorLook's code {h, c, l, r, rc, rt}) on this model: the breastplate and the
+ * arms' plates, the greaves with steel shoes (steel: plain / magic with a cold glow / named with gold), a robe over
+ * everything to the ankles (its colour; little stars on a magic one; gold bands on a better one; the archmage's and the
+ * dark lord's own colours). The helmet, the hood, the pauldrons, the robe's skirt are shapes (RealWear).
+ */
+export function applyArmorUniforms(u, code) {
+    const c = code || {};
+    const steelOf = (k) => (k >= 2 ? 0xcfdcff : 0xb8c2cc);
+    const top = c.c | 0, legs = c.l | 0, robe = c.r | 0;
+    // (all the magic armour on: the magic robe is not drawn — as ArmorLook)
+    const robeShown = robe && !(robe >= 2 && c.h >= 2 && top >= 2 && legs >= 2) ? robe : 0;
+    u.uArm.value.set(c.h | 0, top, legs, robeShown);
+    const best = Math.max(c.h | 0, top, legs);
+    u.uSteel.value.setHex(steelOf(best));
+    u.uTrim.value.setHex(best === 3 ? 0xd4af37 : best === 2 ? 0x9fc4ff : 0x8a94a0);
+    u.uGlow.value.setHex(best >= 2 ? 0x2f5fd0 : 0x000000);
+    if (top) { u.uTop.value.set(u.uTop.value.x, 0.98, 2.42, 3.62); u.uTopX.value.x = 0.05; }
+    if (legs) { u.uBot.value.y = 0.99; u.uBotX.value.x = 0.042; u.uShoe.value.set(u.uShoe.value.x, 0.12, 0.05, 0); }
+    u.uLook.value.y = 0;
+    if (robeShown) {
+        const col = robe === 5 ? 0x2a2236 : robe === 4 ? 0x15183f : (c.rc || 0x2c3e7a);
+        u.uTopC.value.setHex(col);
+        u.uTop.value.set(2, 0.99, 2.0, 3.66); u.uTopX.value.x = 0.032;
+        u.uLook.value.x = 1;
+        u.uLook.value.y = robe >= 4 || (c.rt | 0) >= 1 ? 1 : 0; // (gold bands)
+        u.uTrim.value.setHex(robe === 5 ? 0x9a5cff : 0xe8d07a);
+        u.uGlow.value.setHex(robe === 5 ? 0x6a1fd0 : robe >= 2 ? 0x3a1a6a : 0x000000);
+    }
+}
+
 // ------------------------------------------------------------------ small maths (no garbage)
 const _Gi = new THREE.Matrix4(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _MX = new THREE.Matrix4().makeScale(-1, 1, 1);
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _qh = new THREE.Quaternion(), _qn = new THREE.Quaternion();
@@ -267,11 +298,12 @@ export class RealisticBody {
     /** The look changed (Appearance.applyLook): its colours and clothes, its resting face. */
     setLook(look) {
         applyLookUniforms(this.u, look);
+        applyArmorUniforms(this.u, this._armorOf());
         this.hairMat.userData.u.uHair.value.setHex(look?.hairColor ?? 0x4a3728);
         this.hairMat.userData.u.uLash.value.setHex(look?.hairColor ?? 0x4a3728).multiplyScalar(0.45);
         restFace(look?.face | 0, this._restFace);
         if (this.shown) this._hideStandard(true);
-        const key = wearKey(look || {});
+        const key = wearKey(look || {}, this._armorOf());
         if (key !== this._wearKey && this.meshes) {
             this._wearKey = key;
             this.wearReady = realWear(key).then((lods) => { if (this._wearKey === key && !this.disposed) this._setWear(lods); });
@@ -300,12 +332,17 @@ export class RealisticBody {
         this._layers();
     }
 
+    /** What the hero wears (armour, a robe) as ArmorLook has it; the dark lord's outfit as his robe. */
+    _armorOf() {
+        const ch = this.ch, c = ch.armorCode || null;
+        if (!c) return null;
+        return { h: c.h | 0, c: c.c | 0, l: c.l | 0, r: c.r | 0, rc: c.rc, rt: c.rt | 0 };
+    }
+
     /** Is the standard model needed now (something this one does not draw)? */
     _needStandard() {
         const ch = this.ch;
         if (!this.meshes) return true;
-        if (ch._armorParts && ch._armorParts.length) return true;
-        if (ch.darkLord) return true;
         if (ch.limbs) for (const k in ch.limbs) if (ch.limbs[k] != null) return true;
         if ((ch.size || 1) !== 1) return true;
         if (ch.handVersion === 'v2') return true;
@@ -313,6 +350,10 @@ export class RealisticBody {
     }
 
     _apply() {
+        // (the armour put on / taken off: its pieces on this model, the standard's own pieces hidden)
+        const parts = this.ch._armorParts;
+        const sig = (parts ? parts.length : 0) + ':' + JSON.stringify(this.ch.armorCode || null);
+        if (sig !== this._armorSig) { this._armorSig = sig; if (this.meshes) this.setLook(this.ch.look); }
         const want = this.on && !this._needStandard();
         if (want === this.shown) { if (want) this._layers(); return; }
         this.shown = want;
@@ -336,6 +377,7 @@ export class RealisticBody {
         const ch = this.ch, list = [ch.head, ch.body];
         for (const a of [ch.leftArmAnchor, ch.rightArmAnchor, ch.leftElbowAnchor, ch.rightElbowAnchor, ch.leftLegPivot, ch.rightLegPivot]) for (const c of a.children) if (c.isMesh) list.push(c);
         for (const p of ch._lookParts || []) list.push(p);
+        for (const p of ch._armorParts || []) list.push(p); // (the armour's boxes: drawn by this model itself)
         for (const h of [ch.leftSimplifiedHand, ch.rightSimplifiedHand]) if (h?.handPivot) list.push(h.handPivot);
         if (ch._headShadow) list.push(ch._headShadow);
         for (const o of list) {

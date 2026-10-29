@@ -37,6 +37,7 @@ varying vec4 vInfo;
 varying vec4 vMix;
 varying vec4 vLimb;
 varying vec3 vCover;
+uniform vec4 uArm;
 `;
 
 /** Where the clothes cover (metres, + inside) and the cloth pushed out over the body, before the bones move it. */
@@ -80,13 +81,14 @@ transformed.z -= uShoe.w * cS * smoothstep(0.62, 1.12, aLimb.w) * smoothstep(-0.
 
 const FRAG_PARS = /* glsl */`
 uniform vec3 uSkin, uLip, uIris, uBrow, uTopC, uTopC2, uBotC, uShoeC, uHatC, uHatC2;
-uniform vec4 uTop, uBot, uShoe, uFx, uLook;
+uniform vec4 uTop, uBot, uShoe, uFx, uLook, uArm;
+uniform vec3 uSteel, uTrim, uGlow;
 varying vec3 vRest;
 varying vec4 vInfo;
 varying vec4 vMix;
 varying vec4 vLimb;
 varying vec3 vCover;
-float rSpec = 0.0, rGloss = 0.0, rBump = 0.0;
+float rSpec = 0.0, rGloss = 0.0, rBump = 0.0, rMetal = 0.0;
 vec3 rEmit = vec3(0.0);
 ${NOISE}
 const vec3 EYE_R = vec3(${ANAT.eye[0]}, ${ANAT.eye[1]}, ${ANAT.eye[2]});
@@ -125,6 +127,35 @@ vec3 eyeAt(vec3 p) {
     rSpec = 1.0; rGloss = 90.0;
     return c;
 }
+/** Plate steel: brushed along its length, the lames' grooves across the belly, a trim along the plate's edge, rivets on it. */
+vec3 steelAt(vec3 p, float edge) {
+    vec3 c = uSteel * 0.72;
+    float hh = p.y + 2.0;
+    c *= 0.84 + 0.14 * vn3(vec3(p.x * 30.0, p.y * 420.0, p.z * 30.0)) + 0.07 * vn3(p * 22.0);
+    if (hh < 2.98 && hh > 2.42 && vLimb.x < 0.5 && vLimb.z < 0.5) c *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.01, abs(fract(hh * 9.0) - 0.5) - 0.46));
+    float trim = 1.0 - smoothstep(0.018, 0.03, edge);
+    c = mix(c, uTrim, trim);
+    float rv = 1.0 - smoothstep(0.004, 0.007, length(vec2(fract((p.x + p.z) * 16.0) - 0.5, (edge - 0.045) * 16.0) / 16.0));
+    c = mix(c, uSteel * 1.25, rv * step(0.032, edge));
+    rSpec = 1.1; rGloss = 64.0; rMetal = 1.0;
+    rEmit += uGlow * 0.12;
+    rBump = vn3(vec3(p.x * 30.0, p.y * 420.0, p.z * 30.0)) * 0.3;
+    return c;
+}
+/** A mage's robe: soft heavy cloth, little stars on a magic one, gold bands at the hem, cuffs and collar on a better one. */
+vec3 robeAt(vec3 p, float edge) {
+    vec3 c = uTopC * (0.88 + 0.12 * vn3(p * 180.0) + 0.06 * vn3(p * 9.0));
+    rBump = vn3(p * 180.0) * 0.6;
+    if (uArm.w > 1.5) {
+        vec3 g = floor(p * 9.0), f = fract(p * 9.0) - 0.5;
+        float on = step(0.86, rh3(g));
+        float star = on * (1.0 - smoothstep(0.02, 0.06, min(abs(f.x) * (abs(f.y) + 0.15), abs(f.y) * (abs(f.x) + 0.15)) + length(f) * 0.08));
+        c = mix(c, vec3(1.0, 0.93, 0.62), star * 0.9);
+        rEmit += vec3(1.0, 0.85, 0.4) * star * 0.25 + uGlow * 0.06;
+    }
+    if (uLook.y > 0.5) { float band = 1.0 - smoothstep(0.03, 0.045, edge); c = mix(c, uTrim, band); if (band > 0.5) { rSpec = 0.7; rGloss = 40.0; } }
+    return c;
+}
 vec3 clothKnit(vec3 c, vec3 p, float scale) {
     float k = vn3(p * scale) * 0.6 + vn3(p * scale * 2.7) * 0.4;
     rBump = k;
@@ -133,6 +164,8 @@ vec3 clothKnit(vec3 c, vec3 p, float scale) {
 /** The top: its own cloth and pattern (Appearance.TOPS). */
 vec3 topAt(vec3 p, float armK) {
     float t = uTop.x, hh = p.y + 2.0;
+    if (uArm.w > 0.5) return robeAt(p, vCover.x); // (a robe over everything)
+    if (uArm.y > 0.5) return steelAt(p, vCover.x); // (the breastplate, the arms' plates)
     bool front = p.z < 0.0;
     vec3 c = uTopC;
     vec3 shirt = vec3(0.93, 0.93, 0.9);
@@ -166,6 +199,7 @@ vec3 topAt(vec3 p, float armK) {
 }
 vec3 botAt(vec3 p, float legK) {
     float t = uBot.x, hh = p.y + 2.0;
+    if (uArm.z > 0.5 && legK > 0.5) return steelAt(p, vCover.y); // (the greaves)
     vec3 c = uBotC;
     if (t == 0.0) {
         // denim: a diagonal twill, the outer seam, lighter wear on the thighs and knees
@@ -191,6 +225,7 @@ vec3 botAt(vec3 p, float legK) {
 }
 vec3 shoeAt(vec3 p) {
     float t = uShoe.x, hh = p.y + 2.0;
+    if (uArm.z > 0.5) return steelAt(p, vCover.z); // (steel shoes with the greaves)
     vec3 c = uShoeC;
     float sole = step(hh, 0.06);
     if (t == 0.0 || t == 8.0) { c = mix(c, vec3(0.95), sole); if (p.z < 0.0 && hh > 0.1 && hh < 0.22 && fract(p.z * 40.0) < 0.3) c = vec3(0.92); } // sneakers: the white sole, the laces
@@ -212,7 +247,9 @@ const FRAG_COLOR = /* glsl */`
     else if (zn == 4.0) { c = vec3(0.86, 0.83, 0.74) * (0.9 + 0.1 * vn3(p * 300.0)) * mix(0.45, 1.0, smoothstep(-0.2, -0.245, p.z)) * (0.8 + 0.2 * smoothstep(0.004, 0.0, abs(fract(p.x * 52.0) - 0.5) - 0.42)); rSpec = 0.5; rGloss = 50.0; }
     else if (zn == 5.0) { c = vec3(0.72, 0.36, 0.38) * (0.85 + 0.2 * vn3(p * 250.0)); rSpec = 0.4; rGloss = 30.0; }
     else if (zn >= 7.0 && zn < 8.5) { c = (zn < 7.5 ? uHatC : uHatC2); c = clothKnit(c, p, 200.0); }
-    else if (zn >= 8.5 && zn < 9.5) { c = clothKnit(uTopC, p, 220.0) * 0.92; }
+    else if (zn >= 8.5 && zn < 9.5) { c = uArm.w > 0.5 ? robeAt(p, 1.0) : clothKnit(uTopC, p, 220.0) * 0.92; }
+    else if (zn >= 15.5 && zn < 16.5) { c = steelAt(p, 1.0); }
+    else if (zn >= 16.5 && zn < 17.5) { c = uTrim * (0.85 + 0.15 * vn3(p * 90.0)); rSpec = 1.0; rGloss = 60.0; rMetal = 1.0; rEmit += uGlow * 0.15; }
     else if (zn >= 9.5 && zn < 10.5) { c = botAt(p, 1.0); }
     else if (zn >= 10.5 && zn < 11.5) { c = vec3(0.08, 0.07, 0.07); rSpec = 0.9; rGloss = 70.0; } // glasses' frame
     else if (zn >= 11.5 && zn < 12.5) { c = vec3(0.85, 0.68, 0.24); rSpec = 0.9; rGloss = 60.0; } // gold (a buckle, a clasp)
@@ -269,6 +306,13 @@ const FRAG_LIGHT = /* glsl */`
         reflectedLight.directSpecular += directionalLights[0].color * rSpec * pow(max(dot(normal, Hh), 0.0), rGloss) * 0.6;
     }
     #endif
+    if (rMetal > 0.0) {
+        // (polished steel: the sky over it, the ground under it, mirrored — no picture needed)
+        float sky = 0.5 + 0.5 * normal.y;
+        reflectedLight.indirectSpecular += mix(vec3(0.16, 0.14, 0.12), vec3(0.85, 0.92, 1.05), smoothstep(0.2, 0.9, sky)) * 0.9 * diffuseColor.rgb;
+        reflectedLight.directDiffuse *= 0.45;
+        reflectedLight.indirectDiffuse *= 0.5;
+    }
     totalEmissiveRadiance += rEmit;
 }
 `;
@@ -296,6 +340,7 @@ const SHARED_UNIFORMS = () => ({
     uBot: { value: new THREE.Vector4(0, 1, 2.68, 0) }, uBotX: { value: new THREE.Vector4(0.028, 0, 0, 0) },
     uShoe: { value: new THREE.Vector4(0, 0, 0.032, 0) }, uBend: { value: new THREE.Vector4() },
     uFx: { value: new THREE.Vector4() }, uLook: { value: new THREE.Vector4(1, 0, 0, 0) },
+    uArm: { value: new THREE.Vector4() }, uSteel: { value: new THREE.Color(0xb8c2cc) }, uTrim: { value: new THREE.Color(0x8a94a0) }, uGlow: { value: new THREE.Color(0x000000) },
 });
 
 /** A new skin material for one hero (its colours and clothes in `.userData.u`); the program is shared. */

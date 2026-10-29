@@ -184,6 +184,7 @@ export function dressArmor(ch, code) {
     ch._armorParts = [];
     const c = code || {};
     ch.armorWorn = { helmet: c.h | 0, chest: c.c | 0, legs: c.l | 0, robe: c.r | 0 };
+    ch.armorCode = { ...c }; // (the «Реалистичный» hero draws the same pieces itself — RealisticBody.js)
     const list = ch._armorParts;
     const dk = c.dk | 0; // (the pieces a dark mage's curse blackened: 1 helmet, 2 breastplate, 4 greaves)
     if (c.h && ch.head) helmetParts(ch.head, c.h, list, !!(dk & 1));
