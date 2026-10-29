@@ -999,9 +999,9 @@ export class Duel {
         const dome = g.arenaDuels?.domeBlock?.(from, b.front);
         if (dome) { b.front.set(dome.x, dome.y, dome.z); this._end(b, 'blocked'); return false; }
         // (book-birds are bodies like any other creature: touched below, not by a blast radius)
-        if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
+        if (g.authority && g.spiders?.boltAt(b.front, b.spell, b.by)) { this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); return false; } // («Электром» is held: a hit on a boss starts the lightning)
         if (isJolt(b.spell)) this._joltThings(b, from);
-        if (g.authority && g.dragons?.boltAt(b.front, b.spell, b.by)) { this._end(b, 'fizzle'); return false; }
+        if (g.authority && g.dragons?.boltAt(b.front, b.spell, b.by)) { this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); return false; }
         // a door's leaf on its way: no charge goes through a door — «Джолт» shoves it (it swings open, or shut,
         // as hard as the charge: Doors.impulse; a locked one only rattles); the others burst on the wood
         const dh = g.doors?.segmentHit(from, b.front);

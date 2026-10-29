@@ -471,7 +471,7 @@ export class StrongMagic {
         const dist = to.length();
         const on = dist < STRONG.Electrum.reach && _d.angleTo(to.normalize()) < STRONG.Electrum.cone;
         E.off = on ? 0 : E.off + dt;
-        if (E.off > 0.35) { this.stopElectrum('hand'); return; }
+        if (E.off > 1) { this.stopElectrum('hand'); return; }
         if (!c.drain(STRONG.Electrum.drain * dt, dt)) { this.stopElectrum('mana'); return; }
         duel._drawBolt('Electrum', _o, tp, this.me);
         this._crackle(tp);

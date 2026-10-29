@@ -30,7 +30,7 @@ export const STRONG = {
     Accentric: { cost: 50, dps: 5, total: 40, time: 60, fade: 40, clash: 1.2 },
     Pilbidrio: { cost: 100, dmg: 80, clash: 1.4 },
     Die: { cost: 1000, drain: 10, clash: 5 },
-    Electrum: { cost: 50, drain: 3, hit: 25, dps: 20, clash: 1, reach: 64, cone: 0.42, tick: 0.25 },
+    Electrum: { cost: 50, drain: 3, hit: 25, dps: 20, clash: 1, reach: 64, cone: 0.55, tick: 0.25 },
     Ice: { cost: 5, time: 10, dps: 3 },
     IceMaxima: { cost: 20, time: 10, dps: 10 },
 };

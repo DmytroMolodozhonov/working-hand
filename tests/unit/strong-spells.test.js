@@ -152,3 +152,38 @@ test('range: «Электром» 2× (60 м), «Пилбидрио» 2,5× (75 
     assert.equal(duelRange('Stupefy'), 30);
     assert.ok(STRONG.Electrum.reach >= duelRange('Electrum'), 'the held lightning stays on a target the charge could hit');
 });
+
+test('«Электром» held on a dragon: lasts until «стоп» — not a flash (hand on it, mana, ticks per second)', () => {
+    const { g, d } = dragonWorld();
+    const S = g.strong;
+    const tp = new THREE.Vector3(0, 3, 0);
+    g.duel._targetPos = (b, out) => (b.tk === 'D' && !d.dead ? out.copy(tp) : null);
+    g.duel._myRay = (side, o, dir) => { o.set(0, 3, 20); dir.set(0, 0, -1); };
+    g.duel._drawBolt = () => {};
+    let mana = 100;
+    g.combat = { dead: false, frozen: false, stunned: false, drain: (a) => { mana -= a; return mana > 0; } };
+    g.character = { isArmRaised: () => true };
+    g.wandSide = () => 'right';
+    S.startElectrum('right', 'D', 'd1');
+    assert.ok(S.electrum, 'started');
+    const hp0 = d.hp;
+    for (let t = 0; t < 6; t += 1 / 60) S.update(1 / 60);
+    assert.ok(S.electrum, 'still held after 6 s');
+    assert.ok(hp0 - d.hp > 100, `−20/s for 6 s: ${hp0 - d.hp}`);
+    assert.ok(Math.abs(100 - mana - 18) < 1, `3 mana/s: ${100 - mana}`);
+    assert.ok(S.stopElectrum('stop') && !S.electrum, '«стоп» ends it');
+    // the hand drifts off a moment (aiming at a moving dragon): not an instant break
+    S.startElectrum('right', 'D', 'd1');
+    g.duel._myRay = (side, o, dir) => { o.set(0, 3, 20); dir.set(1, 0, -0.3).normalize(); };
+    for (let t = 0; t < 0.8; t += 1 / 60) S.update(1 / 60);
+    assert.ok(S.electrum, 'a short slip of the hand does not break it');
+});
+
+test('«Электром»: the boss\'s own bolt-catcher (dragons/spiders boltAt) also ends the charge as a hit', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../src/game/Duel.js', import.meta.url), 'utf8');
+    for (const k of ['spiders', 'dragons']) {
+        const line = src.split('\n').find((l) => l.includes(`g.${k}?.boltAt(b.front`));
+        assert.ok(line && /b\.spell === 'Electrum' \? 'hit' : 'fizzle'/.test(line), k);
+    }
+});
