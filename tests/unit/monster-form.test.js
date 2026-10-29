@@ -367,3 +367,16 @@ test('a paw closed at a wall takes a piece of it; opened — the piece flies and
     assert.equal(g.monster.chunks.length + g.monster.flying.length, 0);
     assert.ok([...blocks.values()].filter((t) => t === BLOCK.BRICK).length >= 9, 'lying again as blocks: ' + [...blocks.entries()].filter(([, t]) => t).map(([k, t]) => k + '=' + t).join(' '));
 });
+
+test('the offering of the monster pentagram (outside Creative): the Minotaur\'s horn + one body, then exactly MONSTER.COST mana — paid by the offering, not again by the circle', async () => {
+    const { OFFERINGS } = await import('../../src/game/PentagramOfferings.js');
+    assert.equal(OFFERINGS.monster.mana, MONSTER.COST);
+    assert.equal(OFFERINGS.monster.bodies, 1);
+    assert.deepEqual(OFFERINGS.monster.things.map((t) => t.kind), ['minotaurHorn']);
+    // (paid: `prepaid` — the circle's stand does not take the 200 a second time)
+    const t = new MonsterTransform({ config: { mode: 'survival' }, combat: { enabled: true, fatigue: 0, dead: false }, isDeadLocal: false, character: { group: { position: new THREE.Vector3() } }, terrain: null });
+    t.prepaid = true;
+    assert.equal(t.whyNot(), null, 'prepaid: no mana is asked at the circle');
+    t.prepaid = false;
+    assert.match(t.whyNot(), /не хватает маны/, 'unpaid: asked');
+});

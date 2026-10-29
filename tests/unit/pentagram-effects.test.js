@@ -7,15 +7,15 @@ import { PENT_NAMES, pentagramWords } from '../../src/game/PentagramWords.js';
 import { figureIds, CAST_COST } from '../../src/game/PentagramRules.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 
-function stub({ fatigue = 500, ritual = { ok: true } } = {}) {
+function stub({ fatigue = 500, ritual = { ok: true }, mode = 'creative', can = { ok: true } } = {}) {
     const said = [], calls = { ritual: 0, enchant: 0 };
     const g = {
-        config: { mode: 'freeworld' }, hud: { setVoice: (t) => said.push(t) },
+        config: { mode }, hud: { setVoice: (t) => said.push(t) },
         combat: { enabled: true, fatigue, _hudKey: '' },
         terrain: { data: { topLayer: () => 1, get: () => 1, raycast(o, d) { const t = (0.5 - o.y) / d.y; return t > 0 ? { x: o.x + d.x * t, y: 0.5, z: o.z + d.z * t } : null; } } },
         fx: { spark() {}, lightFlash() {} }, character: { group: { position: new THREE.Vector3(0, 0, 0) } }, sync: { pentagram() {} },
         mana: { success() {} }, dark: { level: 0, skin: 0, onGrow() {} }, castleLife: { alarm() {} }, perf: { note() {} }, death: { bodies: new Map(), falling: new Set() },
-        gargoyles: { startRitual() { calls.ritual++; return ritual; } },
+        gargoyles: { startRitual() { calls.ritual++; return ritual; }, canRitual() { return can; } },
         enchantCircles: { add() { calls.enchant++; return {}; } },
     };
     const p = new Pentagranium(g);
@@ -24,9 +24,10 @@ function stub({ fatigue = 500, ritual = { ok: true } } = {}) {
 }
 const aim = () => ({ origin: new THREE.Vector3(0, 4, -6), dir: new THREE.Vector3(0, -1, 1).normalize() });
 
-test('every name: said in full it makes ITS pentagram; the effect happens (gargoyles fly out, enchant lays its circle)', () => {
+test('Creative: every name said in full makes ITS pentagram with no conditions; the effect happens (gargoyles fly out, enchant lays its circle)', () => {
     for (const id of figureIds()) {
-        const t = stub();
+        const mode = id === 'gargoyles' || id === 'monster' || id === 'breakward' ? 'creative' : 'freeworld'; // (those three need a body (and a horn) on the circle outside Creative: Offerings.js)
+        const t = stub({ mode });
         t.p.learnFigure(id);
         const phrase = `пентаграниум ${PENT_NAMES[id].say[0]}`;
         assert.equal(matchSpell(phrase), 'Pentagranium', phrase);
@@ -34,7 +35,7 @@ test('every name: said in full it makes ITS pentagram; the effect happens (gargo
         const m = [...t.p.marks.values()][0];
         if (id === 'enchant') { assert.equal(m, undefined, 'its circle is laid by EnchantCircles; the mark is not kept'); assert.equal(t.calls.enchant, 1); continue; }
         assert.equal(m?.pent, id, id);
-        assert.equal(t.g.combat.fatigue, 500 - (CAST_COST[id] || 0), `${id}: its mana at the word`);
+        assert.equal(t.g.combat.fatigue, 500 - (mode === 'creative' ? 0 : CAST_COST[id] || 0), `${id}: its mana at the word`);
         if (id === 'gargoyles') assert.equal(t.calls.ritual, 1, 'the gargoyles\' ritual starts at the word');
         else assert.equal(t.calls.ritual, 0);
         if (id === 'enchant') assert.equal(t.calls.enchant, 1);
@@ -49,7 +50,7 @@ test('after a cast the frames go on: an interim look (the pause) must not break 
     assert.ok(Array.isArray(t.p._pending));
 });
 
-test('gargoyles refuse with a clear reason and nothing is drawn (mana, a burnt place, another ritual, no ground)', () => {
+test('Creative: gargoyles refuse with a clear reason and nothing is drawn (mana, a burnt place, another ritual, no ground)', () => {
     for (const [why, re] of [['mana', /Нужно 150 маны/], ['spent', /выжжена/], ['busy', /идёт ритуал/], ['realm', /на землю/], ['off', /не выпускаются/]]) {
         const t = stub({ ritual: { ok: false, why, need: 150 } });
         t.p.learnFigure('gargoyles');
@@ -92,4 +93,32 @@ test('while the phrase is still being said the name must hold half a second (or 
         const u = stub(); u.p.learnFigure('life');
         assert.equal(u.p.cast(true, 'пентаграниум вита', aim()), 'Pentagranium');
     } finally { performance.now = real; }
+});
+
+test('Survival: the gargoyles and the monster make only the picture at the word — no ritual, no mana — and wait for what must lie on the circle', () => {
+    for (const id of ['gargoyles', 'monster', 'breakward']) {
+        const t = stub({ mode: 'survival' });
+        t.p.learnFigure(id);
+        assert.equal(t.p.cast(true, `пентаграниум ${PENT_NAMES[id].say[0]}`, aim()), 'Pentagranium', id);
+        const m = [...t.p.marks.values()][0];
+        assert.equal(m?.pent, id); assert.equal(m.offer, id, 'it waits for the offering');
+        assert.equal(t.g.combat.fatigue, 500, 'no mana at the word'); assert.equal(t.calls.ritual, 0, 'no ritual yet');
+        assert.ok(m.life > 100, 'the picture does not burn out in 6 s while it waits');
+        assert.match(t.said.at(-1), id === 'gargoyles' ? /три тела/ : id === 'monster' ? /рог Минотавра/ : /одно тело/);
+    }
+});
+
+test('Survival: the gargoyles refuse at the word only for a reason of the PLACE (no ground, a burnt place) — mana and bodies come later', () => {
+    for (const [why, re] of [['spent', /выжжена/], ['realm', /на землю/], ['off', /не выпускаются/]]) {
+        const t = stub({ mode: 'survival', can: { ok: false, why } });
+        t.p.learnFigure('gargoyles');
+        assert.equal(t.p.cast(true, 'пентаграниум гаргульес', aim()), null, why);
+        assert.equal(t.p.marks.size, 0, why); assert.match(t.said.at(-1), re, why);
+    }
+    const busy = stub({ mode: 'survival', can: { ok: false, why: 'busy' } });
+    busy.p.learnFigure('gargoyles');
+    assert.equal(busy.p.cast(true, 'пентаграниум гаргульес', aim()), 'Pentagranium', 'another ritual near is checked when the things are laid');
+    const poor = stub({ mode: 'survival', fatigue: 0 });
+    poor.p.learnFigure('gargoyles');
+    assert.equal(poor.p.cast(true, 'пентаграниум гаргульес', aim()), 'Pentagranium', 'no mana is needed to draw it');
 });

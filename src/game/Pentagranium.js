@@ -33,6 +33,7 @@ import { isEnchanted } from '../world/EnchantedStone.js';
 import { BLOCK } from '../world/Terrain.js';
 import { addDark } from './DarkMagic.js';
 import { BARE } from './BareHand.js';
+import { OFFERINGS } from './PentagramOfferings.js';
 
 /** ms: a pentagram's name still being said must hold this long unchanged before it casts (the author: «после Pentagranium подождать полсекунды»). */
 export const PAUSE_MS = 500;
@@ -49,6 +50,13 @@ const USE_WHY = {
     spent: () => '🜏 Здесь пентаграмма уже выжжена: горгульи вылетали отсюда — выберите другое место',
     mana: (r) => `🜏 Нужно ${r.need ?? 150} маны — пока не хватает, пентаграмма не появилась`,
     busy: () => '🜏 Рядом уже идёт ритуал горгулий — подождите, пока он закончится',
+};
+
+/** What the person is told when the pentagram needs an offering (survival; Creative: the word alone works). */
+const OFFER_TEXT = {
+    gargoyles: 'Положите на круг три тела убитых человекоподобных (не кости) — тогда начнётся обряд (150 маны): тела сгорят, и вылетят горгульи',
+    breakward: 'Положите на круг одно тело убитого человекоподобного (не кости) — тогда спишутся 50 маны, тело сгорит, и можно войти в круг: защита будет сломана',
+    monster: 'Положите на круг рог Минотавра и одно тело убитого человекоподобного (не кости), потом встаньте в круг — 200 маны: рог и тело сгорят, и вы станете монстром',
 };
 
 const USE_TEXT = {
@@ -153,24 +161,25 @@ export class Pentagranium {
         if (!p) return hint('🩸 Направьте палочку на землю — пентаграмма ляжет туда, куда вы указываете');
         const origin = _o.set(p.x, this._height(p.x, p.z), p.z);
         if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
-        const cost = CAST_COST[id] || 0, c = g.combat;
+        const offer = !this.creative && OFFERINGS[id] ? id : null; // (survival: the ritual of the gargoyles / the monster needs things on the circle — Offerings.js)
+        const cost = offer ? 0 : CAST_COST[id] || 0, c = g.combat; // (…and its mana is paid when they have been laid, not at the word)
         if (cost && manaRules(g) && (c?.fatigue || 0) < cost) return hint(`🩸 Нужно ${cost} маны — у вас ${Math.floor(c?.fatigue || 0)}`);
         const def = TABLE[id], center = { x: p.x, y: origin.y, z: p.z };
-        const r = this._use1(def, center);
+        const r = offer ? (id === 'gargoyles' ? this._canGargoyles(center) : undefined) : this._use1(def, center); // (an offering: the ritual waits for the things)
         if (r && r.ok === false) return hint(USE_WHY[r.why] ? USE_WHY[r.why](r) : '🩸 Пентаграмма не получилась'); // (gargoyles: the ritual takes the mana and starts at once; it may refuse — then nothing is made, and why is said)
         if (cost && manaRules(g) && c) { c.fatigue -= cost; c._hudKey = ''; }
         const me = g.character.group.position, rot = turnAway(p.x, p.z, me.x, me.z);
         const mark = this._place(`${g.localId}:${Date.now().toString(36)}${this._n++}`, g.localId, id, p.x, center.y, p.z, PENT.R, rot, true);
         if (!mark) return null;
         this._castId = id; this._castAt = now;
-        mark.mine = true; mark.prepaid = cost > 0;
+        mark.mine = true; mark.prepaid = cost > 0; mark.offer = offer;
         this._permanent(mark);
         this._others(mark);
         g.sync?.pentagram?.({ k: 'mark', id: mark.id, by: g.localId, pent: id, x: p.x, y: center.y, z: p.z, r: PENT.R, rot, perm: mark.perm ? 1 : 0, pair: mark.pair || null });
         if (def.darkBonus) addDark(g.dark || g, def.darkBonus, 'ritual'); // (united power: at once +30 to the dark level, 100 at most — DarkMagic.addDark clamps)
         g.mana?.success('Pentagranium'); // (the first success's cells; making a pentagram is no black magic — only the devil one's rite adds darkness)
         if (def?.dark) g.castleLife?.alarm?.({ x: p.x, y: center.y, z: p.z }, 'dark', g.localId, 6); // (only a black pentagram frightens people)
-        g.hud.setVoice(`✨ «${figureOf(id).ru}» рисуется на земле… ${USE_TEXT[id] || ''}`, true);
+        g.hud.setVoice(`✨ «${figureOf(id).ru}» рисуется на земле… ${(offer ? OFFER_TEXT[id] : USE_TEXT[id]) || ''}`, true);
         g.perf?.note?.(`🩸 ${name}`);
         return 'Pentagranium';
     }
@@ -210,6 +219,12 @@ export class Pentagranium {
             this._riteT -= dt;
             if (this._riteT <= 0) { this._riteT = 0.25; this._findRites(); }
         }
+    }
+
+    /** (survival, the gargoyles' pentagram) May the ritual begin here at all — before anything is laid on the circle? → {ok:false, why} | undefined. */
+    _canGargoyles(center) {
+        const can = this.game.gargoyles?.canRitual?.(center);
+        return can && !can.ok && can.why !== 'busy' ? { ok: false, why: can.why } : undefined;
     }
 
     /** The effect that starts at the word (`def.use`: a function, or 'system.method' of the game — gargoyles): its answer, or undefined if there is none. */
@@ -281,7 +296,7 @@ export class Pentagranium {
         const g = this.game, def = TABLE[m.pent], c = { x: m.x, y: m.y, z: m.z };
         if (!def || m.pent === 'devil') return;
         if (m.pent === 'enchant') { g.enchantCircles?.add?.(c.x, c.y, c.z); this._remove(m.id, 'old'); return; }
-        if (def.once && typeof def.use === 'function') m.life = Math.min(m.life, 6); // (the gargoyles' ritual began at the word: the picture burns out)
+        if (def.once && typeof def.use === 'function' && !m.offer) m.life = Math.min(m.life, 6); // (the gargoyles' ritual began at the word: the picture burns out)
     }
 
     /** A good pentagram (`permanent` in the table) stays for good: the oldest permanent one goes when there are too many; teleport ones are paired. */
@@ -558,7 +573,7 @@ export class Pentagranium {
         m.life -= dt;
         // lit: it comes up in a second, flares on a rite, goes out in its last 6 s
         const rite = m.rites.find((r) => !r.done);
-        const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0, m.bareHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
+        const hellWant = Math.max(rite ? 1 : 0, m.unityHell || 0, m.bareHell || 0, m.offerHell || 0); // (the rite of united power pulses the lines too: UnitedPower.js)
         m.hell += (hellWant - m.hell) * Math.min(1, dt * (hellWant ? 3 : 1.2));
         if (m.anim) this._animStep(m, dt);
         if (m.bareRite) this._bareStep(m, dt);
@@ -576,7 +591,7 @@ export class Pentagranium {
             if (g.monster) g.monster.prepaid = !!m.prepaid; // (its 200 mana were taken at the word)
             if (stand(g, m, dt, inCircle)) { this._remove(m.id, 'old'); return; }
         }
-        if (m.mine && m.pent === 'breakward' && g.breakward && Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < m.r) {
+        if (m.mine && m.pent === 'breakward' && g.breakward && (!m.offer || m.prepaid) && Math.hypot(g.character.group.position.x - m.x, g.character.group.position.z - m.z) < m.r) {
             g.breakward.prepaid = !!m.prepaid; // (its 50 mana were taken at the word)
             const why = g.breakward.activate(); // (stepped on: the mark is put on once, the drawing goes out; no mana — a hint — leaves it)
             if (why === null || why === 'защита уже сломана') { this._remove(m.id, 'old'); return; }
@@ -698,6 +713,8 @@ export class Pentagranium {
         } else if (m.k === 'bare') {
             const mk = this.marks.get(m.id);
             if (mk && mk.pent === 'bare') this._bareBegin(mk, false);
+        } else if (m.k === 'ofr') {
+            this.game.offerings?.onNet(by, m); // (the offering of the gargoyles / the monster: Offerings.js)
         } else if (m.k === 'uni') {
             this.game.united?.onNet(m);
         } else if (m.k === 'vit') {
@@ -708,7 +725,7 @@ export class Pentagranium {
         }
     }
 
-    sampleModels() { return [...this.fx.sampleModels(), ...(this.game.united?.sampleModels?.() || []), ...(this.game.vitality?.sampleModels?.() || [])]; }
+    sampleModels() { return [...this.fx.sampleModels(), ...(this.game.united?.sampleModels?.() || []), ...(this.game.vitality?.sampleModels?.() || []), ...(this.game.firm?.sampleModels?.() || [])]; }
 
     /** Death / world change: nothing stays lit. */
     clear() { this.fx.trailEnd(); for (const id of [...this.marks.keys()]) this._remove(id, 'old'); }

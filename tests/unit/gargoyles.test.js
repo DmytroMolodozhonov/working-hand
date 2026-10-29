@@ -804,3 +804,15 @@ test('a gargoyle bites a sailor: the relations code asks for his «brain» — a
     assert.equal(CastleTalk.prototype.brain.call({ brains: new Map() }, undefined), null);
     assert.match(src('src/game/RelationsLife.js'), /v\.cs \? this\.life\.talk\?\.brain/);
 });
+
+test('canRitual: asked before the offering is laid — the place only (no mana, no side effects); a ritual in progress / a burnt place are refused', async () => {
+    const g = await bareGame({ combat: { enabled: true, fatigue: 0, dead: false } });
+    const G = g.gargoyles, c = new THREE.Vector3(10, 0, 10);
+    assert.deepEqual(G.canRitual(c), { ok: true }, 'no mana is asked here');
+    assert.equal(g.combat.fatigue, 0); assert.equal(G.rituals.length, 0); assert.equal(g.dark.level, 0, 'nothing happens');
+    g.combat.fatigue = 200;
+    assert.equal(G.startRitual(c).ok, true);
+    assert.equal(G.canRitual(c).why, 'busy');
+    G._spend({ x: 400, y: 0, z: 400 }, true);
+    assert.equal(G.canRitual(new THREE.Vector3(400, 0, 400)).why, 'spent');
+});

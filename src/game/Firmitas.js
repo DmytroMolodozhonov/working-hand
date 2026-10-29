@@ -104,6 +104,9 @@ export class Firmitas {
         this.anim = null;
     }
 
+    /** For Game.prewarm: the pebble (its stone and its unlit glowing rune) — the rite's picture uses no other shader. */
+    sampleModels() { return [makeItemModel({ kind: FIRM.ITEM })]; }
+
     update(dt) { if (this.anim) this._step(dt); }
 
     _step(dt) {

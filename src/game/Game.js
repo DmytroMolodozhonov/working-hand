@@ -194,6 +194,7 @@ import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { Firmitas } from './Firmitas.js';
+import { Offerings } from './Offerings.js';
 import { GhostCastleLife } from './GhostCastleLife.js';
 import { SpencerBirds } from './SpencerBirds.js';
 import { Ghosts } from './Ghosts.js';
@@ -556,6 +557,7 @@ export class Game {
         this.pentagranium = new Pentagranium(this); // «Pentagranium <Name>»: a pentagram laid where the wand points (it draws itself) and the rite over a wizard's body (Pentagranium.js)
         this.visibleGodi = new VisibleGodi(this); // «Visible Godi»: a cloud on the screen shows what is behind a wall (VisibleGodi.js; the picture: seeFx)
         this.vitality = new Vitality(this); // «Пентаграмма чудовищной живучести» (`Pentagranium Sanguinis`): the blood of a body killed by black magic → maximum health (Vitality.js)
+        this.offerings = new Offerings(this); // what must lie on the pentagram of the gargoyles / the monster before the ritual (Offerings.js)
         this.united = new UnitedPower(this); // «Пентаграмма объединённой силы» (`Pentagranium Unitas`): two things of one kind into one (UnitedPower.js)
         this.enchantCircles = new EnchantCircles(this); // «Пентаграмма зачарования»: the permanent circles and the rite (EnchantCircles.js, Enchant.js)
         this.nihilis = new Nihilis(this); // «Nihilis Atra»: a cone of light scatters black magic (Nihilis.js)
@@ -3861,6 +3863,7 @@ export class Game {
         this.fireworks?.update(dt);
         this.enchantCircles?.update(dt);
         this.united?.update(dt);
+        this.offerings?.update(dt);
         this.vitality?.update(dt);
         if (earth && !duelOnly) this._updateCaves(dt);
         this.keeper?.update(dt);

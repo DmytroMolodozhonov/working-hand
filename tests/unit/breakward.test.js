@@ -118,6 +118,12 @@ test('drain keeps going dry only with the mark', () => {
     m.marked = true; assert.equal(m.holdDry(), true); assert.equal(m.holding, true);
 });
 
+test('outside Creative the mark needs one body on the circle (Offerings): the offering\'s price is the mark\'s own', async () => {
+    const { OFFERINGS } = await import('../../src/game/PentagramOfferings.js');
+    assert.equal(OFFERINGS.breakward.mana, BREAKWARD.COST);
+    assert.equal(OFFERINGS.breakward.bodies, 1);
+});
+
 test('Codex has the pentagram section', () => {
     assert.ok(MECHANICS.some((x) => x.title === 'Пентаграммы'));
 });

@@ -8,6 +8,9 @@
  * Палочка-результат — своя, тонкая и изящная, случайного цвета из `UNITED_PALETTE`; найти её нигде нельзя (только эта пентаграмма).
  */
 
+import { humanoidBody } from './PentagramOfferings.js';
+const VILLAGERS = new Set(['v']);
+
 export const UNITED = {
     COST: 120, // мана при слове
     DARK: 30, // уровней тёмной магии сразу (в сумме не больше 100 — DarkMagic.addDark)
@@ -29,12 +32,8 @@ export const UNITED_NAME_RU = { wand: 'палочку', weapon: 'оружие', 
  * → {ok, why?}
  */
 export function bodyOk(b, { multiplayer = false } = {}) {
-    if (!b) return { ok: false, why: multiplayer ? 'Нужно тело убитого игрока' : 'Нужно тело убитого человекоподобного' };
-    if (b.bones || b.stage === 'bones') return { ok: false, why: 'Кости не подходят — нужно тело, которое ещё не стало скелетом' };
-    if (multiplayer) return b.k === 'p' ? { ok: true } : { ok: false, why: 'В сетевой игре подходит только тело убитого игрока — жители не годятся' };
-    if (b.lg) return { ok: false, why: 'В этом теле лежит сила героя — оно не подходит' };
-    if (b.k !== 'v') return { ok: false, why: 'Нужно тело человекоподобного: жителя, рыцаря, волшебника или моряка' };
-    return { ok: true };
+    if (multiplayer) return humanoidBody(b, { playersOnly: true }); // (online: only a real player's body)
+    return humanoidBody(b, { kinds: VILLAGERS }); // (alone: a villager, a knight, a wizard, a sailor — as it always was)
 }
 
 /** Можно ли объединять вещь: волшебные вещи с бафами/зачарованием (палочка — любая, кроме простой, посоха и палочки дракона). */

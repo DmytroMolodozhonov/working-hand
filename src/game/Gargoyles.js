@@ -84,6 +84,19 @@ export class Gargoyles {
 
     // ============================================================ the ritual
     /**
+     * Could a ritual begin at `center` (everything but the mana)? Asked at the word and again when the offering has been laid (Offerings.js), with no side effects.
+     * @returns {{ok:boolean, why?:string}} why: 'off' | 'realm' | 'spent' | 'busy'
+     */
+    canRitual(center) {
+        const g = this.game;
+        if (!this.enabled) return { ok: false, why: 'off' };
+        if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth') return { ok: false, why: 'realm' };
+        if (isSpent(this.spent, center.x, center.z)) return { ok: false, why: 'spent' };
+        if (this.rituals.some((r) => hdist(r.c, center) < 30 && r.t < GARGOYLE.FIRE_T + GARGOYLE.RELEASE_T + 20)) return { ok: false, why: 'busy' };
+        return { ok: true };
+    }
+
+    /**
      * (the summoner's computer) The picture of the pentagram is good — begin the ritual at `center` if there is the mana.
      * @returns {{ok:boolean, why?:string, need?:number}} not ok: nothing was taken (the picture stays; try again with mana)
      */
