@@ -555,12 +555,15 @@ export class Dragons {
         }
     }
 
+    /** Creative: exactly one dragon in a lair (the author saw two where he went to fight one). */
+    _single() { return this.game.config?.mode === 'creative'; }
+
     /** A lair's saved state (made the first time: its hoard, its dragons). */
     _lairState(e) {
         let st = this.state[e.L.id];
         if (!st) {
             const rng = createRng(e.L.seed ^ 0xd7a6);
-            const n = rng() < 0.25 ? 2 : 1;
+            const n = rng() < 0.25 && !this._single() ? 2 : 1; // (the roll is made either way: the rest of the lair's numbers stay as they were)
             const d = [];
             for (let i = 0; i < n; i++) {
                 const r = rollDragon(rng, i && rng() < 0.6 ? d[0].kind : null); // (a pair: often of one kind)
@@ -581,6 +584,7 @@ export class Dragons {
         const hx = L.hoard.x, hz = L.hoard.z;
         const R = this._heapR(st.loose);
         st.d.forEach((s, i) => {
+            if (i && this._single()) return; // (Creative: one dragon to a lair, even if a pair was rolled before)
             if (s.dead || this.list.some((d) => d.lair === L.id && d.slot === i)) return;
             // curled beside the heap, facing the mouth
             const side = i ? -1 : 1;
@@ -600,6 +604,7 @@ export class Dragons {
             });
             // one egg per dragon of the lair, nestled at the heap's foot
             st.d.forEach((s, i) => {
+                if (i && this._single()) return;
                 const it = dragonEgg(newUid(), s.kind);
                 g.items.spawnLoose(it, at(rng() * TAU, R * 0.85 + i * 0.6, 0.5));
                 st.items.push(it.uid);

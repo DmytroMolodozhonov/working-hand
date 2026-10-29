@@ -112,3 +112,24 @@ test('каждое место из списка: твёрдая земля, во
         assert.notEqual(DEN.ID, 'lair');
     }
 });
+
+test('Творческий: у логова ровно один дракон (раньше в четверти логовов рождалась пара)', async () => {
+    const { Dragons } = await import('../../src/game/Dragons.js');
+    const lairState = (mode, seed) => {
+        const self = { state: {}, game: { config: { mode } }, _single: Dragons.prototype._single };
+        return Dragons.prototype._lairState.call(self, { L: { id: 'lair' + seed, seed }, hoard: { loose: 0 } });
+    };
+    let pairsOutside = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+        assert.equal(lairState('creative', seed * 7919).d.length, 1, `seed ${seed}: в Творческом дракон один`);
+        if (lairState('free', seed * 7919).d.length === 2) pairsOutside++;
+    }
+    assert.ok(pairsOutside > 0, 'вне Творческого пары по-прежнему бывают');
+});
+
+test('места врозь: тестового дракона старой площадки в мире нет (он не дублирует дракона логова)', () => {
+    const t = world(1);
+    assert.ok(t.apart, 'мир с раздельными местами');
+    // Game._updateTestDragon выходит при data.apart: у старта и на тестовой горе логова нет
+    assert.equal(t.lairsNear(TEST_CAVE.X, TEST_CAVE.Z, 300).length, 0);
+});
