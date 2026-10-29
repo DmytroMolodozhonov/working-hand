@@ -29,8 +29,43 @@ const CHECK_T = 0.5; // s: how often a stand looks at its post (and a place at i
 const READ_NEAR = 3.4; // m: a stand this near the eyes may have its pages turned
 const SHOW_R = 12; // m: a stand this near has its pages painted (one a frame); farther: given back
 
+const HINT_R = 26; // m: walking up this near the door, once a word on what the library is
 const _v = new THREE.Vector3();
 let _shared = null;
+let _sign = null;
+let _hinted = false;
+
+/** The sign board over the library's door (one geometry and one material for all libraries; the word is painted once). */
+export function sharedSign() {
+    if (_sign) return _sign;
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 256;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, '#3a2414'); g.addColorStop(0.5, '#4d311b'); g.addColorStop(1, '#2e1c10');
+    x.fillStyle = g; x.fillRect(0, 0, 1024, 256);
+    x.globalAlpha = 0.18; // (wood grain)
+    for (let i = 0; i < 70; i++) { x.fillStyle = i % 2 ? '#000' : '#a0703c'; x.fillRect(0, (i * 37) % 256, 1024, 1 + (i % 3)); }
+    x.globalAlpha = 1;
+    x.strokeStyle = '#d9a93a'; x.lineWidth = 10; x.strokeRect(12, 12, 1000, 232);
+    x.strokeStyle = '#8a6a22'; x.lineWidth = 3; x.strokeRect(26, 26, 972, 204);
+    x.textAlign = 'center';
+    x.font = 'bold 112px serif';
+    x.lineJoin = 'round';
+    x.strokeStyle = '#1a0f06'; x.lineWidth = 12; x.strokeText('БИБЛИОТЕКА', 512, 150);
+    x.fillStyle = '#f5d36a'; x.fillText('БИБЛИОТЕКА', 512, 150);
+    x.fillStyle = '#d9a93a';
+    x.font = '70px serif';
+    x.fillText('\u{1F4D6}', 84, 150); x.fillText('\u{1F4D6}', 940, 150); // (an open book at each end)
+    x.fillStyle = '#e8d49a'; x.font = 'italic 34px serif'; x.fillText('летопись мира — листайте пальцем', 512, 220);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    const edge = new THREE.MeshBasicMaterial({ color: 0x2e1c10 });
+    _sign = { box: new THREE.BoxGeometry(1, 1, 1), mats: [edge, edge, edge, edge, new THREE.MeshBasicMaterial({ map: t }), edge] };
+    _sign.box.userData.shared = true;
+    return _sign;
+}
 
 /** The stand's board and post cap (one geometry per material, merged; made once for all stands). */
 function sharedStand() {
@@ -104,8 +139,22 @@ export class LoreLibrary {
             else list.push({ pent: 'teleport', at: spots[list.length] || at });
         }
         if (!list.length) return;
-        this.sites.set(def.id, { def, list, stands: list.map(() => null), done: list.map(() => false) });
+        this.sites.set(def.id, { def, list, sign: this._makeSign(def), stands: list.map(() => null), done: list.map(() => false) });
         this._make(this.sites.get(def.id));
+    }
+
+    /** The board with the word «Библиотека» over the door of a settlement's library (def.library.sign: its place; null where there is none). */
+    _makeSign(def) {
+        const at = def?.library?.sign, g = this.game;
+        if (!at || !g.scene || typeof document === 'undefined') return null;
+        const S = sharedSign();
+        const m = new THREE.Mesh(S.box, S.mats);
+        m.scale.set(8, 2, 0.12);
+        m.position.set(at.x, at.y, at.z);
+        m.rotation.y = at.yaw;
+        m.userData.keep = true;
+        g.scene.add(m);
+        return m;
     }
 
     /** The place is far: its stands are put away (made again on waking, if their posts still stand). */
@@ -113,6 +162,7 @@ export class LoreLibrary {
         const S = this.sites.get(def.id);
         if (!S) return;
         for (const st of S.stands) if (st) this._remove(st);
+        if (S.sign) this.game.scene?.remove(S.sign);
         this.sites.delete(def.id);
     }
 
@@ -199,6 +249,16 @@ export class LoreLibrary {
         }
         const reading = g.books?.reading;
         const eye = g.character?.head?.getWorldPosition?.(_v);
+        if (eye && !_hinted) { // (walking up to a library's door: once, what it is)
+            for (const S of this.sites.values()) {
+                const d = S.def.library?.door;
+                if (d && Math.hypot(d.x - eye.x, d.z - eye.z) < HINT_R) {
+                    _hinted = true;
+                    g.hud?.setVoice?.('📖 Библиотека: на аналоях лежат книги об истории мира — листайте их пальцем', true);
+                    break;
+                }
+            }
+        }
         if (!reading || !eye) return;
         let nearest = null, nd = READ_NEAR, opened = false;
         for (const S of this.sites.values()) {
@@ -230,6 +290,7 @@ export class LoreLibrary {
 
     sampleModels() {
         const m = makeStandModel();
+        if (typeof document !== 'undefined') { const S = sharedSign(); m.add(new THREE.Mesh(S.box, S.mats)); }
         if (figureOf('teleport')) { const pic = makeStandPicture('teleport'); pic.position.x = 3; m.add(pic); }
         const b = makeItemModel(loreItem('coprus', 'sample'));
         bookPoseOnStand(b.position, b.quaternion);

@@ -71,7 +71,15 @@ function placeIcon(ctx, kind, s) {
     ctx.scale(u, u);
     ctx.lineWidth = 1.4;
     ctx.lineJoin = 'round';
-    if (kind === 'grave') {
+    if (kind === 'library') {
+        // a library: an open book (two pages, a spine, lines of text) with a gold spark
+        ctx.fillStyle = '#f3ead2'; ctx.strokeStyle = '#3a2414';
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(-5, -9, -11, -6); ctx.lineTo(-11, 7); ctx.quadraticCurveTo(-5, 4, 0, 8); ctx.quadraticCurveTo(5, 4, 11, 7); ctx.lineTo(11, -6); ctx.quadraticCurveTo(5, -9, 0, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 8); ctx.stroke();
+        ctx.strokeStyle = '#8a7a58'; ctx.lineWidth = 1;
+        for (const k of [-2, 0.5, 3]) { ctx.beginPath(); ctx.moveTo(-9, k - 1); ctx.lineTo(-2.5, k); ctx.moveTo(2.5, k); ctx.lineTo(9, k - 1); ctx.stroke(); }
+        ctx.fillStyle = '#ffd76a'; ctx.beginPath(); for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2, rr = k % 2 ? 0.9 : 2.4; ctx.lineTo(7 + Math.cos(a) * rr, -9 + Math.sin(a) * rr); } ctx.closePath(); ctx.fill();
+    } else if (kind === 'grave') {
         // a cross and a rounded headstone
         ctx.fillStyle = '#d8d8e0'; ctx.strokeStyle = '#111';
         ctx.beginPath(); ctx.rect(-8, -8, 3, 16); ctx.rect(-12, -4, 11, 3); ctx.fill();
@@ -946,6 +954,16 @@ export class Hud {
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);
                 label(c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - BADGE - 4));
+                const lib = kind === 'wizvillage' ? c.def?.library?.door : null; // (the settlement's library: a little book badge at its door)
+                if (lib) {
+                    const lx = (lib.x - charPos.x) * scale, lz = (lib.z - charPos.z) * scale;
+                    if (inside(lx, lz, 10) && Math.hypot(lx - cx, lz - cz) > 24) {
+                        ctx.fillStyle = 'rgba(30, 20, 12, 0.92)'; ctx.strokeStyle = '#d9a93a'; ctx.lineWidth = 1.5;
+                        ctx.beginPath(); ctx.arc(lx, lz, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                        ctx.save(); ctx.translate(lx, lz + 1); placeIcon(ctx, 'library', 14); ctx.restore();
+                        label('Библиотека', lx, Math.max(-hh + 12, lz - 13));
+                    }
+                }
             } else {
                 const a = Math.atan2(cz, cx);
                 const m = BADGE + 9;

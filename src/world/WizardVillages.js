@@ -212,13 +212,13 @@ function buildHall(p, rng, out) {
     const windows = [];
     for (const a of [-10, -6, 6, 10]) windowHole(p, windows, true, v0, a - 1, a, 2, 6);
     for (const b of [30, 36, 42]) { windowHole(p, windows, false, u0, b - 1, b, 2, 6); windowHole(p, windows, false, u1, b - 1, b, 2, 6); }
-    // inside: a purple runner to the chair, long tables, shelves of books, the Elder's chair, lamps
+    // inside: a purple runner to the chair, long tables, hangings, the Elder's chair, lamps
     p.box(-1, 1, -1, -1, v0 + 1, 41, B.CARPET_PURPLE);
     for (const su of [-1, 1]) {
         p.box(su * 6, su * 9, 0, 1, 29, 38, B.PLANKS);
         p.box(su * 5, su * 5, 0, 0, 29, 38, B.PLANKS_DARK); p.box(su * 10, su * 10, 0, 0, 29, 38, B.PLANKS_DARK);
     }
-    p.box(-12, -4, 0, 4, v1 - 1, v1 - 1, B.BOOKS); p.box(4, 12, 0, 4, v1 - 1, v1 - 1, B.BOOKS);
+    for (const [a0, a1] of [[-12, -4], [4, 12]]) { p.box(a0, a1, 0, 5, v1 - 1, v1 - 1, B.CARPET_PURPLE); p.box(a0, a1, 6, 6, v1 - 1, v1 - 1, B.GOLD); } // (purple hangings with a gold border — no shelves: the hall is the Elder's, the books are in the library)
     p.box(0, 0, 0, 0, 43, 43, B.PLANKS_DARK); p.box(-1, 1, 1, 3, 44, 44, B.PLANKS_DARK); p.box(0, 0, 4, 4, 44, 44, B.ARCANE_LAMP_VIOLET);
     for (const [a, b] of [[-7, 28], [7, 28], [-7, 40], [7, 40], [0, 34]]) p.box(a, a, h - 1, h - 1, b, b, B.ARCANE_LAMP);
     out.throne = { ...p.pt(0, 43, 1), yaw: p.yaw(0) };
@@ -273,29 +273,49 @@ function buildCauldronHall(p, rng, out) {
     void rng;
 }
 
-/** The small library: shelves round the walls, the reading table with the scrolls, room for the lore books. */
+/**
+ * The library: the one building of the settlement with a columned porch, a golden-framed sign board over the door («Библиотека» — the plaque
+ * LoreLibrary.js hangs on it), tall pointed windows, a violet rug from the door to the lecterns, shelves round the walls, candles on pedestals
+ * between the lecterns. No chests, nobody sits there (no librarian): the books of the world's history lie open on seven lecterns.
+ * Sizes from the world's gauges: a 5-wide door 6 high (hats pass), aisles ≥ 3, floor to ceiling 10, the porch 4 deep.
+ */
 function buildLibrary(p, rng, out) {
     const B = BLOCK;
-    const u0 = 28, u1 = 46, v0 = 14, v1 = 28, h = 8, du = 37;
+    const u0 = 27, u1 = 47, v0 = 12, v1 = 29, h = 10, du = 37;
     p.box(u0, u1, -1, -1, v0, v1, B.PLANKS_DARK);
     p.walls(u0, u1, v0, v1, 0, h - 1, B.ARCANE);
+    p.walls(u0, u1, v0, v1, 0, 0, B.ARCANE_DARK); // (a dark plinth round the walls)
     p.box(u0 + 1, u1 - 1, 0, h - 1, v0 + 1, v1 - 1, 0);
-    for (const [a, b] of [[u0, v0], [u1, v0], [u0, v1], [u1, v1]]) p.box(a, a, 0, h, b, b, B.ARCANE_DARK);
+    for (const [a, b] of [[u0, v0], [u1, v0], [u0, v1], [u1, v1]]) p.box(a, a, 0, h + 1, b, b, B.ARCANE_DARK);
     gable(p, u0, u1, v0, v1, h, B.ROOF_PURPLE, B.ARCANE);
-    p.box(du - 1, du + 1, 0, 5, v0, v0, 0);
-    p.box(du - 2, du + 2, 6, 6, v0, v0, B.ARCANE_DARK);
-    p.box(du - 1, du + 1, -1, -1, v0 - 3, v0 - 1, B.PATH);
+    // the doorway (5 wide, 6 high), the sign board over it, the porch: four columns, a beam, a flat roof, steps of path
+    p.box(du - 2, du + 2, 0, 5, v0, v0, 0);
+    p.box(du - 3, du + 3, 6, 6, v0, v0, B.ARCANE_DARK);
+    p.box(du - 5, du + 5, 8, 11, v0, v0, B.GOLD); // (the frame of the sign board, over the porch roof)
+    p.box(du - 4, du + 4, 9, 10, v0, v0, B.CS_DARK); // (the board itself; the plaque with the word hangs before it)
+    for (const du2 of [-5, -2, 2, 5]) p.box(du + du2, du + du2, 0, 5, v0 - 4, v0 - 4, B.ARCANE_DARK); // (columns, 6 high)
+    p.box(du - 6, du + 6, 6, 6, v0 - 4, v0 - 4, B.ARCANE_DARK); // (the beam)
+    p.box(du - 6, du + 6, 7, 7, v0 - 4, v0 - 1, B.ROOF_PURPLE); // (the flat roof of the porch)
+    p.box(du - 6, du - 6, 0, 5, v0 - 4, v0 - 4, B.ARCANE_DARK); p.box(du + 6, du + 6, 0, 5, v0 - 4, v0 - 4, B.ARCANE_DARK);
+    p.box(du - 3, du + 3, -1, -1, v0 - 6, v0 - 1, B.CS_WHITE); // (the porch floor and the steps)
+    p.box(du - 1, du + 1, -1, -1, v0 - 9, v0 - 7, B.PATH);
+    for (const a of [-5, 5]) p.box(du + a, du + a, 9, 9, v0 - 1, v0 - 1, B.ARCANE_LAMP_VIOLET); // (lamps by the sign, over the porch roof)
+    // tall windows: the front (two each side of the door), both side walls
     const windows = [];
-    windowHole(p, windows, true, v0, 31, 32, 2, 4); windowHole(p, windows, true, v0, 42, 43, 2, 4);
+    for (const a of [-9, -6, 6, 9]) windowHole(p, windows, true, v0, du + a - 1, du + a, 1, 6);
+    for (const b of [17, 22, 26]) { windowHole(p, windows, false, u0, b - 1, b, 2, 6); windowHole(p, windows, false, u1, b - 1, b, 2, 6); }
     // the shelves: the back wall and both side walls (a gap at the windows)
-    p.box(u0 + 1, u1 - 1, 0, 5, v1 - 1, v1 - 1, B.BOOKS);
-    p.box(u0 + 1, u0 + 1, 0, 5, v0 + 4, v1 - 2, B.BOOKS);
-    p.box(u1 - 1, u1 - 1, 0, 5, v0 + 4, v1 - 2, B.BOOKS);
-    // the reading table (2 high: its top at a hand's height), a lamp over it, a rug
-    p.box(du - 3, du + 3, -1, -1, 18, 23, B.CARPET_PURPLE);
+    p.box(u0 + 1, u1 - 1, 0, 6, v1 - 1, v1 - 1, B.BOOKS);
+    p.box(u0 + 1, u0 + 1, 0, 6, v0 + 4, v1 - 2, B.BOOKS);
+    p.box(u1 - 1, u1 - 1, 0, 6, v0 + 4, v1 - 2, B.BOOKS);
+    for (const b of [17, 22, 26]) { // (the window slots: no books in front of the glass)
+        p.box(u0 + 1, u0 + 1, 1, 6, b - 1, b, 0); p.box(u1 - 1, u1 - 1, 1, 6, b - 1, b, 0);
+    }
+    // the rug from the door to the lecterns, the reading table (2 high: its top at a hand's height), the lamps over them
+    p.box(du - 3, du + 3, -1, -1, v0 + 1, 23, B.CARPET_PURPLE);
     p.box(du - 2, du + 2, 0, 1, 20, 21, B.PLANKS_DARK);
     p.box(du, du, h - 1, h - 1, 20, 21, B.ARCANE_LAMP);
-    for (const [a, b] of [[31, 24], [43, 24]]) p.box(a, a, h - 1, h - 1, b, b, B.ARCANE_LAMP);
+    for (const [a, b] of [[31, 24], [43, 24], [31, 16], [43, 16], [37, 25]]) p.box(a, a, h - 1, h - 1, b, b, B.ARCANE_LAMP);
     // the scrolls of simple spells on the table: 2–5, different from place to place (repeats between places are fine)
     const n = 2 + Math.floor(rng() * 4);
     const pool = LIBRARY_SPELLS.slice();
@@ -303,19 +323,22 @@ function buildLibrary(p, rng, out) {
     for (let i = 0; i < n; i++) { const k = Math.floor(rng() * pool.length); scrolls.push(pool.splice(k, 1)[0]); }
     const top = p.L(1) - 0.5;
     const spots = scrolls.map((_, i) => { const q = p.pt(du - 1.6 + (3.2 * i) / Math.max(1, n - 1), 20.5, 0); return { x: q.x, y: top, z: q.z }; });
-    // the reading stands of the world's history before the back shelves: one book on each (LoreLibrary.js — LoreBooks.js, LoreStand.js)
+    // the reading stands of the world's history before the back shelves: one book on each (LoreLibrary.js — LoreBooks.js, LoreStand.js);
+    // between them pedestals with candles (lamp blocks), behind them out of the readers' way
     const lore = [];
     for (let i = 0; i < 7; i++) {
         const u = 31 + i * 2, q = p.pt(u, 25, 0), r = p.pt(u, 24, 0); // (the reader stands at the door side, v 24)
         p.box(u, u, 0, 1, 25, 25, B.PLANKS_DARK);
         lore.push({ x: q.x, y: q.y, z: q.z, face: faceYaw(r.x - q.x, r.z - q.z) });
+        if (i < 6) { p.box(u + 1, u + 1, 0, 1, 26, 26, B.PLANKS_DARK); p.box(u + 1, u + 1, 2, 2, 26, 26, B.ARCANE_LAMP_VIOLET); }
     }
-    const door = p.node(du, 11, 0), inn = p.node(du, 17, 0, 'room:library'), desk = p.node(du, 18, 0, 'library'); // (nobody sits there: no librarian)
+    const door = p.node(du, v0 - 3, 0), inn = p.node(du, v0 + 5, 0, 'room:library'), desk = p.node(du, v0 + 6, 0, 'library'); // (nobody sits there: no librarian)
     p.link(door, inn); p.link(inn, desk); p.link(door, p.node(du, 0, 0));
-    out.library = { scrolls, spots, lore, ...p.rect(u0 + 1, u1 - 1, v0 + 1, v1 - 1) };
+    const sg = p.pt(du, v0 - 0.7, 0);
+    out.library = { scrolls, spots, lore, sign: { x: sg.x, y: sg.y + 11.5, z: sg.z, yaw: p.yaw(Math.PI) }, door: p.pt(du, v0 - 3), ...p.rect(u0 + 1, u1 - 1, v0 + 1, v1 - 1) };
     out.civic.push({
-        kind: 'library', civic: true, rich: true, wizard: true, c: p.pt(du, 21), r: 10, doorRec: civicDoor(p, du, v0, 0, 1, 3, 6), windows,
-        chests: [], bedSpots: [], homeNode: inn, doorNode: door, door: p.pt(du, 11), inside: p.pt(du, 17), beds: 0,
+        kind: 'library', civic: true, rich: true, wizard: true, c: p.pt(du, 21), r: 11, doorRec: civicDoor(p, du, v0, 0, 1, 5, 6), windows,
+        chests: [], bedSpots: [], homeNode: inn, doorNode: door, door: p.pt(du, v0 - 3), inside: p.pt(du, v0 + 5), beds: 0,
     });
 }
 
