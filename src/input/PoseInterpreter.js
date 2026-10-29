@@ -5,6 +5,7 @@
  */
 
 import { mouthOpenness } from '../game/VoiceGate.js';
+import { FaceReader } from '../entities/FaceExpr.js';
 import { LegReader } from './LegReader.js';
 import { StepReader } from './StepReader.js';
 import { JumpReader } from './JumpReader.js';
@@ -320,6 +321,7 @@ export class PoseInterpreter {
      */
     constructor(faceSolver = null) {
         this.faceSolver = faceSolver;
+        this.faceReader = new FaceReader(); // (the face's muscles for the «Реалистичный» hero — FaceExpr.js)
         this.shoulderHistory = [];
         this.walkMode = 'old'; // (Настройки → Ходьба: 'old' — the body's bob, 'legs' — steps on the spot: StepReader)
         this.steps = new StepReader();
@@ -483,6 +485,7 @@ export class PoseInterpreter {
 
         // the mouth (is it me who speaks? — VoiceGate)
         data.mouth = mouthOpenness(results.faceLandmarks);
+        try { data.face = results.faceLandmarks ? this.faceReader.read(results.faceLandmarks, data.aspect || 4 / 3, performance.now() / 1000) : null; } catch (e) { data.face = null; }
         const body = data.hasPose ? this.headBody.read(lm, data.aspect || 4 / 3) : null;
         let head = null;
         if (results.faceLandmarks && this.faceSolver) {

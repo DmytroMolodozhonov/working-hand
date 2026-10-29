@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hero skin view</title>
+<style>html, body { margin: 0; background: #8fb3c9; overflow: hidden; } canvas { display: block; }</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.js" } }</script>
+</head>
+<body>
+<script type="module">
+// The hero alone (tools/skin-screenshots.mjs): ?model=real|std &cam=front|side|back|face|hand|three &pose=idle|armup|tpose|fist|point|crouch|walk|reach &face=smile|surprise|blink|o|angry
+import * as THREE from 'three';
+import { VoxelCharacter } from '../src/entities/Character.js';
+import { RealisticBody, realLibrary } from '../src/entities/RealisticBody.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 640), H = +(q.get('h') || 640);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9cbfd4);
+scene.fog = new THREE.Fog(0x9cbfd4, 60, 200);
+scene.add(new THREE.HemisphereLight(0xcfe6ff, 0x6b5a45, 0.75));
+const sun = new THREE.DirectionalLight(0xfff1dd, 0.85);
+sun.position.set(-6, 12, -8);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 40 });
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshLambertMaterial({ color: 0x6f8f4f }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+scene.add(ground);
+
+const ch = new VoxelCharacter(scene);
+ch.group.position.set(0, 2, 0);
+ch.setShowHands(true);
+ch.setHandVersion('v4');
+const look = { skin: +(q.get('skin') || 0xf1c27d), face: +(q.get('lookface') || 0), eyes: 0x3b6ea5, brows: 0x4a3728, hair: +(q.get('hair') || 0), hairColor: 0x4a3728, hat: +(q.get('hat') || 0), hatColor: 0x8e2b2b, top: +(q.get('top') || 0), topColor: +(q.get('topc') || 0x3d7ab8), bottom: +(q.get('bottom') || 0), bottomColor: 0x2c3e50, shoes: +(q.get('shoes') || 0), shoesColor: 0x333333 };
+ch.setLook(look);
+const pose = q.get('pose') || 'idle';
+const model = q.get('model') || 'real';
+
+function setPose(t) {
+    ch.setIdlePose();
+    if (pose === 'crouch') ch.group.position.y = 1.0;
+    ch.group.updateMatrixWorld(true);
+    const p = ch.group.position;
+    const at = (x, y, z) => new THREE.Vector3(p.x + x, p.y + y, p.z + z);
+    if (pose === 'armup') { ch.reachHand('right', at(0.9, 2.6, -0.2)); ch.reachHand('left', at(-1.6, 0.5, -0.4)); }
+    if (pose === 'tpose') { ch.reachHand('right', at(2.6, 1.25, 0)); ch.reachHand('left', at(-2.6, 1.25, 0)); }
+    if (pose === 'reach' || pose === 'fist' || pose === 'point') { ch.reachHand('right', at(0.5, 1.4, -1.6)); ch.reachHand('left', at(-0.7, 0.9, -1.0)); }
+    if (pose === 'crouch') { ch.isCrouching = true; ch.lowK = 1; ch.crouchK = 1; ch.group.position.y = 1.0; ch.reachHand('right', at(0.6, 0.6, -1.2)); ch.reachHand('left', at(-0.6, 0.6, -1.2)); }
+    if (pose === 'walk') { ch.isRunning = true; ch.runIntensity = 0.5; ch.runCycle = 1.2; ch.reachHand('right', at(0.75, -0.3, 0.4)); ch.reachHand('left', at(-0.75, -0.3, -0.5)); }
+    for (const h of [ch.leftSimplifiedHand, ch.rightSimplifiedHand]) {
+        if (pose === 'fist') h.setGrip(1, 'power'); else if (pose === 'point') h.setGrip(0.9, { index: [0, 0, 0, 0], middle: [1.4, 1.5, 0.9, 0], ring: [1.4, 1.5, 0.9, 0], pinky: [1.4, 1.5, 0.9, 0], thumb: [0.3, -0.9, 0.9, 0.6, 0.5] });
+        else h.setGrip(0.15, { index: [0.25, 0.3, 0.15, 0.05], middle: [0.3, 0.35, 0.2, 0], ring: [0.35, 0.4, 0.2, -0.03], pinky: [0.4, 0.45, 0.25, -0.08], thumb: [0.2, -0.6, 0.85, 0.2, 0.15] });
+        h.animateModel?.();
+    }
+    ch.head.rotation.set(+(q.get('hp') || 0), +(q.get('hy') || 0), 0);
+}
+const faces = {
+    smile: { smileL: 0.9, smileR: 0.9, squint: 0.6, jaw: 0.15, wide: 0.4 },
+    surprise: { browL: 1, browR: 1, browIn: 0.5, jaw: 0.75, wide: -0.2 },
+    blink: { blinkL: 1, blinkR: 1 },
+    o: { jaw: 0.45, wide: -1 },
+    angry: { browL: -0.6, browR: -0.6, browIn: -1, lipUp: 0.6, smileL: -0.4, smileR: -0.4 },
+    look: { gazeX: 0.8, gazeY: 0.3 },
+};
+let real = null;
+if (model === 'real') { real = ch.real = new RealisticBody(ch); real.setEnabled(true); }
+const cams = {
+    front: [[0, 2.4, -9.5], [0, 2.3, 0], 35], side: [[9.5, 2.4, 0], [0, 2.3, 0], 35], back: [[0, 2.4, 9.5], [0, 2.3, 0], 35],
+    three: [[-5.5, 3.2, -7.5], [0, 2.2, 0], 35], face: [[0, 4.1, -1.35], [0, 4.1, 0], 30], faceside: [[1.3, 4.12, -0.55], [0, 4.1, -0.1], 30],
+    hand: [[2.2, 3.1, -1.7], [0.55, 3.4, -1.7], 30], eye: [[0.2, 4.17, -0.75], [0.08, 4.15, -0.2], 22], mouth: [[0.12, 3.95, -0.75], [0, 3.92, -0.24], 20], legs: [[3, 1.2, -5], [0, 1.0, 0], 35],
+};
+const [cp, ct, fov] = cams[q.get('cam') || 'front'];
+const camera = new THREE.PerspectiveCamera(fov, W / H, 0.05, 300);
+camera.position.set(...cp); camera.lookAt(...ct);
+window.__shot = async () => {
+    if (real) { await realLibrary(); for (let i = 0; i < 200 && !real.wearReady; i++) await new Promise((r) => setTimeout(r, 20)); await real.wearReady; }
+    setPose();
+    for (let i = 0; i < 4; i++) {
+        ch.update(1 / 60, null, false);
+        setPose();
+        const f = faces[q.get('face')];
+        if (f) { ch.face = { blinkL: 0, blinkR: 0, browL: 0, browR: 0, browIn: 0, gazeX: 0, gazeY: 0, jaw: 0, smileL: 0, smileR: 0, wide: 0, lipUp: 0, roll: 0, squint: 0, ...f }; ch.faceAt = performance.now(); }
+        if (real) { real._faceIdle = { t: 0, next: 99, gaze: { x: 0, y: 0, tx: 0, ty: 0, at: 99 } }; RealisticBody.poseAll(camera, 1); }
+        renderer.render(scene, camera);
+    }
+    return true;
+};
+window.__ready = true;
+</script>
+</body>
+</html>

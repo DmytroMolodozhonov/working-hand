@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
 import { CombatVisuals } from '../game/Combat.js';
 import { KD_NAME } from '../game/Impact.js';
+import { decodeFace, applyFaceDiff } from '../entities/FaceExpr.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
 const _sh = { x: 0, y: 0, z: 0 };
@@ -50,6 +51,13 @@ export class RemoteAvatar {
         this._lookKey = JSON.stringify(look);
         this.character.setLook(look);
         this.color = look.topColor ?? this.color;
+    }
+
+    /** How this player's hero is drawn — as THEY chose it ('real': the «Реалистичный» test model; else the standard one). */
+    setHeroModel(hm) {
+        const v = hm === 'real' ? 'real' : 'std';
+        if (v === (this.character.heroModel || 'std')) return;
+        this.character.setHeroModel(v);
     }
 
     setDead(dead) {
@@ -98,6 +106,18 @@ export class RemoteAvatar {
         this.mastery = Math.max(0, Number(s.dms) || 0); // (their «дуэльное мастерство»: a duel counts it)
         this.wand = s.wd ? { dir: s.wd[0] || null, fav: s.wd[1] || null, power: s.wd[2] || 0 } : null; // (their wand: a duel counts it — Duel._wandK)
         this.lumos = !!s.lm; // (their wand's tip shines: a sleeping dragon sees it from farther)
+        // their face (the «Реалистичный» hero): a whole face, or only what changed, or '-' none seen any more
+        const ch = this.character;
+        if (typeof s.fc === 'string') {
+            if (s.fc === '-') this._fc = null;
+            else if (s.fc[0] === '+') this._fc = this._fc ? applyFaceDiff(this._fc, s.fc.slice(1)) : null;
+            else this._fc = s.fc;
+            if (this._fc) ch.face = decodeFace(this._fc, ch.face || undefined) || ch.face;
+        }
+        if (this._fc) ch.faceAt = performance.now();
+        const rl = Array.isArray(s.rl) ? s.rl : null;
+        ch.legLift = rl ? { l: +rl[0] || 0, lh: !!rl[1], r: +rl[2] || 0, rh: !!rl[3] } : null;
+        ch.torsoLean = rl ? +rl[4] || 0 : 0;
         this.duelContact = s.dc ? s.dc[0] : 1;
         this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {

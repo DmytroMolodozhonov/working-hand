@@ -335,6 +335,7 @@ function readConfig() {
         cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
         showHands: showHandsToggle ? showHandsToggle.checked : false,
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
+        heroModel: $('hero-model')?.value === 'real' ? 'real' : 'std', // (the «Реалистичный» test model — RealisticBody.js)
         handQuality: ($('hand-quality')?.value || 'high').includes('high') ? 'high' : 'low',
         drifting: $('drift-camera') ? $('drift-camera').checked : true,
         leftHanded: $('handedness')?.value === 'left',
@@ -1381,6 +1382,14 @@ const pauseCreative = (() => {
     sync();
     return { sync };
 })();
+// the hero's model changes the running game at once: mine is drawn so, and the others are told (NetSync.sendLook)
+$('hero-model')?.addEventListener('change', () => {
+    const v = $('hero-model').value === 'real' ? 'real' : 'std';
+    if (!game?.character) return;
+    game.character.setHeroModel(v);
+    if (game.config) game.config.heroModel = v;
+    game.sync?.sendLook?.();
+});
 // the hand version changes the running game at once (settings or pause menu)
 for (const r of document.querySelectorAll('input[name="hand-version"]')) {
     r.addEventListener('change', () => {
@@ -1722,7 +1731,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'hero-model', 'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)

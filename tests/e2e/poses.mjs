@@ -62,7 +62,7 @@ export function hand(wx, wy, { size = 0.09, curl = 0, rot = 0, tilt = 0, bend = 
  *     go out of the picture's bottom, seen there with a low visibility, as a real camera does)
  *   jitter: a real camera's shake — every point moved randomly by up to this much (repeatable)
  */
-export function frame({ crossedArms = false, arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0, mirror = false } = {}) {
+export function frame({ crossedArms = false, arms = 'forward', raise = null, pocket = null, toMouth = null, archer = null, draw = 0, windup = null, leftCurl = 0, rightCurl = 0, leftRot = 0, rightRot = 0, leftTilt = 0, rightTilt = 0, leftBend = 0, rightBend = 0, palmsIn = false, noseY = 0.25, bob = 0, wristOffset = [0, 0], lean = 0, forward = 0, rightStick = null, leftStick = null, belt = null, purse = null, legs = null, lowLeft = false, scale = 1, jitter = 0, mirror = false, face = null } = {}) {
     // lean: + = person leans to THEIR left (image right); forward: + = shoulders towards the camera
     const p = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.8, z: 0, visibility: 0.95 }));
     const sh = 0.42 + bob;
@@ -185,7 +185,28 @@ export function frame({ crossedArms = false, arms = 'forward', raise = null, poc
         for (const [i, j] of [[1, 4], [2, 5], [3, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16], [17, 18], [19, 20], [21, 22], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]]) [p[i], p[j]] = [p[j], p[i]];
         for (const h of hands) { for (const q of h.landmarks) q.x = 1 - q.x; h.label = h.label === 'Right' ? 'Left' : 'Right'; }
     }
-    return { poseLandmarks: p, hands, faceLandmarks: undefined, cost: 5, ...(sticks.length ? { sticks } : {}) };
+    return { poseLandmarks: p, hands, faceLandmarks: face ? faceMesh(p[0].x, p[0].y - 0.02, face) : undefined, cost: 5, ...(sticks.length ? { sticks } : {}) };
+}
+
+/**
+ * The camera's 478 face points (MediaPipe's face mesh; only the ones the game reads are placed) round the point
+ * (cx, cy) between the eyes: {smile, close (the eyes), jaw, brow, wide (− an «о»), gaze, roll} — FaceExpr.js reads them.
+ */
+export function faceMesh(cx, cy, { smile = 0, close = 0, jaw = 0, brow = 0, wide = 0, gaze = 0, roll = 0, size = 1 } = {}) {
+    const P = Array.from({ length: 478 }, () => ({ x: cx, y: cy, z: 0 }));
+    const k = 0.5 * size;
+    const put = (i, x, y) => { P[i] = { x: cx + (x - 0.5) * k, y: cy + (y - 0.45) * k, z: 0 }; };
+    put(33, 0.4, 0.45); put(133, 0.46, 0.45); put(263, 0.6, 0.45); put(362, 0.54, 0.45);
+    const lid = 0.012 * (1 - close);
+    put(159, 0.43, 0.45 - lid); put(145, 0.43, 0.45 + lid); put(386, 0.57, 0.45 - lid); put(374, 0.57, 0.45 + lid);
+    put(468, 0.43 - gaze * 0.01, 0.45); put(473, 0.57 - gaze * 0.01, 0.45);
+    for (const [i, x] of [[70, 0.4], [63, 0.415], [105, 0.43], [66, 0.445], [107, 0.46]]) put(i, x, 0.41 - brow * 0.01);
+    for (const [i, x] of [[300, 0.6], [293, 0.585], [334, 0.57], [296, 0.555], [336, 0.54]]) put(i, x, 0.41 - brow * 0.01);
+    put(10, 0.5, 0.33); put(152, 0.5, 0.68); put(0, 0.5, 0.585); put(2, 0.5, 0.55);
+    put(13, 0.5, 0.6); put(14, 0.5, 0.6 + jaw * 0.04);
+    put(61, 0.46 - wide * 0.01, 0.605 - smile * 0.012); put(291, 0.54 + wide * 0.01, 0.605 - smile * 0.012);
+    if (roll) for (const q of P) { const dx = q.x - cx, dy = q.y - cy, c = Math.cos(roll), s = Math.sin(roll); q.x = cx + dx * c - dy * s; q.y = cy + dx * s + dy * c; }
+    return P;
 }
 
 /** Feed `count` frames (~30 FPS) into the page. */

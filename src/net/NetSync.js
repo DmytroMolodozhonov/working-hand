@@ -46,6 +46,7 @@
 import { breaking } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
+import { encodeFace, faceDiff } from '../entities/FaceExpr.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
@@ -110,6 +111,7 @@ export class NetSync {
             const av = new RemoteAvatar(this.game.scene, p.id, p.name, p.color);
             this.game.remotes.set(p.id, av);
             if (this.looks?.has(p.id)) av.setLook(this.looks.get(p.id));
+            av.setHeroModel(this.models?.get(p.id));
             if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${p.name}`);
             this._lookSoon = true; // a newcomer: tell them how I look
         }
@@ -122,6 +124,7 @@ export class NetSync {
             const av = new RemoteAvatar(this.game.scene, id, name, info?.color || 1);
             this.game.remotes.set(id, av);
             if (this.looks?.has(id)) av.setLook(this.looks.get(id));
+            av.setHeroModel(this.models?.get(id));
             if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${name}`);
         }
         // Late joiner: send the whole world state
@@ -291,6 +294,29 @@ export class NetSync {
         this.net.send({ t: 'pstate', name: this.net.name, s: playerSnapshot(this.game) });
     }
 
+    /** My face for the others (FaceExpr: 14 letters every 2 s, between them only the changed ones; '-' — no face seen any more). */
+    _faceNet() {
+        const ch = this.game.character, now = performance.now();
+        if (ch.heroModel !== 'real' || !ch.face || now - (ch.faceAt || 0) > 600) {
+            if (this._fcLast) { this._fcLast = null; return '-'; }
+            return undefined;
+        }
+        const s = encodeFace(ch.face);
+        if (!this._fcLast || now - (this._fcFull || 0) > 2000) { this._fcLast = s; this._fcFull = now; return s; }
+        const d = faceDiff(this._fcLast, s, 1);
+        this._fcLast = s;
+        return d ? '+' + d : undefined;
+    }
+
+    _legsNet() {
+        const ch = this.game.character;
+        if (ch.heroModel !== 'real') return undefined;
+        const L = ch.legLift, lean = Math.round((ch.torsoLean || 0) * 100) / 100;
+        if (!L && !lean) return undefined;
+        const r = (v) => Math.round((v || 0) * 100) / 100;
+        return [r(L?.l), L?.lh ? 1 : 0, r(L?.r), L?.rh ? 1 : 0, lean];
+    }
+
     // ================================================================ update
     update(dt) {
         const g = this.game;
@@ -324,6 +350,8 @@ export class NetSync {
                 sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
                 mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
+                fc: this._faceNet(), // (the «Реалистичный» hero's face: whole now and then, else only what changed — a few letters)
+                rl: this._legsNet(), // (… a knee lifted / a heel kicked up as the camera sees, the shoulders' own tilt)
             }, true);
         }
         // Water ball in my hand
@@ -836,7 +864,8 @@ export class NetSync {
 
     sendLook() {
         const look = this.game.character.look;
-        if (look) this.net.send({ t: 'look', by: this.me, look }, true);
+        // (hm: how my hero is drawn — the «Реалистичный» test model or the standard one; the others draw me so)
+        if (look) this.net.send({ t: 'look', by: this.me, look, hm: this.game.character.heroModel === 'real' ? 'real' : undefined }, true);
         this.game.armor?.resend(); // (and what armour I wear: Armor.js)
         // (and what is in my hands, the backpack, the coin pouch: a newcomer saw empty hands until I took something anew)
         const it = this.game.items;
@@ -1115,7 +1144,9 @@ export class NetSync {
                 if (m.by === this.me || !m.look) break;
                 this.looks = this.looks || new Map();
                 this.looks.set(m.by, m.look);
+                (this.models = this.models || new Map()).set(m.by, m.hm === 'real' ? 'real' : 'std');
                 g.remotes.get(m.by)?.setLook(m.look);
+                g.remotes.get(m.by)?.setHeroModel(m.hm);
                 break;
             }
             case 'an': if (!this.net.isHost) g.animals?.applyNet(rows(m.l)); break;

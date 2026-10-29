@@ -32,6 +32,7 @@ import { G, JUMP_ASSIST, jumpSpeed, walkK, heavySink } from '../game/Jump.js';
 import { ArmPump } from '../game/ArmPump.js';
 import { setEyes } from './ImperiusEyes.js';
 import { setDark, tickDark, refreshArmor } from './DarkSkin.js';
+import { RealisticBody } from './RealisticBody.js';
 
 const _v3k = new THREE.Vector3();
 const _v1 = new THREE.Vector3();
@@ -1036,6 +1037,18 @@ export class VoxelCharacter {
     setLook(look) {
         applyLook(this, look);
         this.setFirstPerson(!!this._fpv);
+        this.real?.setLook(this.look);
+    }
+
+    /**
+     * How this hero is drawn: 'std' — the standard model (the default), 'real' — the «Реалистичный» test model
+     * (RealisticBody.js: the same hero underneath — the game measures the same arms, hands and head).
+     */
+    setHeroModel(kind) {
+        const real = kind === 'real';
+        this.heroModel = real ? 'real' : 'std';
+        if (real && !this.real) this.real = new RealisticBody(this);
+        this.real?.setEnabled(real);
     }
 
     /** The eyes (the first-person camera): from the neck's foot, turned with the head (NECK, EYES). */
@@ -1153,6 +1166,8 @@ export class VoxelCharacter {
     }
 
     dispose() {
+        this.real?.dispose();
+        this.real = null;
         this.scene.remove(this.group);
         this.group.traverse((o) => {
             if (o.isMesh || o.isInstancedMesh) {
