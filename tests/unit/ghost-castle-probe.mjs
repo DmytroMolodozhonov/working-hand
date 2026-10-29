@@ -4,7 +4,7 @@
  * A synthetic site (a GhostSite made by hand: no world generation), a rolling ground between its `lo` and `hi`, the castle's parts laid the
  * way Terrain._buildCastles lays them (a box, a disc, a ring's sector; the ramp marks ignored), and the checks:
  *   reach   — a hero (a floor under him, 5 free layers over it, steps of one layer) gets from the entrance to every chest, spot, prop and door;
- *   wide    — the doorways and the chests are reached by ways 3 blocks wide (every cell of the way has its 3 × 3 standable within a layer);
+ *   wide    — the doorways and the chests are reached by ways 3 blocks wide (every cell of the way and its 4 neighbours standable within a layer);
  *   top     — no block above site.top or above local layer 78;
  *   land    — no air carved below layer hi + 1 (the land is never cut);
  *   bounds  — nothing outside the ±96 square nor outside the cell;
@@ -79,7 +79,10 @@ export function frame(site) {
 /** All the checks; returns { problems: [string], stats }. */
 export function checkCastle(site, built, g, { wideAll = false } = {}) {
     const problems = [];
+    const res_ = {};
     const B = BLOCK;
+    const r = site.rot;
+    const lc = (x, L, z) => { const dx = x - site.x, dz = z - site.z; const u = r === 0 ? dx : r === 1 ? dz : r === 2 ? -dx : -dz, v = r === 0 ? dz : r === 1 ? -dx : r === 2 ? -dz : dx; return `${u},${L - site.F - 1},${v}`; };
     const { get } = g;
     const solid = (x, L, z) => get(x, L, z) !== 0;
     const floorOk = (x, L, z) => { const t = get(x, L, z); return t !== 0 && t !== B.FENCE; };
@@ -129,7 +132,6 @@ export function checkCastle(site, built, g, { wideAll = false } = {}) {
                 if (nL <= L0 || nL + 5 > L1) continue;
                 const i = g.idx(nx, nL, nz);
                 if (vis[i] || !stand(nx, nL, nz)) continue;
-                if (dL === 1 && solid(x, L + 5, z)) continue; // (a step up needs room for the head where he stands)
                 vis[i] = 1; q.push(nx, nL, nz);
             }
         }
@@ -137,8 +139,9 @@ export function checkCastle(site, built, g, { wideAll = false } = {}) {
     const reached = (x, L, z) => g.inside(x, L, z) && vis[g.idx(x, L, z)] === 1;
     const reachNear = (x, L, z, r = 0) => { for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) if (reached(x + dx, L, z + dz)) return true; return false; };
     // ---- wide: cells whose 3 × 3 is standable (within a layer), flooded from the entrance
+    // (the centre and its four neighbours: a straight doorway or corridor 2 wide fails it, a curved band of a spiral stair 3.7 m wide passes)
     const wideAt = (x, L, z) => {
-        for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (!stand(x + dx, L, z + dz) && !stand(x + dx, L - 1, z + dz) && !stand(x + dx, L + 1, z + dz)) return false;
+        for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) if (!stand(x + dx, L, z + dz) && !stand(x + dx, L - 1, z + dz) && !stand(x + dx, L + 1, z + dz)) return false;
         return true;
     };
     const wv = new Uint8Array(g.data.length);
@@ -182,19 +185,19 @@ export function checkCastle(site, built, g, { wideAll = false } = {}) {
         const x = Math.round(s.x), z = Math.round(s.z), L = Math.round(s.y + 1.5);
         let air = floorOk(x, L - 1, z);
         for (let k = 0; k < 6; k++) if (solid(x, L + k, z)) air = false;
-        if (!air) bad.spotAir.push(`${s.room}@${x - site.x},${L - site.F - 1},${z - site.z}`);
-        else if (!reached(x, L, z)) bad.spotReach.push(`${s.room}@${x - site.x},${L - site.F - 1},${z - site.z}`);
-        else if (!wideNear(x, L, z, 1)) bad.spotWide.push(`${s.room}@${x - site.x},${L - site.F - 1},${z - site.z}`);
+        if (!air) bad.spotAir.push(`${s.room}@${lc(x, L, z)}`);
+        else if (!reached(x, L, z)) bad.spotReach.push(`${s.room}@${lc(x, L, z)}`);
+        else if (!wideNear(x, L, z, 1)) bad.spotWide.push(`${s.room}@${lc(x, L, z)}`);
     }
     for (const pr of built.props) {
         const x = Math.round(pr.x), z = Math.round(pr.z), Ls = Math.round(pr.y + 0.5);
-        if (!solid(x, Ls, z) || solid(x, Ls + 1, z)) bad.propAir.push(`${pr.kind}@${x - site.x},${Ls - site.F - 1},${z - site.z}`);
-        else if (!reachNear(x, Ls + 1, z, 1) && !reachNear(x, Ls, z, 1) && !reachNear(x, Ls - 1, z, 1) && !reachNear(x, Ls + 2, z, 1)) bad.propReach.push(`${pr.kind}@${x - site.x},${Ls - site.F - 1},${z - site.z}`);
+        if (!solid(x, Ls, z) || solid(x, Ls + 1, z)) bad.propAir.push(`${pr.kind}@${lc(x, Ls, z)}`);
+        else if (![Ls + 1, Ls, Ls - 1, Ls - 2, Ls + 2].some((L) => reachNear(x, L, z, 2))) bad.propReach.push(`${pr.kind}@${lc(x, Ls, z)}`);
     }
     for (const d of built.doors || []) {
         const x = Math.round(d.x), z = Math.round(d.z), L = Math.round(d.y + 1.5);
-        if (!reachNear(x, L, z, 1)) bad.doorReach.push(`${d.room}@${x - site.x},${L - site.F - 1},${z - site.z}`);
-        else if (!wideNear(x, L, z, 2)) bad.doorWide.push(`${d.room}@${x - site.x},${L - site.F - 1},${z - site.z}`);
+        if (!reachNear(x, L, z, 1)) bad.doorReach.push(`${d.room}@${lc(x, L, z)}`);
+        else if (!wideNear(x, L, z, 2)) bad.doorWide.push(`${d.room}@${lc(x, L, z)}`);
     }
     const say = (k, what) => { if (bad[k].length) problems.push(`${what} (${bad[k].length}): ${bad[k].slice(0, 12).join('  ')}`); };
     say('chestBox', 'сундук не помещается (камень/нет пола)');
@@ -226,10 +229,66 @@ export function checkCastle(site, built, g, { wideAll = false } = {}) {
     for (let i = 0; i < g.data.length; i++) if (g.data[i] && !seen[i]) {
         nFloat++;
         const t = g.data[i];
-        if (!floating.has(t)) { const x = i % W, rest = (i - x) / W, z = rest % D, l = (rest - z) / D; floating.set(t, { n: 0, at: `${x + x0 - site.x},${l + L0 - site.F - 1},${z + z0 - site.z}` }); }
+        if (!floating.has(t)) { const x = i % W, rest = (i - x) / W, z = rest % D, l = (rest - z) / D; floating.set(t, { n: 0, at: lc(x + x0, l + L0, z + z0) }); }
         floating.get(t).n++;
     }
     if (nFloat) problems.push(`висит в воздухе ${nFloat} блоков: ` + [...floating].map(([t, f]) => `${Object.keys(B).find((k) => B[k] === t) || t}×${f.n} (${f.at})`).join(', '));
+    // ---- traps: a place a hero may land on (flying, «Левиоса») from which he can neither walk nor drop back to the reached castle
+    const back = new Uint8Array(g.data.length);
+    const bq = [];
+    for (let i = 0; i < vis.length; i++) if (vis[i]) { back[i] = 1; bq.push(i); }
+    const WD0 = W * D;
+    while (bq.length) {
+        const i = bq.pop();
+        const x = i % W, rest = (i - x) / W, z = rest % D, l = (rest - z) / D;
+        for (const [dx, dz] of N4) {
+            const nx = x + dx, nz = z + dz;
+            if (nx < 0 || nz < 0 || nx >= W || nz >= D) continue;
+            // a cell beside it from which the hero steps up one layer onto it, or walks off and drops (any height) onto it:
+            // the drop needs this column (x, z) free from his feet here (l) up to the head of the one who walks off (nl + 4)
+            for (let nl = l - 1; nl < g.H - 5; nl++) {
+                if (nl + 4 >= l + 5 && g.data[(nl + 4) * WD0 + z * W + x]) break;
+                const j = nl * WD0 + nz * W + nx;
+                if (!back[j] && stand(nx + x0, nl + L0, nz + z0)) { back[j] = 1; bq.push(j); }
+            }
+        }
+    }
+    // where he can get to: walking and dropping down from the reached castle, or landing from the open sky
+    const into = new Uint8Array(g.data.length);
+    const fq = [];
+    for (let i = 0; i < vis.length; i++) if (vis[i]) { into[i] = 1; fq.push(i); }
+    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
+        let l = g.H - 1;
+        while (l > 0 && !g.data[l * WD0 + z * W + x]) l--;
+        const i = (l + 1) * WD0 + z * W + x;
+        if (l + 6 < g.H && !into[i] && stand(x + x0, l + 1 + L0, z + z0)) { into[i] = 1; fq.push(i); } // (the highest floor of a column: open to the sky)
+    }
+    while (fq.length) {
+        const i = fq.pop();
+        const x = i % W, rest = (i - x) / W, z = rest % D, l = (rest - z) / D;
+        for (const [dx, dz] of N4) {
+            const nx = x + dx, nz = z + dz;
+            if (nx < 0 || nz < 0 || nx >= W || nz >= D || l + 6 >= g.H) continue;
+            const up = (l + 1) * WD0 + nz * W + nx;
+            if (!into[up] && stand(nx + x0, l + 1 + L0, nz + z0)) { into[up] = 1; fq.push(up); }
+            let free = true;
+            for (let k = 0; k < 5; k++) if (g.data[(l + k) * WD0 + nz * W + nx]) { free = false; break; }
+            if (!free) continue;
+            let m = l - 1;
+            while (m > 0 && !g.data[m * WD0 + nz * W + nx]) m--;
+            const j = (m + 1) * WD0 + nz * W + nx;
+            if (!into[j] && stand(nx + x0, m + 1 + L0, nz + z0)) { into[j] = 1; fq.push(j); }
+        }
+    }
+    const traps = [];
+    for (let i = 0; i < into.length; i++) {
+        if (!into[i] || back[i]) continue;
+        const x = i % W, rest = (i - x) / W, z = rest % D, l = (rest - z) / D;
+        if (Math.abs(x + x0 - site.x) > GC.HALF || Math.abs(z + z0 - site.z) > GC.HALF) continue;
+        traps.push(lc(x + x0, l + L0, z + z0));
+    }
+    if (traps.length) problems.push(`ловушки — встав туда, не выйти (${traps.length}): ${traps.slice(0, 10).join('  ')}`);
     let nReach = 0; for (let i = 0; i < vis.length; i++) nReach += vis[i];
-    return { problems, stats: { parts: built.parts.length, chests: built.chests.length, props: built.props.length, rooms: built.rooms.length, spots: built.spots.length, doors: (built.doors || []).length, reach: nReach, maxL: maxL - site.F - 1, spotWide: bad.spotWide.length } };
+    res_.vis = vis; res_.wv = wv; res_.stand = stand;
+    return { ...res_, problems, stats: { parts: built.parts.length, chests: built.chests.length, props: built.props.length, rooms: built.rooms.length, spots: built.spots.length, doors: (built.doors || []).length, reach: nReach, maxL: maxL - site.F - 1, spotWide: bad.spotWide.length } };
 }

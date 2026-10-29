@@ -20,6 +20,7 @@ export class GhostRoom {
         Object.assign(this, { K, id, kind, name, u0, u1, v0, v1, l, h });
         this.W = u1 - u0 + 1; this.D = v1 - v0 + 1;
         this.occ = new Uint8Array(this.W * this.D);
+        this.hgt = new Uint8Array(this.W * this.D); // (the height of the piece on a cell: 1 and 2 never touch — no staircase of furniture up to a pocket)
         this.keys = []; // cells that must stay joined (doors' second rows, the middle)
         this.doors = [];
         if (record) K.room(id, kind, name, u0, u1, v0, v1, l, h);
@@ -50,8 +51,8 @@ export class GhostRoom {
         return this;
     }
 
-    /** Keep a rectangle free (an aisle, a stair's foot). */
-    keep(u0, u1, v0, v1) { for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) if (this.in(u, v)) this.occ[this.at(u, v)] = 2; }
+    /** Keep a rectangle for a piece laid later (a chest's niche): never furnished, no ghost spot on it, but walked through. */
+    keep(u0, u1, v0, v1) { for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) if (this.in(u, v)) this.occ[this.at(u, v)] = 3; }
     key(u, v) { this.keys.push([u, v]); }
 
     /** Is a footprint free (inside, nothing on it)? */
@@ -93,13 +94,22 @@ export class GhostRoom {
         return !!seen && this.keys.every(([u, v]) => this.in(u, v) && seen[this.at(u, v)]);
     }
 
-    /** Take a footprint for a piece: only when it is free and the room stays passable; then lay it (fn). */
-    put(u0, u1, v0, v1, fn) {
+    /**
+     * Take a footprint for a piece: only when it is free and the room stays passable; then lay it (fn). `h` the height a hero could stand
+     * on (0 a prop, 1 a bench or a sack, 2 a table or a crate, 9 anything he cannot climb or stand on): a piece 1 high never stands beside
+     * one 2 high — two such would make a staircase up the furniture and down into a pocket between it and the wall, with no way back.
+     */
+    put(u0, u1, v0, v1, fn, h = fn ? 2 : 0) {
         if (u1 < u0) [u0, u1] = [u1, u0];
         if (v1 < v0) [v0, v1] = [v1, v0];
         if (!this.fits(u0, u1, v0, v1)) return false;
+        if (h === 1 || h === 2) {
+            const bad = 3 - h;
+            for (let v = v0 - 1; v <= v1 + 1; v++) for (let u = u0 - 1; u <= u1 + 1; u++) if (this.in(u, v) && this.hgt[this.at(u, v)] === bad) return false;
+        }
         for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) this.occ[this.at(u, v)] = 1;
         if (!this.joined()) { for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) this.occ[this.at(u, v)] = 0; return false; }
+        for (let v = v0; v <= v1; v++) for (let u = u0; u <= u1; u++) this.hgt[this.at(u, v)] = h;
         if (fn) fn();
         return true;
     }
@@ -138,7 +148,7 @@ export class GhostRoom {
         const K = this.K, got = [];
         const seen = this.flood();
         const ok = (u, v) => {
-            if (!this.in(u, v) || !seen || !seen[this.at(u, v)]) return false;
+            if (!this.in(u, v) || !seen || !seen[this.at(u, v)] || this.occ[this.at(u, v)] === 3) return false;
             return !got.some(([a, b]) => Math.abs(a - u) + Math.abs(b - v) < 4);
         };
         const tryAt = (u, v) => { if (ok(u, v)) { got.push([u, v]); K.spot(u, v, this.l, this.id); return true; } return false; };
@@ -308,21 +318,21 @@ function longTable(K, R, margin = 4) {
     // free the ring round it again, and seat chairs into it one by one
     for (let v = v0 - 1; v <= v1 + 1; v++) for (let u = u0 - 1; u <= u1 + 1; u++) if (u < u0 || u > u1 || v < v0 || v > v1) R.occ[R.at(u, v)] = 0;
     table(K, R, u0, u1, v0, v1);
-    chairsRound(K, R, u0, u1, v0, v1, 2);
+    chairsRound(K, R, u0, u1, v0, v1, 3);
     const cells = []; for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push([u, v]);
-    candlesOn(K, cells, R.l + 1, Math.min(6, 2 + (len >> 2)));
+    candlesOn(K, cells, R.l + 1, Math.min(4, 1 + (len >> 2)));
     return true;
 }
 
 /** Pieces along the walls: tries a list of makers [w, d, fn(slot)] at random wall places. */
 function againstWalls(K, R, list, tries = 40) {
     let n = 0;
-    for (const [w, d, fn, want = 1] of list) {
+    for (const [w, d, fn, want = 1, h = 2] of list) {
         const slots = R.alongWalls(w, d, 1);
         let got = 0;
         for (let t = 0; t < tries && got < want && slots.length; t++) {
             const s = slots.splice(K.ri(0, slots.length - 1), 1)[0];
-            if (R.put(s.u0, s.u1, s.v0, s.v1, () => fn(s))) { got++; n++; }
+            if (R.put(s.u0, s.u1, s.v0, s.v1, () => fn(s), h)) { got++; n++; }
         }
     }
     return n;
@@ -330,6 +340,7 @@ function againstWalls(K, R, list, tries = 40) {
 
 /** Candelabras (props) in the room's free corners. */
 function cornerLights(K, R, n = 2) {
+    if (R.W * R.D < 150) return; // (small rooms: their candles are on the furniture)
     const cs = [[R.u0 + 1, R.v0 + 1], [R.u1 - 1, R.v1 - 1], [R.u1 - 1, R.v0 + 1], [R.u0 + 1, R.v1 - 1]];
     let got = 0;
     for (const [u, v] of cs) { if (got >= n) break; if (R.put(u, u, v, v)) { K.prop('candelabra', u, v, R.l - 1); got++; } }
@@ -338,9 +349,9 @@ function cornerLights(K, R, n = 2) {
 const MAKERS = {
     dining(K, R) {
         longTable(K, R, 3);
-        againstWalls(K, R, [[3, 1, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS_DARK); candlesOn(K, cellsOf(s), R.l + 1, 1); }, 2], [5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1], [2, 2, (s) => sheet(K, R, s.u0, s.u1, s.v0, s.v1, 2), 1]]);
+        againstWalls(K, R, [[3, 1, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS_DARK); candlesOn(K, cellsOf(s), R.l + 1, 1); }, 2], [5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1, 9], [2, 2, (s) => sheet(K, R, s.u0, s.u1, s.v0, s.v1, 2), 1]]);
         gloom(K, R, { webs: 3, portraits: 3, chandeliers: 2, lamps: 2 });
-        cornerLights(K, R, 2);
+        cornerLights(K, R, 1);
     },
     hall(K, R) { // the great hall: two long tables of benches, a cold hearth, banners, the lord's table
         const along = R.D >= R.W;
@@ -350,21 +361,21 @@ const MAKERS = {
             if (!(along ? R.W >= 12 : R.D >= 12)) break;
             if (R.put(u0, u1, v0, v1, () => table(K, R, u0, u1, v0, v1))) {
                 const cells = []; for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) cells.push([u, v]);
-                candlesOn(K, cells, R.l + 1, 4);
+                candlesOn(K, cells, R.l + 1, 2);
                 for (let v = v0; v <= v1; v += 3) { const su = off < 0 ? u0 - 1 : u1 + 1; if (along && R.put(su, su, v, v)) K.prop('stool', su, v, R.l - 1, off < 0 ? 1 : -1, 0); }
             }
         }
-        againstWalls(K, R, [[5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1], [2, 2, (s) => { barrel(K, R, s.u0, s.v0); }, 3], [1, 1, (s) => armour(K, R, s.u0, s.v0), 4]]);
+        againstWalls(K, R, [[5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1, 9], [2, 2, (s) => { barrel(K, R, s.u0, s.v0); }, 3], [1, 1, (s) => armour(K, R, s.u0, s.v0), 4, 9]]);
         gloom(K, R, { webs: 4, banners: 6, portraits: 2, chandeliers: 3, lamps: 4 });
-        cornerLights(K, R, 3);
+        cornerLights(K, R, 1);
     },
     kitchen(K, R) {
-        againstWalls(K, R, [[5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1], [3, 1, (s) => { shelf(K, R, s, false); K.p.box(s.u0, s.u1, R.l + 2, R.l + 2, s.v0, s.v1, BLOCK.POTION); }, 2], [2, 2, (s) => barrel(K, R, s.u0, s.v0), 3], [3, 2, (s) => { table(K, R, s.u0, s.u1, s.v0, s.v1); candlesOn(K, cellsOf(s), R.l + 1, 1); }, 2]]);
+        againstWalls(K, R, [[5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1, 9], [3, 1, (s) => { shelf(K, R, s, false); K.p.box(s.u0, s.u1, R.l + 2, R.l + 2, s.v0, s.v1, BLOCK.POTION); }, 2, 9], [2, 2, (s) => barrel(K, R, s.u0, s.v0), 3], [3, 2, (s) => { table(K, R, s.u0, s.u1, s.v0, s.v1); candlesOn(K, cellsOf(s), R.l + 1, 1); }, 2]]);
         if (R.W >= 9 && R.D >= 9) { const u0 = R.cu - 1, v0 = R.cv - 1; if (R.put(u0, u0 + 2, v0, v0 + 1, () => table(K, R, u0, u0 + 2, v0, v0 + 1))) { K.prop('urn', u0 + 1, v0, R.l + 1); if (R.put(u0 - 1, u0 - 1, v0, v0)) K.prop('stool', u0 - 1, v0, R.l - 1, 1, 0); } }
         gloom(K, R, { webs: 4, lamps: 2, chandeliers: 1 });
     },
     armoury(K, R) {
-        againstWalls(K, R, [[1, 1, (s) => armour(K, R, s.u0, s.v0), 6], [3, 1, (s) => { K.p.box(s.u0, s.u1, R.l, R.l + 3, s.v0, s.v1, BLOCK.FENCE); K.p.box(s.u0, s.u1, R.l + 4, R.l + 4, s.v0, s.v1, BLOCK.PLANKS_DARK); }, 3], [2, 2, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS), 3]]);
+        againstWalls(K, R, [[1, 1, (s) => armour(K, R, s.u0, s.v0), 6, 9], [3, 1, (s) => { K.p.box(s.u0, s.u1, R.l, R.l + 3, s.v0, s.v1, BLOCK.FENCE); K.p.box(s.u0, s.u1, R.l + 4, R.l + 4, s.v0, s.v1, BLOCK.PLANKS_DARK); }, 3, 9], [2, 2, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS), 3]]);
         gloom(K, R, { webs: 3, banners: 3, lamps: 2, chandeliers: 1 });
         cornerLights(K, R, 1);
     },
@@ -375,18 +386,18 @@ const MAKERS = {
             const f = (i + 1) / 4;
             const u = along ? R.cu - 1 : Math.round(R.u0 + f * R.W), v = along ? Math.round(R.v0 + f * R.D) : R.cv - 1;
             const u1 = along ? u + 2 : u, v1 = along ? v : v + 2;
-            R.put(u, u1, v, v1, () => K.p.box(u, u1, R.l, R.l, v, v1, BLOCK.PLANKS_DARK));
+            R.put(u, u1, v, v1, () => K.p.box(u, u1, R.l, R.l, v, v1, BLOCK.PLANKS_DARK), 1);
         }
-        cornerLights(K, R, 4);
+        cornerLights(K, R, 1);
     },
     mirror(K, R) { // the mirror hall: pale panels on every wall, urns, a chandelier
         gloom(K, R, { webs: 2, mirrors: 10, lamps: 0, chandeliers: 2 });
-        againstWalls(K, R, [[1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GHOST_BRICK), 4]]);
+        againstWalls(K, R, [[1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GHOST_BRICK), 4, 1]]);
         let n = 0; for (const s of R.alongWalls(1, 1, 5)) { if (n >= 6) break; if (R.put(s.u0, s.u0, s.v0, s.v0)) { K.prop('urn', s.u0, s.v0, R.l - 1); n++; } }
-        cornerLights(K, R, 2);
+        cornerLights(K, R, 1);
     },
     library(K, R) {
-        againstWalls(K, R, [[4, 1, (s) => shelf(K, R, s), 8], [3, 1, (s) => shelf(K, R, s), 4]], 80);
+        againstWalls(K, R, [[4, 1, (s) => shelf(K, R, s), 8, 9], [3, 1, (s) => shelf(K, R, s), 4, 9]], 80);
         const u0 = R.cu - 2, v0 = R.cv - 1;
         if (R.put(u0, u0 + 4, v0, v0 + 2, () => table(K, R, u0, u0 + 4, v0, v0 + 2))) {
             const cells = []; for (let u = u0; u <= u0 + 4; u++) for (let v = v0; v <= v0 + 2; v++) cells.push([u, v]);
@@ -401,11 +412,11 @@ const MAKERS = {
         // the altar's dais
         if (along) {
             K.p.box(R.u0 + 2, R.u1 - 2, R.l, R.l, far - 3, far, BLOCK.GHOST_BRICK);
-            R.put(R.u0 + 2, R.u1 - 2, far - 3, far, () => {
+            R.put(R.u0 + 2, R.u1 - 2, far - 3, far, (() => {
                 K.p.box(R.cu - 2, R.cu + 2, R.l + 1, R.l + 2, far - 1, far - 1, BLOCK.CS_WHITE);
                 K.p.box(R.cu, R.cu, R.l + 3, R.l + 7, far, far, BLOCK.GOLD); K.p.box(R.cu - 2, R.cu + 2, R.l + 6, R.l + 6, far, far, BLOCK.GOLD);
                 K.prop('candelabra', R.cu - 2, far - 1, R.l + 2); K.prop('candelabra', R.cu + 2, far - 1, R.l + 2); K.prop('candle', R.cu, far - 1, R.l + 2);
-            });
+            }), 1);
             for (let v = R.v0 + 4; v <= far - 8; v += 4) {
                 for (const [a, b] of [[R.u0 + 1, R.cu - 3], [R.cu + 3, R.u1 - 1]]) {
                     if (b - a < 1) continue;
@@ -414,12 +425,12 @@ const MAKERS = {
             }
         }
         gloom(K, R, { webs: 4, banners: 4, lamps: 4, chandeliers: 2 });
-        cornerLights(K, R, 2);
+        cornerLights(K, R, 1);
     },
     bedroom(K, R) {
         const cover = K.pick([BLOCK.CARPET_PURPLE, BLOCK.CARPET_RED, BLOCK.CARPET_BLUE]);
-        againstWalls(K, R, [[4, 6, (s) => bed(K, R, s, cover), 1]], 60);
-        againstWalls(K, R, [[3, 2, (s) => wardrobe(K, R, s), 1], [3, 1, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS_DARK); candlesOn(K, cellsOf(s), R.l + 1, 2); }, 1], [2, 2, (s) => sheet(K, R, s.u0, s.u1, s.v0, s.v1, 2), 2], [1, 1, (s) => clock(K, R, s.u0, s.v0), 1], [5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1]]);
+        againstWalls(K, R, [[4, 6, (s) => bed(K, R, s, cover), 1, R.h >= 7 ? 9 : 2]], 60);
+        againstWalls(K, R, [[3, 2, (s) => wardrobe(K, R, s), 1, 9], [3, 1, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS_DARK); candlesOn(K, cellsOf(s), R.l + 1, 2); }, 1], [2, 2, (s) => sheet(K, R, s.u0, s.u1, s.v0, s.v1, 2), 2], [1, 1, (s) => clock(K, R, s.u0, s.v0), 1, 9], [5, 2, (s) => K.hearth(s.cu, s.cv, s.nu, s.nv, R.l, R.lc), 1, 9]]);
         const n = R.W * R.D > 140 ? 2 : 1;
         for (let i = 0; i < n; i++) { const u = R.cu + K.ri(-2, 2), v = R.cv + K.ri(-2, 2); if (R.put(u, u, v, v)) K.prop('chair', u, v, R.l - 1, K.pick([1, -1, 0]), 0); }
         R.rug(R.cu - 2, R.cu + 2, R.cv - 2, R.cv + 2, cover, BLOCK.ARCANE_DARK);
@@ -427,19 +438,19 @@ const MAKERS = {
         cornerLights(K, R, 1);
     },
     ballroom(K, R) {
-        againstWalls(K, R, [[3, 2, (s) => piano(K, R, s), 1], [3, 1, (s) => harp(K, R, s.u0, s.v0, s.nu, s.nv), 1]]);
+        againstWalls(K, R, [[3, 2, (s) => piano(K, R, s), 1, 9], [3, 1, (s) => harp(K, R, s.u0, s.v0, s.nu, s.nv), 1, 9]]);
         for (const s of R.alongWalls(1, 1, 4)) if (K.rng() < 0.5 && R.put(s.u0, s.u0, s.v0, s.v0)) K.prop('chair', s.u0, s.v0, R.l - 1, s.nu, s.nv);
         R.rug(R.u0 + 3, R.u1 - 3, R.v0 + 3, R.v1 - 3, BLOCK.CARPET_PURPLE, BLOCK.ARCANE_DARK);
         gloom(K, R, { webs: 4, mirrors: 6, portraits: 2, lamps: 2, chandeliers: 3 });
-        cornerLights(K, R, 4);
+        cornerLights(K, R, 1);
     },
     music(K, R) {
-        againstWalls(K, R, [[3, 1, (s) => harp(K, R, s.u0, s.v0, s.nu, s.nv), 2], [3, 2, (s) => piano(K, R, s), 1], [4, 1, (s) => shelf(K, R, s), 1]]);
+        againstWalls(K, R, [[3, 1, (s) => harp(K, R, s.u0, s.v0, s.nu, s.nv), 2, 9], [3, 2, (s) => piano(K, R, s), 1, 9], [4, 1, (s) => shelf(K, R, s), 1, 9]]);
         for (let i = 0; i < 4; i++) { const u = R.cu + K.ri(-3, 3), v = R.cv + K.ri(-3, 3); if (R.put(u, u, v, v)) K.prop('chair', u, v, R.l - 1, 0, 1); }
         gloom(K, R, { webs: 3, portraits: 2, mirrors: 1, lamps: 2, chandeliers: 1 });
     },
     study(K, R) {
-        againstWalls(K, R, [[4, 1, (s) => shelf(K, R, s), 3], [1, 1, (s) => clock(K, R, s.u0, s.v0), 1], [2, 2, (s) => { K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GOLD); K.p.box(s.u0, s.u0, R.l + 1, R.l + 1, s.v0, s.v0, BLOCK.CARPET_BLUE); }, 1]]);
+        againstWalls(K, R, [[4, 1, (s) => shelf(K, R, s), 3, 9], [1, 1, (s) => clock(K, R, s.u0, s.v0), 1, 9], [2, 2, (s) => { K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GOLD); K.p.box(s.u0, s.u0, R.l + 1, R.l + 1, s.v0, s.v0, BLOCK.CARPET_BLUE); }, 1]]);
         const u0 = R.cu - 1, v0 = R.cv - 1;
         if (R.put(u0, u0 + 2, v0, v0 + 1, () => table(K, R, u0, u0 + 2, v0, v0 + 1))) { K.prop('candle', u0 + 1, v0, R.l + 1); if (R.put(u0 + 1, u0 + 1, v0 + 2, v0 + 2)) K.prop('chair', u0 + 1, v0 + 2, R.l - 1, 0, -1); }
         gloom(K, R, { webs: 3, portraits: 1, lamps: 2, chandeliers: 1 });
@@ -457,7 +468,7 @@ const MAKERS = {
         gloom(K, R, { webs: 3, lamps: 2 });
     },
     store(K, R) {
-        againstWalls(K, R, [[2, 2, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS), 6], [2, 2, (s) => barrel(K, R, s.u0, s.v0), 6], [2, 1, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.CLOTH_WHITE), 4]], 80);
+        againstWalls(K, R, [[2, 2, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 2, BLOCK.PLANKS), 6], [2, 2, (s) => barrel(K, R, s.u0, s.v0), 6], [2, 1, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.CLOTH_WHITE), 4, 1]], 80);
         gloom(K, R, { webs: 4, lamps: 2 });
         cornerLights(K, R, 1);
     },
@@ -474,26 +485,58 @@ const MAKERS = {
                 R.put(a, b, v, v + 1, () => { for (let u = a; u + 1 <= b; u += 2) barrel(K, R, u, v, false); K.p.box(a, b, R.l + 2, R.l + 2, v, v + 1, BLOCK.PLANKS_DARK); });
             }
         }
+        againstWalls(K, R, [[2, 2, (s) => barrel(K, R, s.u0, s.v0), 8]], 60); // (casks along the walls)
         gloom(K, R, { webs: 4, lamps: 3 });
-        cornerLights(K, R, 2);
+        cornerLights(K, R, 1);
     },
     cell(K, R) { // a dungeon cell: straw, a bone pile, chains on the wall
-        againstWalls(K, R, [[2, 1, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.HAY), 1], [1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.CS_WHITE), 1]]);
+        againstWalls(K, R, [[2, 1, (s) => crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.HAY), 1, 1], [1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.CS_WHITE), 1, 1]]);
         const sl = R.wallSlots(1, 1);
         if (sl.length) { const s = sl[K.ri(0, sl.length - 1)]; const [wu, wv] = K._wall(s.u, s.v, s.nu, s.nv, 0); K.p.box(wu, wu, R.l + 2, R.l + 3, wv, wv, BLOCK.GOLD); } // (the shackles' iron ring in the wall)
         gloom(K, R, { webs: 2, lamps: 0 });
     },
     treasury(K, R) {
-        againstWalls(K, R, [[2, 2, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.GOLD); }, 2], [1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GOLD), 2]]);
+        againstWalls(K, R, [[2, 2, (s) => { crate(K, R, s.u0, s.u1, s.v0, s.v1, 1, BLOCK.GOLD); }, 2, 1], [1, 1, (s) => K.p.box(s.u0, s.u0, R.l, R.l, s.v0, s.v0, BLOCK.GOLD), 2, 1]]);
         let n = 0; for (const s of R.alongWalls(1, 1, 3)) { if (n >= 3) break; if (R.put(s.u0, s.u0, s.v0, s.v0)) { K.prop('urn', s.u0, s.v0, R.l - 1); n++; } }
         gloom(K, R, { webs: 2, portraits: 1, lamps: 2 });
-        cornerLights(K, R, 2);
+        cornerLights(K, R, 1);
     },
     crypt(K, R) { gloom(K, R, { webs: 4, lamps: 0 }); },
     tower(K, R) { // a round tower's floor: a few things on its middle disc
         gloom(K, R, { webs: 0, lamps: 0 });
     },
 };
+
+/**
+ * Drop the props of this room that its furniture walled in: a prop stays only when a free floor cell beside it (or its own, for one on
+ * the floor) is reached from the doorways by a way of free cells (a hero needs no more than his own cell to walk).
+ */
+function pruneProps(R, first) {
+    const K = R.K, p = K.p, W = R.W, D = R.D;
+    const seen = new Uint8Array(W * D), st = [];
+    for (const [u, v] of R.keys) if (R.in(u, v) && R.occ[R.at(u, v)] !== 1 && !seen[R.at(u, v)]) { seen[R.at(u, v)] = 1; st.push(R.at(u, v)); }
+    if (!st.length) return;
+    while (st.length) {
+        const i = st.pop(), u = i % W, v = (i - u) / W;
+        for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const uu = u + du, vv = v + dv;
+            if (uu < 0 || vv < 0 || uu >= W || vv >= D) continue;
+            const j = vv * W + uu;
+            if (!seen[j] && R.occ[j] !== 1) { seen[j] = 1; st.push(j); }
+        }
+    }
+    // the props' local cells (props hold world x, z: turn them back by the plan's rotation)
+    const r = p.rot, loc = (x, z) => { const dx = x - p.X, dz = z - p.Z; return r === 0 ? [dx, dz] : r === 1 ? [dz, -dx] : r === 2 ? [-dx, -dz] : [-dz, dx]; };
+    const keep = K.props.slice(0, first);
+    for (const pr of K.props.slice(first)) {
+        const [u, v] = loc(pr.x, pr.z);
+        let ok = false;
+        for (const [du, dv] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const uu = u + du, vv = v + dv; if (R.in(uu, vv) && seen[R.at(uu, vv)]) { ok = true; break; } }
+        if (ok || !R.in(u, v)) keep.push(pr);
+    }
+    K.props.length = 0;
+    K.props.push(...keep);
+}
 
 function cellsOf(s) { const out = []; for (let u = s.u0; u <= s.u1; u++) for (let v = s.v0; v <= s.v1; v++) out.push([u, v]); return out; }
 
@@ -506,8 +549,16 @@ export function furnishGhostRoom(R, kind = R.kind, { spots = 3, floor = true } =
     const K = R.K;
     if (floor) R.floor();
     const fn = MAKERS[kind] || MAKERS.tower;
+    const first = K.props.length;
     fn(K, R);
-    R.spots(spots);
+    pruneProps(R, first);
+    // shards of the broken windows on the floor below them: a little heap of black stone (never in a way: the room's grid decides)
+    for (const w of K.broken) {
+        if (w.l0 - 2 !== R.l) continue;
+        const u = w.u - w.nu, v = w.v - w.nv;
+        if (R.in(u, v) && R.put(u, u, v, v, () => K.p.box(u, u, R.l, R.l, v, v, BLOCK.GHOST_STONE), 1)) { /* (a heap of shards) */ }
+    }
+    R.spots(R.W * R.D >= 200 ? spots : Math.min(spots, 2));
     K.p.flushSlabs();
     return R;
 }

@@ -125,7 +125,7 @@ export function buildGhostCastle(site) {
         for (let i = 1; i <= STEPS; i++) {
             const v = -T - i, top = -1 - i;
             put(-7, 7, lowL, top, v, v, i % 2 ? B.GHOST_STONE : B.GHOST_TILE);
-            air(-7, 7, top + 1, top + 6, v, v); // (the cornice, the string course, the parapet: headroom over every step)
+            if (top + 6 > hiL) air(-7, 7, Math.max(top + 1, hiL + 1), top + 6, v, v); // (the cornice, the string course, the parapet: headroom over every step — never into the land)
             for (const su of [-1, 1]) {
                 put(su * 8, su * 8, lowL, top + 1, v, v, B.GHOST_BRICK);
                 if (i % 5 === 0) { put(su * 8, su * 8, top + 2, top + 2, v, v, B.GHOST_BRICK); put(su * 8, su * 8, top + 3, top + 3, v, v, B.GHOST_LAMP); }
@@ -148,7 +148,7 @@ export function buildGhostCastle(site) {
             for (let i = 1; i <= STEPS; i++) {
                 const u = su * (T + i), top = -1 - i;
                 put(u, u, lowL, top, -44, -38, i % 2 ? B.GHOST_STONE : B.GHOST_TILE);
-                air(u, u, top + 1, top + 6, -44, -38);
+                if (top + 6 > hiL) air(u, u, Math.max(top + 1, hiL + 1), top + 6, -44, -38);
                 for (const v of [-45, -37]) {
                     put(u, u, lowL, top + 1, v, v, B.GHOST_BRICK);
                     if (i % 5 === 0) { put(u, u, top + 2, top + 2, v, v, B.GHOST_BRICK); put(u, u, top + 3, top + 3, v, v, B.GHOST_LAMP); }
@@ -254,29 +254,30 @@ export function buildGhostCastle(site) {
         p.walls(-32, 32, -16, 40, 0, 23, B.GHOST_STONE, 2);
         // ---- the ground floor (l 0)
         // the atrium: three storeys high, the grand stair in two flights each side, galleries on floors 8 and 16
-        air(-13, 13, 0, 22, -14, -2);
-        K.room('atrium', 'hall', 'Парадный холл', -13, 13, -14, -2, 0, 23);
+        air(-13, 13, 0, 22, -14, -1);
+        K.room('atrium', 'hall', 'Парадный холл', -13, 13, -14, -1, 0, 23);
         door(-2, 2, 0, -16, -15, 8); // (the main door)
         K.door(0, -16, 0, 'atrium');
         for (const su of [-1, 1]) {
             const a = su * 10, b = su * 12, c = su * 7, d = su * 9;
-            for (let i = 0; i < 8; i++) put(Math.min(a, b), Math.max(a, b), 0, i, -12 + i, -12 + i, B.GHOST_BRICK); // (the first flights: up to floor 8)
-            for (let j = 0; j < 8; j++) put(Math.min(c, d), Math.max(c, d), 0, 8 + j, -5 - j, -5 - j, B.GHOST_BRICK); // (the second: back down the hall to floor 16)
-            put(Math.min(su * 10, su * 13), Math.max(su * 10, su * 13), 15, 15, -12, -5, B.GHOST_TILE); // (the side galleries of floor 16)
+            for (let i = 0; i < 8; i++) put(Math.min(a, b), Math.max(a, b), 0, i, -11 + i, -11 + i, B.GHOST_BRICK); // (the first flights: up to floor 8)
+            for (let j = 0; j < 8; j++) put(Math.min(c, d), Math.max(c, d), 0, 8 + j, -4 - j, -4 - j, B.GHOST_BRICK); // (the second: back down the hall to floor 16)
+            put(Math.min(su * 10, su * 13), Math.max(su * 10, su * 13), 15, 15, -11, -4, B.GHOST_TILE); // (the side galleries of floor 16)
         }
-        put(-13, 13, 7, 7, -4, -2, B.GHOST_TILE); put(-6, 6, 7, 7, -5, -5, B.GHOST_TILE); put(-6, 6, 8, 8, -5, -5, B.FENCE); // (the balcony of floor 8, its rail)
-        put(-13, 13, 15, 15, -4, -2, B.GHOST_TILE); put(-6, 6, 15, 15, -5, -5, B.GHOST_TILE); put(-6, 6, 16, 16, -5, -5, B.FENCE); // (floor 16 at the back)
-        put(-13, 13, 15, 15, -14, -13, B.GHOST_TILE); put(-6, 6, 15, 15, -12, -12, B.GHOST_TILE); put(-6, 6, 16, 16, -12, -12, B.FENCE); // (the landing of floor 16 at the front)
-        put(-13, 13, -1, -1, -14, -2, B.GHOST_TILE); put(-2, 2, -1, -1, -14, -2, B.CARPET_RED); put(-1, 1, -1, -1, -14, -2, B.CARPET_PURPLE);
+        put(-13, 13, 7, 7, -3, -1, B.GHOST_TILE); put(-6, 6, 7, 7, -4, -4, B.GHOST_TILE); put(-6, 6, 8, 8, -4, -4, B.FENCE); // (the balcony of floor 8, its rail)
+        put(-13, 13, 15, 15, -3, -1, B.GHOST_TILE); put(-9, 9, 15, 15, -4, -4, B.GHOST_TILE); put(-9, 9, 16, 16, -4, -4, B.FENCE); // (floor 16 at the back, its rail over the hall and the flights)
+        for (const su of [-1, 1]) put(su * 10, su * 10, 16, 16, -10, -5, B.FENCE); // (the side galleries' rails over the second flights)
+        put(-13, 13, 15, 15, -14, -12, B.GHOST_TILE); put(-6, 6, 15, 15, -11, -11, B.GHOST_TILE); put(-6, 6, 16, 16, -11, -11, B.FENCE); // (the landing of floor 16 at the front)
+        put(-13, 13, -1, -1, -14, -1, B.GHOST_TILE); put(-2, 2, -1, -1, -14, -1, B.CARPET_RED); put(-1, 1, -1, -1, -14, -1, B.CARPET_PURPLE);
         for (const [u, v] of [[-6, -14], [6, -14]]) K.prop('candelabra', u, v, -1);
         K.chandelier(0, -8, 23, 8, true);
         for (const su of [-1, 1]) {
-            K.banner(su * 5, -2, 0, -1, 9, 13, B.CARPET_PURPLE); K.banner(su * 5, -2, 0, -1, 17, 21, B.CARPET_RED);
+            K.banner(su * 5, -1, 0, -1, 9, 13, B.CARPET_PURPLE); K.banner(su * 5, -1, 0, -1, 17, 21, B.CARPET_RED);
             K.portrait(su * 10, -14, 0, 1, 18, B.CARPET_BLUE, B.GOLD);
             K.mirror(su * 13, -9, -su, 0, 1, 2, 4);
-            K.cobweb(su * 13, -14, -su, 1, 23); K.cobweb(su * 13, -2, -su, -1, 23);
+            K.cobweb(su * 13, -14, -su, 1, 23); K.cobweb(su * 13, -1, -su, -1, 23);
         }
-        for (const [u, v, l] of [[0, -9, 0], [-11, -13, 0], [11, -13, 0], [0, -3, 8], [-11, -8, 16], [11, -8, 16], [0, -13, 16], [0, -3, 16]]) K.spot(u, v, l, 'atrium');
+        for (const [u, v, l] of [[0, -8, 0], [-11, -13, 0], [11, -13, 0], [0, -2, 8], [-11, -7, 16], [11, -7, 16], [0, -13, 16], [0, -2, 16]]) K.spot(u, v, l, 'atrium');
         // ground-floor rooms
         mk('k_dining', 'dining', 'Трапезная', -30, -17, -14, 12, 0, 7, [[-14, -8], [-24, 13], [-32, -3]]);
         door(-16, -14, 0, -9, -7); door(-25, -23, 0, 13, 15); door(-32, -31, 0, -4, -2);
@@ -291,11 +292,10 @@ export function buildGhostCastle(site) {
         mk('k_servants', 'servants', 'Комната прислуги', 7, 13, 30, 38, 0, 7, [[14, 34], [10, 40]], { as: 'store' });
         door(9, 11, 0, 39, 40);
         const tr = mk('k_treasury', 'treasury', 'Сокровищница трона', -4, 4, 30, 36, 0, 7, [[0, 29]]);
-        tr.keep(-3, 3, 33, 36); // (the throne's chest)
-        door(-1, 1, 0, 24, 29);
+        tr.keep(-3, 3, 33, 36); // (the throne's chest; its door through the great tower's back wall is cut with the tower)
         // ---- floor 8
-        mk('k_ballroom', 'ballroom', 'Бальный зал', -30, -17, -14, 12, 8, 7, [[-14, -3], [-24, 13]]);
-        door(-16, -14, 8, -4, -2); door(-25, -23, 8, 13, 15);
+        mk('k_ballroom', 'ballroom', 'Бальный зал', -30, -17, -14, 12, 8, 7, [[-14, -2], [-24, 13]]);
+        door(-16, -14, 8, -3, -1); door(-25, -23, 8, 13, 15);
         mk('k_bed_a', 'bedroom', 'Спальня наследника', -30, -17, 16, 26, 8, 7, [[-24, 15], [-24, 27]]);
         door(-25, -23, 8, 27, 29);
         mk('k_bed_b', 'bedroom', 'Спальня гувернантки', -30, -17, 30, 38, 8, 7, [[-24, 29], [-14, 34]]);
@@ -306,8 +306,8 @@ export function buildGhostCastle(site) {
         door(23, 25, 8, 21, 23);
         mk('k_bed_c', 'bedroom', 'Спальня капитана стражи', 17, 30, 4, 20, 8, 7, [[24, 21], [24, 3]]);
         door(23, 25, 8, 1, 3);
-        mk('k_study', 'study', 'Кабинет управляющего', 17, 30, -14, 0, 8, 7, [[14, -3], [24, 1]]);
-        door(14, 16, 8, -4, -2);
+        mk('k_study', 'study', 'Кабинет управляющего', 17, 30, -14, 0, 8, 7, [[14, -2], [24, 1]]);
+        door(14, 16, 8, -3, -1);
         // ---- floor 16
         mk('k_royal', 'bedroom', 'Королевская опочивальня', -30, -17, -14, 8, 16, 7, [[-14, -13], [-24, 9]]);
         door(-16, -14, 16, -14, -12); door(-25, -23, 16, 9, 11);
@@ -330,7 +330,7 @@ export function buildGhostCastle(site) {
         p.walls(-33, 33, -17, 41, 7, 7, B.GHOST_BRICK); p.walls(-33, 33, -17, 41, 15, 15, B.GHOST_BRICK); p.walls(-33, 33, -17, 41, 23, 23, B.GHOST_BRICK);
         air(-2, 2, 0, 7, -17, -17); // (the courses never close the door)
         for (const u of [-24, -18, 18, 24]) put(u, u, 0, 22, -17, -17, B.GHOST_STONE); // (pilasters on the front)
-        for (let u = -27; u <= 27; u += 6) if (Math.abs(u) < 7 || Math.abs(u) > 13) put(u, u, 0, 22, 41, 41, B.GHOST_STONE);
+        for (const u of [-27, -21, -15, 15, 21, 27]) put(u, u, 0, 22, 41, 41, B.GHOST_STONE); // (pilasters on the back; none by the back doors and the mausoleum's lane)
         for (const l0 of [0, 8, 16]) {
             for (const u of [-27, -21, 21, 27]) K.lancet(u, -15, 0, -1, l0 + 2, 5, 2, rng() < 0.35);
             for (const u of [-24, -18, -4, 4, 18, 24]) if (l0 > 0 || Math.abs(u) > 12) K.lancet(u, 39, 0, 1, l0 + 2, 5, 2, rng() < 0.35);
@@ -374,6 +374,7 @@ export function buildGhostCastle(site) {
         // ---- the throne hall: two storeys, a ring of pillars, the dais, banners, a great chandelier
         p.cyl(u, v, 12, 0, 14, 0);
         door(-2, 2, 0, -2, 3, 7); // (from the atrium, 5 wide)
+        door(-1, 1, 0, 24, 29); // (behind the throne: to the treasury)
         K.door(0, -1, 0, 'throne');
         p.cyl(u, v, 12, -1, -1, B.GHOST_TILE);
         p.cyl(u, v, 9.6, -1, -1, B.GHOST_STONE, 8.6);
@@ -412,7 +413,7 @@ export function buildGhostCastle(site) {
         [16, 24, 32, 40, 48].forEach((l, i) => {
             const [id, kind, name] = names[i];
             K.room(id, kind, name, -12, 12, 2, 26, l, 7);
-            K.spot(0, 14, l, id);
+            K.spot(i === 3 ? 0 : 0, i === 3 ? 9 : 14, l, id);
             K.spot(-4, 10, l, id);
             K.chandelier(0, 14, l + 7, 0, true);
             if (i === 1) { put(-3, -1, l, l, 16, 17, B.FENCE); put(-3, -1, l + 1, l + 1, 16, 17, B.PLANKS_DARK); K.prop('candle', -2, 16, l + 1); K.prop('urn', -1, 17, l + 1); }
@@ -435,8 +436,7 @@ export function buildGhostCastle(site) {
             const u = su * 56, v = sv * 56, id = 'ct' + (sv < 0 ? 'f' : 'b') + (su < 0 ? 'w' : 'e');
             const doors = [
                 { floor: 0, du: -su, dv: 0, off: 0 }, // (into the courtyard)
-                { floor: 2, du: -su, dv: 0, off: sv * 4 }, // (the wall walk along u)
-                { floor: 2, du: 0, dv: -sv, off: su * 4 }, // (the wall walk along v)
+                { floor: 2, du: -su, dv: 0, off: sv * 4 }, // (the front / back wall walk; the side walks are reached by the covered bridges — a spiral has no room for two doors on one floor)
             ];
             if (sv < 0) doors.push({ floor: 3, du: -su, dv: 0, off: sv * 4 }); // (the hoarding to the gatehouse)
             K.roundTower(u, v, { R: 12, Rin: 10, bandIn: 6.4, floors: [0, 8, 16, 24, 32, 40, 48], from: -1, top: 55, stone: B.GHOST_STONE, slab: B.GHOST_TILE, stepT: B.GHOST_BRICK, doors, windows: (i) => i > 0 });
@@ -447,8 +447,8 @@ export function buildGhostCastle(site) {
             [0, 8, 16, 24, 32, 40, 48].forEach((l, i) => {
                 const rid = id + '_' + l;
                 K.room(rid, 'tower', names[i], u - 10, u + 10, v - 10, v + 10, l, 7);
-                K.spot(u, v, l, rid);
-                if (i % 2 === 0) K.prop(i === 0 ? 'stool' : 'candle', u + 2, v - 2, l - 1);
+                if (i === 0 || i === 2 || i === 3 || i === 6) K.spot(u, v, l, rid);
+                if (i === 0 || i === 3) K.prop(i === 0 ? 'stool' : 'candle', u + 2, v - 2, l - 1);
                 if (i === 6) K.prop('candelabra', u - 2, v + 2, l - 1);
                 K.chandelier(u, v, l + 7, 0, false);
             });
@@ -492,7 +492,7 @@ export function buildGhostCastle(site) {
         mk('gate_ge', 'armoury', 'Караульня', 7, 14, -64, -54, 0, 7, [[6, -59]]);
         door(-6, -6, 0, -60, -58); door(6, 6, 0, -60, -58);
         mk('gate_gallery', 'armoury', 'Галерея над воротами', -14, 14, -64, -54, 16, 7, [[-15, -60], [15, -60]]);
-        late.push(() => { for (const [u, v] of [[-3, -62], [0, -62], [3, -62], [-3, -56], [0, -56], [3, -56]]) air(u, u, 13, 15, v, v); }); // (the murder holes: after the gallery's floor)
+        late.push(() => { for (const [u, v] of [[-3, -62], [0, -62], [3, -62], [-3, -56], [0, -56], [3, -56]]) { air(u, u, 13, 14, v, v); put(u, u, 15, 15, v, v, B.GHOST_LAMP); } }); // (the murder holes: shafts in the vault, a pale grate in the gallery's floor — nobody slips through)
         for (const su of [-1, 1]) air(Math.min(su * 13, su * 20), Math.max(su * 13, su * 20), 16, 21, -61, -59); // (out to the wall walks, through the gate towers)
         // the roof walk: a parapet with merlons
         put(-15, 15, 23, 23, -65, -53, B.GHOST_TILE);
@@ -542,7 +542,7 @@ export function buildGhostCastle(site) {
             K.room('hoard_' + (su < 0 ? 'w' : 'e'), 'gallery', 'Крытая галерея на стене', hu0, hu1, -61, -59, 24, 5);
             K.spot(su * 30, -60, 24, 'hoard_' + (su < 0 ? 'w' : 'e'));
             // spots along the wall walks
-            for (const [wu, wv] of [[su * 60, -10], [su * 60, 30], [su * 30, -60], [su * 30, 60], [su * 60, 48]]) K.spot(wu, wv, 16, 'wallwalk');
+            for (const [wu, wv] of [[su * 60, -10], [su * 60, 30], [su * 30, -60], [su * 30, 60], [su * 60, 40]]) K.spot(wu, wv, 16, 'wallwalk');
         }
     }
 
@@ -550,7 +550,8 @@ export function buildGhostCastle(site) {
     function yard() {
         // the dry fountain with a weeping angel
         const fu = 0, fv = -36;
-        p.cyl(fu, fv, 6, 0, 1, B.GHOST_BRICK, 4.6);
+        p.cyl(fu, fv, 6, 0, 0, B.GHOST_BRICK, 4.6); // (a rim one block high: whoever lands in the dry basin steps out)
+        p.cyl(fu, fv, 6, 1, 1, B.GHOST_STONE, 5.4);
         p.cyl(fu, fv, 4.6, -1, -1, B.GHOST_TILE);
         for (const [du, dv] of [[-3, 0], [3, 0], [0, -3], [0, 3]]) put(fu + du, fu + du, -1, -1, fv + dv, fv + dv, B.GHOST_LAMP);
         p.cyl(fu, fv, 1.2, 0, 4, B.GHOST_STONE);
@@ -569,7 +570,7 @@ export function buildGhostCastle(site) {
         // the well
         const wu = 28, wv = -44;
         p.cyl(wu, wv, 2.5, 0, 1, B.GHOST_BRICK, 1.4);
-        p.cyl(wu, wv, 1.4, -1, -1, B.GHOST_LAMP);
+        p.cyl(wu, wv, 1.4, 0, 0, B.GHOST_LAMP); // (pale «water» one block under the rim's top: nobody is trapped in the well)
         put(wu - 2, wu - 2, 2, 5, wv, wv, B.PLANKS_DARK); put(wu + 2, wu + 2, 2, 5, wv, wv, B.PLANKS_DARK);
         put(wu - 2, wu + 2, 6, 6, wv, wv, B.PLANKS_DARK);
         put(wu - 3, wu + 3, 7, 7, wv - 1, wv + 1, B.GHOST_ROOF); put(wu - 2, wu + 2, 8, 8, wv, wv, B.GHOST_ROOF);
@@ -579,7 +580,7 @@ export function buildGhostCastle(site) {
         for (const [u, v, h] of [[-30, -48, 9], [34, -50, 8], [-42, -32, 10], [42, -30, 9], [-22, -26, 7], [22, -28, 8]]) K.deadTree(u, v, 0, h);
         for (const [u, v] of [[-48, -24], [46, -40], [-34, -38]]) { put(u, u + 1, 0, 0, v, v + 1, B.GHOST_STONE); put(u, u, 1, 1, v, v, B.GHOST_STONE); }
         K.statue(-26, -44, 0, 1, 0, { broken: true });
-        for (const [u, v] of [[0, -48], [-20, -40], [20, -40], [-36, -50], [36, -50], [0, -24], [-48, -32], [48, -32], [-30, -24], [30, -24], [-38, 0], [38, 0], [-38, -16], [38, -16]]) K.spot(u, v, 0, 'yard');
+        for (const [u, v] of [[0, -48], [-20, -40], [20, -40], [-40, -52], [40, -52], [0, -24], [-48, -32], [48, -32], [-30, -24], [30, -24], [-38, 0], [38, 0], [-38, -16], [38, -16]]) K.spot(u, v, 0, 'yard');
     }
 
     function gardens() {
@@ -590,10 +591,10 @@ export function buildGhostCastle(site) {
             const broken = rng() < 0.3;
             put(u, u, 0, broken ? 0 : 1, v, v, B.GHOST_BRICK);
             if (!broken) { put(u, u, 2, 3, v, v, B.GHOST_STONE); put(u, u, 3, 3, v - 1, v + 1, B.GHOST_STONE); }
-            if (rng() < 0.25) K.prop('candle', u + 1, v, -1);
+            if (rng() < 0.12) K.prop('candle', u + 1, v, -1);
         }
         K.deadTree(-37, 33, 0, 9);
-        for (const [u, v] of [[-43, 22], [-51, 25], [-38, 45], [-47, 50]]) K.spot(u, v, 0, 'graveyard');
+        for (const [u, v] of [[-43, 25], [-51, 23], [-38, 45], [-38, 50]]) K.spot(u, v, 0, 'graveyard');
         K.room('deadgarden', 'courtyard', 'Мёртвый сад', 33, IN, 19, IN, 0, 30);
         // a ruined pavilion: four posts and a pointed roof
         const gu = 46, gv = 32;
@@ -611,7 +612,7 @@ export function buildGhostCastle(site) {
         air(-7, 7, 0, 8, 46, 54);
         put(-7, 7, -1, -1, 46, 54, B.GHOST_TILE);
         door(-2, 2, 0, 45, 45, 7);
-        for (const su of [-1, 1]) { put(su * 4, su * 4, 0, 9, 44, 44, B.GHOST_BRICK); put(su * 3, su * 3, 0, 0, 47, 54, B.GHOST_BRICK); }
+        for (const su of [-1, 1]) { put(su * 4, su * 4, 0, 9, 44, 44, B.GHOST_BRICK); put(su * 3, su * 3, 0, 1, 47, 54, B.GHOST_BRICK); }
         for (let k = 0; k <= 8; k++) put(-9 + k, 9 - k, 10 + k, 10 + k, 44, 56, B.GHOST_ROOF);
         K.statue(0, 44, 19, 0, -1, { angel: true });
         for (const su of [-1, 1]) {
@@ -622,8 +623,8 @@ export function buildGhostCastle(site) {
         }
         K.room('mausoleum', 'crypt', 'Мавзолей', -7, 7, 46, 54, 0, 9);
         K.door(0, 45, 0, 'mausoleum');
-        for (const [u, v] of [[0, 43], [-20, 46], [20, 46], [-40, 47], [40, 48]]) K.spot(u, v, 0, 'backgarden');
-        for (const [u, v, h] of [[-24, 50, 9], [24, 50, 8], [-44, 44, 7]]) K.deadTree(u, v, 0, h);
+        for (const [u, v] of [[0, 43], [-20, 46], [20, 46], [-34, 47], [14, 51]]) K.spot(u, v, 0, 'backgarden');
+        for (const [u, v, h] of [[-24, 50, 9], [24, 50, 8]]) K.deadTree(u, v, 0, h);
         // the stair down: 13 whole steps under the mausoleum and on into the terrace
         for (let k = 1; k <= 13; k++) {
             const v = 45 + k, top = -1 - k;
@@ -643,7 +644,7 @@ export function buildGhostCastle(site) {
             air(-39, -37, top + 1, -1, v, v);
             put(-39, -37, top, top, v, v, B.GHOST_TILE);
         }
-        put(-40, -40, 0, 0, 2, 15, B.GHOST_BRICK); put(-36, -36, 0, 0, 2, 15, B.GHOST_BRICK); put(-40, -36, 0, 0, 15, 15, B.GHOST_BRICK);
+        put(-40, -40, 0, 1, 2, 15, B.GHOST_BRICK); put(-36, -36, 0, 1, 2, 15, B.GHOST_BRICK); put(-40, -36, 0, 1, 15, 15, B.GHOST_BRICK); // (walls 2 high: nobody steps into the pit by chance)
         put(-40, -40, 1, 1, 8, 8, B.GHOST_LAMP); put(-36, -36, 1, 1, 8, 8, B.GHOST_LAMP);
         K.door(-38, 1, 0, 'cellar');
         const L = BS; // (−13)
@@ -653,7 +654,7 @@ export function buildGhostCastle(site) {
         const wine = mk('c_wine', 'wine', 'Винный погреб', -32, -6, -10, 12, L, 7, [[-24, 13]]);
         door(-25, -23, L, 13, 15);
         air(-31, -7, L + 7, L + 7, -9, 11); // (the vault's crown)
-        for (const pu of [-26, -19, -12]) for (const pv of [-4, 6]) wine.put(pu, pu + 1, pv, pv + 1, () => put(pu, pu + 1, L, L + 7, pv, pv + 1, B.GHOST_BRICK));
+        for (const pu of [-26, -19, -12]) for (const pv of [-4, 6]) wine.put(pu, pu + 1, pv, pv + 1, () => put(pu, pu + 1, L, L + 7, pv, pv + 1, B.GHOST_BRICK), 9);
         mk('c_store', 'store', 'Подвальная кладовая', -36, -24, 20, 32, L, 7, [[-30, 19]]);
         door(-31, -29, L, 19, 19);
         // the dungeon: a passage, an aisle, cells behind bars (each door 3 wide: the bars were broken long ago)
@@ -692,7 +693,7 @@ export function buildGhostCastle(site) {
             K.room('crypt_a' + uc, 'crypt', 'Ниша склепа', uc - 2, uc + 2, 53, 58, L, 6);
         }
         for (let u = -44, i = 0; u <= 28; u += 3, i++) { put(u, u, L + 3, L + 3, 66, 66, i % 2 ? B.GHOST_LAMP : B.CS_WHITE); put(u, u, L + 1, L + 1, 66, 66, B.CS_WHITE); } // (the ossuary wall: bones and pale lamps)
-        for (const u of [-40, -24, -8, 8, 24]) K.prop('candle', u, 65, L - 1);
+        for (const u of [-36, -4, 20]) K.prop('candle', u, 65, L - 1);
         for (const [u, v] of [[-40, 62], [-30, 62], [-20, 62], [-10, 62], [10, 62], [20, 62], [0, 61]]) K.spot(u, v, L, 'crypt');
     }
 

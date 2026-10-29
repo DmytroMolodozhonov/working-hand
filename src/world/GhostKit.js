@@ -31,6 +31,7 @@ export class GhostKit {
         this.chests = [];
         this.doors = [];
         this.stairs = [];
+        this.broken = []; // (the broken windows: their shards go on the floors when the rooms are furnished)
     }
 
     r(a, b) { return a + this.rng() * (b - a); }
@@ -157,7 +158,7 @@ export class GhostKit {
         const r = big ? 2 : 1;
         p.box(u - r, u + r, lb, lb, v - r, v + r, B.GOLD);
         p.box(u - r + 1, u + r - 1, lb, lb, v - r + 1, v + r - 1, 0); // (a ring, open in the middle)
-        p.box(u, u, lb, lb, v, v, B.GOLD);
+        p.box(u - r, u + r, lb, lb, v, v, B.GOLD); p.box(u, u, lb, lb, v - r, v + r, B.GOLD); // (the spokes from the chain to the ring)
         for (const [du, dv] of [[-r, -r], [r, -r], [-r, r], [r, r]]) p.box(u + du, u + du, lb, lb, v + dv, v + dv, B.GHOST_LAMP);
         if (big) for (const [du, dv] of [[0, -r], [0, r], [-r, 0], [r, 0]]) p.box(u + du, u + du, lb, lb, v + dv, v + dv, B.GHOST_LAMP);
     }
@@ -184,6 +185,7 @@ export class GhostKit {
         box(-2, -2, th, th, l0, l0 + h - 1, B.GHOST_BRICK); // (the jambs' moulding)
         box(2, 2, th, th, l0, l0 + h - 1, B.GHOST_BRICK);
         if (broken) {
+            this.broken.push({ u, v, nu, nv, l0 });
             // the jagged edge of a broken window: a few teeth of the frame left (not glass: «just openings with jagged edges»)
             const s = this.rng() < 0.5 ? -1 : 1;
             box(s, s, 0, 0, l0 + h - 2, l0 + h - 2, B.GHOST_STONE);
