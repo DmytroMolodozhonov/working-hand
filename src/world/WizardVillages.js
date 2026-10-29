@@ -275,8 +275,7 @@ function buildCauldronHall(p, rng, out) {
 
 /**
  * The library: the one building of the settlement with a columned porch, a golden-framed sign board over the door («Библиотека» — the plaque
- * LoreLibrary.js hangs on it), tall pointed windows, a violet rug from the door to the lecterns, shelves round the walls, candles on pedestals
- * between the lecterns. No chests, nobody sits there (no librarian): the books of the world's history lie open on seven lecterns.
+ * LoreLibrary.js hangs on it), tall pointed windows, a violet rug from the door to the lecterns, shelves round the walls. No chests, nobody sits there (no librarian): the books of the world's history lie open on seven lecterns.
  * Sizes from the world's gauges: a 5-wide door 6 high (hats pass), aisles ≥ 3, floor to ceiling 10, the porch 4 deep.
  */
 function buildLibrary(p, rng, out) {
@@ -330,7 +329,6 @@ function buildLibrary(p, rng, out) {
         const u = 31 + i * 2, q = p.pt(u, 25, 0), r = p.pt(u, 24, 0); // (the reader stands at the door side, v 24)
         p.box(u, u, 0, 1, 25, 25, B.PLANKS_DARK);
         lore.push({ x: q.x, y: q.y, z: q.z, face: faceYaw(r.x - q.x, r.z - q.z) });
-        if (i < 6) { p.box(u + 1, u + 1, 0, 1, 26, 26, B.PLANKS_DARK); p.box(u + 1, u + 1, 2, 2, 26, 26, B.ARCANE_LAMP_VIOLET); }
     }
     const door = p.node(du, v0 - 3, 0), inn = p.node(du, v0 + 5, 0, 'room:library'), desk = p.node(du, v0 + 6, 0, 'library'); // (nobody sits there: no librarian)
     p.link(door, inn); p.link(inn, desk); p.link(door, p.node(du, 0, 0));
