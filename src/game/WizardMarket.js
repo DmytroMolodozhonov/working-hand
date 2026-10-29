@@ -81,7 +81,7 @@ export function wizardGood(trade, k, n = 0) {
         }
         case 'scrolls': {
             const it = freshShopScroll(spellScroll(pick(r, SHOP_SIMPLE_SPELLS)), r, SHOP_SIMPLE_SPELLS);
-            return { item: it, price: scrollShopPrice(it) };
+            return { item: it, price: it.kind === 'scroll' ? scrollShopPrice(it) : 12 }; // (every scroll known to the buyer: an apple takes the place — it has a price too)
         }
         case 'curios': {
             if (k === 0) return { item: { kind: 'crystal', uid: newUid(), count: 1 }, price: 70 };
