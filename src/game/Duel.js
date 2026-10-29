@@ -1713,7 +1713,7 @@ export class Duel {
         }
         if (a.by === this.me || b.by === this.me) {
             const mineA = a.by === this.me;
-            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p, mastery: g.mana?.mastery ?? 0, power: mineA ? c.pwA : c.pwB });
+            g.hud.setDuelBar?.({ me: c.marks[mineA ? 0 : 1], them: c.marks[mineA ? 1 : 0], share: mineA ? c.p : 1 - c.p, mastery: g.mana?.mastery ?? 0, power: g.config?.mode === 'creative' ? (mineA ? c.pwA : c.pwB) : null }); // (the numbers of strength: only in Creative — the author: in the survival nobody knows them)
             this._barNow = true;
         }
         // Fatigue drains while pushing (free world)

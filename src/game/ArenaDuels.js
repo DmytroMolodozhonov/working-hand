@@ -1844,7 +1844,7 @@ export class ArenaDuels {
                 if (v && !v.dead) list.push({ tag: t, x: v.x, y: v.y, z: v.z });
             }
         }
-        this.tagFx.show(on ? list.slice(0, 2) : []);
+        this.tagFx.show(on ? list.slice(0, 2) : [], g.config?.mode);
     }
 
     _lit(dt) { this.marks.update(dt, this._litState()); }

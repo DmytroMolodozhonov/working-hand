@@ -4,7 +4,7 @@
  * when its numbers change; no light, no new materials after the first.
  */
 import * as THREE from 'three';
-import { RANK_COLOR, tagKey } from '../game/ArenaTag.js';
+import { RANK_COLOR, tagKey, tagShown } from '../game/ArenaTag.js';
 
 class Sign {
     constructor(scene) {
@@ -45,7 +45,8 @@ export class ArenaTagFx {
     constructor(game) { this.game = game; this.signs = []; }
 
     /** `list`: [{tag, x, y, z}] to show (at most 2); the rest hidden. */
-    show(list) {
+    show(list, mode) {
+        if (!tagShown(mode)) list = []; // (a sign with mana and strength: only in «Творческий» — never in the survival or the free world)
         const sc = this.game.scene;
         for (let i = 0; i < Math.max(list.length, this.signs.length); i++) {
             const it = list[i];

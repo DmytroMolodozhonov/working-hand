@@ -31,3 +31,17 @@ test('the sign is shown only in Creative', () => {
     assert.ok(tagShown('creative'));
     for (const m of ['survival', 'freeworld', 'hardcore', 'test', undefined]) assert.ok(!tagShown(m), String(m));
 });
+
+test('табличка над волшебником: выживание и свободный мир — её нет и не создаётся; творческий — есть', async () => {
+    const { ArenaTagFx } = await import('../../src/fx/ArenaTagFx.js');
+    const fx = new ArenaTagFx({ scene: {} });
+    const made = [];
+    const sprite = { visible: false, position: { set() {} } };
+    fx.signs = [{ sprite, draw: (t) => made.push(t) }];
+    const list = [{ tag: { id: 1 }, x: 0, y: 0, z: 0 }];
+    for (const m of ['survival', 'freeworld', undefined]) { sprite.visible = true; fx.show(list, m); assert.equal(sprite.visible, false, String(m)); }
+    assert.equal(made.length, 0, 'в выживании табличка даже не рисуется');
+    fx.show(list, 'creative');
+    assert.equal(sprite.visible, true);
+    assert.equal(made.length, 1);
+});
