@@ -15,8 +15,12 @@ test.after(async () => { await browser?.close(); srv?.stop(); });
 
 test('the Castle of Ghosts: absent without the sight, in the land with it, gone again without it', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'freeworld', { smooth: true });
-    await waitHudVisible(page);
+    // (the same as startFromMenu, with a long wait: the software GL of a sandbox takes minutes to start a world)
+    await startFromMenu(page, 'freeworld', { smooth: true }).catch(async (e) => {
+        if (!/Timeout/.test(e.message)) throw e;
+        await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 420000 });
+    });
+    await waitHudVisible(page, 120000);
     const r = await page.evaluate(async () => {
         const g = window.__zns.game, v = g.terrain, d = v.data;
         const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -77,4 +81,4 @@ test('the Castle of Ghosts: absent without the sight, in the land with it, gone 
     assert.equal(r.chestsAgain, 0, 'the chests went with it');
     assert.deepEqual(realErrors(errors), []);
     await page.close();
-});
+}, { timeout: 1500000 });
