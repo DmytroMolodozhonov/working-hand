@@ -165,7 +165,7 @@ export class CommandTalk {
         const data = this.game.terrain?.data;
         for (let t = 1; t <= 400; t += t < 60 ? 1 : 8) {
             const x = ray.o.x + ray.d.x * t, y = ray.o.y + ray.d.y * t, z = ray.o.z + ray.d.z * t;
-            if (data?.landMade && !data.landMade(x, z)) break; // (the land there is not brought by the workers yet: asking would make it in the frame, 20–80 ms; in flight the hand points far)
+            if (data?.landMade && !data.landMade(Math.round(x), Math.round(z))) break; // (the land there is not brought by the workers yet: asking would make it in the frame, 20–80 ms; in flight the hand points far)
             const gy = col.groundY(x, z);
             if (y <= gy + 0.2) return hit(t);
             last = t;
