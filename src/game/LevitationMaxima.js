@@ -206,7 +206,7 @@ export function houseCells(data, h, max = 6000) {
     const R = Math.ceil(h.r) + 1;
     const cx = Math.round(h.c.x), cz = Math.round(h.c.z);
     for (let x = cx - R; x <= cx + R; x++) for (let z = cz - R; z <= cz + R; z++) {
-        for (let L = Lf; L <= Lf + 22; L++) {
+        for (let L = Lf; L <= Lf + 34; L++) { // (a rich home of generation 14 is 26 high to its ridge, its chimneys 3 more)
             const t = data.get(x, L, z);
             if (!t || GROUND.has(t) || YARD.has(t) || isTreeBlock(t)) continue;
             if (isEnchanted(t)) return []; // (the wizards' tower: its walls of enchanted stone — no spell tears it off: EnchantedStone.js)

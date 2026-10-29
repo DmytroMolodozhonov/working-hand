@@ -372,6 +372,41 @@ export class SoundManager {
         this._play(this._clangBuf, 0.45 + 0.6 * Math.min(1, power), 0.85 + Math.random() * 0.35);
     }
 
+    /**
+     * A forged-iron gate (the keep's gates, GateModel.js): a deep ring of heavy metal with a low boom and a short grating of
+     * the hinges (made here, no file). `power` 0..1: a latch clicking is quiet, a slam or a blast against the gate rings long.
+     */
+    playIronGate(power = 0.6) {
+        if (!this.enabled) return;
+        const buf = this.sounds.ironGate || (this.sounds.ironGate = this._synthIronGate());
+        if (buf) this._play(buf, 0.4 + 0.65 * Math.min(1, power), 0.9 + Math.random() * 0.2);
+    }
+
+    _synthIronGate() {
+        const ctx = this.context;
+        if (!ctx) return null;
+        const rate = ctx.sampleRate, len = Math.floor(rate * 1.6);
+        const buf = ctx.createBuffer(1, len, rate);
+        const d = buf.getChannelData(0);
+        // a big plate rings low: inharmonic modes round 210 Hz, long decay; the bars add a higher, shorter ring
+        const f0 = 210;
+        const modes = [[1, 0.6, 0.9], [2.32, 0.4, 0.6], [4.1, 0.28, 0.38], [6.7, 0.18, 0.22], [9.4, 0.1, 0.12], [1.006, 0.35, 0.8]];
+        let seed = 11;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / rate;
+            let s = 0;
+            for (const [r, a, decay] of modes) s += a * Math.exp(-t / decay) * Math.sin(2 * Math.PI * f0 * r * t);
+            s += 0.8 * Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 62 * t); // the boom of the leaf
+            s += rnd() * 0.7 * Math.exp(-t / 0.008); // the hit
+            lp += (rnd() - lp) * 0.08; // the hinges grating: low-passed noise that wavers
+            s += lp * 0.35 * Math.exp(-t / 0.35) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 17 * t));
+            d[i] = Math.tanh(s * 1.1) * 0.8;
+        }
+        return buf;
+    }
+
     /** Coins jingling in a pouch (tied onto the belt): a few small clinks (made here). */
     playCoins() {
         if (!this.enabled) return;
@@ -587,6 +622,7 @@ export class SoundManager {
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)], ['bubblePop', () => this._synthBubblePop()],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
+            ['ironGate', () => this._synthIronGate()], // (the keep's forged gates — GateModel.js)
             ['collapse', () => this._synthCollapse()], ['groan', () => this._synthGroan()], // (a building giving way, coming down — Structure.js)
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['boneClack', () => this._synthKnock(820, 0.09)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],

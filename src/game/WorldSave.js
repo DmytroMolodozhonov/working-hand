@@ -23,7 +23,7 @@ import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
-import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN } from '../world/Terrain.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -61,6 +61,8 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     if (gen < BAKSADI_FROM_GEN) lacks.push('дерева Баксади и новых диких растений');
     if (gen < BRIGHTFLOWER_FROM_GEN) lacks.push('огненных цветков Ярколето на тёплых лугах');
     if (gen < CANARIES_FROM_GEN) lacks.push('канариков на болотах');
+    if (gen < GATE_METAL_FROM_GEN) lacks.push('кованых железных ворот в замках');
+    if (gen < HOUSE_SIZE_FROM_GEN) lacks.push('просторных домов жителей (у богатых — в два этажа)');
     const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;
     if (!lacks.length) return `${head} Мир актуален: в нём есть всё новое.`;
     return `${head} Мир устарел: он создан в старой версии, поэтому в нём нет ${lacks.join(', ')}. Играть в нём можно, и ваши постройки и вещи на месте.`;

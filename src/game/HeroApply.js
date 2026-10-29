@@ -51,7 +51,7 @@ export class HeroApply {
         if (!this.on || !id || id === 'start') return;
         const data = g.world?.terrain?.data;
         const gate = () => { const c = data?.castles?.cellOf?.(0, -1); return c?.gate ? { x: c.gate.x, z: c.gate.z, yaw: c.gateYaw } : null; };
-        const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
+        const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed, data.bigHouses) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
         if (id === 'dragon' && data?.apart) { // (the places apart: the nearest real lair, found cell by cell — _stepLair)

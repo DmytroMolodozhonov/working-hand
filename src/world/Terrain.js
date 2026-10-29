@@ -249,7 +249,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 13;
+export const WORLD_GEN = 14;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -257,6 +257,18 @@ export const WORLD_GEN = 13;
  * changes: the keep's depth behind the throne, the height of the upper floor, a hall 4 shorter).
  */
 export const FURNISH_FROM_GEN = 8;
+/**
+ * The first generation whose castles have FORGED-IRON gates in the keep's doorway (GateModel.js: rivets, a grille, rust, a ringing sound).
+ * Only «Бомбардо Максима» (and the gods' / Inspirius / Total Destruction Максима blasts) break them; a plain «Бомбардо» rings on the iron
+ * (Alohomora.blast). An older world keeps its wooden-banded gates — one number, read by Alohomora.metalGates.
+ */
+export const GATE_METAL_FROM_GEN = 14;
+/**
+ * The first generation whose villagers' houses are roomy (Castles.js buildHouseBig): every poor house at least twice the old floor
+ * area (ways 3 wide, furniture by the walls), every rich house TWO floors with a stair, bedrooms above, a balcony and a roof.
+ * An older world keeps its small houses (its saved changes lie on them).
+ */
+export const HOUSE_SIZE_FROM_GEN = 14;
 /** The first generation with plant creatures in the meadows (PlantLife.js: telewilpins, carnivorous heads). Older worlds have none. */
 export const PLANTS_FROM_GEN = 9;
 /** The first generation whose wizards' libraries show the drawing of the teleportation pentagram on a stand (PentagramStand.js; the last stand of each library). Older worlds keep their lore books on all of them. */
@@ -284,6 +296,7 @@ export const CANARIES_FROM_GEN = 13;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 13: the Brightflower in the warm meadows (BRIGHTFLOWER_FROM_GEN) and the Canaries of the swamps (CANARIES_FROM_GEN).
+// 14: forged-iron gates in the keeps (GATE_METAL_FROM_GEN), roomy villagers' houses — the rich in two floors (HOUSE_SIZE_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -570,7 +583,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false, bigArena = false, apart = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -579,11 +592,12 @@ export class TerrainData {
         this.meshTrees = !!(mountains && lush && meshTrees); // (a world made with real trees — `realTrees`: not blocks — chunk.trees, Trees.js)
         this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
+        this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
         // (the creative test ground: a sea right by its castle's quay — the castle is placed first)
-        const spot = mountains && seas && test ? testSeaCastleSpot(seed) : null;
+        const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
@@ -593,7 +607,7 @@ export class TerrainData {
         this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers);

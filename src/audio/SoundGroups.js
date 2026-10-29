@@ -22,7 +22,7 @@ const E = 'effects', S = 'spells', M = 'music';
 /** SoundManager method → group. (Helpers that only make buffers — `_synth*`, `prepare*` — are not sounds.) */
 export const METHOD_GROUP = {
     playAmbientMusic: M,
-    playHit: E, playClang: E, playCoins: E, playBowDraw: E, playBowRelease: E, playFrozenHit: E, playDeath: E,
+    playHit: E, playClang: E, playIronGate: E, playCoins: E, playBowDraw: E, playBowRelease: E, playFrozenHit: E, playDeath: E,
     playLand: E, playGiantStep: E, playSnowStep: E, playNoMana: E, playChestOpen: E,
     playCrack: E, playHammer: E, playChore: E, playBoneClack: E, playOink: E, playOwl: E, playSpencer: E, playCanary: E, playGargoyle: E, playPlant: E,
     playArena: E, playPhoenixSong: E, playPhoenixCry: E, playTempleChime: E,

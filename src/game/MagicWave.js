@@ -97,7 +97,7 @@ export function ruinBand(g, p, r0, r1, full, by, kind = 'ruin') {
     const out = breaking(en && g.world.terrain?.data, en, p.x, p.z, () => g.world.ruin(p, r1, keepIn(keep), { inner: r0, full }));
     g.explosions?.push({ p: [p.x, p.y, p.z], r: r1, ruin: 1, ri: r0, rf: full, ...(en ? { en } : {}), ...(keep.length ? { k: keep } : {}) }); // (saves, late joiners)
     for (const f of out.falls || []) g.falling?.add(f);
-    g.wreck?.afterBlast?.(p, r1, 99);
+    g.wreck?.afterBlast?.(p, r1, 99, kind !== 'inspirius'); // (the forged-iron gates of a keep: only «Инспириус» tears them off — «Circle Attack» only rings on them; Alohomora.IRON_GATE_VS)
     if (g.authority) {
         let wrecked = 0;
         for (const b of out.removed || []) if (isCastleBlock(b[3])) wrecked++;

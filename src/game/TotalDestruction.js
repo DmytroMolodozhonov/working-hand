@@ -178,7 +178,7 @@ export class TotalDestruction {
         g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(en ? { en } : {}), ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
         g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction', d.by); // (it breaks a house's sphere at once)
         for (const f of out.falls || []) g.falling?.add(f);
-        g.wreck?.afterBlast(p, R, 99); // (nothing holds: the gates of a throne room break too)
+        g.wreck?.afterBlast(p, R, 99, !d.max); // (nothing holds: the wooden gates of a throne room break too; the plain one leaves the forged-iron ones standing)
         if (authoritative) {
             let wrecked = 0;
             for (const b of out.removed) if (isCastleBlock(b[3])) wrecked++;
