@@ -24,7 +24,7 @@ export const METHOD_GROUP = {
     playAmbientMusic: M,
     playHit: E, playClang: E, playCoins: E, playBowDraw: E, playBowRelease: E, playFrozenHit: E, playDeath: E,
     playLand: E, playGiantStep: E, playSnowStep: E, playNoMana: E, playChestOpen: E,
-    playCrack: E, playHammer: E, playChore: E, playBoneClack: E, playOink: E, playOwl: E, playGargoyle: E, playPlant: E,
+    playCrack: E, playHammer: E, playChore: E, playBoneClack: E, playOink: E, playOwl: E, playSpencer: E, playGargoyle: E, playPlant: E,
     playArena: E, playPhoenixSong: E, playPhoenixCry: E, playTempleChime: E,
     // the fall of buildings (Game._fallStarted/_fallLanded, MonsterTransform): the general «звуки» slider
     playCollapse: E, playGiveWay: E,

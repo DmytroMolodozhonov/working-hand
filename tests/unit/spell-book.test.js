@@ -81,7 +81,7 @@ test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wiz
     const { isPentagramScroll, figureIds } = await import('../../src/game/PentagramRules.js');
     const { lootOfVillager } = await import('../../src/game/Death.js');
     const r = createRng(11), drawings = new Set(), shop = new Set(), wiz = new Set();
-    for (let i = 0; i < 8000; i++) {
+    for (let i = 0; i < 24000; i++) { // (each new pentagram thins the share of the rest: enough rolls for the rarest)
         const it = rollScroll(r);
         if (isPentagramScroll(it)) { drawings.add(it.pent); assert.ok(!it.spell && it.stat === 'pentagram'); }
         const s = rollShopScroll(r);
