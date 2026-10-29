@@ -361,14 +361,19 @@ export class Ghosts {
             const floor = this._floorAt(s.x, s.y + 1.5, s.z);
             if (floor == null || Math.abs(floor - feet) > 4) continue;
             if (this._los(eye, _v.set(s.x, floor + 2.5, s.z))) continue; // (it must come out of hiding: not seen where it starts)
-            // the corner: step towards the hero until he would see it (never nearer than AFRAID + 2, never in a doorway)
-            const dx = me.x - s.x, dz = me.z - s.z, dl = Math.hypot(dx, dz);
+            // the corner: from its hiding place it drifts out (towards the hero first, then round to the sides) until he would see it — never nearer
+            // than AFRAID + 2, never into a wall on the way, never stopping in a doorway
+            const base = Math.atan2(me.x - s.x, me.z - s.z);
             let reveal = null;
-            for (let st = 1; st <= 7; st += 0.5) {
-                const x = s.x + dx / dl * st, z = s.z + dz / dl * st;
-                if (Math.hypot(me.x - x, me.z - z) < GHOST.AFRAID + 2) break;
-                if (this._solid(x, floor + 1, z) || this._solid(x, floor + 3, z)) break;
-                if (this._los(eye, _w.set(x, floor + 2.5, z))) { if (!this._narrow(x, floor + 1.5, z)) reveal = { x, z }; break; }
+            for (const turn of [0, 0.6, -0.6, 1.2, -1.2, 1.8, -1.8]) {
+                const dx = Math.sin(base + turn), dz = Math.cos(base + turn);
+                for (let st = 1; st <= 7; st += 0.5) {
+                    const x = s.x + dx * st, z = s.z + dz * st;
+                    if (Math.hypot(me.x - x, me.z - z) < GHOST.AFRAID + 2) break;
+                    if (this._solid(x, floor + 1, z) || this._solid(x, floor + 3, z) || this._solid(x + 0.6 * dz, floor + 2, z - 0.6 * dx) || this._solid(x - 0.6 * dz, floor + 2, z + 0.6 * dx)) break;
+                    if (this._los(eye, _w.set(x, floor + 2.5, z))) { if (!this._narrow(x, floor + 1.5, z)) reveal = { x, z }; break; }
+                }
+                if (reveal) break;
             }
             if (!reveal) continue;
             if (this._start(o, s.x, floor, s.z, { type: 'peek', from: new THREE.Vector3(s.x, 0, s.z), to: new THREE.Vector3(reveal.x, 0, reveal.z), stage: 'in', hold: 1.2 + this.rnd() * 0.9 })) {
