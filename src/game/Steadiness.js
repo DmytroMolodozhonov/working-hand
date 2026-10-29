@@ -37,6 +37,8 @@ export const STEADY = {
     HELD_PUSH_K: 0.5, // a held blow still moves the body this much
     BOMBARDO_MAXIMA_K: 0.4, // «Bombardo Maxima» takes 60 % of the skill
     NEVER: new Set(['WindMaxima', 'Inspirius']),
+    WIND_GAIN_COOLDOWN: 2, // s: one fall from the wind gives one +1 (a gust's repeated ticks do not pile up)
+    WIND_KINDS: new Set(['Wind', 'WindMaxima']),
 };
 
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -108,7 +110,24 @@ export class Steadiness {
         }
     }
 
-    onDeath() { this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; }
+    /**
+     * The hero was knocked off their feet by «Wind» / «Wind Maxima» (whoever cast it, whatever made the fall inside the
+     * push): always +1 (the author: «Ветер учит стоять»). Once per fall (a window), not when held (no fall then),
+     * not in Creative (no skill counted there). `now` in ms (tests).
+     */
+    windFell(kind, now = performance.now()) {
+        if (!STEADY.WIND_KINDS.has(kind) || this.game.config?.mode === 'creative') return false;
+        if (this._windAt != null && now - this._windAt < STEADY.WIND_GAIN_COOLDOWN * 1000) return false;
+        this._windAt = now;
+        if (this.skill >= STEADY.MAX) return false;
+        this.skill++;
+        this.acc = this.skill >= STEADY.MAX ? 0 : Math.min(this.acc, needFor(this.skill) - 1);
+        const g = this.game;
+        g.hud?.toast ? g.hud.toast('+1 к устойчивости') : g.hud?.setVoice?.('+1 к устойчивости', true);
+        return true;
+    }
+
+    onDeath() { this._windAt = null; this.skill = STEADY.MIN; this.acc = 0; this.rough = 0; }
 
     snapshot() { return this.skill > STEADY.MIN || this.acc > 0 ? { skill: this.skill, acc: Math.round(this.acc) } : null; }
 

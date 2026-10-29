@@ -125,6 +125,7 @@ export class Knockdown {
             this.minDown = Math.max(this.minDown, (this.state === 'down' ? this.t : 0) + down);
             return false;
         }
+        g.steady?.windFell?.(kind); // (the wind teaches to stand: every fall from «Wind» / «Wind Maxima» is +1 — Steadiness.windFell)
         if (g.beds?.lying) g.beds.standUp?.();
         if (g.animals?.riding) g.animals.dismount?.();
         if (g.dragonRide?.riding) g.dragonRide.stop('thrown'); // (knocked off a dragon: set down gently, the spell torn)
