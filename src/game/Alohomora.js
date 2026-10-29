@@ -2,9 +2,9 @@
  * Alohomora.js — «Алохомора» (5 маны) and «Алохомора Максима» (25): locks.
  *
  * Point the hand (or the wand in it) at a lock a few metres away and say the word:
- *  - a locked chest of a village or a castle: a click, a little light, the lid springs up
- *    a crack — the hand lifts it the rest of the way (Chest.liftTo; nobody's chest opens
- *    by just walking up to it any more);
+ *  - a locked chest of a village or a castle: a click, a little light, and the chest opens WHOLE at once, with the
+ *    same lid and contents as a cave chest (Game.openChest; the author: no lifting the lid by hand — the hand still
+ *    may, Chest.liftTo, for the owner's own chests; nobody's chest opens by just walking up to it);
  *  - a locked door of a villager's house: it unlocks and swings open a crack — the hand
  *    takes the handle and opens it (Doors.js);
  *  - the gates of a throne room: too strong for the plain word — only «Максима» (or a
@@ -30,19 +30,33 @@
  */
 
 import * as THREE from 'three';
-import { isSolid } from '../world/Terrain.js';
+import { isSolid, GATE_METAL_FROM_GEN } from '../world/Terrain.js';
+import { gateVariant } from './GateModel.js';
 import { doorHeld } from './Wreck.js';
 import { CHEST_W, LID_LEN } from '../entities/Chest.js';
 
 export const ALOHOMORA = {
     RANGE: 5.5, // m from the hand to the lock
     CONE: 0.5, // rad round the pointing hand (a lock right by the hand: more, see _pick)
+    METAL_POWER: 2, // forged-iron gates (generation 14): only a blast at least this strong breaks them — «Бомбардо» is 1 (the gate rings and stands), «Бомбардо Максима» 3, Inspirius / Total Destruction / «Бум» 99
     GATE_HITS: 2, // blasts to break the gates: «Бомбардо» counts 1, «Бомбардо Максима» 3, «Total Destruction» breaks them at once
     LOCK_SHARE: 0.55, // of the houses of a village lock their doors (at night / nobody home)
     WIZ_LOCK_SHARE: 0.85, // of the wizards' houses lock their doors (at night; most of them by day too)
     NEAR: 70, // m: the gates of a castle this near are put up
     MEND_T: 180, // s with nobody near: the keep's broken gates are put back (the builders' work, unseen)
     MEND_R: 40, // m: a player this near stops the clock (never put back before somebody's eyes)
+};
+
+/**
+ * What each destructive spell does to the keep's FORGED-IRON gates (generation 14 — GateModel.js): 'breaks' — they fall (the iron is torn off its
+ * archway: a boom, sparks, the people take fright), 'rings' — a blast with no effect on the iron (it shakes and rings, the people are alarmed),
+ * 'none' — the spell does not touch them. The author: «обычная Бомбарда их не ломает; ломает только Бомбарда Максима» (and, by the rules of the
+ * game, the gods' spells, «Инспириус», «Total Destruction Максима»). The older gates (wooden, banded with iron) wear under any blast: two plain ones.
+ */
+export const IRON_GATE_VS = {
+    Bombardo: 'rings', BombardoMaxima: 'breaks', Cannons: 'rings', TotalDestruction: 'rings', TotalDestructionMaxima: 'breaks',
+    Inspirius: 'breaks', Boom: 'breaks', CircleAttack: 'rings', // (the great wave: Wreck.afterBlast 99, soft for Circle Attack — MagicWave.js)
+    Lightning: 'none', Fire: 'none', Ice: 'none', Gather: 'none', Earthquake: 'none', Liquidation: 'none', LevitationMaxima: 'none', Levitation: 'none',
 };
 
 /**
@@ -58,7 +72,7 @@ export const TARGETS = {
     towerChest: { plain: 'none', maxima: 'none', why: 'сундуки академии волшебников заперты чарами Мастера — пока не открыть (позже), откроются, когда он падёт' },
     villagerDoor: { plain: 'unlock', maxima: 'unlock', why: 'дверь дома жителя: заперта ночью или когда никого нет дома; открывается щелью, дальше — рукой' },
     castleDoor: { plain: 'none', maxima: 'none', why: 'двери внутри замка без замков (открываются рукой)' },
-    throneGate: { plain: 'refuse', maxima: 'unlock', why: 'ворота тронного зала: слишком сильный замок для простой «Алохоморы»; ломаются и взрывом' },
+    throneGate: { plain: 'refuse', maxima: 'unlock', why: 'ворота тронного зала: слишком сильный замок для простой «Алохоморы»; ломаются и взрывом (кованые железные ворота новых миров — только «Бомбардо Максима», «Инспириус», «Total Destruction Максима» и заклинания богов: простое «Бомбардо» их лишь заставляет звенеть)' },
     playerDoor: { plain: 'none', maxima: 'none', why: 'дверь, поставленная игроком, не запирается' },
     wizardDoor: { plain: 'unlock', maxima: 'unlock', why: 'двери домов волшебников почти всегда заперты (и днём); большая дверь академии — на ночь; открывается щелью, дальше — рукой' },
     shipHatch: { plain: 'none', maxima: 'none', why: 'на кораблях дверей с замками нет' },
@@ -74,6 +88,9 @@ export const TARGETS = {
     blackship: { plain: 'none', maxima: 'none', why: 'капитан Чёрные Усы и его скелеты — отпирать нечего; сундуки чёрного корабля не заперты, кроме сундука капитана: он открывается, когда капитан убит (Ships._placeChests)' },
     phoenix: { plain: 'none', maxima: 'none', why: 'феникс — живая птица без замков, не действует' },
     owl: { plain: 'none', maxima: 'none', why: 'сова — живая птица без замков, не действует' },
+    canary: { plain: 'none', maxima: 'none', why: 'канарик — живой человек болота: замков в нём нет, не действует' },
+    spencer: { plain: 'none', maxima: 'none', why: 'птичка Спенсера — живая птица без замков, не действует' },
+    custom: { plain: 'none', maxima: 'none', why: 'созданное богами существо: замков в нём нет, не действует' },
     gargoyle: { plain: 'none', maxima: 'none', why: 'горгулья — живое существо без замков, не действует' },
     livingTrees: { plain: 'none', maxima: 'none', why: 'ожившие деревья — не действует' },
     bookBirds: { plain: 'none', maxima: 'none', why: 'книги-птицы — не действует (книга не заперта)' },
@@ -103,6 +120,9 @@ export const LOCK_TARGETS = {
     blackship: { does: 'none', why: 'капитан Чёрные Усы и скелеты — не действует' },
     phoenix: { does: 'none', why: 'феникс — не действует' },
     owl: { does: 'none', why: 'сова — не действует' },
+    canary: { does: 'none', why: 'канарик — не действует' },
+    spencer: { does: 'none', why: 'птичка Спенсера — не действует' },
+    custom: { does: 'none', why: 'созданное существо — не действует' },
     gargoyle: { does: 'none', why: 'горгулья — не действует' },
     livingTrees: { does: 'none', why: 'ожившие деревья — не действует' },
     bookBirds: { does: 'none', why: 'книги-птицы — не действует' },
@@ -225,7 +245,7 @@ export class Alohomora {
         if (now - this._hintT < 3500) return;
         this._hintT = now;
         if (this.spelled.has(d.id)) { this.game.hud?.setVoice('🔒 Дверь заперта заклинанием «Lock» — откройте её «Алохоморой»', true); return; }
-        this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Алохомора» их не возьмёт — нужна «Алохомора Максима» (или взрыв)' : '🔒 Заперто — скажите «Алохомора», показав рукой на замок', true);
+        this.game.hud?.setVoice(d.gate ? '🔒 Ворота тронного зала заперты. Простая «Алохомора» их не возьмёт — нужна «Алохомора Максима» (или мощный взрыв)' : '🔒 Заперто — скажите «Алохомора», показав рукой на замок', true);
     }
 
     // ---------------------------------------------------------------- the spell
@@ -397,6 +417,9 @@ export class Alohomora {
             this.chests.add(m.id);
             const c = g.chests?.find((x) => x.id === m.id);
             if (c) { c.setAjar(); this._flash(c.lidEdge(new THREE.Vector3())); }
+            // (the author: «как только я сказал «Алохомора» — сундук открывается ПОЛНОСТЬЮ, как у сундука в пещере»: the
+            // host opens it with the same lid animation and the contents at once; the guests see it by the net)
+            if (this.auth && c && !c.isOpen) g.openChest(c, null, m.by || g.localId);
             if (this.auth && c && m.by) this._witness(c, m.by);
         } else if (m.k === 'door') {
             this.picked.add(m.id);
@@ -451,7 +474,7 @@ export class Alohomora {
             if (this.auth && c && c.picked && !c.isOpen) g.openChest(c, null, m.by || m.from);
             return;
         }
-        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Крышка приподнялась — поднимите её рукой' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true, true);
+        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Сундук отперт и открылся' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true, true);
         g.sound?.playClang?.(0.2);
     }
 
@@ -490,15 +513,31 @@ export class Alohomora {
 
     // ---------------------------------------------------------------- blasts
     /** A blast (Bombardo, Maxima, Total Destruction…) at the gates: they hold one, the next breaks them. */
-    blast(pos, radius, power = 1) {
+    blast(pos, radius, power = 1, soft = false) {
         for (const [id, rec] of this.gateRecs) {
             const G = rec.def.throneGate;
             const st = this._gate(id);
             if (st.broken || Math.hypot(G.x - pos.x, G.y + 3 - pos.y, G.z - pos.z) > radius + G.w / 2 + 0.5) continue;
+            if (this.metalGates() && (soft || power < ALOHOMORA.METAL_POWER)) { this._ringGate(id, rec, pos); continue; } // (forged iron: a plain «Бомбардо» only rings on it)
             st.hits += power;
             if (st.hits >= ALOHOMORA.GATE_HITS) this._break(id);
             else for (const did of rec.ids) { const d = this.game.doors?.list.get(did); if (d) d.shakeT = 0.5; }
         }
+    }
+
+    /** Gates of forged iron (worlds of generation 14 and later — Terrain.GATE_METAL_FROM_GEN)? */
+    metalGates() { return (this.game.gen ?? 0) >= GATE_METAL_FROM_GEN; }
+
+    /** A blast too weak for the iron gates: the leaves shake and ring, the people take fright (the host tells them). */
+    _ringGate(id, rec, pos) {
+        const g = this.game, G = rec.def.throneGate;
+        for (const did of rec.ids) { const d = g.doors?.list.get(did); if (d) d.shakeT = 0.6; }
+        const me = g.character.group.position;
+        if (Math.hypot(G.x - me.x, G.z - me.z) < 90) g.sound?.playIronGate?.(1);
+        const now = performance.now();
+        if (rec._ringAt != null && now - rec._ringAt < 1500) return; // (one blast = one alarm: several calls land together)
+        rec._ringAt = now;
+        if (this.auth) g.castleLife?.alarm?.({ x: G.x, y: G.y + 2, z: G.z }, 'blast', null);
     }
 
     _break(id) {
@@ -512,8 +551,9 @@ export class Alohomora {
             const d = g.doors?.list.get(did);
             if (!d) continue;
             const debris = [];
-            for (let i = 0; i < 12; i++) debris.push({ x: d.x + (Math.random() - 0.5) * 3, y: d.y + 0.5 + Math.random() * 5, z: d.z + (Math.random() - 0.5) * 3, color: i % 3 ? 0x6b4423 : 0x3a3a40, size: 0.7 });
+            for (let i = 0; i < 12; i++) debris.push({ x: d.x + (Math.random() - 0.5) * 3, y: d.y + 0.5 + Math.random() * 5, z: d.z + (Math.random() - 0.5) * 3, color: this.metalGates() ? (i % 3 ? 0x3a3a40 : i % 2 ? 0x6b3a1c : 0x80858f) : (i % 3 ? 0x6b4423 : 0x3a3a40), size: 0.7 });
             g.fx?.debrisFrom?.(debris, _v.set(d.x, d.y + 2, d.z), 24);
+            if (d.forged) g.sound?.playIronGate?.(1); // (the iron falls with a boom)
             g.doors.remove(did);
         }
     }
@@ -576,7 +616,7 @@ export class Alohomora {
         const lw = G.w / 2;
         [-1, 1].forEach((s, k) => {
             if (g.doors.list.has(ids[k])) return;
-            g.doors._place({ id: ids[k], x: G.x + ax * s * lw / 2, y: G.y, z: G.z + az * s * lw / 2, ry: G.ry, color: 0x5a3a1e, a: st.unlocked ? 0.2 : 0, w: lw, h: G.h, gen: true, gate: true, mirror: s > 0, castle: def.id });
+            g.doors._place({ id: ids[k], x: G.x + ax * s * lw / 2, y: G.y, z: G.z + az * s * lw / 2, ry: G.ry, color: 0x5a3a1e, a: st.unlocked ? 0.2 : 0, w: lw, h: G.h, gen: true, gate: true, mirror: s > 0, castle: def.id, ...(this.metalGates() ? { forged: true, vari: gateVariant(def.id) } : {}) });
         });
     }
 

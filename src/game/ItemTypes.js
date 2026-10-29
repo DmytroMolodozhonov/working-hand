@@ -15,7 +15,7 @@
  *             breaks an ordinary «Protection» it touches.
  *   shield  — wooden / iron / magic; a magic one has its own strength 20–50
  *             that comes back by itself; strong spells break weak shields.
- *   scroll  — burn it: +1–5 max health or +1–10 max strength, for good;
+ *   scroll  — burn it: learn the spell (or the pentagram) written on it, for good (the old scrolls of health / mana cells are gone: retireScroll);
  *             or it teaches a scroll-only spell (Lightning Strike,
  *             Thunderwave, To the Sun, Авада Кедавра — a rare one, Total Destruction —
  *             the rarest).
@@ -29,11 +29,17 @@ import { enchantValueMul, describeEnchant } from './Enchant.js';
 import { addEnchantGlow } from '../fx/EnchantGlow.js';
 import { irMaterial } from '../fx/Iridescent.js';
 import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.js';
+import { brightCoreModel } from '../fx/BrightFlowerModel.js';
+import { canaryHideModel, boneModel } from '../fx/CanaryModel.js';
+import { spencerFeatherItem, beslanBundleItem } from '../fx/InvisibleModels.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
 import { LORE_BY_ID } from './LoreBooks.js';
 import { makeSpellBookModel, COVERS, SWIFT_COVER, SWIFT_TRIM, WARD_COVER, WARD_TRIM } from './BookModel.js';
 import { crystalItemModel } from './CrystalModel.js';
+import { pearGeometry } from './AppleTrees.js';
+import { FLORA_ITEMS, FLORA_ITEM_TEXT, FLORA_OF_ITEM } from './MagicFlora.js';
+import { floraItemModel } from '../fx/FloraModels.js';
 import { pouchModel } from './PouchModel.js';
 import { flaskModel } from './CauldronModel.js';
 import { recipeById } from './Potions.js';
@@ -65,7 +71,7 @@ export const SPELL_RU = {
     ProtectionHouse: 'Protection House', ProtectionInvisible: 'Protection Invisible', ProtectionHouseGrant: 'Protection House Grant', StrengthenHouse: 'Strengthen House', WardDispel: 'Dispel Ward',
     CreateHouse: 'Create a House', ImproveHouse: 'Improve a House',
     WindImpulse: 'Wind Impulse', WindImpulseMaxima: 'Wind Impulse Maxima', Drawdown: 'Drawdown', DrawdownMaxima: 'Drawdown Maxima', Liquidation: 'Liquidation', LiquidationMaxima: 'Liquidation Maxima',
-    Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', VisibleGodi: 'Visible Godi', GroundVortex: 'Ground Vortex',
+    Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', VisibleGodi: 'Visible Godi', Nihilis: 'Nihilis Atra', GroundVortex: 'Ground Vortex',
     // (the four scrolls of the Temple of the Gods' library — GodsTemple.js; the spells themselves: «Космос»)
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima',
     Boom: 'Бум', // (the fifth scroll of the library: Boom.js)
@@ -73,6 +79,7 @@ export const SPELL_RU = {
     ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', // (the seventh and the eighth: the gods' shield — ProtectionGods.js)
     Die: 'Дай', // (the ninth: the gods' black beam — StrongSpells.js)
     ImperiusMaxima: 'Империус Максима', // (the tenth: the mind into any creature, any player — Imperius.js)
+    DivineCreation: 'Да пусть создастся', // (the eleventh: the gods make what is described — DivineCreation.js)
     Pentagranium: 'Пентаграниум', // (black magic: a pentagram drawn on the ground — Pentagranium.js; a scroll)
     Imperius: 'Империус', // (the mind into an ordinary creature: a rare strong scroll on the Earth — Imperius.js)
     Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', IceMaxima: 'Айс Максима', // (the strong duel spells: scrolls on the Earth)
@@ -82,7 +89,7 @@ export const SPELL_RU = {
     CreateCastle: 'Create a Castle', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', Breakthrough: 'Breakthrough', FireMaxima: 'Fire Maxima', BreakthroughMaxima: 'Breakthrough Максима',
 };
 /** The spell scrolls and their ribbon colours (which spells a scroll teaches: SpellBook.js — TAUGHT_BY). */
-export const SCROLL_SPELL_COLOR = { Pentagranium: 0x8c0f24, GroundVortex: 0x8a5a2b, VisibleGodi: 0xd9a7b0, Groundprud: 0xb0793a, LumosFollowing: 0xfff0b8, LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Imperius: 0xe8e4f6, ImperiusMaxima: 0xfff6dc, Die: 0x050008, EarthquakeMaxima: 0x8a5a2b, LiquidationMaxima: 0x6fdc8c, ProtectionMaxima: 0x4aa3ff, IceMaxima: 0xaee9ff, JoltMaxima: 0xd9e8f0, CircleAttack: 0xff3b6b, Drawdown: 0x6b4a2a, Overgrown: 0x3e8e2f, Brainrot: 0xff7ad9, BrainrotMaxima: 0xffc23a, Waterball: 0x2a7fff, AirBubble: 0xbff3ff, WaveAttack: 0x0f5fa8, WaterVortex: 0x00a0b0, WaterVortexSuperMaxima: 0x003a70, Snowman: 0xffffff, Unfurl: 0xe8dcc0, CreateCastle: 0x8f8f9a, IceCastle: 0x7fd4ff, IceBridge: 0xcfefff, Breakthrough: 0xa0522d, FireMaxima: 0xffb000 }; // (one scroll teaches a spell and its «Максима» for Wind Impulse, Circle Attack, Drawdown, Air Bubble, Wave Attack, Breakthrough; «Waterbollow» — «Water forming» too; «Анфёрл» — «Фёрл» too)
+export const SCROLL_SPELL_COLOR = { Nihilis: 0xfff0c0, Pentagranium: 0x8c0f24, GroundVortex: 0x8a5a2b, VisibleGodi: 0xd9a7b0, Groundprud: 0xb0793a, LumosFollowing: 0xfff0b8, LightningStrike: 0xffd84a, Thunderwave: 0x8fa8ff, ToTheSun: 0xff9a2b, AvadaKedavra: 0x2ec95a, Alive: 0x9a6a2e, TotalDestruction: 0x1c1c1c, LetItRain: 0xc4d0dc, AlohomoraMaxima: 0xb87333, LevitationMaxima: 0xc8a2ff, BombardoMaxima: 0xd2452b, OvergrownMaxima: 0x9be15d, Hellfire: 0x7a0d0d, FirefightingMaxima: 0x3fb6ff, Inspirius: 0x7fe3ff, CreateHouse: 0xffb300, ImproveHouse: 0xf4f1e8, WindImpulse: 0xb8c4cc, Invisibility: 0x5b2a86, CreatePlanet: 0x2f6fd1, EnlargePlanet: 0xff6f3c, TerraformPlanet: 0x1fae7a, LevitationSuperMaxima: 0xf2e6ff, GiveMyPower: 0x9a7b1c, Boom: 0xff5a1f, PlanetLiquidation: 0x8c1a6a, ProtectionGods: 0xffcf4a, ProtectionGodsMaxima: 0xfff1b0, Accentric: 0xc05cff, Pilbidrio: 0xf4f4ff, Electrum: 0x3fa9ff, Imperius: 0xe8e4f6, ImperiusMaxima: 0xfff6dc, Die: 0x050008, EarthquakeMaxima: 0x8a5a2b, LiquidationMaxima: 0x6fdc8c, ProtectionMaxima: 0x4aa3ff, IceMaxima: 0xaee9ff, JoltMaxima: 0xd9e8f0, CircleAttack: 0xff3b6b, Drawdown: 0x6b4a2a, Overgrown: 0x3e8e2f, Brainrot: 0xff7ad9, BrainrotMaxima: 0xffc23a, Waterball: 0x2a7fff, AirBubble: 0xbff3ff, WaveAttack: 0x0f5fa8, WaterVortex: 0x00a0b0, WaterVortexSuperMaxima: 0x003a70, Snowman: 0xffffff, Unfurl: 0xe8dcc0, CreateCastle: 0x8f8f9a, DivineCreation: 0xfff3c2, IceCastle: 0x7fd4ff, IceBridge: 0xcfefff, Breakthrough: 0xa0522d, FireMaxima: 0xffb000 }; // (one scroll teaches a spell and its «Максима» for Wind Impulse, Circle Attack, Drawdown, Air Bubble, Wave Attack, Breakthrough; «Waterbollow» — «Water forming» too; «Анфёрл» — «Фёрл» too)
 /** What the temple's scrolls are for (GodsTemple.js — the library of the Temple of the Gods). */
 const TEMPLE_SCROLL_LINE = {
     CreatePlanet: 'Заклинание богов: создать в космосе новую планету',
@@ -95,11 +102,12 @@ const TEMPLE_SCROLL_LINE = {
     ProtectionGodsMaxima: 'Заклинание богов: золотой купол вокруг — не пропускает ни одного заклинания, кроме божественных (300 маны, потом 5 в секунду)',
     Die: 'Заклинание богов: чёрный луч — убивает любое существо сразу и испепеляет (1000 маны)',
     ImperiusMaxima: 'Заклинание богов: вселиться в любое существо — дракона, сову, босса, другого игрока (500 маны, нужно 750 ячеек)',
+    DivineCreation: 'Заклинание богов: скажите «Да пусть создастся …» и опишите что угодно — дом, замок, целый город, статую, своё существо или растение (1000 маны)',
 };
 /** The ribbon's colour in words (for the hint when a spell isn't learnt yet). */
 /** Ribbon colours of every spell scroll (also the ones a book-bird's book can teach, like «Create a Board»). */
 export const SPELL_RIBBON = { ...SCROLL_SPELL_COLOR, CreateBoard: 0x2ec4b6 };
-export const SCROLL_RIBBON_RU = { Pentagranium: 'кроваво-чёрная', GroundVortex: 'землисто-бурая', VisibleGodi: 'дымчато-розовая', Groundprud: 'охристая', LumosFollowing: 'светло-золотистая', LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Imperius: 'перламутрово-белая', ImperiusMaxima: 'перламутровая с золотом', Die: 'чёрная, как ночь, с фиолетовым отблеском', EarthquakeMaxima: 'бурая', LiquidationMaxima: 'мятная', ProtectionMaxima: 'небесно-голубая', IceMaxima: 'ледяная', JoltMaxima: 'дымчатая', CircleAttack: 'алая', Drawdown: 'землистая', Overgrown: 'травяная', Brainrot: 'розовая', BrainrotMaxima: 'розово-золотая, с чешуйчатым отливом', Waterball: 'синяя с волной', AirBubble: 'прозрачно-голубая', WaveAttack: 'морская', WaterVortex: 'цвета морской волны', WaterVortexSuperMaxima: 'тёмно-синяя, штормовая', Snowman: 'белоснежная', Unfurl: 'парусиновая', CreateCastle: 'каменно-серая', IceCastle: 'ледяная с инеем', IceBridge: 'хрустальная', Breakthrough: 'терракотовая', FireMaxima: 'золотисто-огненная' };
+export const SCROLL_RIBBON_RU = { Nihilis: 'белоснежно-золотая', Pentagranium: 'кроваво-чёрная', GroundVortex: 'землисто-бурая', VisibleGodi: 'дымчато-розовая', Groundprud: 'охристая', LumosFollowing: 'светло-золотистая', LightningStrike: 'золотая', Thunderwave: 'синяя', ToTheSun: 'оранжевая', AvadaKedavra: 'зелёная', Alive: 'коричневая', TotalDestruction: 'чёрная', LetItRain: 'серебряная', AlohomoraMaxima: 'медная', LevitationMaxima: 'сиреневая', BombardoMaxima: 'красная', OvergrownMaxima: 'салатовая', Hellfire: 'багровая', Inspirius: 'сияющая бело-голубая', FirefightingMaxima: 'голубая', CreateHouse: 'янтарная', ImproveHouse: 'белая', WindImpulse: 'светло-серая', Invisibility: 'фиолетовая', GiveMyPower: 'тёмно-золотая', CreatePlanet: 'синяя со звёздами', EnlargePlanet: 'коралловая', TerraformPlanet: 'изумрудная', LevitationSuperMaxima: 'жемчужная', Boom: 'огненно-оранжевая с трещинами', PlanetLiquidation: 'тёмно-малиновая', ProtectionGods: 'сияющая золотая', ProtectionGodsMaxima: 'бледно-золотая, сияющая', Accentric: 'сиреневая', Pilbidrio: 'серебристо-белая', Electrum: 'ярко-голубая с молниями', Imperius: 'перламутрово-белая', ImperiusMaxima: 'перламутровая с золотом', Die: 'чёрная, как ночь, с фиолетовым отблеском', EarthquakeMaxima: 'бурая', LiquidationMaxima: 'мятная', ProtectionMaxima: 'небесно-голубая', IceMaxima: 'ледяная', JoltMaxima: 'дымчатая', CircleAttack: 'алая', Drawdown: 'землистая', Overgrown: 'травяная', Brainrot: 'розовая', BrainrotMaxima: 'розово-золотая, с чешуйчатым отливом', Waterball: 'синяя с волной', AirBubble: 'прозрачно-голубая', WaveAttack: 'морская', WaterVortex: 'цвета морской волны', WaterVortexSuperMaxima: 'тёмно-синяя, штормовая', Snowman: 'белоснежная', Unfurl: 'парусиновая', CreateCastle: 'каменно-серая', DivineCreation: 'светло-золотая, сияющая, с белыми лучами', IceCastle: 'ледяная с инеем', IceBridge: 'хрустальная', Breakthrough: 'терракотовая', FireMaxima: 'золотисто-огненная' };
 const SPELL_LABEL = SPELL_RU;
 /** The base spell of a Maxima form (for favourites and directions). */
 export const baseSpell = (name) => (name || '').replace(/Maxima$/, '');
@@ -126,6 +134,8 @@ export const ITEM_INFO = {
     hammer: { name: 'Молот Тора', icon: '🔨', weight: 4 },
     apple: { name: 'Золотое яблоко', icon: '🍏', weight: 0.2, stack: 10 },
     redApple: { name: 'Яблоко', icon: '🍎', weight: 0.2, stack: 10, heal: 3 }, // (an ordinary apple from an apple tree)
+    ...FLORA_ITEMS, // (the wild plants' things: glowcap_mushroom, fern_frond, azure_berry, sun_herb, frost_shard — MagicFlora.js)
+    baksadi_pear: { name: 'Груша Баксади', icon: '🍐', weight: 0.3, stack: 10, heal: 12 }, // (the Baksadi's pear: more than a golden apple's 10; an ingredient of the potion that lifts a dark mage's curse — its id is fixed)
     meat: { name: 'Сырое мясо', icon: '🥩', weight: 0.4, stack: 10 },
     steak: { name: 'Жареный стейк', icon: '🍖', weight: 0.4, stack: 10 },
     book: { name: 'Книга заклинаний', icon: '📖', weight: 0.6 },
@@ -163,6 +173,13 @@ export const ITEM_INFO = {
     // the plant creatures (Plants.js, PlantLife.js): what a broken telewilpin / a killed carnivorous head leaves — for potions later (no use yet)
     telewilpinLeaf: { name: 'Листок телевильпина', icon: '🍁', weight: 0.05, stack: 10 },
     carnivoreHead: { name: 'Головка плотоядной', icon: '🌿', weight: 0.6, stack: 10 },
+    brightCore: { name: 'Сердцевина Ярколета', icon: '🔥', weight: 0.4, stack: 10 },
+    // the Canaries (Canaries.js): the plain spoils of a swamp people — hide and bones (for crafting later)
+    canaryHide: { name: 'Кожа канарика', icon: '🟫', weight: 0.5, stack: 10 },
+    bone: { name: 'Кость', icon: '🦴', weight: 0.3, stack: 20 },
+    // the invisible world (Invisibles.js, SecondSight.js): only a hero who sees the invisible sees them lying on the ground
+    spencerFeather: { name: 'Перо птички Спенсера', icon: '🪶', weight: 0.03, stack: 10, ghost: true },
+    beslanGrass: { name: 'Трава Беслана', icon: '🌾', weight: 0.04, stack: 20, ghost: true },
     // armour and robes (ArmorTypes.js): a piece {piece: helmet | chest | legs, magic, hp…}; put on by hand or «Suit Up»
     armor: { name: 'Доспех', icon: '🪖', weight: 4 },
     robe: { name: 'Мантия', icon: '🧥', weight: 1 },
@@ -204,6 +221,9 @@ function baseValue(it) {
         case 'book': return 50;
         case 'apple': return 12 * (it.count || 1);
         case 'redApple': return 1 * (it.count || 1);
+        case 'baksadi_pear': return 18 * (it.count || 1);
+        case 'glowcap_mushroom': case 'fern_frond': case 'frost_shard': return 4 * (it.count || 1);
+        case 'azure_berry': case 'sun_herb': return 2 * (it.count || 1);
         case 'meat': return 1 * (it.count || 1);
         case 'steak': return 3 * (it.count || 1);
         case 'arrows': return Math.max(1, Math.round((it.count || 1) * 0.6));
@@ -218,7 +238,12 @@ function baseValue(it) {
         case 'glass': return 2 * (it.count || 1);
         case 'phoenixFeather': return 250 * (it.count || 1);
         case 'telewilpinLeaf': return 60 * (it.count || 1);
+        case 'spencerFeather': return 220 * (it.count || 1);
+        case 'beslanGrass': return 45 * (it.count || 1);
         case 'carnivoreHead': return 140 * (it.count || 1);
+        case 'brightCore': return 180 * (it.count || 1);
+        case 'canaryHide': return 20 * (it.count || 1);
+        case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
         default: return 0;
     }
@@ -242,6 +267,28 @@ const SHIELD_KINDS = [
 const BOW_KINDS = ['Простой лук', 'Охотничий лук', 'Длинный лук'];
 
 let _uid = Math.floor(Math.random() * 1e6);
+/**
+ * The scrolls that raised the health or the mana cells are gone from the game (the author: «не вижу смысла»). One that an old save
+ * (or an old client) still holds is turned into a plain apple, in place (the same uid, so a hand/slot/chest keeps its place). Returns the item.
+ */
+export function retireScroll(it) {
+    if (it && it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue')) {
+        for (const k of Object.keys(it)) if (k !== 'uid') delete it[k];
+        it.kind = 'apple'; it.count = 1;
+    }
+    return it;
+}
+
+/** Turn every retired scroll found anywhere inside a saved structure (a save, an inventory, a chest, a body…) into an apple; how many were turned. */
+export function retireScrollsIn(node, depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 14) return 0;
+    let n = 0;
+    if (Array.isArray(node)) { for (const x of node) n += retireScrollsIn(x, depth + 1); return n; }
+    if (node.kind === 'scroll' && (node.stat === 'hp' || node.stat === 'fatigue')) { retireScroll(node); return 1; }
+    for (const k of Object.keys(node)) { const v = node[k]; if (v && typeof v === 'object') n += retireScrollsIn(v, depth + 1); }
+    return n;
+}
+
 export const newUid = () => 'i' + (++_uid).toString(36) + Math.floor(Math.random() * 1296).toString(36);
 
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
@@ -302,7 +349,7 @@ export function rollIceQueenLoot(r = Math.random, first = true) {
     out.push({ kind: 'crystal', uid: newUid(), count: randInt(r, 2, 4) });
     out.push(spellScroll(pick(r, ICE_SCROLLS))); // (her ice magic: an ice castle, an ice bridge, «Айс Максима», a snowman)
     out.push({ kind: 'potion', uid: newUid(), rec: 'heal', color: 0x9fe8ff }, { kind: 'potion', uid: newUid(), rec: 'heal', color: 0xc8f4ff });
-    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', strong: ['Hellfire', 'LightningStrike'] });
+    if (first) out.push({ kind: 'robe', uid: newUid(), magic: true, color: 0xbfe9ff, named: 'Мантия Ледяной Королевы', tier: 'strong', mag: 1000, magMax: 1000, strong: ['Hellfire', 'LightningStrike'] });
     else if (r() < 0.5) out.push(rollKeyItem(r));
     return out;
 }
@@ -354,7 +401,7 @@ export function rollPirateLoot(r = Math.random, room = 'store') {
 /**
  * What a castle's store chest holds by what it is for (generation 8, CastleFurniture.js; CLAUDE.md: «не крутые предметы»):
  * 'food' — bread, cheese, meat, pies, apples; 'clothes' — wool, a plain robe now and then; 'arms' — arrows, a plain sword, axe,
- * bow or shield; 'scrolls' — scrolls of health and strength, now and then a plain spell. Plain things, and only now and then ONE
+ * bow or shield; 'scrolls' — plain spell scrolls. Plain things, and only now and then ONE
  * precious one — less often than the general rule (KEY_CHANCE) — the coins come apart, in their pouch (CastleTreasure.js).
  */
 export function rollStoreLoot(r = Math.random, flavor = 'food', count = 0) {
@@ -378,8 +425,6 @@ function storeThing(r, flavor) {
             if (x < 0.8) return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: false, bonus: 0, arrows: randInt(r, 5, 12) };
             return { kind: 'shield', uid: newUid(), type: randInt(r, 0, 1), magic: false, max: 0 };
         case 'scrolls':
-            if (x < 0.35) return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
-            if (x < 0.75) return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
             return rollScroll(r, true);
         default: // 'food'
             if (x < 0.3) return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 3) };
@@ -388,6 +433,47 @@ function storeThing(r, flavor) {
             if (x < 0.92) return { kind: 'pie', uid: newUid(), count: 1 };
             return { kind: 'apple', uid: newUid(), count: randInt(r, 1, 3) };
     }
+}
+
+/**
+ * A chest of a dungeon on the ground (Dungeons.js; the author: in the magical ones «магические вещи, в основном свитки: практически нет
+ * немагических», in the plain ones «обычные вещи и оружие, изредка магическое»). `flavor` 'magic' — the ruined chapels, temples and citadels
+ * of the mages: spell scrolls and pentagram scrolls (a scroll is the only way a spell or a pentagram is learned), wands, magic robes, magic
+ * weapons and armour; a plain thing hardly ever. `flavor` 'ruin' — the fallen towers, manors and forts: weapons, shields, armour, bows and
+ * arrows, food; a magic thing now and then. `size` ('S' | 'M' | 'L'): the great ones hold the mightier scrolls and more precious things.
+ * (A dungeon UNDER the ground has no flavor: its chests are as a cave's — rollLoot with `deep`.)
+ */
+export function rollDungeonLoot(r = Math.random, flavor = 'ruin', count = 0, size = 'S') {
+    const n = count > 0 ? count : CHEST_THINGS;
+    const big = size === 'L' ? 1 : size === 'M' ? 0.5 : 0;
+    const out = [];
+    while (out.length < n) out.push(flavor === 'magic' ? magicDungeonThing(r, big, size) : ruinDungeonThing(r, big));
+    return out;
+}
+
+function magicDungeonThing(r, big, size) {
+    if (r() < 0.2 * big) return rollKeyItem(r); // (a great ruin: a precious thing more often)
+    const x = r() * 100;
+    if (x < 58) { for (let i = 0; i < 30; i++) { const it = rollScroll(r, size !== 'L'); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); }
+    if (x < 70) { const ids = figureIds(); return pentagramScroll(ids[Math.floor(r() * ids.length) % ids.length], newUid()); }
+    if (x < 79) return rollWand(r);
+    if (x < 86) return makeRobe(true, r);
+    if (x < 92) return rollKeyItem(r);
+    if (x < 96) return makePiece(pick(r, PIECES), { magic: true });
+    return { kind: 'bread', uid: newUid(), count: randInt(r, 1, 2) };
+}
+
+function ruinDungeonThing(r, big) {
+    if (r() < 0.06 + 0.1 * big) return rollKeyItem(r); // (now and then a precious thing)
+    const x = r() * 100, mg = (p) => r() < p;
+    if (x < 26) { const m = mg(0.1); return { kind: 'weapon', type: r() < 0.5 ? 'sword' : 'axe', magic: m, bonus: m ? randInt(r, 1, 60) : 0, uid: newUid() }; }
+    if (x < 38) { const m = mg(0.08); return { kind: 'shield', uid: newUid(), type: randInt(r, 0, m ? 2 : 1), magic: m, max: m ? randInt(r, 20, 50) : 0 }; }
+    if (x < 50) return makePiece(pick(r, PIECES), mg(0.06) ? { magic: true } : undefined);
+    if (x < 62) { const m = mg(0.1); return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; }
+    if (x < 70) return { kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) };
+    if (x < 84) return storeThing(r, 'food');
+    if (x < 90) return makeRobe(false, r);
+    return rollScroll(r, true);
 }
 
 /** A chest in a sea castle's port: the sailors' stores — food, arrows, wool; sometimes a fishing rod, rarely something precious. */
@@ -441,9 +527,9 @@ export const KEY_CHANCE = 0.25;
  * of «Inspirius» turns up only for one whose maximum is already 500 (the author) — for anyone
  * else it never does.
  */
-export const LOOT_FOR = { maxMana: 0 };
+export const LOOT_FOR = { maxMana: 0, known: null }; // (known: (scroll) => bool — the opener already knows it: SpellBook.scrollKnown; Game.openChest sets it)
 
-/** A scroll of a chest (health, strength, a spell…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
+/** A scroll of a chest (a spell, a pentagram…). `mild`: the mightiest spells are rerolled most of the time (a plain chest's scroll). */
 export function rollScroll(r = Math.random, mild = false) {
     const it = _rollScroll(r);
     return mild && MIGHTY.has(it.spell) && r() < 0.65 ? _rollScroll(r) : it;
@@ -451,25 +537,58 @@ export function rollScroll(r = Math.random, mild = false) {
 const MIGHTY = new Set(['Imperius', 'AvadaKedavra', 'Pilbidrio', 'TotalDestruction', 'Hellfire', 'Inspirius', 'LevitationMaxima', 'GiveMyPower', 'CircleAttack', 'WaterVortexSuperMaxima', 'CreateCastle']);
 /**
  * The scrolls of a chest by weight (the author: the simple ones more often, the strong ones rarer). `hp` / `fatigue`:
- * health and mana scrolls. Every spell a beginner does not know has a scroll somewhere (tests/unit/spell-book.test.js):
+ * (no health or mana scrolls any more). Every spell a beginner does not know has a scroll somewhere (tests/unit/spell-book.test.js):
  * here, or the bosses' own (rollIceQueenLoot, rollPirateLoot, a royal chest), the towers' shops, the book-birds.
  */
 export const SCROLL_WEIGHTS = [
-    ['hp', 17], ['fatigue', 2.3],
     // simple
     ['LightningStrike', 12], ['Thunderwave', 12], ['ToTheSun', 5], ['AlohomoraMaxima', 6], ['ImproveHouse', 4], ['CreateBoard', 4.5],
     ['Brainrot', 3], ['Unfurl', 3], ['Waterball', 3], ['Overgrown', 3], ['Snowman', 2.5], ['AirBubble', 2.5], ['WaveAttack', 2.5],
     ['Drawdown', 2.5], ['Groundprud', 3], ['Breakthrough', 2.5], ['LetItRain', 2], ['CreateHouse', 2], ['LumosFollowing', 3],
     // the Maximas and the medium ones
     ['BombardoMaxima', 4], ['OvergrownMaxima', 3], ['FirefightingMaxima', 3], ['Alive', 3], ['EarthquakeMaxima', 2], ['FireMaxima', 2], ['LiquidationMaxima', 2],
-    ['ProtectionMaxima', 2], ['JoltMaxima', 2], ['BrainrotMaxima', 1.2], ['IceMaxima', 1.5], ['WindImpulse', 1.5], ['Invisibility', 1.5], ['VisibleGodi', 2.5], ['GroundVortex', 2], ['GiveMyPower', 2.5],
+    ['ProtectionMaxima', 2], ['JoltMaxima', 2], ['BrainrotMaxima', 1.2], ['IceMaxima', 1.5], ['WindImpulse', 1.5], ['Invisibility', 1.5], ['VisibleGodi', 2.5], ['Nihilis', 2], ['GroundVortex', 2],
     // strong and rare
     ['AvadaKedavra', 4], ['Accentric', 2.5], ['Electrum', 2.5], ['Pilbidrio', 1.2], ['TotalDestruction', 1.5], ['Hellfire', 1.5],
     ['LevitationMaxima', 1.5], ['WaterVortex', 1.2], ['CircleAttack', 1], ['WaterVortexSuperMaxima', 0.8], ['IceBridge', 0.8], ['CreateCastle', 0.5],
     ['pent:devil', 0.9], ['pent:*', 0.7], // (the pentagrams' scrolls — rare, Pentagrams.js)
+    ['pent:night', 0.6], ['pent:sight', 0.6], // (the white pentagrams of sight — SightRules.js: as rare as the devil's, so a hero can find them)
     ['Imperius', 1.2], // (the mind into another body: rare, as the strong ones; a plain chest rerolls it most of the time — MIGHTY)
 ];
 const SCROLL_TOTAL = SCROLL_WEIGHTS.reduce((a, [, w]) => a + w, 0);
+
+/**
+ * ONE place for «a scroll already known never comes again» (the author): every scroll in `items` that the opener (LOOT_FOR.known) already knows is
+ * rolled again from the general scrolls; when every scroll there is is known, the place is taken by another plain thing (never a scroll). The things are
+ * changed in place; the array is returned. Without `known` (Creative, no opener) nothing changes.
+ */
+export function freshScrolls(items, r = Math.random, known = LOOT_FOR.known) {
+    if (!known || !Array.isArray(items)) return items;
+    const stale = (x) => !!x && x.kind === 'scroll' && (x.stat === 'spell' || x.stat === 'pentagram') && known(x);
+    for (let i = 0; i < items.length; i++) {
+        if (!stale(items[i])) continue;
+        let n = null;
+        for (let t = 0; t < 40 && !n; t++) { const c = _rollScroll(r); if (!stale(c)) n = c; }
+        for (let t = 0; t < 12 && !n; t++) { const c = rollPlainItem(r); if (c.kind !== 'scroll') n = c; }
+        items[i] = n || { kind: 'bread', uid: newUid(), count: 1 };
+    }
+    return items;
+}
+
+/**
+ * A scroll for a SHOP's counter (the author: the shops too): if the buyer (LOOT_FOR.known) already knows it, another simple spell of `pool` he does not
+ * know, else a plain apple (the scrolls of health / strength are gone). Pure with `r`. A shop's counter is one for everybody, so the filter is the knowledge of the computer that
+ * stocks it (the host's, in a game with friends).
+ */
+export function freshShopScroll(it, r = Math.random, pool = null) {
+    const known = LOOT_FOR.known;
+    if (!known || !it || it.kind !== 'scroll' || (it.stat !== 'spell' && it.stat !== 'pentagram') || !known(it)) return it;
+    if (pool?.length) {
+        const s = Math.floor(r() * pool.length);
+        for (let i = 0; i < pool.length; i++) { const c = spellScroll(pool[(s + i) % pool.length]); if (!known(c)) return c; }
+    }
+    return { kind: 'apple', uid: newUid(), count: 1 };
+}
 
 /** A scroll that teaches this spell. */
 export const spellScroll = (spell) => ({ kind: 'scroll', uid: newUid(), stat: 'spell', spell });
@@ -481,12 +600,10 @@ function _rollScroll(r) {
     let y = r() * SCROLL_TOTAL;
     for (const [k, w] of SCROLL_WEIGHTS) {
         if ((y -= w) >= 0) continue;
-        if (k === 'hp') return { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) };
-        if (k === 'fatigue') return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
         if (k.startsWith('pent:')) { const ids = figureIds(); return pentagramScroll(k === 'pent:*' ? ids[Math.floor(r() * ids.length) % ids.length] : k.slice(5), newUid()); } // ('pent:*': any other pentagram of the table)
         return spellScroll(k);
     }
-    return { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
+    return spellScroll('LightningStrike');
 }
 
 /** The sea's scrolls (a pirate's plunder, a ship's or a port's chest): the sails and the water. */
@@ -536,9 +653,9 @@ export function rollPlainItem(r = Math.random, deep = false) {
  * happen now and then — the shares are the author's, thing by thing.)
  */
 export const CAVE_LOOT = [
-    ['spellScroll', 53.5], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5], ['hpScroll', 4.1],
+    ['spellScroll', 57.6], ['armor', 10], ['shield', 8], ['weapon', 7], ['wand', 4.5],
     ['arrows', 3], ['robe', 3], ['magicArmor', 2.6], ['bow', 2], ['magicRobe', 1], ['backpack', 1], ['hammer', 0.3],
-]; // (no mana scroll: the author — «useless»; its share went to the spell scrolls)
+]; // (no mana scroll and no health scroll: the author — «не вижу смысла»; their shares went to the spell scrolls)
 const CAVE_MAGIC = 0.18; // (about every fifth weapon, shield or bow of a cave is a magic one — as before)
 const CAVE_MAKE = {
     spellScroll: (r) => { for (let i = 0; i < 30; i++) { const it = rollScroll(r, true); if (it.stat === 'spell') return it; } return spellScroll('LightningStrike'); },
@@ -549,7 +666,6 @@ const CAVE_MAKE = {
     bow: (r) => { const m = r() < CAVE_MAGIC; return { kind: 'bow', uid: newUid(), type: randInt(r, 0, 2), magic: m, bonus: m ? randInt(r, 1, 60) : 0, arrows: m ? 10 : randInt(r, 5, 12) }; },
     arrows: (r) => ({ kind: 'arrows', uid: newUid(), count: randInt(r, 5, 15) }),
     wand: (r) => rollWand(r),
-    hpScroll: (r) => ({ kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) }),
     robe: (r) => makeRobe(false, r),
     magicRobe: (r) => makeRobe(true, r),
     backpack: (r) => ({ kind: 'backpack', uid: newUid(), slots: randInt(r, 3, 5), color: Math.floor(r() * 0xffffff) }),
@@ -635,7 +751,7 @@ function describeItemBase(it) {
             if (it.stat === 'pentagram') return { title: `📜 ${figureOf(it.pent)?.ru || 'Пентаграмма'}`, color: figureOf(it.pent)?.ink ?? 0xc01830, lines: [kindLine(it), `Сожгите свиток («Инферно») — и вы выучите эту пентаграмму навсегда. Чтобы её создать, направьте палочку на землю и скажите <b>«${pentagramSpell(it.pent) || 'Pentagranium'}»</b>: рисунок нарисуется сам. Пока свиток не сожжён, пентаграмма не получится`, ...(it.pent === 'devil' ? ['Чем полезна: позволяет получить ещё 25% силы убитого вами волшебника — тело должно лежать внутри круга'] : [])] };
             if (it.stat === 'flight') return { title: '📜 Свиток полёта', color: 0x9fd8ff, lines: ['Сожгите его («Инферно»): вы научитесь заклинанию <b>«Флайн»</b>'] };
             if (it.stat === 'spell') return { title: `📜 Свиток «${SPELL_LABEL[it.spell] || it.spell}»`, color: SPELL_RIBBON[it.spell] || 0xffe9a8, lines: [kindLine(it), `Сожгите его («Инферно»): вы научитесь заклинанию <b>«${SPELL_LABEL[it.spell] || it.spell}»</b>`, ...(it.spell === 'LetItRain' ? ['Рука или палочка к небу и «Let it rain»: гроза с ливнем на 2 игровых часа'] : []), ...(it.spell === 'CreateHouse' ? ['Нужны 3 шерсти и 10 песка (достаточно держать в ячейках) и 3 дерева неподалёку; палочку на землю и «Create a House» — 20 маны и 0,5 в секунду 10 секунд'] : it.spell === 'ImproveHouse' ? ['Ресурсы в ячейках (или рядом с домом), палочку на дом и «Improve a House»: дом растёт до 5-го уровня, каждый уровень вдвое дороже'] : []), ...(it.spell === 'CreateBoard' ? ['Его можно выучить и из книги птицы-книги'] : []), ...(TEMPLE_SCROLL_LINE[it.spell] ? [TEMPLE_SCROLL_LINE[it.spell], 'Первое использование этого заклинания даст <b>+100 ячеек маны</b>', 'Свиток из библиотеки заброшенного храма богов'] : [])] };
-            return { title: '📜 Свиток', color: 0xffe9a8, lines: [it.stat === 'hp' ? `Сожгите его: здоровье +<b>${it.amount}</b>` : `Сожгите его: мана +<b>${it.amount}</b>`] };
+            return { title: '📜 Свиток', color: 0xffe9a8, lines: ['Сожгите его («Инферно»), чтобы узнать, что в нём'] };
         case 'book':
             if (it.lore && LORE_BY_ID.has(it.lore)) return { title: `📗 «${LORE_BY_ID.get(it.lore).title}»`, color: LORE_BY_ID.get(it.lore).trim, lines: ['Книга из летописи мира: ' + LORE_BY_ID.get(it.lore).sub.toLowerCase(), 'Раскройте двумя руками и листайте пальцем', 'Это не книга заклинаний — её просто читают'] };
             if (it.runbook) return { title: '📕 Бегущая книга', color: 0xffd23f, lines: ['Раскройте её двумя руками и прочитайте единственную страницу:', 'бег на <b>30%</b> быстрее, пока вы живы', 'Это не заклинание — только быстрота'] };
@@ -652,6 +768,8 @@ function describeItemBase(it) {
             return { title: '🔨 Молот Тора', color: 0xbfe3ff, lines: ['В грозу поднимите его вверх — в него ударит молния', 'Наведите на цель: молния бьёт туда (до 3 раз)', `Заряды: <b>${it.charges || 0}</b>`] };
         case 'arrows': return { title: '➶ Стрелы', color: 0xd9b46c, lines: [`Стрел: <b>${it.count}</b>`, 'Возьмите — они сами лягут в колчан лука (до 25)'] };
         case 'apple': return { title: '🍏 Золотое яблоко', color: 0xffd700, lines: ['Поднесите ко рту: +10 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 40% за золотое яблоко'] };
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': return { title: `${FLORA_ITEMS[it.kind].icon} ${FLORA_ITEMS[it.kind].name}`, color: FLORA_ITEM_TEXT[it.kind].color, lines: FLORA_ITEM_TEXT[it.kind].lines };
+        case 'baksadi_pear': return { title: '🍐 Груша Баксади', color: 0xb98cff, lines: ['Поднесите ко рту: +12 HP — больше, чем даёт золотое яблоко', 'Растёт на огромном фиолетовом дереве Баксади', 'Нужна для зелья, снимающего проклятие тёмного мага'] };
         case 'redApple': return { title: '🍎 Яблоко', color: 0xc8202a, lines: ['Поднесите ко рту: +2 HP', 'Коня можно приручить яблоком', 'Пегас подпускает: 9% за яблоко'] };
         case 'meat': return { title: `🥩 Сырое мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xd9534f, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`, `Пожарьте на костре («Fire») или огнём заклинания («Инферно», «Адский огонь») — будет +${2 * foodHeal(it)}`] };
         case 'steak': return { title: `🍖 Жареное мясо${MEAT_RU[it.from] ? ' (' + MEAT_RU[it.from] + ')' : ''}`, color: 0xb5651d, lines: [`Поднесите ко рту: +${foodHeal(it)} HP`] };
@@ -669,9 +787,14 @@ function describeItemBase(it) {
         case 'glass': return { title: '🔷 Осколки стекла', color: 0xdff3ff, lines: [`Осколков: <b>${it.count || 1}</b>`, 'Выпадают из разбитого окна. Ингредиент зелья невидимости'] };
         case 'armor': case 'robe': return describeArmor(it);
         case 'owlFeather': return { title: '🪶 Перо совы', color: 0xc7a6ff, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Перо умной волшебной совы. Переливается всеми цветами. Остаётся от убитой совы, реже — слетает с испуганной', 'Ингредиент зелья светлого ума'] };
+        case 'spencerFeather': return { title: '🪶 Перо птички Спенсера', color: 0xff7ab8, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Светящееся розовое перо невидимой птички. Видно его только тому, кто видит невидимое', 'Чтобы получить это зрение навсегда, положите перо в инвентарь (или в круг) и встаньте в круг «Pentagranium Spectris» — перо сгорит'] };
+        case 'beslanGrass': return { title: '🌾 Трава Беслана', color: 0x7ff2e0, lines: [`Пучков: <b>${it.count || 1}</b>`, 'Сияющая трава невидимого мира. Видна только тем, кто видит невидимое', 'Заменяет перо птички Спенсера в пентаграмме видения невидимых'] };
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'canaryHide': return { title: '🟫 Кожа канарика', color: 0x8a6a44, lines: [`Кож: <b>${it.count || 1}</b>`, 'Грубая плотная кожа болотного жителя, с жёлтой бахромой из перьев', 'Её можно продать на рынке; позже из неё будут делать вещи'] };
+        case 'bone': return { title: '🦴 Кость', color: 0xe6dcba, lines: [`Костей: <b>${it.count || 1}</b>`, 'Крепкая жёлтая кость. Её можно продать на рынке; позже из костей будут делать украшения и инструменты'] };
+        case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
         case 'carnivoreHead': return { title: '🌿 Головка плотоядной', color: 0x6fb83a, lines: [`Головок: <b>${it.count || 1}</b>`, 'Оторванная ловушка-пасть плотоядного растения: зубчики, жилки, липкая слизь', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
-        case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелья светлого ума'] };
+        case 'phoenixFeather': return { title: '🪶 Перо феникса', color: 0xff7a2a, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Осталось от убитого феникса. Светится тёплым огнём', 'Ингредиент зелий: светлого ума и снятия проклятия тёмного мага'] };
         default: return { title: ITEM_INFO[it.kind]?.name || 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     }
 }
@@ -970,6 +1093,17 @@ function appleModel(it, red = false) {
     return g;
 }
 
+/** A Baksadi pear in the hand: the tree's pear (AppleTrees.pearGeometry — the same shape), a faint lilac glow, a little leaf on the stalk. */
+function pearModel() {
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(pearGeometry(), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.38, metalness: 0.1, emissive: 0x8a4cd8, emissiveIntensity: 0.4, vertexColors: true }));
+    m.scale.setScalar(0.42);
+    m.position.y = -0.02;
+    g.add(m);
+    g.add(box(0.07, 0.008, 0.032, mat(0x7a3fb8), 0.045, 0.1)).rotation.z = 0.35;
+    return g;
+}
+
 function breadModel() {
     const g = new THREE.Group();
     g.add(box(0.3, 0.12, 0.15, mat(0xc68a3e)));
@@ -1005,7 +1139,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1027,6 +1161,8 @@ function buildItemModel(it) {
         case 'iceRod': return iceRodModel();
         case 'apple': return appleModel(it);
         case 'redApple': return appleModel(it, true);
+        case 'baksadi_pear': return pearModel();
+        case 'glowcap_mushroom': case 'fern_frond': case 'azure_berry': case 'sun_herb': case 'frost_shard': return floraItemModel(FLORA_OF_ITEM[it.kind]);
         case 'meat': return meatModel(false);
         case 'arrows': { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const a = arrowModel(); a.position.set((i - 2) * 0.12, 0, 0); a.rotation.z = (i - 2) * 0.06; g.add(a); } return g; }
         case 'steak': return meatModel(true);
@@ -1046,7 +1182,12 @@ function buildItemModel(it) {
         case 'phoenixFeather': return phoenixFeatherModel();
         case 'telewilpinLeaf': return telewilpinLeafModel();
         case 'carnivoreHead': return carnivoreHeadItemModel();
+        case 'brightCore': return brightCoreModel();
+        case 'canaryHide': return canaryHideModel();
+        case 'bone': return boneModel();
         case 'owlFeather': return owlFeatherModel();
+        case 'spencerFeather': return spencerFeatherItem();
+        case 'beslanGrass': return beslanBundleItem();
         case 'armor': case 'robe': return armorItemModel(it);
         case 'bronzeHorn': return hornModel(0xb87333, true);
         case 'minotaurHorn': return hornModel(0x3a3028, false);

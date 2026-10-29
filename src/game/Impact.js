@@ -119,7 +119,7 @@ export class HeadJolt {
  */
 export const SPELL_PHYSICS = {
     Lumos: null, LumosMaxima: null, Nox: null, Draw: null, Reveal: null, Accio: null, Alohomora: null, AlohomoraMaxima: null, Lock: null, /* (a lock opens / Lock shuts a door: nobody is pushed — Alohomora.js TARGETS) */ ChangeColor: null, CreateBed: null,
-    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, CreateCastle: null, /* (the castle waits for bodies to go — nobody is pushed: CastleMagic.js) */ Stand: null,
+    Gather: null, CreateFloor: null, CreateWall: null, CreateCeiling: null, BuildRoof: null, CreateDoor: null, CreateBoard: null, CreateCastle: null, DivineCreation: null, /* (the gods' making: nobody pushed — DivineCreation.js) */ /* (the castle waits for bodies to go — nobody is pushed: CastleMagic.js) */ Stand: null,
     Brainrot: null, BrainrotMaxima: null, /* (no push: it calms) */ Imperius: null, ImperiusMaxima: null, /* (the mind goes in — no push: Imperius.js) */ ToTheSun: null, GiveMyPower: null, CreatePlanet: null, EnlargePlanet: null, TerraformPlanet: null, LevitationSuperMaxima: null, PlanetLiquidation: null, /* (the gods' scrolls: only planets — nobody is pushed, PlanetMagic.js) */ LetItRain: null, Storm: null, LightningCatch: null, LightningHold: null, Rescue: null, Pause: null, Flight: null, Up: null,
     AirBubble: null, AirBubbleMaxima: null, Waterball: null, Maxima: null, WaterForming: null, Frozen: null,
     Protection: null, ProtectionMaxima: null, ProtectionGods: null, ProtectionGodsMaxima: null, /* (the gods' shield pushes nobody: ProtectionGods.js) */ ProtectionHouse: null, ProtectionInvisible: null, ProtectionHouseGrant: null, WardDispel: null, WardGrow: null, // (a house's sphere pushes only who walks into it: HouseWards.js)
@@ -172,6 +172,7 @@ export const SPELL_PHYSICS = {
     Drawdown: null, DrawdownMaxima: null, Stitching: null, Invisibility: null, CreateBridge: null, Groundprud: null, /* (the ground rises where nobody stands — Groundprud.js) */ // («Create a Bridge»: planks laid where nobody stands — Bridge.js)
     GroundVortex: { push: 7, jolt: 0.3 }, GroundShield: null, /* (a flying block of the earth vortex: GroundVortex.js; the shield word pushes nobody) */
     Pentagranium: null, // («Pentagranium <Name>»: a drawing on the ground — pushes nobody, Pentagranium.js)
+    Nihilis: null, // («Nihilis Atra»: a cone of light against black magic — it pushes nobody, Nihilis.js)
     VisibleGodi: null, // («Visible Godi»: a look through a wall — pushes nobody, VisibleGodi.js)
     Fireworks: null, // («Fireworks»: sparks high up — they push and hurt nobody, Fireworks.js)
     Liquidation: { push: 2, jolt: 1.5 }, LiquidationMaxima: { push: 2, jolt: 1.5 }, // (a splash: −3 HP, a little shove — Liquidation.js)

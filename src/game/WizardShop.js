@@ -1,14 +1,14 @@
 /**
  * WizardShop.js — what wizards keep and sell (pure, node-testable).
  *
- *  - A chest in a wizard's house: scrolls (health, strength), now and then a spell
+ *  - A chest in a wizard's house: spell scrolls and food, now and then a spell
  *    scroll, a spell book, a plain wand; else food.
  *  - The scroll shop of a tower: 3 scrolls on the counter (common ones mostly);
  *    the price depends on the scroll's strength — always more than a merchant
  *    pays for it (so nobody gets rich buying here and selling at the market).
  */
 
-import { newUid, itemValue, SPELL_RU, fitThings } from './ItemTypes.js';
+import { newUid, itemValue, SPELL_RU, fitThings, freshShopScroll } from './ItemTypes.js';
 import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
 import { pentagramScroll, figureIds } from './PentagramRules.js';
@@ -46,7 +46,8 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
     const n = randInt(r, 1, rich ? 3 : 2) + (rich && r() < 0.3 ? 1 : 0);
     for (let i = 0; i < n; i++) {
         const x = r();
-        if (x < 0.55) out.push(r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) });
+        if (x < 0.30) out.push({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: pick(r, ['ToTheSun', 'Thunderwave', 'LightningStrike', pick(r, SHOP_SPELLS)]) });
+        else if (x < 0.55) out.push({ ...pick(r, [{ kind: 'bread', count: 1 }, { kind: 'cheese', count: 1 }, { kind: 'apple', count: 1 }, { kind: 'pie', count: 1 }]), uid: newUid() });
         else if (x < 0.64) {
             const y = r();
             out.push({ kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.3 ? 'ToTheSun' : y < 0.55 ? 'Thunderwave' : y < 0.7 ? 'LightningStrike' : pick(r, SHOP_SPELLS) });
@@ -59,8 +60,8 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
     if (arm) out.push(arm);
     const things = count > 0 ? fitThings(out, count, r) : out;
     if (lone && r() < LONE_HOUSE.CHANCE) {
-        // (it takes the place of the plainest thing: food, a health / mana scroll — else a random one; never an extra, the chest keeps its count)
-        const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || (it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue'));
+        // (it takes the place of the plainest thing: food — else a random one; never an extra, the chest keeps its count)
+        const plain = (it) => ['bread', 'cheese', 'apple', 'pie'].includes(it.kind) || false;
         let at = things.findIndex(plain);
         if (at < 0) at = Math.floor(r() * things.length) % Math.max(1, things.length);
         if (things.length) things[at] = rollHouseThing(r); else things.push(rollHouseThing(r));
@@ -69,7 +70,7 @@ export function rollWizardHouseLoot(r = Math.random, rich = false, count = 0, lo
 }
 
 /** The wizards' own spells (the towers' shop and their houses): what a beginner does not know yet — the strong ones once each. */
-export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'VisibleGodi', 'GroundVortex', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
+export const SHOP_SPELLS = ['LumosFollowing', 'LumosFollowing', 'Brainrot', 'Brainrot', 'Snowman', 'Overgrown', 'Overgrown', 'Drawdown', 'Drawdown', 'Groundprud', 'VisibleGodi', 'Nihilis', 'GroundVortex', 'JoltMaxima', 'ProtectionMaxima', 'ProtectionMaxima',
     'EarthquakeMaxima', 'LiquidationMaxima', 'IceMaxima', 'CircleAttack', 'Imperius'];
 
 /** The price of a scroll in a tower's shop (coins). */
@@ -77,29 +78,27 @@ export function scrollShopPrice(it) {
     if (!it || it.kind !== 'scroll') return null;
     const n = it.amount || 1;
     switch (it.stat) {
-        case 'hp': return 70 + 10 * n;
-        case 'fatigue': return 65 + 5 * n;
         case 'flight': return 380;
         case 'pentagram': return 380; // (a drawing-scroll of a pentagram: Pentagrams.js)
-        case 'spell': return { LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, Imperius: 850, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
+        case 'spell': return { LumosFollowing: 180, ToTheSun: 240, Thunderwave: 260, LightningStrike: 320, Brainrot: 260, Nihilis: 360, Snowman: 260, Overgrown: 280, Drawdown: 280, JoltMaxima: 340, ProtectionMaxima: 360, EarthquakeMaxima: 380, LiquidationMaxima: 380, IceMaxima: 420, CircleAttack: 900, AvadaKedavra: 500, Accentric: 500, Electrum: 550, Pilbidrio: 800, Imperius: 850, TotalDestruction: 900, Inspirius: 3000 }[it.spell] ?? 300;
         default: return 100;
     }
 }
 
-/** One scroll for the shop's counter: common 75 % (health / strength), spells 25 % (no flight: only the swift book-bird teaches it). */
+/** One scroll for the shop's counter: a spell (no flight: only the swift book-bird teaches it), a pentagram's drawing now and then. */
 export function rollShopScroll(r = Math.random) {
+    return freshShopScroll(rollShopScroll0(r), r, SHOP_SPELLS); // (a scroll the buyer already knows is another one)
+}
+function rollShopScroll0(r) {
     const x = r();
-    if (x < 0.75) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
-    if (x < 0.78) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)
+    if (x < 0.03) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)
     const y = r();
     return { kind: 'scroll', uid: newUid(), stat: 'spell', spell: y < 0.25 ? 'ToTheSun' : y < 0.45 ? 'Thunderwave' : y < 0.6 ? 'LightningStrike' : pick(r, SHOP_SPELLS) };
 }
 
-/** «свиток здоровья +3», «свиток «Lightning Strike»», «свиток полёта». */
+/** «свиток «Lightning Strike»», «свиток полёта». */
 export function scrollName(it) {
     if (!it || it.kind !== 'scroll') return 'свиток';
-    if (it.stat === 'hp') return `свиток здоровья +${it.amount || 1}`;
-    if (it.stat === 'fatigue') return `свиток маны +${it.amount || 1}`;
     if (it.stat === 'flight') return 'свиток полёта';
     if (it.stat === 'spell') return `свиток «${SPELL_RU[it.spell] || it.spell}»`;
     if (it.stat === 'pentagram') return 'свиток пентаграммы';

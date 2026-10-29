@@ -1,5 +1,5 @@
 /**
- * Buildings.js — the different buildings of the settlements (world generation 11; BUILDINGS_FROM_GEN, Terrain.js).
+ * Buildings.js — the different buildings of the settlements (world generation 17; BUILDINGS_FROM_GEN, Terrain.js).
  *
  * The author: «сейчас в деревнях одни и те же дома… больше РАЗНЫХ зданий: церковь, кузница, таверна, мельница, колодец,
  * конюшня, пекарня, лавка травника, амбар». Pure data (no THREE): the blocks go into the settlement's plan (`Plan.box`), the
@@ -25,7 +25,7 @@
 import { BLOCK } from './Terrain.js';
 import { createRng } from '../core/math.js';
 import { SHAPE } from './BlockShapes.js';
-import { rotLot, inwardRy, CHEST_GAP, HOUSE_CHEST_SCALE, placeChests, floorCells } from './Castles.js';
+import { rotLot, inwardRy, CHEST_GAP, HOUSE_CHEST_SCALE, placeChests, floorCells, BIG_LOT } from './Castles.js';
 
 /** What there is: the name for the player, a big lot or a normal one. */
 export const BUILDING_KINDS = {
@@ -732,9 +732,12 @@ export function placeTownBuildings(p, s, out, lots, used, g) {
         if (!best) continue;
         const lot = best.lot;
         taken.add(lot);
+        // (generation 14's roomy lots lie further from the road: the building is moved up to it, its front always 9 m from the road's middle)
+        const [sa, sb] = rot(0, s.bigHouses ? 9 - BIG_LOT.OFF : 0, lot.face);
+        const cu = lot.u + sa, cv = lot.v + sb;
         used.push({ u: lot.u, v: lot.v, big });
-        const node = buildBuilding(p, kind, lot.u, lot.v, lot.face, rng, s, out);
+        const node = buildBuilding(p, kind, cu, cv, lot.face, rng, s, out);
         const [ra, rb] = rot(0, -9, lot.face);
-        p.link(node, p.node(lot.u + ra, lot.v + rb, 0));
+        p.link(node, p.node(cu + ra, cv + rb, 0));
     }
 }

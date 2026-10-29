@@ -405,3 +405,14 @@ export class IceCastleSite {
         return list.length ? [list] : [];
     }
 }
+
+/**
+ * Where a visitor arrives at the palace (Creative «У Ледяной Королевы»): the ledge beyond the gorge, at the foot of the ice
+ * staircase, facing the palace — 40 m and more from the Queen, the guards (at the gates) far ahead.
+ * @returns {{x:number,z:number,yaw:number}} yaw is a bearing atan2(dx, dz) to the palace
+ */
+export function iceApproach(P) {
+    const M = P.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT;
+    const a = iceLocal(P, 0, P.R + M.LEDGE[0] + 4), c = iceLocal(P, 0, 0);
+    return { x: Math.round(a.x), z: Math.round(a.z), yaw: Math.atan2(c.x - a.x, c.z - a.z) };
+}

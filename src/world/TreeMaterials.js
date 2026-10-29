@@ -15,6 +15,8 @@ import { applySkyComp } from './VoxelShading.js';
 export const TREE_WIND = { time: { value: 0 }, strength: { value: 1 } };
 /** The golden apple tree's light (Animals.js pulses it: soft by day, bright by night). */
 export const GOLD_GLOW = { value: 0.5 };
+/** The Baksadi's violet light (AppleTrees.js pulses it: faint by day, glowing at night). */
+export const VIOLET_GLOW = { value: 0.18 };
 
 let _atlas = null;
 /** The leaf pictures (made once: on the loading screen — Game.prewarm). */
@@ -99,13 +101,14 @@ if (vTreeBark > 0.5) {
     diffuseColor.rgb *= mix(0.92, k, near);
 }`);
         if (glow) {
-            shader.uniforms.uGoldGlow = GOLD_GLOW;
+            const violet = glow === 'violet';
+            shader.uniforms.uGoldGlow = violet ? VIOLET_GLOW : GOLD_GLOW;
             shader.fragmentShader = shader.fragmentShader
                 .replace('#include <common>', '#include <common>\nuniform float uGoldGlow;')
-                .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.85, 0.45) * uGoldGlow * (vTreeBark > 0.5 ? 0.25 : 1.0);');
+                .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * ' + (violet ? 'vec3(0.78, 0.5, 1.0)' : 'vec3(1.0, 0.85, 0.45)') + ' * uGoldGlow * (vTreeBark > 0.5 ? 0.25 : 1.0);');
         }
     };
-    m.customProgramCacheKey = () => (glow ? 'tree-leaf-gold' : 'tree-leaf');
+    m.customProgramCacheKey = () => (glow === 'violet' ? 'tree-leaf-violet' : glow ? 'tree-leaf-gold' : 'tree-leaf');
     return m;
 }
 
@@ -115,7 +118,7 @@ export function sharedTreeMaterials() {
     if (_shared) return _shared;
     const leaves = applySkyComp(leafMaterial());
     // (the bark is drawn with the leaves' material too — its points take the atlas's plain cell: one shader for a tree)
-    return (_shared = { leaves, bark: leaves, gold: applySkyComp(leafMaterial({ glow: true })), depth: leafDepthMaterial() });
+    return (_shared = { leaves, bark: leaves, gold: applySkyComp(leafMaterial({ glow: true })), violet: applySkyComp(leafMaterial({ glow: 'violet' })), depth: leafDepthMaterial() });
 }
 
 /** The shadow of the leaves: cut out like them (not square cards), swaying the same. */

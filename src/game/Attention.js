@@ -27,7 +27,61 @@ export const ATT = {
     MIN_CONE: 0.07, // rad: the narrowest cone (far off; the head is never that still)
     PARTNER: 15, // s: the one I was talking with keeps my attention this long
     NOTICE: 0.55, // the score at which he notices me (turns to me, greets)
+    ADDRESS: 8, // s: after I called / waved / came up and stopped, strangers near notice me this long
+    CLOSE: 3, // m: «came right up» — a stranger notices me only this near and only when I stand still
+    STILL: 0.8, // s I stand still within CLOSE for it to count as «came up to him»
+    WAVE_SWINGS: 3, // turns of the hand from side to side to be a wave
+    WAVE_AMP: 0.1, // rad: a swing less than this is a tremble
+    WAVE_WINDOW: 1.8, // s the swings must come within
 };
+
+/**
+ * The author: «если жители меня не знают, они не должны на меня смотреть и взаимодействовать, пока я не подбегу, не
+ * закричу «житель!» — как в реальной жизни». A plain look of mine at a stranger is NOT an address. A being takes notice of
+ * me (turns head/body, greets) when he knows me (`known`: a friend, a subject, a foe, the king, one I talked with, one who heard
+ * of me), or I addressed people just now (`calledAt`: a word, a shout, a wave — within ADDRESS seconds, `d` ≤ SHOUT), or I came
+ * right up to him and stopped (`stillClose`). Pure.
+ * @param {{known:boolean, calledAt:number, now:number, d:number, stillClose:boolean}} o
+ */
+export function mayNotice({ known, calledAt = -1e9, now, d, stillClose = false }) {
+    if (known) return true;
+    if (now - calledAt < ATT.ADDRESS * 1000 && d <= ATT.SHOUT) return true;
+    return !!stillClose && d <= ATT.CLOSE;
+}
+
+/**
+ * A wave of my hand: its direction turned to one side and back a few times within a moment (a pointing hand, held steady, or
+ * a hand swung once is not). Feed `(yaw of the hand's ray, raised?, now s)` a few times a second. Pure.
+ */
+export class WaveDetector {
+    constructor() { this.reset(); }
+    reset() { this.last = null; this.dir = 0; this.turns = []; this.ext = null; }
+    /** @returns {boolean} true while the hand is waving */
+    step(yaw, raised, t) {
+        if (!raised) { this.reset(); return false; }
+        if (this.last == null) { this.last = yaw; this.ext = yaw; return false; }
+        let dy = yaw - this.last;
+        if (dy > Math.PI) dy -= 2 * Math.PI; else if (dy < -Math.PI) dy += 2 * Math.PI;
+        this.last = yaw;
+        if (Math.abs(dy) < 0.004) return this._waving(t);
+        const dir = dy > 0 ? 1 : -1;
+        if (this.dir === 0) { this.dir = dir; this.ext = yaw; }
+        else if (dir === this.dir) { /* (still going the same way) */ }
+        else {
+            // (turned back: the swing just made counts if wide enough)
+            let sw = this.last - dy - this.ext; // (extreme before the turn minus where the swing began)
+            if (sw > Math.PI) sw -= 2 * Math.PI; else if (sw < -Math.PI) sw += 2 * Math.PI;
+            if (Math.abs(sw) >= ATT.WAVE_AMP) this.turns.push(t);
+            this.ext = this.last - dy;
+            this.dir = dir;
+        }
+        return this._waving(t);
+    }
+    _waving(t) {
+        while (this.turns.length && t - this.turns[0] > ATT.WAVE_WINDOW) this.turns.shift();
+        return this.turns.length >= ATT.WAVE_SWINGS;
+    }
+}
 
 /**
  * Only those I can really see are scored (the author: a villager behind a wall must not notice that I look at him — even

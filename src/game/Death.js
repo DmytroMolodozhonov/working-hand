@@ -39,6 +39,7 @@ import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
 import { pentagramScroll, figureIds } from './PentagramRules.js';
 import { darkMageLevel } from './DarkMagic.js';
+import { DARK_DEATH } from './VitalityRules.js';
 
 export const DEATH = {
     BODY_S: 1440, // s the body lies: one whole game day, 24 minutes (the author: «не сразу — после 24 минут игровых, или если человек поспал»); a night's sleep brings it nearer — skipTime
@@ -220,6 +221,8 @@ export class DeathSystem {
             if (how !== 'annihilate') {
                 const b = { id: 'p' + (g.localId || 'me') + '_' + Date.now().toString(36), k: 'p', who: g.localId || 'local', name: g.net?.name || null, x: p.x, y, z: p.z, yaw, age: how === 'burst' ? DEATH.BODY_S : 0, look: g.config?.look || null };
                 if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
+                b.mh = Math.round((g.maxHP || 20) + (legacy?.hp || 0)); // (wipeHero has already taken the grown part off: it is in the legacy) // (his maximum health and whether black magic killed him: the rite of monstrous vitality — VitalityRules.js)
+                if (DARK_DEATH.has(g._deathKind)) b.dk = 1;
                 this.addBody(b, how === 'burst' ? null : ch.group);
                 g.sync?.deathBody?.(this._wire(b));
             }
@@ -335,7 +338,7 @@ export class DeathSystem {
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
         if (v.burst) return;
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null) }; // (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -738,7 +741,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

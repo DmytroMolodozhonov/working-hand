@@ -15,7 +15,7 @@ import { PVP } from './Combat.js';
 import { FX } from '../fx/WizardFx.js';
 
 /** The castle wizards' shields (WizardFx: the hand shield's disc before the body, the dome). */
-export const NPC_SHIELD = { R: 1.82, FWD: 1.3, UP: 2.6, SIDE: 0.35, DOME_R: 3.2 };
+export const NPC_SHIELD = { R: 1.82, FWD: 1.3, UP: 2.6, SIDE: 0.35, DOME_R: 3.2, DOME_UP: 1.2 }; // (DOME_UP: the dome's middle over the feet — a full sphere round the body, as a player's)
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Vector3();
 
@@ -43,7 +43,7 @@ export function shieldsNow(g) {
     for (const cs of g.castleLife?.castles?.values?.() || []) {
         for (const v of cs.active?.values?.() || []) {
             if (!v.wizard || v.dead || !(v.fx & (FX.SHIELD | FX.DOME))) continue;
-            if (v.fx & FX.DOME) out.push({ c: new THREE.Vector3(v.x, v.y - 0.2, v.z), r: NPC_SHIELD.DOME_R, by: v.id });
+            if (v.fx & FX.DOME) out.push({ c: new THREE.Vector3(v.x, v.y + NPC_SHIELD.DOME_UP, v.z), r: NPC_SHIELD.DOME_R, by: v.id });
             else {
                 const fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
                 out.push({ disc: true, c: new THREE.Vector3(v.x + fx * NPC_SHIELD.FWD - Math.cos(v.yaw) * NPC_SHIELD.SIDE, v.y + NPC_SHIELD.UP, v.z + fz * NPC_SHIELD.FWD + Math.sin(v.yaw) * NPC_SHIELD.SIDE), n: new THREE.Vector3(fx, 0, fz), r: NPC_SHIELD.R, by: v.id });

@@ -216,6 +216,7 @@ export class CourtLife {
         const owner = this.life.state(cs.def.id).owner;
         const v = cs.active.get(p.idx);
         if (v && !v.dead && owner) this.life.rel.bump(v, owner, r.bonus, { show: false });
+        if (owner && !r.half) this.life.reb?.note(cs, owner, 'court');
         // the town hears of it: a little warmer everywhere
         if (owner && !r.half) for (const w of cs.active.values()) if (!w.dead && w !== v) this.life.rel.bump(w, owner, { f: 0.4 }, { show: false });
         say(`${this._doneLine(p, way, r)} В казне осталось ${money(court.coins)}.`);

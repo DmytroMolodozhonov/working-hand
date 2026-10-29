@@ -195,11 +195,11 @@ function fakeGame({ mana = 300, mode = 'freeworld' } = {}) {
 // (Character.update keeps the body on its feet as it grows and shrinks: the feet on the ground at y 0)
 const run = (g, s, dt = 0.1) => { for (let t = 0; t < s; t += dt) { g.monster.update(dt); g.character.group.position.y = PLAYER_GROUND_OFFSET * g.character.size; } };
 
-test('standing on it: 200 mana, +1 dark, everything held stops, the wand hidden, 500 HP; ×7 after the change', () => {
+test('standing on it: 200 mana, +25 dark, everything held stops, the wand hidden, 500 HP; ×7 after the change', () => {
     const { g, ch, sent, sounds } = fakeGame();
     assert.equal(g.monster.begin(), true);
     assert.equal(g.combat.fatigue, 100);
-    assert.equal(g.dark.level, 1);
+    assert.equal(g.dark.level, 25);
     assert.equal(g._stopped, true);
     assert.equal(g.monster.hidesWand, true);
     assert.equal(g.items.held.right.model.visible, false);
@@ -360,10 +360,10 @@ test('a paw closed at a wall takes a piece of it; opened — the piece flies and
     assert.equal(blocks.get(`${Math.round(at.x)},${Math.round(at.y) + 1},${Math.round(at.z)}`), BLOCK.AIR);
     curl = 0; g.monster.update(0.016);
     assert.equal(g.monster.carry.right, null);
-    assert.ok(g.monster.flying.length >= 9);
+    assert.ok(g.monster.chunks.length === 1 && g.monster.chunks[0].blocks.length >= 9, 'the piece flies whole');
     // the ground: a floor at y 0 (layer 1)
     g.terrain.data.get = (x, L, z) => (L <= 0 ? BLOCK.STONE : blocks.get(`${x},${L},${z}`) || 0);
-    for (let i = 0; i < 300 && g.monster.flying.length; i++) g.monster.update(0.016);
-    assert.equal(g.monster.flying.length, 0);
+    for (let i = 0; i < 600 && (g.monster.chunks.length || g.monster.flying.length); i++) g.monster.update(0.016);
+    assert.equal(g.monster.chunks.length + g.monster.flying.length, 0);
     assert.ok([...blocks.values()].filter((t) => t === BLOCK.BRICK).length >= 9, 'lying again as blocks: ' + [...blocks.entries()].filter(([, t]) => t).map(([k, t]) => k + '=' + t).join(' '));
 });

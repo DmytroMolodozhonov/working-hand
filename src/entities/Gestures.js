@@ -62,6 +62,15 @@ const BASE = [
     { id: 'wave', ru: 'машет рукой', arm: { x: 2.6, z: 0.5, sz: 0.28, sw: 0.3 }, f: 1.8, dur: 2.0, ctx: ['greet', 'bye', 'call'], emo: ['happy', 'joy', 'love', 'neutral'] },
     { id: 'blow_kiss', ru: 'шлёт воздушный поцелуй', arm: { x: 2.3, z: 0.25, w: -1.2 }, head: { z: 0.12, x: -0.05 }, dur: 1.6, ctx: ['flirt', 'bye'], emo: ['love', 'mischief'] },
     { id: 'thumbs', ru: 'показывает «отлично»', arm: { x: 1.7, z: 0.2, w: -0.4 }, dur: 1.6, ctx: ['praise', 'agree'], emo: ['happy', 'proud', 'joy'] },
+    // --- with the whole body (the author: «нет энтузиазма и харизмы»)
+    { id: 'both_beat', ru: 'бьёт кулаком в ладонь — «вот так!»', arm: { x: 1.3, z: 0.05, w: -0.5, sx: 0.28 }, both: true, f: 2.2, body: { hx: 0.08 }, head: { nodX: 0.1 }, dur: 2.0, ctx: ['explain', 'order', 'warn', 'win'], emo: ['determined', 'angry', 'proud', 'joy'] },
+    { id: 'throw_up', ru: 'вскидывает руки — «да что ж такое!»', arm: { x: 2.7, z: 0.6, w: -0.8, sx: 0.12 }, both: true, f: 1.6, head: { x: -0.1 }, body: { hx: -0.08 }, dur: 1.8, ctx: ['angry', 'meh', 'surprise', 'joke'], emo: ['angry', 'surprised', 'joy', 'laugh'] },
+    { id: 'laugh_hold', ru: 'хохочет, держась за бок', arm: { x: 0.7, z: -0.5, sx: 0.08 }, both: true, f: 3.0, body: { hx: 0.12 }, head: { x: -0.25 }, dur: 2.6, ctx: ['joke', 'laugh', 'story'], emo: ['laugh', 'joy'] },
+    { id: 'grief_hands', ru: 'закрывает лицо ладонями', arm: { x: 2.4, z: -0.15, w: -1.5, sx: 0.04 }, both: true, f: 2.4, head: { x: 0.35 }, body: { hx: 0.2 }, dur: 2.6, ctx: ['sorry', 'sad', 'fear'], emo: ['sad', 'pain', 'afraid'] },
+    { id: 'beg_hands', ru: 'сложил руки перед собой — «прошу вас»', arm: { x: 1.5, z: -0.45, w: -1.5, sx: 0.06 }, both: true, f: 1.8, head: { x: 0.12, z: 0.1 }, body: { hx: 0.1 }, dur: 2.4, ctx: ['plead', 'sorry', 'thanks'], emo: ['sad', 'worried', 'love', 'afraid'] },
+    { id: 'big_show', ru: 'широко ведёт рукой — «а вот!»', arm: { x: 1.5, z: 0.7, sz: 0.5, w: -1.0 }, f: 0.7, body: { hx: 0.05 }, head: { y: 0.15 }, dur: 2.6, ctx: ['show', 'trade', 'story', 'greet'], emo: ['joy', 'happy', 'proud', 'mischief'] },
+    { id: 'poke', ru: 'тычет пальцем — «ты!»', arm: { x: 1.6, z: 0.05, sx: 0.2, w: -0.3 }, f: 2.8, body: { hx: 0.12 }, head: { nodX: 0.08 }, dur: 1.8, ctx: ['scold', 'threat', 'order', 'angry'], emo: ['angry', 'determined', 'suspicious'] },
+    { id: 'flick_off', ru: 'машет кистью — «да ладно вам»', arm: { x: 1.1, z: 0.4, w: -0.6, sw: 0.5 }, f: 2.6, head: { z: 0.1 }, dur: 1.6, ctx: ['joke', 'meh', 'refuse', 'shy'], emo: ['happy', 'embarrassed', 'contempt', 'tired'] },
     // --- only the head and the body
     { id: 'nod', ru: 'кивает', head: { x: 0.0, nodX: 0.2 }, f: 1.7, dur: 1.6, ctx: ['agree', 'listen', 'greet', 'answer'], emo: ['neutral', 'happy', 'thoughtful'] },
     { id: 'nod_slow', ru: 'медленно кивает', head: { x: 0.15, nodX: 0.14 }, f: 0.8, dur: 2.2, ctx: ['agree', 'listen', 'formal', 'think'], emo: ['thoughtful', 'sad', 'determined'] },
@@ -78,8 +87,8 @@ const BASE = [
 
 /** The manners: how big a motion is made and how fast. */
 const MANNERS = [
-    { key: 'soft', ru: 'сдержанно', amp: 0.7, tempo: 0.9 },
-    { key: 'wide', ru: 'широко', amp: 1.15, tempo: 1.1 },
+    { key: 'soft', ru: 'сдержанно', amp: 0.85, tempo: 0.95 },
+    { key: 'wide', ru: 'широко', amp: 1.4, tempo: 1.2 },
 ];
 
 const mirrorOf = (v) => (v == null ? v : -v);
@@ -106,9 +115,9 @@ export const livelyOf = (role) => ROLE_LIVELY[role] ?? 1;
  * Chooses a gesture. `ctx` (a situation key), `emo` (an emotion key), `role`, `rng` (0…1 function), `last` (the previous id, not repeated at once),
  * `lively` (0.5…1.5: how much he moves his hands — the character). → a gesture or null (he keeps still — it happens too).
  */
-export function pickGesture({ ctx = 'answer', emo = 'neutral', role = '', rng = Math.random, last = null, lively = 1 } = {}) {
+export function pickGesture({ ctx = 'answer', emo = 'neutral', role = '', rng = Math.random, last = null, lively = 1, like = null, more = 0, wideK = 1 } = {}) {
     const lv = lively * livelyOf(role);
-    if (rng() > 0.55 + 0.3 * Math.min(1.4, lv) * (EMOTIONS[emo]?.amp ?? 1)) return null;
+    if (rng() > 0.6 + more + 0.3 * Math.min(1.4, lv) * (EMOTIONS[emo]?.amp ?? 1)) return null;
     let total = 0;
     const list = [];
     for (const id of GESTURE_IDS) {
@@ -117,8 +126,9 @@ export function pickGesture({ ctx = 'answer', emo = 'neutral', role = '', rng = 
         if (g.ctx.includes(ctx)) w += 3;
         if (g.emo.includes(emo)) w += 2;
         if (g.base === (last && GESTURES[last]?.base)) w *= 0.1; // (not the same twice in a row)
-        if (g.manner === 'wide') w *= lv >= 1 ? 1.2 : 0.6;
-        else w *= lv >= 1 ? 0.8 : 1.4;
+        if (g.manner === 'wide') w *= (lv >= 1 ? 1.2 : 0.6) * wideK;
+        else w *= (lv >= 1 ? 0.8 : 1.4) / Math.sqrt(wideK);
+        if (like && like[g.base]) w *= like[g.base];
         if ((role === 'knight' || role === 'king') && g.base === 'beckon') w *= 0.4;
         total += w; list.push([g, w]);
     }
@@ -130,9 +140,9 @@ export function pickGesture({ ctx = 'answer', emo = 'neutral', role = '', rng = 
 /** The envelope 0…1 of a gesture at time t (rise 0.35 s, hold, fall 0.45 s). */
 export function envelope(t, dur) {
     if (t <= 0 || t >= dur) return 0;
-    const a = Math.min(1, t / 0.35), b = Math.min(1, (dur - t) / 0.45);
+    const a = Math.min(1, t / 0.26), b = Math.min(1, (dur - t) / 0.4);
     const e = Math.min(a, b);
-    return e * e * (3 - 2 * e);
+    return e * e * (3 - 2 * e); // (the reach of the hand is quick; the overshoot is in the pose — gesturePose)
 }
 
 /**
@@ -145,11 +155,14 @@ export function gesturePose(T, g, t, amp = 1, tempo = 1) {
     if (e <= 0) return 0;
     const A = g.amp * amp, ph = t * g.f * g.tempo * tempo * TAU;
     const s = Math.sin(ph);
+    // (the hand flies a little past the mark and settles back: 8% over in the first 0.4 s; and it never hangs dead — a living tremor)
+    const over = 1 + 0.08 * Math.sin(Math.min(1, t / 0.4) * Math.PI) * Math.min(1.5, A);
+    const alive = 0.025 * Math.sin(t * 5.3 + g.f);
     const to = (key, val) => { T[key] += (val - T[key]) * e; };
     if (g.arm) {
         const a = g.arm;
-        const x = a.x * (0.55 + 0.45 * A) + g.sx * A * s;
-        const z = (a.z ?? 0) * (0.6 + 0.4 * A) + g.sz * A * Math.sin(ph + 1.3);
+        const x = Math.min(3.3, a.x * (0.55 + 0.45 * A) * over + g.sx * A * s + alive);
+        const z = (a.z ?? 0) * (0.6 + 0.4 * A) * over + g.sz * A * Math.sin(ph + 1.3);
         const w = (a.w ?? T.wrist) + g.sw * A * Math.sin(ph + 0.6);
         // the right arm: aRX, aRZ (outward +); the left: aLX, aLZ (outward −)
         const right = g.side === 'r' || g.side === 'b', left = g.side === 'l' || g.side === 'b';

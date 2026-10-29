@@ -66,7 +66,8 @@ export class BodyImpact {
         // (not the gods' spells, Wind Maxima, Inspirius; Bombardo Maxima takes 60 % of it). Held: no fall, the body only
         // reels and the shove / toss are halved. A hand, a horn, a sword, a ball are no spells: they are not resisted.
         let held = false;
-        if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; held = true; k *= STEADY.HELD_PUSH_K; }
+        if (o.stand && res !== 'shatter' && !swim && !frozen) { res = 'stagger'; held = true; } // (a snowball: a shove that never fells — the «устоял» pose, the push as given)
+        else if (res === 'knockdown' && o.spell && !swim && !frozen && g.steady?.holds(o.spell, { cause: o.cause })) { res = 'stagger'; held = true; k *= STEADY.HELD_PUSH_K; }
         // the push itself
         if (k > 0) {
             if (g.flight?.active) g.knockback.addScaledVector(o.v, k);

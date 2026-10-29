@@ -21,14 +21,16 @@ import { holoParts, holoPlain } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
+import { paintParchment, schoolOf, artKey } from '../fx/ScrollArt.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
 const PARCH_H = 0.95;
-const END_NEAR = 0.35; // the free hand this near an end of the scroll can take that roller…
-const GRAB_CURL = 0.5; // …by closing its fingers this much…
-const GRAB_T = 0.2; // …for this long (s)
-const OPEN_CURL = 0.3; // fingers opened this much: the roller is let go…
-const LET_T = 0.3; // …after this long (s)
+const END_NEAR = 0.5; // the free hand this near an end of the scroll can take that roller…
+const GRAB_CURL = 0.4; // …by closing its fingers this much…
+const GRAB_T = 0.1; // …for this long (s)
+const OPEN_CURL = 0.22; // fingers opened this much: the roller is let go…
+const ARM_CURL = 0.45; // …and a hand open this much, coming to the end, is ready to take it (the author: «должен открываться легче»)
+const LET_T = 0.4; // …after this long (s)
 const SLIP = 0.6; // m further apart than the parchment is long: the roller slips out of the fingers
 const ROLL_V = 7; // m/s: a let-go parchment rolls itself back up this fast
 const SCROLL_END = 0.21; // the ends of the scroll model (local x)
@@ -38,81 +40,66 @@ const _m4 = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _qs = new THREE.Quaternion();
 
-/** The text of a scroll, in ink on parchment. */
-/** A drawing-scroll: the figure to be drawn, in blood-red ink on dark paper (the pentagram's own figure; its spell is written beside it). */
-function drawPentagramParchment(item) {
-    const P = figureOf(item.pent) || figureOf('devil');
-    const css = (n) => '#' + n.toString(16).padStart(6, '0');
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 440;
-    const x = c.getContext('2d');
-    const grad = x.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0, '#1a0c10'); grad.addColorStop(0.1, '#2b161b'); grad.addColorStop(0.9, '#2b161b'); grad.addColorStop(1, '#1a0c10');
-    x.fillStyle = grad; x.fillRect(0, 0, 1024, 440);
-    for (let i = 0; i < 260; i++) { x.fillStyle = `rgba(${90 + (i * 37) % 60},${40 + (i * 11) % 30},${40 + (i * 7) % 30},0.05)`; x.fillRect((i * 97) % 1024, (i * 53) % 440, 2 + (i % 5), 1 + (i % 3)); }
-    x.strokeStyle = css(P.seal); x.lineWidth = 5; x.strokeRect(36, 16, 952, 408);
-    x.strokeStyle = 'rgba(190,150,110,0.35)'; x.lineWidth = 1.5; x.strokeRect(46, 26, 932, 388);
-    const cx = 690, cy = 228, R = 160;
-    x.shadowColor = css(P.ink); x.shadowBlur = 14;
-    x.strokeStyle = css(P.ink); x.lineWidth = 6; x.lineJoin = 'round'; x.lineCap = 'round';
-    x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.stroke();
-    x.lineWidth = 5;
-    for (const poly of figureLines(P.id)) {
-        x.beginPath();
-        poly.forEach((p, i) => { const px = cx + p[0] * R, py = cy - p[1] * R; if (i) x.lineTo(px, py); else x.moveTo(px, py); });
-        x.closePath(); x.stroke();
+/** Faces already drawn (a kind of scroll, not a frame: ~70 spells at most; the oldest go first). */
+const _faces = new Map();
+const FACES_MAX = 48;
+
+/** The face of a scroll as a canvas: the school's colours, a drop cap, runes, a picture of the spell (ScrollArt.js). Cached by kind. */
+function faceOf(item) {
+    const school = schoolOf(item);
+    let spec;
+    if (item?.stat === 'pentagram') {
+        // a drawing-scroll: the pentagram's own figure as the picture, its words beside it
+        const P = figureOf(item.pent) || figureOf('devil');
+        const css = (n) => '#' + n.toString(16).padStart(6, '0');
+        spec = {
+            school, title: P.ru,
+            lines: [
+                [{ text: 'Чтобы создать её, направьте палочку на землю и скажите: ', bold: false }, { text: pentagramSpell(P.id) || '', bold: true }],
+                [{ text: P.id === 'devil' ? 'Так вы получите силу убитого мага.' : P.def?.dark ? 'Тёмный знак для особого обряда.' : 'Светлый знак с особой пользой.', bold: false }],
+            ],
+            note: 'Пентаграмму выучит тот, кто сожжёт свиток',
+            custom: (x, { cx, cy, R }) => {
+                const g = x.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
+                g.addColorStop(0, 'rgba(255,248,226,0.95)'); g.addColorStop(1, 'rgba(228,205,150,0.85)');
+                x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fill();
+                x.strokeStyle = '#b8862a'; x.lineWidth = 2; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.stroke();
+                const r = R * 0.78;
+                x.shadowColor = css(P.ink); x.shadowBlur = 10; x.strokeStyle = '#6a0a22'; x.lineWidth = 4.5; x.lineJoin = 'round'; x.lineCap = 'round';
+                x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.stroke();
+                x.lineWidth = 3.5;
+                for (const poly of figureLines(P.id)) {
+                    x.beginPath();
+                    poly.forEach((p, i) => { const px = cx + p[0] * r, py = cy - p[1] * r; if (i) x.lineTo(px, py); else x.moveTo(px, py); });
+                    x.closePath(); x.stroke();
+                }
+                x.shadowBlur = 0;
+            },
+        };
+    } else {
+        const info = describeItem(item) || { title: '📜 Свиток', lines: [] };
+        spec = {
+            school, title: holoPlain(info.title).replace(/^📜\s*/u, ''),
+            lines: info.lines.filter((l) => holoPlain(l).trim()).map((l) => holoParts(l)), // (a scroll without a kind: no empty gap)
+            note: 'Прочитать может каждый — выучит тот, кто сожжёт свиток',
+        };
     }
-    x.shadowBlur = 0;
-    x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.textAlign = 'left';
-    x.fillText(P.ru, 80, 76);
-    x.fillStyle = '#c9b49a'; x.font = '24px serif';
-    x.fillText('Чтобы создать её, направьте палочку', 80, 130);
-    x.fillText('на землю и скажите:', 80, 162);
-    x.fillStyle = css(P.ink); x.font = 'bold 28px serif'; x.fillText(pentagramSpell(P.id) || '', 80, 204);
-    x.fillStyle = '#c9b49a'; x.font = '24px serif';
-    x.fillText(P.id === 'devil' ? 'Так вы получите силу убитого мага.' : P.def?.dark ? 'Тёмный знак для особого обряда.' : 'Светлый знак с особой пользой.', 80, 248);
-    x.fillStyle = css(P.seal); x.beginPath(); x.arc(170, 340, 38, 0, Math.PI * 2); x.fill();
-    x.strokeStyle = '#e6a0a0'; x.lineWidth = 3; x.beginPath(); x.arc(170, 340, 28, 0, Math.PI * 2); x.stroke();
-    x.fillStyle = '#e6a0a0'; x.font = 'bold 30px serif'; x.textAlign = 'center'; x.fillText('★', 170, 352);
-    x.fillStyle = '#9a8a7a'; x.font = 'italic 22px serif'; x.fillText('Пентаграмму выучит тот, кто сожжёт свиток.', 512, 410);
-    const tex = new THREE.CanvasTexture(c);
-    tex.wrapS = THREE.ClampToEdgeWrapping;
-    return tex;
+    const key = artKey(spec);
+    let c = _faces.get(key);
+    if (!c) {
+        c = document.createElement('canvas');
+        c.width = 1024; c.height = 440;
+        paintParchment(c.getContext('2d'), c.width, c.height, spec);
+        if (_faces.size >= FACES_MAX) _faces.delete(_faces.keys().next().value);
+        _faces.set(key, c);
+    }
+    return c;
 }
 
 export function drawParchment(item) {
-    if (item?.stat === 'pentagram') return drawPentagramParchment(item);
-    const info = describeItem(item) || { title: '📜 Свиток', lines: [] };
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 440;
-    const x = c.getContext('2d');
-    const grad = x.createLinearGradient(0, 0, 1024, 0);
-    grad.addColorStop(0, '#d9c08a'); grad.addColorStop(0.08, '#f1e2b8'); grad.addColorStop(0.92, '#f1e2b8'); grad.addColorStop(1, '#d9c08a');
-    x.fillStyle = grad; x.fillRect(0, 0, 1024, 440);
-    x.strokeStyle = '#a7834a'; x.lineWidth = 4; x.strokeRect(40, 18, 944, 404);
-    x.fillStyle = '#5a1a1a'; x.font = 'bold 40px serif'; x.textAlign = 'center';
-    x.fillText(holoPlain(info.title), 512, 80);
-    x.textAlign = 'left';
-    let y = 140;
-    for (const line of info.lines) {
-        if (!holoPlain(line).trim()) continue; // (a scroll without a kind: no empty gap)
-        let px = 80;
-        for (const { text: part, bold } of holoParts(line)) {
-            x.font = (bold ? 'bold ' : '') + '30px serif';
-            x.fillStyle = bold ? '#7a1a00' : '#3a2a1a';
-            for (const word of part.split(/(\s+)/)) {
-                const w = x.measureText(word).width;
-                if (px + w > 950) { y += 38; px = 80; if (!word.trim()) continue; }
-                x.fillText(word, px, y);
-                px += w;
-            }
-        }
-        y += 50;
-    }
-    x.fillStyle = '#7a6a4a'; x.font = 'italic 24px serif'; x.textAlign = 'center';
-    x.fillText('Прочитать может каждый — выучит тот, кто сожжёт свиток', 512, 404);
-    const tex = new THREE.CanvasTexture(c);
+    const tex = new THREE.CanvasTexture(faceOf(item));
     tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.anisotropy = 4;
     return tex;
 }
 
@@ -151,7 +138,7 @@ export class ScrollReading {
             if (!free || !g.currentPose && !this.input) { this._touchT = 0; this._armed = false; return; }
             const d = this._endDist(s.model, ho);
             if (d > END_NEAR * 2) this._armed = false;
-            else if (curl < OPEN_CURL) this._armed = true;
+            else if (curl < ARM_CURL) this._armed = true;
             const near = d < END_NEAR;
             const closing = curl > GRAB_CURL && this._armed;
             this._touchT = near && closing ? (this._touchT || 0) + dt : 0;
@@ -177,7 +164,7 @@ export class ScrollReading {
         // between them — the other hand still holds its roller, so it does not jump closed and open)
         R.closeT = !lostS && !lostO && (!this._up(hs, s.side) || !this._up(hoG, other)) ? R.closeT + dt : 0;
         if (R.letT > LET_T || R.slipT > 0.15 || R.closeT > 0.4) { this._letGo(R); this._rollBack(R, hs, dt); return; }
-        const want = Math.max(0, Math.min(1, (dist - 0.35) / 1.4));
+        const want = Math.max(0, Math.min(1, (dist - 0.3) / 1.1));
         R.open += (want - R.open) * Math.min(1, dt * 8);
         this._place(R, hs, hoG, dt);
     }

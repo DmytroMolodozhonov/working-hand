@@ -121,6 +121,35 @@ export class ParticlePool {
         this.col[i3] = _c.r; this.col[i3 + 1] = _c.g; this.col[i3 + 2] = _c.b;
     }
 
+    /** How many particles are within `r` of (x, y, z). */
+    countNear(x, y, z, r) {
+        const r2 = r * r, P = this.pos;
+        let n = 0;
+        for (let i = 0, i3 = 0; i < this.active; i++, i3 += 3) {
+            const dx = P[i3] - x, dy = P[i3 + 1] - y, dz = P[i3 + 2] - z;
+            if (dx * dx + dy * dy + dz * dz < r2) n++;
+        }
+        return n;
+    }
+
+    /**
+     * A gust (a swing of a wand turning smoke aside): every particle within `r` of (x, y, z) gets `kick(d, ax, az, out)` added to its velocity —
+     * d its distance, (ax, az) the unit way from the point to it, `out` {vx, vy, vz} to fill (null: untouched). Returns how many were thrown.
+     */
+    impulse(x, y, z, r, kick) {
+        const r2 = r * r, P = this.pos, V = this.vel, out = this._kick || (this._kick = { vx: 0, vy: 0, vz: 0 });
+        let n = 0;
+        for (let i = 0, i3 = 0; i < this.active; i++, i3 += 3) {
+            const dx = P[i3] - x, dy = P[i3 + 1] - y, dz = P[i3 + 2] - z, d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 >= r2) continue;
+            const d = Math.sqrt(d2), h = Math.hypot(dx, dz) || 1;
+            if (!kick(d, dx / h, dz / h, out)) continue;
+            V[i3] += out.vx; V[i3 + 1] += out.vy; V[i3 + 2] += out.vz;
+            n++;
+        }
+        return n;
+    }
+
     _kill(i) {
         const last = --this.active;
         if (i === last) return;

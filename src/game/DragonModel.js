@@ -203,7 +203,7 @@ export function dragonModel(kind) {
         wings.push(sh);
     }
     g.scale.setScalar(SCALE * K.size);
-    root.userData = { kind, inner: g, body, neck, head, jaw, tail, legs, wings, size: SCALE * K.size };
+    root.userData = { kind, inner: g, body, neck, head, jaw, tail, legs, wings, span, size: SCALE * K.size };
     return root;
 }
 

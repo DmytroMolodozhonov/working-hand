@@ -24,23 +24,28 @@
 
 import * as THREE from 'three';
 import { logLine } from './BumpRules.js';
-import { PIECES, ARMOR, pieceMax, wornEffects, spellGuard, soakBlow, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
+import { PIECES, ARMOR, MAG, pieceMax, wornEffects, spellGuard, soakBlow, guardSpend, ensureMag, hasMag, magOf, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
+import { shieldHitCost } from './Combat.js';
 import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
 import { pickFlight } from './Expelliarmus.js';
 import { isDivine } from './ProtectionGods.js';
 import { enchantSoak, wearMul } from './Enchant.js';
+import { CURSE_LINE, BROKEN_LINE, curseTick, uncurse } from './DarkLord.js';
 
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const SLOTS = ['helmet', 'chest', 'legs', 'robe'];
+const BEAMS = new Set(['chill', 'Inferno', 'Fire', 'cold', 'Ice']); // (kept on me while they burn: paid by time)
+const COST_OF = { chill: 'Ice', cold: 'Ice', Sapira: 'Sapira', Sands: 'Sands', Disarmor: 'Disarmor', Levitation: 'Levitation', Stupefy: 'Stupefy' };
 const slotOf = (it) => (it?.kind === 'robe' ? 'robe' : it?.kind === 'armor' ? it.piece : null);
 const score = (it) => (!it ? 0 : it.archmage ? 9 : (it.named ? 4 : it.magic ? 3 : 2) + (it.kind === 'armor' ? 0.5 * (it.hp ?? 0) / Math.max(1, pieceMax(it)) : 0));
 
 /** A small picture of a piece for the cells (SVG, 24×24). code: 1 plain, 2 magic, 3 named; robe colour. */
 export function armorIcon(slot, code = 1, color = 0) {
     if (slot === 'robe' && code === 4) return '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M10 2h4l1 6 4 13H5L9 8z" fill="#15183f" stroke="#e7c25a" stroke-width="1.2"/><path d="M12 9l1 2.2 2.3.2-1.8 1.5.6 2.3-2.1-1.2-2.1 1.2.6-2.3-1.8-1.5 2.3-.2z" fill="#ffd36e"/><circle cx="12" cy="18" r="0.9" fill="#9fe8ff"/></svg>';
+    if (slot === 'robe' && code === 5) return '<svg viewBox="0 0 24 24" width="100%" height="100%"><path d="M10 2h4l1 6 4 13H5L9 8z" fill="#0d0b14" stroke="#8a3be8" stroke-width="1.2"/><path d="M9.5 3.2c1-1 4-1 5 0l-1 2.6h-3z" fill="#000"/><path d="M11.4 11l.6 2.4.6-2.4zM9.6 15h4.8v.8H9.6z" fill="#9a5cff"/></svg>';
     const fill = slot === 'robe' ? '#' + ((color || (code >= 2 ? 0x4b2a7a : 0x2c3e7a)) >>> 0).toString(16).padStart(6, '0') : code === 3 ? '#ffd36e' : code === 2 ? '#bcd6ff' : '#b8c2cc';
     const stroke = code >= 2 ? '#e8f2ff' : '#3a4048';
     const path = {
@@ -80,7 +85,14 @@ export class ArmorSystem {
             if (!quiet) g.hud?.setVoice?.('🌟 Этот костюм наденет только Высший маг', true);
             return false;
         }
+        // (the true dark mage's outfit is a part of him: no other robe goes on over it, and it does not come off — DarkLord.js)
+        if (slot === 'robe' && this.worn.robe?.lord) {
+            if (!quiet) g.hud?.setVoice?.(`🜏 ${CURSE_LINE}`, true);
+            return false;
+        }
         if (item.kind === 'armor' && item.hp == null) item.hp = pieceMax(item);
+        ensureMag(item); // (an old thing without a reserve gets one)
+        if (item.kind === 'armor' && g.darkLord?.on) item.cursed = true; // (any armour a dark mage puts on turns black and starts to break)
         const old = this.worn[slot];
         this.worn[slot] = item;
         // (changing: the old piece comes off into the hand the new one came from — it is free now; else a slot, else the ground)
@@ -118,8 +130,10 @@ export class ArmorSystem {
 
     /** Everything worn comes off (the High Mage's suit only with `suit` — death: all of it drops with the rest). */
     takeOffAll({ suit = false } = {}) {
-        const out = SLOTS.map((s) => this.worn[s]).filter((it) => it && (suit || !it.archmage));
+        // (the dark mage's outfit does not drop: it is a part of him, it goes into the legacy — Legacy.js; what the curse blackened is plain steel again)
+        const out = SLOTS.map((s) => this.worn[s]).filter((it) => it && !it.lord && (suit || !it.archmage));
         for (const s of SLOTS) if (suit || !this.worn[s]?.archmage) this.worn[s] = null;
+        for (const it of out) uncurse(it);
         this._changed();
         return out;
     }
@@ -171,6 +185,7 @@ export class ArmorSystem {
             if (it.hp <= 0 && !it.magic) this._broken(slot);
         }
         if (Object.keys(res.wear).length) this._renderCells();
+        if (res.mag) this._spendMag(res.mag); // («Авада Кедавра»: the reserves cut it)
         return res.hp * enchantSoak(this.worn); // (enchanted pieces and robe soften it further)
     }
 
@@ -181,6 +196,36 @@ export class ArmorSystem {
         if (slot === 'legs') at.y -= 1;
         const col = this.worn[slot]?.magic ? 0x9fd8ff : 0xdddddd;
         for (let i = 0; i < 6; i++) g.fx?.spark(at, col, 0.07, _v2.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), 0.35);
+    }
+
+    /**
+     * A true dark mage in armour (DarkLord.js): it turns black at once, and the time worn is counted on the very piece
+     * (`curseT`: took it off and put it on — it goes on from where it was): plain steel breaks after 600 s, magic after 1200 s.
+     */
+    _curse(dt) {
+        let changed = false;
+        for (const slot of PIECES) {
+            const it = this.worn[slot];
+            if (!it) continue;
+            const was = !!it.cursed;
+            const broke = curseTick(it, dt);
+            if (!was) changed = true;
+            if (broke) {
+                this.worn[slot] = null;
+                changed = true;
+                this.game.hud?.setVoice?.(`💥 ${BROKEN_LINE}`, true);
+                const at = this.game.character?.torso?.getWorldPosition(_v);
+                if (at) for (let i = 0; i < 24; i++) this.game.fx?.spark(at, i % 3 ? 0x2a1a3a : 0x9a5cff, 0.1, _v2.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
+            }
+        }
+        if (changed) this._changed();
+    }
+
+    /** The curse is lifted (the cure of DarkLord.js): every piece worn is plain steel again. */
+    uncurseAll() {
+        let any = false;
+        for (const s of PIECES) if (this.worn[s]?.cursed) { uncurse(this.worn[s]); any = true; }
+        if (any) this._changed();
     }
 
     /** A plain piece beaten to nothing: it falls apart (it is gone). */
@@ -196,8 +241,10 @@ export class ArmorSystem {
      * (it bounces off the magic steel / the robe; I see sparks and a word).
      */
     guard(spell, { quiet = false } = {}) {
+        this.fx = wornEffects(this.worn); // (the reserves change as they are spent)
         const r = spellGuard(this.fx, spell);
         if (!r.block) return false;
+        if (r.why !== 'perk') this._payGuard(spell);
         if (!quiet) {
             const g = this.game, c = g.character.group.position;
             const col = r.why === 'robe' ? 0xc39bff : 0x9fd8ff;
@@ -209,6 +256,37 @@ export class ArmorSystem {
             }
         }
         return true;
+    }
+
+    /** Turned away: its mana comes off the reserve (a flame / a beam on me: once in MAG.BEAM_T, not every frame). */
+    _payGuard(spell) {
+        const now = performance.now();
+        const beam = BEAMS.has(spell);
+        if (beam && now - (this._beamAt?.[spell] ?? -1e9) < MAG.BEAM_T * 1000) return;
+        if (beam) (this._beamAt ||= {})[spell] = now;
+        const cost = Math.max(1, shieldHitCost(COST_OF[spell] || spell) * 2); // (shieldHitCost is half the spell's mana)
+        const { spent } = guardSpend(this.worn, this.fx, spell, cost);
+        this._spendMag(spent);
+    }
+
+    /** Reserve off the worn things ({slot: n}). A magic robe at 0 falls apart; a piece at 0 stays on and turns nothing. */
+    _spendMag(spent) {
+        let changed = false;
+        for (const [slot, n] of Object.entries(spent)) {
+            const it = this.worn[slot];
+            if (!hasMag(it)) continue;
+            it.mag = Math.max(0, Math.round((magOf(it) - n) * 100) / 100);
+            changed = true;
+            if (it.mag > 0) continue;
+            if (slot === 'robe' && !it.named) {
+                this.worn.robe = null;
+                this._changed();
+                this.game.hud?.setVoice?.('💥 Запас прочности мантии кончился — она рассыпалась', true);
+                changed = false;
+            } else this.game.hud?.setVoice?.(`✨ Запас прочности кончился: ${armorName(it)} больше ничего не отбивает`, true);
+        }
+        this.fx = wornEffects(this.worn);
+        if (changed) this._renderCells();
     }
 
     /** How strong a spell's harm still is on me (the whole magic set: «Инферно» half). */
@@ -272,6 +350,7 @@ export class ArmorSystem {
             const inv = g.inventory;
             // (the High Mage's suit does not come off by hand; a plain thing does not push it out)
             if (this.worn[slot]?.archmage && !h.item.archmage) { g.hud?.setVoice?.('🌟 Костюм Высшего мага не снять — он на вас', true); continue; }
+            if (slot === 'robe' && this.worn.robe?.lord) { g.hud?.setVoice?.(`🜏 ${CURSE_LINE}`, true); continue; } // (the dark mage's outfit: nothing takes its place)
             const item = items.releaseHand(side);
             if (inv?.inHand?.item === item) inv.inHand = null;
             if (!this.wear(item, { side })) items.takeIntoHand?.(item, side, { closed: true });
@@ -371,7 +450,7 @@ export class ArmorSystem {
         const g = this.game, c = g.combat;
         const now = Date.now();
         if (now - (g._lastDuelCast || 0) < 900) return null; // (the same word heard again)
-        const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic);
+        const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic && !this.worn[s].lord);
         if (!off.length) {
             if (isFinal) g.hud?.setVoice?.(this.anyWorn() ? '✨ «Disarmor»: волшебное с себя не снять' : '🪖 «Disarmor»: на вас нечего снимать', true);
             return null;
@@ -390,7 +469,7 @@ export class ArmorSystem {
     /** «Disarmor» hit me: my plain steel (and a plain robe) flies off in all directions (`gentle`: off myself — it drops by me). */
     disarmorMe(byId, { self = false, gentle = false } = {}) {
         const g = this.game;
-        const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic);
+        const off = SLOTS.filter((s) => this.worn[s] && !this.worn[s].magic && !this.worn[s].lord);
         if (!off.length) {
             g.hud?.setVoice?.(this.anyWorn() ? '✨ «Disarmor»: волшебное не снять — всё осталось на вас' : '🪖 «Disarmor» попал в вас, но снимать было нечего', true);
             return 0;
@@ -520,7 +599,7 @@ export class ArmorSystem {
         const g = this.game;
         if (m.a === 'worn' && from && from !== g.localId) {
             const w = m.w || {};
-            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0, e: Math.min(4, w.e | 0) };
+            const clean = { h: w.h | 0, c: w.c | 0, l: w.l | 0, r: w.r | 0, rc: +w.rc || 0, rt: Math.min(2, w.rt | 0), e: Math.min(4, w.e | 0) };
             this.remote.set(from, clean);
             const r = g.remotes?.get(from);
             if (r?.character) { dressArmor(r.character, clean); r.character._armorKey = JSON.stringify(clean); }
@@ -536,6 +615,7 @@ export class ArmorSystem {
         const g = this.game;
         this._handWear(dt);
         this._suitPending();
+        if (g.darkLord?.on) this._curse(dt);
         // magic steel mends itself (a perk: faster)
         let mended = false;
         for (const s of PIECES) {
@@ -571,7 +651,7 @@ export class ArmorSystem {
         if (!el) {
             el = document.createElement('div');
             el.id = 'armor-cells';
-            el.innerHTML = SLOTS.map((s) => `<div class="armor-cell" data-slot="${s}"><div class="ac-icon"></div><div class="ac-bar"><i></i></div></div>`).join('');
+            el.innerHTML = SLOTS.map((s) => `<div class="armor-cell" data-slot="${s}"><div class="ac-icon"></div><div class="ac-mag"></div><div class="ac-bar"><i></i></div></div>`).join('');
             document.body.appendChild(el);
         }
         el.style.display = 'flex';
@@ -585,6 +665,9 @@ export class ArmorSystem {
             cell.classList.toggle('magic', c >= 2);
             cell.querySelector('.ac-icon').innerHTML = armorIcon(s, c || 1, s === 'robe' ? code.rc : 0);
             cell.title = it ? armorName(it) : { helmet: 'Шлем — не надет', chest: 'Нагрудник — не надет', legs: 'Поножи — не надеты', robe: 'Мантия — не надета' }[s];
+            const mag = cell.querySelector('.ac-mag'); // (the magic reserve: small digits at the icon)
+            mag.textContent = hasMag(it) ? String(Math.round(magOf(it))) : '';
+            mag.title = hasMag(it) ? `Запас магической прочности: ${Math.round(magOf(it))} из ${it.magMax}` : '';
             const bar = cell.querySelector('.ac-bar');
             const show = it?.kind === 'armor';
             bar.style.visibility = show ? 'visible' : 'hidden';

@@ -42,6 +42,7 @@
 import * as THREE from 'three';
 import { isWood, TREE_KINDS } from '../world/Terrain.js';
 import { mergeParts } from '../core/MergeGeometry.js';
+import { forgedGateModel, GATE_VARIANTS } from './GateModel.js';
 
 const WOOD_NEEDED = 12;
 const W = 1.6, H = 3.6, T = 0.18; // a full-size door
@@ -80,7 +81,8 @@ function doorMats(color) {
 const _box = new THREE.BoxGeometry(1, 1, 1);
 const _knobGeo = {};
 
-export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, w: W = DOOR_W, h: H = DOOR_H } = {}) {
+export function doorModel(color, { mirror = false, gate = false, ice = false, metal = false, forged = false, vari = 0, w: W = DOOR_W, h: H = DOOR_H } = {}) {
+    if (forged) return forgedGateModel({ mirror, w: W, h: H, vari }); // (the keep's gates of generation 14: forged iron — GateModel.js)
     const g = new THREE.Group();
     let { wood, dark, gold } = doorMats(color);
     // a door of iron («Create a Castle»'s doors — CastleMagic.js): a steel leaf and frame, iron bands
@@ -270,7 +272,7 @@ export class Doors {
         if (this.list.has(d.id)) { this._move(this.list.get(d.id), d); return; }
         // (a house door fills its opening: wider and taller than a made one — made to its size, not
         // stretched: a stretched model shears its leaf out of shape when it turns)
-        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate || !!d.banded, ice: !!d.ice, metal: !!d.metal, w: d.w || W, h: d.h || H }); // (banded: a gate's look without a castle's lock — CastleMagic.js)
+        const model = doorModel(d.color, { mirror: !!d.mirror, gate: !!d.gate || !!d.banded, ice: !!d.ice, metal: !!d.metal, forged: !!d.forged, vari: d.vari | 0, w: d.w || W, h: d.h || H }); // (banded: a gate's look without a castle's lock — CastleMagic.js)
         model.position.set(d.x, d.y, d.z);
         model.rotation.y = d.ry;
         g.scene.add(model);
@@ -436,7 +438,7 @@ export class Doors {
                 const to = leafPushed(was, ha, door.a, this.openLimit(door, 1), this.openLimit(door, -1));
                 if (to == null) continue;
                 if (locked(door)) { this._rattle(door); door.hand[side] = was; continue; } // (it holds: the hand stays on its side)
-                if (to === 0 && door.a !== 0) this.game.sound?.playClang?.(0.08); // (the latch clicks)
+                if (to === 0 && door.a !== 0) this._ring(door, 0.08); // (the latch clicks)
                 this._setAngle(door, to);
                 door.hand[side] = was;
                 if (Math.abs(door.a - (door._sentA ?? 0)) > 0.05) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); }
@@ -594,8 +596,8 @@ export class Doors {
                 door.gust = false;
                 if (Math.abs(door.a) > 0 && Math.abs(door.a) < DOOR_PUSH.AJAR) door.spin = -Math.sign(door.a) * 0.8;
             }
-            if (r.hit === 'slam') g.sound?.playClang?.(Math.min(0.5, 0.15 + Math.abs(r.w) * 0.1));
-            else if (r.hit === 'open' && Math.abs(r.w) > 0.4) g.sound?.playClang?.(0.12);
+            if (r.hit === 'slam') this._ring(door, Math.min(0.5, 0.15 + Math.abs(r.w) * 0.1));
+            else if (r.hit === 'open' && Math.abs(r.w) > 0.4) this._ring(door, 0.12);
             if (!door.spin && g.authority) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); } // (where it came to rest)
         }
     }
@@ -679,13 +681,26 @@ export class Doors {
         return stop;
     }
 
+    /** Samples for Game.prewarm: every look of the keep's forged-iron gates (their materials, their plate textures) are made and drawn once on the loading screen. */
+    sampleModels() {
+        const out = [];
+        for (let v = 0; v < GATE_VARIANTS; v++) out.push(forgedGateModel({ w: 2.5, h: 7, vari: v, mirror: v % 2 === 1 }));
+        return out;
+    }
+
+    /** A door's own sound: a plain clang; a forged-iron gate groans and booms (SoundManager.playIronGate). */
+    _ring(door, power) {
+        const s = this.game.sound;
+        if (door.forged && s?.playIronGate) s.playIronGate(power); else s?.playClang?.(power);
+    }
+
     /** A locked leaf tried by the hand: it rattles (a sound, a hint now and then). */
     _rattle(door, pushed = false) {
         const g = this.game;
         if (door.shakeT > 0) return;
         door.shakeT = 0.3;
         const near = Math.hypot(door.x - g.character.group.position.x, door.z - g.character.group.position.z) < 30;
-        if (near) g.sound?.playClang?.(0.12); // (the clang has no place of its own: a far door is not heard)
+        if (near) this._ring(door, 0.12); // (the clang has no place of its own: a far door is not heard)
         if (pushed) { if (near) g.hud?.setVoice?.('🔒 Дверь заперта — её трясёт, но замок держит. Откройте «Алохоморой»', true); }
         else g.locks?.lockedTried?.(door);
     }
@@ -722,6 +737,7 @@ export class Doors {
         let best = null;
         for (const door of this.list.values()) {
             if (door.ship) continue; // (a ship's door is fixed in its bulkhead)
+            if (door.forged) continue; // (the keep's forged-iron gates: too heavy for the plain spell — only a strong blast or «Алохомора Максима» opens them, GateModel.js)
             if (door.ice) continue; // (the Ice Castle's gates are grown into their archway of ice: «Левиоса» does not take them — IceFixtures.js)
             const to = _v.set(door.x, door.y + 1.8, door.z).sub(hand);
             const d = to.length();
@@ -765,7 +781,7 @@ export class Doors {
         for (const side of ['left', 'right']) if (this.held[side] === d) this.release(side);
         this.game.scene.remove(d.model);
         // (its boards and knobs are its own geometries — the video card's buffers go with it; the materials are shared)
-        d.model.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+        d.model.traverse((o) => { if (o.isMesh && !o.geometry.userData?.shared) o.geometry.dispose(); }); // (the forged gates' merged shapes are shared by every gate of their look — GateModel.js)
         if (d.boxId != null) this.game.collision.removeBox(d.boxId);
         this.list.delete(id);
     }

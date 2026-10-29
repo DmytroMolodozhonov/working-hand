@@ -135,7 +135,8 @@ export const SPELL_COST = {
     LumosFollowing: 15, // (then 0.1 a second: WandMagic.FOLLOW)
     CreateBed: 6,
     CreateHouse: 20, // a house by magic: then 0.5 a second for its 10 s (HouseMagic.js; each level of «Improve a House» twice as much)
-    CreateCastle: 500, // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
+    CreateCastle: 500,
+    DivineCreation: 1000, // «Да пусть создастся»: the gods make what is described (DivineCreation.js pays it itself; Creative: free) // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
     ImproveHouse: 40, // (level 2; 80, 160, 320 for the next — HouseMagic pays it itself)
     ChangeColor: 2,
     WaterVortex: 20, // very strong: a whole vortex of water, 20 at once + 1 a second while it holds water (see WaterVortex.js)
@@ -164,6 +165,7 @@ export const SPELL_COST = {
     Fireworks: 15, // once, at the start (the author: «снимается 15 маны»); the 10 s that follow cost nothing (Fireworks.js; no scroll)
     Invisibility: 20, // nobody sees me; then 1 a second (only from a scroll — Invisibility.js)
     GroundVortex: 20, // «Ground Vortex»: the earth rises and circles; then 1 a second while held (a scroll — GroundVortex.js)
+    Nihilis: 40, // «Nihilis Atra»: a cone of light scatters black magic; instant (only from a scroll — Nihilis.js)
     VisibleGodi: 20, // «Visible Godi»: a cloud on the screen shows what is behind a wall; then 1 a second (only from a scroll — VisibleGodi.js; the author lost the number in the dictation, the main session chose 20 — change it here)
     Hellfire: 80, // «Let the Hellfire Come»: then 2 a second while held (only with a mana maximum of 100+; Hellfire.js)
     IceCastle: 500, // «Create an Ice Castle»: a stamp, then the hands raise it (IceMagic.js; free in Creative)
@@ -245,6 +247,11 @@ function shared() {
     const goldShieldMat = gold(PGODS.GOLD, 0.4), goldRingMat = gold(PGODS.GOLD_LIGHT, 0.9), goldDomeMat = gold(PGODS.GOLD, 0.2), goldHaloMat = gold(PGODS.GOLD_DEEP, 0.12);
     const goldRayMat = gold(PGODS.GOLD_LIGHT, 0.55);
     const goldGridMat = new THREE.LineBasicMaterial({ color: 0xffe28a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+    // the true dark mage's shield (DarkLord.js): the same shape, painted dark — an ink-black violet veil (normal blending, so it is dark and not light), a bright violet rim
+    const darkShieldMat = new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.62, side: THREE.DoubleSide, depthWrite: false });
+    const darkRingMat = new THREE.MeshBasicMaterial({ color: 0x8a3be8, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    const darkDomeMat = new THREE.MeshBasicMaterial({ color: 0x140626, transparent: true, opacity: 0.34, side: THREE.DoubleSide, depthWrite: false });
+    const darkGridMat = new THREE.LineBasicMaterial({ color: 0x9a5cff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
     // (the rays: 12 thin spikes round the disc, one shape)
     const rays = [];
     for (let i = 0; i < 12; i++) {
@@ -263,7 +270,7 @@ function shared() {
         domeGrid: new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(1, 1)),
         shell: new THREE.IcosahedronGeometry(1, 1),
         spike: new THREE.ConeGeometry(1, 1, 5).translate(0, 0.5, 0),
-        shieldMat, ringMat, domeMat, gridMat, iceMat,
+        shieldMat, ringMat, domeMat, gridMat, iceMat, darkShieldMat, darkRingMat, darkDomeMat, darkGridMat,
     };
     return SHARED;
 }
@@ -306,7 +313,7 @@ function mergeFlat(list) {
 /** One small mesh of each of the shields' materials (Game.prewarm: compiled at loading, never in a frame). */
 export function sampleShieldModels() {
     const S = shared();
-    return [S.shieldMat, S.ringMat, S.domeMat, S.goldShieldMat, S.goldRingMat, S.goldDomeMat, S.goldHaloMat, S.goldRayMat, S.iceMat].map((m) => new THREE.Mesh(S.disc, m))
+    return [S.shieldMat, S.ringMat, S.domeMat, S.goldShieldMat, S.goldRingMat, S.goldDomeMat, S.goldHaloMat, S.goldRayMat, S.iceMat, S.darkShieldMat, S.darkRingMat, S.darkDomeMat].map((m) => new THREE.Mesh(S.disc, m))
         .concat([new THREE.LineSegments(S.hex, S.gridMat), new THREE.LineSegments(S.hex, S.goldGridMat)]);
 }
 
@@ -322,8 +329,10 @@ export class CombatVisuals {
         this.hand.add(disc, ring, hex);
         this.handRing = ring;
         this.handHex = hex;
+        this.handDisc = disc;
         this.dome = new THREE.Group();
-        this.dome.add(new THREE.Mesh(S.dome, S.domeMat));
+        this.domeBall = new THREE.Mesh(S.dome, S.domeMat);
+        this.dome.add(this.domeBall);
         this.domeGrid = new THREE.LineSegments(S.domeGrid, S.gridMat);
         this.domeGrid.scale.setScalar(1.01);
         this.dome.add(this.domeGrid);
@@ -380,7 +389,7 @@ export class CombatVisuals {
         const geo = S.shard || (S.shard = new THREE.CircleGeometry(0.22, 3)); // (pieces: flat triangles)
         const n = type === 2 ? 26 : 16;
         for (let i = 0; i < n; i++) {
-            const m = new THREE.Mesh(geo, (gods ? S.goldShieldMat : S.shieldMat).clone()); // (the gods' one: golden pieces)
+            const m = new THREE.Mesh(geo, (gods ? S.goldShieldMat : this._dark ? S.darkRingMat : S.shieldMat).clone()); // (the gods' one: golden pieces; a dark mage's: violet)
             m.material.opacity = 0.75;
             const u = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize();
             if (type === 2) m.position.copy(at).addScaledVector(u, PVP.DOME_R * 0.95);
@@ -409,12 +418,13 @@ export class CombatVisuals {
 
     /**
      * @param {number} dt
-     * @param {object} st {shield: 0|1|2, shieldLeft, frozen:boolean}
+     * @param {object} st {shield: 0|1|2, shieldLeft, frozen:boolean, handScale?, domeR? (a castle wizard's own sizes: his shield is the same picture)}
      * @param {object} body {center:Vector3, hand:Vector3, dir:Vector3}
      */
     update(dt, st, body) {
         this._t += dt;
         if (this.shards.length) this._updateShards(dt);
+        if (!!st.dark !== !!this._dark) this._paint(!!st.dark);
         if (st.gods) this.hand.visible = this.dome.visible = false;
         else this.gHand.visible = this.gDome.visible = false;
         if (st.gods) { this._updateGods(dt, st, body); this._shell(dt, st, body); return; }
@@ -426,7 +436,7 @@ export class CombatVisuals {
             const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.25 + 0.2));
             this.hand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
             this.hand.lookAt(_v1.copy(this.hand.position).add(body.dir));
-            this.hand.scale.setScalar(PVP.SHIELD_SCALE * k);
+            this.hand.scale.setScalar((st.handScale ?? PVP.SHIELD_SCALE) * k);
             this.handRing.rotation.z = this._t * 2;
             this.handHex.rotation.z = -this._t * 1.3;
         }
@@ -436,10 +446,21 @@ export class CombatVisuals {
         if (showDome) {
             const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._domeAge / 0.25 + 0.2));
             this.dome.position.copy(body.center);
-            this.dome.scale.setScalar(PVP.DOME_R * k * (1 + 0.03 * Math.sin(this._t * 6)));
+            this.dome.scale.setScalar((st.domeR ?? PVP.DOME_R) * k * (1 + 0.03 * Math.sin(this._t * 6)));
             this.domeGrid.rotation.set(this._t * 0.4, this._t * 0.6, 0);
         }
         this._shell(dt, st, body);
+    }
+
+    /** The true dark mage's shield / dome are painted dark, the plain ones blue (the gods' one stays gold: divine magic is not his). */
+    _paint(dark) {
+        const S = shared();
+        this._dark = dark;
+        this.handDisc.material = dark ? S.darkShieldMat : S.shieldMat;
+        this.handRing.material = dark ? S.darkRingMat : S.ringMat;
+        this.handHex.material = dark ? S.darkGridMat : S.gridMat;
+        this.domeBall.material = dark ? S.darkDomeMat : S.domeMat;
+        this.domeGrid.material = dark ? S.darkGridMat : S.gridMat;
     }
 
     /** The gods' shield / dome: golden, breathing light, its rings and rays turning (ProtectionGods.js). */
@@ -489,7 +510,7 @@ export class CombatVisuals {
             // (the ice grows round the body in a quarter of a second)
             const k = Math.min(1, this._iceAge / 0.25);
             this.shell.position.copy(body.center);
-            this.shell.scale.setScalar(0.3 + 0.7 * (1 - (1 - k) * (1 - k)));
+            this.shell.scale.setScalar((0.3 + 0.7 * (1 - (1 - k) * (1 - k))) * (body.size || 1)); // (the monster form: the shell is as great as the body)
         }
     }
 
@@ -1009,9 +1030,15 @@ export class Combat {
         return true;
     }
 
-    freeze(byId, time = PVP.FREEZE_TIME) {
+    /** @param {{rod?:boolean}} opts rod: the Ice Rod's ice (a gift of the gods — takes anybody, even the monster form) */
+    freeze(byId, time = PVP.FREEZE_TIME, opts = null) {
         if (this.godsKeepsOff('Frozen')) return; // (the gods' dome: no ice takes me)
-        if (this.game.monster?.active) return; // (the monster form: «Айс», «Frozen» — the ice cracks off its fur, as off a dragon's scales)
+        const mon = this.game.monster;
+        if (mon?.active) {
+            if (!opts?.rod) return; // (the monster form: «Айс», «Frozen» — the ice cracks off its fur, as off a dragon's scales; only the Rod's ice takes it)
+            time = mon.frozenTime(time);
+            mon.onFrozen?.(time);
+        }
         this.chill = 0;
         this.frozenLeft = Math.max(this.frozenLeft, time);
         this.frozenBy = byId;
@@ -1080,14 +1107,15 @@ export class Combat {
 
     damage(amount, byId, kind) {
         if (this.dead) return;
+        if (this.game.darkLord?.lifting) return; // (the rite of a true dark mage: the ball of darkness is round the body — nothing gets in, nothing is half-done; DarkLord.js)
         if (this.godsKeepsOff(kind)) { this._godsFx(null); return; } // (the gods' shield: no spell but the gods' own gets through — ProtectionGods.js)
         if (BLAST_HARM.has(kind) && this.blastProof()) return; // (a dome: no blast, no falling pieces get in — mine either)
         // the monster form (MonsterForm.js): simple spells and fire do nothing, blades a quarter, strong spells a half…
         const mon = this.game.monster?.active ? this.game.monster : null;
         if (mon) { amount = mon.filterDamage(amount, kind, byId); if (!(amount > 0)) return; }
         // Any hit on a frozen player shatters them, whatever their HP
-        // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic)
-        if (this.frozen && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
+        // (the ice's own bite while it holds — «Айс» −3/s, «Айс Максима» −10/s — is not a blow: StrongMagic; the monster form's ice does not shatter: it takes the filtered harm)
+        if (this.frozen && !mon && kind !== 'Inferno' && kind !== 'iceBite') { this.die(byId, 'shatter'); return; }
         // worn armour takes its share; a robe / a named armour's perks soften it (Armor.js)
         if (this.game.armor) { amount = this.game.armor.absorb(amount, kind); if (!(amount > 0)) return; }
         this.game.imperius?.interruptByDamage?.(amount, kind); // («Империус»: ANY harm to the body left standing brings the mind back at once — the author)
@@ -1125,6 +1153,7 @@ export class Combat {
             const c = this.center(_v1);
             for (let i = 0; i < 60; i++) this.game.fx.spark(c, 0xd6f3ff, 0.25, _v2.set((Math.random() - 0.5) * 12, Math.random() * 8, (Math.random() - 0.5) * 12), 1.0);
         }
+        this.game._deathKind = how; // (Hellfire — HellKills.js: pdead tells the killer)
         this.game.onLocalDeath(text, byId);
     }
 
@@ -1204,6 +1233,7 @@ export class Combat {
         const side = this.shield?.side || 'right';
         this.visuals.update(dt, this.state(), {
             center: this.center(_v1).clone(),
+            size: ch.size || 1,
             hand: this.shieldAt(side, new THREE.Vector3()), // (at the wand's tip when it is in that hand)
             dir: this.shieldDir(side, new THREE.Vector3()),
         });
@@ -1226,7 +1256,7 @@ export class Combat {
         if (this.manaOn) hud.setFatigue(this.fatigue, this.maxFatigue || PVP.MAX_FATIGUE); else hud.hideMana?.(); // (Creative with endless mana: no bar)
         if (this.stunned) return; // the stun message is shown by update()
         hud.setStatus(this.frozen
-            ? `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`
+            ? (this.game.monster?.active ? `🧊 Вы заморожены посохом Ледяной Королевы! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с` : `🧊 Вас заморозили! Разморозка через <b>${Math.ceil(this.frozenLeft)}</b> с. Любой удар сейчас смертелен`)
             : this.chill > 0.05 ? `❄️ Вас замораживают: ${Math.round(this.chill * 100)}% — убегайте из луча!` : '');
         hud.setFrozenOverlay(this.frozen ? 1 : this.chill);
     }
@@ -1238,6 +1268,7 @@ export class Combat {
             side: this.shield ? this.shield.side : 'right',
             shieldLeft: this.shield ? Math.min(this.shield.left, 1e6) : 0, // (Creative's endless one: a number the network can carry)
             gods: !!this.shield?.gods, // (the gods' shield: gold — ProtectionGods.js)
+            dark: !!this.game.darkLord?.on, // (a true dark mage's shields are dark — DarkLord.js)
             frozen: this.frozen,
         };
     }

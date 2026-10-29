@@ -35,9 +35,9 @@ import * as THREE from 'three';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
-import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
+import { ITEM_INFO, itemValue, isMagicItem, newUid, LOOT_FOR } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
-import { ARMOR, PIECES, makePiece, makeRobe, armorName } from './ArmorTypes.js';
+import { ARMOR, PIECES, makePiece, makeRobe, armorName, armorValue } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
 import { CommandTalk } from './CommandTalk.js';
 import { parseCourt } from './Court.js';
@@ -58,8 +58,9 @@ import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
 import { magicStallGood } from './HamletLife.js';
 import { pushOutOfRect } from '../world/Collision.js';
-import { Attention, ATT, inSight } from './Attention.js';
+import { Attention, ATT, inSight, mayNotice, WaveDetector } from './Attention.js';
 import { wizardDetects, placeOf, shopRefuses, expelled, attitude, wizardLine, REFUSE_LINE, EXPEL_LINE } from './DarkMagic.js';
+import { effectiveSkin } from './DarkLord.js';
 import { nameScore, namesGood, namedGood, chooseGood, labelGoods, askLine, LABEL } from './MarketChoice.js';
 
 export const HEAR = 7; // m: a villager hears you this far
@@ -174,6 +175,8 @@ export class CastleTalk {
         this._labCache = new Map(); // text -> {tex, mat, refs}
         this._greetT = new Map();
         this.commands = new CommandTalk(this, journal); // plain-word commands: poses, walks, formations, spars, «не могу» (CommandTalk.js)
+        this.wave = new WaveDetector(); // my hand waving to people (Attention.mayNotice)
+        this._calledAt = -1e9; // when I last called out / waved
         this.attention = new Attention(); // whom I look at, walk to, talk with — he hears my words, he notices me (Attention.js)
         this._attT = 0;
         this._attPrev = null;
@@ -192,6 +195,7 @@ export class CastleTalk {
 
     // ---------------------------------------------------------- brains
     brain(v) {
+        if (!v?.cs) return null; // (not a castle's person — a sailor: nothing to think with)
         let b = this.brains.get(v.id);
         if (!b) {
             const def = v.cs.def;
@@ -359,15 +363,35 @@ export class CastleTalk {
             near.push({ id: v.id, x: v.x, y: v.y + 1.3, z: v.z });
         }
         this.attention.update(eye, look, vel, near, dt, now);
+        // (a call, a wave, or coming up and standing: only then do strangers take notice of me — a plain look is not an address)
+        const ray = this.commands?.pointRay?.();
+        if (this.wave.step(ray?.hand ? Math.atan2(ray.d.x, ray.d.z) : 0, !!ray?.hand, now / 1000)) { this._calledAt = now; this.wave.reset(); }
+        this._still = vel && Math.hypot(vel.x, vel.z) < 0.4 ? (this._still || 0) + dt : 0;
         // he notices me: stops what he does a moment and looks at me (not in a fight, asleep, busy at a task for the king)
         for (const [id, a] of this.attention.of) {
             if (a.score < ATT.NOTICE || a.d > ATT.TALK + 3) continue;
             const v = this.life.byId.get(id);
             if (!v || v.dead || v.foe || v.sleep || v.follow || v.order || v.fleeT > 0 || v.job === 'king') continue;
+            if (!this._mayNotice(v, a.d, now)) continue;
             if (!(v.talking > 0)) v.talkTo = g.localId;
             if (v.talkTo === g.localId) v.talking = Math.max(v.talking || 0, 1.2);
             v.noticedAt = now;
         }
+    }
+
+    /** Does he know me (a friend, a subject, a foe, the king, one I talked with, one who heard of me)? */
+    _knowsMe(v) {
+        if (v.metMe || v.follow || v.role === 'king' || v.job === 'king' || v.guard || v.foe != null) return true;
+        try {
+            const e = this.life.rel?.eff?.(v);
+            if (e && (e.fr !== 0 || e.lv > 0 || e.sub >= 20 || e.sub < 0)) return true; // (a base of 2–10 is only the post a stranger holds)
+            if ((v.role === 'knight' || v.role === 'advisor') && (this.life.wantedLevel?.(this.game.localId) || 0) >= 1) return true; // (the guard looks for the wanted)
+        } catch (_) { /* (no numbers yet: a stranger) */ }
+        return false;
+    }
+
+    _mayNotice(v, d, now) {
+        return mayNotice({ known: this._knowsMe(v), calledAt: this._calledAt, now, d, stillClose: this._still >= ATT.STILL });
     }
 
     /** Something I did changed how this villager takes me (a blow: −12) — Attitude.js. */
@@ -434,7 +458,9 @@ export class CastleTalk {
      * — у кого какая терпимость); изгой в башне и городе — «Уходи». Ответ: true — слова приняты, дальше не идёт.
      */
     _darkGate(v, tradeOnly = false) {
-        const g = this.game, lvl = g.dark?.skin || 0; // (по чёрным пятнам на теле, не по настоящему уровню)
+        const g = this.game;
+        if (g.darkLord?.on && this._lordGate(v, tradeOnly)) return true; // (настоящий тёмный маг: все смотрят на него по-своему — DarkLord.js)
+        const lvl = effectiveSkin(g.dark?.skin || 0, g.darkLord?.on); // (по чёрным пятнам на теле, не по настоящему уровню; у настоящего тёмного мага — всегда 100)
         if (!v.wizard || !wizardDetects(lvl)) return false;
         const place = placeOf(v.cs?.def, v.entry), now = performance.now();
         const memo = (this._dark = this._dark || new Map());
@@ -445,6 +471,31 @@ export class CastleTalk {
         if (m.refuse && this._trader(v)) { this._sayReply(v, REFUSE_LINE, 4); return true; }
         if (!tradeOnly && attitude(lvl, place, v.id) === 'scorn' && now - m.scornAt > 90000) { m.scornAt = now; this._sayReply(v, wizardLine(lvl, place, v.id), 5); return true; }
         return false;
+    }
+
+    /**
+     * A true dark mage (DarkLord.js): who runs, who strikes, who refuses to trade, who sells for 1.5–2 times the price (that one says a word and talks on).
+     * True: the words are taken and the talk goes no further.
+     */
+    _lordGate(v, tradeOnly = false) {
+        const sh = this.game.darkLord.shuns(v);
+        if (!sh) return false;
+        const now = performance.now(), memo = (this._lordMemo = this._lordMemo || new Map());
+        if (sh.soft) { // (agrees to deal — dearer; a line once in a while)
+            if (tradeOnly || now - (memo.get(v.id) || -1e9) < 90000) return false;
+            memo.set(v.id, now);
+            this._sayReply(v, sh.say, 5);
+            return false;
+        }
+        if (memo.size > 200) memo.clear();
+        this._sayReply(v, sh.say, 4);
+        return true;
+    }
+
+    /** What a dark mage pays at this trader (DarkLord.js: 1.5–2 times; for everybody else the price as it is). */
+    _lp(v, price, by = null) {
+        const d = this.game.darkLord;
+        return d && v ? d.priceFor(v, this._trader(v), price, by) : price;
     }
 
     /** A line of the conversation with me: said at once (cutting what was being said), no chatter over it. */
@@ -614,8 +665,10 @@ export class CastleTalk {
         text = this._unecho(text); // (and his words caught with mine in one phrase: «я человек простой… а ты можешь со мной пойти»)
         if (!text) return false;
         if (isApology(text) && this.life.forgive?.(g.localId)) return true; // («извините» to the one I knocked: calmed)
+        this._calledAt = performance.now(); // (a word aloud — strangers near take notice: Attention.mayNotice)
         const v = this._listener(text);
         if (!v) return false;
+        v.metMe = true; // (I spoke to him: he knows me from now on)
         this._en = isEnglishText(text); // (my language: the thinking words made in advance follow it)
         if (this._darkGate(v)) return true; // (чёрный маг: волшебник презирает, не продаёт, гонит — DarkMagic.js)
         if (this.life.night?.heard(v, text)) return true; // (asleep: a mumble; a merchant at night: «come in the morning»)
@@ -1071,16 +1124,19 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
+                    LOOT_FOR.known = g.knownScrollFn?.() || null; // (a scroll I already know is not on the counter — ItemTypes.freshShopScroll; a counter is one for all: the host's knowledge)
                     const wiz = stall.magic ? magicStallGood(n, k) // (a hamlet's seller of magic things — HamletLife.js)
                         : stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
+                    LOOT_FOR.known = null;
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
                     const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.shop && SHOPS[stall.shop] ? SHOPS[stall.shop].goods[k % 3] // (a building's shop: its own goods — Buildings.js, MarketGoods.SHOPS)
                         : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
-                    const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
+                    // (the wizards' magic robe / armour piece: made first — its price is by its magic reserve, ArmorTypes.magPrice)
+                    const gear = !wiz && pick.kind === 'robe' ? makeRobe(true) : !wiz && pick.kind === 'armor' ? makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }) : null;
+                    const price = gear ? armorValue(gear) : pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
                     const item = wiz ? { ...wiz.item, shop: { stall: key, price } }
-                                        : pick.kind === 'robe' ? { ...makeRobe(true), shop: { stall: key, price } }
-                        : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
+                                        : gear ? { ...gear, shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (wiz && item.kind === 'book') item.spells = bookSpells(item.id);
                     if (!wiz && pick.kind === 'weapon') { delete item.count; item.type = pick.type; item.magic = false; item.bonus = 0; }
@@ -1105,11 +1161,12 @@ export class CastleTalk {
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
         if (!v || v.foe) return false;
-        this.offer = { v, kind: 'buy', price: c.shop.price, cauldron: c.id, item: { kind: 'cauldron' }, stall: c.shop.stall };
-        const line = this.brain(v).priceLine({ name: 'котёл' }, c.shop.price, 'buy', this._ctx(v));
+        const cprice = this._lp(v, c.shop.price);
+        this.offer = { v, kind: 'buy', price: cprice, cauldron: c.id, item: { kind: 'cauldron' }, stall: c.shop.stall };
+        const line = this.brain(v).priceLine({ name: 'котёл' }, cprice, 'buy', this._ctx(v));
         v.talking = 4;
         this._sayReply(v, line, 6);
-        this.game.hud.setVoice?.(`💰 Котёл — ${c.shop.price} монет: скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
+        this.game.hud.setVoice?.(`💰 Котёл — ${cprice} монет: скажите «да», чтобы купить (у вас ${this.game.inventory.coins()})`, true);
         return true;
     }
 
@@ -1138,11 +1195,12 @@ export class CastleTalk {
         const cs = this.life.castles.get(cid);
         const v = cs ? this._merchantOf(cs.def, +s) : null;
         if (!v) { delete item.shop; return; } // (nobody sells it any more)
-        this.offer = { v, kind: 'buy', price: item.shop.price, uid: item.uid, item, stall: key };
-        const line = this.brain(v).priceLine({ name: nameOf(item) }, item.shop.price, 'buy', this._ctx(v));
+        const iprice = this._lp(v, item.shop.price);
+        this.offer = { v, kind: 'buy', price: iprice, uid: item.uid, item, stall: key };
+        const line = this.brain(v).priceLine({ name: nameOf(item) }, iprice, 'buy', this._ctx(v));
         v.talking = 4;
         this._sayReply(v, line, 6);
-        this.game.hud.setVoice?.(`💰 ${item.shop.price} монет. «Да» — купить (у вас ${this.game.inventory.coins()})`, true);
+        this.game.hud.setVoice?.(`💰 ${iprice} монет. «Да» — купить (у вас ${this.game.inventory.coins()})`, true);
     }
 
     _tradeYes(v, res = null) {
@@ -1255,7 +1313,7 @@ export class CastleTalk {
         if (!v || v.dead || v.foe) return;
         // (all the pouches lying on his counter count: a second one put to add what was missing)
         const purses = [C, ...this._counterCoins(cs.def, +s).filter((L) => L !== C)];
-        const price = G.item.shop.price, have = purses.reduce((n, L) => n + (L.item.count || 0), 0), name = nameOf(G.item);
+        const price = this._lp(v, G.item.shop.price, by), have = purses.reduce((n, L) => n + (L.item.count || 0), 0), name = nameOf(G.item);
         v.yaw = Math.atan2(-(C.model.position.x - v.x), -(C.model.position.z - v.z));
         if (have < price) {
             this._sayForGuestOrMe(v, by, `${name[0].toUpperCase() + name.slice(1)} стоит ${price}, а тут только ${have}. Добавь ещё ${price - have} — или выбери что-нибудь другое.`);
@@ -1634,7 +1692,8 @@ export class CastleTalk {
             if (v.dead || v.foe || (v.talking > 0 && !noticed) || now - (v.talkedAt || -1e9) < 600000 || this.inTalk()) continue; // (no new «привет» from one I talked with lately, nor in the middle of a talk)
             const d = Math.hypot(v.x - me.x, v.z - me.z);
             // (near — or he noticed me looking at him and coming: a greeting from across the street, not at the door — Attention.js)
-            if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3)) continue;
+            if (d > 5 && !(this.attention?.score(v.id) >= ATT.NOTICE && d < ATT.TALK + 3 && this._mayNotice(v, d, now))) continue;
+            if (d <= 5 && !this._mayNotice(v, d, now) && v.role !== 'merchant' && v.job !== 'home') continue; // (a stranger passing close by does not greet: I must come up, call or wave)
             // (a wall between us: he does not know I am here — no «привет» through it)
             if (g.collision?.lineOfSight && this._losOf && !inSight(v, this._losOf, this._losCache, now)) continue;
             if (now - (this._greetT.get(v.id) || 0) < 90000) continue;

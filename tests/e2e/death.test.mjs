@@ -41,7 +41,7 @@ test('death in the free world: the body stays, everything drops at it, respawn w
         inv.slots[2] = { kind: 'res', block: 1, count: 12 };
         inv.slots[3] = { kind: 'wand', uid: 'dw1', plain: false, model: 2, color: 0xff33aa, dir: null, fav: null, power: 12 };
         g.items.wear({ kind: 'backpack', uid: 'dbp', slots: 3, color: 0x7a4a24 });
-        inv.slots[5] = { kind: 'scroll', uid: 'dsc', stat: 'hp', amount: 2 };
+        inv.slots[5] = { kind: 'scroll', uid: 'dsc', stat: 'spell', spell: 'Thunderwave' };
         g.items.takeIntoHand({ kind: 'shield', uid: 'dsh', type: 1, magic: false, max: 0 }, 'right');
         inv._render();
         return { slots: inv.slots.length };

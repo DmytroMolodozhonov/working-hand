@@ -150,6 +150,15 @@ export class DragonRide {
         } else if (this.active && d) this._mountWatch(d);
     }
 
+    /** (IceQueen._frozenMe) The Ice Rod froze the rider: the dragon is held too (see _ride) — a shell of ice on it, for T s. */
+    iced(T) {
+        const d = this.riding;
+        if (!d) return;
+        const g = this.game, p = d.model.position;
+        this._say('🐉 Лёд сковал и дракона — вы оба замерли', 'iced', 3000);
+        for (let i = 0; i < 30; i++) g.fx?.spark?.(_v.set(p.x + (Math.random() - 0.5) * 8 * d.size, p.y + Math.random() * 5 * d.size, p.z + (Math.random() - 0.5) * 8 * d.size), 0xcfeeff, 0.4, _v2.set(0, 1, 0), 1.2);
+    }
+
     _mountWatch(d) {
         const g = this.game, J = g.currentPose?.jump;
         if (!J) return;
@@ -194,7 +203,11 @@ export class DragonRide {
         const g = this.game, ch = g.character, col = g.collision, p = d.model.position, s = d.size, pose = g.currentPose;
         d.mode = 'ride';
         d.sleep = Math.max(0, d.sleep - dt * 1.2); // (it rises under the rider)
-        if (this.phase === 'ground') this._ground(d, dt, ch, col, p, s, pose);
+        if (g.combat?.frozen) { // (the Ice Rod's ice is on the rider — the dragon under them is held too: it does not fly, it only sinks to the ground, the fire stays in its mouth)
+            d.rideWalk = 0; d.vel.set(0, 0, 0); d.bank = 0;
+            const gy = this._floor(p.x, p.z);
+            if (p.y > gy + 0.2) p.y = Math.max(gy + 0.2, p.y - 9 * dt);
+        } else if (this.phase === 'ground') this._ground(d, dt, ch, col, p, s, pose);
         else if (this.phase === 'fly') this._fly(d, dt, ch, col, p, s, pose);
         else this._glide(d, dt, ch, col, p, s);
         if (!this.riding) return;

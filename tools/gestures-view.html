@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8"><title>gestures</title>
+<script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js" } }</script>
+<body style="margin:0;background:#8fb0c8"><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { VillagerModel, villagerLook } from '/src/entities/VillagerModel.js';
+// rows: characters (role, seed); columns: what happens (feeling, situation, gesture, seconds into it, the stress at that moment)
+const ROWS = [['merchant', 2], ['knight', 3], ['king', 5], ['mage', 1]];
+const COLS = [
+    { emo: 'joy', gctx: 'show', gest: 'explain_big_r_wide', at: 0.9, acc: 1 },
+    { emo: 'angry', gctx: 'refuse', gest: 'fist_shake_r_wide', at: 0.8, acc: 0.9 },
+    { emo: 'afraid', gctx: 'fear', gest: 'recoil_b_wide', at: 0.5, acc: 0, since: 0.25 },
+    { emo: 'laugh', gctx: 'joke', gest: 'pat_belly_r_wide', at: 0.7, acc: 0.6 },
+];
+const W = 230, H = 300;
+const cv = document.getElementById('c');
+const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+r.setSize(W * COLS.length, H * ROWS.length); r.setScissorTest(true);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(3, 6, -4); scene.add(sun);
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 100);
+const models = [];
+ROWS.forEach(([role, seed], ri) => COLS.forEach((c, ci) => {
+    const m = new VillagerModel(villagerLook(seed, role, role === 'mage' ? true : false), {});
+    m.group.position.set(ci * 60, 0, ri * 60);
+    m.group.rotation.y = 0.45; // (turned a little toward the camera)
+    scene.add(m.group); models.push([m, c, ri, ci]);
+}));
+window.render = (secs) => {
+    for (const [m, c] of models) {
+        const st = { mode: 'talk', speed: 0, emo: c.emo, gctx: c.gctx, gest: c.gest, talk: true, acc: 0, breath: 0, since: 9 };
+        let t = 0; const dt = 1 / 30;
+        while (t < c.at) { t += dt; st.acc = t > c.at - 0.12 ? c.acc : 0; st.since = c.since != null ? t - (c.at - c.since) : 9; m.update(dt, st); }
+    }
+    r.clear();
+    for (const [m, c, ri, ci] of models) {
+        r.setViewport(ci * W, (ROWS.length - 1 - ri) * H, W, H); r.setScissor(ci * W, (ROWS.length - 1 - ri) * H, W, H);
+        for (const [m2] of models) m2.group.visible = m2 === m;
+        cam.position.set(ci * 60 - 3.5, 3.3, ri * 60 - 15); cam.lookAt(ci * 60, 1.6, ri * 60);
+        const g = m.group; g.updateMatrixWorld(true);
+        // (the camera looks at the model from the front: the model faces −Z in its own space — turned π)
+        r.render(scene, cam);
+    }
+    return cv.toDataURL('image/png');
+};
+window.ready = true;
+</script>

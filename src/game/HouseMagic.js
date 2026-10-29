@@ -1008,6 +1008,7 @@ export class HouseMagic {
         const key = this._key(by);
         if (this.found.has(key)) return [];
         if ((by === g.localId || by === 'local') && g.bonus?.spells?.CreateHouse) { this.found.add(key); return []; }
+        if (g.remotes?.get?.(by)?.known?.has?.('s:CreateHouse')) { this.found.add(key); return []; }
         if (rng() >= HOUSE_MAGIC.SCROLL_FIRST) return [];
         this.found.add(key);
         return [{ kind: 'scroll', uid: newUid(), stat: 'spell', spell: 'CreateHouse' }];

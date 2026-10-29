@@ -56,7 +56,9 @@ export class FallingBlocks {
         const keys = fall.landed.map(([x, L, z]) => `${x},${L},${z}`);
         if (keys.length) data?.hideCells?.(keys);
         // (a round of a chain: it holds a moment longer — the one before it is seen coming down first)
-        this.pieces.push({ fall, mesh, keys, y: 0, vy: 0, wait: (fall.stage || 0) * STRUCT.STAGE, started: !(fall.stage > 0) });
+        // a piece that topples (Collapse.toppleOf): after the fall it turns over its footing's edge, then lies down
+        const tl = fall.tilt || null;
+        this.pieces.push({ fall, mesh, keys, y: 0, vy: 0, wait: (fall.stage || 0) * STRUCT.STAGE, started: !(fall.stage > 0), tl, phase: 0, ang: 0, av: 0, y2: 0, vy2: 0 });
     }
 
     update(dt) {
@@ -70,10 +72,42 @@ export class FallingBlocks {
             }
             if (!p.started) { p.started = true; p.mesh.position.set(0, 0, 0); this.onStart?.(p.fall); }
             if (p.fall.crushed) { this._land(p); continue; }
-            p.vy += G * dt;
-            p.y = Math.min(p.fall.d, p.y + p.vy * dt);
-            p.mesh.position.y = -p.y;
-            if (p.y >= p.fall.d) this._land(p);
+            if (p.phase === 0) {
+                p.vy += G * dt;
+                p.y = Math.min(p.fall.d, p.y + p.vy * dt);
+                p.mesh.position.y = -p.y;
+                if (p.y >= p.fall.d) { if (p.tl) { p.phase = 1; p.vy = 0; } else this._land(p); }
+            } else if (p.phase === 1) {
+                // turning over the edge of the footing: slowly at first, faster and faster (a weight tipping), then it hits
+                p.av += 4.2 * dt * (0.5 + Math.sin(Math.min(p.ang, Math.PI / 2)) * 3);
+                p.ang = Math.min(Math.PI / 2, p.ang + p.av * dt);
+                this._pose(p);
+                if (p.ang >= Math.PI / 2) { p.phase = 2; p.vy2 = 0; this.onTip?.(p.fall); }
+            } else {
+                p.vy2 += G * dt;
+                p.y2 = Math.min(p.tl.d2 || 0, p.y2 + p.vy2 * dt);
+                this._pose(p);
+                if (p.y2 >= (p.tl.d2 || 0)) this._land(p);
+            }
+        }
+    }
+
+    /** The piece turned by p.ang over its footing's edge (the line through the edge at the footing's level), then dropped by p.y2. */
+    _pose(p) {
+        const T = p.tl, m = p.mesh, a = p.ang * T.sg, d = p.fall.d;
+        const py = T.Lb - 1.5; // (the footing's bottom, in the cells' world height, after the first fall)
+        // the cells are drawn where they hung: a cell X goes to R·(X − d − P) + P − y2, so the mesh is moved by P − R·(P + d) − y2
+        m.rotation.set(0, 0, 0);
+        if (T.axis === 'x') {
+            const px = T.edge + 0.5 * T.sg, th = -a; // (toppling towards +x: clockwise about z)
+            const c = Math.cos(th), s = Math.sin(th), qy = py + d;
+            m.rotation.z = th;
+            m.position.set(px - (px * c - qy * s), py - (px * s + qy * c) - p.y2, 0);
+        } else {
+            const pz = T.edge + 0.5 * T.sg, ph = a; // (towards +z: about x)
+            const c = Math.cos(ph), s = Math.sin(ph), qy = py + d;
+            m.rotation.x = ph;
+            m.position.set(0, py - (qy * c - pz * s) - p.y2, pz - (qy * s + pz * c));
         }
     }
 

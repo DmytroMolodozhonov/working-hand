@@ -12,6 +12,7 @@
  */
 
 import { RelationBars } from '../ui/RelationBars.js';
+import { friendDrag } from './Rebellion.js';
 import {
     baseSub, blank, bump as bumpRel, effective, visibleBars, TONE, TALK_CAP, flirtResult, blankRep, isKnown, firstImpression, DEED,
     hatred, plotOf, strikesAlone, stance, mayEnterHome, mayTakeThing, obeys,
@@ -79,9 +80,12 @@ export class RelationsLife {
     }
 
     /** The bars as they are now: {sub, fr, lv}. */
-    eff(v, pid = this.game.localId) {
-        const ch = this.life.talk?.brain?.(v)?.character;
-        return effective(this.relOf(v, pid), baseSub(this.statusOf(v, pid), ch?.obedience ?? 50));
+    eff(v, pid = this.game.localId, raw = false) {
+        const ch = v.cs ? this.life.talk?.brain?.(v)?.character : null; // (a sailor, a ship's captain: no castle, no talk brain — Gargoyles biting a sailor once threw «reading 'def'»)
+        const e = effective(this.relOf(v, pid), baseSub(this.statusOf(v, pid), ch?.obedience ?? 50));
+        // the unrest of the place drags down the friendship to its owner («формально подчиняются, но ненавидят» — Rebellion.js); `raw`: without it
+        if (!raw && v.cs && this.life.reb?.appliesTo(v.cs, pid)) { const d = friendDrag(this.life.reb.value(v.cs), ch?.temper ?? 50); if (d) e.fr = Math.max(-100, e.fr - d); }
+        return e;
     }
 
     /**
@@ -154,6 +158,7 @@ export class RelationsLife {
         if (this.auth) { a[3] = (a[3] || 0) + Math.max(0, d.f || 0); a[4] = (a[4] || 0) + Math.max(0, d.l || 0); }
         this.bump(v, pid, d);
         if (v.cs) this._rep(v.cs, pid, 'n', 0.2);
+        if (v.cs && this.auth && (d.f > 0 || d.s > 0)) this.life.reb?.note(v.cs, pid, 'talk'); // (a kind word eases the unrest a little)
         this.focus = { v, until: performance.now() + 7000 };
     }
 
@@ -171,6 +176,7 @@ export class RelationsLife {
         const D = killed ? (v.foe === by ? DEED.hurt : DEED.slay) : DEED.hurt; // (killing one who was at me is self-defence: a wound, not a murder)
         const cs = v.cs, p = { x: v.x, y: v.y, z: v.z };
         this._rep(cs, by, D.rep || 'hurt');
+        if (v.role !== 'king') this.life.reb?.note(cs, by, D === DEED.slay ? 'slay' : 'hurt'); // (the unrest of the place: Rebellion.js)
         for (const w of this._witnesses(cs, p)) { this._apply(w, by, w === v ? D.victim : D.witness, by === this.game.localId); if (w !== v) this.life.social?.witnessedBlow(w, v, by, killed); }
         if (v.dead || !killed) this._apply(v, by, D.victim, by === this.game.localId);
         // (a hand raised against the people: the town hears of it — one sour word to everybody)
@@ -185,6 +191,7 @@ export class RelationsLife {
             const w = this._witnesses(cs, pos, 35);
             if (!w.length) continue;
             this._rep(cs, by, 'foes');
+            this.life.reb?.note(cs, by, 'foe');
             for (const x of w) this._apply(x, by, DEED.foe.witness, by === this.game.localId);
         }
     }
@@ -204,8 +211,8 @@ export class RelationsLife {
     }
 
     /** A deal done fairly, a gift, a theft: small deeds (host). */
-    gift(v, by) { if (this.auth) { this._rep(v.cs, by, 'gifts'); this._apply(v, by, DEED.gift.victim, by === this.game.localId); } else this.bump(v, by, DEED.gift.victim); }
-    theft(v, by) { if (this.auth) { this._rep(v.cs, by, 'crimes'); this._apply(v, by, DEED.theft.victim, by === this.game.localId); } }
+    gift(v, by) { if (this.auth) { this._rep(v.cs, by, 'gifts'); this.life.reb?.note(v.cs, by, 'gift'); this._apply(v, by, DEED.gift.victim, by === this.game.localId); } else this.bump(v, by, DEED.gift.victim); }
+    theft(v, by) { if (this.auth) { this._rep(v.cs, by, 'crimes'); this.life.reb?.note(v.cs, by, 'theft'); this._apply(v, by, DEED.theft.victim, by === this.game.localId); } }
 
     /** What the person knows of the hero in words, for the talk (so that his words fit): "видел N заклинаний, знает про убитых…". */
     knownText(v, pid = this.game.localId) {
@@ -393,6 +400,8 @@ export class RelationsLife {
         const out = { rel, rep };
         if (st.court) out.court = st.court;
         if (st.jail) out.jail = st.jail;
+        const reb = this.life.reb?.pack(cs);
+        if (reb) out.reb = reb;
         return out;
     }
 
@@ -405,6 +414,7 @@ export class RelationsLife {
         st.rep = s.rep && typeof s.rep === 'object' ? s.rep : (st.rep || {});
         if (s.court && typeof s.court === 'object') st.court = s.court;
         if (s.jail && typeof s.jail === 'object') st.jail = s.jail;
+        this.life.reb?.unpack(st, s); // (older saves and a calm place: no `reb` — calm)
     }
 
     dispose() { this.bars?.dispose(); this.bars = null; }

@@ -36,11 +36,14 @@ import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
 import { owlDist } from './Owls.js';
+import { spencerBody } from './SpencerBirds.js';
+const _spCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }, _spV = new THREE.Vector3();
 import { gargoyleDist } from './GargoyleModel.js';
 import { iceBody } from './IceQueen.js';
 import { segmentSegmentDistSq } from '../core/math.js';
 import { BowDraw, drawProgress } from './BowDraw.js';
 
+const _cc = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
@@ -510,6 +513,30 @@ export class Gear {
                     if (a.hit.has(o) || owlDist(o, p) > 0.2) continue;
                     a.hit.add(o);
                     g.owls.hit(o, a.dmg, 'arrow', a.by);
+                }
+                // a creature of one's own («Да пусть создастся»): an arrow hurts it (CustomCreatures.hit)
+                if (g.authority) for (const o of g.customCreatures?.targets() || []) {
+                    if (a.hit.has(o) || g.customCreatures.centre(o, _cc).distanceTo(p) > o.r + 0.3) continue;
+                    a.hit.add(o);
+                    g.customCreatures.hit(o, a.dmg, 'arrow', a.by);
+                }
+                // a swamp canary (Canaries.js): an arrow hurts it; its camp turns on the shooter
+                if (g.authority) for (const o of g.canaries?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const cp = o.model.position;
+                    if (Math.hypot(cp.x - p.x, cp.z - p.z) > 0.7 || p.y < cp.y || p.y > cp.y + 2.2) continue;
+                    a.hit.add(o);
+                    g.canaries.hit(o, a.dmg, 'arrow', a.by);
+                    if (!o.dead) this._stick(a, o.model);
+                }
+                // the invisible bird of Spencer (SpencerBirds.js): an arrow kills it (the little body is hit wherever the shaft passes it)
+                if (g.authority) for (const o of g.spencers?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const c = spencerBody(o, _spCap);
+                    _spV.copy(c.a).lerp(c.b, 0.5);
+                    if (_spV.distanceTo(p) > c.r + 0.2) continue;
+                    a.hit.add(o);
+                    g.spencers.hit(o, a.dmg, 'arrow', a.by);
                 }
                 // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
                 if (g.authority) for (const o of g.gargoyles?.targets() || []) {

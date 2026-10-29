@@ -27,6 +27,7 @@ import './ImperiusWalkers.js'; // (… the spider, the living trees, the Ice Cas
 import { IMPERIUS_MAXIMA } from './Imperius.js';
 import { FlapReader, armsOf } from './ImperiusFlight.js';
 import { HowlReader } from './DragonHowl.js';
+import { WalkGate } from './DragonImperius.js';
 import { ImperiusGuards } from './ImperiusGuards.js';
 import { flies } from './Imperius.js';
 import { castingHand } from './WandAim.js';
@@ -85,6 +86,7 @@ export class ImperiusControl {
         this.I = { yaw: 0, walk: 0, run: false, jump: false, strike: false, strikeNow: false, stroke: 0, arms: '', maxima: false, fly: null, look: new THREE.Vector3(0, 0, -1), fire: null, wings: animalWings, say: (t, key) => this._say(t, key || t, 4000) };
         this.flaps = new FlapReader(); // (the arms' strokes: flying a winged creature in the Maxima — ImperiusFlight.js)
         this.howl = new HowlReader(); // (the dragon's fire: the long «У» — DragonHowl.js)
+        this.gate = new WalkGate(); // (it walks only while the legs step, freshly: DragonImperius.WalkGate)
         this._armsDownT = 0;
         this.guards = new ImperiusGuards(game); // (a castle's guard and a taken creature walking about it — ImperiusGuards.js)
         this.dark = 0; // the screen's darkness (the link fading)
@@ -94,6 +96,8 @@ export class ImperiusControl {
     }
 
     get active() { return !!this.name; }
+    /** Where the creature I am in stands (null: none) — «Nihilis Atra» sends the mind home if it is hit (Nihilis.js). */
+    bodyPosition(out) { const c = this.creature; return c && BODIES[this.sys] ? BODIES[this.sys].pos(c, out) : null; }
     get maxima() { return this.name === 'ImperiusMaxima'; }
     /** The hero's body is left (no walking, no jumping of its own). */
     get busy() { return !!this.name; }
@@ -301,8 +305,11 @@ export class ImperiusControl {
         const g = this.game, ch = g.character, pose = g.currentPose;
         const I = this.I;
         I.yaw = this._yaw0 + (ch.group.rotation.y - this._heroYaw);
-        I.walk = ch.isRunning ? Math.max(0.2, ch.runIntensity || 0) : 0;
-        I.run = (ch.runIntensity || 0) > 0.45;
+        // (standing is standing: the camera's old «бегу» — it sent no pose for a while —, a blip of the shoulders and a pause do not walk it)
+        const lastPose = g.poseSmoother?.lastPushAt;
+        const age = lastPose ? (performance.now() - lastPose) / 1000 : null;
+        I.walk = this.phase === 'on' ? this.gate.step({ running: ch.isRunning, intensity: ch.runIntensity, age, paused: !!g.paused, lost: pose?.hasPose === false }, dt) : (this.gate.reset(), 0);
+        I.run = I.walk > 0 && (ch.runIntensity || 0) > 0.45;
         const J = pose?.jump;
         I.jump = false;
         if (J && J.jumps !== this._jumpSeen) { if (this._jumpSeen != null) I.jump = true; this._jumpSeen = J.jumps; }
@@ -463,6 +470,8 @@ export class ImperiusControl {
         for (const d of g.dragons?.list || []) if (!d.dead) consider('D', d.id, d.model.position.x, d.model.position.y, d.model.position.z);
         for (const sp of g.spiders?.list || []) if (!sp.dead) consider('s', sp.id, sp.model.position.x, sp.model.position.y, sp.model.position.z); // (the spider: a servant's key)
         for (const t of g.livingTrees?.list || []) if (!t.isDead) consider('t', t.id, t.model.position.x, t.model.position.y, t.model.position.z);
+        for (const cc of g.customCreatures?.list || []) if (!cc.dead && cc.born >= 1) consider('C', cc.id, cc.model.position.x, cc.model.position.y, cc.model.position.z); // (a creature of one's own: only the Maxima)
+        for (const cn of g.canaries?.list || []) if (!cn.dead) consider('ca', cn.id, cn.model.position.x, cn.model.position.y, cn.model.position.z); // (a swamp canary)
         for (const ic of g.iceCastle?.list || []) if (!ic.dead) consider('I', ic.id, ic.model.position.x, ic.model.position.y, ic.model.position.z);
         for (const sv of g.ships?.crew?.byId?.values?.() || []) if (!sv.dead) consider('sl', sv.id, sv.x, sv.y, sv.z);
         if (!g.isDeadLocal) consider('p', g.localId, g.character.group.position.x, g.character.group.position.y - 1.95, g.character.group.position.z); // (my own body too: hurt, the mind comes back)
@@ -481,6 +490,8 @@ export class ImperiusControl {
         if (d.lengthSq() < 1e-6) d.set(0, 0, 1);
         d.normalize();
         const n = Math.max(1, Math.min(20, dmg | 0)); // (a dragon's bite 14 at most — DRAGON.BITE)
+        if (tk === 'C') { const cc = g.customCreatures?.byId(tid); if (cc) g.customCreatures.hit(cc, n, 'melee', by); return; }
+        if (tk === 'ca') { const cn = g.canaries?.byId(tid); if (cn && !cn.dead) g.canaries.hit(cn, n, 'melee', by); return; } // (a canary struck by a possessed creature)
         if (tk === 'sl') { const v = g.ships?.crew?.byId?.get(tid); if (v && !v.dead) g.ships.crew.hit(v, n, d, by, { via: 'servant' }); return; } // (a sailor)
         g.servants?.damage?.({ k: tk, id: tid }, n, d, by, 'servant', src);
     }

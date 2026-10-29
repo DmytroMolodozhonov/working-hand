@@ -28,9 +28,11 @@ import { iceMagicWords } from '../game/IceMagic.js';
 import { bridgeWords } from '../game/Bridge.js';
 import { groundprudWords } from '../game/GroundprudWords.js';
 import { visibleGodiWords } from '../game/VisibleGodiWords.js';
+import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords } from '../game/PentagramWords.js';
+import { creationWords } from '../game/CreationWords.js';
 import { segmentToSegment } from '../game/SegmentContact.js';
 
 const _a = new THREE.Vector3();
@@ -115,6 +117,9 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Да пусть создастся …» (the gods' making, DivineCreation.js): FIRST — the description after it may hold any other
+    // spell's word («…замок с огнём на башнях»); only the opener at the very start of the phrase (CreationWords.js)
+    if (creationWords(s)) return 'DivineCreation';
     // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
     const imp = imperiusWords(s);
     if (imp) return imp;
@@ -144,6 +149,8 @@ export function matchSpell(text) {
     if (boomWords(s)) return 'Boom';
     // «Pentagranium <Name>» («Пентаграниум Телепортис»…): ONE pentagram per phrase — the first word AND its own English name (PentagramWords.js); the lone «Пентаграниум» is no spell
     if (pentagramWords(s)) return 'Pentagranium';
+    // «Nihilis Atra» («нихилис атра»): BOTH words — never «нигилист» in talk (NihilisWords.js)
+    if (nihilisWords(s)) return 'Nihilis';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
     if (has('give me my power', 'give me power', 'give my power', 'гив ми май пауэр', 'гив ми май пауер', 'гив ми май пауа', 'гив ми май павер', 'гиф ми май пауэр', 'гив ми мой пауэр',
         'верни мне мою силу', 'верни мою силу', 'дай мне мою силу', 'верните мне мою силу')) return 'GiveMyPower';
@@ -516,7 +523,7 @@ export class SpellManager {
             case 'Imperius': case 'ImperiusMaxima': this.castImperius(o, direction.clone(), name === 'ImperiusMaxima'); break; // (the mind's light from the eyes to the creature — ImperiusControl draws the rest)
             case 'BrainrotMaxima': this.castBrainrot(o, direction.clone(), true); break; // (the same rings, golden and wider: at a dragon)
             case 'Storm': if (this.hooks.storm) this.hooks.storm(o); break;
-            case 'ToTheSun': this.hooks.sun?.(o); break;
+            case 'ToTheSun': this.hooks.sun?.(o, casterId, handSide); break; // (the beam goes with that player's wand)
             case 'LetItRain': this.castLetItRain(o, casterId); break;
             case 'LightningHold': this.castLightningHold(casterId, handSide); break;
             case 'LightningHit': this.castLightningHit(o, casterId); break;

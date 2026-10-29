@@ -412,7 +412,7 @@ test('everything is held really in the fingers: nothing floats, nothing sits ins
     await startFromMenu(page, 'creative');
     await waitHudVisible(page);
     await feedF(page, { arms: 'forward', rightCurl: 0.85, leftCurl: 0.85 }, 10);
-    const kinds = [{ kind: 'apple' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }, { kind: 'meat' }, { kind: 'wool' }, { kind: 'scroll', stat: 'hp', amount: 1 }, { kind: 'hammer' }, { kind: 'bow', type: 0, arrows: 0 }, { kind: 'coins', count: 5 }, { kind: 'backpack', slots: 3, color: 0x7a4a24 }];
+    const kinds = [{ kind: 'apple' }, { kind: 'bread' }, { kind: 'cheese' }, { kind: 'pie' }, { kind: 'meat' }, { kind: 'wool' }, { kind: 'scroll', stat: 'spell', spell: 'Thunderwave' }, { kind: 'hammer' }, { kind: 'bow', type: 0, arrows: 0 }, { kind: 'coins', count: 5 }, { kind: 'backpack', slots: 3, color: 0x7a4a24 }];
     const out = [];
     for (const it of kinds) {
         await page.evaluate((it) => { const g = window.__zns.game; for (const s of ['left', 'right']) g.items.releaseHand(s); g.gear._dropNock(); g.items.takeIntoHand({ ...it, uid: 'hold-' + it.kind }, 'right'); }, it);

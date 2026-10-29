@@ -10,6 +10,8 @@ voice_native.offline() — the very pipeline of the game (echo canceller, VAD, s
   overlap     the same, but the player shouts the spell while the friend is talking
   friendspell the friend says spell words (Discord), the player is silent: not a single spell may be cast
   loud        like overlap, the room is louder and more echoey (loud speakers, a big room)
+  ship        no friend: the game's own sea on the speakers (wind, waves, creaking, cannon shots) — a fight at sea (the author's journal: almost no
+              spell was cast at the wheel of a ship); the speakers' sound is also the reference (`ref`), as in the game
 
 The speakers' sound reaches the microphone through a room (delay, early reflections, a reverberant tail, a little distortion);
 the canceller gets the clean copy («loopback»). Output: events (the pipeline's) + truth, then `node tools/voicebench/eval.mjs`
@@ -148,6 +150,26 @@ def friend_track(voices, rng, total, texts, share, who=FRIEND):
 LAST = {}  # (the last scene's parts, for analysis: 'player' — his voice alone, 'echo' — what the room made of the speakers)
 
 
+def ship_sound(rng, total):
+    """The game's sea as the speakers play it: wind (low noise swelling and fading), waves (a slow pulse), a creak now and then, and a cannon
+    shot every 5–9 s (a low thump with a crack), loud: -14 dBFS peaks."""
+    t = np.arange(total) / SR
+    n = rng.standard_normal(total).astype(np.float32)
+    wind = np.convolve(n, np.ones(24, np.float32) / 24, mode="same")  # (lows)
+    wind *= (0.5 + 0.5 * np.sin(2 * np.pi * t / 7.0 + rng.uniform(0, 6)))
+    wave = np.convolve(n, np.ones(160, np.float32) / 160, mode="same") * (0.6 + 0.4 * np.sin(2 * np.pi * t / 3.2))
+    out = wind * 10 ** (-24 / 20) + wave * 10 ** (-20 / 20)
+    k = 3.0
+    while k < total / SR - 1.5:
+        i = int(k * SR)
+        m = min(int(1.2 * SR), total - i)
+        tt = np.arange(m) / SR
+        thump = np.sin(2 * np.pi * (95 - 40 * tt) * tt) * np.exp(-5.5 * tt) + rng.standard_normal(m).astype(np.float32) * 0.5 * np.exp(-30 * tt)
+        out[i:i + m] += (thump * 10 ** (-14 / 20)).astype(np.float32)
+        k += rng.uniform(5.0, 9.0)
+    return out.astype(np.float32)
+
+
 def scene(name, voices, seed, spells=SPELLS, n=20):
     rng = np.random.default_rng(seed)
     pyr = random.Random(seed)
@@ -161,8 +183,14 @@ def scene(name, voices, seed, spells=SPELLS, n=20):
     par = dict(clean=dict(friend=False), chat=dict(friend=True, share=0.55, gain=-10, rt60=0.25, delay=45, dist=0.6),
                overlap=dict(friend=True, share=0.85, gain=-10, rt60=0.25, delay=45, dist=0.6),
                friendspell=dict(friend=True, share=0.5, gain=-10, rt60=0.25, delay=45, dist=0.6, spells_friend=True, silent=True),
-               loud=dict(friend=True, share=0.85, gain=-4, rt60=0.45, delay=70, dist=1.5))[name]
+               loud=dict(friend=True, share=0.85, gain=-4, rt60=0.45, delay=70, dist=1.5),
+               ship=dict(friend=False, ship=True, gain=-6, rt60=0.3, delay=40, dist=1.0))[name]
     texts = FRIEND_SPELLS if par.get("spells_friend") else CHAT
+    if par.get("ship"):
+        ref = ship_sound(rng, total)
+        echo = room(ref, rng, par["gain"], par["delay"] + rng.uniform(-8, 8), par["rt60"], par["dist"])
+        mic += echo
+        LAST["echo"] = echo
     if par["friend"]:
         ref, marks = friend_track(voices, rng, total, texts, par["share"])
         if name != "chat":
@@ -212,7 +240,7 @@ def main():
     a = ap.parse_args()
     import voice_native as vn
     voices = Voices(a.voices, os.path.join(a.voices, "cache"))
-    names = ["clean", "chat", "overlap", "friendspell", "loud"] if a.scene == "all" else a.scene.split(",")
+    names = ["clean", "chat", "overlap", "friendspell", "loud", "ship"] if a.scene == "all" else a.scene.split(",")
     os.makedirs(a.out, exist_ok=True)
     for nm in names:
         mic, ref, truth = scene(nm, voices, a.seed, n=a.n)

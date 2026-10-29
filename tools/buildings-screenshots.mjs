@@ -35,7 +35,7 @@ try {
             const { TerrainData, mergeBuffers, CHUNK } = await import('/src/world/Terrain.js');
             const { applyVoxelDetail } = await import('/src/world/VoxelShading.js');
             const d = new TerrainData();
-            d.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, slopes: true, wizHuts: true, furnish: true, buildings: true });
+            d.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, slopes: true, wizHuts: true, furnish: true, bigHouses: true, buildings: true });
             let site = null, bld = null;
             for (let gz = -4; gz <= 4 && !bld; gz++) for (let gx = -4; gx <= 4 && !bld; gx++) {
                 const list = [d.castles.cellOf(gx, gz), ...(d.hamlets?.cellOf(gx, gz) || [])].filter(Boolean);

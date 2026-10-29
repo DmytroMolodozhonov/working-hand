@@ -19,6 +19,7 @@
 
 import { matchSpell } from '../fx/SpellManager.js';
 import { pentagramSaid } from '../game/PentagramWords.js';
+import { NIHILIS_SAID } from '../game/NihilisWords.js';
 
 export const LETTERS = ' абвгдежзийклмнопрстуфхцчшщъыьэюя';
 export const SPACE = 0;
@@ -46,6 +47,7 @@ const SAID = [
     ['граунд вортекс', 'граунт вортекс', 'граунд вортэкс', 'граунд вортикс'], // (Ground Vortex — both words together, GroundVortexWords.js)
     ['шилд', 'шилт', 'шиелд'], // (Shield — the earth vortex's shield word; does something only while it circles)
     ...pentagramSaid(), // (Pentagranium <Name>: first word and the pentagram's own English name — one phrase per pentagram, PentagramWords.js; the lone first word is no spell)
+    NIHILIS_SAID, // (Nihilis Atra — both words together, NihilisWords.js)
     ['визибл годи', 'визибл гоуди', 'визибл гади', 'визибл боди', 'визибл годе'], // (Visible Godi — both words together, VisibleGodiWords.js)
     ['овергроун', 'оверграун', 'овергрон'],
     ['лайтнинг страйк', 'лайтнин страйк', 'лайтинг страйк'],
@@ -134,6 +136,7 @@ const SAID = [
     ['нокс'],
     ['лайтнинг райтинг'],
     ['раскрой свои секреты', 'ревил'],
+    ['да пусть создастся', 'пусть создастся', 'да пусть сотворится'],
 ];
 
 /** A phrase → the network's letters (ё is е there; anything else is left out). */
@@ -335,7 +338,7 @@ export const ECHO_AFTER = [-0.08, 0.45];
 export const ECHO_LONGER = 0.3;
 
 // (spells whose words go on: the written words carry what follows — «поменяй цвет на синий»)
-export const WORDY = new Set(['ChangeColor']);
+export const WORDY = new Set(['ChangeColor', 'DivineCreation']); // («Да пусть создастся …»: the description goes on — DivineCreation.js)
 
 /** The spells this finds by their sound: for them the sound is the judge, never the written words. */
 export const HEARD = new Set(VOCAB.map((w) => w.spell));

@@ -14,7 +14,7 @@ import { HELM_LOCK } from './ShipTypes.js';
 
 export const HELM = {
     GRAB_R: 0.45, CLOSE_CURL: 0.55, OPEN_CURL: 0.35, RELEASE_CURL: 0.28, RELEASE_MS: 160, CLOSE_WINDOW_MS: 900,
-    LOCK: HELM_LOCK, MAX_RATE: 4.8, SLIP: 0.9, RETURN: 0.12, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
+    LOCK: HELM_LOCK, MAX_RATE: 9, SLIP: 0.9, RETURN: 0.12, GAIN: 1, // (the wheel turns exactly as far as the hand goes round it: the hand stays where it holds)
 };
 
 /** The polar angle of a point in the wheel's plane (0 = top, + = clockwise for the helmsman). */
@@ -43,7 +43,10 @@ export function steer(wheel, holds, dt, speed) {
     let want = 0;
     for (const h of holds) want += h.w0 + HELM.GAIN * (h.a - h.a0);
     want /= holds.length;
-    const rate = HELM.MAX_RATE / (1 + Math.abs(speed) / 8);
-    const next = wheel + Math.max(-rate * dt, Math.min(rate * dt, want - wheel));
-    return Math.max(-HELM.LOCK, Math.min(HELM.LOCK, next));
+    const rate = HELM.MAX_RATE / (1 + Math.abs(speed) / 16);
+    const next = Math.max(-HELM.LOCK, Math.min(HELM.LOCK, wheel + Math.max(-rate * dt, Math.min(rate * dt, want - wheel))));
+    // the wheel is hard over and the hand goes on round: the hold is moved with the hand, so that turning back answers at once
+    // (no dead stretch of the circle to be gone through again — the hand did not «slip», the reference stood still)
+    if (Math.abs(next) >= HELM.LOCK - 1e-9 && Math.abs(want) > Math.abs(next)) for (const h of holds) h.a0 = h.a - (next - h.w0) / HELM.GAIN;
+    return next;
 }

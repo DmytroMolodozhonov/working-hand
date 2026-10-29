@@ -4,7 +4,7 @@
  * fire, clouds and glow: GargoyleRitual.js; the voices: audio/GargoyleSounds.js; the pentagram's entry: PentagramGargoyles.js.
  *
  * The ritual (`startRitual`, on the SUMMONER's computer): the picture is drawn and good → if there are ≥ 150 mana (free in
- * Creative) they are taken at once, +1 to the black level (DarkMagic.addDark 'ritual') and the host begins it; with less
+ * Creative) they are taken at once, +25 to the black level (GARGOYLE.DARK, DarkMagic.addDark 'ritual') and the host begins it; with less
  * mana nothing is taken and nothing starts (the pentagram stays — stand in it with 150 mana later: `PentagramGargoyles`).
  * The host runs it: 5 s of hellfire (the ring of flame runs round and grows, an ember-light, a dread melody) → 30 gargoyles
  * burst out one after another, first straight up, then every way → the storm: black-crimson clouds over SKY_R m, ≤ 12 real
@@ -30,6 +30,7 @@ import { RitualFx } from './GargoyleRitual.js';
 import { gargoyleModel, poseGargoyle, gargoyleBody, gargoyleCenter, gargoyleDist, MODEL_SCALE, HIP, gargoyleStats } from './GargoyleModel.js';
 import {
     GARGOYLE, TARGETS, PHASE, phaseAt, canStart, sparesSummoner, releasePlan, boltPlan, inDisc, rng, mayHunt, biteDamage, harmOf, roomFor, outOfLeash, grabChance, breakFree, isSpent,
+    skyNow, skyReach, burnPlan, BURN_STYLES,
 } from './GargoyleRules.js';
 
 export { TARGETS, GARGOYLE };
@@ -105,7 +106,7 @@ export class Gargoyles {
         }
         if (this.rituals.some((r) => hdist(r.c, center) < 30 && r.t < GARGOYLE.FIRE_T + GARGOYLE.RELEASE_T + 20)) return { ok: false, why: 'busy' };
         if (!free) c.fatigue = Math.max(0, c.fatigue - GARGOYLE.MANA); // (taken the moment the ritual starts)
-        addDark(g.dark, 1, 'ritual'); // (+1 to the black level — DarkMagic.js)
+        addDark(g.dark, GARGOYLE.DARK, 'ritual'); // (+25 to the black level, 100 at most — DarkMagic.addDark clamps)
         const seed = (Math.random() * 1e9) | 0;
         const p = [r1(center.x), r1(center.y), r1(center.z)];
         if (this.auth) this._begin(p, by, seed);
@@ -167,8 +168,11 @@ export class Gargoyles {
     _stepRitual(r, dt) {
         const g = this.game;
         r.t += dt;
-        // the clouds do not thin out while a gargoyle of this ritual lives (the author): the ritual's time waits at the edge of the fade; the last one gone — the sky clears
-        if (r.t > GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD && this.list.some((o) => !o.dead && (o.rit === r.id || hdist(o.home, r.c) < 3))) r.t = GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD;
+        if (r.broken) { // the sun broke the clouds («To the Sun»): the ritual's time stands, the sky clears over CLEAR_T s, the last gargoyle burns up — it is over
+            r.t = r.broken.t;
+            r.clear = Math.min(1, (r.clear || 0) + dt / GARGOYLE.SUN.CLEAR_T);
+            if (r.clear >= 1 && !this.list.some((o) => !o.dead && (o.rit === r.id || hdist(o.home, r.c) < 3))) { this._endRitual(r); return; }
+        } else if (r.t > GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD && this.list.some((o) => !o.dead && (o.rit === r.id || hdist(o.home, r.c) < 3))) r.t = GARGOYLE.STORM_T - GARGOYLE.STORM_HOLD; // the clouds do not thin out while a gargoyle of this ritual lives (the author): the ritual's time waits at the edge of the fade; the last one gone — the sky clears
         const ph = phaseAt(r.t);
         if (ph !== r.phase) {
             r.phase = ph;
@@ -177,7 +181,7 @@ export class Gargoyles {
         if (this.auth && r.plan && r.spawned >= r.plan.length && !r.spentDone) { r.spentDone = true; this._spend(r.c); this._send({ op: 'spent', c: [r1(r.c.x), r1(r.c.y), r1(r.c.z)] }); }
         if (this.auth) {
             while (r.spawned < r.plan.length && r.t >= GARGOYLE.FIRE_T + r.plan[r.spawned].delay) this._release(r, r.plan[r.spawned++]);
-            while (r.boltI < r.bolts.length && r.t >= r.bolts[r.boltI].t) this._bolt(r, r.bolts[r.boltI++]);
+            while (!r.broken && r.boltI < r.bolts.length && r.t >= r.bolts[r.boltI].t) this._bolt(r, r.bolts[r.boltI++]);
         }
         if (ph === PHASE.DONE && !this.list.some((o) => o.rit === r.id && !o.dead && o.mode === 'rise')) this._endRitual(r);
         void g;
@@ -226,6 +230,164 @@ export class Gargoyles {
         this.fx.bolt(1);
         this._boltOn = true; // (the storm's own bolt does not hurt a gargoyle: hitAt skips it)
         try { g.spells?.cast('LightningHit', _v, DOWN, null, by); } finally { this._boltOn = false; }
+    }
+
+    // ============================================================ «To the Sun» against the clouds, and the burning
+    /** The ritual whose black clouds hang over the point `pos` (dark enough to fight), or null. */
+    cloudsOver(pos) {
+        let best = null, bk = 0.3;
+        for (const r of this.rituals) {
+            if (r.broken) continue;
+            const k = skyNow(r) * skyReach(hdist(pos, r.c));
+            if (k > bk) { bk = k; best = r; }
+        }
+        return best;
+    }
+
+    /** Where a ray from `o` along `d` meets the cloud deck of a ritual: `{r, x, y, z, dist}` or null (not at the clouds, below the horizon, too far). */
+    cloudHit(o, d) {
+        if (!(d.y > 0.05)) return null;
+        for (const r of this.rituals) {
+            if (r.broken || skyNow(r) < 0.35) continue;
+            const y = r.c.y + GARGOYLE.SKY_H, t = (y - o.y) / d.y;
+            if (!(t > 0 && t < 260)) continue;
+            const x = o.x + d.x * t, z = o.z + d.z * t;
+            if (Math.hypot(x - r.c.x, z - r.c.z) > GARGOYLE.SKY_R + 25) continue;
+            return { r, x, y, z, dist: t };
+        }
+        return null;
+    }
+
+    byRitual(id) { return this.rituals.find((r) => r.id === id) || null; }
+
+    /** (any computer) The beam fights the clouds of `r`: the ray (origin `o`, direction `d`), how hard they press back (0…1), is it on them. Seen by everybody. */
+    sunFx(r, o, d, stress, on = true) {
+        if (!r) return;
+        const f = r.sunFx || (r.sunFx = { o: new THREE.Vector3(), d: new THREE.Vector3(0, 1, 0), s: 0, on: false, at: 0 });
+        f.o.copy(o); f.d.copy(d); f.s = stress; f.on = on; f.at = performance.now();
+    }
+
+    /** The caster's side: the sun broke the clouds — the host does it (a guest asks). */
+    requestDispel(r, by) {
+        if (!r) return false;
+        if (this.auth) return this.dispel(r, by);
+        this._send({ op: 'sunreq', rid: r.id, by });
+        return true;
+    }
+
+    /**
+     * (every computer) The clouds of ritual `r` are broken: they clear over CLEAR_T s, the strikes stop; the HOST sets every gargoyle of the
+     * ritual on fire in the sun (5–10 s each, its own way — `_burnStep`), whom a gargoyle holds in its claws it drops.
+     */
+    dispel(r, by = null) {
+        if (!r || r.broken) return false;
+        const g = this.game;
+        r.broken = { t: r.t, by }; r.clear = 0;
+        this.fx.bolt(1);
+        const top = _v3.set(r.c.x, r.c.y + GARGOYLE.SKY_H, r.c.z);
+        g.fx?.lightFlash?.(top, 0xfff0b0, 9, 1.6, 160);
+        g.sound?.playMagic?.();
+        g.hud?.setVoice?.('☀️ <span style="color:#ffd36b">Солнце прорвало чёрные тучи!</span> Горгульи горят', true);
+        g.storm?.clearSky?.();
+        if (this.auth) {
+            this._send({ op: 'sun', rid: r.id, by });
+            this._note({ ev: 'dispel', id: r.id, by });
+            for (const o of this.list) {
+                if (o.dead || o.mode === 'crumble' || o.burn) continue;
+                if (o.rit !== r.id && hdist(o.home, r.c) > 3) continue;
+                this._startBurn(o, burnPlan(Math.random(), Math.random(), Math.random()), by);
+            }
+        }
+        return true;
+    }
+
+    /** (host) A gargoyle catches fire in the sun: `pl` {style, dur, delay}. */
+    _startBurn(o, pl, by) {
+        if (o.carry) this._dropVictim(o, 'burn');
+        if (o.imp?.mine) this.game.imperius?.stop?.('hurt');
+        o.burn = { t: -pl.delay, dur: pl.dur, style: pl.style, by, seed: Math.random() * 6.28, said: false };
+        o.target = null; o.flee = 0; o.mode = 'burn';
+        this._note({ ev: 'burn', id: o.id, style: BURN_STYLES[pl.style], dur: pl.dur });
+    }
+
+    /**
+     * (host) One step of a gargoyle burning up in the sun — four ways, so it is worth watching: «smoulder» flies on, smoking and sinking,
+     * «sick» staggers, then drops and writhes on the ground, «blaze» flares up in the sky and bursts, «petrify» slows, turns to stone and falls
+     * to pieces. All end in ash within `dur` (5–10 s).
+     */
+    _burnStep(o, dt) {
+        const b = o.burn, p = o.model.position, style = BURN_STYLES[b.style];
+        b.t += dt;
+        const gy = this._ground(p.x, p.z), floor = gy + FEET * o.scale;
+        if (b.t < 0) { p.addScaledVector(o.vel, dt); o.a.mode = 'fly'; this._orient(o, dt); return; } // (not caught yet: it flies on)
+        if (!b.said) { b.said = true; this._sound(o, 'screech', 1); }
+        const k = Math.min(1, b.t / b.dur);
+        const wob = Math.sin(b.t * 1.7 + b.seed);
+        if (style === 'smoulder' || (style === 'sick' && k < 0.3)) { // staggers on, lower and lower
+            _v2.set(p.x + Math.sin(o.yaw + wob * 1.1) * 14, Math.max(floor + 2, p.y - 3), p.z + Math.cos(o.yaw + wob * 1.1) * 14);
+            this._fly(o, _v2, GARGOYLE.SPEED * (style === 'sick' ? 0.35 : 0.5), dt, { k: 1.6 });
+            o.a.mode = k > 0.55 || style === 'sick' ? 'glide' : 'fly';
+            this._orient(o, dt);
+            o.roll += Math.sin(b.t * 5 + b.seed) * 0.5 * dt;
+            o.model.rotation.set(o.pitch, o.yaw, o.roll);
+        } else if (style === 'sick') { // dropped out of the sky: falls, lies on the ground, kicks
+            o.vel.y -= 24 * dt; o.vel.x *= Math.max(0, 1 - dt * 1.2); o.vel.z *= Math.max(0, 1 - dt * 1.2);
+            p.addScaledVector(o.vel, dt);
+            const down = p.y <= floor + 0.05;
+            if (down) { p.y = floor; o.vel.y = 0; o.vel.x *= Math.max(0, 1 - dt * 6); o.vel.z *= Math.max(0, 1 - dt * 6); }
+            o.a.mode = 'fall';
+            o.pitch += ((down ? 0.7 : 0.2) - o.pitch) * Math.min(1, dt * 4);
+            o.roll += ((down ? Math.sin(b.t * 9) * 0.7 : Math.sin(b.t * 6) * 0.5) - o.roll) * Math.min(1, dt * 8);
+            o.model.rotation.set(o.pitch, o.yaw, o.roll);
+        } else if (style === 'blaze') { // flares up, thrashes upward, bursts
+            o.vel.x += (Math.random() - 0.5) * 30 * dt; o.vel.z += (Math.random() - 0.5) * 30 * dt;
+            o.vel.y += (k < 0.8 ? 14 : -8) * dt;
+            o.vel.multiplyScalar(Math.max(0, 1 - dt * 0.6));
+            p.addScaledVector(o.vel, dt);
+            if (p.y < floor) { p.y = floor; o.vel.y = Math.max(0, o.vel.y); }
+            o.a.mode = 'climb';
+            o.roll += dt * 9; o.pitch += (-0.4 - o.pitch) * Math.min(1, dt * 3);
+            o.model.rotation.set(o.pitch, o.yaw + Math.sin(b.t * 6) * 0.5, o.roll);
+        } else { // petrify: slows, turns to stone, falls, crumbles
+            if (k < 0.45) {
+                _v2.set(p.x + Math.sin(o.yaw) * 10, Math.max(floor + 3, p.y - 1.5), p.z + Math.cos(o.yaw) * 10);
+                this._fly(o, _v2, GARGOYLE.SPEED * 0.45 * (1 - k / 0.45) + 1, dt, { k: 1.8 });
+                o.a.mode = 'glide';
+                this._orient(o, dt);
+            } else {
+                o.a.mode = 'stone';
+                o.vel.y -= 22 * dt; o.vel.x *= Math.max(0, 1 - dt * 2); o.vel.z *= Math.max(0, 1 - dt * 2);
+                p.addScaledVector(o.vel, dt);
+                if (p.y < floor) { p.y = floor; o.vel.y = 0; }
+                o.pitch += (0.25 - o.pitch) * Math.min(1, dt * 3); o.roll *= 0.92;
+                o.model.rotation.set(o.pitch, o.yaw, o.roll);
+                const q = (k - 0.45) / 0.55;
+                o.model.scale.set(MODEL_SCALE * o.scale, MODEL_SCALE * o.scale * (1 - 0.5 * q * q), MODEL_SCALE * o.scale);
+            }
+        }
+        this._separate(o, dt);
+        if (k >= 1) { // ash
+            gargoyleCenter(o, _v3);
+            this._shatter(_v3, o.scale, false);
+            this._die(o, b.by, true);
+        }
+    }
+
+    /** (every computer, per frame) The sun on a burning gargoyle: embers and smoke, more and more (k 0…1 of its burning, `style` index). */
+    _burnFx(o, dt, k, style) {
+        const fx = this.game.fx;
+        if (!fx) return;
+        const c = gargoyleCenter(o, _v3);
+        const rate = (6 + 40 * k) * (style === 2 ? 1.8 : 1) * dt;
+        const n = Math.min(6, Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0));
+        for (let i = 0; i < n; i++) {
+            const a = Math.random() * 6.28, rr = 0.2 + Math.random() * 0.9 * o.scale;
+            _v.set(c.x + Math.cos(a) * rr, c.y + (Math.random() - 0.3) * 1.2, c.z + Math.sin(a) * rr);
+            const r = Math.random();
+            if (r < 0.45) fx.spark(_v, r < 0.12 ? 0xfff2b0 : r < 0.3 ? 0xffb040 : 0xff6a1a, 0.08 + Math.random() * 0.16 * (0.5 + k), _d.set((Math.random() - 0.5) * 2, 2 + Math.random() * 3.5, (Math.random() - 0.5) * 2), 0.5 + Math.random() * 0.7); // flame and embers
+            else fx.spark(_v, 0x2a1c1a, 0.2 + Math.random() * 0.3, _d.set((Math.random() - 0.5) * 1.2, 1.2 + Math.random() * 2, (Math.random() - 0.5) * 1.2), 0.9 + Math.random() * 1.1); // smoke
+        }
+        if (k > 0.8 && style === 2 && Math.random() < dt * 20) fx.spark(c, 0xffffff, 0.35, _d.set(0, 0.5, 0), 0.15); // (the blaze flickers white at the end)
     }
 
     // ============================================================ the creatures
@@ -350,17 +512,19 @@ export class Gargoyles {
 
     // ============================================================ harm TO a gargoyle
     /** A blow / a spell (any computer: a guest's goes to the host). Rules: GargoyleRules.harmOf, the table TARGETS. */
-    hit(o, dmg, kind = null, by = undefined) {
+    hit(o, dmg, kind = null, by = undefined, from = null) {
         if (!o || o.dead || o.mode === 'crumble') return;
         const g = this.game;
         if (by === undefined) by = g.localId;
-        if (!this.auth) { this._send({ op: 'hit', id: o.id, dmg: r1(+dmg || 0), kind }); this._sparks(o, 6, 0xff7030); return; }
+        if (!this.auth) { this._send({ op: 'hit', id: o.id, dmg: r1(+dmg || 0), kind, by: by === 'local' || by === 'H' ? g.localId : by }); if (kind === 'LumosFlashlight') return; this._sparks(o, 6, 0xff7030); return; }
         if (by === 'local' || by === 'H') by = g.localId;
         if (by != null && by !== g.localId && !g.remotes?.has(by)) by = null;
         if (this._boltOn && kind === 'Lightning') return; // (the ritual's own bolts are its own)
         if (o.imp?.immune?.(kind)) return;
         const h = harmOf(kind, dmg);
         this._note({ ev: 'harm', id: o.id, kind, does: h.does, dmg: h.dmg, by });
+        if (h.scare > 0 && h.does !== 'immune') this.scare(o, from || this._player(by)?.pos || o.home, h.scare); // (the hellfire, «Circle Attack», «Inspirius», the Lumos' beam: it flees from them)
+        if (h.does === 'scare') return; // (a light: it only drives it away)
         if (h.does === 'none') {
             if (kind === 'AvadaKedavra') { g.fx?.lightFlash?.(gargoyleCenter(o, _v3), 0x2bff00, 4, 0.4, 20); this._sparks(o, 8, 0x40ff30); }
             return;
@@ -374,6 +538,35 @@ export class Gargoyles {
         this._sparks(o, 10, 0xff6a20);
         if (kind !== 'fall') this._sound(o, 'roar', 0.6);
         if (o.hp <= 0) this._die(o, by, true);
+    }
+
+    /**
+     * (host; a guest asks the host) It is frightened by something at `from` for `secs`: drops its prey (and a person in its claws) and flies
+     * away. The hellfire frightens longest; plain fire does not frighten it at all (GargoyleRules.SCARE, harmOf).
+     */
+    scare(o, from, secs) {
+        if (!o || o.dead || o.mode === 'crumble' || o.burn || !(secs > 0)) return;
+        if (!this.auth) { this._send({ op: 'scare', id: o.id, f: from ? [r1(from.x), r1(from.y ?? 0), r1(from.z)] : null, s: r1(secs) }); return; }
+        if (o.carry) this._dropVictim(o, 'scared');
+        o.flee = Math.max(o.flee || 0, secs);
+        (o.fleeFrom || (o.fleeFrom = new THREE.Vector3())).set(from?.x ?? o.home.x, from?.y ?? o.model.position.y, from?.z ?? o.home.z);
+        o.target = null; o.rethink = 0.3;
+        if (!o.fleeSaid || this.clock - o.fleeSaid > 2500) { o.fleeSaid = this.clock; this._sound(o, 'screech', 0.7); }
+    }
+
+    /** The flashlight of the «Lumos» (a narrow beam from `tip` along `dir`, `reach` m, half-angle `ang`): the gargoyles in it flee. No harm. */
+    lightCone(tip, dir, reach, ang, by = undefined) {
+        if (!this.list.length) return;
+        const t = Math.tan(ang);
+        for (const o of this.list) {
+            if (o.dead || o.mode === 'crumble' || o.burn) continue;
+            const c = gargoyleCenter(o, _v3);
+            _v.subVectors(c, tip);
+            const along = _v.dot(dir);
+            if (along < 0 || along > reach) continue;
+            if (_v.addScaledVector(dir, -along).length() > t * along + 1.8) continue;
+            this.hit(o, 0, 'LumosFlashlight', by, tip);
+        }
     }
 
     /** A blast at p: if it reaches the body. */
@@ -454,6 +647,7 @@ export class Gargoyles {
         if (this.auth) {
             this._send({ op: 'die', id: o.id, p: [r1(p.x), r1(p.y), r1(p.z)], s: shatter ? 1 : 0 });
             creditKill(g, by, { kind: KILL_KIND });
+            if (by != null) g.castleLife?.rel?.foeSlain(p, by); // (the people saw the stone monster fall: grateful, and the unrest of the place eases — Rebellion.js)
         }
         this._sound(o, shatter ? 'shatter' : 'crumble', 1);
         setTimeout(() => this._remove(o), 50);
@@ -566,11 +760,27 @@ export class Gargoyles {
         o.cd = Math.max(0, o.cd - dt);
         if (o.aggro && this.clock > o.aggro.until) o.aggro = null;
         if (o.mode === 'crumble') { this._crumble(o, dt); return; }
+        if (o.burn) { this._burnStep(o, dt); return; }
         if (o.carry) { this._carry(o, dt); return; }
         if (o.age >= o.life) { this._startCrumble(o); return; }
         const hd = hdist(p, o.home);
         // (the people's fright follows it: VillagerFear._poll keeps a danger 'monster' keyed 'garg:' + id)
         if (o.stunT > 0) { o.vel.multiplyScalar(Math.max(0, 1 - dt * 4)); p.addScaledVector(o.vel, dt); o.a.mode = 'fall'; this._orient(o, dt); return; }
+        // frightened (the hellfire, «Circle Attack», «Inspirius», a flashlight): away from the thing, high up
+        if (o.flee > 0 && o.mode !== 'rise') {
+            o.flee -= dt; o.target = null; o.rethink = Math.max(o.rethink, 0.3); o.mode = 'flee';
+            _v2.set(p.x - o.fleeFrom.x, 0, p.z - o.fleeFrom.z);
+            if (_v2.lengthSq() < 1e-3) _v2.set(Math.sin(o.yaw), 0, Math.cos(o.yaw));
+            _v2.normalize();
+            _v3.set(p.x + _v2.x * 45, 0, p.z + _v2.z * 45);
+            _v3.y = this._ground(_v3.x, _v3.z) + 24;
+            this._fly(o, _v3, GARGOYLE.SPEED * 1.25, dt, { k: 3 });
+            o.a.mode = 'fly';
+            this._orient(o, dt);
+            this._separate(o, dt);
+            return;
+        }
+        if (o.mode === 'flee') { o.mode = 'roam'; o.goal = null; }
         // rising out of the circle: straight up, then every way
         if (o.mode === 'rise') {
             const pl = o.plan || { climb: 1.4, up: 10, bearing: o.yaw };
@@ -939,7 +1149,7 @@ export class Gargoyles {
                 for (const o of this.victims) o.claims = 0;
                 for (const o of [...this.list]) {
                     if (o.dead) continue;
-                    if (o.imp && g.imperius?.step('g', o, dt)) { o.age += dt; if (o.age >= o.life) this._startCrumble(o); o.pitch = o.a.pitch || 0; o.roll = o.a.roll || 0; o.model.rotation.set(o.pitch, o.yaw, o.roll); continue; }
+                    if (o.imp && !o.burn && g.imperius?.step('g', o, dt)) { o.age += dt; if (o.age >= o.life) this._startCrumble(o); o.pitch = o.a.pitch || 0; o.roll = o.a.roll || 0; o.model.rotation.set(o.pitch, o.yaw, o.roll); continue; }
                     this._think(o, dt);
                 }
             }
@@ -962,6 +1172,8 @@ export class Gargoyles {
                 o.model.userData.setLod(d > 55);
                 poseGargoyle(o.model, o.a, dt);
                 if (o.breathT > 0) this._breathFx(o, dt);
+                const bv = o.burn ? (o.burn.t >= 0 ? { style: o.burn.style, k: o.burn.t / o.burn.dur } : null) : o.burnV;
+                if (bv) this._burnFx(o, dt, Math.min(1, bv.k), bv.style);
                 if (o.slowT > 0 && Math.random() < dt * 6) g.fx?.spark?.(gargoyleCenter(o, _v3), 0xbfe8ff, 0.07, _v.set(0, 0.5, 0), 0.5); // (frost on it)
             }
             this._wingSounds(me);
@@ -989,7 +1201,7 @@ export class Gargoyles {
         this._netT -= dt;
         if (this._netT > 0) return;
         this._netT = 0.125;
-        this._send({ op: 's', l: this.list.filter((o) => !o.dead).slice(0, 64).map((o) => [o.id, r1(o.model.position.x), r1(o.model.position.y), r1(o.model.position.z), r2(o.yaw), r2(o.pitch), r2(o.roll), MODES.indexOf(o.a.mode), Math.round(o.hp), o.variant, r2(o.scale), r2(o.a.bite || 0), r2(o.a.span), o.slowT > 0 ? 1 : 0]) });
+        this._send({ op: 's', l: this.list.filter((o) => !o.dead).slice(0, 64).map((o) => [o.id, r1(o.model.position.x), r1(o.model.position.y), r1(o.model.position.z), r2(o.yaw), r2(o.pitch), r2(o.roll), MODES.indexOf(o.a.mode), Math.round(o.hp), o.variant, r2(o.scale), r2(o.a.bite || 0), r2(o.a.span), o.slowT > 0 ? 1 : 0, o.burn && o.burn.t >= 0 ? o.burn.style + 1 : 0, o.burn ? r2(Math.max(0, o.burn.t) / o.burn.dur) : 0]) });
     }
 
     /** (a guest) Following the host's gargoyle smoothly. */
@@ -1001,6 +1213,7 @@ export class Gargoyles {
         o.model.rotation.set(o.pitch, o.yaw, o.roll);
         o.a.mode = n.mode; o.a.bite = n.bite;
         o.slowT = n.slow ? 1 : 0;
+        o.burnV = n.burn ? { style: n.burn - 1, k: n.burnK } : null;
         if (n.mode === 'stone') { o.model.scale.y += (MODEL_SCALE * o.scale * 0.5 - o.model.scale.y) * Math.min(1, dt * 0.6); if (Math.random() < dt * 14) { gargoyleCenter(o, _v3); this._shatter(_v3, o.scale * 0.8, false); } }
     }
 
@@ -1023,17 +1236,25 @@ export class Gargoyles {
                 if (isHost) return;
                 const seen = new Set();
                 for (const e of (m.l || []).slice(0, 64)) {
-                    const [id, x, y, z, yaw, pitch, roll, mode, hp, variant, scale, bite, span, slow] = e;
+                    const [id, x, y, z, yaw, pitch, roll, mode, hp, variant, scale, bite, span, slow, burn, burnK] = e;
                     seen.add(id);
                     let o = this.list.find((q) => q.id === id);
                     if (!o) { o = this.spawn(new THREE.Vector3(x, y, z), { id, variant, scale }); if (!o) continue; o.yaw = yaw; o.a.span = span; }
-                    o.net = { p: new THREE.Vector3(x, y, z), yaw, pitch, roll, mode: MODES[mode] || 'fly', bite, slow };
+                    o.net = { p: new THREE.Vector3(x, y, z), yaw, pitch, roll, mode: MODES[mode] || 'fly', bite, slow, burn: burn | 0, burnK: +burnK || 0 };
                     o.hp = hp;
                 }
                 for (const o of [...this.list]) if (!seen.has(o.id) && !o.dead) this._remove(o);
                 break;
             }
-            case 'hit': if (isHost) { const o = this.byId(m.id); if (o) this.hit(o, Math.min(120, Math.max(0, +m.dmg || 0)), typeof m.kind === 'string' ? m.kind.slice(0, 24) : 'melee', m.from); } break;
+            case 'hit': if (isHost) { const o = this.byId(m.id); if (o) this.hit(o, Math.min(120, Math.max(0, +m.dmg || 0)), typeof m.kind === 'string' ? m.kind.slice(0, 24) : 'melee', typeof m.by === 'string' ? m.by : null); } break;
+            case 'scare': if (isHost) { const o = this.byId(m.id); if (o) this.scare(o, Array.isArray(m.f) ? vec(m.f) : null, Math.min(12, Math.max(0, +m.s || 0))); } break;
+            case 'sun': { const r = this.byRitual(String(m.rid)); if (r && !isHost) this.dispel(r, typeof m.by === 'string' ? m.by : null); break; } // (the host broke the clouds: every computer clears the sky)
+            case 'sunreq': if (isHost) this.dispel(this.byRitual(String(m.rid)), typeof m.by === 'string' ? m.by : null); break; // (a guest's sun won the struggle)
+            case 'sunfx': { // (the beam at the clouds: the hole in them, the press-back — everybody sees it)
+                const r = this.byRitual(String(m.rid));
+                if (r && Array.isArray(m.o) && Array.isArray(m.d)) this.sunFx(r, vec(m.o), vec(m.d).normalize(), Math.min(1, Math.max(0, +m.s || 0)), !!m.on);
+                break;
+            }
             case 'hurt': if (m.to === g.localId && Array.isArray(m.f)) this._hurtMe(Math.min(10, +m.dmg || 0), vec(m.f), vec(m.v), !!m.fire); break;
             case 'spent': if (!isHost && Array.isArray(m.c)) this._spend({ x: +m.c[0] || 0, y: +m.c[1] || 0, z: +m.c[2] || 0 }); break;
             case 'fb': { const o = this.list.find((q) => q.id === m.id); if (!isHost && o) o.breathT = GARGOYLE.FIRE.T; break; }

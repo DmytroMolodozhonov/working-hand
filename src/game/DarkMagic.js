@@ -2,7 +2,7 @@
  * DarkMagic.js — чёрная магия (pure, no THREE, node-testable).
  *
  * Слова автора: магия, которую магическое сообщество презирает как опасную. Сюда входят «Alive», «Alive Maxima»,
- * «Авада Кедавра», «Империус» (обычный; «Империус Максима» — божественное, исключение), «Give Me My Power» и
+ * «Авада Кедавра», «Let the Hellfire Come» (каст тьму не даёт — +1 за каждого убитого им человекоподобного, `HellKills.js`), «Империус» (обычный; «Империус Максима» — божественное, исключение), «Give Me My Power» и
  * ритуал дьявольской силы (пентаграмма чёрной магии с телом убитого волшебника; сама пентаграмма и «Пентаграниум» — не чёрные: вызывающий код сам даёт `addDark(hero, 1, 'ritual')`).
  *
  *  - ДВА счётчика (слова автора: «определить чёрного мага может любой волшебник» — по чёрным пятнам):
@@ -44,7 +44,9 @@ export const DARK = {
 
 /** Виды заклинаний чёрной магии (имена как в Mana / SpellBook). «ImperiusMaxima» — НЕ тут (божественное). */
 /** («Пентаграниум» и сама пентаграмма сюда НЕ входят — бывают и хорошие; +1 даёт только РИТУАЛ дьявольской силы: вызывающий код сам делает addDark(hero, 1, 'ritual').) */
-export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric']);
+export const DARK_SPELLS = new Set(['Alive', 'AliveMaxima', 'AvadaKedavra', 'Imperius', 'GiveMyPower', 'Accentric', 'Hellfire']);
+/** Чёрные, но сам каст тьму НЕ повышает: «Let the Hellfire Come» — +1 только за каждого убитого им человекоподобного (HellKills.js). */
+export const DARK_NO_CAST = new Set(['Hellfire']);
 /** Эти всегда дают +1 (не 50 %). */
 export const DARK_ALWAYS = new Set(['GiveMyPower']);
 /** Вторая сессия (пентаграммы) может добавить свой вид. */
@@ -106,7 +108,7 @@ export function cleanSkin(hero, n = DARK.CLEAR_STEP) {
 
 /** Каст чёрного заклинания героем игры `game`: +1 с шансом 50 % (всегда у GiveMyPower / ритуала). */
 export function onDarkCast(game, kind, rng = Math.random) {
-    if (!isDark(kind)) return 0;
+    if (!isDark(kind) || DARK_NO_CAST.has(kind)) return 0;
     if (!DARK_ALWAYS.has(kind) && !(rng() < DARK.CAST_CHANCE)) return 0;
     return addDark(game?.dark || game, 1, DARK_ALWAYS.has(kind) ? 'ritual' : 'cast');
 }
@@ -124,13 +126,14 @@ export function darkNotice(was, now) {
 export class DarkHero {
     constructor(game) { this.game = game; this.level = 0; this.skin = 0; }
     get stage() { return darkStage(this.skin); } // (по коже: её видят волшебники)
-    onGrow(was, now) { // (was/now — кожа; слово на порогах только по ней)
+    onGrow(was, now, why, lvlWas = 0, lvlNow = 0) { // (was/now — кожа; слово на порогах только по ней; lvl* — настоящий уровень: на 100 — «настоящий тёмный маг», DarkLord.js)
+        if (lvlNow >= DARK.MAX && lvlWas < DARK.MAX) this.game?.darkLord?.onMax?.();
         const text = darkNotice(was, now);
         if (text) this.game?.hud?.setVoice?.(`🜏 <span style="color:#9a6bd1">${text}</span>`, true);
         this.game?.net?.sendDark?.(this.skin); // (виден другим игрокам)
     }
     onClean() { this.game?.net?.sendDark?.(this.skin); }
-    onDeath() { this.level = 0; this.skin = 0; }
+    onDeath() { this.level = 0; this.skin = 0; this.game?.darkLord?.onDeath?.(); }
     snapshot() { return this.level > 0 || this.skin > 0 ? { level: this.level, skin: this.skin } : null; }
     restore(s) { this.level = clampDark(s?.level); this.skin = s?.skin == null ? this.level : Math.min(this.level, clampDark(s.skin)); this.game?.net?.sendDark?.(this.skin); }
 }

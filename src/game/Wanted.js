@@ -6,6 +6,10 @@
  * only stun and freeze him, then they get angry (heavier spells, no mercy for one on the ground),
  * and a mass murderer gets «Авада Кедавра» (pure logic, node-testable).
  *
+ * It is also how much the people WANT the criminal (the hidden «interest», GTA-like, never shown): it grows with every deed and falls with time
+ * (DECAY after CALM). WizardMind.HUNT reads its level: the higher, the more of the wizards go after him, the farther from home and the longer
+ * they search (the last known place first, then the likely ways); a hero they never noticed (invisible) is not guessed at.
+ *
  * The host keeps it (it runs the castle people); one level for everybody — a player is known by
  * what he did, wherever he goes (castle knights, wandering knights, the towers, the wanderers).
  */

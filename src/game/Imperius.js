@@ -74,6 +74,8 @@ export const IMPERIUS_TARGETS = {
     cow: { ru: 'корова', plain: true },
     sheep: { ru: 'баран', plain: true },
     horse: { ru: 'конь', plain: true },
+    canary: { ru: 'канарик', plain: true }, // (a swamp canary: not magical — the plain spell takes it; it walks on its own short legs, can lift a boulder and throw it — Canaries.js)
+    custom: { ru: 'существо, созданное богами', magic: true }, // («Да пусть создастся»: the gods' own making — only «Империус Максима» takes it; CustomCreatures.js, adapter BODIES.C)
     pig: { ru: 'свинья', plain: true }, // (the farm pig; its wings are another thing: walking with the plain one, flying only with «Максима»)
     sailor: { ru: 'моряк', plain: true },
     // the magic ones: «Максима» only
@@ -84,6 +86,7 @@ export const IMPERIUS_TARGETS = {
     spider: { ru: 'гигантская паучиха', magic: true, boss: true },
     bookbird: { ru: 'книга-птица', magic: true, fly: true },
     owl: { ru: 'сова', magic: true, fly: true },
+    spencer: { ru: 'птичка Спенсера', magic: true, fly: true }, // (an invisible bird: only «Максима», and only one who sees the invisible can find it — ImperiusFlyers 'sx')
     gargoyle: { ru: 'адская горгулья', magic: true, fly: true }, // (a creature of the pentagram — only «Максима» takes it; its summoner's 20 s grace does not matter to the mind in it — Gargoyles.js)
     phoenix: { ru: 'феникс', magic: true, fly: true },
     tree: { ru: 'ожившее дерево', magic: true },
@@ -105,9 +108,15 @@ export const IMPERIUS_TARGETS = {
  * May this spell take a creature of `kind`? → {ok: true} | {ok: false, say}. ctx: {shield} — a player's shield
  * up (the hand shield / the dome / the gods'): the foreign mind meets it.
  */
+/** Living things «Империус» cannot take at all, and why (the plants have no mind to enter). */
+export const IMPERIUS_NO = {
+    brightflower: { ru: 'Ярколето', why: 'Ярколето — растение: у цветка нет разума, в который можно вселиться (даже «Империус Максима» его не берёт)' },
+    telewilpin: { ru: 'телевильпин', why: 'Телевильпин — растение: у цветка нет разума, в который можно вселиться' },
+    carnivore: { ru: 'плотоядная голова', why: 'Плотоядная голова — растение: в ней нет разума, только голод' },
+};
 export function canTake(kind, maxima, ctx = {}) {
     const t = IMPERIUS_TARGETS[kind];
-    if (!t) return { ok: false, say: '🌀 В это не вселиться' };
+    if (!t) return { ok: false, say: IMPERIUS_NO[kind] ? '🌱 ' + IMPERIUS_NO[kind].why : '🌀 В это не вселиться' };
     if (t.player) {
         if (!maxima) return { ok: false, say: '🧠 Не действует: чужой разум слишком упорный — игрока подчиняет только «Империус Максима»' };
         if (ctx.shield) return { ok: false, say: '🛡️ Чужой разум упёрся в щит — сквозь защиту не вселиться' };
@@ -181,6 +190,9 @@ export function kindOf(sys, c = {}) {
         case 'sp': return 'spider';
         case 'b': return 'bookbird';
         case 'o': return 'owl';
+        case 'ca': return 'canary';
+        case 'sx': return 'spencer';
+        case 'C': return 'custom'; // (a creature of one's own: CustomCreatures.js)
         case 'g': return 'gargoyle';
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';

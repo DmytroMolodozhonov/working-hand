@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import { aimedUpOrSelf, castingHand } from './WandAim.js';
+import { seesInvisible, ghostify, ghostAlpha } from './Invisibles.js';
 
 export const INVIS = {
     COST: 20, // mana at once (Combat.SPELL_COST)
@@ -52,6 +53,9 @@ export const INVIS_TARGETS = {
     blackship: { does: 'blind', why: 'чёрный корабль, его капитан и скелеты не видят меня: не стреляют и не идут на абордаж — только туда, где я колдовал' },
     phoenix: { does: 'blind', why: 'феникс не видит, не лечит и не нападает' },
     owl: { does: 'blind', why: 'сова не видит невидимого: не смотрит на него и не слышит его просьбу' },
+    canary: { does: 'blind', why: 'канарик не видит невидимого: не замечает его на своей территории (g.invis.aiPos), пока тот себя не выдаст' },
+    spencer: { does: 'none', why: 'птичка Спенсера и так невидима и ни на кого не охотится' },
+    custom: { does: 'blind', why: 'созданное существо не видит невидимого (aiPos): злое теряет добычу' },
     gargoyle: { does: 'blind', why: 'горгулья не видит невидимого: не нападает, пока не заденет его случайно' },
     servants: { does: 'none', why: 'мои слуги меня знают и идут за мной' },
     spells: { does: 'show', why: 'мои заклинания видны всем — игрокам и жителям: место заклинания выдаёт меня на 4 секунды' },
@@ -224,10 +228,17 @@ export class Invisibility {
             }
         }
         // the others' heroes, what their hands hold and the blades in them: not drawn while invisible
+        // (one who SEES THE INVISIBLE — SecondSight.js — sees an invisible player after all: see-through, ~15 %, shimmering — Invisibles.js)
+        const seer = seesInvisible(g);
+        const ghostT = performance.now() / 1000;
         for (const [id, r] of g.remotes || []) {
-            const hide = !!this.others.get(id);
+            const inv = !!this.others.get(id), hide = inv && !seer, ghost = inv && seer;
             if (hide) { r.character.group.visible = false; r._invisHidden = true; }
             else if (r._invisHidden) { r._invisHidden = false; r.character.group.visible = !r.dead; }
+            if (ghost && !r.dead) {
+                if (!r._ghost) r._ghost = ghostify(r.character.group, ghostAlpha(ghostT));
+                else r._ghost.set(ghostAlpha(ghostT, r.id || 0));
+            } else if (r._ghost) { r._ghost.restore(); r._ghost = null; }
             const held = g.items?.remoteHeld?.get(id);
             if (held) for (const k of Object.keys(held)) if (held[k]?.model) held[k].model.visible = !hide;
         }
@@ -235,7 +246,7 @@ export class Invisibility {
             const owners = g.sync?.weaponOwners;
             for (const w of g.weapons?.weapons || []) {
                 if (!w.remoteTarget || !owners) continue;
-                const hide = !!this.others.get(owners.get(w.id));
+                const hide = !!this.others.get(owners.get(w.id)) && !seer;
                 if (w.mesh) w.mesh.visible = !hide;
             }
         }

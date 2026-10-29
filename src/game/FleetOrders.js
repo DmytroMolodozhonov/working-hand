@@ -214,6 +214,8 @@ export class FleetOrders {
                 this._say(s, ord.open ? 'sailsUp' : 'sailsDown', f);
                 break;
             }
+            case 'leaveHelm': s.helmOff = true; this._say(s, 'helmOff', f); break; // (the helmsman steps aside — Sailors._helmsman)
+            case 'takeHelm': s.helmOff = false; this._say(s, 'helmOn', f); break;
             case 'cast': {
                 const tied = s.lines.map((l, i) => (l.state === 'tied' ? i : -1)).filter((i) => i >= 0);
                 this.S.rigging._by = by;

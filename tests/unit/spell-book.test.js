@@ -36,7 +36,7 @@ function scrollsFound() {
 
 test('the author\'s list: what a beginner knows outside Creative — and the Maximas only from a scroll', () => {
     const me = survival();
-    for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio'])
+    for (const n of ['Bombardo', 'Earthquake', 'Liquidation', 'Protection', 'Ice', 'Frozen', 'Jolt', 'Firefighting', 'Fire', 'ChangeColor', 'CreateBed', 'Stitching', 'CreateBridge', 'Gather', 'Draw', 'Lumos', 'Accio', 'GiveMyPower'])
         assert.ok(knows(n, me), `${n}: known from the start`);
     for (const n of ['BombardoMaxima', 'EarthquakeMaxima', 'LiquidationMaxima', 'ProtectionMaxima', 'IceMaxima', 'JoltMaxima', 'CircleAttack', 'CircleAttackMaxima',
         'Drawdown', 'DrawdownMaxima', 'Overgrown', 'OvergrownMaxima', 'Brainrot', 'Waterball', 'WaterForming', 'AirBubble', 'AirBubbleMaxima', 'WaveAttack', 'WaveAttackMaxima',
@@ -81,7 +81,7 @@ test('the pentagram drawing-scrolls turn up (chests, the towers\' shops, the wiz
     const { isPentagramScroll, figureIds } = await import('../../src/game/PentagramRules.js');
     const { lootOfVillager } = await import('../../src/game/Death.js');
     const r = createRng(11), drawings = new Set(), shop = new Set(), wiz = new Set();
-    for (let i = 0; i < 8000; i++) {
+    for (let i = 0; i < 24000; i++) { // (each new pentagram thins the share of the rest: enough rolls for the rarest)
         const it = rollScroll(r);
         if (isPentagramScroll(it)) { drawings.add(it.pent); assert.ok(!it.spell && it.stat === 'pentagram'); }
         const s = rollShopScroll(r);

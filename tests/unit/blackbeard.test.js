@@ -126,7 +126,12 @@ test('a skeleton is destroyed as a living tree is (and by what breaks bones): «
     assert.equal(pirateBoneDamage('AvadaKedavra', 25, true), 0);
     assert.equal(pirateBoneDamage('SapiraDuel', 10, true), 0);
     assert.equal(pirateBoneDamage(undefined, 10, true), 0, 'an unnamed spell: nothing');
-    for (const k of ['Inferno', 'Hellfire', 'FireMaxima', 'Lightning', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'Inspirius', 'CircleAttack']) assert.equal(pirateBoneDamage(k, 10, true), 10, k);
+    for (const k of ['Lightning', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'Inspirius', 'CircleAttack']) assert.equal(pirateBoneDamage(k, 10, true), 10, k);
+    // the author's table: fire works at HALF of what it does to a player; «Liquidation Maxima» works (a plain one does not); the gusts break bones
+    for (const k of ['Inferno', 'Hellfire', 'FireMaxima']) assert.equal(pirateBoneDamage(k, 10, true), 5, k);
+    assert.equal(pirateBoneDamage('LiquidationMaxima', 10, true), 10);
+    assert.equal(pirateBoneDamage('Liquidation', 10, true), 0);
+    for (const k of ['Wind', 'WindMaxima', 'Overgrown', 'OvergrownMaxima']) assert.equal(pirateBoneDamage(k, 3, true), 3, k);
     for (const k of ['melee', 'fist', 'arrow', 'cannon', 'crush', 'fall']) assert.equal(pirateBoneDamage(k, 10), 10, k);
     const { S, B } = world();
     S.wake(B);

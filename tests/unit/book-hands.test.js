@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
 // (page art is drawn on canvases: a stand-in that draws nothing)
-const ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? () => ({ width: 10 }) : k === 'createLinearGradient' ? () => ({ addColorStop() {} }) : k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
+const ctx = new Proxy({}, { get: (t, k) => (k === 'measureText' ? () => ({ width: 10 }) : k === 'createLinearGradient' || k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
 globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
 
 const { BookReading, HOLD } = await import('../../src/game/BookReading.js');
@@ -235,7 +235,7 @@ test('a scroll: one hand holds it, the other takes the other roller and unrolls 
     assert.ok(S.r.open > 0.5, 'it reads open');
     // the second hand opens: it lets go — the parchment rolls back to the first fist, then it is a rolled scroll again
     H.left.curl = 0.05;
-    run(0.35);
+    run(0.55);
     assert.ok(S.r?.rolling, 'let go: it rolls back up');
     const w = S.r.parch.scale.x;
     assert.ok(w < 1.6, 'already rolling: ' + w);

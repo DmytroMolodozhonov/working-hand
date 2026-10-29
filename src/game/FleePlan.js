@@ -16,6 +16,7 @@ export const FLEE = {
     REPLAN: 2.0, // s between looks for a better way
     NEAR: 6, // m beyond r: a path node this near a threat costs a lot (passing it)
     STEP: 16, // m: how far ahead a run across the open land is planned
+    CROWD: 9, // the score a place loses for every other runner already heading there (spread out, do not pile up)
 };
 
 /** How far p is from the nearest threat (beyond its r; negative: inside it). */
@@ -124,7 +125,7 @@ export function openWay(p, threats, walk, len = FLEE.STEP) {
  * graph: {nodes, adj}; from: start node; p: {x, y, z} where it stands; cut: Set of edge keys; key(a, b).
  * → {goal, path} (node ids) or null.
  */
-export function fleeSearch(graph, from, p, threats, { cut = null, key = null, maxRun = 120, minGain = 4 } = {}) {
+export function fleeSearch(graph, from, p, threats, { cut = null, key = null, maxRun = 120, minGain = 4, bonus = null, load = null } = {}) {
     const N = graph.nodes, adj = graph.adj;
     if (from < 0 || !N[from]) return null;
     const d0 = threatDist(p, threats);
@@ -143,7 +144,8 @@ export function fleeSearch(graph, from, p, threats, { cut = null, key = null, ma
         const n = N[cur];
         const d = threatDist(n, threats);
         if (cur !== from && c > 3 && d >= Math.min(FLEE.SAFE, d0 + minGain)) {
-            const sc = Math.min(d, FLEE.SAFE + 25) - 0.35 * c;
+            // (bonus: a sheltered place — behind a wall, in a building; load: others run there already — spread out, no heap: WizardMind / CastleLife)
+            const sc = Math.min(d, FLEE.SAFE + 25) - 0.35 * c + (bonus ? bonus(n, cur) : 0) - (load ? FLEE.CROWD * load(cur) : 0);
             if (sc > bs) { bs = sc; best = cur; }
         }
         for (const nb of adj[cur]) {

@@ -41,6 +41,21 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * The slope under a walker, from how it has really moved (smoothed): rise / run, + up, − down.
  * Call once a frame after it was moved and put on the ground. Keeps its small memory on `v`.
  */
+/**
+ * Is the top of a ledge wide enough to climb onto (the author: villagers sometimes climbed a post — a 1×1 column of 3 blocks,
+ * a fence, a pillar)? A ledge of 2–3 blocks is climbed only if it is solid steps or a slope's edge: the top must go on at least
+ * one more cell ahead (depth ≥ 2) AND one cell to the side (width ≥ 2) at the same height, so a column or a one-block-thick wall
+ * is no ground to stand on. `floorOf(x, z)` → the height of the floor there (as the cell (ax, az) was measured); (nx, nz) the
+ * unit direction of the climb. Pure.
+ */
+export function ledgeWide(floorOf, ax, az, nx, nz, f) {
+    const sx = Math.abs(nx) >= Math.abs(nz) ? Math.sign(nx) : 0, sz = sx ? 0 : Math.sign(nz);
+    // (the ground of a hill is rough: a cell a block higher or lower is still the same top; a drop of 2+ is the edge of a post or a thin wall)
+    const same = (x, z) => Math.abs(floorOf(x, z) - f) <= 1;
+    if (!same(ax + sx, az + sz)) return false; // (nothing further ahead on top: a post or a thin wall)
+    return same(ax + sz, az + sx) || same(ax - sz, az - sx); // (and a neighbour to the side)
+}
+
 export function trackSlope(v) {
     if (v.slX === undefined) { v.slX = v.x; v.slY = v.y; v.slZ = v.z; v.slope = 0; return 0; }
     const h = Math.hypot(v.x - v.slX, v.z - v.slZ);

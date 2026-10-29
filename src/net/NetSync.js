@@ -170,6 +170,9 @@ export class NetSync {
             mhouses: g.houseMagic?.netList() || [], // houses made by magic (HouseMagic.js)
             ltlooks: g.livingTrees?.netLooks?.() || [], // the living trees' own looks (LivingTrees.treeOwnLook)
             mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
+            dcrs: g.divine?.netList() || [],
+            cpls: g.customPlants?.netList() || null, // plants of one's own: their kinds and where they grow (CustomPlants.js)
+            ccrs: g.customCreatures?.netList() || null, // the kinds of creatures of one's own (their bodies: the recipes) // what «Да пусть создастся» built (DivineCreation.js)
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
             beds: g.beds?.snapshot() || [],
@@ -210,6 +213,9 @@ export class NetSync {
         if (msg.mhouses) g.houseMagic?.applyNet(msg.mhouses);
         for (const l of msg.ltlooks || []) g.livingTrees?.setLook(l.id, l);
         if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
+        if (msg.dcrs) g.divine?.applyNet(msg.dcrs);
+        if (msg.ccrs) g.customCreatures?.applyNet(msg.ccrs);
+        if (msg.cpls) g.customPlants?.applyNet(msg.cpls);
         if (msg.icemagic) g.iceMagic?.applyNet(msg.icemagic);
         if (msg.planets) g.space?.planets.applyJSON(msg.planets);
         if (msg.castles) g.castleLife?.restore(msg.castles);
@@ -290,6 +296,8 @@ export class NetSync {
                 dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
                 dk: g.dark?.skin || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
+                sg: g.sight?.netFlag(), // (I see the invisible: the others draw me as they draw anyone — and draw their invisible players to me see-through)
+                sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
                 mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
             }, true);
@@ -364,7 +372,7 @@ export class NetSync {
         let n = 0;
         for (const f of list) {
             if ((n += f.cells.length) > 4000) break; // (a whole castle: the rest is just there)
-            out.push({ c: f.cells, d: f.d, l: f.landed, b: f.broken, s: f.stage || 0, ...(f.crushed ? { x: 1 } : {}) });
+            out.push({ c: f.cells, d: f.d, l: f.landed, b: f.broken, s: f.stage || 0, ...(f.crushed ? { x: 1 } : {}), ...(f.tilt ? { tl: f.tilt } : {}) });
         }
         if (out.length) this.net.send({ t: 'fal', f: out }, true);
     }
@@ -479,6 +487,16 @@ export class NetSync {
         this.net.send({ t: 'pgm', by: this.me, ...m }, true);
     }
 
+    /** «Nihilis Atra»: my cone of light (the same cone on every computer — Nihilis.js). */
+    nihilis(origin, dir) {
+        this.net.send({ t: 'nhl', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)] }, true);
+    }
+
+    /** «Настоящий тёмный маг» (DarkLord.js): my rite of turning — {k: 'begin' | 'at' | 'end', id, p, t}: the others see the ball of darkness round me. */
+    darkLord(m) {
+        this.net.send({ t: 'dlord', by: this.me, ...m }, true);
+    }
+
     fireworks(origin, dir, seed) {
         this.net.send({ t: 'fwk', by: this.me, o: [r3(origin.x), r3(origin.y), r3(origin.z)], d: [r3(dir.x), r3(dir.y), r3(dir.z)], s: seed >>> 0 }, true);
     }
@@ -550,6 +568,11 @@ export class NetSync {
     /** My «Water Vortex Super Maxima» storm (~10×/s; null: it fell) — see WaterStorm.onNet. */
     waterStorm(s, why = null) {
         this.net.send(why ? { t: 'ws', by: this.me, s, w: why } : { t: 'ws', by: this.me, s }, true);
+    }
+
+    /** The monster form's chunk of a building: taken / thrown / gone (see MonsterTransform.onNet). */
+    monsterChunk(m) {
+        this.net.send({ t: 'mch', by: this.me, ...m }, true);
     }
 
     /** «Ground Vortex»: my state (~10×/s), a volley, a shield blow, the end (see GroundVortex.onNet). */
@@ -624,13 +647,13 @@ export class NetSync {
         this.net.send({ t: 'cut', by: this.me, h }, true);
     }
 
-    died(killer, mm = null) {
-        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm }, true);
+    died(killer, mm = null, how = null) {
+        this.net.send({ t: 'pdead', by: this.me, killer: killer || null, mm, ...(how === 'Hellfire' ? { k: 'Hellfire' } : null) }, true);
     }
 
     /** (host) Mana for player `to`: his last blow killed a magical creature / a wizard he beat in a duel. */
     manaCredit(to, m) {
-        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null, aw: m.aw ?? 1 });
+        if (this.net.isHost) this.net.sendTo(to, { t: 'mcred', kind: m.kind || null, wiz: m.wiz ?? null, mm: m.mm ?? null, pos: m.pos ?? null, aw: m.aw ?? 1, ...(m.dark ? { dark: m.dark } : null) });
     }
 
     /** (host) An achievement for player `to`: they took part in the kill (Achievements.js). */
@@ -724,6 +747,9 @@ export class NetSync {
     animalGather(id) { this.net.send({ t: 'agath', id }); }
     applePick(key, i, side) { this.net.send({ t: 'apick', key, i, side }); }
     appleGone(key, i, until) { if (this.net.isHost) this.net.send({ t: 'agone', key, i, until }, true); }
+    floraPick(id, i, side) { this.net.send({ t: 'flpick', id, i, side }); }
+    floraGone(id, i, until) { if (this.net.isHost) this.net.send({ t: 'flgone', id, i, until }, true); }
+    floraKill(id, how) { if (this.net.isHost) this.net.send({ t: 'flkill', id, how }, true); }
     animalFeed(id) { this.net.send({ t: 'afeed', id }); }
     animalRide(id, on) { this.net.send({ t: 'aride', id, on: on ? 1 : 0, by: this.me }, true); }
     animalPos(id, p) { this.net.send({ t: 'apos', id, p }); }
@@ -767,6 +793,14 @@ export class NetSync {
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
 
     /** My hero's look, for everybody (on start and whenever somebody joins). */
+    /** The scrolls I know, as keys (SpellBook.scrollKey) — told now and then, so that a chest I open for a friend's world holds none of them. undefined between times. */
+    _knownKeys() {
+        const now = performance.now();
+        if (now - (this._skAt || 0) < 6000) return undefined;
+        this._skAt = now;
+        return [...this.game.myScrollKeys()];
+    }
+
     sendLook() {
         const look = this.game.character.look;
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
@@ -908,7 +942,7 @@ export class NetSync {
             case 'blk': if (m.by !== this.me && Array.isArray(m.l)) g.builder?.applyEdits(m.l.slice(0, 400)); break;
             case 'fal': if (m.by !== this.me && Array.isArray(m.f)) { // (a building's pieces seen falling: its blocks are where they landed already — 'blk')
                 const list = m.f.slice(0, 200).filter((f) => Array.isArray(f?.c) && Array.isArray(f.l) && Array.isArray(f.b))
-                    .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}) }));
+                    .map((f) => ({ cells: f.c.slice(0, 4000), d: +f.d || 0, landed: f.l.slice(0, 4000), broken: f.b.slice(0, 4000), stage: Math.min(10, f.s | 0), ...(f.x ? { crushed: true } : {}), ...(f.tl && (f.tl.axis === 'x' || f.tl.axis === 'z') ? { tilt: { axis: f.tl.axis, sg: f.tl.sg > 0 ? 1 : -1, edge: +f.tl.edge || 0, Lb: +f.tl.Lb || 0, d2: Math.min(300, +f.tl.d2 || 0) } } : {}) }));
                 for (const f of list) g.falling?.add(f);
                 break;
             }
@@ -938,6 +972,9 @@ export class NetSync {
             case 'wards': if (!this.net.isHost) g.wards?.applyNet(m.l, m.g); break;
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
             case 'mcastle': g.castleMagic?.onNet(m, this.net.isHost); break; // («Create a Castle»)
+            case 'dcr': g.divine?.onNet(m, this.net.isHost); break;
+            case 'cpl': g.customPlants?.onNet(m, this.net.isHost); break; // (plants of one's own: CustomPlants.js)
+            case 'ccr': g.customCreatures?.onNet(m, this.net.isHost); break; // (creatures of one's own: CustomCreatures.js) // («Да пусть создастся»)
             case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
             case 'icemagic': g.iceMagic?.onNet(m, this.net.isHost); break; // («Create an Ice Castle», «Ice Bridge»)
             case 'planets': g.space?.onNet(m, this.net.isHost); break; // (the planets: the host's, a guest's ask — Space.js)
@@ -979,8 +1016,10 @@ export class NetSync {
             }
             case 'vgs': if (m.by !== this.me) g.visibleGodi?.onNet(m.by, m); break; // (steam of «Visible Godi»: VisibleGodi.js)
             case 'ench': g.enchantCircles?.onNet(m); break; // (the rite of the enchanting pentagram: EnchantCircles.js)
+            case 'nhl': if (m.by !== this.me) g.nihilis?.onNet(m.by, m); break; // (a cone of «Nihilis Atra»: Nihilis.js)
             case 'pgm': if (m.by !== this.me) g.pentagranium?.onNet(m.by, m); break; // (a pentagram / its rite: Pentagranium.js)
             case 'fwk': if (m.by !== this.me) g.fireworks?.onNet(m); break; // (a salvo of «Fireworks»: Fireworks.js)
+            case 'dlord': if (m.by !== this.me) g.darkLord?.onNet(m.by, m); break; // (the rite of a true dark mage: DarkLordLife.js)
             case 'tdes': {
                 if (m.by === this.me) break;
                 g.voiceGate?.noteRemote(m.k ? 'TotalDestructionMaxima' : 'TotalDestruction', performance.now()); // (my microphone may hear their voice)
@@ -1013,7 +1052,9 @@ export class NetSync {
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)
             case 'phx': g.phoenixes?.onNet(m, this.net.isHost); break; // (phoenixes: Phoenixes.js)
             case 'plant': g.plants?.onNet(m, this.net.isHost); break; // (telewilpins and carnivorous heads: Plants.js)
+            case 'canary': g.canaries?.onNet(m, this.net.isHost); break; // (the swamp Canaries: Canaries.js)
             case 'owl': g.owls?.onNet(m, this.net.isHost); break; // (clever owls: Owls.js)
+            case 'spx': g.spencers?.onNet(m, this.net.isHost); break; // (the invisible birds of Spencer: SpencerBirds.js)
             case 'garg': g.gargoyles?.onNet(m, this.net.isHost); break; // (the infernal gargoyles and their ritual: Gargoyles.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)
@@ -1060,6 +1101,9 @@ export class NetSync {
             case 'agive': if (m.to === this.me && m.item) g.animals?._give(m.item, m.side); break;
             case 'apick': if (this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr) g.animals._pickApple(tr, m.i, m.from, m.side); } break;
             case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
+            case 'flpick': if (this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) g.flora.pick(pl, m.i, m.from, m.side); } break;
+            case 'flgone': if (!this.net.isHost) g.flora?.netGone(m.id, m.i, m.until); break;
+            case 'flkill': if (!this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) { if (m.how === 'burn') g.flora.ignite(pl, true); else g.flora.kill(pl, m.how, true); } } break;
             case 'afeed': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) a.apples = Math.min(3, a.apples + 1); } break;
             case 'aride': { const a = g.animals?.byId.get(m.id); if (a && m.by !== this.me) { a.rider = m.on ? m.by : null; if (m.on && !a.pegasus) a.tamed = m.by; a.state = m.on ? 'ridden' : 'graze'; if (a.model.userData.saddle) a.model.userData.saddle.visible = !!m.on; } break; }
             case 'apos': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a && Array.isArray(m.p)) { a.group.position.set(m.p[0], m.p[1], m.p[2]); a.group.rotation.y = m.p[3]; a.flyCode = m.p[4] || 0; } } break; // (a Pegasus in flight: its wings)
@@ -1156,6 +1200,7 @@ export class NetSync {
             case 'burn': if (m.by !== this.me) g.burning?.onNet(m); break;
             case 'burnl': if (m.by !== this.me) g.burning?.onList(m); break;
             case 'gv': if (m.by !== this.me) g.groundVortex?.onNet(m); break;
+            case 'mch': if (m.by !== this.me) g.monster?.onNet(m); break; // (a chunk of a building in a monster's paw: MonsterTransform.js)
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
             case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
@@ -1190,6 +1235,7 @@ export class NetSync {
                 const who = r ? r.name : 'Игрок';
                 const killer = m.killer === this.me ? 'вы' : (g.remotes.get(m.killer)?.name || null);
                 if (m.killer === this.me) g.killCount++;
+                if (m.killer === this.me && m.k === 'Hellfire') applyCredit(g, { dark: 1 }); // (чёрная магия: человек убит моим Hellfire — HellKills.js)
                 if (m.killer === this.me) g.duel?.opponentDied?.(m.by, Number(m.mm) || 30, r?.group?.position ? [r.group.position.x, r.group.position.y - 2, r.group.position.z] : null); // (mana: a duel won for real, or a kill)
                 g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
                 break;
@@ -1202,7 +1248,7 @@ export class NetSync {
             case 'bite': if (this.net.isHost) break; g.zombieHitsMe({ x: +m.dx || 0, z: +m.dz || 0 }); break;
             case 'achc': if (!this.net.isHost && typeof m.k === 'string') g.achievements?.onCredit(m.k); break; // (an achievement: the host saw me take part)
             case 'ach': if (m.by !== this.me) g.achievements?.onNet(m, m.by); break;
-            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos, aw: m.aw }); break; // (mana: my kill, the host decided)
+            case 'mcred': if (!this.net.isHost) applyCredit(g, { kind: m.kind, wiz: m.wiz, mm: m.mm, pos: m.pos, aw: m.aw, dark: m.dark }); break; // (mana: my kill, the host decided)
             case 'win': g.victory(g.killCount * 100 + g.playerHP * 50); break;
             default: break;
         }

@@ -18,16 +18,18 @@
  */
 
 import * as THREE from 'three';
+import { onFire, FIRE } from './WizardMind.js';
 
 export const BURN = {
     TIME: 8, // s a creature burns after the last fire that touched it (also the most it can ever have left)
     DMG: 2, // HP a second (a player has 20; one damage for every creature)
     TICK: 1, // s between two burns
-    STAND: 1.5, // s a creature must stand in a campfire / a burning block before it catches fire (a light touch is nothing)
+    STAND: 0.1, // s a creature must touch a campfire / a burning block / a burning tree to catch fire — whoever runs through a fire or brushes it burns (the author); the check is made 8 times a second while any fire burns (WizardMind.FIRE_TOUCH)
+    EDGE: 0.5, // m beyond the flames that still count as «рядом» (the heat of an open fire)
     UP_R: 3, // m round the caster where «Firefighting» held up puts the burning out
     UP_R_MAX: 6, // … «Firefighting Maxima»
     WIZ_SELF: 1.5, // s a wizard needs to put himself out
-    FULL: 10, // bodies drawn with the full flames
+    FULL: 16, // bodies drawn with the full flames (a crowd of wizards in a great fire must be seen burning)
     FULL_R: 45, // m: farther — a few puffs; beyond FAR nothing
     FAR: 90,
     TTL: 4, // s a guest believes the host's list without an update
@@ -45,7 +47,7 @@ export const BURN_TARGETS = {
     me: { does: 'burn', why: 'я горю у себя на компьютере: −2 HP в секунду, броня с огнестойкостью режет, щит не держит; бегаю и колдую как обычно; смерть, вода, «Firefighting» вверх/в меня гасят' },
     players: { does: 'burn', why: 'другие игроки горят на своих компьютерах и сообщают об этом по сети (\'burn\'); у меня на них рисуется пламя' },
     zombies: { does: 'burn', why: 'горят (хост решает), бредут как шли; на солнце они и так дымятся — это то же пламя' },
-    castlePeople: { does: 'burn', why: 'жители, рыцари, король, торговцы паникуют и бегут к воде (или прочь от огня) с криком; волшебник сам гасит себя «Firefighting» за 1–2 с; остальные пугаются горящего' },
+    castlePeople: { does: 'burn', why: 'жители, рыцари, король, торговцы паникуют и бегут к воде (или прочь от огня) с криком; у 4 из 5 волшебников есть «Firefighting» — гасят себя за 1–2 с, платя 3 маны (WizardMind.onFire); у остальных или без маны — паника; кто пробежал через костёр или задел горящий блок — загорается сразу' },
     animals: { does: 'burn', why: 'бегут в панике (Animals.fear), горят и получают ожог каждую секунду' },
     sailors: { does: 'burn', why: 'моряки и скелеты чёрного корабля горят (скелет — как живое дерево: Sailors.pirateBoneDamage решает, сколько)' },
     spider: { does: 'none', why: 'гигантская паучиха слишком велика, чтобы загореться целиком: огонь её лишь ранит (Spider.hit), как раньше' },
@@ -56,8 +58,11 @@ export const BURN_TARGETS = {
     iceCastle: { does: 'none', why: 'Ледяная Королева, снеговики и ледяные монстры не загораются: огонь их слабость — он их ТОПИТ сразу (IceQueen.iceDamage, FIRE_K), а не жжёт на теле' },
     blackship: { does: 'burn', why: 'капитан Чёрные Усы и скелеты горят как моряки; сам корабль заклинаниями не повреждается (Ships.isCursed)' },
     phoenix: { does: 'none', why: 'феникс рождён из огня' },
-    owl: { does: 'none', why: 'сова чует огонь и улетает от него (Owls.TARGETS)' },
-    plant: { does: 'own', why: 'телевильпины и плотоядные головы горят своим способом, быстро: −12 HP/с (Plants.js, PlantLife.BURN); на теле существа не горят' },
+    owl: { does: 'none', why: 'сова не горит — слишком магическая (слова автора); чует огонь и улетает от него (Owls.TARGETS)' },
+    canary: { does: 'own', why: 'канарик горит своим способом: Canaries.hit (огонь) — горит 6 с, −2 HP в секунду, бежит прочь; лагерь злится на того, кто поджёг' },
+    custom: { does: 'own', why: 'созданное существо горит, если само не дышит огнём (CustomCreatures.hit «fire»): огненному огонь нипочём' },
+    plant: { does: 'own', why: 'телевильпины и плотоядные головы горят своим способом, быстро: −12 HP/с (Plants.js, PlantLife.BURN); на теле существа не горят; Ярколето огнём не вредит и не злится — оно само из огня (PlantLife.BRIGHT_TARGETS)' },
+    spencer: { does: 'none', why: 'птичка Спенсера факелом не горит: от огня она гибнет сразу («Инферно»), на ней огонь не держится' },
     gargoyle: { does: 'none', why: 'горгулья адская: огонь её не берёт и не поджигает (GargoyleRules.FIRE_KINDS)' },
     items: { does: 'none', why: 'свитки и книги в огне горят уже своим способом (Game.burnHeldBook/Items); горение на теле их не трогает' },
     ships: { does: 'none', why: 'горящий корабль и повозка сами поджигают тех, кто стоит в их огне (stand), но не горят «на теле»' },
@@ -129,7 +134,7 @@ export class Burning {
      * Only the creature's own computer decides about a player (me: here; others: ignored); the host — about the rest.
      * @returns true if it burns now
      */
-    ignite(kind, id, by = null, time = BURN.TIME) {
+    ignite(kind, id, by = null, time = BURN.TIME, hell = false) {
         const g = this.game;
         if (!BURNS.has(kind)) return false;
         if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time); }
@@ -146,6 +151,7 @@ export class Burning {
         }
         b.left = Math.min(BURN.TIME, Math.max(b.left, time));
         if (by) b.by = by;
+        b.hell = !!hell; // (the last fire to touch it: a death by the Hellfire's burn counts for the caster — HellKills.js)
         return true;
     }
 
@@ -245,6 +251,7 @@ export class Burning {
 
     /** «Firefighting» held up: whoever burns within `r` of `o` (3D) stops burning. */
     douseAround(o, r) {
+        this.game.plants?.bright?.douse?.(o, r); // (water on a Brightflower: it falls asleep)
         return this.douseWhere((c, rr) => Math.hypot(c.x - o.x, c.y - o.y, c.z - o.z) - rr <= r);
     }
 
@@ -270,7 +277,13 @@ export class Burning {
     update(dt) {
         const g = this.game;
         this._standT -= dt;
-        if (this._standT <= 0) { const s = Math.max(0.25, -this._standT + 0.5); this._standT = 0.5; this._standCheck(s); }
+        this._standAcc = (this._standAcc || 0) + dt;
+        if (this._standT <= 0) {
+            const fire = this._anyFire();
+            this._standT = fire ? 0.12 : 0.5; // (a fire burns somewhere: looked at 8 times a second — a runner through it must not slip between two looks)
+            const s = this._standAcc; this._standAcc = 0;
+            if (fire || this.stand.size) this._standCheck(s);
+        }
         if (this.me) this._tickMe(dt);
         if (g.authority) for (const [k, b] of [...this.list]) this._tickBody(k, b, dt);
         this._expire(dt);
@@ -307,15 +320,20 @@ export class Burning {
         if (b.left <= 0) { this._out(k, b, 'time'); return; }
         if (b.kind === 'z') { const z = g.zombieById?.get(b.id); if (z) z.burning = 0.6; } // (the zombie's own smoke, seen on every computer)
         const v = b.kind === 'v' ? g.duel._creature('v', b.id) : null;
-        // a wizard puts himself out (he knows «Firefighting»)
+        // a wizard puts himself out with «Firefighting» (4 of 5 know it; it costs mana) — the rest, and one out of mana, run in panic
         if (v?.wizard) {
-            b.selfT += dt;
-            if (!b.said) { b.said = true; g.castleLife?._say?.(v, 'Firefighting!'); }
-            if (b.selfT >= BURN.WIZ_SELF) {
-                this._puff(mid, 1.5);
-                g.sound?.playSpellFx?.('fxVacuum', mid, 0.8, 1);
-                this._out(k, b, 'wizard');
-                return;
+            if (!b.act) { b.act = onFire({ knows: v.knowsFire !== false, mana: v.mana ?? 0, noWand: !!v.noWand, rank: v.rank }); g.castleLife?.alog?.decision?.(v, b.act.a === 'douse' ? `горит: тушится «Firefighting» (${FIRE.COST} маны, ${b.act.t} с)` : `горит: ${v.knowsFire === false ? 'не знает «Firefighting»' : 'нет маны или палочки'} — бежит к воде/прочь`); }
+            if (b.act.a === 'douse') {
+                b.selfT += dt;
+                if (!b.said) { b.said = true; g.castleLife?._say?.(v, 'Firefighting!'); }
+                if (b.selfT >= b.act.t) {
+                    if (v.mana >= FIRE.COST) v.mana -= FIRE.COST;
+                    this._puff(mid, 1.5);
+                    g.sound?.playSpellFx?.('fxVacuum', mid, 0.8, 1);
+                    this._out(k, b, 'wizard');
+                    return;
+                }
+                b.run = null; // (while he says it he stands: the wand up)
             }
         }
         // panic: villagers and animals run, and shout
@@ -326,7 +344,7 @@ export class Burning {
             if (b.kind === 'v') {
                 const cr = v || g.duel._creature('v', b.id);
                 if (cr) {
-                    g.castleLife?.fear?.(cr, sx, sz, 1, 0.3);
+                    g.castleLife?.fear?.(cr, sx, sz, 1, 0.3, { panic: true });
                     if (!b.said) { b.said = true; g.castleLife?._say?.(cr, pick(SHOUT_BURN)); }
                 }
             } else if (b.kind === 'a') {
@@ -352,15 +370,24 @@ export class Burning {
             if (a) { a.damageCooldown = 0; g.animals?.hit?.(a, d, dir, by, true); }
         } else if (b.kind === 'v') {
             const v = g.duel._creature('v', b.id);
-            if (v) g.castleLife?.hit?.(v, d, dir, by, { fire: true, kind: 'burn' });
+            if (v) g.castleLife?.hit?.(v, d, dir, by, { fire: true, kind: 'burn', hell: !!b.hell });
         } else if (b.kind === 'c') {
             const v = g.duel._creature('c', b.id);
-            if (v) g.ships?.crew?.hit?.(v, d, dir, by, { fire: true, kind: 'burn' }); // (a skeleton: Sailors.pirateBoneDamage decides how much)
+            if (v) g.ships?.crew?.hit?.(v, d, dir, by, { fire: true, kind: 'burn', hell: !!b.hell }); // (a skeleton: Sailors.pirateBoneDamage decides how much)
         }
         g.sound?.playSpellFx?.('fxCrackle', mid, 0.5, 0.9 + Math.random() * 0.2);
     }
 
-    /** Standing in a campfire or a burning block/tree long enough sets a creature alight (a light touch does not). */
+    /** Does any fire burn near enough to matter (a campfire, a burning block or tree)? Without one the check is rare and cheap. */
+    _anyFire() {
+        const g = this.game;
+        if (g.fire?.burningBlocks?.size || g.fire?.burningTrees?.length) return true;
+        const cf = g.campfires?.list;
+        if (cf) for (const f of cf.values()) if (f.left > 0) return true;
+        return false;
+    }
+
+    /** Touching a campfire or a burning block/tree sets a creature alight — a runner through the fire too (BURN.STAND). */
     _standCheck(s) {
         const g = this.game;
         const inFire = (x, y, z, r) => {
@@ -371,7 +398,7 @@ export class Burning {
         const consider = (kind, id, x, y, z, r) => {
             const k = key(kind, id);
             if (!BURNS.has(kind)) return;
-            if (inFire(x, y, z, r)) {
+            if (inFire(x, y, z, r + BURN.EDGE)) {
                 seen.add(k);
                 const t = (this.stand.get(k) || 0) + s;
                 if (t >= BURN.STAND) { this.stand.delete(k); this.ignite(kind, id, null); } else this.stand.set(k, t);

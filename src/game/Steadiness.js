@@ -127,6 +127,8 @@ export const NPC_STEADY = {
     novice: [20, 30], adept: [30, 40], teacher: [40, 50], elder: [50, 60], master: [100, 100], // (wizards by rank; the Master of the tower is 100)
     sailor: [10, 30], skeleton: [10, 30], captain: [30, 50], // (Captain Black Moustache too)
     zombie: [1, 10], animal: [1, 10], horse: [10, 20], other: [5, 15],
+    canary: [40, 55], // (the swamp canaries: stocky and very strong — they hold their ground better than a knight: Canaries.js)
+    custom: [20, 50], // (a creature of one's own: by its size — CustomCreatures)
     gargoyle: [20, 30], // (an infernal gargoyle — a heavy stone body held up by wings: Gargoyles.js)
 };
 /** A wizard's rank when the entry has none: by his road role. */
@@ -138,6 +140,8 @@ export function steadyKind(ck, c) {
     const role = c.role || c.entry?.role;
     if (ck === 'z') return 'zombie';
     if (ck === 'G') return 'gargoyle';
+    if (ck === 'N') return 'canary';
+    if (ck === 'C') return 'custom'; // (a creature of one's own: by its kind — NPC_STEADY.custom)
     if (ck === 'a') return c.type === 'horse' ? 'horse' : 'animal';
     if (ck === 'c') return role === 'blackbeard' ? 'captain' : role === 'skeleton' ? 'skeleton' : /captain|капитан/i.test(String(role || c.title || '')) ? 'captain' : 'sailor';
     if (ck === 'v') {

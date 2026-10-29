@@ -173,6 +173,9 @@ export const MAXIMA_TARGETS = {
     bookBirds: { why: 'не действует: книги-птицы летают сами, Максима берёт стоящих на земле (книгу ловит обычная «Левиоса»)' },
     phoenix: { why: 'не действует: феникс летит сам (его ловит обычная «Левиоса»)' },
     owl: { why: 'не действует: сова вспархивает раньше — она летит сама; то, что падает, её не накроет (увёртывается)' },
+    canary: { why: 'поднимается группой, дрыгает ногами, роняет валун; отпущенный с высоты падает и ушибается; лагерь сердится на колдующего' },
+    spencer: { why: 'не действует: птичка Спенсера вспархивает раньше — она летит сама; то, что падает, её не накроет' },
+    custom: { why: 'созданное существо до 4 м поднимается группой и бьётся в воздухе; большее — не поднимается; отпущенное с высоты падает и ранится' },
     gargoyle: { why: 'не действует: тяжёлая каменная горгулья рвётся из невидимой руки и улетает; то, что падает, её только ранит (×1,2)' },
     dragon: { why: 'не действует: дракон вырывается из любой Левиосы — он сильнее магии' },
     iceCastle: { why: 'не действует: ледяная магия королевы держит её, монстров и снеговиков на земле' },
@@ -204,7 +207,7 @@ export function houseCells(data, h, max = 6000) {
     const R = Math.ceil(h.r) + 1;
     const cx = Math.round(h.c.x), cz = Math.round(h.c.z);
     for (let x = cx - R; x <= cx + R; x++) for (let z = cz - R; z <= cz + R; z++) {
-        for (let L = Lf; L <= Lf + 22; L++) {
+        for (let L = Lf; L <= Lf + 34; L++) { // (a rich home of generation 14 is 26 high to its ridge, its chimneys 3 more)
             const t = data.get(x, L, z);
             if (!t || GROUND.has(t) || YARD.has(t) || isTreeBlock(t)) continue;
             if (isEnchanted(t)) return []; // (the wizards' tower: its walls of enchanted stone — no spell tears it off: EnchantedStone.js)
@@ -619,6 +622,8 @@ export class LevitationMaxima {
         for (const v of g.ships?.crew?.byId?.values?.() || []) if (!v.dead && !v.lev) out.push({ ck: 's', c: v, pos: centre('s', v), r: 1.2 });
         for (const t of g.livingTrees?.targets?.() || []) if (!t.lev && !t.isDead) out.push({ ck: 't', c: t, pos: centre('t', t), r: 2.5 });
         for (const s of g.spiders?.targets?.() || []) if (!s.lev) out.push({ ck: 'sp', c: s, pos: spiderCenter(s, new THREE.Vector3()), r: 3 });
+        for (const n of g.canaries?.targets?.() || []) if (!n.lev) out.push({ ck: 'N', c: n, pos: centre('N', n), r: 1.3 });
+        for (const n of g.customCreatures?.targets?.() || []) if (!n.lev && n.D.H * n.scale <= 4) out.push({ ck: 'C', c: n, pos: g.customCreatures.centre(n), r: n.r }); // (a creature of one's own up to 4 m) // (the swamp canaries: carried like a living tree)
         for (const [id, r] of g.remotes || []) if (!r.dead) out.push({ ck: 'p', c: { id }, pos: new THREE.Vector3(r.position.x, r.position.y - 0.5, r.position.z), r: 1 });
         return out;
     }
@@ -747,6 +752,7 @@ export class LevitationMaxima {
     centre(ck, c, out) {
         if (ck === 's') { const o = c.overboard; out.set(o ? o.x : c.x, (o ? o.y : c.y) + 2.4, o ? o.z : c.z); return 2.4; }
         if (ck === 't') { out.copy(c.model.position); out.y += 4; return 4; }
+        if (ck === 'N') { out.copy(c.model.position); out.y += 1.2; return 1.2; }
         if (ck === 'sp') { spiderCenter(c, out); return out.y - c.model.position.y; }
         if (this.game.levitation) return this.game.levitation._centre(ck, c, out);
         out.set(c.x || 0, (c.y || 0) + 1, c.z || 0);
@@ -755,13 +761,15 @@ export class LevitationMaxima {
 
     _move(ck, c, d) {
         if (ck === 's') { const o = c.overboard; o.x += d.x; o.y += d.y; o.z += d.z; }
-        else if (ck === 't' || ck === 'sp') c.model.position.add(d);
+        else if (ck === 't' || ck === 'sp' || ck === 'N') c.model.position.add(d);
     }
 
     _creature(ck, id) {
         const g = this.game;
         if (ck === 's') { const v = g.ships?.crew?.byId?.get(id); return v && !v.dead ? v : null; }
         if (ck === 't') { const t = g.livingTrees?.byId?.get(id); return t && !t.isDead ? t : null; }
+        if (ck === 'N') { const n = g.canaries?.byId?.(id); return n && !n.dead ? n : null; }
+        if (ck === 'C') return g.customCreatures?.byId?.(id) || null;
         if (ck === 'sp') { const s = g.spiders?.list?.find((x) => x.id === id); return s && !s.dead ? s : null; }
         return g.levitation?._creature(ck, id) || null;
     }
@@ -1599,6 +1607,8 @@ export class LevitationMaxima {
         g.phoenixes?.hitAt?.(c, r, dmg, 'crush', by);
         g.gargoyles?.hitAt?.(c, r, dmg, 'crush', by); // (an infernal gargoyle: stone, a house falling on it hurts — GargoyleRules.TARGETS.cauldron)
         g.owls?.hitAt?.(c, r, dmg, 'crush', by); // (an owl: quicker than a falling house — it darts away)
+        g.canaries?.hitAt?.(c, r, dmg, 'crush', by);
+        g.customCreatures?.hitAt?.(c, r, dmg, 'crush', by); // (a creature of one's own under it) // (a canary under it: crushed; the camp turns on the caster)
         g.iceCastle?.hitAt?.(c, r, dmg, 'crush', by); // (a house falling on the queen: it is no spell — it hurts)
         // (a living tree is hurt only by fire; a dragon is never under it — it flies; book-birds fly)
         // knocked down
@@ -1653,6 +1663,11 @@ export class LevitationMaxima {
             if (p.y > ground) continue;
             p.y = ground;
             this.falls.splice(i, 1);
+            if (f.ck === 'N' && !f.gentle) {
+                const d = fallDamage(f.top - ground);
+                if (d) g.canaries?.hit?.(f.c, d, 'fall', f.by);
+                else g.canaries?.hit?.(f.c, 0, 'fall', f.by);
+            }
             if (f.ck === 'sp' && !f.gentle) {
                 const d = fallDamage(f.top - ground) * 3;
                 if (d) g.spiders?.hit?.(f.c, d, 'fall', f.by);
@@ -1681,6 +1696,7 @@ export class LevitationMaxima {
             if (ck === 's') { c.mode = 'idle'; c.speed = 0; }
             if (ck === 't') { c.walkT = (c.walkT || 0) + dt * 6; c.speed = 1; }
             if (ck === 'sp') g.spiders?._animate?.(c, 1, dt);
+            if (ck === 'N') { c.mode = 'flinch'; c.speed = 0; c.stT = 0.15; g.canaries?._dropRock?.(c); } // (struggling in the air, the boulder dropped)
         }
     }
 

@@ -1,7 +1,7 @@
 // «Раскрой свои секреты»: plain readable text, no raw HTML, and a description for every spell it can show.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { holoParts, holoPlain, spellDescription, withSpellDescription } from '../../src/game/HoloText.js';
+import { holoWidth, holoParts, holoPlain, spellDescription, withSpellDescription } from '../../src/game/HoloText.js';
 import { describeItem, SPELL_RU } from '../../src/game/ItemTypes.js';
 import { SPELLS } from '../../src/ui/Codex.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -42,4 +42,14 @@ test('the scroll reading card draws plain words too (no own tag parser left)', a
     const fs = await import('node:fs');
     const src = fs.readFileSync(new URL('../../src/game/ScrollReading.js', import.meta.url), 'utf8');
     assert.ok(src.includes('holoParts') && !src.includes("split(/(<b>"), 'ScrollReading must use holoParts');
+});
+
+test('holoWidth: a middle size — ~28% of the screen width at any distance, text ≥16px at 1080p', () => {
+    for (const d of [0.8, 1.5, 3, 5]) {
+        const w = holoWidth(d, 75, 16 / 9);
+        const frac = w / (2 * Math.tan((75 * Math.PI) / 360) * (16 / 9) * d);
+        assert.ok(frac > 0.2 && frac < 0.32, `d=${d} frac=${frac}`);
+        assert.ok((1920 * frac / 1024) * 40 >= 16);
+    }
+    assert.ok(holoWidth(3) < 2.6); // ~2.1 m at 3 m
 });

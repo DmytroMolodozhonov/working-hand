@@ -622,7 +622,7 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
         // a wand in the hand, a thing lying next to it
         const wand = { kind: 'wand', uid: 'tw1', model: 3, color: 0x44aaff, dir: 'destroy', fav: 'Bombardo', power: 20 };
         g.items.takeIntoHand(wand, 'right');
-        const scroll = { kind: 'scroll', uid: 'ts1', stat: 'fatigue', amount: 7 };
+        const scroll = { kind: 'scroll', uid: 'ts1', stat: 'spell', spell: 'Thunderwave' };
         g.items.takeIntoHand(scroll, 'left');
         const pw = g.wandMagic.power('BombardoMaxima');
         g.wandMagic.reveal();
@@ -632,7 +632,7 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
         const lumos = g.castLocalSpell('Люмос Максима', true);
         await frames(3);
         const light = g.wandMagic.lights[0].intensity;
-        // burn the scroll: max strength +7
+        // burn the scroll (it teaches a spell; there are no scrolls of strength any more: the strength is as it was)
         const maxF0 = g.combat.maxFatigue || 30;
         g.castLocalSpell('Инферно', true);
         const maxF1 = g.combat.maxFatigue;
@@ -659,7 +659,7 @@ test('caves and loot: a chest in a cave chamber, wands / scrolls / backpacks, «
     assert.ok(r.holo, 'a hologram tells the secrets');
     assert.equal(r.lumos, 'LumosMaxima');
     assert.ok(r.light > 1, 'light at the tip');
-    assert.equal(r.maxF1, r.maxF0 + 7, 'the burnt scroll gave +7 strength');
+    assert.equal(r.maxF1, r.maxF0, 'there are no scrolls of strength any more: nothing burnt, nothing gained');
     assert.ok(r.hpAfter >= 15, `the apple healed (+10): ${r.hpAfter}`);
     assert.ok(r.inSlot, 'the wand went into a slot');
     assert.deepEqual(realErrors(errors), []);

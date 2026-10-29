@@ -23,7 +23,8 @@ import { keepIn } from './HouseWards.js';
 import { legacyMode } from '../ui/GameNames.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { normalizeSpawn, spawnLabel, normalizeFoe, DUEL_FOES } from './SpawnSpots.js';
-import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, BUILDINGS_FROM_GEN } from '../world/Terrain.js';
+import { retireScrollsIn } from './ItemTypes.js';
+import { WORLD_GEN, FURNISH_FROM_GEN, PLANTS_FROM_GEN, PENT_STAND_FROM_GEN, SPAWN_MAPS_FROM_GEN, BAKSADI_FROM_GEN, BRIGHTFLOWER_FROM_GEN, CANARIES_FROM_GEN, GATE_METAL_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, ARENA_ENTRIES_FROM_GEN, BUILDINGS_FROM_GEN } from '../world/Terrain.js';
 
 const DB_NAME = 'zns-worlds';
 const STORE = 'worlds';
@@ -57,6 +58,14 @@ export function worldHoverNote(w, cur = GAME_VERSION) {
     if (gen < FURNISH_FROM_GEN) lacks.push('мебели и сундуков в комнатах замков');
     if (gen < PLANTS_FROM_GEN) lacks.push('живых растений на лугах');
     if (gen < PENT_STAND_FROM_GEN) lacks.push('рисунка пентаграммы телепортации в библиотеках волшебников');
+    if (gen < SPAWN_MAPS_FROM_GEN) lacks.push('отдельных мест для дракона, Ледяной Королевы и пещеры паучихи в Творческом режиме');
+    if (gen < BAKSADI_FROM_GEN) lacks.push('дерева Баксади и новых диких растений');
+    if (gen < BRIGHTFLOWER_FROM_GEN) lacks.push('огненных цветков Ярколето на тёплых лугах');
+    if (gen < CANARIES_FROM_GEN) lacks.push('канариков на болотах');
+    if (gen < GATE_METAL_FROM_GEN) lacks.push('кованых железных ворот в замках');
+    if (gen < HOUSE_SIZE_FROM_GEN) lacks.push('просторных домов жителей (у богатых — в два этажа)');
+    if (gen < DUNGEON_FROM_GEN) lacks.push('данжей (развалин и подземелий с сундуками)');
+    if (gen < ARENA_ENTRIES_FROM_GEN) lacks.push('входа для зрителей и лавки распорядителя у арен дуэлей');
     if (gen < BUILDINGS_FROM_GEN) lacks.push('разных зданий в поселениях (церкви, кузницы, таверны, мельницы, колодца…)');
     const head = `Версия игры: ${ver.text.replace(/^версия /, '')}.`;
     if (!lacks.length) return `${head} Мир актуален: в нём есть всё новое.`;
@@ -165,9 +174,12 @@ export function playerSnapshot(game) {
         bonus: game.bonus || null, // scrolls burnt: more health / strength for good
         gear: game.items?.snapshot() || null, // what is in the hands, the backpack worn
         dark: game.dark?.snapshot() || null, // чёрная магия: уровень тьмы
+        dl: game.darkLord?.snapshot() || null, // «настоящий тёмный маг» (DarkLord.js): наряд надет
         bw: game.breakward?.snapshot() || null, // метка «слом защиты» и выученный рисунок пентаграммы
         pentMarks: game.pentagranium?.marksSnapshot() || null, // the good pentagrams on the ground (permanent: teleport, life, mend…)
+        pentBare: game.pentagranium?.bareSnapshot() || null, // the bare-hand power (BareHand.js: the rite of «Palmaris» done)
         pentSeen: game.pentagranium?.snapshot() || null, // the pentagrams' drawings the hero has looked at (Pentagrams.js: without it nothing is counted)
+        sight: game.sight?.snapshot() || null, // the night eyes and the sight of the invisible (SecondSight.js)
         steady: game.steady?.snapshot() || null, // «Устойчивость»: the skill and the run towards the next +1
         mana: game.mana?.snapshot() || null, // the mana maximum grown, the spells / magical creatures already counted
         ach: game.achievements?.snapshot() || null, // the achievements (and «Высший маг»): kept for good
@@ -183,6 +195,7 @@ export function playerSnapshot(game) {
 /** Give a player their things back. */
 export function applyPlayerSnapshot(game, s) {
     if (!s) return;
+    retireScrollsIn(s); // (the scrolls of health and of mana cells are gone from the game: an old one is an apple)
     game._playerRestored = true; // (a player of this world before: their own things, no starting gifts)
     const inv = game.inventory;
     let owed = 0; // coins of an old save that wait for the pouch
@@ -219,9 +232,12 @@ export function applyPlayerSnapshot(game, s) {
         inv._render?.();
     }
     if (s.dark) game.dark?.restore(s.dark);
+    if (s.dl) game.darkLord?.restore(s.dl);
     if (s.bw) game.breakward?.restore(s.bw);
     if (s.steady) game.steady?.restore(s.steady);
+    if (s.sight) game.sight?.restore(s.sight);
     if (s.pentSeen) game.pentagranium?.restore(s.pentSeen);
+    game.pentagranium?.bareRestore(s.pentBare);
     if (s.pentMarks) game.pentagranium?.marksRestore(s.pentMarks);
     if (s.mana) game.mana?.restore(s.mana);
     if (s.ach) game.achievements?.restore(s.ach);
@@ -340,6 +356,9 @@ export class WorldKeeper {
             liquidated: g.liquidation?.snapshot() || [], // cauldrons, chests, beds, doors, boards crumbled by «Liquidation» (they never come back)
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
+            divineCreations: g.divine?.snapshot() || null,
+            customPlants: g.customPlants?.snapshot() || null, // plants of one's own (CustomPlants.js)
+            customCreatures: g.customCreatures?.snapshot() || null, // creatures of one's own: their kinds and the ones alive (CustomCreatures.js) // what «Да пусть создастся» made: the buildings' records, their chests (DivineCreation.js)
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
             magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
             iceMagic: g.iceMagic?.snapshot() || null, // castles and bridges of ice (IceMagic.js)
@@ -378,6 +397,7 @@ export class WorldKeeper {
 
 /** Put a saved world back into a freshly generated game (same seed). */
 export function restoreWorld(game, save, THREE) {
+    retireScrollsIn(save); // (the loose things, the bodies, the chests… of an old save: the retired scrolls become apples)
     const g = game;
     if (!save) return;
     if (Array.isArray(save.edits) && save.edits.length) {
@@ -427,7 +447,10 @@ export function restoreWorld(game, save, THREE) {
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);
-    if (save.magicCastles) g.castleMagic?.restore(save.magicCastles); // («Create a Castle») // (after the beds, the doors and the things lying about)
+    if (save.magicCastles) g.castleMagic?.restore(save.magicCastles);
+    if (save.divineCreations) g.divine?.restore(save.divineCreations);
+    if (save.customPlants) g.customPlants?.restore(save.customPlants);
+    if (save.customCreatures) g.customCreatures?.restore(save.customCreatures); // («Да пусть создастся») // («Create a Castle») // (after the beds, the doors and the things lying about)
     if (save.iceMagic) g.iceMagic?.restore(save.iceMagic);
     if (save.planets) g.space?.planets.applyJSON(save.planets);
     // (Creative always opens in the full day; the other modes go on from the hour they were left at)

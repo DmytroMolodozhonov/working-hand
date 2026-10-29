@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { GARGOYLE, fireStrength, ringAngle, skyStrength, skyReach } from './GargoyleRules.js';
+import { GARGOYLE, fireStrength, ringAngle, skyNow, skyReach } from './GargoyleRules.js';
 
 const POOL = 3;
 const _v = new THREE.Vector3();
@@ -58,8 +58,8 @@ void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; 
 
 // a deck of storm cloud: noise scrolling slowly, black with crimson underlight, lightning inside
 const SKY_FS = `
-uniform float uTime, uStr, uFlash, uSeed;
-uniform vec3 uCam;
+uniform float uTime, uStr, uFlash, uSeed, uStress, uAct;
+uniform vec3 uCam, uHole; // uHole: the beam's place in the deck (x, z) and the hole's radius; uStress 0…1 how hard the clouds press back; uAct 0…1 the struggle is on
 varying vec2 vUv;
 varying vec3 vW;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -69,16 +69,34 @@ void main() {
     vec2 q = (vUv - 0.5) * 2.0;
     float r = length(q);
     float edge = 1.0 - smoothstep(0.62, 1.0, r);
-    vec2 p = vW.xz * 0.012 + vec2(uTime * 0.012, uSeed);
+    vec2 dh = vW.xz - uHole.xy;
+    float dist = length(dh);
+    // the defence: the clouds draw in towards the beam and swirl round it (a lasting tightening: uStress grows with the struggle)
+    float near = uAct * smoothstep(110.0, 6.0, dist);
+    float swirl = near * (0.9 + 1.6 * uStress) * sin(uTime * 0.9);
+    float cs = cos(swirl), sn = sin(swirl);
+    vec2 wp = vW.xz - uHole.xy;
+    wp = vec2(cs * wp.x - sn * wp.y, sn * wp.x + cs * wp.y) * (1.0 + near * (0.35 + 0.5 * uStress)) + uHole.xy;
+    vec2 p = wp * 0.012 + vec2(uTime * 0.012, uSeed);
     float c = fbm(p) * 0.65 + fbm(p * 2.3 - uTime * 0.02) * 0.35;
-    float dens = smoothstep(0.25, 0.8, c + 0.25) * edge;
+    float dens = smoothstep(0.25, 0.8, c + 0.25 + near * (0.18 + 0.3 * uStress)) * edge;
     float under = fbm(p * 1.7 + 3.0);
     vec3 dark = vec3(0.025, 0.012, 0.018);
     vec3 red = vec3(0.42, 0.045, 0.05);
     vec3 col = mix(dark, red, smoothstep(0.35, 0.95, under) * 0.55);
     // a flash lights the cloud from inside: the closer to the strike, the whiter-crimson
     col += vec3(1.0, 0.45, 0.4) * uFlash * (0.35 + 0.65 * fbm(p * 3.0 + 9.0));
+    // the hole the beam burns: ragged, the clouds close in on it and let go again (it beats), a golden rim burning where the light bites
+    float ang = atan(dh.y, dh.x);
+    float rag = fbm(vec2(ang * 1.7, uTime * 0.9) + 5.0) - 0.5;
+    float beat = 0.62 + 0.38 * sin(uTime * (4.0 + 5.0 * uStress) + rag * 6.0);
+    float hr = uHole.z * beat * (1.0 - 0.25 * uStress) * (1.0 + rag * 0.7);
+    float inside = 1.0 - smoothstep(hr * 0.55, hr, dist);
+    float rim = smoothstep(hr * 1.7, hr * 0.95, dist) * (1.0 - inside) * uAct;
+    col = mix(col, vec3(1.0, 0.8, 0.36), rim * 0.85);
+    col = mix(col, vec3(1.0, 0.95, 0.75), inside * uAct);
     float alpha = clamp(dens * uStr * 1.15, 0.0, 0.97);
+    alpha = max(alpha * (1.0 - inside * uAct * 0.92), rim * 0.65 * uStr);
     gl_FragColor = vec4(col, alpha);
 }`;
 
@@ -126,7 +144,7 @@ function shared() {
     for (const g of [wallGeo, ringGeo, discGeo, padGeo]) g.userData.shared = true;
     const wallMat = () => { const m = new THREE.ShaderMaterial({ vertexShader: WALL_VS, fragmentShader: WALL_FS, uniforms: { uTime: { value: 0 }, uStr: { value: 0 }, uHead: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false }); m.userData.shared = true; return m; };
     const glowMat = () => { const m = new THREE.MeshBasicMaterial({ color: 0xff4a0e, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }); m.userData.shared = true; return m; };
-    const skyMat = (seed) => { const m = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: { uTime: { value: 0 }, uStr: { value: 0 }, uFlash: { value: 0 }, uSeed: { value: seed }, uCam: { value: new THREE.Vector3() } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }); m.userData.shared = true; return m; };
+    const skyMat = (seed) => { const m = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: { uTime: { value: 0 }, uStr: { value: 0 }, uFlash: { value: 0 }, uSeed: { value: seed }, uCam: { value: new THREE.Vector3() }, uHole: { value: new THREE.Vector3(0, 0, 0) }, uStress: { value: 0 }, uAct: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false }); m.userData.shared = true; return m; };
     const scorchGeo = new THREE.CircleGeometry(GARGOYLE.SCORCH_R, 40);
     scorchGeo.rotateX(-Math.PI / 2);
     scorchGeo.userData.shared = true;
@@ -246,9 +264,10 @@ export class RitualFx {
         let best = null, bestK = 0;
         for (const r of list) {
             const d = camPos ? Math.hypot(camPos.x - r.c.x, camPos.z - r.c.z) : 0;
-            const k = skyStrength(r.t) * skyReach(d);
+            const k = skyNow(r) * skyReach(d);
             if (k > bestK) { bestK = k; best = r; }
         }
+        const now = performance.now();
         this._sky += (bestK - this._sky) * Math.min(1, dt * 3);
         this.flash = Math.max(0, this.flash - dt * 3.2);
         if (!best || this._sky < 0.004) { for (const d of this.decks) d.visible = false; return; }
@@ -256,14 +275,23 @@ export class RitualFx {
             m.visible = true;
             m.position.set(best.c.x, best.c.y + GARGOYLE.SKY_H + i * 15, best.c.z);
             const u = m.material.uniforms;
-            u.uTime.value = best.t * (1 + i * 0.5); u.uStr.value = skyStrength(best.t) * (i ? 0.8 : 1); u.uFlash.value = this.flash;
+            u.uTime.value = best.t * (1 + i * 0.5); u.uStr.value = skyNow(best) * (i ? 0.8 : 1); u.uFlash.value = this.flash;
+            // the beam of «To the Sun» through this deck: where the ray crosses it (kept alive by the caster's messages, a fraction of a second old)
+            const f = best.sunFx, live = f && f.on && now - f.at < 700 && f.d.y > 0.05;
+            const act = live ? 1 : 0;
+            u.uAct.value += (act - u.uAct.value) * Math.min(1, dt * (live ? 6 : 2.5));
+            if (live) {
+                const t = (m.position.y - f.o.y) / f.d.y;
+                u.uHole.value.set(f.o.x + f.d.x * t, f.o.z + f.d.z * t, GARGOYLE.SUN.HOLE_R);
+                u.uStress.value += (f.s - u.uStress.value) * Math.min(1, dt * 3);
+            }
         });
     }
 
     /** How dark the world's own sky is made over `camPos` (0 … 1, for Storm.update). */
     skyDark(list, camPos) {
         let k = 0;
-        for (const r of list) k = Math.max(k, skyStrength(r.t) * skyReach(Math.hypot(camPos.x - r.c.x, camPos.z - r.c.z)));
+        for (const r of list) k = Math.max(k, skyNow(r) * skyReach(Math.hypot(camPos.x - r.c.x, camPos.z - r.c.z)));
         return Math.min(0.88, k * 0.95);
     }
 

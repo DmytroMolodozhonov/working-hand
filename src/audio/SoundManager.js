@@ -13,8 +13,10 @@
 
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
+import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
+import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
@@ -186,6 +188,11 @@ export class SoundManager {
 
     _spell(buffer, volume = 1, rate = 1) {
         this._play(buffer, volume * (this.spellVolume ?? 1), rate);
+    }
+
+    /** A spell's sound at a place: the «заклинания» slider × the general «звуки» bus (SoundGroups.js). */
+    _castAt(buffer, position, volume = 1, refDistance = 5, rate = 1) {
+        this._playAt(buffer, position, volume * (this.spellVolume ?? 1), refDistance, rate);
     }
 
     async resume() {
@@ -363,6 +370,41 @@ export class SoundManager {
             this._clangBuf = buf;
         }
         this._play(this._clangBuf, 0.45 + 0.6 * Math.min(1, power), 0.85 + Math.random() * 0.35);
+    }
+
+    /**
+     * A forged-iron gate (the keep's gates, GateModel.js): a deep ring of heavy metal with a low boom and a short grating of
+     * the hinges (made here, no file). `power` 0..1: a latch clicking is quiet, a slam or a blast against the gate rings long.
+     */
+    playIronGate(power = 0.6) {
+        if (!this.enabled) return;
+        const buf = this.sounds.ironGate || (this.sounds.ironGate = this._synthIronGate());
+        if (buf) this._play(buf, 0.4 + 0.65 * Math.min(1, power), 0.9 + Math.random() * 0.2);
+    }
+
+    _synthIronGate() {
+        const ctx = this.context;
+        if (!ctx) return null;
+        const rate = ctx.sampleRate, len = Math.floor(rate * 1.6);
+        const buf = ctx.createBuffer(1, len, rate);
+        const d = buf.getChannelData(0);
+        // a big plate rings low: inharmonic modes round 210 Hz, long decay; the bars add a higher, shorter ring
+        const f0 = 210;
+        const modes = [[1, 0.6, 0.9], [2.32, 0.4, 0.6], [4.1, 0.28, 0.38], [6.7, 0.18, 0.22], [9.4, 0.1, 0.12], [1.006, 0.35, 0.8]];
+        let seed = 11;
+        const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+            const t = i / rate;
+            let s = 0;
+            for (const [r, a, decay] of modes) s += a * Math.exp(-t / decay) * Math.sin(2 * Math.PI * f0 * r * t);
+            s += 0.8 * Math.exp(-t / 0.05) * Math.sin(2 * Math.PI * 62 * t); // the boom of the leaf
+            s += rnd() * 0.7 * Math.exp(-t / 0.008); // the hit
+            lp += (rnd() - lp) * 0.08; // the hinges grating: low-passed noise that wavers
+            s += lp * 0.35 * Math.exp(-t / 0.35) * (0.5 + 0.5 * Math.sin(2 * Math.PI * 17 * t));
+            d[i] = Math.tanh(s * 1.1) * 0.8;
+        }
+        return buf;
     }
 
     /** Coins jingling in a pouch (tied onto the belt): a few small clinks (made here). */
@@ -580,6 +622,7 @@ export class SoundManager {
             ['chest', () => this._synthCreak()], ['crack', () => this._synthCrack()], ['splash', () => this._synthWater(0.7, true)], ['bubblePop', () => this._synthBubblePop()],
             ['waterRise', () => this._synthWater(1.1, false)], ['houseDone', () => this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2)],
             ['rumble', () => this._synthRumble(5)], ['houseHum100', () => this._synthHum(10)], ['houseBreak', () => this._synthHouseBreak()],
+            ['ironGate', () => this._synthIronGate()], // (the keep's forged gates — GateModel.js)
             ['collapse', () => this._synthCollapse()], ['groan', () => this._synthGroan()], // (a building giving way, coming down — Structure.js)
             ['wardHum', () => this._synthWardHum()], ['wardClick', () => this._synthKnock(1400, 0.07)], ['wardChime', () => this._synthChime([1047, 1568, 2093], 1.2, 4)],
             ['seal', () => this._synthKnock(90, 0.5)], ['boneClack', () => this._synthKnock(820, 0.09)], ['sealChime', () => this._synthChime([392, 587, 784], 1.4, 3.5)],
@@ -591,9 +634,13 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            // (the invisible bird of Spencer — SpencerBirds.js: a chirp, a trill, small wings)
+            ...SPENCER_SOUNDS.map((k) => ['spencer_' + k, () => synthSpencer(this.context, k)]),
             // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
+            // (the Canaries — Canaries.js: snarls, shouts, grunts, a boulder's thud and the air it cuts)
+            ...CANARY_SOUNDS.map((k) => ['canary_' + k, () => synthCanary(this.context, k)]),
             // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
             ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
             ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
@@ -767,6 +814,9 @@ export class SoundManager {
         this._loop('flight', this.enabled && flight > 0.02 ? 'loopFlight' : null, 0.5 * Math.min(1, flight), 0.8 + 0.4 * Math.min(1, flight));
     }
 
+    /** «Да пусть создастся»: the gods think — their soft choir, as loud as `k` (0…1: near the place; 0 — silent). */
+    creationHum(k) { if (this.context && this.loaded) this._loop('creation', this.enabled && k > 0.01 ? 'loopGenesis' : null, 0.55 * Math.min(1, k)); }
+
     /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
     _loop(slot, key, k, rate = 1) {
         const loops = this._loops || (this._loops = {});
@@ -802,7 +852,7 @@ export class SoundManager {
     playInspiriusZap(position) {
         if (!this.context) return;
         if (!this.sounds.inspZap) this.sounds.inspZap = this._synthElectric(0.3, false);
-        this._playAt(this.sounds.inspZap, position, 1.4, 7, 0.8 + Math.random() * 0.5);
+        this._castAt(this.sounds.inspZap, position, 1.4, 7, 0.8 + Math.random() * 0.5);
     }
 
     /** «Inspirius»: the burst — a blinding crack, a colossal boom, a long rolling thunder. */
@@ -1100,7 +1150,7 @@ export class SoundManager {
         if (!this.context) return;
         if (!this.sounds.bubblePop) this.sounds.bubblePop = this._synthBubblePop();
         const rate = 0.92 + Math.random() * 0.16;
-        if (position) this._playAt(this.sounds.bubblePop, position, 1.1 * volume, 7, rate);
+        if (position) this._castAt(this.sounds.bubblePop, position, 1.1 * volume, 7, rate);
         else this._spell(this.sounds.bubblePop, 1.1 * volume, rate);
     }
 
@@ -1127,7 +1177,7 @@ export class SoundManager {
     playMagic(position = null, volume = 1) {
         if (!this.enabled || !this.context) return;
         if (!this.sounds.magic) this.sounds.magic = this._synthChime([880, 1320, 1760], 0.9, 6);
-        if (position) this._playAt(this.sounds.magic, position, volume, 8, 0.95 + Math.random() * 0.1);
+        if (position) this._castAt(this.sounds.magic, position, volume, 8, 0.95 + Math.random() * 0.1);
         else this._spell(this.sounds.magic, 0.7 * volume);
     }
 
@@ -1144,7 +1194,7 @@ export class SoundManager {
         if (v.isPlaying) v.stop();
         v.setBuffer(this.sounds[key]);
         v.setRefDistance(12);
-        v.setVolume(0.9);
+        v.setVolume(0.9 * (this.spellVolume ?? 1));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -1164,7 +1214,7 @@ export class SoundManager {
             if (!make) return;
             this.sounds[key] = make();
         }
-        this._playAt(this.sounds[key], position, volume, key === 'iceFloor' || key === 'iceDone' ? 14 : 9, kind === 'iceCrack' ? 1.6 + Math.random() * 0.6 : rate);
+        this._castAt(this.sounds[key], position, volume, key === 'iceFloor' || key === 'iceDone' ? 14 : 9, kind === 'iceCrack' ? 1.6 + Math.random() * 0.6 : rate);
     }
 
     /**
@@ -1286,7 +1336,7 @@ export class SoundManager {
         if (!this.sounds.wardHum) this.sounds.wardHum = this._synthWardHum();
         if (!v) { this._wardHumV = new THREE.PositionalAudio(this.effectsListener); this.scene?.add(this._wardHumV); return this.wardHum(position, k, rate); }
         if (!v.isPlaying) { v.setBuffer(this.sounds.wardHum); v.setLoop(true); v.setRefDistance(10); v.play(); }
-        v.setVolume(0.7 * k);
+        v.setVolume(0.7 * k * (this.spellVolume ?? 1));
         v.setPlaybackRate(rate);
         if (position) { v.position.copy(position); v.updateMatrixWorld(true); }
     }
@@ -1297,8 +1347,8 @@ export class SoundManager {
         if (this._wardHumV?.isPlaying) this._wardHumV.stop();
         if (!this.sounds.wardClick) this.sounds.wardClick = this._synthKnock(1400, 0.07);
         if (!this.sounds.wardChime) this.sounds.wardChime = this._synthChime([1047, 1568, 2093], 1.2, 4);
-        this._playAt(this.sounds.wardClick, position, 1.2, 10);
-        this._playAt(this.sounds.wardChime, position, 0.8, 12);
+        this._castAt(this.sounds.wardClick, position, 1.2, 10);
+        this._castAt(this.sounds.wardChime, position, 0.8, 12);
     }
 
     /** A 2 s loop of a soft magic hum (every tone whole cycles in it: no seam where it loops). */
@@ -1374,7 +1424,7 @@ export class SoundManager {
         // (louder than at first — the author: «it's quiet»: ~+4 dB, and loud as far as 26 m from the house;
         // capped so the loudest setting never clips)
         v.setRefDistance(26);
-        v.setVolume(Math.min(1.15, 1.8));
+        v.setVolume(Math.min(1.15, 1.8) * (this.spellVolume ?? 1));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -1395,7 +1445,7 @@ export class SoundManager {
         v.gain.gain.cancelScheduledValues(this.context.currentTime);
         v.setBuffer(buf);
         v.setRefDistance(40); // (a castle: loud far round it)
-        v.setVolume(Math.min(1.15, 1.8));
+        v.setVolume(Math.min(1.15, 1.8) * (this.spellVolume ?? 1));
         v.position.copy(position);
         v.updateMatrixWorld(true);
         v.play();
@@ -1410,7 +1460,7 @@ export class SoundManager {
         v.gain.gain.setTargetAtTime(0, now, 0.12);
         setTimeout(() => { if (this._themeRun === run && v.isPlaying) v.stop(); }, 700);
         if (!this.sounds.houseBreak) this.sounds.houseBreak = this._synthHouseBreak();
-        this._playAt(this.sounds.houseBreak, position || v.position, 1.2, 14);
+        this._castAt(this.sounds.houseBreak, position || v.position, 1.2, 14);
     }
 
     _synthHouseBreak() {
@@ -1424,8 +1474,8 @@ export class SoundManager {
         if (!this.enabled || !this.context) return;
         if (!this.sounds.seal) this.sounds.seal = this._synthKnock(90, 0.5);
         if (!this.sounds.sealChime) this.sounds.sealChime = this._synthChime([392, 587, 784], 1.4, 3.5);
-        this._playAt(this.sounds.seal, position, 1.4 * volume, 10, 0.95 + Math.random() * 0.1);
-        this._playAt(this.sounds.sealChime, position, 0.55 * volume, 10, 1);
+        this._castAt(this.sounds.seal, position, 1.4 * volume, 10, 0.95 + Math.random() * 0.1);
+        this._castAt(this.sounds.sealChime, position, 0.55 * volume, 10, 1);
     }
 
     /** The house's sounds while it rises: 'wood' a log knocking into place, 'sand' the sand melting into glass, 'block' a block laid. */
@@ -1433,7 +1483,7 @@ export class SoundManager {
         if (!this.enabled || !this.context || !this.loaded) return;
         const key = 'house_' + kind;
         if (!this.sounds[key]) this.sounds[key] = kind === 'wood' ? this._synthKnock(170, 0.3) : kind === 'sand' ? this._synthSizzle(0.9) : kind === 'stone' ? this._synthKnock(110, 0.35) : this._synthKnock(320, 0.12);
-        this._playAt(this.sounds[key], position, volume, kind === 'block' ? 6 : 8, 0.85 + Math.random() * 0.3);
+        this._castAt(this.sounds[key], position, volume, kind === 'block' ? 6 : 8, 0.85 + Math.random() * 0.3);
     }
 
     /** The house is done: a warm rising chord. */
@@ -1441,7 +1491,7 @@ export class SoundManager {
         if (!this.enabled || !this.context || !this.loaded) return;
         if (!this.sounds.houseDone) this.sounds.houseDone = this._synthChime([392, 523, 659, 784, 1047], 2.2, 2.2);
         if (this._hum?.isPlaying) this._hum.stop();
-        this._playAt(this.sounds.houseDone, position, 0.8, 14); // (over the tune's own last chord: the same C major)
+        this._castAt(this.sounds.houseDone, position, 0.8, 14); // (over the tune's own last chord: the same C major)
     }
 
     /** Notes struck one after another and ringing (a chime); `decay` per second. */
@@ -1549,7 +1599,7 @@ export class SoundManager {
     playSnowman(position) {
         if (!this.enabled || !this.context) return;
         if (!this.sounds.snowman) this.sounds.snowman = this._synthSnowman();
-        this._playAt(this.sounds.snowman, position, 1.3, 9, 1);
+        this._castAt(this.sounds.snowman, position, 1.3, 9, 1);
     }
 
     _synthSnowman() {
@@ -1841,6 +1891,14 @@ export class SoundManager {
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
     }
 
+    /** The bird of Spencer (SpencerBirds.js): 'chirp' | 'trill' | 'wings' — made ahead (prewarmStep). Only a seer ever asks for it. */
+    playSpencer(position, kind = 'chirp') {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'spencer_' + kind;
+        if (!this.sounds[key]) { if (!SPENCER_SOUNDS.includes(kind)) return; this.sounds[key] = synthSpencer(this.context, kind); }
+        this._playAt(this.sounds[key], position, kind === 'wings' ? 0.5 : 0.9, kind === 'wings' ? 5 : 14, 0.96 + Math.random() * 0.1);
+    }
+
     /** The infernal gargoyles (Gargoyles.js): 'roar' | 'screech' | 'wings' | 'bite' | 'crumble' | 'shatter' | 'ignite' | 'burst' — made ahead (prewarmStep). */
     playGargoyle(position, kind = 'roar', volume = 1) {
         if (!this.enabled || !this.context || !position) return;
@@ -1856,6 +1914,14 @@ export class SoundManager {
         const key = 'plant_' + kind;
         if (!this.sounds[key]) { if (!PLANT_SOUNDS.includes(kind)) return; this.sounds[key] = synthPlant(this.context, kind); }
         this._playAt(this.sounds[key], position, volume, kind === 'snap' || kind === 'fall' || kind === 'chomp' ? 22 : 12, 0.94 + Math.random() * 0.12);
+    }
+
+    /** The Canaries (Canaries.js): a voice or a boulder's noise at a place; `rate` — the canary's own pitch (a big one low, a young one high). */
+    playCanary(position, kind = 'mutter', volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'canary_' + kind;
+        if (!this.sounds[key]) { if (!CANARY_SOUNDS.includes(kind)) return; this.sounds[key] = synthCanary(this.context, kind); }
+        this._playAt(this.sounds[key], position, volume, kind === 'thud' || kind === 'grr' || kind === 'hit' ? 30 : 18, rate * (0.96 + Math.random() * 0.08));
     }
 
     /** The duel arena (ArenaDuels.js): 'cheer' | 'groan' | 'gong' | 'beep' | 'fanfare' | 'clap' at a place — made ahead (prewarmStep). */

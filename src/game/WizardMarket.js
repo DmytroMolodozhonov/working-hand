@@ -10,7 +10,7 @@
  *  - wands      small and middling wands (power 3–30: ~210–510 coins). The strongest (31–50) are NOT
  *               sold anywhere — only found in chests (the author: «их никто не продаст»);
  *  - armor      magic armour pieces (a helmet, a breastplate, greaves), now and then a plain one;
- *  - scrolls    health and mana scrolls and scrolls of simple spells (no strong spell: those are found);
+ *  - scrolls    scrolls of simple spells (no strong spell: those are found);
  *  - curios     mana crystals, the magic pouch, a magic shield, a spell book, feathers;
  *  - pawn       the pawnshop sells nothing: it BUYS anything, plain or magic, 40 % under the price
  *               (PAWN_RATE of itemValue). The other sellers of the lane only sell.
@@ -20,7 +20,7 @@
  * A good: {item, price} — the price is for the whole lot on the counter (three flasks: one price).
  */
 
-import { newUid, itemValue, wandValue, isMagicItem, rollWand, spellScroll, WAND_DIRS } from './ItemTypes.js';
+import { newUid, itemValue, wandValue, isMagicItem, rollWand, spellScroll, WAND_DIRS, freshShopScroll } from './ItemTypes.js';
 import { makePiece, makeRobe, armorValue, PIECES } from './ArmorTypes.js';
 import { scrollShopPrice } from './WizardShop.js';
 import { createRng } from '../core/math.js';
@@ -30,7 +30,7 @@ export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычно�
 export const pawnPrice = (it) => Math.max(1, Math.round(itemValue(it) * PAWN_RATE));
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
-const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead']);
+const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore']);
 export const fenceTakes = (it) => !!it && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
 
 /** The wands: small (power 3–15), middling (16–30); never stronger. Price: 180 + 11 × power. */
@@ -63,12 +63,13 @@ export function wizardGood(trade, k, n = 0) {
         }
         case 'robes': {
             const magic = k !== 1 || r() < 0.5;
-            const it = makeRobe(magic, r);
-            return { item: it, price: Math.round(armorValue(it) * 1.4) };
+            // (the three kinds: the cheap simple one, the middle, the strong — a stall's last place mostly the strong; price by its reserve)
+            const it = makeRobe(magic, r, k === 0 ? 'simple' : k === 1 ? 'mid' : r() < 0.5 ? 'strong' : 'mid');
+            return { item: it, price: magic ? armorValue(it) : Math.round(armorValue(it) * 1.4) };
         }
         case 'armor': {
             const it = makePiece(PIECES[(k + n) % 3], { magic: k !== 2 || r() < 0.7 });
-            return { item: it, price: Math.round(armorValue(it) * 1.6) };
+            return { item: it, price: it.magic ? armorValue(it) : Math.round(armorValue(it) * 1.6) };
         }
         case 'wands': {
             const [a, b] = k === 2 ? WAND_POWER.middle : r() < 0.4 ? WAND_POWER.middle : WAND_POWER.small;
@@ -79,8 +80,7 @@ export function wizardGood(trade, k, n = 0) {
             return { item: it, price: wandValue(it) }; // (= wandPrice: its wands always have a direction — the same rule the pawnshop pays 60 % of)
         }
         case 'scrolls': {
-            const it = k === 0 ? (r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) })
-                : spellScroll(pick(r, SHOP_SIMPLE_SPELLS));
+            const it = freshShopScroll(spellScroll(pick(r, SHOP_SIMPLE_SPELLS)), r, SHOP_SIMPLE_SPELLS);
             return { item: it, price: scrollShopPrice(it) };
         }
         case 'curios': {
@@ -91,9 +91,10 @@ export function wizardGood(trade, k, n = 0) {
                 const max = randInt(r, 20, 40);
                 return { item: { kind: 'shield', uid: newUid(), type: 2, magic: true, max }, price: Math.round((90 + max) * 1.4) };
             }
-            if (x < 0.4) { const id = 100000 + Math.floor(r() * 1e6); return { item: { kind: 'book', uid: newUid(), id }, price: 120 }; } // (its spells: CastleTalk fills them — BookBirds.bookSpells)
-            if (x < 0.7) return { item: { kind: 'phoenixFeather', uid: newUid(), count: 1 }, price: 380 };
-            if (x < 0.85) return { item: { kind: 'owlFeather', uid: newUid(), count: 1 }, price: 90 };
+            if (x < 0.37) { const id = 100000 + Math.floor(r() * 1e6); return { item: { kind: 'book', uid: newUid(), id }, price: 120 }; } // (its spells: CastleTalk fills them — BookBirds.bookSpells)
+            if (x < 0.65) return { item: { kind: 'phoenixFeather', uid: newUid(), count: 1 }, price: 380 };
+            if (x < 0.79) return { item: { kind: 'owlFeather', uid: newUid(), count: 1 }, price: 90 };
+            if (x < 0.86) return { item: { kind: 'spencerFeather', uid: newUid(), count: 1 }, price: 240 }; // (rare: the invisible bird's feather — SecondSight.js)
             return { item: { kind: 'apple', uid: newUid(), count: 1 }, price: 35 };
         }
         default: return null; // the pawnshop (and an unknown trade): nothing on the counter

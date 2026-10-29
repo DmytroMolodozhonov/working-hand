@@ -38,15 +38,18 @@ export const TREE_SIZES = [
     // as a real apple tree is, the apples hanging within a raised hand's reach (2.9–4.4 m), the leaves a little higher
     { name: 'Яблоня', H: [7.5, 9], W: [8, 10], D: [0.45, 0.6], clear: 3.6 },
     { name: 'Золотая яблоня', H: [8.5, 10], W: [9, 11], D: [0.6, 0.75], clear: 3.6 },
+    // the Baksadi (kind 7, Animals.js places it like the apple trees): a huge magic tree with a spreading violet crown — the
+    // crown 15–19 m across and 17–22 m tall, a thick trunk (1.5–2 m at the foot), the pears hanging low on the drooping limbs
+    { name: 'Баксади', H: [17, 22], W: [13, 16], D: [1.9, 2.4], clear: 3.4 },
 ];
 /** The cells of the leaf atlas (TreeLeaves.js): one per kind, the apple trees' two, and a plain one for the bark. */
-export const ATLAS_CELLS = 8;
+export const ATLAS_CELLS = 9;
 /** The atlas's plain cell: the bark (one material for the whole tree — one draw). */
-export const BARK_CELL = 7;
+export const BARK_CELL = 8;
 const BARK_U = (BARK_CELL + 0.5) / ATLAS_CELLS;
 
 const hex = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
-const BARK = [hex(0x5e4632), hex(0xe9e6de), hex(0x4f3a2b), hex(0x5b3330), hex(0x3a2c22), hex(0x5a4030), hex(0x9a6a2a)];
+const BARK = [hex(0x5e4632), hex(0xe9e6de), hex(0x4f3a2b), hex(0x5b3330), hex(0x3a2c22), hex(0x5a4030), hex(0x9a6a2a), hex(0x57405e)];
 const BARK_DARK = hex(0x2b2724); // (the birch's black cracks)
 
 /** A small seeded random (mulberry32). */
@@ -137,6 +140,12 @@ const SPEC = [
         L: [{ seg: 11, sides: 10, curveV: 0.4 },
             { n: [6, 7], from: 0.7, down: [0.45, 0.75], rotate: 2.4, ratio: 0.9, curve: -0.4, curveV: 0.45, trop: 0.02, seg: 8, sides: 7, rr: 0.66 },
             { n: [8, 10], from: 0.2, down: [0.6, 1.0], rotate: 2.4, ratio: 0.5, curve: 0.2, curveV: 0.5, trop: -0.02, seg: 5, sides: 4, rr: 0.55 }] },
+    // the Baksadi: a mighty trunk forking high into 8–10 great limbs that sweep out and droop, branches and twigs all over them — the
+    // crown wide and layered, with gaps of sky between the tiers
+    { split: [0.3, 0.34], shape: 'round', leafSize: 2.0, leafPer: 13, leaves1: 8, gnarl: 0.55, low: 3.7,
+        L: [{ seg: 14, sides: 12, curveV: 0.35 },
+            { n: [8, 10], from: 0.58, down: [0.7, 1.15], rotate: 2.4, ratio: 0.9, curve: -0.95, curveV: 0.5, trop: -0.012, seg: 10, sides: 8, rr: 0.62 },
+            { n: [8, 11], from: 0.22, down: [0.55, 1.05], rotate: 2.4, ratio: 0.52, curve: -0.2, curveV: 0.55, trop: -0.03, seg: 6, sides: 5, rr: 0.55 }] },
 ];
 
 /** How long a limb is by where it starts on the trunk (0 low … 1 high): the crown's outline. */
@@ -162,7 +171,7 @@ const range = (rnd, [a, b]) => a + (b - a) * rnd();
 export function buildTree(kind, variant, { far = false } = {}) {
     const lod = far === true ? 1 : Math.max(0, Math.min(2, far | 0));
     far = lod > 0;
-    kind = Math.max(0, Math.min(6, kind | 0));
+    kind = Math.max(0, Math.min(7, kind | 0));
     variant |= 0;
     const rnd = treeRandom(0x9e3779b1 ^ (kind * 7919 + variant * 104729));
     // (the leaves draw from their own stream: the far shape — fewer, bigger sprigs — grows the very same branches)
@@ -347,7 +356,7 @@ export function buildTree(kind, variant, { far = false } = {}) {
             const nrm = unit(add(add(mul(out, 0.6), [0, 0.65, 0]), mul(fn, dot(fn, out) >= 0 ? 0.15 : -0.15))); // (up-ish: the sun lights the whole crown, the lower part a little less)
             // darker inside the crown, lighter at its top and edge
             const outF = Math.min(1, len(sub(mid, crownC)) / crownR);
-            const sh = cardTint * (kind === 3 || kind === 6 ? 0.82 + 0.14 * outF : 0.52 + 0.4 * outF + 0.12 * Math.max(0, nrm[1]));
+            const sh = cardTint * (kind === 3 || kind === 6 || kind === 7 ? 0.82 + 0.14 * outF : 0.52 + 0.4 * outF + 0.12 * Math.max(0, nrm[1]));
             const col = [sh, sh, sh];
             const flip = lrnd() < 0.5; // (the picture mirrored: not every sprig the same)
             // (the atlas: one cell per kind — TreeLeaves.js)
@@ -385,16 +394,16 @@ export function buildTree(kind, variant, { far = false } = {}) {
             if (st.level < 1) continue;
             for (let f = 0.35; f <= 1; f += 0.16) {
                 const at = pointAt(st, f), y = at.p[1] - 0.32;
-                if (y < 2.9 || y > 4.4 || Math.hypot(at.p[0], at.p[2]) < 1.2) continue;
+                if (y < 2.9 || y > (kind === 7 ? 4.9 : 4.4) || Math.hypot(at.p[0], at.p[2]) < (kind === 7 ? 2.4 : 1.2)) continue;
                 cand.push([at.p[0], y, at.p[2], st.level]);
             }
         }
         // (spread round the crown: the fewest apples on a side first)
-        for (let i = 0; i < cand.length && apples.length < 22; i++) {
+        for (let i = 0; i < cand.length && apples.length < (kind === 7 ? 26 : 22); i++) {
             const k = Math.floor(rnd() * cand.length), c = cand[k];
             const b = Math.floor(((Math.atan2(c[2], c[0]) + Math.PI) / (Math.PI * 2)) * 14) % 14;
             if (bins[b] > Math.min(...bins) + 1) continue;
-            if (apples.some((a) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) < 0.55)) continue;
+            if (apples.some((a) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]) < (kind === 7 ? 0.7 : 0.55))) continue;
             bins[b]++;
             apples.push([c[0], c[1], c[2]]);
         }

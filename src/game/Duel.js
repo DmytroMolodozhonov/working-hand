@@ -47,12 +47,14 @@ import { spiderBody, spiderCenter } from './Spider.js';
 import { dragonBody, dragonCenter } from './Dragons.js';
 import { phoenixBody, phoenixCenter } from './Phoenixes.js';
 import { owlBody, owlCenter } from './Owls.js';
+import { spencerBody, spencerCenter } from './SpencerBirds.js';
 import { gargoyleBody, gargoyleCenter } from './GargoyleModel.js';
 import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
 import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager, wizardWandOf } from './Expelliarmus.js';
+import { isLiquidationDuel, duelBreaks, breakMyHeld } from './HeldBreak.js';
 import { wandPower } from './WandMagic.js';
 import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
@@ -67,7 +69,7 @@ import { segmentToSegment } from './SegmentContact.js';
 export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
-const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
+const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
 export { JERK, sharpJerk } from './Jerk.js';
 
 const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
@@ -90,6 +92,10 @@ export const DUEL_SPELLS = {
     Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
     // «Disarmor»: a cold steel-grey bolt — the plain armour flies off the one it touches (Armor.js)
     Disarmor: { color: 0x8fa3b8, name: 'Disarmor', speed: 16, core: 0.04, glow: 0.18, coreColor: 0xf2f6ff },
+    // «Liquidation» as a duel charge: a trembling grey-violet lump on a thin dusty trail — it crumbles the thing in the hand
+    // (Liquidation.js / HeldBreak.js); the Maxima is thicker, violet-white, and the loser of its duel loses his wand
+    LiquidationDuel: { color: 0xb8b0c8, name: 'Liquidation (дуэльный)', speed: 15, core: 0.04, glow: 0.18, coreColor: 0xf1ecff, jag: 1.3 },
+    LiquidationMaximaDuel: { color: 0xb68cff, name: 'Liquidation Maxima (дуэльный)', speed: 15, core: 0.06, glow: 0.27, coreColor: 0xffffff, jag: 1.5 },
     // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
     //  (as fast as the other duel charges: there must be time to answer it — or it to answer — and meet: a duel)
     Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
@@ -141,6 +147,9 @@ export const JOLT_TARGETS = {
     blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
+    canary: 'a stocky heavy body (the knight\'s mass): it reels back a step or two, drops its boulder, may be thrown down; no damage; the camp turns on the caster (Canaries.boltHit)',
+    spencer: 'kills: a harmful charge is deadly for so small a body (the feather falls); a disarming or lifting one only startles it — SpencerRules.DUEL_DEADLY',
+    custom: 'a creature of one\'s own («Да пусть создастся»): «Джолт» −6 and a shove, a hostile one turns on the caster (CustomCreatures.boltHit)',
     gargoyle: 'a stone body of the infernal gargoyle: «Остолбеней» −6, «Джолт» −8 and a shove, the strong charges hurt, «Айс» slows it, «Авада» does not act (not alive) — Gargoyles.boltHit; a body in every charge\'s way (_bodies)',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
@@ -211,8 +220,8 @@ export const AIM = {
 };
 
 /** Random small lightning from a clash: none from weak wizards (as it was), more and more from the strong — arcs per second for a mean strength. */
-export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5 };
-export const arcRate = (power) => Math.max(0, (power - ARC.FROM) * ARC.RATE);
+export const ARC = { FROM: 2.0, RATE: 0.9, LEN: [5, 13], DMG: 1, HIT_R: 2.5, ON: false }; // (ON: false — the author: «молнии в дуэли лучей не нравятся», OFF; the spell «Lightning Strike» is another thing)
+export const arcRate = (power) => (ARC.ON ? Math.max(0, (power - ARC.FROM) * ARC.RATE) : 0);
 
 /** Body sizes (metres) as a charge touches them: a line a–b and a radius around it. */
 export const BODY = {
@@ -511,7 +520,7 @@ export class Duel {
      * Every body a charge can touch (`skip`: the caster — never his own), as capsules
      * {kind, id, a, b, r}. (The entries are reused: read them before the next call.)
      */
-    _bodies(skip = null) {
+    _bodies(skip = null, reach = DUEL.RANGE_DIE + 5) {
         const g = this.game;
         const pool = this._bpool || (this._bpool = []);
         const out = [];
@@ -527,7 +536,7 @@ export class Duel {
         for (const z of g.zombies || []) if (!z.isDead) this._tipped(z, this._zombieBody(z, put('z', z.id)));
         // animals and castle people are creatures too (Авада, Остолбеней… work on them)
         for (const a of g.animals?.targets() || []) this._roundBody('a', a, put('a', a.id));
-        for (const v of g.castleLife?.targets(DUEL.RANGE_DIE + 5) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
+        for (const v of g.castleLife?.targets(reach) || []) if (v.id !== skip && !isSpectator(v)) this._tipped(v, this._villagerBody(v, put('v', v.id))); // (never the wizard who cast it)
         // the ships' crews (on their decks, or swimming)
         for (const v of g.ships?.crew.byId.values() || []) if (!v.dead && v.id !== skip) this._tipped(v, this._villagerBody(v, put('c', v.id))); // (never Captain Black Moustache by the charge he beat back himself)
         for (const t of g.livingTrees?.targets() || []) this._treeBody(t, put('t', t.id));
@@ -538,8 +547,14 @@ export class Duel {
         for (const dr of g.dragons?.targets() || []) dragonBody(dr, put('D', dr.id));
         // phoenixes (in the air or on the ground): their body from the tail to the breast
         for (const f of g.phoenixes?.targets() || []) phoenixBody(f, put('f', f.id));
+        // the swamp Canaries: a stocky body (Canaries.boltHit says what a charge does: «Авада» kills, «Остолбеней» stuns, the rest hurts)
+        for (const c of g.canaries?.targets() || []) this._canaryBody(c, put('N', c.id));
+        // creatures of one's own («Да пусть создастся»): their own body (CustomCreatures.boltHit says what a charge does)
+        for (const c of g.customCreatures?.targets() || []) c.bodyCapsule(put('C', c.id));
         // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
         for (const o of g.owls?.targets() || []) owlBody(o, put('o', o.id));
+        // the invisible bird of Spencer: a small body (every harmful charge kills it; «Экспеллиармус», «Левиоса» only startle — SpencerRules.DUEL_DEADLY)
+        for (const o of g.spencers?.targets() || []) spencerBody(o, put('S', o.id));
         // infernal gargoyles: a big body (a charge is no match for a flier that dodges — it hits as it hits: Gargoyles.boltHit)
         for (const o of g.gargoyles?.targets() || []) gargoyleBody(o, put('g', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
@@ -566,12 +581,23 @@ export class Duel {
         if (kind === 'D') { const dr = g.dragons?.byId(id); return dr ? dragonBody(dr, e) : null; }
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
+        if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? this._canaryBody(c, e) : null; }
+        if (kind === 'S') { const o = g.spencers?.byId(id); return o ? spencerBody(o, e) : null; }
+        if (kind === 'C') { const c = g.customCreatures?.byId(id); return c ? c.bodyCapsule(e) : null; }
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
         const c = this._creature(kind, id);
         if (!c) return null;
         return kind === 'v' || kind === 'c' ? this._tipped(c, this._villagerBody(c, e)) : kind === 't' ? this._treeBody(c, e) : this._roundBody(kind, c, e);
+    }
+
+    /** A canary's body for a charge: a short stout line from its feet to its crown. */
+    _canaryBody(c, e) {
+        const p = c.model.position, k = c.look?.size || 1;
+        e.a.set(p.x, p.y + 0.35, p.z); e.b.set(p.x, p.y + 1.85 * k, p.z);
+        e.r = 0.55 * k;
+        return e;
     }
 
     /** A plant's body for a charge: the line from its foot to its top (the head's hinge), as thick as the stem and the bloom/jaws. */
@@ -690,6 +716,9 @@ export class Duel {
         if (c.isBird) return out.copy(c.model.position);
         if (c.isPhoenix) return phoenixCenter(c, out);
         if (c.isOwl) return owlCenter(c, out);
+        if (c.isCanary) return out.set(c.model.position.x, c.model.position.y + 1.2, c.model.position.z);
+        if (c.isSpencer) return spencerCenter(c, out);
+        if (c.isCustom) return this.game.customCreatures.centre(c, out);
         if (c.isGargoyle) return gargoyleCenter(c, out);
         if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
@@ -715,6 +744,9 @@ export class Duel {
         if (kind === 'c') { const c = g.ships?.crew.byId.get(id); return c && !c.dead ? c : null; }
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
         if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
+        if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? c : null; } // (a swamp canary)
+        if (kind === 'S') return g.spencers?.byId(id) || null; // (the invisible bird of Spencer)
+        if (kind === 'C') return g.customCreatures?.byId(id) || null; // (a creature of one's own)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
         return null;
@@ -722,7 +754,7 @@ export class Duel {
 
     _targetPos(b, out) {
         const g = this.game;
-        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
+        if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o' || b.tk === 'N' || b.tk === 'C') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
         if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
@@ -1023,6 +1055,7 @@ export class Duel {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
+        if (isLiquidationDuel(b.spell) && this._referee() && (b.tk === 's' || b.tk === 'D' || b.tk === 'I')) { this._end(b, 'hit'); this.game.liquidation?._hurt(b.tk, b.tid, b.front, b.o, b.dir, b.by, 'Liquidation'); return; } // (a boss: the splash's −3, attack and anger as the splash does)
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
@@ -1088,7 +1121,7 @@ export class Duel {
 
     /** Duel's kind letter of a creature object. */
     _kindOf(c) {
-        return c.isSailor ? 'c' : c.isVillager ? 'v' : c.isAnimal ? 'a' : c.isBird ? 'b' : c.isLivingTree ? 't' : c.isPhoenix ? 'f' : c.isOwl ? 'o' : c.isGargoyle ? 'g' : null;
+        return c.isSailor ? 'c' : c.isVillager ? 'v' : c.isAnimal ? 'a' : c.isBird ? 'b' : c.isLivingTree ? 't' : c.isPhoenix ? 'f' : c.isOwl ? 'o' : c.isSpencer ? 'S' : c.isGargoyle ? 'g' : c.isCustom ? 'C' : null;
     }
 
     /**
@@ -1134,6 +1167,9 @@ export class Duel {
             if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
             return;
         }
+        // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the
+        // early returns below (a skeleton of the black ship, a living tree: the splash takes a sabre from a skeleton)
+        if (isLiquidationDuel(spell)) { this._liquidationHit(spell, c, src, byId, p); return; }
         // the strong charges and the ice (StrongMagic: Accentric, Pilbidrio, Electrum, «Айс» / «Frozen» and its Maxima)
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src, ak: part?.ak, low: part?.low, point: part?.point })) return;
         // a book-bird: any charge knocks it out of the air (it falls as a book)
@@ -1142,8 +1178,14 @@ export class Duel {
         if (c.isBird) { if (spell !== 'LevitateDuel' || c.ward) g.books.hitBird(c, 99); return; }
         // a phoenix: each charge as Phoenixes.TARGETS says («Авада» −25, «Остолбеней» drops it, «Айс» melts…)
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
+        // a swamp canary: «Авада» kills, a stun stuns, the others hurt and anger the camp (Canaries.boltHit)
+        if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
+        // a creature of one's own: «Авада» kills, «Остолбеней» stuns, the rest hurt (CustomCreatures.boltHit)
+        if (c.isCustom) { g.customCreatures?.boltHit(c, spell, byId); return; }
         // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
         if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
+        // the invisible bird of Spencer: a harmful charge kills it, a disarming / lifting one startles it (SpencerRules.DUEL_DEADLY)
+        if (c.isSpencer) { g.spencers?.boltHit(c, spell, byId); return; }
         // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)
         if (c.isPlantBody) { g.plants?.boltHit(c, spell, byId); return; }
         // an infernal gargoyle: each charge as GargoyleRules.TARGETS says; «Джолт» shoves it too (a flier: it reels, never falls)
@@ -1155,10 +1197,10 @@ export class Duel {
         if (isJolt(spell)) { this._joltCreature(c, spell, src, byId); return; }
         // a skeleton of the black ship: dead already — «Авада Кедавра» finds no life in it (Sailors.SKELETON_AVADA),
         // and like a living tree no duel charge harms it (only fire, the mighty spells, what breaks bones — Sailors.pirateBoneDamage)
-        if (c.isSailor && c.role === 'skeleton') { this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
+        if (c.isSailor && c.role === 'skeleton') { if (spell === 'AvadaKedavra' && (byId === 'local' || byId === g.localId)) g.hud?.setVoice?.('☠️ Авада Кедавра не действует на скелетов: они и так мертвы', true); this._burst(p, spell === 'AvadaKedavra' ? AVADA.CORE : 0xe2d9bf, 24); g.ships?.crew.provoke(c.crew || c.ship, byId === 'local' ? g.localId : byId, null); return; }
         const hit = (dmg, opts = {}) => (c.isAnimal ? g.animals.hit(c, dmg, null, byId) : c.isSailor ? g.ships.crew.hit(c, dmg, null, byId, { spell: true, ...opts }) : g.castleLife.hit(c, dmg, null, byId, { spell: true, ...opts }));
         if (spell === 'AvadaKedavra') {
-            hit(DAMAGE.AvadaKedavra, { pierce: true }); // (not a killing curse: −25 HP at once, no armour stops it)
+            hit(DAMAGE.AvadaKedavra, { pierce: true, dark: true }); // (dark: a body killed by it fits the rite of monstrous vitality — VitalityRules.js) // (not a killing curse: −25 HP at once, no armour stops it)
             if (!c.dead) g.creatureImpact?.spellHit(c, 'AvadaKedavra', src, byId); // (thrown on its back)
         } else if (spell === 'Stupefy') {
             c.stunT = DUEL.STUN_TIME;
@@ -1231,6 +1273,20 @@ export class Duel {
         if (!opts?.clash && g.armor?.guard(spell)) return;
         // the strong charges and the ice (StrongMagic.hitMe)
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitMe(spell, byId, side)) return;
+        if (isLiquidationDuel(spell)) {
+            // the grey lump crumbles what is in my hand: the main hand's thing, else the other's (the Maxima: my WAND first —
+            // the loser of its duel loses his wand); −3 HP as the splash; a small shake
+            const B = duelBreaks(spell);
+            g.hud.flashColor?.('rgba(184, 176, 200, 0.4)');
+            if (c.enabled) c.damage(3, byId, 'Liquidation');
+            const r = breakMyHeld(g, B);
+            this._note({ ev: 'liquidated', out: r.out, spell });
+            if (r.out) {
+                g.hud.setVoice(r.out === 'wand' ? '🫧 Ваша палочка рассыпалась в прах!' : r.out === 'weapon' ? '🫧 Оружие в вашей руке рассыпалось в прах!' : r.out === 'shield' ? '🫧 Щит в вашей руке рассыпался в прах!' : '🫧 Вещь в вашей руке рассыпалась в прах!', true);
+            } else g.hud.setVoice(r.why || '🫧 Всплеск попал в вас — в руках ничего не было', true);
+            g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 1, noShield: true }); // (a small shove: nothing more)
+            return;
+        }
         if (spell === 'AvadaKedavra') {
             g.hud.flashColor?.(AVADA.HUD); // (the green flash itself: _hitBurst → AvadaLook.hit)
             // the body crumples back (off the feet; up again by a squat)
@@ -1286,6 +1342,7 @@ export class Duel {
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
         this._hitBurst(spell, p, 30);
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature('z', z, spell, byId, { src })) return;
+        if (isLiquidationDuel(spell)) { g.liquidation?._hurt('z', z.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation'); return; } // (−3; nothing in a zombie's hands to crumble)
         if (spell === 'AvadaKedavra') {
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
@@ -1924,12 +1981,35 @@ export class Duel {
         if (!core) this.jolt.trail(b, dir, spell === 'JoltMaxima', this._dt || 1 / 60);
     }
 
+    /**
+     * (the host) «Liquidation» (the duel's) on a creature: −3 HP as the splash (Liquidation._hurt: every kind of creature
+     * decides for itself), and a humanoid's hand-held thing crumbles by HeldBreak's rule (the Maxima: the wand first).
+     */
+    _liquidationHit(spell, c, src, byId, p) {
+        const g = this.game, L = g.liquidation;
+        const bk = this._kindOf(c);
+        if (!L || !bk) return;
+        const B = duelBreaks(spell);
+        const stopped = L._hurt(bk, c.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation');
+        if (!stopped && c.model) L.breakHeld(bk, c.id, p, byId, B.max, src, B.wandFirst, true);
+    }
+
+    /** The grey lump bursts on a body: dust pours down, a violet flash (the Maxima: more, brighter). */
+    _liquidHit(p, n, spell) {
+        const g = this.game, max = spell === 'LiquidationMaximaDuel';
+        this._burst(p, DUEL_SPELLS[spell].color, n);
+        for (let i = 0; i < n; i++) g.fx.spark(p, i % 4 ? (max ? 0xc9a8ff : 0xb8b0c8) : 0x6e655c, 0.05 + Math.random() * 0.07, _v2.set((Math.random() - 0.5) * 1.6, -0.3 - Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1 + Math.random() * 0.8);
+        g.fx.lightFlash?.(p, max ? 0xb68cff : 0xa8a0c0, max ? 3 : 2, 0.25, 12);
+        g.sound?.playCrumble?.();
+    }
+
     /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (isIceCharge(spell)) this.ice?.shatter(p, (n / 30) * (spell === 'IceDuelMaxima' ? 1.5 : 1));
         else if (spell === 'Die') this._burst(p, 0x6a1ab0, n); // (a dark-violet spray: black light adds nothing)
         else if (spell === 'AvadaKedavra') this.avada.hit(p, n); // (the green flash, the ring of poison, the sound)
+        else if (isLiquidationDuel(spell)) this._liquidHit(p, n, spell);
         else this._burst(p, DUEL_SPELLS[spell].color, n);
     }
 

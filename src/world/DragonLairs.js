@@ -44,11 +44,12 @@ const TAU = Math.PI * 2;
  * @param {number} seed  the world's seed
  * @param {(x:number, z:number) => number} H  the ground's top layer at a column
  * @param {(x:number, z:number) => boolean} blocked  no lair here (water, a castle or village…)
+ * @param {object} K  the numbers (LAIR; the spider's den — SpiderDens.js — has its own: smaller, with no chests)
  */
-export function lairOf(gx, gz, seed, H, blocked) {
-    const rng = createRng(((seed * 4241) ^ Math.imul(gx, 7919) ^ Math.imul(gz, 15485863) ^ 0xd4a90) >>> 0);
-    if (rng() > LAIR.CHANCE) return null;
-    const C = LAIR.CELL;
+export function lairOf(gx, gz, seed, H, blocked, K = LAIR, salt = 0xd4a90, boss = 'dragon') {
+    const rng = createRng(((seed * 4241) ^ Math.imul(gx, 7919) ^ Math.imul(gz, 15485863) ^ salt) >>> 0);
+    if (rng() > K.CHANCE) return null;
+    const C = K.CELL;
     // the highest ground of the cell (sampled), then climbed to its peak
     let p = null;
     for (let i = 0; i < 48; i++) {
@@ -56,7 +57,7 @@ export function lairOf(gx, gz, seed, H, blocked) {
         const h = H(Math.round(x), Math.round(z));
         if (!p || h > p.h) p = { x, z, h };
     }
-    if (!p || p.h < LAIR.PEAK_MIN - 3) return null;
+    if (!p || p.h < K.PEAK_MIN - 3) return null;
     for (let k = 0; k < 30; k++) {
         let up = null;
         for (let a = 0; a < 8; a++) {
@@ -67,8 +68,16 @@ export function lairOf(gx, gz, seed, H, blocked) {
         if (!up) break;
         p = up;
     }
-    if (p.h < LAIR.PEAK_MIN || Math.hypot(p.x, p.z) < LAIR.MIN_SPAWN || blocked(p.x, p.z)) return null;
-    const r = LAIR.R_MIN + rng() * (LAIR.R_MAX - LAIR.R_MIN);
+    if (p.h < K.PEAK_MIN || Math.hypot(p.x, p.z) < K.MIN_SPAWN || blocked(p.x, p.z)) return null;
+    return lairAtPeak(gx, gz, p, rng, H, blocked, K, boss);
+}
+
+/**
+ * The lair under a given peak `p` ({x, z, h}): the hall and the mouth on the side of the mountain where it fits (or null). Shared with the
+ * spider's den (SpiderDens.js), whose mountain is made for it.
+ */
+export function lairAtPeak(gx, gz, p, rng, H, blocked, K, boss = 'dragon') {
+    const r = K.R_MIN + rng() * (K.R_MAX - K.R_MIN);
     // the side of the mountain for the mouth: walking down from the peak, where it falls steeply
     // enough (the mouth's floor DROP…DROP_MAX layers below the peak) with the hall all inside rock
     let best = null;
@@ -79,8 +88,8 @@ export function lairOf(gx, gz, seed, H, blocked) {
             const mx = p.x + dx * d, mz = p.z + dz * d;
             if (blocked(mx, mz)) break;
             const F = H(Math.round(mx), Math.round(mz));
-            if (p.h - F < LAIR.DROP) continue;
-            if (p.h - F > LAIR.DROP_MAX) break; // (too steep a fall to a low mouth: not this side)
+            if (p.h - F < K.DROP) continue;
+            if (p.h - F > K.DROP_MAX) break; // (too steep a fall to a low mouth: not this side)
             // the hall: inward from the mouth by most of its radius; rock over it all round
             const cx = mx - dx * r * 0.85, cz = mz - dz * r * 0.85;
             let ok = 0, n = 0, wet = false;
@@ -92,7 +101,7 @@ export function lairOf(gx, gz, seed, H, blocked) {
                     // (the mouth's side may open: only the rest counts)
                     if (q && ((x - cx) * dx + (z - cz) * dz) > r * 0.5) continue;
                     n++;
-                    if (H(Math.round(x), Math.round(z)) >= F + LAIR.NEED) ok++;
+                    if (H(Math.round(x), Math.round(z)) >= F + K.NEED) ok++;
                 }
                 if (wet) break;
             }
@@ -104,13 +113,13 @@ export function lairOf(gx, gz, seed, H, blocked) {
     }
     if (!best) return null;
     const { dx, dz, mx, mz, cx, cz, F } = best;
-    const id = 'lair' + gx + '_' + gz;
-    const hall = { x: cx, z: cz, F, r, h: LAIR.H, end: true, from: { x: mx, z: mz }, w1: 0, w2: 0, p1: 0, p2: 0, lair: true };
+    const id = (K.ID || 'lair') + gx + '_' + gz;
+    const hall = { x: cx, z: cz, F, r, h: K.H, end: true, from: { x: mx, z: mz }, w1: 0, w2: 0, p1: 0, p2: 0, lair: true };
     // the entrance: a wide, high tunnel from inside the hall out through the mountainside (open:
     // no roof kept where it comes out), its floor level with the hall's
     const segs = [];
-    const R = LAIR.MOUTH_R, y = F + 0.79 * R + 0.5;
-    const len = Math.hypot(mx - cx, mz - cz) - r * 0.4 + LAIR.OUT;
+    const R = K.MOUTH_R, y = F + 0.79 * R + 0.5;
+    const len = Math.hypot(mx - cx, mz - cz) - r * 0.4 + K.OUT;
     const n = Math.max(1, Math.ceil(len / 3));
     for (let i = 0; i < n; i++) {
         const t0 = r * 0.4 + (i / n) * len, t1 = r * 0.4 + ((i + 1) / n) * len;
@@ -124,9 +133,9 @@ export function lairOf(gx, gz, seed, H, blocked) {
     }
     Object.assign(s, { x0, x1, z0, z1 });
     // the dragon's own chests: two against the back of the hall, either side of the hoard (the treasure it guards)
-    for (const side of [-1, 1]) {
+    if (!K.NO_CHESTS) for (const side of [-1, 1]) {
         const x = cx - dx * r * 0.55 - dz * side * r * 0.5, z = cz - dz * r * 0.55 + dx * side * r * 0.5;
-        s.chests.push({ x, y: F, z, a: Math.atan2(cx - x, cz - z), boss: 'dragon' });
+        s.chests.push({ x, y: F, z, a: Math.atan2(cx - x, cz - z), boss });
     }
     // where things are: the hoard against the back wall, away from the mouth; the mouth; the ledge
     // outside it (where a dragon takes off)
@@ -134,7 +143,7 @@ export function lairOf(gx, gz, seed, H, blocked) {
         id, x: cx, z: cz, F, r, dir: Math.atan2(dz, dx), dx, dz,
         hoard: { x: cx - dx * r * 0.35, z: cz - dz * r * 0.35 },
         mouth: { x: mx, z: mz },
-        out: { x: mx + dx * (LAIR.OUT + 6), z: mz + dz * (LAIR.OUT + 6) },
+        out: { x: mx + dx * (K.OUT + 6), z: mz + dz * (K.OUT + 6) },
         seed: s.seed,
     };
     return s;

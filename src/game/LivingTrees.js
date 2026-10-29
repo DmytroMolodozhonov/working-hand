@@ -92,9 +92,9 @@ export const isFireDamage = (kind) => FIRE.has(kind);
  * «Total Destruction» (+ Maxima), «Circle Attack» (+ Maxima), «Inspirius». Blades, fists,
  * «Авада» and the other spells still do nothing.
  */
-export const MIGHTY_ON_TREES = new Set(['Electrum', 'Pilbidrio', 'Die', 'Lightning', 'LightningStrike', 'Thunderwave', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom']); // («Бум»: the mountain torn apart from inside — a tree in it too)
+export const MIGHTY_ON_TREES = new Set(['Electrum', 'Pilbidrio', 'Die', 'Lightning', 'LightningStrike', 'Thunderwave', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']); // («Nihilis Atra»: the light scatters what black magic woke; «Бум»: the mountain torn apart from inside — a tree in it too)
 /** These tear it apart (splinters; killed — it falls like a felled trunk) instead of burning it. */
-const TEARS = new Set(['Pilbidrio', 'Die', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom']);
+const TEARS = new Set(['Pilbidrio', 'Die', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']);
 /** How much of a blow of `kind` a living tree takes. */
 export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) ? dmg : 0);
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */
@@ -345,7 +345,7 @@ export class LivingTrees {
             graves = maxima ? (grave.castle?.graves || [grave.grave]).filter((q) => !open(q)) : open(grave.grave) ? [] : [grave.grave];
             if (!graves.length) return say(maxima ? '💀 На этом кладбище все могилы уже разрыты' : '💀 Эта могила уже разрыта — в ней никого нет');
         } else {
-            if (aim?.golden) return say(aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
+            if (aim?.golden) return say(aim.golden.baksadi ? '🌳 Баксади не оживает — это древнее магическое дерево, его корни слишком глубоки' : aim.golden.red ? '🌳 Яблони не оживают' : '🌳 Золотые деревья не оживают'); // (apple trees — golden and ordinary — are not the voxel trees «Alive» wakes)
             if (!aim) return say(`🌳 Направьте руку на дерево или могилу (не дальше ${ALIVE.AIM} м) и скажите «Alive»`);
             trees = maxima ? [aim, ...this._treesRound(aim)] : [aim];
         }

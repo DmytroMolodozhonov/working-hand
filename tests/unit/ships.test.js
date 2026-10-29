@@ -136,7 +136,14 @@ test('the wheel by hand: angles, unwrap, steering speed, the lock, rim distance'
     for (let i = 0; i < 10; i++) w = steer(w, [{ a0: 0, w0: 0, a: 0.5 }], 0.1, 0);
     assert.ok(Math.abs(w - 0.5 * HELM.GAIN) < 1e-9); // (the wheel goes round with the hand)
     const fast = steer(0, [{ a0: 0, w0: 0, a: 5 }], 1, 8);
-    assert.ok(fast <= 2.4 + 1e-9);
+    assert.ok(fast <= 6 + 1e-9);
+    // hard over and the hand goes on round: turning back at once moves the wheel (no dead stretch)
+    const hold = { a0: 0, w0: 0, a: 0 };
+    let ww = 0;
+    for (let i = 0; i < 40; i++) { hold.a += 0.2; ww = steer(ww, [hold], 0.1, 0); }
+    assert.ok(Math.abs(ww - HELM.LOCK) < 1e-9);
+    hold.a -= 0.3; ww = steer(ww, [hold], 0.1, 0);
+    assert.ok(ww < HELM.LOCK - 0.25, `turns back at once: ${ww}`);
     assert.ok(steer(0, [{ a0: 0, w0: 0, a: 100 }], 100, 0) <= HELM.LOCK + 1e-9);
     assert.ok(Math.abs(steer(0, [{ a0: 0, w0: 0, a: 0.4 }, { a0: 0, w0: 0, a: 0.2 }], 10, 0) - 0.3 * HELM.GAIN) < 1e-9);
     assert.ok(Math.abs(steer(1, [], 1, 4)) < 1);

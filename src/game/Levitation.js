@@ -163,8 +163,13 @@ export class Levitation {
         for (const b of g.books?.birds.values() || []) if (b.state !== 'fall' && !b.ward) out.push({ kind: 'bird', obj: b, pos: b.model.position }); // (the book of protection: Leviosa bounces off it)
         // a phoenix: caught, it hangs where the hand holds it, beating its wings (let go: it flies off)
         for (const f of g.phoenixes?.targets() || []) if (!f.lev) out.push({ kind: 'phoenix', obj: f, pos: f.model.position, r: 1 });
+        // the invisible bird of Spencer: «Левиоса» does not hold it — it slips away (SpencerRules.SPENCER_TARGETS.levitation)
+        for (const o of g.spencers?.targets() || []) out.push({ kind: 'spencer', obj: o, pos: o.model.position, r: 0.5 });
         // a clever owl: «Левиоса» is no scroll's spell — it slips out and darts away (Owls.TARGETS)
         for (const o of g.owls?.targets() || []) out.push({ kind: 'owl', obj: o, pos: o.model.position, r: 0.5 });
+        // a swamp canary: heavy and very strong — it tears free of «Левиоса» (the camp turns on the caster)
+        for (const o of g.canaries?.targets() || []) out.push({ kind: 'canary', obj: o, pos: o.model.position, r: 1.1 });
+        for (const o of g.customCreatures?.targets() || []) out.push({ kind: 'custom', obj: o, pos: o.model.position, r: o.r });
         // an infernal gargoyle: a heavy stone body that tears free of «Левиоса» at once (GargoyleRules.TARGETS.Levitation)
         for (const o of g.gargoyles?.targets() || []) out.push({ kind: 'gargoyle', obj: o, pos: o.model.position, r: 1.2 });
         // living bodies (not wizards: a charge flies at them — see Game)
@@ -255,6 +260,8 @@ export class Levitation {
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
         if (best?.kind === 'iceCreature') return '❄️ Ледяная магия держит его на земле — «Левиоса» не поднимет';
         if (best?.kind === 'gargoyle') { this.game.gargoyles?.shooed?.(best.obj); return '🜏 Горгулья вырвалась из «Левиосы» и рванулась прочь'; }
+        if (best?.kind === 'canary') { this.game.canaries?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪨 Канарик вырвался из «Левиосы» — он слишком тяжёлый и сильный, и теперь зол'; }
+        if (best?.kind === 'spencer') { this.game.spencers?.hit(best.obj, 0, 'Levitation'); return '🪶 Птичка выскользнула из «Левиосы» и улетела'; }
         if (best?.kind === 'owl') { this.game.owls?.hit(best.obj, 0, 'Levitation'); return '🦉 Сова выскользнула из «Левиосы» и улетела'; }
         if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар, тело), на животное, зомби, жителя или на другого волшебника — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {

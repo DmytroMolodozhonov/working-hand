@@ -101,3 +101,29 @@ test('a book on a stand is no loose thing; the post gone — the stand falls, th
     lib.sleep(w); assert.equal(game.scene.children.length, 0); assert.equal(boxes.size, 0);
     lib.wake(w); assert.equal(game.scene.children.length, loreForSite(w).length - 1);
 });
+
+test('every wizards’ town of several worlds has its library with a stand for each book, inside the library, with a free place for the reader', () => {
+    let n = 0;
+    for (const seed of [4242, 77, 2026]) {
+        const t = world(seed);
+        for (let gz = -4; gz <= 4; gz++) for (let gx = -4; gx <= 4; gx++) {
+            const s = t.villages.cellOf(gx, gz);
+            if (!s) continue;
+            n++;
+            checkSpots(s.lore, `town ${s.id}`);
+            const lib = s.houses.find((h) => h.kind === 'library');
+            assert.ok(lib, `town ${s.id}: has a library`);
+            assert.equal(lib.chests.length, 0);
+            const R = s.library;
+            for (const p of s.lore) {
+                assert.ok(p.x > R.x0 && p.x < R.x1 && p.z > R.z0 && p.z < R.z1, `town ${s.id}: a stand inside the library`);
+                // (the reader's cell, 1 m in front of the stand along its facing, is free)
+                const rx = Math.round(p.x + Math.sin(p.face)), rz = Math.round(p.z + Math.cos(p.face));
+                const [, , L] = postCell(p);
+                t.chunk(rx >> 5, rz >> 5);
+                assert.equal(t.get(rx, L, rz), 0, `town ${s.id}: room for the reader`);
+            }
+        }
+    }
+    assert.ok(n >= 3, `towns checked: ${n}`);
+});

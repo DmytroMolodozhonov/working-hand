@@ -26,6 +26,13 @@ export const COLLAPSE = {
     SHELL: 1.6, // m beyond the blast radius: where hanging blocks are looked for
     BREAK_PER_M: 0.035, // share of a landed piece broken per metre fallen
     BREAK_MAX: 0.7,
+    // a piece that comes down with its weight beyond its footing does not drop straight: it topples over the weaker side (the author: «здание падает не всегда
+    // перпендикулярно — иногда валится в сторону, в зависимости от равновесия»)
+    TOPPLE: true,
+    TOPPLE_MIN_H: 4, // cells: the piece is at least this tall (a low slab only slides down)
+    TOPPLE_OVER: 0.75, // cells: its middle (the centre of weight) is this far beyond the edge of its footing
+    TOPPLE_MAX: 1500, // cells: a bigger piece is a whole castle — it comes down as it is
+    TOPPLE_BREAK: 0.15, // more of it breaks: a wall smashed on its side
 };
 
 /** Natural ground holds things up; built blocks, trees and leaves hang on it. */
@@ -130,6 +137,42 @@ export function findHanging(data, cx, cy, cz, radius, inner = 0) {
  * Let a hanging piece fall (changes the data): it goes down until a block under
  * it meets something; landing breaks part of it. Returns {d, landed, broken}.
  */
+/**
+ * Where a piece would topple, or null: its footing is the columns whose lowest block lands on something after the fall `d` (`low`: column →
+ * its lowest cell); the centre of weight of ALL its blocks beyond that footing's edge (by TOPPLE_OVER cells) in x or z — it turns over that edge
+ * (the larger overshoot wins). → {axis: 'x' | 'z', sg: ±1, edge, Lb (the layer of the footing after the fall), over}
+ */
+export function toppleOf(piece, low, d, room) {
+    if (!COLLAPSE.TOPPLE || d <= 0 || piece.cells.length > COLLAPSE.TOPPLE_MAX || piece.cells.length < 6) return null;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, Lb = Infinity, mx = 0, mz = 0, top = -Infinity, bot = Infinity;
+    for (const c of piece.cells) { if (c[4]) return null; mx += c[0]; mz += c[2]; if (c[1] > top) top = c[1]; if (c[1] < bot) bot = c[1]; } // (a slab, a ramp: no turning of shapes)
+    if (top - bot + 1 < COLLAPSE.TOPPLE_MIN_H) return null;
+    mx /= piece.cells.length; mz /= piece.cells.length;
+    for (const [x, L, z] of low.values()) {
+        if (room(x, L, z) !== d) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+        if (L - d < Lb) Lb = L - d;
+    }
+    if (!Number.isFinite(x0)) return null; // (nothing under it: it falls straight, it does not turn)
+    const ox = mx < x0 - 0.5 ? x0 - 0.5 - mx : mx > x1 + 0.5 ? mx - x1 - 0.5 : 0;
+    const oz = mz < z0 - 0.5 ? z0 - 0.5 - mz : mz > z1 + 0.5 ? mz - z1 - 0.5 : 0;
+    const over = Math.max(ox, oz);
+    if (over < COLLAPSE.TOPPLE_OVER) return null;
+    if (ox >= oz) return mx > x1 + 0.5 ? { axis: 'x', sg: 1, edge: x1, Lb, over } : { axis: 'x', sg: -1, edge: x0, Lb, over };
+    return mz > z1 + 0.5 ? { axis: 'z', sg: 1, edge: z1, Lb, over } : { axis: 'z', sg: -1, edge: z0, Lb, over };
+}
+
+/** A cell of the piece turned 90° over its footing's edge (see toppleOf): [x, L, z] after the fall d, in the turned position. */
+export function turned(c, d, T) {
+    const h = c[1] - d - T.Lb; // (height over the footing's layer)
+    if (T.axis === 'x') {
+        const u = c[0] - T.edge; // (offset from the edge column; the edge is the column of the footing's outermost blocks)
+        return T.sg > 0 ? [T.edge + 1 + h, T.Lb + (-u), c[2]] : [T.edge - 1 - h, T.Lb + u, c[2]];
+    }
+    const u = c[2] - T.edge;
+    return T.sg > 0 ? [c[0], T.Lb + (-u), T.edge + 1 + h] : [c[0], T.Lb + u, T.edge - 1 - h];
+}
+
 export function dropPiece(data, piece) {
     const own = new Set(piece.cells.map(([x, L, z]) => key(x, L, z)));
     const floor = (data.bedrockTop ?? MIN_LAYER) + 1;
@@ -148,6 +191,17 @@ export function dropPiece(data, piece) {
         d = Math.min(d, k);
     }
     if (!Number.isFinite(d)) d = 0;
+    // how far each column's lowest block could fall (the footing: where it is exactly d)
+    const room = (x, L, z) => {
+        let k = 0;
+        for (let l = L - 1; l >= floor; l--) { const t = data.get(x, l, z); if (isSolid(t) && !own.has(key(x, l, z))) break; k++; }
+        return k;
+    };
+    const T = toppleOf(piece, low, d, room);
+    if (T) {
+        const r = topple(data, piece, d, T, own, floor);
+        if (r) return r;
+    }
     // take it away, then put it down lower (part of it breaks)
     for (const [x, L, z] of piece.cells) data.set(x, L, z, BLOCK.AIR);
     const landed = [], broken = [];
@@ -162,6 +216,43 @@ export function dropPiece(data, piece) {
         landed.push(sh ? [x, L - d, z, t, sh] : [x, L - d, z, t]);
     }
     return { d, landed, broken };
+}
+
+/**
+ * The piece turns over the edge of its footing (T from toppleOf) and lies down: every block is moved to where the turn puts it, then the
+ * whole lies down till it rests. Blocks that would be inside something solid break (a wall falling on a wall). → the fall, with `tilt`
+ * (for the picture: FallingBlocks turns the piece about the edge), or null (it cannot turn — it drops straight as before).
+ */
+function topple(data, piece, d, T, own, floor) {
+    const turnedCells = piece.cells.map((c) => ({ c, p: turned(c, d, T) }));
+    const free = (x, L, z) => { const t = data.get(x, L, z); return !isSolid(t) || own.has(key(x, L, z)); };
+    // a turned block that lands in the ground beside the building (a hill): it breaks. The rest lies down on what is under it.
+    const ok = turnedCells.filter((t) => t.p[1] >= floor && free(t.p[0], t.p[1], t.p[2]));
+    if (!ok.length) return null;
+    const okSet = new Set(ok);
+    const lows = new Map();
+    for (const t of ok) { const k = t.p[0] * 100003 + t.p[2]; if (!lows.has(k) || lows.get(k)[1] > t.p[1]) lows.set(k, t.p); }
+    const ownTurned = new Set(ok.map((t) => key(t.p[0], t.p[1], t.p[2])));
+    let d2 = Infinity;
+    for (const [x, L, z] of lows.values()) {
+        let k = 0;
+        for (let l = L - 1; l >= floor; l--) { const tt = data.get(x, l, z); if (isSolid(tt) && !own.has(key(x, l, z)) && !ownTurned.has(key(x, l, z))) break; k++; }
+        d2 = Math.min(d2, k);
+    }
+    if (!Number.isFinite(d2)) d2 = 0;
+    for (const [x, L, z] of piece.cells) data.set(x, L, z, BLOCK.AIR);
+    const landed = [], broken = [];
+    const p = Math.min(COLLAPSE.BREAK_MAX, (d + d2) * COLLAPSE.BREAK_PER_M + COLLAPSE.TOPPLE_BREAK);
+    for (const t of turnedCells) {
+        const [x, L, z, ty] = t.c;
+        const [nx, nL, nz] = t.p;
+        if (hash01(x, L, z) < p || nL - d2 < floor || !okSet.has(t)) { broken.push(t.c); continue; }
+        const at = data.get(nx, nL - d2, nz);
+        if (isSolid(at)) { broken.push(t.c); continue; }
+        data.set(nx, nL - d2, nz, ty);
+        landed.push([nx, nL - d2, nz, ty]);
+    }
+    return { d, landed, broken, tilt: { axis: T.axis, sg: T.sg, edge: T.edge, Lb: T.Lb, d2 } };
 }
 
 /**

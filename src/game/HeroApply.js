@@ -11,11 +11,12 @@
 import { creativeFiniteMana, creativeMortal } from './HeroSetup.js';
 import { makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { clampDark } from './DarkMagic.js';
-import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT } from './SpawnSpots.js';
+import { spotTarget, safeNear, spawnLabel, farTarget, lairCells, spiderSpot, FAR_SPOT, standLayer, lairSpot, denSpot, queenApproach, lairUsable } from './SpawnSpots.js';
+import { LAIR } from '../world/DragonLairs.js';
 import { isCrewless } from './Sailors.js';
 import { SPIDER_LAIR } from '../world/SpiderLairs.js';
 import { testSeaCastleSpot } from '../world/Castles.js';
-import { WATER_LEVEL_Y } from '../world/Terrain.js';
+import { WATER_LEVEL_Y, BLOCK, isSolid } from '../world/Terrain.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 /** Высота, на которой герой ждёт землю дальнего места (м): внутри дальности пробуждения кораблей и далеко от крыш. */
@@ -50,11 +51,23 @@ export class HeroApply {
         if (!this.on || !id || id === 'start') return;
         const data = g.world?.terrain?.data;
         const gate = () => { const c = data?.castles?.cellOf?.(0, -1); return c?.gate ? { x: c.gate.x, z: c.gate.z, yaw: c.gateYaw } : null; };
-        const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
+        const port = () => { const sp = data?.test ? testSeaCastleSpot(data.seed, data.bigHouses) : null; return sp ? { x: sp.shore.x, z: sp.shore.z + 8 } : null; };
         this.pending = { id, age: 0, far: false, hold: null, origin: g.character?.group?.position?.clone?.() || null, cells: null, t: null };
         if (id === 'blackship') return;
+        if (id === 'dragon' && data?.apart) { // (the places apart: the nearest real lair, found cell by cell — _stepLair)
+            this.pending.cells = lairCells(LAIR.CELL, 16, { x: 0, z: 0 });
+            return;
+        }
+        if (id === 'spider' && data?.apart) { // (the spider's den under its own butte: one place per world — SpiderDens.js)
+            const D = data.spiderDen();
+            if (!D) { this._fail('в этом мире нет подходящего места для пещеры паучихи — вы на начальной площадке', id); return; }
+            this.pending.t = denSpot(D.lair);
+            this._far(this.pending.t);
+            return;
+        }
         if (id === 'spider') { this.pending.cells = lairCells(SPIDER_LAIR.CELL, 6, g.character.group.position); return; }
-        const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate });
+        const iceApproach = () => { const P = data?.apart ? data.iceCastle?.plan : null; return P && !P.test ? queenApproach(P) : null; };
+        const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate, iceApproach, apart: !!data?.apart });
         if (!t) { this._fail(`в этом мире такого места нет — вы на начальной площадке`, id); return; }
         this.pending.t = t;
         this._far(t);
@@ -74,10 +87,10 @@ export class HeroApply {
     }
 
     /** Зависнуть над (x, z): герой не падает и не двигается, пока земля внизу не готова (воркеры ведутся от героя). */
-    _hover(x, z) {
+    _hover(x, z, y = HOVER_Y) {
         const g = this.game, me = g.character.group.position, p = this.pending;
         p.hold = true;
-        me.set(x, HOVER_Y, z);
+        me.set(x, y, z);
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
     }
@@ -96,7 +109,8 @@ export class HeroApply {
     _land(at, t) {
         const g = this.game, data = g.world.terrain.data, me = g.character.group.position;
         this.pending = null;
-        me.set(at.x, data.surfaceY(at.x, at.z) + PLAYER_GROUND_OFFSET + 0.1, at.z);
+        const L = t.layer != null ? this._stand(data, at.x, at.z, t) : null; // (a cave's floor: not the mountain's top above it)
+        me.set(at.x, (L != null ? L - 0.5 : data.surfaceY(at.x, at.z)) + PLAYER_GROUND_OFFSET + 0.1, at.z);
         g.faceYaw((t.yaw || 0) + Math.PI); // (t.yaw is a bearing atan2(dx, dz); the hero looks along −Z at 0)
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
@@ -119,6 +133,8 @@ export class HeroApply {
             if (!g.terrain?.data?.landMade(x, z)) { this._hover(x, z); return; }
             p.mine = S.spawn('fluyt', Math.round(x), Math.round(z), Math.atan2(-Math.sin(a), -Math.cos(a)) + Math.PI, { wake: false });
             if (!p.mine) { this._fail('корабль не удалось поставить — вы на начальной площадке'); return; }
+            // (the hero is the master of this ship: her crew serves and defends him, never turns on him; her chests are not the captain's locked ones — Ships.loyalTo)
+            p.mine.owner = g.localId; p.mine.ownerName = g.keeper?.myName || g.net?.name || null; p.mine.changed = true; p.mine.hostile.clear();
         }
         const s = p.mine, st = s.st;
         if (!s.awake || !s.model) { this._hover(st.x, st.z); return; } // (it wakes itself when the hero is near: no ship built in one frame)
@@ -145,6 +161,34 @@ export class HeroApply {
         }
     }
 
+    /** Слой пола у цели в пещере/на уступе (SpawnSpots.standLayer): твёрдый блок, над ним 6 слоёв воздуха. Земля столбца уже должна быть (landMade). */
+    _stand(data, x, z, t) {
+        return standLayer((ix, L, iz) => isSolid(data.get(ix, L, iz)), (ix, L, iz) => data.get(ix, L, iz) === BLOCK.AIR, x, z, t.layer - (t.down ?? 4), t.layer + (t.up ?? 4));
+    }
+
+    /** Сколько слоёв воздуха над полом зала (слой `floor`) в столбце — высота свода; землю столбца уже принесли (`landMade`). */
+    _headroom(data, x, z, floor) {
+        const ix = Math.round(x), iz = Math.round(z);
+        let n = 0;
+        while (n < 16 && data.get(ix, floor + 1 + n, iz) === BLOCK.AIR) n++;
+        return n;
+    }
+
+    /** Настоящее логово дракона (миры с раздельными местами): ячейки от ближней к дальней, сколько успеем за 3 мс кадра (землю не делаем). */
+    _stepLair(p) {
+        const data = this.game.world.terrain.data, end = performance.now() + 3;
+        while (p.cells.length && performance.now() < end) {
+            const { gx, gz } = p.cells.shift();
+            const S = data.lairOf(gx, gz);
+            if (!S?.lair || !lairUsable(S.lair, data)) continue; // (not by the Ice Queen's palace nor by the spider's cave: the places are apart)
+            p.cells.length = 0;
+            p.t = lairSpot(S.lair);
+            this._far(p.t);
+            return;
+        }
+        if (!p.cells.length) this._fail('логово дракона рядом не нашлось — вы на начальной площадке');
+    }
+
     /**
      * Герой снова с настройками мира: что он вырастил или выиграл с тех пор (ячейки от первых заклинаний и побеждённых, дуэльное
      * мастерство) снимается, мана и здоровье полные. Для дуэльного режима и для повтора боя с боссом.
@@ -167,11 +211,22 @@ export class HeroApply {
         if (p.age > (p.far || p.id === 'blackship' ? 60 : 25)) { this._fail('место не загрузилось — вы остались на месте'); return; }
         try {
             if (p.id === 'blackship') { this._stepShip(p, dt); return; }
+            if (!p.t && p.cells && data.apart && p.id === 'dragon') { this._stepLair(p); return; }
             if (p.id === 'spider' && !p.t) { this._stepSpider(p); return; }
             const t = p.t;
             if (!t) return;
-            if (!data.landMade(t.x, t.z)) { if (p.far) this._hover(t.x, t.z); return; }
-            const at = safeNear(t, this._dry(data));
+            // (the stand and everything round it made: a cave is dug chunk by chunk — no ground made in a frame)
+            if (!data.landMade(t.x, t.z) || (t.need && !t.need.every((q) => data.landMade(q.x, q.z)))) { if (p.far) this._hover(t.x, t.z, t.layer != null ? t.layer + 30 : HOVER_Y); return; }
+            if (t.refine && !p.refined) { // (a cave whose ground is here now: the exact spots by the dome's height — the same as the spider's)
+                p.refined = true;
+                p.t = t.refine((x, z) => this._headroom(data, x, z, t.layer));
+                if (!p.t.boss) { this._fail('в пещере нет места', p.id); return; }
+                return; // (next frame: its own ground made too)
+            }
+            const dry = this._dry(data);
+            const at = t.layer != null
+                ? safeNear(t, (x, z) => data.landMade(x, z) && this._stand(data, x, z, t) != null && !data.isSeaColumn(Math.round(x), Math.round(z)), { rings: [0, 2, 4, 6], around: 8 })
+                : safeNear(t, dry);
             if (!at) { this._fail('рядом нет сухой земли — вы остались на месте'); return; }
             this._land(at, t);
         } catch (e) { this.pending = null; }

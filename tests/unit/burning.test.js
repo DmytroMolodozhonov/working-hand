@@ -10,6 +10,7 @@ function world({ water = false } = {}) {
     const body = (id, x) => ({ kind: 'v', id, a: new THREE.Vector3(x, 0, 0), b: new THREE.Vector3(x, 3.5, 0), r: 0.5 });
     bodies.set('v:1', body(1, 2)); // a neighbour 2 m from me
     bodies.set('v:2', body(2, 20)); // far away
+    for (const id of [3, 4]) bodies.set('v:' + id, body(id, 30)); // wizards (the fire tests)
     const g = {
         localId: 'me', authority: true, isDeadLocal: false, config: { mode: 'survival' }, log: [],
         combat: { dead: false, enabled: true, center: (v) => v.set(0, 1.7, 0), damage: (d, by, kind) => hurt.push({ d, kind }) },
@@ -89,19 +90,30 @@ test('the host burns creatures once a second and a wizard puts himself out', () 
     B.ignite('v', 1);
     for (let i = 0; i < 25; i++) B.update(0.1);
     assert.ok(g.hurt.some((h) => h.v === 1 && h.kind === 'burn'));
-    g.duel._creature = (k, id) => ({ id, wizard: true });
+    const wiz = { id: 2, wizard: true, knowsFire: true, mana: 20, rank: 'adept' };
+    g.duel._creature = (k, id) => (id === 2 ? wiz : { id });
     B.ignite('v', 2);
     for (let i = 0; i < 20; i++) B.update(0.1);
     assert.ok(!B.list.has('v:2'), 'the wizard put himself out in ~1.5 s');
+    assert.equal(wiz.mana, 17, 'it cost him 3 mana (FIRE.COST)');
+    // 1 in 5 does not know «Firefighting»: he burns on, in panic; one out of mana too
+    const dull = { id: 3, wizard: true, knowsFire: false, mana: 50, rank: 'adept' }, dry = { id: 4, wizard: true, knowsFire: true, mana: 1, rank: 'adept' };
+    g.duel._creature = (k, id) => (id === 3 ? dull : id === 4 ? dry : { id });
+    B.ignite('v', 3); B.ignite('v', 4);
+    for (let i = 0; i < 20; i++) B.update(0.1);
+    assert.ok(B.list.has('v:3') && B.list.has('v:4'), 'no «Firefighting» / no mana: they burn on');
+    assert.equal(dull.mana, 50);
 });
 
-test('standing in a campfire sets one alight only after BURN.STAND s', () => {
+test('a touch of a fire sets one alight (a runner through it too); no fire — nobody burns', () => {
+    assert.ok(BURN.STAND <= 0.15, 'the author: whoever runs through the fire burns');
     const g = world(), B = g.burning;
-    g.campfires = { _fireAt: () => ({}) };
-    for (let i = 0; i < 10; i++) B.update(0.1); // 1 s
-    assert.equal(B.me, null);
-    for (let i = 0; i < 10; i++) B.update(0.1);
-    assert.ok(B.me, 'after 2 s in the fire');
+    g.campfires = { _fireAt: () => null };
+    for (let i = 0; i < 20; i++) B.update(0.1);
+    assert.equal(B.me, null, 'no fire here');
+    g.campfires = { _fireAt: () => ({}), list: new Map([[1, { left: 30 }]]) };
+    for (let i = 0; i < 7; i++) B.update(0.1); // (the first look may be up to 0.5 s away; with a fire burning they come 8 times a second)
+    assert.ok(B.me, 'a moment in the fire is enough');
 });
 
 test('the network: others\' flags are shown and forgotten; guests do not decide creatures', () => {

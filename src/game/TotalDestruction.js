@@ -178,7 +178,7 @@ export class TotalDestruction {
         g.explosions?.push({ p: [p.x, p.y, p.z], r: R, ruin: 1, ...(en ? { en } : {}), ...(keep.length ? { k: keep } : {}) }); // (saves and late joiners: the same ruins)
         g.wards?.struck(p, R, d.max ? 'TotalDestructionMaxima' : 'TotalDestruction', d.by); // (it breaks a house's sphere at once)
         for (const f of out.falls || []) g.falling?.add(f);
-        g.wreck?.afterBlast(p, R, 99); // (nothing holds: the gates of a throne room break too)
+        g.wreck?.afterBlast(p, R, 99, !d.max); // (nothing holds: the wooden gates of a throne room break too; the plain one leaves the forged-iron ones standing)
         if (authoritative) {
             let wrecked = 0;
             for (const b of out.removed) if (isCastleBlock(b[3])) wrecked++;
@@ -310,7 +310,11 @@ export class TotalDestruction {
         g.dragons?.hitAt(at, R, BLAST * P, 'TotalDestruction', by);
         g.iceCastle?.hitAt(at, R, BLAST * P, 'TotalDestruction', by); // (a scroll's spell: it hurts the queen too)
         g.phoenixes?.hitAt(at, R, BLAST * P, d.name, by);
+        g.spencers?.hitAt(at, R, BLAST * P, d.name, by); // (the invisible bird: the blast kills it)
         g.owls?.hitAt(at, R, BLAST * P, d.name, by); // (a scroll's spell: it kills an owl)
+        g.canaries?.hitAt(at, R, BLAST * P, d.name, by);
+        g.customCreatures?.hitAt(at, R, BLAST * P, d.name, by);
+        g.customPlants?.hitAt(at, R, BLAST * P, d.name, by); // (a plant of one's own breaks) // (a creature of one's own) // (a canary: the blast hurts it, the camp turns on the caster)
         g.gargoyles?.hitAt(at, R, BLAST * P, d.name, by); // (an infernal gargoyle: the blast breaks stone)
         g.castleLife?.hitAt(at, R, BLAST * P, by);
         g.crystals?.hitAt?.(at, R, by, d.name); // (mana crystals in it crack: their power to the caster)

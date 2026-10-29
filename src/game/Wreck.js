@@ -48,9 +48,9 @@ export class Wreck {
      * After a blast (and what fell after it): doors, beds, chests, glass round it. `power`: the
      * blast's strength (a falling roof: 0) — the gates of a throne room hold one (src/game/Alohomora.js).
      */
-    afterBlast(pos, radius, power = 0) {
+    afterBlast(pos, radius, power = 0, soft = false) {
         const g = this.game, t = this.data;
-        if (power > 0) g.locks?.blast(pos, radius, power);
+        if (power > 0) g.locks?.blast(pos, radius, power, soft); // (soft: the plain «Total Destruction» — it does not break the forged-iron gates)
         if (power > 0) g.iceCastle?.fixtures?.blast(pos, radius, power); // (the Ice Castle's gates and chandelier: IceFixtures.js)
         if (!t) return;
         const R = radius + 24; // (a fallen roof may leave things hanging a little further)

@@ -44,6 +44,7 @@ import { drawRange, drawLevel, DRAW } from './DrawRange.js';
 import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
+import { RebellionLife } from './RebellionLife.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
 import { JusticeLife } from './JusticeLife.js';
@@ -62,7 +63,7 @@ import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
 import { EXPELLIARMUS } from './Expelliarmus.js';
-import { teaches, placeOf, darkOfEntry } from './DarkMagic.js';
+import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
 import { VillagerOrders } from './VillagerOrders.js';
@@ -70,8 +71,10 @@ import { Bodyguard, isLord } from './Bodyguard.js';
 import { CastleWatch } from './CastleWatch.js';
 import { kingFights, guardRadius, guardsKilled } from './KingNerve.js';
 import { slowFactor, tickSlow } from './Slow.js';
-import { trackSlope, slopePace } from './HillWay.js';
-import { creditKill } from './Mana.js';
+import { trackSlope, slopePace, ledgeWide } from './HillWay.js';
+import { creditKill, hellKilled } from './Mana.js';
+import { hellRecent } from './HellKills.js';
+import { darkHit } from './VitalityRules.js';
 import { VillagerFear } from './VillagerFear.js';
 import { Rebuild } from './Rebuild.js';
 import { NightLife } from './NightLife.js';
@@ -305,6 +308,7 @@ export class CastleLife {
         this.hamlets = new HamletLife(this); // the lone houses and the small villages (HamletLife.js)
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
+        this.reb = new RebellionLife(this); // the hidden unrest of a place toward its owner (Rebellion.js)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
@@ -367,6 +371,7 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         const before = levelOf(st.ranks, pid);
         st.ranks = withRank(st.ranks, pid, level, title, name);
+        if (level && level > before) this.reb?.note(cs, st.owner, 'rank'); // (an office given: a sign of the king's care)
         if (level) { const h = cs.hostile; h.delete(pid); for (const k of cs.active.values()) if (k.foe === pid) { k.foe = null; k.grudge = null; } } // (the friend is forgiven at once)
         this._sendState(cs);
         const p = this._playerPos(pid);
@@ -1195,6 +1200,8 @@ export class CastleLife {
         const rise = f - (L - 1);
         if (rise < 2 || rise > 3) return false;
         if (t.solidIn(ax, az, f + 1, f + 5)) return false; // (no room on top)
+        // (a post, a pillar, a fence is no ledge: the top must be as wide as steps are — HillWay.ledgeWide)
+        if (!ledgeWide((x, z) => t.floorBelow(x, z, f + 1), ax, az, nx, nz, f)) return false;
         v.climb = { t: 0, dur: 0.7 + rise * 0.45, x0: v.x, y0: v.y, z0: v.z, x1: ax, y1: f - 0.5, z1: az };
         v.yaw = Math.atan2(-nx, -nz);
         return true;
@@ -1440,6 +1447,7 @@ export class CastleLife {
         if (v.servantOf != null && this._serve(v, dt)) return;
         // the infernal gargoyles (Gargoyles.js): a knight near one runs under it and strikes when it is low
         if (g.gargoyles?.list.length && g.gargoyles.knightStep(v, dt)) return;
+        if (g.customCreatures?.list.length && g.customCreatures.knightStep(v, dt)) return; // (a hostile creature of one's own near: the knights fight it — CustomCreatures.knightStep)
         if (v.arena && g.arenaDuels?.step(v, dt)) return; // (at the duel arena: a fan on the stands, a duellist — ArenaDuels.js)
         if (v.wizard && this.wizards.think(v, dt)) return; // (a wizard: its own fight and magic)
         if (v.role === 'king') this._kingNerve(v, dt); // (the king hides by default; he fights only when most of his guard is dead or he is cornered: KingNerve.js)
@@ -1696,7 +1704,7 @@ export class CastleLife {
                 const g2 = cs.graph;
                 if (!(F.plan?.node != null && v.path && v.pathI < v.path.length && !pathPasses(v.path.slice(v.pathI), g2.nodes, v, T))) {
                     const from = v.node != null && v.node >= 0 && Math.hypot(g2.nodes[v.node].x - v.x, g2.nodes[v.node].z - v.z) < 3 ? v.node : g2.nearest(v.x, v.y, v.z);
-                    const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90 });
+                    const r = fleeSearch(g2, from, v, T, { cut: cs.cut, key: edgeKey, maxRun: indoors ? 140 : 90, ...(v.shelter ? this._fleeExtras(v, T) : {}) });
                     if (r) { v.path = r.path; v.pathI = 0; v.goal = r.goal; F.plan = { node: r.goal }; v.pathCost = (n) => threatCost(n, T); } else { F.plan = null; v.path = null; }
                 }
                 if (!F.plan && !indoors) { const q = openWay(v, T, (x, z) => this._walkable(x, z, v.y)) || escapeWay(v, T, (x, z) => this._walkable(x, z, v.y)); F.plan = q ? { open: q } : { watch: true }; v.path = null; }
@@ -1733,6 +1741,33 @@ export class CastleLife {
         // (standing near it, nowhere farther to go: cowering — ducked, the arms over the head)
         v.mode = v.speed > 0 ? 'flee' : d < FLEE.SAFE * 0.6 ? 'flinch' : 'idle';
         this._ground(v);
+    }
+
+    /**
+     * For a great fire: which places are SAFE (behind a wall from the fire, under a roof) and how many runners already head for each
+     * (FleePlan: the score of a place goes down for every other one going there — they spread out, no heap). Walls looked at once a few
+     * seconds for the whole place (the cache), not for every runner.
+     */
+    _fleeExtras(v, T) {
+        const cs = v.cs, now = Date.now(), col = this.game.collision, data = this.game.world?.terrain?.data;
+        const fires = T.filter((t) => t.pid == null);
+        const key = fires.map((t) => `${Math.round(t.x / 3)},${Math.round(t.z / 3)}`).join('|');
+        let C = cs.shelterCache;
+        if (!C || C.key !== key || now - C.t > 4000) C = cs.shelterCache = { key, t: now, m: new Map() };
+        const loads = new Map();
+        for (const o of cs.active.values()) { if (o === v || o.dead) continue; const nd = o.flee?.plan?.node; if (nd != null) loads.set(nd, (loads.get(nd) || 0) + 1); }
+        const bonus = (n, id) => {
+            let b = C.m.get(id);
+            if (b !== undefined) return b;
+            b = 0;
+            for (const t of fires) {
+                if (col?.lineOfSight && !col.lineOfSight(t.x, n.y + 2.5, t.z, n.x, n.y + 2.5, n.z, 0.45)) b += 16; // (a wall between: the fire does not reach, the heat is held)
+            }
+            if (data?.solidIn) { const L = Math.round(n.y + 1.5); if (data.solidIn(Math.round(n.x), Math.round(n.z), L + 4, L + 14)) b += 6; } // (under a roof)
+            C.m.set(id, b);
+            return b;
+        };
+        return { bonus, load: (id) => loads.get(id) || 0 };
     }
 
     /** A roof over it (inside a house, the tower, a gate): the ways of the building lead out. */
@@ -2706,6 +2741,8 @@ export class CastleLife {
         this.night?.noise(v, 9);
         if (v.damageCooldown > 0 && !opts.spell) return;
         v.damageCooldown = 0.35;
+        v.hellT = opts.hell ? Date.now() : 0; // (the last blow was the Hellfire's: a kill darkens the caster — HellKills.js)
+        v.darkT = darkHit(opts, isDark) ? Date.now() : 0; // (the last blow was black magic: the body fits the rite of monstrous vitality — VitalityRules.js)
         if (v.wizard) v.hurtAt = Date.now();
         // the Master's dome: nothing gets through while it holds (but «Авада Кедавра»)
         // (a spell: half its mana from his — an unnamed one as an ordinary 10; a blow: nothing. Out of mana it shatters)
@@ -2837,8 +2874,10 @@ export class CastleLife {
             if (r === 'fight') { v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : v.role === 'king' ? SHOUT.king : SHOUT.knight), 3); }
             else { const bp = this._playerPos(by); this.fright?.scare?.(v, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : from, by); this._say(v, pick(SHOUT.help), 3); }
         } else if (r === 'search') {
-            v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; // (nobody saw whose: he looks at the place, not for a man — Blame.js)
-            v.path = null; v.lookT = 0;
+            if (v.wizard && this.wizards?.answerShot?.(v, by, from)) { /* (a wizard who saw where the shot came from: shield up, and after it — WizardLife.answerShot) */ } else {
+                v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; // (nobody saw whose: he looks at the place, not for a man — Blame.js)
+                v.path = null; v.lookT = 0;
+            }
             this._say(v, pick(v.wizard ? SHOUT.startledWiz : SHOUT.startled), 3);
         } else {
             v.fleeAt = { x: from.x, z: from.z }; v.fleeFrom = null; v.fleeT = STARTLE.FLEE_S; v.fleeing = false;
@@ -2985,7 +3024,10 @@ export class CastleLife {
         const quiet = !!this.game.arenaDuels?.quietKill?.(v, by);
         if (!quiet) {
             st.killed.add(v.idx);
+            v.darkKill = hellRecent(v.darkT, Date.now()); // (killed by black magic: the body keeps it — Death.villagerDied → the rite of monstrous vitality)
+            if (hellRecent(v.hellT, Date.now())) hellKilled(this.game, by, 'v', v.role, v.id); // (the Hellfire killed a humanoid: +1 black magic to the caster)
             this.game.death?.villagerDied(v); // the body stays; what was in the hand falls (Death.dropHeld), a knight's shield and coins too
+            if (v.byOrder != null && !v.rebelOrder) this.reb?.note(v.cs, v.byOrder, 'execution'); // (a man put to death on the king's order: the people do not forget)
             if (v.byOrder == null) this._comradeDown(v, by); // (on the king's order: nobody is startled)
             this._news(v, 'death', this._isPlayer(by) ? by : null, null, `${v.title || ''} ${v.name || ''}`.trim(), v.cs.def);
         }
@@ -3064,11 +3106,13 @@ export class CastleLife {
      * knights, the king, wizards — back off step by step facing it behind their shields (some panic and
      * run; a shield gone hot in it makes them drop back); everyone else runs from it.
      */
-    fear(v, x, z, heat = 0, dt = 0.25) {
+    fear(v, x, z, heat = 0, dt = 0.25, opt = {}) {
         if (!v || v.dead || v.lev || v.servantOf != null) return;
         const brave = v.role === 'knight' || v.role === 'king' || !!v.wizard;
+        // a great fire (the Hellfire) and a wizard: not a step back in a heap — to a SAFE place (behind a wall, in a building), spread out (WizardLife.fireRun)
+        if (v.wizard && opt.big && !opt.panic) { this.wizards.fireRun(v, x, z, opt.r ?? 12, heat); return; }
         if (!(v.fireT > 0)) {
-            v.firePanic = !brave || Math.random() < 0.15 + 0.35 * heat;
+            v.firePanic = opt.panic || !brave || Math.random() < 0.15 + 0.35 * heat;
             if (v.firePanic) this._say(v, pick(SHOUT.help));
         }
         if (brave && !v.firePanic && (v.shieldHeat || 0) > 2.5) { v.firePanic = true; v.shieldHeat = 0; } // (the shield too hot to hold)
@@ -3217,6 +3261,7 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         st.kingDead = true;
         st.owner = by || null;
+        if (by && this._isPlayer(by) && cs.def.kind !== 'tower' && cs.def.kind !== 'wizvillage') this.reb?.note(cs, by, 'slainKing'); // (the people obey him — and hate him: Rebellion.js)
         st.ownerName = by ? g.playerName(by) : null;
         this.news?.add(cs.def.id, 'captured', { by, byName: st.ownerName, seen: !!by });
         cs.hostile.clear();
@@ -3282,7 +3327,7 @@ export class CastleLife {
             const cs = this._runtime(def);
             if (!cs.awake) continue;
             const st = this.state(def.id);
-            if (by && by === st.owner) continue; // (the king may pull down his own walls)
+            if (by && by === st.owner) { if (isPlayer && blocks > 0) this.reb?.note(cs, by, kind === 'fire' ? 'arson' : 'wreck', kind === 'fire' ? 1 : blocks); continue; } // (the king may pull down his own walls — and the people take it ill: Rebellion.js)
             const bp = isPlayer ? this._playerPos(by) : null;
             // a quiet little damage (a pane, a block or two): whoever sees it grumbles at that player — no guards
             if (!loud && isPlayer && blocks > 0 && !via && this._petty(cs, by, blocks, bp, pos)) continue;
@@ -3506,6 +3551,7 @@ export class CastleLife {
     tookFromHome(home, by) {
         if (!home || !by || !this.enabled || !this.auth) return false;
         const cs = this.castles.get(home.c) || this._runtimeById(home.c);
+        if (cs) this.reb?.note(cs, by, 'theft'); // (the owner robbing his people: Rebellion.js)
         if (cs && home.h < 0) { this.forced(cs.def.id, by, this._playerPos(by)); return true; } // (a chest of the castle itself)
         if (!cs || !cs.def.houses?.[home.h]) return false;
         if (this.rel?.homeAllows?.(cs, home, by, 'take')) return false; // (the family likes him enough to let him take it — Relations.mayTakeThing)
@@ -3670,6 +3716,7 @@ export class CastleLife {
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
             this.guard.update(dt);
             this.rel?.update(dt);
+            this.reb?.update(dt);
             this.alog?.update(dt);
             this.social?.update(dt);
             this.court?.update(dt);
@@ -3758,7 +3805,7 @@ export class CastleLife {
                     }
                     const ck = this.auth ? shownChore(v) : v.chore;
                     const choreMoving = v.mode === 'chore' && v.speed > 0.4; // (a villager at a chore that is on the move — pushed, drawn off: he walks, his things are not shown: no bench stuck to the feet)
-                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { mode: choreMoving ? 'walk' : v.mode, speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow }); }
+                    { const gs = d < 38 ? gestureState(this, v) : null; if (gs) v.emoNow = gs.emo; v.model.update(v.animT, { mode: choreMoving ? 'walk' : v.mode, speed: v.speed, slope: v.slope, chore: !choreMoving && ck && d < CHORE_SEEN ? ck : null, side: v.choreSide, bare: v.cmdLie, sheath: v.sheath, emo: gs?.emo, gctx: gs?.gctx, talk: gs?.talk, gest: v.gestNow, acc: gs?.acc, breath: gs?.breath, listen: gs?.listen, since: gs?.since }); }
                     v.animT = 0;
                     if (v.model.choreBeat && d < 40) this._choreSound(v, v.model.choreBeat, d);
                     if (far || NEAR_ONE) v.model.setFar(true);
@@ -3841,7 +3888,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), v.disarmed ? 1 : 0, choreCode(shownChore(v), v.choreSide)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0), choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -3873,7 +3920,10 @@ export class CastleLife {
                 v.fx = fx ?? 0; v.aimPitch = pitch ?? 0;
             }
             // («Экспеллиармус» knocked its sword out: the sword flies / lies about as a weapon of its own)
-            if (disarmed && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
+            // (bits: 1 sword gone, 2 shield gone, 4 tool gone — «Liquidation» crumbles what is in the hand: HeldBreak.js)
+            if ((disarmed & 1) && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
+            if ((disarmed & 2) && !v.shieldGone) { v.shieldGone = true; v.model?.dropShield?.(); }
+            if ((disarmed & 4) && !v.toolGone) { v.toolGone = true; v.model?.setHeldTool?.('none'); }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;
         }
@@ -3916,9 +3966,9 @@ export class CastleLife {
 
     snapshot() {
         const out = {};
-        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length) {
+        for (const [id, s] of this.states) if (s.kingDead || s.killed.size || s.court || s.jail || Object.keys(s.ranks || {}).length || Object.keys(s.rel || {}).length || Object.keys(s.rep || {}).length || (s.reb && s.reb.v > 0)) {
                 const cs = this.castles.get(id);
-                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
+                out[id] = { owner: s.owner, ownerName: s.ownerName, kingDead: s.kingDead, killed: [...s.killed], ranks: s.ranks || {}, ...(cs ? (this.rel ? this.rel.pack(cs) : {}) : { rel: s.rel || {}, rep: s.rep || {}, ...(s.reb && s.reb.v > 0 ? { reb: s.reb } : {}), ...(s.court ? { court: s.court } : {}), ...(s.jail ? { jail: s.jail } : {}) }) };
             }
         const h = this.hostileSnapshot();
         if (Object.keys(h).length) out.__hostile = h;

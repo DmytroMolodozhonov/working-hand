@@ -1,5 +1,5 @@
 /**
- * The settlements' different buildings — in a real browser (world generation 11, Buildings.js): the mill's sails turn, the church bell hangs
+ * The settlements' different buildings — in a real browser (world generation 17, Buildings.js): the mill's sails turn, the church bell hangs
  * in its belfry, the smith stands at his counter with arms for sale, the priest lives in the church, the doors and the glass are real.
  * Run: node --test tests/e2e/buildings.test.mjs
  */

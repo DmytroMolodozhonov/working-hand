@@ -25,7 +25,7 @@ if (WORLD) {
     const by = {}, kindsBy = {};
     for (const seed of seeds) {
         const d = new TerrainData();
-        d.generate({ seed, mountains: true, seas: true, lush: true, slopes: true, wizHuts: true, furnish: true, buildings: true });
+        d.generate({ seed, mountains: true, seas: true, lush: true, slopes: true, wizHuts: true, furnish: true, bigHouses: true, buildings: true });
         for (let gz = -R; gz <= R; gz++) for (let gx = -R; gx <= R; gx++) {
             const list = [d.castles.cellOf(gx, gz), ...d.hamlets.cellOf(gx, gz).filter((h) => h.type === 'village')].filter(Boolean);
             for (const site of list) {

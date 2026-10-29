@@ -1,5 +1,5 @@
 /**
- * The different buildings of the settlements (world generation 11, Buildings.js; BUILDINGS_FROM_GEN) — the author: «сейчас в деревнях одни и те же дома».
+ * The different buildings of the settlements (world generation 17, Buildings.js; BUILDINGS_FROM_GEN) — the author: «сейчас в деревнях одни и те же дома».
  * Each building is built alone on a flat plan and checked on its real blocks (the way in 3 wide, nothing in the air, a roof, a door 3 × 6, the sizes
  * inside the lot); then in generated worlds (the kinds by the size of the settlement, old worlds as they were); then the people (Trades.js).
  */
@@ -21,9 +21,9 @@ function build(kind, face = 0) {
     return { p, out, node, g: rasterParts(p.parts), house: BUILDING_KINDS[kind].house ? out.houses.at(-1) : null };
 }
 
-test('the world version: new worlds are generation 11, BUILDINGS_FROM_GEN is the one number, ten kinds of building', () => {
+test('the world version: new worlds are generation 17, BUILDINGS_FROM_GEN is the one number, ten kinds of building', () => {
     assert.ok(WORLD_GEN >= BUILDINGS_FROM_GEN);
-    assert.equal(BUILDINGS_FROM_GEN, 11);
+    assert.equal(BUILDINGS_FROM_GEN, 17);
     assert.deepEqual(BUILDING_IDS.sort(), ['bakery', 'chapel', 'church', 'granary', 'herbalist', 'mill', 'smithy', 'stable', 'tavern', 'well']);
 });
 
@@ -125,11 +125,11 @@ test('the stable: horses in pens (the stalls and the paddock), a back door to th
 });
 
 // ------------------------------------------------------------------ the worlds
-const mk = (seed, buildings) => { const d = new TerrainData(); d.generate({ seed, mountains: true, seas: true, lush: true, slopes: true, wizHuts: true, furnish: true, buildings }); return d; };
+const mk = (seed, buildings) => { const d = new TerrainData(); d.generate({ seed, mountains: true, seas: true, lush: true, slopes: true, wizHuts: true, furnish: true, bigHouses: true, buildings }); return d; };
 const SEEDS = [20261015, 99];
 const sitesOf = (d, R = 3) => { const out = []; for (let gz = -R; gz <= R; gz++) for (let gx = -R; gx <= R; gx++) { const c = d.castles.cellOf(gx, gz); if (c) out.push(c); for (const h of d.hamlets.cellOf(gx, gz)) out.push(h); } return out; };
 
-test('generation 11 settlements: castles by their size, folk villages by the number of houses; old worlds have none and are as they were', () => {
+test('generation 17 settlements: castles by their size, folk villages by the number of houses; old worlds have none and are as they were', () => {
     for (const seed of SEEDS) {
         const A = mk(seed, true), B = mk(seed, false);
         for (const c of sitesOf(A).filter((s) => s.kind !== 'hamlet')) {

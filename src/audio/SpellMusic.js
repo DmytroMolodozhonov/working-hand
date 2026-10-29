@@ -457,6 +457,19 @@ const TUNES = {
         noise(o, sr, 0, 8, 0.05, () => 0.05, swell(0.3, 0.3), r); // (the roar under it)
         return finish(o, sr, { rms: 0.08 });
     },
+    /** «Настоящий тёмный маг» (DarkLord.js): a slow toll, a black choir sinking into D minor, a roar that swells and a last deep chord. */
+    thDarkLord(sr) {
+        const o = buf(sr, 11), r = rng(167);
+        pad(o, sr, ['D2', 'A2', 'D3', 'F3'], 0, 3.4, 0.42, { att: 1.2, rel: 0.9, vib: 0.006, harm: 3 });
+        pad(o, sr, ['Bb1', 'F2', 'Bb2', 'Db3'], 3.4, 6.2, 0.46, { att: 0.5, rel: 0.9, vib: 0.006, harm: 4 });
+        pad(o, sr, ['A1', 'E2', 'A2', 'C3', 'Eb3'], 6.2, 9.4, 0.5, { att: 0.4, rel: 1.4, vib: 0.007, harm: 4 });
+        pad(o, sr, ['D1', 'A1', 'D2', 'F2', 'A2'], 9.0, 10.9, 0.5, { att: 0.2, rel: 1.4, harm: 3 });
+        for (let k = 0; k < 6; k++) bell(o, sr, hz(k % 2 ? 'A3' : 'D3'), 0.4 + k * 1.5, 0.2, 3.2, 0.2); // (the toll)
+        melody([[0, 'D4', 2], [2, 'F4', 1], [3, 'E4', 1], [4, 'Db4', 2], [6, 'D4', 2], [8, 'A3', 4]], 0.7, 0.8, (f, t, l) => brass(o, sr, f, t, l, 0.11));
+        for (let k = 0; k < 9; k++) drum(o, sr, 3 + k * 0.82, 0.38 + k * 0.02, 46, 1.0, r);
+        noise(o, sr, 1, 8.8, 0.06, (u) => 0.03 + 0.07 * u, (u) => Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.5), r); // (the roar, rising)
+        return finish(o, sr, { rms: 0.08 });
+    },
     /** «Ground Vortex»: low strings in C minor, stone thuds of the drums, brass over the grinding of earth. */
     thEarth(sr) {
         const o = buf(sr, 7), r = rng(139);
@@ -481,6 +494,26 @@ const TUNES = {
             noise(o, sr, k * 1.8, 1.8, 0.07, (u) => 0.03 + 0.1 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI), r);
         });
         pad(o, sr, ['D3', 'A3', 'D4', 'F4', 'A4'], 7.2, 7.4, 0.4, { att: 0.1, rel: 1, harm: 3 });
+        return finish(o, sr, { rms: 0.075 });
+    },
+    /**
+     * «Да пусть создастся …» (DivineCreation.js): the gods make a thing — a choir rising out of silence (F – Bb – Dm – C),
+     * a harp climbing higher and higher, bells like stars falling, then the whole world answering in F major with brass.
+     */
+    thCreation(sr) {
+        const o = buf(sr, 13), r = rng(211);
+        pad(o, sr, ['F2', 'C3', 'F3'], 0, 3.4, 0.3, { att: 2.2, rel: 1, vib: 0.004, harm: 2 });
+        pad(o, sr, ['Bb2', 'F3', 'Bb3', 'D4'], 3, 5.6, 0.36, { att: 1, rel: 1, vib: 0.006, harm: 3 });
+        pad(o, sr, ['D3', 'A3', 'D4', 'F4'], 5.3, 7.5, 0.38, { att: 0.8, rel: 1, vib: 0.006, harm: 3 });
+        pad(o, sr, ['C3', 'G3', 'C4', 'E4', 'G4'], 7.2, 9, 0.42, { att: 0.6, rel: 0.6, vib: 0.006, harm: 3 });
+        pad(o, sr, ['F2', 'F3', 'C4', 'F4', 'A4', 'C5', 'F5'], 9, 11.8, 0.7, { att: 0.25, rel: 1.6, vib: 0.006, harm: 4 });
+        const arp = ['F3', 'A3', 'C4', 'F4', 'A4', 'C5', 'F5', 'A5', 'C6'];
+        for (let k = 0; k < 40; k++) pluck(o, sr, hz(arp[Math.min(arp.length - 1, Math.floor(k / 5) + (k % 3))]), 0.6 + k * 0.21, 0.13 + 0.05 * (k / 40), 1.6, r);
+        melody([[0, 'C5', 1], [1, 'F5', 1], [2, 'A5', 2], [4, 'G5', 1], [5, 'Bb5', 1], [6, 'A5', 3]], 0.5, 6, (f, t) => bell(o, sr, f, t, 0.12, 2.4, 0.3));
+        melody([[0, 'F4', 1], [1, 'C5', 1], [2, 'F5', 3]], 0.45, 9, (f, t, l) => { brass(o, sr, f, t, l, 0.14); brass(o, sr, f / 2, t, l, 0.09); });
+        for (const at of [9, 9.45, 9.9]) drum(o, sr, at, 0.45, 52, 1.3, r);
+        for (let k = 0; k < 12; k++) bell(o, sr, hz(['F6', 'A6', 'C7', 'F7'][k % 4]), 9.2 + k * 0.12, 0.05, 2);
+        reverb(o, sr, 0.25, 0.5);
         return finish(o, sr, { rms: 0.075 });
     },
 };
@@ -531,6 +564,34 @@ const FX = {
         pad(o, sr, ['C4', 'G4', 'E5'], 0, 1.7, 0.2, { att: 0.15, rel: 0.5, harm: 2, vib: 0.005 });
         ['C6', 'E6', 'G6', 'C7'].forEach((n, k) => bell(o, sr, hz(n), 0.1 + k * 0.2, 0.16, 1.2, 0.25));
         noise(o, sr, 0, 1.2, 0.04, () => 0.7, swell(0.3, 0.5), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** The rite of the bare hand: a bright swell like light gathering in the palms, a rising tune of bells (D – F# – A – D – F# – A) and a soft airy shimmer over it (short: an effect under 2 s — the rite's light plays longer). */
+    fxBare(sr) {
+        const o = buf(sr, 1.95), r = rng(337);
+        pad(o, sr, ['D3', 'A3', 'F#4'], 0, 1.9, 0.2, { att: 0.35, rel: 0.6, harm: 3, vib: 0.004 });
+        glide(o, sr, 0.05, 1.0, 0.1, (u) => 330 + 990 * u * u, swell(0.3, 0.5), 2);
+        ['D6', 'F#6', 'A6', 'D7', 'F#7', 'A7'].forEach((n, k) => bell(o, sr, hz(n), 0.35 + k * 0.2, 0.15, 0.9, 0.3));
+        noise(o, sr, 0.1, 1.5, 0.05, (u) => 0.4 + 0.6 * u, swell(0.4, 0.5), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** The night eyes: a hush, a cool moon-white swell and four soft bells falling like drops of starlight (E – B – G# – E). */
+    fxNight(sr) {
+        const o = buf(sr, 1.95), r = rng(341);
+        noise(o, sr, 0, 1.4, 0.05, () => 0.5, swell(0.35, 0.55), r);
+        pad(o, sr, ['E3', 'B3', 'G#4'], 0, 1.8, 0.16, { att: 0.35, rel: 0.7, harm: 2, vib: 0.004 });
+        ['E6', 'B5', 'G#5', 'E5'].forEach((n, k) => bell(o, sr, hz(n), 0.25 + k * 0.25, 0.14, 1.0, 0.28));
+        glide(o, sr, 0.1, 1.2, 0.07, (u) => 880 - 300 * u, swell(0.3, 0.5), 2);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** The sight of the invisible: an eye opening — a breath, a veiled glide rising through the pink, then a wondering run of bells and a shimmer. */
+    fxSight(sr) {
+        const o = buf(sr, 2.0), r = rng(343);
+        noise(o, sr, 0, 1.0, 0.18, (u) => 0.06 + 0.5 * u, swell(0.4, 0.5), r);
+        glide(o, sr, 0.05, 1.1, 0.1, (u) => 300 + 900 * u * u + 8 * Math.sin(u * 70), swell(0.3, 0.45), 2);
+        ['F#5', 'A#5', 'C#6', 'F#6', 'A#6'].forEach((n, k) => bell(o, sr, hz(n), 0.35 + k * 0.16, 0.15, 1.0, 0.26));
+        pad(o, sr, ['F#3', 'C#4', 'A#4'], 0.6, 1.9, 0.13, { att: 0.3, rel: 0.9, harm: 2, vib: 0.005 });
+        noise(o, sr, 0.8, 0.9, 0.04, () => 0.9, swell(0.2, 0.6), r);
         return finish(o, sr, { peak: 0.7 });
     },
     /** A mend: ringing hammer taps on steel, then a silver chime. */
@@ -588,8 +649,14 @@ const FX = {
     },
     /** «Экспеллиармус»: a whip crack and a quick rising zing. */
     fxExpel(sr) { const o = buf(sr, 0.45), r = rng(17); noise(o, sr, 0, 0.06, 0.9, () => 0.95, (u) => 1 - u, r); glide(o, sr, 0.02, 0.4, 0.3, (u) => 600 + 1800 * u, swell(0.05, 0.6), 3); return finish(o, sr, { peak: 0.7 }); },
+    /** «Liquidation» (duel): a trembling lump flying — a dry grating hiss falling in pitch, grit crumbling after it. */
+    fxLiquidDuel(sr) { const o = buf(sr, 0.7), r = rng(23); glide(o, sr, 0, 0.45, 0.28, (u) => 760 - 380 * u + 40 * Math.sin(u * 60), swell(0.04, 0.5), 2); noise(o, sr, 0.02, 0.5, 0.5, (u) => 0.9 - 0.5 * u, (u) => (1 - u) * (0.6 + 0.4 * Math.sin(u * 70)), r); for (const t of [0.3, 0.38, 0.47]) noise(o, sr, t, 0.06, 0.35, () => 0.5, (u) => 1 - u, r); return finish(o, sr, { peak: 0.62 }); },
+    /** «Liquidation Maxima» (duel): the same, lower and heavier — a violet hum under the grit and a deep thud at the end. */
+    fxLiquidDuelMax(sr) { const o = buf(sr, 0.9), r = rng(29); glide(o, sr, 0, 0.6, 0.3, (u) => 520 - 260 * u + 30 * Math.sin(u * 50), swell(0.05, 0.55), 3); glide(o, sr, 0.05, 0.7, 0.18, (u) => 130 - 40 * u, swell(0.1, 0.6), 2); noise(o, sr, 0.02, 0.6, 0.55, (u) => 0.8 - 0.5 * u, (u) => (1 - u) * (0.6 + 0.4 * Math.sin(u * 60)), r); for (const t of [0.4, 0.5, 0.6]) noise(o, sr, t, 0.07, 0.4, () => 0.45, (u) => 1 - u, r); bell(o, sr, 880, 0.02, 0.5, 0.12, 0.8); return finish(o, sr, { peak: 0.66 }); },
     /** «Disarmor»: a zap and the steel ringing loose. */
     fxDisarmor(sr) { const o = buf(sr, 0.8), r = rng(19); glide(o, sr, 0, 0.3, 0.3, (u) => 900 - 400 * u, swell(0.05, 0.6), 4); for (const [t, f] of [[0.12, 2300], [0.24, 1900], [0.33, 2700]]) bell(o, sr, f, t, 0.18, 0.4, 0.8); noise(o, sr, 0, 0.05, 0.4, () => 0.9, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
+    /** «Nihilis Atra»: a clear rising chord of light, a bell shimmer and a soft airy rush — dark things unmade (a white, clean sound). */
+    fxNihilis(sr) { const o = buf(sr, 1.5), r = rng(211); pad(o, sr, ['D5', 'A5', 'D6', 'F#6'], 0, 0.9, 0.3, { att: 0.05, rel: 0.6, harm: 2 }); glide(o, sr, 0, 0.7, 0.22, (u) => 500 + 1700 * u, swell(0.06, 0.5), 2); for (const [t, f] of [[0.18, 1880], [0.3, 2350], [0.42, 2800], [0.56, 3300], [0.72, 3750]]) bell(o, sr, f, t, 0.16, 0.9, 0.8); noise(o, sr, 0.02, 1.0, 0.22, (u) => 0.35 + 0.5 * u, swell(0.12, 0.55), r); return finish(o, sr, { peak: 0.68 }); },
     /** «Акцентрик»: a woozy, wobbling glissando and a ringing that bends out of tune. */
     fxAccentric(sr) { const o = buf(sr, 1), r = rng(181); glide(o, sr, 0, 0.9, 0.3, (u) => 700 + 400 * Math.sin(u * 18) * (1 - u), swell(0.05, 0.5), 3); bell(o, sr, 1480, 0.1, 0.15, 0.8, 0.3); noise(o, sr, 0, 0.3, 0.3, () => 0.6, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
     /** Accentric's haze heard from inside: a far, slow, warped hum and whispers (played now and then, pitched at random). */
@@ -675,6 +742,40 @@ const FX = {
     endLev(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.6, 0.25, (u) => 700 - 450 * u, swell(0.05, 0.7), 2); return finish(o, sr, { peak: 0.4 }); },
     /** The living tree is a tree again: a long wood groan and a dull thud. */
     endAlive(sr) { const o = buf(sr, 1.4), r = rng(89); glide(o, sr, 0, 1.1, 0.25, (u) => 120 - 60 * u + 6 * Math.sin(u * 70), swell(0.1, 0.3), 6); drum(o, sr, 1, 0.5, 55, 0.4, r); return finish(o, sr, { peak: 0.6 }); },
+    /** A creature of one's own calls (CustomCreatures: pitched by its size — the playback rate): a two-note chirp-and-coo. */
+    fxCreatureCall(sr) {
+        const o = buf(sr, 0.9);
+        glide(o, sr, 0, 0.32, 0.5, (u) => 620 + 380 * Math.sin(u * Math.PI), (u) => Math.sin(u * Math.PI), 3);
+        glide(o, sr, 0.38, 0.42, 0.45, (u) => 760 - 260 * u, (u) => Math.sin(u * Math.PI) * (1 - u * 0.3), 3);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** …growls (a hostile one biting): a low rough snarl. */
+    fxCreatureGrowl(sr) {
+        const o = buf(sr, 1.1), r = rng(229);
+        glide(o, sr, 0, 1.0, 0.55, (u) => 95 + 30 * Math.sin(u * 23) + 20 * u, (u) => Math.min(1, u * 8) * (1 - u), 6);
+        noise(o, sr, 0, 1.0, 0.35, () => 0.12, (u) => Math.min(1, u * 6) * (1 - u), r);
+        return finish(o, sr, { peak: 0.75 });
+    },
+    /** …sings (its song stills the hostile): a short gentle trill of three notes. */
+    fxCreatureSong(sr) {
+        const o = buf(sr, 1.6);
+        [[0, 'E6'], [0.35, 'G6'], [0.7, 'B6'], [1.0, 'E7']].forEach(([t, n]) => { glide(o, sr, t, 0.42, 0.3, (u) => hz(n) * (1 + 0.012 * Math.sin(u * 60)), (u) => Math.sin(u * Math.PI), 2); bell(o, sr, hz(n) / 2, t, 0.05, 0.8); });
+        return finish(o, sr, { peak: 0.65 });
+    },
+    /** …breathes (fire, cold, water, poison): a rushing roar. */
+    fxCreatureBreath(sr) {
+        const o = buf(sr, 1.2), r = rng(233);
+        noise(o, sr, 0, 1.15, 0.6, (u) => 0.25 + 0.3 * Math.sin(u * Math.PI), (u) => Math.min(1, u * 10) * Math.pow(1 - u, 0.7), r);
+        glide(o, sr, 0, 1.0, 0.15, (u) => 140 - 50 * u, (u) => Math.min(1, u * 6) * (1 - u), 4);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** «Да пусть создастся»: the creation is whole — a bright chord blooming with a shimmer. */
+    fxCreationBloom(sr) {
+        const o = buf(sr, 1.9);
+        pad(o, sr, ['F4', 'A4', 'C5', 'F5'], 0, 1.1, 0.5, { att: 0.03, rel: 0.7, harm: 3, vib: 0.008 });
+        for (let k = 0; k < 6; k++) bell(o, sr, hz(['C6', 'F6', 'A6', 'C7', 'F7', 'A7'][k]), k * 0.06, 0.12, 1.2);
+        return finish(o, sr, { peak: 0.8 });
+    },
 };
 
 // ------------------------------------------------------------------ the loops (held spells)
@@ -695,6 +796,8 @@ const LOOPS = {
     /** «Пентаграниум» held: a low uneasy hum (E and B-flat), a whisper of embers, a far drum. */
     loopDark(sr) { const o = buf(sr, 3.4), r = rng(321); pad(o, sr, [82.4, 116.5, 164.8], 0, 3.4, 0.26, { att: 0.01, rel: 0, harm: 3, vib: 0.004 }); noise(o, sr, 0, 3.3, 0.05, (u) => 0.1 + 0.06 * Math.sin(u * 6.28), swell(0.5, 0.5), r); drum(o, sr, 1.7, 0.35, 48, 0.5, r); return finish(loopSeam(o, sr), sr, { peak: 0.33 }); },
     loopSeeing(sr) { const o = buf(sr, 3.3), r = rng(131); pad(o, sr, [110, 164.8], 0, 3.3, 0.22, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); noise(o, sr, 0, 3.2, 0.04, (u) => 0.12 + 0.08 * Math.sin(u * 6.28), swell(0.5, 0.5), r); bell(o, sr, hz('E6'), 1.4, 0.035, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.32 }); },
+    /** «To the Sun» on the black clouds held: a bright golden chord straining against a low rumble of the storm, a bell ringing through it now and then. */
+    loopSunFight(sr) { const o = buf(sr, 3.3), r = rng(211); pad(o, sr, [220, 277.2, 329.6, 440], 0, 3.3, 0.24, { att: 0.01, rel: 0, harm: 2, vib: 0.006 }); noise(o, sr, 0, 3.2, 0.12, (u) => 0.05 + 0.04 * Math.sin(u * 6.28 * 2), (u) => 0.6 + 0.4 * Math.sin(u * 6.28 * 3), r); for (const [t, n] of [[0.2, 'A6'], [1.1, 'E7'], [2.2, 'C#7']]) bell(o, sr, hz(n), t, 0.05, 1, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.36 }); },
     /** The gods' shield held: a warm golden hum (D and A) with a slow shimmer of high bells. */
     loopGods(sr) { const o = buf(sr, 3.3); pad(o, sr, [146.8, 220, 293.7], 0, 3.3, 0.28, { att: 0.01, rel: 0, harm: 2, vib: 0.004 }); for (const [t, n] of [[0.3, 'A6'], [1.4, 'F#6'], [2.4, 'D7']]) bell(o, sr, hz(n), t, 0.04, 0.9, 0.1); return finish(loopSeam(o, sr), sr, { peak: 0.35 }); },
     /** «Электром» held: the hum of a live wire and its crackle. */
@@ -717,6 +820,13 @@ const LOOPS = {
         for (const [t, n] of [[1.5, 'G6'], [4.2, 'D7'], [7.7, 'Eb6'], [10.3, 'Bb6']]) bell(o, sr, hz(n), t, 0.05, 2.5, 0.1);
         return finish(loopSeam(o, sr, 0.5), sr, { rms: 0.05 });
     },
+    /** «Да пусть создастся»: the gods read the words — a soft far choir and a slow shimmer of bells (looped while they think). */
+    loopGenesis(sr) {
+        const o = buf(sr, 4.6), r = rng(223);
+        pad(o, sr, ['F3', 'C4', 'A4'], 0, 4.6, 0.3, { att: 0.01, rel: 0, harm: 2, vib: 0.007 });
+        for (let k = 0; k < 8; k++) bell(o, sr, hz(['C6', 'A5', 'F6', 'G6'][k % 4]) * (1 + 0.002 * r()), 0.2 + k * 0.55, 0.05, 1.6);
+        return finish(loopSeam(o, sr), sr, { peak: 0.4 });
+    },
 };
 
 /** Every sound made here: key → (sr) → samples. */
@@ -732,6 +842,7 @@ export const SPELL_SOUND = {
     // the great spells: their own tunes
     CreateHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] }, ImproveHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] },
     CreateCastle: { own: ['castleTheme', 'houseHum', 'rumble'] },
+    DivineCreation: { own: ['loopGenesis', 'fxCreationBloom', 'houseHum'], theme: 'thCreation' }, // («Да пусть создастся»: the gods think — loopGenesis; the creation whole — fxCreationBloom; DivineCreation.js)
     IceCastle: { own: ['iceBell', 'iceFloor', 'iceDone'] }, IceBridge: { own: ['iceBell', 'iceFloor', 'iceChime'] },
     CircleAttack: { own: ['circleAttack', 'rumble'] }, CircleAttackMaxima: { own: ['circleAttack', 'rumble'] },
     Inspirius: { own: ['inspCast', 'inspZap', 'inspBlast'] },
@@ -756,9 +867,10 @@ export const SPELL_SOUND = {
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     GroundVortex: { theme: 'thEarth' }, GroundShield: { cast: 'fxShield' }, // («Ground Vortex»: its tune; the shield word — a short shield chime)
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)
-    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
+    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] }, LiquidationDuel: { own: ['fxLiquidDuel'] }, LiquidationMaximaDuel: { own: ['fxLiquidDuelMax'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
+    Nihilis: { cast: 'fxNihilis' }, // («Nihilis Atra»: a short bright shimmer — an instant, not a tune; Nihilis.js)
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)
     Jolt: { own: ['jolt'] }, JoltMaxima: { own: ['jolt'] }, Levitation: { own: ['cast'] }, LevitationMaxima: { own: ['cast', 'crack', 'rumble'] },
     Bombardo: { own: ['cast', 'explosion'] }, BombardoMaxima: { own: ['cast', 'explosion'] },
@@ -802,6 +914,7 @@ export const HELD_SOUND = {
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
     GodsShield: { loop: 'loopGods', end: 'endGods' }, // («Protection Gods» held)
     GroundVortex: { loop: 'loopEarth', end: 'fxStop' }, // («Ground Vortex» held: the hum of turning earth)
+    SunClouds: { loop: 'loopSunFight', end: 'fxStop' }, // («To the Sun» on the gargoyles' black clouds held: SunContest.js)
     VisibleGodi: { loop: 'loopSeeing', end: 'fxStop' }, // («Visible Godi» held: the quiet hum while the cloud is on)
     Fireworks: {}, // (its own sounds go on: the whistles and the bursts — FireworksFx)
     Electrum: { loop: 'loopElectrum', end: 'fxStop' }, // (the lightning held on its target)

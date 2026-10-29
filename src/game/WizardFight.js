@@ -39,6 +39,7 @@ import { PVP, shieldHitCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
 import { lessonSpell } from './BumpRules.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
+import { reactLagText, huntRole, huntLeash, chooseShield, canDome, SHIELD } from './WizardMind.js';
 
 const WALK = 2.3, RUN = 5.6;
 const DUEL_DRAIN = 1; // mana a second a wizard spends pushing in a duel (as a player's fatigue)
@@ -221,19 +222,58 @@ export class WizardFight {
 
     // ------------------------------------------------------------ one wizard
     /** (host) A wizard with a foe: true (moved, maybe cast). */
+    /** (host) A new fight for `v`: the reaction time (the log), and the role in the pursuit. */
+    _engage(v, fp) {
+        const L = this.life, lag = v.reactLag || { t: 0.5, level: 2, lost: false };
+        const ready = (v.cs?.alertUntil || 0) > Date.now() || (v.readyUntil || 0) > Date.now() || !!(v.fx & FX.SHIELD);
+        const level = this.life.wantedLevel(v.foe) || 0;
+        const role = huntRole({ role: v.role, rank: v.rank, level, saw: true, tied: v.role === 'master', timid: false, hasWand: !v.noWand }, () => ((v.id.length * 31 + (v.idx | 0) * 17) % 100) / 100);
+        v.engage = { foe: v.foe, t: ready ? lag.t * 0.4 : lag.t, role, level, until: Date.now() + 20000 };
+        L.alog?.decision(v, `${reactLagText(lag)}${ready ? ' (уже настороже — вдвое быстрее)' : ''}; в погоне: ${role === 'hunt' ? 'идёт искать, если убежит' : 'держит место'}; розыск героя: ${level}`);
+    }
+
     step(v, dt) {
         const L = this.life, cs = v.cs;
         const fp = L._playerPos(v.foe);
         const d = fp ? Math.hypot(fp.x - v.x, fp.z - v.z) : Infinity;
-        const gone = !fp || (!L._inLand(cs.def, fp, 30) && (d > 25 || !L._inLand(cs.def, fp, 160)));
-        const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > Date.now();
-        if (gone || !(cs.hostile.get(v.foe) > Date.now() || grudge)) {
-            if (fp && gone) v.gaveUp = { id: v.foe, until: Date.now() + 15000 };
+        const now = Date.now();
+        // (a new fight: his own reaction time first; and does he hunt or keep the place — WizardMind)
+        if (!v.engage || v.engage.foe !== v.foe || v.engage.until < now) this._engage(v, fp);
+        v.engage.until = now + 20000;
+        // where the foe was last seen, and which way he was going (for a hunt, if he gets away)
+        if (fp) {
+            const k = v.seen;
+            v.seen = { x: fp.x, z: fp.z, dx: k ? fp.x - k.x : 0, dz: k ? fp.z - k.z : 0, t: now };
+            if (k && now - k.t < 1500) { v.seen.dx = (fp.x - k.x) * 0.5 + (k.dx || 0) * 0.5; v.seen.dz = (fp.z - k.z) * 0.5 + (k.dz || 0) * 0.5; }
+        }
+        const hunter = v.engage.role === 'hunt';
+        // (a hunter does not stop at the edge of his land: the more they want the criminal, the farther he follows)
+        const leash = hunter ? huntLeash({ role: v.role, level: v.engage.level, saw: true }) : 25;
+        const gone = !fp || (!L._inLand(cs.def, fp, 30) && (d > leash || !L._inLand(cs.def, fp, Math.max(160, leash))));
+        const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > now;
+        const wanted = cs.hostile.get(v.foe) > now || grudge;
+        if (gone || !wanted) {
+            if (fp && gone) v.gaveUp = { id: v.foe, until: now + 15000 };
+            const lost = v.foe;
             v.foe = null; v.path = null; v.wt = null; v.grudge = null;
             v.fx &= ~(FX.SHIELD | FX.DOME);
+            // got away (out of sight, out of reach), and he is still wanted: a hunt — to the last known place, then the likely ways
+            if (hunter && wanted && v.seen && now - v.seen.t < 60000) {
+                L.wizards.startHunt(v, { x: v.seen.x, z: v.seen.z, dx: v.seen.dx, dz: v.seen.dz, saw: true }, v.engage.level, 'убежал из виду');
+                v.huntBy = lost;
+            }
             return true;
         }
         v.seated = false;
+        // the first seconds: he has not got his wand out yet (a beginner is lost, the Master is at once)
+        if (v.engage.t > 0) {
+            v.engage.t -= dt;
+            this._react(v, dt);
+            v.speed = 0; v.path = null; v.mode = 'idle';
+            if (fp) this._turnTo(v, fp, dt);
+            L._ground(v);
+            return true;
+        }
         v.shieldT = (v.shieldT || 0) - dt; v.domeT = (v.domeT || 0) - dt; v.castT = (v.castT || 0) - dt; v.blinkFx = (v.blinkFx || 0) - dt;
         if (v.shieldT <= 0) v.fx &= ~FX.SHIELD;
         if (v.domeT <= 0) v.fx &= ~FX.DOME; // (quiet a while: he lets it go — his «стоп»)
@@ -508,9 +548,9 @@ export class WizardFight {
         if (v.dead || v.noWand || v.stunT > 0 || v.lev || v.vy) return lost();
         if (this.game.duel?.clashes?.some((x) => x.a.by === v.id || x.b.by === v.id)) return lost();
         P.t -= dt; P.age += dt;
-        let fp = null;
+        let fp = null, target = null;
         if (P.at) {
-            const c = this.game.duel?._creature?.(P.at.k, P.at.id);
+            const c = target = this.game.duel?._creature?.(P.at.k, P.at.id);
             if (c) { const at = this.game.duel._creaturePoint(c, _ch); fp = { x: at.x, y: at.y - 0.3, z: at.z }; }
         } else fp = this.life._playerPos(P.foe);
         if (!fp || P.age > CAST_PREP.GIVE_UP) return lost();
@@ -521,7 +561,7 @@ export class WizardFight {
         v.mode = 'cast';
         if (P.t > 0) return true;
         if (v.mana < P.cost) return lost();
-        if (!this.clearShot(v, fp)) return true; // (a moment more: the line may clear)
+        if (!this.clearShot(v, fp, target)) return true; // (a moment more: the line may clear; the target himself is never «in the way»)
         if (!this._cast(v, P.spell, P.foe, fp, P.vs, P.at)) return true; // (not facing it fully yet: still turning)
         v.prep = null;
         v.mana -= P.cost;
@@ -546,9 +586,9 @@ export class WizardFight {
      * A clear shot from this wizard's wand at the foe: the line from the wand's height to the foe's
      * body free of any block, door or wall (sampled finely: a wall one block thick is never missed).
      */
-    clearShot(v, fp) {
+    clearShot(v, fp, foe = null) {
         const c = this.game.collision;
-        if (this._friendInLine(v, fp)) return false;
+        if (this._friendInLine(v, fp, foe)) return false;
         if (!c?.lineOfSight) return true;
         return c.lineOfSight(v.x, v.y + 3.4, v.z, fp.x, fp.y + 0.3, fp.z, 0.35);
     }
@@ -557,12 +597,12 @@ export class WizardFight {
      * One of his own between his wand and the foe (a charge hits whatever it touches first — Duel.js):
      * he doesn't cast through a friend's back; he waits or steps aside for a clear line.
      */
-    _friendInLine(v, fp) {
+    _friendInLine(v, fp, foe = null) {
         const dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz);
         if (L < 1.5) return false;
         const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;
         for (const o of v.cs.active.values()) {
-            if (o === v || o.dead) continue;
+            if (o === v || o === foe || o.dead) continue; // (the arena's duel: the foe is a wizard of the same tower — he is the target, not «one of his own» in the way)
             const ox = o.x - v.x, oz = o.z - v.z;
             const f = ox * ux + oz * uz;
             if (f < 0.6 || f > L + 1.5) continue; // (one right by the foe too: a charge that misses him by a hand finds the friend)
@@ -705,7 +745,15 @@ export class WizardFight {
             if (!n.seen) continue; // (not seen yet: maybe a moment later, when it comes into view)
             seen.add(v.id);
             if (!n.shield) { this._caught(v, b); continue; } // (too late to do anything)
-            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && (v.domeCd ?? 0) <= 0, spell: b.spell, eta, robe: !!v.robe });
+            const domeOk = !!v.W?.dome && (v.domeCd ?? 0) <= 0 && !(v.fx & FX.DOME);
+            let r = react({ role: v.skillRole || v.role, mana: v.mana, shieldReady: true, domeReady: v.role === 'master' && domeOk, spell: b.spell, eta, robe: !!v.robe });
+            // the strong ones (300+ mana) raise «Protection Maxima» when it is really worth it: a heavy spell, a volley, many foes, a bad state
+            if (r === 'shield' && domeOk && canDome(v.maxMana, v.rank)) {
+                let inc = 0;
+                for (const o of duel.bolts.values()) if (o.state === 'flying' && !o.npc && o.by !== v.id && Math.hypot(v.x - o.front.x, v.z - o.front.z) < 22) inc++;
+                const pick2 = chooseShield({ mana: v.mana, maxMana: v.maxMana, rank: v.rank, spell: b.spell, incoming: inc, foes: v.cs?.hostile?.size || 0, boss: this.life.wantedLevel(b.by) >= 3, hpK: v.hp / (v.maxHp || 1), domeReady: true });
+                if (pick2 === 'dome') { r = 'dome'; this.life.alog?.decision(v, `щит: Protection Maxima (залп ${inc}, заклинание ${b.spell})`); }
+            }
             if (r && !v.foe && this.life._isPlayer(b.by) && WizardFight.fights(v)) { v.foe = b.by; v.grudge = { id: b.by, until: Date.now() + 40000 }; v.seated = false; } // (he cast at me: now it is a fight)
             if (r === 'counter' && (!n.counter || eta < CAST_PREP.T + 0.3)) r = 'shield'; // (no time to raise the wand and say it: only the hand shield)
             if (r === 'dome') this._dome(v);
@@ -818,6 +866,9 @@ export class WizardFight {
         if (v.dead) this._shatter(v, FX.SHIELD | FX.DOME);
         else if (v.stunT > 0 || v.lev || v.vy) this._shatter(v, FX.SHIELD);
     }
+
+    /** «Nihilis Atra» shatters a black mage's «Protection Maxima» dome (Nihilis.js). */
+    breakDome(v) { this._shatter(v, FX.DOME); }
 
     /** The wizard's shield / dome breaks: its light flies apart in pieces. */
     _shatter(v, bits) {

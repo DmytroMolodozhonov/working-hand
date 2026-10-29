@@ -54,7 +54,7 @@ export function crowdOf(g) {
         // plant creatures: a telewilpin is a thicket to walk round; a carnivorous head is given a wide berth (its tendrils reach ~6 m)
         for (const p of g.plants?.near || []) {
             if (p.dead) continue;
-            push({ x: p.x, y: p.y, z: p.z, r: p.kind === 'carnivore' ? 4.5 : 1.1, ref: p, id: p.id, kind: 'plant', still: true, vx: 0, vz: 0 });
+            push({ x: p.x, y: p.y, z: p.z, r: p.kind === 'carnivore' ? 4.5 : p.kind === 'brightflower' ? 1.8 : 1.1, ref: p, id: p.id, kind: 'plant', still: true, vx: 0, vz: 0 });
         }
         for (const t of g.livingTrees?.list || []) {
             if (!t.alive || !t.model) continue;
@@ -79,6 +79,18 @@ export function crowdOf(g) {
             const p = o.model.position;
             if (p.y - (g.collision?.groundY?.(p.x, p.z) ?? p.y) > 0.5) continue;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.owl, ref: o, id: o.id, kind: 'owl' });
+        }
+        // the swamp Canaries (Canaries.js): round each other and the walkers (the throwers keep their camp's places)
+        for (const c of g.canaries?.list || []) {
+            if (c.dead || !c.model) continue;
+            const p = c.model.position;
+            push({ x: p.x, y: p.y, z: p.z, r: BODY_R.canary, ref: c, id: c.id, kind: 'canary' });
+        }
+        // creatures of one's own («Да пусть создастся»: CustomCreatures.js) on the ground (a flying one is above everybody), as big as each is
+        for (const c of g.customCreatures?.list || []) {
+            if (c.dead || c.born < 1 || c.flying) continue;
+            const p = c.model.position;
+            push({ x: p.x, y: p.y, z: p.z, r: c.r, ref: c, id: c.id, kind: 'custom' });
         }
         // infernal gargoyles flying low (a hunt at the people's height: nobody walks through one — Gargoyles.js; high up they are above everybody)
         for (const o of g.gargoyles?.list || []) {

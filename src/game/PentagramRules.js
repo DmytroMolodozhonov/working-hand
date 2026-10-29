@@ -13,6 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
+import { NIGHT_LINES, SIGHT_LINES } from './PentagramFigures.js';
 
 export const PENT = {
     COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
@@ -98,6 +99,16 @@ registerPentagram({
     effect: 'Встаньте на неё — броня, которая на вас, будет починена. Плата за каждую часть своя; на что не хватило маны, то останется как было.',
 });
 
+// The pentagrams of sight (SightRules.js, SecondSight.js): drawn once, they stay; stand in the circle — a gift for good (until death).
+registerPentagram({
+    id: 'night', title: 'Пентаграмма ночного зрения', dark: false, glow: 0x9fb4ff, cost: 50, permanent: true, scroll: 'PentagramNight', lines: NIGHT_LINES,
+    effect: 'Встаньте в круг и заплатите 50 маны — вы навсегда (до смерти) станете видеть в темноте на 50 % лучше: и ночью, и в пещерах.',
+});
+registerPentagram({
+    id: 'sight', title: 'Пентаграмма видения невидимых', dark: false, glow: 0xff7ad9, cost: 150, permanent: true, scroll: 'PentagramSight', lines: SIGHT_LINES,
+    effect: 'Встаньте в круг с пером птички Спенсера (или травой Беслана) и заплатите 150 маны — вы навсегда (до смерти) начнёте видеть всё невидимое.',
+});
+
 registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its circle is laid by EnchantCircles — Pentagranium._others)
 
 // «Пентаграмма дьявольской силы» — the one this module owns (its rite is below); the others' entries come from their own modules (Breakward, Gargoyles, Enchant…).
@@ -115,7 +126,7 @@ export const isPentagramScroll = (it) => !!it && it.kind === 'scroll' && it.stat
  * The mana taken at the word (the author: «в этот момент снимается мана»). Others take theirs where the effect itself pays: the gargoyles' ritual
  * (150, when it starts), the enchanting rite (30 % of the current mana when the thing is laid), the devil rite (50, over the body), mending (by pieces).
  */
-export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50, unity: 120 };
+export const CAST_COST = { teleport: 50, life: 50, monster: 200, breakward: 50, unity: 120, vitality: 250 };
 
 /** The figure's turn so that its apex points away from the hero standing at (hx, hz) (it reads upright from where he stands). */
 export const turnAway = (cx, cz, hx, hz) => { const dx = cx - hx, dz = cz - hz, d = Math.hypot(dx, dz) || 1; return Math.atan2(-dx / d, dz / d); };
@@ -190,6 +201,9 @@ export const PENTAGRAM_TARGETS = {
     dragon: { does: 'none', why: 'дракон не замечает; огонь ритуала дракона не жжёт' },
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
+    canary: { does: 'none', why: 'не касается' },
+    spencer: { does: 'none', why: 'не касается' },
+    custom: { does: 'none', why: 'не касается' },
     bodies: { does: 'rite', why: 'тело убитого волшебника (не кости), с которого герой забрал силу, на пентаграмме сгорает в пепел: +25 % силы убитого, один раз на тело' },
     items: { does: 'none', why: 'вещи на земле не трогает' },
     blocks: { does: 'none', why: 'блоков не ломает; если земля под рисунком изменилась — пентаграмма гаснет' },

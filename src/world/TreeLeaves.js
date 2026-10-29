@@ -24,6 +24,7 @@ function leafPath(ctx, x, y, a, L, Wd, shape) {
         if (shape === 'lobed') w *= 0.72 + 0.38 * Math.abs(Math.sin(u * Math.PI * 3.5)); // (the oak's rounded lobes)
         if (shape === 'toothed') w *= 0.92 + 0.08 * ((i % 2) ? 1 : -1); // (the birch's teeth)
         if (shape === 'needle') w = Wd * (1 - u * 0.6);
+        if (shape === 'plain') w *= 1 - 0.25 * Math.pow(u, 3); // (a long willow-like leaf, pointed)
         const px = u * L, py = w * side;
         const X = x + Math.cos(a) * px - Math.sin(a) * py, Y = y + Math.sin(a) * px + Math.cos(a) * py;
         if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
@@ -133,6 +134,49 @@ function sprig(ctx, kind, ox, S) {
             const dir = s % 2 ? 1 : -1;
             shoot(x, y, x + dir * (100 - s * 10), y - 45 - rnd() * 20, 2.5, 20);
         }
+    } else if (kind === 7) {
+        // the Baksadi: long violet leaves with a pale midrib and fine side veins, in drooping sprays on thin plum-brown twigs; deep violet
+        // at the stalk, lilac on the light edge, a few leaves paler, and here and there a glint (it is a magic tree)
+        const PAL = [0x5b2a96, 0x6b36a8, 0x7d46bd, 0x4e2488, 0x8e5ccc];
+        const main = stalk(ctx, rnd, cx, by, cx + (rnd() - 0.5) * 36, 18, (rnd() - 0.5) * 50, 4, '#4a2c58');
+        const lilacLeaf = (x, y, a, L, Wd, base) => {
+            leafPath(ctx, x, y, a, L, Wd, 'plain');
+            const k = 0.85 + rnd() * 0.3;
+            const g = ctx.createLinearGradient(x, y, x + Math.cos(a) * L, y + Math.sin(a) * L);
+            g.addColorStop(0, rgb(base, k * 0.72));
+            g.addColorStop(0.55, rgb(base, k * 1.02));
+            g.addColorStop(1, rgb(0xc9a6f0, 0.78 + rnd() * 0.2)); // (lilac in the light, towards the tip)
+            ctx.fillStyle = g; ctx.fill();
+            // the rim a shade lighter
+            ctx.strokeStyle = 'rgba(214,184,255,0.45)'; ctx.lineWidth = 1; ctx.stroke();
+            // the midrib and the side veins (pale, thin)
+            ctx.strokeStyle = 'rgba(232,214,255,0.7)'; ctx.lineWidth = 1.3;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * L * 0.92, y + Math.sin(a) * L * 0.92); ctx.stroke();
+            ctx.lineWidth = 0.7; ctx.strokeStyle = 'rgba(214,190,250,0.5)';
+            for (let v = 1; v <= 5; v++) {
+                const t = v / 6.2, px = x + Math.cos(a) * L * t, py = y + Math.sin(a) * L * t;
+                for (const side of [-1, 1]) {
+                    const b = a + side * 0.95, ll = Wd * (1 - t * 0.5) * 0.85;
+                    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(b) * ll, py + Math.sin(b) * ll); ctx.stroke();
+                }
+            }
+        };
+        for (let t = 0; t < 8; t++) {
+            const i = 3 + Math.round((t / 8) * 16);
+            const [x, y] = main[i];
+            const dir = t % 2 ? 1 : -1;
+            const ex = x + dir * (26 + rnd() * 48), ey = y - 6 - rnd() * 34;
+            stalk(ctx, rnd, x, y, ex, ey, dir * 8, 2, '#4a2c58');
+            const n = 4 + Math.floor(rnd() * 3);
+            for (let j = 0; j < n; j++) {
+                const a = Math.atan2(ey - y, ex - x) + (j - (n - 1) / 2) * 0.52 + (rnd() - 0.5) * 0.3;
+                const L = 34 + rnd() * 18;
+                lilacLeaf(ex, ey, a, L, L * 0.27, PAL[Math.floor(rnd() * PAL.length)]);
+            }
+        }
+        for (let j = 0; j < 5; j++) lilacLeaf(main[20][0], main[20][1] + 8, -Math.PI / 2 + (j - 2) * 0.45, 40, 11, PAL[j % PAL.length]);
+        // a few glints: tiny pale-violet sparks on the leaves
+        for (let j = 0; j < 14; j++) { ctx.fillStyle = 'rgba(240,225,255,0.85)'; ctx.beginPath(); ctx.arc(cx + (rnd() - 0.5) * 150, by - 30 - rnd() * 200, 0.9 + rnd() * 0.8, 0, Math.PI * 2); ctx.fill(); }
     } else if (kind >= 5) {
         // the apple trees: oval glossy leaves in bunches of 4–6 on short spurs; the golden one's leaves are gold,
         // lighter at their edges (it is a magic tree: the light seems to come from inside them)

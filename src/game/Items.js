@@ -39,7 +39,8 @@ function oneShape(model) {
     model.userData.one.set(true);
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { seesInvisible, isGhostItem } from './Invisibles.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -95,6 +96,12 @@ const GRIPPED = {
     shield: { axis: 'y', handle: 0, face: 'back', pose: 'thin', at: [0.13, -0.115] },
     apple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (cupped, its stem out of the hand)
     redApple: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    baksadi_pear: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    glowcap_mushroom: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    fern_frond: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    azure_berry: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    sun_herb: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
+    frost_shard: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     flask: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true }, // (its belly in the cupped fingers, the neck up)
     potion: { axis: 'body', pose: 'ball', at: [0.2, -0.272], out: true },
     web: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a skein in the cupped hand)
@@ -102,8 +109,13 @@ const GRIPPED = {
     glass: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     phoenixFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (by its quill, the vane up out of the fist)
     owlFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (the same: by its quill)
+    spencerFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (the same)
+    beslanGrass: { axis: 'y', handle: 0.05, pose: 'thin', at: [0.13, -0.1] }, // (a sheaf in the fingers)
     telewilpinLeaf: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (a leaf by its short stalk)
     carnivoreHead: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (the torn trap cupped in the fingers)
+    brightCore: { axis: 'body', pose: 'ball', at: [0.17, -0.2] }, // (a warm glowing core cupped in the fingers)
+    canaryHide: { axis: 'body', pose: 'block', at: [0.17, -0.214] }, // (a folded hide in the fingers)
+    bone: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true }, // (a bone across the palm, like an arrow)
     wool: { axis: 'body', pose: 'wool', at: [0.22, -0.374] },
     dragonEgg: { axis: 'body', pose: 'wool', at: [0.22, -0.42] }, // (big: the fingers spread round it; the other hand may hold it too)
     bread: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
@@ -161,7 +173,7 @@ export function backpackSpot(hand, other, shoulder) {
     return null;
 }
 
-export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, telewilpinLeaf: 0.5, carnivoreHead: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, spencerFeather: 0.6, beslanGrass: 0.3, telewilpinLeaf: 0.5, carnivoreHead: 0.02, brightCore: 0.03, canaryHide: 0.2, bone: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {
@@ -190,6 +202,7 @@ export class ItemSystem {
     // ----------------------------------------------------------- the world
     /** A thing appears lying / hovering (authority; the others are told). */
     spawnLoose(item, pos, { vel = null, hover = false, broadcast = true, quat = null, spin = null, rise = false } = {}) {
+        retireScroll(item); // (an old health / mana scroll: an apple now)
         if (this.loose.has(item.uid)) return this.loose.get(item.uid);
         const model = makeItemModel(item);
         model.position.copy(pos);
@@ -260,7 +273,8 @@ export class ItemSystem {
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
-        const items = (bossItems || (chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house?.flavor ? rollStoreLoot(rng, house.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
+        const items = (bossItems || (chest?.dungeonFlavor ? rollDungeonLoot(rng, chest.dungeonFlavor, want, chest.dungeonSize) : chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house?.flavor ? rollStoreLoot(rng, house.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
+        freshScrolls(items, rng); // (a scroll the opener already knows never comes again)
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();
@@ -269,6 +283,7 @@ export class ItemSystem {
             const p = pos.clone().addScaledVector(across, (i - (items.length - 1) / 2) * gap).addScaledVector(front, 0.3);
             p.y += 1.1;
             if (it.kind === 'weapon') {
+                if (this.game.inventory?.hasWeaponId(it.uid)) return; // (already in a cell on someone's back: never a second one from the chest)
                 const w = this.game.weapons.spawnHovering(it.type, p.clone().setY(p.y + 0.2), it.uid, { byHandle: true }); // (its handle at the hand)
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();
@@ -313,6 +328,7 @@ export class ItemSystem {
     // ------------------------------------------------------------ the hands
     /** A thing (from a slot / the ground / another player) into a hand. */
     takeIntoHand(item, side = 'right', { closed = false } = {}) {
+        retireScroll(item);
         if (this.held[side]) return false;
         const other = this.held[side === 'right' ? 'left' : 'right'];
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
@@ -808,6 +824,7 @@ export class ItemSystem {
         // loose things: fall, bounce, settle; hovering ones bob
         const me = ch.group.position;
         let spent = 0;
+        const seer = seesInvisible(g);
         for (const L of this.loose.values()) {
             // (far ones — a long game leaves many about the world — not drawn, and a still one not stepped:
             // a hovering one's bobbing and sparks are for the eyes only)
@@ -817,7 +834,7 @@ export class ItemSystem {
             // chests came back all at once; still out of sight there, so a frame later is never seen)
             if (L.away && d < 170 && (spent < 2 || !far)) { const t = performance.now(); this._bringBack(L); spent += performance.now() - t; }
             else if (!L.away && d > 200 && (L.hover || L.rest)) this._putAway(L);
-            L.model.visible = !far;
+            L.model.visible = !far && (!isGhostItem(L.item) || !!L.item.shop || seer); // (Spencer's feather and Beslan's grass: seen only by one who sees the invisible — Invisibles.js)
             if (far && (L.hover || L.rest)) continue;
             if (L.ritual) continue; // (the pentagram of enchanting carries it: EnchantCircles)
             this._physics(L, dt);
@@ -1178,12 +1195,12 @@ export class ItemSystem {
         const g = this.game;
         let food = null;
         for (const side of ['right', 'left']) { const h = this.held[side]; if (h && (h.item.kind === 'apple' || h.item.kind === 'meat' || h.item.kind === 'steak' || h.item.kind === 'potion' || ITEM_INFO[h.item.kind]?.heal)) food = { side, h }; }
-        if (!food) { this._eatT = 0; return; }
+        if (!food) { this._eatT = 0; g.darkLord?.mouthFree?.(); return; }
         const mouth = ch.head.getWorldPosition(_v).add(_v2.set(0, -0.25, 0));
         // the food at the mouth: the model's hand there, or the camera sees the hand cover the mouth
         // (the arm's depth is the camera's guess: the picture is surer)
         const atMouth = food.h.model.position.distanceTo(mouth) < 0.75 || !!g.currentPose?.mouthHand?.[food.side];
-        if (atMouth) this._eatT += dt; else this._eatT = 0;
+        if (atMouth) this._eatT += dt; else { this._eatT = 0; g.darkLord?.mouthFree?.(); }
         if (this._eatT < 0.6) return;
         this._eatT = 0;
         if (food.h.item.shop) { g.hud.setVoice?.('💰 Сначала заплатите торговцу (скажите «да»)', true); return; }
@@ -1209,6 +1226,12 @@ export class ItemSystem {
         if (r && !r.effect) { g.hud.setVoice?.(`🧪 ${r.name}: что оно делает, автор скоро расскажет — пока его не выпить`, true); return; }
         const fx = r?.effect || {};
         const said = [];
+        let silent = false;
+        if (fx.lordCure) { // «Зелье снятия проклятия тёмного мага» (DarkLord.js): the first time at the mouth — the warning (the flask stays); the second — drunk, the cells go
+            const res = g.darkLord?.drinkCure(h.item);
+            if (res !== 'drink') return;
+            silent = true;
+        }
         if (fx.skin) { // «Зелье светлого ума»: пятна на теле светлеют; сам уровень чёрного мага остаётся (DarkMagic.cleanSkin)
             if (!(skinOf(g.dark) > 0)) { g.hud.setVoice?.('🧪 Тело и так чистое — зелье не нужно', true); return; }
             const got = cleanSkin(g.dark, fx.skin);
@@ -1224,7 +1247,7 @@ export class ItemSystem {
             said.push(`+${fx.hp} HP`);
         }
         if (fx.mana && g.combat) { g.combat.fatigue = Math.min(g.combat.maxFatigue ?? 100, (g.combat.fatigue ?? 0) + fx.mana); said.push(`+${fx.mana} маны`); }
-        g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
+        if (!silent) g.hud.setVoice?.(`🧪 ${r ? r.name : 'Зелье'} выпито${said.length ? ': ' + said.join(', ') : ''}`, true);
         const col = h.item.color ?? 0x9fd8ff;
         for (let i = 0; i < 14; i++) g.fx?.spark(mouth, col, 0.07, _v2.set((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2), 0.6);
         g.sound?.playSplash?.();
@@ -1276,6 +1299,7 @@ export class ItemSystem {
     burnHeldScroll() {
         const s = this.heldOf('scroll');
         if (!s) return false;
+        if (retireScroll(s.item)?.kind !== 'scroll') return false; // (an old health / mana scroll: there are none now — it is an apple)
         const item = this.releaseHand(s.side);
         this.applyScroll(item);
         return true;
@@ -1307,24 +1331,7 @@ export class ItemSystem {
             }
             return;
         }
-        if (item.stat === 'hp') {
-            g.bonus.hp += item.amount;
-            g.maxHP += item.amount;
-            g.playerHP += item.amount;
-            // (the free world counts its own health: the scroll heals there too)
-            if (g.combat?.enabled) { g.combat.addMaxHp(item.amount); g.maxHP = g.combat.maxHp; g.playerHP = g.combat.hp; }
-        } else {
-            g.bonus.fatigue += item.amount;
-            g.combat.addMaxFatigue?.(item.amount);
-        }
-        if (!g.combat?.enabled) g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount);
-        g.hud.setVoice?.(item.stat === 'hp' ? `📜🔥 Свиток сгорел: здоровье +${item.amount}` : `📜🔥 Свиток сгорел: сила +${item.amount}`, true);
-        // the magic of the scroll swirls around the hero
-        const c = g.character.group.position;
-        for (let i = 0; i < 60; i++) {
-            const a = (i / 60) * Math.PI * 6;
-            g.fx.spark(_v.set(c.x + Math.cos(a) * 1.2, c.y - 1.5 + i * 0.07, c.z + Math.sin(a) * 1.2), item.stat === 'hp' ? 0xff6b6b : 0x9fd8ff, 0.12, _v2.set(-Math.sin(a) * 2, 1.5, Math.cos(a) * 2), 1.2);
-        }
+        // (no scroll of health or of mana cells any more — retireScroll: an old one is an apple)
     }
 
     // ------------------------------------------------------- hand to hand

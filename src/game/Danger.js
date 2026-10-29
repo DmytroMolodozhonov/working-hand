@@ -41,6 +41,8 @@ export const DANGERS = {
     die: { r: 18, hear: 40, see: 80, near: 30, fear: 90, ru: '«Дай»: чёрный луч богов — кого коснулся, того нет совсем (StrongMagic.terror: все обычные в ужасе бегут)' },
     dark: { r: 8, hear: 45, see: 80, near: 20, fear: 60, ru: 'чёрная магия: на земле горит чёрная пентаграмма, над ней сгорает тело волшебника в адском огне' },
     monster: { r: 14, hear: 160, see: 220, near: 40, fear: 90, ru: '«Пентаграмма страшного монстра»: 24-метровый зверь-волкодав идёт, шаги трясут землю, ломает дома кулаками и корпусом (MonsterForm.js)' },
+    creation: { r: 14, hear: 60, see: 140, near: 20, fear: 30, ru: '«Да пусть создастся»: зерно света растёт над землёй, потом из света встаёт постройка или рождается существо (DivineCreation.js)' },
+    beast: { r: 6, hear: 30, see: 60, near: 22, fear: 55, ru: 'злое существо, созданное богами («Да пусть создастся»): охотится на людей; рыцари выходят с ним биться (CustomCreatures.knightStep)' },
     housemagic: { r: 10, hear: 40, see: 70, near: 12, fear: 25, ru: 'магия дома («Create a House», «Improve a House»): вспышки, вихрь деревьев и пыли' },
 };
 
@@ -52,7 +54,7 @@ export const PEOPLE = {
     king: { reacts: true, hides: 'уходит вглубь замка (подальше от опасности)', flees: 'за ворота, если рушится сам замок', douses: false, note: 'кричит страже; в бой — только когда ударили его' },
     advisor: { reacts: true, hides: 'с королём, вглубь замка', flees: 'за ворота', douses: false, note: '' },
     knight: { reacts: true, hides: 'не прячется', flees: 'не бежит: идёт смотреть, но в огонь и в рушащееся не лезет', douses: false, note: 'кричит людям «В дома!»' },
-    wizard: { reacts: true, hides: 'робкие ученики бегут прочь', flees: 'смелые не бегут: идут смотреть (и кто это сделал)', douses: false, note: 'WizardLife.danger; нашли тело своего — тревога и поиск чужаков (BodyFound.js)' },
+    wizard: { reacts: true, hides: 'начинающие прячутся/бегут прочь; от большого огня («Let the Hellfire Come») бегут ВСЕ — за стену, в здание, врассыпную, не кучей (WizardLife.fireRun)', flees: 'смелые идут смотреть и искать виновника: по степени розыска (Wanted) — к месту, откуда прилетело, потом по вероятным путям (WizardMind.HUNT); у каждого своя задержка реакции по рангу (REACT_LAG)', douses: true, note: 'WizardLife.danger/answerShot; 4 из 5 тушат себя «Firefighting» за 3 маны; нашли тело своего — тревога и поиск чужаков (BodyFound.js)' },
     servant: { reacts: false, hides: '—', flees: '—', douses: false, note: 'слуга «Брейнрота» идёт за хозяином, а не прячется' },
     sailor: { reacts: false, hides: '—', flees: '—', douses: false, note: 'моряки на кораблях — у них свой бой (CrewTactics.js)' },
 };

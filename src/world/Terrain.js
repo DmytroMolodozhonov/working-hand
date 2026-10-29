@@ -28,9 +28,11 @@ import { VillageIndex } from './WizardVillages.js';
 import { SiteIndex } from './Sites.js';
 import { HamletIndex } from './Hamlets.js';
 import { ArenaIndex, ARENA_BIG } from './DuelArenas.js';
+import { DungeonIndex } from './Dungeons.js';
 import { SeaIndex, SEA, seaDepth } from './Sea.js';
 import { CAVES, growCaveSystem, caveMouth, hillMouth, carveColumn, chamberFloor, systemIn, noise3 } from './CaveSystems.js';
 import { LAIR, lairOf } from './DragonLairs.js';
+import { DenSite } from './SpiderDens.js';
 import { IceCastleSite, ICE_BLOCK, PALACE_ICE, inIcePalace, ICE_CASTLE } from './IceCastle.js';
 import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MESA_SAND_COLOUR } from './Landscape.js';
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
@@ -248,7 +250,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 11;
+export const WORLD_GEN = 17;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -257,18 +259,70 @@ export const WORLD_GEN = 11;
  */
 export const FURNISH_FROM_GEN = 8;
 /**
+ * The first generation whose castles have FORGED-IRON gates in the keep's doorway (GateModel.js: rivets, a grille, rust, a ringing sound).
+ * Only «Бомбардо Максима» (and the gods' / Inspirius / Total Destruction Максима blasts) break them; a plain «Бомбардо» rings on the iron
+ * (Alohomora.blast). An older world keeps its wooden-banded gates — one number, read by Alohomora.metalGates.
+ */
+export const GATE_METAL_FROM_GEN = 14;
+/**
+ * The first generation whose villagers' houses are roomy (Castles.js buildHouseBig): every poor house at least twice the old floor
+ * area (ways 3 wide, furniture by the walls), every rich house TWO floors with a stair, bedrooms above, a balcony and a roof.
+ * An older world keeps its small houses (its saved changes lie on them).
+ */
+export const HOUSE_SIZE_FROM_GEN = 14;
+/**
  * The first generation whose settlements have DIFFERENT buildings (Buildings.js): a well, a granary, a smithy, a tavern, a bakery, a herbalist's
  * shop, a mill with turning sails, a chapel or a church with a bell, a stable with horses — by the size of the settlement. One number: an older world
  * keeps the villages it was made with (its saved changes lie on them).
  */
-export const BUILDINGS_FROM_GEN = 11;
+export const BUILDINGS_FROM_GEN = 17;
 /** The first generation with plant creatures in the meadows (PlantLife.js: telewilpins, carnivorous heads). Older worlds have none. */
 export const PLANTS_FROM_GEN = 9;
 /** The first generation whose wizards' libraries show the drawing of the teleportation pentagram on a stand (PentagramStand.js; the last stand of each library). Older worlds keep their lore books on all of them. */
 export const PENT_STAND_FROM_GEN = 10;
+/**
+ * The first generation whose Creative test ground keeps the bosses' places APART (the author: «начальная площадка — отдельная карта;
+ * «у дракона» и «у Королевы» — другие карты, они не должны мешать друг другу»): the test dragon no longer sleeps on the start
+ * mountain by the Ice Queen — «У горы дракона» is a real dragon's lair (its own cave, DragonLairs.js) and «У Ледяной Королевы» the
+ * world's own ice castle far away (IceCastle.js, 950–1700 m), and «Логово паучихи» is a dark cave of its own (SpiderDens.js).
+ * Older worlds keep the palace and the dragon on the test mountain (their saves lie on that ground).
+ */
+export const SPAWN_MAPS_FROM_GEN = 11;
+/** The first generation with the Baksadi (the huge violet magic tree with pears: AppleTrees.js, Animals.js) and the new wild plants (MagicFlora.js: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees). Older worlds have none. */
+export const BAKSADI_FROM_GEN = 12;
+/** The first generation with Beslan's grass (InvisibleFlora.js): a plant that only a hero who sees the invisible sees. Nothing in the land depends on it (it is only drawn), but older worlds keep their meadows as they were. */
+export const INVISIBLE_FLORA_FROM_GEN = 10;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
-// 11: different buildings in the settlements (BUILDINGS_FROM_GEN).
+// 11: the Creative bosses' places apart (SPAWN_MAPS_FROM_GEN): the dragon in its lair, the ice castle far off, the spider's den.
+// 12: the Baksadi and the new wild plants (BAKSADI_FROM_GEN).
+/** The first generation with Brightflowers («Ярколето»: a fire flower that breathes flames) in the warm meadows and hills (BrightFlower.js). Older worlds have none. */
+export const BRIGHTFLOWER_FROM_GEN = 13;
+/** The first generation with Canaries (small, very strong people of the swamps who throw boulders at trespassers — Canaries.js) and the marshy lowlands round lakes they live in. Older worlds have none. */
+export const CANARIES_FROM_GEN = 13;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 13: the Brightflower in the warm meadows (BRIGHTFLOWER_FROM_GEN) and the Canaries of the swamps (CANARIES_FROM_GEN).
+// 14: forged-iron gates in the keeps (GATE_METAL_FROM_GEN), roomy villagers' houses — the rich in two floors (HOUSE_SIZE_FROM_GEN).
+/**
+ * The first generation with dungeons in the wild (Dungeons.js, DungeonBuild.js): six kinds of ruins on the ground (three magical, three plain; small,
+ * middling, great) and six kinds under it (mines, crypts, tombs…), with chests of their own (ItemTypes.rollDungeonLoot). One number: older worlds
+ * have none (their saved changes lie on the land they were made on).
+ */
+export const DUNGEON_FROM_GEN = 15;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 15: dungeons (DUNGEON_FROM_GEN).
+/**
+ * The first generation whose duel arenas have the visitors' stair (a separate way up to the stands) and the steward's stall with the three small
+ * figures of wizards on its counter (DuelArenas.entries). One number: an older world keeps its arenas as they were built (the visitors then
+ * use the front gate, the figures stand on little stones by the steward).
+ */
+export const ARENA_ENTRIES_FROM_GEN = 16;
+// (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
+//  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 16: the duel arenas' visitors' stair and the steward's stall with the figures (ARENA_ENTRIES_FROM_GEN).
+// 17: different buildings in the settlements (BUILDINGS_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -555,43 +609,67 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false, bigArena = false, buildings = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
         this.wizHuts = !!(this.lush && wizHuts); // (generation 7: the lone wizards' houses roomy — Hamlets.js)
         this.meshTrees = !!(mountains && lush && meshTrees); // (a world made with real trees — `realTrees`: not blocks — chunk.trees, Trees.js)
-        this.buildings = !!(mountains && buildings); // (generation 11: different buildings in the settlements — Buildings.js)
+        this.buildings = !!(mountains && buildings); // (generation 17: different buildings in the settlements — Buildings.js)
+        this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
+        this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
         // seas only in generation-2 worlds with land (old worlds stay exactly as they were)
         // (the creative test ground: a sea right by its castle's quay — the castle is placed first)
-        const spot = mountains && seas && test ? testSeaCastleSpot(seed) : null;
+        const spot = mountains && seas && test ? testSeaCastleSpot(seed, this.bigHouses) : null;
         this.seas = mountains && seas ? new SeaIndex(seed, spot ? spot.shore : null) : null;
         this.bedrockTop = this.seas ? MIN_LAYER : OLD_BEDROCK;
         const raw = createHeightField(seed, mountains, this.seas, this.test, this.lush);
         this.rawHeight = raw; // (without the castles' levelled land: the globe seen from space — PlanetTextures.js)
         this.land = raw.land || null;
-        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = null;
+        this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = this.den = this.dungeons = null;
+        this._denSys = undefined;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.buildings);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.bigHouses, this.buildings);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
             // the one Ice Castle of the world (IceCastle.js): generation 5 and the creative test ground
             const busy = (x, z) => { const ix = Math.round(x), iz = Math.round(z); return !!(this.castles.landAt(ix, iz) || this.towers.landAt(ix, iz) || this.villages.landAt(ix, iz)); };
-            const ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test ? { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 } : null) : null;
+            const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };
+            let ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test && !this.apart ? testIce : null) : null;
+            if (ice && this.apart && !ice.plan) ice = new IceCastleSite(seed, raw, busy, testIce); // (a world with no summit for it: on the test mountain as before)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
-            const iceL = 2.4 * (this.test ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
-            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined); // (the duel arenas: DuelArenas.js)
+            const iceL = 2.4 * ((ice ? !!ice.testAt : this.test) ? ICE_CASTLE.TEST_MOUNT : ICE_CASTLE.MOUNT).BACK;
+            const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
-            this.hamlets = new HamletIndex(seed, raw, near, this.wizHuts, this.buildings);
-            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas);
+            // (generation 11: the spider's den has a butte of its own, away from every site — SpiderDens.js)
+            // (a dragon's lair nearer than 420 m: another place — tried by the raw land, before the butte is made)
+            const lairNear = (x, z, r) => {
+                const top = (a, b) => raw(Math.round(a), Math.round(b));
+                const wet = (a, b) => { const ix = Math.round(a), iz = Math.round(b); raw(ix, iz); return !!(raw.water || raw.sea || busy(ix, iz)); };
+                const C = LAIR.CELL;
+                for (let gz = Math.floor((z - r) / C); gz <= Math.floor((z + r) / C); gz++) for (let gx = Math.floor((x - r) / C); gx <= Math.floor((x + r) / C); gx++) {
+                    const s = lairOf(gx, gz, seed, top, wet);
+                    if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) return true;
+                }
+                return false;
+            };
+            this.den = this.apart ? new DenSite(seed, raw, near, lairNear) : null;
+            void this.den?.spot; // (worked out now: finding it re-samples `raw`, which the height function reads in a certain order)
+            const hnear = (x, z, r) => near(x, z, r) || (!!this.den?.spot && Math.hypot(x - this.den.spot.x, z - this.den.spot.z) < r + 100);
+            this.hamlets = new HamletIndex(seed, raw, hnear, this.wizHuts, this.buildings);
+            // the dungeons of the wild (Dungeons.js; generation 15): ruins on the ground, halls under it — never on another site's land
+            const dgNear = (x, z, r) => hnear(x, z, r) || this.hamlets.near(x, z, r).length > 0;
+            this.dungeons = dungeons && this.lush ? new DungeonIndex(seed, raw, dgNear) : null;
+            const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas, this.dungeons);
             this.iceCastle = ice;
+            const den = this.den;
             const fn = (ix, iz) => {
                 let h = raw(ix, iz), wet = raw.water, sea = raw.sea, beach = raw.beach, bank = raw.bank; // (read before landAt: finding a site re-samples raw)
                 const kind = raw.kind;
@@ -599,6 +677,7 @@ export class TerrainData {
                 // (the Ice Castle's mountain: its peak, crags, the gorge, the ledge — IceCastle.shapeAt)
                 fn.iceRock = false;
                 if (ice) { const m = ice.shapeAt(ix, iz, h); if (ice.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } }
+                if (den) { const m = den.liftAt(ix, iz, h); if (den.lifted) { h = m; wet = 0; sea = false; beach = false; fn.iceRock = true; } } // (the spider's butte: bare rock)
                 const land = idx.landAt(ix, iz);
                 fn.sea = sea; fn.beach = beach; fn.kind = kind; fn.bank = bank && !land;
                 fn.mesa = mesa; fn.emer = emer; fn.moon = moon; fn.fant = fant;
@@ -1325,10 +1404,33 @@ export class TerrainData {
         if (m.has(key)) return m.get(key);
         const H = this.heightAt;
         const top = (x, z) => H(Math.round(x), Math.round(z));
-        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz)); };
+        const dn = this.den?.spot; // (the spider's butte is not a dragon's mountain: its own cave is under it)
+        const ip = this.apart ? this.iceCastle?.plan : null; // (nor is the Ice Queen's: no dragon's lair on her mountain)
+        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz) || (dn && Math.hypot(ix - dn.x, iz - dn.z) < 140) || (ip && Math.hypot(ix - ip.x, iz - ip.z) < 230)); };
         const s = lairOf(gx, gz, this.seed, top, blocked);
         m.set(key, s);
         return s;
+    }
+
+    /** The spider's den (SpiderDens.js; worlds with the places apart): a cave system under its own butte, or null. */
+    spiderDen() {
+        if (!this.den) return null;
+        if (this._denSys !== undefined) return this._denSys;
+        const H = this.heightAt;
+        const top = (x, z) => H(Math.round(x), Math.round(z));
+        const blocked = (x, z) => { const ix = Math.round(x), iz = Math.round(z); H(ix, iz); return !!(H.water || H.sea || this.sites?.landAt(ix, iz)); };
+        return (this._denSys = this.den.system(top, blocked));
+    }
+
+    /** The spider's den if its hall or mouth is within `r` of a point (a list: none or one; `.lair` is the den). */
+    densNear(x, z, r) {
+        const out = [];
+        if (!this.den || offEarth(x + r)) return out;
+        const sp = this.den.spot;
+        if (!sp || Math.hypot(sp.x - x, sp.z - z) > r + 140) return out; // (far from its butte: not even worked out)
+        const s = this.spiderDen();
+        if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
+        return out;
     }
 
     /** The dragons' lairs whose hall or mouth is within `r` of a point (their systems; `.lair` is the lair). */
@@ -1342,6 +1444,17 @@ export class TerrainData {
                 const s = this.lairOf(gx, gz);
                 if (s && Math.hypot(Math.max(s.x0 - x, 0, x - s.x1), Math.max(s.z0 - z, 0, z - s.z1)) <= r) out.push(s);
             }
+        }
+        return out;
+    }
+
+    /** The dungeons (ruins, halls under the ground) whose chests or walls are within `r` of a point (generation 15; Dungeons.js). */
+    dungeonsNear(x, z, r, lazy = false) {
+        const out = [];
+        if (!this.dungeons || offEarth(x + r)) return out;
+        for (const d of this.dungeons.near(x, z, r)) {
+            if (lazy && !d.isBuilt && this._cellLater(false)) continue; // (building one — 1–5 ms — at most every 30 ms with the workers on)
+            out.push(d);
         }
         return out;
     }
@@ -1398,6 +1511,9 @@ export class TerrainData {
         }
         // (the dragons' lairs reaching into it: a great hall and its huge mouth)
         for (const s of this.lairsNear(x0 + CHUNK / 2, z0 + CHUNK / 2, CHUNK)) {
+            if (s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(systemIn(s, x0, z0, x0 + CHUNK - 1, z0 + CHUNK - 1));
+        }
+        for (const s of this.densNear(x0 + CHUNK / 2, z0 + CHUNK / 2, CHUNK)) { // (the spider's dens: a hall and a mouth like a lair's)
             if (s.x1 >= x0 - 1 && s.x0 <= x0 + CHUNK && s.z1 >= z0 - 1 && s.z0 <= z0 + CHUNK) sys.push(systemIn(s, x0, z0, x0 + CHUNK - 1, z0 + CHUNK - 1));
         }
         if (!sys.length) return;

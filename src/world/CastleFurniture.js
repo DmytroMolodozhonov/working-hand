@@ -33,13 +33,24 @@ const OPPOSITE = { u0: 'u1', u1: 'u0', v0: 'v1', v1: 'v0' };
 export function furnishRoom(env) {
     const { room, s, rng, aisles = [], pre = [] } = env;
     const { kind, u0, u1, v0, v1, l } = room;
-    const key = (u, v) => u + ',' + v;
     const inRoom = (u, v) => u >= u0 && u <= u1 && v >= v0 && v <= v1;
     const inRect = (r, u, v) => u >= r.u0 && u <= r.u1 && v >= r.v0 && v <= r.v1;
-    const inAisle = (u, v) => aisles.some((r) => inRect(r, u, v));
-    const blockedPre = (u, v) => pre.some((r) => inRect(r, u, v));
-    const occ = new Set(); // cells with a thing on the floor
-    const reserve = new Set(); // the free cell in front of a thing
+    // (the checks below run thousands of times a castle: the cells of the room, its ways and its blocked places are flat arrays)
+    let gu0 = u0 - 3, gu1 = u1 + 3, gv0 = v0 - 3, gv1 = v1 + 3;
+    for (const r of aisles) { gu0 = Math.min(gu0, r.u0 - 3); gu1 = Math.max(gu1, r.u1 + 3); gv0 = Math.min(gv0, r.v0 - 3); gv1 = Math.max(gv1, r.v1 + 3); }
+    const GH = gv1 - gv0 + 1, GN = (gu1 - gu0 + 1) * GH;
+    /** A cell's number: its place in the arrays (cells outside them: a negative number of their own). */
+    const key = (u, v) => (u >= gu0 && u <= gu1 && v >= gv0 && v <= gv1 ? (u - gu0) * GH + (v - gv0) : -1 - ((u + 8192) * 16384 + (v + 8192)));
+    const occA = new Uint8Array(GN), resA = new Uint8Array(GN), aisA = new Uint8Array(GN), preA = new Uint8Array(GN), roomA = new Uint8Array(GN);
+    for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) roomA[(u - gu0) * GH + (v - gv0)] = 1;
+    for (const r of aisles) for (let u = r.u0; u <= r.u1; u++) for (let v = r.v0; v <= r.v1; v++) aisA[(u - gu0) * GH + (v - gv0)] = 1;
+    for (const r of pre) for (let u = Math.max(r.u0, gu0); u <= Math.min(r.u1, gu1); u++) for (let v = Math.max(r.v0, gv0); v <= Math.min(r.v1, gv1); v++) preA[(u - gu0) * GH + (v - gv0)] = 1;
+    const inAisle = (u, v) => { const k = key(u, v); return k >= 0 && aisA[k] === 1; };
+    const blockedPre = (u, v) => { const k = key(u, v); return k >= 0 && preA[k] === 1; };
+    const cellSet = (A) => ({ has: (k) => k >= 0 && A[k] === 1, add: (k) => { if (k >= 0) A[k] = 1; }, delete: (k) => { if (k >= 0) A[k] = 0; }, *[Symbol.iterator]() { for (let i = 0; i < GN; i++) if (A[i]) yield i; } });
+    const occ = cellSet(occA); // cells with a thing on the floor
+    const reserve = cellSet(resA); // the free cell in front of a thing
+    const cellOf = (k) => [gu0 + Math.floor(k / GH), gv0 + (k % GH)];
     const topH = new Map(); // cell → how high a thing stands there (layers over the floor)
     const hung = new Set(); // wall cells with a tapestry / lamp up high
     const stat = { items: 0, decor: 0, kinds: {} };
@@ -48,26 +59,30 @@ export function furnishRoom(env) {
     const edge = B.PLANKS; // (the border of a rug and its medallion: boards of the floor itself — a floor made of cloth would not hold, Structure.js)
 
     // ---- the free floor 3 wide: the ways through the room must stay joined
-    const freeExt = (u, v) => (inRoom(u, v) ? !occ.has(key(u, v)) && !blockedPre(u, v) : inAisle(u, v));
-    const wide = (u, v) => {
-        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) if (!freeExt(u + a, v + b)) return false;
-        return true;
+    const freeAt = (k) => (roomA[k] === 1 ? occA[k] === 0 && preA[k] === 0 : aisA[k] === 1); // (k in the arrays)
+    const freeExt = (u, v) => { const k = key(u, v); return k >= 0 && freeAt(k); };
+    const wideAt = (k) => { // (the nine cells round the cell k, k at least one cell inside the arrays)
+        return freeAt(k) && freeAt(k - 1) && freeAt(k + 1) && freeAt(k - GH) && freeAt(k - GH - 1) && freeAt(k - GH + 1) && freeAt(k + GH) && freeAt(k + GH - 1) && freeAt(k + GH + 1);
     };
+    const wide = (u, v) => { const k = key(u, v); return k >= 0 && wideAt(k); };
     const anchors = aisles.map((r) => [Math.round((r.u0 + r.u1) / 2), Math.round((r.v0 + r.v1) / 2)]);
-    /** The 3-wide free floor joined to the first way (a Set of cells), or null where the way itself is not 3 wide. */
+    const stamp = new Int32Array(GN), queue = new Int32Array(GN);
+    let mark = 0;
+    /** The 3-wide free floor joined to the first way (stamped cells of `stamp`), or false where the way itself is not 3 wide. */
     const region = () => {
-        if (!anchors.length || !wide(...anchors[0])) return null;
-        const seen = new Set([key(...anchors[0])]);
-        const q = [anchors[0]];
-        while (q.length) {
-            const [u, v] = q.pop();
-            for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-                const nu = u + du, nv = v + dv, k = key(nu, nv);
-                if (seen.has(k) || !wide(nu, nv)) continue;
-                seen.add(k); q.push([nu, nv]);
+        if (!anchors.length || !wide(...anchors[0])) return false;
+        mark++;
+        let qh = 0, qt = 0;
+        const k0 = key(...anchors[0]);
+        stamp[k0] = mark; queue[qt++] = k0;
+        while (qh < qt) {
+            const k = queue[qh++];
+            for (const nk of [k + GH, k - GH, k + 1, k - 1]) {
+                if (stamp[nk] === mark || nk < 0 || nk >= GN || !wideAt(nk)) continue;
+                stamp[nk] = mark; queue[qt++] = nk;
             }
         }
-        return seen;
+        return true;
     };
     /**
      * Free floor cells (in the box) in a gap 1 or 2 wide between two THINGS along a row or a column of the room: too narrow for
@@ -75,26 +90,29 @@ export function furnishRoom(env) {
      */
     const slots = (b0u, b1u, b0v, b1v) => {
         const out = [];
-        const thing = (u, v) => inRoom(u, v) && (occ.has(key(u, v)) || blockedPre(u, v));
-        const free = (u, v) => inRoom(u, v) ? !occ.has(key(u, v)) && !blockedPre(u, v) : inAisle(u, v);
+        const thing = (u, v) => inRoom(u, v) && (occA[key(u, v)] === 1 || preA[key(u, v)] === 1);
+        const free = (u, v) => { const k = key(u, v); return k >= 0 && freeAt(k); };
         for (let u = Math.max(u0, b0u); u <= Math.min(u1, b1u); u++) for (let v = Math.max(v0, b0v); v <= Math.min(v1, b1v); v++) {
-            if (occ.has(key(u, v)) || blockedPre(u, v)) continue;
-            for (const [du, dv] of [[1, 0], [0, 1]]) {
+            const k0 = key(u, v);
+            if (occA[k0] === 1 || preA[k0] === 1) continue;
+            for (let dir = 0; dir < 2; dir++) {
+                const du = dir === 0 ? 1 : 0, dv = dir === 0 ? 0 : 1;
                 let n = 0;
                 while (n < 3 && free(u + du * (n + 1), v + dv * (n + 1))) n++;
                 if (n >= 2) continue;
                 let m = 0;
                 while (m + n < 3 && free(u - du * (m + 1), v - dv * (m + 1))) m++;
                 if (m + n + 1 > 2) continue; // (3 or more free: a way)
-                if (thing(u + du * (n + 1), v + dv * (n + 1)) && thing(u - du * (m + 1), v - dv * (m + 1))) { out.push(key(u, v)); break; }
+                if (thing(u + du * (n + 1), v + dv * (n + 1)) && thing(u - du * (m + 1), v - dv * (m + 1))) { out.push(k0); break; }
             }
         }
         return out;
     };
     const connected = () => {
         if (anchors.length < 2) return true;
-        const seen = region();
-        return !!seen && anchors.every((a) => seen.has(key(...a)));
+        if (!region()) return false;
+        for (const a of anchors) if (stamp[key(a[0], a[1])] !== mark) return false;
+        return true;
     };
     const enforce = anchors.length < 2 || connected(); // (a room whose aisles are not 3 wide in themselves is not judged by it)
     const baseSlots = new Set(enforce ? slots(u0, u1, v0, v1) : []);
@@ -113,6 +131,7 @@ export function furnishRoom(env) {
         const cell = (a, d) => [ou + a * au + d * du, ov + a * av + d * dv];
         const F = {
             cell,
+            u: (a, d) => ou + a * au + d * du, v: (a, d) => ov + a * av + d * dv, // (the same without making an array: the cheap check of commit)
             put(a0, a1, d0, d1, h0, h1, t) {
                 const [x0, z0] = cell(a0, d0), [x1, z1] = cell(a1, d1);
                 env.box(x0, x1, l + h0, l + h1, z0, z1, t);
@@ -145,9 +164,14 @@ export function furnishRoom(env) {
     const commit = (F, spec, opt = {}) => {
         const { w, dp } = spec;
         const access = opt.access ?? spec.access ?? 1, flat = !!(opt.flat ?? spec.flat), loose = !!opt.loose;
+        for (let a = 0; a < w; a++) for (let d = 0; d < dp; d++) {
+            const u = F.u(a, d), v = F.v(a, d);
+            if (!inRoom(u, v)) return false;
+            const k = key(u, v);
+            if (occA[k] === 1 || preA[k] === 1 || aisA[k] === 1 || (!flat && !loose && resA[k] === 1)) return false;
+        }
         const cells = [];
         for (let a = 0; a < w; a++) for (let d = 0; d < dp; d++) cells.push(F.cell(a, d));
-        for (const [u, v] of cells) if (!inRoom(u, v) || occ.has(key(u, v)) || blockedPre(u, v) || inAisle(u, v) || (!flat && !loose && reserve.has(key(u, v)))) return false;
         const front = [];
         for (let a = 0; a < w && access; a++) for (let d = dp; d < dp + access; d++) front.push(F.cell(a, d));
         if (front.length && front.every(([u, v]) => !inRoom(u, v) || occ.has(key(u, v)) || blockedPre(u, v))) return false; // (no way to it)
@@ -303,7 +327,7 @@ export function furnishRoom(env) {
     /** Chests (placed by Castles.placeChests against the walls, off the things and their fronts); the cells they take are marked. */
     const chests = (list) => {
         const rects = [];
-        for (const k of reserve) { const [u, v] = k.split(',').map(Number); rects.push([u - 0.5, u + 0.5, v - 0.5, v + 0.5]); }
+        for (const k of reserve) { const [u, v] = cellOf(k); rects.push([u - 0.5, u + 0.5, v - 0.5, v + 0.5]); }
         const placed = env.chests(list, rects) || [];
         for (const r of placed) {
             for (let u = Math.ceil(r[0] - 0.5 + 0.2); u <= Math.floor(r[1] + 0.5 - 0.2); u++) for (let v = Math.ceil(r[2] - 0.5 + 0.2); v <= Math.floor(r[3] + 0.5 - 0.2); v++) {
@@ -527,6 +551,12 @@ function bed(K, wl, pos, { king = false, exact = false } = {}) {
     const w = king ? 5 : 3, dp = king ? 7 : 6;
     const sp = {
         w, dp, hMax: king ? 8 : 4, tag: 'bed', access: 1, draw: (F) => {
+            if (K.room.bedEntity) { // (a villager's home: the bed is a thing of its own, set by the game — Houses.js; here its place only)
+                for (let a = 0; a < w; a++) for (let d = 0; d < dp; d++) { const [bu, bv] = F.cell(a, d); K.env.occupy?.(bu, bv); } // (no chest may stand on it)
+                const [mu, mv] = F.cell((w - 1) / 2, 2.4), [hu, hv] = F.cell((w - 1) / 2, 0);
+                const [cu0, cv0] = F.cell(0, 0), [cu1, cv1] = F.cell(0, 1);
+                return { sleep: [mu, mv, hu, hv], head: [hu, hv], dir: [cu1 - cu0, cv1 - cv0], dp };
+            }
             F.put(0, w - 1, 1, dp - 1, 0, 0, B.PLANKS_DARK); // the frame
             F.put(0, w - 1, 1, dp - 1, 1, 1, B.CLOTH_WHITE); // the sheets
             F.put(0, w - 1, 3, dp - 2, 1, 1, carpet); // the coverlet
@@ -826,11 +856,119 @@ ROOMS.barracks = (K) => {
     K.wall(K.any(), P.lampStand, { pos: 'end' });
 };
 
+// ---------------------------------------------------------------------------------------------- the villagers' homes
+// (generation 14, HOUSE_SIZE_FROM_GEN — Castles.buildHouseBig: roomy homes, the rich in two floors with a stair). The rooms of a home are
+// seen from its door: `room.doorSide` is the wall the way in is in, the far wall is across from it.
+const SIDE_WALLS = { u0: ['v0', 'v1'], u1: ['v0', 'v1'], v0: ['u0', 'u1'], v1: ['u0', 'u1'] };
+function homeWalls(K) {
+    const door = K.room.doorSide || 'v0';
+    return { door, far: OPPOSITE[door], side: SIDE_WALLS[door] };
+}
+/** A bed on the first of the walls that takes it (a room narrow for a bed across keeps it along its long wall). */
+function homeBed(K, walls, pos) {
+    for (const wl of walls) { const b = bed(K, wl, pos); if (b) return b; }
+    return null;
+}
+
+/** A poor home: ONE room (11 × 9 and more) — the beds at the far wall, the fire in a side wall with a seat, a table with benches, the cupboards and barrels, chests. */
+ROOMS.homeMain = (K) => {
+    const { P, room } = K;
+    const { far, side } = homeWalls(K);
+    K.rug(K.cu - 2, K.cu + 2, K.cv - 2, K.cv + 2, true, false);
+    const nBeds = room.nBeds || 1;
+    const b1 = homeBed(K, [far, ...side], 'start'); stands(K, b1);
+    const b2 = nBeds > 1 ? homeBed(K, [far, ...side], 'end') : null; stands(K, b2);
+    if (nBeds > 2) { const b3 = homeBed(K, side, 'mid'); stands(K, b3); }
+    if (b1) footChest(K, b1, 2, { look: 'plain', room: 'home', flavor: 'clothes' });
+    const fw = K.chance(0.5) ? side[0] : side[1];
+    const fire = K.wall(fw, P.fireplace(5), { pos: 'mid' }) || K.wall(side, P.fireplace(5), { pos: 'mid' });
+    if (fire) K.stat.chimney = [1, 2, 3].map((a) => fire.F.cell(a, 0)); // (the stack through the roof, as wide as the breast: Castles.buildHouseBig)
+    if (fire) K.seat(fire.wall, fire.a + 2, 2, 0, -1, P.armchair1, { loose: true }) || K.seat(fire.wall, fire.a + 2, 2, 0, -1, P.stool, { loose: true });
+    K.chests([{ at: K.ABcell(far, 2, 2), look: 'plain', flavor: 'clothes', room: 'home', scales: [2] }, { at: K.ABcell(side[0], 2, 2), look: 'plain', flavor: 'food', room: 'home', scales: [2] }]);
+    const set = (F, w, dp) => { P.tableware(F, w, dp); for (let a = 1; a < w - 1; a += 3) P.hangFood(F, a, 1); };
+    for (let L = 7; L >= 3; L--) if (K.scan(P.set(L, 2, set), ['v0', 'u0'])) break;
+    K.wall(K.any(), P.cupboard(3)); K.wall(K.any(), P.cupboard(2), { pos: 'end' });
+    K.wall(K.any(), P.rack(2, 3), { pos: 'mid' });
+    for (let i = 0; i < 3; i++) K.wall(K.any(), P.barrel(i % 2 ? 1 : 2), { pos: i % 2 ? 'end' : 'start' });
+    K.wall(K.any(), P.crate(1, B.VEG)); K.wall(K.any(), P.sacks); K.wall(K.any(), P.lampStand, { pos: 'end' });
+    K.sconces(5);
+};
+
+/** A rich home's ground room: a rug, the fire with armchairs, a long table with benches and high chairs, shelves, a dresser, tapestries and a chandelier. */
+ROOMS.homeLiving = (K) => {
+    const { P } = K;
+    const { far, side } = homeWalls(K);
+    K.rug(K.u0 + 1, K.u1 - 1, K.v0 + 1, K.v1 - 1, true, true);
+    const fire = K.wall(far, P.fireplace(5), { pos: 'mid' }) || K.wall(side, P.fireplace(5), { pos: 'mid' });
+    if (fire) K.stat.chimney = [1, 2, 3].map((a) => fire.F.cell(a, 0));
+    // the family's chests first (they need a stretch of wall and room before the lid), then the rest
+    K.chests([
+        { at: K.ABcell(side[0], 2, 2), look: 'painted', flavor: 'clothes', room: 'home', scales: [2] },
+        { at: K.ABcell(side[1], 2, 2), look: 'plain', flavor: 'scrolls', room: 'home', scales: [2] },
+        { at: K.ABcell(far, 2, 2), look: 'plain', flavor: 'food', room: 'home', scales: [2] },
+    ]);
+    if (fire) {
+        for (const a of [fire.a, fire.a + 4]) K.seat(fire.wall, a, 2, 0, -1, P.armchair, { loose: true }) || K.seat(fire.wall, a, 2, 0, -1, P.armchair1, { loose: true });
+        K.at(fire.wall, fire.a + 2, 2, P.table(1, 1, (F) => F.put(0, 0, 0, 0, 2, 2, K.pick([B.POTION, B.FLOWERS, B.LANTERN]))), { access: 0, loose: true });
+    }
+    const set = (F, w, dp) => { P.tableware(F, w, dp); };
+    for (let L = 6; L >= 3; L--) if (K.scan(P.set(L, 2, set, { chairs: false, cloth: true }), ['v0', 'u0'])) break;
+    K.wall([...side, far], P.bookshelf(3, 4), { pos: 'start' }); K.wall([...side, far], P.bookshelf(2, 3), { pos: 'end' });
+    K.wall(K.any(), P.dresser(true), { pos: 'mid' });
+    K.wall(K.any(), P.cupboard(2), { pos: 'end' });
+    K.wall(K.any(), P.lampStand, { pos: 'start' }); K.wall(K.any(), P.lampStand, { pos: 'end' });
+    K.wall(K.any(), P.portrait, { pos: 'mid' });
+    for (const wl of WALLS) K.tapestry(wl, 2, 'mid');
+    K.chandelier(K.cu, K.cv);
+    K.sconces(5);
+};
+
+/** A rich home's kitchen: the big fire with a crane, work tables with food and hanging onions, cupboards, racks, barrels and crates. */
+ROOMS.homeKitchen = (K) => {
+    const { P } = K;
+    const { far, side } = homeWalls(K);
+    const fire = K.wall(far, P.fireplace(5, true), { pos: 'mid' }) || K.wall(side, P.fireplace(5, true), { pos: 'mid' });
+    if (fire) K.stat.chimney = [1, 2, 3].map((a) => fire.F.cell(a, 0));
+    K.chests([{ at: K.ABcell(far, 1, 3), look: 'crate', flavor: 'food', room: 'kitchen', scales: [2] }]);
+    const tbl = (F, w, dp) => { P.tableware(F, w, dp); for (let a = 1; a < w - 1; a += 2) P.hangFood(F, a, 0); };
+    for (let n = 0; n < 2; n++) for (let L = 5; L >= 3; L--) if (K.scan(P.table(L, 2, tbl), ['v0', 'u0'], { access: 1 })) break;
+    K.wall(K.any(), P.cupboard(3)); K.wall(K.any(), P.cupboard(2)); K.wall(K.any(), P.rack(3, 3));
+    for (let i = 0; i < 4; i++) K.wall(K.any(), P.barrel(i % 2 ? 1 : 2), { pos: i % 2 ? 'end' : 'start' });
+    for (let i = 0; i < 3; i++) K.wall(K.any(), P.crate(i ? 2 : 1, B.VEG), { pos: 'mid' });
+    K.wall(K.any(), P.sacks); K.wall(K.any(), P.stump);
+    K.wall(K.any(), P.lampStand, { pos: 'end' });
+    K.sconces(5);
+};
+
+/** A rich home's bedroom upstairs: a rug, a bed (two in a big one) with stands and a chest at its foot, a wardrobe, a dresser, a desk, shelves, curtains. */
+ROOMS.homeBedroom = (K) => {
+    const { P, room } = K;
+    const { far, side, door } = homeWalls(K);
+    K.rug(K.u0 + 1, K.u1 - 1, K.v0 + 1, K.v1 - 1);
+    // (the beds' heads at the two walls beside the door wall — a long narrow room keeps them at its ends, far apart, each with a way to its side)
+    const walls = [far, ...side.filter((w) => w !== door)];
+    const b1 = homeBed(K, [side[0], ...walls], 'start'); stands(K, b1);
+    const b2 = (room.nBeds || 1) > 1 ? homeBed(K, [side[1], ...walls], 'start') : null; stands(K, b2);
+    if (b1) footChest(K, b1, 2, { look: 'painted', room: 'bedroom', flavor: 'clothes' });
+    K.chests([{ at: K.ABcell(walls[0] || far, 2, 2), look: 'plain', flavor: 'clothes', room: 'bedroom', scales: [2] }]);
+    K.wall(K.any(), P.wardrobe, { pos: 'end' });
+    K.wall(K.any(), P.dresser(false), { pos: 'start' });
+    const desk = K.wall(K.any(), P.table(2, 2, (F) => { F.put(0, 0, 0, 0, 2, 2, B.BOOKS); F.put(1, 1, 0, 0, 2, 2, B.LANTERN); }), { pos: 'mid' });
+    if (desk) K.seat(desk.wall, desk.a, 2, 0, -1, P.chair);
+    K.wall(K.any(), P.bookshelf(2, 3), { pos: 'mid' });
+    K.wall(K.any(), P.lampStand, { pos: 'start' });
+    K.wall(K.any(), P.armchair, { pos: 'end' });
+    for (const wl of WALLS) K.tapestry(wl, 2, 'mid');
+    K.chandelier(K.cu, K.cv);
+    K.sconces(5);
+};
+
 /** How many things a room of each kind has at the least (a thing counts once; a table with its benches three): topUp fills up to it. */
-export const MIN_ITEMS = { kitchen: 14, dining: 12, armoury: 14, treasury: 8, storeroom: 18, chapel: 12, library: 16, bedroom: 10, king: 14, guardroom: 14, gallery: 12, barracks: 6, generic: 6 };
+export const MIN_ITEMS = { kitchen: 14, dining: 12, armoury: 14, treasury: 8, storeroom: 18, chapel: 12, library: 16, bedroom: 10, king: 14, guardroom: 14, gallery: 12, barracks: 6, generic: 6, homeMain: 12, homeLiving: 9, homeKitchen: 11, homeBedroom: 8 };
 /** Fills a room that is still thin with plain things for its kind (never empty). */
 function topUp(K) {
     const min = MIN_ITEMS[K.room.kind] ?? 6;
     const fillers = [K.P.barrel(1), K.P.crate(1), K.P.lampStand, K.P.cupboard(2), K.P.bench(3), K.P.sacks, K.P.stool];
-    for (let i = 0; i < 40 && K.stat.items < min; i++) K.wall(K.any(), fillers[i % fillers.length], { pos: i % 2 ? 'end' : 'start' });
+    const tries = /^home/.test(K.room.kind) ? 12 : 40; // (a villager's home that cannot be filled further is not tried for long: the castle's plan is made in a frame's time)
+    for (let i = 0; i < tries && K.stat.items < min; i++) K.wall(K.any(), fillers[i % fillers.length], { pos: i % 2 ? 'end' : 'start' });
 }

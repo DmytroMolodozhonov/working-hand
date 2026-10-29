@@ -75,7 +75,7 @@ try {
     // 4) a scroll: the book away, a scroll in the right fist; the left hand comes open to its end, closes, pulls
     await page.evaluate(() => { const g = window.__zns.game; g.items.releaseHand('left'); g.items.releaseHand('right'); });
     await feed({ rightCurl: 0.9, leftCurl: 0, wristOffset: [-0.1, 0] }, 10);
-    await page.evaluate(() => window.__zns.game.items._gotItem({ kind: 'scroll', uid: 'shot-sc', stat: 'hp', amount: 2 }, 'right'));
+    await page.evaluate(() => window.__zns.game.items._gotItem({ kind: 'scroll', uid: 'shot-sc', stat: 'spell', spell: 'Thunderwave' }, 'right'));
     await feed({ rightCurl: 0.9, leftCurl: 0, wristOffset: [-0.1, 0] });
     await feed({ rightCurl: 0.9, leftCurl: 0.9, wristOffset: [-0.1, 0] });
     for (const [wo, name] of [[-0.04, '5-scroll-half-unrolled'], [0.02, '6-scroll-unrolled']]) {

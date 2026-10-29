@@ -15,6 +15,19 @@ test('mouth: how open, of its width', () => {
     assert.equal(mouthOpenness(null), null);
 });
 
+test('mouth: a head tipped up or down at the fight still shows the mouth opening (3D, not the flat picture)', () => {
+    // the head pitched back by 50°: the lip gap, which was vertical, now runs along the line of sight (z), so the flat picture sees it ×cos
+    const pitch = (open, a) => {
+        const f = face(open), c = Math.cos(a), s = Math.sin(a);
+        for (const i of [13, 14, 61, 291]) { const p = f[i], dy = p.y - 0.6; f[i] = { x: p.x, y: 0.6 + dy * c, z: dy * s }; }
+        return f;
+    };
+    const flat = (f) => Math.hypot(f[13].x - f[14].x, f[13].y - f[14].y) / Math.hypot(f[61].x - f[291].x, f[61].y - f[291].y);
+    const f = pitch(0.3, 0.87);
+    assert.ok(flat(f) < 0.22, `the flat picture loses it: ${flat(f)}`);
+    assert.ok(Math.abs(mouthOpenness(f) - 0.3) < 1e-9, `3D keeps it: ${mouthOpenness(f)}`);
+});
+
 test('voice gate: my own spell (my lips moved) is cast; a friend\'s voice heard by my microphone is not', () => {
     const g = new VoiceGate();
     let t = 0;

@@ -12,7 +12,7 @@
  *    a part of the mana's growth and its list of firsts: they go into the body with it and come back with it
  *    (until then they can be earned again).
  *  - All of it lies in the body (`b.lg`, Death.js): only its owner can take it back — the spell
- *    «Give Me My Power» (the author: 50 mana, learned only from its scroll — the dark-gold ribbon)
+ *    «Give Me My Power» (the author: 50 mana, known from the very start, no scroll — SpellBook.START_SPELLS)
  *    cast at their own skeleton (Game._castGiveMyPower). Then it is all theirs again — and it REPLACES
  *    what they have grown since (the author: «Ты возвращаешь свою силу — и у тебя столько, сколько было
  *    при той силе… Забираешь свою силу — и от второй итерации отказываешься. А то так можно обойти игру»):
@@ -62,13 +62,16 @@ export function captureLegacy(g) {
         // (and «дуэльное мастерство»: the duels won, and whom — Mana.masteryWon)
         mana: mana && (mana.growth > 0 || mana.spells?.length || mana.kills?.length || mana.found?.length || mana.mastery > 0) ? { growth: mana.growth || 0, spells: mana.spells || [], kills: mana.kills || [], found: mana.found || [], mastery: mana.mastery || 0, beaten: mana.beaten || [] } : null,
         ach: g.achievements ? [...g.achievements.done] : [],
+        bare: g.pentagranium?.bare ? 1 : null, // (колдовать без палочки: обряд «Palmaris» — BareHand.js)
         pent: g.pentagranium?.snapshot() || null, // (the pentagrams' drawings learnt by burning their scrolls — PentagramRules.js)
         dark: g.dark?.snapshot() || null, // (чёрная магия: уровень тьмы — DarkMagic.js)
+        lord: g.darkLord?.legacy() || null, // («настоящий тёмный маг»: наряд, поглощённая мантия, проклятие — DarkLord.js; доспехи в нём не нужны: они падают у тела)
         bw: g.breakward?.marked ? { m: 1 } : null, // (метка «слом защиты»: умирает с прокачками, «Give Me My Power» возвращает)
+        sight: g.sight?.snapshot() || null, // (the night eyes and the sight of the invisible — SecondSight.js)
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.bw && !rec.pent;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare && !rec.sight;
     return empty ? null : rec;
 }
 
@@ -92,10 +95,13 @@ export function wipeHero(g) {
     g.bonus = { hp: 0, fatigue: 0 };
     if (B.spells?.GiveMyPower) g.bonus.spells = { GiveMyPower: true }; // (kept: the one way to take the rest back)
     g.books?.learned?.clear();
-    g.dark?.onDeath(); // (тьма уходит в тело)
+    g.dark?.onDeath(); // (тьма уходит в тело; а с ней и наряд тёмного мага — DarkLordLife.onDeath)
+    g.darkLord?.onDeath();
+    g.pentagranium?.onDeath(); // (the bare-hand power goes too)
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
     g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
+    g.sight?.onDeath(); // (the night eyes and the sight of the invisible go with the life)
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }
 
@@ -121,8 +127,11 @@ export function absorbLegacy(g, rec) {
     if (rec.spells?.length) B.spells = { ...(B.spells || {}), ...Object.fromEntries(rec.spells.map((k) => [k, true])) };
     for (const k of rec.learned || []) g.books?.learned?.add(k);
     if (rec.dark) g.dark?.restore(rec.dark);
+    if (rec.lord) g.darkLord?.restore(rec.lord, { fromLegacy: true }); // (the outfit comes back; the robe he had is absorbed again, its reserve as it was)
     if (rec.pent) g.pentagranium?.restore(rec.pent);
+    if (rec.bare) g.pentagranium?.bareRestore(1);
     if (rec.steady) g.steady?.restore(rec.steady);
+    if (rec.sight) g.sight?.restore(rec.sight);
     if (rec.bw && g.breakward) { g.breakward.marked = true; g.breakward._shown = ''; g.breakward._hud(); }
     if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;

@@ -11,6 +11,7 @@ const OPTS = { seed: 20261015, mountains: true, seas: true, test: true, deepCave
 const make = (opts = OPTS) => { const d = new TerrainData(); d.generate(opts); d.skipSeaTop = true; return d; };
 // (the newest generation too: the castles' furnished rooms, half blocks, the wizards' roomy houses)
 const OPTS8 = { ...OPTS, slopes: true, wizHuts: true, furnish: true };
+const OPTS11 = { ...OPTS8, bigHouses: true }; // (generation 14: the villagers' roomy houses, the rich in two floors)
 const same = (a, b, what) => {
     assert.equal(a.length, b.length, what + ' length');
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) assert.fail(`${what} differs at ${i}`);
@@ -33,7 +34,7 @@ test('a chunk is the same whatever chunks were made before it, and so is its mes
     }
 });
 
-for (const [name, O] of [['generation 5', OPTS], ['generation 8', OPTS8]]) test(`a castle planned in a worker and sent over is the same plan, and builds the same chunks (${name})`, () => {
+for (const [name, O] of [['generation 5', OPTS], ['generation 8', OPTS8], ['generation 14', OPTS11]]) test(`a castle planned in a worker and sent over is the same plan, and builds the same chunks (${name})`, () => {
     const worker = make(O), here = make(O), plain = make(O);
     // the test castle (cell 0, −1) and its neighbours: planned in the worker, sent (structured clone)
     for (let gz = -2; gz <= 1; gz++) for (let gx = -2; gx <= 1; gx++) {
