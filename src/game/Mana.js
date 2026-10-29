@@ -110,7 +110,7 @@ export function firstSpellGain(name) {
 }
 
 /** A duel charge's name → the spell it came from. */
-export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima' };
+export const DUEL_SPELL_NAME = { SapiraDuel: 'Sapira', SandsDuel: 'Sands', IceDuel: 'Ice', LevitateDuel: 'Levitation', Stupefy: 'Stupefy', AvadaKedavra: 'AvadaKedavra', Expelliarmus: 'Expelliarmus', Disarmor: 'Disarmor', IceDuelMaxima: 'IceMaxima', Accentric: 'Accentric', Pilbidrio: 'Pilbidrio', Die: 'Die', Electrum: 'Electrum', Jolt: 'Jolt', JoltMaxima: 'JoltMaxima', LiquidationDuel: 'Liquidation', LiquidationMaximaDuel: 'LiquidationMaxima' };
 
 /**
  * Magical creatures: the first kill of each kind + this much (to whoever struck the last blow).

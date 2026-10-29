@@ -53,6 +53,7 @@ import { DUEL_SPELL_NAME } from './Mana.js';
 import { AvadaLook, AVADA } from '../fx/AvadaLook.js';
 import { IceLook } from '../fx/IceLook.js';
 import { knockOutOfMyHand, disarmVillager, wizardWandOf } from './Expelliarmus.js';
+import { isLiquidationDuel, duelBreaks, breakMyHeld } from './HeldBreak.js';
 import { wandPower } from './WandMagic.js';
 import { JoltLook } from '../fx/JoltLook.js';
 import { DOOR_SPELLS } from './Doors.js';
@@ -67,7 +68,7 @@ import { segmentToSegment } from './SegmentContact.js';
 export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
-const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor' };
+const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
 export { JERK, sharpJerk } from './Jerk.js';
 
 const _tipP = new THREE.Vector3(), _tipQ = new THREE.Quaternion(), _tipD = new THREE.Quaternion();
@@ -90,6 +91,10 @@ export const DUEL_SPELLS = {
     Expelliarmus: { color: 0xc8102e, name: 'Экспеллиармус', speed: 16, core: 0.045, glow: 0.2, coreColor: 0xffffff },
     // «Disarmor»: a cold steel-grey bolt — the plain armour flies off the one it touches (Armor.js)
     Disarmor: { color: 0x8fa3b8, name: 'Disarmor', speed: 16, core: 0.04, glow: 0.18, coreColor: 0xf2f6ff },
+    // «Liquidation» as a duel charge: a trembling grey-violet lump on a thin dusty trail — it crumbles the thing in the hand
+    // (Liquidation.js / HeldBreak.js); the Maxima is thicker, violet-white, and the loser of its duel loses his wand
+    LiquidationDuel: { color: 0xb8b0c8, name: 'Liquidation (дуэльный)', speed: 15, core: 0.04, glow: 0.18, coreColor: 0xf1ecff, jag: 1.3 },
+    LiquidationMaximaDuel: { color: 0xb68cff, name: 'Liquidation Maxima (дуэльный)', speed: 15, core: 0.06, glow: 0.27, coreColor: 0xffffff, jag: 1.5 },
     // «Джолт»: a short, sharp bolt of invisible air — a pale trembling line, rings of shoved air (JoltLook.js)
     //  (as fast as the other duel charges: there must be time to answer it — or it to answer — and meet: a duel)
     Jolt: { color: 0xa9d6ff, name: 'Джолт', speed: 15.5, core: 0.018, glow: 0.07, coreColor: 0xeaf6ff },
@@ -1023,6 +1028,7 @@ export class Duel {
         if (b.tk === 'p' && b.tid === this.me) { this._arriveAtMe(b); return; } // (my own computer: it knows my shield)
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
+        if (isLiquidationDuel(b.spell) && this._referee() && (b.tk === 's' || b.tk === 'D' || b.tk === 'I')) { this._end(b, 'hit'); this.game.liquidation?._hurt(b.tk, b.tid, b.front, b.o, b.dir, b.by, 'Liquidation'); return; } // (a boss: the splash's −3, attack and anger as the splash does)
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
@@ -1134,6 +1140,9 @@ export class Duel {
             if (spell === 'Disarmor') { g.castleLife?._say?.(c, 'Мою мантию так не снять!', 3); this._joltCreature(c, 'Jolt', src, byId); }
             return;
         }
+        // «Liquidation» (duel): −3 as the splash, and what a humanoid holds in his hand crumbles (HeldBreak.js) — before the
+        // early returns below (a skeleton of the black ship, a living tree: the splash takes a sabre from a skeleton)
+        if (isLiquidationDuel(spell)) { this._liquidationHit(spell, c, src, byId, p); return; }
         // the strong charges and the ice (StrongMagic: Accentric, Pilbidrio, Electrum, «Айс» / «Frozen» and its Maxima)
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature(this._kindOf(c), c, spell, byId, { src, ak: part?.ak, low: part?.low, point: part?.point })) return;
         // a book-bird: any charge knocks it out of the air (it falls as a book)
@@ -1231,6 +1240,20 @@ export class Duel {
         if (!opts?.clash && g.armor?.guard(spell)) return;
         // the strong charges and the ice (StrongMagic.hitMe)
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitMe(spell, byId, side)) return;
+        if (isLiquidationDuel(spell)) {
+            // the grey lump crumbles what is in my hand: the main hand's thing, else the other's (the Maxima: my WAND first —
+            // the loser of its duel loses his wand); −3 HP as the splash; a small shake
+            const B = duelBreaks(spell);
+            g.hud.flashColor?.('rgba(184, 176, 200, 0.4)');
+            if (c.enabled) c.damage(3, byId, 'Liquidation');
+            const r = breakMyHeld(g, B);
+            this._note({ ev: 'liquidated', out: r.out, spell });
+            if (r.out) {
+                g.hud.setVoice(r.out === 'wand' ? '🫧 Ваша палочка рассыпалась в прах!' : r.out === 'weapon' ? '🫧 Оружие в вашей руке рассыпалось в прах!' : r.out === 'shield' ? '🫧 Щит в вашей руке рассыпался в прах!' : '🫧 Вещь в вашей руке рассыпалась в прах!', true);
+            } else g.hud.setVoice(r.why || '🫧 Всплеск попал в вас — в руках ничего не было', true);
+            g.impact?.apply({ v: push(3), from, by: byId, spell: 'Expelliarmus', jolt: 1, noShield: true }); // (a small shove: nothing more)
+            return;
+        }
         if (spell === 'AvadaKedavra') {
             g.hud.flashColor?.(AVADA.HUD); // (the green flash itself: _hitBurst → AvadaLook.hit)
             // the body crumples back (off the feet; up again by a squat)
@@ -1286,6 +1309,7 @@ export class Duel {
         const p = _v1.copy(z.group.position).add(_v2.set(0, 1, 0));
         this._hitBurst(spell, p, 30);
         if ((isStrongDuel(spell) || isIceCharge(spell)) && g.strong?.hitCreature('z', z, spell, byId, { src })) return;
+        if (isLiquidationDuel(spell)) { g.liquidation?._hurt('z', z.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation'); return; } // (−3; nothing in a zombie's hands to crumble)
         if (spell === 'AvadaKedavra') {
             g.damageZombie(z, 25, false, _v2.set(0, 0, 1), byId); // (−25 HP, not certain death)
             if (!z.isDead) g.creatureImpact?.spellHit(z, 'AvadaKedavra', src, byId);
@@ -1924,12 +1948,35 @@ export class Duel {
         if (!core) this.jolt.trail(b, dir, spell === 'JoltMaxima', this._dt || 1 / 60);
     }
 
+    /**
+     * (the host) «Liquidation» (the duel's) on a creature: −3 HP as the splash (Liquidation._hurt: every kind of creature
+     * decides for itself), and a humanoid's hand-held thing crumbles by HeldBreak's rule (the Maxima: the wand first).
+     */
+    _liquidationHit(spell, c, src, byId, p) {
+        const g = this.game, L = g.liquidation;
+        const bk = this._kindOf(c);
+        if (!L || !bk) return;
+        const B = duelBreaks(spell);
+        const stopped = L._hurt(bk, c.id, p, src, _v3.copy(p).sub(src), byId, 'Liquidation');
+        if (!stopped && c.model) L.breakHeld(bk, c.id, p, byId, B.max, src, B.wandFirst, true);
+    }
+
+    /** The grey lump bursts on a body: dust pours down, a violet flash (the Maxima: more, brighter). */
+    _liquidHit(p, n, spell) {
+        const g = this.game, max = spell === 'LiquidationMaximaDuel';
+        this._burst(p, DUEL_SPELLS[spell].color, n);
+        for (let i = 0; i < n; i++) g.fx.spark(p, i % 4 ? (max ? 0xc9a8ff : 0xb8b0c8) : 0x6e655c, 0.05 + Math.random() * 0.07, _v2.set((Math.random() - 0.5) * 1.6, -0.3 - Math.random() * 1.6, (Math.random() - 0.5) * 1.6), 1 + Math.random() * 0.8);
+        g.fx.lightFlash?.(p, max ? 0xb68cff : 0xa8a0c0, max ? 3 : 2, 0.25, 12);
+        g.sound?.playCrumble?.();
+    }
+
     /** Where a charge hits / bursts: «Айс» shatters into ice, «Джолт» rings of air, the others spark. */
     _hitBurst(spell, p, n) {
         if (isJolt(spell)) { this.jolt.hit(p, _v1.set(0, 0, 1), spell === 'JoltMaxima'); if (n >= 30) this.game.sound?.playJolt?.(spell === 'JoltMaxima', true); return; }
         if (isIceCharge(spell)) this.ice?.shatter(p, (n / 30) * (spell === 'IceDuelMaxima' ? 1.5 : 1));
         else if (spell === 'Die') this._burst(p, 0x6a1ab0, n); // (a dark-violet spray: black light adds nothing)
         else if (spell === 'AvadaKedavra') this.avada.hit(p, n); // (the green flash, the ring of poison, the sound)
+        else if (isLiquidationDuel(spell)) this._liquidHit(p, n, spell);
         else this._burst(p, DUEL_SPELLS[spell].color, n);
     }
 

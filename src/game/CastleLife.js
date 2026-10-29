@@ -3834,7 +3834,7 @@ export class CastleLife {
         this._netT = 0.2;
         const r = (x) => Math.round(x * 100) / 100;
         const list = [];
-        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), v.disarmed ? 1 : 0, choreCode(shownChore(v), v.choreSide)]);
+        for (const v of this.byId.values()) list.push([v.id, r(v.x), r(v.y), r(v.z), r(v.yaw), v.mode, Math.round(v.hp * 10) / 10, Math.round(v.armor), v.seated ? 1 : 0, r(v.speed), v.fx | 0, r(v.aimPitch || 0), (v.disarmed ? 1 : 0) | (v.shieldGone ? 2 : 0) | (v.toolGone ? 4 : 0), choreCode(shownChore(v), v.choreSide)]);
         g.sync.villagers?.(list);
     }
 
@@ -3866,7 +3866,10 @@ export class CastleLife {
                 v.fx = fx ?? 0; v.aimPitch = pitch ?? 0;
             }
             // («Экспеллиармус» knocked its sword out: the sword flies / lies about as a weapon of its own)
-            if (disarmed && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
+            // (bits: 1 sword gone, 2 shield gone, 4 tool gone — «Liquidation» crumbles what is in the hand: HeldBreak.js)
+            if ((disarmed & 1) && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); }
+            if ((disarmed & 2) && !v.shieldGone) { v.shieldGone = true; v.model?.dropShield?.(); }
+            if ((disarmed & 4) && !v.toolGone) { v.toolGone = true; v.model?.setHeldTool?.('none'); }
             if (mode === 'dead' && !v.dead) this.game.death?.stripVillager(v); // (its sword lies on the ground now)
             if (mode === 'dead') v.dead = true;
         }

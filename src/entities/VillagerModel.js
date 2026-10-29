@@ -1303,6 +1303,19 @@ export class VillagerModel {
         this._meshes.push(this.tool);
     }
 
+    /** The shield on the left arm crumbled («Liquidation»): gone from the arm and from the far shape. → true if there was one */
+    dropShield() {
+        const s = this.shield;
+        if (!s) return false;
+        s.parent?.remove(s);
+        const i = this._meshes.indexOf(s);
+        if (i >= 0) this._meshes.splice(i, 1);
+        giveGeo(s.geometry);
+        this.shield = null;
+        this._one?.check?.();
+        return true;
+    }
+
     // ------------------------------------------------------------ materials
     _currentMat() { return this._flashT > 0 ? HIT_MAT : this._hl ? HL_MAT : MAT; }
     _applyMaterial() { const m = this._currentMat(); for (const o of this._meshes) o.material = m; if (this._lod) { this._lod.material = m; this._lodMat = m; } }

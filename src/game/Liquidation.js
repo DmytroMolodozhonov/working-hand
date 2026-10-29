@@ -29,7 +29,8 @@
 import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { isMagicItem, isGodGift, ITEM_SCALE } from './ItemTypes.js';
+import { isGodGift, ITEM_SCALE } from './ItemTypes.js';
+import { liquidationNeedsMaxima, breakMyHeld, breakCreatureHeld } from './HeldBreak.js';
 import { pickBody, bendToward, AIM } from './Duel.js';
 
 export const LIQ = {
@@ -45,12 +46,7 @@ const THING_DUST = { cauldron: 0x5a5856, chest: 0x8a6a3a, bed: 0xc8b8a0, door: 0
 
 export const isLiquidation = (name) => name === 'Liquidation' || name === 'LiquidationMaxima';
 
-/** Magic things the plain splash cannot take (the «Максима» can). */
-const MAGIC_KINDS = new Set(['wand', 'hammer', 'iceRod', 'book', 'scroll', 'potion', 'crystal', 'dragonEgg', 'phoenixFeather', 'owlFeather', 'telewilpinLeaf', 'carnivoreHead']);
-export function liquidationNeedsMaxima(it) {
-    if (!it) return false;
-    return isMagicItem(it) || MAGIC_KINDS.has(it.kind);
-}
+export { liquidationNeedsMaxima };
 
 /** The wizards' arcane stone, lamps, runes, potion shelves: magic blocks. */
 export const isMagicBlock = (t) => t >= BLOCK.ARCANE && t <= BLOCK.RUNE;
@@ -89,7 +85,7 @@ export const LIQUIDATION_TARGETS = {
     servants: { does: 'hurt', why: 'свои слуги тоже живые: −3, если попасть' },
     looseThings: { does: 'dust', why: 'любая неживая вещь на земле (еда, оружие, щит, лук, мешочек…) рассыпается в прах; волшебная — только «Максимой»' },
     godGifts: { does: 'none', why: 'дары богов (Ледяной Жезл, пьедесталы Творческого) — не действует даже «Максима»: их защита слишком сильна' },
-    heldThings: { does: 'none', why: 'вещь в руке не трогает — всплеск попадает в руку (живое: −3 HP тому, кто держит)' },
+    heldThings: { does: 'dust', why: 'вещь В РУКЕ человекоподобного (игрок, житель, рыцарь, король, волшебник, моряк, скелет, Чёрные Усы): основная рука, иначе другая; немагическое — рассыпается, волшебное — только «Максимой»; дар богов и палочка арены — нет (HeldBreak.js)' },
     blocks: { does: 'dust', why: 'блок стены, доска, камень, кирпич рассыпается (один блок); волшебный камень башен — только «Максимой»; у замка — это порча: стража заметит' },
     trees: { does: 'none', why: 'дерево живое: всплеск разбивается о ствол, ничего не рассыпается' },
     furniture: { does: 'dust', why: 'котёл, сундук, кровать, дверь — только «Максимой» (обычный всплеск для них мал); костёр, доска для волн — любым; из сундука его вещи выпадают; уничтоженное не появляется снова (запомнено, сохраняется); сундук корабля и повозки, ворота тронного зала и Ледяного замка, вещь в руках — нет (см. THINGS)' },
@@ -355,7 +351,8 @@ export class Liquidation {
         const say = (t) => { if (mine) g.hud.setVoice(t, true); };
         if (h.kind === 'body') {
             this._burst(h.at, max, 18);
-            this._hurt(h.bk, h.id, h.at, origin, d, casterId, name);
+            const stopped = this._hurt(h.bk, h.id, h.at, origin, d, casterId, name);
+            if (!stopped) this.breakHeld(h.bk, h.id, h.at, casterId, max, origin, false); // (and what he holds in his hand crumbles: HeldBreak.js; a shield / the dome that stopped the splash — nothing)
             if (mine) g.mana?.success(name);
             return;
         }
@@ -412,6 +409,36 @@ export class Liquidation {
             return;
         }
         this._burst(h.at, max, 12); // (a ward, a tree, a chest, a door…: it breaks on it)
+    }
+
+    /**
+     * The charge (a splash, or a duel charge — Duel.js) reached the humanoid `bk`/`id`: what is in his hand crumbles.
+     * Me: on my computer (it knows my hands — a guest decides for himself); the others: the host. The caller has
+     * already asked the shields (Protection, the dome, a raised shield): a charge they stopped never gets here. → the caster's word on what happened ('' if nothing to say)
+     */
+    breakHeld(bk, id, at, by, max, origin, wandFirst) {
+        const g = this.game;
+        const mine = by === g.localId || by === 'local';
+        const opts = { max, wandFirst };
+        let r = null;
+        if (bk === 'p') {
+            if (id !== g.localId) return;
+            r = breakMyHeld(g, opts);
+            if (r.out) { this._dust(g.combat.center(_b), 0xb9a77f); g.hud.setVoice('🫧 Вещь в вашей руке рассыпалась в прах', true); }
+            else if (r.why) g.hud.setVoice(r.why, true);
+            return;
+        }
+        if (!g.authority || (bk !== 'v' && bk !== 'c')) return;
+        const c = g.duel?._creature(bk, id);
+        if (!c || c.dead) return;
+        r = breakCreatureHeld(g, c, opts);
+        if (r.out) {
+            this._dust(g.duel._creaturePoint(c, _c).setY(_c.y + 0.9), 0xb9a77f);
+            if (bk === 'v') {
+                if (r.out === 'wand') g.castleLife?._say?.(c, 'Моя палочка!', 3);
+                g.castleLife?.startle?.(c, by, origin, { hit: true }); // (an attack: he turns on the one who did it)
+            } else g.ships?.crew?.startle?.(c, by, origin, { hit: true });
+        } else if (r.why && mine) g.hud.setVoice(r.why, true);
     }
 
     /** The thing a solid box belongs to: {k, id, o, p} | null (a pedestal, a counter, a cart… — null). */
@@ -508,16 +535,16 @@ export class Liquidation {
     _hurt(bk, id, at, origin, d, by, name) {
         const g = this.game;
         if (bk === 'p') {
-            if (id !== g.localId) { const r = g.remotes.get(id); if (r?.shieldBlocks?.(origin)) r.showBlock(origin, g.fx); return; }
+            if (id !== g.localId) { const r = g.remotes.get(id); if (r?.shieldBlocks?.(origin)) { r.showBlock(origin, g.fx); return true; } return false; }
             const c = g.combat;
-            if (!c?.enabled || c.dead) return;
-            if (g.wards?.shields?.(origin, c.center(_b))) return;
-            if (c.shieldFactor(origin) >= 1) { c._blocked(origin, name); return; }
+            if (!c?.enabled || c.dead) return false;
+            if (g.wards?.shields?.(origin, c.center(_b))) return true;
+            if (c.shieldFactor(origin) >= 1) { c._blocked(origin, name); return true; }
             c.damage(LIQ.DMG, by, 'Liquidation');
-            return;
+            return false;
         }
-        if (!g.authority) return;
-        if (g.wards?.shields?.(origin, at)) return;
+        if (!g.authority) return true;
+        if (g.wards?.shields?.(origin, at)) return true;
         const dir = _b.copy(d).setY(0).normalize();
         if (bk === 'z') { const z = g.zombieById?.get(id); if (z && !z.isDead) { z.damageCooldown = 0; g.damageZombie(z, LIQ.DMG, false, dir.clone(), null); } return; }
         if (bk === 's') { const sp = g.spiders?.byId(id); if (sp) g.spiders.hit(sp, LIQ.DMG, 'Liquidation', by); return; }
@@ -533,7 +560,7 @@ export class Liquidation {
         if (bk === 'a') { g.animals?.hit(c, LIQ.DMG, dir.clone(), by); return; }
         if (bk === 'c') { g.ships?.crew.hit(c, LIQ.DMG, dir.clone(), by, { spell: true, magic: true, kind: 'Liquidation' }); return; }
         if (bk === 'v') {
-            if (g.castleLife?.wardOff?.(c, origin, 'Liquidation')) return; // (a raised shield / the Master's dome took it)
+            if (g.castleLife?.wardOff?.(c, origin, 'Liquidation')) return true; // (a raised shield / the Master's dome took it)
             g.castleLife?.hit(c, LIQ.DMG, dir.clone(), by, { spell: true, magic: true });
         }
     }

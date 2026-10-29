@@ -20,6 +20,7 @@
 
 import { crewOrder } from '../ai/TalkFlow.js';
 import { confusedMiss } from './StrongSpells.js';
+import { EXPELLIARMUS } from './Expelliarmus.js';
 import { parseCrewOrder } from './FleetMath.js';
 import { parseCommand, canDo, COMMANDS, sayReply, commandAck } from '../ai/TalkCommands.js';
 import * as THREE from 'three';
@@ -1528,8 +1529,9 @@ export class Sailors {
         const g = this.game;
         if (typeof foeId === 'string' && foeId.charCodeAt(0) === 99 && foeId.charCodeAt(1) === 58) { g.fleet?.strike(v, s, foeId); return; } // (a creature foe: FleetOrders.strike)
         if (confusedMiss(v)) return; // (lost in Accentric's haze: the blow goes wide — StrongSpells)
-        if (foeId === g.localId) g.castleLife?.struck?.(v.dmg, v.x, v.z, v.title);
-        else g.sync?.villagerStrike?.(foeId, v.dmg, Math.round(v.x * 10) / 10, Math.round(v.z * 10) / 10, v.title);
+        const dmg = v.disarmed ? Math.max(1, Math.round(v.dmg * EXPELLIARMUS.FIST)) : v.dmg; // (his weapon crumbled — «Liquidation»: fists)
+        if (foeId === g.localId) g.castleLife?.struck?.(dmg, v.x, v.z, v.title);
+        else g.sync?.villagerStrike?.(foeId, dmg, Math.round(v.x * 10) / 10, Math.round(v.z * 10) / 10, v.title);
     }
 
     /** Overboard: in the water, swimming back to a ladder (or drowning). */
@@ -1936,7 +1938,7 @@ export class Sailors {
         this._netT = (this._netT || 0) + 1;
         if (this._netT % 1 !== 0) return;
         for (const [sid, list] of this.crews) {
-            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0, v.rescue?.buoy ? [Math.round(v.rescue.buoy.x * 10) / 10, Math.round(v.rescue.buoy.y * 10) / 10, Math.round(v.rescue.buoy.z * 10) / 10] : 0, v.ship !== v.crew ? v.ship.id : 0]); // (the last: a boarder's deck — another ship)
+            const l = list.map((v) => [v.idx, Math.round(v.l.x * 100) / 100, Math.round(v.l.y * 100) / 100, Math.round(v.l.z * 100) / 100, Math.round(v.lyaw * 100) / 100, Math.max(0, MODE_CODE.indexOf(v.mode)), v.hp, Math.round(v.armor), v.dead ? 1 : 0, v.overboard ? [Math.round(v.overboard.x * 10) / 10, Math.round(v.overboard.y * 10) / 10, Math.round(v.overboard.z * 10) / 10] : 0, v.rescue?.buoy ? [Math.round(v.rescue.buoy.x * 10) / 10, Math.round(v.rescue.buoy.y * 10) / 10, Math.round(v.rescue.buoy.z * 10) / 10] : 0, v.ship !== v.crew ? v.ship.id : 0, v.disarmed ? 1 : 0]); // (a boarder's deck — another ship; the last: his weapon crumbled — «Liquidation», HeldBreak.js)
             g.sync.net.send({ t: 'screw', id: sid, l });
         }
     }
@@ -1955,6 +1957,7 @@ export class Sailors {
             if (a[8] && !v.dead) { v.dead = true; s?.crewKilled.add(v.idx); v.model?.setHeldTool?.('none'); } // (what was in his hand lies on the deck now: the host's Death.dropHeld)
             v.overboard = Array.isArray(a[9]) ? { x: a[9][0], y: a[9][1], z: a[9][2], vy: 0, t: 0 } : null;
             v.buoyNet = Array.isArray(a[10]) ? { x: +a[10][0] || 0, y: +a[10][1] || 0, z: +a[10][2] || 0 } : null; // (the lifebuoy he threw)
+            if (a[12] && !v.disarmed) { v.disarmed = true; v.model?.setHeldTool?.('none'); } // (his weapon crumbled in his hand)
             const deck = (a[11] && this.ships.list.get(a[11])) || s;
             if (deck && deck !== v.ship) { v.ship = deck; v.net.x = v.l.x = a[1]; v.l.y = a[2]; v.net.z = v.l.z = a[3]; } // (he went over to another deck: no sliding across)
         }

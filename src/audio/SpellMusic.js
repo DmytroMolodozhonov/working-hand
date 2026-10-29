@@ -597,6 +597,10 @@ const FX = {
     },
     /** «Экспеллиармус»: a whip crack and a quick rising zing. */
     fxExpel(sr) { const o = buf(sr, 0.45), r = rng(17); noise(o, sr, 0, 0.06, 0.9, () => 0.95, (u) => 1 - u, r); glide(o, sr, 0.02, 0.4, 0.3, (u) => 600 + 1800 * u, swell(0.05, 0.6), 3); return finish(o, sr, { peak: 0.7 }); },
+    /** «Liquidation» (duel): a trembling lump flying — a dry grating hiss falling in pitch, grit crumbling after it. */
+    fxLiquidDuel(sr) { const o = buf(sr, 0.7), r = rng(23); glide(o, sr, 0, 0.45, 0.28, (u) => 760 - 380 * u + 40 * Math.sin(u * 60), swell(0.04, 0.5), 2); noise(o, sr, 0.02, 0.5, 0.5, (u) => 0.9 - 0.5 * u, (u) => (1 - u) * (0.6 + 0.4 * Math.sin(u * 70)), r); for (const t of [0.3, 0.38, 0.47]) noise(o, sr, t, 0.06, 0.35, () => 0.5, (u) => 1 - u, r); return finish(o, sr, { peak: 0.62 }); },
+    /** «Liquidation Maxima» (duel): the same, lower and heavier — a violet hum under the grit and a deep thud at the end. */
+    fxLiquidDuelMax(sr) { const o = buf(sr, 0.9), r = rng(29); glide(o, sr, 0, 0.6, 0.3, (u) => 520 - 260 * u + 30 * Math.sin(u * 50), swell(0.05, 0.55), 3); glide(o, sr, 0.05, 0.7, 0.18, (u) => 130 - 40 * u, swell(0.1, 0.6), 2); noise(o, sr, 0.02, 0.6, 0.55, (u) => 0.8 - 0.5 * u, (u) => (1 - u) * (0.6 + 0.4 * Math.sin(u * 60)), r); for (const t of [0.4, 0.5, 0.6]) noise(o, sr, t, 0.07, 0.4, () => 0.45, (u) => 1 - u, r); bell(o, sr, 880, 0.02, 0.5, 0.12, 0.8); return finish(o, sr, { peak: 0.66 }); },
     /** «Disarmor»: a zap and the steel ringing loose. */
     fxDisarmor(sr) { const o = buf(sr, 0.8), r = rng(19); glide(o, sr, 0, 0.3, 0.3, (u) => 900 - 400 * u, swell(0.05, 0.6), 4); for (const [t, f] of [[0.12, 2300], [0.24, 1900], [0.33, 2700]]) bell(o, sr, f, t, 0.18, 0.4, 0.8); noise(o, sr, 0, 0.05, 0.4, () => 0.9, (u) => 1 - u, r); return finish(o, sr, { peak: 0.65 }); },
     /** «Акцентрик»: a woozy, wobbling glissando and a ringing that bends out of tune. */
@@ -765,7 +769,7 @@ export const SPELL_SOUND = {
     WaterVortexSuperMaxima: { own: ['splash', 'waterRise'], theme: 'thStorm' },
     GroundVortex: { theme: 'thEarth' }, GroundShield: { cast: 'fxShield' }, // («Ground Vortex»: its tune; the shield word — a short shield chime)
     // the duel charges and the fights (their own short sounds; Duel.js plays them for everyone)
-    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] },
+    Stupefy: { own: ['fxStupefy'] }, AvadaKedavra: { own: ['fxAvada', 'fxAvadaHit'] }, Expelliarmus: { own: ['fxExpel'] }, Disarmor: { own: ['fxDisarmor'] }, LiquidationDuel: { own: ['fxLiquidDuel'] }, LiquidationMaximaDuel: { own: ['fxLiquidDuelMax'] },
     Sapira: { own: ['sapira'] }, Sands: { own: ['sand'] }, Ice: { own: ['ice'] }, Frozen: { own: ['ice'] }, IceMaxima: { own: ['ice'] },
     // the strong duel spells (StrongSpells.js): each its own sound; «Дай» — a dark tune
     Accentric: { cast: 'fxAccentric' }, Pilbidrio: { cast: 'fxPilbidrio' }, Electrum: { cast: 'fxElectrum' }, Die: { cast: 'fxDie', theme: 'thDie' }, MonsterForm: { cast: 'fxMonsterRoar', theme: 'thMonster' }, MonsterBack: { cast: 'fxMonsterBack' }, // («Пентаграмма страшного монстра» — MonsterForm.js: not a spoken spell, the pentagram's)

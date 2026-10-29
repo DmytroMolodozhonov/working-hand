@@ -1861,6 +1861,14 @@ export class Game {
         if (name === 'SuitUp') return this.armor.suitUp(isFinal);
         // «Disarmor» with the wand (the hand) held up to the sky: off ME — my plain steel and a plain robe (Armor.disarmSelf)
         if (name === 'Disarmor') { const h = castingHand(this); if (h && pointsUp(h.dir)) return this.armor.disarmSelf(isFinal); }
+        // «Liquidation» at a creature the raised hand points at is a DUEL charge (Duel.js: it flies, meets other charges in a clash,
+        // «Protection» stops it; it crumbles what the one hit holds in his hand — HeldBreak.js; the Maxima's loser loses his wand);
+        // at a thing, a block, nothing — the splash (Liquidation.js). The same words either way: where the hand points decides.
+        if (name === 'Liquidation' || name === 'LiquidationMaxima') {
+            if (name === 'Liquidation' && !isFinal) return null; // (wait: maybe «… Максима»)
+            const laim = this.duel.pickSide(false, duelRange(name));
+            if (laim) return this._castDuel(name, name === 'Liquidation' ? 'LiquidationDuel' : 'LiquidationMaximaDuel', isFinal, laim, laim.side);
+        }
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? (name === 'IceMaxima' ? 'IceDuelMaxima' : 'IceDuel') : isStrongDuel(name) ? name : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
             const reach = duelRange(name);

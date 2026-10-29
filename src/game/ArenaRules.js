@@ -43,6 +43,8 @@ export const ARENA_SPELLS = {
     Expelliarmus: { rule: 'ok', why: '«Экспеллиармус» — спокойно: так и выигрывают' },
     LevitateDuel: { rule: 'ok', why: '«Вингардиум Левиоса» — можно; смерть от падения после неё — несчастный случай' },
     Accio: { rule: 'ok', why: '«Акцио» — забрать выбитую палочку' },
+    LiquidationDuel: { rule: 'ok', why: '«Liquidation» (дуэльный) берёт только немагическое — волшебную палочку не тронет: можно' },
+    LiquidationMaximaDuel: { rule: 'care', why: '«Liquidation Максима» рассыпает палочку соперника — осторожно: свою палочку соперник получит у распорядителя после дуэли, а чужую (с арены) заклинание не берёт' },
     Protection: { rule: 'ok', why: 'щит — можно' },
     ProtectionMaxima: { rule: 'ok', why: 'купол — можно' },
     IceDuel: { rule: 'care', why: '«Айс» / Frozen — не запрещено, но может ранить' },
