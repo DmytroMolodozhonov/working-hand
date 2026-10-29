@@ -97,6 +97,7 @@ import { Flora } from './Flora.js';
 import { WorldTrees } from './Trees.js';
 import { Sky, SKY_DAY, SKY_NIGHT } from './Sky.js';
 import { applyTreeDetail, applySkyComp, SKY_LIGHT } from './VoxelShading.js';
+import { lightBoost, fogBoost, caveDim, darkness } from '../game/SightRules.js';
 import '../core/Shadows.js'; // (the sun shadow's soft edge: patched into the shaders before they compile)
 
 const GRASS_COLORS = [0x4CAF50, 0x66BB6A, 0x43A047, 0x81C784, 0x388E3C];
@@ -194,7 +195,14 @@ export class VoxelWorld {
         };
         // (every change of day and night writes the base light again: the storm's, the cave's and the rooms' light go on it
         // at once — else the room's light is wiped every ~0.7 s by the day's tick and shows again: a blink)
-        if ((this.storm || 0) > 0 || (this.cave || 0) > 0 || (this.indoor || 0) > 0) this.setStorm(this.storm || 0);
+        if ((this.storm || 0) > 0 || (this.cave || 0) > 0 || (this.indoor || 0) > 0 || (this.nightVision || 0) > 0) this.setStorm(this.storm || 0);
+    }
+
+    /** The night gift («Pentagranium Noctis»): 0…1 — the dark is 50 % brighter and seen 1.5 times as far (SightRules.js). */
+    setNightVision(k) {
+        if (Math.abs(k - (this.nightVision || 0)) < 0.002) return;
+        this.nightVision = k;
+        if (this._base) this.setStorm(this.storm || 0);
     }
 
     /** Inside a cave it is dark (0 = outside, 1 = deep inside). */
@@ -221,16 +229,17 @@ export class VoxelWorld {
         // deep in a cave the daylight doesn't reach the player: their hands, the things by them are
         // dark («Люмос» shows the way) — the land itself keeps the daylight that gets to each block
         // (VoxelShading SKY_LIGHT: the cave's mouth lit, the meadow outside bright as ever)
-        const cv = this.cave || 0, dim = 1 - 0.8 * cv;
+        const cv = this.cave || 0, nv = this.nightVision || 0, dim = caveDim(cv, nv); // (the night gift: the cave 50 % less dark — SightRules.js)
         SKY_LIGHT.comp.value = 1 / dim;
         const ind = this.indoor || 0;
         // indoors: the sun is outside; by day the light of the windows and the door fills the rooms (the walls away from
         // the sun as lit as the others), by night only a faint glow: the rooms are as dark as the night, what lights them
         // is a real light (lantern, torch, fire, «Люмос» — FireLights). Smooth with the night (`b.night` 0…1).
         const lamp = 1 + ind * (0.8 - 0.65 * b.night), fill = 1 + ind * (0.5 - 0.4 * b.night);
-        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp;
-        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind);
-        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * fill;
+        const boost = lightBoost(nv, darkness(b.night, cv)); // (the night gift: ×1…1.5 as dark as it is — the same lights, no new ones)
+        this.ambientLight.intensity = b.amb * (1 - 0.5 * k) * dim * lamp * boost;
+        this.dirLight.intensity = b.dir * (1 - 0.8 * k) * dim * (1 - 0.6 * ind) * (1 + (boost - 1) * 0.6);
+        this.hemiLight.intensity = b.hemi * (1 - 0.5 * k) * dim * fill * boost;
         if (this.scene.fog) {
             this.scene.fog.color.copy(b.fog).lerp(_stormFog, 0.75 * k);
             if (this.scene.background && this.scene.background.isColor) this.scene.background.copy(this.scene.fog.color);
@@ -964,7 +973,7 @@ export class VoxelWorld {
             // How far is drawn (settings) × what the graphics level allows; in flight the
             // view opens up by the same metres at every distance, so the land below is visible
             const q = this.viewScale ?? 1, d = this.viewDistance ?? 1;
-            let far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0));
+            let far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
             this.scene.fog.near = Math.min(this.fogNear * d + viewBoost * 40, far * 0.5);

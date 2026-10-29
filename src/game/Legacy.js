@@ -67,10 +67,11 @@ export function captureLegacy(g) {
         dark: g.dark?.snapshot() || null, // (чёрная магия: уровень тьмы — DarkMagic.js)
         lord: g.darkLord?.legacy() || null, // («настоящий тёмный маг»: наряд, поглощённая мантия, проклятие — DarkLord.js; доспехи в нём не нужны: они падают у тела)
         bw: g.breakward?.marked ? { m: 1 } : null, // (метка «слом защиты»: умирает с прокачками, «Give Me My Power» возвращает)
+        sight: g.sight?.snapshot() || null, // (the night eyes and the sight of the invisible — SecondSight.js)
         steady: g.steady?.snapshot() || null, // («Устойчивость»: Steadiness.js)
         caves: g.caveMap?.snapshot() || null, // (the cave map: what the hero knew of the caves — CaveMap.js)
     };
-    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare;
+    const empty = !rec.hp && !rec.fatigue && !rec.flight && !rec.spells.length && !rec.learned.length && !rec.mana && !rec.ach.length && !rec.caves && !rec.steady && !rec.dark && !rec.lord && !rec.bw && !rec.pent && !rec.bare && !rec.sight;
     return empty ? null : rec;
 }
 
@@ -100,6 +101,7 @@ export function wipeHero(g) {
     g.pentagranium?.restore(null); // (the learnt drawings are lost like the learnt spells)
     g.breakward?.onDeath(); // (метка «слом защиты» снимается смертью; в тело не идёт)
     g.steady?.onDeath(); // (the steadiness is lost like the rest of the growth)
+    g.sight?.onDeath(); // (the night eyes and the sight of the invisible go with the life)
     g.caveMap?.clear(); // (the caves are forgotten: the cave map starts empty)
 }
 
@@ -129,6 +131,7 @@ export function absorbLegacy(g, rec) {
     if (rec.pent) g.pentagranium?.restore(rec.pent);
     if (rec.bare) g.pentagranium?.bareRestore(1);
     if (rec.steady) g.steady?.restore(rec.steady);
+    if (rec.sight) g.sight?.restore(rec.sight);
     if (rec.bw && g.breakward) { g.breakward.marked = true; g.breakward._shown = ''; g.breakward._hud(); }
     if (rec.caves) g.caveMap?.merge(rec.caves);
     const M = g.mana;

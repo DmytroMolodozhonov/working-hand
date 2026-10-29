@@ -35,7 +35,7 @@ import * as THREE from 'three';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
 import { Speech } from '../audio/Speech.js';
-import { ITEM_INFO, itemValue, isMagicItem, newUid } from './ItemTypes.js';
+import { ITEM_INFO, itemValue, isMagicItem, newUid, LOOT_FOR } from './ItemTypes.js';
 import { makeMagicPouch } from './CoinBelt.js';
 import { ARMOR, PIECES, makePiece, makeRobe, armorName, armorValue } from './ArmorTypes.js';
 import { TalkMind, fillerLine, fillerPool, isEnglishText, isShortFiller } from '../ai/TalkMind.js';
@@ -1124,8 +1124,10 @@ export class CastleTalk {
                 const along = c.x1 - c.x0 >= c.z1 - c.z0;
                 for (let k = s.goods.length; k < 3; k++) {
                     const n = cs.def.gx * 7 + cs.def.gz * 13 + i * 5 + k * 3 + Math.floor(now / 600000);
+                    LOOT_FOR.known = g.knownScrollFn?.() || null; // (a scroll I already know is not on the counter — ItemTypes.freshShopScroll; a counter is one for all: the host's knowledge)
                     const wiz = stall.magic ? magicStallGood(n, k) // (a hamlet's seller of magic things — HamletLife.js)
                         : stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
+                    LOOT_FOR.known = null;
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
                     const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     // (the wizards' magic robe / armour piece: made first — its price is by its magic reserve, ArmorTypes.magPrice)

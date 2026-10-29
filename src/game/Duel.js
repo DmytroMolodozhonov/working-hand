@@ -47,6 +47,7 @@ import { spiderBody, spiderCenter } from './Spider.js';
 import { dragonBody, dragonCenter } from './Dragons.js';
 import { phoenixBody, phoenixCenter } from './Phoenixes.js';
 import { owlBody, owlCenter } from './Owls.js';
+import { spencerBody, spencerCenter } from './SpencerBirds.js';
 import { gargoyleBody, gargoyleCenter } from './GargoyleModel.js';
 import { iceBody, iceCenter } from './IceQueen.js';
 import { DUEL_SPELL_NAME } from './Mana.js';
@@ -147,6 +148,7 @@ export const JOLT_TARGETS = {
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
     canary: 'a stocky heavy body (the knight\'s mass): it reels back a step or two, drops its boulder, may be thrown down; no damage; the camp turns on the caster (Canaries.boltHit)',
+    spencer: 'kills: a harmful charge is deadly for so small a body (the feather falls); a disarming or lifting one only startles it — SpencerRules.DUEL_DEADLY',
     gargoyle: 'a stone body of the infernal gargoyle: «Остолбеней» −6, «Джолт» −8 and a shove, the strong charges hurt, «Айс» slows it, «Авада» does not act (not alive) — Gargoyles.boltHit; a body in every charge\'s way (_bodies)',
     bookBirds: 'knocked out of the air: it falls as a book (as by any charge)',
     servants: 'the same creatures as above (a servant is a zombie, a villager, an animal or a tree)',
@@ -548,6 +550,8 @@ export class Duel {
         for (const c of g.canaries?.targets() || []) this._canaryBody(c, put('N', c.id));
         // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
         for (const o of g.owls?.targets() || []) owlBody(o, put('o', o.id));
+        // the invisible bird of Spencer: a small body (every harmful charge kills it; «Экспеллиармус», «Левиоса» only startle — SpencerRules.DUEL_DEADLY)
+        for (const o of g.spencers?.targets() || []) spencerBody(o, put('S', o.id));
         // infernal gargoyles: a big body (a charge is no match for a flier that dodges — it hits as it hits: Gargoyles.boltHit)
         for (const o of g.gargoyles?.targets() || []) gargoyleBody(o, put('g', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
@@ -575,6 +579,7 @@ export class Duel {
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
         if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? this._canaryBody(c, e) : null; }
+        if (kind === 'S') { const o = g.spencers?.byId(id); return o ? spencerBody(o, e) : null; }
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
@@ -708,6 +713,7 @@ export class Duel {
         if (c.isPhoenix) return phoenixCenter(c, out);
         if (c.isOwl) return owlCenter(c, out);
         if (c.isCanary) return out.set(c.model.position.x, c.model.position.y + 1.2, c.model.position.z);
+        if (c.isSpencer) return spencerCenter(c, out);
         if (c.isGargoyle) return gargoyleCenter(c, out);
         if (c.isLivingTree) return out.copy(c.model.position).add(_v2.set(0, 4.5 * (c.model.userData.s || 1), 0));
         if (c.isAnimal) return out.copy(c.group.position).add(_v2.set(0, this._animalBody(c).y, 0));
@@ -734,6 +740,7 @@ export class Duel {
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
         if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
         if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? c : null; } // (a swamp canary)
+        if (kind === 'S') return g.spencers?.byId(id) || null; // (the invisible bird of Spencer)
         if (kind === 'g') return g.gargoyles?.byId(id) || null; // (an infernal gargoyle)
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? p : null; } // (a plant creature)
         return null;
@@ -1108,7 +1115,7 @@ export class Duel {
 
     /** Duel's kind letter of a creature object. */
     _kindOf(c) {
-        return c.isSailor ? 'c' : c.isVillager ? 'v' : c.isAnimal ? 'a' : c.isBird ? 'b' : c.isLivingTree ? 't' : c.isPhoenix ? 'f' : c.isOwl ? 'o' : c.isGargoyle ? 'g' : null;
+        return c.isSailor ? 'c' : c.isVillager ? 'v' : c.isAnimal ? 'a' : c.isBird ? 'b' : c.isLivingTree ? 't' : c.isPhoenix ? 'f' : c.isOwl ? 'o' : c.isSpencer ? 'S' : c.isGargoyle ? 'g' : null;
     }
 
     /**
@@ -1169,6 +1176,8 @@ export class Duel {
         if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
         // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)
         if (c.isOwl) { g.owls?.boltHit(c, spell, byId); return; }
+        // the invisible bird of Spencer: a harmful charge kills it, a disarming / lifting one startles it (SpencerRules.DUEL_DEADLY)
+        if (c.isSpencer) { g.spencers?.boltHit(c, spell, byId); return; }
         // a plant creature: fire burns it, cold shatters a flower / freezes a head, «Авада» and the simplest charges do nothing (Plants.boltHit)
         if (c.isPlantBody) { g.plants?.boltHit(c, spell, byId); return; }
         // an infernal gargoyle: each charge as GargoyleRules.TARGETS says; «Джолт» shoves it too (a flier: it reels, never falls)

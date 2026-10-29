@@ -13,6 +13,7 @@
 
 import { ARENA_SOUNDS, synthArena } from './ArenaSounds.js';
 import { synthOwl, OWL_SOUNDS } from './OwlSounds.js';
+import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
@@ -597,6 +598,8 @@ export class SoundManager {
             ['templeWind', () => this._synthTempleWind(8)], ['templeHall', () => this._synthTempleHall(9)], ['templeChime', () => this._synthChime([1319, 1760, 2349, 2637], 2.4, 1.6)],
             // (the clever owl — Owls.js: hoots, wings, a contented trill, the hearts' chime)
             ...OWL_SOUNDS.map((k) => ['owl_' + k, () => synthOwl(this.context, k)]),
+            // (the invisible bird of Spencer — SpencerBirds.js: a chirp, a trill, small wings)
+            ...SPENCER_SOUNDS.map((k) => ['spencer_' + k, () => synthSpencer(this.context, k)]),
             // (the infernal gargoyles and their ritual — Gargoyles.js: growls, shrieks, wings, bites, stone falling apart, the hellfire's swell)
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
@@ -1805,6 +1808,14 @@ export class SoundManager {
         const key = 'owl_' + kind;
         if (!this.sounds[key]) { if (!OWL_SOUNDS.includes(kind)) return; this.sounds[key] = synthOwl(this.context, kind); }
         this._playAt(this.sounds[key], position, kind === 'wings' ? 0.7 : 1, kind === 'wings' ? 6 : 12, 0.95 + Math.random() * 0.1);
+    }
+
+    /** The bird of Spencer (SpencerBirds.js): 'chirp' | 'trill' | 'wings' — made ahead (prewarmStep). Only a seer ever asks for it. */
+    playSpencer(position, kind = 'chirp') {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'spencer_' + kind;
+        if (!this.sounds[key]) { if (!SPENCER_SOUNDS.includes(kind)) return; this.sounds[key] = synthSpencer(this.context, kind); }
+        this._playAt(this.sounds[key], position, kind === 'wings' ? 0.5 : 0.9, kind === 'wings' ? 5 : 14, 0.96 + Math.random() * 0.1);
     }
 
     /** The infernal gargoyles (Gargoyles.js): 'roar' | 'screech' | 'wings' | 'bite' | 'crumble' | 'shatter' | 'ignite' | 'burst' — made ahead (prewarmStep). */

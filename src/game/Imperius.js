@@ -85,6 +85,7 @@ export const IMPERIUS_TARGETS = {
     spider: { ru: 'гигантская паучиха', magic: true, boss: true },
     bookbird: { ru: 'книга-птица', magic: true, fly: true },
     owl: { ru: 'сова', magic: true, fly: true },
+    spencer: { ru: 'птичка Спенсера', magic: true, fly: true }, // (an invisible bird: only «Максима», and only one who sees the invisible can find it — ImperiusFlyers 'sx')
     gargoyle: { ru: 'адская горгулья', magic: true, fly: true }, // (a creature of the pentagram — only «Максима» takes it; its summoner's 20 s grace does not matter to the mind in it — Gargoyles.js)
     phoenix: { ru: 'феникс', magic: true, fly: true },
     tree: { ru: 'ожившее дерево', magic: true },
@@ -189,6 +190,7 @@ export function kindOf(sys, c = {}) {
         case 'b': return 'bookbird';
         case 'o': return 'owl';
         case 'ca': return 'canary';
+        case 'sx': return 'spencer';
         case 'g': return 'gargoyle';
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';

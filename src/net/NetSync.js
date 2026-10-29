@@ -292,6 +292,8 @@ export class NetSync {
                 dms: g.mana?.mastery || undefined, // (my «дуэльное мастерство»: it counts in a duel — Duel._mastery)
                 sp: g.space?.netPos(), // (in space: my place there — the others draw me by it, Space.js)
                 dk: g.dark?.skin || undefined, // (чёрная магия: мой уровень тьмы — метки на теле видят все)
+                sg: g.sight?.netFlag(), // (I see the invisible: the others draw me as they draw anyone — and draw their invisible players to me see-through)
+                sk: this._knownKeys(), // (the scrolls I already know: a chest I open gives me none of them — SpellBook.knownScroll)
                 im: g.imperius?.netFlag(), // («Империус»: my mind is out of my body — its eyes burn white)
                 mo: g.monster?.netFlag(), // (the monster form: [size, how far changed, the roar] — MonsterForm.js)
             }, true);
@@ -787,6 +789,14 @@ export class NetSync {
     doorAngle(id, a) { this.net.send({ t: 'dang', id, a: Math.round(a * 100) / 100 }, true); }
 
     /** My hero's look, for everybody (on start and whenever somebody joins). */
+    /** The scrolls I know, as keys (SpellBook.scrollKey) — told now and then, so that a chest I open for a friend's world holds none of them. undefined between times. */
+    _knownKeys() {
+        const now = performance.now();
+        if (now - (this._skAt || 0) < 6000) return undefined;
+        this._skAt = now;
+        return [...this.game.myScrollKeys()];
+    }
+
     sendLook() {
         const look = this.game.character.look;
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
@@ -1038,6 +1048,7 @@ export class NetSync {
             case 'plant': g.plants?.onNet(m, this.net.isHost); break; // (telewilpins and carnivorous heads: Plants.js)
             case 'canary': g.canaries?.onNet(m, this.net.isHost); break; // (the swamp Canaries: Canaries.js)
             case 'owl': g.owls?.onNet(m, this.net.isHost); break; // (clever owls: Owls.js)
+            case 'spx': g.spencers?.onNet(m, this.net.isHost); break; // (the invisible birds of Spencer: SpencerBirds.js)
             case 'garg': g.gargoyles?.onNet(m, this.net.isHost); break; // (the infernal gargoyles and their ritual: Gargoyles.js)
             case 'door': if (m.d) g.doors?.applyNet(m.d); break;
             case 'bdnew': case 'bds': case 'bdtake': case 'bdown': case 'bdfree': case 'bdgone': g.boards?.onNet(m); break; // (surfboards)

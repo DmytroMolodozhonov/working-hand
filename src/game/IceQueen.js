@@ -154,6 +154,7 @@ export const ICE_TARGETS = {
     phoenix: { does: 'none', why: 'лёд тает на огненной птице (но это нападение)' },
     owl: { does: 'none', why: 'ледяные существа сову не трогают; холод и «Frozen» (не со свитка) — она увёртывается и улетает' },
     canary: { does: 'none', why: 'ледяные существа канарика не трогают; холод и «Frozen» (не со свитка) замораживают его на несколько секунд' },
+    spencer: { does: 'none', why: 'ледяные существа птичку Спенсера не трогают; холод («Айс», «Frozen») убивает её' },
     gargoyle: { does: 'none', why: 'ледяные существа и горгульи друг друга не трогают (Королева и её слуги не «подряд»); холод замедляет горгулью' },
     bookBirds: { does: 'down', why: 'замёрзшая книга падает' },
     iceCreatures: { does: 'none', why: 'королева, монстры, снеговики — сами изо льда; злыми снеговиками жезл управляет, доброго («Snowman») не трогает' },
@@ -1657,6 +1658,7 @@ export class IceCastleLife {
         if (k === 'f') { const f = g.phoenixes?.byId(id); if (f) g.phoenixes.boltHit(f, 'IceDuel', by); return; }
         if (k === 'g') { const o = g.gargoyles?.byId(id); if (o) g.gargoyles.hit(o, 0, 'Ice', by); return; } // (an infernal gargoyle: the cold slows it — no harm, no freezing)
         if (k === 'N') { const cn = g.canaries?.byId(id); if (cn) g.canaries.hit(cn, 0, 'Frozen', by); return; } // (a canary: the cold stops it for a few seconds)
+        if (k === 'S') { const o = g.spencers?.byId(id); if (o) g.spencers.boltHit(o, 'IceDuel', by); return; } // (the invisible bird: cold kills it)
         if (k === 'o') { const o = g.owls?.byId(id); if (o) g.owls.boltHit(o, 'IceDuel', by); return; } // (an owl: no scroll's — it darts away)
         if (k === 'b') { const b = g.books?.birds?.get(id); if (b) g.books.hitBird(b, 99, 'ice'); return; }
         const c = g.duel?._creature?.(k, id);

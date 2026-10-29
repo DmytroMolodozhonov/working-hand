@@ -61,6 +61,7 @@ export const FLYERS = {
     bookbird: { lift: 3.4, thrust: 2.2, maxUp: 7, maxFwd: 11, gravity: 6, sink: 1.5, drag: 0.35, takeoff: 0, turn: 1.6 },
     owl: { lift: 3.8, thrust: 3.0, maxUp: 8, maxFwd: 16, gravity: 7, sink: 1.3, drag: 0.2, takeoff: 0, turn: 1.5 },
     gargoyle: { lift: 5.0, thrust: 4.0, maxUp: 11, maxFwd: 24, gravity: 8, sink: 1.0, drag: 0.14, takeoff: 0, turn: 1.8 }, // (an infernal gargoyle: strong, quick — Gargoyles.js)
+    spencer: { lift: 3.0, thrust: 3.2, maxUp: 7, maxFwd: 15, gravity: 6, sink: 1.2, drag: 0.22, takeoff: 0, turn: 1.9 }, // (a small songbird: quick to turn, not fast — SpencerBirds.js)
     phoenix: { lift: 4.0, thrust: 3.6, maxUp: 9, maxFwd: 22, gravity: 7, sink: 1.2, drag: 0.16, takeoff: 0, turn: 1.4 },
     pig: { lift: 3.4, thrust: 2.4, maxUp: 7, maxFwd: 11, gravity: 8, sink: 2.2, drag: 0.3, takeoff: 0, turn: 1.3 },
 };

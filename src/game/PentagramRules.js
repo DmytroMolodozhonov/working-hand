@@ -13,6 +13,7 @@
 
 import { PENTAGRAMS as TABLE, registerPentagram } from './Pentagrams.js';
 import { ENCHANT_PENTAGRAM } from './Enchant.js';
+import { NIGHT_LINES, SIGHT_LINES } from './PentagramFigures.js';
 
 export const PENT = {
     COST: 20, // mana at once (Combat.SPELL_COST.Pentagranium)
@@ -96,6 +97,16 @@ registerPentagram({
     id: 'mend', title: 'Пентаграмма починки брони', dark: false, glow: 0xdfe6f0, cost: 'MEND_COST', permanent: true, scroll: 'PentagramMend',
     draw: [{ t: 'circle', r: 1 }, { t: 'poly', pts: [[-0.55, 0.6], [0.55, 0.6], [0.55, -0.05], [0, -0.75], [-0.55, -0.05]] }], // (a shield)
     effect: 'Встаньте на неё — броня, которая на вас, будет починена. Плата за каждую часть своя; на что не хватило маны, то останется как было.',
+});
+
+// The pentagrams of sight (SightRules.js, SecondSight.js): drawn once, they stay; stand in the circle — a gift for good (until death).
+registerPentagram({
+    id: 'night', title: 'Пентаграмма ночного зрения', dark: false, glow: 0x9fb4ff, cost: 50, permanent: true, scroll: 'PentagramNight', lines: NIGHT_LINES,
+    effect: 'Встаньте в круг и заплатите 50 маны — вы навсегда (до смерти) станете видеть в темноте на 50 % лучше: и ночью, и в пещерах.',
+});
+registerPentagram({
+    id: 'sight', title: 'Пентаграмма видения невидимых', dark: false, glow: 0xff7ad9, cost: 150, permanent: true, scroll: 'PentagramSight', lines: SIGHT_LINES,
+    effect: 'Встаньте в круг с пером птички Спенсера (или травой Беслана) и заплатите 150 маны — вы навсегда (до смерти) начнёте видеть всё невидимое.',
 });
 
 registerPentagram({ ...ENCHANT_PENTAGRAM, title: ENCHANT_PENTAGRAM.ru }); // (the enchanting pentagram of the other session: its circle is laid by EnchantCircles — Pentagranium._others)
@@ -191,6 +202,7 @@ export const PENTAGRAM_TARGETS = {
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
+    spencer: { does: 'none', why: 'не касается' },
     bodies: { does: 'rite', why: 'тело убитого волшебника (не кости), с которого герой забрал силу, на пентаграмме сгорает в пепел: +25 % силы убитого, один раз на тело' },
     items: { does: 'none', why: 'вещи на земле не трогает' },
     blocks: { does: 'none', why: 'блоков не ломает; если земля под рисунком изменилась — пентаграмма гаснет' },

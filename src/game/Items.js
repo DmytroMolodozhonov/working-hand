@@ -39,7 +39,8 @@ function oneShape(model) {
     model.userData.one.set(true);
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { seesInvisible, isGhostItem } from './Invisibles.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -108,6 +109,8 @@ const GRIPPED = {
     glass: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
     phoenixFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (by its quill, the vane up out of the fist)
     owlFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (the same: by its quill)
+    spencerFeather: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (the same)
+    beslanGrass: { axis: 'y', handle: 0.05, pose: 'thin', at: [0.13, -0.1] }, // (a sheaf in the fingers)
     telewilpinLeaf: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (a leaf by its short stalk)
     carnivoreHead: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (the torn trap cupped in the fingers)
     brightCore: { axis: 'body', pose: 'ball', at: [0.17, -0.2] }, // (a warm glowing core cupped in the fingers)
@@ -170,7 +173,7 @@ export function backpackSpot(hand, other, shoulder) {
     return null;
 }
 
-export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, telewilpinLeaf: 0.5, carnivoreHead: 0.02, brightCore: 0.03, canaryHide: 0.2, bone: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
+export const AERO = { iceRod: 0.006, book: 0.25, scroll: 0.12, wool: 0.12, backpack: 0.05, shield: 0.04, pie: 0.03, bow: 0.025, bread: 0.02, wand: 0.02, cheese: 0.015, meat: 0.015, steak: 0.015, arrows: 0.01, coins: 0.008, apple: 0.008, redApple: 0.008, baksadi_pear: 0.008, glowcap_mushroom: 0.02, fern_frond: 0.3, azure_berry: 0.01, sun_herb: 0.15, frost_shard: 0.01, logs: 0.006, hammer: 0.004, flask: 0.012, potion: 0.01, web: 0.1, glass: 0.03, crystal: 0.01, dragonEgg: 0.004, phoenixFeather: 0.6, owlFeather: 0.6, spencerFeather: 0.6, beslanGrass: 0.3, telewilpinLeaf: 0.5, carnivoreHead: 0.02, brightCore: 0.03, canaryHide: 0.2, bone: 0.02, armor: 0.003, robe: 0.08 }; // (a feather drifts down slowly)
 
 export class ItemSystem {
     constructor(game) {
@@ -270,6 +273,7 @@ export class ItemSystem {
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
         const items = (bossItems || (chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
+        freshScrolls(items, rng); // (a scroll the opener already knows never comes again)
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();
@@ -818,6 +822,7 @@ export class ItemSystem {
         // loose things: fall, bounce, settle; hovering ones bob
         const me = ch.group.position;
         let spent = 0;
+        const seer = seesInvisible(g);
         for (const L of this.loose.values()) {
             // (far ones — a long game leaves many about the world — not drawn, and a still one not stepped:
             // a hovering one's bobbing and sparks are for the eyes only)
@@ -827,7 +832,7 @@ export class ItemSystem {
             // chests came back all at once; still out of sight there, so a frame later is never seen)
             if (L.away && d < 170 && (spent < 2 || !far)) { const t = performance.now(); this._bringBack(L); spent += performance.now() - t; }
             else if (!L.away && d > 200 && (L.hover || L.rest)) this._putAway(L);
-            L.model.visible = !far;
+            L.model.visible = !far && (!isGhostItem(L.item) || !!L.item.shop || seer); // (Spencer's feather and Beslan's grass: seen only by one who sees the invisible — Invisibles.js)
             if (far && (L.hover || L.rest)) continue;
             if (L.ritual) continue; // (the pentagram of enchanting carries it: EnchantCircles)
             this._physics(L, dt);

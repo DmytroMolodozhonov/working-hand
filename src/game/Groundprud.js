@@ -62,6 +62,7 @@ export const GROUNDPRUD_TARGETS = {
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
+    spencer: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
     blocks: { does: 'build', why: 'вырастает из материала земли под каждым столбцом (камень, песок, земля с травой, снег, гравий, порода планеты); обычные блоки мира: их ломают «Бомбардо», «Gather», Total Destruction и так далее' },
     items: { does: 'lift', why: 'вещи на земле под стеной поднимаются на её верх, а не остаются замурованными' },

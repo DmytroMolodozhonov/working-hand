@@ -575,6 +575,25 @@ const FX = {
         noise(o, sr, 0.1, 1.5, 0.05, (u) => 0.4 + 0.6 * u, swell(0.4, 0.5), r);
         return finish(o, sr, { peak: 0.7 });
     },
+    /** The night eyes: a hush, a cool moon-white swell and four soft bells falling like drops of starlight (E – B – G# – E). */
+    fxNight(sr) {
+        const o = buf(sr, 1.95), r = rng(341);
+        noise(o, sr, 0, 1.4, 0.05, () => 0.5, swell(0.35, 0.55), r);
+        pad(o, sr, ['E3', 'B3', 'G#4'], 0, 1.8, 0.16, { att: 0.35, rel: 0.7, harm: 2, vib: 0.004 });
+        ['E6', 'B5', 'G#5', 'E5'].forEach((n, k) => bell(o, sr, hz(n), 0.25 + k * 0.25, 0.14, 1.0, 0.28));
+        glide(o, sr, 0.1, 1.2, 0.07, (u) => 880 - 300 * u, swell(0.3, 0.5), 2);
+        return finish(o, sr, { peak: 0.7 });
+    },
+    /** The sight of the invisible: an eye opening — a breath, a veiled glide rising through the pink, then a wondering run of bells and a shimmer. */
+    fxSight(sr) {
+        const o = buf(sr, 2.0), r = rng(343);
+        noise(o, sr, 0, 1.0, 0.18, (u) => 0.06 + 0.5 * u, swell(0.4, 0.5), r);
+        glide(o, sr, 0.05, 1.1, 0.1, (u) => 300 + 900 * u * u + 8 * Math.sin(u * 70), swell(0.3, 0.45), 2);
+        ['F#5', 'A#5', 'C#6', 'F#6', 'A#6'].forEach((n, k) => bell(o, sr, hz(n), 0.35 + k * 0.16, 0.15, 1.0, 0.26));
+        pad(o, sr, ['F#3', 'C#4', 'A#4'], 0.6, 1.9, 0.13, { att: 0.3, rel: 0.9, harm: 2, vib: 0.005 });
+        noise(o, sr, 0.8, 0.9, 0.04, () => 0.9, swell(0.2, 0.6), r);
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** A mend: ringing hammer taps on steel, then a silver chime. */
     fxMend(sr) {
         const o = buf(sr, 1.7), r = rng(335);

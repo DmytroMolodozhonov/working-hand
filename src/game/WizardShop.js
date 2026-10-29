@@ -8,7 +8,7 @@
  *    pays for it (so nobody gets rich buying here and selling at the market).
  */
 
-import { newUid, itemValue, SPELL_RU, fitThings } from './ItemTypes.js';
+import { newUid, itemValue, SPELL_RU, fitThings, freshShopScroll } from './ItemTypes.js';
 import { bookSpells, WARD_ID } from './BookBirds.js';
 import { rollChestArmor } from './ArmorTypes.js';
 import { pentagramScroll, figureIds } from './PentagramRules.js';
@@ -88,6 +88,9 @@ export function scrollShopPrice(it) {
 
 /** One scroll for the shop's counter: common 75 % (health / strength), spells 25 % (no flight: only the swift book-bird teaches it). */
 export function rollShopScroll(r = Math.random) {
+    return freshShopScroll(rollShopScroll0(r), r, SHOP_SPELLS); // (a scroll the buyer already knows is another one)
+}
+function rollShopScroll0(r) {
     const x = r();
     if (x < 0.75) return r() < 0.5 ? { kind: 'scroll', uid: newUid(), stat: 'hp', amount: randInt(r, 1, 5) } : { kind: 'scroll', uid: newUid(), stat: 'fatigue', amount: randInt(r, 1, 10) };
     if (x < 0.78) return pentagramScroll(pick(r, figureIds()), newUid()); // (rare: a drawing of a pentagram — the black mage's shop closes to the one with a high black level: DarkMagic)

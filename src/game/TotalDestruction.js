@@ -310,6 +310,7 @@ export class TotalDestruction {
         g.dragons?.hitAt(at, R, BLAST * P, 'TotalDestruction', by);
         g.iceCastle?.hitAt(at, R, BLAST * P, 'TotalDestruction', by); // (a scroll's spell: it hurts the queen too)
         g.phoenixes?.hitAt(at, R, BLAST * P, d.name, by);
+        g.spencers?.hitAt(at, R, BLAST * P, d.name, by); // (the invisible bird: the blast kills it)
         g.owls?.hitAt(at, R, BLAST * P, d.name, by); // (a scroll's spell: it kills an owl)
         g.canaries?.hitAt(at, R, BLAST * P, d.name, by); // (a canary: the blast hurts it, the camp turns on the caster)
         g.gargoyles?.hitAt(at, R, BLAST * P, d.name, by); // (an infernal gargoyle: the blast breaks stone)

@@ -38,7 +38,7 @@ import { Helm } from './Helm.js';
 import { Cannons } from './Cannons.js';
 import { Sailors } from './Sailors.js';
 import { Rigging } from './Rigging.js';
-import { rollShipLoot, rollPirateLoot } from './ItemTypes.js';
+import { rollShipLoot, rollPirateLoot, freshScrolls } from './ItemTypes.js';
 
 const s0 = (chest) => chest?.ship || null;
 import { createRng } from '../core/math.js';
@@ -454,6 +454,7 @@ export class Ships {
     lootChest(chest, pos, count = 0) {
         const g = this.game;
         const items = s0(chest)?.cls.magic ? rollPirateLoot(Math.random, chest.local?.room) : rollShipLoot(Math.random, chest.local?.room === 'captain', count); // (the black ship: the pirates' treasure — ItemTypes.rollPirateLoot)
+        freshScrolls(items); // (a scroll the opener already knows never comes again)
         items.forEach((it, i) => {
             const p = pos.clone().add(_v.set((i - (items.length - 1) / 2) * 0.8, 2.2, 0));
             if (it.kind === 'weapon') {

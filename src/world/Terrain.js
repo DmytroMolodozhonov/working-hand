@@ -271,6 +271,8 @@ export const PENT_STAND_FROM_GEN = 10;
 export const SPAWN_MAPS_FROM_GEN = 11;
 /** The first generation with the Baksadi (the huge violet magic tree with pears: AppleTrees.js, Animals.js) and the new wild plants (MagicFlora.js: glowcaps, giant ferns, azure bushes, sun-herbs, frost crystal-trees). Older worlds have none. */
 export const BAKSADI_FROM_GEN = 12;
+/** The first generation with Beslan's grass (InvisibleFlora.js): a plant that only a hero who sees the invisible sees. Nothing in the land depends on it (it is only drawn), but older worlds keep their meadows as they were. */
+export const INVISIBLE_FLORA_FROM_GEN = 10;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
 // 11: the Creative bosses' places apart (SPAWN_MAPS_FROM_GEN): the dragon in its lair, the ice castle far off, the spider's den.

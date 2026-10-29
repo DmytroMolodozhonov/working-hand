@@ -794,7 +794,7 @@ export class MonsterTransform {
         const add = (l) => { if (l) for (const c of l) out.push(c); };
         add(g.zombies); add(g.combat?.enabled ? g.combat.meleeTargets?.() : null); add(g.animals?.targets?.()); add(g.spiders?.targets?.());
         add(g.dragons?.targets?.()); add(g.phoenixes?.targets?.()); add(g.castleLife?.targets?.()); add(g.livingTrees?.targets?.());
-        add(g.ships?.crew?.targets?.()); add(g.owls?.targets?.()); add(g.canaries?.targets?.()); add(g.iceCastle?.targets?.());
+        add(g.ships?.crew?.targets?.()); add(g.owls?.targets?.()); add(g.spencers?.targets?.()); add(g.canaries?.targets?.()); add(g.iceCastle?.targets?.());
         return out;
     }
 

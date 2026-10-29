@@ -20,6 +20,7 @@ import { dragonBody } from './Dragons.js';
 import { BODY_R } from './Crowd.js';
 import { flap as bookFlap } from './BookBirds.js';
 import { waterAt } from './CreatureSwim.js';
+import { seesInvisible } from './Invisibles.js';
 
 const _v = new THREE.Vector3();
 const TAU = Math.PI * 2;
@@ -208,6 +209,10 @@ function birdAdapter(sys, list, P, opts) {
     };
 }
 
+// (the invisible bird of Spencer — SpencerBirds.js: «Максима» only; only one who sees the invisible can find it with the eyes; its poses are its own: fly / glide / perch / hop)
+const spencers = birdAdapter('sx', (g) => g.spencers?.list || [], FLYERS.spencer, { up: 0.5, size: 0.9, walk: 1.6, walkMode: 'hop', r: 0.3, reach: 1.2, dmg: 1, modeMap: { flap: 'fly', stand: 'perch' } });
+const spencerList = spencers.list;
+spencers.list = (g, fn) => { if (seesInvisible(g)) spencerList.call(spencers, g, fn); }; // (the eyes find it only if they see the invisible; the host still finds a guest's bird by its id)
 const owls = birdAdapter('o', (g) => g.owls?.list || [], FLYERS.owl, { up: 0.8, size: 1.3, walk: 1.3, walkMode: 'hop', r: 0.35, reach: 1.4, dmg: 2 });
 // (an infernal gargoyle — Gargoyles.js: «Максима» only; flaps are 'fly', the ground is a hover; released it goes back to its hunt: its mind and its pentagram's leash)
 const gargoyles = birdAdapter('g', (g) => g.gargoyles?.list || [], FLYERS.gargoyle, { up: 1.4, size: 2.4, walk: 3.5, walkMode: 'walk', r: 0.8, reach: 2.6, dmg: 4, modeMap: { flap: 'fly', stand: 'hover', walk: 'hover', hop: 'hover' }, onRelease: (g, o) => { o.mode = 'roam'; o.goal = null; o.target = null; } });
@@ -250,6 +255,7 @@ const books = {
 
 BODIES.D = dragons;
 BODIES.o = owls;
+BODIES.sx = spencers;
 BODIES.g = gargoyles;
 BODIES.f = phoenixes;
 BODIES.b = books;
@@ -278,5 +284,5 @@ export function animalWings(g, a, I, dt) {
 }
 
 /** (tests) the bodies of the Maxima. */
-export const FLYER_SYSTEMS = ['D', 'o', 'f', 'b', 'g'];
+export const FLYER_SYSTEMS = ['D', 'o', 'f', 'b', 'g', 'sx'];
 export { BODY_R };

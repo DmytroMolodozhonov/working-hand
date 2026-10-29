@@ -36,6 +36,8 @@ import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
 import { owlDist } from './Owls.js';
+import { spencerBody } from './SpencerBirds.js';
+const _spCap = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }, _spV = new THREE.Vector3();
 import { gargoyleDist } from './GargoyleModel.js';
 import { iceBody } from './IceQueen.js';
 import { segmentSegmentDistSq } from '../core/math.js';
@@ -519,6 +521,15 @@ export class Gear {
                     a.hit.add(o);
                     g.canaries.hit(o, a.dmg, 'arrow', a.by);
                     if (!o.dead) this._stick(a, o.model);
+                }
+                // the invisible bird of Spencer (SpencerBirds.js): an arrow kills it (the little body is hit wherever the shaft passes it)
+                if (g.authority) for (const o of g.spencers?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const c = spencerBody(o, _spCap);
+                    _spV.copy(c.a).lerp(c.b, 0.5);
+                    if (_spV.distanceTo(p) > c.r + 0.2) continue;
+                    a.hit.add(o);
+                    g.spencers.hit(o, a.dmg, 'arrow', a.by);
                 }
                 // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
                 if (g.authority) for (const o of g.gargoyles?.targets() || []) {

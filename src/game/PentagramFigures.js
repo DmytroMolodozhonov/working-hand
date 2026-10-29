@@ -67,3 +67,37 @@ export const VITALITY_LINES = [
     ...chain(2, 6, 8, 10, 14), // чаша под каплей
     ...chain(0, 14), ...chain(0, 2), // вены сверху к кольцу
 ];
+// ---------------------------------------------------------------- the pentagrams of sight (white magic)
+/** An open curve through `pts` ([x, y] each) → separate segments (every one its own two-point line). */
+const curve = (pts) => pts.slice(1).map((q, k) => [pts[k], q]);
+/** `n + 1` points of an arc of the circle (cx, cy, r) from angle `a0` to `a1` (radians, 0 = right, counter-clockwise). */
+const arc = (cx, cy, r, a0, a1, n) => Array.from({ length: n + 1 }, (_, k) => { const a = a0 + ((a1 - a0) * k) / n; return [+(cx + Math.cos(a) * r).toFixed(4), +(cy + Math.sin(a) * r).toFixed(4)]; });
+const pt = (x, y) => [+x.toFixed(4), +y.toFixed(4)];
+
+/**
+ * «Ночное зрение» (Pentagranium Noctis): a crescent moon, horns to the right, and a four-pointed star glittering in its bay —
+ * an outer arc, an inner arc through the same two horn tips, and the star as a closed little figure.
+ */
+export const NIGHT_LINES = (() => {
+    const A = pt(0.55, 0.71), B = pt(0.55, -0.71), c = 0.45, r = Math.hypot(0.55 - c, 0.71);
+    const outer = arc(0, 0, 0.9, Math.atan2(0.71, 0.55), Math.PI * 2 - Math.atan2(0.71, 0.55), 18); // (the long way round, through the left)
+    const a0 = Math.atan2(0.71, 0.55 - c), a1 = Math.PI * 2 - a0;
+    const inner = arc(c, 0, r, a0, a1, 14).reverse(); // (from the lower horn round to the upper through the left: bulging towards the left)
+    void A; void B;
+    const sx = 0.52, s = 0.2, t = 0.05; // the star
+    const star = [pt(sx, s), pt(sx + t, t), pt(sx + s, 0), pt(sx + t, -t), pt(sx, -s), pt(sx - t, -t), pt(sx - s, 0), pt(sx - t, t)];
+    return [...curve(outer), ...curve(inner), star];
+})();
+
+/**
+ * «Видение невидимых» (Pentagranium Spectris): an open eye — the almond of the lids (two arcs from corner to corner), a ring for the
+ * iris, a diamond for the pupil, and five short lashes fanning over the upper lid.
+ */
+export const SIGHT_LINES = (() => {
+    const lid = (amp) => Array.from({ length: 13 }, (_, k) => { const t = -1 + k / 6; return pt(0.95 * t, amp * Math.pow(1 - t * t, 0.8)); });
+    const upper = lid(0.55), lower = lid(-0.42);
+    const iris = arc(0, 0, 0.3, 0, Math.PI * 2, 14).slice(0, -1);
+    const pupil = [pt(0, 0.12), pt(0.1, 0), pt(0, -0.12), pt(-0.1, 0)];
+    const lashes = [-0.6, -0.3, 0, 0.3, 0.6].map((x) => [pt(x * 0.95, 0.55 * Math.pow(1 - x * x, 0.8) + 0.04), pt(x * 1.08, 0.55 * Math.pow(1 - x * x, 0.8) + 0.2)]);
+    return [...curve(upper), ...curve(lower), iris, pupil, ...lashes];
+})();

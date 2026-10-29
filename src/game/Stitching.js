@@ -273,6 +273,7 @@ export const STITCH_TARGETS = {
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
+    spencer: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
     blocks: { does: 'build', why: 'проход закладывается блоками того же камня / кирпича / дерева, что вокруг; это обычная твёрдая стена — Бомбардо и другие её ломают' },
     houses: { does: 'build', why: 'проём без двери в доме или в стене замка заделывается; дверь, если стоит, — не пустота: её не сшить' },

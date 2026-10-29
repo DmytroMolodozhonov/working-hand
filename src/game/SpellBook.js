@@ -76,3 +76,32 @@ export function howLearned(name) {
     if (BOOK_SPELLS.has(teachKey(name)) && teachKey(name) !== 'CreateBoard') return 'book';
     return 'scroll';
 }
+
+// ---------------------------------------------------------------- scrolls already known never turn up again (the author)
+/**
+ * The author: «если игрок уже сжёг/выучил этот свиток, то этот свиток больше никогда ему не попадётся (сундуки, лавки, птицы, боссы)». The knowledge is
+ * PERSONAL: what a chest holds is rolled at the moment it is opened, for the one who opens it (ItemTypes.LOOT_FOR.known). A spell's scroll is named by the
+ * scroll that teaches it (`teachKey`: a Maxima that a scroll of its own teaches is its own key), a drawing's scroll by the figure.
+ * @returns {string|null} 's:<key>' | 'p:<figure>' | null (a scroll of health / strength, or not a scroll: never "known")
+ */
+export function scrollKey(it) {
+    if (!it || it.kind !== 'scroll') return null;
+    if (it.stat === 'spell' && it.spell) return 's:' + teachKey(it.spell);
+    if (it.stat === 'pentagram' && it.pent) return 'p:' + it.pent;
+    return null;
+}
+
+/** The set of scroll keys a hero has already burnt or learnt: `who` { spells (bonus.spells), learned (books.learned), pent (the figures seen) }. */
+export function knownScrollKeys(who = {}) {
+    const out = new Set();
+    for (const [k, v] of Object.entries(who.spells || {})) if (v) out.add('s:' + k);
+    for (const k of who.learned || []) out.add('s:' + k);
+    for (const k of who.pent || []) out.add('p:' + k);
+    return out;
+}
+
+/** Does this hero already know the scroll `it`? `keys`: knownScrollKeys(...) | a Set of keys. */
+export function scrollKnown(it, keys) {
+    const k = scrollKey(it);
+    return !!k && !!keys && keys.has(k);
+}
