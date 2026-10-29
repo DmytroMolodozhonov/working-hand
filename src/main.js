@@ -1128,9 +1128,11 @@ async function startGameInner(config, welcome) {
         const waitPose = setInterval(() => {
             // (and a few frames drawn behind this screen first: what the first frames compile and send
             // to the graphics card — new models, the sea's waves — happens here, not in the first seconds of play)
-            // (automated tests draw in software, a frame a second: they don't wait)
-            const warm = game.frameCount - frame0 >= 30 || performance.now() - started > 4000 || window.__ZNS_FIXED_QUALITY__;
-            if (!warm) return;
+            // (automated tests draw in software, a frame a second: they don't wait for the smooth run)
+            // the screen closes only when the game is really ready — the ground around, the shaders, 30 smooth frames in a row
+            // (Game.readyToShow; the safety stopwatch of 45 s inside it; the tests' software drawing skips only the smooth run)
+            const rd = game.readyToShow(started, { needCalm: !window.__ZNS_FIXED_QUALITY__ });
+            if (!rd.ok) { updateProgress(90 + Math.round(rd.frac * 9), rd.text); return; }
             // (Creative «Где появиться»: the hero is carried to the chosen place behind this screen — no start platform seen first, no visible jump;
             //  held until the ground there is made and a few frames are drawn on it; a place that cannot be made gives up in 75 s: HeroApply says why)
             if (game.heroApply?.pending && performance.now() - started < 75000) { settleFrame = null; updateProgress(100, 'Переносим к выбранному месту...'); return; }

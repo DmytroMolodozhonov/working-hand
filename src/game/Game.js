@@ -229,6 +229,8 @@ const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
 /** The Creative test dragon: on its own peak of the test mountain, away from the queen's ice castle (Terrain.TEST_DRAGON_SPOT). */
+/** When the loading screen may close (Game.readyToShow): a run of smooth frames, and a safety stopwatch. */
+export const READY = { CALM_FRAMES: 30, CALM_MS: 25, MAX_S: 45 };
 const TEST_DRAGON = { id: 'ctest-dragon', ...TEST_DRAGON_SPOT };
 /** A zombie in deep water: floats like a person (its chest at the top), slow, any bank of a step it climbs; no air to run out. */
 const ZOMBIE_SWIM = { ...SWIMMERS.person, speed: 0.9, float: 2.1, air: Infinity }; // (float: the feet this far under the top — the water at its chest)
@@ -3616,6 +3618,36 @@ export class Game {
         try { const f = this.world?.forest; if (f) for (const step of f.warmSteps()) { step(); await new Promise((r) => setTimeout(r, 0)); } } catch (e) { console.warn('[Game] trees warm-up', e); }
     }
 
+    /**
+     * May the loading screen close? (the author, 29.10: «секунд 5 игра подвисает… окно загрузки заканчивалось так рано —
+     * резко исчезало, а игра ещё не готова».) Only when the game is really ready: the ground around the hero is all built and
+     * shown, the shaders are compiled, and the last `READY.CALM_FRAMES` frames in a row were shorter than `READY.CALM_MS`.
+     * Never for ever: after `READY.MAX_S` seconds the screen closes anyway and the journal says what was missing.
+     * @param {number} sinceMs  performance.now() of the game's start (the safety stopwatch)
+     * @param {{needCalm?: boolean}} [opts]  false in automated tests (software drawing: a frame a second)
+     * @returns {{ok: boolean, frac: number, text: string, why: string|null}}  frac 0…1 for the bar, text for the line under it
+     */
+    readyToShow(sinceMs, { needCalm = true } = {}) {
+        const tv = this.world?.terrain;
+        const late = performance.now() - sinceMs > READY.MAX_S * 1000;
+        const ground = !tv || tv.settled();
+        const shaders = !!this._prewarmed;
+        const calm = needCalm ? Math.min(READY.CALM_FRAMES, this._calmFrames || 0) : READY.CALM_FRAMES;
+        const frac = ((ground ? 1 : 0) + (shaders ? 1 : 0) + calm / READY.CALM_FRAMES) / 3;
+        const miss = [];
+        if (!ground) miss.push('мир');
+        if (!shaders) miss.push('шейдеры');
+        if (calm < READY.CALM_FRAMES) miss.push(`плавность кадров ${calm}/${READY.CALM_FRAMES}`);
+        const ok = !miss.length;
+        if (late && !ok) {
+            const why = `экран загрузки закрыт по времени (${READY.MAX_S} с), не готово: ${miss.join(', ')}`;
+            if (!this._lateNoted) { this._lateNoted = true; console.warn('[Game]', why); this.perf?.note(why); }
+            return { ok: true, frac: 1, text: '', why };
+        }
+        const stage = !ground ? 'Мир…' : !shaders ? 'Шейдеры…' : 'Текстуры и плавность кадров…';
+        return { ok, frac, text: `${stage} ${Math.round(frac * 100)}%`, why: null };
+    }
+
     start() {
         this.active = true;
         this.lastTime = performance.now();
@@ -3690,6 +3722,8 @@ export class Game {
         const dt = Math.min(deltaTime, 0.1);
         this.frameCount++;
         this._noteSpike(deltaTime * 1000, t0);
+        // (the run of calm frames in a row — Game.readyToShow: the loading screen closes only on a smooth picture)
+        this._calmFrames = this.frameCount > 1 && deltaTime * 1000 < READY.CALM_MS ? (this._calmFrames || 0) + 1 : 0;
         const parts = this._parts || (this._parts = {});
         let tm = t0;
         const mark = (name) => { const n = performance.now(); parts[name] = n - tm; tm = n; };

@@ -497,6 +497,11 @@ export class Terrain {
         return Math.ceil(this.viewDistance / CHUNK);
     }
 
+    /** Nothing left to build, in flight or to merge: the ground around is all shown (Game.readyToShow — the loading screen may close). */
+    settled() {
+        return !this._queue.length && !this._inFlight.size && !this._done.length && !this._local.length;
+    }
+
     /** Build every chunk around a point right now (loading screen). */
     flushAround(x, z) {
         this._center = null;

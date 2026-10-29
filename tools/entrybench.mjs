@@ -16,8 +16,10 @@ const CPU = parseFloat(opt('cpu', '1'));
 const GEN = opt('gen', null);
 const CHECK = args.includes('--check');
 const PROFILE = args.includes('--profile');
+const AFTER = parseFloat(opt('after', '10'));
+const window0 = () => 0;
 /** --check: пороги входа (только ужесточать). */
-const LIMITS = { longestMs: 9000, firstFrameS: 100, groundS: 200 }; // (в контейнере видеокарта программная — шейдеры и буферы в ней медленные: 29.10 до правки самая долгая задача 30 с, после 7 с; на настоящей видеокарте в разы меньше. Только ужесточать)
+const LIMITS = { afterMs: 120, longestMs: 9000, firstFrameS: 100, groundS: 200 }; // (в контейнере видеокарта программная — шейдеры и буферы в ней медленные: 29.10 до правки самая долгая задача 30 с, после 7 с; на настоящей видеокарте в разы меньше. Только ужесточать)
 
 const port = 8900 + Math.floor(Math.random() * 100);
 const srv = await startServer(port);
@@ -57,11 +59,21 @@ try {
     const tFrame = (Date.now() - w0) / 1000;
     await poll('ground', () => { const g = window.__zns.game; return (g.terrain._queue?.length ?? 1) === 0 && g.frameCount > 120; }, 300000);
     const tGround = (Date.now() - w0) / 1000;
+    // после закрытия экрана загрузки: сколько долгих задач в первые 10 с (жалоба 29.10: «секунд 5 игра подвисает»)
+    await poll('reveal', () => window.__zns.game.revealed === true, 300000);
+    await page.evaluate(() => { window.__tr = performance.now(); window.__trF = window.__zns.game.frameCount; });
+    await sleep(Math.round(AFTER * 1000));
+    const post = await page.evaluate(() => {
+        const g = window.__zns.game;
+        return { frames: g.frameCount - window.__trF, queue: g.terrain?._queue?.length ?? -1, lt: window.__lt.filter((e) => e.t >= window.__tr).sort((a, b) => b.d - a.d) };
+    });
     const lt = await page.evaluate(() => window.__lt.filter((e) => e.t >= window.__t0).sort((a, b) => b.d - a.d));
     console.log(`\n=== вход: ${MODE}, место ${SPOT}${GEN ? ', поколение ' + GEN : ''}, CPU ×${CPU}`);
     console.log(`игра началась: ${tActive.toFixed(1)} с, первый кадр: ${tFrame.toFixed(1)} с, земля готова: ${tGround.toFixed(1)} с`);
     console.log(`долгих задач: ${lt.length}, самая долгая: ${(lt[0]?.d || 0).toFixed(0)} мс, сумма: ${(lt.reduce((a, b) => a + b.d, 0) / 1000).toFixed(1)} с`);
     for (const e of lt.slice(0, 8)) console.log(`   +${((e.t - t0) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
+    console.log(`ПОСЛЕ ЗАКРЫТИЯ ЭКРАНА (${AFTER} с): кадров ${post.frames}, очередь чанков ${post.queue}, долгих задач ${post.lt.length}, самая долгая ${(post.lt[0]?.d || 0).toFixed(0)} мс, сумма ${(post.lt.reduce((a, b) => a + b.d, 0) / 1000).toFixed(1)} с`);
+    for (const e of post.lt.slice(0, 8)) console.log(`   +${((e.t - window0(e)) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
     const inf = await page.evaluate(() => { const g = window.__zns.game, i = g.renderer.info; const by = {}; for (const p of i.programs) by[p.name] = (by[p.name] || 0) + 1; return { programs: i.programs.length, geometries: i.memory.geometries, textures: i.memory.textures, by, prewarmed: g.prewarmedPrograms }; });
     console.log(`шейдеров: ${inf.programs} (после прогрева ${inf.prewarmed}), геометрий ${inf.geometries}, текстур ${inf.textures}`, JSON.stringify(inf.by));
     if (PROFILE) {
@@ -83,6 +95,7 @@ try {
     if (CHECK) {
         const bad = [];
         if ((lt[0]?.d || 0) > LIMITS.longestMs) bad.push(`самая долгая задача ${lt[0].d.toFixed(0)} мс > ${LIMITS.longestMs}`);
+        if ((post.lt[0]?.d || 0) > LIMITS.afterMs) bad.push(`после закрытия экрана задача ${post.lt[0].d.toFixed(0)} мс > ${LIMITS.afterMs}`);
         if (tFrame > LIMITS.firstFrameS) bad.push(`первый кадр ${tFrame.toFixed(1)} с > ${LIMITS.firstFrameS}`);
         if (tGround > LIMITS.groundS) bad.push(`земля ${tGround.toFixed(1)} с > ${LIMITS.groundS}`);
         if (bad.length) { console.log('ПРОВАЛ:\n  ' + bad.join('\n  ')); out = 1; } else console.log('ОК');
