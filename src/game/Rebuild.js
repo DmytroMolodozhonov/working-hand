@@ -507,6 +507,8 @@ export class Rebuild {
         this._sendSite(s);
         this.sites.delete(s.def.id);
         this.game.burnWreck?.rebuilt(s.def); // (its burnt chests stand in the houses again)
+        const cs = this.life.castles.get(s.def.id), owner = this.life.state(s.def.id).owner;
+        if (cs && owner) this.life.reb?.note(cs, owner, 'repair'); // (the place mended: the unrest eases a little — Rebellion.js)
         const g = this.game, me = g.character?.group.position;
         if (me && this.life._inLand(s.def, me, 40)) g.hud?.toast?.(`🏗️ Строители закончили: ${s.def.name || 'замок'} снова как был`);
     }

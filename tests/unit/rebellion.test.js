@@ -183,3 +183,14 @@ test('game: merchants refuse the king in a hated place, and not in a calm one', 
     assert.equal(refused, 1); assert.ok(said.length >= 1);
     assert.equal(life.reb.refusesTrade(m, 'other'), false, 'only the owner is refused');
 });
+
+test('game: repairs and a stone monster brought down ease the unrest of the owner\'s place (and only his)', () => {
+    const { life, cs } = world();
+    life.reb.note(cs, 'me', 'slainKing');
+    const a = life.reb.value(cs);
+    life.reb.note(cs, 'me', 'repair'); assert.ok(life.reb.value(cs) < a);
+    const b = life.reb.value(cs);
+    life.reb.note(cs, 'me', 'saved'); assert.ok(life.reb.value(cs) < b);
+    const c = life.reb.value(cs);
+    life.reb.note(cs, 'other', 'repair'); assert.equal(life.reb.value(cs), c);
+});

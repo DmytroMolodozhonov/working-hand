@@ -647,6 +647,7 @@ export class Gargoyles {
         if (this.auth) {
             this._send({ op: 'die', id: o.id, p: [r1(p.x), r1(p.y), r1(p.z)], s: shatter ? 1 : 0 });
             creditKill(g, by, { kind: KILL_KIND });
+            if (by != null) g.castleLife?.rel?.foeSlain(p, by); // (the people saw the stone monster fall: grateful, and the unrest of the place eases — Rebellion.js)
         }
         this._sound(o, shatter ? 'shatter' : 'crumble', 1);
         setTimeout(() => this._remove(o), 50);
