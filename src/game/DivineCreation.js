@@ -312,7 +312,7 @@ export class DivineCreation extends HouseMagic {
                 } catch (e) { /* (no hands yet) */ }
             }
             if (M.at) this.fx2.seed({ x: M.at.x, y: M.at.y, z: M.at.z, t: M.t, u: 0, wand: M.wand || null, listen: true }, dt);
-            this._hum = Math.max(this._hum || 0, 0.6); // (the epic tune from the first word)
+            this._hum = Math.max(this._hum || 0, 0.75); // (the epic tune from the first word)
         }
         // (another player's gods listening: their small seed where their wand points)
         if (this._lisOf?.size) for (const [k, o] of this._lisOf) {
@@ -332,7 +332,7 @@ export class DivineCreation extends HouseMagic {
         if (this.magic) return '✨ Сейчас идёт другое творение — подождите, пока оно закончится';
         if (!this.free && !g.items?.heldOf?.('wand') && !this.testAim) return '🪄 Возьмите палочку в руку и направьте её туда, где боги должны создать';
         if (manaRules(g) && !this.free && g.combat.fatigue < CREATION.COST) return `😮‍💨 Не хватает маны: нужно ${CREATION.COST}, есть ${Math.floor(g.combat.fatigue)}`;
-        const kind = kindOfDesc(desc);
+        const kind = saidKind(desc) || kindOfDesc(desc);
         if (kind !== 'build' && !this._air()) return `🌌 Здесь нет воздуха — ${kind === 'plant' ? 'растение' : 'существо'} здесь не выживет. Постройку создать можно`;
         return null;
     }
@@ -342,7 +342,7 @@ export class DivineCreation extends HouseMagic {
         desc = desc.slice(0, CREATION.DESC_MAX);
         const no = this._check(desc);
         if (no) return say(no);
-        const kind = kindOfDesc(desc);
+        const kind = saidKind(desc) || kindOfDesc(desc);
         const at = this._aim();
         if (!at) return say('🪄 Направьте палочку на землю, где боги должны создать');
         const me = g.character.group.position;
@@ -407,9 +407,9 @@ export class DivineCreation extends HouseMagic {
         const y = g.collision?.groundY?.(at[0], at[2]) ?? at[1];
         const dx = at[0] - c[0], dz = at[2] - c[2], dl = Math.hypot(dx, dz) || 1;
         const wand = Array.isArray(ask.wand) && ask.wand.length === 3 && ask.wand.every((v) => Number.isFinite(+v)) ? ask.wand.map(Number) : null;
-        this.magic = { id, by, key, phase: 'seed', t: 0, u: 0, x: at[0], y, z: at[2], c, dir: [dx / dl, dz / dl], desc, seed: (Math.random() * 0x7fffffff) | 0, wand: wand ? { x: wand[0], y: wand[1], z: wand[2] } : null, beat: 0, progT: 0 };
+        this.magic = { id, by, key, phase: 'seed', t: 0, u: 0, x: at[0], y, z: at[2], c, dir: [dx / dl, dz / dl], desc, kindHint: ['build', 'creature', 'plant'].includes(ask.kind) ? ask.kind : 'build', seed: (Math.random() * 0x7fffffff) | 0, wand: wand ? { x: wand[0], y: wand[1], z: wand[2] } : null, beat: 0, progT: 0 };
         this._lastBy.set(key, Date.now());
-        g.sync?.net?.send({ t: this.netType, a: 'seed', id, by, x: r2(at[0]), y: r2(y), z: r2(at[2]), wand });
+        g.sync?.net?.send({ t: this.netType, a: 'seed', id, by, x: r2(at[0]), y: r2(y), z: r2(at[2]), wand, k: this.magic.kindHint });
         this._seedStart(this.magic);
         g.castleLife?.alarm?.({ x: at[0], y, z: at[2] }, 'creation', by, 20);
         if (by === g.localId) this._think(id, desc);
@@ -848,7 +848,7 @@ export class DivineCreation extends HouseMagic {
                 // (my own seed: its stream of light from the wand's tip as the wand moves)
                 if (m.by === g.localId && (m.tipT = (m.tipT || 0) - dt) <= 0) { m.tipT = 0.15; const side = g.wandSide?.() || g.magicHand || 'right'; const h = this._tip(side); if (h) m.wand = { x: h.x, y: h.y, z: h.z }; }
                 this.fx2.seed(m, dt);
-                this._hum = 0.85 * Math.max(0, 1 - d / 160); // (the epic tune louder: the words heard)
+                this._hum = Math.max(0, 1 - d / 180); // (the epic tune louder: the words heard)
             } else {
                 this._hum = m.phase === 'grow' ? Math.max(0, 1 - d / 200) : 0; // (the loudest while it is built)
                 if (m.phase === 'grow') this.fx2.grow(m, dt, this.look);
@@ -1052,7 +1052,7 @@ export class DivineCreation extends HouseMagic {
             case 'recipe': if (isHost && m.recipe && typeof m.recipe === 'object') this._hostRecipe(m.id, m.recipe, from); break;
             case 'u': if (isHost && this.magic?.id === m.id && this.magic.by === from) this.magic.u = Math.max(this.magic.u || 0, Math.min(1, +m.u || 0)); break;
             case 'fade': if (isHost && this.magic?.id === m.id && this.magic.by === from) this._hostFade(m.id, null, false); break;
-            case 'seed': if (!isHost) { this.magic = { id: m.id, by: m.by, phase: 'seed', t: 0, u: 0, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, wand: Array.isArray(m.wand) ? { x: m.wand[0], y: m.wand[1], z: m.wand[2] } : null, progT: 0 }; this._seedStart(this.magic); } break;
+            case 'seed': if (!isHost) { this.magic = { id: m.id, by: m.by, phase: 'seed', t: 0, u: 0, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, wand: Array.isArray(m.wand) ? { x: m.wand[0], y: m.wand[1], z: m.wand[2] } : null, kindHint: ['build', 'creature', 'plant'].includes(m.k) ? m.k : 'build', progT: 0 }; this._seedStart(this.magic); } break;
             case 'prog': if (!isHost && this.magic?.id === m.id) this.magic.u = Math.min(1, +m.u || 0); break;
             case 'bloom': if (!isHost && this.magic?.id === m.id) { this.magic.kind = m.kind; this._bloom(this.magic); if (m.kind !== 'build') this.magic = null; else this.magic.phase = 'site'; } break;
             case 'grow': if (!isHost && this.magic?.id === m.id && m.rect) Object.assign(this.magic, { phase: 'grow', t: 0, u: 0, rect: m.rect, G: +m.G || 0, top: +m.top || 0, colors: Array.isArray(m.colors) ? m.colors.slice(0, 6) : [], T: +m.T || 20 }); break;

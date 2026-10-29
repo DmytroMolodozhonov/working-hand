@@ -43,7 +43,7 @@ test('whatever the network writes, the recipe is safe: clamped, white-listed, it
     assert.deepEqual(r.abilities.filter((a) => a === 'nuke'), []);
     const b = sanitizeRecipe({ type: 'build', build: { parts: [{ kind: 'castle', size: [1e6, -5, 'x'] }, { kind: 'spaceship', size: [1, 1, 1] }] } }, 'замок', 1);
     assert.equal(b.parts[0].kind, 'castle'); assert.ok(b.parts.every((q) => q.size.every(Number.isFinite)));
-    assert.ok(b.parts[0].size[0] <= 110);
+    assert.ok(b.parts[0].size[0] <= 128);
     // broken JSON, a cut-off answer, text round it
     assert.equal(parseAnswer('мусор'), null);
     assert.equal(parseAnswer('Вот: {"type":"build","name":"Дом","build":{"parts":[{"kind":"house","size":[14,11,11]}]}} готово').type, 'build');

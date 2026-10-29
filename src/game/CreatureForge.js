@@ -45,6 +45,9 @@ export function creatureDims(recipe, seed = 1) {
     const legH = nLegs ? H * T.leg * Math.sqrt(legLen) : plan === 'serpent' || plan === 'fish' || plan === 'blob' ? 0 : H * 0.06;
     const torso = { rx: H * T.tw * fat, ry: H * T.th * fat, rz: H * T.tl * (plan === 'serpent' ? 1 : fat) };
     if (plan === 'blob') { torso.rx = torso.ry = torso.rz = H * 0.42; }
+    // (the kind's build: a horse's long deep trunk, an elephant's broad one, a cat's slim one — CreatureSpecies)
+    const B = recipe.body || {};
+    if (plan !== 'blob') { torso.rx *= clamp(B.wide ?? 1, 0.5, 2); torso.ry *= clamp(B.deep ?? 1, 0.5, 2); torso.rz *= clamp(B.len ?? 1, 0.5, 2.2); }
     let ty = legH + torso.ry * (T.upright ? 1 : 0.85);
     if (plan === 'serpent') ty = torso.ry;
     if (plan === 'fish') ty = torso.ry + H * 0.05;
@@ -60,12 +63,23 @@ export function creatureDims(recipe, seed = 1) {
         out.neck = null;
         out.head = { r: 0, at: [0, torso.ry * 0.35, -torso.rz * 0.6] }; // (its face is on its body)
     } else {
-        const up = plan === 'insect' || plan === 'spider' || plan === 'fish' ? 0.05 : plan === 'serpent' ? 0.6 : 0.85;
+        const up = Number.isFinite(recipe.neckUp) ? clamp(recipe.neckUp, 0, 1.45) : plan === 'insect' || plan === 'spider' || plan === 'fish' ? 0.05 : plan === 'serpent' ? 0.6 : 0.85;
         out.neck = neckLen > H * 0.02 ? { len: neckLen, r: Math.max(headR * 0.42, torso.rx * 0.38), at: [0, torso.ry * 0.35, -torso.rz * 0.82], tilt: up } : null;
         const nx = out.neck ? Math.cos(up) * neckLen : 0, ny = out.neck ? Math.sin(up) * neckLen : 0;
         out.head = { r: headR, at: [0, out.neck ? ny + torso.ry * 0.35 : torso.ry * 0.1, out.neck ? -torso.rz * 0.82 - nx - headR * 0.6 : -torso.rz - headR * 0.75] };
     }
     out.snout = plan === 'quadruped' || plan === 'dragon' ? headR * (0.55 + r() * 0.2) : plan === 'bird' ? headR * 0.9 : 0; // (a bird's: its beak)
+    out.snoutKind = plan === 'bird' ? 'beak' : out.snout > 0 ? 'muzzle' : 'none';
+    if (recipe.snout && recipe.snout.kind) { // (the kind's own: a horse's long muzzle, a cat's flat face, an elephant's trunk…)
+        const k = recipe.snout.kind, L = clamp(recipe.snout.len ?? 1, 0, 3);
+        out.snoutKind = k;
+        out.snout = k === 'none' ? 0 : headR * L * ({ muzzle: 0.72, flat: 0.38, long: 0.85, beak: 0.85, trunk: 1.25 }[k] || 0.7);
+    }
+    out.earShape = recipe.earShape || 'pointy';
+    out.feet = recipe.feet || (plan === 'spider' || plan === 'insect' || plan === 'dragon' || plan === 'bird' ? 'claw' : 'paw');
+    out.mane = plan === 'quadruped' || plan === 'dragon' || plan === 'biped' ? recipe.mane || null : null;
+    out.antlers = !!recipe.antlers && headR > 0; out.tusks = !!recipe.tusks && headR > 0; out.whiskers = !!recipe.whiskers && headR > 0;
+    out.hump = clamp(Math.round(recipe.hump || 0), 0, 2); out.shell = !!recipe.shell; out.spikes = !!recipe.spikes;
     // the eyes: on the front of the head (a blob's on its body), as many as said, as big
     const nEyes = clamp(Math.round(recipe.eyes?.n ?? 2), 1, 8), eyeK = clamp(recipe.eyes?.size ?? 1, 0.4, 3);
     const er = Math.max(0.015, (headR || torso.rx * 0.5) * 0.22 * eyeK);
@@ -104,7 +118,11 @@ export function creatureDims(recipe, seed = 1) {
     const tk = recipe.tail || 'none';
     const tLen = H * 0.42 * clamp(recipe.tailLen ?? 1, 0.2, 2.5) * (plan === 'dragon' || plan === 'serpent' ? 1.6 : plan === 'fish' ? 0.55 : 1);
     out.tail = tk === 'none' && plan !== 'serpent' ? null : { kind: plan === 'fish' ? 'fin' : tk === 'none' ? 'thin' : tk, len: tLen, n: plan === 'serpent' ? 9 : tk === 'bushy' || tk === 'feather' ? 3 : 5,
-        r: Math.max(0.02, plan === 'serpent' ? torso.rx * 0.9 : torso.rx * (tk === 'bushy' ? 0.45 : 0.24)), at: [0, ty + torso.ry * (plan === 'serpent' || plan === 'fish' ? 0 : 0.3), torso.rz * 0.9] };
+        r: Math.max(0.02, plan === 'serpent' ? torso.rx * 0.9 : torso.rx * (tk === 'bushy' ? 0.45 : tk === 'hair' ? 0.2 : tk === 'tuft' || tk === 'curly' ? 0.1 : 0.24)), at: [0, ty + torso.ry * (plan === 'serpent' || plan === 'fish' ? 0 : 0.3), torso.rz * 0.9],
+        // (how it hangs: a horse's hair tail and a cow's tuft fall down; the rest are carried)
+        droop: tk === 'hair' ? 1.15 : tk === 'tuft' ? 1.25 : tk === 'curly' ? -0.4 : 0 };
+    if (out.tail && tk === 'stub') { out.tail.len = Math.max(0.03, torso.rx * 0.35); out.tail.n = 1; out.tail.r = torso.rx * 0.3; }
+    if (out.tail && tk === 'curly') { out.tail.len = torso.rx * 0.9; out.tail.n = 4; }
     // the wings: a pair on the back (a butterfly two pairs), folded when it walks
     const wk = recipe.wings || 'none';
     const span = H * 0.75 * clamp(recipe.wingSpan ?? 1, 0.4, 2.2) * (wk === 'dragon' ? 1.3 : wk === 'insect' ? 0.7 : 1);

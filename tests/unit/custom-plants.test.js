@@ -38,7 +38,7 @@ test('sprouting, growing, a trunk to bump into; fire and blasts take them, charg
     const n = P.list.length;
     P.hitAt({ x: 0, y: 10, z: 0 }, 3, 5, 'Sapira');
     assert.equal(P.list.length, n, 'a charge does nothing');
-    P.hitAt({ x: 0, y: 10, z: 0 }, 50, 5, 'Bombardo');
+    P.hitAt({ x: 0, y: 10, z: 0 }, 300, 5, 'Bombardo');
     assert.equal(P.list.length, 0);
     assert.equal(g.collision.boxes.size, 0, 'no box left');
     assert.ok(PLANT_TARGETS.fire && PLANT_TARGETS.charges);

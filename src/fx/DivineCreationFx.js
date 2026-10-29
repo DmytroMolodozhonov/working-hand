@@ -20,7 +20,9 @@
 
 import * as THREE from 'three';
 
-const GOLD = 0xffd98a, WHITE = 0xfff6e0, VIOLET = 0xc9a8ff, SKY = 0x9fe8ff, ROSE = 0xffb8d8;
+const GOLD = 0xffd98a, WHITE = 0xfff6e0, VIOLET = 0xc9a8ff, SKY = 0x9fe8ff, ROSE = 0xffb8d8, AMBER = 0xffb060, GREEN = 0x8aff9a, LIME = 0xd8ff7a, EMERALD = 0x3fe08a;
+/** Each kind its own light after the words are heard (the author: «анимация однотипная»). */
+const KIND_PAL = { build: [GOLD, WHITE, SKY], creature: [ROSE, AMBER, VIOLET], plant: [GREEN, LIME, EMERALD] };
 const PALETTE = [GOLD, WHITE, VIOLET, SKY, GOLD, ROSE];
 /** The colours of the blocks flying into a building (by its material; BLOCK ids — CreationBuild's). */
 export const BLOCK_COLOR = { 20: 0x8a8a8a, 21: 0xd8c08a, 22: 0x4c4c55, 23: 0xece8e0, 24: 0x6f7d5a, 25: 0x7d7c78, 26: 0xa4523c, 27: 0xb88a52, 28: 0x6b4a2a, 29: 0xa83a2c, 30: 0x3f5f9e, 31: 0x4f565e, 32: 0xc9b05a, 34: 0xe6b422, 48: 0xeee6d6, 49: 0x7c8db0, 6: 0x8b5a2b, 3: 0x8a8a8a, 7: 0x4f8a3a, 42: 0xf2f0ea };
@@ -52,7 +54,10 @@ export class DivineCreationFx {
         const pool = this.pool, fx = this.game.fx;
         if (!pool) return;
         this._view();
+        // (still being told what to make: a small calm seed, one ring, the words streaming from the wand — no more)
+        if (m.listen) { this._listen(m, dt); return; }
         const t = m.t, u = Math.min(1, m.u || 0), grow = Math.min(1, 0.25 + 0.75 * Math.max(u, Math.min(1, t / 30)));
+        this._kindLayer(m, dt, grow);
         const cy = m.y + 4 + 3 * grow; // the seed hangs over the ground, higher as it grows
         const R = 2.2 + 9 * grow; // the rings' radius
         const n = Math.min(3, Math.max(1, Math.round(dt * 60))); // (the same look at any frame rate)
@@ -101,6 +106,56 @@ export class DivineCreationFx {
         if (this.flashT <= 0) {
             this.flashT = rnd(0.5, 1.1) * (1.2 - 0.6 * grow);
             fx?.lightFlash?.({ x: m.x, y: cy, z: m.z }, Math.random() < 0.5 ? GOLD : VIOLET, 2 + 3 * grow, 0.5, 30 + 40 * grow);
+        }
+    }
+
+    /** While the description is being said: a small seed breathing, one turning ring, the words flowing in from the wand. */
+    _listen(m, dt) {
+        const pool = this.pool, t = m.t, n = Math.min(3, Math.max(1, Math.round(dt * 60)));
+        const cy = m.y + 3.2, beat = 0.8 + 0.2 * Math.sin(t * 2.4);
+        pool.spawn(m.x, cy, m.z, 0, 0, 0, WHITE, 0.9 * beat, 0.09, { shrink: 0, fade: false });
+        pool.spawn(m.x, cy, m.z, 0, 0, 0, GOLD, 2.2 * beat, 0.09, { shrink: 0, fade: false });
+        for (let k = 0; k < 3 * n; k++) { const a = t * 0.8 + Math.random() * Math.PI * 2; if (((a * 24 / (Math.PI * 2)) | 0) % 3 === 2) continue; pool.spawn(m.x + Math.cos(a) * 2.6, m.y + 0.16, m.z + Math.sin(a) * 2.6, 0, 0.04, 0, GOLD, 0.26, 0.3, { shrink: 0.4 }); }
+        if (Math.random() < dt * 6) { const a = Math.random() * Math.PI * 2; pool.spawn(m.x + Math.cos(a) * 1.4, cy, m.z + Math.sin(a) * 1.4, -Math.cos(a) * 1.2, 0.2, -Math.sin(a) * 1.2, PALETTE[(Math.random() * PALETTE.length) | 0], 0.25, 1, { shrink: 0.5 }); }
+        if (m.wand) for (let k = 0; k < n; k++) {
+            const w = m.wand, T = 0.8;
+            pool.spawn(w.x + (Math.random() - 0.5) * 0.2, w.y + (Math.random() - 0.5) * 0.2, w.z + (Math.random() - 0.5) * 0.2, (m.x - w.x) / T, (cy - w.y) / T + 1.3, (m.z - w.z) / T, Math.random() < 0.5 ? WHITE : GOLD, 0.18, T, { shrink: 0.3, gravity: -3.3 });
+        }
+    }
+
+    /**
+     * After the words are heard: what is being made shows in the light — a building: a golden plan drawn on the ground,
+     * pillars at its corners, squares of light rising; a creature: a cocoon of warm light beating like a heart; a plant:
+     * green tendrils spiralling up into the seed, leaves drifting.
+     */
+    _kindLayer(m, dt, grow) {
+        const pool = this.pool, t = m.t, kind = m.kind || m.kindHint || 'build', P = KIND_PAL[kind] || KIND_PAL.build;
+        const n = Math.min(3, Math.max(1, Math.round(dt * 60)));
+        const cy = m.y + 4 + 3 * grow;
+        if (kind === 'build') {
+            const S = 5 + 9 * grow; // (the plan's half side)
+            for (let k = 0; k < 6 * n; k++) { // its outline drawn on the ground, running
+                const side = k % 4, u = ((t * 0.35 + Math.random()) % 1) * 2 - 1;
+                const x = side < 2 ? u * S : (side === 2 ? -S : S), z = side < 2 ? (side === 0 ? -S : S) : u * S;
+                pool.spawn(m.x + x, m.y + 0.15, m.z + z, 0, 0.05, 0, P[k % 2], 0.3, 0.35, { shrink: 0.4 });
+            }
+            for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) for (let k = 0; k < n; k++) pool.spawn(m.x + sx * S, m.y + Math.random() * 10 * grow, m.z + sz * S, 0, 4, 0, P[1], 0.32, 0.6, { shrink: 0.5 });
+            const lvl = (t * 2.2) % (8 + 10 * grow); // (a square of light rising, again and again)
+            for (let k = 0; k < 4 * n; k++) { const side = k % 4, u = Math.random() * 2 - 1, s2 = S * 0.8; pool.spawn(m.x + (side < 2 ? u * s2 : (side === 2 ? -s2 : s2)), m.y + lvl, m.z + (side < 2 ? (side === 0 ? -s2 : s2) : u * s2), 0, 0, 0, P[2], 0.24, 0.25, { shrink: 0.5 }); }
+        } else if (kind === 'creature') {
+            const beat = Math.pow(Math.max(0, Math.sin(t * Math.PI * 1.15)), 8); // (a heartbeat: lub… dub)
+            if (beat > 0.6 && !this._beatOn) { this._beatOn = true; for (let k = 0; k < 64; k++) { const a = (k / 64) * Math.PI * 2; pool.spawn(m.x, cy, m.z, Math.cos(a) * 9, 0, Math.sin(a) * 9, P[k % 3], 0.3, 0.8, { shrink: 0.6, drag: 1.5 }); } this.game.fx?.lightFlash?.({ x: m.x, y: cy, z: m.z }, AMBER, 3 + 3 * grow, 0.3, 40); }
+            if (beat < 0.2) this._beatOn = false;
+            for (let k = 0; k < 5 * n; k++) { // the cocoon: an egg of motes turning round the seed
+                const a = t * 1.3 + Math.random() * Math.PI * 2, e = Math.acos(2 * Math.random() - 1), rr = 2.2 + 3 * grow;
+                pool.spawn(m.x + Math.cos(a) * Math.sin(e) * rr, cy + Math.cos(e) * rr * 1.35, m.z + Math.sin(a) * Math.sin(e) * rr, -Math.sin(a) * 1.5, 0, Math.cos(a) * 1.5, P[k % 3], 0.26, 0.4, { shrink: 0.5 });
+            }
+        } else {
+            for (let v = 0; v < 3; v++) for (let k = 0; k < 2 * n; k++) { // three tendrils winding up from the ground into the seed
+                const h = Math.random(), a = v * 2.094 + h * 7 + t * 0.6, rr = (1 - h) * (3 + 5 * grow);
+                pool.spawn(m.x + Math.cos(a) * rr, m.y + h * (cy - m.y), m.z + Math.sin(a) * rr, 0, 0.3, 0, P[v % 3], 0.3 + 0.2 * (1 - h), 0.5, { shrink: 0.5 });
+            }
+            if (Math.random() < dt * 14) { const a = Math.random() * Math.PI * 2; pool.spawn(m.x + Math.cos(a) * 2, cy + 1, m.z + Math.sin(a) * 2, Math.cos(a) * 2.5, 1.5, Math.sin(a) * 2.5, Math.random() < 0.5 ? LIME : GREEN, 0.42, 2.2, { shrink: 0.3, gravity: 1.2, drag: 0.8 }); } // (leaves drifting down)
         }
     }
 

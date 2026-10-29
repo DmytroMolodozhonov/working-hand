@@ -47,6 +47,7 @@ const CACHE = new Map(); // recipe key → {mats}
 const CACHE_MAX = 24;
 const hex = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const mixHex = (a, b, k) => { const m = mix(hex(a), hex(b), k); return ((Math.round(m[0]) << 16) | (Math.round(m[1]) << 8) | Math.round(m[2])) >>> 0; };
 
 /** The skin's colours: the recipe's (or, unsaid, a palette fitting its kind). */
 export function paletteOf(recipe, seed = 1) {
@@ -60,7 +61,15 @@ export function paletteOf(recipe, seed = 1) {
         bark: [[0x6a4a2a, 0x9a7a4a, 0x3a5a2a]], stone: [[0x8a8a84, 0xc8c4b8, 0x4a4a48]],
     }[recipe.skin] || [[0x8a5a33, 0xd9b48a, 0x3a2a1c]];
     const base = KIND[Math.floor(r() * KIND.length)];
-    const c = recipe.colors || [];
+    const c = [...(recipe.colors || [])];
+    // (a body colour said, the others not: its own lighter belly and darker accents — a white horse is not tan underneath)
+    if (c[0] != null) {
+        const b = hex(c[0]), lum = (b[0] + b[1] + b[2]) / 765;
+        const shade = (k) => ((Math.round(Math.min(255, b[0] * k)) << 16) | (Math.round(Math.min(255, b[1] * k)) << 8) | Math.round(Math.min(255, b[2] * k))) >>> 0;
+        const toward = (t, k) => { const m = mix(b, hex(t), k); return ((Math.round(m[0]) << 16) | (Math.round(m[1]) << 8) | Math.round(m[2])) >>> 0; };
+        if (c[1] == null) c[1] = lum > 0.75 ? shade(0.93) : toward(0xf4ecdc, 0.45);
+        if (c[2] == null) c[2] = lum < 0.2 ? toward(0x6a6a70, 0.35) : shade(0.42);
+    }
     const tint = (v) => { const t = hex(v), j = 0.94 + r() * 0.12; return ((Math.min(255, t[0] * j) << 16) | (Math.min(255, t[1] * j) << 8) | Math.min(255, t[2] * j)) >>> 0; };
     return [tint(c[0] ?? base[0]), tint(c[1] ?? base[1]), tint(c[2] ?? base[2])];
 }
@@ -125,9 +134,12 @@ export function creatureMaterials(recipe, key, seed = 1) {
         white: new THREE.MeshLambertMaterial({ color: 0xf6f4ee }),
         pupil: new THREE.MeshLambertMaterial({ color: 0x14100c }),
         iris: glow != null || recipe.eyes?.color != null ? new THREE.MeshLambertMaterial({ color: recipe.eyes?.color ?? glow, emissive: recipe.eyes?.color ?? glow, emissiveIntensity: 0.8 }) : new THREE.MeshLambertMaterial({ color: 0x6a4a1a }),
+        mane: new THREE.MeshLambertMaterial({ color: recipe.maneColor ?? (recipe.colors?.[2] != null ? pal[2] : mixHex(pal[2], pal[0], 0.15)) }),
+        hoof: new THREE.MeshLambertMaterial({ color: recipe.hoofColor ?? mixHex(pal[2], 0x2a2420, 0.5) }),
+        horn: new THREE.MeshLambertMaterial({ color: recipe.hornColor ?? (recipe.skin === 'crystal' ? 0xe8f6ff : 0xe8dcc0) }),
         wing: recipe.wings === 'insect'
             ? new THREE.MeshLambertMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })
-            : new THREE.MeshLambertMaterial({ color: recipe.wings === 'feather' ? pal[0] : recipe.wings === 'butterfly' ? pal[1] : pal[2], side: THREE.DoubleSide, map: recipe.wings === 'butterfly' || recipe.wings === 'feather' ? tex : null }),
+            : new THREE.MeshLambertMaterial({ color: recipe.wingColor ?? (recipe.wings === 'feather' ? pal[0] : recipe.wings === 'butterfly' ? pal[1] : pal[2]), side: THREE.DoubleSide, map: recipe.wingColor == null && (recipe.wings === 'butterfly' || recipe.wings === 'feather') ? tex : null }),
         pal,
     };
     for (const x of Object.values(m)) if (x?.isMaterial) x.userData.keep = true;
@@ -165,6 +177,27 @@ export function buildCreature(recipe, key, seed = 1) {
     } else {
         part(body, g.sphere, M.body, T.rx, T.ry, T.rz);
         if (D.plan !== 'blob') part(body, g.sphere, M.belly, T.rx * 0.86, T.ry * 0.62, T.rz * 0.84, 0, -T.ry * 0.36, 0);
+        // (a beast's shape: a deep chest in front, round haunches behind — not one egg)
+        if (D.plan === 'quadruped' || D.plan === 'dragon') {
+            part(body, g.sphere, M.body, T.rx * 1.02, T.ry * 1.08, T.rz * 0.42, 0, T.ry * 0.04, -T.rz * 0.55);
+            part(body, g.sphere, M.body, T.rx * 1.0, T.ry * 1.0, T.rz * 0.4, 0, T.ry * 0.1, T.rz * 0.56);
+        }
+        for (let k = 0; k < D.hump; k++) part(body, g.sphere, M.body, T.rx * 0.55, T.ry * 0.7, T.rz * 0.32, 0, T.ry * 0.95, (D.hump === 2 ? (k ? 0.32 : -0.32) : 0) * T.rz);
+        if (D.shell) { // (a turtle's dome of plates, its rim)
+            part(body, g.sphere, M.belly, T.rx * 1.18, T.ry * 1.25, T.rz * 1.12, 0, T.ry * 0.22, 0);
+            part(body, g.sphere, M.acc, T.rx * 1.24, T.ry * 0.22, T.rz * 1.18, 0, -T.ry * 0.1, 0);
+            for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2; part(body, g.sphere, M.acc, T.rx * 0.32, T.ry * 0.12, T.rz * 0.32, Math.cos(a) * T.rx * 0.62, T.ry * 1.18 - 0.05 * T.ry, Math.sin(a) * T.rz * 0.6); }
+        }
+        if (D.spikes) { // (a ridge of spikes along the back — a hedgehog's whole back bristles)
+            const many = !D.shell && D.feet === 'paw' && D.H < 1.5;
+            const n = many ? 26 : 8;
+            for (let i = 0; i < n; i++) {
+                const u = many ? (i % 9) / 8 - 0.5 : i / (n - 1) - 0.5, side = many ? (Math.floor(i / 9) - 1) * 0.45 : 0;
+                const j = joint(body, side * T.rx, T.ry * (0.92 - Math.abs(side) * 0.3), u * T.rz * 1.7);
+                j.rotation.set(0.35, 0, -side * 1.2);
+                part(j, g.cone, M.horn, T.rx * (many ? 0.08 : 0.12), T.ry * (many ? 0.55 : 0.45) * (1 - Math.abs(u) * 0.8), T.rx * (many ? 0.08 : 0.12));
+            }
+        }
         if (D.plan === 'insect' || D.plan === 'spider') { // (the abdomen behind)
             const ab = joint(body, 0, T.ry * 0.25, T.rz * 0.95);
             rig.spine.push(ab);
@@ -177,7 +210,14 @@ export function buildCreature(recipe, key, seed = 1) {
         const n = rig.neck = joint(body, ...D.neck.at);
         if (!D.upright) n.rotation.x = D.neck.tilt;
         if (D.upright) part(n, g.limb, M.body, D.neck.r, D.neck.len, D.neck.r, 0, D.neck.len, 0);
-        else { const seg = joint(n, 0, 0, 0); seg.rotation.x = -Math.PI / 2; part(seg, g.limb, M.body, D.neck.r, D.neck.len, D.neck.r, 0, D.neck.len, 0); }
+        else {
+            const seg = joint(n, 0, 0, 0); seg.rotation.x = -Math.PI / 2; part(seg, g.limb, M.body, D.neck.r, D.neck.len, D.neck.r, 0, D.neck.len, 0);
+            if (D.mane === 'neck') { // (a horse's mane: locks along the top of its neck, over the withers)
+                const k = 10;
+                for (let i = 0; i < k; i++) part(seg, g.sphere, M.mane, D.neck.r * 0.28, D.neck.len / k * 0.85, D.neck.r * 0.75, Math.sin(i * 1.7) * D.neck.r * 0.12, D.neck.len * (i + 0.5) / k, D.neck.r * 0.82);
+                part(seg, g.sphere, M.mane, D.neck.r * 0.3, D.neck.r * 0.9, D.neck.r * 0.5, 0, -D.neck.r * 0.4, D.neck.r * 0.7);
+            }
+        }
         headParent = n;
     }
     const H = D.head;
@@ -185,11 +225,41 @@ export function buildCreature(recipe, key, seed = 1) {
     if (D.neck && !D.upright) head.rotation.x = -D.neck.tilt; // (the head level again at the neck's end)
     const face = H.r > 0 ? H.r : T.rx;
     if (H.r > 0) {
-        part(head, g.sphere, M.body, H.r, H.r * 0.9, H.r * 1.05);
-        if (D.snout > 0) {
-            if (D.plan === 'bird') { const bk = joint(head, 0, -H.r * 0.1, -H.r * 0.8); bk.rotation.x = -Math.PI / 2; part(bk, g.cone, M.claw, H.r * 0.28, D.snout, H.r * 0.22); }
-            else { part(head, g.sphere, M.belly, D.snout * 0.6, D.snout * 0.5, D.snout, 0, -H.r * 0.25, -H.r * 0.85); part(head, g.sphere, M.pupil, D.snout * 0.12, D.snout * 0.1, D.snout * 0.05, D.snout * 0.22, -H.r * 0.18, -H.r * 0.85 - D.snout * 0.95); part(head, g.sphere, M.pupil, D.snout * 0.12, D.snout * 0.1, D.snout * 0.05, -D.snout * 0.22, -H.r * 0.18, -H.r * 0.85 - D.snout * 0.95); }
+        part(head, g.sphere, M.body, H.r * (D.snoutKind === 'muzzle' && D.snout > H.r * 0.9 ? 0.85 : 1), H.r * 0.9, H.r * (D.snoutKind === 'muzzle' && D.snout > H.r * 0.9 ? 1.2 : 1.05));
+        const sn = D.snout, kind = D.snoutKind;
+        if (sn > 0) {
+            if (kind === 'beak') { const bk = joint(head, 0, -H.r * 0.1, -H.r * 0.8); bk.rotation.x = -Math.PI / 2 - 0.15; part(bk, g.cone, M.horn, H.r * 0.3, sn, H.r * 0.24); part(bk, g.cone, M.horn, H.r * 0.22, sn * 0.7, H.r * 0.12, 0, 0, H.r * 0.12); }
+            else if (kind === 'trunk') { // (an elephant's trunk: a chain hanging and curling, its own joints — it sways)
+                let p = joint(head, 0, -H.r * 0.25, -H.r * 0.85);
+                p.rotation.x = 0.35;
+                const n = 6, seg = sn / n;
+                rig.trunk = [];
+                for (let i = 0; i < n; i++) {
+                    const rr = H.r * 0.3 * (1 - i / n * 0.55);
+                    part(p, g.limb, M.body, rr, seg * 1.05, rr);
+                    const q = joint(p, 0, -seg, 0); q.rotation.x = -0.12; rig.trunk.push(q); p = q;
+                }
+                part(p, g.sphere, M.belly, H.r * 0.16, H.r * 0.1, H.r * 0.16);
+            } else { // muzzle (a horse's long one, angled down), flat (a cat's), long (a crocodile's flat jaws)
+                const longFace = kind === 'muzzle' && sn > H.r * 0.9;
+                const mz = joint(head, 0, -H.r * (longFace ? 0.3 : 0.18), -H.r * (longFace ? 0.75 : 0.62));
+                mz.rotation.x = longFace ? -0.5 : kind === 'long' ? -0.05 : -0.15; // (the nose down a little; a horse's well down)
+                const w = kind === 'long' ? 0.55 : kind === 'flat' ? 0.62 : longFace ? 0.6 : 0.5, h = kind === 'long' ? 0.32 : longFace ? 0.58 : 0.48;
+                part(mz, g.sphere, M.body, H.r * w, H.r * h, sn * 0.62, 0, 0, -sn * 0.48);
+                part(mz, g.sphere, M.belly, H.r * w * 0.92, H.r * h * 0.85, sn * 0.25, 0, -H.r * 0.05, -sn * 0.92); // (the nose's tip)
+                for (const sd of [-1, 1]) part(mz, g.sphere, M.pupil, H.r * 0.07, H.r * 0.06, H.r * 0.04, sd * H.r * w * 0.45, H.r * h * 0.25, -sn * 1.08); // (the nostrils)
+                if (kind === 'long') for (let i = 0; i < 7; i++) for (const sd of [-1, 1]) { const tj = joint(mz, sd * H.r * w * 0.82, -H.r * h * 0.5, -sn * (0.15 + i * 0.12)); tj.rotation.x = Math.PI; part(tj, g.cone, M.white, H.r * 0.05, H.r * 0.16, H.r * 0.05); } // (its teeth)
+                if (D.whiskers) for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) { const wj = joint(mz, sd * H.r * w * 0.8, -H.r * 0.02 * i, -sn * 0.8); wj.rotation.set(0.1 * (i - 1), 0, -sd * (Math.PI / 2 - 0.25 + i * 0.15)); part(wj, g.limb, M.white, H.r * 0.012, -H.r * 1.1, H.r * 0.012); }
+                rig.muzzle = mz;
+            }
         }
+        if (D.tusks) for (const sd of [-1, 1]) { const tj = joint(head, sd * H.r * 0.42, -H.r * 0.5, -H.r * 0.75); tj.rotation.set(-2.2, 0, sd * 0.15); part(tj, g.cone, M.white, H.r * 0.13, H.r * 1.5, H.r * 0.13); }
+        if (D.antlers) for (const sd of [-1, 1]) { // (a deer's antlers: a beam back and out, its tines up)
+            const bj = joint(head, sd * H.r * 0.45, H.r * 0.7, H.r * 0.1); bj.rotation.set(-0.45, 0, -sd * 0.5);
+            part(bj, g.cone, M.horn, H.r * 0.1, H.r * 2.4, H.r * 0.1);
+            for (let i = 0; i < 4; i++) { const tj = joint(bj, 0, H.r * (0.6 + i * 0.45), 0); tj.rotation.set(0.9 - i * 0.15, 0, sd * (i % 2 ? 0.4 : -0.2)); part(tj, g.cone, M.horn, H.r * 0.06, H.r * (0.9 - i * 0.12), H.r * 0.06); }
+        }
+        if (D.mane === 'lion') for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; part(head, g.sphere, M.mane, H.r * 0.55, H.r * 0.55, H.r * 0.45, Math.cos(a) * H.r * 0.95, Math.sin(a) * H.r * 0.95 + H.r * 0.05, H.r * 0.25); }
         // a jaw that opens (a breath, a bite)
         if (D.plan !== 'bird' && D.plan !== 'blob') { const jaw = rig.jaw = joint(head, 0, -H.r * 0.45, -H.r * 0.3); part(jaw, g.sphere, M.belly, H.r * 0.6, H.r * 0.2, H.r * 0.7, 0, 0, -H.r * 0.2); }
     }
@@ -205,23 +275,46 @@ export function buildCreature(recipe, key, seed = 1) {
     }
     // ears, horns, antennae
     if (D.ears > 0 && face > 0) for (const s of [-1, 1]) {
-        const j = joint(eyeRoot, s * face * 0.6, face * 0.65, face * 0.05);
-        j.rotation.z = -s * 0.35;
-        part(j, g.cone, M.body, face * 0.22 * D.ears, face * 0.6 * D.ears, face * 0.12 * D.ears);
-        part(j, g.cone, M.belly, face * 0.13 * D.ears, face * 0.42 * D.ears, face * 0.06 * D.ears, 0, 0, -face * 0.03);
+        const E = D.ears, shape = D.earShape;
+        if (shape === 'none') break;
+        const j = joint(eyeRoot, s * face * (shape === 'fan' ? 0.85 : 0.6), face * (shape === 'fan' ? 0.15 : shape === 'floppy' ? 0.5 : 0.65), face * (shape === 'fan' ? 0.25 : 0.05));
+        if (shape === 'fan') { // (an elephant's: great flaps on the sides)
+            j.rotation.set(0, -s * 0.35, 0);
+            part(j, g.sphere, M.body, face * 0.12, face * 0.75 * E * 0.5, face * 0.62 * E * 0.5, s * face * 0.1, -face * 0.1, face * 0.3);
+            part(j, g.sphere, M.belly, face * 0.1, face * 0.6 * E * 0.5, face * 0.5 * E * 0.5, s * face * 0.05, -face * 0.1, face * 0.3);
+        } else if (shape === 'round') {
+            part(j, g.sphere, M.body, face * 0.26 * E, face * 0.26 * E, face * 0.08 * E);
+            part(j, g.sphere, M.belly, face * 0.16 * E, face * 0.16 * E, face * 0.06 * E, 0, 0, -face * 0.03);
+        } else if (shape === 'floppy') { // (a dog's: hanging down at the sides)
+            j.rotation.z = -s * 2.4;
+            part(j, g.sphere, M.body, face * 0.2 * E, face * 0.48 * E, face * 0.07 * E, 0, face * 0.38 * E, 0);
+        } else { // pointy, long (a rabbit's tall ears; a donkey's)
+            const long = shape === 'long' ? 1.9 : 1;
+            j.rotation.z = -s * (shape === 'long' ? 0.18 : 0.35);
+            j.rotation.x = shape === 'long' ? 0.25 : 0;
+            part(j, g.cone, M.body, face * 0.22 * E / long, face * 0.6 * E * long, face * 0.12 * E, 0, 0, 0);
+            part(j, g.cone, M.belly, face * 0.13 * E / long, face * 0.42 * E * long, face * 0.06 * E, 0, 0, -face * 0.03);
+        }
         rig.ears.push(j);
     }
-    for (const h of D.horns) { const j = joint(eyeRoot, h.at[0], h.at[1], h.at[2]); j.rotation.z = -h.lean; j.rotation.x = -0.35; part(j, g.cone, M.claw, h.r, h.len, h.r); }
+    for (const h of D.horns) { const j = joint(eyeRoot, h.at[0], h.at[1], h.at[2]); j.rotation.z = -h.lean; j.rotation.x = -0.35; part(j, g.cone, M.horn, h.r, h.len, h.r); if (D.horns.length === 1) for (let i = 0; i < 4; i++) part(j, g.cone, M.white, h.r * (1.05 - i * 0.2), h.r * 0.25, h.r * (1.05 - i * 0.2), 0, h.len * (0.15 + i * 0.2), 0); } // (a unicorn's: its spiral rings)
     if (D.antennae) for (const s of [-1, 1]) { const j = joint(eyeRoot, s * face * 0.35, face * 0.6, -face * 0.4); j.rotation.set(-0.7, 0, -s * 0.4); part(j, g.limb, M.acc, face * 0.05, -face * 1.6, face * 0.05); part(j, g.sphere, M.acc, face * 0.12, face * 0.12, face * 0.12, 0, face * 1.6, 0); rig.ears.push(j); }
     // the legs: hip → upper → knee → lower → foot
     for (const L of D.legs) {
         const hip = joint(bob, ...L.hip);
         hip.rotation.z = -L.side * L.splay;
         part(hip, g.sphere, M.body, L.r * 1.5, L.r * 1.5, L.r * 1.5);
+        if (D.plan === 'quadruped' || D.plan === 'dragon' || D.plan === 'biped') part(hip, g.sphere, M.body, L.r * 1.75, L.upper * 0.4, L.r * 2.0, 0, -L.upper * 0.28, 0); // (the thigh / the shoulder's muscle)
         part(hip, g.limb, M.body, L.r * 1.25, L.upper, L.r * 1.25);
         const knee = joint(hip, 0, -L.upper, 0);
         part(knee, g.limb, D.plan === 'spider' || D.plan === 'insect' ? M.acc : M.body, L.r, L.lower, L.r);
-        part(knee, g.sphere, M.claw, L.r * 1.25, L.r * 0.7, L.r * 1.6, 0, -L.lower, -L.r * 0.4);
+        if (D.feet === 'hoof') { part(knee, g.limb, M.hoof, L.r * 1.18, L.r * 1.3, L.r * 1.18, 0, -L.lower + L.r * 1.3, 0); part(knee, g.sphere, M.mane, L.r * 1.3, L.r * 0.6, L.r * 1.3, 0, -L.lower + L.r * 1.55, 0); } // (a hoof; the fetlock's hair)
+        else if (D.feet === 'pad') part(knee, g.limb, M.belly, L.r * 1.25, L.r * 0.5, L.r * 1.25, 0, -L.lower + L.r * 0.5, 0);
+        else if (D.feet === 'webbed') part(knee, g.sphere, M.acc, L.r * 1.7, L.r * 0.35, L.r * 2.2, 0, -L.lower, -L.r * 0.8);
+        else {
+            part(knee, g.sphere, D.feet === 'paw' ? M.body : M.claw, L.r * 1.3, L.r * 0.7, L.r * 1.6, 0, -L.lower, -L.r * 0.4);
+            for (const k of [-1, 0, 1]) { const cj = joint(knee, k * L.r * 0.6, -L.lower, -L.r * 1.6); cj.rotation.x = -Math.PI / 2 - 0.3; part(cj, g.cone, M.claw, L.r * 0.18, L.r * (D.feet === 'claw' ? 0.9 : 0.45), L.r * 0.18); }
+        }
         rig.legs.push({ ...L, hipAt: L.hip, hip, knee });
     }
     for (const A of D.arms) {
@@ -241,7 +334,7 @@ export function buildCreature(recipe, key, seed = 1) {
             const k = 1 - i / tl.n;
             const j = i === 0 ? parent : joint(parent, 0, 0, seg);
             const rr = tl.r * (serpent ? 0.35 + 0.65 * k : 0.4 + 0.6 * k);
-            part(j, g.sphere, M.body, rr, rr, seg * 0.62, 0, 0, seg * 0.5);
+            part(j, g.sphere, tl.kind === 'hair' ? M.mane : M.body, tl.kind === 'hair' ? rr * 1.6 : rr, tl.kind === 'hair' ? rr * 0.8 : rr, seg * 0.62, 0, 0, seg * 0.5);
             if (serpent) part(j, g.sphere, M.belly, rr * 0.85, rr * 0.55, seg * 0.55, 0, -rr * 0.4, seg * 0.5);
             if (tl.kind === 'spiky' && i % 2 === 0) { const s = joint(j, 0, rr * 0.8, seg * 0.5); part(s, g.cone, M.claw, rr * 0.35, rr * 1.2, rr * 0.35); }
             rig.tail.push(j);
@@ -252,8 +345,11 @@ export function buildCreature(recipe, key, seed = 1) {
         if (tl.kind === 'bushy') part(end, g.sphere, M.belly, er * 2, er * 2, er * 3, 0, 0, er * 1.5);
         else if (tl.kind === 'club') { part(end, g.sphere, M.acc, er * 2.2, er * 2, er * 2.2); for (const s of [-1, 1]) { const sp = joint(end, s * er * 1.6, 0, 0); sp.rotation.z = -s * Math.PI / 2; part(sp, g.cone, M.claw, er * 0.5, er * 1.5, er * 0.5); } }
         else if (tl.kind === 'fin') { const f = joint(end, 0, 0, 0); f.rotation.z = Math.PI / 2; part(f, g.fin, M.fin, tl.len * 0.5 + T.ry, 1, tl.len * 0.5 + T.ry); const f2 = joint(end, 0, 0, 0); f2.rotation.z = -Math.PI / 2; part(f2, g.fin, M.fin, tl.len * 0.5 + T.ry, 1, tl.len * 0.5 + T.ry); }
+        else if (tl.kind === 'hair') { for (let i = 0; i < 5; i++) part(end, g.sphere, M.mane, tl.r * (1.6 - i * 0.15), tl.r * 0.9, tl.len * 0.18, Math.sin(i * 2.1) * tl.r * 0.6, 0, tl.len * 0.1 * i); } // (a horse's: long hair falling)
+        else if (tl.kind === 'tuft') part(end, g.sphere, M.mane, tl.r * 2.4, tl.r * 2.4, tl.r * 4, 0, 0, tl.r * 2);
         else if (tl.kind === 'feather') { for (const a of [-0.5, 0, 0.5]) { const f = joint(end, 0, 0, 0); f.rotation.y = Math.PI / 2 + a; part(f, g.feather, M.wing, tl.len * 0.9, 1, tl.len * 0.5); } }
         rig.tailEnd = end;
+        rig.tailDroop = tl.droop || 0;
     }
     for (const f of D.fins) { const j = joint(body, 0, f.at[1] - T.y, f.at[2]); j.rotation.z = Math.PI / 2; part(j, g.fin, M.fin, f.h, 1, f.len); }
     // the wings
@@ -364,7 +460,9 @@ export function poseCreature(model, a, dt) {
     // ---- the spine, the tail: a wave (a serpent / a fish swims with it)
     const waveAmp = walk === 'slither' && !fly ? 0.45 * Math.max(0.3, amp) : a.mode === 'swim' ? 0.4 : 0.12 + 0.1 * amp;
     const wf = walk === 'slither' ? ph : t * (2 + speed);
-    R.tail.forEach((j, i) => { j.rotation.y = Math.sin(wf - i * 0.75) * waveAmp; j.rotation.x = D.plan === 'serpent' ? 0 : -0.15 + 0.05 * Math.sin(t * 1.7 + i); });
+    const droop = R.tailDroop || 0;
+    R.tail.forEach((j, i) => { j.rotation.y = Math.sin(wf - i * 0.75) * waveAmp * (droop > 0.5 ? 0.5 : 1); j.rotation.x = D.plan === 'serpent' ? 0 : (i === 0 ? droop : droop * 0.08) - (droop > 0.5 ? 0.25 * amp : 0.15) + 0.05 * Math.sin(t * 1.7 + i); });
+    if (R.trunk) R.trunk.forEach((j, i) => { j.rotation.x = -0.12 - 0.06 * Math.sin(t * 1.1 + i * 0.6) - (a.breath || 0) * 0.3; j.rotation.z = 0.08 * Math.sin(t * 0.9 + i * 0.5); });
     if (walk === 'slither' && !fly && R.body) body.rotation.y = Math.sin(wf + 0.75) * waveAmp * 0.6;
     R.spine.forEach((j) => { j.rotation.x = 0.06 * Math.sin(t * 1.5); });
     // ---- the wings

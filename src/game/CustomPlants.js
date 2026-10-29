@@ -25,6 +25,11 @@ import { realmAt } from '../world/Planets.js';
 const r2 = (v) => Math.round(v * 100) / 100;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
 const GROW_T = { fast: 40, normal: 120, slow: 300 }; // s from a seed to its full height
+// (a glowing kind's halo: where its light is and how wide, against its height — the crown of a tree, a flower's head…)
+const HALO = { tree: [0.68, 0.42], bush: [0.5, 0.62], flower: [0.86, 0.32], grass: [0.5, 0.55], vine: [0.55, 0.38], mushroom: [0.72, 0.5], cactus: [0.6, 0.36], reed: [0.85, 0.3], crystal: [0.5, 0.58] };
+let HALO_GEO = null;
+const haloGeo = () => { if (!HALO_GEO) { HALO_GEO = new THREE.SphereGeometry(1, 14, 10); HALO_GEO.userData.shared = true; } return HALO_GEO; };
+const haloMat = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false });
 const BURNS = /^(Inferno|Fire|FireMaxima|Hellfire|InfernoMaxima|fire|burn|Lightning|LightningStrike)$/i;
 const BREAKS = /^(Bombardo|BombardoMaxima|blast|TotalDestruction|TotalDestructionMaxima|CircleAttack|CircleAttackMaxima|Inspirius|Boom|Die|crush)$/;
 
@@ -57,7 +62,7 @@ export class CustomPlants {
         const M = plantMaterials();
         const s = plantShape({ form: 'flower', flowers: { color: 0xf08cb4 }, glow: 0x9ef0ff }, 1);
         const g = new THREE.Group();
-        g.add(new THREE.InstancedMesh(s.body, M.body, 1), new THREE.InstancedMesh(s.glow || s.body, M.glow, 1));
+        g.add(new THREE.InstancedMesh(s.body, M.body, 1), new THREE.InstancedMesh(s.glow || s.body, M.glow, 1), new THREE.InstancedMesh(haloGeo(), haloMat(0x9ef0ff), 1));
         return [g];
     }
 
@@ -101,7 +106,10 @@ export class CustomPlants {
         S.mesh = new THREE.InstancedMesh(sh.body, M.body, cap);
         S.mesh.castShadow = true; S.mesh.receiveShadow = true;
         S.glowMesh = sh.glow ? new THREE.InstancedMesh(sh.glow, M.glow, cap) : null;
-        for (const m of [S.mesh, S.glowMesh]) if (m) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.scene?.add(m); }
+        // (it glows: a soft halo of its light round its crown — faint by day, bright at night — and motes rising)
+        S.haloMesh = S.recipe.glow != null ? new THREE.InstancedMesh(haloGeo(), haloMat(S.recipe.glow), cap) : null;
+        if (S.haloMesh) { S.haloMesh.castShadow = false; S.haloMesh.renderOrder = 2; }
+        for (const m of [S.mesh, S.glowMesh, S.haloMesh]) if (m) { m.count = 0; m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.scene?.add(m); }
         S.trunkR = sh.trunkR;
         this.species.set(S.key, S);
     }
@@ -110,6 +118,7 @@ export class CustomPlants {
         const S = this.species.get(key);
         if (!S) return;
         for (const m of [S.mesh, S.glowMesh]) if (m) { this.game.scene?.remove(m); m.geometry.dispose(); m.dispose?.(); }
+        if (S.haloMesh) { this.game.scene?.remove(S.haloMesh); S.haloMesh.material.dispose(); S.haloMesh.dispose?.(); }
         this.species.delete(key);
     }
 
@@ -230,11 +239,39 @@ export class CustomPlants {
         const me = g.character?.group?.position;
         for (const S of this.species.values()) {
             const near = !me || this.list.some((p) => p.sp === S.key && Math.abs(p.x - me.x) < 300 && Math.abs(p.z - me.z) < 300);
-            S.mesh.visible = near; if (S.glowMesh) S.glowMesh.visible = near;
+            S.mesh.visible = near; if (S.glowMesh) S.glowMesh.visible = near; if (S.haloMesh) S.haloMesh.visible = near;
         }
+        this._glow(dt);
         for (const key of this._dirty) this._draw(key);
         this._dirty.clear();
         if (this.auth) { this._netT -= dt; if (this._netT <= 0) { this._netT = 5; this._send({ op: 'age', l: this.list.filter((p) => p.age < 1).slice(0, 200).map((p) => [p.id, r2(p.age)]) }); } }
+    }
+
+    /**
+     * (every frame) The glowing kinds: their halo breathes, faint by day and bright at night; at night motes of their light
+     * rise from the near ones (the fireworks' glow points — no light of their own: the light count stays the same).
+     */
+    _glow(dt) {
+        const g = this.game;
+        const night = Math.max(0, Math.min(1, g.fireLights?.darkness?.() ?? (g.dayCycle ? g.world?.nightAmount || 0 : g.isNight ? 1 : 0)));
+        this._gt = (this._gt || 0) + dt;
+        for (const S of this.species.values()) if (S.haloMesh) S.haloMesh.material.opacity = (0.06 + 0.34 * night) * (0.85 + 0.15 * Math.sin(this._gt * 1.7));
+        if (night < 0.25) return;
+        this._moteT = (this._moteT || 0) - dt;
+        if (this._moteT > 0) return;
+        this._moteT = 0.12;
+        const pool = g.fx?.fireworks, me = g.character?.group?.position;
+        if (!pool || !me) return;
+        g.divine?.fx2?._view?.();
+        let n = 0;
+        for (const p of this.list) {
+            const S = this.species.get(p.sp);
+            if (!S?.haloMesh || p.age < 0.3 || Math.abs(p.x - me.x) > 70 || Math.abs(p.z - me.z) > 70) continue;
+            const k = S.recipe.height * p.s * p.age, h = HALO[S.recipe.form] || HALO.bush;
+            const a = Math.random() * 6.283, r = Math.random() * h[1] * k;
+            pool.spawn(p.x + Math.cos(a) * r, p.y + h[0] * k + (Math.random() - 0.5) * h[1] * k, p.z + Math.sin(a) * r, (Math.random() - 0.5) * 0.3, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 0.3, S.recipe.glow, 0.12 + 0.08 * Math.min(3, k / 4), 2.2 + Math.random(), { shrink: 0.4, drag: 0.4 });
+            if (++n >= 14) break;
+        }
     }
 
     /** (host) Grown plants drop seeds now and then into their habitat. */
@@ -275,9 +312,10 @@ export class CustomPlants {
             _m.compose(_p.set(p.x, p.y - 0.05, p.z), _q.setFromAxisAngle(_up, p.rot), _s.set(k, k, k));
             S.mesh.setMatrixAt(n, _m);
             if (S.glowMesh) S.glowMesh.setMatrixAt(n, _m);
+            if (S.haloMesh) { const h = HALO[S.recipe.form] || HALO.bush; _m.compose(_p.set(p.x, p.y + h[0] * k, p.z), _q.identity(), _s.set(h[1] * k, h[1] * k * 0.9, h[1] * k)); S.haloMesh.setMatrixAt(n, _m); }
             if (++n >= CREATION.PLANTS_PER_SPECIES) break;
         }
-        for (const m of [S.mesh, S.glowMesh]) if (m) { m.count = n; m.instanceMatrix.needsUpdate = true; }
+        for (const m of [S.mesh, S.glowMesh, S.haloMesh]) if (m) { m.count = n; m.instanceMatrix.needsUpdate = true; }
     }
 
     // ============================================================ network / save

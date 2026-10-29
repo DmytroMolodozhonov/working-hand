@@ -375,51 +375,132 @@ function partWall(W, p, ctx) {
 }
 
 /** A castle: a courtyard behind curtain walls, towers, a gatehouse, a keep (a big house), a well; a moat and a bridge. */
+/** A stair of ramps from layer l0 (the next floor's stairs in a keep): as stair(), lifted. */
+function stairAt(f, a, b, da, db, l0, h, sa, sb, t) {
+    for (let i = 0; i < h; i++) for (let w = 0; w < 2; w++) {
+        const ca = a + da * i + sa * w, cb = b + db * i + sb * w;
+        for (let l = l0; l < l0 + i; l++) f.put(ca, cb, l, t);
+        f.put(ca, cb, l0 + i, t, da > 0 ? SHAPE.RAMP_PX : da < 0 ? SHAPE.RAMP_NX : db > 0 ? SHAPE.RAMP_PZ : SHAPE.RAMP_NZ);
+        for (let l = l0 + i + 1; l < l0 + i + 6; l++) f.put(ca, cb, l, BLOCK.AIR);
+    }
+}
+
+/**
+ * The keep (a donjon): a great square stone tower of `floors` storeys (FH each), walls 2 thick, a string course of trim at
+ * every floor, tall windows on every side of every storey, stairs up along its side wall, a door 3 × 6 to the gate, a
+ * walkable roof with battlements, a round turret with a spire at each corner and a tall one over the middle.
+ * Centred at local (0, cb), w × d. @returns its top layer
+ */
+function keepAt(W, f, cb, w, d, floors, st, rng) {
+    const FH = 8, H = floors * FH, ha = Math.floor(w / 2), hb = Math.floor(d / 2);
+    const b0 = cb - hb, b1 = cb + hb;
+    // the walls (2 thick), the corners and the floors' bands of trim
+    for (let a = -ha; a <= ha; a++) for (let b = b0; b <= b1; b++) {
+        const edge = Math.min(a + ha, ha - a, b - b0, b1 - b);
+        if (edge > 1) continue;
+        const corner = (a + ha <= 1 || ha - a <= 1) && (b - b0 <= 1 || b1 - b <= 1);
+        f.put(a, b, -1, st.trim);
+        for (let l = 0; l < H; l++) f.put(a, b, l, corner || l % FH === 0 ? st.trim : st.wall);
+        // the battlements on the roof's edge (outer ring only)
+        if (edge === 0) { f.put(a, b, H, st.wall); if ((a + b) % 2 === 0) f.put(a, b, H + 1, st.wall); }
+    }
+    // the inside: paving, the floors (a stairwell left open), the roof
+    for (let a = -ha + 2; a <= ha - 2; a++) for (let b = b0 + 2; b <= b1 - 2; b++) {
+        f.put(a, b, -1, (a + b) % 5 === 0 ? st.trim : st.floor);
+        for (let l = 0; l < H; l++) f.put(a, b, l, BLOCK.AIR);
+        for (let k = 1; k <= floors; k++) {
+            const well = a >= ha - 4 && b >= b0 + 3 && b <= b0 + 3 + FH + 1; // (the stairs come up here)
+            if (k < floors && well) continue;
+            f.put(a, b, k * FH - 1, k === floors ? st.trim : st.floor);
+        }
+    }
+    // the stairs along the right wall, floor to floor (and up to the roof)
+    for (let k = 0; k < floors; k++) stairAt(f, ha - 3, b0 + 3, 0, 1, k * FH, FH, -1, 0, st.trim);
+    // the door to the courtyard (to the gate), its arch
+    f.door(0, b0, 0, 0, 1, 0x5a3a1c);
+    f.door(0, b0 + 1, 0, 0, 1, 0x5a3a1c);
+    f.box(-2, 2, BUILD.DOOR_H, BUILD.DOOR_H, b0 - 1, b0 - 1, st.trim);
+    // tall windows, every storey, every side
+    for (let k = 0; k < floors; k++) {
+        const l0 = k * FH + 2, l1 = l0 + 3;
+        for (let a = -ha + 4; a <= ha - 5; a += 6) { if (k > 0 || Math.abs(a) > 3) f.window(a, a + 1, b0, b0, l0, l1); f.window(a, a + 1, b1, b1, l0, l1); }
+        for (let b = b0 + 5; b <= b1 - 5; b += 6) { f.window(-ha, -ha, b, b + 1, l0, l1); if (k < floors || b > b0 + 3 + FH) f.window(ha, ha, b, b + 1, l0, l1); }
+    }
+    // beds and chests: the lord's chambers upstairs, the treasury below
+    if (floors >= 2) {
+        for (let i = 0; i < 2; i++) W.beds.push({ ...f.pt(-ha + 4 + i * 5, b1 - 4, FH), yaw: f.yaw(0, -1) });
+        W.chests.push({ k: 100, ...f.pt(-ha + 3, b0 + 3, FH), yaw: f.yaw(1, 0), gap: 0.15, scale: 2 });
+    }
+    W.chests.push({ k: 101, ...f.pt(-ha + 3, b1 - 3, 0), yaw: f.yaw(1, 0), gap: 0.15, scale: 2 });
+    W.chests.push({ k: 102, ...f.pt(-ha + 3, b1 - 6, 0), yaw: f.yaw(1, 0), gap: 0.15, scale: 2 });
+    // the corner turrets (their spires over the roof) and a great spire in the middle
+    let top = H + 2;
+    for (const [a, b] of [[-ha, b0], [ha, b0], [-ha, b1], [ha, b1]]) top = Math.max(top, towerAt(f, a, b, 3, H + 7, st, { spire: true, door: false, rng }));
+    if (w >= 22) top = Math.max(top, towerAt(f, 0, cb, 4, H + 10, st, { spire: true, door: false, rng }));
+    return top;
+}
+
+/**
+ * A castle — a real one (the author: «больше похоже на маленькую крепость вокруг домика»): high curtain walls with a
+ * walkway and battlements, tall round towers at the corners and along the walls, a gatehouse of two towers over a gate
+ * 7 × 9, a great keep of three storeys with its turrets and spire, a hall and a chapel along the walls, a well, the
+ * paved yard, a moat with a bridge.
+ */
 function partCastle(W, p, ctx) {
     const { f, st, rng, gr } = ctx;
-    const rt = Math.max(4, Math.min(6, Math.round(Math.min(p.size[0], p.size[1]) / 14)));
+    const rt = Math.max(5, Math.min(7, Math.round(Math.min(p.size[0], p.size[1]) / 15)));
     const A = Math.round(p.size[0] / 2) - (p.moat ? rt + 5 : rt + 1), B = Math.round(p.size[1] / 2) - (p.moat ? rt + 5 : rt + 1);
     // (the walls' stairs run along the side walls from the front towers back: they must reach the walkway before the back towers)
-    const hw = Math.max(7, Math.min(18, Math.round(p.size[2] * 0.45), 2 * B - 2 * rt - 8));
-    const th = hw + 8 + Math.round(rng() * 4);
-    const spires = p.spires !== undefined ? p.spires || rng() < 0.4 : rng() < 0.6;
+    const hw = Math.max(10, Math.min(18, Math.round(p.size[2] * 0.4), 2 * B - 2 * rt - 8));
+    const th = hw + 12 + Math.round(rng() * 5);
+    const spires = p.spires !== undefined ? p.spires || rng() < 0.5 : rng() < 0.7;
     // the courtyard's paving and the land cleared inside
-    for (let a = -A + 2; a <= A - 2; a++) for (let b = -B + 2; b <= B - 2; b++) f.put(a, b, -1, (a + b) % 7 === 0 ? BLOCK.COBBLE : BLOCK.PATH);
+    for (let a = -A + 2; a <= A - 2; a++) for (let b = -B + 2; b <= B - 2; b++) f.put(a, b, -1, (a * 3 + b) % 11 === 0 ? BLOCK.COBBLE : (a + b) % 4 === 0 ? BLOCK.COBBLE : BLOCK.PATH);
     // the four curtain walls (the front one with a gate)
     curtain(f, -A, -B, A, -B, hw, st, [0, -1]);
     curtain(f, -A, B, A, B, hw, st, [0, 1]);
     curtain(f, -A, -B, -A, B, hw, st, [-1, 0]);
     curtain(f, A, -B, A, B, hw, st, [1, 0]);
-    // the gate: 7 wide, 9 high, under an arch of trim
+    // the gate: 7 wide, 9 high, under an arch of trim, a portcullis' bars over it; the gatehouse's room above
     f.box(-3, 3, 0, 8, -B - 1, -B + 1, BLOCK.AIR);
-    f.box(-4, 4, 9, 9, -B - 1, -B + 1, st.trim);
+    f.box(-4, 4, 9, 10, -B - 1, -B + 1, st.trim);
+    for (let a = -3; a <= 3; a += 2) f.put(a, -B - 1, 8, BLOCK.FENCE);
+    f.box(-6, 6, hw, hw + 4, -B - 2, -B + 2, st.wall);
+    f.box(-5, 5, hw + 1, hw + 3, -B - 1, -B + 1, BLOCK.AIR);
+    for (let a = -6; a <= 6; a += 2) f.put(a, -B - 2, hw + 5, st.wall);
     // stairs up to the walkway along both side walls (inside), from behind the front towers to the back
     stair(f, -A + 2, -B + rt + 2, 0, 1, hw, 1, 0, st.trim);
     stair(f, A - 2, -B + rt + 2, 0, 1, hw, -1, 0, st.trim);
-    // the towers: the corners, then along the walls, the gatehouse's two first
-    const want = p.towers != null ? p.towers : 4 + (A > 34 ? 2 : 0);
-    const spots = [[-A, -B], [A, -B], [-A, B], [A, B], [-7, -B - 1], [7, -B - 1], [0, B], [-A, 0], [A, 0], [-Math.round(A / 2), B], [Math.round(A / 2), B], [-A, Math.round(B / 2)]];
-    if (want >= 6) spots.splice(0, 0, spots.splice(4, 2)[0], spots.splice(4, 1)[0]); // (the gatehouse first when there are many)
-    let top = hw + 2;
+    // the towers: the gatehouse's two, the corners, then along the walls
+    const want = p.towers != null ? Math.max(4, p.towers) : 8 + (A > 40 ? 2 : 0);
+    const spots = [[-9, -B - 1], [9, -B - 1], [-A, -B], [A, -B], [-A, B], [A, B], [-A, 0], [A, 0], [0, B], [-Math.round(A / 2), B], [Math.round(A / 2), B], [-A, Math.round(B / 2)]];
+    let top = hw + 6;
     for (let i = 0; i < Math.min(want, spots.length); i++) {
         const [a, b] = spots[i];
+        const gate = i < 2, corner = i >= 2 && i < 6;
         const inward = [Math.abs(a) >= A - 0.5 ? -Math.sign(a) : 0, Math.abs(b) >= B - 0.5 ? -Math.sign(b) : 0];
         const ds = inward[1] ? [0, inward[1]] : [inward[0], 0];
-        top = Math.max(top, towerAt(f, a, b, rt, th + (i < 4 ? 0 : 2), st, { spire: spires, doorSide: [ds[0], ds[1]], rng }));
+        top = Math.max(top, towerAt(f, a, b, gate ? rt - 1 : rt, th + (corner ? 4 : gate ? 0 : 2), st, { spire: spires || corner, doorSide: [ds[0], ds[1]], rng }));
         // (the tower's door opens into the courtyard: the wall's blocks in front of it go)
         const da = a + ds[0] * (rt + 1), db = b + ds[1] * (rt + 1);
         if (ds[1]) f.box(da - 1, da + 1, 0, BUILD.DOOR_H - 1, db - ds[1] * 1, db, BLOCK.AIR); else f.box(da - ds[0], da, 0, BUILD.DOOR_H - 1, db - 1, db + 1, BLOCK.AIR);
     }
-    // the keep: a big house at the back of the courtyard, its door to the gate
-    const kw = Math.min(2 * A - 10, 34), kd = Math.min(Math.round(B * 0.9), 24);
-    const kb = B - 4 - Math.ceil(kd / 2) - 2;
-    const keep = { kind: 'house', size: [kw, kd, 14], floors: kw >= 24 ? 2 : 1 };
-    const kc = f.pt(0, kb);
-    const kG = ctx.G;
-    partHouse(W, keep, { ...ctx, x: Math.round(kc.x), z: Math.round(kc.z), G: kG, face: ctx.face, seed: ctx.seed + 17 });
-    // a well in the courtyard, a path from the gate
-    wellAt(f, Math.round(A / 2.5), -Math.round(B / 3), st);
-    for (let b = -B + 1; b < kb - kd / 2; b++) f.box(-1, 1, -1, -1, b, b, BLOCK.COBBLE);
+    // the keep: the great tower of the castle at the back of the yard, its door to the gate
+    const kw = Math.max(16, Math.min(2 * A - 2 * rt - 14, 40)), kd = Math.max(14, Math.min(Math.round(B * 0.9), 30));
+    const kb = B - rt - 3 - Math.ceil(kd / 2);
+    const floors = p.size[2] >= 34 ? 3 : 2;
+    top = Math.max(top, keepAt(W, f, kb, kw, kd, floors, st, rng));
+    // a hall and a chapel along the side walls (when the yard is wide enough)
+    if (A >= 30 && B >= 26) {
+        const hs = [Math.min(18, A - rt - kw / 2 - 6), 12];
+        if (hs[0] >= 12) for (const sd of [-1, 1]) {
+            const hc = f.pt(sd * (A - rt - 3 - Math.ceil(hs[0] / 2)), -Math.round(B / 4));
+            partHouse(W, { kind: sd < 0 ? 'hall' : 'house', size: [hs[0], hs[1], 12] }, { ...ctx, x: Math.round(hc.x), z: Math.round(hc.z), G: ctx.G, face: (ctx.face + (sd < 0 ? 1 : 3)) % 4, seed: ctx.seed + 31 + sd });
+        }
+    }
+    // a well in the courtyard, a path from the gate to the keep
+    wellAt(f, Math.round(A / 3), -Math.round(B / 2.5), st);
+    for (let b = -B + 1; b < kb - kd / 2; b++) f.box(-2, 2, -1, -1, b, b, BLOCK.COBBLE);
     // the moat round the walls, a bridge over it before the gate
     if (p.moat) {
         for (let a = -A - rt - 5; a <= A + rt + 5; a++) for (let b = -B - rt - 5; b <= B + rt + 5; b++) {

@@ -20,6 +20,7 @@
 
 import { BLOCK } from '../world/Terrain.js';
 import { createRng, hashString } from '../core/math.js';
+import { SPECIES, SPECIES_KEYS, SPECIES_RU, speciesOf } from './CreatureSpecies.js';
 
 export const CREATION = {
     COST: 1000, // mana, at once (the author: «стоит 1000 маны»); Creative: nothing
@@ -51,11 +52,11 @@ export const CREATION = {
 /** Health and the rest: the limits (the author: «20 здоровья по умолчанию; если укажет — больше»). */
 export const CAPS = {
     HP_DEFAULT: 20, HP_MIN: 1, HP_MAX: 300,
-    SIZE_MIN: 0.3, SIZE_MAX: 14, // m tall (a mouse… a creature over a house)
+    SIZE_MIN: 0.3, SIZE_MAX: 20, // m tall (a mouse… a creature over a house)
     SPEED: { slow: 2.2, normal: 4.2, fast: 7.5 }, // m/s on the ground (the hero runs ~8)
     DMG_MAX: 8, // a blow / a breath of a creature at most (a zombie's blow ~5)
     LEGS_MAX: 8, EYES_MAX: 8, HORNS_MAX: 6,
-    PLANT_H_MIN: 0.3, PLANT_H_MAX: 24,
+    PLANT_H_MIN: 0.3, PLANT_H_MAX: 40,
 };
 
 // ---------------------------------------------------------------------------------------------- materials
@@ -93,7 +94,7 @@ const WALLS = ['stone', 'dark', 'white', 'sand', 'brick', 'cobble', 'mossy', 'pl
  */
 export const PARTS = {
     city: { ru: /город|столиц|поселен|деревн|посел|селен|квартал/, size: [104, 80, 14], min: [52, 44, 8], max: [128, 128, 40] },
-    castle: { ru: /замок|замка|крепост|цитадел|форт(?!ун)|дворец|дворц|палац/, size: [60, 60, 26], min: [44, 44, 14], max: [110, 110, 60] },
+    castle: { ru: /замок|замка|крепост|цитадел|форт(?!ун)|дворец|дворц|палац/, size: [96, 84, 40], min: [70, 64, 26], max: [128, 128, 64] },
     house: { ru: /дом(?!ин)|домик|изб|хижин|коттедж|особняк|хат[ау]|жилищ|усадьб/, size: [14, 11, 11], min: [10, 9, 9], max: [40, 30, 30] },
     hall: { ru: /зал|ратуш|казарм|амбар|сара|склад|конюшн|таверн|трактир|харчевн|кузниц|лавк|магазин/, size: [24, 16, 13], min: [14, 11, 10], max: [60, 40, 30] },
     tower: { ru: /башн|башен|шпил|минарет|колокольн/, size: [10, 10, 26], min: [7, 7, 14], max: [24, 24, 70] },
@@ -177,7 +178,10 @@ export const FLY = {
 };
 export const FLY_KEYS = Object.keys(FLY);
 export const WING_KINDS = ['none', 'feather', 'bat', 'insect', 'dragon', 'butterfly'];
-export const TAIL_KINDS = ['none', 'thin', 'bushy', 'club', 'fin', 'spiky', 'feather'];
+export const TAIL_KINDS = ['none', 'thin', 'bushy', 'club', 'fin', 'spiky', 'feather', 'hair', 'tuft', 'stub', 'curly'];
+export const EAR_SHAPES = ['pointy', 'round', 'long', 'floppy', 'fan', 'none'];
+export const FEET = ['hoof', 'paw', 'claw', 'webbed', 'pad'];
+export const SNOUTS = ['muzzle', 'flat', 'beak', 'trunk', 'long', 'none'];
 export const SKINS = ['fur', 'scales', 'feathers', 'smooth', 'shell', 'crystal', 'slime', 'bark', 'stone'];
 export const PATTERNS = ['none', 'spots', 'stripes', 'gradient', 'patches', 'rings', 'stars'];
 export const TEMPERS = ['friendly', 'neutral', 'shy', 'hostile'];
@@ -216,15 +220,15 @@ export const FLAW_KEYS = Object.keys(FLAWS);
 
 // ---------------------------------------------------------------------------------------------- plants
 export const PLANT_FORMS = {
-    tree: { ru: /дерев|деревь|дуб|сосн|ель|ив[аы]|клен|пальм|баобаб/, h: 9 },
-    bush: { ru: /куст/, h: 2.2 },
-    flower: { ru: /цвет(ок|ы|ов|ут|ет)|цветущ|роз[ау]|тюльпан|ромашк|лили|подсолнух|колокольчик/, h: 1.1 },
-    grass: { ru: /трав|осок|злак|колос/, h: 0.8 },
-    vine: { ru: /лиан|плющ|вьюн|виноград|вьется/, h: 4 },
-    mushroom: { ru: /гриб|мухомор|поганк/, h: 1.2 },
-    cactus: { ru: /кактус|колюч|агав/, h: 3 },
-    reed: { ru: /камыш|тростник|бамбук/, h: 3 },
-    crystal: { ru: /кристалл|самоцвет|каменн(ое|ый) растен/, h: 2.5 },
+    tree: { ru: /дерев|деревь|дуб|сосн|ель|ив[аы]|клен|пальм|баобаб/, h: 15 },
+    bush: { ru: /куст/, h: 3.4 },
+    flower: { ru: /цвет(ок|ы|ов|ут|ет)|цветущ|роз[ау]|тюльпан|ромашк|лили|подсолнух|колокольчик/, h: 2 },
+    grass: { ru: /трав|осок|злак|колос/, h: 1.3 },
+    vine: { ru: /лиан|плющ|вьюн|виноград|вьется/, h: 6 },
+    mushroom: { ru: /гриб|мухомор|поганк/, h: 2.4 },
+    cactus: { ru: /кактус|колюч|агав/, h: 4.5 },
+    reed: { ru: /камыш|тростник|бамбук/, h: 4 },
+    crystal: { ru: /кристалл|самоцвет|каменн(ое|ый) растен/, h: 3.5 },
 };
 export const PLANT_FORM_KEYS = Object.keys(PLANT_FORMS);
 export const CROWNS = ['round', 'cone', 'umbrella', 'weeping', 'spiral', 'columnar', 'none'];
@@ -321,7 +325,7 @@ export function forbidden(desc) {
 export function kindOfDesc(desc) {
     const s = lower(desc);
     if (STATUE_RE.test(s) || /из (камня|кирпича|дерева|мрамора|золота|блоков)/.test(s)) return 'build';
-    const creature = /существ|животн|зверь|звер[яеок]|чудищ|чудовищ|монстр|тварь|питом|создани|зверек|зверушк|птиц|насеком|дракон|рыб[ау]|паук|змея|змей(?!ка)|жук|слизень|слизн|котик|кот[ае]?\b|кошк|собак|лошадк|кролик|заяц|ящер|гриффон|единорог|бабочк|голем|тролл|гоблин|великан|ёж|еж\b|пчел|муравей|сова|лиса|волк|медвед|олен|мышь|мышк/.test(s)
+    const creature = speciesOf(s) != null || /существ|животн|зверь|звер[яеок]|чудищ|чудовищ|монстр|тварь|питом|создани|зверек|зверушк|птиц|насеком|дракон|рыб[ау]|паук|змея|змей(?!ка)|жук|слизень|слизн|котик|кот[ае]?\b|кошк|собак|лошадк|кролик|заяц|ящер|гриффон|единорог|бабочк|голем|тролл|гоблин|великан|ёж|еж\b|пчел|муравей|сова|лиса|волк|медвед|олен|мышь|мышк/.test(s)
         || /шерст|пушист|лап(ы|ами|ах|ой)\b|копыт|клюв|клык|хвост|крыль|чешу|щупальц|усами|усы\b|ушами|перья|перьями|рычит|мурлыч|летающ|летает|бегает|ползает|плавает|кусается|ест |питается/.test(s)
         || /(с|со) (\S+ ){0,2}(глазами|глазом|ногами|лапами|крыльями|хвостом|рогами|рогом|ушами|клювом|щупальцами|чешуёй|чешуей|шерстью|перьями|панцирем)|умеющ(ее|ий|ая) (летать|плавать|ходить)|летающ(ее|ий|ая)|здоровья|двуног|четвероног|шестиног|многоног/.test(s);
     const plant = /растени|растенье|цвет(ок|ы|ов|ами)|дерев(о|ья|ьев|ца|ом|е)|куст|гриб|трав[аыу]|лиан|тростник|камыш|бамбук|водоросл|кактус|плющ|мох|папоротник|цветущ|семена|размножа(ется|ются) (быстро|медленно|часто|редко)|распространя/.test(s);
@@ -352,6 +356,24 @@ export function saidKind(desc) {
 // ---------------------------------------------------------------------------------------------- the guess (no network)
 const has = (s, re) => re.test(s);
 /** How big, from the words (a size word said of a part — «огромными глазами», «большой головой» — is no size of the whole). */
+/**
+ * How much bigger or smaller than its kind's own the words make it: «большой» ×1.7, «очень большой» ×2.4, «огромный» ×2.8,
+ * «очень-очень большой» / «гигантский» ×3.8, «маленький» ×0.6, «крошечный» ×0.35 (the size words of its parts — «большие
+ * глаза» — not counted). Each «очень» more: ×1.35 (big) / ×0.75 (small).
+ */
+export function sizeFactor(s0) {
+    const s = String(s0).replace(/(?:^|\s)(?:с|со|и|а|но|у|где|которого|которой|у него|у нее)\s+(?:очень\s+)?(огромн|гигантск|больш|маленьк|крошечн|длинн|высок|широк|коротк|толст|тонк)\S*\s+(\S+\s+)?(глаз|ног|лап|крыл|хвост|уш|рог|голов|зуб|окн|двер|ше[йяию]|клюв|щупал|нос|грив|мор|ствол|лист|цвет|плод|ягод|шляпк|корн|лепест|бутон|шип|игл|лап)\S*/g, '');
+    const very = (s.match(/очень|оч\.|невероятно|необычайно|ну очень|супер|мега|ультра/g) || []).length;
+    let k = 1;
+    if (/(исполинск|гигантск|колоссальн|громадн|титаническ|размером с (гору|замок|дом|башню))/.test(s)) k = 3.8;
+    else if (/огромн|здоровенн|высоченн/.test(s)) k = 2.8;
+    else if (/(большой|большая|большое|больших|крупн|высок|рослый|рослая)/.test(s)) k = 1.7;
+    else if (/(крошечн|малюсеньк|миниатюрн|игрушечн|карликов)/.test(s)) k = 0.35;
+    else if (/(маленьк|небольш|мелк|низк)/.test(s)) k = 0.6;
+    if (k > 1) k *= Math.pow(1.35, Math.min(3, very));
+    else if (k < 1) k *= Math.pow(0.75, Math.min(3, very));
+    return k;
+}
 const sizeWord = (s0) => {
     const s = s0.replace(/(огромн|гигантск|больш|маленьк|крошечн|длинн|высок|широк|коротк|толст|тонк)\S*\s+(\S+\s+)?(глаз|ног|лап|крыл|хвост|уш|рог|голов|зуб|окн|двер|ше[йяию]|клюв|щупал)\S*/g, '');
     return /(огромн|гигантск|исполинск|громадн|колоссальн|величествен)/.test(s) ? 1.6 : /(большой|большая|большое|больших|высок|просторн|широк)/.test(s) ? 1.25
@@ -435,54 +457,80 @@ function guessBuild(s, r, name) {
 }
 
 function guessCreature(s, r, name) {
-    let plan = PLAN_KEYS.find((p) => PLANS[p].ru.test(s)) || null;
+    // the kind it is like (CreatureSpecies): its real build, size, colours — the words below still win
+    const sp = speciesOf(s), S = sp ? SPECIES[sp] : null;
+    let plan = S?.plan || PLAN_KEYS.find((p) => PLANS[p].ru.test(s)) || null;
     const legsSaid = countBefore(s, /ног|лап/);
     if (!plan) plan = legsSaid === 2 ? 'biped' : legsSaid === 6 ? 'insect' : legsSaid === 8 ? 'spider' : legsSaid === 0 ? 'blob' : 'quadruped';
     const wingsSaid = /крыл|летает|летать|летающ|летун|порха|парит/.test(s);
-    let wings = 'none';
-    if (wingsSaid) wings = /перн|перья|птич/.test(s) ? 'feather' : /кожист|перепонч|летуч/.test(s) ? 'bat' : /стрекоз|прозрачн(ые|ыми) крыл|пчел|мух/.test(s) ? 'insect'
-        : /бабочк|узорчат|цветн(ые|ыми) крыл/.test(s) ? 'butterfly' : plan === 'dragon' ? 'dragon' : plan === 'insect' ? 'insect' : plan === 'bird' ? 'feather' : r() < 0.5 ? 'feather' : 'bat';
+    let wings = S?.wings || 'none';
+    if (wingsSaid) wings = /перн|перья|птич/.test(s) ? 'feather' : /кожист|перепонч|летуч|драконь/.test(s) ? (/драконь/.test(s) ? 'dragon' : 'bat') : /стрекоз|прозрачн(ые|ыми) крыл|пчел|мух/.test(s) ? 'insect'
+        : /бабочк|узорчат|цветн(ые|ыми) крыл/.test(s) ? 'butterfly' : S?.wings && S.wings !== 'none' ? S.wings : plan === 'dragon' ? 'dragon' : plan === 'insect' ? 'insect' : plan === 'bird' ? 'feather' : r() < 0.5 ? 'feather' : 'bat';
     if (/без крыльев|бескрыл/.test(s)) wings = 'none';
-    const flies = (wingsSaid && !/не летает|не умеет летать/.test(s)) || /левитир|парит без крыльев|летает магией|призрак/.test(s);
-    const k = sizeWord(s);
+    const flies = (wings !== 'none' && (wingsSaid || !!S?.fly) && !/не летает|не умеет летать/.test(s)) || /левитир|парит без крыльев|летает магией|призрак/.test(s);
+    // the size: the kind's own (medium when no kind: the hero's size about), the words multiply it
     const sizeSaid = /(\d+(?:[.,]\d+)?)\s*(м|метр)/.exec(s);
-    const base = { quadruped: 1.6, biped: 2.6, bird: 1.1, insect: 0.9, spider: 1.4, serpent: 1.0, fish: 1.0, blob: 1.0, dragon: 3.5 }[plan];
-    const size = clamp(sizeSaid ? parseFloat(sizeSaid[1].replace(',', '.')) : base * k * k, CAPS.SIZE_MIN, CAPS.SIZE_MAX);
+    const base = S?.h ?? { quadruped: 3, biped: 3.4, bird: 1.8, insect: 1.2, spider: 1.8, serpent: 1.6, fish: 1.6, blob: 1.6, dragon: 6 }[plan];
+    const size = clamp(sizeSaid ? parseFloat(sizeSaid[1].replace(',', '.')) : base * sizeFactor(s), CAPS.SIZE_MIN, CAPS.SIZE_MAX);
     const hp = clamp(countBefore(s, /здоров|жизн|хп|hp/) ?? CAPS.HP_DEFAULT, CAPS.HP_MIN, CAPS.HP_MAX);
-    const walk = WALK_KEYS.find((w) => WALK[w].ru.test(s)) || PLANS[plan].walk;
-    const fly = flies ? FLY_KEYS.find((f) => FLY[f].ru.test(s)) || (wings === 'none' ? 'float' : wings === 'butterfly' ? 'flutter' : wings === 'insect' ? 'hover' : wings === 'dragon' ? 'dragon' : wings === 'bat' ? 'bat' : 'flap') : null;
-    const cols = coloursIn(s);
+    const walk = WALK_KEYS.find((w) => WALK[w].ru.test(s)) || S?.walk || PLANS[plan].walk;
+    const fly = flies ? FLY_KEYS.find((f) => FLY[f].ru.test(s)) || (S?.fly && wings === S.wings ? S.fly : wings === 'none' ? 'float' : wings === 'butterfly' ? 'flutter' : wings === 'insect' ? 'hover' : wings === 'dragon' ? 'dragon' : wings === 'bat' ? 'bat' : 'flap') : null;
+    // the colours: each where it was said (the body, the mane, the wings, the eyes, the horns, the belly, the spots…)
+    const part = (w) => colourBy(s, w);
+    const cMane = part('грив'), cWing = part('крыл'), cEye = part('глаз'), cHorn = part('рог|бивн'), cTail = part('хвост'), cBelly = part('брюх|живот'),
+        cPat = part('пятн|полос|крапин|узор'), cSkin = part('шерст|шкур|кож|чешу|пер(?:ья|ьями|ьях)|оперен|мех|окрас|панцир'), cHoof = part('копыт');
+    const bound = [cMane, cWing, cEye, cHorn, cTail, cBelly, cPat, cHoof].filter((c) => c != null);
+    const free = coloursIn(s).filter((c) => !bound.includes(c) || c === cSkin);
+    const pick = S?.colors ? S.colors[Math.floor(Math.abs(r()) * S.colors.length) % S.colors.length] : null;
+    const body = cSkin ?? free[0] ?? null;
     const eyesBig = /(больш|огромн|круглы|выпучен)\S* глаз/.test(s), eyesN = countBefore(s, /глаз/);
     const abilities = ABILITY_KEYS.filter((a) => ABILITIES[a].ru.test(s) && !(a === 'glow' && /не светится/.test(s)));
     if (/магическ|волшебн/.test(s) && !abilities.includes('glow')) abilities.push('glow');
+    const has = (re) => re.test(s), no = (re) => re.test(s);
     return {
-        type: 'creature', name, plan, size,
-        legs: legsSaid != null ? clamp(legsSaid, 0, CAPS.LEGS_MAX) : PLANS[plan].legs,
-        legLen: /длинн\S* ног|длинноног|высок\S* ног/.test(s) ? 1.6 : /коротк\S* (ног|лап)|коротколап/.test(s) ? 0.55 : 1,
-        legThick: /тонк\S* (ног|лап)|тонконог|худ/.test(s) ? 0.5 : /толст\S* (ног|лап)|мощн\S* лап|массивн/.test(s) ? 1.6 : 1,
-        neck: /длинн\S* ше/.test(s) ? 1.8 : /без шеи|коротк\S* ше/.test(s) ? 0.3 : 1,
-        head: /больш\S* голов|огромн\S* голов|головаст/.test(s) ? 1.5 : /маленьк\S* голов/.test(s) ? 0.7 : 1,
-        eyes: { n: clamp(eyesN ?? (/циклоп|одноглаз/.test(s) ? 1 : 2), 1, CAPS.EYES_MAX), size: eyesBig ? 2 : /маленьк\S* глаз|глазк/.test(s) ? 0.6 : 1, color: /красн\S* глаз/.test(s) ? 0xff3020 : /светящ\S* глаз|горящ\S* глаз/.test(s) ? 0xffe060 : null },
-        ears: /(длинн|больш|остр)\S* уш|ушаст|кролик|заяц|зайч/.test(s) ? 1.8 : /без ушей/.test(s) ? 0 : plan === 'biped' ? 0.5 : 1,
-        horns: { n: clamp(countBefore(s, /рог/) ?? (/рог|рогат/.test(s) ? 2 : 0), 0, CAPS.HORNS_MAX), len: /длинн\S* рог/.test(s) ? 1.6 : 1 },
-        tail: /без хвоста|бесхвост/.test(s) ? 'none' : /пушист\S* хвост/.test(s) ? 'bushy' : /булав/.test(s) ? 'club' : /шипаст\S* хвост|хвост[а-я]* (с )?шип/.test(s) ? 'spiky' : /плавник/.test(s) ? 'fin' : /хвост/.test(s) ? 'thin' : plan === 'bird' ? 'feather' : plan === 'fish' ? 'fin' : plan === 'insect' || plan === 'spider' || plan === 'blob' || plan === 'biped' ? 'none' : 'thin',
-        tailLen: /длинн\S* хвост/.test(s) ? 1.7 : /коротк\S* хвост/.test(s) ? 0.5 : 1,
-        wings, wingSpan: /огромн\S* крыл|больш\S* крыл|широк\S* крыл/.test(s) ? 1.5 : /маленьк\S* крыл|крылышк/.test(s) ? 0.6 : 1,
-        skin: /пушист|мех|шерст|мохнат/.test(s) ? 'fur' : /чешу/.test(s) ? 'scales' : /перья|перн|оперен/.test(s) ? 'feathers' : /панцир|раковин|броня/.test(s) ? 'shell'
-            : /кристалл|хрустал|стеклян/.test(s) ? 'crystal' : /слиз|склизк|желе/.test(s) ? 'slime' : /кор[аы]\b|деревянн/.test(s) ? 'bark' : /каменн/.test(s) ? 'stone'
-                : { bird: 'feathers', dragon: 'scales', serpent: 'scales', fish: 'scales', blob: 'slime', insect: 'shell', spider: 'fur' }[plan] || 'fur',
-        colors: [cols[0] ?? null, cols[1] ?? null, cols[2] ?? null],
-        pattern: /пятн|пятнист|в крапин/.test(s) ? 'spots' : /полос|тигров/.test(s) ? 'stripes' : /кольц/.test(s) ? 'rings' : /звезд/.test(s) ? 'stars' : /переход|градиент|радужн/.test(s) ? 'gradient' : /пятнами|пег/.test(s) ? 'patches' : 'none',
-        glow: abilities.includes('glow') ? (colourOf((/свет\S* (\S+)/.exec(s) || [])[1]) ?? cols[0] ?? 0x9ef0ff) : null,
+        type: 'creature', name, plan, size, species: sp,
+        legs: legsSaid != null ? clamp(legsSaid, 0, CAPS.LEGS_MAX) : S?.legs ?? PLANS[plan].legs,
+        legLen: has(/длинн\S* ног|длинноног|высок\S* ног/) ? (S?.legLen ?? 1) * 1.4 : has(/коротк\S* (ног|лап)|коротколап/) ? (S?.legLen ?? 1) * 0.55 : S?.legLen ?? 1,
+        legThick: has(/тонк\S* (ног|лап)|тонконог|худ/) ? 0.5 : has(/толст\S* (ног|лап)|мощн\S* лап|массивн/) ? 1.6 : S?.legThick ?? 1,
+        neck: has(/длинн\S* ше/) ? Math.max(1.8, (S?.neck ?? 1) * 1.4) : has(/без шеи|коротк\S* ше/) ? 0.3 : S?.neck ?? 1,
+        neckUp: S?.neckUp ?? null,
+        head: has(/больш\S* голов|огромн\S* голов|головаст/) ? 1.5 : has(/маленьк\S* голов/) ? 0.7 : S?.head ?? 1,
+        body: { len: S?.body?.len ?? 1, deep: S?.body?.deep ?? 1, wide: (S?.body?.wide ?? 1) * (has(/толст|пухл|упитан|жирн/) ? 1.3 : has(/худ|строй|тощ/) ? 0.8 : 1) },
+        snout: has(/без мор|плоск\S* мор/) ? { len: 0.4, kind: 'flat' } : has(/хобот/) ? { len: 2.4, kind: 'trunk' } : has(/клюв/) ? { len: 1, kind: 'beak' } : has(/длинн\S* мор/) ? { len: 1.8, kind: 'muzzle' }
+            : has(/(больш|огромн|длинн)\S* нос/) ? { len: 1.9, kind: 'long' } : S?.snout ?? null,
+        eyes: { n: clamp(eyesN ?? (has(/циклоп|одноглаз/) ? 1 : 2), 1, CAPS.EYES_MAX), size: eyesBig ? 2 : has(/маленьк\S* глаз|глазк/) ? 0.6 : 1, color: cEye ?? (has(/светящ\S* глаз|горящ\S* глаз/) ? 0xffe060 : null) },
+        ears: has(/(длинн|больш|огромн)\S* уш|ушаст/) ? Math.max(1.8, S?.ears ?? 1) : no(/без ушей/) ? 0 : S?.ears ?? (plan === 'biped' ? 0.5 : 1),
+        earShape: has(/длинн\S* уш/) ? 'long' : has(/висяч\S* уш|вислоух/) ? 'floppy' : has(/остр\S* уш/) ? 'pointy' : has(/кругл\S* уш/) ? 'round' : no(/без ушей/) ? 'none' : S?.earShape ?? (plan === 'quadruped' ? 'pointy' : 'round'),
+        horns: { n: clamp(countBefore(s, /рог/) ?? (has(/рог|рогат/) && !has(/ветвист/) ? Math.max(2, S?.horns?.n ?? 2) : S?.horns?.n ?? 0), 0, CAPS.HORNS_MAX), len: has(/длинн\S* рог|огромн\S* рог/) ? 1.6 : S?.horns?.len ?? 1 },
+        antlers: has(/ветвист\S* рог|рога как у олен/) || !!S?.antlers,
+        tusks: has(/бивн|клык/) || !!S?.tusks,
+        mane: has(/без грив/) ? null : has(/грив/) ? (S?.mane || (sp === 'lion' ? 'lion' : 'neck')) : S?.mane ?? null,
+        hump: has(/горб/) ? (S?.hump || 1) : S?.hump ?? 0,
+        shell: has(/панцир|раковин/) || !!S?.shell,
+        spikes: has(/шип|игл[аы] на спин|колюч/) || !!S?.spikes,
+        whiskers: has(/ус(ы|ами|ики)/) || !!S?.whiskers,
+        feet: has(/копыт/) ? 'hoof' : has(/когт/) ? 'claw' : has(/перепонк|ласт/) ? 'webbed' : S?.feet ?? (plan === 'biped' ? 'pad' : 'paw'),
+        tail: no(/без хвоста|бесхвост/) ? 'none' : has(/пушист\S* хвост/) ? 'bushy' : has(/булав/) ? 'club' : has(/шипаст\S* хвост|хвост[а-я]* (с )?шип/) ? 'spiky' : has(/плавник/) ? 'fin'
+            : has(/хвост[а-я]* как у лошад|конск\S* хвост/) ? 'hair' : S?.tail ?? (has(/хвост/) ? 'thin' : plan === 'bird' ? 'feather' : plan === 'fish' ? 'fin' : plan === 'insect' || plan === 'spider' || plan === 'blob' || plan === 'biped' ? 'none' : 'thin'),
+        tailLen: has(/длинн\S* хвост/) ? 1.7 : has(/коротк\S* хвост/) ? 0.5 : S?.tailLen ?? 1,
+        wings, wingSpan: has(/огромн\S* крыл|больш\S* крыл|широк\S* крыл/) ? 1.5 : has(/маленьк\S* крыл|крылышк/) ? 0.6 : S?.wingSpan ?? 1,
+        skin: has(/пушист|мех|шерст|мохнат/) ? 'fur' : has(/чешу/) ? 'scales' : has(/перья|перн|оперен/) ? 'feathers' : has(/панцир|раковин|броня/) && !S?.shell ? 'shell'
+            : has(/кристалл|хрустал|стеклян/) ? 'crystal' : has(/слиз|склизк|желе/) ? 'slime' : has(/кор[аы](?![а-яё])|деревянн/) ? 'bark' : has(/каменн/) ? 'stone' : has(/гладк|кожан/) ? 'smooth'
+                : S?.skin || { bird: 'feathers', dragon: 'scales', serpent: 'scales', fish: 'scales', blob: 'slime', insect: 'shell', spider: 'fur' }[plan] || 'fur',
+        colors: [body ?? (free.length ? null : pick?.[0] ?? null), cPat ?? cBelly ?? free[1] ?? (body == null ? pick?.[1] ?? null : null), cMane ?? cTail ?? free[2] ?? (body == null ? pick?.[2] ?? null : null)],
+        maneColor: cMane ?? cTail ?? null, wingColor: cWing, hornColor: cHorn, hoofColor: cHoof,
+        pattern: has(/пятн|пятнист|в крапин/) ? 'spots' : has(/полос|тигров/) ? 'stripes' : has(/кольц/) ? 'rings' : has(/звезд/) ? 'stars' : has(/переход|градиент|радужн/) ? 'gradient' : has(/пятнами|пег/) ? 'patches' : S?.pattern ?? 'none',
+        glow: abilities.includes('glow') ? (colourOf((/свет\S* (\S+)/.exec(s) || [])[1]) ?? body ?? 0x9ef0ff) : null,
         walk: plan === 'serpent' || plan === 'fish' ? (walk === 'roll' ? 'roll' : 'slither') : walk,
-        fly, swim: /плава|в воде|водоплав|ныря/.test(s) || plan === 'fish',
-        hp, speed: /быстр|стремительн|шустр|молниеносн/.test(s) ? 'fast' : /медленн|неторопл/.test(s) ? 'slow' : 'normal',
+        fly, swim: has(/плава|в воде|водоплав|ныря/) || plan === 'fish' || !!S?.swim,
+        hp, speed: has(/быстр|стремительн|шустр|молниеносн/) ? 'fast' : has(/медленн|неторопл/) ? 'slow' : S?.speed ?? 'normal',
         abilities: abilities.slice(0, 4), flaws: FLAW_KEYS.filter((f) => FLAWS[f].ru.test(s)).slice(0, 3),
-        temper: /злой|зл(ое|ая|ые)|агрессив|враждеб|хищн|кровожад|опасн|нападает/.test(s) ? 'hostile' : /пуглив|робк|застенчив/.test(s) ? 'shy' : /добр|дружелюб|ласков|милый|милое|милая|верн|ручн/.test(s) ? 'friendly' : 'neutral',
-        diet: /хищн|мясо|ест мяс/.test(s) ? 'meat' : /магией|ест ману/.test(s) ? 'magic' : /всеяд/.test(s) ? 'anything' : 'plants',
+        temper: has(/злой|зл(ое|ая|ые)|агрессив|враждеб|хищн|кровожад|опасн|нападает/) ? 'hostile' : has(/пуглив|робк|застенчив/) ? 'shy' : has(/добр|дружелюб|ласков|милый|милое|милая|верн|ручн/) ? 'friendly' : 'neutral',
+        diet: has(/хищн|мясо|ест мяс/) ? 'meat' : has(/магией|ест ману/) ? 'magic' : has(/всеяд/) ? 'anything' : 'plants',
         habitat: HABITAT_KEYS.find((h) => HABITATS[h].test(s)) || (plan === 'fish' ? 'water' : 'any'),
-        breed: /не размножа|единствен/.test(s) ? 0 : /быстро размножа|плодовит|много потомства/.test(s) ? 2 : /размножа/.test(s) ? 1 : 0,
-        count: clamp(countBefore(s, /существ|зверюш|зверь|звер[яе]|птиц|созда/) ?? 1, 1, 6),
+        breed: has(/не размножа|единствен/) ? 0 : has(/быстро размножа|плодовит|много потомства/) ? 2 : has(/размножа/) ? 1 : 0,
+        count: clamp(countBefore(s, /существ|зверюш|зверь|звер[яе]|птиц|созда|кон[ейя]|лошад|кошек|собак|волк/) ?? 1, 1, 6),
+        sizeSaid: !!sizeSaid || sizeFactor(s) !== 1,
     };
 }
 
@@ -498,7 +546,7 @@ function guessPlant(s, r, name) {
     const cFruit = colourBy(s, fruitWord), cFlower = colourBy(s, flowerWord), cLeaf = colourBy(s, leafWord);
     const cols = coloursIn(s).filter((c) => c !== cFruit && c !== cFlower);
     const glowWhere = new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${fruitWord})`).test(s) ? 'fruit' : new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${flowerWord})`).test(s) ? 'flowers' : 'all';
-    const k = sizeWord(s);
+    const k = sizeFactor(s);
     const hSaid = /(\d+(?:[.,]\d+)?)\s*(м|метр)/.exec(s);
     const spread = SPREAD_KEYS.find((q) => SPREAD[q].ru.test(s)) || 'normal';
     const habitat = HABITAT_KEYS.filter((h) => HABITATS[h].test(s));
@@ -517,6 +565,7 @@ function guessPlant(s, r, name) {
         spread, habitat: habitat.length ? habitat.slice(0, 3) : ['any'],
         grow: /быстро раст|мгновенно/.test(s) ? 'fast' : /медленно раст/.test(s) ? 'slow' : 'normal',
         count: clamp(countBefore(s, /растени|дерев|куст|цвет|гриб/) ?? (form === 'tree' ? 1 : 5), 1, 20),
+        sizeSaid: !!hSaid || k !== 1,
     };
 }
 
@@ -540,6 +589,11 @@ export function sanitizeRecipe(raw, desc = '', seed = 1) {
     const name = (typeof R.name === 'string' && R.name.trim() ? R.name.trim() : base.name).replace(/[<>{}]/g, '').slice(0, 40);
     if (forbidden(name)) return { ...base, name: base.name };
     const body = R[type] && typeof R[type] === 'object' ? R[type] : R;
+    // (the network named the kind it is like, the words did not: its build is taken from that kind)
+    if (type === 'creature' && !base.species && SPECIES_KEYS.includes(body.species)) {
+        const b2 = guessRecipe(`${desc} (похоже на ${SPECIES_RU[body.species]})`, seed, 'creature');
+        if (b2.species === body.species) return cleanCreature(body, { ...b2, name: base.name }, name);
+    }
     if (type === 'creature') return cleanCreature(body, base, name);
     if (type === 'plant') return cleanPlant(body, base, name);
     return cleanBuild(body, base, name);
@@ -588,14 +642,18 @@ function cleanBuild(b, base, name) {
 }
 
 function cleanCreature(c, base, name) {
-    const plan = pickKey(c.plan, PLAN_KEYS, base.plan);
+    // (a known kind — said or named — keeps its build: the network's numbers are often «1» for everything and made every
+    // creature the same; the words and the kind decide the shape, the network fills what they did not say)
+    const known = !!base.species;
+    const shape = (v, d) => (known ? d : v);
+    const plan = known ? base.plan : pickKey(c.plan, PLAN_KEYS, base.plan);
     const cols = Array.isArray(c.colors) ? c.colors.map(colourOf) : [];
     const walkAsked = pickKey(c.walk, WALK_KEYS, null);
     let wings = pickKey(c.wings, WING_KINDS, base.wings);
     let fly = c.fly === null || c.fly === 'none' ? null : pickKey(c.fly, FLY_KEYS, base.fly);
     if (fly && FLY[fly].wings[0] !== 'none' && wings === 'none') wings = FLY[fly].wings[0]; // (a flapping flight needs wings: they grow)
     if (!fly && base.fly) fly = base.fly; // (the words said it flies)
-    const legs = clamp(Math.round(num(c.legs, base.legs)), 0, CAPS.LEGS_MAX);
+    const legs = clamp(Math.round(known ? base.legs : num(c.legs, base.legs)), 0, CAPS.LEGS_MAX);
     // the walk the body can do (the author: «при любых обстоятельствах ничего не ломалось»): legs it has decide
     let walk = walkAsked || base.walk;
     if (!WALK[walk].legs.includes(legs) && !(legs >= 4 && WALK[walk].legs.includes(4))) walk = legs === 0 ? (walk === 'roll' || walk === 'bounce' ? walk : plan === 'blob' ? 'bounce' : 'slither') : legs === 2 ? (walk === 'hop' || walk === 'waddle' ? walk : 'stride') : legs >= 6 ? 'scuttle' : 'trot';
@@ -609,17 +667,27 @@ function cleanCreature(c, base, name) {
     const eyes = c.eyes && typeof c.eyes === 'object' ? c.eyes : {};
     const horns = c.horns && typeof c.horns === 'object' ? c.horns : {};
     const out = {
-        type: 'creature', name, plan, size: clamp(num(c.size, base.size), CAPS.SIZE_MIN, CAPS.SIZE_MAX), legs,
-        legLen: clamp(num(c.legLen, base.legLen), 0.3, 2.2), legThick: clamp(num(c.legThick, base.legThick), 0.3, 2),
-        neck: clamp(num(c.neck, base.neck), 0, 2.5), head: clamp(num(c.head, base.head), 0.4, 2.2),
+        type: 'creature', name, plan, species: base.species || null,
+        // (the size: the words / the kind decide; else the network's, kept near a medium one — never a tiny thing unasked)
+        size: base.sizeSaid || known ? base.size : clamp(num(c.size, base.size), Math.max(CAPS.SIZE_MIN, base.size * 0.6), Math.min(CAPS.SIZE_MAX, base.size * 2.5)), legs,
+        legLen: clamp(shape(num(c.legLen, base.legLen), base.legLen), 0.3, 2.2), legThick: clamp(shape(num(c.legThick, base.legThick), base.legThick), 0.3, 2.2),
+        neck: clamp(shape(num(c.neck, base.neck), base.neck), 0, 2.6), head: clamp(shape(num(c.head, base.head), base.head), 0.4, 2.2),
+        neckUp: base.neckUp, body: base.body,
+        snout: base.snout || (SNOUTS.includes(c.snout) ? { len: c.snout === 'trunk' ? 2.4 : c.snout === 'flat' ? 0.5 : 1.2, kind: c.snout } : null),
         eyes: { n: clamp(Math.round(num(eyes.n, base.eyes.n)), 1, CAPS.EYES_MAX), size: clamp(num(eyes.size, base.eyes.size), 0.4, 3), color: colourOf(eyes.color) ?? base.eyes.color },
-        ears: clamp(num(c.ears, base.ears), 0, 2.5),
+        ears: clamp(shape(num(c.ears, base.ears), base.ears), 0, 2.5),
+        earShape: known ? base.earShape : pickKey(c.earShape, EAR_SHAPES, base.earShape),
+        feet: known ? base.feet : pickKey(c.feet, FEET, base.feet),
+        mane: base.mane ?? (c.mane === 'neck' || c.mane === 'lion' ? c.mane : null),
+        antlers: base.antlers || (!known && c.antlers === true), tusks: base.tusks || (!known && c.tusks === true), hump: base.hump || (!known && Number.isFinite(+c.hump) ? clamp(Math.round(+c.hump), 0, 2) : 0),
+        shell: base.shell || (!known && c.shell === true), spikes: base.spikes || (!known && c.spikes === true), whiskers: base.whiskers,
+        maneColor: base.maneColor ?? colourOf(c.maneColor), wingColor: base.wingColor ?? colourOf(c.wingColor), hornColor: base.hornColor, hoofColor: base.hoofColor,
         horns: { n: clamp(Math.round(num(horns.n, base.horns.n)), 0, CAPS.HORNS_MAX), len: clamp(num(horns.len, base.horns.len), 0.3, 2.5) },
-        tail: pickKey(c.tail, TAIL_KINDS, base.tail), tailLen: clamp(num(c.tailLen, base.tailLen), 0.2, 2.5),
+        tail: known ? base.tail : pickKey(c.tail, TAIL_KINDS, base.tail), tailLen: clamp(shape(num(c.tailLen, base.tailLen), base.tailLen), 0.2, 2.5),
         wings, wingSpan: clamp(num(c.wingSpan, base.wingSpan), 0.4, 2.2),
-        skin: pickKey(c.skin, SKINS, base.skin),
+        skin: known ? base.skin : pickKey(c.skin, SKINS, base.skin),
         colors: [0, 1, 2].map((i) => base.colors[i] ?? cols[i] ?? null), // (the colours said in the words first)
-        pattern: pickKey(c.pattern, PATTERNS, base.pattern),
+        pattern: base.pattern !== 'none' || known ? base.pattern : pickKey(c.pattern, PATTERNS, base.pattern),
         glow: abil.includes('glow') ? (colourOf(c.glow) ?? base.glow ?? 0x9ef0ff) : null,
         walk, fly, swim: c.swim != null ? !!c.swim || base.swim : base.swim, hp,
         speed: pickKey(c.speed, ['slow', 'normal', 'fast'], base.speed),
@@ -638,7 +706,8 @@ function cleanPlant(p, base, name) {
     const hab = (Array.isArray(p.habitat) ? p.habitat : [p.habitat]).filter((h) => HABITAT_KEYS.includes(h));
     return {
         type: 'plant', name, form: pickKey(p.form, PLANT_FORM_KEYS, base.form),
-        height: clamp(num(p.height, base.height), CAPS.PLANT_H_MIN, CAPS.PLANT_H_MAX),
+        // (the words / the form's own medium height decide; the network's kept near it — never a tiny thing unasked)
+        height: base.sizeSaid ? base.height : clamp(num(p.height, base.height), Math.max(CAPS.PLANT_H_MIN, base.height * 0.7), Math.min(CAPS.PLANT_H_MAX, base.height * 2)),
         trunk: { color: base.trunk.color ?? colourOf(trunk.color), thick: clamp(num(trunk.thick, base.trunk.thick), 0.3, 2.5), twist: clamp(num(trunk.twist, base.trunk.twist), 0, 1) },
         crown: pickKey(p.crown, CROWNS, base.crown), leaves: pickKey(p.leaves, LEAVES, base.leaves),
         leafColor: base.leafColor ?? colourOf(p.leafColor),

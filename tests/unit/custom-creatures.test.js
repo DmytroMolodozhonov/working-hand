@@ -104,3 +104,34 @@ test('its maker is never its prey; a friendly one follows its maker; the limits 
     assert.equal(w2.C.species.size, C.species.size);
     void g;
 });
+
+// The author: «все существа получаются однотипными, похожи на кошечек… попросил похожее на коня, очень-очень большое —
+// создало небольшое». The kind said decides the build; the size words multiply its own; each colour goes where it was said.
+test('a creature like a horse is a horse; «очень-очень большой» is huge; the colours where they were said', async () => {
+    const { sanitizeRecipe, sizeFactor } = await import('../../src/game/CreationRules.js');
+    const { creatureDims } = await import('../../src/game/CreatureForge.js');
+    const generic = { plan: 'quadruped', size: 1, legLen: 1, neck: 1, head: 1, tail: 'thin' }; // (a network's lazy answer)
+    const horse = sanitizeRecipe({ type: 'creature', creature: generic }, 'существо, похожее на коня', 1);
+    assert.equal(horse.species, 'horse');
+    assert.equal(horse.feet, 'hoof'); assert.equal(horse.mane, 'neck'); assert.equal(horse.tail, 'hair');
+    assert.ok(horse.legLen > 1.3 && horse.neck > 1.8, 'long legs, a long neck');
+    const big = sanitizeRecipe({ type: 'creature', creature: generic }, 'существо, похожее на коня, очень-очень большое', 1);
+    assert.ok(big.size > horse.size * 2.5, `huge: ${big.size} vs ${horse.size}`);
+    assert.ok(sizeFactor('маленький цветок') < 1 && sizeFactor('существо с большими глазами') === 1);
+    const bw = sanitizeRecipe(null, 'белый конь с чёрной гривой', 1);
+    assert.ok(bw.colors[0] > 0xd00000, 'the body white');
+    assert.equal(bw.maneColor, 0x1e1e24, 'the mane black');
+    // every kind its own body: an elephant is not a cat
+    const el = creatureDims(sanitizeRecipe(null, 'слон', 1), 1), cat = creatureDims(sanitizeRecipe(null, 'кошка', 1), 1);
+    assert.equal(el.snoutKind, 'trunk'); assert.ok(el.tusks); assert.equal(el.earShape, 'fan');
+    assert.ok(el.H > cat.H * 3, 'an elephant over a cat');
+    // a creature not like any kind: medium (about the hero's size), never tiny unasked
+    const any = sanitizeRecipe({ type: 'creature', creature: { ...generic, size: 0.4 } }, 'существо с крыльями', 1);
+    assert.ok(any.size >= 1.5, `medium: ${any.size}`);
+    for (const d of ['огромный серый слон', 'жираф', 'олень', 'медведь', 'черепаха', 'синий дракон с золотыми рогами', 'единорог', 'сова', 'паук']) {
+        const r = sanitizeRecipe(null, d, 1);
+        assert.ok(r.species, d);
+        const D = creatureDims(r, 1);
+        assert.ok(Number.isFinite(D.H) && D.legs.every((L) => Number.isFinite(L.upper)), d);
+    }
+});

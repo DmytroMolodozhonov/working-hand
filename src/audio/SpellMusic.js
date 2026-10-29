@@ -515,7 +515,7 @@ const TUNES = {
         for (const at of [9, 9.45, 9.9]) drum(o, sr, at, 0.45, 52, 1.3, r);
         for (let k = 0; k < 12; k++) bell(o, sr, hz(['F6', 'A6', 'C7', 'F7'][k % 4]), 9.2 + k * 0.12, 0.05, 2);
         reverb(o, sr, 0.25, 0.5);
-        return finish(o, sr, { rms: 0.075 });
+        return finish(o, sr, { rms: 0.11 });
     },
 };
 
@@ -555,7 +555,7 @@ const FX = {
         for (const n of ['D3', 'A3', 'D4', 'F#4', 'A4']) brass(o, sr, hz(n), 1.28, 1.3, 0.09);
         for (let k = 0; k < 10; k++) bell(o, sr, hz(['D7', 'A6', 'F#6', 'D6', 'A5'][k % 5]), 1.35 + k * 0.09, 0.06, 1.5, 0.3);
         reverb(o, sr, 0.25, 0.5);
-        return finish(o, sr, { peak: 0.8 });
+        return finish(o, sr, { peak: 0.92 });
     },
     /** A pentagram is lit: a low thud, a dark rising chord, a cold bell. */
     fxPentagram(sr) {
@@ -861,7 +861,7 @@ const LOOPS = {
             [12, 'A4', 1.5], [13.5, 'G4', 0.5], [14, 'F4', 1], [15, 'E4', 1]], B, 4 * bar, (f, t, l) => { brass(o, sr, f, t, l * 0.92, 0.1); brass(o, sr, f / 2, t, l * 0.92, 0.07); });
         noise(o, sr, 8 * bar - 1.6, 1.6, 0.16, (u) => 0.05 + 0.5 * u, (u) => u * u, r); // the cymbal swelling into the head
         reverb(o, sr, 0.22, 0.5);
-        return finish(loopSeam(o, sr, 0.25), sr, { rms: 0.08 });
+        return finish(loopSeam(o, sr, 0.25), sr, { rms: 0.13 });
     },
 };
 

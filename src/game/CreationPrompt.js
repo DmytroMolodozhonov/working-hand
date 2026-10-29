@@ -10,8 +10,9 @@
 
 import {
     MATERIAL_KEYS, PART_KEYS, STATUE_KEYS, PLAN_KEYS, WALK_KEYS, FLY_KEYS, WING_KINDS, TAIL_KINDS, SKINS, PATTERNS, TEMPERS, DIETS,
-    ABILITY_KEYS, FLAW_KEYS, PLANT_FORM_KEYS, CROWNS, LEAVES, FRUITS, HABITAT_KEYS, SPREAD_KEYS, CAPS,
+    ABILITY_KEYS, FLAW_KEYS, PLANT_FORM_KEYS, CROWNS, LEAVES, FRUITS, HABITAT_KEYS, SPREAD_KEYS, CAPS, EAR_SHAPES, FEET, SNOUTS,
 } from './CreationRules.js';
+import { SPECIES_KEYS } from './CreatureSpecies.js';
 
 const S = { type: 'string' }, N = { type: 'number' }, I = { type: 'integer' }, B = { type: 'boolean' };
 const E = (list) => ({ enum: list });
@@ -45,13 +46,14 @@ export const CREATION_SCHEMA = {
         creature: {
             type: 'object',
             properties: {
-                plan: E(PLAN_KEYS), size: N, legs: I, legLen: N, legThick: N, neck: N, head: N,
+                species: E(SPECIES_KEYS), plan: E(PLAN_KEYS), size: N, legs: I, legLen: N, legThick: N, neck: N, head: N,
                 eyes: { type: 'object', properties: { n: I, size: N, color: COLOR } }, ears: N,
                 horns: { type: 'object', properties: { n: I, len: N } }, tail: E(TAIL_KINDS), tailLen: N,
                 wings: E(WING_KINDS), wingSpan: N, skin: E(SKINS), colors: { type: 'array', items: COLOR, maxItems: 3 }, pattern: E(PATTERNS), glow: COLOR,
                 walk: E(WALK_KEYS), fly: E([...FLY_KEYS, 'none']), swim: B, hp: I, speed: E(['slow', 'normal', 'fast']),
                 abilities: { type: 'array', items: E(ABILITY_KEYS), maxItems: 4 }, flaws: { type: 'array', items: E(FLAW_KEYS), maxItems: 3 },
                 temper: E(TEMPERS), diet: E(DIETS), habitat: E(HABITAT_KEYS), breed: I, count: I,
+                earShape: E(EAR_SHAPES), feet: E(FEET), snout: E(SNOUTS), mane: E(['neck', 'lion', 'none']), antlers: B, tusks: B, hump: I, shell: B, spikes: B, maneColor: COLOR, wingColor: COLOR,
             },
             required: ['plan', 'size', 'walk'],
         },
@@ -77,7 +79,7 @@ export const CREATION_SYSTEM = `Ты — боги мира волшебной и
 "name": короткое имя по-русски (2–4 слова). Заполни ТОЛЬКО секцию своего типа ("build", "creature" или "plant").
 build.parts — части (до 8): kind из списка, size = [ширина, глубина, высота] в метрах, at = [x, y] — место центра части в метрах от центра постройки (y вперёд к игроку отрицательный), floors — этажи, towers — башни замка, houses — дома города, subject — кого изображает статуя, moat — ров, walls — стены вокруг, spires — шпили. Город и замок — ОДНА часть ("city"/"castle"), их дома и башни игра расставит сама.
 Материалы (wall, roof, trim) — только из списка: stone (серый камень), dark (тёмный камень), white (белый, мрамор), sand (песчаник), brick (кирпич), cobble (булыжник), mossy (замшелый), plaster (штукатурка), planks, darkplanks, logs (брёвна), gold, arcane (волшебный камень), arcanedark, redroof, blueroof, slateroof, purpleroof, thatch (солома), snow.
-creature: plan — скелет (quadruped, biped, bird, insect, spider, serpent, fish, blob, dragon); size — рост в метрах (0.3–14); legs — число ног; legLen/legThick/neck/head — пропорции (1 = обычно, 0.5 = тонкие/короткие, 1.6 = длинные/большие); eyes.size 1 обычные, 2 большие; wings — none/feather/bat/insect/dragon/butterfly; walk — ОДИН из 10 способов ходьбы: trot, gallop, stride, hop, waddle, scuttle, slither, crawl, roll, bounce; fly — ОДИН из 10 способов полёта (flap, soar, hover, flutter, bat, dragon, float, pulse, swoop, spin) или "none", если не летает; hp — здоровье: ${CAPS.HP_DEFAULT}, если игрок не назвал число; abilities — только из списка: fireBreath, waterSpit, iceBreath, poison, lightning, glow, invisible, heal, teleport, sing; flaws — slow, blind, fragile, clumsy, timid, hatesWater, sleepy, loud; temper — friendly, neutral, shy, hostile; colors — до трёх цветов "#rrggbb".
+creature: species — на какое животное похоже (ключ из списка: horse конь, cow корова, deer олень, giraffe жираф, elephant слон, camel верблюд, dog собака, wolf волк, fox лиса, cat кошка, lion лев, tiger тигр, bear медведь, rabbit кролик, monkey обезьяна, turtle черепаха, crocodile крокодил, dinosaur динозавр, frog лягушка, eagle орёл, owl сова, dragon дракон, griffin грифон, unicorn единорог, pegasus пегас и др.; если не похоже ни на кого — не пиши); plan — скелет (quadruped, biped, bird, insect, spider, serpent, fish, blob, dragon); size — рост в метрах (0.3–14); legs — число ног; legLen/legThick/neck/head — пропорции (1 = обычно, 0.5 = тонкие/короткие, 1.6 = длинные/большие); eyes.size 1 обычные, 2 большие; wings — none/feather/bat/insect/dragon/butterfly; walk — ОДИН из 10 способов ходьбы: trot, gallop, stride, hop, waddle, scuttle, slither, crawl, roll, bounce; fly — ОДИН из 10 способов полёта (flap, soar, hover, flutter, bat, dragon, float, pulse, swoop, spin) или "none", если не летает; hp — здоровье: ${CAPS.HP_DEFAULT}, если игрок не назвал число; abilities — только из списка: fireBreath, waterSpit, iceBreath, poison, lightning, glow, invisible, heal, teleport, sing; flaws — slow, blind, fragile, clumsy, timid, hatesWater, sleepy, loud; temper — friendly, neutral, shy, hostile; colors — до трёх цветов "#rrggbb".
 plant: form (tree, bush, flower, grass, vine, mushroom, cactus, reed, crystal), height в метрах, crown, leaves, цвета "#rrggbb", fruit, glow (если светится) и glowOn — что светится (all, leaves, flowers, fruit), spread — как часто распространяется (never, rare, normal, often), habitat — где растёт (meadow, forest, mountain, water, desert, snow, swamp, cave, any), grow — скорость роста.
 Следуй описанию игрока как можно точнее: каждое названное свойство должно попасть в рецепт. Не придумывай лишнего. Ответ — только JSON.`;
 
