@@ -144,3 +144,11 @@ test('«Электром» on a dragon / the spider: the charge ends as a HIT (s
     }
     assert.ok(STRONG.Electrum.drain > 0 && STRONG.Electrum.dps > 0, 'held: mana per second, damage per second');
 });
+
+test('range: «Электром» 2× (60 м), «Пилбидрио» 2,5× (75 м), the rest 30 м', async () => {
+    const { duelRange } = await import('../../src/game/Duel.js');
+    assert.equal(duelRange('Electrum'), 60);
+    assert.equal(duelRange('Pilbidrio'), 75);
+    assert.equal(duelRange('Stupefy'), 30);
+    assert.ok(STRONG.Electrum.reach >= duelRange('Electrum'), 'the held lightning stays on a target the charge could hit');
+});

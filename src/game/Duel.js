@@ -163,6 +163,8 @@ export const JOLT_TARGETS = {
 export const DUEL = {
     SPEED: 15, // m/s — fast (≈0.7 s over 10 m), but still visible and answerable
     RANGE: 30, // m
+    RANGE_ELECTRUM: 60, // m: «Электром» — вдвое дальше обычного
+    RANGE_PILBIDRIO: 75, // m: «Пилбидрио» — в 2,5 раза дальше обычного
     RANGE_DIE: 50, // m: «Дай» (1000 mana, one charge in a fight) reaches farther than the rest
     CONTACT_ANGLE: 0.9, // rad: hand still on the opponent (~50°: aiming roughly is enough)
     DEFLECT_MIN_SHARE: 0.2, // a share of the beam clash (my side of the whole fight) at or below it: no breaking away — a losing wizard cannot just turn the spell aside (the author)
@@ -274,7 +276,9 @@ export function rayToSegment(o, d, a, b, out = {}) {
  * (miss: how far beside the body the line goes, rad; 0 = right through it).
  */
 /** How far a duel charge of this spell flies, m. */
-export const duelRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : DUEL.RANGE);
+export const duelRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : spell === 'Pilbidrio' ? DUEL.RANGE_PILBIDRIO : spell === 'Electrum' ? DUEL.RANGE_ELECTRUM : DUEL.RANGE);
+/** The farthest any charge goes (bodies farther than this are never asked). */
+const RANGE_MAX = Math.max(DUEL.RANGE, DUEL.RANGE_DIE, DUEL.RANGE_ELECTRUM, DUEL.RANGE_PILBIDRIO);
 
 export function pickBody(o, d, bodies, range = DUEL.RANGE) {
     let best = null;
@@ -531,7 +535,7 @@ export class Duel {
      * Every body a charge can touch (`skip`: the caster — never his own), as capsules
      * {kind, id, a, b, r}. (The entries are reused: read them before the next call.)
      */
-    _bodies(skip = null, reach = DUEL.RANGE_DIE + 5) {
+    _bodies(skip = null, reach = RANGE_MAX + 5) {
         const g = this.game;
         const pool = this._bpool || (this._bpool = []);
         const out = [];
