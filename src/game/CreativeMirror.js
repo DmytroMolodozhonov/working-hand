@@ -135,7 +135,7 @@ export function mirrorModel() {
     add(new THREE.BoxGeometry(W - 0.3, Hh - 0.3, 0.06), M.wood, 0, cy, -0.12);
     // the bead row round the glass
     const gw = W - 0.76, gh = Hh - 0.76;
-    const bead = (x, y) => add(new THREE.SphereGeometry(0.035, 8, 6), M.gold, x, y, 0.18);
+    const bead = (x, y) => add(new THREE.SphereGeometry(0.035, 6, 4), M.gold, x, y, 0.18);
     for (let i = 0; i <= 40; i++) { const t = i / 40 - 0.5; bead(t * gw, cy + gh / 2); bead(t * gw, cy - gh / 2); }
     for (let i = 1; i < 64; i++) { const t = i / 64 - 0.5; bead(gw / 2, cy + t * gh); bead(-gw / 2, cy + t * gh); }
     // rosettes at the corners: petals round a boss
