@@ -4428,7 +4428,9 @@ export class Game {
                 || this.combat.immobile || this.isDeadLocal || this.beds?.lying || this.animals?.riding || this.animals?.horseNear?.() || this.dragonRide?.busy || this.dragonRide?.mountable?.()
                 || this.spiders?.held || this.levitation.lifted || this.boards?.mounted || this.ships?.rigging.climbing || this.ledge?.active || this.imperius?.busy || this.imperius?.puppet
                 || (this.config.mode === 'test' && this.testState === 'setup');
-            if (!first && !busy && ch.onGround && ch.jump(J.strength)) { this._jumpAt = J.at; this._jumpOnto(); }
+            const went = !first && !busy && ch.onGround && ch.jump(J.strength);
+            if (went) { this._jumpAt = J.at; this._jumpOnto(); }
+            if (!first) this.perf?.note(`прыжок: сила ${J.strength.toFixed(2)}, ${went ? 'прыгнул' : `не прыгнул (${busy ? 'занят' : ch.onGround ? 'мало силы' : 'не на земле'})`}${went && (ch.jumpVel.x || ch.jumpVel.z) ? `, толчок к уступу ${Math.hypot(ch.jumpVel.x, ch.jumpVel.z).toFixed(1)}` : ''}`); // (the journal: why a jump did not work)
         } else if (J && J.air && ch.jumpAir && J.at === this._jumpAt) ch.jumpBoost(J.strength); // (it went up higher)
         const L = ch.landing;
         if (L && L.at !== this._landSeen) {
