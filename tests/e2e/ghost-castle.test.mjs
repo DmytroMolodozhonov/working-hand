@@ -54,7 +54,7 @@ test('the Castle of Ghosts: absent without the sight, in the land with it, gone 
         out.hasLite = site.hasLite;
         // 4) into the castle: its chests appear (four), each its own
         g.character.group.position.set(site.x, site.F + 6, site.z);
-        for (let i = 0; i < 300; i++) { await sleep(100); if (g.chests.filter((c) => String(c.cave || '').startsWith('gc')).length >= 4) break; }
+        for (let i = 0; i < 1500; i++) { await sleep(100); if (g.chests.filter((c) => String(c.cave || '').startsWith('gc')).length >= 4) break; } // (the sandbox's software GL makes the chunks slowly: up to 150 s)
         const mine = g.chests.filter((c) => String(c.cave || '').startsWith('gc'));
         out.chests = mine.length; out.unique = new Set(mine.map((c) => c.id)).size; out.local = mine.every((c) => c.localOnly); out.flavor = [...new Set(mine.map((c) => c.dungeonFlavor))];
         out.haze = g.world.ghostHaze || 0;
