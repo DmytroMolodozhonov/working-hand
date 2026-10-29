@@ -1617,7 +1617,9 @@ export class Animals {
             p.y += (gy + base - p.y) * Math.min(1, dt * 8); // walking up and down steps
         }
         if (!a.dead) {
-            g.collision.resolveCylinder(p, a.bodyR ?? 0.6 * S.size, p.y - 0.5, a.bodyH ?? 2, 1.1);
+            // (the feet are on the ground, not at the body's height: a lying animal sits lower by its folded legs — measured from
+            // «p.y − 0.5» the whole flat ground stood above its «feet» as a wall and threw it ~10 m a frame in one direction, a horse «flew» past)
+            g.collision.resolveCylinder(p, a.bodyR ?? 0.6 * S.size, p.y - base, a.bodyH ?? 2, 1.1);
             // the others are solid too (their real bodies: long along, narrow across)
             for (const o of this.list) {
                 if (o === a || o.dead) continue;
