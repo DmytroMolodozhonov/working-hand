@@ -107,6 +107,7 @@ export const VORTEX_TARGETS = {
     o: { push: 'none', bubble: false, fill: false, carry: false, why: 'сова — вода не её враг: уворачивается' },
     N: { push: 'knock', bubble: false, fill: false, carry: false, why: 'канарик тяжёл и упрям: шар его не заберёт, но вода сбивает с ног, тушит на нём огонь, лагерь сердится на колдующего (Canaries.hit)' },
     S: { push: 'none', bubble: false, fill: false, carry: false, why: 'птичка Спенсера слишком мала для шара: вода лишь вспугивает её (SpencerRules.SPENCER_TARGETS.water)' },
+    C: { push: 'knock', bubble: false, fill: false, carry: false, why: 'своё существо: вода сбивает с ног и тушит, шар его не берёт — у каждого своё тело (CustomCreatures.watered)' },
     b: { push: 'none', bubble: false, fill: false, carry: false, why: 'книги-птицы — не существа для воды' },
     D: { push: 'none', bubble: false, fill: false, carry: false, why: 'дракон: вода лишь плещет по огромному телу (DragonKinds.ON_DRAGON)' },
     I: { push: 'knock', bubble: false, fill: false, carry: false, why: 'Ледяная Королева и ледяные существа: вода плещет по льду (IceQueen.ICE_TARGETS.water)' },

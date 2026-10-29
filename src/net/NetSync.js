@@ -171,6 +171,7 @@ export class NetSync {
             ltlooks: g.livingTrees?.netLooks?.() || [], // the living trees' own looks (LivingTrees.treeOwnLook)
             mcastles: g.castleMagic?.netList() || [], // castles made by magic (CastleMagic.js)
             dcrs: g.divine?.netList() || [],
+            cpls: g.customPlants?.netList() || null, // plants of one's own: their kinds and where they grow (CustomPlants.js)
             ccrs: g.customCreatures?.netList() || null, // the kinds of creatures of one's own (their bodies: the recipes) // what «Да пусть создастся» built (DivineCreation.js)
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
@@ -214,6 +215,7 @@ export class NetSync {
         if (msg.mcastles) g.castleMagic?.applyNet(msg.mcastles);
         if (msg.dcrs) g.divine?.applyNet(msg.dcrs);
         if (msg.ccrs) g.customCreatures?.applyNet(msg.ccrs);
+        if (msg.cpls) g.customPlants?.applyNet(msg.cpls);
         if (msg.icemagic) g.iceMagic?.applyNet(msg.icemagic);
         if (msg.planets) g.space?.planets.applyJSON(msg.planets);
         if (msg.castles) g.castleLife?.restore(msg.castles);
@@ -971,6 +973,7 @@ export class NetSync {
             case 'wardop': if (this.net.isHost) g.wards?.apply(m.op, m.from); break;
             case 'mcastle': g.castleMagic?.onNet(m, this.net.isHost); break; // («Create a Castle»)
             case 'dcr': g.divine?.onNet(m, this.net.isHost); break;
+            case 'cpl': g.customPlants?.onNet(m, this.net.isHost); break; // (plants of one's own: CustomPlants.js)
             case 'ccr': g.customCreatures?.onNet(m, this.net.isHost); break; // (creatures of one's own: CustomCreatures.js) // («Да пусть создастся»)
             case 'mhouse': g.houseMagic?.onNet(m, this.net.isHost); break; // («Create a House», «Improve a House»)
             case 'icemagic': g.iceMagic?.onNet(m, this.net.isHost); break; // («Create an Ice Castle», «Ice Bridge»)

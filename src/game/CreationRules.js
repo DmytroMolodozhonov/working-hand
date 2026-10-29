@@ -320,9 +320,11 @@ export function kindOfDesc(desc) {
     if (STATUE_RE.test(s) || /из (камня|кирпича|дерева|мрамора|золота|блоков)/.test(s)) return 'build';
     const creature = /существ|животн|зверь|звер[яеок]|чудищ|чудовищ|монстр|тварь|питом|создани|зверек|зверушк|птиц|насеком|дракон|рыб[ау]|паук|змея|змей(?!ка)|жук|слизень|слизн|котик|кот[ае]?\b|кошк|собак|лошадк|кролик|заяц|ящер|гриффон|единорог|бабочк|голем|тролл|гоблин|великан|ёж|еж\b|пчел|муравей|сова|лиса|волк|медвед|олен|мышь|мышк/.test(s)
         || /(с|со) (\S+ ){0,2}(глазами|глазом|ногами|лапами|крыльями|хвостом|рогами|рогом|ушами|клювом|щупальцами|чешуёй|чешуей|шерстью|перьями|панцирем)|умеющ(ее|ий|ая) (летать|плавать|ходить)|летающ(ее|ий|ая)|здоровья|двуног|четвероног|шестиног|многоног/.test(s);
-    const plant = /растени|растенье|цвет(ок|ы|ов)|дерево|деревья|куст|гриб|трав[аыу]|лиан|кактус|плющ|мох|папоротник|цветущ|семена|размножа(ется|ются) (быстро|медленно|часто|редко)|распространя/.test(s);
+    const plant = /растени|растенье|цвет(ок|ы|ов|ами)|дерев(о|ья|ьев|ца|ом|е)|куст|гриб|трав[аыу]|лиан|тростник|камыш|бамбук|водоросл|кактус|плющ|мох|папоротник|цветущ|семена|размножа(ется|ются) (быстро|медленно|часто|редко)|распространя/.test(s);
     const build = PART_KEYS.some((k) => PARTS[k].ru.test(s)) && !/дом(ашн|овит)/.test(s);
-    if (plant && !creature && !(build && !/дерев/.test(s))) return 'plant';
+    // (a plant named first wins over a building word further on: «кристаллическое растение», «тростник у воды»)
+    if (plant && !creature && /^(\S+ ){0,2}(растени|растенье|цвет(ок|ы)|дерев|куст|гриб|кактус|тростник|камыш|бамбук|лиан|плющ|папоротник|водоросл)/.test(s.replace(/^(да |пусть |ну )+/, ''))) return 'plant';
+    if (plant && !creature && !build) return 'plant';
     if (creature) return 'creature';
     if (plant && !build) return 'plant';
     return 'build';
@@ -464,9 +466,18 @@ function guessCreature(s, r, name) {
     };
 }
 
+/** The colour said right before a part («с красными ягодами», «синие листья»): null when none. */
+function colourBy(s, part) {
+    const m = new RegExp(`(?:^|\\s)(?:(\\S+)\\s+)?(\\S+)\\s+(?:${part})`).exec(s);
+    return m ? colourOf(m[2]) ?? colourOf(m[1] || '') : null;
+}
+
 function guessPlant(s, r, name) {
     const form = PLANT_FORM_KEYS.find((f) => PLANT_FORMS[f].ru.test(s)) || 'flower';
-    const cols = coloursIn(s);
+    const fruitWord = 'ягод|яблок|плод|орех|шишк|вишн', flowerWord = 'цвет(?:ами|ы|ок|ков|ки)|лепестк|бутон|соцвет', leafWord = 'лист|игол|иглам|хво|крон|шляпк';
+    const cFruit = colourBy(s, fruitWord), cFlower = colourBy(s, flowerWord), cLeaf = colourBy(s, leafWord);
+    const cols = coloursIn(s).filter((c) => c !== cFruit && c !== cFlower);
+    const glowWhere = new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${fruitWord})`).test(s) ? 'fruit' : new RegExp(`(свет(ящ|ит)|сия|мерца)\\S*\\s+(\\S+\\s+)?(${flowerWord})`).test(s) ? 'flowers' : 'all';
     const k = sizeWord(s);
     const hSaid = /(\d+(?:[.,]\d+)?)\s*(м|метр)/.exec(s);
     const spread = SPREAD_KEYS.find((q) => SPREAD[q].ru.test(s)) || 'normal';
@@ -476,12 +487,13 @@ function guessPlant(s, r, name) {
         height: clamp(hSaid ? parseFloat(hSaid[1].replace(',', '.')) : PLANT_FORMS[form].h * k, CAPS.PLANT_H_MIN, CAPS.PLANT_H_MAX),
         trunk: { color: /бел\S* ствол|берез/.test(s) ? 0xe8e4dc : /черн\S* ствол/.test(s) ? 0x2a2420 : null, thick: /толст/.test(s) ? 1.5 : /тонк/.test(s) ? 0.6 : 1, twist: /кривой|извилист|скрюч|спирал/.test(s) ? 1 : 0 },
         crown: /плакуч|свисаю|ив[аы]/.test(s) ? 'weeping' : /конус|ель|елк|пирамидальн/.test(s) ? 'cone' : /зонт|плоск\S* крон|акаци/.test(s) ? 'umbrella' : /спирал|винт/.test(s) ? 'spiral' : /колонн|тополь|кипарис/.test(s) ? 'columnar' : form === 'tree' || form === 'bush' ? 'round' : 'none',
-        leaves: /игл|хво/.test(s) ? 'needle' : /папоротн|резн/.test(s) ? 'fern' : /сердечк|в форме сердц/.test(s) ? 'heart' : /перист/.test(s) ? 'feather' : form === 'cactus' || form === 'crystal' || form === 'mushroom' ? 'none' : 'broad',
-        leafColor: cols.find((c) => c !== 0xf0d040 && c !== 0xf08cb4) ?? null,
-        flowers: { color: /цвет|бутон|соцвет|роз|тюльпан|ромашк|цветет/.test(s) ? (cols.find((c) => c !== 0x3f9d3a) ?? 0xf08cb4) : null, count: /много цвет|усыпан/.test(s) ? 2 : 1 },
-        fruit: /яблок/.test(s) ? 'apple' : /ягод|вишн|клубник/.test(s) ? 'berry' : /орех|желуд|шишк/.test(s) ? 'nut' : /кристалл/.test(s) ? 'crystal' : /колокольч/.test(s) ? 'bell' : /звездочк|звезд/.test(s) ? 'star' : 'none',
-        fruitColor: null,
-        glow: /свет(ит|ится|ящ)|сия|мерца|фосфор|волшебн|магическ/.test(s) ? (cols[0] ?? 0x9ef0ff) : null,
+        leaves: /игл|игол|хво/.test(s) ? 'needle' : /папоротн|резн/.test(s) ? 'fern' : /сердечк|в форме сердц/.test(s) ? 'heart' : /перист/.test(s) ? 'feather' : form === 'cactus' || form === 'crystal' || form === 'mushroom' ? 'none' : 'broad',
+        leafColor: cLeaf ?? (form === 'mushroom' || form === 'crystal' || form === 'cactus' ? cols[0] : cols.find((c) => c !== 0xf0d040 && c !== 0xf08cb4)) ?? null,
+        flowers: { color: cFlower ?? (/цвет|бутон|соцвет|роз|тюльпан|ромашк|цветет|лепест/.test(s) ? (cols.find((c) => c !== 0x3f9d3a && c !== cLeaf) ?? 0xf08cb4) : null), count: /много цвет|усыпан/.test(s) ? 2 : 1 },
+        fruit: /яблок|плод/.test(s) ? 'apple' : /ягод|вишн|клубник/.test(s) ? 'berry' : /орех|желуд|шишк/.test(s) ? 'nut' : /кристалл/.test(s) ? 'crystal' : /колокольч/.test(s) ? 'bell' : /звездочк|звезд/.test(s) ? 'star' : 'none',
+        fruitColor: cFruit,
+        glow: /свет(ит|ится|ящ)|сия|мерца|фосфор|волшебн|магическ/.test(s) ? ((glowWhere === 'fruit' ? cFruit : glowWhere === 'flowers' ? cFlower : null) ?? cols[0] ?? 0x9ef0ff) : null,
+        glowOn: glowWhere,
         spread, habitat: habitat.length ? habitat.slice(0, 3) : ['any'],
         grow: /быстро раст|мгновенно/.test(s) ? 'fast' : /медленно раст/.test(s) ? 'slow' : 'normal',
         count: clamp(countBefore(s, /растени|дерев|куст|цвет|гриб/) ?? (form === 'tree' ? 1 : 5), 1, 20),
@@ -608,8 +620,9 @@ function cleanPlant(p, base, name) {
         crown: pickKey(p.crown, CROWNS, base.crown), leaves: pickKey(p.leaves, LEAVES, base.leaves),
         leafColor: base.leafColor ?? colourOf(p.leafColor),
         flowers: { color: base.flowers.color ?? colourOf(flowers.color), count: clamp(Math.round(num(flowers.count, base.flowers.count)), 0, 3) },
-        fruit: pickKey(p.fruit, FRUITS, base.fruit), fruitColor: colourOf(p.fruitColor) ?? base.fruitColor,
+        fruit: pickKey(p.fruit, FRUITS, base.fruit), fruitColor: base.fruitColor ?? colourOf(p.fruitColor),
         glow: base.glow ?? colourOf(p.glow),
+        glowOn: base.glowOn !== 'all' ? base.glowOn : pickKey(p.glowOn, ['all', 'leaves', 'flowers', 'fruit'], 'all'),
         spread: base.spread !== 'normal' ? base.spread : pickKey(p.spread, SPREAD_KEYS, 'normal'),
         habitat: base.habitat[0] !== 'any' ? base.habitat : hab.length ? hab.slice(0, 3) : ['any'],
         grow: pickKey(p.grow, ['slow', 'normal', 'fast'], base.grow),

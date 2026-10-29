@@ -60,7 +60,7 @@ export const CREATION_SCHEMA = {
             properties: {
                 form: E(PLANT_FORM_KEYS), height: N, trunk: { type: 'object', properties: { color: COLOR, thick: N, twist: N } },
                 crown: E(CROWNS), leaves: E(LEAVES), leafColor: COLOR, flowers: { type: 'object', properties: { color: COLOR, count: I } },
-                fruit: E(FRUITS), fruitColor: COLOR, glow: COLOR, spread: E(SPREAD_KEYS), habitat: { type: 'array', items: E(HABITAT_KEYS), maxItems: 3 },
+                fruit: E(FRUITS), fruitColor: COLOR, glow: COLOR, glowOn: E(['all', 'leaves', 'flowers', 'fruit']), spread: E(SPREAD_KEYS), habitat: { type: 'array', items: E(HABITAT_KEYS), maxItems: 3 },
                 grow: E(['slow', 'normal', 'fast']), count: I,
             },
             required: ['form', 'height'],
@@ -77,7 +77,7 @@ export const CREATION_SYSTEM = `Ты — боги мира волшебной и
 build.parts — части (до 8): kind из списка, size = [ширина, глубина, высота] в метрах, at = [x, y] — место центра части в метрах от центра постройки (y вперёд к игроку отрицательный), floors — этажи, towers — башни замка, houses — дома города, subject — кого изображает статуя, moat — ров, walls — стены вокруг, spires — шпили. Город и замок — ОДНА часть ("city"/"castle"), их дома и башни игра расставит сама.
 Материалы (wall, roof, trim) — только из списка: stone (серый камень), dark (тёмный камень), white (белый, мрамор), sand (песчаник), brick (кирпич), cobble (булыжник), mossy (замшелый), plaster (штукатурка), planks, darkplanks, logs (брёвна), gold, arcane (волшебный камень), arcanedark, redroof, blueroof, slateroof, purpleroof, thatch (солома), snow.
 creature: plan — скелет (quadruped, biped, bird, insect, spider, serpent, fish, blob, dragon); size — рост в метрах (0.3–14); legs — число ног; legLen/legThick/neck/head — пропорции (1 = обычно, 0.5 = тонкие/короткие, 1.6 = длинные/большие); eyes.size 1 обычные, 2 большие; wings — none/feather/bat/insect/dragon/butterfly; walk — ОДИН из 10 способов ходьбы: trot, gallop, stride, hop, waddle, scuttle, slither, crawl, roll, bounce; fly — ОДИН из 10 способов полёта (flap, soar, hover, flutter, bat, dragon, float, pulse, swoop, spin) или "none", если не летает; hp — здоровье: ${CAPS.HP_DEFAULT}, если игрок не назвал число; abilities — только из списка: fireBreath, waterSpit, iceBreath, poison, lightning, glow, invisible, heal, teleport, sing; flaws — slow, blind, fragile, clumsy, timid, hatesWater, sleepy, loud; temper — friendly, neutral, shy, hostile; colors — до трёх цветов "#rrggbb".
-plant: form (tree, bush, flower, grass, vine, mushroom, cactus, reed, crystal), height в метрах, crown, leaves, цвета "#rrggbb", fruit, glow (если светится), spread — как часто распространяется (never, rare, normal, often), habitat — где растёт (meadow, forest, mountain, water, desert, snow, swamp, cave, any), grow — скорость роста.
+plant: form (tree, bush, flower, grass, vine, mushroom, cactus, reed, crystal), height в метрах, crown, leaves, цвета "#rrggbb", fruit, glow (если светится) и glowOn — что светится (all, leaves, flowers, fruit), spread — как часто распространяется (never, rare, normal, often), habitat — где растёт (meadow, forest, mountain, water, desert, snow, swamp, cave, any), grow — скорость роста.
 Следуй описанию игрока как можно точнее: каждое названное свойство должно попасть в рецепт. Не придумывай лишнего. Ответ — только JSON.`;
 
 /** The user's turn: the description as said. */

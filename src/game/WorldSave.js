@@ -356,6 +356,7 @@ export class WorldKeeper {
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
             divineCreations: g.divine?.snapshot() || null,
+            customPlants: g.customPlants?.snapshot() || null, // plants of one's own (CustomPlants.js)
             customCreatures: g.customCreatures?.snapshot() || null, // creatures of one's own: their kinds and the ones alive (CustomCreatures.js) // what «Да пусть создастся» made: the buildings' records, their chests (DivineCreation.js)
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
             magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
@@ -447,6 +448,7 @@ export function restoreWorld(game, save, THREE) {
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);
     if (save.magicCastles) g.castleMagic?.restore(save.magicCastles);
     if (save.divineCreations) g.divine?.restore(save.divineCreations);
+    if (save.customPlants) g.customPlants?.restore(save.customPlants);
     if (save.customCreatures) g.customCreatures?.restore(save.customCreatures); // («Да пусть создастся») // («Create a Castle») // (after the beds, the doors and the things lying about)
     if (save.iceMagic) g.iceMagic?.restore(save.iceMagic);
     if (save.planets) g.space?.planets.applyJSON(save.planets);

@@ -1,3 +1,4 @@
+// (--plants: plants of one's own — CustomPlantModel.js)
 // Pictures of creatures of one's own («Да пусть создастся существо …» — CustomCreatureModel.js): each description a
 // creature, posed mid-walk (or mid-flight), a 3.5 m red post (the hero) beside it for scale.
 // Usage: node tools/creature-screenshots.mjs [--out docs/creatures] [--fly]
@@ -24,13 +25,28 @@ const DESCS = [
     'маленький кролик-циклоп с одним огромным глазом, прыгает',
 ];
 
+const PLANTS = [
+    'огромное дерево с синими листьями и светящимися плодами',
+    'плакучая ива с серебристыми листьями',
+    'ель с голубыми иголками, растёт в горах',
+    'куст с красными ягодами',
+    'волшебный цветок с огненными лепестками',
+    'светящийся гриб в пещере',
+    'кактус с розовыми цветами в пустыне',
+    'кристаллическое растение, фиолетовое, светится',
+    'лиана с белыми цветами',
+    'тростник у воды',
+    'золотая трава на лугу',
+    'спиральное дерево с розовыми цветами',
+];
+const plants = process.argv.includes('--plants');
 const srv = await startServer(port);
 const browser = await launch();
 try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
     page.on('pageerror', (e) => console.error('page error:', e.message));
     await page.goto(srv.url + 'tools/tree-view.html');
-    const url = await page.evaluate(async ([descs, fly]) => {
+    const url = await page.evaluate(async ([descs, fly, plantsOn]) => {
         const THREE = await import('three');
         const { buildCreature, poseCreature } = await import('/src/entities/CustomCreatureModel.js');
         const { sanitizeRecipe, recipeKey } = await import('/src/game/CreationRules.js');
@@ -46,7 +62,25 @@ try {
         const cols = 4, rows = Math.ceil(descs.length / cols), tw = 1600 / cols, th = 900 / rows;
         r.setScissorTest(true);
         const names = [];
+        const { plantShape, plantMaterials } = await import('/src/fx/CustomPlantModel.js');
         descs.forEach((d, i) => {
+            if (plantsOn) {
+                const rec = sanitizeRecipe({ type: 'plant' }, d, i + 1), M = plantMaterials(), sh = plantShape(rec, i + 1);
+                const g = new THREE.Group(); const b = new THREE.Mesh(sh.body, M.body); b.castShadow = true; g.add(b); if (sh.glow) g.add(new THREE.Mesh(sh.glow, M.glow));
+                g.scale.setScalar(rec.height); g.position.set(i * 60, 0, 0); scene.add(g);
+                const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.5, 0.25), new THREE.MeshLambertMaterial({ color: 0xd03030 }));
+                const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+                post.position.set(box.max.x + 0.6, 1.75, c.z + 0.8); scene.add(post);
+                const R = Math.max(size.x, size.y, size.z, 3.5) * 0.85;
+                const cam = new THREE.PerspectiveCamera(36, tw / th, 0.1, 400);
+                cam.position.set(c.x + R * 0.35, c.y + R * 0.4, c.z + R * 2.1); cam.lookAt(c.x, Math.max(c.y, 1.2), c.z);
+                const col = i % cols, row = Math.floor(i / cols);
+                r.setViewport(col * tw, 900 - (row + 1) * th, tw, th); r.setScissor(col * tw, 900 - (row + 1) * th, tw, th);
+                sun.position.set(c.x + 20, 40, c.z + 30); sun.target.position.copy(c); sun.target.updateMatrixWorld();
+                r.render(scene, cam);
+                names.push(`${i}: ${rec.form} ${rec.crown} ${rec.leaves} ${rec.height.toFixed(1)}m glow=${rec.glow != null}`);
+                return;
+            }
             const rec = sanitizeRecipe({ type: 'creature' }, d, i + 1);
             const m = buildCreature(rec, recipeKey(rec), i + 1);
             const flying = fly && rec.fly;
@@ -70,9 +104,9 @@ try {
         });
         window.__names = names;
         return cv.toDataURL('image/png');
-    }, [DESCS, process.argv.includes('--fly')]);
+    }, [plants ? PLANTS : DESCS, process.argv.includes('--fly'), plants]);
     console.log((await page.evaluate(() => window.__names)).join('\n'));
-    const file = path.join(out, `creatures${process.argv.includes('--fly') ? '-fly' : ''}.png`);
+    const file = path.join(out, plants ? 'plants.png' : `creatures${process.argv.includes('--fly') ? '-fly' : ''}.png`);
     fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
     console.log('saved', file);
 } finally {
