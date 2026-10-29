@@ -172,6 +172,7 @@ import { HouseWards, isWardSpell, WARD_NAMES, keepIn } from './HouseWards.js';
 import { ZombieSpawn, worldLights, litAt, inSunlight, ZSPAWN, lightLevel } from './ZombieSpawn.js';
 import { HouseMagic } from './HouseMagic.js';
 import { CastleMagic } from './CastleMagic.js';
+import { DivineCreation } from './DivineCreation.js';
 import { IceMagic } from './IceMagic.js';
 import { Space } from './Space.js';
 import { PlanetMagic, PLANET_SPELLS } from './PlanetMagic.js';
@@ -211,7 +212,7 @@ const LEV_SAME_PHRASE = 2.5;
 const WATER_COOLDOWN = 600; // ms between water commands («максима» can be repeated)
 const BOMBARDO_WAIT = 700; // ms to wait for «…Максима» after an unfinished «Бомбардо»
 // Mana: spells that may still fail after they are paid for — they report their own success (Mana.js)
-const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
+const MANA_LATER = new Set(['GroundVortex', 'Imperius', 'ImperiusMaxima', 'BrainrotMaxima', 'CreatePlanet', 'PlanetLiquidation', 'EnlargePlanet', 'TerraformPlanet', 'LevitationSuperMaxima', 'IceCastle', 'IceBridge', 'Inferno', 'Hellfire', 'WaterVortexSuperMaxima', 'Bombardo', 'BombardoMaxima', 'Accio', 'LightningStrike', 'TotalDestruction', 'TotalDestructionMaxima', 'Inspirius', 'Boom', 'Sapira', 'Sands', 'Stupefy', 'AvadaKedavra', 'Expelliarmus', 'Jolt', 'JoltMaxima', 'Firefighting', 'FirefightingMaxima', 'CreateHouse', 'ImproveHouse', 'CreateCastle', 'DivineCreation', 'Liquidation', 'LiquidationMaxima', 'Fireworks', 'VisibleGodi']);
 const PLAYER_RADIUS = 0.48;
 export const DAY_CYCLE_MS = 24 * 60 * 1000;
 const ZOMBIE_RADIUS = 0.88;
@@ -571,6 +572,7 @@ export class Game {
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
         this.castleMagic = new CastleMagic(this); // «Create a Castle» (CastleMagic.js)
+        this.divine = new DivineCreation(this); // «Да пусть создастся …»: the gods make what is described (DivineCreation.js)
         this.iceMagic = new IceMagic(this); // «Create an Ice Castle», «Ice Bridge» (IceMagic.js)
         this.space = new Space(this); // «Космос»: Flying Maxima, the Solar System, the planets (Space.js, world/Planets.js)
         this.planetMagic = new PlanetMagic(this); // the gods' scrolls: «Create a Planet», «Enlarge Planet», «Terraform Planet», «Wingardium Leviosa Super Maxima»
@@ -1311,7 +1313,7 @@ export class Game {
     }
 
     spillBurntChest(chest, rp, burn = true) { // (burn false: «Liquidation Максима» crumbled it — nothing burns, all falls out)
-        if (chest.store) { if (this.authority) (chest.store.castle ? this.castleMagic : this.houseMagic)?.chestBurnt(chest, rp); return; } // (a magic house's chest: what was put in it)
+        if (chest.store) { if (this.authority) (chest.store.divine ? this.divine : chest.store.castle ? this.castleMagic : this.houseMagic)?.chestBurnt(chest, rp); return; } // (a magic house's chest: what was put in it)
         if (!this.authority || chest.itemType !== 'loot' || chest.ship) return;
         const testing = this.config.mode === 'creative' && /^(cvtest|creative-test)/.test(String(chest.id));
         const L0 = new Set(this.items.loose.keys()), W0 = new Set(this.weapons.weapons);
@@ -1330,7 +1332,7 @@ export class Game {
         if (!chest.open()) return;
         if (this.sound) this.sound.playChestOpen(chest.getPosition());
         // a magic house's chest: what was put into it rises out of it (HouseMagic.js)
-        if (chest.store) { if (this.authority) { (chest.store.castle ? this.castleMagic : this.houseMagic).chestOpened(chest); this.sync?.chestOpenedLoot?.(chest); } return; }
+        if (chest.store) { if (this.authority) { (chest.store.divine ? this.divine : chest.store.castle ? this.castleMagic : this.houseMagic).chestOpened(chest); this.sync?.chestOpenedLoot?.(chest); } return; }
         const id = rewardId || `c${chest.id}`;
         if (chest.itemType === 'loot') {
             // a cave chest: wands, scrolls, shields… float up out of it
@@ -1722,6 +1724,8 @@ export class Game {
         if (this.imperius?.heardPhrase(text)) return null;
         // («Назови …» right after «Create a Planet»: the new planet's name — not a spell, PlanetMagic.tryName)
         if (this.planetMagic?._naming && this.planetMagic.tryName(text, isFinal)) return null;
+        // (the phrase after a lone «Да пусть создастся»: what the gods are to make — DivineCreation.hearDesc)
+        if (this.divine?.listening && !matchSpell(text) && this.divine.hearDesc(text, isFinal)) return null;
         let name = matchSpell(text);
         // «Айс Максима» with water in the hands: the water's «Frozen» (one spell, both words — StrongSpells.js)
         if (name === 'IceMaxima' && (this.water?.active || this.vortex?.state)) name = 'Frozen';
@@ -1847,6 +1851,7 @@ export class Game {
         if (name === 'CreateBed' || name === 'ChangeColor') return this.beds.cast(name, text, isFinal);
         if (name === 'CreateHouse' || name === 'ImproveHouse') return this.houseMagic.cast(name, isFinal); // (HouseMagic.js)
         if (name === 'CreateCastle') return this.castleMagic.cast(name, isFinal); // (CastleMagic.js)
+        if (name === 'DivineCreation') return this.divine.cast(isFinal, text); // («Да пусть создастся …»: the description is the phrase's own — DivineCreation.js)
         if (name === 'IceCastle' || name === 'IceBridge') return this.iceMagic.cast(name, isFinal); // (IceMagic.js)
         if (isWardSpell(name)) return this._castWard(name, isFinal, text); // «Защита дома» (HouseWards.js)
         // the spell's strength with the wand in the hand (used by damage while it acts)
@@ -3623,6 +3628,7 @@ export class Game {
         if (earth) this.wards?.update(dt);
         this.houseMagic?.update(dt);
         this.castleMagic?.update(dt);
+        this.divine?.update(dt);
         this.iceMagic?.update(dt);
         if (earth) this.ships?.rigging.updateBody(dt); // (hanging on a ship's rope ladder: the body where the hands hold)
         if (earth) this.ships?.helm.updateHands(); // (a hand on a ship's wheel sits on its rim; a free one never goes through it)

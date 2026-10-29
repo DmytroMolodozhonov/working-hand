@@ -483,6 +483,26 @@ const TUNES = {
         pad(o, sr, ['D3', 'A3', 'D4', 'F4', 'A4'], 7.2, 7.4, 0.4, { att: 0.1, rel: 1, harm: 3 });
         return finish(o, sr, { rms: 0.075 });
     },
+    /**
+     * «Да пусть создастся …» (DivineCreation.js): the gods make a thing — a choir rising out of silence (F – Bb – Dm – C),
+     * a harp climbing higher and higher, bells like stars falling, then the whole world answering in F major with brass.
+     */
+    thCreation(sr) {
+        const o = buf(sr, 13), r = rng(211);
+        pad(o, sr, ['F2', 'C3', 'F3'], 0, 3.4, 0.3, { att: 2.2, rel: 1, vib: 0.004, harm: 2 });
+        pad(o, sr, ['Bb2', 'F3', 'Bb3', 'D4'], 3, 5.6, 0.36, { att: 1, rel: 1, vib: 0.006, harm: 3 });
+        pad(o, sr, ['D3', 'A3', 'D4', 'F4'], 5.3, 7.5, 0.38, { att: 0.8, rel: 1, vib: 0.006, harm: 3 });
+        pad(o, sr, ['C3', 'G3', 'C4', 'E4', 'G4'], 7.2, 9, 0.42, { att: 0.6, rel: 0.6, vib: 0.006, harm: 3 });
+        pad(o, sr, ['F2', 'F3', 'C4', 'F4', 'A4', 'C5', 'F5'], 9, 11.8, 0.7, { att: 0.25, rel: 1.6, vib: 0.006, harm: 4 });
+        const arp = ['F3', 'A3', 'C4', 'F4', 'A4', 'C5', 'F5', 'A5', 'C6'];
+        for (let k = 0; k < 40; k++) pluck(o, sr, hz(arp[Math.min(arp.length - 1, Math.floor(k / 5) + (k % 3))]), 0.6 + k * 0.21, 0.13 + 0.05 * (k / 40), 1.6, r);
+        melody([[0, 'C5', 1], [1, 'F5', 1], [2, 'A5', 2], [4, 'G5', 1], [5, 'Bb5', 1], [6, 'A5', 3]], 0.5, 6, (f, t) => bell(o, sr, f, t, 0.12, 2.4, 0.3));
+        melody([[0, 'F4', 1], [1, 'C5', 1], [2, 'F5', 3]], 0.45, 9, (f, t, l) => { brass(o, sr, f, t, l, 0.14); brass(o, sr, f / 2, t, l, 0.09); });
+        for (const at of [9, 9.45, 9.9]) drum(o, sr, at, 0.45, 52, 1.3, r);
+        for (let k = 0; k < 12; k++) bell(o, sr, hz(['F6', 'A6', 'C7', 'F7'][k % 4]), 9.2 + k * 0.12, 0.05, 2);
+        reverb(o, sr, 0.25, 0.5);
+        return finish(o, sr, { rms: 0.075 });
+    },
 };
 
 // ------------------------------------------------------------------ the short effects
@@ -690,6 +710,13 @@ const FX = {
     endLev(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.6, 0.25, (u) => 700 - 450 * u, swell(0.05, 0.7), 2); return finish(o, sr, { peak: 0.4 }); },
     /** The living tree is a tree again: a long wood groan and a dull thud. */
     endAlive(sr) { const o = buf(sr, 1.4), r = rng(89); glide(o, sr, 0, 1.1, 0.25, (u) => 120 - 60 * u + 6 * Math.sin(u * 70), swell(0.1, 0.3), 6); drum(o, sr, 1, 0.5, 55, 0.4, r); return finish(o, sr, { peak: 0.6 }); },
+    /** «Да пусть создастся»: the creation is whole — a bright chord blooming with a shimmer. */
+    fxCreationBloom(sr) {
+        const o = buf(sr, 1.9);
+        pad(o, sr, ['F4', 'A4', 'C5', 'F5'], 0, 1.1, 0.5, { att: 0.03, rel: 0.7, harm: 3, vib: 0.008 });
+        for (let k = 0; k < 6; k++) bell(o, sr, hz(['C6', 'F6', 'A6', 'C7', 'F7', 'A7'][k]), k * 0.06, 0.12, 1.2);
+        return finish(o, sr, { peak: 0.8 });
+    },
 };
 
 // ------------------------------------------------------------------ the loops (held spells)
@@ -734,6 +761,13 @@ const LOOPS = {
         for (const [t, n] of [[1.5, 'G6'], [4.2, 'D7'], [7.7, 'Eb6'], [10.3, 'Bb6']]) bell(o, sr, hz(n), t, 0.05, 2.5, 0.1);
         return finish(loopSeam(o, sr, 0.5), sr, { rms: 0.05 });
     },
+    /** «Да пусть создастся»: the gods read the words — a soft far choir and a slow shimmer of bells (looped while they think). */
+    loopGenesis(sr) {
+        const o = buf(sr, 4.6), r = rng(223);
+        pad(o, sr, ['F3', 'C4', 'A4'], 0, 4.6, 0.3, { att: 0.01, rel: 0, harm: 2, vib: 0.007 });
+        for (let k = 0; k < 8; k++) bell(o, sr, hz(['C6', 'A5', 'F6', 'G6'][k % 4]) * (1 + 0.002 * r()), 0.2 + k * 0.55, 0.05, 1.6);
+        return finish(loopSeam(o, sr), sr, { peak: 0.4 });
+    },
 };
 
 /** Every sound made here: key → (sr) → samples. */
@@ -749,6 +783,7 @@ export const SPELL_SOUND = {
     // the great spells: their own tunes
     CreateHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] }, ImproveHouse: { own: ['houseTheme', 'houseHum', 'houseDone'] },
     CreateCastle: { own: ['castleTheme', 'houseHum', 'rumble'] },
+    DivineCreation: { own: ['loopGenesis', 'fxCreationBloom', 'houseHum'], theme: 'thCreation' }, // («Да пусть создастся»: the gods think — loopGenesis; the creation whole — fxCreationBloom; DivineCreation.js)
     IceCastle: { own: ['iceBell', 'iceFloor', 'iceDone'] }, IceBridge: { own: ['iceBell', 'iceFloor', 'iceChime'] },
     CircleAttack: { own: ['circleAttack', 'rumble'] }, CircleAttackMaxima: { own: ['circleAttack', 'rumble'] },
     Inspirius: { own: ['inspCast', 'inspZap', 'inspBlast'] },

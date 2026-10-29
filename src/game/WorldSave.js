@@ -345,6 +345,7 @@ export class WorldKeeper {
             liquidated: g.liquidation?.snapshot() || [], // cauldrons, chests, beds, doors, boards crumbled by «Liquidation» (they never come back)
             houses: g.houses?.snapshot() || null,
             wards: g.wards?.snapshot() || [], // houses' spheres of protection (HouseWards.js)
+            divineCreations: g.divine?.snapshot() || null, // what «Да пусть создастся» made: the buildings' records, their chests (DivineCreation.js)
             magicCastles: g.castleMagic?.snapshot() || null, // castles made by magic and what is in their chests (CastleMagic.js)
             magicHouses: g.houseMagic?.snapshot() || null, // houses made by magic and what is in their chests (HouseMagic.js)
             iceMagic: g.iceMagic?.snapshot() || null, // castles and bridges of ice (IceMagic.js)
@@ -432,7 +433,8 @@ export function restoreWorld(game, save, THREE) {
     if (save.ships) g.ships?.restore(save.ships);
     if (save.guns) g.ships?.cannons.restore(save.guns);
     if (save.magicHouses) g.houseMagic?.restore(save.magicHouses);
-    if (save.magicCastles) g.castleMagic?.restore(save.magicCastles); // («Create a Castle») // (after the beds, the doors and the things lying about)
+    if (save.magicCastles) g.castleMagic?.restore(save.magicCastles);
+    if (save.divineCreations) g.divine?.restore(save.divineCreations); // («Да пусть создастся») // («Create a Castle») // (after the beds, the doors and the things lying about)
     if (save.iceMagic) g.iceMagic?.restore(save.iceMagic);
     if (save.planets) g.space?.planets.applyJSON(save.planets);
     // (Creative always opens in the full day; the other modes go on from the hour they were left at)

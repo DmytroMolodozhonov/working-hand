@@ -135,7 +135,8 @@ export const SPELL_COST = {
     LumosFollowing: 15, // (then 0.1 a second: WandMagic.FOLLOW)
     CreateBed: 6,
     CreateHouse: 20, // a house by magic: then 0.5 a second for its 10 s (HouseMagic.js; each level of «Improve a House» twice as much)
-    CreateCastle: 500, // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
+    CreateCastle: 500,
+    DivineCreation: 1000, // «Да пусть создастся»: the gods make what is described (DivineCreation.js pays it itself; Creative: free) // a whole castle by magic, at once (CastleMagic.js pays it itself; Creative: free)
     ImproveHouse: 40, // (level 2; 80, 160, 320 for the next — HouseMagic pays it itself)
     ChangeColor: 2,
     WaterVortex: 20, // very strong: a whole vortex of water, 20 at once + 1 a second while it holds water (see WaterVortex.js)

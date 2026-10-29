@@ -337,7 +337,7 @@ export const ECHO_AFTER = [-0.08, 0.45];
 export const ECHO_LONGER = 0.3;
 
 // (spells whose words go on: the written words carry what follows — «поменяй цвет на синий»)
-export const WORDY = new Set(['ChangeColor']);
+export const WORDY = new Set(['ChangeColor', 'DivineCreation']); // («Да пусть создастся …»: the description goes on — DivineCreation.js)
 
 /** The spells this finds by their sound: for them the sound is the judge, never the written words. */
 export const HEARD = new Set(VOCAB.map((w) => w.spell));

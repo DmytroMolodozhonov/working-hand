@@ -773,6 +773,9 @@ export class SoundManager {
         this._loop('flight', this.enabled && flight > 0.02 ? 'loopFlight' : null, 0.5 * Math.min(1, flight), 0.8 + 0.4 * Math.min(1, flight));
     }
 
+    /** «Да пусть создастся»: the gods think — their soft choir, as loud as `k` (0…1: near the place; 0 — silent). */
+    creationHum(k) { if (this.context && this.loaded) this._loop('creation', this.enabled && k > 0.01 ? 'loopGenesis' : null, 0.55 * Math.min(1, k)); }
+
     /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
     _loop(slot, key, k, rate = 1) {
         const loops = this._loops || (this._loops = {});

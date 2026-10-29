@@ -32,6 +32,7 @@ import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
 import { pentagramWords } from '../game/PentagramWords.js';
+import { creationWords } from '../game/CreationWords.js';
 import { segmentToSegment } from '../game/SegmentContact.js';
 
 const _a = new THREE.Vector3();
@@ -116,6 +117,9 @@ export function matchSpell(text) {
     const s = (text || '').toLowerCase().trim();
     if (!s) return null;
     const has = (...words) => words.some((w) => s.includes(w));
+    // «Да пусть создастся …» (the gods' making, DivineCreation.js): FIRST — the description after it may hold any other
+    // spell's word («…замок с огнём на башнях»); only the opener at the very start of the phrase (CreationWords.js)
+    if (creationWords(s)) return 'DivineCreation';
     // «Империус» («…Максима»): the whole word only — «империя», «император», «империал» are talk (imperiusWords)
     const imp = imperiusWords(s);
     if (imp) return imp;

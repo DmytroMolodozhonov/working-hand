@@ -47,6 +47,7 @@ MODELS = {
     "gemma4big": "ggml-org/gemma-4-E4B-it-GGUF",
 }
 DEFAULT_MODEL = "gemma4"
+MAX_LONG = 1400  # words of a long answer («Да пусть создастся»: a recipe in JSON)
 
 
 def data_dir():
@@ -119,7 +120,20 @@ class NativeLLM:
 
     def status(self):
         return {"available": self.available(), "state": self.state, "error": self.error, "progress": round(self.progress, 3),
-                "detail": self.detail, "model": self.model, "ms": self.ms, "build": BUILD}
+                "detail": self.detail, "model": self.model, "ms": self.ms, "build": BUILD, "have": self.downloaded()}
+
+    def downloaded(self):
+        """The models already on this computer (the best one is taken for «Да пусть создастся» when none runs)."""
+        out = []
+        try:
+            names = " ".join(os.listdir(os.path.join(data_dir(), "models"))).lower()
+        except OSError:
+            return out
+        for key, repo in MODELS.items():
+            tag = repo.split("/")[-1].lower().replace("-gguf", "")
+            if tag in names or tag.replace("-", "_") in names:
+                out.append(key)
+        return out
 
     # ------------------------------------------------------------ the program
     def binary_dir(self):
@@ -311,7 +325,8 @@ class NativeLLM:
         temp = float(job.get("temperature", 0.7))
         body = {
             "messages": job.get("messages") or [],
-            "max_tokens": max(1, min(200, int(job.get("maxTokens") or 60))),
+            # («Да пусть создастся»: a whole recipe of a building / a creature — a long answer, up to MAX_LONG words)
+            "max_tokens": max(1, min(MAX_LONG if job.get("long") else 200, int(job.get("maxTokens") or 60))),
             "cache_prompt": True,  # (the words read before are kept: a warm-up while the player comes near — TalkMind.warmRequest)
             "temperature": max(0.05, temp) if temp > 0 else 0.0,
             "top_k": 40, "top_p": 0.9,
@@ -319,13 +334,17 @@ class NativeLLM:
             "stream": True,
             "chat_template_kwargs": {"enable_thinking": False},
         }
+        schema = job.get("schema")
+        if isinstance(schema, dict):
+            # (the answer held to a JSON shape by llama.cpp's grammar: «Да пусть создастся» — DivineCreation.js)
+            body["response_format"] = {"type": "json_schema", "json_schema": {"name": "recipe", "schema": schema}}
         if tools:
             body["tools"] = [t if t.get("type") == "function" else {"type": "function", "function": t} for t in tools]
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode("utf-8"),
                                      headers={"Content-Type": "application/json", "Authorization": "Bearer " + self._key})
         text, calls = "", {}
         tm, first, t0 = None, 0.0, time.perf_counter()
-        r = urllib.request.urlopen(req, timeout=60)
+        r = urllib.request.urlopen(req, timeout=120 if job.get("long") else 60)
         self._current[jid] = r
         try:
             for raw in r:
