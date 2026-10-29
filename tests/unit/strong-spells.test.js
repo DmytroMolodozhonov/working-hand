@@ -133,3 +133,14 @@ test('«Дай» on me: the gods\' shield is only broken by the first; with no s
     assert.ok(g.combat.dead, 'the second kills');
     assert.equal(g.deaths[0].how, 'annihilate');
 });
+
+test('«Электром» on a dragon / the spider: the charge ends as a HIT (so the held lightning starts), not a fizzle', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../src/game/Duel.js', import.meta.url), 'utf8');
+    for (const k of ["'s'", "'D'"]) {
+        const line = src.split('\n').find((l) => l.includes(`b.tk === ${k} && this._referee()`) && l.includes('boltHit'));
+        assert.ok(line, `arrive line for ${k}`);
+        assert.match(line, /b\.spell === 'Electrum' \? 'hit' : 'fizzle'/, `Electrum on ${k} must end as a hit`);
+    }
+    assert.ok(STRONG.Electrum.drain > 0 && STRONG.Electrum.dps > 0, 'held: mana per second, damage per second');
+});

@@ -1073,8 +1073,9 @@ export class Duel {
         if (b.tk === 'z' && this._referee()) { this._arriveAtZombie(b); return; }
         if ((b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o') && this._referee()) { this._arriveAtCreature(b); return; }
         if (isLiquidationDuel(b.spell) && this._referee() && (b.tk === 's' || b.tk === 'D' || b.tk === 'I')) { this._end(b, 'hit'); this.game.liquidation?._hurt(b.tk, b.tid, b.front, b.o, b.dir, b.by, 'Liquidation'); return; } // (a boss: the splash's −3, attack and anger as the splash does)
-        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
-        if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
+        if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
+        // («Электром» is held: a hit on a boss starts the lightning on it, so it ends as a hit, not a fizzle)
+        if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word
         b.waitT += dt;
