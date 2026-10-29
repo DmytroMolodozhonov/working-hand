@@ -150,6 +150,7 @@ export function refreshArmor(ch) {
         const o = new THREE.Mesh(m.geometry, overlayMat(m.userData?.magic || ch.look?.magicArmor ? 'magic' : 'armor', look));
         o.userData.darkOverlay = true;
         o.renderOrder = 1;
+        o.layers.mask = m.layers.mask; // (в первом лице метки на спрятанной голове/шлеме тоже спрятаны)
         m.add(o);
         ch._darkArmor.push(o);
     });
@@ -160,6 +161,7 @@ function addOverlay(ch, m, mat) {
     o.userData.darkOverlay = true;
     o.renderOrder = 1;
     o.scale.setScalar(1.012); // (чуть шире, чтобы не мерцать на гранях)
+    o.layers.mask = m.layers.mask; // (голова в первом лице на слое 1 — метки на ней тоже: иначе чёрные пятна перед глазами)
     m.add(o);
     ch._darkOverlays.push(o);
 }
@@ -182,6 +184,7 @@ function setSmoke(ch, look) {
         ch._darkAge = new Float32Array(SMOKE_N).map((_, i) => i / SMOKE_N);
     }
     ch._darkSmoke.visible = true;
+    ch._darkSmoke.layers.set(ch._fpv ? 1 : 0); // (свой дымок в первом лице не рисуется: 0,9-метровые клубы у самых глаз)
     ch._darkSmokeK = look.smoke;
 }
 
@@ -189,6 +192,8 @@ function setSmoke(ch, look) {
 export function tickDark(ch, dt) {
     const s = ch?._darkSmoke;
     if (!s || !s.visible) return;
+    const want = ch._fpv ? 1 : 0;
+    if (s.layers.mask !== (1 << want)) s.layers.set(want); // (переключили вид — дымок следом)
     const pos = s.geometry.attributes.position, age = ch._darkAge, k = ch._darkSmokeK || 0;
     const live = Math.max(2, Math.round(SMOKE_N * k));
     for (let i = 0; i < SMOKE_N; i++) {
