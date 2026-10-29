@@ -25,14 +25,14 @@ await page.waitForFunction(() => window.__zns?.game?.active, null, { timeout: 24
 const src = fs.readFileSync(new URL('../src/net/NetSync.js', import.meta.url), 'utf8');
 const types = [...new Set([...src.slice(src.indexOf('_onMessage(m) {')).matchAll(/case '(\w+)'/g)].map((m) => m[1]))].filter((t) => t !== 'win');
 const role = process.argv[2] || 'host';
-await page.evaluate(({ role }) => { const g = window.__zns.game, net = window.__zns.net; if (role === 'guest') { Object.defineProperty(net, 'isHost', { get: () => false, configurable: true }); g.authority = false; } }, { role });
+await page.evaluate(({ role }) => { const g = window.__zns.game, net = window.__zns.net; if (role === 'guest') { Object.defineProperty(net, 'isHost', { get: () => false, configurable: true }); g.authority = false; } g.sync._syncPlayerList([{ id: 'ghost', name: 'Призрак', color: 3 }]); }, { role }); // (the sender is a real player here: his avatar exists)
 const res = [];
 const from = process.argv[3]; let on = !from;
 for (const t of types) {
   if (!on) { on = t === from; if (!on) continue; }
   process.stdout.write(t + ' ');
   if (page.isClosed()) { console.log('\nPAGE CLOSED before', t); break; }
-  const r = await page.evaluate(({ t }) => {
+  const r = await Promise.race([page.evaluate(({ t }) => {
     const g = window.__zns.game, sync = g.sync, to = window.__zns.net.localId;
     const junk = [{}, { id: 'nobody', by: 'ghost', to, l: 'x', p: 'x', s: 'x', d: 'x', o: 'x', m: null, k: 'x', a: 'x', e: 'x', c: 'x', f: 'x', w: 'x', i: -1, n: 1e9, x: 'a', z: 'b', b: 'x', r: 'x', h: 'x', v: 'x', q: 'x', item: 'x', uid: 'x', side: 'x', name: 5, text: {}, res: 'x' },
       { id: 1, by: 1, to, l: [null, 1, 'a', {}, [1, 2]], p: [1], s: [], d: [null], o: [null, null], c: [[1]], m: {}, k: 1, a: 'set', e: 'go', f: [{}], b: {}, r: [], h: [1], item: {}, uid: 1, w: [[1]], v: [], res: {}, name: 'Bombarda', text: 'x'.repeat(5000) },
@@ -40,7 +40,9 @@ for (const t of types) {
     const out = [];
     for (const [j, x] of junk.entries()) { const t0 = performance.now(); try { sync._onMessage({ t, from: 'ghost', ...x }); } catch (e) { out.push(`${t}#${j} THROW ${e.message.slice(0, 80)}`); } const dt = performance.now() - t0; if (dt > 300) out.push(`${t}#${j} ${Math.round(dt)} ms`); }
     return out;
-  }, { t }).catch((e) => [`${t} EVAL FAIL ${e.message.slice(0, 80)}`]);
+  }, { t }), new Promise((r) => setTimeout(() => r([`${t} HANG > 20 s`]), 20000))]).catch((e) => [`${t} EVAL FAIL ${e.message.slice(0, 80)}`]);
+  if (r.some((x) => /HANG/.test(x))) { res.push(...r); break; }
+  { const t0 = Date.now(); const ok = await Promise.race([page.evaluate(() => new Promise((q) => requestAnimationFrame(() => q(1)))), new Promise((q) => setTimeout(() => q(0), 20000))]); if (!ok) { res.push(`${t}: no frame for 20 s after`); break; } if (Date.now() - t0 > 4000) res.push(`${t}: next frame ${Date.now() - t0} ms`); }
   res.push(...r);
   if (r.some((x) => /EVAL FAIL/.test(x))) break;
 }
