@@ -30,7 +30,7 @@ test('the words: «я хочу найти паучиху», «где драко�
 
 test('every boss (every achievement) has words and a finder', () => {
     const words = new Map(bossWords());
-    for (const a of ACHIEVEMENTS) {
+    for (const a of ACHIEVEMENTS.filter((x) => x.boss !== false)) { // (the Castle of Ghosts is a place, not a boss: the owl does not point to it)
         assert.ok(words.get(a.id)?.length, `no words for ${a.id}`);
         assert.equal(typeof BOSS_FINDERS[a.id], 'function', `no finder for ${a.id}`);
     }

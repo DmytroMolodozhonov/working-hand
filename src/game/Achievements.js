@@ -58,7 +58,7 @@ export const ACHIEVEMENTS = [
     { id: 'dragon', mana: 150, icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
     { id: 'blackbeard', mana: 75, icon: '🏴‍☠️', title: 'Убить капитана Чёрные Усы', desc: 'Победить пирата капитана Чёрные Усы на его чёрном корабле' },
     { id: 'tower', mana: 200, icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
-    { id: 'ghostCastle', mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
+    { id: 'ghostCastle', boss: false, mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
 ];
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
 export const ACH_BY_ID = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));

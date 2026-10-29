@@ -33,7 +33,7 @@ test('a hero: hp, mana, regen, steadiness, armour, coins', () => {
     assert.equal(byId(s, 'coins').value, '77');
     assert.equal(byId(s, 'darkStage').value, 'презираемый');
     assert.equal(byId(s, 'spells').value, '1 / 2');
-    assert.equal(byId(s, 'ach').value, '1 / 6');
+    assert.equal(byId(s, 'ach').value, '1 / 7');
     assert.ok(byId(s, 'worn-helmet').ench);
     const tip = itemTip(byId(s, 'worn-helmet'));
     assert.ok(tip.lines.some((l) => l.includes('зачарование')));
