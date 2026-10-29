@@ -89,8 +89,8 @@ diffuseColor.rgb *= 0.82 + 0.16 * m1 + 0.08 * m2 - 0.1 * vein;`);
                 // old silvering: a faint cool tint, a few dim spots and a darker rim near the frame
                 vec2 e = min(vLoc, 1.0 - vLoc);
                 float rim = smoothstep(0.0, 0.06, min(e.x, e.y * 0.6));
-                float spots = smoothstep(0.78, 0.95, mn(vLoc * vec2(14.0, 22.0))) * (1.0 - rim * 0.7);
-                c *= vec3(0.94, 0.97, 1.0) * mix(0.82, 1.0, rim) * (1.0 - spots * 0.25) * uFade;
+                float spots = smoothstep(0.86, 0.97, mn(vLoc * vec2(14.0, 22.0))) * (1.0 - rim);
+                c *= vec3(0.95, 0.975, 1.0) * mix(0.86, 1.0, rim) * (1.0 - spots * 0.12) * uFade;
                 gl_FragColor = vec4(c, 1.0);
                 #include <fog_fragment>
             }`,
