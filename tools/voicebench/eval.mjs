@@ -49,9 +49,13 @@ export function judge(scene, why = null) {
     const casts = castsOf(scene.events, { why });
     const used = new Set();
     const rows = [];
+    // (the duel: the friend says the same spells close to mine — a cast is his echo when his phrase ended nearer before it than mine)
+    const friendSpells = scene.scene === 'duel' ? (scene.truth.friend || []) : [];
+    const endBefore = (list, t) => Math.max(-Infinity, ...list.filter((s) => s.t1 <= t + 0.05).map((s) => s.t1));
+    const hisEcho = (c) => friendSpells.length && endBefore(friendSpells, c.t) > endBefore(scene.truth.spells, c.t);
     for (const s of scene.truth.spells) {
         const want = matchSpell(s.text);
-        const i = casts.findIndex((c, k) => !used.has(k) && c.name === want && c.t >= s.t0 && c.t <= s.t1 + 3);
+        const i = casts.findIndex((c, k) => !used.has(k) && c.name === want && c.t >= s.t0 && c.t <= s.t1 + 3 && !hisEcho(c));
         if (i >= 0) { used.add(i); rows.push({ text: s.text, ok: true, delay: Math.round((casts[i].t - s.t1) * 1000) }); } else rows.push({ text: s.text, ok: false });
     }
     // every other cast is false: a spell nobody said (the friend's talk, his spell words, an echo), or the wrong one
@@ -75,7 +79,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const res = [];
     for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json')).sort()) res.push(judge(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))));
-    const order = ['clean', 'chat', 'overlap', 'loud', 'friendspell', 'ship'];
+    const order = ['clean', 'chat', 'overlap', 'loud', 'friendspell', 'ship', 'duel'];
     res.sort((a, b) => order.indexOf(a.scene) - order.indexOf(b.scene));
     if (args.includes('--json')) console.log(JSON.stringify(res, null, 1));
     else {

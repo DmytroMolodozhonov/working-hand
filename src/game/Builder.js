@@ -454,7 +454,11 @@ export class Builder {
             if ((e[3] | 0) === BLOCK.ICE) this.ice.push({ x: e[0] | 0, L: e[1] | 0, z: e[2] | 0, until: performance.now() + ICE_LIFE * 1000 });
         }
         data.enchantFree = prev;
-        this.game.blockEdits = (this.game.blockEdits || []).concat(list);
+        // (pushed, not concat: a copy of the whole list at every message of 400 edits — a guest watching «Total Destruction» copied
+        // it hundreds of times; and kept as long as the host's own list, not for ever)
+        const all = this.game.blockEdits || (this.game.blockEdits = []);
+        for (const e of list) all.push(e);
+        if (all.length > 30000) all.splice(0, all.length - 30000);
         if (this.game.authority) this.game.castleLife?.rebuild?.forget(list);
     }
 }

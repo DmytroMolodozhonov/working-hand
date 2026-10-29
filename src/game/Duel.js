@@ -1633,6 +1633,7 @@ export class Duel {
     /** Is this wizard still holding the duel (hand on the opponent)? jerk = gave up sharply. */
     _contact(id, bolt, opponentId) {
         if (id === this.me) {
+            if (this.game.combat?.dead || this.game.isDeadLocal) return { ok: false, jerk: true }; // (dead: my hand holds nothing — as a remote's `r.dead`)
             // (own vectors: _playerPos writes into _v2 — the hand's direction must survive it)
             const hand = _ch, dir = this._myRay(bolt.side, _ch, _cd);
             // (the one I push against: another player, or a wizard of a tower / the arena — his place, not «nobody» — else my hand would be off him and push for nothing)

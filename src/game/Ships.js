@@ -461,7 +461,7 @@ export class Ships {
                 const w = g.weapons.spawnHovering(it.type, p, it.uid);
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();
-                if (g.sync) g.sync.weaponAppeared?.(w);
+                if (g.sync) g.sync.weaponAppeared?.(w, true); // (the chest's: anybody's to take)
             } else g.items.spawnLoose(it, p, { hover: true });
         });
         const s = chest.ship;

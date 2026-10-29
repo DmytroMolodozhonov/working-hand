@@ -18,6 +18,15 @@ export const GATE = {
     SEEN: 0.35, // the face seen in this share of the pictures: the lips can decide
     ECHO: 3500, // ms: the same spell said / cast by somebody else just now: an echo of their voice
     HOLD: 700, // ms a spell waits (multiplayer, the lips unseen) for a friend's word to come over the network
+    // ms: my phrase began this long after a friend's word came over the network — it is mine, not the echo of theirs. Their voice
+    // from my speakers (Discord: 0.1–0.5 s late) begins BEFORE their game can tell me: it sends the word only once they finished
+    // it and their recognizer wrote it (≥ 0.6 s after they began). A reply with the same spell in a duel came 1–3.5 s later
+    // and was thrown away as an echo whenever the camera couldn't see my mouth (voice-discord-duel.test.js).
+    SAID_AFTER: 600,
+    // ms round the moment a friend BEGAN his spell (his «say» tells it): the echo of his voice begins within this — before: the
+    // network's delay unknown (≤ 0.3 s) and the program's 0.2 s; after: Discord's delay (≤ 1.2 s, a bad connection).
+    // Outside it the same spell is mine (a duel: both answer with the same spells).
+    BEGAN_BEFORE: 600, BEGAN_AFTER: 1300,
     LOUD: 12, QUIET: 6, // dB over the microphone's background: a voice heard / silence
     SYNC: 0.06, // the mouth this much more open (of its width) while the voice was loud than when quiet: it was me
     CAM_LAG: 100, // ms a camera picture comes after the moment it shows
@@ -56,16 +65,35 @@ export class VoiceGate {
         while (this.samples.length && t - this.samples[0].t > GATE.WINDOW + 2000) this.samples.shift();
     }
 
-    /** Somebody else cast a spell (the network says so). */
-    noteRemote(name, t) {
-        this.remote.push({ t, base: baseOf(name) });
+    /**
+     * Somebody else cast a spell (the network says so).
+     * began: when (my clock) they began to say it — their «say» tells how long ago; by: who (one spell of theirs is one note:
+     * the cast's message and the word's — the one that knows when it began wins).
+     */
+    noteRemote(name, t, { began = null, by = null } = {}) {
+        const base = baseOf(name), b = Number.isFinite(began) ? began : null;
+        if (by != null) {
+            const same = (r) => r.by === by && r.base === base && Math.abs(t - r.t) < 4000;
+            if (b != null) this.remote = this.remote.filter((r) => !(same(r) && r.began == null));
+            else if (this.remote.some((r) => same(r) && r.began != null)) return;
+        }
+        this.remote.push({ t, base, began: b, by });
         while (this.remote.length && t - this.remote[0].t > GATE.ECHO + 1000) this.remote.shift();
     }
 
-    /** Was the same spell just said by somebody else (a player, or a wizard of the game aloud)? */
-    echoes(name, t) {
+    /**
+     * Was the same spell just said by somebody else (a player, or a wizard of the game aloud)?
+     * from: when my phrase began (ms, the same clock; unknown: null) — begun after their word came, it is no echo of it.
+     */
+    echoes(name, t, from = null) {
         const base = baseOf(name);
-        return this.remote.some((r) => r.base === base && t - r.t < GATE.ECHO);
+        const known = Number.isFinite(from);
+        return this.remote.some((r) => {
+            if (r.base !== base || t - r.t >= GATE.ECHO) return false;
+            if (!known) return true;
+            if (r.began != null) return from >= r.began - GATE.BEGAN_BEFORE && from <= r.began + GATE.BEGAN_AFTER; // (his voice from my speakers begins just then)
+            return from <= r.t + GATE.SAID_AFTER;
+        });
     }
 
     /**
@@ -119,9 +147,10 @@ export class VoiceGate {
      * May the spell `name`, just heard by my microphone, be cast?
      * sure: my lips moved right then — it is mine (and the others may be told at once).
      * mic: {levels, floor} — the microphone's level, to see whether the mouth moved with the voice.
+     * from: when my phrase began (meta.from): begun after a friend's word came, it can't be its echo.
      * @returns {{ok: boolean, why?: 'lips'|'echo', sure?: boolean}}
      */
-    check(name, t, mic = null) {
+    check(name, t, mic = null, from = null) {
         // the strongest: did my mouth move with the voice the microphone heard?
         const sync = mic ? this.lipsSync(t, mic.levels, mic.floor) : null;
         if (sync === false) return { ok: false, why: 'lips' };
@@ -129,7 +158,7 @@ export class VoiceGate {
         const lips = this.lipsMoved(t);
         if (lips === false) return { ok: false, why: 'lips' };
         const recent = lips && this.lipsMoved(t, GATE.RECENT) === true;
-        const echo = this.echoes(name, t);
+        const echo = this.echoes(name, t, from);
         // (my lips moved right then: it's mine, even if a friend said the same just now)
         if (echo && (!recent || STRICT.has(baseOf(name)))) return { ok: false, why: 'echo' };
         return { ok: true, sure: !!recent };

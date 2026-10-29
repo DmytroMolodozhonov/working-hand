@@ -794,7 +794,7 @@ export class Blackbeard {
         const p = new THREE.Vector3(v.x, v.y + 3, v.z);
         try {
             const w = g.weapons?.spawnHovering?.('sword', p, newUid());
-            if (w) { w.magic = true; w.bonus = 60; w.applyMagicLook?.(); g.sync?.weaponAppeared?.(w); }
+            if (w) { w.magic = true; w.bonus = 60; w.applyMagicLook?.(); g.sync?.weaponAppeared?.(w, true); }
         } catch (e) { console.warn('blackbeard rapier', e); }
         for (const o of this.crew?.crews.get(v.crew?.id || BB.ID) || []) if (!o.dead && o.role === 'skeleton') { this.crew._say(o, 'Х-р-р-р…', 3); break; }
         void by;

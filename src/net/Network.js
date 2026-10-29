@@ -34,6 +34,41 @@ const ICE = [
     // published public login, for testing; slow: ~50 kbit/s per player, so the game sends less then)
     { urls: ['turn:freeturn.net:3478', 'turn:freeturn.net:3478?transport=tcp'], username: 'free', credential: 'free' },
 ];
+// PeerJS's JSON channel refuses a message of 16300 bytes or more (and calls it a connection error — the
+// player was dropped): a bigger one (the world for a newcomer, a castle's people, a fallen building…) goes
+// in pieces, put back together on the other side (Network._sendConn / _unpiece)
+export const PIECE_BYTES = 15000;
+const PIECE_CHARS = 4800;
+export const PIECES_MAX = 4000; // (pieces of one message at most: ~60 MB — anything more is no message of the game)
+/** Messages only the host's network itself sends: a guest's copy is never passed on or believed. */
+const HOST_ONLY = new Set(['players', 'host-left', 'full', 'version', 'info', 'welcome']);
+
+/** UTF-8 bytes of a string (without making the bytes). */
+export function utf8Bytes(s) {
+    let n = 0;
+    for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        n += c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xd800 && c < 0xdc00 ? (i++, 4) : 3;
+    }
+    return n;
+}
+
+/** A long JSON text cut into pieces small enough for the channel (never inside a surrogate pair). */
+export function splitPieces(text) {
+    const out = [];
+    for (let i = 0; i < text.length;) {
+        let n = Math.min(PIECE_CHARS, text.length - i);
+        for (;;) {
+            if (n > 1 && i + n < text.length) { const c = text.charCodeAt(i + n - 1); if (c >= 0xd800 && c < 0xdc00) n--; }
+            if (n <= 64 || utf8Bytes(JSON.stringify(text.slice(i, i + n))) < PIECE_BYTES - 200) break;
+            n = Math.floor(n / 2);
+        }
+        out.push(text.slice(i, i + n));
+        i += n;
+    }
+    return out;
+}
+
 const JOIN_WAIT = 25000; // ms: the host's computer must answer within this
 const NEW_PLAYER_GRACE = 120000; // ms: a player who is still loading (camera…) isn't dropped for silence
 
@@ -102,6 +137,7 @@ export class Network extends Emitter {
         this._serverKey = '';
         this._probes = new Set();
         this._joinSession = randomCode(16); // one menu instance, not the lasting pid shared by two tabs
+        this._pieceId = 0;
     }
 
     get isHost() { return this.role === 'host'; }
@@ -205,12 +241,14 @@ export class Network extends Emitter {
             this.emit('peer-join', { id, name });
             this.broadcast({ t: 'players', players: this.playerList() });
         });
-        conn.on('data', (msg) => {
+        conn.on('data', (raw) => {
             if (this.conns.get(conn.peer) !== conn) return; // a rejected or obsolete channel owns no player
             this.lastSeen.set(conn.peer, performance.now());
-            if (!msg || typeof msg !== 'object') return;
-            if (msg.t === 'ping') return;
+            if (!raw || typeof raw !== 'object') return;
+            if (raw.t === 'ping') return;
             this.talked.add(conn.peer);
+            const msg = this._unpiece(conn, raw);
+            if (!msg || typeof msg !== 'object' || HOST_ONLY.has(msg.t)) return; // (a guest can't tell the others who plays, or that the host left)
             if (msg.t === 'bye') { this._dropClient(conn.peer); return; }
             msg.from = conn.peer;
             this.emit('message', msg);
@@ -218,7 +256,7 @@ export class Network extends Emitter {
         });
         const drop = () => { if (this.conns.get(conn.peer) === conn) this._dropClient(conn.peer); };
         conn.on('close', drop);
-        conn.on('error', drop);
+        conn.on('error', (err) => { if (!tooBig(err)) drop(); }); // (one message refused is not a lost player)
         this._watchIce(conn, drop);
     }
 
@@ -359,10 +397,12 @@ export class Network extends Emitter {
                     this._checkRelay(conn, 'хостом');
                     resolve(myId);
                 });
-                conn.on('data', (msg) => {
+                conn.on('data', (raw) => {
                     if (this.hostConn !== conn || this.peer !== peer || !this.isClient) return;
                     this.lastSeen.set('H', performance.now());
-                    if (!msg || typeof msg !== 'object' || msg.t === 'ping') return;
+                    if (!raw || typeof raw !== 'object' || raw.t === 'ping') return;
+                    const msg = this._unpiece(conn, raw);
+                    if (!msg || typeof msg !== 'object') return;
                     if (msg.t === 'full') {
                         this.leave();
                         this.emit('disconnected', { reason: `Сервер заполнен (${msg.max || MAX_PLAYERS} из ${msg.max || MAX_PLAYERS})` });
@@ -385,7 +425,7 @@ export class Network extends Emitter {
                     this.emit('message', msg);
                 });
                 conn.on('close', lost);
-                conn.on('error', (err) => { if (!settled) fail({ type: 'p2p', message: err?.message }); else lost(); });
+                conn.on('error', (err) => { if (tooBig(err)) return; if (!settled) fail({ type: 'p2p', message: err?.message }); else lost(); });
                 this._watchIce(conn, lost);
             });
         });
@@ -511,7 +551,28 @@ export class Network extends Emitter {
 
     _sendConn(conn, msg) {
         if (!conn || !conn.open) return;
-        try { conn.send(msg); } catch (e) { /* channel closing */ }
+        try {
+            const text = JSON.stringify(msg);
+            if (text.length * 3 < PIECE_BYTES || utf8Bytes(text) < PIECE_BYTES) { conn.send(msg); return; }
+            const parts = splitPieces(text);
+            if (parts.length > PIECES_MAX) { netLog(`сообщение «${msg?.t}» слишком большое (${text.length} знаков) — не отправлено`); return; }
+            const k = ++this._pieceId;
+            for (let i = 0; i < parts.length; i++) conn.send({ t: '_pc', k, i, n: parts.length, s: parts[i] });
+        } catch (e) { /* channel closing */ }
+    }
+
+    /** A piece of a big message (_sendConn): null until its last piece came, then the whole message. */
+    _unpiece(conn, msg) {
+        if (msg.t !== '_pc') return msg;
+        const n = msg.n | 0;
+        let st = conn._pieces;
+        if (msg.i === 0 || !st || st.k !== msg.k) st = conn._pieces = { k: msg.k, n, parts: [] };
+        // (the channel is ordered: a piece out of turn means a broken message — forget it)
+        if (n < 1 || n > PIECES_MAX || n !== st.n || msg.i !== st.parts.length || typeof msg.s !== 'string') { conn._pieces = null; return null; }
+        st.parts.push(msg.s);
+        if (st.parts.length < n) return null;
+        conn._pieces = null;
+        try { return JSON.parse(st.parts.join('')); } catch (e) { return null; }
     }
 
     _startHeartbeat() {
@@ -574,6 +635,9 @@ export class Network extends Emitter {
         this.relayed = false;
     }
 }
+
+/** PeerJS refused one message as too big for the channel: the link itself is fine. */
+const tooBig = (err) => err?.type === 'message-too-big';
 
 function humanError(err) {
     switch (err?.type) {

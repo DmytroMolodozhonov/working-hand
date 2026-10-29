@@ -621,6 +621,8 @@ export class GroundVortex {
             f.pos.addScaledVector(f.vel, dt);
             const gy = g.collision?.groundY ? g.collision.groundY(f.pos.x, f.pos.z) : -1e9;
             if (f.pos.y - 0.5 > gy && f.age < 6) continue;
+            // (a dozen laid this frame already: this one waits on the ground for the next — it was lost before)
+            if (f.mine && !f.crumble && data && laid >= 12) { f.vel.set(0, 0, 0); f.pos.y = Math.max(f.pos.y, gy + 0.5); continue; }
             this.falls.splice(i, 1);
             if (g.fx) for (let k = 0; k < 3; k++) g.fx.spark(f.pos, 0xb9a98a, 0.15, _b.set((Math.random() - 0.5) * 4, Math.random() * 2, (Math.random() - 0.5) * 4), 0.5);
             if (f.mine && !f.crumble && data && laid++ < 12) {
@@ -647,6 +649,29 @@ export class GroundVortex {
         cells.forEach((c, i) => { data.set(c[0], c[1], c[2], mine[i]); edits.push([c[0], c[1], c[2], mine[i]]); });
         if (edits.length) g.builder?._sendEdits(edits);
         this._note({ ev: 'returned', n: edits.length, of: mine.length });
+        return edits.length;
+    }
+
+    /**
+     * (host) A player left holding blocks (closed the window, lost the link): only their computer would have laid
+     * them back — the host puts them into the ground where the swarm was (as returnAll), else the holes stay for good.
+     * (Only on leaving: a swarm gone quiet for a moment (GV.STALE) may still be held — laying it would double it.)
+     */
+    onLeave(id) {
+        const sw = this.remote.get(id);
+        if (!sw) return 0;
+        this.remote.delete(id);
+        const g = this.game, data = this.data;
+        if (!g.authority || !data) { this._releaseAll(sw, false); return 0; }
+        const types = [];
+        for (const b of sw.B) if (b) types.push(b.t);
+        sw.B.length = 0; sw.n = 0;
+        if (!types.length) return 0;
+        const cells = R.spiralCells((x, L, z) => data.get(x, L, z), (x, z) => data.topLayer(x, z), sw.body.x, sw.body.z, types.length, (x, L, z) => !!(data.godGiftAt?.(x, L, z) || g.ships?.footprintAt?.(x, L - 1, z)));
+        const edits = [];
+        cells.forEach((c, i) => { data.set(c[0], c[1], c[2], types[i]); edits.push([c[0], c[1], c[2], types[i]]); });
+        if (edits.length) g.builder?._sendEdits(edits);
+        this._note({ ev: 'returned', n: edits.length, of: types.length, left: id });
         return edits.length;
     }
 

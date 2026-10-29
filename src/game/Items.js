@@ -287,7 +287,7 @@ export class ItemSystem {
                 const w = this.game.weapons.spawnHovering(it.type, p.clone().setY(p.y + 0.2), it.uid, { byHandle: true }); // (its handle at the hand)
                 w.magic = !!it.magic; w.bonus = it.magic ? it.bonus : 0;
                 w.applyMagicLook?.();
-                if (this.game.sync) this.game.sync.weaponAppeared?.(w);
+                if (this.game.sync) this.game.sync.weaponAppeared?.(w, true); // (the chest's: anybody's to take)
             } else {
                 // (a house's things belong to the house: taking one while its people see it is a theft)
                 if (house?.def?.id != null) it.home = { c: house.def.id, h: house.i };

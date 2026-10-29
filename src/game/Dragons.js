@@ -421,6 +421,12 @@ export class Dragons {
         this.log.push('release');
     }
 
+    /** (host) A player left the game: a dragon they tamed without riding it is its own master again (else «taken» for ever). */
+    onLeave(id) {
+        if (!this.auth) return;
+        for (const d of this.list) if (d.tame?.by === id) { this.release(d, id); this._sendSoon = true; }
+    }
+
     /** (host) The spell is torn (the caster struck the dragon, …): the caster's computer is told; a rider is dropped. */
     breakTame(d, why, offender = null) {
         const t = d?.tame;
@@ -607,7 +613,7 @@ export class Dragons {
             });
             if (g.weapons?.spawnLying) {
                 const w = g.weapons.markMagic(g.weapons.spawnLying('sword', hx + Math.cos(ba + 0.35) * BONES_R, fy, hz + Math.sin(ba + 0.35) * BONES_R, ba, 'lair' + L.id), 30 + Math.floor(rng() * 31));
-                g.sync?.weaponAppeared?.(w);
+                g.sync?.weaponAppeared?.(w, true); // (the lair's: anybody's to take)
             }
         }
     }

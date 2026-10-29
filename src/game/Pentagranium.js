@@ -114,6 +114,15 @@ export class Pentagranium {
         return out.length ? out.concat(this._pending.filter((p) => !out.some((o) => o.id === p.id))) : this._pending.length ? this._pending.slice() : null;
     }
     marksRestore(list) { this._pending = (Array.isArray(list) ? list : []).filter((m) => m && figureOf(m.pent) && TABLE[m.pent]?.permanent).slice(0, USE.PERM_MAX); }
+    /** (a guest coming in) The host's permanent pentagrams — made before I came (they were sent only once, when made): added to mine. */
+    netRestore(list) {
+        if (!Array.isArray(list)) return;
+        for (const m of list.slice(0, USE.PERM_MAX)) {
+            if (!m || typeof m.id !== 'string' || !figureOf(m.pent) || !TABLE[m.pent]?.permanent || this.marks.has(m.id) || this._pending.some((p) => p.id === m.id)) continue;
+            if (this._pending.length >= USE.PERM_MAX) break;
+            this._pending.push({ id: m.id, by: String(m.by || ''), pent: m.pent, x: +m.x || 0, y: +m.y || 0, z: +m.z || 0, r: Math.max(PENT.R_MIN, Math.min(PENT.R_MAX, +m.r || PENT.R)), rot: +m.rot || 0, pair: typeof m.pair === 'string' ? m.pair : null });
+        }
+    }
 
     // ------------------------------------------------------------ the cast
     /** Voice on my computer: `text` is the phrase heard («Pentagranium Teleportis»). `aim` ({origin, dir}) is for tests. */

@@ -1131,9 +1131,10 @@ export class Combat {
 
     die(byId, how) {
         if (this.dead) return;
-        if (this.game.bossRetry?.intercept?.()) return; // (a start at a boss: a fall is a window to try again, not a death — BossRetry.js)
-        if (this.game.arenaDuels?.duelDeath?.()) return; // (the duel mode: a lost duel and at once the next, no death — ArenaDuels.duelDeath)
-        if (this.game.monster?.active && this.game.monster.saves(how, byId)) return; // (a beheading, a shatter… tear the monster's body, not the man)
+        // (a death caught here leaves no «how» behind: else the next ordinary death was taken for «Дай» / Pilbidrio — StrongMagic, Death.js)
+        if (this.game.bossRetry?.intercept?.()) { this.game._deathHow = null; return; } // (a start at a boss: a fall is a window to try again, not a death — BossRetry.js)
+        if (this.game.arenaDuels?.duelDeath?.()) { this.game._deathHow = null; return; } // (the duel mode: a lost duel and at once the next, no death — ArenaDuels.duelDeath)
+        if (this.game.monster?.active && this.game.monster.saves(how, byId)) { this.game._deathHow = null; return; } // (a beheading, a shatter… tear the monster's body, not the man)
         this.dead = true;
         this.game.levitation?.dropMe?.(false);
         this.hp = 0;

@@ -25,7 +25,7 @@
  *   bite     host→player  zombie bit you;  win: someone reached the finish
  *   wb       player→all   water ball in hand (10×/s);  wdrop: ball dropped
  *   vx       player→all   «Water Vortex» (its state 10×/s, launch, hit, bubble, freeze, burst) and «Fire Maxima»
- *   ice      player→all   ice blocks built with water forming
+ *   iceb     player→all   ice blocks built with water forming (ice: the Ice Castle — IceQueen.js)
  *   phit     player→all   my fist/weapon hit player `to` (Свободный мир); with k/pt/i/lp: the blow's push
  *   ppush    player→all   my hands pushed / slapped / shoved player `to` (no harm: their body moves)
  *   cimp     host→all     creatures' bodies: fell (k), reeled (s), rose (r), head jolted (j) — CreatureImpact
@@ -139,12 +139,20 @@ export class NetSync {
         this.game.levMax?.onLeave(id);
         this.game.handHold?.onLeave(id); // (hands they held or that held mine: let go)
         this.game.boards?.onLeave(id); // (the surfboard they held or rode stays where it was)
-        // Drop weapons they were holding
-        for (const [wid, owner] of this.weaponOwners) {
+        this.game.groundVortex?.onLeave?.(id); // (the blocks of their «Ground Vortex» go back into the ground: the host lays them)
+        this.game.dragons?.onLeave?.(id); // (a dragon they tamed is free again)
+        // Drop weapons they were holding — but one that is in their pocket by their last word (a sword taken out of a slot:
+        // `pstate` keeps it in the slots) went with them: left lying here too, it was doubled at every leave (the host decides)
+        const pocket = new Set();
+        for (const s of this._states?.get(id)?.slots || []) if (s?.kind === 'weapon' && s.id != null) pocket.add(s.id);
+        this._states?.delete(id);
+        for (const [wid, owner] of [...this.weaponOwners]) {
             if (owner !== id) continue;
             this.weaponOwners.delete(wid);
             const w = this.game.weapons.byId.get(wid);
-            if (w) { w.clearRemote(); w.holder = null; w.drive = null; w.wake(); }
+            if (!w) continue;
+            if (this.net.isHost && pocket.has(wid)) { this.weaponGone(w); this.game.weapons.remove(w); continue; }
+            w.clearRemote(); w.holder = null; w.drive = null; w.wake();
         }
     }
 
@@ -177,6 +185,7 @@ export class NetSync {
             ccrs: g.customCreatures?.netList() || null, // the kinds of creatures of one's own (their bodies: the recipes) // what «Да пусть создастся» built (DivineCreation.js)
             icemagic: g.iceMagic?.netList() || [], // castles and bridges of ice (IceMagic.js)
             planets: g.space?.planets.toJSON() || null, // the planets (made, changed by spells: Space.js)
+            pents: g.pentagranium?.marksSnapshot() || null, // the permanent pentagrams (teleport, life, mend): sent only once when made — a newcomer saw none
             beds: g.beds?.snapshot() || [],
             castles: g.castleLife?.snapshot() || {},
             rebuild: g.castleLife?.rebuild.snapshot() || null, // (what the builders put back: stands again after the blasts are replayed)
@@ -261,6 +270,7 @@ export class NetSync {
             this._syncPlayerList(msg.players);
         }
         if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.inventory?.ensureStarterWand(); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
+        if (msg.pents) g.pentagranium?.netRestore?.(msg.pents); // (after my own things: their pentagrams would replace the list)
     }
 
     /** Guests send their own things to the host now and then (the host keeps the world). */
@@ -411,9 +421,10 @@ export class NetSync {
         this.net.send({ t: 'wgone', w: w.id }, true);
     }
 
-    weaponAppeared(w) {
-        this.weaponOwners.set(w.id, this.me);
-        this.net.send({ t: 'wnew', w: w.id, type: w.type, s: w.serialize(), owner: this.me }, true);
+    /** free: it appeared in the world (a chest's loot, a lair's, a ship's), nobody's — else it was «in my hand» and no guest could take it. */
+    weaponAppeared(w, free = false) {
+        if (free) this.weaponOwners.delete(w.id); else this.weaponOwners.set(w.id, this.me);
+        this.net.send({ t: 'wnew', w: w.id, type: w.type, s: w.serialize(), owner: free ? null : this.me, ...(free ? { free: 1 } : {}) }, true);
     }
 
     /** «Брейнрот» from a guest: the host makes the zombie a servant. */
@@ -470,8 +481,10 @@ export class NetSync {
     }
 
     /** My microphone heard me say a spell: the others are told at once (my voice from their speakers is not theirs). */
-    say(name) {
-        this.net.send({ t: 'say', by: this.me, name }, true);
+    say(name, from = null) {
+        // (ago: how long ago I BEGAN it — the others' microphones may hear my voice from their speakers only round that moment: VoiceGate.echoes)
+        const ago = Number.isFinite(from) ? Math.round(performance.now() - from) : undefined;
+        this.net.send({ t: 'say', by: this.me, name, ...(ago >= 0 && ago < 10000 ? { ago } : {}) }, true);
     }
 
     /** My spell worked: its sound (SoundManager.spellCast) at my place — the others near hear it. */
@@ -591,8 +604,10 @@ export class NetSync {
         this.net.send({ t: 'wdrop', by: this.me, p: [r3(b.pos.x), r3(b.pos.y), r3(b.pos.z)], v: [r3(b.vel.x), r3(b.vel.y), r3(b.vel.z)], r: r3(b.r), f: b.frozen ? 1 : 0 }, true);
     }
 
-    ice(cells) {
-        this.net.send({ t: 'ice', by: this.me, c: cells }, true);
+    /** Ice built with «Water forming» + «Frozen» (Game.placeIce). (It was `ice(cells)` — the Ice Castle's `ice(m)` below
+     * has the same name and took its place: nobody else ever saw that ice until they joined again.) */
+    iceBlocks(cells) {
+        this.net.send({ t: 'iceb', by: this.me, c: cells }, true);
     }
 
     duelCast(b) {
@@ -807,6 +822,10 @@ export class NetSync {
         const look = this.game.character.look;
         if (look) this.net.send({ t: 'look', by: this.me, look }, true);
         this.game.armor?.resend(); // (and what armour I wear: Armor.js)
+        // (and what is in my hands, the backpack, the coin pouch: a newcomer saw empty hands until I took something anew)
+        const it = this.game.items;
+        if (it) { for (const side of ['right', 'left']) if (it.held?.[side]?.item) this.itemHold(side, it.held[side].item); if (it.worn?.backpack?.item) this.itemHold('back', it.worn.backpack.item); }
+        this.game.inventory?.purse?.resend?.();
         this.game.achievements?.resend(); // (and how many achievements: «Высший маг» over the name)
     }
 
@@ -963,11 +982,12 @@ export class NetSync {
             case 'wnew': {
                 if (g.weapons.byId.has(m.w)) break;
                 const w = g.weapons.markMagic(g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w), m.s[10]);
-                this.weaponOwners.set(m.w, m.owner || m.from);
+                if (m.free) this.weaponOwners.delete(m.w); else this.weaponOwners.set(m.w, m.owner || m.from);
                 w.setRemoteTarget(m.s);
                 break;
             }
-            case 'pstate': if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s); break;
+            case 'pstate': if (this.net.isHost && m.s && typeof m.s === 'object') (this._states || (this._states = new Map())).set(m.from, m.s); // (their pocket, for _onLeave)
+                if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s); break;
             case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': case 'rbtake': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
@@ -1009,11 +1029,11 @@ export class NetSync {
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;
             case 'csnd': if (m.by !== this.me && typeof m.n === 'string' && Array.isArray(m.p)) g.sound?.spellCast?.(m.n, vec(m.p)); break;
-            case 'say': if (m.by !== this.me && typeof m.name === 'string') g.voiceGate?.noteRemote(m.name, performance.now()); break;
+            case 'say': if (m.by !== this.me && typeof m.name === 'string') { const now = performance.now(), ago = +m.ago; g.voiceGate?.noteRemote(m.name, now, { by: m.by, began: Number.isFinite(ago) && ago >= 0 && ago < 10000 ? now - ago : null }); } break;
             case 'draw': if (m.by !== this.me) g.wandMagic?.remoteDraw(m.by, m.c, m.p); break;
             case 'spell': {
                 if (m.by === this.me) break;
-                g.voiceGate?.noteRemote(m.name, performance.now()); // (my microphone may hear their voice)
+                g.voiceGate?.noteRemote(m.name, performance.now(), { by: m.by }); // (my microphone may hear their voice)
                 g.noteCaster?.(m.name, m.by);
                 g.spells.cast(m.name, vec(m.o), vec(m.d), m.side, m.by);
                 break;
@@ -1098,7 +1118,7 @@ export class NetSync {
             case 'tpay': if (this.net.isHost) g.castleLife?.talk.pay(String(m.coin || ''), String(m.good || ''), m.from); break;
             case 'tpaid': if (!this.net.isHost) g.castleLife?.talk.paidGood(String(m.uid || '')); break;
             case 'tnote': if (m.to === this.me) g.hud.setVoice?.(String(m.text || ''), true); break;
-            case 'tsell': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.talk.sellNow(m.uid || null, m.wid || null, Math.min(2000, +m.price || 1), vec(m.p)); break;
+            case 'tsell': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.talk.sellNow(m.uid || null, m.wid || null, Math.min(2000, +m.price || 1), vec(m.p), m.from); break;
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
             case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;
             case 'agath': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) { const n = a.meat; for (let i = 0; i < n; i++) g.animals._takeMeat(a, m.from, null); } } break;
@@ -1207,8 +1227,8 @@ export class NetSync {
             case 'mch': if (m.by !== this.me) g.monster?.onNet(m); break; // (a chunk of a building in a monster's paw: MonsterTransform.js)
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
-            case 'ice': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break;
-            case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now()); g.duel.remoteCast(m); } break;
+            case 'iceb': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break; // (ice of «Water forming» + «Frozen»)
+            case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now(), { by: m.by }); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;

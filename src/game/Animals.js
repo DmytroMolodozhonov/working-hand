@@ -581,7 +581,8 @@ export class Animals {
             const to = _v.set(tr.x - o.x, tr.y + 4 - o.y, tr.z - o.z);
             if (to.length() > 12 || d.angleTo(to.normalize()) > 0.35) continue;
             let n = 0;
-            tr.apples.forEach((ap, i) => { if (ap.until <= Date.now()) { this._pickApple(tr, i, g.localId, null); n++; } });
+            // (a guest asks the host, as a hand does: else the apples were his AND still on the tree for everybody else)
+            tr.apples.forEach((ap, i) => { if (ap.until <= Date.now()) { if (this.auth) this._pickApple(tr, i, g.localId, null); else g.sync?.applePick?.(tr.key, i, null); n++; } });
             return n ? `✨ Gather: ${n} ${tr.baksadi ? 'груш Баксади' : tr.red ? 'яблок' : 'золотых яблок'}` : tr.baksadi ? '🍐 Груш пока нет — вырастут через несколько минут' : '🍏 Яблок пока нет — вырастут через несколько минут';
         }
         return null;

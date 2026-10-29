@@ -1370,11 +1370,17 @@ export class CastleTalk {
     }
 
     /** (host) the sale happens: the thing is gone, coins lie on the counter. */
-    sellNow(uid, wid, price, p) {
+    sellNow(uid, wid, price, p, by = null) {
         const g = this.game;
+        // (the thing must still lie there: another player may have taken it between the offer and the «да» — no coins for nothing,
+        // and never out of somebody's hand)
+        const gone = () => { if (by && by !== g.localId) this._tradeNote(by, '🤷 Вещи уже нет на прилавке — сделка не состоялась'); };
         if (uid && g.items.loose.has(uid)) g.items.pickUp(uid, '#merchant', 'right');
-        else if (wid) { const w = g.weapons.byId.get(wid); if (w) { g.weapons.remove(w); g.sync?.weaponGone?.(w); } }
-        else return;
+        else if (wid) {
+            const w = g.weapons.byId.get(wid);
+            if (!w || w.holder || g.sync?.weaponOwners?.get(wid)) { gone(); return; }
+            g.weapons.remove(w); g.sync?.weaponGone?.(w);
+        } else { gone(); return; }
         // (one pouch with the whole sum: the pouch has no limit; picked up, its coins go into mine)
         g.items.spawnLoose(makeMagicPouch(newUid(), Math.max(1, Math.round(price))), new THREE.Vector3(p.x, p.y + 0.3, p.z));
     }

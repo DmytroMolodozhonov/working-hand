@@ -280,7 +280,7 @@ export class ArenaDuels {
         } else this._referee(A, D, dt);
         // the reward: the winner at the steward's counter — his stake back and as much again (a winner who walks off is paid at once: _payAway)
         for (const o of [...A.owed]) {
-            const p = L._playerPos(o.id), S = A.def.desk.stand || A.def.desk.front, F = A.def.desk.front;
+            const p = this._here(o.id), S = A.def.desk.stand || A.def.desk.front, F = A.def.desk.front;
             const near = p && Math.min(Math.hypot(p.x - S.x, p.z - S.z), F ? Math.hypot(p.x - F.x, p.z - F.z) : 1e9) < 4.5;
             if (near) {
                 // (the steward gives the coins from his hand — or, with nobody there, they lie on the book as ever)
@@ -292,12 +292,12 @@ export class ArenaDuels {
                 this._tell(o.id, { e: 'paid', id: A.id, coins: o.coins });
                 this.log.push('paid:' + o.id + ':' + o.coins);
                 A.owed.splice(A.owed.indexOf(o), 1);
-            } else if (!p) A.owed.splice(A.owed.indexOf(o), 1);
+            } else if (!p && !this._inGame(o.id)) A.owed.splice(A.owed.indexOf(o), 1); // (only a player who left loses it — not one dead or invisible for a moment)
             else if (Math.hypot(p.x - S.x, p.z - S.z) > STEWARD.LEAVE_R) { this._payAway(A, o); } // (he walked off without his prize: it follows him into his pouch)
         }
         A.sayT -= dt;
         // a player signed up who has walked away is struck off
-        for (const id of A.queue.prune((id) => { const q = L._playerPos(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) {
+        for (const id of A.queue.prune((id) => { const q = this._here(id), S = A.def.desk.stand; return !q || !S || Math.hypot(q.x - S.x, q.z - S.z) > STEWARD.LEAVE_R; })) {
             A.tiers.delete(id);
             this._refund(A, id, 'left');
             this._tell(id, { e: 'off', id: A.id, why: 'left' });
@@ -494,7 +494,7 @@ export class ArenaDuels {
     // ------------------------------------------------------------------ the duels
     _nextDuel(A, cs) {
         // the players signed up first (the first in the queue still here, with a wand)
-        const p = A.queue.take((id) => !!this.life._playerPos(id));
+        const p = A.queue.take((id) => !!this._here(id));
         const tier = p != null ? A.tiers.get(p) || null : null; // (the opponent the player chose at the steward — the dolls)
         const a = tier ? this._foe(A, cs, TIERS[tier].ranks) : this._recruit(A, cs, 'duel');
         if (!a) { A.restT = 10; if (p != null) A.queue.list.unshift(p); return; }
@@ -527,7 +527,7 @@ export class ArenaDuels {
         }
         // a duellist gone (killed by something else, the tower asleep): the duel is off
         if (gone(D.a) || (!D.p && gone(D.b))) { this._end(A, D, null, 'gone'); return; }
-        if (D.p != null && !L._playerPos(D.p)) { this._end(A, D, 'a', 'left'); return; }
+        if (D.p != null && !this._here(D.p)) { this._end(A, D, 'a', 'left'); return; }
         const marks = A.def.gates;
         if (D.phase === 'enter') {
             // in by the front gate; the two meet in the middle (a player's opponent goes to his mark)
@@ -550,7 +550,7 @@ export class ArenaDuels {
         }
         if (D.phase === 'call') {
             // the player comes out to the mark at the front gate's end
-            const p = L._playerPos(D.p), m = marks[0].mark;
+            const p = this._here(D.p), m = marks[0].mark;
             const on = p && Math.hypot(p.x - m.x, p.z - m.z) < STEWARD.MARK_R;
             if (on) D.atMark = true;
             else if (D.atMark && p && Math.hypot(p.x - m.x, p.z - m.z) > STEWARD.MARK_AWAY) { this._tell(D.p, { e: 'off', id: A.id, why: 'moved' }); this._end(A, D, null, 'noshow'); return; } // (stood on his place, then walked off)
@@ -561,7 +561,7 @@ export class ArenaDuels {
         }
         if (D.phase === 'count') {
             if (D.p != null) { // (the player's place: he stays on it till «Бой!»)
-                const p = L._playerPos(D.p), m = marks[0].mark;
+                const p = this._here(D.p), m = marks[0].mark;
                 if (!p || Math.hypot(p.x - m.x, p.z - m.z) > STEWARD.MARK_AWAY) { this._tell(D.p, { e: 'off', id: A.id, why: 'moved' }); this._end(A, D, null, 'noshow'); return; }
             }
             const n = Math.floor(D.t);
@@ -576,7 +576,7 @@ export class ArenaDuels {
         if (A.def.practice ? D.go >= this._maxT(A) : duelClock(D.go) === 'draw') { this._end(A, D, null, 'time'); return; }
         // the player: off the floor too long — the duel given up
         if (D.p != null) {
-            const p = L._playerPos(D.p);
+            const p = this._here(D.p);
             const on = p && onArenaFloor(A.def, p.x, p.z, -ARENA_DUEL.FAR_FLOOR);
             D.offT = on ? 0 : D.offT + dt;
             if (D.offT > ARENA_DUEL.OFF_FLOOR) { this._end(A, D, 'a', 'off'); return; }
@@ -630,7 +630,7 @@ export class ArenaDuels {
         if (why !== 'gone' && why !== 'noshow' && why !== 'foul') { this._fx(A, 'gong', A.def.centre); if (who) { this._fx(A, 'cheer', A.def.centre); this._fans(A, 'win'); } }
         // the player's wand, taken by the wizard: the winner throws it down on the floor before the player (the author: «он выкидывает её на землю»)
         if (D.trophy?.player != null) {
-            const w = D.trophy.by, pp = this.life._playerPos(D.trophy.player), c = A.def.centre;
+            const w = D.trophy.by, pp = this._here(D.trophy.player), c = A.def.centre;
             const to = pp || c, dx = to.x - w.x, dz = to.z - w.z, dl = Math.hypot(dx, dz) || 1;
             const at = new THREE.Vector3(w.x + dx / dl * 1.2, w.y + 2.8, w.z + dz / dl * 1.2);
             this.game.items?.spawnLoose(D.trophy.item, at, { vel: new THREE.Vector3(dx / dl * 3.2, 2.2, dz / dl * 3.2), spin: new THREE.Vector3(2, 6, 1) });
@@ -1351,6 +1351,7 @@ export class ArenaDuels {
         if (m.e === 'fhi') { if (this.mode?.friend && !this.auth) this.mode.said = false; return; }
         if (m.e === 'fhello') { if (this.auth && this.fr) this.fr.hello.add(from); return; }
         if (m.e === 'fready') { if (this.auth && this.fr && from === this.fr.friend) this.fr.ready = true; return; }
+        if (m.e === 'fdown') { if (this.auth && this.fr && from === this.fr.friend && this.fr.phase === 'fight') this.fr.friendDown = true; return; } // (the friend fell: the round is the host's)
         if (m.e === 'join') { if (this.auth) { const A = this.list.get(m.id); if (A) this._join(A, from, m.tier); } return; }
         if (m.e === 'cancel') { if (this.auth) { const A = this.list.get(m.id); if (A) this._cancel(A, from); } return; }
         if (m.e === 'tg') { const A = this.list.get(m.id); if (A && !this.auth) A.tg = Array.isArray(m.t) ? m.t.slice(0, 2) : []; return; }
@@ -1628,8 +1629,8 @@ export class ArenaDuels {
         if (F.phase === 'wait') {
             F.hintT -= dt;
             if (F.hintT <= 0) { F.hintT = 8; g.hud?.setVoice?.(F.friend ? '⏳ Друг входит на арену — скоро начнём' : '⏳ Ждём друга: пусть зайдёт на этот сервер. Бой начнётся, когда он будет на арене', true); }
-            if (F.friend && F.ready) {
-                F.phase = 'count'; F.t = 0; F.ready = false;
+            if (F.friend && F.ready && !g.remotes.get(F.friend)?.dead) { // (a friend still dead — on his death screen — is no opponent yet)
+                F.phase = 'count'; F.t = 0; F.ready = false; F.hostDown = false; F.friendDown = false;
                 this._toMark(A, 0); this._resetHero(); this._wandBack();
                 this._friendHold(A, true);
                 this._tell(F.friend, { e: 'fstart', id: A.id });
@@ -1646,10 +1647,11 @@ export class ArenaDuels {
                 this._fans(A, 'start');
             }
         } else if (F.phase === 'fight') {
-            const hostDead = !!(g.combat?.dead || g.isDeadLocal), r = g.remotes.get(F.friend), fDead = !!r?.dead;
+            // (a fall in the fight is no real death: the loser is up again at once — duelDeath; the round only remembers it)
+            const hostDead = !!(F.hostDown || g.combat?.dead || g.isDeadLocal), r = g.remotes.get(F.friend), fDead = !!(F.friendDown || r?.dead);
             if (hostDead || fDead || F.t > ARENA_DUEL.MAX_T) {
                 const res = hostDead && fDead ? 'draw' : hostDead ? 'friend' : fDead ? 'host' : 'draw';
-                F.phase = 'over'; F.t = 0; F.rounds = (F.rounds || 0) + 1;
+                F.phase = 'over'; F.t = 0; F.rounds = (F.rounds || 0) + 1; F.hostDown = false; F.friendDown = false;
                 this._tell(F.friend, { e: 'fend', id: A.id, r: res === 'draw' ? 'draw' : res === 'friend' ? 'win' : 'lose' });
                 this._mine({ e: 'fend', r: res === 'draw' ? 'draw' : res === 'host' ? 'win' : 'lose' });
                 this._fx(A, 'gong', A.def.centre); this._fans(A, res === 'draw' ? 'start' : 'win');
@@ -1750,6 +1752,19 @@ export class ArenaDuels {
         });
     }
 
+    /**
+     * Where a player really is (null: dead or gone) — for the arena's own bookkeeping (on his place, at the lectern, still in the
+     * duel). Not the villagers' sight (CastleLife._playerPos): «Невидимость» in a duel was taken for leaving it — a lost duel,
+     * the prize and the place in the queue gone.
+     */
+    _here(id) {
+        const g = this.game;
+        if (id === g.localId || id === 'local') return g.isDeadLocal || g.combat?.dead ? null : g.character.group.position;
+        const r = g.remotes.get(id);
+        return r && !r.dead ? r.position : null;
+    }
+    _inGame(id) { return id === this.game.localId || id === 'local' || this.game.remotes.has(id); }
+
     /** (CastleLife._die) Is this death the duel mode's own — a wizard of its arena struck down by the hero: nobody mourns, avenges or buries him. */
     quietKill(v, by) {
         const m = this.mode;
@@ -1762,10 +1777,17 @@ export class ArenaDuels {
      */
     duelDeath() {
         const m = this.mode;
-        if (!m || !this.auth) return false;
-        const A = this.list.get(m.arenaId);
+        if (!m || (!this.auth && !m.friend)) return false;
+        const A = this.list.get(m.arenaId) || (m.friend && !this.auth ? [...this.list.values()].find((x) => !x.def.practice && x.def.desk) : null);
         if (!A || Math.hypot(this.game.character.group.position.x - A.def.x, this.game.character.group.position.z - A.def.z) > (A.def.outer || 30) + 6) return false;
         this.game.combat.revive();
+        if (m.friend) {
+            // a duel with a friend «до смерти»: whoever falls loses the round — up again at once, nothing dropped, no death screen,
+            // for the host as for the friend (the host's death was swallowed and he never lost; the friend died for real)
+            if (this.auth) { if (this.fr?.phase === 'fight') this.fr.hostDown = true; }
+            else if (this.my?.role === 'friend') this.game.sync?.arena?.({ e: 'fdown', id: A.id });
+            return true;
+        }
         const D = A.duel;
         if (D) {
             if (D.phase !== 'over') this._end(A, D, 'a', 'dead');

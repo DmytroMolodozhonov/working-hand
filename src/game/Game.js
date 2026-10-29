@@ -3285,7 +3285,7 @@ export class Game {
         const r3 = (v) => Math.round(v * 100) / 100;
         const list = blobs.map((b) => ({ x: r3(b.x), y: r3(b.y), z: r3(b.z), r: r3(b.r) }));
         this.applyIce(list);
-        if (this.sync) this.sync.ice(list);
+        if (this.sync) this.sync.iceBlocks(list);
     }
 
     applyIce(blobs) {

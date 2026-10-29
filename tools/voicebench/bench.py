@@ -184,14 +184,17 @@ def scene(name, voices, seed, spells=SPELLS, n=20):
                overlap=dict(friend=True, share=0.85, gain=-10, rt60=0.25, delay=45, dist=0.6),
                friendspell=dict(friend=True, share=0.5, gain=-10, rt60=0.25, delay=45, dist=0.6, spells_friend=True, silent=True),
                loud=dict(friend=True, share=0.85, gain=-4, rt60=0.45, delay=70, dist=1.5),
-               ship=dict(friend=False, ship=True, gain=-6, rt60=0.3, delay=40, dist=1.0))[name]
+               ship=dict(friend=False, ship=True, gain=-6, rt60=0.3, delay=40, dist=1.0),
+               # (a duel over Discord: the friend answers with the SAME spell just before or after mine — his echo must not
+               # cast, mine must not be taken for his echo: SpellSpotter ECHO_AFTER, docs/qa/multiplayer-report.md V-02)
+               duel=dict(friend=True, gain=-10, rt60=0.25, delay=45, dist=0.6, duel=True))[name]
     texts = FRIEND_SPELLS if par.get("spells_friend") else CHAT
     if par.get("ship"):
         ref = ship_sound(rng, total)
         echo = room(ref, rng, par["gain"], par["delay"] + rng.uniform(-8, 8), par["rt60"], par["dist"])
         mic += echo
         LAST["echo"] = echo
-    if par["friend"]:
+    if par["friend"] and not par.get("duel"):
         ref, marks = friend_track(voices, rng, total, texts, par["share"])
         if name != "chat":
             pass
@@ -214,6 +217,17 @@ def scene(name, voices, seed, spells=SPELLS, n=20):
             place(LAST.setdefault("player", np.zeros(total, np.float32)), clip, t)
             truth["spells"].append({"t0": t / SR, "t1": (t + len(clip)) / SR, "text": text})
             t += len(clip) + int(rng.uniform(3.2, 5.0) * SR)
+    if par.get("duel"):
+        for s in truth["spells"]:
+            clip = level(voices.say(FRIEND, s["text"], rng.uniform(0.95, 1.2)), rng.uniform(-27, -22))
+            t = int((s["t0"] + rng.uniform(-1.0, 1.2)) * SR)
+            if t < 0 or t + len(clip) > total:
+                continue
+            place(ref, clip, t)
+            truth["friend"].append({"t0": t / SR, "t1": (t + len(clip)) / SR, "text": s["text"]})
+        echo = room(ref, rng, par["gain"], par["delay"] + rng.uniform(-8, 8), par["rt60"], par["dist"])
+        mic += echo
+        LAST["echo"] = echo
     mic += (rng.standard_normal(total) * 10 ** (-70 / 20)).astype(np.float32)  # the room's hiss
     return np.clip(mic, -1, 1), np.clip(ref, -1, 1), truth
 
@@ -240,7 +254,7 @@ def main():
     a = ap.parse_args()
     import voice_native as vn
     voices = Voices(a.voices, os.path.join(a.voices, "cache"))
-    names = ["clean", "chat", "overlap", "friendspell", "loud", "ship"] if a.scene == "all" else a.scene.split(",")
+    names = ["clean", "chat", "overlap", "friendspell", "loud", "ship", "duel"] if a.scene == "all" else a.scene.split(",")
     os.makedirs(a.out, exist_ok=True)
     for nm in names:
         mic, ref, truth = scene(nm, voices, a.seed, n=a.n)

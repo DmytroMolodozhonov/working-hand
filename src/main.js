@@ -502,10 +502,11 @@ voiceToggleBtn?.addEventListener('click', () => {
 
 // (multiplayer, my lips not seen: a spell waits a moment — the friend's word may be on its way over the network)
 let heldSpell = null;
-function holdSpell(command, isFinal) {
-    if (heldSpell) { heldSpell.command = command; heldSpell.isFinal = heldSpell.isFinal || isFinal; return; }
-    heldSpell = { command, isFinal };
-    setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true); }, GATE.HOLD);
+function holdSpell(command, isFinal, meta = null) {
+    if (heldSpell) { heldSpell.command = command; heldSpell.isFinal = heldSpell.isFinal || isFinal; heldSpell.meta = meta || heldSpell.meta; return; }
+    heldSpell = { command, isFinal, meta };
+    // (with its meta: when the words were said — the echo check and the journal need it after the wait too)
+    setTimeout(() => { const h = heldSpell; heldSpell = null; if (h) voice.onResult(h.command, h.isFinal, true, h.meta); }, GATE.HOLD);
 }
 
 // A friend's echo (EchoGuard.js): a spell heard while a friend spoke too — the game waits a moment for his own word
@@ -784,8 +785,11 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg };
             if (said) journal(command, isFinal, meta, said, !!name, name ? '' : castWhy(said), 'микрофон игрока');
             else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
+            // (the others are told what I said even when it didn't work here — unknown, no mana: else my voice from their speakers,
+            // with no word of mine to tell it, cast it from THEIR hand)
+            if (said && !name && isFinal && game.remotes?.size > 0) game.sync?.say?.(said, meta?.from);
             if (name) {
-                if (game.remotes?.size > 0) game.sync?.say?.(said);
+                if (game.remotes?.size > 0) game.sync?.say?.(said, meta?.from);
                 if (mineWin) game.voiceChat?.said(name, mineWin[0], mineWin[1]); // (my voice in their speakers is not theirs)
                 voice.learnOwnVoice();
                 hud.setVoice(`✨ <span style="color:#55efc4">${name.toUpperCase()}</span>`);
@@ -807,8 +811,9 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         // the echo of a spell a friend has just cast (their voice from my speakers / headphones)
         const heard = matchSpell(command);
         // (alone too: a wizard of the game may have just said that spell's word aloud from the speakers)
-        if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now()))) {
-            const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor });
+        const saidFrom = Number.isFinite(meta?.from) ? meta.from : null; // (when my words began: after a friend's word came — mine, not its echo)
+        if (heard && (game.remotes?.size > 0 || game.voiceGate.echoes(heard, performance.now(), saidFrom))) {
+            const gate = game.voiceGate.check(heard, performance.now(), { levels: voice._levels, floor: voice.noiseFloor }, saidFrom);
             if (!gate.ok) {
                 if (isFinal || held) netLog(`заклинание «${command}» не моё: ${gate.why === 'lips' ? 'губы не двигались' : 'эхо заклинания друга'}`);
                 journal(command, isFinal || held, meta, heard, false, gate.why === 'lips' ? 'отсеяно: губы не двигались (камера) — это не ваш голос' : 'отсеяно: эхо заклинания друга');
@@ -817,9 +822,9 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (game.remotes?.size > 0) {
                 // sure it's me (my lips moved right then): the others are told at once — my voice from
                 // their speakers then casts nothing there; not sure: wait a moment for their word
-                if (gate.sure) game.sync?.say?.(heard);
-                else if (!held) { holdSpell(command, isFinal); return; }
-                else game.sync?.say?.(heard);
+                if (gate.sure) game.sync?.say?.(heard, saidFrom);
+                else if (!held) { holdSpell(command, isFinal, meta); return; }
+                else game.sync?.say?.(heard, saidFrom);
                 if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
         }
@@ -1431,7 +1436,11 @@ $('pause-exit-btn').onclick = async () => {
     try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
     backToMenu();
 };
-window.addEventListener('pagehide', () => { try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ } net.sayGoodbye(); });
+window.addEventListener('pagehide', () => {
+    try { if (game?.sync) game.groundVortex?.returnAll?.(); } catch (e) { /* closing */ } // (blocks held by «Ground Vortex» back into the ground: the others see it)
+    try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ }
+    net.sayGoodbye();
+});
 $('restart-btn').onclick = backToMenu;
 $('victory-menu-btn').onclick = backToMenu;
 

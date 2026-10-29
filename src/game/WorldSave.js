@@ -345,7 +345,8 @@ export class WorldKeeper {
             items: g.items ? [...g.items.loose.values()].filter((L) => !onSpot(L) && !(L.item.shop && !L.item.shop.paid)).map((L) => ({ item: L.item, p: [r2(L.model.position.x), r2(L.model.position.y), r2(L.model.position.z)], h: L.hover ? 1 : 0 })) : [],
             gargoyleScorch: g.gargoyles?.snapshot() || undefined, // (the burnt pentagrams of the gargoyles: spent for good)
             enchantCircles: g.enchantCircles?.snapshot() || undefined, // (the permanent circles of the enchanting pentagram)
-            weapons: g.weapons.weapons.filter((w) => !w.holder).map((w) => w.serialize()),
+            // (a weapon in a guest's hand is his — kept in his things (pstate): saved here too, it came back twice)
+            weapons: g.weapons.weapons.filter((w) => !w.holder && !(g.sync?.weaponOwners?.get(w.id) && g.sync.weaponOwners.get(w.id) !== g.localId)).map((w) => w.serialize()),
             fixedWeapons: g.fixedWeapons || [], // the weapons the world starts with (a newer game may add more)
             animals: g.animals?.snapshot() || [],
             animalSites: g.animals?.sitesSnapshot() || {}, // (herd places emptied lately; an older save has none: all full)
