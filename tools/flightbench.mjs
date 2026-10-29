@@ -12,6 +12,9 @@
  *   --check             fail (exit code 1) when the flight is not smooth (LIMITS below)
  *   --profile           also record a CPU profile of the max run (scratch/flight.cpuprofile)
  *   --size 640x360      the window (small: here the picture is drawn by the processor)
+ *   --maxima            the route of «Flying Maxima» instead (Space.js / Flight.FAST_SPEED): 150 m/s straight, a U-turn,
+ *                       along the surface, ground made ahead by the workers (TerrainView._lead); with --check also holds
+ *                       «Maxima» to LIMITS (no chunk made in a frame, no long frame)
  *   --space             then the space route too («Космос», Space.js): «выход» — Flying Maxima out of the
  *                       air, «космос» — full speed through space, «посадка» — into Mars' air and down to its
  *                       ground, «марс» — a flight over it, «домой» — out again and back into the Earth's air
@@ -44,18 +47,19 @@ const OUT = opt('out', null);
 const PROFILE = args.includes('--profile');
 const CHECK = args.includes('--check');
 const SPACE_ROUTE = args.includes('--space');
+const MAXIMA = args.includes('--maxima');
 const ALLOC = args.includes('--alloc'); // who makes the garbage in flight (sampling heap profiler: the biggest makers of short-lived objects)
 /** --check: what a flight must keep (the game's own work in a frame; no shader made in flight). */
-const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0 };
+const LIMITS = { gameMaxMs: 50, gameOver33Share: 0.01, gameLow1Fps: 30, newShaders: 0, maximaMadeInFrame: 0, maximaP99Ms: 30 };
 const [W, H] = opt('size', '640x360').split('x').map(Number);
 const PRESETS = { high: { graphics: '3', viewDistance: 'high' }, max: { graphics: '3', viewDistance: 'max' }, ultra: { graphics: '3', viewDistance: 'high', ultra: 'on' } };
 
 /** Runs in the page: fly the route, record every frame. */
-async function flyRoute() {
+async function flyRoute(MAXIMA) {
     const g = window.__zns.game;
     const ch = g.character;
     const data = g.terrain.data;
-    const SPEED = 26; // m/s (FLIGHT.MAX_SPEED)
+    const SPEED = MAXIMA ? 150 : 26; // m/s (FLIGHT.MAX_SPEED; «Flying Maxima»: FLIGHT.FAST_SPEED is the top, 150 here)
     const frames = [];
     let seg = 'взлёт';
     // targets: the nearest castle beyond 250 m, the highest ground within ~1.2 km
@@ -76,7 +80,7 @@ async function flyRoute() {
     const face = (tx, tz) => Math.atan2(-(tx - ch.group.position.x), -(tz - ch.group.position.z));
     const turnTo = (target, rate, dt) => { let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); yaw += Math.max(-rate * dt, Math.min(rate * dt, d)); return Math.abs(d); };
     let phase = 0, phaseT = 0, circleA = 0, startYaw = 0;
-    const plan = [
+    const plan = MAXIMA ? [{ name: 'прямой', time: 40 }, { name: 'разворот', time: 12 }, { name: 'замок', time: 30 }] : [
         { name: 'прямой', time: 22 },
         { name: 'разворот', time: 7 },
         { name: 'замок', time: 32 },
@@ -88,7 +92,7 @@ async function flyRoute() {
     let done = false;
     g._updateFlight = function (dt, pose) {
         const f = g.flight;
-        if (f.active && !done) { f.state = 'cruise'; f.t = 5; f.speed = SPEED; f.pitch = 0; f.hovering = false; } // (no camera here: the route flies)
+        if (f.active && !done) { f.state = 'cruise'; f.t = 5; f.speed = SPEED; f.pitch = 0; f.hovering = false; f.fast = !!MAXIMA; } // (no camera here: the route flies)
         origFlight(dt, pose);
         if (!f.active || done) return;
         const p = ch.group.position;
@@ -114,8 +118,8 @@ async function flyRoute() {
         p.x += fx * SPEED * step; p.z += fz * SPEED * step;
         // terrain following: 18 m over the highest ground just ahead
         let gy = -1e9;
-        for (const a of [0, 10, 25, 45]) gy = Math.max(gy, g.collision.groundY(p.x + fx * a, p.z + fz * a));
-        const want = Math.min(105, gy + 18);
+        for (const a of (MAXIMA ? [0, 40, 100, 200] : [0, 10, 25, 45])) gy = Math.max(gy, g.collision.groundY(p.x + fx * a, p.z + fz * a));
+        const want = Math.min(MAXIMA ? 300 : 105, gy + (MAXIMA ? 40 : 18));
         p.y += (want - p.y) * Math.min(1, step * 1.5);
         if (p.y < gy + 4) p.y = gy + 4;
         g.smoothBody = yaw; g.cameraBaseRotation = yaw; ch.setBodyRotation(yaw);
@@ -275,7 +279,7 @@ async function flySpaceRoute() {
     // 1. out: in flight, «Flying Maxima», up through the sky into space
     if (!g.flight.active) g.startFlight(true);
     g.flight.state = 'cruise'; g.flight.t = 5;
-    S.cast(true);
+    S.cast(true); S._beginAscend(false);
     await wait(() => S.realm === 'space', 120000);
     // 2. space: full speed away (towards Mars), the planets and the belts passing
     seg = 'космос';
@@ -294,7 +298,7 @@ async function flySpaceRoute() {
     // 5. home: out again, then straight into the Earth's air
     seg = 'домой';
     g.flight.state = 'cruise'; g.flight.t = 5; g.flight.hovering = false;
-    S.cast(true);
+    S.cast(true); S._beginAscend(false);
     await wait(() => S.realm === 'space', 120000);
     const e = P('earth'), Re = S.planets.get('earth').radius;
     S.P.x = e.x + 200; S.P.y = e.y + Re + 500; S.P.z = e.z - 300; S.O.x = S.P.x; S.O.y = S.P.y; S.O.z = S.P.z; S._exitDir = null;
@@ -320,6 +324,7 @@ function metrics(frames, key) {
         fps: +(1000 * n / sum).toFixed(1),
         low1: +(1000 / worstAvg).toFixed(1), // the 1 % worst frames, as FPS
         p50: +sorted[Math.floor(n / 2)].toFixed(1),
+        p99: +sorted[Math.max(0, Math.floor(n / 100))].toFixed(1),
         max: +sorted[0].toFixed(1),
         over33: v.filter((x) => x > 33.3).length,
         over50: v.filter((x) => x > 50).length,
@@ -376,7 +381,7 @@ async function runLevel(browser, url, level) {
         await heap.send('HeapProfiler.enable');
         await heap.send('HeapProfiler.startSampling', { samplingInterval: 4096, includeObjectsCollectedByMajorGC: true, includeObjectsCollectedByMinorGC: true });
     }
-    const r = await page.evaluate(flyRoute);
+    const r = await page.evaluate(flyRoute, MAXIMA);
     if (heap) {
         const { profile } = await heap.send('HeapProfiler.stopSampling');
         const by = new Map();
@@ -420,12 +425,12 @@ async function runLevel(browser, url, level) {
 }
 
 function table(results) {
-    const row = (name, m) => m ? `${name.padEnd(10)} ${String(m.fps).padStart(6)} ${String(m.low1).padStart(7)} ${String(m.max).padStart(8)} ${String(m.over33).padStart(6)} ${String(m.frames).padStart(7)}` : `${name} —`;
+    const row = (name, m) => m ? `${name.padEnd(10)} ${String(m.fps).padStart(6)} ${String(m.low1).padStart(7)} ${String(m.p99).padStart(7)} ${String(m.max).padStart(8)} ${String(m.over33).padStart(6)} ${String(m.frames).padStart(7)}` : `${name} —`;
     for (const r of results) {
         console.log(`\n=== ${r.level}  (замок ${r.castle.x},${r.castle.z}; вершина ${r.peak.x},${r.peak.z} h${r.peak.h})`);
         for (const kind of ['frame', 'cpu', 'game']) {
             console.log(`  ${{ frame: 'КАДР (с рисованием процессором)', cpu: 'ПРОЦЕССОР (работа игры за кадр, с подготовкой рисования)', game: 'ИГРА (логика, мир, существа — без рисования)' }[kind]}`);
-            console.log(`  ${'часть'.padEnd(10)} ${'FPS'.padStart(6)} ${'1%худш'.padStart(7)} ${'макс,мс'.padStart(8)} ${'>33мс'.padStart(6)} ${'кадров'.padStart(7)}`);
+            console.log(`  ${'часть'.padEnd(10)} ${'FPS'.padStart(6)} ${'1%худш'.padStart(7)} ${'p99,мс'.padStart(7)} ${'макс,мс'.padStart(8)} ${'>33мс'.padStart(6)} ${'кадров'.padStart(7)}`);
             console.log('  ' + row('весь полёт', r.total[kind]));
             for (const s in r.segs) console.log('  ' + row(s, r.segs[s][kind]));
         }
@@ -466,6 +471,11 @@ if (CHECK) {
         if (m.low1 < LIMITS.gameLow1Fps) bad.push(`${r.level}: 1% худших кадров игры ${m.low1} FPS < ${LIMITS.gameLow1Fps}`);
         const shaders = r.newProgs.filter((x) => !x.startsWith('   ')).length;
         if (shaders > LIMITS.newShaders) bad.push(`${r.level}: в полёте собрано шейдеров: ${shaders}`);
+        if (MAXIMA) { // («Flying Maxima», 150 m/s: the land is made by the workers, not in a frame; only tighten)
+            const made = Object.values(r.genCallers || {}).reduce((a, b) => a + b.n, 0);
+            if (made > LIMITS.maximaMadeInFrame) bad.push(`${r.level}: «Maxima»: земли сделано в кадре ${made} раз`);
+            if (m.p99 > LIMITS.maximaP99Ms) bad.push(`${r.level}: «Maxima»: 99-й перцентиль кадра игры ${m.p99} мс > ${LIMITS.maximaP99Ms}`);
+        }
         if (r.errors.length) bad.push(`${r.level}: ошибки: ${r.errors.join('; ')}`);
     }
     console.log(bad.length ? '\nПРОВЕРКА НЕ ПРОЙДЕНА:\n  ' + bad.join('\n  ') : '\nПРОВЕРКА ПРОЙДЕНА');

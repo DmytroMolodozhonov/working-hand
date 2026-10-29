@@ -39,6 +39,9 @@ export const FLIGHT = {
     CEILING: 110,
     COST: 2.5, // mana a second flying (free world) — more than comes back (1 a second): no endless flight (the author)
     HOVER_COST: 1.8, // mana a second hovering («Паузин»)
+    FAST_SPEED: 160, // m/s: «Flying Maxima» over the ground — fast, along the surface (the author: 120–200)
+    FAST_ACCEL: 55, // m/s²: how fast it picks that speed up (a few seconds, not a jerk)
+    FAST_CLIMB: 1.5, // rad: the path may go almost straight up (86°) — the only way out into space (Space.js, FLYMAX.UP_DEG)
 };
 
 export class FlightController {
@@ -57,6 +60,7 @@ export class FlightController {
         this.samples = 0;
         this.lastEvent = null;
         this.hovering = false;
+        this.fast = false; // «Flying Maxima» over the ground (Space.cast): the fast cruise
     }
 
     /** «Паузин»: hover on the spot. */
@@ -110,6 +114,7 @@ export class FlightController {
         if (!this.busy) return;
         this.state = 'landing';
         this.t = 0;
+        this.fast = false;
         this.lastEvent = reason;
     }
 
@@ -194,8 +199,11 @@ export class FlightController {
         } else {
             // Cruise
             const steer = this.steering(input.torso, input.headPitch || 0);
-            this.speed = Math.min(FLIGHT.MAX_SPEED * (this.armorK || 1), this.speed + FLIGHT.CRUISE_ACCEL * (this.armorK || 1) * dt); // (armorK: a named armour's perk, Armor.js)
-            const target = steer.dive >= 0 ? steer.dive * FLIGHT.MAX_DIVE : -steer.dive * FLIGHT.MAX_CLIMB;
+            if (this.fast) {
+                // (above the plain top speed it is a gentler pull: the speed rises a few seconds, and a bump slows it as always)
+                this.speed = Math.min(FLIGHT.FAST_SPEED, this.speed + FLIGHT.FAST_ACCEL * dt);
+            } else this.speed = Math.min(FLIGHT.MAX_SPEED * (this.armorK || 1), this.speed + FLIGHT.CRUISE_ACCEL * (this.armorK || 1) * dt); // (armorK: a named armour's perk, Armor.js)
+            const target = steer.dive >= 0 ? steer.dive * FLIGHT.MAX_DIVE : -steer.dive * (this.fast ? FLIGHT.FAST_CLIMB : FLIGHT.MAX_CLIMB);
             // Right after take-off the path levels out by itself
             const level = clamp(1 - this.t / 2.0, 0, 1);
             const wanted = lerp(target, 0.0, level * 0.7);

@@ -75,7 +75,7 @@ export const FIELDS = [
         const n = names.filter((s) => g.canSaySpell(s)).length;
         return row('Выучено заклинаний', `${n} / ${names.length}`, { icon: '📖', link: 'codex', tip: 'Все они — в «Справочнике»' });
     } },
-    { id: 'flightMax', section: 'magic', get: (g) => g.knowsSpell && g.knowsSpell('FlyingMaxima') ? row('Дар богов', 'Flying Maxima — полёт в космос', { icon: '🪽' }) : null },
+    { id: 'flightMax', section: 'magic', get: (g) => g.knowsSpell && g.knowsSpell('FlyingMaxima') ? row('Дар богов', 'Flying Maxima — быстрый полёт и космос', { icon: '🪽' }) : null },
     { id: 'gmp', section: 'magic', get: (g) => g.bonus?.spells?.GiveMyPower ? row('Дар', 'Give Me My Power — забрать свою силу', { icon: '💀' }) : null },
     { id: 'pentagrams', section: 'magic', get: (g) => {
         // the drawings the hero knows: a burnt scroll (bonus.spells[scroll]); the break-ward one has its own flag; Creative — all

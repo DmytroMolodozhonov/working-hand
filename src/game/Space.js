@@ -6,7 +6,9 @@
  *   1. 1000 mana cells (any way: practice, achievements, «Высший маг», crystals, scrolls): once —
  *      «Поздравляем! Вы приблизились к силе богов» and «Flying Maxima» is learnt (kept with the hero,
  *      game.bonus.spells.FlyingMaxima). In Creative it is known at once.
- *   2. Only in flight (after «Флайн»): «Flying Maxima» — the hero shoots straight up, faster and
+ *   2. Only in flight (after «Флайн»): «Flying Maxima» — the fast flight (Flight.FLIGHT.FAST_SPEED) along the ground of
+ *      the Earth or any planet; space only when the path is held straight up (≥ FLYMAX.UP_DEG) for FLYMAX.UP_HOLD s in
+ *      a row (_climbStep). Then the hero shoots up, faster and
  *      faster; the sky darkens, the stars come out, clouds rush down past, a white-out — and he is
  *      above the round Earth, going on out of its orbit (state ascend → space).
  *   3. Space: the same flight by the body (lean to turn, forward / back to dive / climb, «Паузин» to
@@ -59,6 +61,11 @@ export const FLYMAX = {
     ENTRY_T: 1.7, // s of burning air (planets with air); 0.8 without
     DESC_H: 240, // m over the ground after the fall into the air (Earth); planets: 160
     MAX_SPEED: 18000, // m/s far out (the speed near a planet is held down by its distance)
+    UP_DEG: 80, // the flight path must point this steeply up (° over the horizon) …
+    UP_HOLD: 5, // … for this many seconds in a row — only then «Flying Maxima» leaves the air for space
+    UP_GRACE: 0.4, // s: a tracking glitch / a wobble of the body while holding up is forgiven
+    CEIL_EARTH: 405, // m (world y): the fast flight's top over the Earth, just under where the climb ends (EARTH_TOP)
+    CEIL_PLANET: 270, // m over a planet's ground: the same
     SOI: 5, // a planet carries a hero within this many radii (+1500 m) along its orbit
 };
 
@@ -169,7 +176,7 @@ export class Space {
         g.bonus = g.bonus || {};
         g.bonus.spells = { ...(g.bonus.spells || {}), FlyingMaxima: true };
         const title = '✨ Поздравляем, вы приблизились к силе богов!';
-        const sub = 'Боги даруют вам своё заклинание «Flying Maxima» — его нельзя найти или купить, только получить в дар. В полёте скажите его — и летите вверх, за небо, в космос';
+        const sub = 'Боги даруют вам своё заклинание «Flying Maxima» — его нельзя найти или купить, только получить в дар. В полёте скажите его — и мчитесь быстро; а если держать полёт прямо вверх 5 секунд — улетите за небо, в космос';
         if (g.achievements?._banner) g.achievements._banner(title, sub, true);
         else g.hud?.notify?.(`${title} ${sub}`, 8000);
         g.hud?.setVoice?.(`${title}<br>${sub}`, true);
@@ -206,10 +213,26 @@ export class Space {
         }
         if (this.state !== 'off') return null;
         if (!g.flight.active || g.flight.state !== 'cruise') return say('🦸 «Flying Maxima» — только в полёте: сначала взлетите («Флайн»), потом скажите «Flying Maxima»');
-        if (g.animals?.riding) return say('🐴 Звери не летают выше неба — сначала спешьтесь');
-        if (g.dragonRide?.busy) return say('🐉 На драконе выше неба не взлететь — сначала слезьте');
+        if (g.animals?.riding) return say('🐴 Звери не летают так быстро — сначала спешьтесь');
+        if (g.dragonRide?.busy) return say('🐉 На драконе так не полетать — сначала слезьте');
+        // over the ground (the Earth or any planet with a ground): the fast flight along the surface; into space only straight up (_climbStep)
+        const fl = g.flight;
+        if (fl.fast) { if (isFinal) g.hud?.setVoice?.('🚀 Вы уже летите быстро. Хотите в космос — летите вертикально вверх 5 секунд', true); return 'FlyingMaxima'; }
+        fl.fast = true;
+        fl.hovering = false;
+        this.upHold = 0;
         const p = g.character.group.position;
-        if (g.collision?.ceilingAt && g.collision.ceilingAt(p.x, p.z, p.y + 1) !== Infinity) return say('🧱 Над вами крыша — вылетите под открытое небо');
+        g.sound?.playSpace?.('spaceRise', 0.6);
+        g.fx?.lightFlash?.(p, 0xbfe4ff, 2, 0.5, 40);
+        if (isFinal) g.hud?.setVoice?.('🚀 <b>Flying Maxima!</b> Летите быстро вдоль земли. В космос — только прямо вверх, 5 секунд', true);
+        return 'FlyingMaxima';
+    }
+
+    /** The climb out of the air begins (the fast flight held straight up long enough, or the debug key). */
+    _beginAscend(isFinal = true) {
+        const g = this.game;
+        const p = g.character.group.position;
+        if (g.collision?.ceilingAt && g.collision.ceilingAt(p.x, p.z, p.y + 1) !== Infinity) { this._say('🧱 Над вами крыша — вылетите под открытое небо', 'roof', 3000); return false; }
         this.state = 'ascend';
         this._t = 0;
         this._v = Math.max(14, g.flight.speed * 0.6);
@@ -218,11 +241,41 @@ export class Space {
         const gy = this._ground(p.x, p.z);
         this._top = this.realm === 'earth' ? Math.max(FLYMAX.EARTH_TOP, p.y + 200) : Math.max(p.y + 120, gy + FLYMAX.PLANET_TOP);
         g.flight.hovering = false;
+        g.flight.fast = false;
+        this.upHold = 0; this.upK = 0;
         this.prepare();
         g.sound?.playSpace?.('spaceRise', 1);
         g.fx?.lightFlash?.(p, 0xbfe4ff, 2, 0.5, 40);
         if (isFinal) g.hud?.setVoice?.('🚀 <b>Flying Maxima!</b> Вы уходите вверх — к звёздам…', true);
-        return 'FlyingMaxima';
+        return true;
+    }
+
+    /** How high the fast flight may go over this spot (world y): under where the sky ends, so the way to space is only the climb. */
+    fastCeiling(p) {
+        return this.realm === 'earth' ? FLYMAX.CEIL_EARTH : this._ground(p.x, p.z) + FLYMAX.CEIL_PLANET;
+    }
+
+    /**
+     * The fast flight, every frame: held straight up (path ≥ UP_DEG) for UP_HOLD seconds in a row → space.
+     * Anything else (levelled, a dive, hovering, landing, grounded) resets the count after a short grace.
+     * Returns nothing; the feeling (wind, white edges, a tremble) grows with the count.
+     */
+    _climbStep(dt) {
+        const g = this.game, fl = g.flight;
+        const up = fl.fast && fl.state === 'cruise' && !fl.hovering && !g.isDeadLocal && fl.pitch >= FLYMAX.UP_DEG * Math.PI / 180;
+        if (up) { this._upBad = 0; this.upHold = (this.upHold || 0) + dt; }
+        else if (this.upHold > 0) {
+            this._upBad = (this._upBad || 0) + dt;
+            if (this._upBad > FLYMAX.UP_GRACE || !fl.fast) { this.upHold = 0; this._upBad = 0; }
+        }
+        const k = clamp((this.upHold || 0) / FLYMAX.UP_HOLD, 0, 1);
+        this.upK = k;
+        if (k > 0) {
+            g.fx.shake = Math.max(g.fx.shake || 0, 0.12 * k);
+            this._overlay('white', 0.3 * k * k);
+            this._say(`🚀 Держите прямо вверх… ${Math.max(1, Math.ceil(FLYMAX.UP_HOLD - this.upHold))}`, 'uphold' + Math.ceil(FLYMAX.UP_HOLD - this.upHold), 900);
+        }
+        if (this.upHold >= FLYMAX.UP_HOLD) { if (!this._beginAscend(true)) this.upHold = 0; }
     }
 
     /** Spells off the Earth: a reason it does not work here, or null (Game._castLocalSpell). */
@@ -278,6 +331,7 @@ export class Space {
         if (this.state === 'ascend') return this._ascend(dt);
         if (this.state === 'descend') return this._descend(dt, pose);
         if (this.realm === 'space' || this.state === 'space' || this.state === 'entry') return this._fly(dt, pose);
+        if (g.flight.fast || this.upHold > 0) this._climbStep(dt);
         g._updateFlight(dt, pose);
     }
 
@@ -611,9 +665,9 @@ export class Space {
         if (p.y - ground < 70 || this._t > 12) {
             // the usual flight from here (diving a little, at the usual speed)
             this.state = 'off';
-            fl.state = 'cruise'; fl.t = 2; fl.hovering = false; fl.speed = 22; fl.pitch = -0.25;
+            fl.state = 'cruise'; fl.t = 2; fl.hovering = false; fl.fast = false; fl.speed = 22; fl.pitch = -0.25;
             this.climbK = 0;
-            this._say(`${this.realm === 'earth' ? '🌍' : '🪐'} Вы в небе над ${this.realm === 'earth' ? 'Землёй' : this.planets.get(this.realm)?.name || 'планетой'}. Летите, куда хотите; «Flying Maxima» — снова в космос`, 'arrived', 5000);
+            this._say(`${this.realm === 'earth' ? '🌍' : '🪐'} Вы в небе над ${this.realm === 'earth' ? 'Землёй' : this.planets.get(this.realm)?.name || 'планетой'}. Летите, куда хотите; «Flying Maxima» — быстрый полёт, а прямо вверх 5 секунд — снова в космос`, 'arrived', 5000);
         }
     }
 
@@ -635,7 +689,7 @@ export class Space {
             const k = this.state === 'ascend' || this.state === 'descend' ? this.climbK || 0 : 0;
             if (k > 0.001) this._darkSky(k);
             else if (this._skyDark) this._restoreEarthSky();
-            g.sound?.spaceLoop?.('spaceWind', 0);
+            g.sound?.spaceLoop?.('spaceWind', (this.upK || 0) * 0.8); // (the wind of the fast climb)
             return;
         }
         this._skyDark = true;
@@ -826,7 +880,7 @@ export class Space {
         this.breathing = airless;
         // «Flying Maxima» itself: −1.5 mana a second while it carries the hero (the author) — the climb, space, the burning air —
         // and the plain «Флайн» under it on top, its own price (2.5, hovering 1.8: Flight.FLIGHT; the author: both are paid in space)
-        this.maxFlying = this.state === 'ascend' || this.state === 'entry' || this.realm === 'space';
+        this.maxFlying = this.state === 'ascend' || this.state === 'entry' || this.realm === 'space' || !!g.flight?.fast;
         this.flyCost = this.maxFlying ? FLYMAX.FLY + (g.flight?.hovering ? FLIGHT.HOVER_COST : FLIGHT.COST) : 0;
         if (this.maxFlying && c?.enabled && !g.isDeadLocal && !c.dead) c.fatigue = Math.max(0, c.fatigue - this.flyCost * dt);
         if (!airless || g.isDeadLocal || c?.dead) { this.suffocate = 0; this._panel(); return; }

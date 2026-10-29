@@ -49,6 +49,7 @@ test('Planet Liquidation: the shield of the gods, the beam, the cracks, the blas
     await page.evaluate(() => { const g = window.__zns.game; g.castDebug('Flight'); g.flight.state = 'cruise'; g.flight.t = 2; });
     await frames(10);
     assert.equal((await say('Flying Maxima')).name, 'FlyingMaxima');
+    await page.evaluate(() => window.__zns.game.space._beginAscend(false));
     for (let i = 0; i < 80 && (await page.evaluate(() => window.__zns.game.space.realm)) !== 'space'; i++) await frames(5);
     await page.evaluate(async () => { const S = window.__zns.game.space; for (let i = 0; i < 200 && (S._tex.get('earth') !== 'done' || S._tex.get('mars') !== 'done'); i++) await new Promise((r) => setTimeout(r, 100)); });
     // the clock held where the test says (this browser draws only a few frames a second)

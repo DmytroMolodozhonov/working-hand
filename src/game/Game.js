@@ -3319,7 +3319,7 @@ export class Game {
     /** Debug keys: cast in the camera direction. */
     castDebug(name) {
         if (name === 'Flight') { this.flight.active ? this.flight.land('debug') : this.startFlight(true); return; }
-        if (name === 'FlyingMaxima') { if (!this.flight.active) this.startFlight(true); this.flight.state = 'cruise'; this.space?.cast(true); return; }
+        if (name === 'FlyingMaxima') { if (!this.flight.active) this.startFlight(true); this.flight.state = 'cruise'; this.space?.cast(true); this.space?._beginAscend(true); return; }
         if (this._waterSpell(name)) { this._lastWaterCast = 0; return this._castWater(this._waterSpell(name), '', true); }
         if (/^Protection(Gods)?(Maxima)?$/.test(name)) { this._lastShieldCast = 0; return this._castProtection(name, true); }
         if (name === 'Levitation') { this._lastLevitate = 0; return this._castLevitation(true); }
@@ -4218,12 +4218,13 @@ export class Game {
         const bodyBlocked = (x, y, z) => col.pointBlocked(x, y, z) || col.pointBlocked(x, y + 1.2, z) || col.pointBlocked(x, y + 2.4, z);
         const blocked = () => bodyBlocked(p.x, p.y, p.z) || bodyBlocked(p.x + fx * ahead, p.y, p.z + fz * ahead);
         const dist = out.forward * dt, climb = out.up * dt;
-        const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dist), Math.abs(climb)) / 0.5));
+        const ceil = flight.fast ? this.space.fastCeiling(p) : 110; // («Flying Maxima»: higher, up to where the sky ends — Space.fastCeiling)
+        const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dist), Math.abs(climb)) / 0.5)); // (every half metre: even at 160 m/s no ridge is jumped)
         for (let i = 0; i < steps; i++) {
             const px = p.x, py = p.y, pz = p.z;
             p.x += fx * dist / steps;
             p.z += fz * dist / steps;
-            p.y = Math.min(110, p.y + climb / steps);
+            p.y = Math.min(ceil, p.y + climb / steps);
             if (climb > 0 && bodyBlocked(p.x, p.y, p.z)) { p.y = py; } // a ceiling / overhang above
             if (!blocked()) continue;
             // Terrain ahead: a slope we can glide up (follow the relief); a cliff,

@@ -51,6 +51,7 @@ test('space: Flying Maxima, the round Earth, the planets, landing on Venus, Mars
     await frames(10);
     const said = await page.evaluate(() => { const g = window.__zns.game; return { name: g.castLocalSpell('Flying Maxima', true), voice: g.hud?._lastVoice }; });
     assert.equal(said.name, 'FlyingMaxima', JSON.stringify(said));
+    await page.evaluate(() => window.__zns.game.space._beginAscend(false)); // (the 5 s straight up are measured in the unit test)
     await page.evaluate(() => { const g = window.__zns.game, S = g.space; S.testHold = true; g.character.group.position.y = S._y0 + (S._top - S._y0) * 0.72; });
     await look([0.6, 0.35, -0.7]);
     await frames(30);

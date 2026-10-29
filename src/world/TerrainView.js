@@ -548,7 +548,8 @@ export class Terrain {
     update(focus) {
         this._frame++;
         const fx = focus ? focus.x : 0, fz = focus ? focus.z : 0;
-        this._plan(fx, fz);
+        const lead = this._lead(fx, fz);
+        this._plan(lead[0], lead[1]);
 
         // 1) Chunks changed by explosions, buildings, a house rising (only the ones we show). With workers:
         // made there from this computer's own data of the changed chunks (sent along), one job a chunk at
@@ -600,6 +601,31 @@ export class Terrain {
 
         // 3) Forget far, untouched chunk data now and then (it regenerates identically)
         if (this._frame % 120 === 0) this.data.evictFar(Math.floor(fx / CHUNK), Math.floor(fz / CHUNK), this.radiusChunks + 4);
+    }
+
+    /**
+     * Where to centre the streaming: on the player, and — in a very fast flight («Flying Maxima», 100+ m/s) — a second
+     * ahead along the way he flies (at most a third of the radius), so the land he is rushing to is already made
+     * when he gets there, not drawn into his face. Slow movement: exactly the player (nothing changes).
+     */
+    _lead(x, z) {
+        const now = performance.now(), L = this._leadS || (this._leadS = { x, z, t: now, vx: 0, vz: 0, key: 0 });
+        const dt = (now - L.t) / 1000;
+        if (dt > 0.02) {
+            const ivx = (x - L.x) / dt, ivz = (z - L.z) / dt;
+            const k = dt > 0.5 || Math.hypot(ivx, ivz) > 2500 ? 1 : Math.min(1, dt * 2); // (a jump — a teleport / a world change: no lead from it)
+            const jump = Math.hypot(ivx, ivz) > 2500;
+            L.vx = jump ? 0 : L.vx + (ivx - L.vx) * k; L.vz = jump ? 0 : L.vz + (ivz - L.vz) * k;
+            L.x = x; L.z = z; L.t = now;
+        }
+        const sp = Math.hypot(L.vx, L.vz);
+        const out = this._leadOut || (this._leadOut = [0, 0]);
+        out[0] = x; out[1] = z;
+        if (sp < 60) return out;
+        const max = this.radiusChunks * CHUNK * 0.33, a = Math.min(max, sp * 1.0) / sp;
+        const s = Math.min(1, (sp - 60) / 40); // (fades in between 60 and 100 m/s: no sudden jump of the centre)
+        out[0] = x + L.vx * a * s; out[1] = z + L.vz * a * s;
+        return out;
     }
 
     /** A chunk round (cx, cz) whose ground is not made yet (its mesh needs all nine), or null. */

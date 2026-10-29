@@ -55,6 +55,7 @@ test('planet spells: create, enlarge, terraform, move', async () => {
     await page.evaluate(() => { const g = window.__zns.game; g.castDebug('Flight'); g.flight.state = 'cruise'; g.flight.t = 2; });
     await frames(10);
     assert.equal((await say('Flying Maxima')).name, 'FlyingMaxima');
+    await page.evaluate(() => window.__zns.game.space._beginAscend(false));
     for (let i = 0; i < 80 && (await page.evaluate(() => window.__zns.game.space.realm)) !== 'space'; i++) await frames(5);
     // a place near a body (k radii from its centre, toward the Sun a little), looking (and pointing) at it
     const near = (spec) => page.evaluate((spec) => {
