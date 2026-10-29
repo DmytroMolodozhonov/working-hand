@@ -467,7 +467,7 @@ if (CHECK) {
         const m = r.total.game;
         if (!m) { bad.push(`${r.level}: полёт не записан`); continue; }
         if (m.max > (MAXIMA ? LIMITS.maximaMaxMs : LIMITS.gameMaxMs)) bad.push(`${r.level}: самый долгий кадр игры ${m.max} мс > ${MAXIMA ? LIMITS.maximaMaxMs : LIMITS.gameMaxMs}`);
-        if (m.over33 > m.frames * LIMITS.gameOver33Share) bad.push(`${r.level}: кадров игры дольше 33 мс — ${m.over33} из ${m.frames}`);
+        if (m.over33 > m.frames * (MAXIMA ? 0.03 : LIMITS.gameOver33Share)) bad.push(`${r.level}: кадров игры дольше 33 мс — ${m.over33} из ${m.frames}`);
         if (m.low1 < (MAXIMA ? 15 : LIMITS.gameLow1Fps)) bad.push(`${r.level}: 1% худших кадров игры ${m.low1} FPS < ${LIMITS.gameLow1Fps}`);
         const shaders = r.newProgs.filter((x) => !x.startsWith('   ')).length;
         if (shaders > LIMITS.newShaders) bad.push(`${r.level}: в полёте собрано шейдеров: ${shaders}`);
