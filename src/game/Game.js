@@ -4388,7 +4388,7 @@ export class Game {
             if (!z.steer) z.steer = (me, p, ux, uz, d, speed, sdt) => this._zombieStep(me, p, ux, uz, d, speed, sdt);
             if (this._zombieSwim(z, dt)) continue; // (in deep water: up at the top, paddling to the bank — not along the bottom)
             z.update(dt, target ? target.pos : null, this.camera, this.collision);
-            if (z.dummy && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) {
+            if (z.dummy && this.dummyHome && !z.isDead && !z.isFrozen && !z.isStunned && !(z.stunTimer > 0)) { // (a guest has the host's dummy, not its place: the frame broke on every frame)
                 // pushed by a blow, it steps back to its place (stands on the spot)
                 const hm = this.dummyHome, k = Math.min(1, dt * 4);
                 z.group.position.x += (hm.x - z.group.position.x) * k;

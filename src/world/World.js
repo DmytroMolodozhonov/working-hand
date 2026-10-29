@@ -558,7 +558,9 @@ export class VoxelWorld {
     }
 
     restoreMovedTrees(list) {
-        for (const [i, x, y, z, dir] of list || []) {
+        for (const e of Array.isArray(list) ? list : []) {
+            if (!Array.isArray(e) || ![1, 2, 3].every((k) => Number.isFinite(+e[k]))) continue; // (a broken entry from the network)
+            const [i, x, y, z, dir] = e;
             const t = this.trees?.find((q) => q.index === i);
             if (t) this.placeTree(t, +x, +y, +z, dir || null);
             else this.forest?.movedById(i, +x, +y, +z, dir || null); // (its land not here yet: put down when it comes)

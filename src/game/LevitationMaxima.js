@@ -1875,6 +1875,7 @@ export class LevitationMaxima {
     onNetState(list) {
         if (!Array.isArray(list)) return;
         for (const a of list) {
+            if (!Array.isArray(a)) continue;
             const L = this.lifts.get(a[0]);
             if (!L) continue;
             L.net = L.net || { p: new THREE.Vector3() };

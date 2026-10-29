@@ -847,6 +847,7 @@ export class Duel {
         const had = this.bolts.get(m.id);
         if (had) { if (m.s === 'JoltMaxima' && had.spell === 'Jolt') had.spell = m.s; return; } // (it became «Джолт Максима»: upgradeJolt)
         if (m.up) return; // (an upgrade of a charge already gone here: nothing new flies)
+        if (!DUEL_SPELLS[m.s]) return; // (a charge of a spell this game doesn't know — another version: nothing to draw)
         const b = this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
         if (b.spell === 'AvadaKedavra') this.avada.cast(b.o, b.dir); // (seen and heard here as at the caster's)
     }

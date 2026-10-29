@@ -1837,7 +1837,8 @@ export class Ships {
             case 'ships': {
                 if (isHost) return;
                 if (Array.isArray(m.w)) { this.wind.x = +m.w[0] || 0; this.wind.z = +m.w[1] || 0; }
-                for (const a of m.l || []) {
+                for (const a of Array.isArray(m.l) ? m.l : []) {
+                    if (!Array.isArray(a)) continue;
                     const n = unpackShip(a);
                     const s = this.list.get(n.id);
                     if (!s) continue;

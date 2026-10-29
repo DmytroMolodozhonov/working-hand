@@ -118,3 +118,14 @@ test('кусок не по порядку — сообщение отбрасы�
     assert.deepEqual(n._unpiece(ch, { t: '_pc', k: 2, i: 1, n: 2, s: '"x":1}' }), { t: 'a', x: 1 });
     assert.equal(n._unpiece(ch, { t: '_pc', k: 3, i: 0, n: 1e9, s: '' }), null, 'absurd piece count refused');
 });
+
+test('гость, который ещё грузит мир, не считается играющим (короткий предел тишины — только когда пошли его движения)', (t) => {
+    // (found by tests/e2e/multiplayer-qa: a guest that sent his look and things, then froze making the world, was dropped after 30 s)
+    const { host, ends } = hostWith(t, ['g1']);
+    const g1 = ends.get('g1').atGuest;
+    g1.send({ t: 'look', by: 'g1', look: {} });
+    g1.send({ t: 'pstate', s: {} });
+    assert.equal(host.talked.has('g1'), false, 'still loading: the long grace');
+    g1.send({ t: 'p', id: 'g1', s: [] });
+    assert.equal(host.talked.has('g1'), true, 'playing');
+});

@@ -1043,7 +1043,7 @@ export class Levitation {
         const c = this._creature(m.k, m.id);
         if (m.on) {
             if (!c || c.lev || !this.grab(m.k, c, m.by, m.side || 'right', +m.h || 3)) g.sync?.levNo?.(m.by, m.k, m.id);
-        } else if (c?.lev?.by === m.by) this.letGo(m.k, c, !!m.g);
+        } else if (c?.lev && c.lev.by === m.by) this.letGo(m.k, c, !!m.g); // (nothing held: nothing to let go)
     }
 
     /**

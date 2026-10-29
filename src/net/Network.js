@@ -246,7 +246,9 @@ export class Network extends Emitter {
             this.lastSeen.set(conn.peer, performance.now());
             if (!raw || typeof raw !== 'object') return;
             if (raw.t === 'ping') return;
-            this.talked.add(conn.peer);
+            // (playing — his pose comes: only then the short silence limit. A guest still making the world (a slow computer: a minute
+            // and more with the page frozen) had sent his look and things already, counted as playing — and was dropped after 30 s)
+            if (raw.t === 'p') this.talked.add(conn.peer);
             const msg = this._unpiece(conn, raw);
             if (!msg || typeof msg !== 'object' || HOST_ONLY.has(msg.t)) return; // (a guest can't tell the others who plays, or that the host left)
             if (msg.t === 'bye') { this._dropClient(conn.peer); return; }

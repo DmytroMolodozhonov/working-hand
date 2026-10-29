@@ -58,7 +58,15 @@ const netWand = (w) => (w ? [w.dir || 0, w.fav || 0, w.power || 0] : undefined);
 
 const _v = new THREE.Vector3();
 const r3 = (v) => Math.round(v * 1000) / 1000;
-const vec = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+// (a place from the network: a broken message (another version, a bug) gives 0, never NaN — a NaN place poisoned the sound and the
+// drawing for good; found by the fuzz of tests/e2e/multiplayer-qa)
+const num = (x) => (Number.isFinite(+x) ? +x : 0);
+const vec = (a) => (Array.isArray(a) ? new THREE.Vector3(num(a[0]), num(a[1]), num(a[2])) : new THREE.Vector3());
+const arr = (a, n = 0) => Array.isArray(a) && a.length >= n;
+/** Rows of a host's snapshot (an array of arrays) without the broken ones: a row of another shape threw for the whole list. */
+const rows = (l, n = 4, idOk = null) => (Array.isArray(l) ? l.filter((e) => Array.isArray(e) && e.length >= n && (!idOk || idOk(e[0]))) : []);
+/** A pose from the network that can be drawn: its place three finite numbers. */
+const poseOk = (s) => !!s && typeof s === 'object' && Array.isArray(s.p) && s.p.length >= 3 && s.p.slice(0, 3).every(Number.isFinite);
 
 export class NetSync {
     constructor(game, net) {
@@ -273,6 +281,10 @@ export class NetSync {
         if (msg.pents) g.pentagranium?.netRestore?.(msg.pents); // (after my own things: their pentagrams would replace the list)
     }
 
+    /** My things changed hands (thrown, given, paid, sold, a body, a sword pocketed): the host hears of it within ~0.3 s, not up to 8 s
+     * later — a guest who lost the link just then came back with things both in his pocket and in the world (or without them). */
+    _mineSoon() { if (!this.net.isHost) this._mineT = Math.max(this._mineT || 0, 7.7); }
+
     /** Guests send their own things to the host now and then (the host keeps the world). */
     _sendMine() {
         if (this.net.isHost) return;
@@ -417,12 +429,14 @@ export class NetSync {
 
     /** A weapon went into my inventory (gone from the world) / came out of it. */
     weaponGone(w) {
+        this._mineSoon();
         this.weaponOwners.delete(w.id);
         this.net.send({ t: 'wgone', w: w.id }, true);
     }
 
     /** free: it appeared in the world (a chest's loot, a lair's, a ship's), nobody's — else it was «in my hand» and no guest could take it. */
     weaponAppeared(w, free = false) {
+        this._mineSoon();
         if (free) this.weaponOwners.delete(w.id); else this.weaponOwners.set(w.id, this.me);
         this.net.send({ t: 'wnew', w: w.id, type: w.type, s: w.serialize(), owner: free ? null : this.me, ...(free ? { free: 1 } : {}) }, true);
     }
@@ -683,11 +697,13 @@ export class NetSync {
 
     /** A body stays where somebody died (Death.js). */
     deathBody(b) {
+        this._mineSoon();
         this.net.send({ t: 'dbody', b }, true);
     }
 
     /** I took my legacy back from my body (Legacy.js): it is empty now for everybody. */
     bodyLegacy(id) {
+        this._mineSoon();
         this.net.send({ t: 'dblg', id }, true);
     }
 
@@ -751,9 +767,9 @@ export class NetSync {
     villagerAsk(id, text, ctx) { this.net.send({ t: 'vask', id, text: String(text).slice(0, 300), ctx: ctx || {} }); }
     villagerAnswer(to, id, res) { if (this.net.isHost) this.net.send({ t: 'vans', to, id, res }); }
     villagerAI(on) { if (this.net.isHost) this.net.send({ t: 'vai', on: !!on }); }
-    tradeSell(uid, wid, price, p) { this.net.send({ t: 'tsell', uid, wid, price, p }); }
+    tradeSell(uid, wid, price, p) { this._mineSoon(); this.net.send({ t: 'tsell', uid, wid, price, p }); }
     /** I named a good with my coins on the counter (a guest): the host takes the price from the pouch. */
-    tradePay(coin, good) { this.net.send({ t: 'tpay', coin, good }); }
+    tradePay(coin, good) { this._mineSoon(); this.net.send({ t: 'tpay', coin, good }); }
     /** (host) a good was paid for: everybody lets the hand take it, its price card goes. */
     tradePaid(uid) { if (this.net.isHost) this.net.send({ t: 'tpaid', uid }, true); }
     /** (host) what the payment did, for the guest who paid. */
@@ -884,11 +900,13 @@ export class NetSync {
     }
 
     itemThrow(item, p, v, q = null, w = null) {
+        this._mineSoon();
         // (q: how it was turned in the hand, w: its spin — it flies on as it left the hand)
         this.net.send({ t: 'ithrow', item, p: [r3(p.x), r3(p.y), r3(p.z)], v: [r3(v.x), r3(v.y), r3(v.z)], q: q ? [r3(q.x), r3(q.y), r3(q.z), r3(q.w)] : null, w: w ? [r3(w.x), r3(w.y), r3(w.z)] : null });
     }
 
     itemGive(to, item, side) {
+        this._mineSoon();
         this.net.send({ t: 'igive', to, item, side }, true);
     }
 
@@ -936,15 +954,17 @@ export class NetSync {
         switch (m.t) {
             case 'p': {
                 const r = g.remotes.get(m.id || m.from);
+                if (!poseOk(m.s)) break; // (a broken pose drew nothing but errors every frame)
                 if (r) r.applyState(m);
                 g.boards?.remotePose(m.id || m.from, m.bd); // (the surfboard they carry or ride)
-                for (const ws of m.w || []) {
+                for (const ws of Array.isArray(m.w) ? m.w : []) {
+                    if (!arr(ws, 11)) continue;
                     const w = g.weapons.byId.get(ws[0]);
                     if (w && !w.holder) { w.setRemoteTarget(ws); w.hover = null; }
                 }
                 break;
             }
-            case 'z': if (!this.net.isHost) this._applyZombies(m.l, m.rm); break;
+            case 'z': if (!this.net.isHost && Array.isArray(m.l)) this._applyZombies(m.l, Array.isArray(m.rm) ? m.rm : []); break;
             // the voice chat (VoiceChat.js): the server's mode, each player's state, his own voice's levels and spells (the echo guard)
             case 'vcm': case 'vcq': case 'vcf': case 'vcs': case 'vce': case 'vcw': g.voiceChat?.onNet(m); break;
             // ships (src/game/Ships.js): the host's ships and crews; guests' wheel, sails, blows, guns
@@ -980,7 +1000,7 @@ export class NetSync {
                 break;
             }
             case 'wnew': {
-                if (g.weapons.byId.has(m.w)) break;
+                if (g.weapons.byId.has(m.w) || !arr(m.s, 11)) break;
                 const w = g.weapons.markMagic(g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w), m.s[10]);
                 if (m.free) this.weaponOwners.delete(m.w); else this.weaponOwners.set(m.w, m.owner || m.from);
                 w.setRemoteTarget(m.s);
@@ -988,7 +1008,7 @@ export class NetSync {
             }
             case 'pstate': if (this.net.isHost && m.s && typeof m.s === 'object') (this._states || (this._states = new Map())).set(m.from, m.s); // (their pocket, for _onLeave)
                 if (this.net.isHost && m.s) this.game.keeper?.notePlayer(this.net.players.get(m.from)?.pid, this.net.players.get(m.from)?.name || m.name, m.s); break;
-            case 'birds': if (!this.net.isHost) g.books?.applyNet(m.l, m.b); break;
+            case 'birds': if (!this.net.isHost && Array.isArray(m.l)) g.books?.applyNet(m.l.filter(Array.isArray), Array.isArray(m.b) ? m.b.filter(Array.isArray) : []); break;
             case 'rbcatch': case 'rbgot': case 'rbaccio': case 'rbtake': g.runner?.onNet(m); break; // (the running book)
             case 'btake': if (this.net.isHost) g.books?._take(m.id, m.from); break;
             case 'lum': if (m.by !== this.me && Array.isArray(m.p) && Array.isArray(m.d)) g.wandMagic?.addThrown(vec(m.p), vec(m.d).normalize().multiplyScalar(LUMOS.THROW_SPEED), Math.max(1, Math.min(6, +m.l || 2)), false, m.by); break;
@@ -1011,7 +1031,7 @@ export class NetSync {
             case 'ltree': if (!this.net.isHost) { g.livingTrees?.applyNet(m.l); g.servants?.applyNet(m.sv); } break;
             case 'alivehit': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t?.skel && Number.isFinite(+m.dmg)) g.livingTrees.hit(t, Math.min(20, Math.max(0, +m.dmg)), m.kind === 'fist' ? 'fist' : 'melee', m.from); } break;
             case 'alive': if (this.net.isHost && m.d?.skel && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z) && Number.isFinite(+m.d.ex) && Number.isFinite(+m.d.ez)) { if (!g.livingTrees?.list.some((t) => t.d.gid === m.d.gid)) g.livingTrees?.spawn({ skel: 1, gid: String(m.d.gid || ''), x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, ex: +m.d.ex, ez: +m.d.ez, kind: 0, trunk: 0, leaf: 0, h: 2, max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)) }, m.from); } else if (this.net.isHost && m.d && Number.isFinite(+m.d.x) && Number.isFinite(+m.d.z)) g.livingTrees?.spawn({ x: +m.d.x, y: +m.d.y || 0, z: +m.d.z, ry: +m.d.ry || 0, kind: m.d.kind | 0, trunk: m.d.trunk | 0, leaf: m.d.leaf | 0, h: Math.min(20, Math.max(5, m.d.h | 0)), max: m.d.max ? 1 : 0, delay: Math.min(3, Math.max(0, +m.d.delay || 0)), inst: m.d.inst, cells: m.d.cells, fx: m.d.fx, fz: m.d.fz, L0: m.d.L0 }, m.from); break;
-            case 'treemoved': if (!this.net.isHost) g.world?.restoreMovedTrees?.(m.l); break; // (a spawn-area tree put down elsewhere / felled: World.placeTree)
+            case 'treemoved': if (!this.net.isHost && Array.isArray(m.l)) g.world?.restoreMovedTrees?.(m.l); break; // (a spawn-area tree put down elsewhere / felled: World.placeTree)
             case 'ltlook': if (!this.net.isHost) g.livingTrees?.setLook(m.id, m); break; // (what tree a living tree is: its blocks / its model)
             case 'aliveend': if (this.net.isHost) { const t = g.livingTrees?.byId.get(m.id); if (t && t.owner === m.from) g.livingTrees.end(t, m.why === 'mana' || m.why === 'far' || m.why === 'focus' ? m.why : 'stop'); } break;
             case 'svatk': if (this.net.isHost) { if (m.k) g.servants?.command(m.from, { k: m.k, id: m.id }); else if (typeof m.x === 'number') g.servants?.commandPoint(m.from, m.x, m.z); } break;
@@ -1058,14 +1078,14 @@ export class NetSync {
             }
             case 'insp': g.inspirius?.onNet(m); break;
             case 'bum': g.boom?.onNet(m); break; // («Бум»: Boom.js)
-            case 'boom': if (!this.net.isHost) { g.applyExplosion(vec(m.p), m.r, false, m.k || 1, m.by || null); g.explosions.push({ p: m.p, r: m.r }); } break;
+            case 'boom': if (!this.net.isHost && arr(m.p, 3) && +m.r > 0 && +m.r <= 60) { g.applyExplosion(vec(m.p), +m.r, false, Math.min(5, Math.max(0, +m.k || 1)), m.by || null); g.explosions.push({ p: m.p, r: +m.r }); } break; // (a radius from a broken message — 1e9 — carved for ever: the game froze)
             case 'chest': {
                 (g._openedChests = g._openedChests || new Set()).add(m.id);
                 const c = g.chests.find((x) => x.id === m.id);
                 if (c && !this.net.isHost) g.openChest(c);
                 break;
             }
-            case 'boss': if (!this.net.isHost) g.spiders?.applyNet(m.l); break;
+            case 'boss': if (!this.net.isHost) g.spiders?.applyNet(rows(m.l)); break;
             case 'bhit': if (this.net.isHost) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) g.spiders.hit(sp, Math.min(40, m.dmg || 1), m.kind, m.from); } break;
             case 'bshot': if (!this.net.isHost) g.spiders?._fire(m.kind, vec(m.o), m.to); break;
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
@@ -1085,7 +1105,7 @@ export class NetSync {
             case 'dang': g.doors?.applyAngle(m.id, m.a); break;
             case 'lock': case 'dlk': g.locks?.applyNet(m); break; // («Алохомора» — Alohomora.js)
             case 'cf': case 'cfask': case 'cfwood': g.campfires?.onNet(m); break;
-            case 'cart': if (!this.net.isHost) g.carriages?.onNet(m); break; // (carts on the roads: Carriages.js)
+            case 'cart': if (!this.net.isHost) g.carriages?.onNet({ ...m, l: rows(m.l) }); break; // (carts on the roads: Carriages.js)
             case 'liq': if (!g.authority) g.liquidation?.onNet(m); break; // («Liquidation»: what the host saw crumble)
             case 'caul': case 'caulmv': case 'caulfill': case 'caulfilled': case 'caulshop': g.cauldrons?.onNet(m); break; // (cauldrons and potions)
             case 'glass': if (typeof m.id === 'string') g.houses?.applyGlass(m.id); break;
@@ -1098,8 +1118,8 @@ export class NetSync {
                 g.remotes.get(m.by)?.setLook(m.look);
                 break;
             }
-            case 'an': if (!this.net.isHost) g.animals?.applyNet(m.l); break;
-            case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(m.l); break;
+            case 'an': if (!this.net.isHost) g.animals?.applyNet(rows(m.l)); break;
+            case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(rows(m.l, 4, (id) => typeof id === 'string')); break;
             case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) { const f = +m.mg || 0; g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!(f & 1), weapon: !!(f & 2), spell: !!(f & 4), pierce: !!(f & 8), hard: !!(f & 16) }); } } break;
             case 'vstr': if (m.to === this.me) g.castleLife?.struck(Math.min(10, +m.dmg || 1), +m.x || 0, +m.z || 0, String(m.who || 'Рыцарь').slice(0, 30)); break;
             case 'vsay': if (m.by !== this.me) g.castleLife?.heard(m.id, String(m.text || '').slice(0, 200)); break;
@@ -1109,7 +1129,7 @@ export class NetSync {
             case 'vvand': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.damaged({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, m.from, Math.min(500, +m.n || 0), !!m.l, { r: Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null }); break;
             case 'vdng': if (this.net.isHost && Array.isArray(m.p)) g.castleLife?.alarm({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, String(m.k || ''), m.from, Number.isFinite(+m.r) && m.r != null ? Math.min(30, +m.r) : null); break;
             case 'vdouse': if (!this.net.isHost && Array.isArray(m.p)) g.castleLife?.fright.splash({ x: +m.p[0], y: +m.p[1], z: +m.p[2] }, Math.min(4, +m.r || 2)); break;
-            case 'vbuild': if (!this.net.isHost) g.castleLife?.rebuild.applyNet(m.id, m.s, m.c); break;
+            case 'vbuild': if (!this.net.isHost) g.castleLife?.rebuild.applyNet(m.id, rows(m.s, 1), Array.isArray(m.c) ? m.c : null); break;
             case 'vcrime': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.reportCrime(v, m.from, String(m.kind || '')); } break;
             case 'vord': if (this.net.isHost) { const v = g.castleLife?.byId.get(m.id); if (v) g.castleLife.orders.run(v, String(m.name || ''), m.args && typeof m.args === 'object' ? m.args : {}, m.from); } break;
             case 'vask': if (this.net.isHost) g.castleLife?.talk.answerGuest(m.from, m.id, String(m.text || '').slice(0, 300), m.ctx && typeof m.ctx === 'object' ? m.ctx : {}); break;
@@ -1122,7 +1142,7 @@ export class NetSync {
             case 'ahit': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals.hit(a, Math.min(30, m.dmg || 1), m.d ? vec(m.d) : null, m.from || m.by, !!m.f); } break;
             case 'ameat': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) g.animals._takeMeat(a, m.from, m.side); } break;
             case 'agath': if (this.net.isHost) { const a = g.animals?.byId.get(m.id); if (a) { const n = a.meat; for (let i = 0; i < n; i++) g.animals._takeMeat(a, m.from, null); } } break;
-            case 'agive': if (m.to === this.me && m.item) g.animals?._give(m.item, m.side); break;
+            case 'agive': if (m.to === this.me && m.item && typeof m.item === 'object') g.animals?._give(m.item, m.side === 'left' ? 'left' : 'right'); break;
             case 'apick': if (this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr) g.animals._pickApple(tr, m.i, m.from, m.side); } break;
             case 'agone': if (!this.net.isHost) { const tr = g.animals?.trees.get(m.key); if (tr && tr.apples[m.i]) tr.apples[m.i].until = Date.now() + Math.max(0, (m.until || 0) - Date.now()); } break;
             case 'flpick': if (this.net.isHost) { const pl = g.flora?.byId.get(m.id); if (pl) g.flora.pick(pl, m.i, m.from, m.side); } break;
@@ -1143,27 +1163,28 @@ export class NetSync {
             case 'arrow': if (m.by !== this.me) g.gear?.fire(vec(m.o), vec(m.v), m.d || 3, m.by); break;
             case 'weather': g.gear?.startWeather(Math.min(400, m.s || 120)); break;
             // ---- things (wands, scrolls, shields…)
-            case 'inew': if (!this.net.isHost && m.item) g.items?.spawnLoose(m.item, vec(m.p), { vel: m.v ? vec(m.v) : null, hover: !!m.h, broadcast: false }); break;
-            case 'ipos': if (!this.net.isHost) g.items?.applyPositions(m.l); break;
+            case 'inew': if (!this.net.isHost && m.item && typeof m.item === 'object') g.items?.spawnLoose(m.item, vec(m.p), { vel: m.v ? vec(m.v) : null, hover: !!m.h, broadcast: false }); break;
+            case 'ipos': if (!this.net.isHost) g.items?.applyPositions(rows(m.l)); break;
             case 'itake': if (this.net.isHost) g.items?.pickUp(m.uid, m.from, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right'); break;
             case 'igone': {
                 if (this.net.isHost) break;
                 const it = g.items?.removeLoose(m.uid);
-                if (m.to === this.me && it) g.items._gotItem(it, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right');
+                if (m.to === this.me && it) { g.items._gotItem(it, m.side === 'left' ? 'left' : m.side === 'slot' ? 'slot' : 'right'); this._mineSoon(); }
                 break;
             }
-            case 'ithrow': if (this.net.isHost && m.item) { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v), quat: Array.isArray(m.q) ? new THREE.Quaternion().fromArray(m.q).normalize() : null, spin: Array.isArray(m.w) ? vec(m.w) : null }); if (L) L.thrower = m.from; } break;
-            case 'igive': if (m.to === this.me && m.item) { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right')) g.inventory.storeItem(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break;
+            case 'ithrow': if (this.net.isHost && m.item && typeof m.item === 'object') { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v), quat: Array.isArray(m.q) ? new THREE.Quaternion().fromArray(m.q).normalize() : null, spin: Array.isArray(m.w) ? vec(m.w) : null }); if (L) L.thrower = m.from; } break;
+            case 'igive': if (m.to === this.me && m.item && typeof m.item === 'object') { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right') && !g.inventory.storeItem(m.item)) g.items._noRoom?.(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break; // (hands and slots full: at my feet — it was lost)
             case 'ihold': if (m.by !== this.me) g.items?.setRemoteHeld(m.by, m.side, m.item || null); break;
             case 'wspawn': {
-                if (this.net.isHost || g.weapons.byId.has(m.s[0])) break;
+                if (this.net.isHost || !arr(m.s, 11) || !arr(m.hover, 3) || g.weapons.byId.has(m.s[0])) break;
                 const w = g.weapons.markMagic(g.weapons.spawnHovering(m.s[1], vec(m.hover), m.s[0]), m.s[10]);
                 w.setRemoteTarget(m.s);
                 break;
             }
             case 'w': {
-                if (this.net.isHost) break;
+                if (this.net.isHost || !Array.isArray(m.l)) break;
                 for (const s of m.l) {
+                    if (!arr(s, 11)) continue;
                     const w = g.weapons.byId.get(s[0]);
                     if (!w || w.holder || this.weaponOwners.get(w.id) === this.me) continue;
                     w.setRemoteTarget(s);
@@ -1187,7 +1208,7 @@ export class NetSync {
             case 'rel': {
                 if (!this.net.isHost) break;
                 const w = g.weapons.byId.get(m.w);
-                if (!w || this.weaponOwners.get(m.w) !== m.from) break;
+                if (!w || this.weaponOwners.get(m.w) !== m.from || !arr(m.s, 9) || !arr(m.v, 3) || !arr(m.av, 3)) break;
                 this.weaponOwners.delete(m.w);
                 w.clearRemote();
                 w.position.set(m.s[2], m.s[3], m.s[4]);
@@ -1218,7 +1239,7 @@ export class NetSync {
                 break;
             }
             case 'wb': if (m.by !== this.me) g.water.applyRemote(m.by, m.s); break;
-            case 'wdrop': if (m.by !== this.me) g.water.remoteDrop(m); break;
+            case 'wdrop': if (m.by !== this.me && arr(m.p, 3) && arr(m.v, 3)) g.water.remoteDrop(m); break;
             case 'vx': if (m.by !== this.me) g.vortex?.onNet(m); break;
             case 'hf': if (m.by !== this.me) g.hellfire?.onNet(m); break;
             case 'burn': if (m.by !== this.me) g.burning?.onNet(m); break;
@@ -1228,7 +1249,7 @@ export class NetSync {
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
             case 'iceb': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break; // (ice of «Water forming» + «Frozen»)
-            case 'duel': if (m.by !== this.me) { g.voiceGate?.noteRemote(m.s, performance.now(), { by: m.by }); g.duel.remoteCast(m); } break;
+            case 'duel': if (m.by !== this.me && arr(m.o, 3) && arr(m.d, 3) && typeof m.s === 'string') { g.voiceGate?.noteRemote(m.s, performance.now(), { by: m.by }); g.duel.remoteCast(m); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;
@@ -1281,6 +1302,7 @@ export class NetSync {
     _applyZombies(list, removed = []) {
         const g = this.game;
         for (const s of list) {
+            if (!Array.isArray(s) || s.length < 6 || ![1, 2, 3].every((i) => Number.isFinite(s[i]))) continue;
             let z = g.zombieById.get(s[0]);
             if (!z) {
                 z = g._createZombie(new THREE.Vector3(s[1], s[2], s[3]), s[0]);
