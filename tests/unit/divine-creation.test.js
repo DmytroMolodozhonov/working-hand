@@ -180,6 +180,15 @@ test('the gods fail: no network and nonsense → the words are read; too long �
     for (const p of ['создастся существо за большими', 'тво с большими глазами двумя', 'глазами двумя крыльями и', 'крыльями и невероятно большим', 'невероятно большим носом и четырьмя', 'и четырьмя ногами']) { f.dc.hearDesc(p, false, { cut: true }); await run(f.dc, 0.5); }
     await run(f.dc, CREATION.FINAL_WAIT + 1);
     assert.equal(f.dc.magic?.desc, 'существо за большими глазами двумя крыльями и невероятно большим носом и четырьмя ногами');
+    // the epic tune: its loudness set ONCE a frame and never 0 while the words are heard (two calls a frame — off, then
+    // on — restarted it every frame: the author heard no music)
+    const h = world();
+    const hum = []; h.g.sound = { creationHum: (k) => hum.push(k), playSpellFx() {}, spellCast() {} };
+    h.dc.cast(true, 'да пусть создастся');
+    h.g.character.getHandWorldPosition = (sd, v) => v.set(0, 14, -40);
+    for (let i = 0; i < 10; i++) h.dc.update(0.1);
+    assert.equal(hum.length, 10, 'once a frame');
+    assert.ok(hum.every((k) => k > 0.3), 'playing while the words are heard: ' + hum.join(','));
     // a lone opener and nothing said: the gods stop listening, nothing paid
     const q = world();
     q.dc.cast(true, 'да пусть создастся');

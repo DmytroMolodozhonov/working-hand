@@ -312,7 +312,7 @@ export class DivineCreation extends HouseMagic {
                 } catch (e) { /* (no hands yet) */ }
             }
             if (M.at) this.fx2.seed({ x: M.at.x, y: M.at.y, z: M.at.z, t: M.t, u: 0, wand: M.wand || null, listen: true }, dt);
-            g.sound?.creationHum?.(0.6); // (the epic tune from the first word)
+            this._hum = Math.max(this._hum || 0, 0.6); // (the epic tune from the first word)
         }
         // (another player's gods listening: their small seed where their wand points)
         if (this._lisOf?.size) for (const [k, o] of this._lisOf) {
@@ -835,7 +835,8 @@ export class DivineCreation extends HouseMagic {
             else if (!this.auth && me.u - me.sentU > 0.08) { me.sentU = me.u; g.sync?.net?.send({ t: this.netType, a: 'u', id: me.id, u: r2(me.u) }); }
         }
         const m = this.magic;
-        if (!m) { this.look.idle(dt, g.fx); g.sound?.creationHum?.(0); }
+        this._hum = 0; // (the epic tune's loudness: set once a frame at its end — two calls a frame restarted it every frame)
+        if (!m) this.look.idle(dt, g.fx);
         else {
             m.t += dt;
             const pos = g.character?.group?.position;
@@ -847,9 +848,9 @@ export class DivineCreation extends HouseMagic {
                 // (my own seed: its stream of light from the wand's tip as the wand moves)
                 if (m.by === g.localId && (m.tipT = (m.tipT || 0) - dt) <= 0) { m.tipT = 0.15; const side = g.wandSide?.() || g.magicHand || 'right'; const h = this._tip(side); if (h) m.wand = { x: h.x, y: h.y, z: h.z }; }
                 this.fx2.seed(m, dt);
-                g.sound?.creationHum?.(0.85 * Math.max(0, 1 - d / 160)); // (the epic tune louder: the words heard)
+                this._hum = 0.85 * Math.max(0, 1 - d / 160); // (the epic tune louder: the words heard)
             } else {
-                g.sound?.creationHum?.(m.phase === 'grow' ? Math.max(0, 1 - d / 200) : 0); // (the loudest while it is built)
+                this._hum = m.phase === 'grow' ? Math.max(0, 1 - d / 200) : 0; // (the loudest while it is built)
                 if (m.phase === 'grow') this.fx2.grow(m, dt, this.look);
             }
             if (this.auth && this.magic === m) {
@@ -863,6 +864,7 @@ export class DivineCreation extends HouseMagic {
             }
         }
         this._listenStep(dt);
+        g.sound?.creationHum?.(this._hum);
         if (this._pendingFurnish?.size) for (const id of [...this._pendingFurnish]) { const rec = this.list.get(id); if (!rec) { this._pendingFurnish.delete(id); continue; } if (this.plan(rec)) { this._pendingFurnish.delete(id); this._furnish(rec, this.auth); } }
         if (this.auth) {
             this._sweepT -= dt;
