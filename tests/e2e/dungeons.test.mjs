@@ -62,7 +62,7 @@ async function visit(page, kind) {
 
 test('a magical ruin: its chests appear when you come, once; opened, they give things of magic (scrolls)', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'freeworld');
+    await startFromMenu(page, 'freeworld', { smooth: true });
     await waitHudVisible(page);
     const r = await visit(page, 'ruin_chapel');
     assert.ok(!r.err, r.err);
@@ -80,7 +80,7 @@ test('a magical ruin: its chests appear when you come, once; opened, they give t
 
 test('an underground dungeon: down a stair, chests in different rooms; opened — things as of a cave', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
-    await startFromMenu(page, 'freeworld');
+    await startFromMenu(page, 'freeworld', { smooth: true });
     await waitHudVisible(page);
     const r = await visit(page, 'crypt');
     assert.ok(!r.err, r.err);
