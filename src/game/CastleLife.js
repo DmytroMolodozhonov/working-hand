@@ -57,6 +57,7 @@ import { createRng } from '../core/math.js';
 import { CastleTalk, onCounter, journal as gameJournal } from './CastleTalk.js';
 import { WizardLife, isWizSite, WIZ_SHOUT, WIZ_JOBS, FX } from './WizardLife.js';
 import { HamletLife, hamletRoster } from './HamletLife.js';
+import { withTrade, applyTradeLook, tradeTitle } from './Trades.js';
 import { WizardFight } from './WizardFight.js';
 import { floorUnder } from './Wreck.js';
 import { WIZ, wizardRoster, wizardStats } from './WizardAI.js';
@@ -200,7 +201,7 @@ export function rosterEntry(def, idx) {
 }
 
 export function roleTitle(e) {
-    return (e.female ? ROLE_NAMES_F : ROLE_NAMES)[e.role];
+    return (e.trade && tradeTitle(e.trade, e.female)) || (e.female ? ROLE_NAMES_F : ROLE_NAMES)[e.role];
 }
 
 // --------------------------------------------------------------- graph
@@ -334,7 +335,13 @@ export class CastleLife {
     get index() { const d = this.game.world?.terrain?.data; return d?.sites || d?.castles || null; } // (castles and wizards' towers)
 
     /** Who is person number `idx` of a site (a castle's villager or a wizard). */
-    _roster(def, idx) { const own = def.people?.find((p) => p.idx === idx); if (own) return own; return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
+    _rosterRaw(def, idx) { const own = def.people?.find((p) => p.idx === idx); if (own) return own; return def.kind === 'hamlet' ? hamletRoster(def, idx) : isWizSite(def) ? wizardRoster(def, idx) : rosterEntry(def, idx); }
+
+    /** The same with the trade of the building the person works in (generation 11: Trades.js — a smith, a baker, a priest…). */
+    _roster(def, idx) {
+        const e = this._rosterRaw(def, idx);
+        return def.buildings?.length ? withTrade(def, e, (d) => this._homesOf(d)) : e;
+    }
 
     state(id) {
         let s = this.states.get(id);
@@ -422,6 +429,7 @@ export class CastleLife {
         const e = this._roster(def, idx);
         let look = villagerLook(e.seed, e.role === 'advisor' ? 'merchant' : e.role, e.female, { castleColor: def.color });
         if (e.robe) look.magicRobe = true; // (a wizard's magic robe: Armor.js)
+        if (e.trade) applyTradeLook(look, e.trade); // (a smith, a baker, a priest…: the clothes of the trade — Trades.js)
         if (e.role === 'advisor') Object.assign(look, { advisor: true, magicChest: true, magicLegs: true, hat: 'chancellor', hatColor: 0x6a1233, plume: false, shirt: 0x6a1233, pants: 0x3d0a1f, boots: 0x2b1a14, dress: false }); // (the king's super-helper: no helm, magic breastplate and greaves, the cap of office)
         if (e.rank) look.rank = e.rank; // (his rank: the robe's trim and cuffs — VillagerModel)
         if (extra.look) extra.look(look, e); // (a steward of the duel arena: his own robe — ArenaDuels.stewardLook)
@@ -3234,6 +3242,7 @@ export class CastleLife {
      */
     alarm(pos, kind, by = null, r = null) {
         if (!this.enabled || !pos) return;
+        this.game.buildingFx?.alarm(pos, r || 60); // (the church bell tolls the alarm — BuildingFx.js)
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
         this.fright.add(kind, pos, { r });
         this._news(pos, kind, by, viaOfKind(kind));
@@ -3411,7 +3420,7 @@ export class CastleLife {
         const first = def.knights + 1 + def.stalls.length;
         const last = Math.min(Math.max(first + 1, def.population), first + 900);
         for (let idx = first; idx < last; idx++) {
-            const e = this._roster(def, idx);
+            const e = this._rosterRaw(def, idx);
             if (e.home < 0) continue;
             (m.get(e.home) || m.set(e.home, []).get(e.home)).push(idx);
         }

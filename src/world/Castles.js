@@ -28,6 +28,7 @@ import { offEarth } from './Planets.js';
 import { roofShapes } from './PlanSlopes.js';
 import { furnishRoom } from './CastleFurniture.js';
 import { SHAPE } from './BlockShapes.js';
+import { placeTownBuildings } from './Buildings.js';
 
 export const CASTLE_CELL = 480;
 /** A cell holds a castle this often (before its land is checked): the giant spider's lairs are rarer by it (SpiderLairs.js). */
@@ -1344,7 +1345,7 @@ export const CHEST_GAP = 0.15;
 const CHEST_FRONT = 0.75;
 
 /** Cells (lot / plan a, b) with something standing on layers l0..l0 + 2 — chests go where nothing is. */
-function floorCells(box, l0, filled) {
+export function floorCells(box, l0, filled) {
     return (a0, a1, l1, l2, b0, b1, t) => {
         box(a0, a1, l1, l2, b0, b1, t);
         const lo = Math.min(l1, l2) - l0, hi = Math.max(l1, l2) - l0;
@@ -1364,7 +1365,7 @@ function floorCells(box, l0, filled) {
  * it. Each one the nearest such place to its spot, of the first size (`scales`) that has one;
  * none fits — no chest. put(a, b, fa, fb, scale): the chest's middle, the way its front looks.
  */
-function placeChests({ a0, a1, b0, b1, filled, beds = [], keep, wants, inner = [], scales }, put) {
+export function placeChests({ a0, a1, b0, b1, filled, beds = [], keep, wants, inner = [], scales }, put) {
     const eps = 1e-6;
     const free = (r0, r1, s0, s1, way = true) => {
         if (r0 < a0 - eps || r1 > a1 + eps || s0 < b0 - eps || s1 > b1 + eps) return false;
@@ -1607,6 +1608,7 @@ function buildVillage(p, s, rng, out) {
         gy.u += da; gy.v += db; gy.big = true; used.push(gy);
         buildGraveyard(p, gy.u, gy.v, gy.face, s, out);
     }
+    if (s.buildings) placeTownBuildings(p, s, out, lots, used, { mcv, R2, R2z, free, rotLot }); // (generation 11: a well, a granary, a smithy, a tavern, a church… on lots of their own)
     for (const lot of lots) {
         if (used.some((o) => Math.abs(o.u - lot.u) < (o.big ? 26 : 14) && Math.abs(o.v - lot.v) < (o.big ? 26 : 14))) continue;
         used.push(lot);
@@ -1913,8 +1915,9 @@ export class CastleIndex {
      * @param {number} seed
      * @param {(ix:number, iz:number) => number} rawHeight the wild height field (with .water)
      */
-    constructor(seed, rawHeight, seas = null, test = false, furnish = false) {
+    constructor(seed, rawHeight, seas = null, test = false, furnish = false, buildings = false) {
         this.seed = seed;
+        this.buildings = buildings; // generation 11: different buildings in the villages (Buildings.js; BUILDINGS_FROM_GEN, Terrain.js)
         this.furnish = furnish; // generation 8: the castles' rooms furnished, more chests (FURNISH_FROM_GEN, Terrain.js)
         this.raw = rawHeight;
         this.seas = seas; // SeaIndex (generation-2 worlds): sea castles with a port
@@ -2099,6 +2102,7 @@ export class CastleIndex {
         // generation 8: furnished rooms. Its own numbers (the castle's go on as before): the same castle, its rooms filled.
         s.furnish = !!this.furnish;
         if (s.furnish) s.frng = createRng((this.seed * 6469 + gx * 90001 + gz * 1000003 + 0x2f6b9) >>> 0);
+        s.buildings = !!this.buildings;
         buildVillage(p, s, rng, out);
         buildCastle(p, s, rng, out);
         if (seaOpts) { buildSeaWorks(p, s, rng, out); buildPort(p, s, rng, out); }
@@ -2118,6 +2122,7 @@ export class CastleIndex {
             gate: p.pt(0, -s.D - 5, 0), gateIn: p.pt(0, -s.D + s.T + 2, 0), gateYaw: p.yaw(0),
             throne: out.throne, throneFront: out.throneFront, throneGate: out.throneGate || null, rooms: out.rooms, chests: out.chests.map((c, i) => ({ ...c, id: 'cs' + gx + '_' + gz + '_ch' + i })),
             houses: out.houses.map((h, i) => ({ ...h, id: 'cs' + gx + '_' + gz + '_h' + i })), pens: out.pens.map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_p' + i })),
+            fx: out.fx || [], wells: out.wells || [], buildings: out.buildings || [],
             stalls: out.stalls, fields: out.fields, market: out.market, graveyards: out.graveyards || [], graves: (out.graves || []).map((q, i) => ({ ...q, id: 'cs' + gx + '_' + gz + '_g' + i })), posts: out.posts, beds: out.beds,
             nodes: p.nodes, edges: p.edges, wallWalk: out.wallWalk,
             parts: p.parts,

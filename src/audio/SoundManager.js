@@ -597,6 +597,8 @@ export class SoundManager {
             // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
             ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
             ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
+            // (the settlements' buildings — BuildingFx.js: the church's big bell, the chapel's small one, the blow on the smith's anvil)
+            ['bell_big', () => this._synthBell(196, 6.5)], ['bell_small', () => this._synthBell(330, 4.5)], ['anvil', () => this._synthAnvil()],
             // (the duel arena — ArenaDuels.js: the stands' roar and groan, the gong, «3-2-1», the fanfare, applause)
             ...ARENA_SOUNDS.map((k) => ['arena_' + k, () => synthArena(this.context, k)]),
         ]);
@@ -1027,6 +1029,49 @@ export class SoundManager {
             case 'zap': case 'magic': if (this.sounds.magic) this._playAt(this.sounds.magic, position, (beat === 'zap' ? 0.3 : 0.18) * volume, 5, beat === 'zap' ? 1.4 : 1); break;
             default: break;
         }
+    }
+
+    /**
+     * A church bell: the partials of a cast bell (hum, prime, tierce, quint, nominal, and higher ones) — the low ones ring long, the high
+     * ones soon die — each a hair out of tune with its twin so that the sound slowly beats; a short knock at the start.
+     */
+    _synthBell(f0, seconds) {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * seconds);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const P = 2 * Math.PI;
+        const parts = [[0.5, 0.45, 0.55], [1, 1, 0.75], [1.2, 0.6, 1.0], [1.5, 0.42, 1.3], [2, 0.7, 1.6], [2.5, 0.28, 2.4], [3, 0.2, 3.0], [4, 0.14, 4.2], [5.2, 0.08, 6]];
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            let v = 0;
+            for (const [k, a, dec] of parts) {
+                v += Math.sin(P * f0 * k * t) * a * Math.exp(-t * dec);
+                v += Math.sin(P * f0 * k * 1.004 * t + 0.7) * a * 0.5 * Math.exp(-t * dec * 1.1); // (the twin: the beat)
+            }
+            const knock = Math.exp(-t * 90) * (Math.random() * 2 - 1) * 0.5;
+            d[i] = (v * 0.22 + knock) * Math.min(1, t * 1500) * Math.min(1, (len - i) / (sr * 0.4));
+        }
+        return buf;
+    }
+
+    /** One blow of a hammer on an anvil: a bright ring that dies in half a second. */
+    _synthAnvil() {
+        const ctx = this.context, sr = ctx.sampleRate, len = Math.floor(sr * 0.7);
+        const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+        const P = 2 * Math.PI;
+        const parts = [[1, 1, 7], [2.32, 0.55, 11], [4.18, 0.3, 17], [6.7, 0.15, 26]];
+        for (let i = 0; i < len; i++) {
+            const t = i / sr;
+            let v = 0;
+            for (const [k, a, dec] of parts) v += Math.sin(P * 1180 * k * t) * a * Math.exp(-t * dec);
+            d[i] = (v * 0.3 + (Math.random() * 2 - 1) * Math.exp(-t * 220) * 0.6) * Math.min(1, t * 2500) * Math.min(1, (len - i) / (sr * 0.1));
+        }
+        return buf;
+    }
+
+    /** A sound of a settlement's building at a place (BuildingFx.js): the bell, the anvil. */
+    playBuilding(key, position, volume = 1, ref = 8, rate = 1) {
+        if (!this.enabled || !this.context || !this.loaded || !this.sounds[key]) return;
+        this._playAt(this.sounds[key], position, volume, ref, rate);
     }
 
     /** A plucked string (Karplus–Strong): the lute of a villager playing on a bench. */

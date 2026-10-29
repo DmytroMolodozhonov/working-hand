@@ -34,6 +34,7 @@ const NEAR = 75; // m: a house near a player comes to life
 const FAR = 100; // m: … and goes back to stone when nobody is this near
 const PANE_MAX = 600;
 const DOOR_COLOR = 0x7a4f2a;
+const _c = new THREE.Color();
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _m = new THREE.Matrix4();
@@ -71,6 +72,7 @@ export class Houses {
         const geo = new THREE.BoxGeometry(1, 1, 0.08);
         this.glassMat = new THREE.MeshPhongMaterial({ color: 0xcfe9ff, specular: 0xffffff, shininess: 90, transparent: true, opacity: 0.3, depthWrite: false });
         this.glass = new THREE.InstancedMesh(geo, this.glassMat, PANE_MAX);
+        this.glass.setColorAt(0, _c.set(0xffffff)); // (a coloured pane — stained glass of a church, Buildings.js — has its own colour; made now so the shader is the same from the start)
         this.glass.count = 0;
         this.glass.frustumCulled = false; // (instances are all over the village)
         this.glass.renderOrder = 2;
@@ -166,7 +168,7 @@ export class Houses {
             if (c.gap != null) chest.setWallGap(c.gap); // (its lid leans on the wall behind it)
             chest.mesh.updateMatrixWorld(true);
             chest.boxId = g.collision.addBox(chest.getCollisionBox());
-            chest.house = { def, i, rich: h.rich };
+            chest.house = { def, i, rich: h.rich, flavor: h.flavor || null }; // (a building's chests hold what it is for: Buildings.js)
             chest.locked = true; // (somebody's chest: «Алохомора» — src/game/Alohomora.js)
             if (g._openedChests?.has(id)) chest.setOpenInstant();
             else g.locks?.restoreChest(chest);
@@ -254,9 +256,11 @@ export class Houses {
             _q.setFromAxisAngle(UP, p.ry);
             _m.compose(_v.set(p.x, p.y, p.z), _q, _s.set(p.w, p.h, 1));
             this.glass.setMatrixAt(k, _m);
+            this.glass.setColorAt(k, _c.set(p.tint ?? 0xffffff));
         }
         this.glass.count = n;
         this.glass.instanceMatrix.needsUpdate = true;
+        if (this.glass.instanceColor) this.glass.instanceColor.needsUpdate = true;
     }
 
     /** Is a point inside a pane (within `pad` of its plane)? */

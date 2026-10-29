@@ -73,6 +73,7 @@ import { FireLights } from './FireLights.js';
 import { Cauldrons } from './Cauldrons.js';
 import { Beds } from './Beds.js';
 import { Houses } from './Houses.js';
+import { BuildingFx } from './BuildingFx.js';
 import { WizVillages } from './WizVillages.js';
 import { Wreck } from './Wreck.js';
 import { BurnWreck, burnsInFire } from './BurnWreck.js';
@@ -137,7 +138,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
-import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
+import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
 import { SurfBoards } from './SurfBoards.js';
@@ -349,6 +350,7 @@ export class Game {
             slopes: this.gen >= 6, // (ramps and slabs in the land and the buildings — BlockShapes.js)
             wizHuts: this.gen >= 7, // (the lone wizards' houses roomy — Hamlets.js)
             furnish: this.gen >= FURNISH_FROM_GEN, // (the castles' rooms furnished, more chests — CastleFurniture.js)
+            buildings: this.gen >= BUILDINGS_FROM_GEN, // (different buildings in the settlements — Buildings.js)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
             meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)
         });
@@ -554,6 +556,7 @@ export class Game {
         this.cauldrons = new Cauldrons(this); // big cauldrons: water, things thrown in, brewing potions
         this.beds = new Beds(this); // beds, «Create a Bed», «Change a color», sleeping through the night
         this.houses = new Houses(this); // village houses near the players: doors, glass, beds, chests, families, pens
+        this.buildingFx = new BuildingFx(this); // the mill's sails, the church bell, the chimneys' smoke, the anvil (generation 11: Buildings.js)
         this.wizVillages = new WizVillages(this); // the wizards' settlements: the central fire, the statue's plaque, the library's scrolls (WizVillages.js)
         this.wards = new HouseWards(this); // «Protection House»: a house's sphere of protection (HouseWards.js)
         this.houseMagic = new HouseMagic(this); // «Create a House», «Improve a House» (HouseMagic.js)
@@ -3288,6 +3291,7 @@ export class Game {
         for (const m of this.castleLife?.talk?.signs?.sampleModels?.() || []) zoo.add(m); // (the «Скупка» plaques of the buyers)
         for (const m of this.wizVillages?.sampleModels?.() || []) zoo.add(m); // (the plaque on Coprus the Clever's pedestal)
         for (const m of this.loreLibrary?.sampleModels?.() || []) zoo.add(m); // (the reading stand with its book)
+        for (const m of this.buildingFx?.sampleModels?.() || []) zoo.add(m); // (a mill's sails, a church bell)
         for (const t of ['cow', 'pig', 'sheep', 'horse']) zoo.add(animalModel(t, 0x6b3f1e));
         zoo.add(animalModel('horse', PEGASUS_COLOR)); // (the Pegasus of some herds: its glossy coat — a shader of its own, compiled when a herd came into view)
         // (each animal as the video card draws it — one shape per material moved by its parts, FarShape: the skinned
@@ -3592,7 +3596,7 @@ export class Game {
         this._heldPaperInFire(dt); // (a scroll or a book held in a fire burns)
         if (earth && !duelOnly) this.crystals?.update(dt);
         if (earth) this.beds.update(dt);
-        if (earth) this.houses.update(dt);
+        if (earth) { this.houses.update(dt); this.buildingFx?.update(dt); }
         if (earth && !duelOnly) this.wizVillages?.update(dt);
         if (earth && !duelOnly) this.spiders.update(dt);
         if (earth && !duelOnly) this.dragons.update(dt);
@@ -4554,6 +4558,7 @@ export class Game {
         this.cauldrons?.dispose();
         this.crystals?.dispose();
         this.houses?.dispose();
+        this.buildingFx?.dispose();
         this.beds?.dispose();
         this.spiders?.dispose();
         this.dragons?.dispose();

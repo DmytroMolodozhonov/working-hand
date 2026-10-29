@@ -248,7 +248,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 10;
+export const WORLD_GEN = 11;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -256,12 +256,19 @@ export const WORLD_GEN = 10;
  * changes: the keep's depth behind the throne, the height of the upper floor, a hall 4 shorter).
  */
 export const FURNISH_FROM_GEN = 8;
+/**
+ * The first generation whose settlements have DIFFERENT buildings (Buildings.js): a well, a granary, a smithy, a tavern, a bakery, a herbalist's
+ * shop, a mill with turning sails, a chapel or a church with a bell, a stable with horses — by the size of the settlement. One number: an older world
+ * keeps the villages it was made with (its saved changes lie on them).
+ */
+export const BUILDINGS_FROM_GEN = 11;
 /** The first generation with plant creatures in the meadows (PlantLife.js: telewilpins, carnivorous heads). Older worlds have none. */
 export const PLANTS_FROM_GEN = 9;
 /** The first generation whose wizards' libraries show the drawing of the teleportation pentagram on a stand (PentagramStand.js; the last stand of each library). Older worlds keep their lore books on all of them. */
 export const PENT_STAND_FROM_GEN = 10;
 // (Not a generation but a mark of the world, `realTrees`, every world made from now on — smooth or not: the trees are real
 //  trees, not blocks — TreeBuild.js, Trees.js, their places in `chunk.trees`. A world made before keeps its block trees.)
+// 11: different buildings in the settlements (BUILDINGS_FROM_GEN).
 // 10: the drawing of the teleportation pentagram on a stand in the wizards' libraries (PENT_STAND_FROM_GEN).
 // 9: plant creatures (PLANTS_FROM_GEN).
 // 8: the castles' rooms furnished (FURNISH_FROM_GEN).
@@ -548,13 +555,14 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false, bigArena = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, meshTrees = false, bigArena = false, buildings = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
         this.wizHuts = !!(this.lush && wizHuts); // (generation 7: the lone wizards' houses roomy — Hamlets.js)
         this.meshTrees = !!(mountains && lush && meshTrees); // (a world made with real trees — `realTrees`: not blocks — chunk.trees, Trees.js)
+        this.buildings = !!(mountains && buildings); // (generation 11: different buildings in the settlements — Buildings.js)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
         this.test = !!(mountains && test); // (creative, generation 3: the test ground)
@@ -569,7 +577,7 @@ export class TerrainData {
         this.castles = this.towers = this.villages = this.sites = this.iceCastle = this.hamlets = null;
         if (mountains) {
             // castles and their villages, the wizards' towers stand on levelled land
-            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish);
+            this.castles = new CastleIndex(seed, raw, this.seas, this.test, this.furnish, this.buildings);
             this.towers = new TowerIndex(seed, raw, this.castles);
             // the wizards' settlements (WizardVillages.js): in cells with neither a castle nor a tower
             this.villages = new VillageIndex(seed, raw, this.castles, this.towers);
@@ -581,7 +589,7 @@ export class TerrainData {
             const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined); // (the duel arenas: DuelArenas.js)
             const near = (x, z, r) => arenas.near(x, z, r).length > 0 || this.castles.near(x, z, r).length > 0 || this.towers.near(x, z, r).length > 0 || this.villages.near(x, z, r).length > 0
                 || (!!ice?.plan && Math.max(Math.abs(x - ice.plan.x), Math.abs(z - ice.plan.z)) < r + iceL);
-            this.hamlets = new HamletIndex(seed, raw, near, this.wizHuts);
+            this.hamlets = new HamletIndex(seed, raw, near, this.wizHuts, this.buildings);
             const idx = this.sites = new SiteIndex(this.castles, this.towers, ice, this.villages, this.hamlets, arenas);
             this.iceCastle = ice;
             const fn = (ix, iz) => {

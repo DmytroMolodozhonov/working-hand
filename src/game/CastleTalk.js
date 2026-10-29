@@ -50,7 +50,7 @@ import { stewardPool } from './ArenaSteward.js';
 import { inHall } from './ThroneHall.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { DANGERS } from './Danger.js';
-import { stallTrade, counterZone } from './MarketGoods.js';
+import { stallTrade, counterZone, SHOPS } from './MarketGoods.js';
 import { BODY_H } from '../entities/Character.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
 import { DealPrices, dealKey, overCounter, counterOffset } from './BuyerDeal.js';
@@ -1074,7 +1074,8 @@ export class CastleTalk {
                     const wiz = stall.magic ? magicStallGood(n, k) // (a hamlet's seller of magic things — HamletLife.js)
                         : stall.trade && !stall.potions ? wizardGood(stall.trade, k, n) : null; // (a settlement's shop: its own trade — WizardMarket.js)
                     // (a market stall sells its own trade's goods — the baker bread and pies, the bowyer bows and arrows: MarketGoods)
-                    const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
+                    const pick = wiz ? { kind: wiz.item.kind, price: wiz.price, fixed: true } : stall.shop && SHOPS[stall.shop] ? SHOPS[stall.shop].goods[k % 3] // (a building's shop: its own goods — Buildings.js, MarketGoods.SHOPS)
+                        : stall.potions ? (k === 2 ? WIZARD_RARE[((n % WIZARD_RARE.length) + WIZARD_RARE.length) % WIZARD_RARE.length] : POTION_GOODS[k % POTION_GOODS.length]) : stallTrade(cs.def.id, i, cs.def.stalls.length).goods[k];
                     const price = pick.fixed ? pick.price : Math.max(1, Math.round(pick.price * (0.85 + ((i * 37 + k * 11) % 30) / 100)));
                     // (the wizards' magic robe / a magic armour piece: a real thing of its own — ArmorTypes)
                     const item = wiz ? { ...wiz.item, shop: { stall: key, price } }
@@ -1082,6 +1083,7 @@ export class CastleTalk {
                         : pick.kind === 'armor' ? { ...makePiece(PIECES[((n % 3) + 3) % 3], { magic: true }), shop: { stall: key, price } }
                             : { kind: pick.kind, uid: newUid(), count: pick.count || 1, shop: { stall: key, price } };
                     if (wiz && item.kind === 'book') item.spells = bookSpells(item.id);
+                    if (!wiz && pick.kind === 'weapon') { delete item.count; item.type = pick.type; item.magic = false; item.bonus = 0; }
                     if (!wiz && pick.kind === 'shield') { item.type = pick.type || 0; item.magic = false; item.max = 0; delete item.count; }
                     if (!wiz && pick.kind === 'bow') { item.type = 0; item.magic = false; item.bonus = 0; item.arrows = 5; delete item.count; }
                     const f = (k + 0.5) / 3;

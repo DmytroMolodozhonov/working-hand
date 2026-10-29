@@ -25,6 +25,7 @@
 import { pawnStall } from './PawnStall.js';
 import { BLOCK } from './Terrain.js';
 import { CASTLE_CELL, hash01, Plan, buildHouse, buildWizHut, rotLot, POOR_HOUSES } from './Castles.js';
+import { buildBuilding, hamletKinds } from './Buildings.js';
 import { createRng } from '../core/math.js';
 import { offEarth } from './Planets.js';
 
@@ -145,7 +146,7 @@ const LOTS = [
 const RING_R = 10, RING_N = 12;
 
 /** 4–9 houses round a round fire; the wizards' one has 3–4 stalls of magic things. */
-function buildVillage(p, rng, out, mage, pawn = false) {
+function buildVillage(p, rng, out, mage, pawn = false, buildings = false) {
     const B = BLOCK;
     // the fire in the middle: a ring of stones, logs to sit on, the round road round it
     p.cyl(0, 0, 2.6, 0, 0, B.COBBLE, 1.6);
@@ -166,9 +167,21 @@ function buildVillage(p, rng, out, mage, pawn = false) {
     const style = mage ? wizardStyle(rng) : folkStyle(rng);
     const kinds = mage ? ['cottage', 'towerhouse', 'cottage', 'manor', 'stone'] : POOR_HOUSES.filter((k) => k !== 'barn').concat(['manor']);
     const used = lots.slice(0, n), free = lots.slice(n);
-    for (const lot of used) {
-        const kind = kinds[Math.floor(rng() * kinds.length)];
-        const door = buildHouse(p, kind, lot.u, lot.v, lot.face, rng, style, out);
+    // generation 11: the folk's village has different buildings too (a well, a granary, a smithy, a bakery…): on the free lots (the well)
+    // and instead of some of the houses — by the size of the village (Buildings.hamletKinds)
+    const special = new Map(); // lot → kind
+    if (buildings && !mage) {
+        const want = hamletKinds(n, createRng((lots[0].u * 7919 + lots[0].v * 104729 + n * 31 + 99) >>> 0));
+        const free2 = free.filter((l) => !l.corner).concat(free.filter((l) => l.corner));
+        for (const k of want) {
+            if (k === 'well') { const l = free2.shift(); if (l) special.set(l, k); continue; }
+            const l = used.find((o) => !special.has(o) && !o.corner) || used.find((o) => !special.has(o));
+            if (l) special.set(l, k);
+        }
+    }
+    for (const lot of used.concat([...special.keys()].filter((l) => !used.includes(l)))) {
+        const kind = special.has(lot) ? special.get(lot) : kinds[Math.floor(rng() * kinds.length)];
+        const door = special.has(lot) ? buildBuilding(p, kind, lot.u, lot.v, lot.face, rng, style, out) : buildHouse(p, kind, lot.u, lot.v, lot.face, rng, style, out);
         const dn = p.nodes[door];
         const r = p.nodes[ringNear(dn._u, dn._v)];
         pathLine(p, dn._u, dn._v, r._u, r._v);
@@ -180,7 +193,7 @@ function buildVillage(p, rng, out, mage, pawn = false) {
     if (!mage) {
         let f = 0;
         for (const lot of free) {
-            if (!lot.corner || f >= 2 || rng() < 0.3) continue;
+            if (special.has(lot) || !lot.corner || f >= 2 || rng() < 0.3) continue;
             const node = field(p, lot.u, lot.v, 5, rng() < 0.6 ? B.WHEAT : B.VEG, out, null);
             const fn = p.nodes[node], r = p.nodes[ringNear(fn._u, fn._v)];
             const steps = p.line(fn._u, fn._v, r._u, r._v, 0, 6);
@@ -221,14 +234,14 @@ function magicStall(p, face, ringNear) {
 
 // ------------------------------------------------------------- the site
 /** One hamlet of `type` at (X, Z), floor layer F. Returns the castle-shaped record. */
-export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = false) {
+export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = false, buildings = false) {
     const rot = Math.floor(rng() * 4);
     const p = new Plan(X, Z, F, rot);
     const out = { houses: [], fields: [], stalls: [], posts: [] };
     const mage = type === 'magehut' || type === 'magevillage';
     if (type === 'magehut') buildMageHut(p, rng, out, wizHuts);
     else if (type === 'hermit') buildHermitHut(p, rng, out);
-    else buildVillage(p, rng, out, mage, type === 'magevillage');
+    else buildVillage(p, rng, out, mage, type === 'magevillage', buildings);
     p.joinRoads();
     const id = 'hm' + gx + '_' + gz + '_' + slot;
     const houses = out.houses.map((h, i) => ({ ...h, id: id + '_h' + i }));
@@ -259,7 +272,7 @@ export function buildHamlet(seed, type, gx, gz, slot, X, Z, F, rng, wizHuts = fa
         color: mage ? 0x6a2c91 : 0x7a5a3a, colorName: mage ? 'фиолетовые' : 'бурые', stone: mage ? BLOCK.ARCANE : BLOCK.COBBLE, zone,
         style: 'hamlet', styleName: name, walls: null, inner: null, keep: null,
         gate: p.pt(0, -zone + 2), gateIn: p.pt(0, -zone + 6), gateYaw: p.yaw(0),
-        throne: null, throneFront: null, rooms: [], chests: [], houses, pens: [], stalls: out.stalls, fields: out.fields, market: null,
+        throne: null, throneFront: null, rooms: [], chests: [], houses, pens: (out.pens || []).map((q, i) => ({ ...q, id: id + '_p' + i })), fx: out.fx || [], wells: out.wells || [], buildings: out.buildings || [], stalls: out.stalls, fields: out.fields, market: null,
         graveyards: [], graves: [], posts: out.posts, beds: [], wallWalk: [], dummies: [], spots: [],
         fire: lone ? null : p.pt(0, 0, 0), // (the round fire in the middle: a real campfire while somebody is near — HamletLife)
         nodes: p.nodes, edges: p.edges, parts: p.parts,
@@ -297,8 +310,8 @@ export function pickType(x) {
 /** Finds and remembers the hamlets (the same shape of answers as CastleIndex / TowerIndex). */
 export class HamletIndex {
     /** `busy(x, z, r)`: another site (a castle, a tower, the Ice Castle) is within `r` of a point. */
-    constructor(seed, raw, busy, wizHuts = false) {
-        this.seed = seed; this.raw = raw; this.busy = busy; this.wizHuts = wizHuts; // (generation 7: the lone wizards' houses roomy)
+    constructor(seed, raw, busy, wizHuts = false, buildings = false) {
+        this.seed = seed; this.raw = raw; this.busy = busy; this.wizHuts = wizHuts; this.buildings = buildings; // (generation 7: the lone wizards' houses roomy)
         this.cells = new Map(); // cell key → [defs]
         this._lastCell = null;
     }
@@ -325,7 +338,7 @@ export class HamletIndex {
                 if (this.busy(X, Z, zone + HAMLET.BLEND + 12)) continue;
                 const F = hamletGround(this.raw, X, Z, zone);
                 if (F == null) continue;
-                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng, this.wizHuts));
+                out.push(buildHamlet(this.seed, type, gx, gz, s, X, Z, F, rng, this.wizHuts, this.buildings));
                 break;
             }
         };

@@ -19,6 +19,18 @@ export const TRADES = [
     { id: 'glass', ru: 'стекольщик', goods: [{ kind: 'glass', price: 5, count: 3 }, { kind: 'flask', price: 6, count: 2 }, { kind: 'glass', price: 5, count: 3 }] },
 ];
 
+/**
+ * What the shops of the settlement buildings (Buildings.js; a stall's `shop`) sell — each its own goods. The smith sells plain arms
+ * (a sword, an axe, a shield, arrows), the baker bread and pies, the herbalist flasks, apples and healing herbs, the innkeeper
+ * hot food. Prices a little above a market stall's (a shop, not a barrow).
+ */
+export const SHOPS = {
+    smith: { ru: 'кузнец', goods: [{ kind: 'weapon', type: 'sword', price: 60 }, { kind: 'weapon', type: 'axe', price: 50 }, { kind: 'shield', price: 35, type: 0 }] },
+    baker: { ru: 'пекарь', goods: [{ kind: 'bread', price: 3, count: 2 }, { kind: 'pie', price: 7 }, { kind: 'bread', price: 3 }] },
+    herbs: { ru: 'травник', goods: [{ kind: 'flask', price: 8, count: 2 }, { kind: 'redApple', price: 2, count: 3 }, { kind: 'apple', price: 30 }] },
+    tavern: { ru: 'трактирщик', goods: [{ kind: 'steak', price: 7 }, { kind: 'cheese', price: 4 }, { kind: 'pie', price: 7 }] },
+};
+
 function hash(s) {
     let h = 2166136261;
     for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }

@@ -563,6 +563,11 @@ function hatBoxes(L, B, cc) {
             b(B, 0.06, 0.5, 0.2, 0.7, 2.1, 0.28, shade(0xf4f0ea, 0.85), -0.45, 0, -0.55);
             break;
         }
+        case 'chef': // a baker's tall white cap: a band and a puffed crown
+            b(B, 1.36, 0.22, 1.36, 0, 1.2, 0, hcol);
+            b(B, 1.5, 0.5, 1.5, 0, 1.55, 0, hcol);
+            b(B, 1.3, 0.14, 1.3, 0, 1.86, 0, shade(hcol, 0.96));
+            break;
         case 'beret':
             b(B, 1.42, 0.24, 1.42, 0, 1.3, 0.05, hcol);
             b(B, 1.3, 0.1, 1.3, 0, 1.17, 0.02, GOLD);
@@ -744,6 +749,7 @@ function bodyBoxes(L) {
         b(B, 0.06, 0.06, 0.1, -0.12, -0.42, -0.5, IRON); // nails
         if (!L.dress) belt(-0.62, 0x4a3020, IRON);
     } else if (L.role === 'farmer') {
+        if (L.apron != null) b(B, 0.9, L.dress ? 1.2 : 1.0, 0.05, 0, L.dress ? -1.15 : -0.45, -0.52, L.apron); // (a miller's / a keeper's apron over the overalls)
         if (L.dress) {
             b(B, 0.8, 1.1, 0.05, 0, -1.15, -0.51, 0xf2efe6); // white apron
         } else {
@@ -775,7 +781,14 @@ function bodyBoxes(L) {
         b(B, 0.34, 0.38, 0.22, 0.42, -0.84, -0.38, 0x8b5a2b); // coin pouch on the belt
         b(B, 0.22, 0.08, 0.24, 0.42, -0.64, -0.38, GOLD);
         b(B, 0.12, 0.12, 0.03, 0.42, -0.86, -0.5, GOLD);
+        if (L.apron != null) { // a shopkeeper's apron over the vest (the baker, the innkeeper — Trades.js)
+            const a = L.apron;
+            b(B, 0.96, L.dress ? 2.1 : 1.35, 0.06, 0, L.dress ? -0.68 : -0.4, -0.47, a);
+            b(B, 0.12, 0.42, 0.05, -0.34, 0.56, -0.46, a); b(B, 0.12, 0.42, 0.05, 0.34, 0.56, -0.46, a);
+            b(B, 0.5, 0.3, 0.04, 0, -0.55, -0.51, shade(a, 0.9)); // pocket
+        }
     }
+    if (L.cross) { b(B, 0.1, 0.5, 0.05, 0, 0.12, -0.46, L.accent); b(B, 0.3, 0.1, 0.05, 0, 0.22, -0.46, L.accent); } // a priest's golden cross on the chest
     return B;
 }
 

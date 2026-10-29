@@ -79,10 +79,12 @@ export function hamletRoster(def, idx) {
         return { idx, role, female, name, home, stall: seller ? idx - 1 : -1, seed, brave, wizard: true, robe, rank, mana, ...(stranger ? { stranger: true } : {}) };
     }
     const watch = idx >= 1 && idx <= K;
-    const role = watch ? 'knight' : def.type === 'hermit' ? 'farmer' : rng() < 0.55 ? 'farmer' : 'builder';
+    // (generation 11: a folk village's shops — the smithy, the bakery, the tavern, the herbalist — have their merchants, who live there)
+    const shop = !watch && idx > K && idx <= K + S ? idx - K - 1 : -1;
+    const role = watch ? 'knight' : shop >= 0 ? 'merchant' : def.type === 'hermit' ? 'farmer' : rng() < 0.55 ? 'farmer' : 'builder';
     const name = (female ? FOLK_F : FOLK_M)[Math.floor(rng() * (female ? FOLK_F : FOLK_M).length)];
-    const home = !H ? -1 : watch ? 0 : ((idx - first) % H + H) % H;
-    return { idx, role, female, name, home, stall: -1, seed, hermit: def.type === 'hermit', watchman: watch };
+    const home = !H ? -1 : watch ? 0 : shop >= 0 ? (def.stalls[shop].houseOf ?? 0) : ((idx - first) % H + H) % H;
+    return { idx, role, female, name, home, stall: shop, seed, hermit: def.type === 'hermit', watchman: watch };
 }
 
 /** The k-th of 3 things on a wizards' seller's counter (n: a roll that changes now and then): {item, price}. */
