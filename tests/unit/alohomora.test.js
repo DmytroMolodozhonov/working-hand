@@ -187,3 +187,25 @@ test('the keep\'s broken gates come back after 180 s with nobody near; a player 
     guest.applyNet({ t: 'lock', k: 'mend', id: 'c1', by: 'host' });
     assert.ok(!guest.gates.get('c1').broken, 'a guest sees the same');
 });
+
+test('«Алохомора» на сундук: хозяин сразу открывает его целиком (как сундук пещеры), гость ждёт сеть', () => {
+    for (const auth of [true, false]) {
+        const c = new Chest(new THREE.Scene(), new THREE.Vector3(0, 0.5, 0), 'loot', 0, 'h1c0');
+        c.locked = true;
+        c.mesh.updateMatrixWorld(true);
+        const opened = [];
+        const game = {
+            chests: [c], authority: auth, localId: 'me', sound: {}, fx: null, hud: null,
+            openChest: (ch, rid, by) => { opened.push(by); ch.open(); },
+        };
+        const A = Object.create(Alohomora.prototype);
+        A.game = game; A.chests = new Set(); A.picked = new Set(); A.gates = new Map();
+        Object.defineProperty(A, 'auth', { get: () => auth });
+        A._flash = () => {};
+        A._witness = () => {};
+        A.apply({ k: 'chest', id: 'h1c0', by: 'me' }, true);
+        assert.ok(c.picked, 'unlocked');
+        assert.equal(opened.length, auth ? 1 : 0, auth ? 'the host opens it at once' : 'a guest waits for the host');
+        if (auth) { c.update(1.2); assert.ok(-c.lidGroup.rotation.x > 1.0, 'the lid is wide open, no hand needed'); }
+    }
+});

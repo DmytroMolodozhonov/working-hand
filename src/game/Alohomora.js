@@ -2,9 +2,9 @@
  * Alohomora.js — «Алохомора» (5 маны) and «Алохомора Максима» (25): locks.
  *
  * Point the hand (or the wand in it) at a lock a few metres away and say the word:
- *  - a locked chest of a village or a castle: a click, a little light, the lid springs up
- *    a crack — the hand lifts it the rest of the way (Chest.liftTo; nobody's chest opens
- *    by just walking up to it any more);
+ *  - a locked chest of a village or a castle: a click, a little light, and the chest opens WHOLE at once, with the
+ *    same lid and contents as a cave chest (Game.openChest; the author: no lifting the lid by hand — the hand still
+ *    may, Chest.liftTo, for the owner's own chests; nobody's chest opens by just walking up to it);
  *  - a locked door of a villager's house: it unlocks and swings open a crack — the hand
  *    takes the handle and opens it (Doors.js);
  *  - the gates of a throne room: too strong for the plain word — only «Максима» (or a
@@ -397,6 +397,9 @@ export class Alohomora {
             this.chests.add(m.id);
             const c = g.chests?.find((x) => x.id === m.id);
             if (c) { c.setAjar(); this._flash(c.lidEdge(new THREE.Vector3())); }
+            // (the author: «как только я сказал «Алохомора» — сундук открывается ПОЛНОСТЬЮ, как у сундука в пещере»: the
+            // host opens it with the same lid animation and the contents at once; the guests see it by the net)
+            if (this.auth && c && !c.isOpen) g.openChest(c, null, m.by || g.localId);
             if (this.auth && c && m.by) this._witness(c, m.by);
         } else if (m.k === 'door') {
             this.picked.add(m.id);
@@ -451,7 +454,7 @@ export class Alohomora {
             if (this.auth && c && c.picked && !c.isOpen) g.openChest(c, null, m.by || m.from);
             return;
         }
-        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Крышка приподнялась — поднимите её рукой' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true, true);
+        if (mine) g.hud?.setVoice(m.k === 'chest' ? '🗝️ Щёлк! Сундук отперт и открылся' : m.k === 'gate' ? '🗝️ Ворота отперты и чуть приоткрылись — толкните створку рукой' : '🗝️ Щёлк! Дверь приоткрылась — возьмитесь за ручку и откройте', true, true);
         g.sound?.playClang?.(0.2);
     }
 
