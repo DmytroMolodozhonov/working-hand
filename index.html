@@ -296,6 +296,7 @@
                         <button class="sub-tab" data-sub="set-audio">🔊 Звук</button>
                         <button class="sub-tab" data-sub="set-voice">🎤 Голос</button>
                         <button class="sub-tab" data-sub="set-log">📜 Журнал</button>
+                        <button class="sub-tab" data-sub="set-alllog">🗂️ Общие логи</button>
                     </div>
                     <div id="set-view" class="sub-pane active">
                     <div class="settings-group">
@@ -596,6 +597,25 @@
                             <p>Теперь система будет слушать только после нажатия кнопки. Это позволяет проверить
                                 микрофон точно тогда, когда вам это нужно.</p>
                         </div>
+                    </div>
+                    </div>
+                    <div id="set-alllog" class="sub-pane">
+                    <div class="settings-group">
+                        <h3 style="margin-bottom: 10px;">🗂️ Общие логи</h3>
+                        <p class="info-text" style="font-size:0.85rem;color:#a4b0be;margin-bottom:10px">Все журналы игры вместе, по времени: производительность, заклинания, жители, руки, предметы, сеть, ошибки. Что-то пошло не так — нажмите «Скопировать последние 5 минут» и отправьте разработчику. Голос и чужие разговоры сюда не пишутся сверх обычного журнала.</p>
+                        <div id="alllog-tags" style="display:flex;gap:6px 12px;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem"></div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+                            <input id="alllog-search" type="search" placeholder="Поиск по тексту…" style="flex:1;min-width:160px">
+                            <select id="alllog-level"><option value="info">Все</option><option value="warn">Предупреждения и ошибки</option><option value="error">Только ошибки</option></select>
+                            <label style="font-size:0.8rem"><input id="alllog-follow" type="checkbox" checked> листать за новыми</label>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+                            <button id="alllog-copy-all" class="menu-btn" style="padding:8px 14px">📋 Скопировать всё</button>
+                            <button id="alllog-copy-5" class="menu-btn" style="padding:8px 14px">⏱️ Скопировать последние 5 минут</button>
+                            <button id="alllog-save" class="menu-btn" style="padding:8px 14px">💾 Сохранить в файл</button>
+                        </div>
+                        <div id="alllog-info" class="info-text" style="font-size:0.75rem;color:#a4b0be;margin-bottom:6px;word-break:break-all"></div>
+                        <div id="alllog-text" style="height:46vh;overflow:auto;background:rgba(0,0,0,0.45);border-radius:8px;padding:10px;font-size:0.75rem;font-family:monospace;white-space:pre-wrap;text-align:left"></div>
                     </div>
                     </div>
                     <div id="set-log" class="sub-pane">

@@ -14,6 +14,7 @@
  */
 
 import { Emitter } from '../core/events.js';
+import { allLog } from '../core/AllLog.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
 const PREFIX = 'zns-room-';
@@ -76,6 +77,7 @@ const NEW_PLAYER_GRACE = 120000; // ms: a player who is still loading (camera…
 export function netLog(text) {
     const line = `${new Date().toLocaleTimeString('ru-RU')} 🌐 ${text}`;
     try { console.info(line); } catch (e) { /* ignore */ }
+    allLog('Сеть', text);
     if (typeof fetch === 'undefined' || typeof location === 'undefined' || !/^https?:/.test(location.protocol)) return;
     try { fetch('/api/perflog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line }) }).catch(() => {}); } catch (e) { /* ignore */ }
 }

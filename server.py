@@ -17,6 +17,7 @@ API:
   GET    /api/alive           — окно игры открыто, пока держит эту строку (запускатор)
   POST   /api/perflog         — строка дневника производительности → zns-perf.log
   POST   /api/spelllog        — строка журнала заклинаний → zns-spells.log
+  POST   /api/alllog          — пачка строк «Общих логов» (все журналы вместе) → zns-all.log (последние ~20 МБ)
   POST   /api/gamelog         — строка из игры в журнал (какая нейросеть жителей загружена и т.п.)
   GET    /api/pose/status     — нейросеть камеры вне браузера (pose_native.py): есть ли, работает ли
   GET    /api/pose/stream     — её точки тела, рук и лица (Server-Sent Events)
@@ -66,6 +67,8 @@ RECORD_DIR = "recordings"  # hand recordings (F9 in the game): sent to the devel
 RECORD_MAX = 30 * 1024 * 1024
 PERF_LOG = "zns-perf.log"  # the game's performance diary (send it to the developer)
 SPELL_LOG = "zns-spells.log"  # the spell journal: every phrase heard and what came of it
+ALL_LOG = "zns-all.log"  # «Общие логи»: every journal together, by time
+ALL_LOG_MAX = 20 * 1024 * 1024  # kept: the last ~20 MB (trimmed to half of it when it grows past)
 LOG_DIR = "logs"  # what the game prints (settings → «Журнал»)
 LOG_TITLES = {
     "launcher.log": "Запуск и игра",
@@ -74,6 +77,7 @@ LOG_TITLES = {
     "server.prev.log": "Прошлый запуск",
     PERF_LOG: "Производительность",
     SPELL_LOG: "Заклинания",
+    ALL_LOG: "Общие логи (все журналы вместе)",
 }
 MAX_BODY = 5 * 1024 * 1024  # 5 MB is plenty for a map
 
@@ -209,7 +213,25 @@ def log_files():
         paths = [os.path.join(LOG_DIR, "server.log"), os.path.join(LOG_DIR, "server.prev.log")]
     paths.append(SPELL_LOG)
     paths.append(PERF_LOG)
+    paths.append(ALL_LOG)
     return paths
+
+
+def append_all_log(text):
+    """Append to zns-all.log; past ALL_LOG_MAX only the newest half stays (cut at a line start)."""
+    try:
+        if os.path.exists(ALL_LOG) and os.path.getsize(ALL_LOG) > ALL_LOG_MAX:
+            keep = ALL_LOG_MAX // 2
+            with open(ALL_LOG, "rb") as fh:
+                fh.seek(-keep, 2)
+                fh.readline()  # (the first, cut line)
+                tail = fh.read()
+            with open(ALL_LOG, "wb") as fh:
+                fh.write(tail)
+        with open(ALL_LOG, "a", encoding="utf-8") as f:
+            f.write(text)
+    except OSError as e:
+        print(f"  [Общие логи] не записать: {e}")
 
 
 def read_logs(limit=200_000):
@@ -314,7 +336,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.
-        if any(p in (self.path or "") for p in ("/api/perflog", "/api/spelllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
+        if any(p in (self.path or "") for p in ("/api/perflog", "/api/spelllog", "/api/alllog", "/api/gamelog", "/api/pose/", "/api/voice/", "/api/alive", "/api/logs")):
             return
         if "/api/" in (self.path or "") or (args and str(args[1])[:1] in "45"):
             super().log_message(fmt, *args)
@@ -672,6 +694,14 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 line = str(data.get("line", ""))[:2000].replace("\r", " ").replace("\n", " ")
                 if line:
                     print(f"  [{tag or 'Игра'}] {line}")
+                return self._json(200, {"status": "ok"})
+
+            if path == "/api/alllog":
+                # a batch of lines from the game's «Общие логи» (every few seconds, not per line)
+                lines = self._read_json().get("lines") or []
+                text = "".join(str(l)[:2000].replace("\r", " ").replace("\n", " ") + "\n" for l in lines[:1000])
+                if text:
+                    append_all_log(text)
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/spelllog":

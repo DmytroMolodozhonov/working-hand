@@ -31,6 +31,7 @@
  */
 
 import { markIntent } from './GestureLife.js';
+import { allLog } from '../core/AllLog.js';
 import * as THREE from 'three';
 import { isApology } from './BumpRules.js';
 import { VillagerBrain, detectIntent } from './VillagerBrain.js';
@@ -108,6 +109,7 @@ export function journal(line) {
     if (_journalSeen.size > 200) _journalSeen.clear();
     _journalSeen.set(key, now);
     console.info('[Жители]', line);
+    allLog('Жители', line);
     try {
         if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;
         fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Жители', line: String(line) }) }).catch(() => {});

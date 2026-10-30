@@ -99,13 +99,33 @@ export class RemoteAvatar {
         for (let i = 0; i < 20; i++) fx.spark(at, i % 2 ? (c.gods ? 0xffcf4a : 0x9fd8ff) : 0xffffff, 0.15, _d.set((Math.random() - 0.5) * 8, Math.random() * 5, (Math.random() - 0.5) * 8), 0.4);
     }
 
+    /** What came by the net lately (HandsLog): packets a second over the last 3 s, age of the last, the longest gap, hands in the packet. */
+    netStats(now = performance.now()) {
+        const a = this._pk;
+        if (!a || !a.length) return null;
+        let n = 0, maxGap = 0, prev = 0;
+        for (const t of a) {
+            if (now - t > 3000) continue;
+            n++;
+            if (prev && t - prev > maxGap) maxGap = t - prev;
+            prev = t;
+        }
+        const age = now - a[a.length - 1];
+        if (age > maxGap) maxGap = age;
+        return { n, rate: n / 3, age, maxGap, lh: !!this._pkHands?.lh, rh: !!this._pkHands?.rh };
+    }
+
     get position() {
         return this.character.group.position;
     }
 
     applyState(s) {
         this.target = s;
-        this.lastUpdate = performance.now();
+        const t = performance.now();
+        (this._pk || (this._pk = [])).push(t); // (arrival times: the journal «Руки» — packets a second, the longest gap)
+        if (this._pk.length > 64) this._pk.shift();
+        this._pkHands = !!s.s?.lh || !!s.s?.rh ? { lh: !!s.s?.lh, rh: !!s.s?.rh } : this._pkHands;
+        this.lastUpdate = t;
         if (s.hp !== undefined) this.hp = s.hp;
         if (s.ft !== undefined) this.fatigue = s.ft;
         if (s.mm !== undefined) this.maxMana = s.mm; // (its mana maximum: «Inspirius»' scroll turns up only for 500+)

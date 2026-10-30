@@ -10,6 +10,7 @@
  */
 
 import { CappedLog } from './CappedLog.js';
+import { allLog } from './AllLog.js';
 
 export const SPELL_LOG_MAX = 600;
 
@@ -94,6 +95,7 @@ export class SpellLog {
     note(text) { this._push(`${clock(new Date())} ${text}`); }
 
     _push(line) {
+        allLog('Заклинания', line);
         this.lines.push(line);
         if (!this.send || this._sendFailed > 3 || typeof fetch === 'undefined' || globalThis.__ZNS_NO_PERFLOG__) return;
         fetch('/api/spelllog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ line }) })

@@ -9,6 +9,7 @@ hand_rig.json
 .claude/
 zns-perf.log*
 zns-spells.log*
+zns-all.log*
 logs/
 recordings/
 .handbench/

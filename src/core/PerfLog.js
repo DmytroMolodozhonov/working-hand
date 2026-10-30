@@ -9,6 +9,8 @@
  * zns-perf.log next to the game — a file the player can just send.
  */
 
+import { allLog } from './AllLog.js';
+
 const EVERY = 5000;
 /** Once a minute a line about what the game holds («рост»): if something piles up, it shows. */
 const GROWTH_EVERY = 60000;
@@ -131,6 +133,7 @@ export class PerfLog {
     }
 
     _push(line) {
+        allLog(/\| разговор:/.test(line) ? 'Жители' : 'Производительность', line);
         this.lines.push(line);
         if (this.lines.length > 400) this.lines.shift();
         this._send(line);

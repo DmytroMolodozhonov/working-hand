@@ -40,6 +40,8 @@ import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWind
 import { WORLD_GEN } from './world/Terrain.js';
 import { GAME_NAME, MODES, MODE_ORDER, MAPS_ENTRY, modeLabel, modeTitle, legacyMode } from './ui/GameNames.js';
 import { setupLogPanel, keepLauncherAlive } from './ui/JournalTab.js';
+import { setupAllLogsPanel } from './ui/AllLogsTab.js';
+import { hookAllLog, allLog } from './core/AllLog.js';
 import { watchServer } from './ui/ServerLost.js';
 import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
@@ -225,6 +227,8 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
 })();
 // Settings → «Журнал»; and the app launcher keeps running while this window is open
 setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title: 'Заклинания (эта игра)', text: game.spellLog.text() } : null));
+hookAllLog(); allLog('Игра', `=== игра открыта ${new Date().toLocaleString('ru-RU')}`);
+setupAllLogsPanel(document);
 keepLauncherAlive();
 watchServer(); // (the game's program closed while the window is open: said plainly, and back by itself)
 

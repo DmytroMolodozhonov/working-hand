@@ -43,6 +43,7 @@ import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
 import { LegFilter, legLog } from '../input/LegSafe.js';
 import { PerfLog } from '../core/PerfLog.js';
+import { HandsLog } from './HandsLog.js';
 import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
 import { WorldKeeper, restoreWorld, applyPlayerSnapshot } from './WorldSave.js';
@@ -679,6 +680,7 @@ export class Game {
         // Adaptive graphics (resolution, shadows, view distance) for a steady frame rate
         this.quality = new QualityManager(this.renderer, config.graphics ?? 'auto');
         this.perf = config.mode === 'test' ? null : new PerfLog(this); // the performance diary (zns-perf.log)
+        this.handsLog = config.mode === 'test' ? null : new HandsLog(this); // the journal «Руки» (Общие логи)
         this.spellLog = new SpellLog({ send: config.mode !== 'test' }); // every phrase heard and what came of it (zns-spells.log)
         if (typeof window !== 'undefined' && window.__ZNS_FIXED_QUALITY__) this.quality.auto = false; // (tests: software rendering would keep stepping it down)
         this.quality.ultra = Ultra.wanted(config.ultra); // (decided before the first apply: the shadows' kind is fixed then)
@@ -3378,6 +3380,7 @@ export class Game {
         this.poseSmoother.push(poseData);
         this.currentPose = this.poseSmoother.sample();
         this.firstPoseReceived = true;
+        this.handsLog?.noteFrame(poseData); // (the journal «Руки»: counters only)
     }
 
     clearPose() {
@@ -4032,6 +4035,7 @@ export class Game {
         mark('графика');
         this._frameEnd = performance.now();
         this.perf?.frame(deltaTime * 1000, parts);
+        this.handsLog?.update(deltaTime);
 
         const ms = performance.now() - t0;
         this.stats.frames++;

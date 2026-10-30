@@ -7,6 +7,7 @@
  *   - a light knock is told off («Эй, осторожнее!»), only a hard blow or a second knock within 20 s angers them;
  *   - «извините» in 15 s calms the one I knocked.
  */
+import { allLog } from '../core/AllLog.js';
 
 export const BUMP = { AGAIN_MS: 20000, SORRY_MS: 15000, SORRY_R: 14, MAX_SPEED: 45, SURE: 5, SOFT_PUSH: 0.01, MAX_HP_LOSS: 0.4 };
 
@@ -46,6 +47,7 @@ export function strikeLine({ kind, part, speed, hand, who, by, hard }) {
 /** A line to the game's journal (console + server log), never to the screen. */
 export function logLine(line) {
     console.info('[Удары]', line);
+    allLog('Удары', line);
     try {
         if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;
         fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Удары', line: String(line) }) }).catch(() => {});

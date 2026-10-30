@@ -45,7 +45,7 @@ import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
-import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, dropWhy, handLog } from './HandRelease.js';
 import { OffGate } from './OffHandRelease.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
@@ -345,6 +345,7 @@ export class ItemSystem {
         const model = makeItemModel(item);
         this.game.scene.add(model);
         this.held[side] = { item, model, since: performance.now(), shape: this._shapeOf(model) };
+        handLog(`взял(а) в руку (${side === 'right' ? 'правая' : 'левая'}): ${ITEM_INFO[item.kind]?.name || item.kind}${item.count > 1 ? ' ×' + item.count : ''}, id ${item.uid}${closed ? ', рука закрыта' : ', рука открыта — ждёт сжатия'}`);
         if (item.kind === 'wand') this.game.inventory?.heldWand?.(item); // (my wand: remembered, and in the save)
         if (this.game.sync) this.game.sync.itemHold?.(side, item);
         return true;
@@ -657,7 +658,7 @@ export class ItemSystem {
         const h = this.held[side];
         if (!h) return;
         const item = h.item;
-        handLog(`${ITEM_INFO[item.kind]?.name || item.kind} покинул(а) руку (${side === 'right' ? 'правую' : 'левую'}): ${why}, скорость ${vel.length().toFixed(1)}`);
+        handLog(`${ITEM_INFO[item.kind]?.name || item.kind} покинул(а) руку (${side === 'right' ? 'правую' : 'левую'}): ${why}, скорость ${vel.length().toFixed(1)}${this.auth ? '' : ', через сеть: просьба хосту'}`);
         this.letLog.push(why);
         const pos = h.model.position.clone();
         const quat = h.model.quaternion.clone();
@@ -918,6 +919,17 @@ export class ItemSystem {
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
             if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch))) continue;
             if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+                // (the journal «Предметы»: the fingers open, but something forbids letting go — what)
+                if (ch.isHandTracked?.(side) && (ch.getGripCurl?.(side) ?? 1) < DROP.CLOSED) {
+                    this._dropTry(side, kind, holdsWhy(ch, now)
+                        || (g.inventory?.pocketCycling?.(side) ? 'листаете ячейки карманов' : null)
+                        || (kind === 'wand' && this._touching(side, h, now) ? 'палочка касается земли/стены' : null)
+                        || (kind === 'wand' && g.spellBusy?.() ? 'идёт заклинание — палочку не бросить' : null)
+                        || (kind === 'bow' && g.gear?.nock ? 'на тетиве стрела' : null)
+                        || ((kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) ? 'вещь читается' : null)
+                        || (this._otherHandTakes(side, h) ? 'вещь закреплена: другая рука держит её (правило двух рук)' : null)
+                        || 'руки не готовы');
+                }
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);
@@ -938,7 +950,9 @@ export class ItemSystem {
             }
             // (the wand never falls out of an opened hand — the author holds it by one finger, the other four open:
             // it leaves the hand only thrown; a pouch only from a hand really opened wide, kept open: DROP.WAND_*)
-            if (kind === 'wand') { this._drop[side].since = 0; continue; }
+            if (kind === 'wand') { this._drop[side].since = 0; this._dropTry(side, kind, curl < DROP.CLOSED && tracked ? 'палочка не выпадает из разжатой руки — только бросок' : null); continue; }
+            if (tracked && curl < DROP.CLOSED) this._dropTry(side, kind, dropWhy(this._drop[side], { now: gt, curl, tracked, ...arm }, strict));
+            else this._dropTry(side, kind, null);
             if (this._drop[side].update({ now: gt, curl, tracked, ...arm, strict })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата вытянутая рука (пальцы ${curl.toFixed(2)})` });
         }
         this.swap.update(dt);
@@ -946,6 +960,21 @@ export class ItemSystem {
         this._wear(dt, ch);
         this._give(dt, ch);
         this._netSend(dt);
+    }
+
+    /**
+     * The journal «Предметы»: the hand let the fingers open and the thing stayed — why (null: nothing to say; the next
+     * opening is told again). The same reason within 2.5 s is silent; another one at most twice a second.
+     */
+    _dropTry(side, kind, why) {
+        const m = this._dtry || (this._dtry = { right: { key: '', at: -1e9 }, left: { key: '', at: -1e9 } });
+        const e = m[side];
+        if (!why) { e.key = ''; return; }
+        const now = performance.now();
+        const key = why.replace(/[\d.]+/g, '#');
+        if (key === e.key ? now - e.at < 2500 : now - e.at < 500) return;
+        e.key = key; e.at = now;
+        handLog(`попытка отпустить (${side === 'right' ? 'правая' : 'левая'}): ${ITEM_INFO[kind]?.name || kind} не выпал(а) — ${why}`);
     }
 
     /** The off hand over a buyer's counter, held out and opened: the thing lies on the counter. true — it did. */
@@ -1124,6 +1153,7 @@ export class ItemSystem {
         // (a thing of a house chest: taken by this player — the theft is theirs, if anybody of the house sees it)
         if (item.home) { const home = item.home; delete item.home; if (toId && toId[0] !== '#') this.game.castleLife?.tookFromHome?.(home, toId); }
         if (this.game.sync) this.game.sync.itemGone?.(uid, toId, side);
+        handLog(`поднят(а) с земли: ${ITEM_INFO[item.kind]?.name || item.kind}, id ${item.uid}, кто: ${toId === this.game.localId ? 'я' : (toId || '?')}${side ? ', рука ' + (side === 'right' ? 'правая' : 'левая') : ''}`);
         if (toId === this.game.localId) this._gotItem(item, side);
     }
 

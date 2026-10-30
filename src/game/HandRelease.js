@@ -13,6 +13,7 @@
  * crouching or turning never throw (the speeds are the hand's own, against the body).
  * Pure logic: the inputs come from Character.armState().
  */
+import { allLog } from '../core/AllLog.js';
 
 export const DROP = {
     OPEN: 0.25, // fingers this open (tracked curl) …
@@ -80,8 +81,9 @@ export const RUN_FAST = 0.6, RUN_HOLD_MS = 600;
  * Why a thing left the hand — a line for the game's journal (settings → «Журнал») and the console:
  * so an unwanted drop shows what did it. Never on the screen.
  */
-export function handLog(line) {
+export function handLog(line, tag = 'Предметы') {
     try { console.info('[Руки]', line); } catch (_) { /* ignore */ }
+    allLog(tag, line);
     try {
         if (typeof fetch !== 'function' || typeof location === 'undefined' || !/^https?:$/.test(location.protocol)) return;
         fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Руки', line: String(line) }) }).catch(() => {});
@@ -104,6 +106,35 @@ export function holdsFast(ch, now = performance.now()) {
     // in them no letting go (the author: running fast the wand must never fly off) — a throw only once stopped
     if (ch.armPump?.pumping || (ch.isRunning && ch.runIntensity > RUN_FAST)) { ch._runUntil = now + RUN_HOLD_MS; return true; }
     return now < (ch._downUntil || 0) || now < (ch._runUntil || 0);
+}
+
+/**
+ * Why an opening hand did NOT let the thing go (pure: the journal «Предметы», tests). null — nothing to say
+ * (the fingers are not opening). `gate` is a DropGate (armed), `s` as DropGate.update gets it.
+ */
+export function dropWhy(gate, s, strict = false) {
+    const f = (x) => (Number.isFinite(x) ? x.toFixed(2) : '?');
+    if (!s.tracked) return 'кисть не видна камере — потерянная кисть ничего не отпускает';
+    const open = strict ? DROP.WAND_OPEN : DROP.OPEN;
+    if (s.curl >= DROP.CLOSED) return null;
+    if (s.curl >= open) return `кисть не разжата: пальцы ${f(s.curl)}, нужно меньше ${open}`;
+    if (!gate.armed) return 'вещь только что попала в руку: сначала сожмите пальцы';
+    if (!(s.reach > DROP.REACH)) return `рука не вытянута: ${f(s.reach)} из ${DROP.REACH}`;
+    if (!(s.forward > DROP.FORWARD)) return `рука не вперёд: ${f(s.forward)} из ${DROP.FORWARD}`;
+    if (!(s.up > DROP.LEVEL)) return `рука опущена ниже уровня: ${f(s.up)}`;
+    if (!(s.speed < DROP.STILL)) return `рука движется (${f(s.speed)} м/с, нужно меньше ${DROP.STILL}) — это не разжатие`;
+    if (!(s.palmUp < DROP.PALM_UP)) return 'ладонь смотрит вверх — вещь лежит на ней';
+    if (gate.since) return `держу разжатие ${Math.round(s.now - gate.since)} мс из ${strict ? DROP.WAND_HOLD_MS : DROP.HOLD_MS}`;
+    return strict ? 'палочка: пальцы не были видны сжатыми прямо перед разжатием' : null;
+}
+
+/** The camera-side reason the hand cannot let go now (swimming, flying, running…): for the journal (pure). */
+export function holdsWhy(ch, now = performance.now()) {
+    if (ch.swimming || ch.swimY != null) return 'плывёте — гребки не бросок';
+    if (ch.flying) return 'вы летите — руки рулят';
+    if (ch.knockedDown || now < (ch._downUntil || 0)) return 'вы упали/только встали';
+    if (ch.armPump?.pumping || (ch.isRunning && ch.runIntensity > RUN_FAST) || now < (ch._runUntil || 0)) return 'бег — махи руками не бросок';
+    return null;
 }
 
 export class DropGate {
