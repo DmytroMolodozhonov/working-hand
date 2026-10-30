@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { VoxelCharacter } from '../entities/Character.js';
 import { CombatVisuals } from '../game/Combat.js';
 import { KD_NAME } from '../game/Impact.js';
+import { wrapPi, stepAngle, neckLimit, TWIST } from './RemoteTwist.js';
 import { decodeFace, applyFaceDiff } from '../entities/FaceExpr.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
@@ -66,6 +67,18 @@ export class RemoteAvatar {
         // (knocked down as they died — Avada, a blast: the body is seen falling first)
         if (dead && this.character.knockedDown && typeof setTimeout === 'function') this._hideT = setTimeout(() => { if (this.dead) this.character.group.visible = false; }, 1200);
         else this.character.group.visible = !dead;
+    }
+
+    /** The diary line «ноги назад» when the sent head is turned far back from the body (once in 10 s per player). */
+    _neck(dt) {
+        const ch = this.character;
+        this._twistLogT = Math.max(0, (this._twistLogT || 0) - dt);
+        const raw = wrapPi(this.target.s.hy);
+        if (Math.abs(raw) > 2.1 && this._twistLogT <= 0 && typeof this.log === 'function') {
+            this._twistLogT = TWIST.LOG_GAP;
+            const deg = (a) => Math.round(wrapPi(a) * 180 / Math.PI);
+            this.log(`ноги назад: ${this.id}, корпус ${deg(ch.group.rotation.y)}°, голова от корпуса ${deg(raw)}°, пришло ry ${deg(this.target.s.ry)}°`);
+        }
     }
 
     /** Would this player's shield stop something coming from `from`? */
@@ -167,10 +180,10 @@ export class RemoteAvatar {
         // how fast the body moves (my hands striking it measure their speed against it)
         if (this._ppOk && dt > 0) { _d.subVectors(g, this._pp).divideScalar(dt); if (_d.lengthSq() < 900) this.vel.lerp(_d, 0.3); else this.vel.set(0, 0, 0); }
         this._pp.copy(g); this._ppOk = true;
-        let d = s.s.ry - ch.group.rotation.y;
-        while (d > Math.PI) d -= Math.PI * 2;
-        while (d < -Math.PI) d += Math.PI * 2;
-        ch.group.rotation.y += d * k;
+        // (the head turns only so far from the chest; sent further round, the body — and the legs — are put round to meet it)
+        const nk = neckLimit(Number.isFinite(+s.s.hy) ? +s.s.hy : 0);
+        const bodyTo = (Number.isFinite(+s.s.ry) ? +s.s.ry : ch.group.rotation.y) + nk.turn;
+        ch.group.rotation.y = stepAngle(ch.group.rotation.y, bodyTo, k);
         // off the feet / reeling (Knockdown.js): the body tips over (or leans) the way it was pushed
         const kd = s.s.kd | 0, sg = Array.isArray(s.s.sg) ? s.s.sg : null;
         ch.knockedDown = kd > 0;
@@ -190,7 +203,8 @@ export class RemoteAvatar {
         ch.boardRoll = Number.isFinite(+s.s.rz) ? +s.s.rz : 0;
         ch.swimming = s.s.sw != null; // (swimming: lying in the water, the legs kicking — the tilt and the arms come as they are)
         ch.swimMove = +s.s.sw || 0;
-        ch.head.rotation.y += (s.s.hy - ch.head.rotation.y) * k;
+        ch.head.rotation.y = stepAngle(ch.head.rotation.y, nk.head, k); // (the short way round: an angle sent past ±π must not spin the head the long way)
+        this._neck(dt);
         ch.head.rotation.x += (s.s.hp - ch.head.rotation.x) * k;
         const slerp = (obj, arr) => { if (arr) obj.quaternion.slerp(_q.set(arr[0], arr[1], arr[2], arr[3]), k); };
         slerp(ch.leftArmAnchor, s.s.la);

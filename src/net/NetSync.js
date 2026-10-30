@@ -108,7 +108,7 @@ export class NetSync {
         const ids = new Set(list.map((p) => p.id));
         for (const p of list) {
             if (p.id === this.me || this.game.remotes.has(p.id)) continue;
-            const av = new RemoteAvatar(this.game.scene, p.id, p.name, p.color);
+            const av = new RemoteAvatar(this.game.scene, p.id, p.name, p.color); av.log = (t) => this.game.perf?.note?.(t);
             this.game.remotes.set(p.id, av);
             if (this.looks?.has(p.id)) av.setLook(this.looks.get(p.id));
             av.setHeroModel(this.models?.get(p.id));
@@ -121,7 +121,7 @@ export class NetSync {
     _onJoin({ id, name }) {
         if (!this.game.remotes.has(id)) {
             const info = this.net.players.get(id);
-            const av = new RemoteAvatar(this.game.scene, id, name, info?.color || 1);
+            const av = new RemoteAvatar(this.game.scene, id, name, info?.color || 1); av.log = (t) => this.game.perf?.note?.(t);
             this.game.remotes.set(id, av);
             if (this.looks?.has(id)) av.setLook(this.looks.get(id));
             av.setHeroModel(this.models?.get(id));
