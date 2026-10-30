@@ -463,3 +463,7 @@ test('the fissures grow with the strength lost: none whole, all when it is nearl
 test('the table «кто/что» has the blast row', () => {
     assert.equal(ICE_TARGETS.blast.does, 'break');
 });
+
+test('раненая Королева (< 40 HP) уходит от врага и отдаёт бой страже', () => {
+  assert.ok(QUEEN_AI.WEAK_HP === 40 && QUEEN_AI.WEAK_KEEP > QUEEN_AI.KEEP_MAX);
+});

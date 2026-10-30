@@ -799,7 +799,7 @@ export class IceCastleLife {
             const ridden = !!g.dragonRide?.riding;
             const mine = ip || g.character.group.position;
             const p = seen(g.localId, mine);
-            if (p) put(g.localId, p, !!g.items?.heldOf('iceRod'), ip ? Math.max(1, (imp.size || imp.scale || 1)) : (g.character.size || 1), !!ip || ridden);
+            if (p) put(g.localId, p, this._hasRodMe(), ip ? Math.max(1, (imp.size || imp.scale || 1)) : (g.character.size || 1), !!ip || ridden);
         }
         for (const [id, r] of g.remotes || []) {
             if (r.dead || !r.position) continue;
@@ -808,6 +808,14 @@ export class IceCastleLife {
             if (p) put(id, p, this._remoteRod(id), r.character?.size || 1, onDragon);
         }
         return out;
+    }
+
+    /** Do I have the Ice Rod — in a hand or anywhere in my slots / pouch (the interface)? The castle's creatures then obey me. */
+    _hasRodMe() {
+        const g = this.game;
+        if (g.items?.heldOf('iceRod')) return true;
+        const has = (x) => !!x && (x.kind === 'iceRod' || x.item?.kind === 'iceRod' || (Array.isArray(x.items) && x.items.some(has)) || (Array.isArray(x.contents) && x.contents.some(has)));
+        return !!g.inventory?.slots?.some(has);
     }
 
     _remoteRod(id) {
@@ -892,7 +900,7 @@ export class IceCastleLife {
     _enemy(c, range, from = c.model.position) {
         let best = null;
         for (const q of this._players(c.type === 'queen')) {
-            if (q.rod && c.type === 'snowman' && this.state.queenDead) continue; // (the rod's holder: the snowmen obey him)
+            if (q.rod && c.type !== 'queen') continue; // (whoever has the Ice Rod — in a hand or in his pockets: her snowmen and her ice guards obey him and do not touch him)
             const d = Math.max(0, Math.hypot(q.p.x - from.x, q.p.z - from.z) - q.rad); // (by its edge: a great body is nearer than its middle)
             let r = c.type !== 'queen' && this._offender(q.id) ? Math.max(range, ICE.DEFEND.R) : q.id === c.foe ? range * 1.6 : range;
             if (q.giant) r = Math.max(r, Math.min(ICE.GIANT.SEE, range * 2.5 + q.rad * 2)); // (a giant cannot be missed: it is seen from far)
@@ -937,7 +945,13 @@ export class IceCastleLife {
         if (c.charge && (c.charge.id !== e.id || this._t > c.charge.until || leash)) this._chargeEnd(c, false);
         if (c.charge) { this._queenChase(c, e, d, dt); return; }
         // she keeps her distance: closer than KEEP_MIN she steps back (cornered with him near: the blade), further than KEEP_MAX she goes closer
-        const band = rangeBand(d);
+        // wounded (< 40 HP): she leaves the fight to her guards — calls the whole castle on him, keeps away from him, summons more snowmen
+        const weak = c.hp < QUEEN_AI.WEAK_HP;
+        if (weak) {
+            if (!c.weakSaid) { c.weakSaid = true; this._say(c, 'Стражи, ко мне! Уничтожьте его!'); }
+            if (e.k === 'p' && !e.rod && !this._offender(e.id)) this.offender = { id: e.id, until: Date.now() + ICE.DEFEND.T * 1000 };
+        } else c.weakSaid = false;
+        const band = weak && d < QUEEN_AI.WEAK_KEEP ? 'near' : rangeBand(d);
         if (leash) { const t = this._wayTo(c, hall); this._step(c, t.x, t.z, dt, 2); }
         else if (!see || band === 'far') { const t = this._wayTo(c, e.p); this._step(c, t.x, t.z, dt, t === e.p ? A.KEEP_MAX * 0.7 + (e.rad || 0) : 1.2); c.cornerT = 0; } // (the stop is for the foe, not for the gate on the way to him)
         else if (band === 'near' && !c.act) {
@@ -963,6 +977,7 @@ export class IceCastleLife {
         const roll = Math.random();
         // (the rod's freeze first of all, at her range and not too often; a giant: the same; then the rest)
         const since = c.lastFreeze == null ? null : this._t - c.lastFreeze;
+        if (weak && nSnow < 8 && roll < 0.55) { c.act = 'summon'; c.actT = 0.7; c.actTo = e; this._say(c, 'Снеговики, ко мне!'); return; }
         const spell = mayFreeze(d, since) && (e.giant ? (!c.giantFrozen || Date.now() > c.giantFrozen) : true) && roll < 0.85 ? 'freeze'
             : nSnow < 5 && roll < 0.2 ? 'summon' : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
         if (spell === 'freeze' && !mayFreeze(d, since)) return; // (point blank or too soon: not the freeze — the next turn is another spell)

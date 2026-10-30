@@ -102,6 +102,8 @@ export const QUEEN_AI = {
     BLADE_LEN: 2.4, // the blade's length in rod units (the rod is 1.45; the queen holds it ×1.9, she herself ×1.5)
     LOSE_SIGHT: 1.6, // s: a foe lost behind a wall is still where she last saw him for this long (no turning back at every step)
     GATE_ZONE: 9, // m: from the gate — the gateway's neighbourhood (no sidestepping beside the wall)
+    WEAK_HP: 40, // HP: below this she leaves the fight to her guards (the whole castle goes on him), keeps WEAK_KEEP m away and summons snowmen
+    WEAK_KEEP: 30, // m
     EVADE: 0.55, // chance per second that she sidesteps while she keeps her distance
     ARMOR_CUT: 0.6, // magic armour / a magic robe with a reserve: the freeze is this share of its time (the reserve is spent)
 };
