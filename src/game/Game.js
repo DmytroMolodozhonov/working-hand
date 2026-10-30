@@ -3700,6 +3700,7 @@ export class Game {
         this.active = true;
         this.lastTime = performance.now();
         this.inventory?.ensureStarterWand(); // (every wizard has a wand — the plain wooden one at least)
+        if (this.inventory) this.inventory._appleT = 99; // (Creative: the five golden apples at once)
         // Creative: 100 coins in the pouch to start with (once; a world played before keeps its own coins). The pouch itself
         // every hero has from the start (Inventory.ensureStarterWand → CoinBelt.ensure), in every mode.
         if (this.config.mode === 'creative' && !this._startCoins && this.inventory?.purse) {

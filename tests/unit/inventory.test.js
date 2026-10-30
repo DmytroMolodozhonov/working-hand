@@ -47,3 +47,34 @@ test('a thing held in the right hand and brought to the right hip (as a pouch is
     assert.ok(can({ kind: 'cheese' }));
     assert.ok(!can({ kind: 'wand' }) && !can({ kind: 'coins' }) && !can({ kind: 'shield' }) && !can(null) && !can(null, {}));
 });
+
+// Creative: five golden apples are always with the hero
+import { Inventory, CREATIVE_APPLES, APPLES_WAIT } from '../../src/game/Inventory.js';
+const fake = (mode = 'creative', slots = [null, null, null, null, null], held = {}) => ({ game: { config: { mode }, items: { held }, isDeadLocal: false }, slots, _render() {}, ensure: Inventory.prototype.ensureCreativeApples });
+const total = (inv) => inv.slots.reduce((n, s) => n + (s?.kind === 'apple' ? s.count : 0), 0);
+
+test('creative start: no apples → five at once in one cell; the wand stays; Survival gets none', () => {
+    const inv = fake('creative', [{ kind: 'wand' }, null, null, null, null]);
+    assert.ok(inv.ensure(99));
+    assert.equal(total(inv), CREATIVE_APPLES);
+    assert.equal(inv.slots[0].kind, 'wand');
+    assert.equal(inv.slots.filter((s) => s?.kind === 'apple').length, 1);
+    const surv = fake('survival');
+    assert.ok(!surv.ensure(99) && total(surv) === 0);
+});
+
+test('creative: one eaten → back to five after a pause, not at once; a stack in the hand counts; no room waits', () => {
+    const inv = fake();
+    inv.ensure(99);
+    inv.slots.find((s) => s).count = 4;
+    assert.ok(!inv.ensure(0.5) && total(inv) === 4);
+    assert.ok(inv.ensure(APPLES_WAIT) && total(inv) === 5);
+    const hand = fake('creative', [null, null, null, null, null], { right: { item: { kind: 'apple', count: 5 } } });
+    assert.ok(!hand.ensure(99) && total(hand) === 0);
+    const full = fake('creative', Array.from({ length: 5 }, () => ({ kind: 'sword' })));
+    assert.ok(!full.ensure(99));
+    full.slots[2] = null;
+    assert.ok(full.ensure(99) && total(full) === 5);
+    const dead = fake(); dead.game.isDeadLocal = true;
+    assert.ok(!dead.ensure(99));
+});

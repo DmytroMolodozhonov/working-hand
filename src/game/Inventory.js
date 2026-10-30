@@ -27,7 +27,7 @@
 
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
-import { ITEM_INFO, starterWand, retireScroll } from './ItemTypes.js';
+import { ITEM_INFO, starterWand, retireScroll, newUid } from './ItemTypes.js';
 import { WandBelt } from './WandBelt.js';
 import { CoinBelt } from './CoinBelt.js';
 import { armorIcon } from './Armor.js';
@@ -38,6 +38,8 @@ import { ENCHANT_TIERS } from './Enchant.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
+/** Creative: this many golden apples (`apple`) are always with the hero — eaten, thrown, lost: back after `APPLES_WAIT` s. */
+export const CREATIVE_APPLES = 5, APPLES_WAIT = 1.5;
 
 /** A tree's trunk block (shown as a log, not a cube — LogModel.js). */
 const isWood = (b) => TREE_KINDS.some((k) => k.wood === b);
@@ -250,6 +252,36 @@ export class Inventory {
         const i = this.slots.findIndex((s) => !s);
         if (i < 0) return false;
         this.slots[i] = { ...starterWand(), spare: true }; // (a stand-in: my own wand, if it lies somewhere, takes its place again — gotWand)
+        this._render();
+        return true;
+    }
+
+    /**
+     * Creative: five golden apples are always at hand (the author: «лучше 5 золотых яблок и больше ничего»), endless like
+     * everything in Creative. Counted over the slots and the hands (an unpaid shop apple does not count); fewer than five
+     * for `APPLES_WAIT` seconds (eaten, thrown, died) → the stack is topped up, or a new one goes into a free slot (no room →
+     * it waits quietly). Mine alone: each player's own inventory. → true when something was given.
+     */
+    ensureCreativeApples(dt = 0) {
+        const g = this.game;
+        if (g.config?.mode !== 'creative' || g.isDeadLocal) { this._appleT = 0; return false; }
+        let have = 0, stack = null;
+        for (const s of this.slots) if (s?.kind === 'apple' && !s.shop) { have += s.count || 1; stack = stack || s; }
+        for (const side of ['left', 'right']) {
+            const h = g.items?.held[side]?.item;
+            if (h?.kind === 'apple' && !h.shop) { have += h.count || 1; stack = stack || h; }
+        }
+        if (have >= CREATIVE_APPLES) { this._appleT = 0; return false; }
+        this._appleT = (this._appleT ?? 0) + dt;
+        if (this._appleT < APPLES_WAIT) return false;
+        const need = CREATIVE_APPLES - have;
+        if (stack) stack.count = (stack.count || 1) + need;
+        else {
+            const i = this.slots.findIndex((x) => !x);
+            if (i < 0) return false;
+            this.slots[i] = { kind: 'apple', uid: newUid(), count: need };
+        }
+        this._appleT = 0;
         this._render();
         return true;
     }
@@ -491,6 +523,7 @@ export class Inventory {
      */
     update(dt) {
         const g = this.game;
+        this.ensureCreativeApples(dt);
         this._renderCoins();
         if (!g.currentPose || g.combat.immobile) { this.belt._show(); this.purse._show(); this._updateHandBlock(); return; }
         const ch = g.character;

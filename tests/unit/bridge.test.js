@@ -5,7 +5,7 @@ import { matchSpell } from '../../src/fx/SpellManager.js';
 import { SPELL_COST } from '../../src/game/Combat.js';
 import { START_SPELLS } from '../../src/game/SpellBook.js';
 import { BLOCK } from '../../src/world/Terrain.js';
-import { bridgePlan, bridgeWords, bridgeMaterial, bridgeAim, bridgeExtra, bridgeHint, BRIDGE } from '../../src/game/Bridge.js';
+import { bridgePlan, bridgeWords, bridgeMaterial, bridgeExtra, bridgeHint, blockAt, rayTarget, BRIDGE } from '../../src/game/Bridge.js';
 
 test('«Create a Bridge»: its words (never «Ice Bridge», never «мост» in talk), 10 mana, no scroll', () => {
     for (const t of ['Create a Bridge', 'криейт э бридж', 'крейт э бридж', 'бридж', 'создай мост', 'построй мост']) assert.equal(matchSpell(t), 'CreateBridge', t);
@@ -16,143 +16,98 @@ test('«Create a Bridge»: its words (never «Ice Bridge», never «мост» i
     assert.ok(START_SPELLS.has('CreateBridge'));
 });
 
-/** A world: ground at layer 10 for z ≤ 0 and z ≥ gapEnd, a river (bed 5, water 6–9) between. */
-function world(gapEnd, farL = 10) {
-    const set = new Map();
+/** A world: ground at layer 10 for z ≤ 0 and z ≥ gapEnd (at farL), a river (bed 5, water 6–9) between. */
+function world(gapEnd, farL = 10, o = {}) {
     const top = (x, z) => (z <= 0 ? 10 : z >= gapEnd ? farL : 5);
     const get = (x, L, z) => {
-        const k = x + ',' + L + ',' + z;
-        if (set.has(k)) return set.get(k);
+        if (o.wall && z === o.wall && L >= 10 && L <= 14) return BLOCK.CS_GREY;
         if (L <= top(x, z)) return BLOCK.GRASS;
-        return z > 0 && z < gapEnd && L <= 9 ? BLOCK.WATER : BLOCK.AIR;
+        return z > 0 && z < gapEnd && L <= 9 && !o.dry ? BLOCK.WATER : BLOCK.AIR;
     };
-    return { get, top };
+    return { get };
 }
+const A = { x: 0, z: 0, L: 10 };
 
-test('the plan: a strip three wide of the banks\' material over the river, nothing on the banks, no wood', () => {
-    const { get, top } = world(8);
-    const p = bridgePlan(get, top, { x: 0, z: -1, L: 10 }, { x: 0, z: 9, L: 10 });
+test('over a river: three wide, level, only in the empty cells, grows from the hero, banks untouched', () => {
+    const { get } = world(8);
+    const p = bridgePlan(get, A, { x: 0, z: 8, L: 10 });
     assert.ok(p.cells, p.why);
     for (const [x, L, z, b] of p.cells) {
         assert.ok(z > 0 && z < 8, 'only over the gap: ' + z);
-        assert.ok(Math.abs(x) <= 1 && L === 10, 'level, three wide, no railing');
-        assert.equal(b, BLOCK.GRASS, 'grass banks → grass');
+        assert.ok(Math.abs(x) <= 1 && L === 10);
+        assert.equal(b, BLOCK.GRASS);
     }
     assert.equal(p.cells.length, 3 * 7);
-    for (let i = 1; i < p.cells.length; i++) assert.ok(p.cells[i][4] >= p.cells[i - 1][4], 'grows from the near bank');
+    for (let i = 1; i < p.cells.length; i++) assert.ok(p.cells[i][4] >= p.cells[i - 1][4]);
+    assert.ok(!p.raised);
 });
 
-/** A ravine between two banks of the given blocks. */
-function ravine(nearB, farB) {
-    const top = (x, z) => (z <= 0 || z >= 6 ? 10 : 2);
-    const get = (x, L, z) => (L <= top(x, z) ? (L === top(x, z) ? (z <= 0 ? nearB : farB) : BLOCK.STONE) : BLOCK.AIR);
-    return { get, top };
-}
-const mats = (p) => new Set(p.cells.map((c) => c[3]));
-
-test('the material is the banks\': stone, sand, earth, grass, snow, ice, a castle block; different banks → each its own half', () => {
-    for (const b of [BLOCK.STONE, BLOCK.SAND, BLOCK.GRASS, BLOCK.DIRT, BLOCK.SNOW, BLOCK.ICE, BLOCK.CS_GREY]) {
-        const w = ravine(b, b);
-        const p = bridgePlan(w.get, w.top, { x: 0, z: 0, L: 10 }, { x: 0, z: 6, L: 10 });
-        assert.deepEqual([...mats(p)], [b], 'block ' + b);
-    }
-    const w = ravine(BLOCK.STONE, BLOCK.SAND);
-    const p = bridgePlan(w.get, w.top, { x: 0, z: 0, L: 10 }, { x: 0, z: 6, L: 10 });
-    assert.ok(p.cells.filter((c) => c[4] < 0.5).every((c) => c[3] === BLOCK.STONE));
-    assert.ok(p.cells.filter((c) => c[4] >= 0.5).every((c) => c[3] === BLOCK.SAND));
+test('no river at all: over dry land / a pit / thin air it is built too, with no «can walk here» answer', () => {
+    const air = (x, L, z) => (L <= 10 && z <= 0 ? BLOCK.STONE : BLOCK.AIR); // a ledge over nothing, a tower 30 m away
+    const p = bridgePlan(air, A, { x: 0, z: 30, L: 10 });
+    assert.ok(p.cells && p.cells.length >= 3 * 29, p.why);
+    // solid level ground: nothing empty at the feet's level → a raised walkway, still a bridge
+    const flat = (x, L) => (L <= 10 ? BLOCK.GRASS : BLOCK.AIR);
+    const f = bridgePlan(flat, A, { x: 8, z: 0, L: 10 });
+    assert.ok(f.raised && f.cells.length > 0 && f.cells.every((c) => c[1] === 11));
+    for (const k of ['none', 'near', 'far', 'unknown', 'empty']) assert.ok(!/можно (просто )?пройти/.test(bridgeHint(k)), k);
 });
 
-test('no wood: trees, planks and fences at the edge give earth; never a wooden block', () => {
-    for (const b of [BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANKS, BLOCK.PLANKS_DARK, BLOCK.FENCE, BLOCK.BIRCH, BLOCK.DARK_LEAVES]) assert.equal(bridgeMaterial(b), BLOCK.DIRT);
-    for (let b = 0; b <= 72; b++) { const m = bridgeMaterial(b); assert.ok(![BLOCK.PLANKS, BLOCK.PLANKS_DARK, BLOCK.FENCE, BLOCK.WOOD, BLOCK.LEAVES].includes(m)); }
-    assert.equal(bridgeMaterial(BLOCK.ENCHANTED), BLOCK.STONE);
-});
-
-test('the plan: a gentle slope up to a higher bank; too steep, too far, too near, no gap — a reason', () => {
-    let w = world(8, 12);
-    let p = bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 9, L: 12 });
+test('up and down: a ramp at 1:1 at most; the high target is reached as far as the slope gets', () => {
+    const air = (x, L, z) => (L <= 10 && z <= 0 ? BLOCK.STONE : BLOCK.AIR);
+    let p = bridgePlan(air, A, { x: 0, z: 20, L: 30 }); // up 20 over 20 m: 1:1
     assert.ok(p.cells);
-    const mid = p.cells.filter((c) => c[0] === 0).map((c) => c[1]);
-    assert.ok(Math.min(...mid) >= 10 && Math.max(...mid) <= 12 && new Set(mid).size >= 2);
-    w = world(4, 24);
-    assert.equal(bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 5, L: 24 }).why, 'steep');
-    w = world(50);
-    assert.equal(bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 51, L: 10 }).why, 'far');
-    assert.equal(bridgePlan(w.get, w.top, { x: 0, z: -1, L: 10 }, { x: 0, z: 0, L: 10 }).why, 'near');
-    const flat = { get: (x, L) => (L <= 10 ? BLOCK.GRASS : BLOCK.AIR), top: () => 10 };
-    assert.equal(bridgePlan(flat.get, flat.top, { x: 0, z: 0, L: 10 }, { x: 8, z: 0, L: 10 }).why, 'nogap');
+    let ys = p.cells.filter((c) => c[0] === 0).map((c) => c[1]);
+    assert.ok(Math.min(...ys) >= 10 && Math.max(...ys) >= 29);
+    p = bridgePlan(air, A, { x: 0, z: 10, L: 60 }); // far steeper: 1:1 only
+    ys = p.cells.map((c) => c[1]);
+    assert.ok(Math.max(...ys) <= 21);
+    p = bridgePlan((x, L, z) => (L <= 40 && z <= 0 ? BLOCK.STONE : BLOCK.AIR), { x: 0, z: 0, L: 40 }, { x: 0, z: 25, L: 10 }); // down
+    ys = p.cells.filter((c) => c[0] === 0).map((c) => c[1]);
+    assert.ok(Math.min(...ys) <= 16 && Math.max(...ys) <= 40);
+    // every step of a slanting deck is a block or a ramp: neighbours along the way differ by at most one layer
+    const col = new Map(); for (const [x, L, z] of p.cells) if (x === 0) col.set(z, Math.max(col.get(z) ?? -1e9, L));
+    for (const z of col.keys()) if (col.has(z + 1)) assert.ok(Math.abs(col.get(z + 1) - col.get(z)) <= 1);
 });
 
-/** A flexible world: top(x, z) and a block() per column; water fills up to `water` where set. */
-function column(topFn, o = {}) {
-    const get = (x, L, z) => {
-        const t = topFn(x, z);
-        if (L <= t) return o.block ? o.block(x, L, z, t) : BLOCK.GRASS;
-        if (o.water && L <= o.water && t < o.water) return BLOCK.WATER;
-        return o.extra ? o.extra(x, L, z) : BLOCK.AIR;
-    };
-    return { get, top: topFn };
-}
-const A0 = { x: 0, z: 0, L: 10 };
-const aim = (w, hx, hz, point = null) => bridgeAim(w.get, w.top, A0, hx, hz, point);
-
-test('aiming: a narrow river, the hand points at the far SLOPE 25 m away — the bridge goes to the near edge (7 m)', () => {
-    const w = column((x, z) => (z <= 0 ? 10 : z < 7 ? 5 : 10 + (z - 6)), { water: 9 }); // (a hill behind the river)
-    const r = aim(w, 0, 1);
-    assert.ok(r.plan, r.why);
-    assert.equal(r.B.z, 7);
-    assert.ok(r.plan.len < 8);
-});
-
-test('aiming: a ravine, a 1-block gap, a pit one deep; a hand off to the side still finds the bank', () => {
-    let w = column((x, z) => (z <= 0 || z >= 9 ? 10 : 0));
-    assert.ok(aim(w, 0, 1).plan, 'ravine');
-    w = column((x, z) => (z === 1 ? 4 : 10));
-    assert.ok(aim(w, 0, 1).plan, 'a gap of one block');
-    w = column((x, z) => (z >= 1 && z <= 3 ? 9 : 10));
-    assert.ok(aim(w, 0, 1).plan, 'a pit one deep');
-    w = column((x, z) => (z <= 0 || z >= 8 ? 10 : 3));
-    const r = aim(w, Math.sin(0.2), Math.cos(0.2));
-    assert.ok(r.plan, 'a little to the side');
-});
-
-test('aiming: a bank 6 layers higher, up to 1:1; a wide river 30 m; more than 12 higher says so', () => {
-    let w = column((x, z) => (z <= 0 ? 10 : z < 8 ? 5 : 16), { water: 9 });
-    let r = aim(w, 0, 1);
-    assert.ok(r.plan, r.why);
-    const ys = r.plan.cells.filter((c) => c[0] === 0).map((c) => c[1]);
-    assert.ok(Math.max(...ys) >= 15 && Math.min(...ys) >= 10);
-    w = column((x, z) => (z <= 0 || z >= 30 ? 10 : 5), { water: 9 });
-    r = aim(w, 0, 1);
-    assert.ok(r.plan, r.why);
-    assert.ok(r.plan.len >= 30 && r.plan.len <= BRIDGE.MAX);
-    w = column((x, z) => (z <= 0 ? 10 : z < 4 ? 3 : 40));
-    assert.equal(aim(w, 0, 1).why, 'steep');
-});
-
-test('aiming: trees at the edge are passed, a house wall is named, a lake without a bank says so', () => {
-    let w = column((x, z) => (z <= 0 || z >= 8 ? 10 : 4), { water: 9, block: (x, L, z, t) => (L === t && z >= 8 && z <= 9 ? BLOCK.LEAVES : BLOCK.GRASS) });
-    let r = aim(w, 0, 1);
-    assert.ok(r.plan, r.why);
-    assert.ok(r.B.z >= 10, 'past the crown');
-    w = column((x, z) => (z <= 0 ? 10 : z < 8 ? 4 : 16), { water: 9, block: (x, L, z, t) => (z >= 8 && L === t ? BLOCK.CS_GREY : BLOCK.GRASS) });
-    assert.equal(aim(w, 0, 1).why, 'wall');
-    w = column((x, z) => (z <= 0 ? 10 : 4), { water: 9 });
-    assert.equal(aim(w, 0, 1).why, 'sea');
-});
-
-test('aiming: level ground — nothing beside: a hint, water beside the way: a path to the pointed place', () => {
-    let w = column(() => 10);
-    assert.equal(aim(w, 0, 1, { x: 0, z: 8 }).why, 'nogap');
-    w = column((x, z) => (x >= 3 && x <= 4 ? 4 : 10), { water: 9 });
-    const r = aim(w, 0, 1, { x: 0, z: 8 });
-    assert.ok(r.plan && r.plan.cells.length > 0, r.why);
-});
-
-test('the price: ten up to 16 m, then half a mana a metre', () => {
+test('199 / 200 / 201 m: allowed up to 200, the price goes by length', () => {
+    const air = (x, L, z) => (L <= 10 && z <= 0 ? BLOCK.STONE : BLOCK.AIR);
+    assert.ok(bridgePlan(air, A, { x: 0, z: 199, L: 10 }).cells);
+    assert.ok(bridgePlan(air, A, { x: 0, z: 200, L: 10 }).cells);
+    assert.equal(bridgePlan(air, A, { x: 0, z: 201, L: 10 }).why, 'far');
+    assert.equal(bridgePlan(air, A, { x: 0, z: 1, L: 10 }).why, 'near');
     assert.equal(bridgeExtra(10), 0);
     assert.equal(bridgeExtra(16), 0);
     assert.equal(bridgeExtra(26), 5);
-    assert.ok(bridgeExtra(99) <= 12);
-    for (const k of ['near', 'far', 'sea', 'steep', 'wall', 'nogap']) assert.ok(!/\d+ ?м/.test(bridgeHint(k)), 'no numbers: ' + k);
+    assert.ok(bridgeExtra(200) >= 90 && bridgeExtra(200) <= 95);
+});
+
+test('somebody else\'s building in the way is never replaced; a wall across leaves nothing → \'empty\'', () => {
+    const { get } = world(8, 10, { wall: 4 });
+    const p = bridgePlan(get, A, { x: 0, z: 8, L: 10 });
+    assert.ok(p.cells.every((c) => !(c[2] === 4 && c[1] >= 10 && c[1] <= 14)));
+    const sealed = (x, L, z) => (z <= 0 ? BLOCK.STONE : BLOCK.ENCHANTED);
+    assert.equal(bridgePlan(sealed, A, { x: 0, z: 6, L: 10 }).why, 'empty');
+});
+
+test('ground that is not made yet: waits (never made in the frame)', () => {
+    const { get } = world(8);
+    assert.equal(bridgePlan(get, A, { x: 0, z: 8, L: 10 }, (x, z) => z < 5).why, 'unknown');
+    const data = { raycast: () => null };
+    assert.equal(rayTarget(data, { x: 0, y: 12, z: 0 }, { x: 0, y: 0, z: 1 }, 200, (x, z) => z < 50).why, 'unknown');
+    assert.equal(rayTarget(data, { x: 0, y: 12, z: 0 }, { x: 0, y: 0, z: 1 }, 200, () => true).why, 'none');
+    assert.match(bridgeHint('none'), /не дальше 200 метров/);
+});
+
+test('the ray: the target is the solid block hit; the material is the ends\'', () => {
+    assert.deepEqual(blockAt({ x: 3.5, y: 8.5, z: 20 }, { x: 0, y: 0, z: 1 }), { x: 4, L: 10, z: 20 });
+    const get = (x, L, z) => (z <= 0 ? BLOCK.SAND : z >= 10 ? BLOCK.STONE : BLOCK.AIR);
+    const p = bridgePlan((x, L, z) => (L <= 10 ? get(x, L, z) : BLOCK.AIR), A, { x: 0, z: 10, L: 10 });
+    assert.ok(p.cells.filter((c) => c[4] < 0.5).every((c) => c[3] === BLOCK.SAND));
+    assert.ok(p.cells.filter((c) => c[4] >= 0.5).every((c) => c[3] === BLOCK.STONE));
+});
+
+test('no wood: trees, planks and fences give earth; never a wooden block', () => {
+    for (const b of [BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANKS, BLOCK.PLANKS_DARK, BLOCK.FENCE, BLOCK.BIRCH, BLOCK.DARK_LEAVES]) assert.equal(bridgeMaterial(b), BLOCK.DIRT);
+    assert.equal(bridgeMaterial(BLOCK.ENCHANTED), BLOCK.STONE);
 });
