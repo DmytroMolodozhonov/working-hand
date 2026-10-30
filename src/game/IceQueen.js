@@ -716,6 +716,21 @@ export class IceCastleLife {
         return Math.hypot(p.x - P.hall.x, p.z - P.hall.z) < P.hall.r + 1.2 && p.y > P.floor - 2.5 && p.y < P.hall.top;
     }
 
+    /**
+     * Inside the hall or out of it — for the WAY through the gates. The wall is 2 m thick and the gateway cuts through it, so a body
+     * in the doorway (or a foe standing in it) must not change sides with every step (the queen turned back and forth in the door):
+     * clearly in (≥ 1 m from the wall's inner face) / clearly out (≥ 3.5 m beyond its outer face) are decided at once; between them the
+     * side it had a moment ago is kept (`prev`).
+     */
+    _zone(p, prev) {
+        const P = this.plan;
+        if (!(p.y > P.floor - 2.5 && p.y < P.hall.top)) return false;
+        const d = Math.hypot(p.x - P.hall.x, p.z - P.hall.z);
+        if (d < P.hall.r - 1) return true;
+        if (d > P.hall.r + 4.5) return false;
+        return prev != null ? prev : d < P.hall.r + 1.2;
+    }
+
     /** Players as targets: {id, p (feet), c (centre)} (the dead, the invisible far off not). */
     _players(boss = false) {
         const g = this.game, out = boss ? this._plB || (this._plB = []) : this._pl || (this._pl = []);
@@ -820,7 +835,7 @@ export class IceCastleLife {
     /** The next point on the way to `t` (through the gates when one is inside the hall and the other not). */
     _wayTo(c, t) {
         const P = this.plan;
-        const ci = this._inside(c.model.position), ti = this._inside(t);
+        const ci = c.zoneC = this._zone(c.model.position, c.zoneC), ti = c.zoneT = this._zone(t, c.zoneT);
         if (ci === ti) { c.wp = null; return t; }
         const key = ci ? 'out' : 'in';
         if (!c.wp || c.wp.key !== key) c.wp = { key, i: 0 };
@@ -871,7 +886,11 @@ export class IceCastleLife {
         }
         if (!c.greeted) { c.greeted = true; this._say(c, e.giant ? 'Что за чудовище ломится в мой замок?! Заморозить его!' : 'Кто посмел войти в мой ледяной замок?!'); }
         const d = Math.max(0, Math.hypot(e.p.x - p.x, e.p.z - p.z) - (e.rad || 0));
-        const see = e.giant || this._sees(c, e.p);
+        const seeNow = e.giant || this._sees(c, e.p);
+        if (seeNow) c.seenAt = this._t;
+        // (movement keeps a foe she saw a moment ago: a step aside in a doorway loses him behind the wall — she must not turn back at once)
+        const see = seeNow || this._t - (c.seenAt ?? -9) < QUEEN_AI.LOSE_SIGHT;
+        const atGate = Math.hypot(p.x - P.gate.x, p.z - P.gate.z) < QUEEN_AI.GATE_ZONE;
         const leash = Math.hypot(p.x - P.x, p.z - P.z) > Q.LEASH;
         // a frozen foe: run up, the blade, the blow (the freeze is over, he is gone, or she is too far from her hall — it ends)
         if (c.charge && (c.charge.id !== e.id || this._t > c.charge.until || leash)) this._chargeEnd(c, false);
@@ -888,13 +907,14 @@ export class IceCastleLife {
         } else {
             // (at her distance: she sidesteps now and then, facing him)
             c.cornerT = 0;
-            if ((c.evadeT = (c.evadeT || 0) - dt) <= 0 && Math.random() < A.EVADE * dt * 4) { c.evadeT = 0.9 + Math.random() * 0.8; c.evadeDir = Math.random() < 0.5 ? -1 : 1; }
+            if (atGate) c.evadeT = 0; // (no sidestep in the gateway: a wall is beside her)
+            else if ((c.evadeT = (c.evadeT || 0) - dt) <= 0 && Math.random() < A.EVADE * dt * 4) { c.evadeT = 0.9 + Math.random() * 0.8; c.evadeDir = Math.random() < 0.5 ? -1 : 1; }
             if (c.evadeT > 0 && !c.act) { const dx = e.p.x - p.x, dz = e.p.z - p.z, L = Math.hypot(dx, dz) || 1; this._step(c, p.x + (-dz / L) * c.evadeDir * 6, p.z + (dx / L) * c.evadeDir * 6, dt, 0.3, 1.2); if (!c.act) this._face(c, e.p, dt * 0.5); }
             else { c.moving = false; this._face(c, e.p, dt); }
         }
         this._bladeStep(c, dt, d);
         c.castT -= dt;
-        if (c.castT > 0 || !see || d > Q.REACH || c.act) return;
+        if (c.castT > 0 || !seeNow || d > Q.REACH || c.act) return;
         // «лицом к цели»: she casts only facing her foe
         if (!facesTarget(c.model.rotation.y, p.x, p.z, e.p.x, e.p.z, FACE.SPELL)) { this._face(c, e.p, dt); return; }
         c.castT = Q.CAST * (0.75 + Math.random() * 0.5);

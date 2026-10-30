@@ -114,6 +114,54 @@ export function walkRound(m, { giants = 2, snow = 6 } = {}) {
     return simulate({ room: roomG, agents, seconds: 420 });
 }
 
+/**
+ * A grid of the whole terrace INCLUDING the palace: a cell is floor if some layer in F…P+1 is solid with `high` clear layers over it (the
+ * queen is 7 m tall: 6 clear layers under the gate's arch). Steps of the stair are 1 high, so the stair is floor. → like floorGrid.
+ */
+export function palaceGrid(d, P, half = P.R + 4, high = 6) {
+    const n = half * 2 + 1, x0 = Math.round(P.x) - half, z0 = Math.round(P.z) - half;
+    const ok = Array.from({ length: n }, () => new Uint8Array(n));
+    const solid = (x, L, z) => { const b = d.get(x, L, z); return b !== BLOCK.AIR && b !== BLOCK.WATER; };
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+        const x = x0 + i, z = z0 + j;
+        for (let L = P.F; L <= P.floor + 1; L++) {
+            if (!solid(x, L, z)) continue;
+            let clear = true;
+            for (let k = 1; k <= high; k++) if (solid(x, L + k, z)) { clear = false; break; }
+            if (clear) { ok[i][j] = 1; break; }
+        }
+    }
+    return { ok, n, x0, z0, F: P.F, at: (x, z) => { const i = Math.round(x) - x0, j = Math.round(z) - z0; return i >= 0 && j >= 0 && i < n && j < n ? ok[i][j] : 0; } };
+}
+
+/** Width (blocks) of the clear opening of the palace gate across its way, measured on the blocks. */
+export function gateWidth(grid, P) {
+    let best = 0;
+    for (const dv of [-3, -2, -1, 0, 1, 2]) {
+        const centre = iceLocal(P, 0, 13 + dv - 2); // (the gate's wall: v = HV + HR = 13; HV = -2)
+        let w = 0;
+        for (let u = -8; u <= 8; u++) { const q = iceLocal(P, u, 13 + dv - 2); if (grid.at(q.x, q.z)) w++; }
+        best = best ? Math.min(best, w) : w;
+    }
+    return best;
+}
+
+/**
+ * The queen (r 1.0) walks from her throne out of the gate, round the terrace, back through the gate and to the throne, three times —
+ * with Pilot.js. → pilotsim's result (arrived, longest stand, set back).
+ */
+export function queenWalk(m, { r = 1.0, speed = 2.6 } = {}) {
+    const P = m.plan, d = m.d;
+    const grid = palaceGrid(d, P);
+    const room = (x, z) => fits(grid, x, z, r);
+    const w = (u, v) => { const q = iceLocal(P, u, v); return { x: q.x, z: q.z, stop: 1.2 }; };
+    const round = [w(0, 36), w(30, 40), w(40, 10), w(34, -30), w(0, -44), w(-34, -30), w(-40, 10), w(-30, 40)];
+    const lap = [w(0, 11 - 2), w(0, 13 - 2 + 2), w(0, 28), ...round, w(0, 28), w(0, 13 - 2 + 2), w(0, 11 - 2), w(0, -7)];
+    const goals = [...lap, ...lap, ...lap];
+    const T = iceLocal(P, 0, -7);
+    return { grid, res: simulate({ room, agents: [{ id: 'queen', x: T.x, z: T.z, r, speed, goals }], seconds: 900 }) };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
     const args = process.argv.slice(2);
     const opt = (n, def) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : def; };
@@ -127,6 +175,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log(`seed ${seed}: castle at ${P.x},${P.z} F${P.F} R${P.R} A${P.A}; clear disk ${m.disk} cells: giants stand on ${pc(m.giantOk, m.disk)}, reach ${pc(m.giantReached, m.giantOk)}; snowmen reach ${pc(m.snowReached, m.snowOk)}; the way to the gate for a 6-wide body: ${m.reaches6 ? 'yes' : 'NO'}`);
         if (!m.reaches6 || m.giantReached < m.giantOk) bad++;
         if (args.includes('--walk')) {
+            const q = queenWalk(m);
+            const gw = gateWidth(q.grid, P);
+            console.log(`   queen: gate ${gw} blocks across (she is 2 wide), arrived ${q.res.arrived}/${q.res.total}, longest stand ${q.res.maxStand} s, set back ${q.res.unsticks}`);
+            if (q.res.arrived < q.res.total || q.res.maxStand > 3 || gw < 2 * 1.0 + 1) bad++;
             const r = walkRound(m);
             console.log(`   walk: arrived ${r.arrived}/${r.total}, deepest overlap ${r.deepestOverlap} m, longest stand ${r.maxStand} s, set back ${r.unsticks}`);
             if (r.arrived < r.total || r.maxStand > 12) bad++;
