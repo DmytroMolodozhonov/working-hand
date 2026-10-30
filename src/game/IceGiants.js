@@ -154,3 +154,53 @@ export const QUEEN_VS = {
     noShield: { does: 'shatter', why: 'без щита: заморозка издали, бег, клинок. Бегите, держите «Protection» или «Protection Maxima» между собой и ею' },
     duel: { does: 'none', why: 'Дуэль, арена, корабль и космос Королеву не касаются: она живёт в своём замке' },
 };
+
+// ================================================================ blasts on the ice
+/**
+ * «Бомбарда и Бомбарда Максима очень сильные — должны влиять на ледяных великанов и снеговиков: разлетаться, уничтожаться или хотя бы трескаться,
+ * в зависимости от структуры» (the author). What a blast does to each, by how near its centre it was (`dmg` is the spell's own number: the peak at
+ * the centre, falling to 0.3 of it at the edge — IceQueen.hitAt) and by what the thing is made of:
+ *  — the evil snowman / the friendly one: packed snow — any Bombardo bursts it into lumps (the old ×3 of the spell kills it);
+ *  — the ice giant: ice a few metres thick — a plain Bombardo CRACKS it (BLAST.GIANT_PLAIN of its strength at the centre; the cracks show on its body
+ *    by the share of strength lost), a Bombardo Maxima takes BLAST.GIANT_MAX at the centre and BREAKS it into blocks when it is that near (SHATTER_NEAR)
+ *    — or when what it has left is less than that;
+ *  — «Бум», «Инспириус», «Total Destruction Максима» and every spell of the gods break whatever is made of snow or of ice at once;
+ *  — the Queen: she is not torn apart (her frost is magic, not packed ice): a plain blast is a shove and a few HP, «Максима» as on anyone (a scroll spell),
+ *    and either throws her back a few steps (BLAST.QUEEN_PUSH).
+ */
+export const BLAST = {
+    PEAK: { Bombardo: 8, BombardoMaxima: 24 }, // (Damage.BlastPeak × the spell's power: its number at the very centre)
+    GIANT_PLAIN: 0.1, GIANT_MAX: 0.45, SHATTER_NEAR: 0.5,
+    QUEEN_PLAIN: 0.5, // (share of a plain Bombardo's own number that reaches her)
+    QUEEN_PUSH: 6, GIANT_PUSH: 3, // m/s at the centre
+    CRACKS: 8, // the fissures a giant's model can show
+};
+/** Spells that break whatever is of snow or ice at once (the gods' ones are added by the caller: GOD_SPELLS). */
+export const SHATTER_KINDS = new Set(['Boom', 'Inspirius', 'TotalDestructionMaxima']);
+
+/** Is this kind a blast (it shoves and may break)? */
+export const isBlast = (kind, god = false) => kind in BLAST.PEAK || SHATTER_KINDS.has(kind) || !!god;
+
+/**
+ * What the blow `kind` of strength `dmg` does to the ice creature `type` ('monster' | 'snowman' | 'friend' | 'queen') of `max` strength.
+ * → null: not a blast (the usual table decides: iceDamage), else {dmg, breaks, k}: the damage taken, whether it flies apart if this kills it,
+ * k — how near the centre (0…1: the shove).
+ */
+export function blastVerdict(type, kind, dmg, max, god = false) {
+    if (!(dmg > 0) || !isBlast(kind, god)) return null;
+    const heavy = god || SHATTER_KINDS.has(kind);
+    const peak = BLAST.PEAK[kind];
+    const k = heavy || !peak ? 1 : Math.max(0, Math.min(1, dmg / peak));
+    if (type === 'queen') {
+        if (heavy) return { dmg, breaks: false, k };
+        return { dmg: kind === 'Bombardo' ? dmg * BLAST.QUEEN_PLAIN : dmg, breaks: false, k };
+    }
+    if (type === 'snowman' || type === 'friend') return { dmg: heavy ? max : Math.max(dmg * 3, k > 0.5 ? max : 0), breaks: true, k };
+    // the ice giant
+    if (heavy) return { dmg: max, breaks: true, k };
+    if (kind === 'Bombardo') return { dmg: max * BLAST.GIANT_PLAIN * k, breaks: true, k };
+    return { dmg: k >= BLAST.SHATTER_NEAR ? max : max * BLAST.GIANT_MAX * k, breaks: true, k };
+}
+
+/** How many of its fissures a giant shows with `hp` of `max` left. */
+export const crackCount = (hp, max) => (max > 0 ? Math.max(0, Math.min(BLAST.CRACKS, Math.floor((1 - hp / max) * (BLAST.CRACKS + 0.99)))) : 0);

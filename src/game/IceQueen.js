@@ -40,7 +40,7 @@ import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { BOLT, boltSpeed, wallAlong, segDist, gustArrives } from './QueenBolts.js';
-import { MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
+import { BLAST, blastVerdict, isBlast, crackCount, MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
 export { QUEEN_VS, MELT_STEPS } from './IceGiants.js'; // (the tables of the fight: «кто/что × как действует»)
 
 export const ICE = {
@@ -140,6 +140,7 @@ export const ICE_TARGETS = {
     melt: { does: 'shrink', why: 'ледяные великаны и злые снеговики ТАЮТ от огня (Инферно, Fire, Fire Maxima, огонь дракона, «Адский огонь» вдвое сильнее Инферно): с каждым попаданием меньше (до 30 % роста) и слабее бьют (урон, досягаемость, шаг — IceGiants.MELT_STEPS); убить огнём можно только когда он уже наименьший; размер идёт хосту и в снапшот, на коллизию и ходьбу (радиус, рост); Королева не тает — огонь на неё действует уроном' },
     queenVsPlayer: { does: 'see QUEEN_VS', why: 'удары Королевы по игроку: «Protection» и «Protection Maxima» держат всё (заморозка, льдины, шипы, вьюга, клинок — IceGiants.QUEEN_VS); магическая мантия и доспехи не держат, но платят запасом прочности и укорачивают заморозку' },
     scrollSpells: { does: 'damage', why: 'заклинания со свитка (молния, «Авада Кедавра» −25, «Тотальное разрушение», «Inspirius», «Бомбардо Максима»…) действуют как на всех' },
+    blast: { does: 'break', why: 'Бомбардо и Бомбардо Максима (IceGiants.BLAST): снеговик разлетается комьями снега (уголь и морковка летят отдельно); ледяной великан от Бомбардо трескается (−10 % прочности в центре, трещины на теле — по доле потерянного), от Максима теряет 45 % и разваливается на глыбы, если взрыв рядом (центр ≥ ½) или осталось меньше; «Бум», «Инспириус», «Тотальное разрушение Максима» и заклинания богов разбивают любого из льда и снега сразу; Королеву не рвёт — простой взрыв: ½ урона и отброс на 6 м/с, Максима как на всех; кусочки — из пула частиц, звук, тряска' },
     plainSpells: { does: 'none', why: 'простые заклинания без свитка (Бомбардо, Сапира, Остолбеней, Айс, Джолт, Вайнд, вода…) на королеву не действуют — иней гасит их; монстра Бомбардо лишь трескает (½); снеговиков бьёт всё' },
     blade: { does: 'damage', why: 'меч и топор: королеве — полный урон, монстру — половина (лёд крошится), снеговику — полный' },
     arrow: { does: 'damage', why: 'стрелы — как клинок' },
@@ -292,6 +293,9 @@ export class IceCastleLife {
         const g = this.game;
         const who = by === undefined ? g.localId : by;
         let n = iceDamage(c.type, kind, dmg);
+        // a blast on snow and ice (IceGiants.BLAST): by its nearness and by what the thing is made of — cracks, a break into blocks, a burst of lumps
+        const bv = blastVerdict(c.type, kind, dmg, c.max, GOD_SPELLS.has(kind));
+        if (bv) { n = bv.dmg; if (n > 0 && bv.breaks) c.breaksT = this._t; }
         if (n <= 0 && dmg > 0) this._noEffect(c, kind, who);
         if (!this.auth) { if (dmg > 0) g.sync?.ice?.({ e: 'hit', id: c.id, dmg: r2(dmg), kind, by: who }); this._flash(c, n > 0); return n; }
         this._flash(c, n > 0);
@@ -370,7 +374,17 @@ export class IceCastleLife {
         for (const c of this.targets()) {
             iceBody(c, e);
             const d = Math.sqrt(segmentSegmentDistSq([p.x, p.y, p.z], [p.x, p.y, p.z], [e.a.x, e.a.y, e.a.z], [e.b.x, e.b.y, e.b.z])) - e.r;
-            if (d < radius) this.hit(c, dmg * (d <= 0 ? 1 : Math.max(0.3, 1 - d / radius)), kind, by);
+            if (d < radius) {
+                const f = d <= 0 ? 1 : Math.max(0.3, 1 - d / radius);
+                if (isBlast(kind, GOD_SPELLS.has(kind))) c.blastFrom = (c.blastFrom || new THREE.Vector3()).copy(p); // (where it came from: the pieces fly away from it)
+                this.hit(c, dmg * f, kind, by);
+                // (a blast shoves the heavy ones too, a little: the queen steps back, a giant sways — a snowman is thrown by CreatureImpact)
+                if (!c.dead && this.auth && !small(c.type) && kind in BLAST.PEAK) {
+                    const sp = (c.type === 'queen' ? BLAST.QUEEN_PUSH : BLAST.GIANT_PUSH) * f * (kind === 'BombardoMaxima' ? 1.5 : 1);
+                    const dx = c.model.position.x - p.x, dz = c.model.position.z - p.z, L = Math.hypot(dx, dz) || 1;
+                    (c.shove || (c.shove = new THREE.Vector3())).add(_v3.set((dx / L) * sp, 0, (dz / L) * sp));
+                }
+            }
         }
     }
 
@@ -463,6 +477,27 @@ export class IceCastleLife {
         }
     }
 
+    /**
+     * A giant / a snowman torn apart by a blast: blocks of ice (a giant) or lumps of snow with the coal and the carrot (a snowman) thrown out from
+     * the blast, pooled pieces (Effects.debris), a crack of ice, a shake of the ground. Every computer its own (the host's word: `dead` + the shattered bit).
+     */
+    _shatterFx(c, p) {
+        const g = this.game, big = !small(c.type), deb = g.fx?.debris;
+        const from = c.blastFrom || _v3.set(p.x, p.y - 1.2, p.z);
+        const n = big ? 44 : 20;
+        for (let i = 0; i < n; i++) {
+            const dx = p.x - from.x + (Math.random() - 0.5) * 2, dy = Math.max(0.2, p.y - from.y + 0.6), dz = p.z - from.z + (Math.random() - 0.5) * 2, d = Math.hypot(dx, dy, dz) || 1;
+            const sp = (big ? 7 : 8) + Math.random() * (big ? 9 : 8);
+            const color = big ? [0xcdeffd, 0xa8ddf7, 0x86c8ee, 0xe9fbff][i % 4] : i < 3 ? 0x22252a : i === 3 ? 0xe8832a : [0xffffff, 0xeef6fc, 0xdbe9f3][i % 3];
+            deb?.spawn(p.x + (Math.random() - 0.5) * (big ? 2.4 : 1.2), p.y + (Math.random() - 0.5) * (big ? 3 : 1.4), p.z + (Math.random() - 0.5) * (big ? 2.4 : 1.2),
+                (dx / d) * sp + (Math.random() - 0.5) * 4, (dy / d) * sp * 0.6 + 4 + Math.random() * 7, (dz / d) * sp + (Math.random() - 0.5) * 4,
+                color, (big ? 0.5 + Math.random() * 1.0 : 0.22 + Math.random() * 0.3), 2.6 + Math.random() * 2, { shrink: 0.1, fade: false, spin: 9 });
+        }
+        for (let i = 0; i < (big ? 40 : 14); i++) g.fx?.spark?.(p, i % 2 ? 0xffffff : 0x9fe3ff, big ? 0.3 : 0.18, _v2.set((Math.random() - 0.5) * 14, 2 + Math.random() * 8, (Math.random() - 0.5) * 14), 1.1); // (the cloud of frost)
+        g.sound?.playIce?.('iceCrack', c.model.position, big ? 1.5 : 0.9, big ? 0.6 : 1.0);
+        if (big) g.fx.shake = Math.max(g.fx.shake || 0, 0.5);
+    }
+
     _die(c, killer) {
         const g = this.game;
         if (c.dead) return;
@@ -473,6 +508,8 @@ export class IceCastleLife {
         if (c.type === 'friend' && (FIRE_K[c.lastKind] || c.melting)) { c.melting = true; this._puddle(c); } // (melted: a puddle with its coal and carrot)
         for (let i = 0; i < (big ? 70 : 24); i++) g.fx?.spark?.(p, i % 3 ? 0xe8fbff : 0x8fd6ff, (big ? 0.3 : 0.18), _v2.set((Math.random() - 0.5) * (big ? 12 : 6), Math.random() * (big ? 9 : 5), (Math.random() - 0.5) * (big ? 12 : 6)), big ? 1.4 : 0.9);
         g.sound?.playFrozenHit?.();
+        // killed by a blast: it does not sink — it FLIES APART (the lumps and blocks of what it was made of)
+        if (c.type !== 'queen' && !FIRE_K[c.lastKind] && (c.shattered || (c.breaksT != null && this._t - c.breaksT < 0.6))) { c.shattered = true; this._shatterFx(c, p); }
         if (c.type === 'queen') {
             this.state.queenDead = true;
             this.state.queenHp = 0;
@@ -493,8 +530,9 @@ export class IceCastleLife {
             this.state.monsterDeadAt[c.slot] = Date.now();
             if (this.auth) creditKill(g, killer, { kind: 'iceMonster' });
         } else if (this.auth && killer && c.type === 'snowman') creditKill(g, killer, { kind: 'snowman' }); // (the friendly one: no reward for it)
-        // (it falls apart: the model sinks and is gone)
-        c.deadT = 1.2;
+        // (it falls apart: the model sinks and is gone — a shattered one is gone at once, its pieces are in the air)
+        c.deadT = c.shattered ? 0.05 : 1.2;
+        if (c.shattered) c.model.scale.setScalar(0.001);
         this._sendSoon = true;
     }
 
@@ -1723,6 +1761,19 @@ export class IceCastleLife {
         }
         if (c.one && (c.oneT += dt) > 0.5) { c.oneT = 0; c.one.check(); } // (a part shown / hidden by the game)
         if ((c.type === 'monster' || c.type === 'snowman') && (c.meltHot > 0 || c.melt > 0)) this._meltLook(c, dt);
+        if (c.type === 'monster') this._crackLook(c);
+    }
+
+    /** A giant's fissures follow the strength it has lost (every computer, from its HP): one more with every ~eighth; the shape follows the shown parts. */
+    _crackLook(c) {
+        const list = c.model.userData.dmgCracks;
+        if (!list) return;
+        const n = c.dead ? 0 : crackCount(c.hp, c.max);
+        if (n === c._crackN) return;
+        if (c._crackN != null && n > c._crackN) this.game.sound?.playIce?.('iceCrack', c.model.position, 0.8, 1.2); // (a new crack: the ice groans)
+        c._crackN = n;
+        list.forEach((m, i) => { m.visible = i < n; });
+        c.one?.check();
     }
 
     /** The queen's rod grows into a blade (scale), with a ringing of ice and a flurry of sparks; it turns back the same way. */
@@ -2115,7 +2166,7 @@ export class IceCastleLife {
         this._sendSoon = false;
         // (no castle here and nobody to send: one empty list, then quiet)
         if (!this.plan && !this.list.length) { if (this._sentEmpty) return; this._sentEmpty = true; } else this._sentEmpty = false;
-        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0, r2(c.melt || 0), r2(c.blade || 0)]);
+        const l = this.list.filter((c) => !c.dead || c.deadT > 0).map((c) => [c.id, TYPES.indexOf(c.type), r2(c.model.position.x), r2(c.model.position.y), r2(c.model.position.z), r2(c.model.rotation.y), Math.round(c.hp * 10) / 10, c.dead ? 1 : 0, (c.moving ? 1 : 0) | (c.act ? 2 : 0) | (c.melting ? 4 : 0) | (c.shattered ? 8 : 0), c.act || 0, c.slot || 0, c.type === 'friend' ? r2(Math.min(c.buildT, ICE.FRIEND.BUILD)) : 0, r2(c.melt || 0), r2(c.blade || 0)]);
         g.sync.ice?.({ e: 's', l, st: { qd: this.state.queenDead ? 1 : 0, ...this.fixtures.netState() } });
     }
 
@@ -2162,7 +2213,7 @@ export class IceCastleLife {
             c.moving = !!(fl & 1);
             c.act = act || null;
             if (c.act && c.actT <= 0) c.actT = 0.6;
-            if (dead && !c.dead) this._die(c, null);
+            if (dead && !c.dead) { if (fl & 8) c.shattered = true; this._die(c, null); }
         }
         for (const c of [...this.list]) if (!seen.has(c.id) && !c.dead) this._remove(c);
         if (m.st) { this.state.queenDead = !!m.st.qd; this.fixtures.applyNet(m.st); }

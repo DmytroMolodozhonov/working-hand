@@ -421,3 +421,45 @@ test('sizes: the queen\'s blade, measured on the model (Box3): hair-thin as a ro
     assert.ok(len > 5 && len < h0 * 1.2, `the blade is ${len.toFixed(1)} m (the queen ${h0.toFixed(1)} m)`);
     assert.ok(out.max.x - out.min.x < 3, 'the guard');
 }) ;
+
+// ---- Бомбарда / Бомбарда Максима по ледяным (IceGiants.BLAST)
+import { blastVerdict, crackCount, BLAST, SHATTER_KINDS } from '../../src/game/IceGiants.js';
+
+test('a blast on a snowman bursts it; on a giant a plain Bombardo cracks it, a Maxima near breaks it into blocks', () => {
+    const snow = blastVerdict('snowman', 'Bombardo', 8, ICE.SNOW.HP);
+    assert.ok(snow.dmg >= ICE.SNOW.HP && snow.breaks, 'a plain blast at the centre kills a snowman and it flies apart');
+    const far = blastVerdict('snowman', 'Bombardo', 2.4, ICE.SNOW.HP);
+    assert.ok(far.breaks && far.dmg >= 7, 'at the edge it is badly hurt');
+    const M = ICE.MONSTER.HP;
+    const plain = blastVerdict('monster', 'Bombardo', 8, M);
+    assert.ok(plain.dmg > 0 && plain.dmg < M * 0.2, `a plain Bombardo cracks a giant (${plain.dmg} of ${M})`);
+    const maxFar = blastVerdict('monster', 'BombardoMaxima', 24 * 0.3, M);
+    assert.ok(maxFar.dmg > 0 && maxFar.dmg < M * 0.2, 'a Maxima at the edge: a heavy crack, not a break');
+    const maxNear = blastVerdict('monster', 'BombardoMaxima', 24, M);
+    assert.equal(maxNear.dmg, M, 'a Maxima at the centre breaks it into blocks');
+    assert.ok(maxNear.breaks);
+    for (const k of SHATTER_KINDS) assert.equal(blastVerdict('monster', k, 1, M).dmg, M, k + ' breaks a giant at once');
+    assert.equal(blastVerdict('monster', 'SomeGodSpell', 1, M, true).dmg, M, 'the gods\' spells break it at once');
+    assert.equal(blastVerdict('monster', 'Ice', 8, M), null, 'not a blast: the usual table');
+    assert.equal(blastVerdict('monster', 'Bombardo', 0, M), null);
+});
+
+test('the queen is not torn apart: a shove and a little damage; the gods\' spells go as on anyone', () => {
+    const plain = blastVerdict('queen', 'Bombardo', 8, 350);
+    assert.ok(plain.dmg > 0 && plain.dmg <= 8 * BLAST.QUEEN_PLAIN + 1e-9 && !plain.breaks);
+    const mx = blastVerdict('queen', 'BombardoMaxima', 24, 350);
+    assert.ok(mx.dmg < 350 * 0.1 && !mx.breaks);
+    assert.ok(!blastVerdict('queen', 'Boom', 99, 350).breaks);
+});
+
+test('the fissures grow with the strength lost: none whole, all when it is nearly gone', () => {
+    assert.equal(crackCount(180, 180), 0);
+    assert.equal(crackCount(0, 180), BLAST.CRACKS);
+    let last = -1;
+    for (let hp = 180; hp >= 0; hp -= 5) { const n = crackCount(hp, 180); assert.ok(n >= last); last = n; }
+    assert.ok(crackCount(120, 180) >= 2 && crackCount(120, 180) < BLAST.CRACKS);
+});
+
+test('the table «кто/что» has the blast row', () => {
+    assert.equal(ICE_TARGETS.blast.does, 'break');
+});

@@ -298,7 +298,23 @@ export function iceMonsterModel() {
         ['cone', 0.18, 0.35, 0.18, 0, -3.2, -0.3, ICEB3, Math.PI, 0, 0]], MAT.ice);
     const armL = pivot(-1.25, 2.2, 0, arm()), armR = pivot(1.25, 2.2, 0, arm());
     torso.add(armL, armR);
-    g.userData = { torso, armL, armR, legL, legR, head };
+    // the wounds: dark jagged fissures over the giant's body, each hidden until a blast has cracked it that far (IceQueen._crackLook — by the
+    // share of its strength gone; one more with every tenth: the shape follows the shown parts — FarShape.check)
+    const DARKC = 0x0b3556;
+    const fissure = (parent, x, y, z, rz, len = 1) => {
+        const L = [];
+        for (let k = 0; k < 5; k++) L.push(['box', 0.07, 0.34 * len, 0.05, (k % 2 ? 0.1 : -0.1) * len, (k - 2) * 0.3 * len, 0, DARKC, 0, 0, (k % 2 ? 0.45 : -0.45)]);
+        L.push(['box', 0.05, 0.26 * len, 0.05, 0.2 * len, 0.1 * len, 0, DARKC, 0, 0, -1.0], ['box', 0.05, 0.22 * len, 0.05, -0.2 * len, -0.25 * len, 0, DARKC, 0, 0, 1.0]);
+        const m = mesh(L, MAT.solid, false);
+        m.position.set(x, y, z); m.rotation.z = rz; m.visible = false;
+        parent.add(m);
+        return m;
+    };
+    const dmgCracks = [
+        fissure(torso, 0.45, 1.75, -0.76, 0.2, 1.3), fissure(torso, -0.3, 1.7, 0.8, -0.3, 1.3), fissure(torso, -0.5, 0.75, -0.62, 0.5), fissure(torso, 0.25, 2.6, -0.4, -0.2),
+        fissure(head, 0.15, 0.08, -0.42, 0.3, 0.6), fissure(armL, 0.1, -1.8, -0.25, 0.1), fissure(armR, -0.1, -1.8, -0.25, -0.1), fissure(legL, 0.1, -0.7, -0.37, 0.15),
+    ];
+    g.userData = { torso, armL, armR, legL, legR, head, dmgCracks };
     return g;
 }
 
