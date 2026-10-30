@@ -1969,16 +1969,11 @@ export class Game {
             const aim = this.duel.pickSide(false, reach);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
             if (!side || !this.character.isArmRaised(side)) {
-                if (isFinal) this.hud.setVoice('✋ Поднимите руку и направьте её на цель — тогда заклинание сработает', true);
+                if (isFinal) this.hud.setVoice('✋ Поднимите руку (палочку) — заклинание полетит туда, куда она указывает', true);
                 return null;
             }
-            // «Дай»: only at a target the raised hand (the wand) points right at — never cast into the air (StrongSpells.js)
-            if (!aim) {
-                // heard, hand raised, but nothing within reach: too far (the creature is there, beyond the range) or no target — no charge, no mana
-                const far = isFinal && !(this._interimCast && Date.now() - this._interimCast.at < 3000) ? this.duel.farTarget(reach) : null;
-                if (far != null) { this.lastCastWhy = 'цель слишком далеко'; this._why('tooFar', name, { dist: Math.round(far), range: reach }); return null; }
-                if (name === 'Die') { this.lastCastWhy = '«Дай»: рука не наведена на цель'; if (isFinal) this._why('noTarget', name, { what: 'неё' }); return null; }
-            }
+            // (no creature on the line — or one beyond the reach: the charge still leaves the hand, flies where the wand points
+            //  and goes out at the first obstacle or the end of the reach (DuelRange.js); the mana is paid as always)
             return this._castDuel(ice ? (name === 'IceMaxima' ? 'IceMaxima' : 'Ice') : name, duelSpell, isFinal, aim || null, side); // («Frozen» without water costs what «Айс» costs)
         }
         if (name === 'Accio') return this._castAccio(isFinal);
