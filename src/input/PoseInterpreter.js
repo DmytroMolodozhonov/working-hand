@@ -155,11 +155,11 @@ const mirrorHand = (h) => (h ? h.map((p) => ({ ...p, x: 1 - p.x })) : h);
  *              the two places); null — the hip or the shoulder not seen.
  * Both places are well outside the belly's middle, so a hand going to the wand never touches them.
  */
-export const OFF_POCKET = [-0.12, 0.08]; // (the wrist outward of the hip joint, torso heights)
+export const OFF_POCKET = [-0.22, 0.13]; // (wide: the author — crossing the body must be as easy as the rest; from in front of the hip to a little outside it) // (the wrist outward of the hip joint, torso heights)
 // (its height: the wrist from this far above the hip to this far below, torso heights — the author puts the hand
 // in a little higher than the hip joint: the opening of a real pocket is at the waist)
-export const OFF_POCKET_DY = [-0.45, 0.2];
-export const OFF_PURSE = [0.14, 0.6];
+export const OFF_POCKET_DY = [-0.6, 0.45]; // (±25 cm around the hip: the hand passes at the belt or lower, not exactly at one height)
+export const OFF_PURSE = [0.13, 0.6];
 export function offHip(lm, hand, aspect = 4 / 3) {
     const sh = lm?.[11], el = lm?.[13], wr = lm?.[15], hip = lm?.[24];
     if (!sh || !el || !wr || !hip) return null;
@@ -173,13 +173,13 @@ export function offHip(lm, hand, aspect = 4 / 3) {
     const ux = (el.x - sh.x) * aspect, uy = el.y - sh.y, fx = (wr.x - el.x) * aspect, fy = wr.y - el.y;
     const nu = Math.hypot(ux, uy), nf = Math.hypot(fx, fy);
     if (nu < 1e-4 || nf < 1e-4) return false;
-    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.45) return false;
+    if (Math.acos(Math.max(-1, Math.min(1, (ux * fx + uy * fy) / (nu * nf)))) < 0.25) return false;
     if (wOut >= OFF_POCKET[0] && wOut <= OFF_POCKET[1] && dy > OFF_POCKET_DY[0] && dy < OFF_POCKET_DY[1]) {
         if (!hand || hand.length < 21) return 'pocket';
         const dxh = (hand[9].x - hand[0].x) * aspect, dyh = hand[9].y - hand[0].y;
         const len = Math.hypot(dxh, dyh);
-        // (fingers down into it, within ~55°: reaching across, the hand comes in at a slant)
-        return len > 1e-4 && dyh / len > 0.55 ? 'pocket' : false;
+        // (fingers down into it, within ~70°: reaching across, the hand comes in at a slant)
+        return len > 1e-4 && dyh / len > 0.35 ? 'pocket' : false;
     }
     if (wOut >= OFF_PURSE[0] && wOut <= OFF_PURSE[1] && dy > -0.5 && dy < 0.2) return 'purse';
     return false;

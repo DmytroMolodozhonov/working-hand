@@ -60,3 +60,33 @@ test('looking down: counts after a moment, not a nod passing by; a jitter of the
     assert.equal(lookSteady(st, false, 0.2), true);
     assert.equal(lookSteady(st, false, 0.15), false, 'up for longer: no more');
 });
+
+test('the crossed pocket is easy: the wrist may pass ±20 cm around the hip, a slanted hand still counts', () => {
+    // sweep the left wrist around the right-pocket pose (picture units: the torso is ~0.3 high, so 0.04 ≈ 20 cm)
+    const hit = (dx, dy, slant = 0) => {
+        const f = frame({ arms: 'hang', pocket: 'cross' });
+        const lm = f.poseLandmarks;
+        lm[15] = { ...lm[15], x: lm[15].x + dx, y: lm[15].y + dy };
+        lm[13] = { ...lm[13], y: lm[13].y + dy }; // (the elbow goes with the hand)
+        let hand = f.hands.find((h) => h.label === 'Right')?.landmarks;
+        if (hand && slant) { hand = hand.map((p) => ({ ...p })); hand[9] = { ...hand[9], x: hand[0].x + slant * 0.1, y: hand[0].y + 0.1 }; }
+        return bodyPlaces(lm, hand, null, 4 / 3, false).pocket.off === true;
+    };
+    for (const dx of [-0.03, -0.015, 0, 0.015]) for (const dy of [-0.04, 0, 0.04]) assert.ok(hit(dx, dy), `dx ${dx} dy ${dy}`);
+    // fingers down at a slant (reaching across): still in
+    assert.ok(hit(-0.02, 0, 1), 'the hand slanted ~45°');
+    // far from the hip: the belly's middle, high up — never
+    assert.ok(!hit(-0.12, 0) && !hit(0.2, 0), 'the belly / far outside');
+    assert.ok(!hit(0, -0.3), 'the chest');
+});
+
+test('the same-side hand (the leading one) and passing hands put nothing; the time to put is short', async () => {
+    const { POCKET_DWELL, POCKET_HINT_R, nearPocket } = await import('../../src/game/Inventory.js');
+    assert.ok(POCKET_DWELL <= 0.2 && POCKET_DWELL + 0.1 <= 0.5, 'in the zone 0.2 s + looking down 0.1 s: within 0.5 s');
+    for (const o of [{ arms: 'hang', pocket: 'right' }, { arms: 'hang', pocket: 'left' }, { arms: 'hang', belt: 'right' }, { arms: 'forward' }, { arms: 'down' }]) assert.ok(at(o).pocket !== true, JSON.stringify(o));
+    // mirrored: the right hand to the left pocket works, the right hand at its own
+    assert.equal(at({ arms: 'hang', pocket: 'cross', mirror: true }, true).pocket, true);
+    // the hint ring: near only close to the pocket, either side
+    assert.ok(nearPocket({ x: 0.45, y: 0.05, z: -0.5 }, 1) && !nearPocket({ x: -0.45, y: 0.05, z: -0.5 }, 1));
+    assert.ok(nearPocket({ x: -0.45, y: 0.05, z: -0.5 }, -1) && POCKET_HINT_R < 1.2);
+});

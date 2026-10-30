@@ -95,7 +95,7 @@ export function pocketStrike(hist, local, sx) {
 }
 
 /** s the hand must stay in the pocket (the camera: wrist at the hip, elbow bent, hand gone in). */
-export const POCKET_DWELL = 0.3;
+export const POCKET_DWELL = 0.2; // (the author: crossing the body must be easy — 0.2 s in the zone is enough; with the look-down 0.1 s the thing is put in within ~0.35 s)
 /** The hand away from the pocket this long (s) — the chosen slot's thing stays in it. */
 export const POCKET_PICK = 1.0;
 /**
@@ -114,6 +114,22 @@ export function lookSteady(st, down, dt) {
 }
 
 /** Things that go on the back (over the shoulder) rather than into a pocket. */
+/** Where the things' pocket is on the body's group (the leading hand's hip, in front of the pouch; ×1 right, ×−1 left-hander) and how near the hand must be for the hint to glow. */
+export const POCKET_AT = [0.45, 0.05, -0.55];
+export const POCKET_HINT_R = 0.7;
+/** The hand (a body-space point) near enough to the pocket to show its hint. */
+export const nearPocket = (local, sx) => Math.hypot(local.x - POCKET_AT[0] * sx, local.y - POCKET_AT[1], local.z - POCKET_AT[2]) < POCKET_HINT_R;
+let _hintGeo = null, _hintMat = null;
+/** The pocket's hint: ONE soft ring (shared form and material), glowing only when a thing in the other hand is brought near. */
+function pocketHintMesh() {
+    if (!_hintGeo) {
+        _hintGeo = new THREE.TorusGeometry(0.34, 0.025, 6, 28);
+        _hintMat = new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    }
+    const m = new THREE.Mesh(_hintGeo, _hintMat.clone()); // (own opacity; shader shared)
+    m.name = 'pocket-hint'; m.visible = false; m.frustumCulled = false; m.renderOrder = 5;
+    return m;
+}
 export const BACK_KINDS = new Set(['weapon', 'hammer', 'bow', 'shield', 'dragonEgg', 'iceRod']); // (a dragon's egg is too big for a pocket)
 
 /** The hand is over the shoulder, behind the head, and keeps still there. */
@@ -149,6 +165,8 @@ export class Inventory {
         this._look = { on: false, t: 0 }; // (looking down at the pocket / the pouches: lookSteady)
         this.headDown = false;
         this._pocket = { left: { out: 0, hist: [], armed: true }, right: { out: 0, hist: [], armed: true } };
+        this._hint = { mesh: null, a: 0 }; // (the pocket's soft ring: _hintStep)
+        this._pkLog = { side: '', state: '' }; // (the journal «Предметы»: only what changed)
         this.belt = new WandBelt(game); // (the wand's place at the waistband: WandBelt.js)
         this.purse = new CoinBelt(game); // (the coin pouches on the belt's right side: CoinBelt.js)
         this._back = { left: { t: 0, at: 0 }, right: { t: 0, at: 0 } };
@@ -550,7 +568,10 @@ export class Inventory {
             // seen holding it, so its fingers never point down into the pocket): it goes into a slot too
             if (side === off && inPocket !== true && g.currentPose.purse?.off === true && this._pocketable(off)) inPocket = true;
             // ...and only looking down at it (as in life — never by chance)
+            const zone = inPocket === true;
             if (inPocket && !this.headDown) inPocket = false;
+            if (side === off) this._pocketJournal(side, local, zone, st);
+            if (side === off) this._hintStep(side, local, sx, dt);
             // (the wand is not put away / drawn by a pocket — lowering the arm did it by
             // accident: it has its own place at the waistband, WandBelt.js)
             st.inT = inPocket ? (st.inT || 0) + dt : 0;
@@ -568,7 +589,9 @@ export class Inventory {
                 st.armed = false;
                 st.out = now;
                 st.hist.length = 0;
+                const had = !!(g.items?.held[side] || g.weapons.hands[side].held);
                 this.pocketTouch(side);
+                console.info('[Предметы]', `карман: рука ${side}, ${had ? 'вещь убрана в ячейку' : 'достала следующую вещь'} (в зоне ${st.inT.toFixed(2)} с)`);
                 this._handsOff(side);
             }
             // over the shoulder: put the weapon / hammer / bow / shield on the back, or take it
@@ -583,6 +606,37 @@ export class Inventory {
         // the «hand» cell shows what the hands hold
         const hk = this._handKey();
         if (hk !== this._hk) { this._hk = hk; this._render(); }
+    }
+
+    /** The pocket's soft ring: glows only while the off hand holds a thing and is near the pocket (nothing otherwise, no noise). */
+    _hintStep(side, local, sx, dt) {
+        const g = this.game, h = this._hint;
+        const holds = !!(g.items?.held[side] || g.weapons.hands[side].held) && !this._cyc;
+        const want = holds && this.headDown && nearPocket(local, sx) ? 1 : 0;
+        h.a += (want - h.a) * Math.min(1, dt * 8);
+        if (!h.mesh && h.a < 0.02) return;
+        if (!h.mesh) { h.mesh = pocketHintMesh(); g.character.group.add(h.mesh); }
+        const m = h.mesh;
+        m.visible = h.a > 0.02;
+        if (!m.visible) return;
+        m.position.set(POCKET_AT[0] * sx, POCKET_AT[1], POCKET_AT[2]);
+        m.rotation.set(0.5, 0.35 * sx, 0);
+        m.material.opacity = 0.18 + 0.32 * h.a + 0.08 * Math.sin(performance.now() * 0.006); // (soft breathing)
+        m.scale.setScalar(0.85 + 0.15 * h.a);
+    }
+
+    /** Journal «Предметы» (Settings → Журнал): the other hand and the pocket — the side, the distance, the result or why not (only on a change). */
+    _pocketJournal(side, local, zone, st) {
+        const g = this.game, L = this._pkLog;
+        const holds = !!(g.items?.held[side] || g.weapons.hands[side].held);
+        const near = nearPocket(local, g.dom === 'left' ? -1 : 1);
+        if (!zone && !near) { L.state = ''; return; }
+        const why = zone ? (!this.headDown ? 'не смотрите вниз' : !st.armed ? 'уже сработало, уберите руку' : holds ? (st.inT < POCKET_DWELL ? 'держите ещё' : 'кладёт') : 'пустая рука достаёт следующее') : 'рука рядом, но не в зоне кармана';
+        const state = side + zone + this.headDown + st.armed + holds + (st.inT > POCKET_DWELL);
+        if (state === L.state) return;
+        L.state = state;
+        const d = Math.hypot(local.x - POCKET_AT[0] * (g.dom === 'left' ? -1 : 1), local.y - POCKET_AT[1], local.z - POCKET_AT[2]);
+        console.info('[Предметы]', `карман: рука ${side}, сторона ${g.dom === 'left' ? 'left' : 'right'}, до центра кармана ${d.toFixed(2)} м, в руке ${holds ? 'вещь' : 'пусто'}, ${why}`);
     }
 
     /**
@@ -1091,6 +1145,7 @@ export class Inventory {
 
     dispose() {
         this.purse.dispose();
+        if (this._hint?.mesh) { this._hint.mesh.parent?.remove(this._hint.mesh); this._hint.mesh.material.dispose(); this._hint.mesh = null; } // (the ring's form is shared)
         if (this._handBlock) { this.game.scene.remove(this._handBlock); this._handBlock.geometry.dispose(); this._handBlock.material.dispose(); }
         this.show(false);
     }
