@@ -1317,7 +1317,7 @@ export class Sailors {
             v.mode = v.waveT > 0 ? 'cheer' : 'idle'; v.speed = 0;
             if (v.waveT > 0) v.waveT -= dt;
             const p = v.talkTo && this._playerLocal(s, v.talkTo, _l);
-            if (p) v.lyaw = Math.atan2(-(p.x - v.l.x), -(p.z - v.l.z));
+            if (p && !this._blind(v, p, dt)) v.lyaw = Math.atan2(-(p.x - v.l.x), -(p.z - v.l.z));
             return;
         }
         // jobs: walk the ship between stations, work at them
@@ -1843,6 +1843,19 @@ export class Sailors {
         if (!near && !o.rope && o.t > 25) { this._die(v, s.lastBy); v.overboard.y = WATER_LEVEL_Y - 3; }
     }
 
+    /** A wall / hull / hatch between the sailor and the one he talks with: he does not turn to him, the talk ends after a moment. */
+    _blind(v, p, dt) {
+        const g = this.game, c = g.collision;
+        const w = v.talkTo === g.localId ? g.character.group.position : g.remotes.get(v.talkTo)?.position;
+        if (!w || !c?.lineOfSight) return false;
+        const now = performance.now();
+        if (now - (v.losAt || 0) > 300) { v.losAt = now; v.losOk = c.lineOfSight(v.x, v.y + 3.6, v.z, w.x, w.y + 0.5, w.z, 0.45); }
+        if (v.losOk) { v.blindT = 0; return false; }
+        v.blindT = (v.blindT || 0) + dt;
+        if (v.blindT > 0.6) { v.talking = 0; v.talkTo = null; v.blindT = 0; g.castleLife?.alog?.decision(v, 'моряк не видит героя (стена/трюм между ними) — не смотрит и не слушает'); }
+        return true;
+    }
+
     _playerLocal(s, id, out) {
         const g = this.game;
         if (typeof id === 'string' && id.charCodeAt(0) === 99 && id.charCodeAt(1) === 58) return g.fleet?.localOf(s, id, out) || null; // ('c:…': a creature foe, not a player)
@@ -1891,6 +1904,7 @@ export class Sailors {
             const dx = v.x - me.x, dz = v.z - me.z, d = Math.hypot(dx, dz);
             // (a ship's deck stands well above the pier: one on the pier talks up to the sailors at the rail)
             if (d > HEAR || Math.abs(v.y - (me.y - 1.95)) > 5) continue;
+            if (g.collision?.lineOfSight && !g.collision.lineOfSight(v.x, v.y + 3.6, v.z, me.x, me.y + 0.5, me.z, 0.45)) continue; // (a hull, a hatch, a wall between us: he does not hear)
             if (chat && d > 1.5 && (dx * fx + dz * fz) / d < 0.85) continue;
             const sc = d - 2.5 * (d > 0.01 ? (dx * fx + dz * fz) / d : 1);
             if (sc < bs) { bs = sc; best = v; }

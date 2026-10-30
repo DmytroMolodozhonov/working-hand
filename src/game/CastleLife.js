@@ -1504,7 +1504,7 @@ export class CastleLife {
         const st = this.state(cs.def.id);
         if (st.owner && v.bowT <= 0 && !v.follow && !v.order) { // (a bow once, not on the march and not at every step)
             const op = this._playerPos(st.owner);
-            if (op && Math.hypot(op.x - v.x, op.z - v.z) < 6) {
+            if (op && Math.hypot(op.x - v.x, op.z - v.z) < 6 && this._sees(v, op)) { // (a wall: he does not bow to one he cannot see)
                 v.bowT = 150; // (game seconds before the next bow)
                 v.bowing = 1.6;
                 v.yaw = Math.atan2(-(op.x - v.x), -(op.z - v.z));
@@ -1515,7 +1515,7 @@ export class CastleLife {
         if (v.bowing > 0) { v.bowing -= dt; v.mode = 'bow'; v.speed = 0; return; }
         if (v.giveT > 0) { v.giveT -= dt; v.mode = 'offer'; v.speed = 0; this._ground(v); return; } // (a merchant's hand out for the coins)
         // talking with a player: stops and looks at them (the king keeps his seat)
-        if (v.talking > 0 && v.job !== 'king') {
+        if (v.talking > 0 && v.job !== 'king' && !this._talkBlind(v, dt)) {
             const tp = this._playerPos(v.talkTo || g.localId);
             const gp = v.glance || tp; // (shown a place with the hand: he faces it, not me — CommandTalk._begin)
             if (gp) v.yaw = turn(v.yaw, Math.atan2(-(gp.x - v.x), -(gp.z - v.z)), dt * 6);
@@ -2694,6 +2694,29 @@ export class CastleLife {
         if (g.impact) g.impact.apply({ v: push.clone(), from: from.clone().setY(g.character.group.position.y + 1), by: null, kind: 'knight', jolt: 1.5, toss: 2, noShield: true });
         else g.knockback?.add(push);
         g.hud.setVoice(`⚔️ ${who} ударил вас: −${dmg}`, true);
+    }
+
+    /**
+     * A wall (a roof, a shut door) between a villager and the one he «talks with»: he does not turn to him, does not stand
+     * facing him — the author: «он ВООБЩЕ через стену никак не может взаимодействовать». A moment of grace (a step behind a post),
+     * then the talk is over. Asked ~3 times a second. → true: he is blind to him (the caller skips the talk).
+     */
+    _talkBlind(v, dt) {
+        const tid = v.talkTo || this.game.localId;
+        const tp = this._playerPos(tid);
+        if (!tp) return false;
+        const now = performance.now();
+        if (v.losId !== tid || now - (v.losAt || 0) > 300) {
+            v.losId = tid; v.losAt = now;
+            v.losOk = this._sees(v, tp);
+        }
+        if (v.losOk) { v.blindT = 0; return false; }
+        v.blindT = (v.blindT || 0) + dt;
+        if (v.blindT > 0.6) {
+            this.alog?.decision(v, 'не видит героя (стена между ними) — не смотрит на него и не разговаривает');
+            v.talking = 0; v.talkTo = null; v.blindT = 0;
+        }
+        return true;
     }
 
     _sees(v, p) {

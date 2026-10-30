@@ -938,7 +938,7 @@ export class CastleTalk {
     _listener(text = null) {
         // (the one I address — looked at, walked to, just talked with; across a yard if I shout — Attention.js;
         // in a crowd the one I look at, not whoever stands nearest)
-        const id = this.attention?.addressee((i) => { const v = this.life.byId.get(i); return !!v && !v.dead && Math.abs(v.y - (this.game.character.group.position.y - 1.95)) < 8; }, this._shouting());
+        const id = this.attention?.addressee((i) => { const v = this.life.byId.get(i); return !!v && !v.dead && Math.abs(v.y - (this.game.character.group.position.y - 1.95)) < 8 && this.life._sees(v, this.game.character.group.position); }, this._shouting()); // (a wall between us: he does not hear that I speak to him — no matter how near)
         // (talking with friends in the voice chat: my words are not to whoever stands nearest — only to the one I address:
         // looked at, walked to, talk with already, called by his trade — the author: «голос игрока не принимается жителем
         // как разговор с ним без обращения»)
@@ -972,6 +972,7 @@ export class CastleTalk {
             const dx = v.x - me.x, dz = v.z - me.z;
             const d = Math.hypot(dx, dz);
             if (ok && !ok(v)) continue;
+            if (!this.life._sees(v, me) && !(v.order?.kind === 'door' && inHall(v.cs.def, me, 0))) continue; // (through a wall nobody is «the nearest» or «all»: my voice does not pass it)
             if ((d > range && !(v.order?.kind === 'door' && inHall(v.cs.def, me, 0))) || Math.abs(v.y - (me.y - 1.95)) > (range > HEAR ? 8 : 3)) continue; // (the vizier at the doors hears the king anywhere in the throne room)
             const facing = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
             let s = d - 2.5 * facing;
