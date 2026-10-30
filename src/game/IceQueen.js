@@ -39,6 +39,7 @@ import { hitBody } from './MagicWave.js';
 import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
+import { BOLT, boltSpeed, wallAlong, segDist, gustArrives } from './QueenBolts.js';
 import { MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
 export { QUEEN_VS, MELT_STEPS } from './IceGiants.js'; // (the tables of the fight: «кто/что × как действует»)
 
@@ -213,7 +214,8 @@ export class IceCastleLife {
         this.list = [];
         this.byIdMap = new Map();
         this.shots = [];
-        this.fxs = []; // spikes, beams, gusts in flight
+        this.fxs = []; // spikes, gusts in flight
+        this.bolts = []; // the queen's far blows on their way (QueenBolts.js): the rod's freeze, the spikes' mark
         this.state = { queenDead: false, queenHp: ICE.QUEEN.HP, monsters: [ICE.MONSTER.HP, ICE.MONSTER.HP], monsterMelt: [0, 0], monsterDeadAt: [0, 0], seen: false };
         this.active = false;
         this._netT = 0;
@@ -563,6 +565,7 @@ export class IceCastleLife {
         if (!P) { this._netSend(dt); return; }
         this.fixtures.update(dt);
         this._updateShots(dt);
+        this._updateBolts(dt);
         this._updateFx(dt);
         this._updateRod(dt);
         this._hudBar();
@@ -975,12 +978,9 @@ export class IceCastleLife {
         if (!tp && spell !== 'summon') return;
         if (spell === 'summon') { for (let i = 0; i < 3; i++) this._spawnSnowman(c.model.position); this._fx({ e: 'fx', k: 'summon', o: [r2(from.x), r2(from.y), r2(from.z)] }); return; }
         if (spell === 'freeze') {
-            this._fx({ e: 'fx', k: 'beam', o: [r2(from.x), r2(from.y), r2(from.z)], t: [r2(tp.x), r2(tp.y), r2(tp.z)] });
+            // the rod's bolt FLIES to him (QueenBolts.js): it freezes whoever it reaches on its way — not the moment she casts it
             c.lastFreeze = this._t;
-            const r = this._freezePlayer(e.id, 'iceQueen', QUEEN_AI.FREEZE_T);
-            const q = c.model.position, d = Math.max(0, Math.hypot(tp.x - q.x, tp.z - q.z) - (e.rad || 0));
-            // (it took: she runs at him before he thaws — a guest's computer answers `frzr`; a shield held it: she goes on with her spells)
-            if ((r === null || r.ok) && chargeOn(d, r ? r.T : QUEEN_AI.FREEZE_T)) { c.charge = { id: e.id, until: this._t + (r ? r.T : QUEEN_AI.FREEZE_T * 0.85) - 0.3, t0: this._t, pend: r === null }; c.bladeT = 0; c.sheathT = 0; }
+            this._launchBolt('freeze', from, tp, e.id);
             if (e.giant) c.giantFrozen = Date.now() + 9000;
             return;
         }
@@ -996,9 +996,9 @@ export class IceCastleLife {
             this.game.fx.shake = Math.max(this.game.fx.shake || 0, 0.6);
             return;
         }
-        if (spell === 'spikes') { const f = _feet(tp, new THREE.Vector3()); this._fx({ e: 'fx', k: 'spikes', t: [r2(f.x), r2(this._floor(f.x, f.z, f.y + 2)), r2(f.z)], q: [r2(from.x), r2(from.y), r2(from.z)] }); return; }
+        if (spell === 'spikes') { const f = _feet(tp, new THREE.Vector3()); f.y = this._floor(f.x, f.z, f.y + 2); this._launchBolt('spikes', from, f.setY(f.y + 0.4), e.id); return; } // (a bolt of frost runs along the floor to his feet; the spikes burst there when it arrives)
         if (spell === 'shards') { for (let i = 0; i < 5; i++) this._fire('shard', from, tp, { spread: 1.2, by: c.id, delay: i * 0.12, to: e }); return; }
-        if (spell === 'blizzard') { const p = c.model.position; this._fx({ e: 'fx', k: 'gust', o: [r2(p.x), r2(p.y + 3), r2(p.z)], y: r2(c.model.rotation.y) }); }
+        if (spell === 'blizzard') this._fx({ e: 'fx', k: 'gust', o: [r2(from.x), r2(from.y), r2(from.z)], y: r2(c.model.rotation.y) }); // (from the rod's tip; the front of it travels)
     }
 
     _thinkMonster(c, dt) {
@@ -1421,10 +1421,92 @@ export class IceCastleLife {
         return { ok: true, T };
     }
 
+    // ================================================================ the queen's bolts (the far blows fly: QueenBolts.js)
+    /** (host) A bolt leaves the rod's tip for `to`; every computer flies it. */
+    _launchBolt(kind, from, to, targetId = null) {
+        const d = Math.max(1, from.distanceTo(to)), sp = boltSpeed(d);
+        const dir = _v.copy(to).sub(from).divideScalar(d);
+        const m = { e: 'fx', k: 'bolt', b: kind, id: 'b' + (++this._seq) + Math.floor(Math.random() * 1e3), o: [r2(from.x), r2(from.y), r2(from.z)], d: [r2(dir.x * 1000) / 1000, r2(dir.y * 1000) / 1000, r2(dir.z * 1000) / 1000], v: r2(sp), n: r2(d), q: targetId };
+        this._fx(m);
+    }
+
+    _addBolt(m) {
+        if (!Array.isArray(m.o) || !Array.isArray(m.d) || !m.o.every(Number.isFinite) || !m.d.every(Number.isFinite)) return;
+        const g = this.game;
+        const mesh = shardModel();
+        mesh.scale.setScalar(m.b === 'freeze' ? 3.4 : 2.4);
+        mesh.position.copy(vec(m.o));
+        const dir = vec(m.d).normalize();
+        mesh.quaternion.setFromUnitVectors(_v.set(0, 0, 1), dir);
+        g.scene.add(mesh);
+        this.bolts.push({ id: String(m.id), kind: m.b === 'spikes' ? 'spikes' : 'freeze', mesh, dir, speed: Math.max(10, Math.min(80, +m.v || 40)), len: Math.max(1, Math.min(60, +m.n || 20)), trav: 0, q: m.q ?? null, o: vec(m.o) });
+        g.sound?.playIce?.();
+    }
+
+    /** One bolt ends (it hit, it struck a wall, it flew its length): the burst of ice and the sound; the mesh goes. */
+    _endBolt(i, p, hit = false) {
+        const b = this.bolts[i];
+        this.game.scene.remove(b.mesh);
+        this.bolts.splice(i, 1);
+        this._burst(p, hit ? 18 : 10);
+        this.game.sound?.playFrozenHit?.();
+    }
+
+    _updateBolts(dt) {
+        const g = this.game, t = g.world?.terrain?.data, col = g.collision;
+        for (let i = this.bolts.length - 1; i >= 0; i--) {
+            const b = this.bolts[i], pos = b.mesh.position;
+            let left = b.speed * dt, ended = false;
+            while (left > 1e-4 && !ended) {
+                const s = Math.min(left, BOLT.STEP);
+                left -= s;
+                const prev = _v2.copy(pos);
+                pos.addScaledVector(b.dir, s);
+                b.trav += s;
+                // a wall (blocks, a door, a chandelier): the bolt crumbles there — nothing reaches a body behind it
+                if ((t && t.isSolidAt(pos.x, pos.y, pos.z)) || (col?.lineOfSight && !col.lineOfSight(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z, 0.5))) { pos.copy(prev); this._endBolt(i, pos); ended = true; break; }
+                if (b.kind === 'spikes') { if (b.trav >= b.len) { this._applyFx({ k: 'spikes', t: [pos.x, pos.y - 0.4, pos.z], q: [b.o.x, b.o.y, b.o.z] }); this._endBolt(i, pos); ended = true; } continue; }
+                // the rod's freeze: whoever it reaches on its way (the host decides)
+                if (this.auth) {
+                    for (const q of this._players(true)) {
+                        const qc = this._playerCentre(q.id, _v3);
+                        if (qc && segDist(prev, pos, qc) < BOLT.HIT_R + q.rad) {
+                            const bolt = b;
+                            this._fx({ e: 'fx', k: 'bend', id: b.id, p: [r2(pos.x), r2(pos.y), r2(pos.z)] });
+                            this._boltFreeze(q);
+                            ended = true;
+                            if (this.bolts[i] === bolt) { g.scene.remove(bolt.mesh); this.bolts.splice(i, 1); }
+                            break;
+                        }
+                    }
+                    if (ended) break;
+                }
+                if (b.trav >= b.len + BOLT.OVERSHOOT) { this._endBolt(i, pos); ended = true; }
+            }
+            if (ended) continue;
+            // the trail and the glow: a comet of ice sparks
+            for (let k = 0; k < BOLT.SPARKS; k++) {
+                _v3.copy(pos).addScaledVector(b.dir, -Math.random() * 1.6).add(_v2.set((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5));
+                g.fx?.spark?.(_v3, k % 2 ? 0xffffff : 0x9fe3ff, 0.16 + Math.random() * 0.12, _v2.set(0, 0.3, 0), 0.45);
+            }
+            b.mesh.rotation.z += dt * 8; // (turns as it flies)
+        }
+    }
+
+    /** (host) The rod's bolt reached `q`: his shield or his body (the same as the old beam did, only now when it ARRIVES). */
+    _boltFreeze(q) {
+        const c = this.queen;
+        if (!c || c.dead) return;
+        const r = this._freezePlayer(q.id, 'iceQueen', QUEEN_AI.FREEZE_T);
+        const p = c.model.position, d = Math.max(0, Math.hypot(q.p.x - p.x, q.p.z - p.z) - (q.rad || 0));
+        // (it took: she runs at him before he thaws — a guest's computer answers `frzr`; a shield held it: she goes on with her spells)
+        if ((r === null || r.ok) && chargeOn(d, r ? r.T : QUEEN_AI.FREEZE_T)) { c.charge = { id: q.id, until: this._t + (r ? r.T : QUEEN_AI.FREEZE_T * 0.85) - 0.3, t0: this._t, pend: r === null }; c.bladeT = 0; c.sheathT = 0; }
+    }
+
     // ================================================================ shots
     /** (host) A shot leaves `from` for `to` (snow: a snowflake −1; shard −3; boulder −10), sent to all. */
     _fire(kind, from, to, { spread = 0, by = null, delay = 0, to: target = null, dm = 1 } = {}) {
-        const speed = kind === 'boulder' ? 17 : kind === 'shard' ? 26 : 19;
+        const speed = kind === 'boulder' ? 17 : kind === 'shard' ? 48 : 19; // (the shards fly 40–60 m/s: seen, but a shield / a step aside is in time)
         const tp = _v.copy(to).add(_v2.set((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread * 0.5, (Math.random() - 0.5) * spread));
         const d = Math.max(0.5, from.distanceTo(tp));
         const t = d / speed;
@@ -1454,10 +1536,19 @@ export class IceCastleLife {
             s.life -= dt;
             const p = s.mesh.position;
             s.v.y -= ICE.G * dt;
-            p.addScaledVector(s.v, dt);
+            // (fast shots are walked in half-metre steps: a one-block wall is never jumped over — it stops them, the ice crumbles)
+            let end = s.life <= 0;
+            const n = Math.max(1, Math.ceil(s.v.length() * dt / BOLT.STEP));
+            for (let k = 0; k < n && !end; k++) {
+                const px = p.x, py = p.y, pz = p.z;
+                p.addScaledVector(s.v, dt / n);
+                if (t && t.isSolidAt(p.x, p.y, p.z)) { p.set(px, py, pz); end = true; }
+            }
             s.mesh.rotation.z += dt * 9; s.mesh.rotation.x += dt * 5;
-            if (s.kind === 'shard') s.mesh.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _v2.copy(s.v).normalize());
-            let end = s.life <= 0 || (t && t.isSolidAt(p.x, p.y, p.z));
+            if (s.kind === 'shard') {
+                s.mesh.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _v2.copy(s.v).normalize());
+                for (let k = 0; k < 3; k++) this.game.fx?.spark?.(_v3.copy(p).addScaledVector(s.v, -Math.random() * 0.03), k % 2 ? 0xffffff : 0x9fe3ff, 0.12, _v2.set(0, 0.2, 0), 0.35); // (the shard's trail)
+            }
             // me (my computer decides: my shield, my health)
             if (!end && meC && s.to?.[0] !== 'I' && meC.distanceTo(p) < s.r + 0.8) {
                 end = true;
@@ -1498,11 +1589,11 @@ export class IceCastleLife {
 
     _applyFx(m) {
         const g = this.game;
-        if (m.k === 'beam') {
-            const o = vec(m.o), t = vec(m.t);
-            const n = Math.ceil(o.distanceTo(t) / 0.6);
-            for (let i = 0; i <= n; i++) g.fx?.spark?.(_v.lerpVectors(o, t, i / n), i % 2 ? 0xffffff : 0x9fe3ff, 0.18, _v2.set(0, 0.2, 0), 0.5);
-            g.sound?.playIce?.();
+        if (m.k === 'bolt') {
+            this._addBolt(m);
+        } else if (m.k === 'bend') {
+            const i = this.bolts.findIndex((b) => b.id === String(m.id));
+            if (i >= 0 && Array.isArray(m.p) && m.p.every(Number.isFinite)) this._endBolt(i, vec(m.p), true);
         } else if (m.k === 'slash') {
             // the blade's blow: an arc of ice sparks from raised to low, a crack of ice
             const o = vec(m.o), t = vec(m.t);
@@ -1516,7 +1607,12 @@ export class IceCastleLife {
             // a frost ring on the ground, then the spikes burst up out of it
             this.fxs.push({ k: 'spikes', p: vec(m.t), from: m.q ? vec(m.q) : null, t: 0, hit: false, meshes: [] });
         } else if (m.k === 'gust') {
-            this.fxs.push({ k: 'gust', p: vec(m.o), y: +m.y || 0, t: 0, hit: false });
+            // (the gust has a FRONT that travels from the rod; a wall stops it: no blow behind a wall)
+            const o = vec(m.o), y = +m.y || 0, t = g.world?.terrain?.data;
+            const dir = _v.set(-Math.sin(y), 0, -Math.cos(y));
+            const wall = t ? wallAlong((x, yy, z) => t.isSolidAt(x, yy, z), o, dir, BOLT.GUST_LEN) : BOLT.GUST_LEN;
+            this.fxs.push({ k: 'gust', p: o, y, t: 0, hit: false, wall });
+            g.sound?.playIce?.();
         }
     }
 
@@ -1550,19 +1646,24 @@ export class IceCastleLife {
                 if (f.t > 3.2) { for (const s of f.meshes) g.scene.remove(s.m); this.fxs.splice(i, 1); }
             } else if (f.k === 'gust') {
                 const fx = -Math.sin(f.y), fz = -Math.cos(f.y);
+                const front = Math.min(f.wall, f.t * BOLT.GUST_SPEED); // (the wave's head: it flies from the rod, a wall stops it)
                 for (let n = 0; n < 6; n++) {
-                    const d = Math.random() * 16;
+                    const d = Math.random() * front;
                     g.fx?.spark?.(_v.set(f.p.x + fx * d + (Math.random() - 0.5) * d * 0.5, f.p.y + (Math.random() - 0.5) * 2, f.p.z + fz * d + (Math.random() - 0.5) * d * 0.5), 0xffffff, 0.12, _v2.set(fx * 14, 0, fz * 14), 0.5);
                 }
-                if (!f.hit && f.t > 0.2) {
-                    f.hit = true;
+                for (let n = 0; n < 3; n++) g.fx?.spark?.(_v.set(f.p.x + fx * front + (Math.random() - 0.5) * 2, f.p.y + (Math.random() - 0.5) * 1.5, f.p.z + fz * front + (Math.random() - 0.5) * 2), 0x9fe3ff, 0.26, _v2.set(fx * 8, 0.5, fz * 8), 0.4); // (the bright head of the wave)
+                if (!f.hit) {
                     const me = g.character?.group.position;
                     if (me) {
                         const dx = me.x - f.p.x, dz = me.z - f.p.z, d = Math.hypot(dx, dz);
-                        if (d < 18 && (dx * fx + dz * fz) / Math.max(0.01, d) > Math.cos(0.6)) this._hurtMe(3, 'ice', f.p, _v.set(fx * 15, 4, fz * 15), 'QueenGust');
+                        // (it reaches me when its head does — and not at all behind the wall that stopped it)
+                        if (f.t >= gustArrives(d, f.wall + 1)) {
+                            f.hit = true;
+                            if ((dx * fx + dz * fz) / Math.max(0.01, d) > Math.cos(0.6)) this._hurtMe(3, 'ice', f.p, _v.set(fx * 15, 4, fz * 15), 'QueenGust');
+                        }
                     }
                 }
-                if (f.t > 1.2) this.fxs.splice(i, 1);
+                if (f.t > 1.4) this.fxs.splice(i, 1);
             }
         }
     }
@@ -1588,6 +1689,15 @@ export class IceCastleLife {
             const cr = u.rod.userData.crystal;
             if (cr) cr.scale.setScalar(1 + actK * 0.5 + c.bladeV * 0.8 + Math.sin(t * 3) * 0.05);
             if (u.blade) this._bladeLook(c, u);
+            // the wind-up of a far blow: the cold gathers into the rod's crystal (sparks flow to its tip, brighter and thicker as the cast nears) — then the bolt leaves it
+            if (c.act && c.act !== 'slash' && c.act !== 'summon' && c.actLook > 0.2) {
+                const tip = this._rodTip(c, _v3);
+                const n = 2 + Math.round(2 * Math.min(1, c.actLook));
+                for (let k = 0; k < n; k++) {
+                    const a = Math.random() * Math.PI * 2, e = (Math.random() - 0.5) * 2, rr = 1.2 + Math.random() * 1.3;
+                    this.game.fx?.spark?.(_v.set(tip.x + Math.cos(a) * rr, tip.y + e * rr, tip.z + Math.sin(a) * rr), k % 2 ? 0xffffff : 0x9fe3ff, 0.14 + Math.random() * 0.1, _v2.set(tip.x - _v.x, tip.y - _v.y, tip.z - _v.z).multiplyScalar(2.4), 0.45);
+                }
+            }
         } else if (c.type === 'monster') {
             const w = c.moving ? Math.sin(t) : 0;
             u.legL.rotation.x = w * 0.45; u.legR.rotation.x = -w * 0.45;
@@ -2093,6 +2203,8 @@ export class IceCastleLife {
     dispose() {
         for (const c of [...this.list]) this._remove(c);
         for (let i = this.shots.length - 1; i >= 0; i--) this._dropShot(i);
+        for (const b of this.bolts) this.game.scene.remove(b.mesh);
+        this.bolts.length = 0;
         for (const f of this.fxs) for (const s of f.meshes || []) this.game.scene.remove(s.m);
         for (const q of this.puddles || []) this.game.scene.remove(q.m);
         if (this.puddles) this.puddles.length = 0;
