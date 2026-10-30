@@ -41,6 +41,7 @@ import { Storm, aimedAtSky } from '../fx/Storm.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
+import { LegFilter, legLog } from '../input/LegSafe.js';
 import { PerfLog } from '../core/PerfLog.js';
 import { BookBirds, makeBookModel, SWIFT_PEDESTAL_ID, WARD_PEDESTAL_ID } from './BookBirds.js';
 import { RunningBook } from './RunningBook.js';
@@ -4080,8 +4081,7 @@ export class Game {
             // (for the «Реалистичный» hero: the face, the shoulders' own tilt, a knee lifted / a heel kicked up — RealisticBody)
             if (pose.face) { ch.face = pose.face; ch.faceAt = performance.now(); }
             ch.torsoLean = pose.torso && !flying ? pose.torso.lateral || 0 : 0;
-            const lg = pose.legs?.seen ? pose.legs : null;
-            ch.legLift = lg ? { l: lg.left.up ? lg.left.raise : 0, lh: !!lg.left.heel, r: lg.right.up ? lg.right.raise : 0, rh: !!lg.right.heel } : null;
+            ch.legLift = (this._legFilter ??= new LegFilter(legLog)).step(pose.legs, dt); // (clamped, a flicker thrown out, none when the legs are not in the picture: LegSafe)
             const down = this.knock.down; // (lying: no walking, no crouching — the squat is read to get up)
             ch.setCrouching(flying || down ? false : pose.isCrouching);
             ch.setStoop(flying || down || this.animals?.riding || this.dragonRide?.busy || this.boards?.mounted ? 0 : pose.stoop); // (bent a little: lower — under a low roof, StoopReader)

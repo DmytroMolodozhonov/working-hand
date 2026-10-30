@@ -10,6 +10,7 @@ import { VoxelCharacter } from '../entities/Character.js';
 import { CombatVisuals } from '../game/Combat.js';
 import { KD_NAME } from '../game/Impact.js';
 import { wrapPi, stepAngle, neckLimit, TWIST } from './RemoteTwist.js';
+import { safeLegs } from '../input/LegSafe.js';
 import { decodeFace, applyFaceDiff } from '../entities/FaceExpr.js';
 
 const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
@@ -130,8 +131,8 @@ export class RemoteAvatar {
         }
         if (this._fc) ch.faceAt = performance.now();
         const rl = Array.isArray(s.rl) ? s.rl : null;
-        ch.legLift = rl ? { l: +rl[0] || 0, lh: !!rl[1], r: +rl[2] || 0, rh: !!rl[3] } : null;
-        ch.torsoLean = rl ? +rl[4] || 0 : 0;
+        ch.legLift = rl ? safeLegs({ l: rl[0], lh: rl[1], r: rl[2], rh: rl[3] }) : null; // (a bad packet cannot bend a knee backwards: LegSafe)
+        ch.torsoLean = rl ? Math.max(-1, Math.min(1, +rl[4] || 0)) : 0;
         this.duelContact = s.dc ? s.dc[0] : 1;
         this.duelJerk = s.dc ? s.dc[1] : 0;
         if (s.c) {

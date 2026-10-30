@@ -20,6 +20,7 @@
  * Not drawn on it (the standard model shows itself again meanwhile): armour and the dark lord's outfit, a cut-off
  * limb, the monster form, the «V2» detailed hands.
  */
+import { LEG_SAFE, safeRaise } from '../input/LegSafe.js';
 import * as THREE from 'three';
 import { BONE_COUNT, BONE_NAMES, B, ANAT, FLOOR, FINGER_NAMES, restPose, armRest, legRest } from './real/RealRig.js';
 import { realSkinMaterial, realProxyMaterial, realHairMaterial } from './real/RealSkinMaterial.js';
@@ -456,6 +457,7 @@ export class RealisticBody {
         // ---- the arms
         for (const S of SIDES) this._arm(S, dt);
         // ---- the legs
+        this._dt = dt;
         const drop = ch.bodyDrop ? ch.bodyDrop() : 0;
         for (const S of SIDES) this._leg(S, crouch, walking, runK, cyc, drop);
         for (const b of M) b.matrixWorldNeedsUpdate = true;
@@ -566,8 +568,12 @@ export class RealisticBody {
         const Lth = ANAT.Lth, Lsh = ANAT.Lsh;
         const floor = FLOOR + drop;
         const air = ch.flying || ch.swimming || ch.jumpAir || ch.knockedDown || !!ch.legPose || (!ch.remote && ch.onGround === false && !walking);
-        const lift = ch.legLift && !walking && !air ? ch.legLift : null;
-        const raise = lift ? (s === 'L' ? lift.l : lift.r) || 0 : 0, heelKick = lift ? (s === 'L' ? lift.lh : lift.rh) : false;
+        // (the camera's legs fade in and out over 0.3 s — between the animation and the camera — and are clamped: LegSafe)
+        const want = ch.legLift && !walking && !air ? 1 : 0;
+        if (s === 'L') this._legFade = (this._legFade || 0) + (want - (this._legFade || 0)) * Math.min(1, this._dt / LEG_SAFE.FADE_S);
+        const fade = this._legFade || 0;
+        const lift = ch.legLift && fade > 0.02 && !air ? ch.legLift : null;
+        const raise = lift ? safeRaise((s === 'L' ? lift.l : lift.r) * fade) : 0, heelKick = lift ? !!(s === 'L' ? lift.lh : lift.rh) && fade > 0.5 : false;
         let thigh, shin, knee, toeBend = 0;
         const footQ = _A.footQ;
         const legYaw = (_e.setFromQuaternion(_q, 'YXZ').y) + sx * -0.06;

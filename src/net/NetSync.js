@@ -51,6 +51,7 @@ import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
 import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { LUMOS } from '../game/WandMagic.js';
+import { safeRaise } from '../input/LegSafe.js';
 import { applyCredit } from '../game/Mana.js';
 import { normalizeHero, LEGACY_HERO } from '../game/HeroSetup.js';
 
@@ -313,7 +314,7 @@ export class NetSync {
         if (ch.heroModel !== 'real') return undefined;
         const L = ch.legLift, lean = Math.round((ch.torsoLean || 0) * 100) / 100;
         if (!L && !lean) return undefined;
-        const r = (v) => Math.round((v || 0) * 100) / 100;
+        const r = (v) => Math.round(safeRaise(v) * 100) / 100; // (clamped before it is sent: the friend draws no rubbish)
         return [r(L?.l), L?.lh ? 1 : 0, r(L?.r), L?.rh ? 1 : 0, lean];
     }
 
