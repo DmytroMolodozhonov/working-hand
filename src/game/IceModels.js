@@ -17,6 +17,8 @@ const MAT = {
     // ice: see-through, glowing a little from inside
     ice: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.8, emissive: 0x1b4f72, depthWrite: true }),
     glow: new THREE.MeshBasicMaterial({ vertexColors: true }),
+    // the giant's cracks: dark blue, never tinted red by the hurt flash (ice is not flesh: no blood-red wounds)
+    crack: new THREE.MeshBasicMaterial({ vertexColors: true }),
     cape: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.45, emissive: 0x10324a, side: THREE.DoubleSide, depthWrite: false }),
     sparkle: new THREE.PointsMaterial({ color: 0xffffff, size: 0.09, transparent: true, opacity: 0.9, depthWrite: false }),
     hit: new THREE.MeshLambertMaterial({ vertexColors: true, color: 0xff8080, emissive: 0x7a1010 }),
@@ -300,12 +302,12 @@ export function iceMonsterModel() {
     torso.add(armL, armR);
     // the wounds: dark jagged fissures over the giant's body, each hidden until a blast has cracked it that far (IceQueen._crackLook — by the
     // share of its strength gone; one more with every tenth: the shape follows the shown parts — FarShape.check)
-    const DARKC = 0x0b3556;
+    const DARKC = 0x0a2a4a;
     const fissure = (parent, x, y, z, rz, len = 1) => {
         const L = [];
         for (let k = 0; k < 5; k++) L.push(['box', 0.07, 0.34 * len, 0.05, (k % 2 ? 0.1 : -0.1) * len, (k - 2) * 0.3 * len, 0, DARKC, 0, 0, (k % 2 ? 0.45 : -0.45)]);
         L.push(['box', 0.05, 0.26 * len, 0.05, 0.2 * len, 0.1 * len, 0, DARKC, 0, 0, -1.0], ['box', 0.05, 0.22 * len, 0.05, -0.2 * len, -0.25 * len, 0, DARKC, 0, 0, 1.0]);
-        const m = mesh(L, MAT.solid, false);
+        const m = mesh(L, MAT.crack, false);
         m.position.set(x, y, z); m.rotation.z = rz; m.visible = false;
         parent.add(m);
         return m;

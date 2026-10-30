@@ -102,6 +102,10 @@ export const QUEEN_AI = {
     BLADE_LEN: 2.4, // the blade's length in rod units (the rod is 1.45; the queen holds it ×1.9, she herself ×1.5)
     LOSE_SIGHT: 1.6, // s: a foe lost behind a wall is still where she last saw him for this long (no turning back at every step)
     GATE_ZONE: 9, // m: from the gate — the gateway's neighbourhood (no sidestepping beside the wall)
+    SHIELD: { CHANCE: 0.5, GAP: 5, HOLD: 0.35 }, // her temporary ice shield: the chance per spell, the pause between two shields (s), how long one stands for the spell stream (s)
+    // conjuring: while she is fought — a snowman every SNOW_EVERY s, an ice giant (only outside the palace) every GIANT_EVERY s; each takes her SNOW_T / GIANT_T s of standing
+    // still, a blow breaks it off and the time is lost; wounded she is quicker (WEAK_K × the pause)
+    CONJ: { SNOW_EVERY: 15, GIANT_EVERY: 75, SNOW_T: 2.2, GIANT_T: 4, WEAK_K: 0.7 },
     WEAK_HP: 40, // HP: below this she leaves the fight to her guards (the whole castle goes on him), keeps WEAK_KEEP m away and summons snowmen
     WEAK_KEEP: 30, // m
     EVADE: 0.55, // chance per second that she sidesteps while she keeps her distance

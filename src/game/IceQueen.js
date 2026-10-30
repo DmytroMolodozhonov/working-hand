@@ -40,7 +40,7 @@ import { registerKind } from './CreatureImpact.js';
 import { SpeechBubble } from '../ui/SpeechBubble.js';
 import { Chest } from '../entities/Chest.js';
 import { BOLT, boltSpeed, wallAlong, segDist, gustArrives } from './QueenBolts.js';
-import { BLAST, blastVerdict, isBlast, crackCount, MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
+import { SHATTER_KINDS, BLAST, blastVerdict, isBlast, crackCount, MELT, meltStats, meltStage, applyFire, QUEEN_AI, rangeBand, mayFreeze, chargeOn, bladeGrow, freezeSeconds } from './IceGiants.js';
 export { QUEEN_VS, MELT_STEPS } from './IceGiants.js'; // (the tables of the fight: «кто/что × как действует»)
 
 export const ICE = {
@@ -141,6 +141,7 @@ export const ICE_TARGETS = {
     queenVsPlayer: { does: 'see QUEEN_VS', why: 'удары Королевы по игроку: «Protection» и «Protection Maxima» держат всё (заморозка, льдины, шипы, вьюга, клинок — IceGiants.QUEEN_VS); магическая мантия и доспехи не держат, но платят запасом прочности и укорачивают заморозку' },
     scrollSpells: { does: 'damage', why: 'заклинания со свитка (молния, «Авада Кедавра» −25, «Тотальное разрушение», «Inspirius», «Бомбардо Максима»…) действуют как на всех' },
     blast: { does: 'break', why: 'Бомбардо и Бомбардо Максима (IceGiants.BLAST): снеговик разлетается комьями снега (уголь и морковка летят отдельно); ледяной великан от Бомбардо трескается (−10 % прочности в центре, трещины на теле — по доле потерянного), от Максима теряет 45 % и разваливается на глыбы, если взрыв рядом (центр ≥ ½) или осталось меньше; «Бум», «Инспириус», «Тотальное разрушение Максима» и заклинания богов разбивают любого из льда и снега сразу; Королеву не рвёт — простой взрыв: ½ урона и отброс на 6 м/с, Максима как на всех; кусочки — из пула частиц, звук, тряска' },
+    iceShield: { does: 'ward', why: 'Королева: на любое заклинание (не божественное, не «Бум»/«Инспириус», не клинок, стрела, кулак) в половине случаев — ледяной щит перед ней (новый — не чаще раза в 5 с; «Электрум» — поток: щит принимает первый удар и лопается, следующий идёт в Королеву, пока она не отойдёт в сторону и не прервёт луч): заклинание пропадает в нём, щит разлетается; так же от Бомбарды и Бомбарды Максима; абсолютная устойчивость — её не повалить, не подбросить, не сбить (простой отброс взрыва — шаг назад)' },
     plainSpells: { does: 'none', why: 'простые заклинания без свитка (Бомбардо, Сапира, Остолбеней, Айс, Джолт, Вайнд, вода…) на королеву не действуют — иней гасит их; монстра Бомбардо лишь трескает (½); снеговиков бьёт всё' },
     blade: { does: 'damage', why: 'меч и топор: королеве — полный урон, монстру — половина (лёд крошится), снеговику — полный' },
     arrow: { does: 'damage', why: 'стрелы — как клинок' },
@@ -292,6 +293,10 @@ export class IceCastleLife {
         if (!c || c.dead) return 0;
         const g = this.game;
         const who = by === undefined ? g.localId : by;
+        // the Queen's ice shield (QUEEN_AI.SHIELD): a spell thrown at her — half the time she raises a shield of ice before her; the spell strikes it and is
+        // gone, the shield bursts. Not the gods' spells and not «Бум»-like ones, not blades, arrows, fists, falls — those are not spells she can ward off.
+        if (c.type === 'queen' && this.auth && dmg > 0 && kind === 'Electrum') { c.evadeT = 0.9 + Math.random() * 0.5; c.evadeDir = Math.random() < 0.5 ? -1 : 1; } // (a stream on her: she steps aside to break it — the sidestep of _thinkQueen)
+        if (c.type === 'queen' && this.auth && dmg > 0) { this._interruptConj(c); if (this._iceShield(c, kind, who)) return 0; } // (any blow at her breaks her conjuring off)
         let n = iceDamage(c.type, kind, dmg);
         // a blast on snow and ice (IceGiants.BLAST): by its nearness and by what the thing is made of — cracks, a break into blocks, a burst of lumps
         const bv = blastVerdict(c.type, kind, dmg, c.max, GOD_SPELLS.has(kind));
@@ -322,6 +327,71 @@ export class IceCastleLife {
         if (c.type === 'snowman' && FIRE_K[kind]) for (let i = 0; i < 6; i++) g.fx?.spark?.(iceCenter(c, _v), 0xdfefff, 0.2, _v2.set((Math.random() - 0.5) * 2, 2 + Math.random() * 2, (Math.random() - 0.5) * 2), 0.8);
         if (c.hp <= 0) this._die(c, who);
         return n;
+    }
+
+    /** (host) She begins to conjure `kind` ('snowman' | 'giant'; a giant only outside the palace — it would not fit through its doors). */
+    _startConj(c, e, kind, slot) {
+        const CJ = QUEEN_AI.CONJ;
+        c.act = 'conj'; c.actT = kind === 'giant' ? CJ.GIANT_T : CJ.SNOW_T; c.actTo = e; c.conjKind = kind; c.conjSlot = slot;
+        this._say(c, kind === 'giant' ? 'Встань, ледяной страж!' : 'Снеговик, ко мне!');
+    }
+
+    /** (host) The conjuring is broken off (a blow, a freeze, a shove): nothing comes, and the time of it is lost. */
+    _interruptConj(c) {
+        if (c.act !== 'conj') return;
+        c.act = null; c.actTo = null; c.actT = 0;
+        const CJ = QUEEN_AI.CONJ;
+        if (c.conjKind === 'giant') c.giantCd = CJ.GIANT_EVERY; else c.snowCd = CJ.SNOW_EVERY;
+        this._sendSoon = true;
+        this.game.fx?.spark && (() => { const p = iceCenter(c, _v); for (let i = 0; i < 14; i++) this.game.fx.spark(p, 0xbfefff, 0.2, _v2.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.6); })();
+        if ((c.mockT || 0) <= 0) { c.mockT = 5; this._say(c, 'Не дают сосредоточиться!'); }
+    }
+
+    /** (host) The conjuring is done: the snowman rises in the hall or the yard; the giant stands up out of the snow before her (outside). */
+    _finishConj(c, e) {
+        const CJ = QUEEN_AI.CONJ, p = c.model.position, P = this.plan, g = this.game;
+        if (c.conjKind === 'giant') {
+            c.giantCd = CJ.GIANT_EVERY;
+            const i = c.conjSlot;
+            if (this._inside(p) || this.list.some((m) => m.type === 'monster' && m.slot === i && !m.dead)) return; // (she went in, or the place is taken: nothing)
+            const dx = e.p.x - p.x, dz = e.p.z - p.z, L = Math.hypot(dx, dz) || 1;
+            const x = p.x + (dx / L) * 6, z = p.z + (dz / L) * 6;
+            if (Math.hypot(x - P.hall.x, z - P.hall.z) < P.hall.r + 4) return; // (never in the hall's wall)
+            this.state.monsters[i] = ICE.MONSTER.HP; this.state.monsterMelt[i] = 0; this.state.monsterDeadAt[i] = 0;
+            const m = this._spawn('monster', new THREE.Vector3(x, this._floor(x, z, p.y + 4), z), { hp: ICE.MONSTER.HP, yaw: Math.atan2(-dx, -dz), slot: i });
+            m.home.set(P.guard[i].x, m.model.position.y, P.guard[i].z);
+            m.rise = 1; m.foe = e.id;
+            g.fx && (g.fx.shake = Math.max(g.fx.shake || 0, 0.4));
+            g.sound?.playIce?.('iceCrack', m.model.position, 1.4, 0.6);
+            for (let k = 0; k < 40; k++) g.fx?.spark?.(_v.set(x, m.model.position.y + 0.3, z), k % 2 ? 0xffffff : 0x9fe3ff, 0.3, _v2.set((Math.random() - 0.5) * 8, 2 + Math.random() * 5, (Math.random() - 0.5) * 8), 1);
+        } else {
+            c.snowCd = CJ.SNOW_EVERY;
+            const s = this._spawnSnowman(p); // (in the hall too: a snowman fits through anything)
+            if (s) s.foe = e.id;
+        }
+        this._sendSoon = true;
+    }
+
+    /**
+     * (host) The Queen wards off a spell with a temporary shield of ice. → true: the spell struck the shield (and is gone; no damage, no effect).
+     * A chance QUEEN_AI.SHIELD.CHANCE per spell, but not again within SHIELD.GAP s of the last shield (a stream of fire is one spell, not sixty).
+     */
+    _iceShield(c, kind, who) {
+        const A = QUEEN_AI.SHIELD;
+        if (!kind || kind in PLAIN || GOD_SPELLS.has(kind) || SHATTER_KINDS.has(kind) || c.dead || c.frozenT > 0) return false;
+        const now = this._t || 0;
+        if (c.shieldUntil > now) return true; // (the shield she has just raised still stands for this very spell stream)
+        if (now < (c.shieldGap || 0) || Math.random() >= A.CHANCE) return false;
+        // («Электрум» is a stream that does not stop: the shield takes its first stroke and bursts — the next stroke goes on into her; no holding of the shield for it)
+        c.shieldUntil = kind === 'Electrum' ? 0 : now + A.HOLD; c.shieldGap = now + A.GAP;
+        const from = who != null ? this._casterPos(who, c) : null;
+        const f = from ? _v.set(from.x - c.model.position.x, 0, from.z - c.model.position.z) : _v.set(-Math.sin(c.model.rotation.y), 0, -Math.cos(c.model.rotation.y));
+        const L = Math.hypot(f.x, f.z) || 1;
+        const m = { e: 'fx', k: 'ishield', o: [r2(c.model.position.x + (f.x / L) * 2.2), r2(c.model.position.y + 3.2), r2(c.model.position.z + (f.z / L) * 2.2)], d: [r2(f.x / L), r2(f.z / L)] };
+        this._fx(m);
+        c.hurtT = 0; this._sendSoon = true;
+        if (c.type === 'queen' && (c.mockT || 0) <= 0) { c.mockT = 6; this._say(c, 'Лёд, защити меня!'); }
+        return true;
     }
 
     /**
@@ -836,13 +906,14 @@ export class IceCastleLife {
         if (c.hurtT > 0) c.hurtT -= dt;
         if (c.rise > 0) { c.rise -= dt * 1.5; this._ground(c, dt); return; }
         if (c.shove) { // (pushed: it slides)
+            if (c.act === 'conj') this._interruptConj(c);
             const p = c.model.position;
             p.x += c.shove.x * dt; p.z += c.shove.z * dt;
             c.shove.multiplyScalar(Math.max(0, 1 - 4 * dt));
             g.collision?.resolveCylinder?.(p, c.r, p.y, c.h, 1.05);
             if (c.shove.lengthSq() < 0.05) c.shove = null;
         }
-        if (c.stunT > 0) { c.stunT -= dt; this._ground(c, dt); c.moving = false; return; }
+        if (c.stunT > 0) { c.stunT -= dt; if (c.act === 'conj') this._interruptConj(c); this._ground(c, dt); c.moving = false; return; }
         if (c.type === 'queen') this._thinkQueen(c, dt);
         else if (c.type === 'monster') this._thinkMonster(c, dt);
         else if (c.type === 'friend') this._thinkFriend(c, dt);
@@ -945,6 +1016,18 @@ export class IceCastleLife {
         if (c.charge && (c.charge.id !== e.id || this._t > c.charge.until || leash)) this._chargeEnd(c, false);
         if (c.charge) { this._queenChase(c, e, d, dt); return; }
         // she keeps her distance: closer than KEEP_MIN she steps back (cornered with him near: the blade), further than KEEP_MAX she goes closer
+        // conjuring (QUEEN_AI.CONJ): while she is fought she may make a snowman every 15 s and an ice giant every 75 s — but it takes her a moment in which she
+        // does nothing else, and a blow, a freeze or a shove in that moment breaks it off and the chance is lost (the clock starts again)
+        const CJ = QUEEN_AI.CONJ, weakK = c.hp < QUEEN_AI.WEAK_HP ? CJ.WEAK_K : 1;
+        c.snowCd = Math.max(0, (c.snowCd ?? CJ.SNOW_EVERY * weakK) - dt);
+        c.giantCd = Math.max(0, (c.giantCd ?? CJ.GIANT_EVERY * weakK) - dt);
+        if (c.act === 'conj') { c.moving = false; this._face(c, e.p, dt * 0.3); return; } // (she stands and gathers the cold: no spell, no step)
+        if (!c.act && !c.charge) {
+            const freeSlot = [0, 1].find((i) => !this.list.some((m) => m.type === 'monster' && m.slot === i && !m.dead));
+            if (c.giantCd <= 0 && freeSlot != null && !this._inside(p)) this._startConj(c, e, 'giant', freeSlot);
+            else if (c.snowCd <= 0 && this.list.filter((q) => q.type === 'snowman' && !q.dead).length < ICE.SNOW.MAX) this._startConj(c, e, 'snowman', 0);
+            if (c.act === 'conj') return;
+        }
         // wounded (< 40 HP): she leaves the fight to her guards — calls the whole castle on him, keeps away from him, summons more snowmen
         const weak = c.hp < QUEEN_AI.WEAK_HP;
         if (weak) {
@@ -977,9 +1060,8 @@ export class IceCastleLife {
         const roll = Math.random();
         // (the rod's freeze first of all, at her range and not too often; a giant: the same; then the rest)
         const since = c.lastFreeze == null ? null : this._t - c.lastFreeze;
-        if (weak && nSnow < 8 && roll < 0.55) { c.act = 'summon'; c.actT = 0.7; c.actTo = e; this._say(c, 'Снеговики, ко мне!'); return; }
         const spell = mayFreeze(d, since) && (e.giant ? (!c.giantFrozen || Date.now() > c.giantFrozen) : true) && roll < 0.85 ? 'freeze'
-            : nSnow < 5 && roll < 0.2 ? 'summon' : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
+            : roll < 0.42 ? 'freeze' : roll < 0.64 ? 'spikes' : roll < 0.84 ? 'shards' : 'blizzard';
         if (spell === 'freeze' && !mayFreeze(d, since)) return; // (point blank or too soon: not the freeze — the next turn is another spell)
         c.act = spell; c.actT = 0.7; c.actTo = e;
         if (spell === 'freeze' && e.giant) c.actT = Math.min(ICE.GIANT.WIND_MAX, 0.7 + ICE.GIANT.WIND_K * Math.max(0, (e.size || 1) - 1) * (e.size > 4 ? 1.6 : 1)); // (the greater the body, the longer the rod gathers its cold)
@@ -1026,6 +1108,7 @@ export class IceCastleLife {
     /** (host) Her spell leaves the rod (after the wind-up). */
     _queenCast(c, spell, e) {
         const g = this.game;
+        if (spell === 'conj') { this._finishConj(c, e); return; }
         const from = this._rodTip(c, new THREE.Vector3());
         const tp = e.k === 'p' ? this._playerCentre(e.id, new THREE.Vector3()) : null;
         if (!tp && spell !== 'summon') return;
@@ -1653,6 +1736,9 @@ export class IceCastleLife {
             for (let i = 0; i <= 22; i++) { const k = i / 22, a = k * Math.PI; g.fx?.spark?.(_v.set(o.x + (t.x - o.x) * k, o.y + (t.y - o.y) * k + Math.sin(a) * 2.2, o.z + (t.z - o.z) * k), i % 2 ? 0xffffff : 0x9fe3ff, 0.22, _v2.set((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3), 0.6); }
             g.sound?.playIce?.('iceCrack', t, 1.2, 1.1);
             g.sound?.playFrozenHit?.();
+        } else if (m.k === 'ishield') {
+            // a plate of ice rises before her (a ring of glittering ice standing up), takes the spell, bursts into pieces
+            if (Array.isArray(m.o) && m.o.every(Number.isFinite) && Array.isArray(m.d)) this.fxs.push({ k: 'ishield', p: vec(m.o), dx: +m.d[0] || 0, dz: +m.d[1] || 0, t: 0, burst: false });
         } else if (m.k === 'summon') {
             const o = vec(m.o);
             for (let i = 0; i < 30; i++) g.fx?.spark?.(o, 0xe8fbff, 0.2, _v2.set((Math.random() - 0.5) * 8, Math.random() * 6, (Math.random() - 0.5) * 8), 1);
@@ -1697,6 +1783,20 @@ export class IceCastleLife {
                     if (me && Math.hypot(me.x - f.p.x, me.z - f.p.z) < 1.9 && Math.abs(me.y - 1.95 - f.p.y) < 2.5) this._hurtMe(9, 'ice', f.from || f.p, _v.set(0, 9, 0), 'QueenSpikes'); // (from the queen: «Protection» facing her / the dome holds the spikes too)
                 }
                 if (f.t > 3.2) { for (const s of f.meshes) g.scene.remove(s.m); this.fxs.splice(i, 1); }
+            } else if (f.k === 'ishield') {
+                const R = 2.6, sx = -f.dz, sz = f.dx; // (the plate stands across the line to the caster)
+                if (f.t < 0.35) {
+                    for (let k = 0; k < 9; k++) { const a = Math.random() * Math.PI * 2, r = Math.random() * R; g.fx?.spark?.(_v.set(f.p.x + sx * Math.cos(a) * r * 0.9, f.p.y + Math.sin(a) * r * 0.9, f.p.z + sz * Math.cos(a) * r * 0.9), k % 2 ? 0xffffff : 0xbfefff, 0.22, _v2.set(0, 0, 0), 0.3); }
+                } else if (!f.burst) {
+                    f.burst = true;
+                    for (let k = 0; k < 26; k++) {
+                        const a = Math.random() * Math.PI * 2, r = Math.random() * R;
+                        g.fx?.debris?.spawn(f.p.x + sx * Math.cos(a) * r * 0.9, f.p.y + Math.sin(a) * r * 0.9, f.p.z + sz * Math.cos(a) * r * 0.9, f.dx * (4 + Math.random() * 7) + (Math.random() - 0.5) * 4, 2 + Math.random() * 5, f.dz * (4 + Math.random() * 7) + (Math.random() - 0.5) * 4, [0xe9fbff, 0xcdeffd, 0xa8ddf7][k % 3], 0.25 + Math.random() * 0.4, 1.6 + Math.random(), { shrink: 0.1, fade: false, spin: 9 });
+                    }
+                    g.sound?.playIce?.('iceCrack', f.p, 1.2, 1.3);
+                    g.sound?.playFrozenHit?.();
+                }
+                if (f.t > 0.5) this.fxs.splice(i, 1);
             } else if (f.k === 'gust') {
                 const fx = -Math.sin(f.y), fz = -Math.cos(f.y);
                 const front = Math.min(f.wall, f.t * BOLT.GUST_SPEED); // (the wave's head: it flies from the rod, a wall stops it)

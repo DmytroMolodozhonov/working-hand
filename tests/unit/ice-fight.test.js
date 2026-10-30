@@ -174,6 +174,7 @@ test('an evil snowman: small steps of melting, smaller and smaller; dies after t
     life.hit(s2, 5, 'Bombardo', 'me');
     assert.ok(s2.dead && s2.sz === 1, 'a blast: shattered, not melted');
     const q = life._spawn('queen', new THREE.Vector3(10, 0, 20));
+    q.shieldGap = 1e9; // (her ice shield is a chance: not in this test)
     life.hit(q, 3, 'Inferno', 'me');
     assert.equal(q.sz, 1); assert.ok(q.hp < ICE.QUEEN.HP);
 });
@@ -466,4 +467,58 @@ test('the table «кто/что» has the blast row', () => {
 
 test('раненая Королева (< 40 HP) уходит от врага и отдаёт бой страже', () => {
   assert.ok(QUEEN_AI.WEAK_HP === 40 && QUEEN_AI.WEAK_KEEP > QUEEN_AI.KEEP_MAX);
+});
+
+test('the Queen\'s ice shield: half of the spells strike it and are gone; not the gods\', not blades; a pause between two shields', () => {
+    const { g } = fakeGame();
+    const life = new IceCastleLife(g);
+    const q = life._spawn('queen', new THREE.Vector3(10, 0, 20));
+    let warded = 0, hit = 0;
+    for (let i = 0; i < 400; i++) {
+        q.shieldUntil = 0; q.shieldGap = 0; q.hp = ICE.QUEEN.HP;
+        life.hit(q, 3, 'Inferno', 'me');
+        if (q.hp === ICE.QUEEN.HP) warded++; else hit++;
+    }
+    assert.ok(warded > 140 && warded < 260, `about half: ${warded}/${warded + hit}`);
+    // not a spell she can ward off
+    for (let i = 0; i < 50; i++) { q.shieldUntil = 0; q.shieldGap = 0; q.hp = ICE.QUEEN.HP; life.hit(q, 5, 'melee', 'me'); assert.ok(q.hp < ICE.QUEEN.HP, 'a blade is not warded'); }
+    // right after a shield, the next spell within the pause goes through
+    q.shieldUntil = 0; q.shieldGap = 1e9; q.hp = ICE.QUEEN.HP;
+    life.hit(q, 3, 'Inferno', 'me');
+    assert.ok(q.hp < ICE.QUEEN.HP);
+});
+
+test('Королева создаёт снеговика раз в 15 с и стража раз в 75 с, но это занимает время: удар прерывает — шанс потерян', () => {
+    const C = QUEEN_AI.CONJ;
+    assert.equal(C.SNOW_EVERY, 15); assert.equal(C.GIANT_EVERY, 75);
+    assert.ok(C.GIANT_T > C.SNOW_T && C.SNOW_T >= 1, 'a giant takes longer');
+    const { g } = fakeGame();
+    const life = new IceCastleLife(g);
+    const q = life._spawn('queen', new THREE.Vector3(10, 0, 20));
+    q.shieldGap = 1e9; // (no ice shield here)
+    life._startConj(q, { id: 'me', p: new THREE.Vector3(0, 0, 30) }, 'snowman', 0);
+    assert.equal(q.act, 'conj');
+    q.snowCd = 0;
+    life.hit(q, 3, 'Inferno', 'me');
+    assert.equal(q.act, null, 'a blow breaks it off');
+    assert.equal(q.snowCd, C.SNOW_EVERY, 'and the time is lost: the pause starts again');
+    life._startConj(q, { id: 'me', p: new THREE.Vector3(0, 0, 30) }, 'giant', 1);
+    q.stunT = 1; q.giantCd = 0;
+    life._think(q, 0.1);
+    assert.equal(q.act, null, 'a stun too');
+    assert.equal(q.giantCd, C.GIANT_EVERY);
+});
+
+test('«Электрум» на щит Королевы: первый удар потока лопает щит, следующий идёт в неё; новый щит — не раньше чем через 5 с', () => {
+    assert.equal(QUEEN_AI.SHIELD.GAP, 5);
+    const { g } = fakeGame();
+    const life = new IceCastleLife(g);
+    const q = life._spawn('queen', new THREE.Vector3(10, 0, 20));
+    let first = null;
+    for (let i = 0; i < 200 && first == null; i++) { q.shieldUntil = 0; q.shieldGap = 0; q.hp = ICE.QUEEN.HP; if (life.hit(q, 5, 'Electrum', 'me') === 0) first = true; }
+    assert.ok(first, 'the shield took the first stroke');
+    assert.ok(q.shieldGap > 0 && !(q.shieldUntil > 0), 'not held for the stream');
+    q.hp = ICE.QUEEN.HP;
+    life.hit(q, 5, 'Electrum', 'me');
+    assert.ok(q.hp < ICE.QUEEN.HP, 'the next stroke goes into her');
 });
