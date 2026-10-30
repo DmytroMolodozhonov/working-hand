@@ -39,6 +39,7 @@ import { createLandscape, LUSH, KIND, BIOMES, hashLand, mesaRock, mixColour, MES
 import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
+import { IceCastleMapSite, inQueenMap, queenChunk } from './QueenMap.js';
 import { SHAPE, canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
@@ -260,7 +261,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 21;
+export const WORLD_GEN = 22;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -350,6 +351,12 @@ export const ICE_ARENA_FROM_GEN = 20;
  * four on the towers, two on patrol, the rest at the quay / barracks / treasury / kitchen (KnightPosts.js). Older worlds keep their crowds.
  */
 export const KNIGHT_CAP_FROM_GEN = 21;
+/**
+ * The first generation whose Creative test ground has the Ice Queen on a MAP OF HER OWN (QueenMap.js): a far region of the same world with the arena palace, a
+ * plain of snow and a ring of mountains — no dragon, no spider, no castle, village, zombie or herd anywhere near; the main map (the start ground) has
+ * neither the Queen nor the dragon. The author: «Ледяную Королеву перенести на ДРУГУЮ карту, где будет только она». Older worlds keep her far on the Earth.
+ */
+export const QUEEN_MAP_FROM_GEN = 22;
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -644,7 +651,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -653,6 +660,7 @@ export class TerrainData {
         this.meshTrees = !!(mountains && lush && meshTrees); // (a world made with real trees — `realTrees`: not blocks — chunk.trees, Trees.js)
         this.buildings = !!(mountains && buildings); // (generation 17: different buildings in the settlements — Buildings.js)
         this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
+        this.queenMap = !!(this.apart && queenMap); // (generation 22: the Ice Queen on a map of her own — QueenMap.js, QUEEN_MAP_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
@@ -678,6 +686,7 @@ export class TerrainData {
             const testIce = { x: TEST_CAVE.X - 6, z: TEST_CAVE.Z - 4 };
             let ice = this.lush || this.test ? new IceCastleSite(seed, raw, busy, this.test && !this.apart ? testIce : null, !!iceArena) : null;
             if (ice && this.apart && !ice.plan) ice = new IceCastleSite(seed, raw, busy, testIce); // (a world with no summit for it: on the test mountain as before)
+            if (this.queenMap) ice = new IceCastleMapSite(seed); // (generation 22: the Queen's palace is on her own far map — the Earth has none)
             // the lone houses and the small villages between them (Hamlets.js): never on another site's land
             const iceL = 2.4 * iceMount({ test: ice ? !!ice.testAt : this.test, arena: !!iceArena }).BACK;
             const arenas = new ArenaIndex(seed, raw, this.towers, this.villages, bigArena ? ARENA_BIG : undefined, !!arenaEntries, !!arenaX2); // (the duel arenas: DuelArenas.js)
@@ -740,6 +749,7 @@ export class TerrainData {
         this.planets = this.planets && this.planets.seed === (seed | 0) ? this.planets : new PlanetRegistry(seed);
         const earthH = this.heightAt, planets = this.planets;
         if (mountains) {
+            const qmap = this.queenMap ? this.iceCastle : null; // (the Queen's map: a plain of snow, her palace, mountains — nothing else; QueenMap.js)
             const fn = (ix, iz) => {
                 if (ix >= SPACE.ZONE_X) {
                     const def = planets.bySlot(slotAt(ix, iz));
@@ -749,7 +759,15 @@ export class TerrainData {
                         fn.mesa = fn.emer = fn.moon = fn.fant = 0;
                         return h;
                     }
+                    if (qmap && inQueenMap(ix, iz, 2)) {
+                        const h = qmap.heightOf(ix, iz);
+                        fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
+                        fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+                        fn.iceRock = true; // (no grass, no trees: snow where it can lie, bare rock on the crags)
+                        return h;
+                    }
                 }
+                fn.iceRock = false;
                 const h = earthH(ix, iz);
                 fn.water = earthH.water; fn.sea = earthH.sea; fn.beach = earthH.beach; fn.bank = earthH.bank; fn.kind = earthH.kind;
                 fn.mesa = earthH.mesa; fn.emer = earthH.emer; fn.moon = earthH.moon; fn.fant = earthH.fant;
@@ -776,7 +794,7 @@ export class TerrainData {
         let c = this.chunks.get(key);
         // (the far zone between the planets — where a hero in space is kept, Space.js: nothing at all
         //  there, one shared empty chunk, never kept: a flight there makes no ground)
-        if (!c && cx >= ZONE_CX && this.mountains && !this.planetOfChunk(cx, cz)) return emptyChunk();
+        if (!c && cx >= ZONE_CX && this.mountains && !this.planetOfChunk(cx, cz) && !(this.queenMap && queenChunk(cx, cz, CHUNK))) return emptyChunk();
         if (!c) {
             c = this._generateChunk(cx, cz);
             this.chunks.set(key, c);
@@ -1065,6 +1083,7 @@ export class TerrainData {
      * the trunk (a 2×2 trunk on four columns of one height; the ground round it a step at most).
      */
     _plantLush(c) {
+        if (this.queenMap && c.cx * CHUNK >= SPACE.ZONE_X - 64) return; // (the Queen's map: snow and ice only — no tree, no bush, no flower)
         const x0 = c.cx * CHUNK, z0 = c.cz * CHUNK, C = 7;
         const put = (x, L, z, type, onlyAir) => {
             const lx = x - x0, lz = z - z0;

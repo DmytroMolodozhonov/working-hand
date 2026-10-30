@@ -44,10 +44,10 @@ const POOL_MAX = 64; // idle chunk shells kept for reuse
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
 export class Terrain {
-    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, viewDistance = 112 } = {}) {
+    constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, viewDistance = 112 } = {}) {
         this.scene = scene;
         this.data = new TerrainData();
-        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap });
+        this.data.generate({ seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap });
         // the sea's top is drawn by the wave surface (src/fx/SeaSurface.js), not by flat block faces
         this.data.skipSeaTop = !!this.data.seas;
         this.material = applyVoxelDetail(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 8, specular: 0x111111 }));
@@ -68,7 +68,7 @@ export class Terrain {
         this._frame = 0;
         this.stats = { built: 0, unloaded: 0, maxBuildMs: 0, byWorkers: 0, maxWorkerMs: 0, maxApplyMs: 0 };
         this.flushAround(0, 0);
-        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena }; // (the world's recipe: space.worker.js makes the Earth's globe from it)
+        this.opts = { seed, mountains, seas, test, deepCaves, lush, slopes, wizHuts, furnish, bigHouses, meshTrees, bigArena, apart, dungeons, arenaEntries, buildings, ghostCastle, arenaX2, iceArena, knightCap, queenMap }; // (the world's recipe: the terrain workers and space.worker.js (the Earth's globe) make the world by the SAME one as this thread — `apart`, `knightCap`, `queenMap` too)
         this._startWorkers(this.opts);
     }
 

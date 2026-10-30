@@ -17,9 +17,9 @@ import { simulate } from './pilotsim.mjs';
 export const GIANT_R = 1.6, SNOWMAN_R = 0.85;
 
 /** The world of a seed with the arena (the generation that has it). */
-export function arenaWorld(seed) {
+export function arenaWorld(seed, extra = {}) {
     const d = new TerrainData();
-    d.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, iceArena: true });
+    d.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, iceArena: true, ...extra });
     return d;
 }
 
@@ -65,8 +65,9 @@ export function reach(grid, sx, sz, r) {
 }
 
 /** Everything measured for a seed. */
-export function measure(seed) {
-    const d = arenaWorld(seed), P = d.iceCastle.plan;
+/** `extra`: more recipe options — {test, apart, slopes…, queenMap: true}: the Queen's own map (QueenMap.js). */
+export function measure(seed, extra = {}) {
+    const d = arenaWorld(seed, extra), P = d.iceCastle.plan;
     if (!P) return { seed, plan: null };
     const grid = floorGrid(d, P);
     const ap = iceApproach(P);
@@ -166,9 +167,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const args = process.argv.slice(2);
     const opt = (n, def) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : def; };
     const seeds = opt('seeds', '12345,777,42,2026').split(',').map(Number);
+    const extra = args.includes('--queen-map') ? { test: true, apart: true, slopes: true, furnish: true, queenMap: true } : {}; // (--queen-map: the Queen's own map, as a Creative world of generation 22 makes it)
     let bad = 0;
     for (const seed of seeds) {
-        const m = measure(seed);
+        const m = measure(seed, extra);
         if (!m.plan) { console.log(`seed ${seed}: no castle`); bad++; continue; }
         const P = m.plan;
         const pc = (a, b) => (b ? (100 * a / b).toFixed(1) : '0') + '%';

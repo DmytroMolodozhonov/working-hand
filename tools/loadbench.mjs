@@ -17,7 +17,7 @@ const GEN = +opt('gen', '20');
 const opts = {
     seed: SEED, mountains: true, seas: GEN >= 2, test: GEN >= 3, deepCaves: GEN >= 4, lush: GEN >= 5, slopes: GEN >= 6, wizHuts: GEN >= 7,
     furnish: GEN >= 8, apart: GEN >= 11, bigHouses: GEN >= 14, dungeons: GEN >= 15, arenaEntries: GEN >= 16, buildings: GEN >= 17,
-    ghostCastle: GEN >= 18, arenaX2: GEN >= 19, iceArena: GEN >= 20,
+    ghostCastle: GEN >= 18, arenaX2: GEN >= 19, iceArena: GEN >= 20, queenMap: GEN >= 22,
 };
 const t = { gen: 0, sky: 0, mesh: 0, merge: 0, flora: 0, init: 0 };
 let n0 = performance.now();

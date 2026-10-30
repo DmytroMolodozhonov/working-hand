@@ -1018,7 +1018,7 @@ export class IceCastleLife {
         if (spell === 'freeze') {
             // the rod's bolt FLIES to him (QueenBolts.js): it freezes whoever it reaches on its way — not the moment she casts it
             c.lastFreeze = this._t;
-            this._launchBolt('freeze', from, tp, e.id);
+            this._launchBolt('freeze', from, tp, e.id, !!e.giant);
             if (e.giant) c.giantFrozen = Date.now() + 9000;
             return;
         }
@@ -1461,10 +1461,10 @@ export class IceCastleLife {
 
     // ================================================================ the queen's bolts (the far blows fly: QueenBolts.js)
     /** (host) A bolt leaves the rod's tip for `to`; every computer flies it. */
-    _launchBolt(kind, from, to, targetId = null) {
+    _launchBolt(kind, from, to, targetId = null, giant = false) {
         const d = Math.max(1, from.distanceTo(to)), sp = boltSpeed(d);
         const dir = _v.copy(to).sub(from).divideScalar(d);
-        const m = { e: 'fx', k: 'bolt', b: kind, id: 'b' + (++this._seq) + Math.floor(Math.random() * 1e3), o: [r2(from.x), r2(from.y), r2(from.z)], d: [r2(dir.x * 1000) / 1000, r2(dir.y * 1000) / 1000, r2(dir.z * 1000) / 1000], v: r2(sp), n: r2(d), q: targetId };
+        const m = { e: 'fx', k: 'bolt', b: kind, id: 'b' + (++this._seq) + Math.floor(Math.random() * 1e3), o: [r2(from.x), r2(from.y), r2(from.z)], d: [r2(dir.x * 1000) / 1000, r2(dir.y * 1000) / 1000, r2(dir.z * 1000) / 1000], v: r2(sp), n: r2(d), q: targetId, gi: giant ? 1 : 0 };
         this._fx(m);
     }
 
@@ -1477,7 +1477,7 @@ export class IceCastleLife {
         const dir = vec(m.d).normalize();
         mesh.quaternion.setFromUnitVectors(_v.set(0, 0, 1), dir);
         g.scene.add(mesh);
-        this.bolts.push({ id: String(m.id), kind: m.b === 'spikes' ? 'spikes' : 'freeze', mesh, dir, speed: Math.max(10, Math.min(80, +m.v || 40)), len: Math.max(1, Math.min(60, +m.n || 20)), trav: 0, q: m.q ?? null, o: vec(m.o) });
+        this.bolts.push({ id: String(m.id), kind: m.b === 'spikes' ? 'spikes' : 'freeze', mesh, dir, speed: Math.max(10, Math.min(80, +m.v || 40)), len: Math.max(1, Math.min(60, +m.n || 20)), trav: 0, q: m.q ?? null, o: vec(m.o), pierce: !!m.gi }); // (pierce: a giant stands over the walls — no wall hides it from her, none stops her ice: ICE.GIANT)
         g.sound?.playIce?.();
     }
 
@@ -1502,7 +1502,7 @@ export class IceCastleLife {
                 pos.addScaledVector(b.dir, s);
                 b.trav += s;
                 // a wall (blocks, a door, a chandelier): the bolt crumbles there — nothing reaches a body behind it
-                if ((t && t.isSolidAt(pos.x, pos.y, pos.z)) || (col?.lineOfSight && !col.lineOfSight(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z, 0.5))) { pos.copy(prev); this._endBolt(i, pos); ended = true; break; }
+                if (!b.pierce && ((t && t.isSolidAt(pos.x, pos.y, pos.z)) || (col?.lineOfSight && !col.lineOfSight(prev.x, prev.y, prev.z, pos.x, pos.y, pos.z, 0.5)))) { pos.copy(prev); this._endBolt(i, pos); ended = true; break; }
                 if (b.kind === 'spikes') { if (b.trav >= b.len) { this._applyFx({ k: 'spikes', t: [pos.x, pos.y - 0.4, pos.z], q: [b.o.x, b.o.y, b.o.z] }); this._endBolt(i, pos); ended = true; } continue; }
                 // the rod's freeze: whoever it reaches on its way (the host decides)
                 if (this.auth) {
