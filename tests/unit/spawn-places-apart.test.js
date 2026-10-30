@@ -87,6 +87,23 @@ test('паучиха: тёмная пещера под своей горой, б
     }
 });
 
+test('паучиха в зале: стоит на полу в 18–28 м от героя и видна с места появления (луч по воздуху, свод над обоими)', () => {
+    for (const seed of SEEDS) {
+        const t = world(seed), L = t.spiderDen().lair, free = headroom(t, L.F);
+        const tt = denSpot(L).refine(free), at = safeNear(tt, (x, z) => stand(t, x, z, tt.layer, tt.up, tt.down, 8) != null, { rings: [0, 2, 4, 6], around: 8 });
+        assert.ok(at, `seed ${seed}: нет места для героя`);
+        const sp = tt.boss, d = Math.hypot(at.x - sp.x, at.z - sp.z);
+        assert.ok(d >= 18 && d <= 28.5, `seed ${seed}: паучиха в ${d.toFixed(1)} м`);
+        assert.ok(free(sp.x, sp.z) >= 9, `seed ${seed}: над паучихой нет места (она ~9 м ростом)`);
+        // луч от глаз героя (3,4 м над полом) до её спины (4 м): только воздух — стены между ними нет
+        const Ly = stand(t, at.x, at.z, tt.layer, tt.up, tt.down, 8), N = 60;
+        for (let i = 0; i <= N; i++) {
+            const k = i / N, x = Math.round(at.x + (sp.x - at.x) * k), z = Math.round(at.z + (sp.z - at.z) * k), y = Math.round(Ly + 3.4 + (L.F + 1 + 4 - Ly - 3.4) * k);
+            assert.equal(t.get(x, y, z), BLOCK.AIR, `seed ${seed}: между героем и паучихой камень (${x},${y},${z})`);
+        }
+    }
+});
+
 test('каждое место из списка: твёрдая земля, воздух над головой, земля готова, босс не вплотную', () => {
     for (const seed of SEEDS.slice(0, 2)) {
         const t = world(seed);
