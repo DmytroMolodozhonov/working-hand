@@ -95,7 +95,7 @@ export const SPELL_COST = {
     BrainrotMaxima: 30, // «Brain Rot Maxima» (the dragons — DragonTame.js): once to cast, then 0,5 a second to hold it
     LightningStrike: 25,
     ToTheSun: 12,
-    GiveMyPower: 50, // your power back from your own skeleton (Legacy.js; the author: 50)
+    GiveMyPower: 30, // your power back from your own skeleton (Legacy.js; the author: 30)
     CreatePlanet: 500, EnlargePlanet: 100, TerraformPlanet: 1000, LevitationSuperMaxima: 100, // the gods' scrolls (PlanetMagic.js; the author: 500, 100, 1000; the Super Maxima then 3 a second)
     LetItRain: 20,
     Earthquake: 10,
