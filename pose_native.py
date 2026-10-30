@@ -210,6 +210,8 @@ class NativePose:
         self.game_fps_at = 0.0
         self._hd_slow = False
         self.v5 = _V5Hands()
+        self._zoom = None  # body_zoom.BodyZoom (made with the camera)
+        self._zrect = None  # the crop the networks look at in the current picture (x, y, w, h in pixels)
 
     # ------------------------------------------------------------ availability
     def available(self):
@@ -399,10 +401,10 @@ class NativePose:
         def run(rgb, ts, small=None):
             r = h.process(small if small is not None else rgb)
             out = {
-                "poseLandmarks": _pts(r.pose_landmarks.landmark if r.pose_landmarks else None, True),
-                "faceLandmarks": _pts(r.face_landmarks.landmark if r.face_landmarks else None),
-                "leftHandLandmarks": _pts(r.left_hand_landmarks.landmark if r.left_hand_landmarks else None),
-                "rightHandLandmarks": _pts(r.right_hand_landmarks.landmark if r.right_hand_landmarks else None),
+                "poseLandmarks": self._um(_pts(r.pose_landmarks.landmark if r.pose_landmarks else None, True), rgb),
+                "faceLandmarks": self._um(_pts(r.face_landmarks.landmark if r.face_landmarks else None), rgb),
+                "leftHandLandmarks": self._um(_pts(r.left_hand_landmarks.landmark if r.left_hand_landmarks else None), rgb),
+                "rightHandLandmarks": self._um(_pts(r.right_hand_landmarks.landmark if r.right_hand_landmarks else None), rgb),
             }
             v5 = self._v5()
             if v5:
@@ -426,7 +428,7 @@ class NativePose:
                 min_pose_detection_confidence=0.5, min_pose_presence_confidence=0.5, min_tracking_confidence=0.5))
         # the body follower never stays stuck on a wrong body (pose_guard.py: found on the author's recording)
         from pose_guard import PoseGuard
-        pose = PoseGuard(make_pose(mode), make_pose(vision.RunningMode.IMAGE), lambda lm: _pts(lm, True))
+        pose = PoseGuard(make_pose(mode), make_pose(vision.RunningMode.IMAGE), lambda lm: _pts(lm, True))  # (points of the crop: mapped back below)
         hands = vision.HandLandmarker.create_from_options(vision.HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=os.path.join(MODELS, "hand_landmarker.task")),
             running_mode=mode, num_hands=2,
@@ -456,25 +458,25 @@ class NativePose:
                 # a hand to be found anew waits for this picture's body.
                 if v5.tracking() and last_pose[0] is not None:
                     jh = pool.submit(v5.process, rgb, last_pose[0], None, hand_pool)
-                    pl = jp.result()[0]
+                    pl = self._um(jp.result()[0], rgb)
                     hands_out = jh.result()
                 else:
                     # a hand not followed: every 3rd picture MediaPipe's palm detector looks too —
                     # close to the camera the body's wrist is wrong, the palm detector right
                     js = pool.submit(hands.detect_for_video, img, ts) if n[0] % 3 == 0 else None
-                    pl = jp.result()[0]
-                    seeds = [_pts(lm) for lm in (js.result().hand_landmarks or [])] if js is not None else None
+                    pl = self._um(jp.result()[0], rgb)
+                    seeds = [self._um(_pts(lm), rgb) for lm in (js.result().hand_landmarks or [])] if js is not None else None
                     hands_out = v5.process(rgb, pl or last_pose[0], pool=hand_pool, seeds=seeds)
                 last_pose[0] = pl or last_pose[0]
                 out = {"poseLandmarks": pl, "hands": hands_out}
             else:
                 jh = pool.submit(hands.detect_for_video, img, ts)
-                pl, h = jp.result()[0], jh.result()
+                pl, h = self._um(jp.result()[0], rgb), jh.result()
                 out = {
                     "poseLandmarks": pl,
                     "hands": [
                         {
-                            "landmarks": _pts(lm),
+                            "landmarks": self._um(_pts(lm), rgb),
                             "label": h.handedness[i][0].category_name if h.handedness and h.handedness[i] else None,
                             "score": h.handedness[i][0].score if h.handedness and h.handedness[i] else 1.0,
                         }
@@ -483,7 +485,7 @@ class NativePose:
                 }
             if jf is not None:
                 f = jf.result()
-                out["faceLandmarks"] = _pts(f.face_landmarks[0]) if f.face_landmarks else None
+                out["faceLandmarks"] = self._um(_pts(f.face_landmarks[0]), rgb) if f.face_landmarks else None
             return out
 
         def close():
@@ -496,6 +498,14 @@ class NativePose:
                 except Exception:  # noqa: BLE001
                     pass
         return run, close
+
+    def _um(self, pts, rgb):
+        """Points the networks gave on the crop → the whole picture's (see body_zoom.py)."""
+        z, r = self._zoom, self._zrect
+        if pts and z is not None and r is not None:
+            h, w = rgb.shape[:2]
+            z.unmap(pts, w, h, r)
+        return pts
 
     def _v5(self):
         """The V5 hand finder if it is asked for and ready, else None (the old hands go on)."""
@@ -535,6 +545,14 @@ class NativePose:
             # several pictures ago. (A test video is read picture by picture.)
             grab = None if os.environ.get("ZNS_CAMERA_FILE") else _LatestFrame(cap, self._stop)
             t_last = 0.0
+            import numpy as np
+            from body_zoom import BodyZoom, FarWatch, Light, body_box
+            zoom = self._zoom = BodyZoom()
+            if os.environ.get("ZNS_NO_ZOOM"):
+                zoom.update = lambda *a, **k: None  # (tests / bench: the old way)
+            watch = FarWatch()
+            light = None if os.environ.get("ZNS_NO_LIGHT") else Light(cv2, np)
+            last_body = None
             while not self._stop.is_set():
                 if grab:
                     ok, frame = grab.next(timeout=1.0)
@@ -566,11 +584,36 @@ class NativePose:
                 t0 = t_last = time.perf_counter()
                 t_wall = time.time()  # (when the picture was taken into work: the game measures the hands' delay)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                H, W = rgb.shape[:2]
+                # a far player: backlight / dark figure → a lightening; a small body → a zoom on it
+                # (the networks of the body and the face look at the crop, the hands at the whole picture)
+                k = 0.0
+                if light is not None:
+                    try:
+                        k = light.step(lambda: cv2.cvtColor(cv2.resize(rgb, (160, max(2, round(160 * H / W))), interpolation=cv2.INTER_AREA), cv2.COLOR_RGB2GRAY),
+                                       body_box(last_body))
+                        if k > 0:
+                            rgb = light.gamma(rgb, k)
+                    except Exception:  # noqa: BLE001
+                        light = None
+                rect = zoom.pixels(W, H) if zoom.active() else (0, 0, W, H)
+                self._zrect = rect
+                cx, cy, cw, ch = rect
+                crop = rgb if (cw >= W and ch >= H) else np.ascontiguousarray(rgb[cy:cy + ch, cx:cx + cw])
                 small = None
-                if rgb.shape[1] > 800:
-                    small = cv2.resize(rgb, (640, round(640 * rgb.shape[0] / rgb.shape[1])), interpolation=cv2.INTER_AREA)
+                if crop.shape[1] > 800:
+                    small = cv2.resize(crop, (640, round(640 * crop.shape[0] / crop.shape[1])), interpolation=cv2.INTER_AREA)
+                elif crop is not rgb:
+                    small = crop
+                if k >= 0.25 and light is not None:
+                    small = light.contrast(small if small is not None else rgb, k)
                 ts = int((time.time() - t_start) * 1000)
                 out = run(rgb, ts, small)
+                last_body = out.get("poseLandmarks")
+                zoom.update(last_body, W / H)
+                if zoom.changed:
+                    print(f"  [Камера] игрок мелкий — приближаю его (×{1 / zoom.s:.1f})" if zoom.on else "  [Камера] игрок виден крупно — смотрю на весь кадр")
+                hint = watch.update(last_body, aspect=W / H)
                 # a real stick (a pen, a brush) held in a hand: its direction (stick_detect.py)
                 sticks = _sticks(frame, out)
                 if sticks:
@@ -584,6 +627,12 @@ class NativePose:
                     frames = 0
                     t_rate = now
                 v5on = self.hands_mode == "v5" and self.v5.state == "ready"
+                if zoom.active():
+                    out["zoom"] = round(1 / zoom.s, 2)  # (how many times closer the body networks look)
+                if k > 0:
+                    out["light"] = round(k, 2)
+                if hint:
+                    out["farHint"] = True  # (the game may say «step closer»)
                 out.update({"t": round(t_wall * 1000), "cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
                             "handsEngine": "v5" if v5on else "mp"})
                 if v5on:

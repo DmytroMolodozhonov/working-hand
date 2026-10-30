@@ -506,11 +506,29 @@ export class PoseInterpreter {
         }
         if (head) {
             const t = performance.now() / 1000;
+            // a head lost for a while (a far player, the light): the first look back is taken as is, not through the filter's old speed
+            if (this._headLostT && t - this._headLostT > 0.3) { this.headFilter.yaw.x = null; this.headFilter.pitch.x = null; }
+            this._headLostT = 0;
             this._headT = t;
             this.lastHead.yaw = this.headFilter.yaw.filter(head.yaw, t);
             this.lastHead.pitch = this.headFilter.pitch.filter(head.pitch, t);
             data.headRotation.yaw = this.lastHead.yaw;
             data.headRotation.pitch = this.lastHead.pitch;
+        } else {
+            // neither the face nor the body's nose and ears are seen (far away, against the light): the view does not freeze
+            // on the last turn — after 0.4 s it eases back to «straight» (time constant 3 s); a head seen again takes over at once
+            const t = performance.now() / 1000;
+            if (!this._headLostT) this._headLostT = t;
+            const lost = t - this._headLostT;
+            if (lost > 0.4) {
+                const dt = Math.min(0.2, t - (this._headDecayT || t));
+                const f = Math.exp(-dt / 3);
+                this.lastHead.yaw *= f;
+                this.lastHead.pitch *= f;
+                data.headRotation.yaw = this.lastHead.yaw;
+                data.headRotation.pitch = this.lastHead.pitch;
+            }
+            this._headDecayT = t;
         }
         return data;
     }

@@ -61,7 +61,7 @@ export class HeadFromBody {
     read(lm, aspect = 4 / 3) {
         if (!lm || lm.length < 13) return null;
         const nose = lm[0], eL = lm[7], eR = lm[8], sL = lm[11], sR = lm[12];
-        if (!nose || !eL || !eR || (nose.visibility ?? 1) < 0.4 || (eL.visibility ?? 1) < 0.15 || (eR.visibility ?? 1) < 0.15) return null;
+        if (!nose || !eL || !eR || (nose.visibility ?? 1) < 0.3 || (eL.visibility ?? 1) < 0.15 || (eR.visibility ?? 1) < 0.15) return null;
         // (in pixels' shape: x stretched by the picture's width)
         const ex = (eL.x - eR.x) * aspect, ey = eL.y - eR.y;
         const len = Math.hypot(ex, ey);

@@ -64,3 +64,28 @@ test('PoseInterpreter: no face found — the head still turns (from the body)', 
     for (let i = 0; i < 30; i++) d = P.process({ poseLandmarks: head(-0.5, 0), faceLandmarks: null }, video);
     assert.ok(d.headRotation.yaw < -0.35, `yaw ${d.headRotation.yaw}`);
 });
+
+test('head lost for a while (far, against the light): the view does not freeze on the last turn — it eases back, and a head seen again takes over at once', () => {
+    const real = performance.now.bind(performance);
+    let now = 1000;
+    performance.now = () => now;
+    try {
+        const P = new PoseInterpreter(null);
+        const video = { videoWidth: 640, videoHeight: 480 };
+        let d;
+        for (let i = 0; i < 40; i++) { now += 50; d = P.process({ poseLandmarks: head(0.5, 0), faceLandmarks: null }, video); }
+        const turned = d.headRotation.yaw;
+        assert.ok(turned > 0.35);
+        // nothing seen (no nose, no ears): the first half second it holds, then it eases back
+        const blind = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.05 }));
+        for (let i = 0; i < 8; i++) { now += 50; d = P.process({ poseLandmarks: blind, faceLandmarks: null }, video); }
+        assert.ok(d.headRotation.yaw > turned * 0.9, 'a short gap holds the turn');
+        for (let i = 0; i < 80; i++) { now += 50; d = P.process({ poseLandmarks: blind, faceLandmarks: null }, video); }
+        assert.ok(d.headRotation.yaw < turned * 0.4, `eased back (${turned} → ${d.headRotation.yaw})`);
+        // seen again (turned the other way): no slow crawl from the old value
+        now += 50; d = P.process({ poseLandmarks: head(-0.5, 0), faceLandmarks: null }, video);
+        assert.ok(d.headRotation.yaw < -0.3, `back at once (${d.headRotation.yaw})`);
+    } finally {
+        performance.now = real;
+    }
+});

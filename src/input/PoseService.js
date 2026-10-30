@@ -503,6 +503,12 @@ export class PoseService {
             this._notice(busy ? `Кисти V5 ${r.v5} — пока работают кисти V4` : `Кисти V5 не запустились (${r.v5}) — работают кисти V4`);
         } else if (this.handsWanted.startsWith('v5') && r.handsEngine === 'v5' && this._noticed && !this._noticed.startsWith('Кисти V5 включились')) this._notice('Кисти V5 включились');
         this._nativeVideo = { videoWidth: r.w || 640, videoHeight: r.h || 480 };
+        // a far or badly lit player (3 s of a weak body): say so, kindly and not often
+        this.stats.farZoom = r.zoom || 1;
+        if (r.farHint && performance.now() - (this._farHintAt || -1e9) > 60000) {
+            this._farHintAt = performance.now();
+            this.onNotice?.('Подойдите чуть ближе к камере — вас плохо видно');
+        }
         // (the picture's own time, not when it reached the game: the hand filters see its real speed
         // even when results come unevenly — the program's clock is this computer's)
         const age = r.t ? Math.max(0, Math.min(500, Date.now() - r.t)) : 0;
