@@ -991,7 +991,7 @@ export class Duel {
         const ward = g.wards?.segmentHit(from, b.front, isStrongDuel(b.spell) ? b.spell : null, b.by);
         if (ward) {
             b.front.copy(ward);
-            if (b.spell === 'Electrum' && b.by === this.me && g.wards.lastHit) g.strong?.startElectrum(b.side, 'W', g.wards.lastHit.id, ward);
+            if (b.spell === 'Electrum' && b.by === this.me && g.wards.lastHit) { g.strong?.startElectrum(b.side, 'W', g.wards.lastHit.id, ward); b.wardHold = true; }
             this._end(b, 'blocked');
             return false;
         }
@@ -1440,10 +1440,22 @@ export class Duel {
         this.bolts.delete(b.id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid); // (now the lightning is held on it)
+        else this._pressShield(b, res);
         if (res === 'blocked' || res === 'fizzle') this._hitBurst(b.spell, b.front, 15);
         // (my «Левиоса» at a wizard: why it did not lift them — a house's sphere, or it flew past)
         if (b.aim && b.by === this.me && b.spell === 'LevitateDuel' && res !== 'hit') this.game.levitation?.missed?.(b.aim, res === 'blocked' ? 'levWard' : 'levMiss');
         if (broadcast && this.game.sync && (b.by === this.me || res === 'hit' || res === 'blocked')) this.game.sync.duelEnd(b.id, res);
+    }
+
+    /**
+     * My «Электром» charge was stopped by a player's shield right at them (not a house's sphere, not the arena's dome far
+     * from them): the lightning is held on them all the same — it presses on the shield until it gives way (Combat.pressBeam).
+     */
+    _pressShield(b, res) {
+        if (res !== 'blocked' || b.by !== this.me || b.spell !== 'Electrum' || b.wardHold || b.tk !== 'p' || b.tid == null) return;
+        const tp = this._targetPos(b, _v3);
+        if (!tp || tp.distanceTo(b.front) > 6) return;
+        this.game.strong?.startElectrum(b.side, b.tk, b.tid);
     }
 
     /** Another computer finished a charge (hit / blocked / fizzled). */
@@ -1453,6 +1465,7 @@ export class Duel {
         this.bolts.delete(id);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid);
+        else this._pressShield(b, res);
         // (my «Левиоса»: the wizard's own computer found it on its shield)
         if (res === 'blocked' && b.aim && b.by === this.me && b.spell === 'LevitateDuel') this.game.levitation?.missed?.(b.aim, 'levShield');
         this._hitBurst(b.spell, b.front, res === 'hit' ? 30 : 15);

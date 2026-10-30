@@ -229,6 +229,14 @@ export function shieldHitCost(kind) {
     return (cost ?? 10) / 2; // (an unnamed spell: as an ordinary one, 10)
 }
 
+/**
+ * A held beam on a shield (the author: «Электром» presses on «Protection» like on a house's sphere — without end, until the
+ * shield gives way): mana a second the shield's holder pays while it is pressed. The dome («Protection Maxima») pays half
+ * («держит дольше»), as against the Ice Queen. Not in the table — a one-off charge, paid once (shieldHitCost).
+ */
+export const SHIELD_PRESS = { Electrum: 6 };
+export const pressCost = (kind, dt, dome = false) => (SHIELD_PRESS[kind] || 0) * dt * (dome ? 0.5 : 1);
+
 const SHIELD_LEVEL = 0.15; // m: one hand this much higher than the other — the shield goes up at it (Combat._shieldSide)
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
@@ -972,6 +980,36 @@ export class Combat {
         fx.lightFlash(at, 0x6fc3ff, 2, 0.2, 15);
         this.game.hud.setVoice('🛡️ Щит отразил заклинание!', true);
         if (this.game.sound) this.game.sound.playFrozenHit?.();
+        return true;
+    }
+
+    /**
+     * A held beam (`kind`, «Электром») presses on whatever shields me from `from`, `dt` seconds more. The ground-vortex
+     * blocks, the wall of things and a shield in the hand take it as any blow; my «Protection» / dome drink its mana
+     * every second (pressCost) — sparks, a flash, a crackle — until it gives way; the gods' golden shield holds it free.
+     * @returns {boolean} true: held; false: no shield here, or it gave way now (the beam goes on to me)
+     */
+    pressBeam(from, kind, dt) {
+        if (this.dead || this.shieldFactor(from) < 1) return false;
+        const s = this.shield;
+        if (!s || s.left <= 0 || s.gods) return this._blocked(from, kind);
+        if (this.manaOn) {
+            const cost = pressCost(kind, dt, s.type === 2);
+            if (this.fatigue < cost) {
+                this.fatigue = 0;
+                this._shatter('💥 Щит разбит — молния продавила его, не хватило маны!');
+                return false;
+            }
+            this.fatigue -= cost;
+        }
+        const c = this.center(_v1);
+        const at = s.type === 2 ? c.addScaledVector(_v2.subVectors(from, c).normalize(), 2.4) : this.shieldAt(s.side, _v1);
+        const fx = this.game.fx;
+        for (let i = 0; i < 3; i++) fx?.spark(at, i % 2 ? 0xbfe6ff : 0xffffff, 0.12, _v3.set((Math.random() - 0.5) * 6, Math.random() * 4, (Math.random() - 0.5) * 6), 0.3);
+        if (Math.random() < 0.35) fx?.lightFlash?.(at, 0x8fd0ff, 1.5 + Math.random(), 0.12, 12); // (the shield flickers under it)
+        if (Math.random() < 0.4) this.game.sound?.playCrack?.(at, 0.5);
+        const now = performance.now();
+        if (now - (this._pressMsgAt || -1e9) > 3000) { this._pressMsgAt = now; this.game.hud?.setVoice?.('🛡️⚡ Молния давит на щит — он держится, пока хватает маны', true); }
         return true;
     }
 

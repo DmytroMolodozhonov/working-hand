@@ -35,7 +35,7 @@ import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './Knight
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
 import { FX } from '../fx/WizardFx.js';
 import { DUEL, DUEL_SPELLS } from './Duel.js';
-import { PVP, shieldHitCost } from './Combat.js';
+import { PVP, shieldHitCost, pressCost } from './Combat.js';
 import { wantedTactics } from './Wanted.js';
 import { lessonSpell } from './BumpRules.js';
 import { FACE, facesTarget, turnToward, yawTo } from './FaceTarget.js';
@@ -846,12 +846,23 @@ export class WizardFight {
      * (host) A spell reached this wizard's shield (`dome`: the Master's dome, else the hand shield):
      * it costs half of that spell's mana. true: held; false: no mana for it — it shatters, the spell goes on.
      */
-    shieldPays(v, spell, dome = false) {
-        const cost = shieldHitCost(spell);
+    shieldPays(v, spell, dome = false, dt = 0) {
+        // (a held beam presses on it: mana a second, the dome half — Combat.pressCost; a one-off charge pays half its price)
+        const cost = dt > 0 && spell === 'Electrum' ? pressCost(spell, dt, dome) : shieldHitCost(spell);
         if (dome) v.domeT = Math.max(v.domeT || 0, v.W?.dome?.t || 6); // (still under fire: he keeps it up)
         if (v.mana >= cost) { v.mana -= cost; return true; }
         v.mana = 0;
         this._shatter(v, dome ? FX.DOME : FX.SHIELD);
+        return false;
+    }
+
+    /** (host) «Электром» presses on a knight's shield of wood and iron: it heats up (10 s), then gives way; it cools down when not pressed. */
+    shieldHeats(v, dt) {
+        const now = performance.now();
+        v.heat = Math.max(0, (v.heat || 0) - Math.max(0, (now - (v.heatAt || now)) / 1000 - dt)) + dt;
+        v.heatAt = now;
+        if (v.heat < 10) return true;
+        v.heat = 0;
         return false;
     }
 

@@ -132,7 +132,7 @@ export class StrongMagic {
         const g = this.game, c = g.combat;
         if (c.dead) return;
         const from = this.game.duel?._handOf?.(by, 'right', _w, _d) ? _w : null;
-        if (from && c.shieldFactor(from) >= 1 && c._blocked(from, 'Electrum')) return;
+        if (from && c.shieldFactor(from) >= 1 && c.pressBeam(from, 'Electrum', dmg / STRONG.Electrum.dps)) return; // (a shield: it presses on it, mana a second, until it gives way)
         if (c.enabled) c.damage(dmg, by, 'Electrum');
         if (Math.random() < 0.3) g.fx?.spark?.(c.center(_v), 0xbfe6ff, 0.15, _o.set((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4), 0.3);
     }
@@ -508,7 +508,7 @@ export class StrongMagic {
         const c = tk === 'z' ? g.zombieById?.get(tid) : tk === 's' ? g.spiders?.byId?.(tid) : tk === 'D' ? g.dragons?.byId?.(tid) : tk === 'I' ? g.iceCastle?.byId?.(tid) : duel?._creature?.(tk, tid);
         if (!c || !this._alive(tk, c)) return;
         // (a wizard's shield / the Master's dome drinks it with its mana)
-        if (tk === 'v' && duel?._casterAt && g.castleLife?.wardOff?.(c, duel._casterAt(by, c), 'Electrum')) return;
+        if (tk === 'v' && duel?._casterAt && g.castleLife?.wardOff?.(c, duel._casterAt(by, c), 'Electrum', dmg / STRONG.Electrum.dps)) return;
         this._hurt(tk, c, dmg, 'Electrum', by);
     }
 
