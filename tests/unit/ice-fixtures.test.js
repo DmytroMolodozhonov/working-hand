@@ -5,10 +5,21 @@ import assert from 'node:assert/strict';
 import { IceFixtures, GATE, gateDamage, gateCap } from '../../src/game/IceFixtures.js';
 import { BLOCK } from '../../src/world/Terrain.js';
 
+// (a floor under the hall at layer 20 and a wall from it up to the vault at layer 48: the chain's hook stands on the castle)
+function stand(t) {
+    for (let x = -6; x <= 6; x++) for (let z = -8; z <= 4; z++) t.set(x, 20, z, BLOCK.ICE_WALL);
+    for (let L = 20; L <= 48; L++) t.set(3, L, -2, BLOCK.ICE_WALL);
+    for (let x = 0; x <= 3; x++) t.set(x, 48, -2, BLOCK.ICE_WALL);
+}
+
 function setup() {
     const blocks = new Map();
     const key = (x, L, z) => x + ',' + L + ',' + z;
-    const t = { get: (x, L, z) => blocks.get(key(x, L, z)) ?? BLOCK.AIR, set: (x, L, z, b) => blocks.set(key(x, L, z), b) };
+    const t = {
+        get: (x, L, z) => blocks.get(key(x, L, z)) ?? BLOCK.AIR, set: (x, L, z, b) => blocks.set(key(x, L, z), b),
+        landMade: () => true, bedrockTop: -40,
+        floorBelow(x, z, L) { for (let l = L; l > -60; l--) if (blocks.has(key(x, l, z)) && blocks.get(key(x, l, z)) !== BLOCK.AIR) return l; return -61; },
+    };
     const doors = { list: new Map(), _place(d) { this.list.set(d.id, { ...d, model: { traverse() {} } }); }, remove(id) { this.list.delete(id); }, _setAngle(d, a) { d.a = a; } };
     const game = { doors, world: { terrain: { data: t } }, scene: { add() {}, remove() {} }, collision: { addBox: () => 1, removeBox() {} } };
     const plan = { x: 0, z: 0, rot: 0, F: 10, floor: 20, gate: { x: 0, y: 19.5, z: 13 }, chandelier: { x: 0, y: 40, z: -2 } };
@@ -47,6 +58,7 @@ test('her magic gone: the gates are plain ice — one «Бомбардо Мак�
 test('the chandelier hangs on its chain from the vault; its hook melted — it falls and shatters', () => {
     const { f, life, t } = setup();
     const P = life.plan;
+    stand(t);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) t.set(dx, 48, -2 + dz, BLOCK.ICE_WALL); // (the vault over it)
     f.make();
     f.update(0.016);
@@ -55,6 +67,7 @@ test('the chandelier hangs on its chain from the vault; its hook melted — it f
     f.update(1);
     assert.ok(!life.state.chandFallen, 'held while its hook is there');
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (dx || dz) t.set(dx, 48, -2 + dz, BLOCK.AIR);
+    for (let x = 1; x <= 3; x++) t.set(x, 48, -2, BLOCK.AIR);
     f.update(1);
     assert.ok(life.state.chandFallen, 'the vault round the hook blown away: a lone block does not hold it in the air');
     for (let i = 0; i < 200 && !f.ch.wreck; i++) f.update(0.02);
@@ -64,9 +77,48 @@ test('the chandelier hangs on its chain from the vault; its hook melted — it f
 
 test('a blast at the chandelier breaks its chain', () => {
     const { f, life, t } = setup();
-    t.set(0, 48, -2, BLOCK.ICE_WALL);
+    stand(t);
     f.make();
     f.update(0.016);
     f.blast({ x: 0, y: 38, z: -2 }, 4, 3);
     assert.ok(life.state.chandFallen);
+});
+
+test('the vault over the hook cut off from the castle (a lone column in the air): the chandelier falls, and it lies WHOLE on the floor', () => {
+    const { f, life, t } = setup();
+    stand(t);
+    f.make(); f.update(0.016);
+    assert.ok(f.ch.model && f.ch.chain);
+    for (let L = 20; L <= 47; L++) t.set(3, L, -2, BLOCK.AIR); // (the wall that held the vault is gone; a bit of vault is left hanging)
+    for (let i = 0; i < 12; i++) f.update(0.6);
+    assert.ok(life.state.chandFallen, 'a hook with nothing under it is no hook');
+    for (let i = 0; i < 300 && !f.ch.wreck; i++) f.update(0.02);
+    assert.ok(f.ch.wreck);
+    assert.equal(f.ch.model.scale.y, 1, 'whole: not squashed, not broken');
+});
+
+test('the castle woke up already blown apart (no vault at all): the chandelier is on the floor, not in the air', () => {
+    const { f, life, t } = setup();
+    for (let x = -6; x <= 6; x++) for (let z = -8; z <= 4; z++) t.set(x, 20, z, BLOCK.ICE_WALL);
+    f.make(); f.update(0.016);
+    assert.ok(life.state.chandFallen);
+    assert.ok(f.ch.wreck && f.ch.model.position.y < 25, 'lying on the floor');
+});
+
+test('the floor under it blown away too: it falls on to what is left below', () => {
+    const { f, life, t } = setup();
+    stand(t);
+    for (let x = -6; x <= 6; x++) for (let z = -8; z <= 4; z++) t.set(x, 5, z, BLOCK.ICE_WALL); // (the ground far below)
+    f.make(); f.update(0.016);
+    for (let x = -6; x <= 6; x++) for (let z = -8; z <= 4; z++) t.set(x, 20, z, BLOCK.AIR);
+    f.fallChandelier();
+    for (let i = 0; i < 600 && !f.ch.wreck; i++) f.update(0.02);
+    assert.ok(f.ch.wreck && f.ch.model.position.y < 12 && f.ch.model.position.y > 4, 'on the lower floor (' + f.ch.model.position.y + ')');
+});
+
+test('gates with no frame at their first look (the castle blown apart while far): they fall', () => {
+    const { f, life } = setup();
+    f.make(); f.update(0.016);
+    f.update(1);
+    assert.ok(life.state.gateBroken, 'no lintel, no posts: not hanging in the air');
 });

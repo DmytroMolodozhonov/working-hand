@@ -35,7 +35,7 @@
  */
 
 import * as THREE from 'three';
-import { doorHeld } from './Wreck.js';
+import { doorHeld, floorUnder } from './Wreck.js';
 import { isSolid } from '../world/Terrain.js';
 import { iceYaw, iceLocal } from '../world/IceCastle.js';
 import { chandelierModel, iceChainModel, CHANDELIER_HUB, CHANDELIER_LOW } from './IceModels.js';
@@ -78,6 +78,43 @@ export function hookHeld(t, x, L, z) {
     if (isSolid(t.get(x, L + 1, z))) return true;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && isSolid(t.get(x + dx, L, z + dz))) return true;
     return false;
+}
+
+/**
+ * Does the hook's block stand on the castle — a chain of solid blocks from it down to the palace's floor (`floorL`)? «Ничто не висит
+ * в воздухе»: a lone column of the spire left over the blown vault is not a hook (hookHeld looks only at the neighbours). A greedy
+ * search, the lowest neighbour first — an intact vault is a short way down its rings and walls; a cut-off piece is searched whole
+ * (≤ `cap` blocks; one bigger than that is a mass the collapse rules deal with themselves: held).
+ */
+export function hookGrounded(t, x, L, z, floorL, cap = 1500) {
+    x = Math.round(x); z = Math.round(z);
+    if (!isSolid(t.get(x, L, z))) return false;
+    const seen = new Set();
+    const key = (a, l, b) => ((a + 4096) * 8192 + (b + 4096)) * 512 + (l + 128);
+    const stack = [[x, L, z]];
+    seen.add(key(x, L, z));
+    while (stack.length) {
+        const [a, l, b] = stack.pop();
+        if (l <= floorL) return true;
+        if (seen.size > cap) return true;
+        // (pushed last = taken first: below, then the four sides, then above)
+        for (const [da, dl, db] of NEIGHBOURS) {
+            const na = a + da, nl = l + dl, nb = b + db, k = key(na, nl, nb);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            if (isSolid(t.get(na, nl, nb))) stack.push([na, nl, nb]);
+        }
+    }
+    return false;
+}
+const NEIGHBOURS = [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]];
+
+/** Are the land chunks round the hall made (the support check must not ask the world to make them in a frame)? */
+export function hallLoaded(t, P) {
+    if (!t?.landMade || !P?.chandelier) return false;
+    const X = P.chandelier.x, Z = P.chandelier.z;
+    for (const [dx, dz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, 14], [14, -14], [-14, -14]]) if (!t.landMade(X + dx, Z + dz)) return false;
+    return true;
 }
 
 /** The first solid layer above (x, L0, z) within `up` layers (the hook of a chandelier); null: none (yet). */
@@ -162,15 +199,20 @@ export class IceFixtures {
         // (host) the supports: the gates' archway, the chandelier's hook
         const t = this.game.world?.terrain?.data;
         if (!t) return;
-        if (!this.st.gateBroken) for (const id of this.leaves) {
+        const loaded = hallLoaded(t, this.plan);
+        if (!this.st.gateBroken && loaded) for (const id of this.leaves) {
             const d = this.game.doors?.list.get(id);
             if (!d) continue;
             const held = doorHeld(t, d);
             if (held) this.held0.set(id, true);
-            else if (this.held0.get(id)) { this.breakGates('frame'); break; }
+            else { this.breakGates('frame'); break; } // (no frame — seen held before or the castle woke up already blown apart: «ничто не висит в воздухе»)
         }
         const c = this.ch;
-        if (c && !this.st.chandFallen && c.hookL != null && !hookHeld(t, this.plan.chandelier.x, c.hookL, this.plan.chandelier.z)) this.fallChandelier('hook');
+        if (c && !this.st.chandFallen && c.hookL != null && loaded) {
+            const P = this.plan, X = P.chandelier.x, Z = P.chandelier.z;
+            // (the hook's block gone, or left alone in the air over a blown vault: the chain has nothing to hang on)
+            if (!hookHeld(t, X, c.hookL, Z) || ((this._groundT = (this._groundT || 0) + 1) % 3 === 0 && !hookGrounded(t, X, c.hookL, Z, P.floor))) this.fallChandelier('hook');
+        }
     }
 
     /** Her magic in the gates: the frost-glow while she lives, plain ice when she is gone. */
@@ -187,14 +229,19 @@ export class IceFixtures {
         const g = this.game, P = this.plan, c = this.ch;
         if (!c || !P.chandelier) return;
         const X = P.chandelier.x, Z = P.chandelier.z;
-        const floor = P.floor - 0.5; // (the hall's walking height)
+        let floor = P.floor - 0.5; // (the hall's walking height)
         if (!c.model) {
             if (this.st.chandFallen) { this._wreck(); return; }
             const t = g.world?.terrain?.data;
             if (!t) return;
             const hub = P.chandelier.y - 2 + CHANDELIER_HUB;
             const L = hookAbove(t, X, Math.round(hub + 1.5) + 1, Z);
-            if (L == null) return; // (the vault's blocks not here yet: hung when they are)
+            if (!hallLoaded(t, P)) return; // (the land is not here yet: the hall is looked at when it is)
+            if (L == null || !hookGrounded(t, X, L, Z, P.floor)) {
+                // (the vault is gone — blown apart, melted, fallen while the castle slept: nothing to hang on; the host lays it on the floor)
+                if (this.auth) { this.st.chandFallen = true; this.life._sendSoon = true; this._wreck(); }
+                return;
+            }
             c.hookL = L;
             c.hookY = L - 1.5; // (the block's underside)
             c.y = P.chandelier.y - 2;
@@ -209,10 +256,16 @@ export class IceFixtures {
         }
         if (this.st.chandFallen && !c.falling && !c.wreck) this._startFall(); // (the host's word reached me)
         if (!c.falling) return;
+        // (what is under it NOW: the floor may be blown away too — it falls on to whatever is left; nothing to the bedrock: it is gone.
+        // Asked from where it WAS, before the step: a long frame never carries it through the floor)
+        if ((c.landT = (c.landT || 0) - dt) <= 0 || c.rest == null) { c.landT = 0.1; c.rest = this._restY(c.y - CHANDELIER_LOW); }
         c.vy -= 20 * dt;
         c.y += c.vy * dt;
+        if (c.rest != null) c.y = Math.max(c.y, c.rest + CHANDELIER_LOW);
         c.model.position.y = c.y;
         c.model.rotation.z = Math.min(0.5, c.model.rotation.z + dt * 0.4);
+        if (c.rest == null) { if (c.y < (this.game.world?.terrain?.data?.bedrockTop ?? -40)) { this._crash(_v.set(X, c.y, Z)); this._dropChandelier(); c.falling = false; c.wreck = true; } return; }
+        floor = c.rest;
         if (c.y - CHANDELIER_LOW > floor) return;
         // the crash: it shatters on the floor
         c.falling = false;
@@ -228,11 +281,20 @@ export class IceFixtures {
         c.wreck = true;
         if (c.chain) { g.scene?.remove(c.chain); c.chain = null; }
         if (!c.model) { c.model = chandelierModel(); g.scene?.add(c.model); }
-        const floor = P.floor - 0.5;
-        c.model.position.set(P.chandelier.x, floor + 1.1, P.chandelier.z);
-        c.model.rotation.set(0.25, 0.7, 1.15);
-        c.model.scale.set(1, 0.55, 1);
-        if (c.boxId == null && g.collision) c.boxId = g.collision.addBox({ minX: P.chandelier.x - 2.4, maxX: P.chandelier.x + 2.4, minY: floor, maxY: floor + 1.6, minZ: P.chandelier.z - 2.4, maxZ: P.chandelier.z + 2.4, kind: 'wreck' });
+        // (a gift of the gods is not broken by its fall: it lies whole on whatever floor is left under it, tilted on its rim)
+        const floor = c.rest ?? this._restY(P.chandelier.y) ?? P.floor - 0.5;
+        c.rest = floor;
+        c.model.position.set(P.chandelier.x, floor + 2.4, P.chandelier.z);
+        c.model.rotation.set(0.35, 0.7, 0.9);
+        c.model.scale.set(1, 1, 1);
+        if (c.boxId == null && g.collision) c.boxId = g.collision.addBox({ minX: P.chandelier.x - 2.4, maxX: P.chandelier.x + 2.4, minY: floor, maxY: floor + 2.4, minZ: P.chandelier.z - 2.4, maxZ: P.chandelier.z + 2.4, kind: 'wreck' });
+    }
+
+    /** The walking height under the chandelier's lowest point (null: nothing there). */
+    _restY(fromY) {
+        const t = this.game.world?.terrain?.data, P = this.plan;
+        if (!t || !P?.chandelier) return null;
+        return floorUnder(t, P.chandelier.x, fromY, P.chandelier.z);
     }
 
     _startFall() {
