@@ -78,7 +78,7 @@ test('save keeps the skill', () => {
 });
 
 // ------------------------------------------------------------------ the others
-import { creatureSteady, steadyKind, NPC_STEADY, braceProfile, braceTime, braceLean, creatureHolds } from '../../src/game/Steadiness.js';
+import { creatureSteady, steadyKind, NPC_STEADY, braceProfile, braceTime, braceLean, creatureHolds, creatureAbsolute } from '../../src/game/Steadiness.js';
 
 test('creatures: fixed value by kind, from the id (the same every time), inside the author\'s ranges', () => {
     const inR = (v, k) => assert.ok(v >= NPC_STEADY[k][0] && v <= NPC_STEADY[k][1], `${k}: ${v}`);
@@ -98,13 +98,15 @@ test('creatures: fixed value by kind, from the id (the same every time), inside 
     assert.equal(steadyKind('v', { role: 'student', wizard: true }), 'novice');
 });
 
-test('creatures: the same exceptions (gods, Wind Maxima, Inspirius) and the Bombardo Maxima share', () => {
-    const tower = { id: 'tower:0', role: 'master', wizard: true }; // 100
-    assert.equal(creatureHolds('v', tower, 'Jolt', {}, () => 0.99), true);
-    assert.equal(creatureHolds('v', tower, 'WindMaxima', {}, () => 0), false);
-    assert.equal(creatureHolds('v', tower, 'Inspirius', {}, () => 0), false);
-    assert.equal(creatureHolds('v', tower, 'BombardoMaxima', {}, () => 0.41), false);
-    assert.equal(creatureHolds('v', tower, 'BombardoMaxima', {}, () => 0.39), true);
+test('creatures: the same exceptions (gods, Wind Maxima, Inspirius) and the Bombardo Maxima share — for a wizard without the mark (the head of the tower has the mark: nothing fells him)', () => {
+    const w = Array.from({ length: 200 }, (_, i) => ({ id: `tower:${i}`, role: 'teacher', wizard: true, rank: 'elder' })).find((x) => !creatureAbsolute('v', x));
+    assert.equal(creatureHolds('v', w, 'Jolt', {}, () => 0), true);
+    assert.equal(creatureHolds('v', w, 'WindMaxima', {}, () => 0), false);
+    assert.equal(creatureHolds('v', w, 'Inspirius', {}, () => 0), false);
+    assert.equal(creatureHolds('v', w, 'BombardoMaxima', {}, () => 0.41), false);
+    assert.equal(creatureHolds('v', w, 'BombardoMaxima', {}, () => 0.01), true);
+    const tower = { id: 'tower:0', role: 'master', wizard: true }; // the head: the mark, always
+    for (const k of ['WindMaxima', 'Inspirius', 'BombardoMaxima']) assert.equal(creatureHolds('v', tower, k, {}, () => 0.99), true, k);
 });
 
 test('the stance: quick in, held, upright again; leans harder for a harder blow; 0.5 … 0.8 s', () => {

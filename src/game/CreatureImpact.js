@@ -29,7 +29,8 @@
 import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
-import { creatureHolds, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
+import { FIRM, absoluteStops } from './FirmRules.js';
+import { creatureHolds, creatureAbsolute, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
 export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
@@ -262,6 +263,11 @@ export class CreatureImpact {
         }
         if (wind === 'held' && res !== 'shatter') { held = true; res = 'stagger'; o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 }; }
         else if (wind === 'fall' && res !== 'none' && res !== 'shatter') res = 'knockdown';
+        // the mark of absolute steadiness (a wizard's, Steadiness.creatureAbsolute): nothing fells him — not the wind, not a blast, not a fall; the «устоял» pose, the push a fraction
+        if (res === 'knockdown' && ck === 'v' && creatureAbsolute(ck, c) && absoluteStops(o.spell || o.kind) && !K.frozen(c)) {
+            held = true; res = 'stagger';
+            o = { ...o, v: o.v.clone().multiplyScalar(FIRM.PUSH_K), toss: 0, fly: false, tumble: 0 };
+        }
         const vHeld = Math.hypot(o.v.x, o.v.z);
         this._note(ck, c, o, held ? 'held' : res);
         if (res === 'knockdown' && ck === 'v' && (o.spell === 'Wind' || o.spell === 'WindMaxima')) this.game.castleLife?.windKnocked?.(c, o.by); // (a wizard knocked down twice by the wind may teach a lesson — nothing else)

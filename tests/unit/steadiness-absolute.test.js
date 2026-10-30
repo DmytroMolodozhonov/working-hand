@@ -185,3 +185,24 @@ test('the hint texts are plain Russian; the «who / what» table says something 
     for (const t of [FIRM_HINT.have, FIRM_HINT.noPebble, FIRM_HINT.done, FIRM_HINT.noMana(300)]) assert.match(t, /[А-Яа-я]/);
     for (const k of ['me', 'players', 'zombies', 'castlePeople', 'animals', 'sailors', 'spider', 'livingTrees', 'bookBirds', 'dragon', 'iceCastle', 'phoenix', 'owl', 'canary', 'items', 'ground', 'spells']) assert.ok(FIRM_TARGETS[k]?.why, k);
 });
+
+test('the mark on wizards without a pentagram: the head of the tower always, strong 50 %, middle 25 %, junior 15 % — rolled once from the id, the same everywhere', async () => {
+    const { creatureAbsolute, creatureHolds, WIZARD_MARK } = await import('../../src/game/Steadiness.js');
+    const wiz = (rank, i) => ({ id: `cs${i % 7}_${i}:${i}`, wizard: true, rank, role: 'mage' });
+    const share = (rank, n = 2000) => { let k = 0; for (let i = 0; i < n; i++) if (creatureAbsolute('v', wiz(rank, i))) k++; return k / n; };
+    assert.equal(share('master'), 1, 'the head: always');
+    for (const [rank, p] of [['novice', 0.15], ['adept', 0.25], ['teacher', 0.5], ['elder', 0.5]]) assert.ok(Math.abs(share(rank) - p) < 0.04, `${rank}: ${share(rank)}`);
+    assert.deepEqual(WIZARD_MARK, { novice: 0.15, adept: 0.25, teacher: 0.5, elder: 0.5, master: 1 });
+    for (let i = 0; i < 200; i++) assert.equal(creatureAbsolute('v', wiz('adept', i)), creatureAbsolute('v', wiz('adept', i)), 'deterministic');
+    // (200 wizards of each rank, as asked)
+    for (const [rank, p] of [['novice', 0.15], ['adept', 0.25], ['teacher', 0.5]]) { const f = share(rank, 200); assert.ok(Math.abs(f - p) < 0.12, `${rank} of 200: ${f}`); }
+    // (a marked wizard holds against everything but the stun and death; an unmarked one by his own skill; others never have it)
+    const head = wiz('master', 1);
+    for (const k of ['WindMaxima', 'Inspirius', 'BombardoMaxima', 'Wind']) assert.equal(creatureHolds('v', head, k), true, k);
+    assert.equal(creatureHolds('v', head, 'Stupefy', {}, () => 0.999), true, 'the head\'s own skill is 100 anyway');
+    assert.equal(creatureHolds('v', head, null, { drop: 500, spell: false }), true, 'a fall');
+    const novice = Array.from({ length: 400 }, (_, i) => wiz('novice', i)).find((w) => !creatureAbsolute('v', w));
+    assert.equal(creatureHolds('v', novice, 'WindMaxima', {}, () => 0), false, 'unmarked: Wind Maxima fells');
+    for (const ck of ['z', 'a', 'c', 'G', 'N']) assert.equal(creatureAbsolute(ck, { id: 'x', role: 'knight' }), false, ck);
+    assert.equal(creatureAbsolute('v', { id: 'k1', role: 'knight' }), false, 'a knight has no mark');
+});

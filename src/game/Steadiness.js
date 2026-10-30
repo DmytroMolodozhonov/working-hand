@@ -223,8 +223,23 @@ export function creatureSteady(ck, c) {
     return lo + (hashString(kind + '|' + String(c.id)) % (hi - lo + 1));
 }
 
+/**
+ * The mark of absolute steadiness on wizards without any pentagram (the author, via the main session): the head of the tower ALWAYS has it; the others by a
+ * chance rolled ONCE per wizard from his id (the same on every computer and after every reload; nothing to save): the strong («высшие» — teacher, elder) 50 %,
+ * the middle (adept) 25 %, the junior (novice) 15 %. Such a wizard is never knocked down by anything (as the hero with the mark: FirmRules.js) and shows the
+ * «устоял» pose. Other creatures never have it.
+ */
+export const WIZARD_MARK = { novice: 0.15, adept: 0.25, teacher: 0.5, elder: 0.5, master: 1 };
+export function creatureAbsolute(ck, c) {
+    if (ck !== 'v' || !c) return false;
+    const kind = steadyKind(ck, c), p = WIZARD_MARK[kind];
+    if (!p) return false;
+    return p >= 1 || (hashString('firm|' + String(c.id)) % 10000) / 10000 < p;
+}
+
 /** (host) Does this creature stay on its feet against `kind` (a spell)? */
 export function creatureHolds(ck, c, kind, opts = {}, rnd = Math.random) {
+    if (creatureAbsolute(ck, c) && absoluteStops(kind)) return true; // (a wizard with the mark of absolute steadiness)
     const p = holdChance(creatureSteady(ck, c), kind, opts);
     return p > 0 && rnd() < p;
 }
