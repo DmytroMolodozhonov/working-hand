@@ -261,7 +261,7 @@ export const OLD_BEDROCK = -9;
  * 3: the creative test ground (a river by the pedestals, a castle close by — see TEST_RIVER).
  * A saved world and a guest keep the generation their world was made with.
  */
-export const WORLD_GEN = 22;
+export const WORLD_GEN = 23;
 /**
  * The first generation whose castles have their rooms furnished (CastleFurniture.js: a big royal bedchamber, kitchens, hall, armoury, chapel,
  * library…, 5–10 more chests of many kinds). One number: a world of an older generation keeps its empty rooms — its saved changes
@@ -357,6 +357,13 @@ export const KNIGHT_CAP_FROM_GEN = 21;
  * neither the Queen nor the dragon. The author: «Ледяную Королеву перенести на ДРУГУЮ карту, где будет только она». Older worlds keep her far on the Earth.
  */
 export const QUEEN_MAP_FROM_GEN = 22;
+/**
+ * The first generation whose caves keep clear of the lakes and rivers (Terrain._carveSystems, `caveLake`): no tunnel or hall is cut within CAVE_LAKE.GAP columns of
+ * water, so a cave never opens onto the side of a lake (the author: «видел дно озера, находясь в пещере» — the lake's wall stood bare, there was no rock between).
+ * Older worlds keep their caves as they were.
+ */
+export const CAVE_LAKE_FROM_GEN = 23;
+export const CAVE_LAKE = { GAP: 2 };
 // 18: the Castle of Ghosts, for the ones who see the invisible (GHOST_CASTLE_FROM_GEN).
 /**
  * The first generation whose duel arenas are twice as wide (DuelArenas.ARENA_X2: the author «Колизей должен быть раза в два больше»): the floor's radius ×2, 8 rows of
@@ -651,7 +658,7 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false } = {}) {
         this.seed = seed;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
@@ -661,6 +668,7 @@ export class TerrainData {
         this.buildings = !!(mountains && buildings); // (generation 17: different buildings in the settlements — Buildings.js)
         this.apart = !!(mountains && test && apart); // (generation 11: the bosses' places apart — SPAWN_MAPS_FROM_GEN)
         this.queenMap = !!(this.apart && queenMap); // (generation 22: the Ice Queen on a map of her own — QueenMap.js, QUEEN_MAP_FROM_GEN)
+        this.caveLake = !!(mountains && deepCaves && caveLake); // (generation 23: a cave never opens into a lake's side — CAVE_LAKE_FROM_GEN)
         this.furnish = !!(mountains && furnish); // (generation 8: the castles' rooms furnished — CastleFurniture.js; table tops and seats are half blocks where there are slopes, whole blocks without)
         this.bigHouses = !!(mountains && furnish && bigHouses); // (generation 14: the villagers' homes roomy, the rich in two floors — Castles.buildHouseBig; the castles' villages are laid wider)
         this.deepCaves = !!(mountains && deepCaves); // (generation 4: cave systems, not single chambers)
@@ -1654,6 +1662,7 @@ export class TerrainData {
         }
         if (!sys.length) return;
         const H = this.heightAt;
+        const nearWater = this.caveLake ? this._waterMargin(x0, z0) : null;
         for (let lz = 0; lz < CHUNK; lz++) {
             for (let lx = 0; lx < CHUNK; lx++) {
                 const x = x0 + lx, z = z0 + lz;
@@ -1661,6 +1670,7 @@ export class TerrainData {
                 if (c.wet) { if (c.wet[col] & 3) continue; } // (generation 5: the flags the ground was made with)
                 else { H(x, z); if (H.water || H.sea) continue; }
                 if (this.sites?.landAt(x, z)) continue;
+                if (nearWater && nearWater[col]) continue; // (generation 23: rock between the cave and a lake)
                 const top0 = c.top[col];
                 let carved = false, hiCut = MIN_LAYER;
                 let extra = null;
@@ -1707,6 +1717,23 @@ export class TerrainData {
                 }
             }
         }
+    }
+
+    /**
+     * Generation 23: the columns of a chunk within CAVE_LAKE.GAP of a lake, river or sea (from the recipe, so the same answer whichever chunk is
+     * made first: the padded square is looked at, not the neighbour's blocks). One flag per column.
+     */
+    _waterMargin(x0, z0) {
+        const G = CAVE_LAKE.GAP, P = CHUNK + 2 * G, H = this.heightAt;
+        const wet = new Uint8Array(P * P);
+        for (let pz = 0; pz < P; pz++) for (let px = 0; px < P; px++) { H(x0 + px - G, z0 + pz - G); if (H.water || H.sea) wet[pz * P + px] = 1; }
+        const near = new Uint8Array(CHUNK * CHUNK);
+        for (let lz = 0; lz < CHUNK; lz++) for (let lx = 0; lx < CHUNK; lx++) {
+            let n = 0;
+            for (let dz = 0; dz <= 2 * G && !n; dz++) for (let dx = 0; dx <= 2 * G; dx++) if (wet[(lz + dz) * P + lx + dx]) { n = 1; break; }
+            near[lz * CHUNK + lx] = n;
+        }
+        return near;
     }
 
     /** The rock faces of a chunk's caves: patches of earth and gravel, dark deep stone low down. */
