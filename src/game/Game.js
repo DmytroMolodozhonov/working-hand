@@ -3493,7 +3493,7 @@ export class Game {
         zoo.add(...this.flora?.sample() || [], ...[goldenTreeModel(), goldenTreeModel(true), baksadiModel()].map((m) => { new FarShape(m).set(true); return m; }), ...bonesModels(), spiderModel(), phoenixModel(), doorModel(0x8b5a2b), doorModel(0x7a4f2a), doorModel(0xcdeffd, { gate: true, ice: true }), doorModel(0x5b6068, { metal: true }), doorModel(0x5a3a1e, { gate: true }), this.campfires.sampleModel());
         for (const m of sampleIceModels()) zoo.add(m); // (the Ice Castle: the queen, snowmen, monsters, the chandelier, shots, spikes, the rod)
         for (const m of [iceQueenModel(), snowmanModel(), iceMonsterModel()]) { new FarShape(m).set(true); zoo.add(m); } // (as the video card draws them: one shape each — FarShape)
-        for (const m of [...realSamples(), ...mirrorSamples()]) zoo.add(m); // (the «Реалистичный» hero's skin, hair and shadow; the Creative mirror's glass and frame)
+        for (const m of [...(this.config?.heroModel === 'real' ? realSamples() : []), ...mirrorSamples()]) zoo.add(m); // (the realistic skin's shaders only when it is chosen: the driver of an RTX 3050 dropped the whole context on them at every start — journal 30.10) // (the «Реалистичный» hero's skin, hair and shadow; the Creative mirror's glass and frame)
         for (const m of darkSamples()) zoo.add(m); // (чёрная магия: маска меток и дымок — DarkSkin.js)
         for (const m of [...darkLordSamples(), ...lordSamples()]) zoo.add(m); // («настоящий тёмный маг»: шар тьмы, воронка, круг рун, наряд — DarkLordFx.js, DarkLordLook.js)
         zoo.add(monsterSamples()); // («Пентаграмма страшного монстра»: шерсть, глаза, когти — MonsterBody.js)
