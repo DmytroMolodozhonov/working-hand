@@ -27,7 +27,8 @@ import { createRng } from '../core/math.js';
 
 export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычной цены»)
 /** What the pawnshop / the shady buyer pays for a thing. */
-export const pawnPrice = (it) => Math.max(1, Math.round(itemValue(it) * PAWN_RATE));
+export const ICE_ROD_PAWN = 10000; // (the author: «посох Ледяной Королевы будет стоить 10 тысяч монет у скупщика вещей» — a flat price, no 40 % off)
+export const pawnPrice = (it) => (it && it.kind === 'iceRod' ? ICE_ROD_PAWN : Math.max(1, Math.round(itemValue(it) * PAWN_RATE)));
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
 const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'magicPebble']);
