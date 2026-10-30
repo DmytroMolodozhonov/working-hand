@@ -161,6 +161,7 @@ export class Spiders {
         this.enabled = !game.config.map && game.config.mode !== 'test' && game.config.mode !== 'creative';
         // (Creative: no night spiders outside, but her cave — «Где появиться → Логово паучихи» — is hers at any hour: `denOnly`, found by the author 30.10:
         // `enabled` is off there, the whole update returned and she was never made)
+        this.lairMode = false; // (Creative: set by «Где появиться → Логово паучихи» — then the night spiders of the lairs are out near the hero)
         this.denOnly = !this.enabled && !game.config.map && game.config.mode === 'creative';
         this._hud = typeof document !== 'undefined' ? document.getElementById('boss-bar') || this._makeHud() : null;
     }
@@ -507,7 +508,7 @@ export class Spiders {
     update(dt) {
         if (!this.enabled && !this.denOnly) return;
         const g = this.game;
-        const night = g.isNight && this.enabled;
+        const night = g.isNight && (this.enabled || this.lairMode);
         // at night she is out at her lairs near the players (the host decides)
         if (this.auth) {
             this._denT -= dt;
@@ -515,7 +516,7 @@ export class Spiders {
             if (night) {
                 this._lairT -= dt;
                 if (this._lairT <= 0) { this._lairT = 1; this._visitLairs(); } // (once a second is plenty)
-            } else if (this.enabled) {
+            } else if (this.enabled || this.lairMode) {
                 for (const s of [...this.list]) if (!s.dead && !s.imp && !s.den) this._remove(s); // hides at dawn (not while a mind is in her: «Империус Максима»)
                 this._left.clear();
             }

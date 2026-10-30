@@ -58,14 +58,11 @@ export class HeroApply {
             this.pending.cells = lairCells(LAIR.CELL, 20, { x: 0, z: 0 });
             return;
         }
-        if (id === 'spider' && data?.apart) { // (the spider's den under its own butte: one place per world — SpiderDens.js)
-            const D = data.spiderDen();
-            if (!D) { this._fail('в этом мире нет подходящего места для пещеры паучихи — вы на начальной площадке', id); return; }
-            this.pending.t = denSpot(D.lair);
-            this._far(this.pending.t);
+        if (id === 'spider') { // (the author 30.10: «паучиха должна быть на природе, в тёмное время суток; пещеры там быть не должно» — the ordinary lair outside, at night)
+            this.pending.cells = lairCells(SPIDER_LAIR.CELL, 6, g.character.group.position);
+            if (g.spiders) g.spiders.lairMode = true; // (Creative: the night spiders are off, but at her place she comes out)
             return;
         }
-        if (id === 'spider') { this.pending.cells = lairCells(SPIDER_LAIR.CELL, 6, g.character.group.position); return; }
         const iceApproach = () => { const P = data?.apart ? data.iceCastle?.plan : null; return P && !P.test ? queenApproach(P) : null; };
         const t = ['tower', 'arena', 'village', 'magevillage', 'magehut', 'port'].includes(id) ? farTarget(id, data, { port }) : spotTarget(id, { castleGate: gate, iceApproach, apart: !!data?.apart });
         if (!t) { this._fail(`в этом мире такого места нет — вы на начальной площадке`, id); return; }
@@ -115,7 +112,16 @@ export class HeroApply {
         g.character.verticalVelocity = 0;
         g.knockback?.set?.(0, 0, 0);
         this._upright();
+        if (t.spider) this._makeNight(); // (her place: the dark time of day, she is out at night)
         if (t.duel) g.arenaDuels?.startDuelMode?.(t.arenaId, g.hero?.foe); // (the arena: a fight in ten seconds — ArenaDuels)
+    }
+
+    /** Solo only (the clock is shared by the players): put the day to night so the spider is out and the place is dark; the day goes on from there. */
+    _makeNight() {
+        const g = this.game;
+        if (!g.dayCycle || g.remotes?.size || g.isNight) return;
+        g.dayStart = Date.now() - 24 * 60 * 1000 * 0.82; // (DAY_CYCLE_MS of Game.js: not imported — a cycle)
+        g.world.setDayPhase(g.dayPhase());
     }
 
     /**
