@@ -66,6 +66,7 @@ import { ROBE_BLOCKS, MAGIC_SET_BLOCKS } from './ArmorTypes.js';
 import { isStrongDuel, isIceCharge, clashPower, STRONG } from './StrongSpells.js';
 import { manaRules, creativeFiniteMana } from './HeroSetup.js';
 import { segmentToSegment } from './SegmentContact.js';
+import { DUEL_RANGE, emptyRange } from './DuelRange.js';
 export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
@@ -275,10 +276,10 @@ export function rayToSegment(o, d, a, b, out = {}) {
  * nearest along the line. bodies: [{a, b, r, …}]. → {body, along, k, dist, miss} | null
  * (miss: how far beside the body the line goes, rad; 0 = right through it).
  */
-/** How far a duel charge of this spell flies, m. */
-export const duelRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : spell === 'Pilbidrio' ? DUEL.RANGE_PILBIDRIO : spell === 'Electrum' ? DUEL.RANGE_ELECTRUM : DUEL.RANGE);
+/** How far a duel charge of this spell flew BEFORE the reach depended on mana (messages / charges without `rng`), m. */
+export const legacyRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : spell === 'Pilbidrio' ? DUEL.RANGE_PILBIDRIO : spell === 'Electrum' ? DUEL.RANGE_ELECTRUM : DUEL.RANGE);
 /** The farthest any charge goes (bodies farther than this are never asked). */
-const RANGE_MAX = Math.max(DUEL.RANGE, DUEL.RANGE_DIE, DUEL.RANGE_ELECTRUM, DUEL.RANGE_PILBIDRIO);
+const RANGE_MAX = DUEL_RANGE.MAX;
 
 export function pickBody(o, d, bodies, range = DUEL.RANGE) {
     let best = null;
@@ -817,7 +818,7 @@ export class Duel {
      * @param {string} spell  key of DUEL_SPELLS
      * @param {object} [aim] {side, t} from pickSide (else: from the spell hand, at whatever it points at)
      */
-    cast(spell, aim = null, handSide = null) {
+    cast(spell, aim = null, handSide = null, reach = null) {
         const side = aim ? aim.side : (handSide || this.game.magicHand || this.game.lastMagicHand || this.game.dom || 'right');
         const origin = new THREE.Vector3(), dir = new THREE.Vector3();
         this._myRay(side, origin, dir);
@@ -833,6 +834,8 @@ export class Duel {
         // («Левиоса» lifts the body by its middle: pointed at the feet, it must not dive into the ground beside them)
         if (spell === 'LevitateDuel') ak = Math.max(0.3, Math.min(0.75, ak));
         const b = this._addBolt({ id: `${this.me}:${nextId++}`, by: this.me, spell, side, tk, tid, ak, o: origin, d: dir });
+        // (the reach: the caster's mana before the price — DuelRange.js; nobody on the line: it goes out sooner)
+        if (reach != null) b.rng = emptyRange(reach, !!pickBody(origin, dir, this._bodies(this.me, reach + 5), reach));
         b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
         const g = this.game;
         if (g.sync) g.sync.duelCast(b);
@@ -862,7 +865,7 @@ export class Duel {
         if (had) { if (m.s === 'JoltMaxima' && had.spell === 'Jolt') had.spell = m.s; return; } // (it became «Джолт Максима»: upgradeJolt)
         if (m.up) return; // (an upgrade of a charge already gone here: nothing new flies)
         if (!DUEL_SPELLS[m.s]) return; // (a charge of a spell this game doesn't know — another version: nothing to draw)
-        const b = this._addBolt({ id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
+        const b = this._addBolt({ rng: Number.isFinite(m.rg) ? Math.min(DUEL_RANGE.MAX, Math.max(0, m.rg)) : undefined, id: m.id, by: m.by, spell: m.s, side: m.side, tk: m.tk || 'n', tid: m.tid ?? null, ak: m.ak ?? 0.5, o: new THREE.Vector3(...m.o), d: new THREE.Vector3(...m.d) });
         if (b.spell === 'AvadaKedavra') this.avada.cast(b.o, b.dir); // (seen and heard here as at the caster's)
     }
 
@@ -1041,7 +1044,7 @@ export class Duel {
             return true;
         }
         if (wallS <= 1) b.front.lerpVectors(from, b.front, wallS);
-        if (b.traveled > duelRange(b.spell) || wallS <= 1) { this._end(b, 'fizzle'); return false; }
+        if (b.traveled > (b.rng ?? legacyRange(b.spell)) || wallS <= 1) { this._end(b, 'fizzle'); return false; }
         return true;
     }
 

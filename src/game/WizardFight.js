@@ -30,6 +30,7 @@
  */
 
 import * as THREE from 'three';
+import { duelRange, emptyRange } from './DuelRange.js';
 import { WIZ, NPC_COST, pickSpell, react, noticeCharge, manaPace, wantsMaxima, castHold, holdsCast, duelBand, duelDist, prepTime, CAST_PREP } from './WizardAI.js';
 import { KT, choosePlan, reviewPlan, remember, begin, newMemory } from './KnightTactics.js';
 import { WIZ_PLANS, WIZ_LINES, wizardRoles, planSpell, CAST_PACE } from './WizardTactics.js';
@@ -373,8 +374,10 @@ export class WizardFight {
         const plan = sq?.plan || 'duel';
         // a duel's distance: not far, not close — further from a foe behind his shield (WizardAI.duelBand)
         const shield = this._foeShield(v.foe);
-        const [lo, hi] = duelBand(W.range, shield);
-        const keep = duelDist(d, W.range, shield);
+        const cap = duelRange(v.mana); // (the reach is his mana: with little of it he comes closer)
+        const WR = cap < r1 ? [Math.min(r0, cap * 0.5), Math.max(cap * 0.9, 2)] : W.range;
+        const [lo, hi] = duelBand(WR, shield);
+        const keep = duelDist(d, WR, shield);
         const mine = Math.atan2(v.z - fp.z, v.x - fp.x);
         const strafe = Math.sin(this.clock * 0.5 + v.idx * 1.7) * 0.22 + (v.spotTurn || 0); // (a moving target is harder to hit; stuck: another side)
         const spread = (k, of) => sq.base + (of > 1 ? (k / of) * Math.PI * 2 : 0);
@@ -490,7 +493,7 @@ export class WizardFight {
         if (v.castCd > 0 || v.castT > 0.15) return false;
         if (wt && (wt.role === 'shield' || wt.role === 'guard' || wt.role === 'retreat')) return false;
         if (v.mana < NPC_COST.Jolt) return false; // (no mana for any spell: he does not stand waiting to aim)
-        return !(d > W.range[1] * 1.2 || d < 1.2);
+        return !(d > Math.min(W.range[1] * 1.2, duelRange(v.mana)) || d < 1.2); // (never at a foe beyond his mana: 1 mana = 1 m)
     }
 
     /** He turns to a point at a body's speed (FaceTarget: never an instant about-face). */
@@ -709,7 +712,9 @@ export class WizardFight {
         const err = 0.06 / (v.W.skill || 1) * (v.dazeT > 0 ? 6 : 1); // (not a perfect hand; dizzy after a «Джолт»: far off)
         _d.x += (Math.random() - 0.5) * 2 * err; _d.y += (Math.random() - 0.5) * err; _d.z += (Math.random() - 0.5) * 2 * err;
         _d.normalize();
-        const b = duel._addBolt({ id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: at ? at.k : 'p', tid: at ? at.id : foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
+        const reach = duelRange(v.mana); // (his mana before the price is paid — _prepTick pays after this cast)
+        if (reach <= 0) return false;
+        const b = duel._addBolt({ rng: emptyRange(reach, true), id: `${v.id}:${++this.seq}`, by: v.id, spell, side: 'right', tk: at ? at.k : 'p', tid: at ? at.id : foeId, ak: 0.55, o: _o.clone(), d: _d.clone(), npc: true, vs });
         if (spell === 'AvadaKedavra') this.life._say(v, 'Авада Кедавра!', 2); // (the killing words are heard)
         g.sync?.duelCast?.(b);
         v.aimPitch = Math.asin(Math.max(-1, Math.min(1, _d.y)));

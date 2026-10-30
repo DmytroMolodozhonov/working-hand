@@ -140,7 +140,8 @@ import { plantSamples } from '../fx/PlantModels.js';
 import { Gargoyles } from './Gargoyles.js';
 import { LivingTrees } from './LivingTrees.js';
 import { Servants } from './Servants.js';
-import { Duel, duelRange } from './Duel.js';
+import { Duel } from './Duel.js';
+import { duelRange } from './DuelRange.js';
 import { QualityManager, viewDistanceScale } from './Quality.js';
 import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
@@ -1959,12 +1960,12 @@ export class Game {
         // at a thing, a block, nothing — the splash (Liquidation.js). The same words either way: where the hand points decides.
         if (name === 'Liquidation' || name === 'LiquidationMaxima') {
             if (name === 'Liquidation' && !isFinal) return null; // (wait: maybe «… Максима»)
-            const laim = this.duel.pickSide(false, duelRange(name));
+            const laim = this.duel.pickSide(false, this._duelReach());
             if (laim) return this._castDuel(name, name === 'Liquidation' ? 'LiquidationDuel' : 'LiquidationMaximaDuel', isFinal, laim, laim.side);
         }
         const duelSpell = name === 'Sapira' ? 'SapiraDuel' : name === 'Sands' ? 'SandsDuel' : ice ? (name === 'IceMaxima' ? 'IceDuelMaxima' : 'IceDuel') : isStrongDuel(name) ? name : (name === 'Stupefy' || name === 'AvadaKedavra' || name === 'Expelliarmus' || name === 'Disarmor' || name === 'Jolt' || name === 'JoltMaxima') ? name : null;
         if (duelSpell) {
-            const reach = duelRange(name);
+            const reach = this._duelReach();
             const aim = this.duel.pickSide(false, reach);
             const side = aim ? aim.side : this.wandSide() || (this.character.isArmRaised(this.magicHand || this.lastMagicHand || this.dom) ? (this.magicHand || this.lastMagicHand || this.dom) : (this.wandSide() || [this.dom, this.off].find((s) => this.character.isArmRaised(s))));
             if (!side || !this.character.isArmRaised(side)) {
@@ -2226,6 +2227,11 @@ export class Game {
         return true;
     }
 
+    /** How far a duel charge cast NOW flies: my mana before the price is paid, 1 mana = 1 m, up to 200 (DuelRange.js). */
+    _duelReach() {
+        return duelRange(this.combat?.fatigue, { creative: !this.combat?.manaOn });
+    }
+
     _castDuel(costName, spell, isFinal, aim = undefined, side = null) {
         const now = Date.now();
         const early = this._interimCast;
@@ -2234,9 +2240,11 @@ export class Game {
         if (now - (this._lastDuelCast || 0) < 900) return null;
         const tired = this.combat.check(costName);
         if (tired) { this.hud.setVoice(tired, true); return null; }
-        const target = aim === undefined ? this.duel.pickSide(false) : aim;
+        const reach = this._duelReach(); // (before combat.pay below: the mana there was at the word)
+        if (reach <= 0) { this.lastCastWhy = 'нет маны — заклинание некуда послать'; if (isFinal) this.hud.setVoice('😮‍💨 Не хватает маны', true); return null; }
+        const target = aim === undefined ? this.duel.pickSide(false, reach) : aim;
         this._manaLater = true; // (mana: counted when the charge hits — Duel.js)
-        this.duel.cast(spell, target, side);
+        this.duel.cast(spell, target, side, reach);
         this.combat.pay(costName);
         this._lastDuelCast = now;
         this._interimCast = isFinal ? null : { name: costName, at: now };
