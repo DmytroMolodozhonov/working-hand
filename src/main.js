@@ -72,7 +72,25 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: '
 renderer.setSize(window.innerWidth, window.innerHeight);
 // (the video card dropped the drawing context — a driver reset under a heavy scene: three.js then dies on «null.trim()» in the shader log;
 //  the journal says why, and the loading screen says it in words instead of «Cannot read properties of null»)
-canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__glLost = true; netLog('🎮 видеокарта сбросила графику (WebGL context lost) — игра не может продолжать'); try { updateProgress(100, 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.'); } catch (err) { /* the screen is not built yet */ } });
+// (the last shader the card was asked to build: written to the browser's storage BEFORE each compile — a driver reset leaves the page dead,
+//  and this says which shader it was: at once in the journal when the page still lives, and at the next start when it does not)
+let _lastShader = null;
+(() => {
+    try {
+        const gl = renderer.getContext(), compile = gl.compileShader.bind(gl), link = gl.linkProgram.bind(gl), srcOf = new WeakMap(), src = gl.shaderSource.bind(gl);
+        gl.shaderSource = (sh, text) => { srcOf.set(sh, text); return src(sh, text); };
+        gl.compileShader = (sh) => {
+            const t = srcOf.get(sh) || '', name = (/#define SHADER_NAME (\S+)/.exec(t) || [])[1] || '?';
+            const defs = (t.match(/^#define (USE_\w+|NUM_\w+ \d+|SKINNING|INSTANCING\w*|[A-Z_]{6,24})/gm) || []).slice(0, 40).map((d) => d.slice(8)).join(' ');
+            _lastShader = `${name} (${t.length} знаков, ${t.indexOf('gl_Position') >= 0 ? 'вершинный' : 'фрагментный'}): ${defs}`;
+            try { localStorage.setItem('zns-gl-at', _lastShader); } catch (e) { /* no storage */ }
+            return compile(sh);
+        };
+        gl.linkProgram = (pr) => link(pr);
+        try { const old = localStorage.getItem('zns-gl-at'); if (old) { localStorage.removeItem('zns-gl-at'); setTimeout(() => netLog(`🔥 прошлый запуск оборвался на шейдере: ${old.slice(0, 700)}`), 1500); } } catch (e) { /* no storage */ }
+    } catch (e) { /* the card gives no hooks: the journal just says less */ }
+})();
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__glLost = true; netLog(`🎮 видеокарта сбросила графику (WebGL context lost) — игра не может продолжать; последний шейдер: ${(_lastShader || '—').slice(0, 700)}`); try { updateProgress(100, 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.'); } catch (err) { /* the screen is not built yet */ } });
 setTextureRenderer(renderer); // (pictures made on the video card at loading: src/core/GpuTexture.js)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
 renderer.shadowMap.enabled = true;
@@ -1122,6 +1140,7 @@ async function startGameInner(config, welcome) {
         updateProgress(100, cameraOk ? 'Ожидание первого кадра камеры...' : 'Запуск без камеры...');
 
         const reveal = () => {
+            try { localStorage.removeItem('zns-gl-at'); } catch (e) { /* no storage */ }
             game.revealed = true; // (the frames before it are behind the loading screen: PerfLog says so of their hitches)
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';

@@ -3571,6 +3571,7 @@ export class Game {
         const PER = 4; // (samples in a group)
         const parts = [...zoo.children];
         const of = this._pwOf = 6 + Math.ceil(parts.length / PER); // (+ the world's own and the last few)
+        if (typeof window !== 'undefined' && window.__ZNS_DEBUG_PW) window.__pwDesc = { of, per: PER, groups: parts.map((p, i) => { let v = 0, n = 0; const names = []; p.traverse?.((o) => { n++; v += o.geometry?.attributes?.position?.count || 0; if (o.name && names.length < 4) names.push(o.name); }); return `${i}: ${p.type}/${p.name || ''} objs ${n} verts ${v} [${names.join(',')}] ${p.userData?.kind || ''} ${this._pwDescribe([p])}`; }) }; // (a tool lists what each warm-up step builds)
         const skip = this._pwReadCrumb(parts);
         try {
             this._pwMark('мир');
