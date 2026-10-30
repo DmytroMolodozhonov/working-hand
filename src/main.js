@@ -790,7 +790,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (meta) { meta.lips = lips; meta.running = running; }
             const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips })
                 // (found by its sound: how sure, weighed with how like the spell the written letters are, the lips, the run)
-                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
+                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, snr: meta.snr, holding: !!(game.focus?.held?.() || game.combat?.shield || game.flight?.active), hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
             if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
             // «стоп, раскрой свои секреты»: first the stop (what I hold lets go), then the spell
             if (spoken !== 'Stand' && game.focus?.held?.() && stopFirst(meta?.written || command)) {
@@ -806,7 +806,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             const said = matchSpell(command);
             // (settled: the voice already waited for a possible «… Максима» / «… Хаус» — as good as the phrase's end)
             const name = game.castLocalSpell(command, isFinal || !!meta.settled);
-            if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg };
+            if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg, to: meta?.to };
             if (said) journal(command, isFinal, meta, said, !!name, name ? '' : castWhy(said), 'микрофон игрока');
             else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
             // (the others are told what I said even when it didn't work here — unknown, no mana: else my voice from their speakers,
@@ -853,7 +853,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             }
         }
         const name = game.castLocalSpell(command, isFinal || !!meta?.settled);
-        if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg };
+        if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg, to: meta?.to };
         if (heard) journal(command, isFinal || held, meta, heard, !!name, name ? '' : castWhy(heard), 'микрофон игрока');
         else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
         // not a spell: maybe you are talking to someone in a castle (only one close enough hears)

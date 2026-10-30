@@ -16,7 +16,7 @@
  * one heard it very clearly), and never right at the cut edge of the look (SpellSpotter.EDGE).
  */
 
-import { unpack, hear, threshold, HEARD, WORDY, GOES_ON, goesOnKnown } from '../audio/SpellSpotter.js';
+import { unpack, V, hear, threshold, HEARD, WORDY, GOES_ON, goesOnKnown } from '../audio/SpellSpotter.js';
 import { matchSpell } from '../fx/SpellManager.js';
 import { spellPhrase } from '../audio/SpellPhrase.js';
 import { soundingLine } from '../audio/GameVoices.js';
@@ -86,9 +86,42 @@ const fitOf = (h, d) => h.spell.avg - threshold(h.spell.len, d.far || 0, Number.
 export const GAME_CLEAR = 0.6;
 const gameClear = (h, d) => !!d.game && h.spell.len >= 4 && h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) >= GAME_CLEAR;
 
+/** A spell said again in the same phrase: the quiet after the first one must be at least this (40 ms steps) before it counts. */
+export const REPEAT_GAP = 3;
+
+/**
+ * «Бомбардо… Бомбардо… Бомбардо» in one breath (a phrase stays open 0.85 s of quiet): the phrase already cast that spell, so the
+ * next words used to be read as one long muddle and never cast — the author felt it as «переотдых». The sound after the end of the
+ * spell that went off is looked at once more; the very same spell found there is a new cast, at once, as the first one was.
+ * Anything else after it («… Максима», another word) goes the old way. (Pure: tests.)
+ */
 export function lookAt(d, seg = {}) {
     const lp = unpack(d.lp, d.T);
-    const ref = d.ref ? unpack(d.ref, d.refT) : null;
+    if (seg.fired && seg.settled && Number.isFinite(seg.firedEnd) && Number.isFinite(d.t1)) {
+        const k = Math.ceil((seg.firedEnd - (d.t1 - d.T * 40)) / 40) + REPEAT_GAP;
+        if (k >= 0 && d.T - k >= 8) {
+            const rest = { ...d, T: d.T - k, cut: true, ref: null };
+            const r = lookAtRows(rest, {}, lp.subarray(k * V), null);
+            const h = r.heard;
+            if (h.sure && !h.echo && h.spell.canonical === seg.fired) {
+                const end = d.t1 - h.tail;
+                if (!r.say) return { ...r, seg };
+                if (r.say.more) {
+                    // («Бомбардо…» may still become «… Максима»: the game waits, as for the first one — and is told once)
+                    if (Math.abs((seg.repMore ?? -1e9) - end) < 200) return { ...r, say: null, seg };
+                    return { ...r, repeat: true, shift: k * 40, seg: { ...seg, repMore: end } };
+                }
+                return { ...r, repeat: true, shift: k * 40, seg: { ...r.seg, firedEnd: end } };
+            }
+        }
+    }
+    const r = lookAtRows(d, seg, lp, d.ref ? unpack(d.ref, d.refT) : null);
+    if (r.say && r.heard.sure && Number.isFinite(d.t1) && Number.isFinite(r.heard.tail)) r.seg.firedEnd = d.t1 - r.heard.tail;
+    return r;
+}
+
+function lookAtRows(d, seg, lp, refRows) {
+    const ref = refRows;
     const h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr });
     const next = { ...seg };
     let say = null, echo = null;
@@ -177,10 +210,10 @@ export class NativeVoice {
     }
 
     /** When (page time, ms) the heard spell — or else the whole phrase — was said. */
-    _when(d, h) {
+    _when(d, h, shift = 0) {
         if (this.off == null || !Number.isFinite(d.t0)) return {};
-        const a = h.spell ? d.t0 + h.spell.a * 40 : d.t0;
-        const b = h.spell ? d.t0 + (h.spell.b + 1) * 40 : d.t1;
+        const a = h.spell ? d.t0 + shift + h.spell.a * 40 : d.t0;
+        const b = h.spell ? d.t0 + shift + (h.spell.b + 1) * 40 : d.t1;
         // (the program's clock tells when a sound was heard; its messages come ~0.1 s later still)
         return { from: a + this.off - 200, to: b + this.off };
     }
@@ -261,7 +294,7 @@ export class NativeVoice {
         this.onLetters?.(r.heard?.written || '', d); // (what was written so far — the dragon's «У» of «Империус Максима»: DragonHowl)
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);
-        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, near: r.heard.near, ...this._when(d, r.heard),
+        const meta = { native: true, aec: !!this.status?.aec, far: d.far || 0, echo: false, spell: r.heard.spell?.spell || null, written: r.heard.written, near: r.heard.near, ...this._when(d, r.heard, r.shift || 0),
             peak: d.peak, floor: d.floor, snr: d.snr, extra: r.heard.extra, seg: d.id, src: d.src,
             // (q: s of quiet already after the words; cut: the look missed the phrase's start — TalkFlow waits for its end)
             q: Number.isFinite(d.q) ? d.q : null, cut: !!d.cut,
@@ -274,7 +307,7 @@ export class NativeVoice {
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         meta.refChecked = !!d.ref && !r.echo; // (the speakers' own rows were compared with the microphone's: no echo of them — SpellPhrase.trustedFar)
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
-        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled });
+        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled, repeat: !!r.repeat });
         else if (d.final && !r.seg.fired) {
             // (nothing handed on: the closest spell and how far it was from counting — the spell journal)
             const b = r.heard.best;

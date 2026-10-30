@@ -231,6 +231,9 @@ export const PHRASE_WHY_RU = {
 /** ms after a spell of mine went off in which another one from the voice must be heard clearly (AFTER_CAST_FIT). */
 export const AFTER_CAST_MS = 1500;
 export const AFTER_CAST_FIT = 0.6;
+/** A spell said again must fit this much better than needed, and begin this long (ms) after the last one's speech ended. */
+export const REPEAT_FIT = 0.3;
+export const REPEAT_AFTER_MS = 0; // (meta.from already starts 200 ms before the word)
 
 /**
  * Right after a spell went off, the microphone hears its explosion, its echo, the end of my own phrase:
@@ -244,6 +247,11 @@ export const AFTER_CAST_FIT = 0.6;
 export function afterCast(last, spell, meta, now) {
     if (!last || !spell || !(now - last.at < 4000)) return null;
     const fit = meta?.fit;
+    // the same spell said again by me — «Бомбардо… Бомбардо…» (the author: the second one felt like «переотдых»): the voice found it after
+    // the end of the first one (NativeVoice.lookAt `repeat`), or a new phrase began after the first one's speech was over — a new
+    // cast at once, if it is made out at all (REPEAT_FIT in a new phrase); the explosion's echo and the tail of the same phrase are not like that
+    if (spell === last.spell && meta?.native
+        && (meta.repeat || (fit >= REPEAT_FIT && meta.seg !== last.seg && Number.isFinite(meta.from) && Number.isFinite(last.to) && meta.from >= last.to + REPEAT_AFTER_MS))) return null;
     // («Бомбардо Максима» → «Айс Максима» twice: a look at the phrase's end starting inside «бомбардо» fits «лёд максима» well —
     // one phrase says one «… Максима»; in the next 1.5 s another «X Максима» is that same end, however clearly it was made out)
     if (/Maxima$/.test(spell) && /Maxima$/.test(last.spell) && spell !== last.spell && !last.spell.startsWith(spell)
@@ -371,6 +379,9 @@ export function lettersLike(written, spellWords) {
  *          running?: boolean, lips?: boolean|null}} h
  * @returns {string|null} why it is not cast, or null
  */
+export const STOP_HELD_FIT = 0;
+export const LOUD_OWN_FIT = 1.5;
+export const LOUD_OWN_SNR = 15;
 export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
@@ -378,6 +389,9 @@ export function soundTrust(h) {
     if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical, fit)) return 'обычное слово («интересно» и т.п.), а не заклинание';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
     const short = len <= SHORT_LEN;
+    // «стоп» while something is held (a shield, a flame, a spell, flight): it must let go almost always — the thinnest sure fit is enough
+    // (the journal: «стоп» refused at +0.2…0.9 with a shield up); with nothing held it only finishes a build — as before
+    if (h.spell === 'Stand' && h.holding && fit >= STOP_HELD_FIT) return null;
     if (h.spell === 'Stand') return fit >= 1 || (like && fit >= 0.3) ? null : `«стоп» узнан неуверенно (запас ${fit.toFixed(1)})`;
     if (h.lips === false && !like) return 'губы не двигались, и буквы не похожи на заклинание';
     // «Акцио» in a duel (`hope`: my wand was knocked away — I call it back): the network hears it as «актер», «акце», «арте»;
@@ -390,7 +404,9 @@ export function soundTrust(h) {
     // «сам с собой разговаривал — прозвучала буква с, и сработал песок»); nor one word in a sentence the network wrote
     if (len <= SHORT_WORD) {
         const tiny = letters(h.canonical || '').length <= 2 && h.lips === true && fit >= 1.2; // («ап» heard as «а», the mouth seen moving)
-        if (!like && !tiny) return 'короткое заклинание: буквы не похожи — это обычная речь';
+        // a loud, clear word with the mouth seen moving, the letters of the network off («акцио» written «аксо», «акцу», «акцию»): mine
+        const loudOwn = h.lips === true && fit >= LOUD_OWN_FIT && !DANGEROUS.has(h.spell) && (!Number.isFinite(h.snr) || h.snr >= LOUD_OWN_SNR);
+        if (!like && !tiny && !loudOwn) return 'короткое заклинание: буквы не похожи — это обычная речь';
         const said = norm(h.written ?? '').split(' ').filter(Boolean).length, own = norm(h.canonical || '').split(' ').filter(Boolean).length;
         if (said > own + 2) return 'короткое заклинание внутри фразы — это разговор';
     }

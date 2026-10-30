@@ -1842,7 +1842,7 @@ export class Game {
         if (gvx !== undefined) return gvx;
         const vx = this.vortex.voice(name, text, isFinal);
         if (vx !== undefined) return vx;
-        if (this.combat.frozen || this.combat.stunned) { this.hud.setVoice(this.combat.check(name), true); return null; }
+        if ((this.combat.frozen || this.combat.stunned) && !(name === 'Stand' && /стоп|stop/i.test(text))) { this.hud.setVoice(this.combat.check(name), true); return null; } // («стоп» is never blocked: it lets go of what I hold)
         // both hands cut off: no spell (the stump still stops the blood with «Rescue»)
         if (this.character.handLost?.('left') && this.character.handLost?.('right') && name !== 'Rescue' && name !== 'Stand') { if (isFinal) this.hud.setVoice('🩸 Без рук колдовать нельзя', true); return null; }
         // «Up»: a raised hand, lying (get up) or in the water (leap out)

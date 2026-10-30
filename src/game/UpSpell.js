@@ -36,7 +36,17 @@ export function isUpWord(text) {
 // (VY 21.2 with the body's gravity 20: ~11 m up — twice the old 15)
 // (the hand (the author): not high up — only not lowered; a little above level is enough. Held straight out
 //  level counts only lying down (LIFT_DOWN), standing it must be a little above it: ARM_UP ≈ 9°, LIFT_UP 1.1)
-export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.15, LIFT_DOWN: 0.85, LIFT_UP: 1.1, AGAIN_MS: 2500 };
+export const UP = { VY: 21.2, H: 9, MIN_T: 0.3, MAX_T: 6, ARM_UP: 0.15, LIFT_DOWN: 0.85, LIFT_UP: 1.1, AGAIN_MS: 2500, COOLDOWN_MS: 7000, HINT_MS: 3000 };
+
+/**
+ * «Up» may be cast once in COOLDOWN_MS (the author: not more often than every 7 s, Creative too; no bar, no sign — only a quiet
+ * «wait a little» at most once in HINT_MS). The same phrase heard twice is handled by AGAIN_MS before.
+ * @returns {null|'wait'|'wait-quiet'} null: free; 'wait': not cast, tell the player; 'wait-quiet': not cast, said just now
+ */
+export function upCooldown(now, castAt, hintAt) {
+    if (castAt == null || !(now - castAt < UP.COOLDOWN_MS)) return null;
+    return hintAt != null && now - hintAt < UP.HINT_MS ? 'wait-quiet' : 'wait';
+}
 
 /**
  * What «Up» does now. `armUp`: a hand raised up. → 'rise' | 'leap' | a hint (string) | null (nothing to do).
@@ -96,7 +106,13 @@ export class UpSpell {
         const g = this.game, ch = g.character;
         // the phrase that just worked, heard once more (said → over): already done — no «not in the air»
         // note while it throws me up, no second leap right after getting up
-        if (performance.now() - (this.castAt ?? -1e9) < UP.AGAIN_MS) return null;
+        const now = performance.now();
+        if (now - (this.castAt ?? -1e9) < UP.AGAIN_MS) return null;
+        const wait = upCooldown(now, this.castAt, this.hintAt);
+        if (wait) {
+            if (wait === 'wait' && isFinal) { this.hintAt = now; g.hud.setVoice('⬆️ Подождите немного', true); }
+            return null;
+        }
         const down = g.knock.state === 'falling' || g.knock.state === 'down';
         const swimming = !!g.swim?.swimming && !this.leap;
         const arm = this.raisedArm();
@@ -153,5 +169,5 @@ export class UpSpell {
         if (imp) imp.gentleUntil = Math.max(imp.gentleUntil || 0, performance.now() + 250);
     }
 
-    reset() { this.leap = null; this.castAt = null; }
+    reset() { this.leap = null; this.castAt = null; this.hintAt = null; }
 }
