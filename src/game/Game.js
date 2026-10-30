@@ -3426,6 +3426,34 @@ export class Game {
         progress(1);
     }
 
+    /** The shader warm-up's crumb: where it was when the video card dropped the context (a driver reset leaves the page dead — the next start reads this, says in the journal which sample it was, and skips it). */
+    _pwMark(stage) { try { if (stage) localStorage.setItem('zns-pw-at', stage); else localStorage.removeItem('zns-pw-at'); } catch (e) { /* no storage */ } }
+
+    _pwDescribe(parts) {
+        const seen = new Set();
+        for (const p of parts) p.traverse?.((o) => { for (const m of [].concat(o.material || [])) seen.add(`${m.type}${m.name ? ':' + m.name : ''}${o.isSkinnedMesh ? '/skin' : ''}${o.isInstancedMesh ? '/inst' : ''}`); });
+        return [...seen].slice(0, 10).join(', ');
+    }
+
+    /** What the last start left: the stage that killed the context. Returns the sets of group indices and stage names to skip now. */
+    _pwReadCrumb(parts) {
+        const skip = { groups: new Set(), stages: new Set() };
+        try {
+            const old = JSON.parse(localStorage.getItem('zns-pw-skip') || '{}');
+            for (const i of old.groups || []) skip.groups.add(i);
+            for (const t of old.stages || []) skip.stages.add(t);
+            const at = localStorage.getItem('zns-pw-at');
+            if (at) {
+                localStorage.removeItem('zns-pw-at');
+                const m = /^g:(\d+)$/.exec(at);
+                if (m) { const i = +m[1]; skip.groups.add(i); netLog(`🔥 прошлый запуск оборвался при прогреве шейдеров: образцы ${i}–${i + 3}: ${this._pwDescribe(parts.slice(i, i + 4))} — пропускаем`); }
+                else { skip.stages.add(at); netLog(`🔥 прошлый запуск оборвался при прогреве шейдеров: стадия «${at}» — пропускаем`); }
+                localStorage.setItem('zns-pw-skip', JSON.stringify({ groups: [...skip.groups].slice(-40), stages: [...skip.stages].slice(-20) }));
+            }
+        } catch (e) { /* no storage */ }
+        return skip;
+    }
+
     *_prewarmRun() {
         if (this._prewarmed) return;
         this._prewarmed = true;
@@ -3543,7 +3571,9 @@ export class Game {
         const PER = 4; // (samples in a group)
         const parts = [...zoo.children];
         const of = this._pwOf = 6 + Math.ceil(parts.length / PER); // (+ the world's own and the last few)
+        const skip = this._pwReadCrumb(parts);
         try {
+            this._pwMark('мир');
             this.renderer.compile(this.scene, this.camera);
             sides(); // (the world: every chunk's and model's buffers and textures)
             yield { of };
@@ -3552,11 +3582,14 @@ export class Game {
             zoo.remove(...parts);
             for (let i = 0; i < parts.length; i += PER) {
                 const part = parts.slice(i, i + PER);
+                if (skip.groups.has(i)) { yield { of }; continue; }
+                this._pwMark('g:' + i);
                 zoo.add(...part);
                 sides();
                 zoo.remove(...part);
                 yield { of };
             }
+            this._pwMark(null);
         } finally {
             for (const c of hideRest) c.visible = true;
             this.camera.quaternion.copy(q);
@@ -3568,15 +3601,17 @@ export class Game {
         zoo.traverse((o) => { if (o.isMesh && !o.geometry.userData?.keep && !o.geometry.userData?.shared) o.geometry.dispose(); });
         for (const o of hidden) o.visible = false;
         this.flashlight.intensity = savedIntensity;
-        this.space?.prewarm(this.renderer); // (every shader of space: the planets, the Sun, the rings, the stars)
+        if (!skip.stages.has('космос')) { this._pwMark('космос'); this.space?.prewarm(this.renderer); } // (every shader of space: the planets, the Sun, the rings, the stars)
         yield { of: this._pwOf };
-        this.seeFx?.prewarm(); // («Visible Godi»: the cloud's shader)
+        if (!skip.stages.has('пар')) { this._pwMark('пар'); this.seeFx?.prewarm(); } // («Visible Godi»: the cloud's shader)
         yield { of: this._pwOf };
-        this.arenaDuels?.prewarm(); // (the lit places of a duel: three small shaders)
+        if (!skip.stages.has('арена')) { this._pwMark('арена'); this.arenaDuels?.prewarm(); } // (the lit places of a duel: three small shaders)
         yield { of: this._pwOf };
+        this._pwMark('ультра');
         this.divine?.fx2?.warm?.(); // (the card's point size: asked once here, not in a night flight)
         this.ultra?.prewarm(); // («Ультра качество»: the picture's glow, rays, mist and tone — even with it off: switched on later, no stutter)
         yield { of: this._pwOf };
+        this._pwMark(null);
         this.prewarmedPrograms = this.renderer.info.programs.length;
     }
 
