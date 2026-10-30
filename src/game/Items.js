@@ -46,6 +46,7 @@ import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { OffGate } from './OffHandRelease.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
@@ -189,6 +190,7 @@ export class ItemSystem {
         this._drop = { right: new DropGate(), left: new DropGate() };
         this._dropChest = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over my own chest: HouseMagic.chestUnderHand)
         this._dropBuy = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
+        this._offGate = { right: new OffGate(), left: new OffGate() }; // (the off hand opened anywhere: OffHandRelease.js — a wand too)
         this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
         this.letLog = new CappedLog(); // (why things left the hands: tests)
@@ -337,6 +339,7 @@ export class ItemSystem {
         this._drop[side].reset(closed);
         this._dropBuy[side].reset();
         this._dropChest[side].reset();
+        this._offGate[side].reset();
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
@@ -914,7 +917,7 @@ export class ItemSystem {
             // (nor a wand while a spell is going — swinging it to cast never throws it)
             // (the pawnshop / the shady buyer: the OFF hand held out over his counter and opened lays any thing on it — even a wand)
             if (side === g.off && ch.armState && !holdsFast(ch) && (this._buyerPut(side, h, gt, ch) || this._chestPut(side, h, gt, ch))) continue;
-            if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.()) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
+            if (holdsFast(ch) || g.inventory?.pocketCycling?.(side) || (kind === 'wand' && this._touching(side, h, now)) || (kind === 'wand' && g.spellBusy?.() && !(side === g.off && g.wandSide?.() !== side)) || (kind === 'bow' && g.gear?.nock) || (kind === 'book' && g.books?.readingSide) || (kind === 'scroll' && g.scrolls?.readingSide) || this._otherHandTakes(side, h) || !ch.armState) {
                 this._thr[side].reset(); this._drop[side].since = 0; continue;
             }
             const arm = ch.armState(side, this._arm[side]);
@@ -926,6 +929,13 @@ export class ItemSystem {
             const td = this._thr[side];
             if (td.why) { handLog(`бросок не засчитан (${side === 'right' ? 'правая' : 'левая'}): ${td.why}`); td.why = null; }
             if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side], why: `бросок (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)` }); continue; }
+            // (the OFF hand held out and opened: any thing, a wand too, falls as easily as over a buyer's counter — the other
+            // hand keeps its own wand / Protection shield; the leading hand's wand still leaves it only thrown)
+            if (side === g.off) {
+                const og = this._offGate[side].update({ now: gt, curl, tracked, ...arm, heldMs: performance.now() - h.since, wand: kind === 'wand' });
+                if (og.drop) { this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата неосновная рука (пальцы ${curl.toFixed(2)}, рука ${arm.reach.toFixed(2)})` }); continue; }
+                if (og.why && this._offGate[side].mayLog(performance.now())) handLog(`отпускание: левая/неосновная рука ${side === 'right' ? 'правая' : 'левая'}, ${ITEM_INFO[kind]?.name || kind}, пальцы ${curl.toFixed(2)} — не выпала: ${og.why}`);
+            }
             // (the wand never falls out of an opened hand — the author holds it by one finger, the other four open:
             // it leaves the hand only thrown; a pouch only from a hand really opened wide, kept open: DROP.WAND_*)
             if (kind === 'wand') { this._drop[side].since = 0; continue; }
