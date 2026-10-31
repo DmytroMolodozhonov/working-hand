@@ -1237,6 +1237,8 @@ export class Combat {
             ? '🔥 Вас сожгла лава'
             : how === 'abyss'
             ? '🔥 Вы сорвались в пропасть ада'
+            : how === 'crushed'
+            ? `🐺 ${name ? `${name} раздавил вас в лапе монстра` : 'Вас раздавила лапа монстра'}`
             : `💀 ${name ? `Вас победил ${name}` : 'Вы погибли'}`;
         if (how === 'shatter' || how === 'iceQueen') {
             const c = this.center(_v1);

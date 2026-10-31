@@ -167,6 +167,7 @@ export class NetSync {
         }
         this.game.water?.applyRemote(id, null);
         this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
+        this.game.monsterGrab?.onLeave(id); // (the creatures in their monster paws fall; their paw held me — I fall)
         this.game.levMax?.onLeave(id);
         this.game.handHold?.onLeave(id);
         this.game.items?.onHandoverLeave?.(id); // (hands they held or that held mine: let go)
@@ -678,6 +679,11 @@ export class NetSync {
     /** The monster form's chunk of a building: taken / thrown / gone (see MonsterTransform.onNet). */
     monsterChunk(m) {
         this.net.send({ t: 'mch', by: this.me, ...m }, true);
+    }
+
+    /** The monster form's paw: a creature taken / squeezed / let go / crushed (see MonsterGrab.onNet). */
+    monsterGrab(m) {
+        this.net.send({ t: 'mgr', by: this.me, ...m }, true);
     }
 
     /** «Ground Vortex»: my state (~10×/s), a volley, a shield blow, the end (see GroundVortex.onNet). */
@@ -1344,7 +1350,8 @@ export class NetSync {
             case 'burn': if (m.by !== this.me) g.burning?.onNet(m); break;
             case 'burnl': if (m.by !== this.me) g.burning?.onList(m); break;
             case 'gv': if (m.by !== this.me) g.groundVortex?.onNet(m); break;
-            case 'mch': if (m.by !== this.me) g.monster?.onNet(m); break; // (a chunk of a building in a monster's paw: MonsterTransform.js)
+            case 'mch': if (m.by !== this.me) g.monster?.onNet(m); break;
+            case 'mgr': if (m.by !== this.me) g.monsterGrab?.onNet(m); break; // (a creature in a monster's paw: MonsterGrab.js) // (a chunk of a building in a monster's paw: MonsterTransform.js)
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
             case 'iceb': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break; // (ice of «Water forming» + «Frozen»)

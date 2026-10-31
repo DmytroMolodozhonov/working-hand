@@ -22,6 +22,7 @@ import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
 import { synthTaron, TARON_SOUNDS } from './TaronSounds.js';
 import { synthThrow, THROW_SOUNDS } from './ThrowSounds.js';
+import { synthGrab, GRAB_SOUNDS } from './GrabSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
@@ -662,6 +663,8 @@ export class SoundManager {
             ...ARENA_SOUNDS.map((k) => ['arena_' + k, () => synthArena(this.context, k)]),
             // (a thing thrown and landing — Items / ThrowModel: the air it cuts, its knock on the ground by its stuff, water)
             ...THROW_SOUNDS.map((k) => ['thr_' + k, () => synthThrow(this.context, k)]),
+            // (the monster's paw and the body in it — MonsterGrab.js: the fingers closing, the squeeze, the crunch)
+            ...GRAB_SOUNDS.map((k) => ['grab_' + k, () => synthGrab(this.context, k)]),
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -1626,6 +1629,14 @@ export class SoundManager {
         if (!buf || !position) return;
         const k = Math.min(1, speed / 14);
         this._playAt(buf, position, 0.25 + 0.6 * k, 5, 0.9 + Math.random() * 0.2);
+    }
+
+    /** The monster's paw (MonsterGrab.js): 'grab' | 'squeeze' | 'crunch' — made ahead (prewarmStep). */
+    playGrab(kind, position, volume = 1) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const buf = this.sounds['grab_' + kind];
+        if (!buf || !position) return;
+        this._playAt(buf, position, Math.min(1, 0.8 * volume), 10, 0.9 + Math.random() * 0.2);
     }
 
     playBoneClack(position, volume = 1) {

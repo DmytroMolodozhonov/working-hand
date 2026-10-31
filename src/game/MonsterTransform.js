@@ -117,7 +117,7 @@ export class MonsterTransform {
             const h = g.items?.held?.[side];
             if (h) h.gripped = false;
             if (h) h.q = null;
-            hands?.[side]?.setGrip?.(null);
+            if (!g.monsterGrab?.holds(side)) hands?.[side]?.setGrip?.(null); // (пальцы лапы на существе — MonsterGrab)
             if (ch.aim) ch.aim[side] = null;
         }
     }
@@ -284,7 +284,7 @@ export class MonsterTransform {
             this.roar = k > 0.86 ? Math.min(1, (k - 0.86) / 0.06) * (k < 1 ? 1 : 0) : 0;
             if (k >= 1) { this.phase = 'on'; this.t = 0; st = growAt(1); this.roar = 0.9; this._roarT = 1.2; ch.sizeRun = MONSTER.RUN_K; ch.jumpK = MONSTER.JUMP_K; }
         } else if (this.phase === 'shrink') {
-            if (this.carry.left || this.carry.right) this._dropAll();
+            if (this.carry.left || this.carry.right || g.monsterGrab?.holds('left') || g.monsterGrab?.holds('right')) this._dropAll();
             const k = this.t / (this._shrinkS || MONSTER.SHRINK_S);
             st = growAt(k, true);
             this.roar = k < 0.3 ? 0.6 : 0;
@@ -316,6 +316,7 @@ export class MonsterTransform {
             this._climbStep(dt);
             this._steps(dt);
             this._grabs(dt);
+            g.monsterGrab?.stepMine(dt); // (существа в лапах: сжатие, бросок — MonsterGrab.js)
             this._clubs(dt);
             this._fists(dt);
             this._alarmT -= dt;
@@ -340,7 +341,7 @@ export class MonsterTransform {
     _freeWandHand() {
         const ch = this.game.character, hands = ch.getActiveHands?.();
         if (!hands) return;
-        for (const side of ['left', 'right']) if (hands[side]?.gripOverride && !this.carry[side]) this._freeHands();
+        for (const side of ['left', 'right']) if (hands[side]?.gripOverride && !this.carry[side] && !this.game.monsterGrab?.holds(side)) this._freeHands(); // (пальцы на существе в лапе — его хват: MonsterGrab)
     }
 
     /** Ступни монстра (y) и настоящее препятствие: точка в твёрдом (для кольца вокруг тела). */
@@ -604,6 +605,7 @@ export class MonsterTransform {
         for (const side of ['left', 'right']) {
             const curl = ch.getGripCurl?.(side) || 0, was = this._curl[side];
             this._curl[side] = curl;
+            if (g.monsterGrab?.holds(side)) continue; // (в этой лапе существо — MonsterGrab.js)
             const pull = this._pull[side];
             if (pull) { // (ломает дальше, пока кулак сжат)
                 if (curl < GRAB.OPEN || ch.handLost?.(side)) { this._pull[side] = null; if (this.carry[side]) this._let(side); continue; }
@@ -612,6 +614,7 @@ export class MonsterTransform {
             }
             if (this.carry[side]) { if (curl < GRAB.OPEN) this._let(side); continue; }
             if (!(was < GRAB.OPEN && curl >= GRAB.CLOSE) || !T?.get || ch.handLost?.(side) || this._grabCd > 0) continue;
+            if (g.monsterGrab?.tryGrab(side)) continue; // (в ладони существо: лапа берёт его, а не кусок стены — GrabRules.js)
             this._grab(side, ch.getHandWorldPosition(side, _v), T);
         }
     }
@@ -905,6 +908,7 @@ export class MonsterTransform {
 
     /** Все лапы разжимаются (заморозка, смерть, конец формы): куски падают и ложатся. */
     _dropAll() {
+        this.game.monsterGrab?.dropAll(); // (существа из лап — падают)
         for (const side of ['left', 'right']) if (this.carry[side]) this._let(side, true);
     }
 
@@ -924,7 +928,7 @@ export class MonsterTransform {
         const g = this.game, ch = g.character;
         for (const side of ['left', 'right']) {
             this._fist[side] = Math.max(0, this._fist[side] - dt);
-            if (this._fist[side] > 0 || ch.handLost?.(side) || this.carry[side]) continue;
+            if (this._fist[side] > 0 || ch.handLost?.(side) || this.carry[side] || g.monsterGrab?.holds(side)) continue; // (кулак с существом — не удар: MonsterGrab)
             // (the hand's own speed against the body — a run carries both hands along, that is no blow — in metres: ×size)
             const rel = ch.handRelVelocity?.[side];
             if (!rel) continue;

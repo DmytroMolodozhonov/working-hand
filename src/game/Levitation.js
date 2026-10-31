@@ -958,6 +958,7 @@ export class Levitation {
     _updateLifted(dt) {
         const g = this.game;
         const L = this.lifted;
+        if (L.paw) return; // (в лапе монстра: тело ведёт MonsterGrab._stepMe)
         const ch = g.character;
         L.age += dt;
         const up = 0.6 + 2.0; // (my middle above my feet)
@@ -991,7 +992,7 @@ export class Levitation {
         this.fallTop = gentle ? null : L.top;
         this.fallBy = L.by;
         this.myFly = gentle ? null : { prev: null, vel: null, t: 0 }; // (thrown: the blow I strike is counted — _myFlight)
-        g.sync?.lift?.(L.by, L.side, L.hold, false, free, null, L.mx);
+        if (!L.paw) g.sync?.lift?.(L.by, L.side, L.hold, false, free, null, L.mx); // (лапа монстра говорит своим сообщением — MonsterGrab)
         if (free) g.hud.setVoice('🛡️ Вы вырвались из Левиосы!', true);
     }
 

@@ -187,6 +187,40 @@ function disposeTree(o) {
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+/**
+ * Лужа крови под раздавленным телом (монстр сжал лапу до конца — MonsterGrab): неровное пятно, одна общая форма и
+ * один материал на всех (в форму тела FarShape её цвет запекается — нового шейдера нет).
+ */
+let _poolGeo = null, _poolMat = null;
+function bloodPool() {
+    if (!_poolGeo) {
+        const n = 28, pos = [0, 0, 0], idx = [];
+        for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2, r = 1.25 + 0.35 * Math.sin(a * 3 + 1.3) + 0.2 * Math.sin(a * 7 + 0.4) + 0.12 * Math.cos(a * 11);
+            pos.push(Math.cos(a) * r * 1.35, 0, Math.sin(a) * r);
+            idx.push(0, 1 + ((i + 1) % n), 1 + i);
+        }
+        _poolGeo = new THREE.BufferGeometry();
+        _poolGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        _poolGeo.setIndex(idx);
+        _poolGeo.computeVertexNormals();
+        _poolGeo.userData.shared = true;
+        _poolMat = new THREE.MeshStandardMaterial({ color: 0x5a0610, roughness: 0.25, metalness: 0.05 });
+    }
+    const m = new THREE.Mesh(_poolGeo, _poolMat);
+    m.userData.shared = true;
+    return m;
+}
+
+/** Раздавленное тело: сплющено и шире, под ним лужа крови. */
+function crushLook(pivot) {
+    pivot.scale.set(1.15, 0.42, 1.1);
+    const pool = bloodPool();
+    pool.position.y = 0.05 / 0.42;
+    pool.scale.set(1 / 1.15, 1, 1 / 1.1);
+    pivot.add(pool);
+}
+
 export class DeathSystem {
     constructor(game) {
         this.game = game;
@@ -223,6 +257,7 @@ export class DeathSystem {
                 if (legacy) b.lg = legacy; // (all the hero grew: theirs to take back — Legacy.js)
                 b.mh = Math.round((g.maxHP || 20) + (legacy?.hp || 0)); // (wipeHero has already taken the grown part off: it is in the legacy) // (his maximum health and whether black magic killed him: the rite of monstrous vitality — VitalityRules.js)
                 if (DARK_DEATH.has(g._deathKind)) b.dk = 1;
+                if (g._deathKind === 'crushed') b.cr = 1; // (раздавлен в лапе монстра: тело сплющено — MonsterGrab)
                 this.addBody(b, how === 'burst' ? null : ch.group);
                 g.sync?.deathBody?.(this._wire(b));
             }
@@ -338,7 +373,7 @@ export class DeathSystem {
         this.stripVillager(v);
         if (drops.length) this.scatter(drops, { x: v.x, y, z: v.z });
         if (v.burst) return;
-        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
+        const b = { id: 'v' + v.id + '_' + Date.now().toString(36), k: 'v', who: v.id, role: v.role, x: v.x, y, z: v.z, yaw: v.yaw || 0, age: 0, st: steel.length || v.stripped ? 1 : 0, look: lived, ...(v.wizard ? { wz: 1, mm: Math.round(v.maxMana || 30) } : null), mh: Math.round(v.maxHp || 20), ...(v.darkKill ? { dk: 1 } : null), ...(v.crushed ? { cr: 1 } : null) }; // (mh: his maximum health, dk: killed by black magic — the rite of monstrous vitality: VitalityRules.js) (a wizard's body keeps his mana maximum: the rite of a pentagram — Pentagrams.js)
         this.addBody(b);
         g.sync?.deathBody?.(this._wire(b));
     }
@@ -379,6 +414,7 @@ export class DeathSystem {
             else made = this.makers[b.k]?.(b) || null;
         } catch (e) { console.warn('[Death] body', e); made = null; }
         if (!made) return;
+        if (b.cr) crushLook(made.pivot); // (раздавлен лапой монстра — MonsterGrab)
         b.model = made.pivot;
         b.len = made.len;
         b.headPlusZ = !!made.headPlusZ;
@@ -741,7 +777,7 @@ export class DeathSystem {
     // ------------------------------------------------------------ net / save
     _wire(b) {
         const r = (x) => Math.round(x * 100) / 100;
-        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined };
+        return { id: b.id, k: b.k, who: b.who, name: b.name || null, role: b.role || null, x: r(b.x), y: r(b.y), z: r(b.z), yaw: r(b.yaw || 0), age: Math.round(b.age || 0), look: b.look || null, st: b.st ? 1 : 0, lg: b.lg || undefined, wz: b.wz || undefined, mm: b.mm || undefined, rit: b.rit || undefined, mh: b.mh || undefined, dk: b.dk || undefined, cr: b.cr || undefined };
     }
 
     /** (network) somebody's body: a player's is copied from their avatar while it is still there. */

@@ -107,6 +107,7 @@ import { captureLegacy, wipeHero } from './Legacy.js';
 import { BreakwardMark } from './BreakwardMark.js';
 import { Steadiness } from './Steadiness.js';
 import { MonsterTransform } from './MonsterTransform.js';
+import { MonsterGrab } from './MonsterGrab.js';
 import { monsterSamples } from '../entities/MonsterBody.js';
 import { DarkHero, onDarkCast } from './DarkMagic.js';
 import { DarkExile } from './DarkExile.js';
@@ -546,6 +547,7 @@ export class Game {
         this.heroApply = new HeroApply(this); // «Настройки героя» Творческого мира (HeroApply.js)
         this.breakward = new BreakwardMark(this); // метка «слом защиты» (пентаграмма breakward: Breakward.js)
         this.monster = new MonsterTransform(this); // «Пентаграмма страшного монстра»: ×7, 10 минут (MonsterForm.js)
+        this.monsterGrab = new MonsterGrab(this); // монстр берёт существ в лапу: держать, раздавить, бросить (GrabRules.js)
         this.mana = new Mana(this); // the mana bar's maximum grows with practice (Mana.js)
         this.achievements = new Achievements(this); // the five deeds and the status «Высший маг» (kept on death)
         // pushes, staggers, knockdowns, head jolts: my body (BodyImpact + Knockdown), every creature (CreatureImpact)
@@ -3874,6 +3876,7 @@ export class Game {
 
         this.darkLord.update(dt); // (the turning into a true dark mage: the rite holds the body in the air — before the character moves)
         this.levitation.update(dt);
+        this.monsterGrab.update(dt); // (тела в лапах монстров — хост; я сам в лапе — мой компьютер: MonsterGrab.js)
         if (earth) this.levMax?.update(dt);
         else if (this.levMax?.swarm?.active) { this.levMax.swarm.release(false); this.levMax.mine = null; } // (off the Earth the things are let go)
         this.accio.update(dt);
