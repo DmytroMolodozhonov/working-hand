@@ -363,6 +363,9 @@ export class NetSync {
         return [r(L?.l), L?.lh ? 1 : 0, r(L?.r), L?.rh ? 1 : 0, lean];
     }
 
+    /** Send my pose (with the shield) on the next frame, not in up to 50 ms (the crossed arms' shield: CrossedArms.js). */
+    poseSoon() { this.pTimer = 1; }
+
     // ================================================================ update
     update(dt) {
         const g = this.game;

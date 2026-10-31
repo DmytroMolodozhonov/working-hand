@@ -447,7 +447,8 @@ export class CombatVisuals {
         this._handAge = showHand ? (this._handAge || 0) + dt : 0;
         if (showHand) {
             // (grows in as it is cast; fades in the last third of a second)
-            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.25 + 0.2));
+            // (half its size at once, full in 0.12 s: the shield already holds from its first frame, the look catches up)
+            const k = Math.max(0.05, Math.min(1, st.shieldLeft / 0.35, this._handAge / 0.12 + 0.5));
             this.hand.position.copy(body.hand).addScaledVector(body.dir, 0.45);
             this.hand.lookAt(_v1.copy(this.hand.position).add(body.dir));
             this.hand.scale.setScalar((st.handScale ?? PVP.SHIELD_SCALE) * k);
@@ -777,7 +778,7 @@ export class Combat {
             if (wand && side === wand) this.game.hud?.setVoice?.('🛡️ Щит в руке с палочкой: любое другое заклинание этой палочкой собьёт его. Держите щит другой рукой', true);
             else if (this.manaOn) this.game.hud?.setVoice?.('🛡️ Щит держится, пока есть мана (−0,5 в секунду). Каждое отражённое заклинание — половина его цены', true);
         }
-        if (this.game.sound) this.game.sound.playIce?.();
+        if (this.game.sound && !this.game.crossedShield?.quiet) this.game.sound.playIce?.(); // (a guessed shield of the crossed arms: no sound until it is confirmed — CrossedArms.js)
         return null;
     }
 
@@ -1011,6 +1012,7 @@ export class Combat {
         if (swarm?.faces?.(from)) return swarm.took(from, kind); // (the blow lands in the things, not in me)
         if ((!this.shield || this.shield.left <= 0) && this.game.gear?.shieldFaces(from)) { this.game.gear.shieldTook(kind || 'Sapira'); return true; }
         if (!this.shield) return false;
+        if (this.shield.tent) this.shield.tent = false; // (a guessed shield of the crossed arms held a blow: it is real now and paid — CrossedArms.js)
         if (!this._payHit(kind)) return false;
         if (this.shield?.gods) return true; // (its own gold sparks: godsHit)
         const c = this.center(_v1);
@@ -1324,7 +1326,9 @@ export class Combat {
         if (!this.visuals) return;
         const ch = this.game.character;
         const side = this.shield?.side || 'right';
-        this.visuals.update(dt, this.state(), {
+        const st = this.state();
+        if (this.shield?.tent) { st.shield = 0; st.shieldLeft = 0; } // (a guessed one: it protects, unseen — CrossedArms.js)
+        this.visuals.update(dt, st, {
             center: this.center(_v1).clone(),
             size: ch.size || 1,
             hand: this.shieldAt(side, new THREE.Vector3()), // (at the wand's tip when it is in that hand)
@@ -1368,7 +1372,7 @@ export class Combat {
 
     serialize() {
         if (!this.enabled && !this.shield && !this.frozen) return null; // (the ice shell of «Айс» is seen in every mode)
-        const s = this.shield;
+        const s = this.shield?.tent ? null : this.shield; // (a guessed shield of the crossed arms is not sent until confirmed)
         return [s ? s.type : 0, s && s.side === 'left' ? 1 : 0, s ? Math.round(s.left * 10) / 10 : 0, Math.ceil(this.frozenLeft), this.brokeN || 0, s?.gods ? 1 : 0, s?.wand ? 1 : 0, s?.gesture ? 1 : 0]; // (the 8th: the crossed arms' shield, in front of them; the 5th: how many times it shattered — the others see the pieces; the 6th: the gods' shield, gold; the 7th: at the wand's tip)
     }
 

@@ -2208,7 +2208,9 @@ export class Game {
         const now = Date.now();
         const early = this._interimCast;
         if (isFinal && early && early.name === name && now - early.at < 3000) { this._interimCast = null; return null; }
-        if (now - (this._lastShieldCast || 0) < 800 && this._lastShieldName === name) return null; // (a longer phrase heard after — «… Gods», «… Maxima» — goes on)
+        // (the same word heard twice — a phrase still said, then its end — while the shield it put up still stands; a longer phrase heard after —
+        // «… Gods», «… Maxima» — goes on; the shield gone — the arms opened, «стоп», a blow: cast again at once, no 0.8 s gap)
+        if (now - (this._lastShieldCast || 0) < 800 && this._lastShieldName === name && this.combat.shield) return null;
         const hint = this.combat.castProtection(/Maxima$/.test(name), name.startsWith('ProtectionGods'));
         if (hint) { this.hud.setVoice(hint, true); return null; }
         this._lastShieldCast = now;

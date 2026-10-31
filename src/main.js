@@ -1193,6 +1193,7 @@ async function startGameInner(config, welcome) {
     }
 }
 
+poseService.onRawPose = (raw, t) => { if (game && game.active) game.crossedShield?.onPose(raw, t); }; // (the crossed arms' shield: the picture as it comes)
 poseService.onPoseUpdate = (poseData) => {
     if (game && game.active) game.setPose(poseData);
 };

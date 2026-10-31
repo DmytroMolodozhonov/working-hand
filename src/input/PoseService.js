@@ -36,6 +36,7 @@ export class PoseService {
         this.isRunning = false;
         this.ready = false;
         this.onPoseUpdate = null;
+        this.onRawPose = null; // (raw points, its own time: CrossedArms — the crossed arms' shield)
         this.onStatus = null;
         this.worker = null;
         this.runner = null; // main-thread fallback
@@ -809,6 +810,9 @@ export class PoseService {
         const t = r.ts ?? performance.now();
         if (r.faceLandmarks !== undefined) this._lastFace = r.faceLandmarks;
 
+        // («Protection» by crossed arms: the RAW points the moment the picture comes — no smoothing lag, no waiting for the
+        // game's frame; CrossedArms.CrossTrack, tools/protectbench.mjs)
+        if (this.onRawPose) try { this.onRawPose(r.poseLandmarks, t); } catch (e) { console.warn('[CrossedArms]', e); }
         const pose = this.poseGuard.process(r.poseLandmarks, t);
         // (the wrists raw and filtered, picture by picture: a throw gives back the peak the filter cut off — ThrowModel.WristTrace;
         // its clock — the moment the picture reached the game, as the shown pose's)
