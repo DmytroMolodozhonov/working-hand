@@ -57,6 +57,7 @@ const OFFER_TEXT = {
     gargoyles: 'Положите на круг три тела убитых человекоподобных (не кости) — тогда начнётся обряд (150 маны): тела сгорят, и вылетят горгульи',
     breakward: 'Положите на круг одно тело убитого человекоподобного (не кости) — тогда спишутся 50 маны, тело сгорит, и можно войти в круг: защита будет сломана',
     monster: 'Положите на круг рог Минотавра и одно тело убитого человекоподобного (не кости), потом встаньте в круг — 200 маны: рог и тело сгорят, и вы станете монстром',
+    infernum: 'Положите на круг тело любого убитого существа (не кости) — оно сгорит, и врата в ад откроются',
 };
 
 const USE_TEXT = {
@@ -69,6 +70,7 @@ const USE_TEXT = {
     vitality: 'Положите в круг тело человека, убитого чёрной магией, и встаньте рядом: максимум вашего здоровья вырастет на максимум здоровья жертвы (250 маны, +10 к тёмной магии)',
     night: 'Встаньте в круг (50 маны) — вы навсегда начнёте лучше видеть в темноте',
     sight: 'Встаньте в круг с пером птички Спенсера (150 маны) — вы начнёте видеть невидимое',
+    infernum: 'Встаньте в круг и постойте немного — врата в ад открыты',
     firm: 'Положите на круг волшебный камушек, встаньте в него (300 маны) — вас больше не повалит ничто, до самой смерти',
 };
 
@@ -162,7 +164,7 @@ export class Pentagranium {
         const origin = _o.set(p.x, this._height(p.x, p.z), p.z);
         if (g.wards?.forbids?.(origin, origin)) return hint('🛡️ Здесь чужая защита дома — пентаграмма не держится');
         const offer = !this.creative && OFFERINGS[id] ? id : null; // (survival: the ritual of the gargoyles / the monster needs things on the circle — Offerings.js)
-        const cost = offer ? 0 : CAST_COST[id] || 0, c = g.combat; // (…and its mana is paid when they have been laid, not at the word)
+        const cost = offer && OFFERINGS[id].mana ? 0 : CAST_COST[id] || 0, c = g.combat; // (the hell's pentagram: its 150 at the word, the body after) // (…and its mana is paid when they have been laid, not at the word)
         if (cost && manaRules(g) && (c?.fatigue || 0) < cost) return hint(`🩸 Нужно ${cost} маны — у вас ${Math.floor(c?.fatigue || 0)}`);
         const def = TABLE[id], center = { x: p.x, y: origin.y, z: p.z };
         const r = offer ? (id === 'gargoyles' ? this._canGargoyles(center) : undefined) : this._use1(def, center); // (an offering: the ritual waits for the things)
@@ -717,6 +719,8 @@ export class Pentagranium {
             this.game.offerings?.onNet(by, m); // (the offering of the gargoyles / the monster: Offerings.js)
         } else if (m.k === 'uni') {
             this.game.united?.onNet(m);
+        } else if (m.k === 'hell') {
+            this.game.hellGate?.onNet(m); // (the gates of hell open: HellGate.js)
         } else if (m.k === 'vit') {
             this.game.vitality?.onNet(by, m); // (the rite of monstrous vitality: Vitality.js)
         } else if (m.k === 'rite') {

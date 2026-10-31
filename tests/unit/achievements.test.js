@@ -113,15 +113,15 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
     assert.equal(towerLeft(def, get(() => false), () => false), null, 'not loaded: unknown');
 });
 
-test('all seven (Captain Black Moustache and the Castle of Ghosts too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
+test('all eight (Captain Black Moustache, the Castle of Ghosts and the gates of hell too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
     for (const k of ACH_IDS) a.gain(k);
     assert.ok(a.high);
-    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + ACH.HIGH_MANA);
-    assert.ok(Math.abs(a.regenK - (1 + 7 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
+    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + ACH.HIGH_MANA);
+    assert.ok(Math.abs(a.regenK - (1 + 8 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    assert.deepEqual(achBonus(ACH_IDS), { mana: 1775, regen: 3.05, high: true });
+    assert.deepEqual(achBonus(ACH_IDS), { mana: 1875, regen: 3.2, high: true });
     assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 
@@ -161,10 +161,10 @@ test('death takes the achievements: the practice-grown mana and the achievements
     assert.equal(g.combat.maxFatigue, 80, 'the king again: +50 again');
 });
 
-test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; six of seven is no High Mage', () => {
+test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; seven of eight is no High Mage', () => {
     const { g, a, credits } = fakeGame({ remotes: ['p2'] });
-    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle']) a.gain(k);
-    assert.equal(a.high, false, 'six of seven: not yet');
+    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle', 'hellGate']) a.gain(k);
+    assert.equal(a.high, false, 'seven of eight: not yet');
     const before = g.combat.maxFatigue;
     a.hit('blackbeard', 'bb', 'p2');
     a.killed('blackbeard', 'bb', 'me', pos(0, 0, 0));

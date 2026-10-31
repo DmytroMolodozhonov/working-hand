@@ -61,6 +61,13 @@ export class Offerings {
             if (!this._inCircle(m, b.x, b.y, b.z)) continue;
             out.bodies.push(b); out.any = true;
         }
+        // (an animal's carcass — not its bones — is a body too: the hell's pentagram takes any killed creature — HellRules.anyBody)
+        for (const a of g.animals?.list || []) {
+            if (!a.dead || a.bonesAt || a.airborne || a.offered) continue;
+            const q = a.group?.position;
+            if (!q || !this._inCircle(m, q.x, q.y, q.z)) continue;
+            out.bodies.push({ id: 'an' + a.id, k: 'a', animal: a, x: q.x, y: q.y, z: q.z, model: a.group }); out.any = true;
+        }
         for (const [uid, L] of g.items?.loose || []) {
             if (!L.rest || L.hover || L.ritual || L.item?.shop) continue;
             const p = L.model?.position;
@@ -106,6 +113,8 @@ export class Offerings {
             if (g.monster?.phase) return '🐺 Вы уже монстр';
         } else if (m.offer === 'breakward') {
             if (g.breakward?.marked) return '🜏 Защита уже сломана — второй раз не нужно';
+        } else if (m.offer === 'infernum' || m.offer === 'hellBack') {
+            if (m.gateOpen > 0) return null; // (already open: nothing more is burnt — HellGate.js)
         }
         if (manaRules(g) && (c?.fatigue || 0) < need.mana) return '🜏 ' + OFFER_HINT.noMana(need.mana, c?.fatigue || 0);
         return null;
@@ -114,7 +123,8 @@ export class Offerings {
     // ------------------------------------------------------------ the dark flame gathers
     _begin(m, a) {
         const g = this.game;
-        for (const b of a.bodies) b.off = 1;
+        if (m.gateOpen > 0) return; // (the gates stand open: the next body is not taken)
+        for (const b of a.bodies) { b.off = 1; if (b.animal) b.animal.offered = true; }
         for (const t of a.things) { t.L.ritual = true; t.L.rest = true; t.L.sentRest = true; t.L.vel?.set(0, 0, 0); t.L.spin?.set(0, 0, 0); }
         const at = [...a.bodies.map((b) => [b.x, b.y, b.z]), ...a.things.map((t) => [t.L.model.position.x, t.L.model.position.y, t.L.model.position.z])];
         this.run = { m, bodies: a.bodies, things: a.things, at, t: 0, remote: false };
@@ -153,14 +163,14 @@ export class Offerings {
         // trouble cancels it: nothing is spent
         if (g.isDeadLocal || g.combat?.dead) return this._cancel(OFFER_HINT.cancelDead);
         if (!P?.marks.has(m.id)) return this._cancel(OFFER_HINT.cancelGone);
-        if (R.bodies.some((b) => !g.death?.bodies.has(b.id) || b.lev || !this._inCircle(m, b.x, b.y, b.z)) || R.things.some((t) => !g.items?.loose.has(t.uid) || !this._inCircle(m, t.L.model.position.x, t.L.model.position.y, t.L.model.position.z))) return this._cancel(OFFER_HINT.cancelMoved);
+        if (R.bodies.some((b) => (b.animal ? !g.animals?.list.includes(b.animal) || b.animal.bonesAt : !g.death?.bodies.has(b.id)) || b.lev || !this._inCircle(m, b.x, b.y, b.z)) || R.things.some((t) => !g.items?.loose.has(t.uid) || !this._inCircle(m, t.L.model.position.x, t.L.model.position.y, t.L.model.position.z))) return this._cancel(OFFER_HINT.cancelMoved);
         if (R.t >= OFFER.CHARGE) this._commit();
     }
 
     _unlock() {
         const R = this.run;
         if (!R) return;
-        for (const b of R.bodies) b.off = 0;
+        for (const b of R.bodies) { b.off = 0; if (b.animal) b.animal.offered = false; }
         for (const t of R.things) if (t.L) t.L.ritual = false;
     }
 
@@ -188,7 +198,9 @@ export class Offerings {
     _commit() {
         const R = this.run, g = this.game, m = R.m, need = OFFERINGS[m.offer], c = g.combat;
         const center = { x: m.x, y: m.y, z: m.z };
-        if (m.offer === 'gargoyles') {
+        if (m.offer === 'infernum' || m.offer === 'hellBack') {
+            g.hellGate?.opened?.(m, true); // (the gates of hell open: HellGate.js — every computer by 'pgm' k 'hell')
+        } else if (m.offer === 'gargoyles') {
             const r = g.gargoyles?.startRitual?.(center, { by: g.localId, silent: true });
             if (!r?.ok) return this._cancel(r?.why === 'mana' ? OFFER_HINT.cancelMana : (WHY[r?.why] || OFFER_HINT.cancelDead));
             m.life = Math.min(m.life, 6 + OFFER.BURN); // (the picture burns out after the ritual began, as it always did)
@@ -204,7 +216,7 @@ export class Offerings {
             this._embers(p.x, p.y, p.z, 26);
             if ((t.item.count || 1) > 1) { t.item.count--; t.L.ritual = false; } else { g.items.removeLoose(t.uid); g.sync?.itemGone?.(t.uid, null, null); }
         }
-        const ids = R.bodies.map((b) => b.id);
+        const ids = R.bodies.filter((b) => !b.animal).map((b) => b.id);
         for (const b of R.bodies) this._burnBody(b);
         g.sync?.pentagram?.({ k: 'ofr', op: 'burn', id: m.id, bodies: ids });
         this._endRun(true);
@@ -220,7 +232,14 @@ export class Offerings {
     _burnBody(b) {
         if (!b || this.burns.some((x) => x.b === b)) return;
         b.off = 1;
+        if (b.animal) { this._burnAnimal(b); return; }
         this.burns.push({ b, id: b.id, t: 0, x: b.x, y: b.y, z: b.z, scale0: b.model?.scale?.x || 1, y0: b.model?.position?.y ?? b.y });
+    }
+
+    /** An animal's carcass burns away (its own model; the herd's host removes it — Animals._remove). */
+    _burnAnimal(b) {
+        const o = b.animal.group;
+        this.burns.push({ b: { id: b.id, model: o }, animal: b.animal, id: b.id, t: 0, x: b.x, y: b.y, z: b.z, scale0: o?.scale?.x || 1, y0: o?.position?.y ?? b.y });
     }
 
     _burnStep(dt) {
@@ -243,7 +262,8 @@ export class Offerings {
                 if (u > 0.55 && Math.random() < 0.3) fx.spark(_v.set(r.x, r.y + 0.3, r.z), 0xd8d0bc, 0.2, _d.set((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), 1.6); // (ash)
             }
             if (r.t >= OFFER.BURN + 0.2) {
-                if (g.death?.bodies.has(r.id)) g.death.removeBody(r.id, false);
+                if (r.animal) { if (g.animals?.list.includes(r.animal)) { if (g.animals.auth) g.animals._remove(r.animal); else if (r.animal.group) r.animal.group.visible = false; } }
+                else if (g.death?.bodies.has(r.id)) g.death.removeBody(r.id, false);
                 this.burns.splice(i, 1);
             }
         }

@@ -39,7 +39,7 @@ export const SPAWN_SPOTS = Object.freeze([
 ]);
 
 export const SPAWN_IDS = SPAWN_SPOTS.map((s) => s.id);
-export const spawnLabel = (id) => SPAWN_SPOTS.find((s) => s.id === id)?.label || SPAWN_SPOTS[0].label;
+export const spawnLabel = (id) => (id === 'hell' ? 'Врата ада' : id === 'earth' ? 'Назад на Землю' : SPAWN_SPOTS.find((s) => s.id === id)?.label || SPAWN_SPOTS[0].label);
 export const normalizeSpawn = (id) => (SPAWN_IDS.includes(id) ? id : 'start');
 
 /** Дальше этого от героя (м) место считается дальним: его землю ещё надо дождаться. */

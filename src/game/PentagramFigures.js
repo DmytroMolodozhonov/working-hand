@@ -115,3 +115,16 @@ export const FIRM_LINES = (() => {
     const roots = [[pt(-0.4, -0.44), ringPt(6)], [pt(0, -0.44), ringPt(8)], [pt(0.4, -0.44), ringPt(10)]]; // корни к кольцу
     return [col, cap, plinth, ...flutes, ...roots];
 })();
+
+/**
+ * «Пентаграмма ада» (Pentagranium Infernum, чёрная): ВРАТА — стрельчатый проём на двух ступенях порога, внутри — язык пламени (три языка вверх), от плеч
+ * проёма к кольцу загибаются два рога. Ни звезды, ни треугольника, ни колонны: свой рисунок.
+ */
+export const INFERNUM_LINES = (() => {
+    const L = [pt(-0.42, -0.62), pt(-0.42, 0.16), pt(-0.37, 0.4), pt(-0.24, 0.58), pt(0, 0.74)];
+    const gate = [...L, ...L.slice(0, -1).reverse().map(([x, y]) => pt(-x, y))]; // (the pointed arch, down both sides to the threshold)
+    const steps = [[pt(-0.66, -0.62), pt(0.66, -0.62)], [pt(-0.52, -0.78), pt(0.52, -0.78)]]; // (two steps down — into the depths)
+    const flame = [pt(0, 0.46), pt(0.07, 0.14), pt(0.19, 0.3), pt(0.22, -0.08), pt(0.14, -0.46), pt(-0.14, -0.46), pt(-0.22, -0.08), pt(-0.19, 0.3), pt(-0.07, 0.14)];
+    const horn = (k) => curve([pt(-0.42 * k, 0.12), pt(-0.6 * k, 0.2), pt(-0.7 * k, 0.4), ringPt(k > 0 ? 2 : 14)]);
+    return [...curve(gate), ...steps, flame, ...horn(1), ...horn(-1)];
+})();

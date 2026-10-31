@@ -17,6 +17,8 @@
  * has been checked once more); not enough mana — the things lie there until there is; a wrong thing — the hint says what is wrong, only once per set.
  */
 
+import { HELL_OFFERINGS, anyBody } from './HellRules.js';
+
 /** Kinds of Death body (Death.js `b.k`) of man-like creatures: v — a villager / knight / wizard / sailor, p — a player, z — a zombie (when it leaves a body). */
 export const HUMANOID_KINDS = new Set(['v', 'p', 'z']);
 
@@ -38,6 +40,7 @@ export const OFFERINGS = {
     gargoyles: { id: 'gargoyles', bodies: 3, things: [], mana: 150, what: 'тела' },
     breakward: { id: 'breakward', bodies: 1, things: [], mana: 50, what: 'тело' }, // (the author, via the main session: «Слом защиты» too wants ONE body)
     monster: { id: 'monster', bodies: 1, things: [{ kind: 'minotaurHorn', name: 'рог Минотавра' }], mana: 200, what: 'рог и тело' },
+    ...HELL_OFFERINGS, // «Pentagranium Infernum» — ONE body of ANY killed creature (`any`: anyBody); the return mark in hell — a gargoyle's head (HellRules.js)
 };
 
 /** The timing of the rite: the dark flame gathers (nothing is spent yet), then the things burn away. */
@@ -54,7 +57,7 @@ export function assess(pent, { bodies = [], things = [] } = {}, { playersOnly = 
     const need = OFFERINGS[pent];
     if (!need) return { ok: true, bodies: [], things: [] };
     const good = [], wrong = [];
-    for (const b of bodies) { const r = humanoidBody(b, { playersOnly }); if (r.ok) good.push(b); else wrong.push(r.why); }
+    for (const b of bodies) { const r = need.any ? anyBody(b) : humanoidBody(b, { playersOnly }); if (r.ok) good.push(b); else wrong.push(r.why); }
     const used = good.slice(0, need.bodies);
     const usedThings = [], missing = [];
     for (const t of need.things) {
@@ -65,7 +68,7 @@ export function assess(pent, { bodies = [], things = [] } = {}, { playersOnly = 
     if (!lack && !missing.length) return { ok: true, bodies: used, things: usedThings };
     const parts = [];
     if (missing.length) parts.push(`нужен ${missing.join(', ')}: положите на пентаграмму`);
-    if (lack > 0) parts.push(`положите на пентаграмму ещё ${lack} ${bodiesWord(lack)} убитых человекоподобных (не кости)`);
+    if (lack > 0) parts.push(need.any ? `положите на пентаграмму ${lack > 1 ? lack + ' ' + bodiesWord(lack) : 'тело'} любого убитого существа (не кости)` : `положите на пентаграмму ещё ${lack} ${bodiesWord(lack)} убитых человекоподобных (не кости)`);
     const text = parts.join('; ').replace(/^./, (c) => c.toUpperCase());
     return { ok: false, bodies: used, things: usedThings, text, bad: wrong[0] || null };
 }

@@ -199,6 +199,8 @@ import { VisibleGodi } from './VisibleGodi.js';
 import { Pentagranium } from './Pentagranium.js';
 import { SecondSight } from './SecondSight.js';
 import { Firmitas } from './Firmitas.js';
+import { HellGate } from './HellGate.js';
+import { HellRealm } from './HellRealm.js';
 import { Offerings } from './Offerings.js';
 import { GhostCastleLife } from './GhostCastleLife.js';
 import { SpencerBirds } from './SpencerBirds.js';
@@ -560,6 +562,8 @@ export class Game {
         this.bridge = new Bridge(this); // «Create a Bridge»: planks over a river or a ravine (Bridge.js)
         this.invis = new Invisibility(this); // «Invisibility»: nobody sees me (Invisibility.js)
         this.groundVortex = new GroundVortex(this); // «Ground Vortex»: the earth rises and circles the hero (GroundVortex.js)
+        this.hellGate = new HellGate(this); // the gates of hell: «Pentagranium Infernum», the passage down and back (HellGate.js; rules — HellRules.js, the map — HellMap.js)
+        this.hellRealm = new HellRealm(this); // hell's sky, fog, light, lava, sparks and sound — where the hero is (HellRealm.js)
         this.firm = new Firmitas(this); // the gift of the white pentagram of absolute steadiness: the rite's picture (Firmitas.js; the flag is Steadiness.absolute)
         this.sight = new SecondSight(this); // the gifts of the white pentagrams of sight: the night eyes, the sight of the invisible (SecondSight.js)
         this.ghostCastle = new GhostCastleLife(this); // the Castle of Ghosts: in the land only while the hero sees the invisible; its chests, who vanishes in it (GhostCastleLife.js)
@@ -1899,7 +1903,7 @@ export class Game {
         if (PLANET_SPELLS.includes(name)) return this.planetMagic.cast(name, isFinal);
         if (name === 'PlanetLiquidation') return this.planetDestroy.cast(isFinal); // (instant: the magic let go does the rest — PlanetDestroy.js)
         // off the Earth some spells have nothing to work with: no air for fire, no water, no ground in space (Space.js)
-        const offEarth = this.space?.spellBlocked(name);
+        const offEarth = this.space?.spellBlocked(name) || this.hellGate?.spellBlocked(name); // (and hell: the water and the cold do not work there — HellRules.hellSpellBlock)
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
@@ -3315,6 +3319,7 @@ export class Game {
         this.impact.reset();
         this.hud.update(this.playerHP, this.maxHP, this.killCount, this.punchCount);
         this.inventory?.ensureStarterWand();
+        this.hellGate?.onRespawn(p); // (died in hell: the respawn is on the Earth — a bed in hell does not count)
         this.space?.onRespawn(); // (back on the Earth: nothing of space left on)
         this.death?.respawned(); // game.onRespawn hooks
         if (this.sync) this.sync.respawned();
@@ -3919,6 +3924,8 @@ export class Game {
         if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);
         this.sight?.update(dt);
+        this.hellGate?.update(dt);
+        this.hellRealm?.update(dt);
         this.firm?.update(dt);
         this.ghostCastle?.update(dt);
         this.groundVortex?.update(dt);
@@ -4897,6 +4904,8 @@ export class Game {
         this.ghosts?.dispose();
         this.beslan?.dispose();
         this.sight?.dispose();
+        this.hellGate?.dispose();
+        this.hellRealm?.dispose();
         this.firm?.dispose();
         this.ghostCastle?.dispose();
         this.customCreatures?.dispose();
