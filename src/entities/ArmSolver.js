@@ -49,28 +49,35 @@ export const ARM = {
     PLANE_E: 0.2, // the depth's softness at the plane (planeDepth)
     NOISE_K: 3.5, DZ_LO: 0.02, DZ_HI: 0.08,
     NOISE_PX: 0.0028, // the prior: the camera's noise on a segment's length in the picture (height units; ≈ 1 cm of a real arm)
-    NOISE_MEAN: 0.12, NOISE_T: 2.0, // s: the length's own mean (its noise is what is off it); how slowly the noise is learnt
+    NOISE_INIT2: 6.4e-5, // (rad²: the jerk's start — a fair camera until it shows otherwise)
+    NOISE_INIT: 0.01, NOISE_MEAN: 0.12, NOISE_T: 1.5, // s: the length's own mean (its noise is what is off it); how slowly the noise is learnt
     NOISE_STILL: 1.2, // rad/s: only while the segment barely turns (a moving arm's length changes on purpose)
     REBASE: 0.3, // a side changing with the segment nearer the plane than this (of its length) glides there (DirFilter.rebase)
     SIGN_HYST: 0.06, // a side (in front / behind) changes only when the other is better by this much (no flicker on noise)
-    // the drawn directions, an adaptive 1€ on each segment's direction (the joints' angles, not the points): still — barely
-    // moves (the noise cut), moving — follows at once (a swing, a throw keep their speed: tools/armstab.mjs, throwbench)
-    F_MIN: 0.4, // Hz: the cutoff when still
+    // the drawn directions on a VERY noisy camera only: an adaptive 1€ on each segment's direction (DirFilter); a usual camera's
+    // arm is smoothed once, by PoseSmoother (whose carry ahead the wand's aim needs: tools/handbench/pointbench.mjs)
+    F_MIN: 0.4, // Hz: the cutoff when still (a very noisy camera)
     F_BETA: 12, // Hz more per rad/s of the arm's turn …
     F_W0: 1.2, // … past this (rad/s: the camera's noise, averaged, looks like a slow turn — it must not open the filter)
     F_DCUT: 3, // Hz: how fast the turn's speed is followed
     F_MAX: 30, // Hz
+    ONE_LO: 0.65, // one way: |the averaged velocity| ÷ the averaged |step| (the noise ≈ 0.3…0.5, a move ≈ 1) — under it, noise
+    // how noisy the camera is: the directions' jerk (a smooth move has next to none; a picture's noise is a kink), learnt while
+    // the input wanders every way: under NOISY_LO — a usual camera (tools/handbench/pointing.mjs's 720p webcam: ~0.008…0.014),
+    // the filter off; from NOISY_HI — a very noisy one (tools/armstab.mjs ×1: ~0.02…0.03), the filter full
+    NOISY_LO: 0.018, NOISY_HI: 0.026, J_STILL: 0.3, // (… learnt only while it turns slower than J_STILL rad/s)
     D_MIN: 1, // Hz: a segment's depth (out of the picture's plane) when the arm is still …
-    D_NEAR: 0.25, D_FAR: 60, // … and at once when it is well out of the plane (> D_NEAR of the segment: the noise there is small)
     D_JUMP: 0.1, D_FAST: 80, // … and at once when it changes by more than this share of the segment (a real move in depth)
 };
 
 /**
  * A unit direction's adaptive 1€ filter (pure, fixed memory): the cutoff from the turn's speed — the signed velocity averaged
  * (the camera's noise mostly cancels in it, unlike |the step|, which the noise alone keeps high) — past a dead band: still —
- * F_MIN (the noise cut), turning — up to F_MAX (a swing, a throw keep their speed). tools/armstab.mjs chose the numbers:
- * the camera's noise, already smoothed upstream (PoseStabilizer), is a slow wander no filter tells from a slow move without a
- * lag — these halve it and keep a swing ≤ 60 ms late; a hard or soft dead band, a look ahead gave less for more lag.
+ * F_MIN (the noise cut), turning — up to F_MAX (a swing, a throw keep their speed). Applied by how noisy the camera is (k:
+ * the directions' jerk learnt — noise()): a usual camera — not at all (PoseSmoother is the one smoothing, the wand's aim keeps
+ * its lead), a very noisy one — fully. It also knows the turn's speed (w) for the solver, and glides over a side the solver
+ * flipped (rebase). tools/armstab.mjs + tools/handbench/pointbench.mjs chose the numbers: a filter strong enough to still a
+ * usual camera's arm made a slow aim 2–3 times later — the wand's aim wins there.
  */
 export class DirFilter {
     constructor(o = ARM) {
@@ -78,22 +85,37 @@ export class DirFilter {
         this.x = 0; this.y = 0; this.z = 0; // what is drawn
         this.px = 0; this.py = 0; this.pz = 0; this.vx = 0; this.vy = 0; this.vz = 0; // the input before, its velocity
         this.w = 0; // the turn's speed now (rad/s)
+        this.m = 0; // the averaged size of its steps (rad/s)
+        this.qx = 0; this.qy = 0; this.qz = 0; this.j2 = -1; // the input two frames back; its jerk² averaged (the camera's noise: a
+        // smooth move, however slow or fast, has next to none — a picture's noise is a kink)
     }
     reset() { this.on = false; this.w = 0; }
     /** The input jumps here by itself (the solver chose the other side): not a turn — it must not open the filter. */
-    rebase(x, y, z) { if (this.on) { this.px = x; this.py = y; this.pz = z; } }
+    rebase(x, y, z) { if (this.on) { this.qx += x - this.px; this.qy += y - this.py; this.qz += z - this.pz; this.px = x; this.py = y; this.pz = z; } }
+    /** The camera's noise of this direction (rad, from the jerk: a frame's kink), learnt. */
+    noise() { return this.j2 > 0 ? Math.sqrt(this.j2) : Math.sqrt(this.o.NOISE_INIT2); }
     /** In: a unit direction (x, y, z), the frame's dt (s). The drawn direction into `out`. */
-    step(x, y, z, dt, out) {
+    step(x, y, z, dt, out, k = 1) {
         const o = this.o;
         if (!this.on || !(dt > 0) || dt > 0.5) {
-            this.x = this.px = x; this.y = this.py = y; this.z = this.pz = z;
-            this.vx = this.vy = this.vz = 0; this.w = 0; this.on = true;
+            this.x = this.px = this.qx = x; this.y = this.py = this.qy = y; this.z = this.pz = this.qz = z;
+            this.vx = this.vy = this.vz = 0; this.w = 0; this.m = 0; this.on = true;
         } else {
             const ad = alpha(o.F_DCUT, dt);
             this.vx += ad * ((x - this.px) / dt - this.vx); this.vy += ad * ((y - this.py) / dt - this.vy); this.vz += ad * ((z - this.pz) / dt - this.vz);
+            // (one way: |the averaged velocity| ÷ the averaged |step| — the camera's noise turns every way (≈ 0.3…0.5), a real
+            // move, however slow (a careful aim of the wand), goes one way (≈ 1): only the first teaches the noise)
+            this.m += ad * (Math.hypot(x - this.px, y - this.py, z - this.pz) / dt - this.m);
+            const jx = x - 2 * this.px + this.qx, jy = y - 2 * this.py + this.qy, jz = z - 2 * this.pz + this.qz, j2 = jx * jx + jy * jy + jz * jz;
+            // (learnt only while the input wanders every way — a move going one way, however slow, is not the camera's noise)
+            if (this.j2 < 0) this.j2 = o.NOISE_INIT2;
+            else if (this.w < o.J_STILL && (this.m <= 1e-6 || this.w / this.m < o.ONE_LO)) this.j2 += (Math.min(j2, 16 * this.j2 + 1e-6) - this.j2) * alpha(1 / (2 * Math.PI * o.NOISE_T), dt);
+            this.qx = this.px; this.qy = this.py; this.qz = this.pz;
             this.px = x; this.py = y; this.pz = z;
             this.w = Math.hypot(this.vx, this.vy, this.vz);
-            const a = alpha(Math.min(o.F_MAX, o.F_MIN + o.F_BETA * Math.max(0, this.w - o.F_W0)), dt);
+            // (k: how noisy this camera is — a usual one is not smoothed here at all: PoseSmoother is the one smoothing, the wand's
+            // aim keeps every millisecond; a very noisy one (a dark room, a far player, a poor webcam) — up to the full filter)
+            const a = 1 - k * (1 - alpha(Math.min(o.F_MAX, o.F_MIN + o.F_BETA * Math.max(0, this.w - o.F_W0)), dt));
             this.x += (x - this.x) * a; this.y += (y - this.y) * a; this.z += (z - this.z) * a;
             const l = Math.hypot(this.x, this.y, this.z) || 1;
             this.x /= l; this.y /= l; this.z /= l;
@@ -114,7 +136,7 @@ function noiseState() { return { m: 0, v: -1 }; }
  */
 function planeDz(N, L, l, w, dt) {
     const q = l / (L || 1), prior = ARM.NOISE_PX / (L || 1);
-    if (N.v < 0) { N.m = q; N.v = prior * prior; }
+    if (N.v < 0) { N.m = q; N.v = ARM.NOISE_INIT * ARM.NOISE_INIT; } // (a camera is taken for a fair one until it shows otherwise)
     N.m += (q - N.m) * alpha(1 / (2 * Math.PI * ARM.NOISE_MEAN), dt);
     if (w < ARM.NOISE_STILL) { const r = q - N.m; N.v += (r * r - N.v) * alpha(1 / (2 * Math.PI * ARM.NOISE_T), dt); }
     // (never far below the prior: a still arm in a perfectly still picture must not make the depth twitchy again)
@@ -166,6 +188,9 @@ export class ArmSolver {
         const ux = -(elbow.x - shoulder.x) * aspect, uy = -(elbow.y - shoulder.y);
         const fx = -(wrist.x - elbow.x) * aspect, fy = -(wrist.y - elbow.y);
         const lu = Math.hypot(ux, uy), lf = Math.hypot(fx, fy);
+        // (how noisy this camera is for this arm: 0 clean … 1 noisy — the noise of the segments' lengths, learnt while still)
+        const nq = Math.max(S.fu.noise(), S.ff.noise());
+        const kN = S.kN = nq <= ARM.NOISY_LO ? 0 : nq >= ARM.NOISY_HI ? 1 : (nq - ARM.NOISY_LO) / (ARM.NOISY_HI - ARM.NOISY_LO);
         // learn this player's lengths
         if (!S.seen) { S.Lu = Math.max(pu, lu); S.Lf = Math.max(pf, lf); S.seen = true; }
         S.Lu = this._learn(S.Lu, lu, pu); S.Lf = this._learn(S.Lf, lf, pf);
@@ -211,7 +236,7 @@ export class ArmSolver {
         out.rawU = out.rawU || { x: 0, y: 0, z: 0 }; out.rawF = out.rawF || { x: 0, y: 0, z: 0 };
         out.rawU.x = u.x; out.rawU.y = u.y; out.rawU.z = u.z; out.rawF.x = f.x; out.rawF.y = f.y; out.rawF.z = f.z;
         // the drawn directions: still — steady, moving — at once (DirFilter)
-        if (this.filter !== false) { u = S.fu.step(u.x, u.y, u.z, dt, u); f = S.ff.step(f.x, f.y, f.z, dt, f); }
+        if (this.filter !== false) { u = S.fu.step(u.x, u.y, u.z, dt, u, kN); f = S.ff.step(f.x, f.y, f.z, dt, f, kN); }
         // the shoulder girdle: up with a raised arm, back with an arm drawn behind, forward with a reach
         const reachF = Math.max(0, -(u.z * ARM.UPPER + f.z * ARM.FORE) / (ARM.UPPER + ARM.FORE));
         const gy = ARM.GIRDLE_UP * Math.max(0, u.y);

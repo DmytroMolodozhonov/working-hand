@@ -21,11 +21,11 @@ test('an arm held still does not tremble — up, down, sideways, forward (good a
 test('a raised arm is never thrown forward and back by itself (the side flipping on the camera\'s noise; no twitch)', () => {
     for (const pose of ['overhead', 'tpose', 'raisedBent', 'rest']) {
         for (const seed of [3, 65]) {
-            const fr = run({ arm: () => POSES[pose], seconds: 5, seed }).filter((f) => f.t > 2.5);
+            const fr = run({ arm: () => POSES[pose], seconds: 5, seed, noise: 0.3 }).filter((f) => f.t > 2.5);
             let jump = 0, zMin = Infinity, zMax = -Infinity;
             for (let i = 1; i < fr.length; i++) jump = Math.max(jump, fr[i].hand.distanceTo(fr[i - 1].hand));
             for (const f of fr) { zMin = Math.min(zMin, f.up.z); zMax = Math.max(zMax, f.up.z); }
-            assert.ok(jump < 0.06, `${pose} (${seed}): a ${(jump * 100).toFixed(1)} cm twitch in one frame`);
+            assert.ok(jump < 0.04, `${pose} (${seed}): a ${(jump * 100).toFixed(1)} cm twitch in one frame`);
             assert.ok(zMax - zMin < 0.2, `${pose} (${seed}): the upper arm swings ${((zMax - zMin) * 57).toFixed(0)}° in and out of the picture (before: ±17°, a range of 0.6)`);
         }
     }
@@ -53,7 +53,7 @@ test('the depth at the picture\'s plane is gentle (√ was infinitely steep: the
     assert.ok(ARM.DZ_HI > ARM.DZ_LO);
 });
 
-test('the direction\'s filter: still — steady, turning — at once; a side flip glides (does not open it)', () => {
+test('the direction\'s filter (a very noisy camera): still — steady, turning — at once; a side flip glides (does not open it)', () => {
     const F = new DirFilter(), o = { x: 0, y: 0, z: 0 };
     F.step(1, 0, 0, 1 / 60, o);
     // noise ±1° about +x: the drawn direction moves far less

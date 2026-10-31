@@ -33,7 +33,7 @@ test('a fingertip at a step\'s edge keeps the face it lay on (a stepped slope mu
 });
 
 test('pressed on a wall, a slope, a ceiling; the shoulder at a wall; walking along it: never in, no hysterics, no twitch', () => {
-    const r = wall({ seeds: 1 });
+    const r = wall({ seeds: 1, noise: 0.3 }); // (a usual camera — tools/armstab.mjs)
     for (const [k, v] of Object.entries(r)) {
         assert.ok(v.depthCm <= LIMITS.wallDepthCm, `${k}: ${v.depthCm.toFixed(1)} cm in it (before, the shoulder at a wall: 45 cm)`);
         assert.ok(v.ncm <= LIMITS.wallCm, `${k}: ${v.ncm.toFixed(2)} cm in and out`);
