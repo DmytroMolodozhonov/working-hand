@@ -76,6 +76,9 @@ export class Accio {
         // the thing comes into a free hand: the leading one (Настройки → «Ведущая рука»: a right-hander's
         // right) whichever hand points, the other only when the leading one is busy (accioCatcher)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
+        // (the author: a thing comes only into the SECONDARY («дочерняя») hand — the one opposite the wand hand; it must be empty,
+        //  else a hint tells to free it first)
+        const sec = g.dom === 'left' ? 'right' : 'left';
         // (an arm only ~20° from hanging counts too: a thing lying right by the feet is pointed at low)
         const lift = g.currentPose?.armLift;
         // (the spell journal: what lay about and how near the pointing it was — why nothing came / why the wrong thing did)
@@ -85,7 +88,7 @@ export class Accio {
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
             dg.raised++;
-            const catcher = accioCatcher(free, g.dom);
+            const catcher = free(sec) ? sec : null;
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
             for (const w of catcher ? g.weapons.weapons : []) {
@@ -172,8 +175,8 @@ export class Accio {
         if (!best) {
             const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose}${dg.nearestAny != null ? `, ближайшая в ${Math.round(dg.nearestAny)} м` : ''}${dg.wands ? `; палочек ${dg.wands}, ближайшая в ${Math.round(dg.wandD)} м (${dg.wandNote})` : '; палочек на земле нет'})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
             g.lastCastWhy = 'цель не найдена: ' + why;
-            const busy = !free('left') && !free('right');
-            return busy ? '🪄 Обе руки заняты — отпустите что-нибудь' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м — и скажите «Акцио»';
+            const busy = !free(sec);
+            return busy ? '🪄 Вторая рука занята — сначала освободите её, тогда Акцио сработает' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м — и скажите «Акцио»';
         }
         if (best.body) {
             if (g.sound) (g.sound.playSpellFx?.('fxAccio') || g.sound.playWhoosh?.());
