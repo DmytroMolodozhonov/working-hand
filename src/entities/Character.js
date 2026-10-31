@@ -211,6 +211,22 @@ export class VoxelCharacter {
         return true;
     }
 
+    /**
+     * Pushed off the ground with these speeds (vy up; vx / vz carried on through the air): a jump the legs did not read —
+     * the monster form's hop over a ledge or out of a crack (MonsterClimb.js). False: not on the ground.
+     */
+    launch(vy, vx = 0, vz = 0) {
+        if (this.jumpAir || !this.onGround || !(vy > 0)) return false;
+        this.verticalVelocity = vy;
+        this.jumpAir = true;
+        this.onGround = false;
+        this._jumpT = 0;
+        this._jumpS = 1;
+        this.airTop = this.group.position.y;
+        this.jumpVel.x = vx; this.jumpVel.z = vz;
+        return true;
+    }
+
     /** The jump turned out stronger while the body still went up (it went up higher): a little more push. */
     jumpBoost(strength) {
         if (!this.jumpAir || this.verticalVelocity <= 0 || this._jumpT > 0.25 || strength <= (this._jumpS || 0)) return;

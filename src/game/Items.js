@@ -337,6 +337,7 @@ export class ItemSystem {
     takeIntoHand(item, side = 'right', { closed = false } = {}) {
         retireScroll(item);
         if (this.held[side]) return false;
+        if (this.game.monster?.active) { this.game.inventory?.monsterShut?.(); return false; } // (the monster form: the paws take no little things — from a pocket, a slot, a body, «Акцио»)
         const other = this.held[side === 'right' ? 'left' : 'right'];
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
@@ -1302,6 +1303,7 @@ export class ItemSystem {
     pickUp(uid, toId, side) {
         const L = this.loose.get(uid);
         if (!L) return;
+        if (toId && toId === this.game.localId && this.game.monster?.active) { L.asked = false; this.game.inventory?.monsterShut?.(); return; } // (the monster form: nothing is taken into the paws or the slots — it stays where it lies)
         if (L.item.shop && !L.item.shop.paid && toId && toId[0] !== '#') return; // (a good not paid for stays on the counter)
         const item = this.removeLoose(uid);
         // (a thing of a house chest: taken by this player — the theft is theirs, if anybody of the house sees it)

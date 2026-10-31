@@ -379,8 +379,21 @@ export class Inventory {
         return true;
     }
 
+    /**
+     * The monster form (MonsterTransform): the pockets, the quick cells, the back, the belt's pouch are shut — the paws take no
+     * little things (the author: «монстр НЕ может брать предметы из карманов/инвентаря вообще, пока не вернулся в обычный вид»).
+     * True: shut. The hint «В облике монстра карманы недоступны» comes once per form (`say`: false — only ask).
+     */
+    monsterShut(say = true) {
+        const m = this.game.monster;
+        if (!m?.active) return false;
+        if (say && !m._pocketHint) { m._pocketHint = true; this.game.hud?.toast?.('🐺 В облике монстра карманы недоступны', 2600); }
+        return true;
+    }
+
     /** Choose a cell: -1 is the free hand, 0… the slots. */
     select(i, side = null) {
+        if (i >= 0 && this.monsterShut()) return; // (the free hand, -1, stays: it takes nothing)
         if (i === this.selected && (this.inHand || i < 0)) return;
         this._putBackHand(side);
         const n = this.slots.length + 1;
@@ -404,6 +417,7 @@ export class Inventory {
     // =========================================================== hand / item
     /** What of the chosen slot appears in the hand: the leading one (keys), or `side` (taken from the pocket by the other hand). */
     _takeIntoHand(side = null) {
+        if (this.monsterShut()) return;
         const s = this.selected >= 0 ? this.slots[this.selected] : null;
         const g = this.game, D = side || g.dom || 'right';
         if (!s) return;
@@ -470,6 +484,7 @@ export class Inventory {
      * `only` — just that hand (the other hand reaching into it); none — either hand, the leading one first.
      */
     pocketRight(only = null) {
+        if (this.monsterShut()) return;
         const g = this.game, dom = g.dom || 'right';
         if (g.boards?.hold) { g.hud.toast?.('🏄 Доска не помещается в карман: её можно только держать в руках'); return; }
         const sides = only ? [only] : [dom, dom === 'right' ? 'left' : 'right'];
@@ -644,6 +659,7 @@ export class Inventory {
      * it — always into the RIGHT hand (the left only if the right is busy), whichever hand went in.
      */
     wandPocket(side) {
+        if (this.monsterShut()) return false;
         const g = this.game;
         const holder = ['right', 'left'].find((sd) => g.items?.held[sd]?.item.kind === 'wand');
         if (holder) side = holder;
@@ -677,6 +693,7 @@ export class Inventory {
      * Any other thing in the hand goes into a slot; an empty hand takes the next thing.
      */
     pocketTouch(side) {
+        if (this.monsterShut()) return false;
         const g = this.game, c = this._cyc;
         if (c && c.side === side) {
             const h = g.items?.held[side];
@@ -746,6 +763,7 @@ export class Inventory {
 
     /** The things' pocket, an empty hand: the next thing of the slots into it (not the wand, not what goes on the back). */
     takeNext(side = 'right') {
+        if (this.monsterShut()) return false;
         const n = this.slots.length + 1; // (the last of the circle — the pouch from the belt)
         const start = this._next ?? -1;
         for (let k = 1; k <= n; k++) {
@@ -836,6 +854,7 @@ export class Inventory {
     }
 
     _backGesture(side) {
+        if (this.monsterShut()) return;
         const g = this.game;
         const t = this._backThing(side);
         if (t) {
@@ -875,6 +894,7 @@ export class Inventory {
 
     /** A slot's thing into a hand (weapon, bow, shield, hammer…). */
     _fromSlot(i, side) {
+        if (this.monsterShut()) return false;
         const g = this.game;
         const s = this.slots[i];
         if (!s) return false;

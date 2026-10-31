@@ -30,11 +30,20 @@ import { addDark } from './DarkMagic.js';
 import { isDivine } from './ProtectionGods.js';
 import { BLOCK, BASE_COLORS, isCastleBlock } from '../world/Terrain.js';
 import { kindOf } from './CreatureImpact.js';
+import { CLIMB, G as CLIMB_G, expectedStep, stuckStep, findHop, hopLaunch, assist, squeezeStep, roomFor, openWay, liftOut, trailPush, trailBack } from './MonsterClimb.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3();
 const PGO = 2.0; // Character.PLAYER_GROUND_OFFSET (ноги героя под серединой тела)
 const r2 = (v) => Math.round(v * 100) / 100;
 const v3 = (p) => [r2(p.x), r2(p.y), r2(p.z)];
+
+/** Прыжок ищется не каждый кадр, пока «упёрся» (лучи по земле — не дёшево): раз в 0,25 с. */
+function findHopCached(m, T, p, feet, ch, S, R, bodyH, clock) {
+    if (m._hopQ && clock - m._hopQ.t < 0.25) return m._hopQ.r;
+    const r = findHop(T, p.x, p.z, feet, ch.group.rotation.y, S, R, bodyH);
+    m._hopQ = { t: clock, r };
+    return r;
+}
 
 export class MonsterTransform {
     constructor(game) {
@@ -58,6 +67,8 @@ export class MonsterTransform {
         this._pull = { left: null, right: null }; // кусок ломается в лапе по частям (≈ 80 блоков за кадр)
         this._club = { left: 0, right: 0 }; this._clubOwner = {};
         this._grabCd = 0; this._seq = 0;
+        this.squeeze = 1; // доля радиуса тела против стен (щель уже тела — сужается: MonsterClimb.js)
+        this._stuckT = 0; this._hopCd = 0; this._lifts = 0; this._hopLand = false; this._trail = []; this._clock2 = 0; this._pPrev = null; this._pocketHint = false;
         this._remotes = new Map(); // чужие монстры: куски в их лапах и в полёте (только вид — ломают их компьютеры)
         this.remoteFx = null;
         this._curl = { left: 0, right: 0 };
@@ -92,6 +103,25 @@ export class MonsterTransform {
         return null;
     }
 
+    /**
+     * Обе кисти свободны. Жалоба автора: «правая кисть монстра не работает, левая работает». Причина: палочка лежит в ведущей
+     * (у правши правой) руке и остаётся там «в руке» невидимой — её хват (SimplifiedHand.gripOverride) держит пальцы на ~0,5
+     * и не даёт ни сжать кулак, ни раскрыть ладонь: хват и удар по рабочей кисти не читаются. Хват снимается с обеих рук
+     * (палочка при возврате схватится заново: Items.update, `gripped = false`); прицел от палочки (`aim`) — тоже.
+     * Левша — зеркально: сторона не зашита, чистятся обе.
+     */
+    _freeHands() {
+        const g = this.game, ch = g.character;
+        const hands = ch.getActiveHands?.();
+        for (const side of ['left', 'right']) {
+            const h = g.items?.held?.[side];
+            if (h) h.gripped = false;
+            if (h) h.q = null;
+            hands?.[side]?.setGrip?.(null);
+            if (ch.aim) ch.aim[side] = null;
+        }
+    }
+
     /** Встал на пентаграмму монстра (PentagramMonster): начать превращение. true — началось. */
     begin({ free = false } = {}) {
         const g = this.game, why = this.whyNot();
@@ -117,6 +147,8 @@ export class MonsterTransform {
         }
         // палочка прячется (её слот и предмет на месте): у других игроков её тоже нет
         for (const side of ['left', 'right']) { const h = g.items?.held?.[side]; if (h?.item.kind === 'wand') { h.model.visible = false; g.sync?.itemHold?.(side, null); } }
+        this._freeHands();
+        this._pocketHint = false; this._squeeze = 1; this._stuckT = 0; this._hopCd = 0; this._hopLand = false;
         // здоровье: у человека — своё (ждёт), у монстра — 500
         if (c?.enabled) { this.origHp = c.hp; this.origMax = c.maxHp || 0; c.maxHp = MONSTER.HP; c.hp = MONSTER.HP; }
         else { this.origHp = g.playerHP; this.origMax = g.maxHP; g.maxHP = MONSTER.HP; g.playerHP = MONSTER.HP; }
@@ -152,6 +184,7 @@ export class MonsterTransform {
         const was = this.phase;
         this._dropAll();
         this.phase = null;
+        this.squeeze = 1; this._stuckT = 0; this._pPrev = null; this._trail.length = 0; this._hopLand = false;
         if (this.look) this.look.setOn(false);
         // ноги — где стоял монстр: человек туда, где помещается
         const feet = ch.group.position.y - PGO * (ch.size || 1);
@@ -279,6 +312,8 @@ export class MonsterTransform {
             if (!this._iced) { this._iced = true; this._dropAll(); }
         } else this._iced = false;
         if (this.phase === 'on' && !g.combat?.dead && !g.isDeadLocal && !iced) {
+            this._freeWandHand();
+            this._climbStep(dt);
             this._steps(dt);
             this._grabs(dt);
             this._clubs(dt);
@@ -286,6 +321,7 @@ export class MonsterTransform {
             this._alarmT -= dt;
             if (this._alarmT <= 0) this._alarm();
         }
+        if (this.phase !== 'on') this.squeeze = 1;
         this._budget = Math.min(STOMP.BREAK_PER_S, this._budget + STOMP.BREAK_PER_S * dt);
         this._drawBlocks(dt);
         this._flushEdits();
@@ -296,6 +332,87 @@ export class MonsterTransform {
         const g = this.game, p = this.humanPos();
         this._alarmT = loud ? 1 : 2.5;
         g.castleLife?.alarm?.(_v.set(p.x, p.y - PGO, p.z), 'monster', g.localId, 14);
+    }
+
+    // ------------------------------------------------------------------ прыжок на уступ, протискивание, выход из щели (MonsterClimb.js)
+
+    /** Палочка лежит в руке невидимой, а хват от неё мешает кисти (см. _freeHands): пока форма, хвата быть не должно. */
+    _freeWandHand() {
+        const ch = this.game.character, hands = ch.getActiveHands?.();
+        if (!hands) return;
+        for (const side of ['left', 'right']) if (hands[side]?.gripOverride && !this.carry[side]) this._freeHands();
+    }
+
+    /** Ступни монстра (y) и настоящее препятствие: точка в твёрдом (для кольца вокруг тела). */
+    _feet() { const ch = this.game.character; return ch.group.position.y - PGO * (ch.size || 1); }
+
+    /**
+     * Идёт, но не движется: 1) прыжок на уступ выше шага, 2) протиснуться в щель уже тела, 3) прыжок вверх в самую свободную
+     * сторону, 4) вернуться на место нескольких секунд назад. Каждая ступень — только если прошлая не помогла. Землю не ломает.
+     */
+    _climbStep(dt) {
+        const g = this.game, ch = g.character, p = ch.group.position, S = ch.size || 1, T = g.terrain?.data;
+        const clock = this._clock2 += dt;
+        const prev = this._pPrev || (this._pPrev = p.clone());
+        const moved = Math.hypot(p.x - prev.x, p.z - prev.z);
+        prev.copy(p);
+        this._hopCd = Math.max(0, this._hopCd - dt);
+        if (!T?.floorBelow || !T.solidIn || ch.swimY != null || g.flight?.busy) { this._stuckT = 0; return; }
+        // (след — давняя точка, куда вернуть в самом крайнем случае: только где ноги стоят на твёрдом и в теле не камень)
+        if (ch.onGround && !ch.jumpAir && this._stuckT < 0.2) trailPush(this._trail, clock, p);
+        const intent = !!ch.isRunning && ch.onGround && !ch.jumpAir && !g.knock?.down && !(g.combat?.frozen);
+        this._stuckT = stuckStep(this._stuckT, intent, moved, expectedStep(ch.runIntensity, ch.sizeRun, dt), dt);
+        const R = 0.48 * S, bodyH = ch.bodyHeight?.(true) ?? MONSTER.BODY_H, feet = this._feet();
+        const blocked = this._blockedFn || (this._blockedFn = (x, y, z) => !!this.game.collision?.pointBlocked?.(x, y, z)); // (одна функция на всё время: без мусора в кадре)
+        // 1. прыжок на уступ
+        if (this._stuckT >= CLIMB.STUCK_T && this._hopCd <= 0) {
+            const plan = findHop(T, p.x, p.z, feet, ch.group.rotation.y, S, R, bodyH);
+            if (plan) {
+                const L = hopLaunch(plan, S, R, CLIMB_G * (ch.gravityK || 1));
+                if (ch.launch(L.vy, plan.fx * L.vf, plan.fz * L.vf)) {
+                    this._hopCd = CLIMB.HOP_CD; this._hopLand = true; this._stuckT = 0; this._hops = (this._hops || 0) + 1;
+                    g.sound?.playGiantStep?.(this.humanPos(), 1.4);
+                    g.fx.shake = Math.max(g.fx.shake || 0, 0.25);
+                    this.game.perf?.note?.(`монстр: прыжок на уступ ${plan.h.toFixed(1)} м`);
+                    return;
+                }
+            }
+        }
+        // 2. протиснуться: радиус против стен сужается, пока стоит и прыжка нет; шире — когда есть место
+        const hopFound = this._stuckT >= CLIMB.STUCK_T && !!findHopCached(this, T, p, feet, ch, S, R, bodyH, clock);
+        const room = this.squeeze < 1 && roomFor(blocked, p.x, feet, p.z, R, S);
+        this.squeeze = squeezeStep(this.squeeze, this._stuckT, hopFound, room, dt);
+        // 3. выталкивание вверх в свободную сторону
+        if (this._stuckT >= CLIMB.LIFT_AT && this._hopCd <= 0 && ch.onGround) {
+            const L = liftOut(openWay(blocked, p.x, feet, p.z, S), S, CLIMB_G * (ch.gravityK || 1));
+            if (ch.launch(L.vy, L.x, L.z)) {
+                this._hopCd = CLIMB.HOP_CD * 2; this._hopLand = true; this.game.perf?.note?.('монстр: застрял — выталкивание вверх');
+                // (три выталкивания подряд на одном месте — щель непроходима: на прежнее место, а не прыгать без конца)
+                const at = this._liftAt || (this._liftAt = p.clone());
+                if (Math.hypot(p.x - at.x, p.z - at.z) > 12) { this._lifts = 0; at.copy(p); }
+                if (++this._lifts >= CLIMB.LIFTS_MAX) { this._lifts = 0; this._stuckT = CLIMB.TRAIL_AT; }
+            }
+        }
+        // 4. ничего не помогло: на место нескольких секунд назад
+        if (this._stuckT >= CLIMB.TRAIL_AT) {
+            const t = trailBack(this._trail, clock);
+            if (t) { p.set(t.x, t.y, t.z); ch.verticalVelocity = 0; g._lastFree?.copy?.(p); this.game.perf?.note?.('монстр: застрял — возвращён на прежнее место'); }
+            this._stuckT = 0; this.squeeze = 1; this._trail.length = 0;
+        }
+    }
+
+    /**
+     * Настоящий прыжок (JumpReader) у уступа — Game._jumpOnto: куда и с какой скоростью, чтобы взять кромку (как ledgePush у героя). false — уступа нет.
+     */
+    assistJump() {
+        const g = this.game, ch = g.character, p = ch.group.position, S = ch.size || 1, T = g.terrain?.data;
+        if (!this.phase || this.phase !== 'on' || !T?.floorBelow || !T.solidIn) return false;
+        const a = assist(T, p.x, p.z, this._feet(), ch.group.rotation.y, S, 0.48 * S, ch.bodyHeight?.(true) ?? MONSTER.BODY_H, CLIMB_G * (ch.gravityK || 1));
+        if (!a) return false;
+        ch.jumpVel.x = a.x; ch.jumpVel.z = a.z;
+        if (a.vy > ch.verticalVelocity) ch.verticalVelocity = a.vy;
+        this._hopLand = true;
+        return true;
     }
 
     // ------------------------------------------------------------------ шаги: тяжесть, следы, воронки
@@ -309,7 +426,12 @@ export class MonsterTransform {
         const L = ch.landing;
         if (L && L.at !== this._landSeen) {
             this._landSeen = L.at;
-            if (L.drop > STOMP.LAND_DROP) {
+            const hopped = this._hopLand; this._hopLand = false;
+            if (hopped) { // (прыжок через уступ / из щели: топот, но воронок и слома нет — землю не рушим зря: MonsterClimb.js)
+                g.fx.shake = Math.max(g.fx.shake || 0, 0.35);
+                g.sound?.playGiantStep?.(this.humanPos(), 1.2);
+                this._tremor(p.x, p.z, 1);
+            } else if (L.drop > STOMP.LAND_DROP) {
                 g.fx.shake = Math.max(g.fx.shake || 0, Math.min(1.2, 0.3 + L.drop / 30));
                 g.sound?.playGiantStep?.(this.humanPos(), 1.6);
                 this._dent(p.x, p.z, crater(Math.round(Math.min(5, STOMP.CRATER_R + L.drop / 15))), true);

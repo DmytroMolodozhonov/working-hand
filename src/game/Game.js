@@ -4782,7 +4782,8 @@ export class Game {
      */
     _jumpOnto() {
         const ch = this.character, T = this.collision?.terrain, p = ch.group.position;
-        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2 || (ch.size || 1) > 1.01) return; // (a run carries it on already; a monster steps over by itself)
+        if ((ch.size || 1) > 1.01) { if (this.monster?.active) this.monster.assistJump(); return; } // (a monster's real jump takes the ledge ahead: MonsterClimb.js)
+        if (!T?.topLayer || Math.hypot(ch.jumpVel.x, ch.jumpVel.z) > 2) return; // (a run carries it on already)
         const push = ledgePush(T, p.x, p.z, p.y - PLAYER_GROUND_OFFSET, ch.group.rotation.y, PLAYER_RADIUS);
         if (push) { ch.jumpVel.x = push.x; ch.jumpVel.z = push.z; }
     }
@@ -4821,7 +4822,7 @@ export class Game {
         // (the monster form: its body first smashes what it can — walls, fences, trees — and what stays is a wall: MonsterTransform)
         if (this.monster?.active) this.monster.smashAt(p);
         const S = ch.size || 1;
-        return this.collision.resolveCylinder(p, PLAYER_RADIUS * S, this._feetY(p), ch.bodyHeight?.() ?? BODY_H, (1.05 + (ch.jumpAir ? JUMP_ASSIST : 0)) * S, true, ch.bodyHeight?.(true) ?? BODY_H);
+        return this.collision.resolveCylinder(p, PLAYER_RADIUS * S * (this.monster?.active ? this.monster.squeeze : 1), this._feetY(p), ch.bodyHeight?.() ?? BODY_H, (1.05 + (ch.jumpAir ? JUMP_ASSIST : 0)) * S, true, ch.bodyHeight?.(true) ?? BODY_H);
     }
 
     /**
