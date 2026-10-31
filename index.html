@@ -71,6 +71,8 @@
                 <button id="pause-exit-btn">🏠 Выйти в главное меню</button>
                 <!-- the leading hand (Правша / Левша), the same control as in «Настройки» -->
                 <div id="pause-hands"></div>
+                <!-- «Быстрые настройки»: the same settings as in «Настройки» (camera, sizes, hand version) -->
+                <div id="pause-quick"></div>
             </div>
             <div id="pause-player" class="pause-pane"></div>
             <div id="pause-players" class="pause-pane"></div>
@@ -379,20 +381,20 @@
                     <div class="settings-group">
                         <label>Плавность камеры: <span id="smooth-val">30%</span></label>
                         <!-- 0 = Raw, 100 = Max Smooth -->
-                        <input type="range" id="cam-smooth" min="0" max="95" value="70">
+                        <input type="range" id="cam-smooth" min="0" max="95" step="5" value="70">
                     </div>
                     <div class="settings-group">
                         <label>Чувствительность: <span id="sens-val">100%</span></label>
                         <!-- 10 = 0.1x, 100 = 1.0x -->
-                        <input type="range" id="cam-sens" min="10" max="100" value="100">
+                        <input type="range" id="cam-sens" min="10" max="100" step="5" value="100">
                     </div>
                     <div class="settings-group">
                         <label>Размер мини-карты: <span id="minimap-size-val">120%</span></label>
-                        <input type="range" id="minimap-size" min="80" max="250" step="10" value="120">
+                        <input type="range" id="minimap-size" min="60" max="200" step="10" value="120">
                     </div>
                     <div class="settings-group">
                         <label>Размер панели предметов: <span id="hotbar-size-val">100%</span></label>
-                        <input type="range" id="hotbar-size" min="70" max="200" step="10" value="100">
+                        <input type="range" id="hotbar-size" min="70" max="160" step="10" value="100">
                     </div>
                     <div class="settings-group checkbox-group">
                         <label>

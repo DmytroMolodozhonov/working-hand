@@ -10,7 +10,7 @@
 /** The settings shown in the pause menu (ids of the controls in «Настройки → Звук»). */
 export const PAUSE_AUDIO_IDS = ['music-vol', 'zombie-vol', 'spell-vol', 'talk-vol', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'voice-engine', 'voice-mic', 'voice-filter'];
 /** The «🖥 Графика» tab: the same, for «Настройки → Графика». */
-export const PAUSE_GRAPHICS_IDS = ['show-fps-toggle', 'view-distance', 'graphics-quality', 'ultra-quality', 'fps-limit', 'antialias', 'minimap-size', 'hotbar-size']; // (the author: the sizes of the minimap and of the slots also in Escape)
+export const PAUSE_GRAPHICS_IDS = ['show-fps-toggle', 'view-distance', 'graphics-quality', 'ultra-quality', 'fps-limit', 'antialias']; // (the sizes of the minimap and of the slots are in «Быстрые настройки» of the first tab — QuickSettings.js)
 
 function labelOf(src) {
     const lab = src.closest('.settings-group')?.querySelector('label');

@@ -575,3 +575,13 @@ button, input, select, textarea { font-family: inherit; }
 .vc-checks .pause-check { color: var(--ui-text); font-size: 0.9rem; cursor: pointer; }
 .vc-state { white-space: pre-line; margin: 8px 2px 4px; color: var(--ui-muted); font-size: 0.8rem; line-height: 1.45; }
 .mp-voice-hint { margin: -2px 0 8px; font-size: 0.8rem; opacity: 0.85; }
+/* «Быстрые настройки» in the pause menu (QuickSettings.js) */
+#pause-quick { text-align: left; margin-top: 10px; max-height: min(46vh, 380px); overflow-y: auto; padding-right: 4px; }
+.pause-quick-title { color: var(--ui-gold); font-weight: 800; padding: 8px 2px 2px; border-top: 1px solid var(--ui-border); }
+.pause-quick-reset, .pause-quick-apply { background: rgba(5, 3, 18, 0.6); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; width: auto; margin: 0; }
+.pause-quick-apply:not(:disabled) { border-color: var(--ui-gold); color: var(--ui-gold); }
+.pause-quick-reset:disabled, .pause-quick-apply:disabled { opacity: 0.4; cursor: default; }
+.pause-quick-prev { flex: none; width: 34px; height: 24px; display: flex; align-items: flex-end; justify-content: center; }
+.pause-quick-prev i { display: block; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.14); border: 1px solid var(--ui-gold); border-radius: 3px; transform-origin: bottom center; }
+.pause-quick-prev-bar i { height: 40%; }
+#pause-quick button.pause-quick-reset, #pause-quick button.pause-quick-apply { width: auto; flex: none; margin: 0; padding: 4px 10px; font-size: 0.8rem; font-weight: 600; min-height: 0; line-height: 1.3; border-radius: 8px; box-shadow: none; }

@@ -13,6 +13,7 @@ import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
+import { setupQuickSettings } from './ui/QuickSettings.js';
 import { Hud, setMinimapSize, setHotbarSize, lastWords } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
@@ -1342,6 +1343,12 @@ const voiceChatUi = setupVoiceChatUi({ pane: $('pause-audio'), create: $('mp-cre
 // «🖥 Графика» in the pause menu: the same graphics settings, applied at once
 const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
 // «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
+// «Быстрые настройки» (the first tab): camera smoothness, sensitivity, sizes, hand version — the same controls as in «Настройки»
+const pauseQuick = setupQuickSettings($('pause-quick'), {
+    handOn: () => !!(poseService.isRunning || poseService.injected),
+    handsNow: () => document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
+    setHands: (v) => { const r = document.querySelector(`input[name="hand-version"][value="${v}"]`); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } },
+});
 const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode', 'hints-mode']);
 const applyHandedness = () => {
     const left = $('handedness')?.value === 'left';
@@ -1467,6 +1474,7 @@ function togglePauseMenu(show) {
         voiceChatUi.sync();
         pauseGraphics.sync();
         pauseHands.sync();
+        pauseQuick.sync();
         // «✨ Заклинания»: in Creative all of them (not on a map); in the other modes the ones the hero can say now
         const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
         document.querySelector('[data-pause-tab="pause-players"]').hidden = !(net && net.active && game?.sync); // (only in a network game)
