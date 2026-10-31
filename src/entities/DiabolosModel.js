@@ -419,7 +419,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------ материалы
-const DEVIL_U = { uChainOn: { value: 1 }, uFarK: { value: 1 }, uSeeFar: { value: 1900 }, uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
+const DEVIL_U = { uFireL: { value: 0 }, uChainOn: { value: 1 }, uFarK: { value: 1 }, uSeeFar: { value: 1900 }, uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
 const NOISE_GLSL = `
 float dh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float dn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
@@ -431,6 +431,21 @@ float dfbm(vec3 p){ return 0.5 * dn(p) + 0.25 * dn(p * 2.03) + 0.125 * dn(p * 4.
  * трещины света за фронтом, весь он светится изнутри (uWoundK), в конце — растворяется пеплом с горящей кромкой (uDissolve).
  * Координаты модели после скиннинга (FarShape: форма — ребёнок корня), без новых источников света.
  */
+/**
+ * Свет огня на нём (без ламп): тёплый отсвет СНИЗУ — лава ямы и угли (брюхо, подбородок, рога снизу), и сбоку — кольцо огненных чаш
+ * (DevilFires), мерцает. Умножается на цвет кожи — это освещение, а не свечение. uFireL: 1 в аду у котловины, 0 — нет огня.
+ */
+function fireLight(sh) {
+    sh.uniforms.uFireL = DEVIL_U.uFireL; sh.uniforms.uTime = DEVIL_U.uTime;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vFUnder; varying float vFSide; varying float vFH;')
+        .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvec3 fWn = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz); vFUnder = max(0.0, -fWn.y); vFSide = 1.0 - abs(fWn.y); vFH = position.y;');
+    if (!/uniform float uTime/.test(sh.fragmentShader)) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uTime;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uFireL; varying float vFUnder; varying float vFSide; varying float vFH;')
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float fFl = 0.85 + 0.15 * sin(uTime * 6.3 + vFH * 2.1) * sin(uTime * 2.7);
+float fLow = 1.0 - smoothstep(0.4, 3.4, vFH);
+totalEmissiveRadiance += diffuseColor.rgb * uFireL * fFl * (vec3(1.0, 0.42, 0.12) * vFUnder * (0.9 + 0.8 * fLow) + vec3(1.0, 0.55, 0.22) * vFSide * (0.32 + 0.3 * fLow));`);
+}
 function injectDeath(sh, skin, cap = 0.88) {
     sh.uniforms.uFarK = DEVIL_U.uFarK; sh.uniforms.uSeeFar = DEVIL_U.uSeeFar;
     // Дымка ада (туман ~120 м) спрятала бы гору в 122 м уже за сотню метров: на нём туман «тоньше» — до 0,6 тумана как у всех,
@@ -490,11 +505,12 @@ float dCrack = (1.0 - smoothstep(0.0, 0.018, dC)) * dSkin * smoothstep(0.35, 0.6
 float dPulse = 0.65 + 0.35 * sin(uTime * 2.1 + dN * 9.0);
 totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * uHeat) + vec3(0.25, 0.04, 0.0) * dCrack * dCrack;`);
         injectDeath(sh, true);
+        fireLight(sh);
     };
     skin.customProgramCacheKey = () => 'diabolos-skin';
     const hard = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: 0x000000 });
     hard.name = 'diabolos-hard';
-    hard.onBeforeCompile = (sh) => injectDeath(sh, false);
+    hard.onBeforeCompile = (sh) => { injectDeath(sh, false); fireLight(sh); };
     hard.customProgramCacheKey = () => 'diabolos-hard';
     const glow = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
     glow.name = 'diabolos-glow';
@@ -652,6 +668,8 @@ void main() {
     _chainGlow.userData.shared = true;
     return _chainGlow;
 }
+/** Свет огня котловины на нём (0…1: DevilFires — есть огонь рядом). */
+export function devilFireLight(k) { DEVIL_U.uFireL.value = k; }
 /** Свет цепи: 1 — сияет; 0 — погасла (он мёртв, цепь лопнула и лежит тёмным металлом). */
 export function devilChainLight(k) { DEVIL_U.uChainOn.value = k; }
 

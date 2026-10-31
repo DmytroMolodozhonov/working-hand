@@ -248,6 +248,8 @@ export class HellGate {
             { x: P.returnMark.x, z: P.returnMark.z, name: 'Метка возврата', icon: '⛧', always: true },
         ];
         for (const c of P.taronCamps) if (Math.hypot(c.x - me.x, c.z - me.z) < 800) out.push({ x: c.x, z: c.z, name: 'Лагерь Таронов', icon: '🪓' });
+        const sw = this.game.diabolos?.swordMark?.(); // (Творческий: божественный меч, пока лежит на земле — Diabolos.swordMark)
+        if (sw) out.push({ x: sw.x, z: sw.z, name: 'Божественный меч', icon: '🗡', always: true });
         return out;
     }
 

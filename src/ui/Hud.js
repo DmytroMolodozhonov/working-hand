@@ -79,6 +79,13 @@ function placeIcon(ctx, kind, s) {
         ctx.beginPath(); ctx.moveTo(-8, -5); ctx.quadraticCurveTo(-9, 5, 0, 10); ctx.quadraticCurveTo(9, 5, 8, -5); ctx.quadraticCurveTo(0, -9, -8, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#ffd040'; ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(-2, 0); ctx.lineTo(-5, 1.5); ctx.closePath(); ctx.moveTo(6, -1); ctx.lineTo(2, 0); ctx.lineTo(5, 1.5); ctx.closePath(); ctx.fill();
         ctx.strokeStyle = '#1a0000'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-3, 5); ctx.quadraticCurveTo(0, 7, 3, 5); ctx.stroke();
+    } else if (kind === 'sword') {
+        // the divine sword (Creative): a white-gold blade point down in a ray of light
+        ctx.fillStyle = 'rgba(255, 236, 170, 0.35)'; ctx.beginPath(); ctx.moveTo(-5, -12); ctx.lineTo(5, -12); ctx.lineTo(3, 11); ctx.lineTo(-3, 11); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fffaf0'; ctx.strokeStyle = '#6a5420'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(-2, 4); ctx.lineTo(-2, -5); ctx.lineTo(2, -5); ctx.lineTo(2, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#e8b830'; ctx.beginPath(); ctx.rect(-6, -7, 12, 2.4); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(-1.2, -12, 2.4, 5); ctx.fill(); ctx.beginPath(); ctx.arc(0, -12.5, 1.8, 0, Math.PI * 2); ctx.fill();
     } else if (kind === 'hellmark') {
         // the mark back: a glowing ring with the gate inside
         ctx.strokeStyle = '#ff6a1a'; ctx.lineWidth = 2;
@@ -912,7 +919,7 @@ export class Hud {
             ctx.font = 'bold 12px sans-serif';
         };
         const badge = (x, y, kind, a = null) => {
-            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : kind === 'devil' ? '#ff2a14' : kind === 'hellmark' ? '#ff8a3a' : '#ffd76a';
+            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : kind === 'devil' ? '#ff2a14' : kind === 'hellmark' ? '#ff8a3a' : kind === 'sword' ? '#fff2c0' : '#ffd76a';
             if (a != null) {
                 // the pointer: which way the place is
                 ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -956,7 +963,7 @@ export class Hud {
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
-            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : icon === '😈' ? 'devil' : icon === '⛧' ? 'hellmark' : 'castle';
+            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : icon === '😈' ? 'devil' : icon === '⛧' ? 'hellmark' : icon === '🗡' ? 'sword' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);

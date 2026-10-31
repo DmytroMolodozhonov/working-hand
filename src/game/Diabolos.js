@@ -22,7 +22,8 @@ import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from '
 import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, JOINTS } from '../entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, JOINTS } from '../entities/DiabolosModel.js';
+import { DevilFires } from '../fx/DevilFires.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
 import { FarShape } from '../core/FarShape.js';
@@ -147,6 +148,7 @@ export class Diabolos {
         this.one.set(true);
         const n = DEVIL.CHAIN_LINKS;
         this._makeChain(n, true);
+        this._fires(y);
         this.anchor = anchorModel();
         this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z);
         g.scene?.add(this.anchor);
@@ -174,6 +176,14 @@ export class Diabolos {
         if (alive) devilChainLight(1);
     }
 
+    /** Огонь котловины (чаши по кругу, проход к дороге прибытия) — и его отсвет на нём. */
+    _fires(y) {
+        const s = this.site, sp = this.game.terrain?.data?.hellPlan?.spawn;
+        const road = sp ? Math.atan2(sp.z - s.cz, sp.x - s.cx) : Math.atan2(s.z - s.anchor.z, s.x - s.anchor.x);
+        (this.fires || (this.fires = new DevilFires(this.game))).build(s.cx ?? s.x, s.cz ?? s.z, s.y != null ? s.y + 1 : y, road);
+        devilFireLight(1);
+    }
+
     _unload() {
         const g = this.game;
         this._proxK = 1; devilFar(1);
@@ -184,6 +194,8 @@ export class Diabolos {
         }
         if (this.chainMesh) { g.scene?.remove(this.chainMesh); this.chainMesh.dispose?.(); this.chainMesh = null; }
         if (this.chainGlow) { g.scene?.remove(this.chainGlow); this.chainGlow = null; }
+        if (this._beam) { g.scene?.remove(this._beam); this._beam = null; }
+        this.fires?.dispose(); devilFireLight(0);
         if (this.anchor) { g.scene?.remove(this.anchor); this.anchor = null; }
         this._dropChests();
         this._remains = false;
@@ -204,6 +216,8 @@ export class Diabolos {
         this._sitePoll -= dt;
         if (this._sitePoll <= 0) { this._sitePoll = 1; if (!this.site) this._findSite(); }
         if (!this.site) return;
+        this._swordBeamStep(dt);
+        this.fires?.update(dt, this.game.character?.group?.position);
         const ps = this._players();
         let near = Infinity;
         for (const q of ps) { const dd = Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z); near = Math.min(near, inHell(q.p.x, q.p.z) && dd < SEEN_R ? 0 : dd); } // (в аду — виден отовсюду: гора в 122 м над дымкой; автор не нашёл его с плато прибытия в 1250 м)
@@ -1425,6 +1439,7 @@ export class Diabolos {
         for (let i = 0; i < 240; i++) R.step(1 / 60, anchor, null, (x, z) => this._ground(x, z, y));
         this.rope = R;
         this._makeChain(R.n, false); devilChainLight(0); // (мёртв: цепь лопнула и погасла)
+        this._fires(y);
         this._linksFrom(R);
         this._makeChests(y);
     }
@@ -1467,6 +1482,27 @@ export class Diabolos {
         this._chests = null;
     }
     /** Творческий: у края котловины, в 25 м от его места, на земле — божественный меч (один; унесли — в этой игре не появится снова). */
+    /** Божественный меч Творческого, пока лежит на земле (не в руке, не в сумке): {x, z} — для миникарты (HellGate.mapMarks). */
+    swordMark() {
+        const g = this.game;
+        if (g.config?.mode !== 'creative') return null;
+        const w = (g.weapons?.weapons || []).find((x) => x.id === 'divine-creative');
+        if (!w || w.holder || !w.position || w.removed) return null;
+        return w.position;
+    }
+    /** Столб света над лежащим божественным мечом (только Творческий): золотисто-белый, мерцает, виден издалека сквозь дымку; за мечом на земле. */
+    _swordBeamStep(dt) {
+        const g = this.game, p = this.swordMark();
+        if (!p) { if (this._beam) this._beam.visible = false; return; }
+        if (!this._beam) { this._beam = swordBeam(); g.scene?.add(this._beam); }
+        const b = this._beam;
+        b.visible = true;
+        b.position.set(p.x, p.y - 1, p.z);
+        const me = g.character?.group?.position;
+        const near = me ? Math.hypot(me.x - p.x, me.z - p.z) : 99;
+        BEAM_U.uT.value += dt;
+        BEAM_U.uNear.value = Math.min(1, Math.max(0.15, (near - 3) / 30)); // (вплотную — бледнее: не слепит)
+    }
     _creativeSword() {
         const g = this.game, s = this.site;
         if (this._swordGiven || g.config?.mode !== 'creative' || !this.auth) return;
@@ -1559,7 +1595,7 @@ export class Diabolos {
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
         const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), 2);
-        return [m, c, cg, anchorModel(), ballModel(), rockModel()];
+        return [m, c, cg, ...DevilFires.samples(), swordBeam(), anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {
@@ -1671,4 +1707,47 @@ totalEmissiveRadiance += vec3(1.0, 0.35, 0.05) * rC * 0.9;`);
     m.visible = false;
     m.name = 'diabolos-rock';
     return m;
+}
+
+// ------------------------------------------------------------------ столб света над божественным мечом (Творческий)
+const BEAM_U = { uT: { value: 0 }, uNear: { value: 1 } };
+let _beamGeo = null, _beamMat = null;
+/** Луч: два вложенных конуса (ядро и мягкое сияние), вверх 180 м, бегущие вверх искры-полосы, мерцание; аддитивно, без тумана и ламп. */
+export function swordBeam() {
+    if (!_beamGeo) {
+        _beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
+        _beamGeo.translate(0, 0.5, 0);
+        _beamGeo.userData.keep = true;
+        _beamMat = new THREE.ShaderMaterial({
+            uniforms: BEAM_U,
+            vertexShader: `varying vec2 vUv; varying float vRim;
+void main() {
+  vUv = uv;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vec3 n = normalize(normalMatrix * normal);
+  vRim = abs(dot(n, normalize(-mv.xyz)));
+  gl_Position = projectionMatrix * mv;
+}`,
+            fragmentShader: `uniform float uT; uniform float uNear; varying vec2 vUv; varying float vRim;
+void main() {
+  float y = vUv.y;
+  float fade = smoothstep(0.0, 0.03, y) * (1.0 - smoothstep(0.35, 1.0, y));
+  float core = pow(vRim, 3.0);
+  float flick = 0.82 + 0.18 * sin(uT * 7.0 + y * 3.0) * sin(uT * 2.3);
+  float motes = smoothstep(0.92, 1.0, sin(y * 140.0 - uT * 9.0 + vUv.x * 18.0));
+  float a = (core * 0.85 + motes * 0.35) * fade * flick * uNear;
+  gl_FragColor = vec4(mix(vec3(1.0, 0.82, 0.45), vec3(1.0, 0.98, 0.9), core) * a, a);
+}`,
+            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+        });
+        _beamMat.name = 'divine-sword-beam';
+        _beamMat.userData.shared = true;
+    }
+    const g = new THREE.Group();
+    const inner = new THREE.Mesh(_beamGeo, _beamMat); inner.scale.set(0.9, 180, 0.9);
+    const outer = new THREE.Mesh(_beamGeo, _beamMat); outer.scale.set(2.6, 130, 2.6);
+    for (const m of [inner, outer]) { m.frustumCulled = false; m.renderOrder = 3; g.add(m); }
+    g.name = 'divine-sword-beam';
+    g.visible = false;
+    return g;
 }
