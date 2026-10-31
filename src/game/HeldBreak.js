@@ -18,6 +18,7 @@
  * Pure rules at the top (tests/unit/held-break.test.js); the game parts below take `game`.
  */
 
+import { isDivine, DIVINE_NOPE } from './DivineSword.js';
 import { isMagicItem, isGodGift } from './ItemTypes.js';
 import { WAND_TOOLS } from './Expelliarmus.js';
 
@@ -85,7 +86,7 @@ export function pickHeld(slots) {
  */
 export function slotVerdict(slot, max) {
     if (!slot) return { act: 'no', code: 'empty', why: '' };
-    if (slot.godGift) return { act: 'no', code: 'god', why: '✨ Это дар богов — никакое заклинание его не уничтожит' };
+    if (slot.godGift) return { act: 'no', code: 'god', why: isDivine(slot.w || slot.item) ? DIVINE_NOPE : '✨ Это дар богов — никакое заклинание его не уничтожит' }; // (the divine sword: made, not given — DivineSword.DIVINE_NOPE)
     if (slot.arena) return { act: 'no', code: 'arena', why: '🏟️ Палочка арены под защитой распорядителя' };
     if (slot.magic && !max) return { act: 'no', code: 'magic', why: '✨ Эта вещь волшебная — её возьмёт только «Liquidation Максима»' };
     return { act: 'break' };

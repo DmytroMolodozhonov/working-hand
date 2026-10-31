@@ -19,6 +19,9 @@ import { Vector3 } from 'three';
 /** The `kind` of its blow where a creature asks what hit it (LivingTrees.aliveDamage, IceQueen.iceDamage, Owls.isStrong: it always counts). */
 export const DIVINE_KIND = 'DivineSword';
 
+/** What a destroying spell says on it (Liquidation / Liquidation Maxima, the held-thing breaker): not a gift — MADE by the gods' craft (the author). */
+export const DIVINE_NOPE = '✨ Этот меч создан с помощью божественных технологий — поэтому его невозможно уничтожить';
+
 /** Weapon types that are divine (more divine things later: one place). */
 export const DIVINE_KINDS = new Set(['divine']);
 

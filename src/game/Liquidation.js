@@ -26,6 +26,7 @@
  * so a house, a cave, a beach coming near again never makes it anew.
  */
 
+import { isDivine, DIVINE_NOPE } from './DivineSword.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS } from '../world/Terrain.js';
@@ -378,7 +379,7 @@ export class Liquidation {
         }
         if (h.kind === 'weapon') {
             const w = h.w;
-            if (w.godGift) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; } // (the divine sword)
+            if (w.godGift) { this._burst(h.at, max, 12); say(isDivine(w) ? DIVINE_NOPE : '✨ Это дар богов — никакое заклинание его не уничтожит'); return; } // (the divine sword: made by the gods' craft — its own words)
             if (w.magic && !max) { this._burst(h.at, max, 12); say('✨ Это волшебное оружие — его возьмёт только «Liquidation Максима»'); return; }
             this._dust(w.position, 0x9ca3ad);
             if (auth && g.weapons.byId?.has(w.id)) { g.weapons.remove(w); g.sync?.weaponGone?.(w); }

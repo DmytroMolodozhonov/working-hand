@@ -223,3 +223,14 @@ test('the touch kills the creatures that ignore a plain blade: a living tree, th
     assert.ok(isStrong('DivineSword') && !isStrong('melee'));
     assert.match(fs.readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8'), /isWeapon && isDivineThing\(weapon\)/);
 });
+
+test('Liquidation (and its Maxima) on the divine sword: its own words — made by the gods\' craft, not a gift', async () => {
+    const { DIVINE_NOPE } = await import('../../src/game/DivineSword.js');
+    assert.match(DIVINE_NOPE, /создан с помощью божественных технологий/);
+    const { slotVerdict } = await import('../../src/game/HeldBreak.js');
+    for (const max of [false, true]) assert.equal(slotVerdict({ hand: 'left', src: 'weapon', kind: 'weapon', godGift: true, w: { type: 'divine', godGift: true } }, max).why, DIVINE_NOPE, 'in a hand, Maxima too');
+    assert.match(slotVerdict({ hand: 'left', src: 'item', kind: 'item', godGift: true, item: { kind: 'iceRod' } }, true).why, /дар богов/, 'the rod is still a gift');
+    const src = fs.readFileSync(new URL('../../src/game/Liquidation.js', import.meta.url), 'utf8');
+    assert.match(src, /isDivine\(w\) \? DIVINE_NOPE/, 'the sword lying on the ground');
+    assert.match(fs.readFileSync(new URL('../../src/game/HeldBreak.js', import.meta.url), 'utf8'), /isDivine\(slot\.w \|\| slot\.item\) \? DIVINE_NOPE/, 'the sword in a hand');
+});
