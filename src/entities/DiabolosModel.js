@@ -419,7 +419,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------ материалы
-const DEVIL_U = { uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
+const DEVIL_U = { uFarK: { value: 1 }, uSeeFar: { value: 1900 }, uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
 const NOISE_GLSL = `
 float dh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float dn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
@@ -431,7 +431,21 @@ float dfbm(vec3 p){ return 0.5 * dn(p) + 0.25 * dn(p * 2.03) + 0.125 * dn(p * 4.
  * трещины света за фронтом, весь он светится изнутри (uWoundK), в конце — растворяется пеплом с горящей кромкой (uDissolve).
  * Координаты модели после скиннинга (FarShape: форма — ребёнок корня), без новых источников света.
  */
-function injectDeath(sh, skin) {
+function injectDeath(sh, skin, cap = 0.88) {
+    sh.uniforms.uFarK = DEVIL_U.uFarK; sh.uniforms.uSeeFar = DEVIL_U.uSeeFar;
+    // Дымка ада (туман ~120 м) спрятала бы гору в 122 м уже за сотню метров: на нём туман «тоньше» — до 0,6 тумана как у всех,
+    // дальше растянут до uSeeFar (силуэт виден с плато прибытия), и никогда не глухой (cap: глаза и трещины светят сквозь дымку).
+    // uFarK — во сколько раз он на самом деле дальше, чем нарисован (вдали он рисуется ближе и меньше — Diabolos._farProxy).
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
+#ifdef FOG_EXP2
+float fogFactor = 1.0 - exp(- fogDensity * fogDensity * fogDepth * fogDepth);
+#else
+float dFd = fogDepth * uFarK, dF0 = fogFar * 0.6;
+float dFz = dFd <= dF0 ? dFd : dF0 + (dFd - dF0) * (fogFar - dF0) / max(uSeeFar - dF0, 1.0);
+float fogFactor = smoothstep(fogNear, fogFar, dFz) * ${cap.toFixed(2)};
+#endif
+gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+#endif`).replace('#include <common>', '#include <common>\nuniform float uFarK; uniform float uSeeFar;');
     sh.uniforms.uWound = DEVIL_U.uWound; sh.uniforms.uWoundK = DEVIL_U.uWoundK; sh.uniforms.uDissolve = DEVIL_U.uDissolve;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vMp;')
         .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvMp = transformed;');
@@ -484,7 +498,7 @@ totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * 
     hard.customProgramCacheKey = () => 'diabolos-hard';
     const glow = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
     glow.name = 'diabolos-glow';
-    glow.onBeforeCompile = (sh) => injectDeath(sh, false);
+    glow.onBeforeCompile = (sh) => injectDeath(sh, false, 0.5); // (глаза, пасть, жар — сквозь дымку ярче)
     glow.customProgramCacheKey = () => 'diabolos-glow';
     const chain = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
     chain.name = 'diabolos-chain';
@@ -497,6 +511,8 @@ totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * 
 /** Жар кожи (0…1: спит — тлеет, в ярости — горит) и время пульса — общие для всех копий формы. */
 export function devilHeat(heat, t) { DEVIL_U.uHeat.value = heat; DEVIL_U.uTime.value = t; }
 /** Рана (точка в координатах модели или null), фронт света (ед. формы), сила свечения 0…1, распад 0…1. */
+/** Нарисован ближе настоящего в k раз (вдали — Diabolos._farProxy): туман считается по настоящему расстоянию. */
+export function devilFar(k) { DEVIL_U.uFarK.value = k; }
 export function devilWound(local, front, k, dissolve) {
     if (local) DEVIL_U.uWound.value.set(local.x, local.y, local.z, front); else DEVIL_U.uWound.value.set(0, -99, 0, 0);
     DEVIL_U.uWoundK.value = k; DEVIL_U.uDissolve.value = dissolve;

@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from './DiabolosRules.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, chooseMove, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, JOINTS } from '../entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, JOINTS } from '../entities/DiabolosModel.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
 import { FarShape } from '../core/FarShape.js';
@@ -37,6 +37,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const ID = 'diabolos';
 const NET_DT = 0.2;      // с между строками состояния хоста
+const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
 const POSE_FAR = 420;    // м: дальше — поза реже
 const CHAIN_NEAR = 520;  // м: дальше цепь не считается (лежит, как легла)
 const CHEST_STYLES = ['iron', 'rich', 'iron', 'rich', 'iron'];
@@ -110,7 +111,10 @@ export class Diabolos {
         const g = this.game, s = this.site;
         if (this.everDead) { this._loadRemains(); return; }
         const seed = Math.abs(Math.round(s.x * 7 + s.z * 13)) % 9973;
-        const y = this._ground(s.x, s.z, s.y ?? 0);
+        // (пол котловины ещё не сделан воркерами — издали: слой пола из плана ада, верх блока = слой + 1; придёт земля — уточнится)
+        const gy = this._ground(s.x, s.z, NaN);
+        this._yGuess = !Number.isFinite(gy);
+        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y + 1 : 0;
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? this._ground(s.anchor.x, s.anchor.z, y) + 2.5, z: s.anchor.z };
         // лицом от якоря (цепь тянется за ним назад)
         const yaw = Math.atan2(-(s.x - anchor.x), -(s.z - anchor.z)) + Math.PI;
@@ -151,6 +155,7 @@ export class Diabolos {
 
     _unload() {
         const g = this.game;
+        this._proxK = 1; devilFar(1);
         if (this.model) {
             this.one?.set(false); this.one?.dispose?.();
             g.scene?.remove(this.model);
@@ -177,10 +182,10 @@ export class Diabolos {
         if (!this.site) return;
         const ps = this._players();
         let near = Infinity;
-        for (const q of ps) near = Math.min(near, Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z));
+        for (const q of ps) near = Math.min(near, inHell(q.p.x, q.p.z) ? 0 : Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z)); // (в аду — виден отовсюду: гора в 122 м над дымкой; автор не нашёл его с плато прибытия в 1250 м)
         if (g.isDeadLocal && !ps.length && this.d) near = Infinity;
         if (this._remains) { if (near > DEVIL.ACTIVE_R * 1.15) this._unload(); return; } // (убит: только цепь, якорь, сундуки)
-        if (!this.d) { if (near < DEVIL.ACTIVE_R && this._ground(this.site.x, this.site.z, NaN) === this._ground(this.site.x, this.site.z, NaN)) this._load(); else return; }
+        if (!this.d) { if (near < DEVIL.ACTIVE_R && (this.site.y != null || Number.isFinite(this._ground(this.site.x, this.site.z, NaN)))) this._load(); else return; }
         else if (near > DEVIL.ACTIVE_R * 1.15 && !this.d.dying) { this._unload(); return; } // (все ушли: засыпает и выгружается — после загрузки он снова спит)
         if (this._remains || !this.d) return;
         const d = this.d;
@@ -189,7 +194,9 @@ export class Diabolos {
         else if (this.auth) this._think(d, dt, ps);
         else this._follow(d, dt);
         if (!this.d) return; // (умер в этот кадр — останки уже на месте)
+        if (this._yGuess) { const gy = this._ground(d.x, d.z, NaN); if (Number.isFinite(gy)) { d.y = gy; this._yGuess = false; } } // (пол котловины пришёл от воркеров)
         this._animate(d, dt);
+        this._farProxy(d);
         this._balls(dt);
         if (this.held) this._holdStep(dt);
         this._meHits(d, dt);
@@ -864,12 +871,27 @@ export class Diabolos {
         this._chain(dt);
     }
 
+    /** Вдали (камера дальше PROXY_D): он рисуется ближе в k раз и во столько же раз меньше, в ту же сторону — тот же силуэт под тем же углом,
+     *  а дальняя плоскость камеры (1000 м) его не режет; туман шейдер считает по настоящему расстоянию (devilFar). Логика берёт d.x/d.y/d.z —
+     *  а позицию модели _animate ставит заново каждый кадр; ближе PROXY_D всё как есть (бой, огонь, хват — только вблизи). */
+    _farProxy(d) {
+        const m = this.model, cam = this.game.camera;
+        if (!m || !cam) return;
+        const cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
+        const D = Math.hypot(m.position.x - cx, m.position.y + 60 - cy, m.position.z - cz);
+        const k = D > PROXY_D ? PROXY_D / D : 1;
+        if (k < 1) m.position.set(cx + (m.position.x - cx) * k, cy + (m.position.y - cy) * k, cz + (m.position.z - cz) * k);
+        if (k !== this._proxK) { m.scale.setScalar(DEVIL.SCALE * k); this._proxK = k; }
+        devilFar(1 / k);
+    }
+
     _visible() {
         const cam = this.game.camera;
         if (!cam || !this.model) return true;
         _pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
         _fr.setFromProjectionMatrix(_pm);
-        _sph.center.set(this.d.x, this.d.y + 60, this.d.z); _sph.radius = 110;
+        const k = this._proxK || 1, m = this.model;
+        _sph.center.set(m.position.x, m.position.y + 60 * k, m.position.z); _sph.radius = 110 * k; // (вдали — там, где нарисован)
         return _fr.intersectsSphere(_sph);
     }
 
@@ -1196,7 +1218,10 @@ export class Diabolos {
     _loadRemains() {
         const g = this.game, s = this.site;
         this._remains = true;
-        const y = this._ground(s.x, s.z, s.y ?? 0);
+        // (пол котловины ещё не сделан воркерами — издали: слой пола из плана ада, верх блока = слой + 1; придёт земля — уточнится)
+        const gy = this._ground(s.x, s.z, NaN);
+        this._yGuess = !Number.isFinite(gy);
+        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y + 1 : 0;
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? y + 2.5, z: s.anchor.z };
         this.anchor = anchorModel(); this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z); g.scene?.add(this.anchor);
         // цепь: лежит от кольца в сторону места, где он сидел
