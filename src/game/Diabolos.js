@@ -22,7 +22,7 @@ import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from '
 import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, JOINTS } from '../entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, aimArms, JOINTS } from '../entities/DiabolosModel.js';
 import { DevilFires } from '../fx/DevilFires.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
@@ -403,18 +403,78 @@ export class Diabolos {
         if (talk?.voiceOn && talk.speech?.supported) { if (!talk.speech.neural?.ready) talk.speech.preload?.(); talk.speech.say(text, { ...DEVIL_VOICE, shout: /!$/.test(text) }); } // (игрок говорит заклинание — реплика ждёт, пока он договорит: не мешает распознаванию)
         this._note(`😈 Дьяволос говорит: «${text}»`);
     }
-    /** Под «Империус Максима»: идёт куда смотрит тело того, кто в нём (на своей цепи), «удар» — кулак/копыто, долгое «У» — струя. */
+    /**
+     * Под «Империус Максима» (автор: «у него же целый список взаимодействий»): всё, что умеет он сам, — по телу того, кто в нём.
+     *  ноги: шаг/бег на месте — идёт по котловине (на своей цепи), поворот тела — поворот;
+     *  руки: его руки повторяют ваши (плечо, локоть, кулак — `aimArms`);
+     *  взмах рукой вперёд/вниз — удар кулаком (той рукой), рука вытянута и кулак сжат — хватает (кто у кисти — того и схватил),
+     *  ладони сошлись — хлопок огнём, прыжок — топот копытом; долгое «У» — струя огня;
+     *  голосом: «огонь», «шар», «пинок», «рёв», «ярость» — эти его ходы (heardOrder).
+     */
     driven(d, I, dt) {
         if (!d || d.dying) return;
         d.mode = d.move ? 'act' : 'walk'; d.sit = Math.max(0, d.sit - dt); d.target = null; d.act = null;
         for (const k in d.cd) d.cd[k] = Math.max(0, d.cd[k] - dt);
-        if (d.move) { this._walk(d, 0, null); return; }
+        this._ctlArms = I.armsPose || null;
         if (Number.isFinite(I.yaw)) { let a = I.yaw - d.yaw; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; this._turn(d, a, dt); }
-        if ((I.walk || 0) > 0.02) this._walk(d, dt, { x: d.x - Math.sin(d.yaw) * 30, z: d.z - Math.cos(d.yaw) * 30 });
+        const walking = (I.walk || 0) > 0.02 && !d.move;
+        if (walking) this._walkAhead(d, dt, I.run ? 1.35 : 1);
         else this._walk(d, 0, null);
-        const ahead = { id: null, p: new THREE.Vector3(d.x - Math.sin(d.yaw) * 45, d.y, d.z - Math.cos(d.yaw) * 45), feet: d.y };
+        if (d.move) return;
+        const ahead = this._ahead(d, 45);
+        const A = I.armsPose, order = this._order; this._order = null;
+        if (order && !(d.cd[order] > 0)) { this._startMove(d, order, this._aimFor(d, order) || ahead); this._note(`😈 по воле того, кто в нём: ${order}`); return; }
         if (I.fire && !(d.cd.fire > 0)) { this._startMove(d, 'fire', ahead); d.cd.fire = 8; return; }
-        if (I.strikeNow) { I.strikeNow = false; this._startMove(d, (this._impN = (this._impN || 0) + 1) % 3 === 0 ? 'stomp' : 'fist', ahead); }
+        if (I.jump && !(d.cd.stomp > 0)) { d.cd.stomp = 2; this._startMove(d, 'stomp', ahead); return; }
+        if (A?.left?.ha && A?.right?.ha && !(d.cd.clap > 0)) { // (ладони сошлись перед грудью — хлопок)
+            const gap = A.left.ha.distanceTo(A.right.ha), was = this._clapGap ?? gap;
+            this._clapGap = gap;
+            if (gap < 0.28 && was - gap > 0.04 && A.left.ha.z < A.left.sh.z - 0.15) { d.cd.clap = 3; this._startMove(d, 'clap', ahead); return; }
+        }
+        if (A && !(d.cd.grab > 0)) for (const side of ['left', 'right']) { // (рука вытянута вперёд, кулак сжался — хват)
+            const a = A[side];
+            if (!a?.ha || a.seen === false) continue;
+            const reach = a.ha.distanceTo(a.sh), fwd = a.sh.z - a.ha.z;
+            const was = this._curl?.[side] ?? a.curl;
+            (this._curl || (this._curl = {}))[side] = a.curl;
+            if (reach > 1.35 && fwd > 0.9 && a.curl > 0.75 && was < 0.6) {
+                d.cd.grab = 6;
+                const tg = this._aimFor(d, 'grab') || ahead;
+                this._startMove(d, 'grab', tg);
+                d.move.side = side === 'left' ? 'L' : 'R';
+                return;
+            }
+        }
+        if (I.strikeNow) { I.strikeNow = false; const tg = this._aimFor(d, 'fist') || ahead; this._startMove(d, 'fist', tg); }
+    }
+    /** Шаг вперёд по взгляду (на своей цепи; столб обходит). */
+    _walkAhead(d, dt, k = 1) {
+        const to = this._ahead(d, 30);
+        const w = DEVIL.WALK; DEVIL.WALK = w * k;
+        try { this._walk(d, dt, to); } finally { DEVIL.WALK = w; }
+    }
+    _ahead(d, r) { return { id: null, x: d.x - Math.sin(d.yaw) * r, z: d.z - Math.cos(d.yaw) * r, p: new THREE.Vector3(d.x - Math.sin(d.yaw) * r, d.y, d.z - Math.cos(d.yaw) * r), feet: d.y }; }
+    /** Кого бить/хватать по воле того, кто в нём: ближайший игрок перед ним в досягаемости хода (не сам вселившийся — его тело стоит). */
+    _aimFor(d, id) {
+        const M = MOVES[id], by = d.imp?.by;
+        let best = null, bd = Infinity;
+        for (const q of this._players()) {
+            if (q.id === by) continue;
+            const dist = Math.hypot(q.p.x - d.x, q.p.z - d.z);
+            if (dist > (M?.reach ?? 60) + 10) continue;
+            if (Math.abs(yawTo(d.yaw, d.x, d.z, q.p.x, q.p.z)) > 0.9) continue;
+            if (dist < bd) { bd = dist; best = q; }
+        }
+        return best;
+    }
+    /** Его ходы голосом того, кто в нём. → true (фраза — приказ ему, не заклинание). */
+    heardOrder(text) {
+        const s = String(text || '').toLowerCase();
+        const id = /огон|огнём|пламя|fire|дыхни/.test(s) ? 'fire' : /шар|ball|плюнь|плюй/.test(s) ? 'ball' : /пин|kick|камн|глыб/.test(s) ? 'kick'
+            : /рёв|рев|рычи|ори|roar|ррр/.test(s) ? 'roar' : /ярост|rage|бей землю/.test(s) ? 'rage' : /хлоп|clap/.test(s) ? 'clap' : /топ|stomp|раздав/.test(s) ? 'stomp' : null;
+        if (!id) return false;
+        this._order = id;
+        return true;
     }
     /** Чужой разум ушёл (вырвался / отпустили): смотрит вокруг и злится на того, кто был в голове. */
     freed(d) {
@@ -1188,6 +1248,8 @@ export class Diabolos {
         if (d.dying) face = this._dyingPose(d, P);
         P.face = face;
         poseDiabolos(m, P);
+        // («Империус Максима»: руки повторяют руки того, кто в нём — пока нет его собственного удара/хвата)
+        if (d.imp?.mine && this._ctlArms && !d.move) aimArms(m, this._ctlArms, 0.85);
     }
 
     /** Хват: кулак у морды, пальцы сжимаются, хохот, раздавил. */

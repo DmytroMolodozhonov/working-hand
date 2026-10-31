@@ -578,3 +578,23 @@ test('«Империус Максима» на Дьяволоса: только 
     assert.ok(d.d.grudge.has('me'));
     assert.ok(said.some((s) => /голову|тело|бог/.test(s)), 'сказал что-то злое');
 });
+
+test('«Империус Максима»: руки Дьяволоса повторяют руки того, кто в нём (вперёд — вперёд, вверх — вверх, левая — левой)', async () => {
+    const { diabolosModel, poseDiabolos, aimArms, fistWorld } = await import('../../src/entities/DiabolosModel.js');
+    const m = diabolosModel(); m.scale.setScalar(DEVIL.SCALE);
+    poseDiabolos(m, {}); m.updateMatrixWorld(true);
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    // правая — вперёд (−z), левая — вверх
+    aimArms(m, { right: { sh: V(0.7, 3.25, 0), el: V(0.7, 3.25, -1), ha: V(0.7, 3.25, -1.9), curl: 0 }, left: { sh: V(-0.7, 3.25, 0), el: V(-0.7, 4.25, 0), ha: V(-0.7, 5.15, 0), curl: 1 } }, 1);
+    const shR = m.userData.bones.shR.getWorldPosition(new THREE.Vector3()), shL = m.userData.bones.shL.getWorldPosition(new THREE.Vector3());
+    const R = fistWorld(m, 'R', new THREE.Vector3()), L = fistWorld(m, 'L', new THREE.Vector3());
+    assert.ok(R.z < shR.z - 40 && Math.abs(R.y - shR.y) < 25, `правая вперёд: ${R.toArray().map(Math.round)} от плеча ${shR.toArray().map(Math.round)}`);
+    assert.ok(L.y > shL.y + 40 && L.x < 0, `левая вверх: ${L.toArray().map(Math.round)}`);
+    assert.ok(R.x > 0, 'правая — справа (не зеркально)');
+    // под Империусом голосом — его ходы, обычная речь — нет
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const dv = new Diabolos(fakeGame(new THREE.Vector3()).g);
+    assert.equal(dv.heardOrder('пинок'), true); assert.equal(dv._order, 'kick');
+    assert.equal(dv.heardOrder('шар огня'), true);
+    assert.equal(dv.heardOrder('привет'), false);
+});

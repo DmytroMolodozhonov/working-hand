@@ -291,6 +291,7 @@ export class ImperiusControl {
         const ru = this.maxima ? 'Империус Максима' : 'Империус';
         const how = this.sys === 'pl' ? 'Шагайте на месте — он идёт, поворот тела — поворот. Он смотрит своими глазами, но тело слушается вас'
             : this.kind === 'dragon' ? 'Бегите на месте — он бежит; разбежавшись, машите обеими руками сверху вниз — взлетит. Долгое «У-у-у» — огонь (громче — больше)'
+            : this.kind === 'diabolos' ? 'Шагайте на месте — он идёт по котловине (цепь держит), поворот тела — поворот; его руки повторяют ваши: взмах вперёд — удар кулаком, вытяните руку и сожмите кулак — хватает, сведите ладони — хлопок огнём, прыжок — топот. Долгое «У» — струя огня; скажите «шар», «пинок», «рёв» или «ярость»'
             : this._flier ? 'Машите обеими руками сверху вниз — летит (чаще и сильнее — выше и быстрее), руки в стороны — парит, руки вниз — снижается'
             : 'Шагайте на месте — оно идёт, поворот тела — поворот, взмах руки вперёд — его удар';
         g.hud?.setVoice?.(`🌀 «${ru}» — вы в теле: ${kindRu(this.kind)}. ${how}. «Стоп» — вернуться`, true);
@@ -335,7 +336,7 @@ export class ImperiusControl {
         I.strikeNow = I.strike;
         g.camera && I.look.set(0, 0, -1).applyQuaternion(g.camera.quaternion);
         // the dragon's fire: the long «У»
-        I.fire = this.kind === 'dragon' && this.phase === 'on' ? this.howl.update(dt) : null;
+        I.fire = (this.kind === 'dragon' || this.kind === 'diabolos') && this.phase === 'on' ? this.howl.update(dt) : null;
         if (I.fire?.start) this._say(`🔥 Огонь! (громче «У» — больше пламя; снова — через ${7} с)`, 'fire', 6000);
         ch.setRunning?.(false);
     }
@@ -345,14 +346,33 @@ export class ImperiusControl {
     voiceLevel(db) { this.howl.level(db); }
     /** A whole phrase heard: «у-у-у» in a dragon is its fire (the browser's recognizer — no letters there). → true: it was. */
     heardPhrase(text) {
+        if (this.kind === 'diabolos' && this.phase === 'on') return !!this.game.diabolos?.heardOrder?.(text) || /^[\sуюu\-.!…]+$/i.test(String(text || '')); // (его приказы голосом: «огонь», «шар», «пинок», «рёв», «ярость»…)
         if (this.kind !== 'dragon' || this.phase !== 'on') return false;
         return this.howl.phrase(text) || /^[\sуюu\-.!…]+$/i.test(String(text || ''));
+    }
+
+    /** Руки героя сейчас в пространстве тела (x вправо, y вверх, z назад): плечо, локоть, кисть, сжатие пальцев, видна ли кисть. */
+    _armsNow(ch, out = { left: {}, right: {} }) {
+        ch.group.updateMatrixWorld(true);
+        const inv = (this._invM || (this._invM = new THREE.Matrix4())).copy(ch.group.matrixWorld).invert();
+        for (const side of ['left', 'right']) {
+            const o = out[side];
+            o.sh = (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(o.sh || new THREE.Vector3()).applyMatrix4(inv);
+            o.el = (side === 'left' ? ch.leftElbowAnchor : ch.rightElbowAnchor).getWorldPosition(o.el || new THREE.Vector3()).applyMatrix4(inv);
+            o.ha = ch.getHandWorldPosition(side, o.ha || new THREE.Vector3()).applyMatrix4(inv);
+            o.curl = ch.getGripCurl?.(side) ?? 0;
+            o.seen = !(ch.handLost?.(side));
+        }
+        out.t = performance.now();
+        return out;
     }
 
     /** After the hero's own frame: the body where it was, as it was — the arms down, «asleep standing» (it may fall, as a body does). */
     afterPlayer() {
         if (!this.name) return;
         const ch = this.game.character, b = this._body, p = ch.group.position;
+        // (руки с камеры — до «рук вниз» ниже: великан-Дьяволос повторяет руки того, кто в нём — Diabolos.driven; иначе он получал опущенные)
+        if (this.kind === 'diabolos' && this.phase === 'on') this.I.armsPose = this._armsNow(ch, this.I.armsPose);
         p.x = b.x; p.z = b.z;
         b.y = p.y;
         ch.group.rotation.y = b.yaw;

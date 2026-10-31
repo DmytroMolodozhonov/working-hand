@@ -831,3 +831,37 @@ export function fistWorld(model, sd, out) {
 export function hoofWorld(model, sd, out) { return out.set(0, -0.1, -0.06).applyMatrix4(model.userData.bones['fe' + sd].matrixWorld); }
 
 export const DIABOLOS_BONES = ORDER;
+
+// ------------------------------------------------------------------ руки по рукам того, кто в нём («Империус Максима»)
+const _iq = new THREE.Quaternion(), _iq2 = new THREE.Quaternion(), _iv = new THREE.Vector3(), _iv2 = new THREE.Vector3(), _ir = new THREE.Vector3();
+/** Кость `bone` так, чтобы её ребёнок `child` лёг в направлении `dir` (пространство модели); w — доля (0…1, плавно поверх позы). */
+function aimBone(model, bone, child, dir, w) {
+    bone.parent.updateWorldMatrix(true, false);
+    model.getWorldQuaternion(_iq2).invert();
+    bone.parent.getWorldQuaternion(_iq).premultiply(_iq2); // (поворот родителя в пространстве модели)
+    _iv.copy(dir).applyQuaternion(_iq.invert());
+    _ir.copy(child.position).normalize();
+    const q = _iq2.setFromUnitVectors(_ir, _iv.normalize());
+    bone.quaternion.slerp(q, w);
+    bone.updateMatrixWorld(true);
+}
+/**
+ * Руки Дьяволоса повторяют руки игрока (пространство тела: x вправо, y вверх, z назад — как у модели): плечо→локоть, локоть→кисть;
+ * левая — левой, правая — правой (не зеркально); кулак — сжатие пальцев. arms = {left: {sh, el, ha, curl, seen}, right: …}, w — доля.
+ */
+export function aimArms(model, arms, w = 1) {
+    const B = model.userData.bones;
+    model.updateMatrixWorld(true);
+    for (const [side, sd] of [['left', 'L'], ['right', 'R']]) {
+        const a = arms?.[side];
+        if (!a?.sh || !a.el || !a.ha || a.seen === false) continue;
+        const up = _iv2.subVectors(a.el, a.sh);
+        if (up.lengthSq() < 1e-6) continue;
+        aimBone(model, B['sh' + sd], B['el' + sd], up.clone(), w);
+        const fo = _iv2.subVectors(a.ha, a.el);
+        if (fo.lengthSq() > 1e-6) aimBone(model, B['el' + sd], B['wr' + sd], fo.clone(), w);
+        const sq = Math.max(0, Math.min(1, ((a.curl ?? 0) - 0.35) / 0.5));
+        B['ha' + sd].scale.set(1 - sq * 0.16, 1 - sq * 0.22, 1 - sq * 0.12);
+    }
+    model.updateMatrixWorld(true);
+}
