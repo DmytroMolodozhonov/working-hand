@@ -11,7 +11,7 @@
 
 /** The sliders: id of the settings' control, limits, the usual value, words for the player. */
 export const QUICK = [
-    { id: 'cam-smooth', label: 'Плавность камеры', min: 0, max: 95, step: 5, def: 70, unit: '%', hint: 'Чем больше, тем мягче и медленнее камера следует за вашими движениями.' },
+    { id: 'cam-smooth', label: 'Плавность камеры', min: 0, max: 95, step: 5, def: 70, unit: '%', hint: 'Чем больше, тем мягче и медленнее камера и руки героя следуют за вашими движениями. Меньше — быстрее, но заметнее дрожь.' },
     { id: 'cam-sens', label: 'Чувствительность', min: 10, max: 100, step: 5, def: 100, unit: '%', hint: 'Чем больше, тем сильнее поворачивается камера от ваших движений.' },
     { id: 'minimap-size', label: 'Размер мини-карты', min: 60, max: 200, step: 10, def: 120, unit: '%', hint: 'Мини-карта в углу экрана.', preview: 'map' },
     { id: 'hotbar-size', label: 'Размер панели предметов', min: 70, max: 160, step: 10, def: 100, unit: '%', hint: 'Ячейки с вещами внизу экрана.', preview: 'bar' },

@@ -514,6 +514,9 @@ export class PoseService {
         // even when results come unevenly — the program's clock is this computer's)
         const age = r.t ? Math.max(0, Math.min(500, Date.now() - r.t)) : 0;
         this.stats.handAge = age;
+        // (the journal «Руки»: where the picture's time went in the program — waited, the networks, the rest — and the camera's own rate)
+        if (r.st) this.stats.stages = r.st;
+        if (r.camFps != null) this.stats.camFps = r.camFps;
         const ts = this._nativeTs = Math.max((this._nativeTs || 0) + 1, performance.now() - age); // (never back in time)
         if (r.hands) this._handleResult({ ts, cost: r.cost, poseLandmarks: r.poseLandmarks, hands: r.hands, faceLandmarks: r.faceLandmarks, sticks: r.sticks });
         else this._onHolistic(r);
@@ -825,7 +828,10 @@ export class PoseService {
         results.at = performance.now(); // (CrossedArms: a picture not renewed for a while is no pose)
         this.lastResults = results;
         this._drawSkeleton(results);
-        if (this.onPoseUpdate) this.onPoseUpdate(this._withSticks(this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement), r.sticks, assigned.left, assigned.right));
+        // (the picture's own time: PoseSmoother shows the arms and hands ahead of it, to the moment the frame is drawn)
+        const pd = this.interpreter.process(results, this.native ? this._nativeVideo : this.videoElement);
+        if (pd) pd.ts = t;
+        if (this.onPoseUpdate) this.onPoseUpdate(this._withSticks(pd, r.sticks, assigned.left, assigned.right));
     }
 
     /** Feed already-detected results (tests, replays) through the same guards. */

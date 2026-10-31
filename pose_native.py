@@ -34,11 +34,13 @@ POSE_MODELS = ["pose_landmarker_lite.task", "pose_landmarker_full.task", "pose_l
 
 
 def _pts(lms, vis=False):
+    # (rounded: 1e-5 of the picture is 0.01 px of 1280 — far below the networks' own jitter; the stream is half as long,
+    # json.dumps here and JSON.parse in the game's own thread twice as quick)
     if not lms:
         return None
     if vis:
-        return [{"x": p.x, "y": p.y, "z": p.z, "visibility": getattr(p, "visibility", 1.0) or 0.0} for p in lms]
-    return [{"x": p.x, "y": p.y, "z": p.z} for p in lms]
+        return [{"x": round(p.x, 5), "y": round(p.y, 5), "z": round(p.z, 4), "visibility": round(getattr(p, "visibility", 1.0) or 0.0, 3)} for p in lms]
+    return [{"x": round(p.x, 5), "y": round(p.y, 5), "z": round(p.z, 4)} for p in lms]
 
 
 def _sticks(frame, out):
@@ -50,6 +52,20 @@ def _sticks(frame, out):
         return find_sticks(frame, hands) if hands else []
     except Exception:  # noqa: BLE001
         return []
+
+
+def _boost_thread():
+    """This thread a step above the others on Windows (the camera's reader and the networks' loop): the villagers' network,
+    the voices and the game share the processor and the video card with them — the hands waited («камера шлёт раз в
+    63–100 мс»). Never fails (another system: nothing to do)."""
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import ctypes
+        k = ctypes.windll.kernel32
+        k.SetThreadPriority(k.GetCurrentThread(), 1)  # THREAD_PRIORITY_ABOVE_NORMAL
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class _LatestFrame:
@@ -65,6 +81,10 @@ class _LatestFrame:
         self.taken = 0
         self.fails = 0
         self.dead = False
+        self.at = 0.0  # when the newest picture was read from the camera (time.time(): the game measures the delay from it)
+        self.fps = 0.0  # pictures a second the camera itself gives (a dim room: the camera's exposure halves it)
+        self._n = 0
+        self._t = time.time()
         self.thread = threading.Thread(target=self._run, name="camera-read", daemon=True)
         self.thread.start()
 
@@ -74,13 +94,21 @@ class _LatestFrame:
         self.thread.join(timeout=2)
 
     def _run(self):
+        _boost_thread()  # (the camera's reader before the villagers' network and the voice: the hands wait for it)
         while not self.stop.is_set() and not self.outer.is_set():
             ok, frame = self.cap.read()
+            now = time.time()
             with self.cond:
                 if ok and frame is not None:
                     self.frame = frame
+                    self.at = now
                     self.seq += 1
                     self.fails = 0
+                    self._n += 1
+                    if now - self._t >= 1.0:
+                        self.fps = self._n / (now - self._t)
+                        self._n = 0
+                        self._t = now
                 else:
                     self.fails += 1
                     self.dead = self.fails > 100
@@ -91,7 +119,7 @@ class _LatestFrame:
                     return
 
     def next(self, timeout=1.0):
-        """The newest picture not given out yet (waits for one): (ok, frame)."""
+        """The newest picture not given out yet (waits for one): (ok, frame). Its read time — `at`."""
         with self.cond:
             if self.seq == self.taken:
                 self.cond.wait(timeout)
@@ -515,6 +543,7 @@ class NativePose:
 
     # ------------------------------------------------------------ the loop
     def _run(self):
+        _boost_thread()
         cv2 = self._cv2
         cap = None
         close = None
@@ -582,7 +611,11 @@ class NativePose:
                     print(f"  [Камера] камера {self.width}x{self.height}")
                     continue
                 t0 = t_last = time.perf_counter()
-                t_wall = time.time()  # (when the picture was taken into work: the game measures the hands' delay)
+                # (when the picture came from the camera — the game measures the hands' whole delay from it; it may have
+                # waited here while the networks worked on the one before: `wait`)
+                t_now = time.time()
+                t_wall = grab.at if grab and grab.at else t_now
+                wait = max(0.0, t_now - t_wall) * 1000
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 H, W = rgb.shape[:2]
                 # a far player: backlight / dark figure → a lightening; a small body → a zoom on it
@@ -608,7 +641,9 @@ class NativePose:
                 if k >= 0.25 and light is not None:
                     small = light.contrast(small if small is not None else rgb, k)
                 ts = int((time.time() - t_start) * 1000)
+                t_net = time.perf_counter()
                 out = run(rgb, ts, small)
+                net_ms = (time.perf_counter() - t_net) * 1000
                 last_body = out.get("poseLandmarks")
                 zoom.update(last_body, W / H)
                 if zoom.changed:
@@ -634,7 +669,9 @@ class NativePose:
                 if hint:
                     out["farHint"] = True  # (the game may say «step closer»)
                 out.update({"t": round(t_wall * 1000), "cost": round(cost, 1), "w": self.width, "h": self.height, "backend": self.backend,
-                            "handsEngine": "v5" if v5on else "mp"})
+                            "handsEngine": "v5" if v5on else "mp",
+                            # where the time goes (the journal «Руки»): waited for the networks, the networks, the rest; the camera's own pictures a second
+                            "st": [round(wait, 1), round(net_ms, 1), round(cost - net_ms, 1)], "camFps": round(grab.fps, 1) if grab else None})
                 if v5on:
                     out["v5Engine"] = self.v5.hands.engine  # ("gpu": the video card; "cpu": the processor)
                 if self.hands_mode == "v5" and self.v5.state != "ready":

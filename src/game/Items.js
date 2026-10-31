@@ -45,6 +45,7 @@ import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
+import { V5_WAND, AimSteady, wandAimDir, wandSideAxis } from './V5WandAim.js';
 import { HandoverPeer, HANDOVER, WHY, giveWhy, takeWhy, TouchTimer } from './Handover.js';
 import { allLog } from '../core/AllLog.js';
 import { DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, handLog } from './HandRelease.js';
@@ -147,19 +148,11 @@ const GRIPPED = {
 const WAND_V3 = { axis: 'y', handle: 0.1 };
 /** V4 hands holding the wand like a pen (with a real stick seen by the camera): off — V3's wand is used. */
 const PEN_WAND = false;
-/** V5: how far the wand's own end is behind its point in the palm (SimplifiedHand WAND_LINE.at): its butt at the heel of the hand. */
-const V5_WAND_BACK = 0.35;
-/**
- * V5: how much the hand's own turn leads the wand; the rest — the forearm (the body network's elbow →
- * wrist), carrying the grip's angle. The author: «V3 points exactly where I point, V4/V5 don't» — V3's
- * wand is 0.6 forearm + 0.4 palm; V4 0.85 palm, V5 was the palm alone. The palm's turn from a fist of
- * 50 px (worse: pointed at the camera) is a guess; the forearm is not — so V5 points like V3 now and
- * the wand still lies across the palm in the V5 grip.
- */
-const V5_WAND_PALM = 0.4;
+/** V5: the wand's numbers and its aim — V5WandAim.js (the game and tools/handbench/pointbench.mjs share them). */
+const V5_WAND_BACK = V5_WAND.BACK;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _f = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
-const _qa = new THREE.Quaternion();
+const _g = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _UPY = new THREE.Vector3(0, 1, 0);
 const _hq = new THREE.Quaternion();
@@ -488,25 +481,17 @@ export class ItemSystem {
             h.wandHand = hand;
             h.gripped = true;
         }
-        const a = hand.wandAxis(h.wandFit.r, _a, _b), d = _b;
-        // the grip's angle (the palm's «up» → the wand in it) carried by the forearm, then a part of the
-        // palm's own turn: points where the arm points, bent by the wrist (V5_WAND_PALM)
-        const pq = hand.palm.getWorldQuaternion(_hq);
-        const up = _e.set(0, 1, 0).applyQuaternion(pq);
-        const fore = ch.getForearmDirection(side, _f);
-        const byArm = fore.applyQuaternion(_qa.setFromUnitVectors(up, d)).normalize();
-        d.multiplyScalar(V5_WAND_PALM).addScaledVector(byArm, 1 - V5_WAND_PALM).normalize();
-        const x = _c.set(1, 0, 0).applyQuaternion(pq);
-        x.addScaledVector(d, -x.dot(d));
-        if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
-        x.normalize();
+        // where it points: the real hand (the drawn wrist bent so the aslant wand lies along it) mixed with the forearm (V5WandAim.js)
+        const d = wandAimDir(ch, hand, side, _b, h.wandFit.r);
+        const a = hand.wandAxis(h.wandFit.r, _a, _e);
+        const x = wandSideAxis(hand, d, _c);
         _m4.makeBasis(x, d, _e.crossVectors(x, d));
         _q.setFromRotationMatrix(_m4);
         // steadied by its own speed (a still wand doesn't tremble, a quick turn passes at once)
         if (!h.q) h.q = _q.clone();
         else {
-            const st = (this._wandSteady || (this._wandSteady = {}))[side] || (this._wandSteady[side] = new Steady({ minCutoff: 1.2, beta: 5 }));
-            h.q.slerp(_q, st.alpha(h.q.angleTo(_q) / Math.max(1e-3, dt), dt));
+            const st = (this._aimSteady || (this._aimSteady = {}))[side] || (this._aimSteady[side] = new AimSteady());
+            h.q.slerp(_q, st.alpha(_g.set(0, 1, 0).applyQuaternion(h.q), d, Math.max(1e-3, dt)));
         }
         h.model.quaternion.copy(h.q);
         // its own end V5_WAND_BACK behind the point in the palm, along the (steadied) wand
@@ -993,6 +978,9 @@ export class ItemSystem {
         // a true speed, not the beat of the frames against the camera's pictures)
         const ps = g.poseSmoother, tt = ps?.eff > 0 ? ps.eff : now;
         const fresh = !!ps && ps.to !== this._lastTo; if (ps) this._lastTo = ps.to;
+        // (the arms shown ahead of the camera's picture — PoseSmoother.PREDICT — only while they point: an empty hand or the
+        // leading hand's wand; a hand holding a thing it may throw keeps the arm's true speed for the hands' memory)
+        if (ps?.hold) for (const side of ['right', 'left']) { const h = this.held[side]; ps.hold[side] = !!h && !(h.item.kind === 'wand' && side !== g.off); }
         for (const side of ['right', 'left']) {
             const h = this.held[side];
             if (!h) continue;

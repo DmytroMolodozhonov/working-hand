@@ -175,6 +175,12 @@ export function lengthProfile(model) {
 }
 
 export const WAND_LINE = { at: [0, 0.2], gap: 0.008, dir: [-0.55, 0.8, 0] };
+/**
+ * The wrist bent to the little finger's side holding the V5 wand (rad): as a real hand pointing a wand held aslant across
+ * the palm — the wand then goes where the hand and the forearm point (tools/handbench/pointbench.mjs: without it the aim was
+ * the grip's 34.5° off towards the thumb, «не указывает туда, куда нужно»). The fingers keep their grip: the whole palm turns.
+ */
+export const WAND_BEND = Math.atan2(-WAND_LINE.dir[0], WAND_LINE.dir[1]);
 
 /** In the palm's frame (right hand; a left one is its mirror): where a held edge lies — x of the web, the palm's face. */
 export const BOOK_POINTS = { edgeX: -0.12, edgeY: 0.05, face: -0.075 };
@@ -617,6 +623,9 @@ export class SimplifiedHand {
         const GP = _m2.makeScale(this.group.scale.x, 1, 1).multiply(_m3.makeRotationFromEuler(this.handPivot.rotation));
         const R = GP.invert().multiply(A);
         if (this.group.scale.x < 0) R.multiply(_m3.makeScale(1, 1, -1));
+        // a V5 wand in this hand (Items sets it every frame): the palm bent at the wrist so the wand lies along the real hand
+        this.wandBent = this.wandBendAt != null && performance.now() - this.wandBendAt < 250;
+        if (this.wandBent) R.multiply(_m3.makeRotationZ(-WAND_BEND));
         return out.setFromRotationMatrix(R);
     }
 

@@ -112,6 +112,7 @@ export function simulate(o) {
     const trace = new WristTrace(); // (PoseService: the wrist raw and filtered, picture by picture)
     if (o.trace !== false) ht.trace = trace;
     const sm = new PoseSmoother();
+    sm.hold.left = true; // (a hand holding a thing: never shown ahead of the picture — Items sets it so)
     const dc = o.dCutoff ?? POSE_ARM_DCUTOFF; // (TrackingGuard.PoseStabilizer: the wrists' filters)
     const fx = new OneEuroFilter(2.0, 3.0, dc), fy = new OneEuroFilter(2.0, 3.0, dc);
     // (the hand's depth: the game does not take the camera's rough z as it is — the arm solver builds it from the elbow and

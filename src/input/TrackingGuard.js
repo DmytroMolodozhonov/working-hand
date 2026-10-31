@@ -111,7 +111,7 @@ export function assignHands(hands, pose) {
 /** Per-hand validator + filter. */
 export class HandStabilizer {
     /** The hand filter's strength (see HandFilter; tuned in tests/unit/hand-latency.test.js). */
-    static params = { minCutoff: 0.6, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3, zK: 0.5, zBeta: 2 };
+    static params = { minCutoff: 0.6, beta: 8, dCutoff: 4, floorK: 1.5, floorT: 3, zK: 0.5, zBeta: 2, dead: 0.3 };
 
     constructor() {
         this.signature = null; // running average of bone signature
@@ -206,7 +206,9 @@ export class HandStabilizer {
  * joints are measured from differences between the points).
  */
 export class HandFilter {
-    constructor({ minCutoff = 0.8, beta = 8, dCutoff = 4, floorK = 1.5, floorT = 3, zK = 1, zBeta = 1 } = {}) {
+    constructor({ minCutoff = 0.8, beta = 8, dCutoff = 4, floorK = 1.5, floorT = 3, zK = 1, zBeta = 1, dead = 0.3, floorK0 = 1.5 } = {}) {
+        this.dead = dead;
+        this.floorK0 = floorK0; // (the old way's speed: only what stands well above its floor — its jitter's spikes stay out)
         this.zK = zK; // (the depth's cut-off at rest: zK of the picture's; when moving: zBeta of it)
         this.zBeta = zBeta;
         this.minCutoff = minCutoff;
@@ -215,11 +217,17 @@ export class HandFilter {
         this.floorK = floorK;
         this.floorT = floorT;
         this.prev = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+        this.raw1 = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+        this.raw2 = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
+        this.vel = Array.from({ length: 21 }, () => ({ x: 0, y: 0, z: 0 }));
         this.reset();
     }
 
     reset() {
         this.has = false;
+        this.rawN = 0;
+        this.speed0 = 0;
+        this.floor0 = null;
         this.speed = 0;
         this.floor = null;
         this.lastTime = null;
@@ -236,21 +244,60 @@ export class HandFilter {
         if (!this.has || !(dt > 0) || dt > 0.5) {
             // the first picture (or after a long gap): as it is
             for (let i = 0; i < 21; i++) { P[i].x = lm[i].x; P[i].y = lm[i].y; P[i].z = lm[i].z || 0; }
-            this.has = true; this.speed = 0;
+            this.has = true; this.speed = 0; this.speed0 = 0; this.rawN = 0;
+            for (const v of this.vel) { v.x = 0; v.y = 0; v.z = 0; }
         } else {
+            const size = Math.max(0.02, palmSize(lm));
+            // The hand's speed (palm sizes a second) from the points' VELOCITIES, each steadied over ~¼ s as a vector:
+            // the camera's jitter goes every way and averages out there, a real move doesn't. The whole hand's travel
+            // (the mean of 21 points: √21 times less jitter) plus its turn and the fingers (each point against the mean,
+            // less the jitter's own share, read off the raw points' second difference p − 2·p₋₁ + p₋₂: white noise of σ
+            // gives σ√6 there, a steady move ~0). Before, the speed was the size of each picture's step against the
+            // filtered points, and its floor — that speed coming down at rest: a slow careful aim, held a second or
+            // two, became «the floor» and was smoothed away like jitter (tools/handbench/pointbench.mjs: a 12°/s aim
+            // 160 ms behind).
+            const R1 = this.raw1, R2 = this.raw2, V = this.vel, av = HandFilter.alpha(this.dCutoff, dt);
+            // (the depth too: a palm turning towards the camera moves mostly in it)
+            let mx = 0, my = 0, mz = 0, rel = 0;
+            if (this.rawN >= 1) {
+                for (let i = 0; i < 21; i++) {
+                    V[i].x += av * ((lm[i].x - R1[i].x) / dt - V[i].x);
+                    V[i].y += av * ((lm[i].y - R1[i].y) / dt - V[i].y);
+                    V[i].z += av * (((lm[i].z || 0) - R1[i].z) / dt - V[i].z);
+                    mx += V[i].x; my += V[i].y; mz += V[i].z;
+                }
+                mx /= 21; my /= 21; mz /= 21;
+                for (let i = 0; i < 21; i++) { const ex = V[i].x - mx, ey = V[i].y - my, ez = V[i].z - mz; rel += ex * ex + ey * ey + ez * ez; }
+                rel = Math.sqrt(rel / 21) / size;
+            }
+            if (this.rawN >= 2) {
+                let jerk = 0;
+                for (let i = 0; i < 21; i++) {
+                    const ex = lm[i].x - 2 * R1[i].x + R2[i].x, ey = lm[i].y - 2 * R1[i].y + R2[i].y, ez = (lm[i].z || 0) - 2 * R1[i].z + R2[i].z;
+                    jerk += ex * ex + ey * ey + ez * ez;
+                }
+                // (the jitter's share in the steadied velocity: σ√2 a step, × √(a / (2 − a)) of the steadying)
+                const noise = Math.sqrt(jerk / 21 / 3) / size / dt * Math.sqrt(av / (2 - av));
+                // (it drops at once, rises over `floorT` s: a real quick change of direction is short)
+                if (this.floor == null) this.floor = noise;
+                this.floor += (noise < this.floor ? 0.3 : Math.min(1, dt / this.floorT)) * (noise - this.floor);
+            }
+            // (less what a still hand still shows: `dead` palm sizes a second — the steadied jitter of a far player's hand)
+            // (the mean's own jitter is √21 times smaller than a point's: a noisy 640×480 camera raises it — taken off too)
+            const fl = this.floor ?? rel;
+            const moved = Math.max(0, Math.max(0, Math.hypot(mx, my, mz) / size - this.floorK * fl / 4.6) + Math.max(0, rel - this.floorK * fl) - this.dead);
+            // and the old way's speed (each picture's step against the filtered points, less its floor): quick for the palm's
+            // turns and the fingers' own moves; the floor there swallows a slow steady move — the new one above does not
             let sum = 0;
             for (let i = 0; i < 21; i++) {
                 const dx = lm[i].x - P[i].x, dy = lm[i].y - P[i].y, dz = (lm[i].z || 0) - P[i].z;
                 sum += dx * dx + dy * dy + dz * dz;
             }
-            const size = Math.max(0.02, palmSize(lm));
-            const seen = Math.sqrt(sum / 21) / size / dt; // (palm sizes a second)
-            // the camera's own jitter: the floor the seen speed comes down to while the hand
-            // is still (it drops at once, rises over `floorT` s) — only a move above it counts
-            if (this.floor == null) this.floor = seen;
-            this.floor += (seen < this.floor ? 0.3 : Math.min(1, dt / this.floorT)) * (seen - this.floor);
-            const raw = Math.max(0, seen - this.floorK * this.floor);
-            this.speed += HandFilter.alpha(this.dCutoff, dt) * (raw - this.speed);
+            const seen = Math.sqrt(sum / 21) / size / dt;
+            if (this.floor0 == null) this.floor0 = seen;
+            this.floor0 += (seen < this.floor0 ? 0.3 : Math.min(1, dt / this.floorT)) * (seen - this.floor0);
+            this.speed0 += HandFilter.alpha(this.dCutoff, dt) * (Math.max(0, seen - this.floorK0 * this.floor0) - this.speed0);
+            this.speed = Math.max(moved, this.speed0);
             const a = HandFilter.alpha(this.minCutoff + this.beta * this.speed, dt);
             // the depth is the network's guess, several times noisier than the picture's x, y:
             // steadied harder (zK of the cut-off) — a real move opens it as well
@@ -262,6 +309,9 @@ export class HandFilter {
             }
         }
         this.lastTime = tSec;
+        const t2 = this.raw2; this.raw2 = this.raw1; this.raw1 = t2; // (the raw points of the last two pictures, for the jitter)
+        for (let i = 0; i < 21; i++) { t2[i].x = lm[i].x; t2[i].y = lm[i].y; t2[i].z = lm[i].z || 0; }
+        this.rawN = Math.min(2, this.rawN + 1);
         for (let i = 0; i < 21; i++) { out[i].x = P[i].x; out[i].y = P[i].y; out[i].z = P[i].z; }
         return out;
     }

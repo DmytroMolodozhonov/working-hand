@@ -15,6 +15,7 @@ python tools/handbench/bench.py --quick    # маленькая часть, па
 python tools/handbench/tune.py             # подбор чисел V5 только на части «dev»
 python tools/handbench/load.py             # нагрузка всей программы камеры: V3 против V5
 node tools/handbench/flight.mjs v3,v5      # полёт над новым миром: FPS игры и задержка кисти
+node tools/handbench/pointbench.mjs --check   # куда указывает палочка V5: смещение, дрожь, задержка камера → экран, перелёт (синтетика, без камеры)
 python tools/handbench/far.py ЗАПИСЬ.mp4 --hands [--backlight]   # дальний игрок: человек в 1,5×/2×/3× дальше, было → стало (приближение, свет)
 ```
 

@@ -333,6 +333,9 @@ def safe_map_name(name):
 
 class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, **FORCED_TYPES}
+    # (TCP_NODELAY: the camera's and the voice's streams are many small messages one after another; with Nagle's algorithm
+    # each waited for the browser's (delayed) acknowledgement of the one before — up to 40 ms on Linux, 200 on Windows)
+    disable_nagle_algorithm = True
 
     def log_message(self, fmt, *args):
         # Quiet static-file spam; keep API and errors visible.

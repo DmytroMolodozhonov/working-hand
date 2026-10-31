@@ -328,8 +328,10 @@ class GpuNet:
         import subprocess
         import struct
         self.struct = struct
-        # (CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS: the game and the voice go first)
-        flags = 0x08000000 | 0x00004000 if sys.platform.startswith("win") else 0
+        # (CREATE_NO_WINDOW; the probe at BELOW_NORMAL. The working one at NORMAL — it is on the path of EVERY camera
+        # picture: at BELOW_NORMAL it was level with the villagers' network (llm_native: BELOW_NORMAL) and under the
+        # voices, and every picture's hands waited for them — «камера шлёт раз в 63–100 мс при 41–55 FPS игры»)
+        flags = (0x08000000 | (0x00004000 if probe else 0)) if sys.platform.startswith("win") else 0
         model = "--probe" if probe else gpu_net_path()
         self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "hand_v5_gpu.py"), model, ort_dir or ""],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)

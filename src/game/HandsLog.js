@@ -24,7 +24,37 @@ export const HANDS = {
     STUCK_EPS: 0.0004, // (the wrist moved less than this in the picture)
     REMOTE_MS: 4000, // the other players' line at most this often
     RAISED_UP: -0.3, // sin of the arm's elevation: above this the arm is raised
+    CAM_MS: 5000, // the camera's line («камера: …») at most this often, only on a change
 };
+
+/**
+ * The camera's line: poses a second, the delay from the picture to the game and where it went, how far ahead the hands are
+ * shown, and — if poses come rarely or late — why (the author's log: «камера шлёт раз в 63–100 мс при 41–55 FPS игры»).
+ * st: {poses, camFps, age, stages: [waited, networks, rest] (ms), gameFps, lead (ms), engine} → {text, bad, key} | null.
+ */
+export function cameraLine(st) {
+    if (!st || !(st.poses > 0)) return null;
+    const [wait = 0, net = 0, rest = 0] = st.stages || [];
+    const age = st.age ?? null;
+    const deliver = age != null && st.stages ? Math.max(0, age - wait - net - rest) : null;
+    const why = [];
+    if (st.camFps && st.camFps < 24) why.push(`камера сама даёт только ${Math.round(st.camFps)} кадр./с (мало света — камера держит кадр дольше; или так настроена)`);
+    if (net > 45) why.push(`нейросети считают кадр ${Math.round(net)} мс (видеокарту/процессор делят нейросеть жителей, голос, озвучка)`);
+    if (wait > 30) why.push(`кадр ждал ${Math.round(wait)} мс, пока нейросети закончат прошлый`);
+    if (st.gameFps && st.gameFps < 40 && st.camFps && st.poses < st.camFps * 0.8) why.push(`игра медленная (${st.gameFps} FPS) — камера подстраивается под неё`);
+    if (deliver != null && deliver > 40) why.push(`доставка в игру ${Math.round(deliver)} мс`);
+    const gap = Math.round(1000 / st.poses);
+    const text = `камера: ${st.poses} поз/с (раз в ${gap} мс${st.camFps ? `, камера даёт ${Math.round(st.camFps)}/с` : ''}), `
+        + `от снимка до игры ${age != null ? Math.round(age) + ' мс' : '—'}`
+        + (st.stages ? ` (ждал ${Math.round(wait)}, нейросети ${Math.round(net)}, прочее ${Math.round(rest)}${deliver != null ? `, доставка ${Math.round(deliver)}` : ''})` : '')
+        + (st.lead != null ? `, руки показаны вперёд на ${Math.round(st.lead)} мс` : '')
+        + (st.engine ? `, кисти ${st.engine}` : '')
+        + (why.length ? `; почему редко/поздно: ${why.join('; ')}` : '');
+    const bad = why.length > 0 || st.poses < 20;
+    // (a new line only when something worth saying changed: the rate by 5, the delay by 25 ms, the reasons)
+    const key = `${Math.round(st.poses / 5)}|${age != null ? Math.round(age / 25) : '-'}|${why.length}`;
+    return { text, bad, key };
+}
 
 const SIDE = { right: 'правая', left: 'левая' };
 const f1 = (x) => (Number.isFinite(x) ? (Math.round(x * 10) / 10).toString() : '—');
@@ -150,6 +180,18 @@ export class HandsLog {
         for (const side of ['right', 'left']) this._side(side, ch, g, now);
         if (this._lineAcc >= HANDS.LINE_MS) this._lineAcc = 0;
         this._remotes(now);
+        this._camera(now);
+    }
+
+    _camera(now) {
+        if (now - (this._camAt || 0) < HANDS.CAM_MS) return;
+        this._camAt = now;
+        const g = this.game, ps = g.poseService?.stats, sm = g.poseSmoother;
+        if (!ps || !this._poseTimes.length || now - this._lastPose > 2000) return;
+        const line = cameraLine({ poses: this._poseTimes.length, camFps: ps.camFps, age: ps.handAge, stages: ps.stages, gameFps: g.fpsNow, lead: sm ? sm.lead * 1000 : null, engine: ps.handsEngine === 'v5' ? `V5${ps.v5Engine === 'gpu' ? ' (видеокарта)' : ps.v5Engine === 'cpu' ? ' (процессор)' : ''}` : ps.handsEngine });
+        if (!line || line.key === this._camKey) return;
+        this._camKey = line.key;
+        allLog('Руки', line.text, line.bad ? 'warn' : 'info');
     }
 
     _event(side, now, text) {

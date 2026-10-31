@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
 import { HandRecorder } from './game/HandRecorder.js';
 import { PoseService } from './input/PoseService.js';
+import { setHandSmoothness } from './input/HandSmooth.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
 import { setupQuickSettings } from './ui/QuickSettings.js';
@@ -309,6 +310,7 @@ const sensVal = $('sens-val');
 function updateSmoothness(val) {
     const v = parseInt(val, 10);
     settings.smoothness = Math.max(0.05, 1.0 - v / 100);
+    setHandSmoothness(v, poseService); // (the hands and the wand too: HandSmooth.js)
     smoothVal.textContent = v + '%';
     if (game) game.settings.smoothness = settings.smoothness;
 }
