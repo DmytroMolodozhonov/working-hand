@@ -127,7 +127,7 @@ export class HellGate {
         } else {
             const f = this.from || { x: 0, y: 0, z: 0 };
             // (beside the pentagram, not on it: the circle there may still be open — 5 m off, on dry land; HeroApply.safeNear looks round for it)
-            to = { x: f.x + 5.5, z: f.z, yaw: 0 };
+            to = { x: f.x + 5.5, z: f.z, yaw: 0, layer: Math.round(f.y + 0.5), up: 10, down: 10 }; // (firm ground by the pentagram's own layer: a shore by the water counts too)
         }
         this.inside = null;
         this.trans = { t: 0, dir: down ? 'down' : 'up', to, done: false, from: { x: me.x, y: me.y, z: me.z }, m: { x: m.x, y: m.y, z: m.z } };
@@ -154,6 +154,14 @@ export class HellGate {
         }
         // (hold the dark until the hero stands on the land of the other side, then let it go)
         if (g.heroApply?.pending) { this._fade(1); if (T.t > 70) { this.trans = null; this._fade(0); } return; }
+        if (!T.checked) {
+            T.checked = true;
+            const me = g.character.group.position, there = inHell(me.x, me.z);
+            if ((T.dir === 'down') !== there) { // (the land there gave no place to stand — HeroApply put me back: never stuck between, the start of the world instead)
+                if (T.dir === 'up') { const ha = g.heroApply; ha.pending = { id: 'earth', age: 0, far: true, hold: null, origin: null, cells: null, t: { x: 3, z: 3, yaw: 0 } }; T.done = true; T.t = INFERNUM.FADE_S / 2; T.checked = false; return; }
+                this.lock = null;
+            }
+        }
         T.after = (T.after || 0) + dt;
         this._fade(Math.max(0, 1 - T.after / half));
         if (T.after === dt) this._arrived(T);
@@ -164,6 +172,7 @@ export class HellGate {
         const g = this.game, fx = g.fx, me = g.character.group.position;
         if (fx) for (let i = 0; i < 80; i++) { const a = (i / 80) * Math.PI * 2; fx.spark(_v.set(me.x + Math.cos(a) * 1.5, me.y - 1.8, me.z + Math.sin(a) * 1.5), BEAM[i % 4], 0.22, _d.set(Math.cos(a) * 2, 2 + Math.random() * 4, Math.sin(a) * 2), 1.4); }
         fx?.lightFlash?.(_v.set(me.x, me.y, me.z), 0xff4010, 5, 0.6, 30);
+        if (T.dir === 'down' && !this.inHell) { g.hud?.setVoice?.(HELL_TEXT.noLand, true); return; } // (the land of hell was not ready: still here, nothing lost)
         if (T.dir === 'down') g.hud?.setVoice?.(this.creative ? HELL_TEXT.arrivedCreative : HELL_TEXT.arrived, true);
         else { g.hud?.setVoice?.(HELL_TEXT.back, true); this.lock = null; }
     }
