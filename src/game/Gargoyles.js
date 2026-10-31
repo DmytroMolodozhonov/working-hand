@@ -692,7 +692,7 @@ export class Gargoyles {
         if (this.auth) {
             this._send({ op: 'die', id: o.id, p: [r1(p.x), r1(p.y), r1(p.z)], s: shatter ? 1 : 0 });
             creditKill(g, by, { kind: KILL_KIND });
-            if (headDrops(how)) g.items?.spawnLoose?.({ kind: HEAD.KIND, uid: newUid() }, p.clone(), { vel: new THREE.Vector3((Math.random() - 0.5) * 3, 2.5, (Math.random() - 0.5) * 3) }); // (25 %: the head falls whole — the way back from hell, HellRules.HEAD)
+            if (!o.patrol && headDrops(how)) g.items?.spawnLoose?.({ kind: HEAD.KIND, uid: newUid() }, p.clone(), { vel: new THREE.Vector3((Math.random() - 0.5) * 3, 2.5, (Math.random() - 0.5) * 3) }); // (25 %: the head falls whole — the way back from hell, HellRules.HEAD; a hell patrol's own drop is HellPatrol.onDie)
             if (by != null) g.castleLife?.rel?.foeSlain(p, by); // (the people saw the stone monster fall: grateful, and the unrest of the place eases — Rebellion.js)
         }
         this._sound(o, shatter ? 'shatter' : 'crumble', 1);

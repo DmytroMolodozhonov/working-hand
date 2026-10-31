@@ -15,7 +15,7 @@ description: Чек-лист добавления новой пентаграм�
 7. **Справочник:** «Магия → Пентаграммы» — карточка с рисунком: «Чтобы создать, направьте палочку на землю и скажите: Pentagranium <Name>…» (польза → как пользоваться, на «вы»).
 8. **Тесты:** `pentagram-effects.test.js` (каждое имя даёт свой эффект), `pentagram-use`, свои. «А если»: нет маны, нет земли, не выучил, сеть, смерть, выход из круга.
 
-- Если обряду нужны вещи/тела на круге — `PentagramOfferings.js` (`OFFERINGS`, `humanoidBody`) + `Offerings.js`; если дар навсегда — образец `Firmitas.js`/`SecondSight.js` (флаг героя в сохранение, `captureLegacy/wipeHero/absorbLegacy`).
+- Если обряду нужны вещи/тела на круге — `PentagramOfferings.js` (`OFFERINGS`, `humanoidBody`; любое тело — `any: true` → `HellRules.anyBody`, туши зверей тоже идут) + `Offerings.js` (мана при слове, если в `OFFERINGS` `mana: 0`); переход куда-то — образец `HellGate.js` (`heroApply.pending` ждёт землю); если дар навсегда — образец `Firmitas.js`/`SecondSight.js` (флаг героя в сохранение, `captureLegacy/wipeHero/absorbLegacy`).
 
 ## Если чего-то не хватило
 Нашёл новое место в коде или ошибку, которую пришлось ловить, — допиши строкой в нужный пункт и закоммить вместе с работой. Правила — сначала в CLAUDE.md, потом сюда; не дублируй его, устаревшее удаляй.
