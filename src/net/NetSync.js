@@ -149,7 +149,8 @@ export class NetSync {
         this.game.water?.applyRemote(id, null);
         this.game.levitation?.onLeave(id); // (what they held falls; if they held me, I fall)
         this.game.levMax?.onLeave(id);
-        this.game.handHold?.onLeave(id); // (hands they held or that held mine: let go)
+        this.game.handHold?.onLeave(id);
+        this.game.items?.onHandoverLeave?.(id); // (hands they held or that held mine: let go)
         this.game.boards?.onLeave(id); // (the surfboard they held or rode stays where it was)
         this.game.groundVortex?.onLeave?.(id); // (the blocks of their «Ground Vortex» go back into the ground: the host lays them)
         this.game.dragons?.onLeave?.(id); // (a dragon they tamed is free again)
@@ -941,6 +942,8 @@ export class NetSync {
         this.net.send({ t: 'igive', to, item, side }, true);
     }
 
+    itemHandover(to, m) { this.net.send({ t: 'hov', by: this.me, to, ...m }, true); }
+
     itemHold(side, item) {
         this.net.send({ t: 'ihold', by: this.me, side, item }, true);
     }
@@ -1207,6 +1210,7 @@ export class NetSync {
             }
             case 'ithrow': if (this.net.isHost && m.item && typeof m.item === 'object') { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v), quat: Array.isArray(m.q) ? new THREE.Quaternion().fromArray(m.q).normalize() : null, spin: Array.isArray(m.w) ? vec(m.w) : null }); if (L) L.thrower = m.from; } break;
             case 'igive': if (m.to === this.me && m.item && typeof m.item === 'object') { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right') && !g.inventory.storeItem(m.item)) g.items._noRoom?.(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break; // (hands and slots full: at my feet — it was lost)
+            case 'hov': if (m.to === this.me && m.by !== this.me) g.items?.onHandover(m.by, m); break;
             case 'ihold': if (m.by !== this.me) g.items?.setRemoteHeld(m.by, m.side, m.item || null); break;
             case 'wspawn': {
                 if (this.net.isHost || !arr(m.s, 11) || !arr(m.hover, 3) || g.weapons.byId.has(m.s[0])) break;

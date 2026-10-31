@@ -45,6 +45,8 @@ import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
+import { HandoverPeer, HANDOVER, WHY, giveWhy, takeWhy, TouchTimer } from './Handover.js';
+import { allLog } from '../core/AllLog.js';
 import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, dropWhy, handLog } from './HandRelease.js';
 import { OffGate } from './OffHandRelease.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
@@ -852,6 +854,12 @@ export class ItemSystem {
             if (g.monster?.hidesWand && h.item.kind === 'wand') { h.model.visible = false; continue; }
             const grip = ch.getGripObject(side);
             grip.getWorldPosition(h.model.position);
+            if (h.fly) { // (a handed-over thing floats from the giver's hand into mine — not a jump)
+                h.fly.t += dt;
+                const k = Math.min(1, h.fly.t / HANDOVER.FLY_T), e = k * k * (3 - 2 * k);
+                h.model.position.lerpVectors(h.fly.from, h.model.position, e);
+                if (k >= 1) h.fly = null;
+            }
             const kind = h.item.kind;
             if (GRIPPED[kind] && g.weapons?.palmFrame && !h.aim) {
                 // held in the fist like the sword: the handle across the palm, turning with the wrist
@@ -1374,33 +1382,168 @@ export class ItemSystem {
         // (no scroll of health or of mana cells any more — retireScroll: an old one is an apple)
     }
 
-    // ------------------------------------------------------- hand to hand
-    _give(dt, ch) {
+    // ------------------------------------------------------- hand to hand (Handover.js)
+    // The author: only the SECONDARY hand gives, the taker's secondary hand must be empty, the hands touch 2.5 s.
+    _hlog(line) { handLog('передача: ' + line); allLog('Мультиплеер', 'передача: ' + line); }
+
+    _handoverPeer() {
+        if (this._hov) return this._hov;
         const g = this.game;
-        if (!g.sync || !g.remotes.size) return;
-        for (const side of ['right', 'left']) {
-            const h = this.held[side];
-            if (!h) continue;
-            let near = null;
-            for (const [id, r] of g.remotes) {
-                if (r.dead) continue;
-                for (const rs of ['right', 'left']) {
-                    if (this.remoteHeld.get(id)?.[rs]) continue; // their hand is busy
-                    const rh = r.character.getHandWorldPosition(rs, _v2);
-                    // (the wand: only into a hand that closes on it — hands near in a duel never hand it over)
-                    if (h.item.kind === 'wand' && !((r.character.getGripCurl?.(rs) ?? 0) > 0.55)) continue;
-                    if (rh.distanceTo(h.model.position) < 0.45) near = { id, rs };
+        this._timers = new Map(); this._hovHint = new Map(); this._hovRingT = null;
+        this._hov = new HandoverPeer({
+            now: () => performance.now() / 1000,
+            send: (to, m) => g.sync?.itemHandover?.(to, m),
+            held: () => this.held[g.off]?.item || null,
+            release: () => this.releaseHand(g.off),
+            alive: (id) => g.remotes.has(id),
+            canTake: (rs) => takeWhy({ rs, off: g.off, handFree: !this.held[g.off] && g.handHold?._handFree?.(g.off) !== false && g.books?.readingSide !== g.off, canTake: !this._handoverBlocked() }),
+            take: (item) => {
+                const side = g.off;
+                if (this.held[side] || g.handHold?._handFree?.(side) === false) {
+                    if (!g.inventory.storeItem(item)) this._noRoom?.(item);
+                    return false;
                 }
+                if (!this.takeIntoHand(item, side)) { if (!g.inventory.storeItem(item)) this._noRoom?.(item); return false; }
+                const h = this.held[side];
+                const from = this._flyFrom;
+                if (h && from) h.fly = { from: from.clone(), t: 0 };
+                return true;
+            },
+        });
+        return this._hov;
+    }
+
+    /** Dead, stunned, asleep, in a duel, in someone else's body: no giving or taking. */
+    _handoverBlocked() {
+        const g = this.game;
+        return !!(g.isDeadLocal || g.combat?.dead || g.combat?.immobile || g.beds?.lying || g.imperius?.active || g._inDuel?.());
+    }
+
+    _ring() {
+        if (this._ringGrp) return this._ringGrp;
+        const grp = new THREE.Group();
+        const geo = this._ringGeo || (this._ringGeo = new THREE.SphereGeometry(0.035, 6, 4));
+        this._ringMat = this._ringMat || new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+        this._ringDots = [];
+        for (let i = 0; i < 16; i++) {
+            const m = new THREE.Mesh(geo, this._ringMat);
+            const a = (i / 16) * Math.PI * 2;
+            m.userData.base = new THREE.Vector3(Math.sin(a) * 0.42, Math.cos(a) * 0.42, 0);
+            m.position.copy(m.userData.base);
+            grp.add(m); this._ringDots.push(m);
+        }
+        grp.visible = false;
+        this.game.scene.add(grp);
+        return (this._ringGrp = grp);
+    }
+
+    /** The soft ring where the hands touch: lit dots clockwise, the whole ring lit when it is done. */
+    _showRing(at, progress) {
+        const grp = this._ring();
+        if (!at) { grp.visible = false; return; }
+        grp.visible = true;
+        grp.position.copy(at);
+        grp.quaternion.copy(this.game.camera.quaternion); // (it faces the eye)
+        const n = Math.round(progress * 16);
+        for (let i = 0; i < 16; i++) { const d = this._ringDots[i]; d.visible = i < n || i === n; d.scale.setScalar(i < n ? 1 : 0.55); }
+    }
+
+    onHandover(from, m) {
+        const g = this.game, P = this._handoverPeer();
+        if (m.k === 'p') { // (the other one's hands are touching mine: the same ring on my screen)
+            this._hovRingT = m.on ? { id: from, t: 0, rs: m.rs === 'left' ? 'left' : 'right' } : null;
+            return;
+        }
+        if (m.k === 'n') { // (they hold a thing out to my busy hand)
+            const r = g.remotes.get(from);
+            if (r && !this._handoverBlocked() && this.held[g.off] && g.handHold) {
+                const d = g.handHold.palm(g.character, g.off, _v).distanceTo(g.handHold.palm(r.character, m.rs === 'left' ? 'left' : 'right', _v2));
+                if (d < HANDOVER.NEAR * 2) { g.hud.setVoice?.('✋ Освободите вторую руку', true); }
             }
-            if (near) this._giveT += dt; else this._giveT = 0;
-            if (this._giveT > 0.6 && near) {
-                this._giveT = 0;
-                const item = this.releaseHand(side);
-                g.sync.itemGive?.(near.id, item, near.rs);
-                g.hud.setVoice?.(`🤝 Передано: ${ITEM_INFO[item.kind]?.name || 'предмет'}`, true);
-                return;
+            return;
+        }
+        this._flyFrom = null;
+        if (m.k === 'c') { // (the thing floats from the giver's nearer hand into mine)
+            const r = g.remotes.get(from);
+            if (r) {
+                const mine = g.handHold.palm(g.character, g.off, _b);
+                const l = g.handHold.palm(r.character, 'left', _a).clone(), rr = g.handHold.palm(r.character, 'right', _c);
+                this._flyFrom = l.distanceTo(mine) <= rr.distanceTo(mine) ? l : rr.clone();
             }
         }
+        const ev = P.onMsg(from, m);
+        if (!ev) return;
+        const who = g.playerName?.(from) || from;
+        if (ev.event === 'refuse') this._hlog(`кому ${g.localId} от ${who}: отказ — ${WHY[ev.why] || ev.why}`);
+        else if (ev.event === 'refused') this._hlog(`от ${g.localId} кому ${who}: отказ — ${WHY[ev.why] || ev.why}`);
+        else if (ev.event === 'given') { this._hlog(`от ${g.localId} кому ${who}: передано «${ITEM_INFO[ev.item?.kind]?.name || ev.item?.kind}»`); g.hud.setVoice?.(`🤝 Передано: ${ITEM_INFO[ev.item?.kind]?.name || 'предмет'}`, true); g.sound?.playCoins?.(); this._showRing(null); }
+        else if (ev.event === 'taken') { this._hlog(`кому ${g.localId} от ${who}: принято «${ITEM_INFO[ev.item?.kind]?.name || ev.item?.kind}» (${ev.into === 'hand' ? 'в руку' : 'в ячейку/к ногам'})`); g.hud.setVoice?.('🤝 Вам передали предмет', true); this._hovRingT = null; }
+        else if (ev.event === 'cancel') this._hlog(`с ${who}: отменено — ${WHY[ev.why] || ''}`);
+    }
+
+    onHandoverLeave(id) { this._hov?.onLeave(id); if (this._hovRingT?.id === id) this._hovRingT = null; }
+
+    _give(dt, ch) {
+        const g = this.game;
+        if (!this._hov && (!g.sync || !g.remotes.size)) return;
+        const P = this._handoverPeer();
+        const ev = P.tick();
+        if (ev?.event === 'cancel') this._hlog(`от ${g.localId}: отменено — ${WHY[ev.why] || ''} (предмет остался в руке)`);
+        if (!g.sync || !g.remotes.size) { P.abort(); this._timers.clear(); this._showRing(null); return; }
+        if (this._handoverBlocked()) { P.abort(); this._timers.clear(); this._showRing(null); return; }
+        const off = g.off, dom = g.dom;
+        const hp = g.handHold;
+        // the ring of the one who is touched (my screen: the same ring)
+        if (this._hovRingT) {
+            const R = this._hovRingT, r = g.remotes.get(R.id);
+            R.t += dt;
+            if (!r || R.t > HANDOVER.HOLD + 1.5) this._hovRingT = null;
+            else if (!this._ringUse) this._showRing(_v.addVectors(hp.palm(g.character, off, _a), hp.palm(r.character, off === 'left' ? 'right' : 'left', _b)).multiplyScalar(0.5), Math.min(1, R.t / HANDOVER.HOLD));
+        }
+        this._ringUse = false;
+        const h = this.held[off];
+        const item = h?.item;
+        const ctx = { dead: false, spell: !!g.focus?.held?.(), twoHanded: !!g.combat?.shield };
+        // the main hand is no giving hand: a hint to the log, once in a while
+        const hd = this.held[dom];
+        let shown = false;
+        for (const [id, r] of g.remotes) {
+            if (r.dead) continue;
+            for (const rs of ['right', 'left']) {
+                const key = id + '|' + rs;
+                let T = this._timers.get(key);
+                if (!T) this._timers.set(key, T = new TouchTimer());
+                let dist = null;
+                try { dist = hp.palm(g.character, off, _a).distanceTo(hp.palm(r.character, rs, _b)); } catch (_) { dist = null; }
+                if (hd && !h && dist != null && dist < HANDOVER.NEAR) {
+                    const t = this._hovHint.get('p' + key) || 0;
+                    if (performance.now() - t > 8000) { this._hovHint.set('p' + key, performance.now()); this._hlog(`от ${g.localId} кому ${g.playerName?.(id) || id}: ${WHY.primary} — переложите во вторую руку`); }
+                }
+                const why = giveWhy(item, off, off, ctx);
+                if (why || P.ask || P.reserve) { if (T.active) { T.reset(); g.sync?.itemHandover?.(id, { k: 'p', on: 0 }); } continue; }
+                const busyHand = !!this.remoteHeld.get(id)?.[rs];
+                const wasActive = T.active;
+                const done = T.update(dt, dist);
+                if (dist != null && dist < HANDOVER.NEAR && !wasActive && T.active) g.sync?.itemHandover?.(id, { k: 'p', on: 1, rs });
+                if (wasActive && !T.active) { g.sync?.itemHandover?.(id, { k: 'p', on: 0 }); this._hlog(`от ${g.localId} кому ${g.playerName?.(id) || id}: руки разошлись, держалось меньше ${HANDOVER.HOLD} с — предмет у отдающего`); }
+                if (T.active && !shown) {
+                    shown = true; this._ringUse = true;
+                    this._showRing(_v.addVectors(hp.palm(g.character, off, _a), hp.palm(r.character, rs, _b)).multiplyScalar(0.5), T.progress);
+                    if (busyHand && T.t > 0.4 && performance.now() - (this._hovHint.get(key) || 0) > HANDOVER.HINT_T * 1000) {
+                        this._hovHint.set(key, performance.now());
+                        g.sync?.itemHandover?.(id, { k: 'n', rs });
+                        g.hud.setVoice?.('✋ У него занята рука', true);
+                    }
+                }
+                if (done) {
+                    T.reset();
+                    if (busyHand) { this._hlog(`от ${g.localId} кому ${g.playerName?.(id) || id}: отказ — ${WHY.busy}`); g.sync?.itemHandover?.(id, { k: 'p', on: 0 }); g.sync?.itemHandover?.(id, { k: 'n', rs }); continue; }
+                    if (P.start(id, rs, g.localId)) this._hlog(`от ${g.localId} кому ${g.playerName?.(id) || id}: рука ${off === 'left' ? 'левая' : 'правая'} → ${rs === 'left' ? 'левая' : 'правая'}, расстояние ${dist?.toFixed(2)}, держалось ${HANDOVER.HOLD} с — спрашиваю`);
+                    g.sync?.itemHandover?.(id, { k: 'p', on: 0 });
+                }
+            }
+        }
+        if (!shown && !this._hovRingT) this._showRing(null);
     }
 
     // ------------------------------------------------------------ network
