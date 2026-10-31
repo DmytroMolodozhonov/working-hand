@@ -27,6 +27,7 @@ export const GUARD_REACT = {
     // (the castle's own fight with these — never a guard's «уходи»)
     zombie: null, dragon: null, spider: null, tree: null, gargoyle: null, // (a gargoyle: the knights fight it with the sword — Gargoyles.knightStep)
     skeleton: null, snowman: null, iceMonster: null, iceQueen: null, guardBeast: null,
+    taron: null, custom: null, spencer: null, // (a Taron lives only in the underworld, no castle; a creature of one's own and the invisible bird are no guard's business)
     king: null, towerHead: null, blackbeard: null, pirateSkeleton: null, player: null,
 };
 
