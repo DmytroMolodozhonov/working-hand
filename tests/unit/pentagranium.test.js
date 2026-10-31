@@ -176,3 +176,17 @@ test('a pentagram from another player is shown (mark message)', () => {
     p.onNet('o', { k: 'mark', id: 'x2', by: 'o', pent: 'nope', x: 10, y: 0.5, z: 10, r: 3.6 });
     assert.equal(p.marks.size, 1, 'an unknown figure is ignored');
 });
+
+test('«Пентаграниум» и ошибка во втором слове: ничего не создаётся, Vita не подставляется; ждём второе слово', () => {
+    const { g, p } = stub({ fatigue: 100 });
+    p.learnFigure('life'); p.learnFigure('teleport');
+    for (const t of ['пентаграниум', 'пентаграниум ви', 'пентаграниум мита', 'пентаграниум бита', 'пентаграниум витамины', 'пентаграниум хлеб'])
+        for (const fin of [false, true]) assert.equal(p.cast(fin, t, AIM0()), null, `${t} final=${fin}`);
+    assert.equal(p.marks.size, 0);
+    assert.equal(g.combat.fatigue, 100, 'ничего не заплачено');
+    // пауза посреди фразы: сперва одно слово (ждём), потом имя целиком — делается ровно то, что сказано, а не Vita
+    assert.equal(p.cast(false, 'пентаграниум', AIM0()), null);
+    assert.equal(p.cast(false, 'пентаграниум телепортис', AIM0()), null, 'имя должно продержаться PAUSE_MS или фраза кончиться');
+    assert.equal(p.cast(true, 'пентаграниум телепортис', AIM0()), 'Pentagranium');
+    assert.equal([...p.marks.values()][0].pent, 'teleport');
+});

@@ -893,6 +893,7 @@ voice.onEcho = (words, meta) => {
 
 // A finished phrase the native voice heard that gave nothing: the journal tells how near a spell it was
 // (a spell lost in the noise shows here: «не хватило …», «шумно»)
+voice.onPentWeak = () => { if (game?.active) game.hud?.setVoice?.('🩸 Скажите полное имя пентаграммы', true); };
 voice.onMiss = (written, meta) => {
     if (!game?.active || !written) return;
     const near = meta?.near && Number.isFinite(meta.nearFit) && meta.nearFit > -1.5

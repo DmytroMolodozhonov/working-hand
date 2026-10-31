@@ -18,7 +18,7 @@
  */
 
 import { matchSpell } from '../fx/SpellManager.js';
-import { pentagramSaid } from '../game/PentagramWords.js';
+import { pentagramSaid, PENT_FIRST } from '../game/PentagramWords.js';
 import { NIHILIS_SAID } from '../game/NihilisWords.js';
 
 export const LETTERS = ' абвгдежзийклмнопрстуфхцчшщъыьэюя';
@@ -402,6 +402,23 @@ export function lettersOutside(P, a, b, pause = Infinity) {
  *   text: the spell's own words when one was heard well enough, else the words as written;
  *   echo: that spell is in the speakers' sound too — a friend's voice (or the game's), not mine.
  */
+/**
+ * «Pentagranium <Name>»: the phrase is long and its first word is heard well, so the whole phrase's cost per letter hides a second
+ * word that was not said (yet) or said wrong («пентаграниум мита» fitted «… вита»; the lone «пентаграниум» fitted «… вита» too).
+ * So the NAME alone must fit the sound, on its own: each letter (NAME_FIT) and all of them together (NAME_TOTAL), and sit at the
+ * phrase's end (right after the first word). Nothing is guessed from a near name: it fits, or the pentagram is not made.
+ */
+export const NAME_FIT = -1.2;
+export const NAME_TOTAL = -5;
+export function pentNameHeard(P, best, open = {}) {
+    const name = best.phrase.split(' ').pop();
+    const toks = encode(name);
+    if (!toks.length) return false;
+    const r = spot(P, toks, open);
+    if (r.pen <= NEG / 2) return false;
+    return r.pen / toks.length >= NAME_FIT && r.pen >= NAME_TOTAL && r.a >= best.a && Math.abs(r.b - best.b) <= NEAR && lettersOutside(P, -1, r.b, PAUSE) <= 1; // (nothing goes on after the name: «вита» is no part of «витамин»)
+}
+
 /** A spell's span without the quiet at its ends (its first and last sound). */
 export function trimQuiet(P, sp) {
     let a = Math.max(0, sp.a), b = Math.min(P.T - 1, sp.b);
@@ -425,7 +442,9 @@ export function hear(lp, T, o = {}) {
     // Инферно» then counted «так» as letters round it, a sentence. Its own letters start at its first sound.)
     if (best) trimQuiet(P, best);
     const need = best ? threshold(best.len, far, snr) : 0;
-    if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best };
+    if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best, pentWeak: PENT_FIRST.some((w) => written.includes(w)) }; // (pentWeak: «Пентаграниум» was said, but no pentagram with it — a hint)
+    // («Pentagranium»: the name itself must be heard — not the first word alone, not a near-miss of the name)
+    if (best.spell === 'Pentagranium' && !pentNameHeard(P, best, open)) return { text: written, written, spell: null, sure: false, echo: false, far, best, pentWeak: true };
     // (a phrase still being said: the spell must be over — nothing heard after it. «Бомбардо…» may yet
     // be «Бомбардо Максима», «лет…» «Let the Hellfire come», «вин…» «Вингардиум»: the next look tells)
     // («Да пусть создастся …» goes on with its description: told at once, the music and the light start with the words — DivineCreation)

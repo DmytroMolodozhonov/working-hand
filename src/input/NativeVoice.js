@@ -189,6 +189,7 @@ export class NativeVoice {
         this.onLevel = null;  // ({t, db, raw, far}) the microphone's level (after the echo was taken out)
         this.onEcho = null;   // (spell words) a spell heard only from the speakers
         this.onFail = null;   // () the native voice stopped working (the browser's takes over)
+        this.onPentWeak = null; // (meta) «Пентаграниум» said, but its name was not heard clearly: nothing made, a hint
         this.onMiss = null;   // (written, meta) a finished phrase that gave the game nothing (the spell journal)
         this.onQuiet = null;  // (s) the quiet after the words of the open phrase now (−1: none open) — TalkFlow
         this.knows = null;    // (spell) → does the hero know it (the game sets it: a longer spell nobody knows is not waited for)
@@ -304,6 +305,8 @@ export class NativeVoice {
         // (when the speech itself ended — the quiet heard after it taken off: the talk's stopwatch starts there)
         if (Number.isFinite(d.q) && Number.isFinite(meta.to) && !r.heard.spell) meta.end = meta.to - d.q * 1000;
         const sp = r.heard.sure && r.heard.spell;
+        // («Пентаграниум» and a name not heard / not clear: nothing is made; once per phrase, a soft hint)
+        if (d.final && r.heard.pentWeak && !r.seg.pentHint) { r.seg.pentHint = true; this.onPentWeak?.(meta); }
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         meta.refChecked = !!d.ref && !r.echo; // (the speakers' own rows were compared with the microphone's: no echo of them — SpellPhrase.trustedFar)
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }

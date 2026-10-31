@@ -31,13 +31,24 @@ export const PENT_NAMES = {
 /** «Pentagranium Teleportis» — заклинание пентаграммы `id` (для справочника, свитков и подсказок). */
 export const pentagramSpell = (id) => (PENT_NAMES[id] ? `Pentagranium ${PENT_NAMES[id].en}` : null);
 
+/** The name stem is a whole word (or the start of one for long stems): the short «вита» is no part of «витамины». */
+function hasName(s, w) {
+    let i = s.indexOf(w);
+    while (i >= 0) {
+        const after = s[i + w.length];
+        if (w.length > 5 || after === undefined || !/[a-zа-яё]/.test(after)) return true;
+        i = s.indexOf(w, i + 1);
+    }
+    return false;
+}
+
 /** Какая пентаграмма названа во фразе: id или null. Нужны ОБА слова — первое («Пентаграниум») и имя; одно «Пентаграниум» — не заклинание. */
 export function pentagramWords(text) {
     const s = String(text || '').toLowerCase().trim();
     if (!s || !PENT_FIRST.some((w) => s.includes(w))) return null;
     // the longest / most exact name wins (not the first in the table): a short stem inside a longer name never takes it
     let best = null, len = 0;
-    for (const id of Object.keys(PENT_NAMES)) for (const w of PENT_NAMES[id].stems) if (w.length > len && s.includes(w)) { best = id; len = w.length; }
+    for (const id of Object.keys(PENT_NAMES)) for (const w of PENT_NAMES[id].stems) if (w.length > len && hasName(s, w)) { best = id; len = w.length; }
     return best;
 }
 
