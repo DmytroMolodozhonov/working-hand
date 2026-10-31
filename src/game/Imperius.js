@@ -101,6 +101,9 @@ export const IMPERIUS_TARGETS = {
     // the bosses: a mind too strong for the plain one («Максима» takes any — the author: «любое существо»)
     king: { ru: 'король', boss: true },
     towerHead: { ru: 'глава башни волшебников', boss: true },
+    // Дьяволос (слова автора): «Империус Максима» берёт его лишь с шансом 35 % (в Творческом — всегда), и каждую минуту он с шансом 50 %
+    // вырывается из-под чужой воли (бросок — на компьютере того, кто в нём: ImperiusControl._devilRoll)
+    diabolos: { ru: 'Дьяволос', boss: true, chance: 0.35, breakEvery: 60, breakChance: 0.5 },
     // another player: only «Максима», and never through the gods' shield / «Protection Maxima»
     player: { ru: 'игрок', player: true },
 };
@@ -114,7 +117,6 @@ export const IMPERIUS_NO = {
     brightflower: { ru: 'Ярколето', why: 'Ярколето — растение: у цветка нет разума, в который можно вселиться (даже «Империус Максима» его не берёт)' },
     telewilpin: { ru: 'телевильпин', why: 'Телевильпин — растение: у цветка нет разума, в который можно вселиться' },
     carnivore: { ru: 'плотоядная голова', why: 'Плотоядная голова — растение: в ней нет разума, только голод' },
-    diabolos: { ru: 'Дьяволос', icon: '😈', why: 'Нельзя: Дьяволос сам создал заклинание подчинения (вся чёрная магия — его), у него иммунитет — не берёт даже «Империус Максима»' },
     ghost: { ru: 'призрак', icon: '👻', why: 'В призрака нельзя вселиться: у него нет тела и своей воли — он лишь морок замка призраков (не действует даже «Империус Максима»)' },
 };
 export function canTake(kind, maxima, ctx = {}) {
@@ -124,6 +126,11 @@ export function canTake(kind, maxima, ctx = {}) {
         if (!maxima) return { ok: false, say: '🧠 Не действует: чужой разум слишком упорный — игрока подчиняет только «Империус Максима»' };
         if (ctx.shield) return { ok: false, say: '🛡️ Чужой разум упёрся в щит — сквозь защиту не вселиться' };
         return { ok: true };
+    }
+    if (t.chance && !maxima) return { ok: false, say: `😈 Не действует: разум ${t.ru === 'Дьяволос' ? 'Дьяволоса' : t.ru} — древний бог; попробовать можно только «Империус Максима»` };
+    if (t.chance && ctx.roll) { // (кубик — один раз, у хоста при захвате; в Творческом — всегда удаётся)
+        if (!ctx.creative && !((ctx.rnd ?? Math.random()) < t.chance)) return { ok: false, say: '😈 Разум Дьяволоса вышвырнул вас: он слишком древний (удаётся примерно в трёх случаях из десяти)', roll: false };
+        return { ok: true, roll: true };
     }
     if (maxima || t.plain) return { ok: true };
     if (t.boss) return { ok: false, say: `👑 Не действует: разум ${t.ru === 'король' ? 'короля' : 'босса'} слишком силён — нужен «Империус Максима»` };
@@ -198,7 +205,7 @@ export function kindOf(sys, c = {}) {
         case 'sx': return 'spencer';
         case 'C': return 'custom'; // (a creature of one's own: CustomCreatures.js)
         case 'g': return 'gargoyle';
-        case 'dv': return 'diabolos'; // (Дьяволос: IMPERIUS_NO — нельзя)
+        case 'dv': return 'diabolos'; // (Дьяволос: только «Максима», шанс 35 % — IMPERIUS_TARGETS.diabolos)
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';
         case 'I': return c.type === 'queen' ? 'iceQueen' : c.type === 'monster' ? 'iceMonster' : 'snowman';

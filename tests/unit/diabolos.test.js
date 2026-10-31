@@ -544,3 +544,37 @@ test('речь: бас (роль devil — ниже всех), троллит п
     assert.ok(d.d.stunT > 0, 'растерян');
     assert.ok(said.some((s) => /Дьяволос: «/.test(s)), 'что-то сказал');
 });
+
+test('«Империус Максима» на Дьяволоса: только Максима, шанс 35 % (в Творческом — всегда); в нём — ходит на цепи и бьёт; вырвался — зол', async () => {
+    const { canTake, IMPERIUS_TARGETS } = await import('../../src/game/Imperius.js');
+    assert.equal(canTake('diabolos', false).ok, false, 'простой «Империус» — нет');
+    assert.equal(canTake('diabolos', true, { roll: true, rnd: 0.2 }).ok, true, '0,2 < 0,35 — взял');
+    assert.equal(canTake('diabolos', true, { roll: true, rnd: 0.5 }).ok, false, '0,5 — вышвырнул');
+    assert.equal(canTake('diabolos', true, { roll: true, rnd: 0.99, creative: true }).ok, true, 'Творческий — всегда');
+    const R = IMPERIUS_TARGETS.diabolos;
+    assert.equal(R.chance, 0.35); assert.equal(R.breakEvery, 60); assert.equal(R.breakChance, 0.5);
+    let ok = 0; for (let i = 0; i < 4000; i++) if (canTake('diabolos', true, { roll: true }).ok) ok++;
+    assert.ok(ok / 4000 > 0.31 && ok / 4000 < 0.39, `доля ${ok / 4000}`);
+    // в нём чужой разум: идёт, куда смотрит тело, копыто — на цепи
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(0, 1.95, -150);
+    const { g, said } = fakeGame(me);
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: DEVIL.CHAIN_LEN });
+    d.update(0.016);
+    const I = { yaw: Math.PI, walk: 1 }; // (на юг, +z)
+    g.imperius = { step: (sys, c, dt) => { d.driven(c, I, dt); return true; } };
+    d.d.imp = { by: 'me', mine: true };
+    const z0 = d.d.z;
+    let maxHoof = 0;
+    for (let i = 0; i < 30 * 40; i++) { d.update(1 / 30); const fo = d._footOff(d.d); maxHoof = Math.max(maxHoof, Math.hypot(d.d.x + fo.x - d.d.anchor.x, d.d.z + fo.z - d.d.anchor.z)); }
+    assert.ok(d.d.z > z0 + 20, `ушёл ${(d.d.z - z0).toFixed(0)} м`);
+    assert.ok(maxHoof <= DEVIL.CHAIN_LEN + 0.5, 'цепь держит и под Империусом');
+    I.walk = 0; I.strikeNow = true;
+    d.update(1 / 30);
+    assert.ok(d.d.move && ['fist', 'stomp'].includes(d.d.move.id), 'удар по воле');
+    d.d.imp = null;
+    d.brokeFree('me');
+    assert.ok(d.d.grudge.has('me'));
+    assert.ok(said.some((s) => /голову|тело|бог/.test(s)), 'сказал что-то злое');
+});

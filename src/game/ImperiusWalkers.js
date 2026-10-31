@@ -253,10 +253,24 @@ const customs = modelBody('C', (g) => g.customCreatures?.list || [], (g, id) => 
 });
 BODIES.C = customs;
 
-// ============================================================ Дьяволос: на прицел попадает, но не берётся никогда (IMPERIUS_NO.diabolos — он создал подчинение)
+// ============================================================ Дьяволос («Империус Максима», шанс 35 %; каждую минуту 50 % — вырвется)
+// Ходит своими ногами и на своей цепи (Diabolos._walk: копыто не дальше цепи, столб обходит), удар — его ходы:
+// «удар» — кулак по земле перед собой (у ног — копыто), долгое «У» (как огонь дракона) — струя огня; всё бьёт как у него самого.
 BODIES.dv = {
-    list(g, fn) { for (const d of g.diabolos?.list || []) fn(d, d.x, d.y, d.z, 120); },
+    sys: 'dv',
+    list(g, fn) { for (const d of g.diabolos?.list || []) if (!d.dying && !d.isDead) fn(d, d.x, d.y, d.z, 120); },
     body: (c, out) => c.bodyCapsule(out),
+    find: (g, id) => g.diabolos?.byId?.(id) || null,
+    dead: (c) => !!(c.dying || c.isDead),
+    pos: (c, out) => out.set(c.x, c.y, c.z),
+    face: (c) => c.yaw,
+    head: () => null,
+    size: () => 122,
+    drive(g, c, I, dt) { g.diabolos?.driven?.(c, I, dt); },
+    follow(g, c, n, dt) { g.diabolos?.driven?.(c, { yaw: n.ry, walk: n.w ? 1 : 0, strikeNow: !!n.atk, to: n }, dt); },
+    struck: () => null, // (его удары считаются его же ходами — Diabolos._strike)
+    release(g, c) { g.diabolos?.freed?.(c); },
+    net(c) { return [c.x, c.y, c.z, c.yaw, c.walkK > 0.3 ? 1 : 0, c.move ? 1 : 0]; },
 };
 
 /** (tests) the walkers added here. */

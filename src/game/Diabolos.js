@@ -215,6 +215,7 @@ export class Diabolos {
         const d = this.d;
         d.t += dt;
         if (d.dying) this._dyingTick(d, dt);
+        else if (d.imp && g.imperius?.step?.('dv', d, dt)) { if (d.move) this._moveTick(d, dt, null); } // (в нём чужой разум: ходит и бьёт по воле того, кто в нём)
         else if (this.auth) this._think(d, dt, ps);
         else this._follow(d, dt);
         if (!this.d) return; // (умер в этот кадр — останки уже на месте)
@@ -367,6 +368,34 @@ export class Diabolos {
         const talk = g.castleLife?.talk;
         if (talk?.voiceOn && talk.speech?.supported) talk.speech.say(text, { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, shout: /!$/.test(text) });
         this._note(`😈 Дьяволос говорит: «${text}»`);
+    }
+    /** Под «Империус Максима»: идёт куда смотрит тело того, кто в нём (на своей цепи), «удар» — кулак/копыто, долгое «У» — струя. */
+    driven(d, I, dt) {
+        if (!d || d.dying) return;
+        d.mode = d.move ? 'act' : 'walk'; d.sit = Math.max(0, d.sit - dt); d.target = null; d.act = null;
+        for (const k in d.cd) d.cd[k] = Math.max(0, d.cd[k] - dt);
+        if (d.move) { this._walk(d, 0, null); return; }
+        if (Number.isFinite(I.yaw)) { let a = I.yaw - d.yaw; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; this._turn(d, a, dt); }
+        if ((I.walk || 0) > 0.02) this._walk(d, dt, { x: d.x - Math.sin(d.yaw) * 30, z: d.z - Math.cos(d.yaw) * 30 });
+        else this._walk(d, 0, null);
+        const ahead = { id: null, p: new THREE.Vector3(d.x - Math.sin(d.yaw) * 45, d.y, d.z - Math.cos(d.yaw) * 45), feet: d.y };
+        if (I.fire && !(d.cd.fire > 0)) { this._startMove(d, 'fire', ahead); d.cd.fire = 8; return; }
+        if (I.strikeNow) { I.strikeNow = false; this._startMove(d, (this._impN = (this._impN || 0) + 1) % 3 === 0 ? 'stomp' : 'fist', ahead); }
+    }
+    /** Чужой разум ушёл (вырвался / отпустили): смотрит вокруг и злится на того, кто был в голове. */
+    freed(d) {
+        if (!d) return;
+        d.move = null; d.walkFor = 0;
+        if (this.auth) { d.mode = 'stand'; d.modeT = 0; }
+    }
+    /** (компьютер того, кто в нём) Вырвался сам: ярость на этого игрока и реплика. */
+    brokeFree(by) {
+        const d = this.d;
+        if (!d) return;
+        if (!this.auth) { this.game.sync?.diabolos?.({ e: 'dist', by, why: 'вырвался из-под Империуса' }); return; }
+        d.grudge.set(by, { t: DEVIL.GRUDGE_T * 2, why: 'был в его голове' });
+        d.rage = Math.min(1, d.rage + 0.4);
+        this._say('broke', true);
     }
     /** Память последних ходов (режиссёр не повторяет один ход больше 2 раз подряд). */
     _remember(d, id) { d.recent.unshift(id); if (d.recent.length > 6) d.recent.length = 6; }

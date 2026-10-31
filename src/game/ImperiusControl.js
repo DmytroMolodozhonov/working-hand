@@ -29,7 +29,7 @@ import { FlapReader, armsOf } from './ImperiusFlight.js';
 import { HowlReader } from './DragonHowl.js';
 import { WalkGate } from './DragonImperius.js';
 import { ImperiusGuards } from './ImperiusGuards.js';
-import { flies } from './Imperius.js';
+import { flies, IMPERIUS_TARGETS } from './Imperius.js';
 import { castingHand } from './WandAim.js';
 import { CurvedBeam } from '../fx/Particles.js';
 
@@ -226,7 +226,7 @@ export class ImperiusControl {
         const kind = kindOf(sys, c);
         // (a player behind «Protection Maxima» or the gods' shield: the foreign mind meets it)
         const shield = sys === 'pl' && (c.local ? !!(g.combat?.shield && (g.combat.shield.type === 2 || g.combat.shield.gods)) : !!(c.combat?.shield === 2 || c.combat?.gods));
-        const ok = canTake(kind, name === 'ImperiusMaxima', { shield });
+        const ok = canTake(kind, name === 'ImperiusMaxima', { shield, roll: true, creative: g.config?.mode === 'creative' || g.config?.mode === 'test' });
         if (!ok.ok) return ok;
         if (sys === 'pl' && c.imp) return { ok: false, say: '🌀 Этим игроком уже управляют' };
         if (sys === 'D' && c.tame) return { ok: false, say: '🐉 Дракона держит «Брейнрот Максима» — сначала его отпустят' };
@@ -383,6 +383,16 @@ export class ImperiusControl {
         const B = BODIES[this.sys], c = this.creature;
         if (!c || B.dead(c)) { this.stop('dead'); return; }
         if (!c.imp && g.authority) { this.stop('lost'); return; }
+        // Дьяволос: каждую минуту — кубик, вырвется ли он (50 %; IMPERIUS_TARGETS.diabolos)
+        if (this.kind === 'diabolos' && this.phase === 'on') {
+            const R = IMPERIUS_TARGETS.diabolos;
+            this._devilT = (this._devilT || 0) + dt;
+            if (this._devilT >= R.breakEvery) {
+                this._devilT = 0;
+                if (Math.random() < R.breakChance) { g.diabolos?.brokeFree?.(this.me); this.stop('broke'); return; }
+                this._say('😈 Дьяволос рвётся из-под вашей воли… пока держите', 'devilHold', 3000);
+            }
+        } else this._devilT = 0;
         // the mana: held
         const cb = g.combat;
         if (cb?.enabled) {
@@ -561,6 +571,7 @@ export class ImperiusControl {
             dead: '🌀 Существо погибло — сознание вернулось в ваше тело',
             hurt: '🌀 Ваше тело ударили — сознание рывком вернулось',
             lost: '🌀 Связь с существом потеряна',
+            broke: '😈 Дьяволос вырвался из-под вашей власти — и он это запомнит!',
         }[why];
         if (note) this._say(note, 'end:' + why, 1500);
         this._release();
