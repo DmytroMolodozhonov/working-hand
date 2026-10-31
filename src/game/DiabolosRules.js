@@ -352,7 +352,7 @@ export const DIRECTOR = {
 };
 const BANDS = { // вес хода по полосе: близко / средне / далеко (дальше FIRE.LEN — только то, что долетает)
     stomp: [3, 0, 0], grab: [2, 1.6, 0], fist: [2.2, 2.4, 0], clap: [1.2, 2, 0], kick: [1.4, 2, 1.6],
-    ball: [0.4, 1, 1.8], fire: [0.3, 1.2, 2.4], roar: [0.4, 0.6, 0.8], rage: [0.2, 0.2, 0.2],
+    ball: [0.3, 0.7, 1.1], fire: [0.3, 1.2, 2.4], roar: [0.4, 0.6, 0.8], rage: [0.2, 0.2, 0.2],
 };
 const ACT_CD = { fire: 'fire', ball: 'ball', grab: 'grab', clap: 'clap', roar: 'roar', rage: 'rage', kick: 'kick' };
 export function planMove(s, rnd = Math.random) {
@@ -368,6 +368,7 @@ export function planMove(s, rnd = Math.random) {
         let w = BANDS[id][band];
         if (id === 'rage') w = s.atLeash && s.beyond ? 3 : (s.fury || 0) > 0.6 || (s.rage || 0) > 0.3 ? 0.9 : w; // (у предела цепи; в ярости бьёт по земле)
         if (id === 'roar') w += s.beyond ? 0.8 : 0;
+        if (s.beyond && (id === 'rage' || id === 'kick')) w += 0.8; // (за цепью: рвётся на цепи, швыряет глыбы — не только шары)
         if (w <= 0 || d > M.reach || (cd[ACT_CD[id]] ?? 0) > 0) continue;
         if (s.air && (id === 'stomp' || id === 'kick' || id === 'fist')) continue; // (в воздухе копыто и кулак по земле не достают)
         if (s.high && id === 'grab') continue; // (выше руки)
@@ -381,7 +382,7 @@ export function planMove(s, rnd = Math.random) {
         if (recent[0] === 'walk' && recent[1] === 'walk') w *= 0.3;
         W.push(['walk', null, w]);
     }
-    if (recent[0] !== 'act') W.push(['act', null, DIRECTOR.ACT_W * (s.beyond ? 1.6 : 1)]);
+    if (recent[0] !== 'act') W.push(['act', null, DIRECTOR.ACT_W * (s.beyond ? 2.2 : 1)]);
     if (recent[0] !== 'bluff' && (cd.roar ?? 0) <= 0) W.push(['bluff', 'roar', DIRECTOR.BLUFF_W]);
     let sum = 0;
     for (const w of W) sum += w[2];

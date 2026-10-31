@@ -40,7 +40,8 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const ID = 'diabolos';
 const ROCKS_MAX = 10;    // глыб пинка в воздухе одновременно
 const ROCK_R = 2.3;      // м — радиус глыбы (масштаб формы)
-const NET_DT = 0.2;      // с между строками состояния хоста
+const NET_DT = 0.2;
+const DEVIL_VOICE = { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1 }; // (бас: роль devil — VoiceCast)      // с между строками состояния хоста
 const SEEN_R = 4000;     // м: в аду ближе этого — загружен (виден с плато прибытия и издали; ад теперь без края — дальше не держим)
 const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
 const POSE_FAR = 420;    // м: дальше — поза реже
@@ -143,6 +144,10 @@ export class Diabolos {
         m.userData.creature = this.d;
         this.d.group = m;
         g.scene?.add(m);
+        // («Империус Максима»: глаза того, кто в нём, — перед лицом, а не внутри головы — жалоба автора «вижу текстуры внутри него»)
+        this.d.eyeAnchor = new THREE.Object3D();
+        this.d.eyeAnchor.position.set(0, 0.06, -0.42);
+        m.userData.bones.head.add(this.d.eyeAnchor);
         m.userData.farRadius = DEVIL.SCALE * 3.2; // (сфера отсечения — на ВСЮ гору 122 м: без неё FarShape брал 4 м у ног, и он «мигал», когда ноги уходили с экрана — жалоба автора)
         this.one = new FarShape(m);
         this.one.set(true);
@@ -194,7 +199,6 @@ export class Diabolos {
         }
         if (this.chainMesh) { g.scene?.remove(this.chainMesh); this.chainMesh.dispose?.(); this.chainMesh = null; }
         if (this.chainGlow) { g.scene?.remove(this.chainGlow); this.chainGlow = null; }
-        if (this._beam) { g.scene?.remove(this._beam); this._beam = null; }
         this.fires?.dispose(); devilFireLight(0);
         if (this.anchor) { g.scene?.remove(this.anchor); this.anchor = null; }
         this._dropChests();
@@ -216,8 +220,8 @@ export class Diabolos {
         this._sitePoll -= dt;
         if (this._sitePoll <= 0) { this._sitePoll = 1; if (!this.site) this._findSite(); }
         if (!this.site) return;
-        this._swordBeamStep(dt);
         this.fires?.update(dt, this.game.character?.group?.position);
+        if (this.d) this._voiceWarm(dt);
         const ps = this._players();
         let near = Infinity;
         for (const q of ps) { const dd = Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z); near = Math.min(near, inHell(q.p.x, q.p.z) && dd < SEEN_R ? 0 : dd); } // (в аду — виден отовсюду: гора в 122 м над дымкой; автор не нашёл его с плато прибытия в 1250 м)
@@ -372,6 +376,23 @@ export class Diabolos {
         this._speak(sit, i);
         this.game.sync?.diabolos?.({ e: 'say', s: SITS.indexOf(sit), i });
     }
+    /**
+     * Голос — нейросеть голосов жителей (как у них, басом). Она грузится сама только у замков — в аду их нет, и его реплики шли
+     * одним текстом (жалоба автора). Пока он в мире: просим загрузку, а когда готова — заранее делаем его короткие реплики.
+     */
+    _voiceWarm(dt) {
+        this._vwT = (this._vwT || 0) - dt;
+        if (this._vwT > 0) return;
+        this._vwT = 2;
+        const talk = this.game.castleLife?.talk, sp = talk?.speech;
+        if (!talk?.voiceOn || !sp) return;
+        if (!sp.neural?.ready) { sp.preload?.(); return; }
+        if (this._voicePrepared) return;
+        this._voicePrepared = true;
+        const short = [];
+        for (const L of Object.values(LINES)) for (const l of L) if (l.length <= 40) short.push(l);
+        sp.prepare?.(short, DEVIL_VOICE);
+    }
     /** Сказать у себя: текст внизу экрана и бас (роль `devil` — VoiceCast), если я рядом. */
     _speak(sit, i) {
         const g = this.game, d = this.d, text = LINES[sit]?.[i];
@@ -380,7 +401,7 @@ export class Diabolos {
         if (!me || Math.hypot(me.x - d.x, me.z - d.z) > TALK.HEAR_R) return;
         g.hud?.setVoice?.(`😈 Дьяволос: «${text}»`, true);
         const talk = g.castleLife?.talk;
-        if (talk?.voiceOn && talk.speech?.supported) talk.speech.say(text, { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, shout: /!$/.test(text) });
+        if (talk?.voiceOn && talk.speech?.supported) { if (!talk.speech.neural?.ready) talk.speech.preload?.(); talk.speech.say(text, { ...DEVIL_VOICE, shout: /!$/.test(text) }); } // (игрок говорит заклинание — реплика ждёт, пока он договорит: не мешает распознаванию)
         this._note(`😈 Дьяволос говорит: «${text}»`);
     }
     /** Под «Империус Максима»: идёт куда смотрит тело того, кто в нём (на своей цепи), «удар» — кулак/копыто, долгое «У» — струя. */
@@ -487,8 +508,10 @@ export class Diabolos {
         const sp = DEVIL.WALK * (1 - 0.5 * Math.min(1, Math.abs(ang)));
         let sx = dx / dist * sp * dt, sz = dz / dist * sp * dt;
         try {
-            const a = crowdStep(this.game, d, { x: d.x, y: d.y, z: d.z }, dx / dist, dz / dist, sp * dt, { r: DEVIL.RADIUS, id: 9001, skip: (b) => b.ref === d });
-            if (a && Number.isFinite(a.x)) { sx = a.x; sz = a.z; }
+            // (как у всех ходящих: crowdStep даёт НАПРАВЛЕНИЕ (доля скорости), шаг = направление × скорость × dt; раньше направление шло как шаг —
+            //  без скорости и времени кадра пилот его не понимал, и он топтался на месте и плевался шарами — жалоба автора)
+            const a = crowdStep(this.game, d, { x: d.x, y: d.y, z: d.z }, dx / dist, dz / dist, Math.max(0.5, dist), { r: DEVIL.RADIUS * 0.8, speed: sp, dt, look: 30, dy: 80, id: 9001, skip: (b) => b.ref === d });
+            if (a && Number.isFinite(a.x)) { sx = a.x * sp * dt; sz = a.z * sp * dt; }
         } catch (_) { /* (толпа не сломает шаг: идёт прямо) */ }
         const fo = this._footOff(d);
         const L = leash(d.anchor.x, d.anchor.z, d.x + sx, d.z + sz, fo.x, fo.z, this.site.len);
@@ -523,7 +546,7 @@ export class Diabolos {
         d.mode = 'act'; d.modeT = 0;
         const T = rageTempo(d.rage); // (ярость от божественного: чаще, ближе, дольше)
         if (id === 'fire') { d.cd.fire = (18 - 6 * d.fury) * T.cd; d.move.fireLen = FIRE.TIME * T.fireTime; }
-        if (id === 'ball') d.cd.ball = (3.2 - 1.4 * d.fury) * T.cd;
+        if (id === 'ball') d.cd.ball = (6 - 2 * d.fury) * T.cd; // (шары — реже: не «одно и то же»)
         if (id === 'grab') d.cd.grab = GRAB.CD * T.grabCd;
         if (id === 'clap') d.cd.clap = 9;
         if (id === 'roar') d.cd.roar = bluff ? 7 : 12;
@@ -1490,19 +1513,6 @@ export class Diabolos {
         if (!w || w.holder || !w.position || w.removed) return null;
         return w.position;
     }
-    /** Столб света над лежащим божественным мечом (только Творческий): золотисто-белый, мерцает, виден издалека сквозь дымку; за мечом на земле. */
-    _swordBeamStep(dt) {
-        const g = this.game, p = this.swordMark();
-        if (!p) { if (this._beam) this._beam.visible = false; return; }
-        if (!this._beam) { this._beam = swordBeam(); g.scene?.add(this._beam); }
-        const b = this._beam;
-        b.visible = true;
-        b.position.set(p.x, p.y - 1, p.z);
-        const me = g.character?.group?.position;
-        const near = me ? Math.hypot(me.x - p.x, me.z - p.z) : 99;
-        BEAM_U.uT.value += dt;
-        BEAM_U.uNear.value = Math.min(1, Math.max(0.15, (near - 3) / 30)); // (вплотную — бледнее: не слепит)
-    }
     _creativeSword() {
         const g = this.game, s = this.site;
         if (this._swordGiven || g.config?.mode !== 'creative' || !this.auth) return;
@@ -1595,7 +1605,7 @@ export class Diabolos {
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
         const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), 2);
-        return [m, c, cg, ...DevilFires.samples(), swordBeam(), anchorModel(), ballModel(), rockModel()];
+        return [m, c, cg, ...DevilFires.samples(), anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {
@@ -1709,45 +1719,3 @@ totalEmissiveRadiance += vec3(1.0, 0.35, 0.05) * rC * 0.9;`);
     return m;
 }
 
-// ------------------------------------------------------------------ столб света над божественным мечом (Творческий)
-const BEAM_U = { uT: { value: 0 }, uNear: { value: 1 } };
-let _beamGeo = null, _beamMat = null;
-/** Луч: два вложенных конуса (ядро и мягкое сияние), вверх 180 м, бегущие вверх искры-полосы, мерцание; аддитивно, без тумана и ламп. */
-export function swordBeam() {
-    if (!_beamGeo) {
-        _beamGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true);
-        _beamGeo.translate(0, 0.5, 0);
-        _beamGeo.userData.keep = true;
-        _beamMat = new THREE.ShaderMaterial({
-            uniforms: BEAM_U,
-            vertexShader: `varying vec2 vUv; varying float vRim;
-void main() {
-  vUv = uv;
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  vec3 n = normalize(normalMatrix * normal);
-  vRim = abs(dot(n, normalize(-mv.xyz)));
-  gl_Position = projectionMatrix * mv;
-}`,
-            fragmentShader: `uniform float uT; uniform float uNear; varying vec2 vUv; varying float vRim;
-void main() {
-  float y = vUv.y;
-  float fade = smoothstep(0.0, 0.03, y) * (1.0 - smoothstep(0.35, 1.0, y));
-  float core = pow(vRim, 3.0);
-  float flick = 0.82 + 0.18 * sin(uT * 7.0 + y * 3.0) * sin(uT * 2.3);
-  float motes = smoothstep(0.92, 1.0, sin(y * 140.0 - uT * 9.0 + vUv.x * 18.0));
-  float a = (core * 0.85 + motes * 0.35) * fade * flick * uNear;
-  gl_FragColor = vec4(mix(vec3(1.0, 0.82, 0.45), vec3(1.0, 0.98, 0.9), core) * a, a);
-}`,
-            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-        });
-        _beamMat.name = 'divine-sword-beam';
-        _beamMat.userData.shared = true;
-    }
-    const g = new THREE.Group();
-    const inner = new THREE.Mesh(_beamGeo, _beamMat); inner.scale.set(0.9, 180, 0.9);
-    const outer = new THREE.Mesh(_beamGeo, _beamMat); outer.scale.set(2.6, 130, 2.6);
-    for (const m of [inner, outer]) { m.frustumCulled = false; m.renderOrder = 3; g.add(m); }
-    g.name = 'divine-sword-beam';
-    g.visible = false;
-    return g;
-}

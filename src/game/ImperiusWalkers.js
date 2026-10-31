@@ -264,7 +264,7 @@ BODIES.dv = {
     dead: (c) => !!(c.dying || c.isDead),
     pos: (c, out) => out.set(c.x, c.y, c.z),
     face: (c) => c.yaw,
-    head: () => null,
+    head: (c) => c.eyeAnchor || null, // (точка перед лицом: камера не внутри головы)
     size: () => 122,
     drive(g, c, I, dt) { g.diabolos?.driven?.(c, I, dt); },
     follow(g, c, n, dt) { g.diabolos?.driven?.(c, { yaw: n.ry, walk: n.w ? 1 : 0, strikeNow: !!n.atk, to: n }, dt); },
