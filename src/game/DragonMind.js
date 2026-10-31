@@ -38,14 +38,14 @@ export const MIND = {
     LAND_TIMEOUT: 22, // s of approach, then it gives up
     STUCK_T: 3.2, // s of no progress on foot while it needs to be nearer: it takes off over the obstacle
     LIFT_T: 1.4, // s of take-off: a crouch, the run-up, the wing-beats, the climb
-    STAND_OFF: 9, // × size: where it lands from the target (jaws' reach is 7.5)
+    STAND_OFF: 11, // × size: where it lands from the target — far enough that the HEAD is in view, not only the neck (the author); the jaws lunge 10
 };
 
 /** The moves of the dragon on its feet (and the dive's pass in the air): reach in × size, windows in s from the move's start. */
 export const MOVES = {
     // wind: s of the wind-up; hit: when the blow lands (the target is looked at THEN — a step aside dodges it); end: s till it is free; snd: when its sound
-    bite: { reach: 7.5, face: FACE.BITE, wind: 0.38, hit: 0.38, end: 0.95, snd: 0.3, dmg: 14, push: 6, up: 3, kind: 'bite', ru: 'укус' },
-    claw: { reach: 6.0, face: 35 * DEG, wind: 0.3, hit: 0.3, end: 0.8, snd: 0.22, dmg: 8, push: 7, up: 2, kind: 'claw', ru: 'удар когтями' },
+    bite: { reach: 10, face: FACE.BITE, wind: 0.38, hit: 0.38, end: 0.95, snd: 0.3, dmg: 14, push: 6, up: 3, kind: 'bite', ru: 'укус' },
+    claw: { reach: 8, face: 35 * DEG, wind: 0.3, hit: 0.3, end: 0.8, snd: 0.22, dmg: 8, push: 7, up: 2, kind: 'claw', ru: 'удар когтями' },
     tail: { reach: 10, behind: 1.9, wind: 0.55, hit: 0.8, end: 1.25, snd: 0.5, dmg: 9, push: 11, up: 5, kind: 'tail', ru: 'удар хвоста' },
     gust: { reach: 13, min: 3.5, face: 60 * DEG, wind: 0.7, beats: [0.8, 1.2], end: 1.6, snd: 0.55, dmg: 3, push: 14, up: 4, kind: 'gust', ru: 'порыв крыльев' },
     roar: { wind: 0.4, hit: -1, end: 1.6, snd: 0.05, kind: 'roar', ru: 'рёв' },
@@ -134,7 +134,7 @@ export function pickMove(c) {
     const s = c.size || 1, a = Math.abs(c.ang), d = c.dist;
     if (c.blowCd <= 0) {
         if (d < MOVES.tail.reach * s && a > MOVES.tail.behind) return 'tail'; // (somebody beside / behind it: the tail)
-        if (d < MOVES.bite.reach * s && a < MOVES.bite.face) return d < 5.5 * s && c.last !== 'claw' && c.rnd < 0.45 ? 'claw' : 'bite';
+        if (d < MOVES.bite.reach * s && a < MOVES.bite.face) return d < 7 * s && c.last !== 'claw' && c.rnd < 0.45 ? 'claw' : 'bite';
         if (d < MOVES.claw.reach * s && a < MOVES.claw.face) return 'claw';
     }
     if (c.gustCd <= 0 && a < MOVES.gust.face && d > MOVES.gust.min * s && d < MOVES.gust.reach * s && (c.crowd >= 2 || !c.breathReady || c.rnd < 0.5)) return 'gust';

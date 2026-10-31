@@ -62,7 +62,8 @@ export function rollDragon(rng = Math.random, kind = null) {
 export const DRAGON = {
     WAKE: 1.6, // s from noticing a thief to rising (÷ react)
     TURN: 1.6, // rad/s turning (× react)
-    WALK: 6, // m/s on its feet (× react)
+    WALK: 6, // m/s on its feet (× react) — a rider's walk (DragonRide); its own fighting / lair walk is FIGHT_WALK
+    FIGHT_WALK: 3, // m/s: on its own feet (the author: “он должен быть медленнее в два раза” — slower by half than before)
     FLY: 16, // m/s in the air (× react)
     FLAME_REACH: 14, // m of its fire…
     FLAME_PER: 9, // …+ this × its flame power
@@ -72,7 +73,7 @@ export const DRAGON = {
     FLAME_TICK: 0.4,
     BITE: 14, // HP (a bite: close in front of it)
     TAIL: 9, // HP (a sweep of the tail: close behind / beside it) — and it throws you
-    BLOW_REST: 2.4, // s between bites / sweeps (÷ react)
+    BLOW_REST: 4.8, // s between bites / sweeps (÷ react) — twice as slow as before (the author: slower by half on the ground)
     GIVE_UP: 150, // m from its lair (or where the chase began): then it turns back
     GUARD: 10, // m beyond the hall's wall: an intruder there is chased
     HEAR: 60, // m: a blast, a spell's thunder this near wakes it

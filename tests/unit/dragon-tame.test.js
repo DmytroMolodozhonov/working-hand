@@ -82,7 +82,7 @@ test('a neutral stare (an intruder, not a quarrel) is settled by the spell; the 
     assert.equal(d.target, null);
     D._anger(d, 'me'); // (anger with no offence)
     assert.equal(d.aggro, null, 'a calmed dragon is not turned on its tamer without an offence');
-    D._anger(d, 'foe');
+    D._anger(d, 'foe', true);
     assert.equal(d.aggro, 'foe', 'but it stays angry at others');
 });
 

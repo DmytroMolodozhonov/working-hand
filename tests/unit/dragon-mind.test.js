@@ -66,11 +66,11 @@ test('the moves on its feet: by distance and angle — bite / claws in front, th
     assert.equal(P({ ang: 0.45, dist: 6 }), 'claw', 'a bit off the jaws’ line: the claws, not the bite («лицом к цели»)');
     assert.equal(P({ ang: 1.2, dist: 6 }), null, 'beside it: it first turns');
     assert.equal(P({ dist: 25 }), null, 'far: no move (it walks, it breathes)');
-    assert.equal(P({ dist: 11, gustCd: 0, rnd: 0.1 }), 'gust', 'a middle range: the wing gust');
-    assert.equal(P({ dist: 11, gustCd: 0, rnd: 0.9, breathReady: true }), null, 'its fire is ready: the fire first');
-    assert.equal(P({ dist: 11, gustCd: 0, rnd: 0.9, breathReady: false }), 'gust');
-    assert.equal(P({ dist: 11, gustCd: 0, rnd: 0.9, crowd: 3 }), 'gust', 'many round it: the gust');
-    assert.equal(P({ blowCd: 1, dist: 11, gustCd: 5 }), null, 'a blow was just struck');
+    assert.equal(P({ dist: 15, gustCd: 0, rnd: 0.1 }), 'gust', 'a middle range: the wing gust');
+    assert.equal(P({ dist: 15, gustCd: 0, rnd: 0.9, breathReady: true }), null, 'its fire is ready: the fire first');
+    assert.equal(P({ dist: 15, gustCd: 0, rnd: 0.9, breathReady: false }), 'gust');
+    assert.equal(P({ dist: 15, gustCd: 0, rnd: 0.9, crowd: 3 }), 'gust', 'many round it: the gust');
+    assert.equal(P({ blowCd: 1, dist: 15, gustCd: 5 }), null, 'a blow was just struck');
     assert.equal(P({ blowCd: 1, dist: 6 }), null);
 });
 
@@ -132,7 +132,7 @@ function world({ authority = true, flat = 0 } = {}) {
 }
 const wildDragon = (D, o = {}) => {
     const d = D.spawn({ id: 'dx', kind: 'crimson', react: 1, flame: 1, pos: new THREE.Vector3(0, 40, -70), mode: 'air', ...o });
-    d.purpose = 'chase'; d.target = 'me'; d.aggro = 'me'; d.chaseFrom = new THREE.Vector3(0, 0, -70);
+    d.purpose = 'chase'; d.target = 'me'; d.aggro = 'me'; d.aggroWhy = 'wounded'; d.grudge.me = { at: 0 }; d.chaseFrom = new THREE.Vector3(0, 0, -70);
     return d;
 };
 const run = (D, d, secs, dt = 0.05, each = null) => { const modes = []; for (let t = 0; t < secs && !d.dead; t += dt) { D._think(d, dt); each?.(t); if (!modes.length || modes[modes.length - 1][0] !== d.mode) modes.push([d.mode, t]); } return modes; };
@@ -188,7 +188,7 @@ test('IN THE GAME: hurt to ≤ 30 %, it flies away and does not turn back at onc
     run(D, d, 6);
     assert.ok(Math.hypot(d.model.position.x, d.model.position.z - z0) > 20, 'it is going away');
     // (later it fights on: cornered)
-    d.retreatT = 0; d.mode = 'air'; d.purpose = 'chase'; d.target = 'me'; d.aggro = 'me'; d.stay = 30; d.hp = DRAGON_HP * 0.2; d.dec = null;
+    d.retreatT = 0; d.mode = 'air'; d.purpose = 'chase'; d.target = 'me'; d.aggro = 'me'; d.aggroWhy = 'wounded'; d.stay = 30; d.hp = DRAGON_HP * 0.2; d.dec = null;
     D._think(d, 0.05);
     assert.equal(d.purpose, 'chase', 'the second time it fights to the end');
 });
@@ -266,14 +266,14 @@ test('IN THE GAME: on its feet it walks round the people in its way — never th
         const d = wildDragon(D, { pos: new THREE.Vector3(0, 0, -62), mode: 'fight' });
         d.fly = 0; d.stay = 0; d.target = 'me'; d.aggro = 'me'; d.breathCd = 999; d.react = 1;
         let deepest = 0, near = false, tookOff = false;
-        for (let t = 0; t < 80 && !d.dead; t += 0.05) {
+        for (let t = 0; t < 200 && !d.dead; t += 0.05) {
             D._think(d, 0.05);
             if (d.mode === 'air') { tookOff = true; break; }
             const p = d.model.position;
             for (const v of byId.values()) deepest = Math.max(deepest, BODY_R.dragon * d.size / 1.25 + BODY_R.knight - Math.hypot(p.x - v.x, p.z - v.z));
-            if (Math.hypot(p.x, p.z) < 11) { near = true; break; }
+            if (Math.hypot(p.x, p.z) < 15) { near = true; break; }
         }
-        assert.ok(near || tookOff, `${name}: it came to its target (or flew over the obstacle)`);
+        assert.ok(near || tookOff, `${name} it came to its target (or flew over the obstacle)`);
         assert.ok(deepest < 1.4, `${name}: bodies are not driven into each other (${deepest.toFixed(2)} m)`);
     }
 });

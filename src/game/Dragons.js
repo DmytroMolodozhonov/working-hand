@@ -47,6 +47,7 @@ import { DragonSmash } from './DragonSmash.js';
 import { TAME, tameVerdict, LOWER_ANGER, attackVerdict, angryAt } from './DragonTame.js';
 import { MIND, MOVES, MOVE_IDS, LANDING, COOL, decide, targetClass, crowdAround, staminaStep, tiredK, pickMove, aimedAt, moveAnim, strikesDue, spotOk, landCandidates, liftPhase, waveAt } from './DragonMind.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
+import { AGGRO, AGGRO_RULES, woundsGrudge, attackReason, shouldForget, sitterLeaves, restSpotOk, dodgeHeading } from './DragonAggro.js';
 
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _q = new THREE.Vector3();
 const _c = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
@@ -199,7 +200,8 @@ export class Dragons {
         if (rule?.blind) { d.blind = Math.max(d.blind, rule.blind); d.breath = null; }
         if (rule?.slow) d.slow = Math.max(d.slow, rule.slow);
         // it turns on whoever struck it (a player) — even a blow that did not hurt it
-        if (who && who !== 'dragon' && this._playerPos(who)) this._anger(d, who, true);
+        // (only a real hit on the body is a wound — DragonAggro.woundsGrudge: a spell that is harmless / an earthquake «in the cone» is not a quarrel)
+        if (who && who !== 'dragon' && this._playerPos(who)) { if (woundsGrudge(kind, n)) this._anger(d, who, true); else this.log.push('no-grudge:' + kind); }
         g.achievements?.hit('dragon', d.id, who); // (taking part: the achievement — even a blow that did not hurt it)
         if (n <= 0) return 0;
         d.hp = Math.max(0, d.hp - n);
@@ -275,7 +277,7 @@ export class Dragons {
             d.model.position.addScaledVector(_v.copy(v).setY(0), 0.08);
             d.sweep = Math.max(-1, Math.min(1, d.sweep + (Math.random() - 0.5)));
             if (name === 'Earthquake' || name === 'EarthquakeMaxima') this.hit(d, 0, 'Earthquake', casterId);
-            if (casterId && this._playerPos(casterId)) this._anger(d, casterId, true);
+            // (a push / wind «in the cone» is no hit on the body: no grudge — DragonAggro.NOT_A_REASON)
             n++;
         }
         return n;
@@ -295,12 +297,14 @@ export class Dragons {
      * Its calmed one's (Brain Rot Maxima) own spell breaks the moment the calmed one's offended.
      * Without an offence, the one it is calmed to is never turned on.
      */
-    _anger(d, who, offended = false, thief = false) {
-        if (offended) this._offend(d, who, thief, false);
+    _anger(d, who, offended = false, thief = false, why = null) {
+        if (offended) { this._offend(d, who, thief, false); why = thief ? 'thief' : 'wounded'; }
         else if (d.tame && d.tame.by === who) return;
+        if (!why) return; // (no reason — no anger: DragonAggro.AGGRO_RULES)
         if (d.retreatT > 0) return; // (it is flying away hurt: the grudge is written, but it does not turn back until it has got away — DragonMind.MIND.HURT)
-        d.aggro = who;
+        d.aggro = who; d.aggroWhy = why;
         d.target = who;
+        this._decide(d, who, why);
         if (d.mode === 'sleep' || d.mode === 'watch') { d.mode = 'watch'; d.sleepGoal = 0; d.wakeT = Math.min(d.wakeT || 9, 0.4); }
         else if (d.mode === 'landed') {
             // (sitting already: it fights from where it sits if they are near on the ground — it need not fly up; else it takes off after them)
@@ -318,13 +322,13 @@ export class Dragons {
         g.at = this._t;
         if (thief) g.thief = true;
         if (d.tame && d.tame.by === who) this.breakTame(d, 'attacked', who);
-        if (anger && this._playerPos(who)) this._anger(d, who);
+        if (anger && this._playerPos(who)) this._anger(d, who, false, false, thief ? 'thief' : 'wounded');
     }
 
     _wake(d, who, thief) {
         if (d.dead) return;
         if (d.mode === 'sleep') { d.mode = 'watch'; d.wakeT = DRAGON.WAKE / d.react; d.calmT = 0; this._roar(d); }
-        if (who) { d.target = who; if (thief) d.aggro = who; }
+        if (who) { d.target = who; if (thief) { d.aggro = who; d.aggroWhy = 'thief'; } }
     }
 
     _roar(d) {
@@ -850,7 +854,7 @@ export class Dragons {
         const ps = this._players().filter((P) => earthly(P.p)); // (no dragons fly by off the Earth: Planets.earthly)
         if (!ps.length) return;
         const q = ps[Math.floor(Math.random() * ps.length)].p;
-        const a = Math.random() * TAU, side = (Math.random() - 0.5) * 300;
+        const a = Math.random() * TAU, side = (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * 180); // (the line passes to the side of the player, not over their head)
         const from = new THREE.Vector3(q.x + Math.cos(a) * WANDER.FAR - Math.sin(a) * side * 0.3, 0, q.z + Math.sin(a) * WANDER.FAR + Math.cos(a) * side * 0.3);
         const to = new THREE.Vector3(q.x - Math.cos(a) * WANDER.FAR + Math.sin(a) * side, 0, q.z - Math.sin(a) * WANDER.FAR - Math.cos(a) * side);
         from.y = this._skyFloor(from.x, from.z) + WANDER.ALT + Math.random() * 25;
@@ -860,7 +864,10 @@ export class Dragons {
         d.dest = to;
         d.cruiseY = from.y;
         // sometimes it lands somewhere along its way to rest
-        if (Math.random() < WANDER.LAND) d.landAt = from.clone().lerp(to, 0.35 + Math.random() * 0.3);
+        if (Math.random() < WANDER.LAND) { // (a rest far from every player — DragonAggro.restSpotOk)
+            const spot = from.clone().lerp(to, 0.35 + Math.random() * 0.3);
+            if (restSpotOk(spot, ps.map((P) => P.p))) d.landAt = spot;
+        }
         this.log.push('wanderer:' + r.kind);
         if (from.distanceTo(g.character.group.position) < 600) allLog('Мир', 'вдали пролетает дракон (' + r.kind + ')'); // (the journal only — no on-screen warning)
     }
@@ -905,6 +912,7 @@ export class Dragons {
         if (d.stun > 0) { d.breath = null; d.move = null; this._animate(d, dt, 0); return; }
         const tp = d.target ? this._playerPos(d.target) : null;
         if (d.target && !tp) { d.target = null; d.aggro = null; }
+        if (d.target && tp && !d.tame && !d.imp && this._attacking(d) && this._guard(d, tp, dt, L)) { this._animate(d, dt, 0); return; }
         switch (d.mode) {
             case 'sleep': {
                 // who comes near: wakes it (nearer for one who sneaks in the dark; farther with a light / running)
@@ -956,7 +964,7 @@ export class Dragons {
             case 'exit': {
                 // out of the huge mouth: to the mouth, out onto the ledge — then it takes off
                 const goal = d.exitStep === 0 ? L.mouth : L.out;
-                const moved = this._walkTo(d, goal.x, goal.z, DRAGON.WALK * 1.3 * quick, dt, L, true);
+                const moved = this._walkTo(d, goal.x, goal.z, DRAGON.FIGHT_WALK * 1.3 * quick, dt, L, true);
                 if (moved < 2.5) {
                     if (d.exitStep === 0) d.exitStep = 1;
                     else this._takeOff(d, d.target ? 'chase' : 'home');
@@ -994,7 +1002,7 @@ export class Dragons {
                 } else {
                     d.fly = 0;
                     const h = d.home || { x: L.hoard.x, z: L.hoard.z };
-                    const moved = this._walkTo(d, h.x, h.z, DRAGON.WALK * quick, dt, L, false);
+                    const moved = this._walkTo(d, h.x, h.z, DRAGON.FIGHT_WALK * quick, dt, L, false);
                     if (tp && this.lairAt(tp, 3)) { d.mode = 'chase'; break; }
                     if (moved < 2) { d.mode = 'watch'; d.calmT = 0; d.wakeT = 0; d.model.rotation.y = h.yaw ?? d.model.rotation.y; }
                 }
@@ -1005,7 +1013,15 @@ export class Dragons {
             case 'landed': {
                 if (!d.tame) d.restT -= dt; // (calmed: it waits for its rider)
                 const near = this._nearest(p, calm);
-                if (near && near.d < WANDER.SEE) { this._wake(d, near.id, false); this._anger(d, near.id); return; }
+                // (people come up to a dragon that is resting in the open: it does not pounce — it looks, then lifts off and goes away; DragonAggro.sitterLeaves)
+                if (near && !d.aggro && !d.tame && sitterLeaves(near.d, !!this._why(d, near.id))) {
+                    this._takeOff(d, 'cruise');
+                    const aw = _v.set(p.x - near.p.x, 0, p.z - near.p.z); if (aw.lengthSq() < 1e-3) aw.set(1, 0, 0); aw.normalize();
+                    d.dest = p.clone().addScaledVector(aw, WANDER.FAR * 2); d.cruiseY = p.y + 35; d.landAt = null;
+                    this.log.push('sitter-leaves');
+                    this._animate(d, dt, 0);
+                    return;
+                }
                 if (near) this._lookAt(d, near.p, dt * 0.3);
                 if (d.restT <= 0) this._takeOff(d, 'cruise');
                 this._animate(d, dt, 0);
@@ -1013,6 +1029,62 @@ export class Dragons {
             }
             default: this._animate(d, dt, 0);
         }
+    }
+
+    // ================================================================ when it may attack (DragonAggro.js)
+    /** Is it in a posture of attack now (not just looking at / waking for somebody)? */
+    _attacking(d) { return d.mode === 'chase' || d.mode === 'exit' || d.mode === 'fight' || d.mode === 'land' || (d.mode === 'air' && d.purpose === 'chase'); }
+
+    /** The reason to attack player `id` now (DragonAggro.AGGRO_RULES id) or null. */
+    _why(d, id, slack = 0) {
+        const L = d.lair ? this.lairs.get(d.lair)?.L : null;
+        const q = this._playerPos(id);
+        const inLair = !!(L && q && (this.lairAt(q, DRAGON.GUARD + slack) || Math.hypot(q.x - L.mouth.x, q.z - L.mouth.z) < AGGRO.LAIR_ZONE + slack));
+        let nearOffender = false;
+        if (q && !inLair) {
+            for (const [o, gr] of Object.entries(d.grudge)) {
+                if (this._t - gr.at >= TAME.GRUDGE_T) continue;
+                const op = this._playerPos(o);
+                if (op && Math.hypot(op.x - q.x, op.z - q.z) < AGGRO.NEAR_OFFENDER) { nearOffender = true; break; }
+            }
+        }
+        return attackReason(d, id, { now: this._t, grudgeT: TAME.GRUDGE_T, inLair, nearOffender });
+    }
+
+    /** The journal: «цель X: причина» (not more than once per target per dragon). */
+    _decide(d, who, why) {
+        const R = AGGRO_RULES.find((r) => r.id === why);
+        const key = who + ':' + why;
+        if (d.decKey === key) return;
+        d.decKey = key;
+        this.log.push('target:' + key);
+        this.game.perf?.note?.(`🐉 дракон ${d.id}: решение — цель ${who}: ${R?.why || why}`);
+    }
+
+    /**
+     * (host, 2×/s) The watchman: an attacker must have a reason for its target. None → an error line in the journal
+     * and it drops the target (it never fights without a reason). Also: a target far off for FORGET_T s is forgotten.
+     * → true if the frame is spent (it dropped the target).
+     */
+    _guard(d, tp, dt, L) {
+        const p = d.model.position;
+        d.lostT = p.distanceTo(tp) > AGGRO.FORGET_R ? (d.lostT || 0) + dt : 0;
+        if (shouldForget(d.lostT)) {
+            d.lostT = 0; d.target = null; d.aggro = null; d.breath = null; d.move = null;
+            this.log.push('forget'); this._goHome(d, L);
+            return true;
+        }
+        d.whyT = (d.whyT || 0) - dt;
+        if (d.whyT > 0) return false;
+        d.whyT = AGGRO.WHY_EVERY;
+        const why = this._why(d, d.target, 8); // (8 m of slack: the lair chase gives up on its own a moment after they step out)
+        if (why) return false;
+        // (no reason: an error for the author's journal; the dragon does not attack)
+        if (this._t - (d.noWhyNote ?? -99) > AGGRO.NOTE_EVERY) { d.noWhyNote = this._t; this.game.perf?.note?.(`🐉 напал без причины: дракон ${d.id} (${d.mode}) на ${d.target}, ${Math.round(p.distanceTo(tp))} м`); }
+        this.log.push('no-reason');
+        d.target = null; d.aggro = null; d.breath = null; d.move = null;
+        this._goHome(d, L);
+        return true;
     }
 
     /** The intruder of its lair (nearest player in or near its hall, or at its mouth). */
@@ -1056,7 +1128,8 @@ export class Dragons {
             return 0;
         }
         let walk = 0;
-        if (dist > 7 * s && !d.breath) walk = this._walkTo(d, tp.x, tp.z, DRAGON.WALK * quick, dt, L, false, 6 * s) > 0 ? 1 : 0;
+        // (it keeps ~10 m × size off: the head, not just the neck, is in the player's view; the jaws lunge across the gap)
+        if (dist > 10.5 * s && !d.breath) walk = this._walkTo(d, tp.x, tp.z, DRAGON.FIGHT_WALK * quick, dt, L, false, 9.5 * s) > 0 ? 1 : 0;
         else this._lookAt(d, tp, dt);
         this._attack(d, tp, dist, ang, dt);
         return walk;
@@ -1224,8 +1297,15 @@ export class Dragons {
             return;
         }
         // cruising: high over the world from far away to far away (maybe landing on the way)
-        if (!d.dest) { d.dest = p.clone().add(_v.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(WANDER.FAR * 2)); d.cruiseY = p.y; }
+        if (!d.dest) {
+            const nr = this._nearest(p);
+            const [hx, hz] = dodgeHeading(Math.random() - 0.5, Math.random() - 0.5, nr ? { x: nr.p.x - p.x, z: nr.p.z - p.z } : null); // (not towards people)
+            d.dest = p.clone().add(_v.set(hx, 0, hz).normalize().multiplyScalar(WANDER.FAR * 2)); d.cruiseY = p.y;
+        }
         if (d.landAt) {
+            // (somebody came near the resting place — it flies on, never sits down by people)
+            if (!d.tame && (d.avoidT = (d.avoidT || 0) - dt) <= 0) { d.avoidT = 0.5; // (a calmed one comes down by its holder on purpose, so it is exempt)
+                if (!restSpotOk(d.landAt, this._players().map((P) => P.p))) { d.landAt = null; this.log.push('rest-skipped'); return; } }
             const gy = this._skyFloor(d.landAt.x, d.landAt.z, false);
             // (never down under a floating island: it flies on)
             if (this._skyFloor(d.landAt.x, d.landAt.z) > gy + 2) { d.landAt = null; return; }
@@ -1381,6 +1461,7 @@ export class Dragons {
         const from = dragonCenter(d, new THREE.Vector3());
         for (const q of this._players()) {
             if (d.tame && q.id === d.tame.by) continue;
+            if (!d.imp && !this._why(d, q.id)) continue; // (no quarrel — no hurt from the touchdown wave)
             const dx = q.p.x - p.x, dz = q.p.z - p.z, dist = Math.hypot(dx, dz);
             if (dist > LANDING.R * s * 0.55 || q.p.y - p.y > 6 * s) continue;
             const v = new THREE.Vector3(dx, 0, dz);
@@ -1476,6 +1557,7 @@ export class Dragons {
         let n = 0;
         for (const q of this._players()) {
             if (d.tame && q.id === d.tame.by) continue; // (the one it is calmed to is never hurt)
+            if (!d.imp && !this._why(d, q.id)) continue; // (a bystander with no quarrel and far from the offender is never hit: DragonAggro)
             const dx = q.p.x - p.x, dz = q.p.z - p.z, dist = Math.hypot(dx, dz), ang = this._angleTo(d, q.p);
             if (q.p.y - p.y > (m.kind === 'gust' ? 12 : 7) * s) continue; // (too high above it: out of reach)
             let ok = false;
@@ -1537,7 +1619,7 @@ export class Dragons {
         const dist = Math.hypot(tp.x - p.x, tp.z - p.z);
         const walk = this._groundChase(d, tp, dt, quick, null);
         // (stuck behind a rock / a wall / a cliff: it takes off over it)
-        if (walk > 0 && dist > 8 * s) {
+        if (walk > 0 && dist > 11.5 * s) {
             if (dist < d.stuckDist - 1) { d.stuckDist = dist; d.stuckT = 0; }
             else if ((d.stuckT += dt) > MIND.STUCK_T) { d.landFail = MIND.LAND_FAIL * 1.5; this._takeOff(d, 'chase'); this.log.push('stuck'); return 0; }
         } else { d.stuckT = 0; d.stuckDist = dist; }
