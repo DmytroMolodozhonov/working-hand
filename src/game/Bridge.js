@@ -5,15 +5,15 @@
  * The author: «Мост должен создаваться НЕ только над рекой, а по любым условиям… Можно везде создать мост. Главное,
  * чтобы палочка упиралась в какой-то твёрдый объект. Может быть мост ввысь, через расщелины, пропасти, неважно.
  * ЕМУ ВООБЩЕ ДОЛЖНО БЫТЬ ПОФИГ. До 200 метров, больше нельзя». So there is no «bank» to look for and no «gap» to
- * find: the wand's ray (`TerrainData.raycast`, up to 200 m) hits a solid block, and the strip (three wide, at the
- * level of the hero's feet, climbing or going down 1:1 at most — a ramp on every step) is laid from under the feet
+ * find: the wand's ray (`TerrainData.raycast`, up to 200 m) hits a solid block, and the strip (five wide, a straight
+ * line in height from the hero's feet to the target — level over a lake, an even climb up a hill, 1:1 at the steepest, a ramp on every step) is laid from under the feet
  * to that block: over a river, a ravine, the sea, lava, thin air, up a mountain or a tower, down a cliff. Only
  * EMPTY cells (air, water) are filled — a wall, a house, a tree, an enchanted or a god's block in the way is left
- * as it is (never replaced). On solid level ground, where nothing is empty, the strip is laid one layer higher
- * (a raised walkway, a step up from the hero's feet).
+ * as it is (never replaced). Half-block rails on the edges, flared slab feet at both ends. On solid level ground,
+ * where nothing is empty, a low walkway of slabs is laid half a block up.
  *
  * It is made of what the ends are made of — the near half of the block under the feet, the far half of the block
- * hit (`bridgeMaterial`; no wood at all). Price: ten mana up to 16 m, +0.5 per metre beyond (200 m → ~102).
+ * hit; an unfit end takes the other's, else what is most around (`bridgeMaterials`, `BRIDGE_MATERIAL_OF`; wood only where wood is about). Price: ten mana up to 16 m, +0.5 per metre beyond (200 m → ~102).
  * The strip grows by pieces (the front of the magic runs from the hero to the target, 1.5 s up to ~10 s for the
  * longest; the caster's computer lays the blocks a few at a time), the others only see the magic run.
  *
@@ -27,11 +27,11 @@
  */
 
 import * as THREE from 'three';
-import { BLOCK, isLeaves, isWood, isPlanetBlock } from '../world/Terrain.js';
-import { isEnchanted } from '../world/EnchantedStone.js';
+import { BLOCK } from '../world/Terrain.js';
 import { castingHand } from './WandAim.js';
 import { occupied } from './Stitching.js';
 import { stepRamps } from '../world/PlanSlopes.js';
+import { SHAPE } from '../world/BlockShapes.js';
 
 export const BRIDGE = {
     REACH: 200, // m along the wand: how far the solid thing it points at may be (the author: «до 200 метров»)
@@ -66,10 +66,10 @@ export const BRIDGE_TARGETS = {
     ghost: { does: 'none', why: 'не касается: призрак бестелесный' },
     custom: { does: 'none', why: 'не касается' },
     gargoyle: { does: 'none', why: 'не касается' },
-    blocks: { does: 'build', why: 'кладёт блоки того же материала, что и края (камень, земля, песок, снег, лёд, блок замка), только в пустоту и воду; землю, стены, чужие блоки не трогает' },
+    blocks: { does: 'build', why: 'кладёт блоки материала, что рядом (камень, песчаник, снег, лёд, блок замка; земля — только если вокруг одна земля), только в пустоту и воду; землю, стены, чужие блоки не трогает' },
     gap: { does: 'build', why: 'пропасти, ущелья, ямы и пустота: мост ложится в любое пустое место, берега искать не нужно (палочка упирается в твёрдое — туда он и идёт)' },
     water: { does: 'build', why: 'вода — пустая клетка: настил ложится на уровне ног, над водой или в воду' },
-    trees: { does: 'none', why: 'деревья не трогает и из дерева не строит: ствол или листва с края — это просто земля; блок там, где дерево, не кладётся' },
+    trees: { does: 'none', why: 'деревья не трогает; блок там, где дерево, не кладётся; доски — материал моста только если вокруг доски и брёвна, листва — никогда' },
     houses: { does: 'none', why: 'стены домов и замков не ломает — упирается в них' },
     ships: { does: 'none', why: 'корабль — не блоки мира (его палубы двигаются)' },
     ward: { does: 'none', why: 'в чужой сфере защиты дома не строит (HouseWards.forbids)' },
@@ -79,22 +79,46 @@ export const BRIDGE_TARGETS = {
 };
 
 /**
- * What the strip is made of for a bank whose top block is `b` — the same material. Exceptions, each with its reason:
- * trees (a trunk / leaves / planks at the edge: no wood is used — the ground under it is earth), tilled land and
- * paths (just earth), the enchanted stone (no spell makes it — plain stone, as Stitching does), glowing / decor
- * and unknown blocks (stone). Sand and gravel stay sand and gravel: no block of this world falls, so a strip of
- * them hangs as any filling does.
+ * WHAT THE BRIDGE IS MADE OF (the author: «он создал мост из ДЕРЕВА, хотя должен — из МАТЕРИАЛОВ, КОТОРЫЕ РЯДОМ»):
+ * block nearby → the bridge's block. `EARTH` — ground that is only a last resort (a bridge of stone is preferred when
+ * stone is anywhere around; with only earth about, an earthen causeway). Not listed = never a bridge's material:
+ * air, water, bedrock, leaves, thatch / hay / fences / crops, cloth, lamps, gold, the enchanted and ghost stone, a
+ * god's gift (the bridge only lays; it never copies what no spell makes).
  */
-export function bridgeMaterial(b) {
-    if (isEnchanted(b)) return BLOCK.STONE;
-    if (isWood(b) || isLeaves(b) || b === BLOCK.THATCH || b === BLOCK.HAY || b === BLOCK.FENCE) return BLOCK.DIRT;
-    if (b === BLOCK.FARMLAND || b === BLOCK.PATH || b === BLOCK.WHEAT || b === BLOCK.VEG || b === BLOCK.FLOWERS) return BLOCK.DIRT;
-    if (b === BLOCK.ICE_SHAPE) return BLOCK.ICE;
-    if (b === BLOCK.AIR || b === BLOCK.WATER || b === BLOCK.BEDROCK) return BLOCK.STONE;
-    if (b === BLOCK.GRASS || b === BLOCK.DIRT || b === BLOCK.STONE || b === BLOCK.SNOW || b === BLOCK.SAND || b === BLOCK.ICE || b === BLOCK.GRAVEL || b === BLOCK.DEEPSTONE) return b;
-    if ((b >= BLOCK.CS_GREY && b <= BLOCK.BRICK) || b === BLOCK.PLASTER || isPlanetBlock(b)) return b;
-    if (b >= BLOCK.ICE_WALL && b <= BLOCK.ICE_DARK) return b;
-    return BLOCK.STONE;
+export const EARTH = -1;
+export const BRIDGE_MATERIAL_OF = (() => {
+    const B = BLOCK, m = {};
+    const put = (list, to) => { for (const k of list) if (B[k] != null) m[B[k]] = to ?? B[k]; };
+    put(['STONE', 'DEEPSTONE', 'GRAVEL', 'ARCANE', 'ARCANE_DARK'], B.STONE);
+    put(['SAND'], B.CS_SAND); // (sandstone)
+    put(['SNOW'], B.SNOW);
+    put(['ICE', 'ICE_SHAPE', 'ICE_WALL', 'ICE_GLOW', 'ICE_FLOOR', 'ICE_DARK'], B.ICE);
+    put(['CS_GREY', 'CS_SAND', 'CS_DARK', 'CS_WHITE', 'CS_MOSSY', 'COBBLE', 'BRICK', 'PLASTER']); // (castle walls: the same stone)
+    put(['PLANKS', 'PLANKS_DARK']);
+    put(['WOOD', 'BIRCH', 'SPRUCE', 'CHERRY', 'DARK'], B.PLANKS); // (a trunk: planks — only where wood is what is around)
+    put(['REGOLITH', 'PLANET_ROCK', 'PLANET_ICE', 'PLANET_DARK']); // (other planets: their own ground)
+    put(['GRASS', 'DIRT', 'FARMLAND', 'PATH', 'PLANET_GRASS'], EARTH);
+    return m;
+})();
+
+/**
+ * The two materials of a bridge: the near half from the block under the feet `nearB`, the far half from the block the
+ * wand hit `farB`; an end that is no fit (grass, water, air, leaves…) takes the other end's; both unfit → the most
+ * common fit material among `around` (the blocks round the hero within 8 m); only earth about → earth; nothing →
+ * stone. → {near, far}
+ */
+export function bridgeMaterials(nearB, farB, around = []) {
+    const pick = (b) => { const v = BRIDGE_MATERIAL_OF[b]; return v === undefined || v === EARTH ? null : v; };
+    const nm = pick(nearB), fm = pick(farB);
+    let a = null;
+    if (nm == null || fm == null) {
+        const n = new Map(); let earth = 0;
+        for (const b of around) { const v = BRIDGE_MATERIAL_OF[b]; if (v === undefined) continue; if (v === EARTH) earth++; else n.set(v, (n.get(v) || 0) + 1); }
+        let best = 0;
+        for (const [v, c] of n) if (c > best) { best = c; a = v; }
+        if (a == null) a = earth || BRIDGE_MATERIAL_OF[nearB] === EARTH || BRIDGE_MATERIAL_OF[farB] === EARTH ? BLOCK.DIRT : BLOCK.STONE;
+    }
+    return { near: nm ?? fm ?? a, far: fm ?? nm ?? a };
 }
 /** The colour of the magic's sparks over a material. */
 const sparkColor = (b) => (b === BLOCK.SAND ? 0xe6d8a0 : b === BLOCK.SNOW ? 0xf4f8ff : b === BLOCK.ICE || (b >= BLOCK.ICE_WALL && b <= BLOCK.ICE_DARK) ? 0xa8dcff : b === BLOCK.GRASS ? 0x7fbf5a : b === BLOCK.DIRT ? 0x9a7448 : 0xb8b4aa);
@@ -116,54 +140,78 @@ export function bridgeWords(text) {
  * The bridge between A (the hero's feet: the layer aL they stand on) and the target B (bx, bz, bL: the solid
  * block the wand hit): {cells: [[x, L, z, block, t, shape?]…] sorted from A to B, len} — or {why}:
  * 'near' (under 2 m across), 'far' (over 200 m), 'unknown' (the ground on the way is not made yet), 'empty'
- * (no cell can be filled: the way is walled). get(x, L, z) → block; known(x, z) → is this ground made.
- * The strip is three wide, level with the feet, 1:1 up or down at the steepest (the target higher than that is
- * reached as far as the slope gets); the near half is made of the block under the feet, the far half of B's.
- * On solid level ground (nothing empty at the feet's level) it is laid one layer higher (`raised`).
+ * (no cell can be filled: the way is walled). get(x, L, z) → block; known(x, z) → is this ground made;
+ * around: the blocks round the hero (for the material, `bridgeMaterials`).
+ * The deck is FIVE wide (the hero is 3.5 m), a straight line in height from the feet to the target (level when the
+ * target is level — over a lake too; a rise spread evenly, never steeper than 1:1: where it is steeper the target is
+ * reached as far as the slope gets; each step up is a ramp), flush with the ground at both ends. Half-block rails
+ * (slabs) on the two edges, none in the first / last 3 blocks, where the outer columns are slabs as well: a flared
+ * foot, so one steps on from the side without a jump. Only EMPTY cells (air, water) are laid. On solid level ground
+ * (nothing empty at the feet) it is a low walkway of slabs one half-block up.
  */
-export function bridgePlan(get, A, B, known = null) {
+export function bridgePlan(get, A, B, known = null, around = []) {
     const dx = B.x - A.x, dz = B.z - A.z;
     const len = Math.hypot(dx, dz);
     if (len < BRIDGE.MIN) return { why: 'near' };
     if (len > BRIDGE.MAX + 0.5) return { why: 'far' };
     const rise = B.L - A.L;
     const fx = dx / len, fz = dz / len, sx = -fz, sz = fx; // (along, across)
-    const near = bridgeMaterial(get(A.x, A.L, A.z)), far = bridgeMaterial(get(B.x, B.L, B.z));
-    // the columns of the deck (three wide), sampled finely so a slanting bridge has no holes
-    const cols = new Map(); // "x,z" → {x, z, t}
+    const { near, far } = bridgeMaterials(get(A.x, A.L, A.z), get(B.x, B.L, B.z), around);
+    // the columns of the deck (five wide), sampled finely so a slanting bridge has no holes
+    const cols = new Map(); // "x,z" → {x, z, t, lat}
     for (let s = 0; s <= len + 0.01; s += 0.25) {
         const t = s / len;
-        for (let w = -1.25; w <= 1.3; w += 0.5) { // (three wide; off the halves: Math.round would lean to one side)
+        for (let w = -2.25; w <= 2.3; w += 0.5) { // (off the halves: Math.round would lean to one side)
             const x = Math.round(A.x + fx * s + sx * w), z = Math.round(A.z + fz * s + sz * w);
             const k = x + ',' + z;
-            if (!cols.has(k)) cols.set(k, { x, z, t });
+            if (!cols.has(k)) cols.set(k, { x, z, t, m: s, lat: Math.round(w) });
         }
     }
+    // (each column's place along the way is its own centre's, not the first sample that touched it: neighbours then differ by one layer at most)
+    for (const c of cols.values()) { c.m = Math.max(0, Math.min(len, (c.x - A.x) * fx + (c.z - A.z) * fz)); c.t = c.m / len; }
     if (known) for (const c of cols.values()) if (!known(c.x, c.z)) return { why: 'unknown' };
-    const build = (raise) => {
-        // up to 1:1 along the way
-        const deckAt = (t) => { const m = len * t; return Math.round(A.L + raise + Math.max(-m, Math.min(m, rise - raise))); };
-        const cells = [];
+    // a straight line from the feet to the target, 1:1 at the steepest
+    const deckAt = (t) => { const m = len * t; return A.L + Math.round(Math.max(-m, Math.min(m, rise * t))); };
+    const foot = (c) => c.m < 3 || c.m > len - 3; // (the first / last 3 blocks)
+    const cells = [];
+    const tops = new Map();
+    for (const c of cols.values()) tops.set(c.x + ',' + c.z, deckAt(c.t));
+    const ramps = stepRamps(tops), rampAt = new Set();
+    for (const [x, L, z] of ramps) rampAt.add(x + ',' + L + ',' + z);
+    const mat = (c) => (c.t < 0.5 ? near : far);
+    for (const c of cols.values()) {
+        const L = tops.get(c.x + ',' + c.z);
+        if (!free(get(c.x, L, c.z))) continue; // (the ground, a wall, a tree, a house: left as they are)
+        cells.push([c.x, L, c.z, mat(c), c.t, Math.abs(c.lat) === 2 && foot(c) ? SHAPE.SLAB : 0]);
+        if (Math.abs(c.lat) === 2 && !foot(c) && !rampAt.has(c.x + ',' + (L + 1) + ',' + c.z) && free(get(c.x, L + 1, c.z))) cells.push([c.x, L + 1, c.z, mat(c), c.t, SHAPE.SLAB]); // (a rail)
+    }
+    // where the deck goes up a block (a slanting bridge): a ramp on the lower step — walked up, not climbed (BlockShapes.js)
+    for (const [x, L, z, shape] of ramps) {
+        const c = cols.get(x + ',' + z);
+        if (c && free(get(x, L, z))) cells.push([x, L, z, mat(c), c.t, shape]);
+    }
+    let raised = false;
+    if (!cells.length) { // solid level ground: a low walkway of slabs, half a block up
         for (const c of cols.values()) {
-            if (raise && c.t * len < 1) continue; // (a raised walkway starts a step ahead of the feet)
-            const L = deckAt(c.t);
-            if (!free(get(c.x, L, c.z))) continue; // (the ground, a wall, a tree, a house: left as they are)
-            cells.push([c.x, L, c.z, c.t < 0.5 ? near : far, c.t]);
+            const L = deckAt(c.t) + 1;
+            if (c.m < 1 || !free(get(c.x, L, c.z))) continue;
+            cells.push([c.x, L, c.z, mat(c), c.t, SHAPE.SLAB]);
         }
-        // where the deck goes up a block (a slanting bridge): a ramp on the lower step — walked up, not climbed (BlockShapes.js)
-        const tops = new Map();
-        for (const c of cols.values()) tops.set(c.x + ',' + c.z, deckAt(c.t));
-        for (const [x, L, z, shape] of stepRamps(tops)) {
-            const c = cols.get(x + ',' + z);
-            if (c && free(get(x, L, z))) cells.push([x, L, z, c.t < 0.5 ? near : far, c.t, shape]);
-        }
-        return cells;
-    };
-    let cells = build(0), raised = false;
-    if (!cells.length) { cells = build(1); raised = true; }
+        raised = cells.length > 0;
+    }
     if (!cells.length) return { why: 'empty' };
     cells.sort((a, b) => a[4] - b[4] || a[1] - b[1]);
     return { cells, len, near, far, raised };
+}
+
+/** The blocks round the hero within 8 m (every 2nd column, the top solid block near his feet): the bridge's material when the ends are no fit. */
+export function aroundBlocks(get, A, r = 8) {
+    const out = [];
+    for (let dx = -r; dx <= r; dx += 2) for (let dz = -r; dz <= r; dz += 2) {
+        if (dx * dx + dz * dz > r * r) continue;
+        for (let L = A.L + 2; L >= A.L - 4; L--) { const b = get(A.x + dx, L, A.z + dz); if (b !== BLOCK.AIR && b !== BLOCK.WATER) { out.push(b); break; } }
+    }
+    return out;
 }
 
 /** The mana beyond the usual ten for a long bridge. */
@@ -221,7 +269,8 @@ export class Bridge {
         const r = rayTarget(data, origin, dir, BRIDGE.REACH, known);
         if (!r.hit) return { why: r.why };
         const B = blockAt(r.hit, dir);
-        const plan = bridgePlan((x, L, z) => data.get(x, L, z), A, B, known);
+        const get = (x, L, z) => data.get(x, L, z);
+        const plan = bridgePlan(get, A, B, known, aroundBlocks(get, A));
         return plan.cells ? { A, B, plan } : { why: plan.why };
     }
 
@@ -264,7 +313,8 @@ export class Bridge {
         if (!mine) plan = null;
         else if (!plan) {
             const B = { x: Math.round(o.x + d.x), L: Math.round(o.y + d.y), z: Math.round(o.z + d.z) };
-            plan = bridgePlan((x, L, z) => data.get(x, L, z), A, B, data.landMade ? (x, z) => data.landMade(x, z) : null);
+            const get = (x, L, z) => data.get(x, L, z);
+            plan = bridgePlan(get, A, B, data.landMade ? (x, z) => data.landMade(x, z) : null, aroundBlocks(get, A));
             if (!plan.cells) return;
         }
         const cells = plan ? plan.cells.map((c) => ({ c, wait: 0 })) : [];

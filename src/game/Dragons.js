@@ -27,6 +27,7 @@
  *    (`drg` messages). Every computer burns its own player in the flame. Saved with the world.
  */
 
+import { allLog } from '../core/AllLog.js';
 import { crowdStep } from './CrowdSources.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
@@ -330,7 +331,7 @@ export class Dragons {
         const g = this.game;
         g.sound?.playExplosion?.(d.model.position, g.character.group.position, 0.4);
         d.mouthT = 1.2;
-        if (d.model.position.distanceTo(g.character.group.position) < 80) g.hud?.notify?.(`🐉 ${DRAGON_KINDS[d.kind].name} проснулся!`);
+        if (d.model.position.distanceTo(g.character.group.position) < 80) allLog('Мир', `${DRAGON_KINDS[d.kind].name} проснулся`);
     }
 
     _die(d, killer = d.lastBy) {
@@ -861,7 +862,7 @@ export class Dragons {
         // sometimes it lands somewhere along its way to rest
         if (Math.random() < WANDER.LAND) d.landAt = from.clone().lerp(to, 0.35 + Math.random() * 0.3);
         this.log.push('wanderer:' + r.kind);
-        if (from.distanceTo(g.character.group.position) < 600) g.hud?.notify?.('🐉 Высоко в небе пролетает дракон…');
+        if (from.distanceTo(g.character.group.position) < 600) allLog('Мир', 'вдали пролетает дракон (' + r.kind + ')'); // (the journal only — no on-screen warning)
     }
 
     /**

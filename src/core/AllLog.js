@@ -22,7 +22,7 @@ export const ALL_LOG = {
     RECENT_MS: 5 * 60 * 1000, // «the last 5 minutes»
 };
 
-export const TAGS = ['Производительность', 'Заклинания', 'Голос', 'Жители', 'Руки', 'Предметы', 'Сеть', 'Удары', 'Ошибки', 'Игра'];
+export const TAGS = ['Производительность', 'Заклинания', 'Голос', 'Жители', 'Руки', 'Предметы', 'Сеть', 'Удары', 'Ошибки', 'Игра', 'Мир'];
 export const LEVELS = { info: 0, warn: 1, error: 2 };
 
 const pad = (n, w = 2) => String(n).padStart(w, '0');

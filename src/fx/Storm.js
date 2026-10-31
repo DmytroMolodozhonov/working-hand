@@ -13,6 +13,11 @@ import * as THREE from 'three';
 
 const DROPS = 700;
 const BOX = { x: 44, y: 30, z: 44 };
+/**
+ * The weather's own rain: every CHECK seconds a roll; CHANCE per roll (was 0.17 — the author: «дождь слишком часто»,
+ * 4 times rarer → 0.0425); a rain lasts MIN…MIN+SPAN seconds (unchanged). The host rolls, everyone gets the same.
+ */
+export const WEATHER = { CHECK: 300, CHANCE: 0.17 / 4, MIN: 120, SPAN: 60 };
 /** «Let it rain»: 2 game hours (a game day is 24 minutes: an hour is a minute). */
 export const RAIN_SECONDS = 120;
 /** The weather's storm: the clouds gather for 1.5 game hours (a minute and a half) before it rains. */

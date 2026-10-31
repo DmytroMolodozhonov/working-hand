@@ -32,6 +32,8 @@ import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes
 import { enchantMul, shieldMul, shieldPlain, enchantAdd } from './Enchant.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { SPELL_COST } from './Combat.js';
+import { allLog } from '../core/AllLog.js';
+import { WEATHER } from '../fx/Storm.js';
 import { spiderDist } from './Spider.js';
 import { dragonDist } from './Dragons.js';
 import { phoenixDist } from './Phoenixes.js';
@@ -632,18 +634,18 @@ export class Gear {
         const g = this.game;
         if (!g.authority || g.config.map || g.config.mode === 'test' || !g.dayCycle) return;
         this._weatherT += dt;
-        if (this._weatherT < 300) return;
+        if (this._weatherT < WEATHER.CHECK) return;
         this._weatherT = 0;
-        if (Math.random() >= 0.17) return;
-        const seconds = 120 + Math.random() * 60;
+        if (Math.random() >= WEATHER.CHANCE) return;
+        const seconds = WEATHER.MIN + Math.random() * WEATHER.SPAN;
         this.startWeather(seconds);
         if (g.sync) g.sync.weather?.(seconds);
     }
 
     startWeather(seconds) {
         const g = this.game;
-        g.storm?.gatherThenRain(seconds);
-        g.hud.notify?.('☁️ Собираются тучи — скоро будет гроза');
+        g.storm?.gatherThenRain(seconds); // (no on-screen warning: the clouds themselves are the sign — the author)
+        allLog('Мир', 'собираются тучи, гроза через ~1,5 мин');
     }
 
     // ================================================================= frame
