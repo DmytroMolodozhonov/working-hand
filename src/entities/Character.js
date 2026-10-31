@@ -6,6 +6,7 @@
  * (mountains / craters) and exposes clean accessors for weapons and network.
  */
 
+import { ArmSolver } from './ArmSolver.js';
 import * as THREE from 'three';
 import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
@@ -355,22 +356,32 @@ export class VoxelCharacter {
         this.group.getWorldQuaternion(_qBody);
         _up.set(0, 1, 0).applyQuaternion(_qBody);
 
-        const solveArm = (armAnchor, elbowAnchor, shoulder, elbow, wrist) => {
+        // the arms as a human arm moves (ArmSolver: this player's lengths, in front of / behind the body from the camera's
+        // depth and anatomy, the shoulder girdle) — the old getRelativeDirection always put the arm in front
+        const AS = this.armSolver || (this.armSolver = new ArmSolver());
+        const aspect = poseData.aspect || 1, adt = Math.min(0.2, Math.max(0.001, dt));
+        AS.shoulders(poseData.rightShoulder, poseData.leftShoulder, aspect, adt);
+        const so = this._armOut || (this._armOut = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
+        const solveArm = (armAnchor, elbowAnchor, shoulder, elbow, wrist, side) => {
+            AS.solve(side, shoulder, elbow, wrist, aspect, so, adt);
+            // the shoulder girdle (up with a raised arm, back with an arm drawn behind, forward with a reach)
+            armAnchor.position.set(side === 'left' ? -0.7 : 0.7, 0.5 + so.g.y, so.g.z);
+            armAnchor.updateMatrixWorld(true);
             // Upper arm
-            this.getRelativeDirection(shoulder, elbow, _v1).applyQuaternion(_qBody);
+            _v1.set(so.u.x, so.u.y, so.u.z).applyQuaternion(_qBody);
             armAnchor.up.copy(_up);
             _v2.copy(armAnchor.position);
             armAnchor.parent.localToWorld(_v2).add(_v1);
             this._smoothLookAt(armAnchor, _v2, armK);
             armAnchor.updateMatrixWorld(true);
             // Forearm
-            this.getRelativeDirection(elbow, wrist, _v1).applyQuaternion(_qBody);
+            _v1.set(so.f.x, so.f.y, so.f.z).applyQuaternion(_qBody);
             elbowAnchor.up.copy(_up);
             elbowAnchor.getWorldPosition(_v2).add(_v1);
             this._smoothLookAt(elbowAnchor, _v2, armK);
         };
-        solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist);
-        solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist);
+        solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist, 'left');
+        solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist, 'right');
         this._bendKept('left');
         this._bendKept('right');
 
@@ -668,9 +679,12 @@ export class VoxelCharacter {
         const L1 = this.BONE_LENGTH_UPPER, L2 = this.BONE_LENGTH_LOWER;
         armReach(S, point, L1, L2, pole, _r3, _r4);
         if (fingers > 0) {
-            // the wrist short of the point by the hand, along the forearm
-            const f = _r5.subVectors(point, _r3).normalize();
-            armReach(S, _r6.copy(point).addScaledVector(f, -fingers), L1, L2, pole, _r3, _r4);
+            // the wrist short of the point by the hand, along the forearm (a few rounds: the forearm's line settles —
+            // one round missed by a few cm when the shoulder girdle had moved)
+            for (let it = 0; it < 4; it++) {
+                const f = _r5.subVectors(point, _r3).normalize();
+                armReach(S, _r6.copy(point).addScaledVector(f, -fingers), L1, L2, pole, _r3, _r4);
+            }
         }
         arm.up.copy(_up);
         arm.lookAt(_r3);
