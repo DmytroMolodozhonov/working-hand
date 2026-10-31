@@ -150,7 +150,22 @@ function makePlan(seed) {
     const nearRoadNode = (x, z) => { let best = null, bd = Infinity; for (const r of P.roads) for (const p of r) { const d = Math.hypot(p.x - x, p.z - z); if (d < bd && Math.hypot(p.x - CX, p.z - CZ) > H.WALL_OUT) { bd = d; best = p; } } return best; };
     // --- лагеря Таронов: 3–6 плато в 500–1300 м от середины, дорога от ближайшей точки дорог
     const nc = 3 + Math.floor(rng() * 4);
-    for (let k = 0, tries = 0; k < nc && tries < 200; tries++) {
+    // (the FIRST camp is near the arrival — 345…395 m from where the hero stands, to one side of the main road — so the Tarons are met at once:
+    //  the author, testing hell: «я не вижу Таронов… не спавнятся или очень редко»; the others are as before, far in the hell)
+    {
+        const side = rng() < 0.5 ? 1 : -1;
+        for (let t = 0; t < 40; t++) {
+            const a = toC + side * (0.55 + rng() * 0.5), d = 345 + rng() * 50; // (≥ 330 from the mark: the arrival plateau's blend (SPAWN_R + 300) must not lift the camp's own level)
+            const x = Math.round(sx + Math.cos(a) * d), z = Math.round(sz + Math.sin(a) * d);
+            if (Math.abs(x - CX) > H.HALF - H.RIM - 80 || Math.abs(z - CZ) > H.HALF - H.RIM - 80 || Math.hypot(x - mx, z - mz) < 330) continue;
+            const r = 20 + Math.round(rng() * 14), y = Math.round(roadLevel(P, x, z));
+            P.taronCamps.push({ x, z, n: 4 + Math.floor(rng() * 3), r, y });
+            const from = nearRoadNode(x, z);
+            P.roads.push(road(from.x, from.z, from.h, x, z, y, 40));
+            break;
+        }
+    }
+    for (let k = P.taronCamps.length, tries = 0; k < nc && tries < 200; tries++) {
         const a = a0 + (k + 1) * (TAU / (nc + 1)) + (rng() - 0.5) * 0.5, d = 500 + rng() * 800;
         const x = Math.round(CX + Math.cos(a) * d), z = Math.round(CZ + Math.sin(a) * d);
         if (Math.hypot(x - mx, z - mz) < 320) continue;
@@ -271,12 +286,15 @@ function makePlan(seed) {
         return true;
     });
     // --- логова горгулий ада: скалы-башни с площадкой наверху
-    for (let k = 0; k < 6; k++) place(34, (x, z) => {
+    // (the first lair is near the arrival, 320…480 m from the hero, on the other side of the road from the first camp: one is seen flying within the first minutes)
+    const lairAt = (x, z) => {
         const y = 72 + Math.round(rng() * 22);
         P.spires.push({ x, z, r: 15 + rng() * 5, top: y, lair: true, tw: rng() * TAU });
         P.gargoyleLairs.push({ x, z, y });
         return true;
-    });
+    };
+    place(34, lairAt, { x: sx, z: sz, a: toC - (P.taronCamps[0] && Math.hypot(P.taronCamps[0].x - sx, P.taronCamps[0].z - sz) < 450 ? Math.sign(Math.sin(Math.atan2(P.taronCamps[0].z - sz, P.taronCamps[0].x - sx) - toC)) * 0.9 : -0.9), spread: 0.6, d0: 320, d1: 480 });
+    for (let k = P.gargoyleLairs.length; k < 6; k++) place(34, lairAt);
     // --- шпили базальта и обсидиана: сотни метров над лавой
     for (let k = 0; k < 150; k++) { const r = 5 + rng() * 11; place(r * 1.7 + 2, (x, z) => {
         const top = Math.min(H.TOP, Math.round(46 + rng() * 70));

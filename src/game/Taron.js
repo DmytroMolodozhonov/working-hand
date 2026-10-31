@@ -3,7 +3,7 @@
  * Rules, numbers and the «who / what» table: TaronRules.js; the look: fx/TaronModel.js; the voices: audio/TaronSounds.js.
  *
  *   Where     the camps of the underworld's plan (`setPlan({taronCamps: [{x, z, n, r}]})` — src/world/HellMap.js `hellPlan(seed)`; until a plan exists nobody is
- *             made). A camp is loaded 240 m round a player and put away at 400 m; its Tarons are made a few a frame, only once the land is made
+ *             made). A camp is loaded 420 m round a player and put away at 560 m; its Tarons are made a few a frame, only once the land is made
  *             (TerrainData.landMade). A killed Taron is a gap in his camp: +1 after 15 game minutes, never above the camp's `n`.
  *   Calm      they stand about, shift their weight, snort, walk a few steps round the camp. Whoever is not theirs and is seen within 40 m (or has hurt one of
  *             them: 30 s of grudge, 70 m) is an enemy: a roar, then the whole camp's awake.
@@ -33,7 +33,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const MODES = ['idle', 'walk', 'hunt', 'windup', 'swing', 'recover', 'flinch', 'roar', 'dead'];
 const MODE_NO = Object.fromEntries(MODES.map((m, i) => [m, i]));
-const LOAD = 240, KEEP = 400, DRAW = 220, ANIM = 140, FAR = 70, DEATH_T = 6, G = 24;
+const LOAD = 420, KEEP = 560, DRAW = 420, ANIM = 200, FAR = 70, DEATH_T = 6, G = 24; // (a camp is made when a player is within 420 m — the hero sees it from the hill; drawn within 420 m)
 export const TARON_LOAD = { LOAD, KEEP };
 
 export class Taron {

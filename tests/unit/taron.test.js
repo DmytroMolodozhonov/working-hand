@@ -35,7 +35,7 @@ test('a camp is made near a player (n Tarons, 7 m, not far ones), put away when 
     for (const t of T.list) { t.model.updateMatrixWorld(true); t.model.userData.axe.visible = false; assert.ok(Math.hypot(t.model.position.x, t.model.position.z) < 31); }
     g.character.group.position.set(0, 0, 900);
     step(g, T, 3);
-    assert.equal(T.list.length, 0, 'put away at 400 m');
+    assert.equal(T.list.length, 0, 'put away at 560 m');
     g.character.group.position.set(0, 0, 100);
     step(g, T, 20);
     assert.equal(T.list.filter((t) => !t.dead).length, 5, 'and made again');
