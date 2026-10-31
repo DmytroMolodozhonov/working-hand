@@ -88,7 +88,8 @@ export class Accio {
         for (const side of ['right', 'left']) {
             if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
             dg.raised++;
-            const catcher = free(sec) ? sec : null;
+            const catcher = free(sec) ? sec : null; // (things, books, bodies: the secondary hand only)
+            const wandHand = free(g.dom) ? g.dom : catcher; // (a WAND called back: into the wand hand first — the author: «призвать палочку» with the main hand is allowed)
             const hand = ch.getHandWorldPosition(side, new THREE.Vector3());
             const dir = ch.getHandDirection(side, new THREE.Vector3());
             for (const w of catcher ? g.weapons.weapons : []) {
@@ -127,22 +128,24 @@ export class Accio {
                 if (!best || score < best.score) best = { board: id, score };
             }
             // any other thing lying about (a bow, a shield, a wand, a scroll, food, coins…)
-            if (!catcher) { dg.noHand = true; continue; }
+            if (!catcher && !wandHand) { dg.noHand = true; continue; }
             for (const L of g.items?.loose.values() || []) {
+                const catcherL = L.item?.kind === 'wand' ? wandHand : catcher;
                 dg.loose++;
                 { const dd = L.model.position.distanceTo(hand); if (dd < (dg.nearestAny ?? Infinity)) dg.nearestAny = dd; if (L.item?.kind === 'wand') { dg.wands = (dg.wands || 0) + 1; if (dd < (dg.wandD ?? Infinity)) { dg.wandD = dd; dg.wandNote = L.asked ? 'её уже зовёт другой' : L.accio ? 'уже летит' : L.swarm ? 'в рое' : 'свободна'; } } }
                 if (L.asked || L.accio || L.swarm) continue;
                 const to = _v1.subVectors(L.model.position, hand);
                 const d = to.length();
                 if (d > ACCIO.RANGE || d < 0.3) continue;
+                if (!catcherL) { dg.noHand = true; continue; }
                 dg.inRange++;
                 const ang = dir.angleTo(to.normalize());
                 inRangeUids.add(L.item.uid);
-                if (ang < dg.nearAng) { dg.nearAng = ang; dg.nearD = d; nearL = L; nearSide = catcher; }
+                if (ang < dg.nearAng) { dg.nearAng = ang; dg.nearD = d; nearL = L; nearSide = catcherL; }
                 if (ang > ACCIO.CONE + Math.atan2(ACCIO.NEAR, d)) continue;
                 dg.inCone++;
                 const score = ang * 5 + d * 0.05;
-                if (!best || score < best.score) best = { L, side: catcher, score };
+                if (!best || score < best.score) best = { L, side: catcherL, score };
             }
             // a fallen book-bird's book
             for (const bk of g.books?.books?.values() || []) {
