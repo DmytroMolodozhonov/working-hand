@@ -648,8 +648,8 @@ export class NetSync {
         this.net.send({ t: 'vgs', by: this.me, k: 'p', p: [r3(p.x), r3(p.y), r3(p.z)], s: seed >>> 0 }, true);
     }
 
-    steamOff() {
-        this.net.send({ t: 'vgs', by: this.me, k: 'o' }, true);
+    steamOff(instant = false) {
+        this.net.send({ t: 'vgs', by: this.me, k: 'o', ...(instant ? { q: 1 } : {}) }, true);
     }
 
     /** «Invisibility»: I am invisible now / seen again (Invisibility.js). */

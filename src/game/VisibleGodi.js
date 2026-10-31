@@ -71,6 +71,7 @@ export const SEE = {
     PUFF_R: 1.35, // m: a puff's radius (the hero is 3.5 m tall: a puff is about a head and a half wide)
     EMIT_T: 0.06, // s between two looks of the jet
     OWNER_MAX: 40, // puffs one hero's steam keeps on every computer
+    FADE_T: 2, // s: «стоп» / no mana — the steam thins out, drifts and melts this long (the window with it); death / leaving: at once
 };
 
 /** The lens (see the header). */
@@ -491,10 +492,11 @@ export class VisibleGodi {
         this.steam = SEE.STEAM;
         this.jet = null;
         this.lens = null;
-        this.viewing = on; this._scanT = 0;
-        g.seeFx?.setOn?.(on); // (others' steam in front of the eyes switches it on again at the next look: _viewTick)
+        this._scanT = 0;
+        const fade = !on && why !== 'dead' && why !== 'steam' && typeof g.steam?.fade === 'function'; // (the steam melts away: SEE.FADE_T; at death at once)
+        if (on || !fade) { this.viewing = on; g.seeFx?.setOn?.(on); } // (while it melts the window stays and melts with it: _viewTick lets go when no steam is left)
         g.steam?.setJet?.('local', null, null, false);
-        if (!on) { g.steam?.clear?.('local'); g.sync?.steamOff?.(); }
+        if (!on) { if (fade) g.steam.fade('local', performance.now() / 1000); else g.steam?.clear?.('local'); g.sync?.steamOff?.(!fade); }
         g.perf?.note?.(on ? '👁️ Visible Godi: включена' : '👁️ Visible Godi: выключена' + (why ? ' (' + why + ')' : ''));
         if (!on) {
             if (why === 'steam') g.hud.setVoice('👁️ Пар разошёлся — тучки больше нет', true);
@@ -568,7 +570,7 @@ export class VisibleGodi {
         const R = SEE.MAX_LEN + 10;
         for (let i = 0; i < this.all.length; i++) {
             const q = this.all[i];
-            if (puffStrength(now - q.t0) < 0.1) continue;
+            if (puffStrength(now - q.t0) * (q.k ?? 1) < 0.1) continue;
             const x = q.x - e[12], y = q.y - e[13], z = q.z - e[14], L = Math.hypot(x, y, z);
             if (L < LENS.INSIDE) return true;
             if (L < R && (x * dx + y * dy + z * dz) / (l * L) > 0.15) return true;
@@ -649,7 +651,7 @@ export class VisibleGodi {
     onNet(by, m) {
         const g = this.game;
         if (by === g.localId) return;
-        if (m.k === 'o') { g.steam?.clear?.(by); return; }
+        if (m.k === 'o') { if (m.q || !g.steam?.fade) g.steam?.clear?.(by); else g.steam.fade(by, performance.now() / 1000); return; } // (the end of their spell: their steam melts away, the same on every computer; q — at once)
         if (m.k !== 'p' || !Array.isArray(m.p)) return;
         const p = m.p.map(Number);
         if (p.some((x) => !Number.isFinite(x))) return;

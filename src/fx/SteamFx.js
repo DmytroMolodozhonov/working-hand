@@ -22,7 +22,7 @@ const VERT = /* glsl */ `
 attribute vec4 aRand;
 attribute vec3 aOff;
 attribute float aBirth;
-uniform float uNow, uJet, uPx, uLife;
+uniform float uNow, uJet, uPx, uLife, uFade;
 uniform vec3 uTip, uHead;
 varying float vA;
 varying vec3 vC;
@@ -44,8 +44,14 @@ void main() {
         float ang = uNow * 0.25 * sp + ph;
         o.xz = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * o.xz; // (slowly swirling)
         o.y += 0.12 * sin(uNow * 0.6 * sp + ph * 2.0) + 0.015 * age; // (breathing, drifting up)
+        // the end of the spell (uFade 0→1): the puff thins out, swells and drifts up and sideways in a curl, then is gone
+        float fd = uFade * uFade * (3.0 - 2.0 * uFade);
+        o *= 1.0 + 0.7 * fd;
+        o.xz += vec2(cos(ph * 1.7 + uNow * 0.8), sin(ph * 1.3 + uNow * 0.7)) * 0.9 * fd;
+        o.y += 1.4 * fd * (0.6 + aRand.z);
+        live *= 1.0 - fd;
         p = position + o;
-        size = aRand.y * grow;
+        size = aRand.y * grow * (1.0 + 0.45 * fd);
         a = live * (kind < 0.5 ? 0.42 : kind < 2.5 ? 0.55 : (0.5 + 0.5 * sin(uNow * 6.0 + ph * 4.0)) * 0.9);
     }
     vec4 mv = viewMatrix * modelMatrix * vec4(p, 1.0);
@@ -95,9 +101,11 @@ class Body {
         this.next = 0; this.births = new Float64Array(SEE.OWNER_MAX).fill(-1e9); // (per puff: when it was born, s)
         this.ppos = new Float32Array(SEE.OWNER_MAX * 3); this.seeds = new Uint32Array(SEE.OWNER_MAX); // (per puff: where, and its seed — whoever looks through the steam needs them)
         this.jet = 0; this.jetOn = false; this.touched = 0;
+        this.fadeAt = -1; // when the steam began to melt away (s, the performance clock), or -1
     }
 
     add(x, y, z, seed, now) {
+        if (this.fadeAt >= 0) this.clear(); // (a new spell on a melting cloud: the old one goes at once)
         const slot = this.next; this.next = (this.next + 1) % SEE.OWNER_MAX;
         this.births[slot] = now;
         this.ppos[slot * 3] = x; this.ppos[slot * 3 + 1] = y; this.ppos[slot * 3 + 2] = z; this.seeds[slot] = seed >>> 0;
@@ -116,12 +124,13 @@ class Body {
     }
 
     clear() {
-        this.birth.fill(-1e9); this.births.fill(-1e9); this.next = 0;
+        this.birth.fill(-1e9); this.births.fill(-1e9); this.next = 0; this.fadeAt = -1; this.mat.uniforms.uFade.value = 0;
         this.points.geometry.attributes.aBirth.needsUpdate = true;
     }
 
     /** Alive puffs now; the body hides itself when it has nothing to show. */
     live(now) {
+        if (this.fadeAt >= 0 && now - this.fadeAt >= SEE.FADE_T) return 0;
         let n = 0;
         for (let i = 0; i < SEE.OWNER_MAX; i++) if (now - this.births[i] < SEE.PUFF_LIFE) n++;
         return n;
@@ -136,7 +145,7 @@ export class SteamBodies {
         this.bodies = new Map(); // hero id → Body
         this.base = new THREE.ShaderMaterial({
             vertexShader: VERT, fragmentShader: FRAG,
-            uniforms: { uNow: { value: 0 }, uJet: { value: 0 }, uPx: { value: 700 }, uLife: { value: SEE.PUFF_LIFE }, uTip: { value: new THREE.Vector3() }, uHead: { value: new THREE.Vector3() } },
+            uniforms: { uNow: { value: 0 }, uJet: { value: 0 }, uPx: { value: 700 }, uLife: { value: SEE.PUFF_LIFE }, uFade: { value: 0 }, uTip: { value: new THREE.Vector3() }, uHead: { value: new THREE.Vector3() } },
             transparent: true, depthWrite: false, depthTest: true,
         });
         this.base.userData.keep = true;
@@ -172,6 +181,20 @@ export class SteamBodies {
         if (on && tip && head) { b.mat.uniforms.uTip.value.set(tip.x, tip.y, tip.z); b.mat.uniforms.uHead.value.set(head.x, head.y, head.z); }
     }
 
+    /** The end of a hero's steam: it melts away over SEE.FADE_T s (thins, swells, drifts) and then the body is emptied. */
+    fade(id, now = performance.now() / 1000) {
+        const b = this.bodies.get(id);
+        if (!b || b.fadeAt >= 0 || b.live(now) === 0) return;
+        b.fadeAt = now;
+        b.jetOn = false;
+    }
+
+    /** How far a body's melting has come, 0…1 (0: not melting). */
+    fadeOf(id, now = performance.now() / 1000) {
+        const b = this.bodies.get(id);
+        return b && b.fadeAt >= 0 ? Math.min(1, (now - b.fadeAt) / SEE.FADE_T) : 0;
+    }
+
     clear(id) {
         const b = this.bodies.get(id);
         if (!b) return;
@@ -184,13 +207,14 @@ export class SteamBodies {
         if (!this.bodies.size) return;
         if (r && cam) { const h = r.domElement?.height || 720; this._px = h / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)); }
         for (const [id, b] of this.bodies) {
+            if (b.fadeAt >= 0 && now - b.fadeAt >= SEE.FADE_T) b.clear(); // (melted: the slots are free again)
             const live = b.live(now);
             b.jet += ((b.jetOn ? 1 : 0) - b.jet) * (1 - Math.exp(-dt * 8));
             const show = live > 0 || b.jet > 0.02;
             if (b.points.visible !== show) b.points.visible = show;
             if (!show) continue;
             const u = b.mat.uniforms;
-            u.uNow.value = now; u.uJet.value = b.jet; u.uPx.value = this._px || 700;
+            u.uFade.value = b.fadeAt >= 0 ? Math.min(1, (now - b.fadeAt) / SEE.FADE_T) : 0; u.uNow.value = now; u.uJet.value = b.jet; u.uPx.value = this._px || 700;
         }
     }
 
@@ -204,8 +228,10 @@ export class SteamBodies {
             for (let i = 0; i < SEE.OWNER_MAX; i++) {
                 const t0 = b.births[i];
                 if (now - t0 >= SEE.PUFF_LIFE) continue;
-                const q = out[n] || (out[n] = { x: 0, y: 0, z: 0, t0: 0, seed: 0 });
+                const q = out[n] || (out[n] = { x: 0, y: 0, z: 0, t0: 0, seed: 0, k: 1 });
                 q.x = b.ppos[i * 3]; q.y = b.ppos[i * 3 + 1]; q.z = b.ppos[i * 3 + 2]; q.t0 = t0; q.seed = b.seeds[i];
+                const f = b.fadeAt >= 0 ? Math.min(1, (now - b.fadeAt) / SEE.FADE_T) : 0;
+                q.k = 1 - f * f * (3 - 2 * f); // (the melting steam: the same curve as the shader's)
                 n++;
             }
         }

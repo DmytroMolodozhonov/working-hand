@@ -488,7 +488,9 @@ test('another hero\'s steam: puffs from the net are drawn on my computer (a body
     assert.equal(sb.bodies.get('bob').points.visible, true);
     v.onNet('bob', { k: 'o' });
     sb.update(0.016, now + 0.2);
-    assert.equal(sb.bodies.get('bob').points.visible, false, 'the end of their spell clears it');
+    assert.equal(sb.bodies.get('bob').points.visible, true, 'the end of their spell: it melts away, not a click');
+    sb.update(0.016, now + SEE.FADE_T + 0.2);
+    assert.equal(sb.bodies.get('bob').points.visible, false, 'and is gone after FADE_T');
     // many heroes: bodies are reused (never more than the pool), puffs of one hero are a ring (never more than OWNER_MAX)
     for (let i = 0; i < 12; i++) sb.addPuff('p' + i, 0, 0, 0, i, now);
     assert.ok(sb.bodies.size <= 5, 'bodies: ' + sb.bodies.size);

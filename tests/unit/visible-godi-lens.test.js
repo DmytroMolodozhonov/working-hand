@@ -213,7 +213,7 @@ test('anyone looks through the steam: a viewer who is NOT the caster gets the wi
     tick(v);
     assert.equal(g.seeFx.on, false, 'not looking through it: only the steam itself');
     // bob\'s steam ends: nothing
-    v.onNet('bob', { k: 'o' });
+    v.onNet('bob', { k: 'o', q: 1 });
     g.camera.lookAt(0, 0, 10); g.camera.updateMatrixWorld(true);
     tick(v);
     assert.equal(g.seeFx.on, false);
@@ -239,5 +239,60 @@ test('anyone: a viewer who walked INTO the steam gets the window / lens all roun
     assert.ok(fx.coverage >= 1, 'a disc over the screen');
     assert.ok(fx.stats.lensPasses > 20, 'the lens picture is drawn: ' + fx.stats.lensPasses);
     assert.equal(fx.mat.uniforms.uN.value >= 1, true);
+    fx.dispose();
+});
+
+// ------------------------------------------------------------------ the end: the steam melts away (SEE.FADE_T), not a click
+test('the end of the spell: the steam melts away over FADE_T — monotonic, the window with it, the body emptied after; death / a new cast — at once; the net says the same', () => {
+    const scene = new THREE.Scene();
+    const sb = new SteamBodies({ scene, renderer: { domElement: { height: 720 } }, camera: new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 100) });
+    const t0 = 100;
+    for (let i = 0; i < 5; i++) sb.addPuff('bob', i * 0.7, 0, 5, 40 + i, t0 - 3);
+    const out = [];
+    sb.gather(out, t0);
+    assert.equal(out.length, 5);
+    assert.ok(out.every((q) => q.k === 1), 'before the end: full');
+    sb.fade('bob', t0);
+    assert.ok(SEE.FADE_T >= 1.5 && SEE.FADE_T <= 2.5, 'melts in 1.5–2.5 s: ' + SEE.FADE_T);
+    let prev = 2, prevU = -1;
+    for (let t = 0; t <= SEE.FADE_T + 0.05; t += 0.1) {
+        sb.update(0.1, t0 + t);
+        sb.gather(out, t0 + t);
+        if (!out.length) break; // (melted: emptied)
+        const k = out[0].k, u = sb.bodies.get('bob').mat.uniforms.uFade.value;
+        assert.ok(k <= prev + 1e-9, 'the strength only goes down: ' + k);
+        assert.ok(u >= prevU - 1e-9, 'the melting only goes on');
+        prev = k; prevU = u;
+    }
+    assert.ok(out.length === 0, 'after FADE_T the puffs are gone (the slots are free)');
+    assert.equal(sb.alive('bob', t0 + 3), 0);
+    // half way: about half strength (a smooth curve)
+    for (let i = 0; i < 5; i++) sb.addPuff('bob', i * 0.7, 0, 5, 40 + i, t0 + 10 - 3);
+    sb.fade('bob', t0 + 10);
+    sb.gather(out, t0 + 10 + SEE.FADE_T / 2);
+    assert.ok(Math.abs(out[0].k - 0.5) < 0.05, 'half way: ' + out[0].k);
+    // a new spell on a melting cloud: the old goes at once
+    sb.addPuff('bob', 0, 0, 5, 99, t0 + 10.2);
+    sb.gather(out, t0 + 10.2);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].k, 1);
+    // the net: «o» melts them, «o» with q — at once
+    const { g, v } = viewer({ x: 0, y: 0, z: 0 });
+    const now = performance.now() / 1000;
+    v.onNet('amy', { k: 'p', p: [0, 0, 6], s: 1 });
+    v.onNet('amy', { k: 'o' });
+    assert.ok(g.steam.fadeOf('amy', now + 0.5) > 0.1 && g.steam.fadeOf('amy', now + 0.5) < 0.9, 'melting, not cut');
+    v.onNet('bea', { k: 'p', p: [0, 0, 6], s: 2 });
+    v.onNet('bea', { k: 'o', q: 1 });
+    assert.equal(g.steam.alive('bea', now), 0, 'death: at once');
+    // the window narrows with the steam
+    const renderer = fakeRenderer();
+    const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 600);
+    camera.updateMatrixWorld(true);
+    const fx = new SeeThroughFx({ renderer, scene: new THREE.Scene(), camera, quality: { current: { pixelRatio: 1 } } });
+    fx.setOn(true); fx.setTarget({ state: 'far' });
+    fx.setLens({ x: 0, y: 0, z: -4, n: 1, span: 0, newest: 9, zoom: 3, seed: 1, seeds: new Set([1]), ray: { first: Infinity, thin: false, exit: 0 }, near: LENS.NEAR });
+    const w = (k) => { fx.setPuffs([{ x: 0, y: 0, z: -4, t0: -5, seed: 1, k }], 10); fx._now = 10; fx.open = 1; fx._project(); return fx.mat.uniforms.uPuffs.value[0].w; };
+    assert.ok(w(1) > w(0.6) && w(0.6) > w(0.3), 'the mask thins as the steam melts');
     fx.dispose();
 });

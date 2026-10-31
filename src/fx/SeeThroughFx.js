@@ -256,17 +256,17 @@ export class SeeThroughFx {
             const e = cam.matrixWorld.elements;
             for (let i = 0; i < P.length; i++) {
                 const q = P[i], dx = q.x - e[12], dy = q.y - e[13], dz = q.z - e[14];
-                if (dx * dx + dy * dy + dz * dz < LENS.INSIDE * LENS.INSIDE) inside = Math.max(inside, puffStrength(this._now - q.t0) * this.open);
+                if (dx * dx + dy * dy + dz * dz < LENS.INSIDE * LENS.INSIDE) inside = Math.max(inside, puffStrength(this._now - q.t0) * (q.k ?? 1) * this.open);
             }
             for (let i = P.length - 1; i >= 0 && n < 40; i--) {
-                const q = P[i], age = this._now - q.t0, w = puffStrength(age) * this.open;
+                const q = P[i], age = this._now - q.t0, kf = q.k ?? 1, w = puffStrength(age) * kf * this.open;
                 if (w <= 0.01) continue;
                 if (lensMode && !L.inside && !L.seeds.has(q.seed)) continue; // (one window: the cloud of the lens; the other clouds are only steam)
                 _pv.set(q.x, q.y, q.z).applyMatrix4(inv);
                 const z = -_pv.z;
                 if (z < 0.4 || z > 40) continue;
                 const k = f / z, sx = _pv.x * k * 1, sy = _pv.y * k;
-                const r = SEE.PUFF_R * 1.25 * k * (0.55 + 0.45 * Math.min(1, age / 0.9));
+                const r = SEE.PUFF_R * 1.25 * k * (0.55 + 0.45 * Math.min(1, age / 0.9)) * (0.55 + 0.45 * kf) * (1 + 0.5 * (1 - kf)); // (melting: it thins and the window narrows with it)
                 if (Math.abs(sx) > 0.5 * asp + r || Math.abs(sy) > 0.5 + r) continue;
                 list[n++].set(sx, sy, r, w);
                 if (lensMode) { x0 = Math.min(x0, 0.5 + (sx - r) / asp); x1 = Math.max(x1, 0.5 + (sx + r) / asp); y0 = Math.min(y0, 0.5 + sy - r); y1 = Math.max(y1, 0.5 + sy + r); }
