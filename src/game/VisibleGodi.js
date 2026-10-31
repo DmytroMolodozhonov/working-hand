@@ -27,6 +27,16 @@
  *   - magic stops the look: the enchanted stone (arenas, wizards' towers), arcane stone, the Ice Queen's ice, the
  *     gods' temple (golden shield), the black ship's cursed hull, another's house sphere — a milky «nothing».
  *
+ * LENS (the author: «если человек не возле стены, а просто где-то там — туман должен работать как ЛИНЗА, как ЛУПА: можно
+ * увидеть что-то ДАЛЁКОЕ»): when the forward ray finds no near wall (traceView 'open' / 'far': the first solid thing is
+ * farther than REACH) the cloud is a magnifying glass: its window shows what lies FAR away in the direction of the cloud
+ * (eyes → the cloud's centre), enlarged ×LENS.ZOOM_MIN…ZOOM_MAX — ×3 for a lone puff, more the denser the cloud (the
+ * puffs joined to the nearest-to-the-gaze one) and the longer the jet has painted it, ×8 for a thick cloud. It sees what
+ * is seen in a straight line through the air: a wall on the way is in the picture as a wall (a chink thinner than GAP_MAX
+ * is passed, as in the wall mode). Only what the scene has already — nothing is asked of the land (landMade), the haze
+ * of the game's own fog is the limit. Several clouds: the window is the one nearest to the centre of the gaze.
+ * The wall mode above is not changed: it starts whenever the first solid thing is within REACH.
+ *
  * Others see the steam (messages 'vgs': a puff / the end); only the caster looks through it.
  */
 
@@ -57,6 +67,22 @@ export const SEE = {
     PUFF_R: 1.35, // m: a puff's radius (the hero is 3.5 m tall: a puff is about a head and a half wide)
     EMIT_T: 0.06, // s between two looks of the jet
     OWNER_MAX: 40, // puffs one hero's steam keeps on every computer
+};
+
+/** The lens (see the header). */
+export const LENS = {
+    ZOOM_MIN: 2, // a puff just born (it swells in 0.6 s)
+    ZOOM_DEFAULT: 3, // a lone puff
+    ZOOM_MAX: 8, // a thick cloud painted for a while
+    DENSE_N: 14, // puffs joined into one cloud that make it «thick»
+    SEASON_T: 6, // s of painting after which the time part of the zoom is full
+    LINK: 2, // m: puffs this near each other are one cloud
+    NEAR: 3, // m: the lens picture is drawn from here (the hand and wand are nearer: not in the picture)
+    MAX_LEN: 80, // m: how far the lens ray looks for the first solid thing (the zoom picture itself sees as far as the scene)
+    STEP: 0.25, // m: the lens ray's step (the first thing is only needed roughly; the chink check is GAP_MAX)
+    COS_MIN: 0.5, // the cloud must be within 60° of the gaze to be the window
+    REAL: 12, // m: the first solid thing at least this far (or none) — a far look that counts for the first-time cells
+    FIRST: 5, // cells of the mana maximum the first time the lens showed something far (Mana.FIRST_SPELL.VisibleGodiLens)
 };
 
 // the codes the ray's sampler gives besides block ids
@@ -191,6 +217,97 @@ export function traceView(sample, o, d, { maxLen = SEE.MAX_LEN, step = SEE.STEP,
     return out;
 }
 
+/** 'wall' (see through a wall) | 'blocked' (magic) | 'lens' (open air / the first solid thing is far). Pure. */
+export const modeOf = (info) => (!info || info.state === 'open' || info.state === 'far') ? 'lens' : info.state === 'blocked' ? 'blocked' : 'wall';
+
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+
+/**
+ * The lens's enlargement. `n` — puffs in the cloud, `span` — s the jet has been painting it (first puff to last),
+ * `newest` — age (s) of its newest puff (a puff swells in 0.6 s: the glass opens 2→3). Always within ZOOM_MIN…ZOOM_MAX. Pure.
+ */
+export function lensZoom(n, span, newest = 99) {
+    const swell = clamp01(newest / 0.6);
+    const dense = clamp01((n - 1) / (LENS.DENSE_N - 1)), long = clamp01(span / LENS.SEASON_T);
+    const k = 0.65 * dense + 0.35 * long;
+    const z = LENS.ZOOM_MIN + (LENS.ZOOM_DEFAULT - LENS.ZOOM_MIN) * swell + (LENS.ZOOM_MAX - LENS.ZOOM_DEFAULT) * k * swell;
+    return Math.min(LENS.ZOOM_MAX, Math.max(LENS.ZOOM_MIN, z));
+}
+
+/**
+ * Which cloud is the lens: of the live puffs the one nearest to the gaze (eye `o`, unit `d`), and every puff joined to it
+ * (a chain of puffs LINK m apart) — the cloud. Writes { x, y, z (the strength-weighted centre), n, span, newest, zoom, seed }
+ * and `out.seeds` (a Set of the members' seeds) and returns `out`, or null when no puff is in front of the gaze. Pure.
+ * `puffs`: [{ x, y, z, t0, seed }], `now`: the clock of t0.
+ */
+export function lensCloud(puffs, now, o, d, out) {
+    let best = -1, bc = LENS.COS_MIN;
+    for (let i = 0; i < puffs.length; i++) {
+        const q = puffs[i];
+        if (puffStrength(now - q.t0) < 0.25) continue;
+        const dx = q.x - o.x, dy = q.y - o.y, dz = q.z - o.z, L = Math.hypot(dx, dy, dz);
+        if (L < 0.4) continue;
+        const c = (dx * d.x + dy * d.y + dz * d.z) / L;
+        if (c > bc) { bc = c; best = i; }
+    }
+    if (best < 0) return null;
+    const seeds = out.seeds || (out.seeds = new Set());
+    seeds.clear();
+    const mem = out._mem || (out._mem = []);
+    mem.length = 0;
+    mem.push(best);
+    seeds.add(puffs[best].seed);
+    // the chain: grow the cloud while a live puff is within LINK of one already in it
+    for (let k = 0; k < mem.length; k++) {
+        const a = puffs[mem[k]];
+        for (let i = 0; i < puffs.length; i++) {
+            const q = puffs[i];
+            if (seeds.has(q.seed) || puffStrength(now - q.t0) < 0.25) continue;
+            if (Math.hypot(q.x - a.x, q.y - a.y, q.z - a.z) <= LENS.LINK) { seeds.add(q.seed); mem.push(i); }
+        }
+    }
+    let sx = 0, sy = 0, sz = 0, sw = 0, oldest = Infinity, youngest = -Infinity, newest = Infinity;
+    for (const i of mem) {
+        const q = puffs[i], w = puffStrength(now - q.t0) + 1e-3;
+        sx += q.x * w; sy += q.y * w; sz += q.z * w; sw += w;
+        if (q.t0 < oldest) oldest = q.t0;
+        if (q.t0 > youngest) youngest = q.t0;
+        newest = Math.min(newest, now - q.t0);
+    }
+    out.x = sx / sw; out.y = sy / sw; out.z = sz / sw;
+    out.n = mem.length; out.span = Math.max(0, youngest - oldest); // (how long the jet painted this cloud: first puff to last) out.newest = newest;
+    out.zoom = lensZoom(out.n, out.span, newest);
+    out.seed = puffs[best].seed;
+    return out;
+}
+
+/**
+ * The lens ray: from `o` along `d` (unit) to the first solid thing. `sample` as in traceView (0 = open).
+ * @returns {{ first: number, thin: boolean, exit: number }} first: m to the first solid thing (Infinity: none within MAX_LEN);
+ *   thin: that thing is no thicker than GAP_MAX (a chink: passed like in the wall mode); exit: m to its far side.
+ */
+export function traceLens(sample, o, d, out = { first: Infinity, thin: false, exit: 0 }, { maxLen = LENS.MAX_LEN, step = LENS.STEP } = {}) {
+    out.first = Infinity; out.thin = false; out.exit = 0;
+    const n = Math.ceil(maxLen / step);
+    for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) * step;
+        if (!sample(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t, t)) continue;
+        out.first = i * step;
+        let j = i;
+        while (j + 1 < n && sample(o.x + d.x * (j + 1.5) * step, o.y + d.y * (j + 1.5) * step, o.z + d.z * (j + 1.5) * step, (j + 1.5) * step)) j++;
+        out.exit = (j + 1) * step;
+        out.thin = out.exit - out.first <= SEE.GAP_MAX + 1e-6;
+        return out;
+    }
+    return out;
+}
+
+/** Where the lens picture's near plane stands: past a chink, else before the first solid thing (never through a wall), but not nearer than the hands. */
+export const lensNear = (ray) => ray.thin ? Math.max(0.2, ray.exit + SEE.NEAR_PAD) : Math.max(0.3, Math.min(LENS.NEAR, ray.first - 0.05));
+
+/** Does the lens show something far (counts for the first-time cells)? */
+export const lensFar = (ray) => !ray.thin && ray.first >= LENS.REAL;
+
 /** Where the camera's near plane stands for the picture behind the wall: just past its far side, never into magic stone behind it. */
 export const nearOf = (info) => Math.max(0.2, Math.min(info.exit + SEE.NEAR_PAD, info.stopAt - 0.02));
 
@@ -235,6 +352,7 @@ export const VISIBLE_TARGETS = {
     ghost: { does: 'none', why: 'призрак пар не показывает; видит его только тот, кто прошёл пентаграмму видения' },
     custom: { does: 'see', why: 'созданное существо вижу; оно не знает' },
     gargoyle: { does: 'see', why: 'горгулью вижу; она не знает' },
+    lens: { does: 'see', why: 'ЛИНЗА (клуб пара в открытом воздухе, ближней преграды нет): далёкие существа видны приближённо; они не реагируют, не знают о взгляде; жители замечают героя только по прямой видимости — пар им не помогает; невидимое (птичка Спенсера, призраки) в линзе видит только видящий; стена на пути остаётся стеной' },
     iceCastle: { does: 'blocked', why: 'стены Ледяного замка — магия Королевы: взгляд не пускают (молочное «ничего»)' },
     blackship: { does: 'blocked', why: 'корпус чёрного корабля проклят: взгляд не пускает; обычные корабли — дерево, просвечивается' },
     bosses: { does: 'see', why: 'боссы заклинанием не защищены, но и не узнают о нём; сундуки босса видно, если стена пропускает взгляд' },
@@ -270,6 +388,10 @@ export class VisibleGodi {
         this.jet = null; // { tip, head } now (SteamFx draws the thread of steam between them)
         this._jetT = 0;
         this._puff = { x: 0, y: 0, z: 0 };
+        this.lens = null; // the lens now (lensCloud's record + `ray`), or null
+        this._lensRec = { x: 0, y: 0, z: 0, n: 0, span: 0, newest: 0, zoom: 3, seed: 0, seeds: new Set(), ray: { first: Infinity, thin: false, exit: 0 }, near: LENS.NEAR };
+        this._ld = { x: 0, y: 0, z: 0 };
+        this._lensWorked = false; // the first far look through the lens: its +5 cells were asked for
         this.sample = (x, y, z, t) => this._sample(x, y, z, t);
     }
 
@@ -341,7 +463,7 @@ export class VisibleGodi {
         if (tired) { g.hud.setVoice(tired, true); return null; }
         g.combat.pay('VisibleGodi');
         this.set(true);
-        g.hud.setVoice('👁️ Из палочки идёт пар — рисуйте им тучку на стене, потом смотрите сквозь неё (пар кончится; 1 мана в секунду, «стоп» — закрыть)', true);
+        g.hud.setVoice('👁️ Из палочки идёт пар — рисуйте им тучку на стене — и смотрите сквозь стену, или в воздухе — и она станет лупой для далёкого (пар кончится; 1 мана в секунду, «стоп» — закрыть)', true);
         return 'VisibleGodi';
     }
 
@@ -356,6 +478,7 @@ export class VisibleGodi {
         this.puffs.length = 0;
         this.steam = SEE.STEAM;
         this.jet = null;
+        this.lens = null;
         g.seeFx?.setOn?.(on);
         g.steam?.setJet?.('local', null, null, false);
         if (!on) { g.steam?.clear?.('local'); g.sync?.steamOff?.(); }
@@ -398,10 +521,39 @@ export class VisibleGodi {
                 g.mana?.success?.('VisibleGodi'); // (the first real look behind a wall: +5 cells, once)
                 g.perf?.note?.(`👁️ Visible Godi: первый просвет — ${i.name}, ${i.thick.toFixed(1)} м, ясность ${Math.round(i.clear * 100)}%`);
             }
+            this._scanLens(i);
         }
         this._paint(dt);
         g.seeFx?.setTarget?.(this.info);
+        g.seeFx?.setLens?.(this.lens);
         g.seeFx?.setPuffs?.(this.puffs, performance.now() / 1000);
+    }
+
+    /** The lens for the ray just followed: only when there is no near wall (modeOf) and a cloud is in front of the gaze. */
+    _scanLens(info) {
+        const g = this.game, L = this._lensRec;
+        this.lens = null;
+        if (modeOf(info) !== 'lens' || !this.puffs.length) return;
+        const e = g.camera?.matrixWorld?.elements;
+        if (!e) return;
+        const d = this._ld;
+        d.x = -e[8]; d.y = -e[9]; d.z = -e[10];
+        const l = Math.hypot(d.x, d.y, d.z) || 1; d.x /= l; d.y /= l; d.z /= l;
+        _o.x = e[12]; _o.y = e[13]; _o.z = e[14];
+        if (!lensCloud(this.puffs, performance.now() / 1000, _o, d, L)) return;
+        // the lens ray: from the eyes to the cloud's centre
+        d.x = L.x - _o.x; d.y = L.y - _o.y; d.z = L.z - _o.z;
+        const m = Math.hypot(d.x, d.y, d.z) || 1; d.x /= m; d.y /= m; d.z /= m;
+        this._doorAt = -1;
+        this._refreshThings(_o);
+        traceLens(this.sample, _o, d, L.ray);
+        L.near = lensNear(L.ray);
+        this.lens = L;
+        if (!this._lensWorked && lensFar(L.ray) && g.seeFx?.coverage > 0 && g.seeFx?.lens > 0.5) {
+            this._lensWorked = true;
+            g.mana?.success?.('VisibleGodiLens'); // (the first far look through the lens: +5 cells, once)
+            g.perf?.note?.(`👁️ Visible Godi: первая линза — увеличение ×${L.zoom.toFixed(1)}, дальше ${Number.isFinite(L.ray.first) ? Math.round(L.ray.first) + ' м' : 'открытое небо/даль'}`);
+        }
     }
 
     /** The jet: looks ahead of the wand a few times a second, leaves a puff where the wand has moved on; old puffs go. */

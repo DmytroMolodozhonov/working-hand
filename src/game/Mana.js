@@ -105,8 +105,12 @@ export const NOT_SPELLS = new Set(['GroundShield', 'Stand', 'Stop', 'Pause', 'No
 /** Other names a spell reports itself by → the spell. */
 export const SAME_SPELL = { WallRise: 'Breakthrough', WallRiseMaxima: 'BreakthroughMaxima', InfernoMaxima: 'Inferno' };
 
+/** Bonuses of a spell's second «first time» (not spells: no scroll, no words). */
+export const FIRST_EXTRA = { VisibleGodiLens: 5 };
+
 /** A spell's first-success bonus (0: not a spell). Unknown names: +1. */
 export function firstSpellGain(name) {
+    if (name === 'VisibleGodiLens') return FIRST_EXTRA.VisibleGodiLens; // (not a spell of its own: the second first-time bonus of «Visible Godi», the lens)
     if (!name || NOT_SPELLS.has(name)) return 0;
     return FIRST_SPELL[SAME_SPELL[name] || name] ?? 1;
 }
@@ -422,7 +426,7 @@ const TITLES = {
     WaterVortex: 'Water Vortex', Snowman: 'Snowman', Alive: 'Alive', AliveMaxima: 'Alive Максима', AvadaKedavra: 'Авада Кедавра', LightningStrike: 'Lightning Strike', TotalDestruction: 'Total Destruction', CircleAttack: 'Circle Attack', CircleAttackMaxima: 'Circle Attack Maxima', Inspirius: 'Inspirius', Boom: 'Бум',
     IceMaxima: 'Айс Максима', Accentric: 'Акцентрик', Pilbidrio: 'Пилбидрио', Electrum: 'Электром', Die: 'Дай',
     Hellfire: 'Let the Hellfire Come', WaterVortexSuperMaxima: 'Water Vortex Super Maxima', CreateHouse: 'Create a House', ImproveHouse: 'Improve a House', CreateCastle: 'Create a Castle', DivineCreation: 'Да пусть создастся',
-    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', VisibleGodi: 'Visible Godi', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
+    WindImpulse: 'Wind Impulse', Drawdown: 'Drawdown', Liquidation: 'Liquidation', Stitching: 'Stitching', Invisibility: 'Invisibility', CreateBridge: 'Create a Bridge', Groundprud: 'Groundprud', VisibleGodi: 'Visible Godi', VisibleGodiLens: 'Visible Godi (линза)', Nihilis: 'Nihilis Atra', Pentagranium: 'Пентаграниум', GroundVortex: 'Ground Vortex',
     Fireworks: 'Fireworks', IceCastle: 'Create an Ice Castle', IceBridge: 'Ice Bridge', FlyingMaxima: 'Flying Maxima',
     CreatePlanet: 'Create a Planet', EnlargePlanet: 'Enlarge Planet', TerraformPlanet: 'Terraform Planet', LevitationSuperMaxima: 'Wingardium Leviosa Super Maxima', ProtectionGods: 'Protection Gods', ProtectionGodsMaxima: 'Protection Gods Maxima', PlanetLiquidation: 'Planet Liquidation',
 };

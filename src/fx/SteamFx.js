@@ -192,6 +192,14 @@ export class SteamBodies {
         }
     }
 
+    /** Hide every body while another picture of the scene is drawn (the lens must not look through the steam itself); false restores. */
+    pause(on) {
+        for (const b of this.bodies.values()) {
+            if (on) { b._was = b.points.visible; b.points.visible = false; }
+            else if (b._was !== undefined) { b.points.visible = b._was; b._was = undefined; }
+        }
+    }
+
     /** Every body's puffs alive: for the log and the tests. */
     alive(id, now = performance.now() / 1000) { return this.bodies.get(id)?.live(now) ?? 0; }
 

@@ -1,6 +1,7 @@
 // «Visible Godi»: pictures of the cloud as the game draws it (the real SeeThroughFx shader and its second pass over real voxel
 // blocks, drawn by Chromium's software GL) and numbers for them: how bright, how contrasty and how detailed the cloud is for a wall
-// of planks / stone of 1…9 blocks, an enchanted wall, a wall too far, wood + courtyard + stone.
+// of planks / stone of 1…9 blocks, an enchanted wall, a wall too far, wood + courtyard + stone — and the LENS (open air:
+// a cloud shows far towers enlarged: `lens1` one puff ×3, `lens10` ten puffs ×8; the same view without the spell is in numbers.json).
 // Usage: node tools/visible-godi-screenshots.mjs [--out docs/spells/visible-godi] [--seed 20261015] [--only wood1,stone3]
 import { startServer } from '../tests/e2e/harness.mjs';
 import { chromium } from 'playwright';
@@ -48,6 +49,8 @@ try {
             ['leaves3', '3 blocks of leaves', BLOCK.LEAVES, 3, {}],
             ['enchanted2', 'enchanted wall (2)', BLOCK.ENCHANTED, 2, {}],
             ['cluster', 'planks, 3 m of air, stone', BLOCK.PLANKS, 1, { cluster: true }],
+            ['lens1', 'LENS: open air, one puff (x3)', BLOCK.AIR, 0, { z0: 400, lens: 'one' }],
+            ['lens10', 'LENS: open air, ten puffs (x8)', BLOCK.AIR, 0, { z0: 400, lens: 'dense' }],
         ].filter((c) => !only || only.includes(c[0]));
         const result = [];
         for (const [id, label, type, n, o] of cases) {
@@ -56,7 +59,7 @@ try {
             const top = d.topLayer(0, 0);
             const z0 = o.z0 ?? 3;
             d.enchantFree = true;
-            for (let L = top + 1; L <= top + 8; L++) {
+            if (!o.lens) for (let L = top + 1; L <= top + 8; L++) {
                 // (the room behind: back wall of brick 14 m away, side walls)
                 for (let x = -9; x <= 9; x++) { d.set(x, L, 16, BLOCK.BRICK); }
                 for (let z = 4; z <= 16; z++) { d.set(-9, L, z, BLOCK.BRICK); d.set(9, L, z, BLOCK.BRICK); }
@@ -93,14 +96,21 @@ try {
                 const l = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.0, 0.6), new THREE.MeshLambertMaterial({ color: 0x333344 })); l.position.y = 0.5;
                 grp.add(b, h, l); grp.position.set(x, gy, z); scene.add(grp);
             };
-            person(-2.5, z0 + n + 6.5, 0xd02828, 0xf0c8a0);
-            person(1.5, z0 + n + 8, 0x2860d0, 0xe0b890);
-            person(5, z0 + n + 10, 0xe0c020, 0xf0c8a0);
-            const chest = new THREE.Mesh(new THREE.BoxGeometry(2, 1.2, 1.2), new THREE.MeshLambertMaterial({ color: 0x8b4a1c })); chest.position.set(-5, gy + 0.6, z0 + n + 7); scene.add(chest);
-            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0 })); lamp.position.set(0, gy + 5.5, z0 + n + 8); scene.add(lamp);
+            if (o.lens) {
+                // far away in the open: a line of coloured towers and a banner post, 60…150 m (only what the scene has)
+                [[-6, 70, 0xd02828], [4, 95, 0x2860d0], [-3, 120, 0xe0c020], [14, 150, 0x30a050], [-20, 150, 0xa040c0]].forEach(([x, z, c]) => {
+                    const t = new THREE.Mesh(new THREE.BoxGeometry(7, 70, 7), new THREE.MeshLambertMaterial({ color: c })); t.position.set(x, gy + 35, z);
+                    const roof = new THREE.Mesh(new THREE.ConeGeometry(5.5, 8, 4), new THREE.MeshLambertMaterial({ color: 0x553322 })); roof.position.set(x, gy + 74, z);
+                    scene.add(t, roof);
+                });
+            }
+            if (!o.lens) person(-2.5, z0 + n + 6.5, 0xd02828, 0xf0c8a0);
+            if (!o.lens) { person(1.5, z0 + n + 8, 0x2860d0, 0xe0b890); person(5, z0 + n + 10, 0xe0c020, 0xf0c8a0); }
+            const chest = new THREE.Mesh(new THREE.BoxGeometry(2, 1.2, 1.2), new THREE.MeshLambertMaterial({ color: 0x8b4a1c })); chest.position.set(-5, gy + 0.6, z0 + n + 7); if (!o.lens) scene.add(chest);
+            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff2a0 })); lamp.position.set(0, gy + 5.5, z0 + n + 8); if (!o.lens) scene.add(lamp);
             const camera = new THREE.PerspectiveCamera(75, W / H, 0.1, 400);
             camera.position.set(0, top + 1.0, 0);
-            camera.lookAt(0, top + 1.0, 10);
+            camera.lookAt(0, top + 1.0 + (o.lens ? 1.4 : 0), 10); // (the lens cases look a little up: over the hill, at the towers)
             camera.updateMatrixWorld(true);
             const game = { renderer: r, scene, camera, quality: { current: { pixelRatio: 1 }, ultra: false } };
             const fx = new SeeThroughFx(game);
@@ -109,9 +119,9 @@ try {
             const tn0 = performance.now() / 1000;
             const puffs = [];
             const zf = (o.z0 ?? 3) - 0.5 > 4 ? 3.5 : (o.z0 ?? 3) - 0.5;
-            [[-1.7, 0.3], [-0.7, 1.0], [0.6, 0.2], [1.7, 0.9], [0, -0.5], [-1.0, -0.4], [1.1, -0.5], [0, 0.7], [-0.2, 0.2], [0.9, 0.7]].forEach(([x, y], i) => {
-                puffs.push({ x, y: top + 1.0 + y, z: zf, t0: tn0 - 4, seed: 1234 + i * 77 });
-                steam.addPuff('local', x, top + 1.0 + y, zf, 1234 + i * 77, tn0 - 4);
+            [[-1.7, 0.3], [-0.7, 1.0], [0.6, 0.2], [1.7, 0.9], [0, -0.5], [-1.0, -0.4], [1.1, -0.5], [0, 0.7], [-0.2, 0.2], [0.9, 0.7]].slice(0, o.lens === 'one' ? 1 : 10).forEach(([x, y], i) => {
+                puffs.push({ x: o.lens === 'one' ? 0 : x * 0.5, y: top + 1.0 + (o.lens ? 0.5 : 0) + (o.lens === 'one' ? 0 : y * 0.5), z: zf, t0: tn0 - (o.lens === 'dense' ? 4 - i * 0.4 : 4), seed: 1234 + i * 77 });
+                { const q = puffs[puffs.length - 1]; steam.addPuff('local', q.x, q.y, q.z, q.seed, q.t0); }
             });
             fx.prewarm();
             const stub = { camera, terrain: { data: d }, ships: { list: new Map() }, wards: { list: new Map(), mine: () => false }, doors: null };
@@ -119,6 +129,7 @@ try {
             const info = v.scan();
             fx.setOn(true);
             fx.setTarget(info);
+            if (o.lens) { v.puffs = puffs; v._scanLens(info); fx.setLens(v.lens); }
             // the main picture, then the cloud over it; frames go on until the cloud has opened and settled (1.2 s)
             const pics = {};
             const frame = () => { const t = performance.now() / 1000; steam.update(1 / 60, t); fx.setPuffs(puffs, t); r.autoClear = true; r.setRenderTarget(null); r.render(scene, camera); fx.render(t); };
@@ -140,7 +151,7 @@ try {
                 return { mean: +m.toFixed(3), contrast: +Math.sqrt(Math.max(0, sum2 / n - m * m)).toFixed(3), detail: +(grad / gn).toFixed(4), blue: +(bl / n).toFixed(3) };
             };
             const plain = stats((steam.update(1 / 60, tn0), r.render(scene, camera), read()));
-            for (let k = 0; k < 70; k++) frame();
+            if (o.lens) { const tEnd = performance.now() + 3500; while (performance.now() < tEnd) { frame(); gl.finish(); await new Promise((res) => setTimeout(res, 16)); } } else for (let k = 0; k < 70; k++) frame();
             const px = read();
             // the price of the cloud (here the processor draws the picture, so only the proportions mean something): a frame of the
             // scene alone, with the cloud drawn at 24 a second (the real rate), and with the second picture in EVERY frame (the worst case)
@@ -152,7 +163,7 @@ try {
                 const base = run(1 / 60, false), real = run(1 / 60, true), worst = run(1 / 24, true);
                 ms = { scene: +base.toFixed(1), cloud24Hz: +real.toFixed(1), everyFrame: +worst.toFixed(1) };
             }
-            result.push({ id, label, ms, state: info.state, clear: +info.clear.toFixed(3), thick: +info.thick.toFixed(2), why: info.why, plain, cloud: stats(px), passes: fx.stats.passes, png: cv.toDataURL('image/png') });
+            result.push({ id, label, ms, state: info.state, clear: +info.clear.toFixed(3), thick: +info.thick.toFixed(2), why: info.why, plain, cloud: stats(px), passes: fx.stats.passes, mode: o.lens ? 'lens' : 'wall', dbg: { lens: +fx.lens.toFixed(2), cov: fx.coverage, drawn: fx._drawnMode, lensPasses: fx.stats.lensPasses || 0, cuv: fx._cuv, bb: fx._bb }, zoom: v.lens ? +v.lens.zoom.toFixed(2) : null, png: cv.toDataURL('image/png') });
             fx.dispose(); steam.dispose();
             scene.traverse((o) => { if (o.geometry && o.isMesh) o.geometry.dispose(); });
         }
