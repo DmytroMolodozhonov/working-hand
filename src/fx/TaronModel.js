@@ -184,7 +184,7 @@ export function taronModel(look) {
         parts.push(placed(solid('sphere', 0.52, 0.5, 0.48, mul(HS, 1.04), { seg: 10, seed: 21 }), 0.62, -0.28, -0.48), placed(solid('sphere', 0.52, 0.5, 0.48, mul(HS, 1.04), { seg: 10, seed: 22 }), -0.62, -0.28, -0.48)); // cheeks
         parts.push(placed(solid('sphere', 0.68, 0.46, 0.55, shade, { seg: 10, seed: 23 }), 0, -0.72, -0.35)); // the double chin
         parts.push(placed(solid('sphere', 0.5, 0.3, 0.4, mul(HS, 0.92), { seg: 8, seed: 24 }), 0, -1.0, -0.3));
-        parts.push(placed(solid('box', 1.5, 0.22, 0.42, shade, { seed: 25, mottle: 0.12 }), 0, 0.2, -0.78, 0.14, 0, 0)); // the brow ridge
+        for (const sx of [1, -1]) parts.push(placed(solid('sphere', 0.5, 0.17, 0.3, shade, { seg: 8, seed: 25, mottle: 0.12 }), 0.38 * sx, 0.17, -0.78, 0.12, 0, -sx * 0.18)); // the brow ridge: two heavy arches (not a band)
         // small deep-set eyes (red-rimmed, a yellow glint), dark sockets
         for (const s of [1, -1]) {
             parts.push(placed(solid('sphere', 0.24, 0.16, 0.14, deep, { seg: 8 }), 0.4 * s, 0.05, -0.82));
