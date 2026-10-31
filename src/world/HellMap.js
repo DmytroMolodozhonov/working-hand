@@ -37,16 +37,20 @@ import { createRng, createNoise2D } from '../core/math.js';
 export const HELL_FROM_GEN = 1;
 
 export const HELL = {
-    CX: 250752, CZ: 0, // м: середина ада (дальняя зона; целое число чанков от края)
-    HALF: 2048, // м: квадрат ±HALF от середины (128 чанков); дальше — ничего (стена скал перед краем)
+    CX: 480000, CZ: 0, // м: середина ада — за последним столбцом планет (x > 446384), целое число чанков
+    HALF: 3072, // м: середина ада ±HALF — здесь план (метка, Дьяволос, дороги, лагеря); дальше ад тянется ячейками CELL_P по тому же рецепту
+    X0: 462016, // м: ближний край (к планетам): горный хребет RIM шириной — за ним ничего
+    FAR: 1040000, // м: дальше по x и |z| ад не уходит (предел ключей чанков ±1 048 576 м — сотни км, никто не дойдёт)
+    CELL_P: 1024, // м: ячейка ада вне середины — свои плато с лавопадами, вулканы, арки, шпили, логова (из сида ячейки)
+    DEVIL_DIST_MAX: 1000, // м: Дьяволос не дальше этого от места появления (автор)
     BASE: 18, // слой: обычная земля ада
     LAVA_Y: 3, // слой: верх лавы в озёрах и реках
     SEAT_Y: 14, SEAT_R: 90, MOAT_R0: 96, MOAT_R1: 110, WALL_R: 128, WALL_H: 72, WALL_OUT: 230, // тронная котловина: пол, ров лавы, кольцевая стена
     ANCHOR_R: 7, ANCHOR_H: 34, RING_R: 10.5, RING_TUBE: 1.8, RING_Y: 10, // столб цепи в середине котловины и кованое кольцо на нём
     CHAIN_LEN: 70, // м
-    SPAWN_D: 1250, SPAWN_Y: 24, SPAWN_R: 28, MARK_R: 3.5, // плато прибытия и метка возврата
+    SPAWN_D: 800, SPAWN_Y: 24, SPAWN_R: 28, MARK_R: 3.5, // плато прибытия и метка возврата
     ROAD_W: 5, // м: половина ширины дороги / моста (проход 8,4 м между парапетами)
-    RIM: 280, // м от края: стена скал до неба
+    RIM: 900, // м от ближнего края: хребет из скал до неба
     TOP: 116, // слой: выше ничего не строится (MAX_LAYER 120)
     OPEN_S: 20, // с: круг «открыт» после жертвы (можно войти нескольким)
     STEP_S: 1.5, // с: постоять в открытом круге — переход
@@ -54,7 +58,7 @@ export const HELL = {
 };
 
 /** Столбец (x, z) в аду (`margin` — на столько метров за краем тоже: соседи, на которые смотрят откосы чанка)? */
-export const inHell = (x, z, margin = 0) => x >= HELL.CX - HELL.HALF - margin && x < HELL.CX + HELL.HALF + margin && z >= HELL.CZ - HELL.HALF - margin && z < HELL.CZ + HELL.HALF + margin;
+export const inHell = (x, z, margin = 0) => x >= HELL.X0 - margin && x < HELL.FAR + margin && z > -HELL.FAR - margin && z < HELL.FAR + margin;
 /** Чанк (cx, cz) шириной C м — в аду? Край ада — по краям чанков: чанк целиком внутри или снаружи. */
 export const hellChunk = (cx, cz, C = 32) => inHell(cx * C, cz * C);
 
@@ -86,11 +90,11 @@ function roadDist(x, z, road) {
 export function roadLevel(P, x, z) {
     const H = HELL;
     let r = 20 + 6 * P.noise3(x / 900, z / 900);
-    for (const c of P.taronCamps) { const d = Math.hypot(x - c.x, z - c.z); if (d < c.r + 260) r += (c.y - r) * smooth((c.r + 260 - d) / 260); }
     const dc = Math.hypot(x - H.CX, z - H.CZ);
     if (dc < H.WALL_OUT + 330) r += (H.SEAT_Y - r) * smooth((H.WALL_OUT + 330 - dc) / 300);
     const m = P.returnMark, ds = Math.hypot(x - m.x, z - m.z);
     if (ds < H.SPAWN_R + 300) r += (H.SPAWN_Y - r) * smooth((H.SPAWN_R + 300 - ds) / 300);
+    for (const c of P.taronCamps) { const d = Math.hypot(x - c.x, z - c.z); if (d < c.r + 260) r += (c.y - r) * smooth((c.r + 260 - d) / 260); } // (last: a camp's plateau is exactly its level)
     return r;
 }
 
@@ -157,7 +161,7 @@ function makePlan(seed) {
         for (let t = 0; t < 40; t++) {
             const a = toC + side * (0.55 + rng() * 0.5), d = 345 + rng() * 50; // (≥ 330 from the mark: the arrival plateau's blend (SPAWN_R + 300) must not lift the camp's own level)
             const x = Math.round(sx + Math.cos(a) * d), z = Math.round(sz + Math.sin(a) * d);
-            if (Math.abs(x - CX) > H.HALF - H.RIM - 80 || Math.abs(z - CZ) > H.HALF - H.RIM - 80 || Math.hypot(x - mx, z - mz) < 330) continue;
+            if (Math.abs(x - CX) > H.HALF - 140 || Math.abs(z - CZ) > H.HALF - 140 || Math.hypot(x - mx, z - mz) < 330) continue;
             const r = 20 + Math.round(rng() * 14), y = Math.round(roadLevel(P, x, z));
             P.taronCamps.push({ x, z, n: 4 + Math.floor(rng() * 3), r, y });
             const from = nearRoadNode(x, z);
@@ -165,12 +169,14 @@ function makePlan(seed) {
             break;
         }
     }
-    for (let k = P.taronCamps.length, tries = 0; k < nc && tries < 200; tries++) {
-        const a = a0 + (k + 1) * (TAU / (nc + 1)) + (rng() - 0.5) * 0.5, d = 500 + rng() * 800;
-        const x = Math.round(CX + Math.cos(a) * d), z = Math.round(CZ + Math.sin(a) * d);
-        if (Math.hypot(x - mx, z - mz) < 320) continue;
-        if (P.taronCamps.some((c) => Math.hypot(c.x - x, c.z - z) < 380)) continue;
-        if (Math.abs(x - CX) > H.HALF - H.RIM - 80 || Math.abs(z - CZ) > H.HALF - H.RIM - 80) continue;
+    // (the others: 200…700 m from the arrival, round it — the author: «лагеря Таронов 100–700 м… вокруг по пути»)
+    for (let k = P.taronCamps.length, tries = 0; k < nc && tries < 300; tries++) {
+        const a = rng() * TAU, d = 200 + rng() * 500;
+        const x = Math.round(sx + Math.cos(a) * d), z = Math.round(sz + Math.sin(a) * d);
+        if (Math.hypot(x - mx, z - mz) < 330) continue;
+        if (Math.hypot(x - CX, z - CZ) < H.WALL_OUT + 120) continue;
+        if (P.taronCamps.some((c) => Math.hypot(c.x - x, c.z - z) < 260)) continue;
+        if (Math.abs(x - CX) > H.HALF - 140 || Math.abs(z - CZ) > H.HALF - 140) continue;
         const r = 20 + Math.round(rng() * 20), y = Math.round(roadLevel(P, x, z));
         const camp = { x, z, n: 3 + Math.floor(rng() * 4), r, y };
         P.taronCamps.push(camp); // (before its road: the road's field is level over the camp)
@@ -180,7 +186,7 @@ function makePlan(seed) {
     }
     // --- что не на дорогах и не на площадках
     const busy = (x, z, r) => {
-        if (Math.abs(x - CX) > H.HALF - H.RIM + r * 0.3 || Math.abs(z - CZ) > H.HALF - H.RIM + r * 0.3) return true;
+        if (Math.abs(x - CX) > H.HALF - r - 40 || Math.abs(z - CZ) > H.HALF - r - 40) return true; // (the middle's own: the cells round it have theirs)
         if (Math.hypot(x - CX, z - CZ) < H.WALL_OUT + r + 30) return true;
         if (Math.hypot(x - mx, z - mz) < H.SPAWN_R + r + 40) return true;
         for (const c of P.taronCamps) if (Math.hypot(x - c.x, z - c.z) < c.r + r + 30) return true;
@@ -192,7 +198,7 @@ function makePlan(seed) {
         for (let t = 0; t < 120; t++) {
             let x, z;
             if (near) { const a = near.a + (rng() - 0.5) * near.spread, d = near.d0 + rng() * (near.d1 - near.d0); x = Math.round(near.x + Math.cos(a) * d); z = Math.round(near.z + Math.sin(a) * d); }
-            else { x = Math.round(CX + (rng() * 2 - 1) * (H.HALF - H.RIM - r)); z = Math.round(CZ + (rng() * 2 - 1) * (H.HALF - H.RIM - r)); }
+            else { x = Math.round(CX + (rng() * 2 - 1) * (H.HALF - r - 40)); z = Math.round(CZ + (rng() * 2 - 1) * (H.HALF - r - 40)); }
             if (!free(x, z, r)) continue;
             taken.push({ x, z, r });
             return fn(x, z);
@@ -200,81 +206,21 @@ function makePlan(seed) {
         return null;
     };
     // --- плато-столовые горы с лавопадами (два — прямо перед глазами прибывшего)
-    const mesa = (x, z, r, h, face = null) => {
-        const m = { x, z, r, h, falls: [] };
-        const nf = face != null ? 2 : 1 + Math.floor(rng() * 2);
-        for (let f = 0; f < nf; f++) {
-            const dir = face != null ? face + (f ? 0.45 : -0.25) : rng() * TAU, w = 3 + Math.floor(rng() * 3);
-            const fx = x + Math.cos(dir) * r * 0.72, fz = z + Math.sin(dir) * r * 0.72; // (the back of a cleft cut into the cliff: the fall pours out of the rock, never stands off it)
-            const pool = { x: Math.round(x + Math.cos(dir) * (r + 9)), z: Math.round(z + Math.sin(dir) * (r + 9)), r: 10 + w };
-            const fall = { x: Math.round(fx), z: Math.round(fz), top: Math.round(H.LAVA_Y + (h - 1 - H.LAVA_Y) * (0.5 + 0.2 * rng())), bottom: H.LAVA_Y, w, dir, pool, mesa: m }; // (top: the glowing grotto in the cliff the lava pours out of — rock over it, never the open sky)
-            m.falls.push(fall);
-            P.lavaFalls.push(fall);
-            P.fountains.push({ x: pool.x, z: pool.z, y: H.LAVA_Y, h: 6 + w * 2, fall: true });
-        }
-        P.mesas.push(m);
-        return m;
-    };
-    for (let k = 0; k < 2; k++) { const r = 34 + Math.round(rng() * 14), h = 62 + Math.round(rng() * 16); place(r * 1.18 + 14, (x, z) => mesa(x, z, r, h, Math.atan2(mz - z, mx - x)), { x: mx, z: mz, a: toC + (k ? 0.75 : -0.75), spread: 0.4, d0: 170 + r, d1: 280 + r }); } // (their falls face the arrival: the first sight of hell)
-    for (let k = 0; k < 12; k++) { const r = 30 + Math.round(rng() * 40), h = 50 + Math.round(rng() * 40); place(r * 1.18 + 14, (x, z) => mesa(x, z, r, h)); }
-    // --- вулканы: кратер с озером лавы и фонтаном
-    for (let k = 0; k < 4; k++) { const cr0 = 80 + Math.round(rng() * 40); place(cr0, (x, z) => {
-        const c = { x, z, r: cr0, h: 56 + Math.round(rng() * 22), cr: 18 + Math.round(rng() * 10) };
-        c.lava = c.h - 9;
-        P.craters.push(c);
-        P.fountains.push({ x, z, y: c.lava, h: 22 + Math.round(rng() * 14) });
-        return c;
-    }); }
-    // --- титаны: огромные кости — позвоночник, рёбра, череп с рогами
-    for (let k = 0; k < 3; k++) { const L = 110 + rng() * 80; place(L / 2 + 36, (x, z) => {
-        const a = rng() * TAU;
-        const t = { x0: Math.round(x - Math.cos(a) * L / 2), z0: Math.round(z - Math.sin(a) * L / 2), x1: Math.round(x + Math.cos(a) * L / 2), z1: Math.round(z + Math.sin(a) * L / 2), y: 20 + Math.round(rng() * 8), a, ribs: [] };
-        const nx = -Math.sin(a), nz = Math.cos(a);
-        for (let s = 18; s < L - 30; s += 10) {
-            const bx = t.x0 + Math.cos(a) * s, bz = t.z0 + Math.sin(a) * s, reach = 22 + 8 * Math.sin(Math.PI * s / L);
-            for (const sd of [-1, 1]) t.ribs.push({ ax: bx, az: bz, bx: bx + nx * reach * sd + Math.cos(a) * 6, bz: bz + nz * reach * sd + Math.sin(a) * 6 });
-        }
-        t.skull = { x: t.x1 + Math.cos(a) * 9, z: t.z1 + Math.sin(a) * 9, r: 11 };
-        P.titans.push(t);
-        return t;
-    }); }
-    // --- соборы из колонн (руины титанов): две ряда колонн, арки между ними
-    for (let k = 0; k < 3; k++) place(80, (x, z) => {
-        const a = rng() * TAU, n = 5 + Math.floor(rng() * 3), step = 22, half = 15 + Math.round(rng() * 5), top = 64 + Math.round(rng() * 18);
-        const ux = Math.cos(a), uz = Math.sin(a), nx = -uz, nz = ux;
-        const col = [];
-        for (let i = 0; i < n; i++) {
-            const s = (i - (n - 1) / 2) * step;
-            for (const sd of [-1, 1]) {
-                if (rng() < 0.18 && i > 0 && i < n - 1) { col.push(null); continue; } // (рухнувшая колонна)
-                const c = { x: x + ux * s + nx * half * sd, z: z + uz * s + nz * half * sd, r: 3.2, top: top - Math.round(rng() * 10) };
-                P.pillars.push(c); col.push(c);
-            }
-        }
-        for (let i = 0; i < col.length; i++) {
-            const c = col[i]; if (!c) continue;
-            const along = col[i + 2], across = i % 2 === 0 ? col[i + 1] : null;
-            if (along) P.arches.push({ ax: c.x, az: c.z, bx: along.x, bz: along.z, y0: Math.min(c.top, along.top) - 12, top: Math.min(c.top, along.top) - 1, w: 2.5, th: 3, gothic: true });
-            if (across) P.arches.push({ ax: c.x, az: c.z, bx: across.x, bz: across.z, y0: Math.min(c.top, across.top) - 6, top: Math.min(c.top, across.top) + 8, w: 2.5, th: 3, gothic: true });
-        }
-        return true;
-    });
+    for (let k = 0; k < 2; k++) { const r = 34 + Math.round(rng() * 14), h = 62 + Math.round(rng() * 16); place(r * 1.18 + 14, (x, z) => addMesa(P, rng, x, z, r, h, Math.atan2(mz - z, mx - x)), { x: mx, z: mz, a: toC + (k ? 0.75 : -0.75), spread: 0.4, d0: 170 + r, d1: 280 + r }); } // (their falls face the arrival: the first sight of hell)
+    for (let k = 0; k < 20; k++) { const r = 30 + Math.round(rng() * 40), h = 50 + Math.round(rng() * 40); place(r * 1.18 + 14, (x, z) => addMesa(P, rng, x, z, r, h)); }
+    for (let k = 0; k < 6; k++) { const cr0 = 80 + Math.round(rng() * 40); place(cr0, (x, z) => addCrater(P, rng, x, z, cr0)); }
+    for (let k = 0; k < 4; k++) { const L = 110 + rng() * 80; place(L / 2 + 36, (x, z) => addTitan(P, rng, x, z, L)); }
+    for (let k = 0; k < 4; k++) place(80, (x, z) => addCathedral(P, rng, x, z));
     // --- огромные арки: три — врата над дорогами, остальные — по миру
     for (let k = 0, i = 0; k < 3 && i < 40; i++) {
         const r = P.roads[k % P.roads.length], j = 1 + Math.floor(rng() * (r.length - 2));
         const p = r[j], q = r[j + 1] || r[j - 1];
-        if (Math.hypot(p.x - CX, p.z - CZ) < H.WALL_OUT + 40 || Math.hypot(p.x - mx, p.z - mz) < 120) continue;
+        if (!p || !q || Math.hypot(p.x - CX, p.z - CZ) < H.WALL_OUT + 40 || Math.hypot(p.x - mx, p.z - mz) < 120) continue;
         const ux = (q.x - p.x), uz = (q.z - p.z), L = Math.hypot(ux, uz), nx = -uz / L, nz = ux / L, half = 28 + rng() * 14;
         P.arches.push({ ax: p.x + nx * half, az: p.z + nz * half, bx: p.x - nx * half, bz: p.z - nz * half, y0: -6, top: Math.max(p.h + 44, 70 + Math.round(rng() * 25)), w: 5 + rng() * 3, th: 7, gate: true });
         k++;
     }
-    for (let k = 0; k < 9; k++) { const half = 35 + rng() * 45; place(half + 10, (x, z) => {
-        const a = rng() * TAU;
-        const ar = { ax: x + Math.cos(a) * half, az: z + Math.sin(a) * half, bx: x - Math.cos(a) * half, bz: z - Math.sin(a) * half, y0: -6, top: 70 + Math.round(rng() * 40), w: 5 + rng() * 4, th: 6 + rng() * 4 };
-        if (ar.top > H.TOP) ar.top = H.TOP;
-        P.arches.push(ar);
-        return ar;
-    }); }
+    for (let k = 0; k < 14; k++) { const half = 35 + rng() * 45; place(half + 10, (x, z) => addArch(P, rng, x, z, half)); }
     // (no arch leg or low arc over a road: what is lower over a road than 7 above it is taken away)
     const W = H.ROAD_W;
     P.arches = P.arches.filter((a) => {
@@ -287,20 +233,11 @@ function makePlan(seed) {
     });
     // --- логова горгулий ада: скалы-башни с площадкой наверху
     // (the first lair is near the arrival, 320…480 m from the hero, on the other side of the road from the first camp: one is seen flying within the first minutes)
-    const lairAt = (x, z) => {
-        const y = 72 + Math.round(rng() * 22);
-        P.spires.push({ x, z, r: 15 + rng() * 5, top: y, lair: true, tw: rng() * TAU });
-        P.gargoyleLairs.push({ x, z, y });
-        return true;
-    };
+    const lairAt = (x, z) => addLair(P, rng, x, z);
     place(34, lairAt, { x: sx, z: sz, a: toC - (P.taronCamps[0] && Math.hypot(P.taronCamps[0].x - sx, P.taronCamps[0].z - sz) < 450 ? Math.sign(Math.sin(Math.atan2(P.taronCamps[0].z - sz, P.taronCamps[0].x - sx) - toC)) * 0.9 : -0.9), spread: 0.6, d0: 320, d1: 480 });
-    for (let k = P.gargoyleLairs.length; k < 6; k++) place(34, lairAt);
+    for (let k = P.gargoyleLairs.length; k < 6; k++) place(34, lairAt, { x: sx, z: sz, a: rng() * TAU, spread: TAU, d0: 300, d1: 1400 }); // (round the way, not far: the gargoyles are met)
     // --- шпили базальта и обсидиана: сотни метров над лавой
-    for (let k = 0; k < 150; k++) { const r = 5 + rng() * 11; place(r * 1.7 + 2, (x, z) => {
-        const top = Math.min(H.TOP, Math.round(46 + rng() * 70));
-        P.spires.push({ x, z, r, top, obs: rng() < 0.35, tw: rng() * TAU });
-        return true;
-    }); }
+    for (let k = 0; k < 260; k++) { const r = 5 + rng() * 11; place(r * 1.7 + 2, (x, z) => addSpire(P, rng, x, z, r)); }
     // --- лагеря: костровища и тотемы из костей (мелкие постройки на плато)
     for (const c of P.taronCamps) {
         const pits = 2 + Math.floor(rng() * 2);
@@ -336,6 +273,129 @@ function makePlan(seed) {
     return P;
 }
 
+// ------------------------------------------------------------------ the shapes (the middle's plan and every cell round it use the same)
+function addMesa(T, rng, x, z, r, h, face = null) {
+    const H = HELL, m = { x, z, r, h, falls: [] };
+    const nf = face != null ? 2 : 1 + Math.floor(rng() * 2);
+    for (let f = 0; f < nf; f++) {
+        const dir = face != null ? face + (f ? 0.45 : -0.25) : rng() * TAU, w = 3 + Math.floor(rng() * 3);
+        const fx = x + Math.cos(dir) * r * 0.72, fz = z + Math.sin(dir) * r * 0.72;
+        const pool = { x: Math.round(x + Math.cos(dir) * (r + 9)), z: Math.round(z + Math.sin(dir) * (r + 9)), r: 10 + w };
+        const fall = { x: Math.round(fx), z: Math.round(fz), top: Math.round(H.LAVA_Y + (h - 1 - H.LAVA_Y) * (0.5 + 0.2 * rng())), bottom: H.LAVA_Y, w, dir, pool, mesa: m }; // (top: the glowing grotto in the cliff the lava pours out of — rock over it, never the open sky)
+        m.falls.push(fall);
+        T.lavaFalls.push(fall);
+        T.fountains.push({ x: pool.x, z: pool.z, y: H.LAVA_Y, h: 6 + w * 2, fall: true });
+    }
+    T.mesas.push(m);
+    return m;
+}
+function addCrater(T, rng, x, z, r) {
+    const c = { x, z, r, h: 56 + Math.round(rng() * 22), cr: 18 + Math.round(rng() * 10) };
+    c.lava = c.h - 9;
+    T.craters.push(c);
+    T.fountains.push({ x, z, y: c.lava, h: 22 + Math.round(rng() * 14) });
+    return c;
+}
+function addTitan(T, rng, x, z, L) {
+    const a = rng() * TAU;
+    const t = { x0: Math.round(x - Math.cos(a) * L / 2), z0: Math.round(z - Math.sin(a) * L / 2), x1: Math.round(x + Math.cos(a) * L / 2), z1: Math.round(z + Math.sin(a) * L / 2), y: 20 + Math.round(rng() * 8), a, ribs: [] };
+    const nx = -Math.sin(a), nz = Math.cos(a);
+    for (let s = 18; s < L - 30; s += 10) {
+        const bx = t.x0 + Math.cos(a) * s, bz = t.z0 + Math.sin(a) * s, reach = 22 + 8 * Math.sin(Math.PI * s / L);
+        for (const sd of [-1, 1]) t.ribs.push({ ax: bx, az: bz, bx: bx + nx * reach * sd + Math.cos(a) * 6, bz: bz + nz * reach * sd + Math.sin(a) * 6 });
+    }
+    t.skull = { x: t.x1 + Math.cos(a) * 9, z: t.z1 + Math.sin(a) * 9, r: 11 };
+    T.titans.push(t);
+    return t;
+}
+function addCathedral(T, rng, x, z) {
+    const a = rng() * TAU, n = 5 + Math.floor(rng() * 3), step = 22, half = 15 + Math.round(rng() * 5), top = 64 + Math.round(rng() * 18);
+    const ux = Math.cos(a), uz = Math.sin(a), nx = -uz, nz = ux;
+    const col = [];
+    for (let i = 0; i < n; i++) {
+        const s = (i - (n - 1) / 2) * step;
+        for (const sd of [-1, 1]) {
+            if (rng() < 0.18 && i > 0 && i < n - 1) { col.push(null); continue; } // (рухнувшая колонна)
+            const c = { x: x + ux * s + nx * half * sd, z: z + uz * s + nz * half * sd, r: 3.2, top: top - Math.round(rng() * 10) };
+            T.pillars.push(c); col.push(c);
+        }
+    }
+    for (let i = 0; i < col.length; i++) {
+        const c = col[i]; if (!c) continue;
+        const along = col[i + 2], across = i % 2 === 0 ? col[i + 1] : null;
+        if (along) T.arches.push({ ax: c.x, az: c.z, bx: along.x, bz: along.z, y0: Math.min(c.top, along.top) - 12, top: Math.min(c.top, along.top) - 1, w: 2.5, th: 3, gothic: true });
+        if (across) T.arches.push({ ax: c.x, az: c.z, bx: across.x, bz: across.z, y0: Math.min(c.top, across.top) - 6, top: Math.min(c.top, across.top) + 8, w: 2.5, th: 3, gothic: true });
+    }
+    return true;
+}
+function addArch(T, rng, x, z, half) {
+    const a = rng() * TAU;
+    const ar = { ax: x + Math.cos(a) * half, az: z + Math.sin(a) * half, bx: x - Math.cos(a) * half, bz: z - Math.sin(a) * half, y0: -6, top: Math.min(HELL.TOP, 70 + Math.round(rng() * 40)), w: 5 + rng() * 4, th: 6 + rng() * 4 };
+    T.arches.push(ar);
+    return ar;
+}
+function addLair(T, rng, x, z) {
+    const y = 72 + Math.round(rng() * 22);
+    T.spires.push({ x, z, r: 15 + rng() * 5, top: y, lair: true, tw: rng() * TAU });
+    T.gargoyleLairs.push({ x, z, y });
+    return true;
+}
+function addSpire(T, rng, x, z, r) {
+    T.spires.push({ x, z, r, top: Math.min(HELL.TOP, Math.round(46 + rng() * 70)), obs: rng() < 0.35, tw: rng() * TAU });
+    return true;
+}
+
+/**
+ * A cell of hell outside its middle (CELL_P m square): its own plateaus with falls, a volcano, arches, a titan, a cathedral, a lair, spires — from the cell's own
+ * seed, the same on every computer; every shape inside the cell (so a column looks at its own cell only). Kept in a small cache (the workers have their own).
+ */
+const CELLS_MAX = 64;
+function cellPlan(P, ci, cj) {
+    const key = ci * 1048576 + cj;
+    let C = P.cells.get(key);
+    if (C) return C;
+    C = { mesas: [], craters: [], spires: [], arches: [], pillars: [], titans: [], props: [], taronCamps: [], gargoyleLairs: [], lavaFalls: [], fountains: [], roads: [] };
+    const H = HELL, rng = createRng((Math.imul(ci, 73856093) ^ Math.imul(cj, 19349663) ^ Math.imul(P.seed | 0, 83492791) ^ 0x4e11) >>> 0);
+    const x0 = H.CX - H.HALF + ci * H.CELL_P, z0 = H.CZ - H.HALF + cj * H.CELL_P, S = H.CELL_P;
+    if (x0 + S > H.X0 + H.RIM * 0.6) { // (not inside the near range of mountains)
+        const taken = [];
+        const place = (r, fn) => {
+            if (2 * (r + 10) >= S) return null;
+            for (let t = 0; t < 40; t++) {
+                const x = Math.round(x0 + r + 10 + rng() * (S - 2 * r - 20)), z = Math.round(z0 + r + 10 + rng() * (S - 2 * r - 20));
+                if (taken.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + r + 12)) continue;
+                taken.push({ x, z, r });
+                return fn(x, z);
+            }
+            return null;
+        };
+        if (rng() < 0.35) { const cr0 = 80 + Math.round(rng() * 40); place(cr0, (x, z) => addCrater(C, rng, x, z, cr0)); }
+        if (rng() < 0.22) { const L = 110 + rng() * 80; place(L / 2 + 36, (x, z) => addTitan(C, rng, x, z, L)); }
+        if (rng() < 0.18) place(80, (x, z) => addCathedral(C, rng, x, z));
+        for (let k = 1 + Math.floor(rng() * 2); k > 0; k--) { const r = 30 + Math.round(rng() * 34), h = 50 + Math.round(rng() * 40); place(r * 1.18 + 14, (x, z) => addMesa(C, rng, x, z, r, h)); }
+        for (let k = Math.floor(rng() * 3); k > 0; k--) { const half = 35 + rng() * 45; place(half + 10, (x, z) => addArch(C, rng, x, z, half)); }
+        if (rng() < 0.4) place(34, (x, z) => addLair(C, rng, x, z));
+        for (let k = 10 + Math.floor(rng() * 8); k > 0; k--) { const r = 5 + rng() * 11; place(r * 1.7 + 2, (x, z) => addSpire(C, rng, x, z, r)); }
+    }
+    buildIndex(C);
+    if (P.cells.size >= CELLS_MAX) P.cells.delete(P.cells.keys().next().value);
+    P.cells.set(key, C);
+    return C;
+}
+
+/** The lava fountains near (x, z): the middle's and the cells' round (HellRealm: the sparks). */
+export function hellFountains(P, x, z, out = []) {
+    out.length = 0;
+    for (const f of P.fountains) out.push(f);
+    const H = HELL, ci = Math.floor((x - (H.CX - H.HALF)) / H.CELL_P), cj = Math.floor((z - (H.CZ - H.HALF)) / H.CELL_P);
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const i = ci + di, j = cj + dj;
+        if (i >= 0 && i < 6 && j >= 0 && j < 6) continue; // (the middle: in P.fountains)
+        for (const f of cellPlan(P, i, j).fountains) out.push(f);
+    }
+    return out;
+}
+
 // ------------------------------------------------------------------ the land of hell (heights) — pure numbers, read by HellLand.js
 
 const CELL = 128;
@@ -366,8 +426,7 @@ function buildIndex(P) {
         put({ k: 'road', a, b, L: Math.hypot(b.x - a.x, b.z - a.z) }, Math.min(a.x, b.x) - m, Math.min(a.z, b.z) - m, Math.max(a.x, b.x) + m, Math.max(a.z, b.z) + m);
     }
     P.grid = grid;
-    P.noise = createNoise2D((P.seed ^ 0x4e11) >>> 0);
-    P.noise2 = createNoise2D((P.seed ^ 0x13a7) >>> 0);
+    if (P.seed != null && !P.noise) { P.noise = createNoise2D((P.seed ^ 0x4e11) >>> 0); P.noise2 = createNoise2D((P.seed ^ 0x13a7) >>> 0); P.cells = new Map(); }
 }
 
 /** Где край плато `m` в направлении `a` (м от середины): неровный обрыв — общий для земли и для лавопадов (HellLand: грот на самом склоне). */
@@ -378,7 +437,9 @@ export function mesaEdge(P, m, a) {
 const EMPTY = [];
 /** Формы плана, задевающие клетку столбца (x, z). */
 export function hellNear(P, x, z) {
-    return P.grid.get(Math.floor(x / CELL) * 65536 + Math.floor(z / CELL)) || EMPTY;
+    const H = HELL, dx = x - (H.CX - H.HALF), dz = z - (H.CZ - H.HALF), k = Math.floor(x / CELL) * 65536 + Math.floor(z / CELL);
+    if (dx >= 0 && dx < 2 * H.HALF && dz >= 0 && dz < 2 * H.HALF) return P.grid.get(k) || EMPTY;
+    return cellPlan(P, Math.floor(dx / H.CELL_P), Math.floor(dz / H.CELL_P)).grid.get(k) || EMPTY; // (the cells round the middle: each its own shapes)
 }
 
 /**
@@ -402,9 +463,9 @@ export function groundNoRoads(P, x, z) {
     // озёра лавы в низинах
     if (macro < -0.22) h = Math.min(h, H.LAVA_Y - 1 - (-0.22 - macro) * 22);
     // стена скал по краю ада
-    const edge = H.HALF - Math.max(Math.abs(dx), Math.abs(dz));
+    const edge = Math.min(x - H.X0, H.FAR - Math.max(x, Math.abs(z))); // (the near side, to the planets: a range of mountains to the sky; hundreds of km off — the same)
     g.rim = 0;
-    if (edge < H.RIM) { const k = smooth((H.RIM - edge) / (H.RIM - 40)); h += k * (90 + 20 * ridge); g.rim = k; }
+    if (edge < H.RIM) { const k = smooth((H.RIM - edge) / (H.RIM - 60)); h += k * (95 + 25 * ridge + 10 * n(x / 90, z / 90)); g.rim = k; }
     // тронная котловина: пол, ров лавы, кольцевая стена, внешний склон
     const dc = Math.sqrt(dx * dx + dz * dz);
     if (dc < H.WALL_OUT) {

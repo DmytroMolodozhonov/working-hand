@@ -23,13 +23,15 @@ test('the contract: the plan has every field the other sessions read', () => {
 });
 
 test('hell lies in the far zone, apart from the Queen\'s map and the planets — off the Earth', () => {
-    const x0 = HELL.CX - HELL.HALF, x1 = HELL.CX + HELL.HALF;
+    const x0 = HELL.X0;
     assert.ok(x0 > QUEEN_MAP.CX + QUEEN_MAP.HALF, 'past the Queen\'s map');
     assert.ok(x0 >= SPACE.ZONE_X && offEarth(x0));
-    for (const z of [-HELL.HALF, 0, HELL.HALF - 1]) for (const x of [x0, HELL.CX, x1 - 1]) assert.equal(slotAt(x, z), -1, 'no planet slot');
+    // past the last column of planets: no slot anywhere in hell, as far as one goes (hundreds of km)
+    for (const z of [-500000, -8000, 0, 9000, 300000]) for (const x of [x0, HELL.CX, HELL.CX + 20000, 700000]) { assert.equal(slotAt(x, z), -1, 'no planet slot'); assert.ok(inHell(x, z)); }
     assert.ok(!earthly({ x: HELL.CX, y: 20, z: 0 }));
-    assert.ok(x0 % CHUNK === 0 && (HELL.CZ - HELL.HALF) % CHUNK === 0);
+    assert.ok(x0 % CHUNK === 0 && (HELL.CX - HELL.HALF) % CHUNK === 0 && HELL.CX % CHUNK === 0);
     assert.ok(hellChunk(x0 / CHUNK, 0) && !hellChunk(x0 / CHUNK - 1, 0));
+    assert.ok(HELL.FAR / CHUNK < 32768, 'within the chunks\' keys');
 });
 
 test('the Earth is not changed by hell (same heights with and without it)', () => {
@@ -92,4 +94,32 @@ test('nothing of the Earth in hell: no castle, cave, lair, dungeon there', () =>
     }
     assert.ok(hellRock > 3000 * 0.9, 'hell\'s own stone');
     assert.ok(lava > 0, 'lava near the arrival');
+});
+
+test('the devil is near the arrival (≤ 1 km, the author); camps and lairs round the way', () => {
+    for (const seed of [1, 5, 4242, 777, 20261015]) {
+        const P = hellPlan(seed), s = P.spawn;
+        const d = Math.hypot(P.devilSeat.x - s.x, P.devilSeat.z - s.z);
+        assert.ok(d <= HELL.DEVIL_DIST_MAX && d >= 600, `devil ${d.toFixed(0)} m`);
+        assert.ok(P.taronCamps.some((c) => Math.hypot(c.x - s.x, c.z - s.z) <= 450), 'a camp near the arrival');
+        for (const c of P.taronCamps) assert.ok(Math.hypot(c.x - s.x, c.z - s.z) <= 760, 'camps 150–700 m round the arrival');
+        assert.ok(P.gargoyleLairs.every((L) => Math.hypot(L.x - s.x, L.z - s.z) <= 1600), 'lairs round the way');
+    }
+});
+
+test('hell has no end where one walks: far from the middle the land goes on, with its plateaus, falls, spires', () => {
+    const d = world();
+    let rock = 0, lava = 0, shapes = 0;
+    for (const [x, z] of [[HELL.CX + 9000, 4000], [HELL.CX + 40000, -25000], [HELL.CX - 12000, 30000], [HELL.CX + 3500, -3500]]) {
+        for (let k = 0; k < 40; k++) {
+            const px = x + k * 23, pz = z + ((k * 37) % 300), L = d.heightAt(px, pz), t = d.get(px, L, pz);
+            if (t === BLOCK.HELL_LAVA) lava++; else if (t >= BLOCK.HELL_BASALT && t <= BLOCK.HELL_IRON) rock++;
+            assert.ok(t !== BLOCK.AIR, 'never a void');
+        }
+    }
+    const P = d.hellPlan;
+    for (let i = 0; i < 4; i++) { d.heightAt(HELL.CX + 9000 + i * 1024, 512); }
+    for (const C of P.cells.values()) shapes += C.mesas.length + C.spires.length + C.arches.length;
+    assert.ok(rock + lava >= 150);
+    assert.ok(shapes > 20, 'the cells have their own shapes: ' + shapes);
 });

@@ -11,7 +11,7 @@
  *  - В аду вечные сумерки: день и ночь Земли не меняют свет (World.setHell).
  */
 import * as THREE from 'three';
-import { HELL, inHell } from '../world/HellMap.js';
+import { HELL, inHell, hellFountains } from '../world/HellMap.js';
 import { LAVA, ABYSS_Y } from './HellRules.js';
 import { HELL_TIME } from '../world/VoxelShading.js';
 import { BLOCK } from '../world/Terrain.js';
@@ -109,7 +109,7 @@ export class HellRealm {
         if (Math.random() < 0.6) { const a = Math.random() * 6.283, r = 6 + Math.random() * 20; fx.spark(_v.set(me.x + Math.cos(a) * r, me.y - 2 + Math.random() * 4, me.z + Math.sin(a) * r), EMBER[(Math.random() * 4) | 0], 0.08, _d.set((Math.random() - 0.5) * 0.8, 0.8 + Math.random() * 1.2, (Math.random() - 0.5) * 0.8), 3); }
         const P = this.data.hellPlan;
         let budget = 30;
-        for (const f of P.fountains) {
+        for (const f of hellFountains(P, me.x, me.z, this._fl || (this._fl = []))) {
             const d = Math.hypot(f.x - me.x, f.z - me.z);
             if (d > 240 || budget <= 0) continue;
             const n = Math.min(budget, f.fall ? 4 : 8);
