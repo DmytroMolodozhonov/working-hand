@@ -66,12 +66,14 @@ test('preview grows with the value, stays in the box', () => {
 
 // ---- «Общие настройки»: one page, nothing twice, the pause has only the key buttons
 const page = () => readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
-test('the pause menu has only the key buttons — no settings copies', () => {
+test('the pause menu has no settings copies — «Общие настройки» is the one page', () => {
     const html = page();
-    const pause = html.slice(html.indexOf('<div id="pause-menu"'), html.indexOf('<div id="general-settings"'));
-    for (const id of ['pause-continue-btn', 'pause-settings-btn', 'pause-exit-btn']) assert.ok(pause.includes(`id="${id}"`), id);
+    const pause = html.slice(html.indexOf('<div id="pause-menu"'), html.indexOf('<div id="death-screen"'));
+    for (const id of ['pause-continue-btn', 'pause-exit-btn', 'pause-settings']) assert.ok(pause.includes(`id="${id}"`), id);
+    assert.ok(pause.includes('data-pause-tab="pause-settings"'), '«Общие настройки» is a tab of the pause');
+    assert.ok(!pause.includes('general-settings'), 'no second window');
     for (const gone of ['pause-audio', 'pause-graphics', 'pause-creative', 'pause-quick', 'pause-hands', 'data-pause-tab="pause-audio"', 'data-pause-tab="pause-graphics"', 'data-pause-tab="pause-creative"']) assert.ok(!pause.includes(gone), gone);
-    assert.ok(!/<input|<select/.test(pause), 'no controls in the pause menu');
+    assert.ok(!/<input|<select/.test(pause.replace(/<div id="pause-settings"[^>]*><\/div>/, '')), 'no controls in the pause menu');
 });
 test('every setting is in ONE place: no id twice, the hand version once', () => {
     const html = page();

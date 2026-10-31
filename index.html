@@ -61,15 +61,17 @@
                 <button class="pause-tab" data-pause-tab="pause-player" role="tab">🧙 Игрок</button>
                 <button class="pause-tab" data-pause-tab="pause-players" role="tab" hidden>👥 Игроки</button>
                 <button class="pause-tab" data-pause-tab="pause-bosses" role="tab">👑 Боссы</button>
+                <button class="pause-tab" data-pause-tab="pause-settings" role="tab">⚙ Общие настройки</button>
                 <button class="pause-tab" data-pause-tab="pause-spells" role="tab" hidden>✨ Магия</button>
             </div>
             <div id="pause-main" class="pause-pane active">
                 <button id="pause-continue-btn">▶ Продолжить</button>
-                <button id="pause-settings-btn">⚙ Общие настройки</button>
                 <button id="pause-exit-btn">⟲ Выйти в главное меню</button>
             </div>
             <div id="pause-player" class="pause-pane"></div>
             <div id="pause-players" class="pause-pane"></div>
+            <!-- «Общие настройки»: the main menu's settings page itself moves in here while this tab is open -->
+            <div id="pause-settings" class="pause-pane"></div>
             <div id="pause-bosses" class="pause-pane"><div id="pause-bosses-list" class="bosses-list"></div></div>
             <!-- the whole spell book without leaving the game (not on a map) -->
             <div id="pause-spells" class="pause-pane">
@@ -82,13 +84,6 @@
                 <div id="pause-magic-pentagrams" class="magic-layout" hidden><div id="pause-pentagram-cats" class="sub-tabs"></div><div id="pause-pentagrams-grid" class="items-grid"></div></div>
             </div>
             <div class="pause-hint">Мир сохранится сам. Escape — продолжить игру</div>
-        </div>
-    </div>
-    <!-- «Общие настройки» in the game: the SAME page as in the main menu (#tab-settings moves in here while it is open) -->
-    <div id="general-settings" class="hidden" role="dialog" aria-label="Общие настройки">
-        <div class="gs-box">
-            <div class="gs-head"><button id="gs-back" type="button">← Назад</button><div class="gs-title">⚙ Общие настройки</div></div>
-            <div id="gs-body"></div>
         </div>
     </div>
     <div id="death-screen" class="hidden">

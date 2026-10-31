@@ -26,10 +26,9 @@ test('view distance: Medium by default, Maximum from the pause menu streams in w
 
     // the pause menu → «Общие настройки» → «Графика» → «Максимальная»
     await page.keyboard.press('Escape');
-    await page.click('#pause-settings-btn');
-    await page.click('#general-settings .sub-tab[data-sub="set-graphics"]');
+    await page.click('[data-pause-tab="pause-settings"]');
+    await page.click('#pause-settings .sub-tab[data-sub="set-graphics"]');
     await page.selectOption('#view-distance', 'max');
-    await page.keyboard.press('Escape'); // (closes «Общие настройки»)
     await page.keyboard.press('Escape'); // (continues)
     // frames while the far land loads (logged: the longest frame)
     const run = await page.evaluate(async () => {

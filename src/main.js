@@ -988,7 +988,7 @@ function startHandRecording() {
 // ------------------------------------------------------------------ keyboard
 window.addEventListener('keydown', (e) => {
     // Escape: the pause menu (continue / back to the main menu)
-    if (e.key === 'Escape' && game && game.active) { e.preventDefault(); if (settingsOpen()) closeGeneralSettings(); else togglePauseMenu(); return; } // («Общие настройки» is over the pause: Escape closes it first, the next Escape continues)
+    if (e.key === 'Escape' && game && game.active) { e.preventDefault(); togglePauseMenu(); return; }
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
     if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
     // F9: a 10-second recording of the hands for the developer (HandRecorder.js)
@@ -1409,33 +1409,28 @@ document.querySelectorAll('.set-reset[data-reset]').forEach((b) => {
     b.addEventListener('click', () => { if (!el) return; el.value = b.dataset.def; el.dispatchEvent(new Event('input', { bubbles: true })); syncResets(); });
 });
 $('show-heard-toggle')?.addEventListener('change', (e) => { if (!e.target.checked) hud.heard('', false); });
-const gsBox = $('general-settings');
 const settingsPane = $('tab-settings');
+const settingsBox = $('pause-settings');
 let settingsHome = null, settingsWasActive = false;
-const settingsOpen = () => !!gsBox && !gsBox.classList.contains('hidden');
+const settingsOpen = () => !!settingsHome;
+// the page is #tab-settings itself: while the pause tab is open it lives there, after — back in the main menu
 function openGeneralSettings() {
-    if (!gsBox || !settingsPane || settingsOpen()) return;
+    if (!settingsBox || !settingsPane || settingsHome) return;
     settingsHome = document.createComment('tab-settings'); // (where the page lives in the main menu)
     settingsPane.before(settingsHome);
     settingsWasActive = settingsPane.classList.contains('active');
     settingsPane.classList.add('active');
-    $('gs-body').appendChild(settingsPane);
-    gsBox.classList.remove('hidden');
+    settingsBox.appendChild(settingsPane);
     applyFps(); syncHandVersion(); syncResets(); voiceChatUi.sync(); showVoiceMic();
-    $('gs-back')?.focus();
 }
 function closeGeneralSettings() {
-    if (!settingsOpen()) return;
-    gsBox.classList.add('hidden');
-    if (settingsHome?.parentNode) { settingsHome.replaceWith(settingsPane); }
+    if (!settingsHome) return;
+    if (settingsHome.parentNode) settingsHome.replaceWith(settingsPane);
     settingsPane.classList.toggle('active', settingsWasActive);
     settingsHome = null;
-    // (a log being followed stops with the page: the main menu opens on a quiet one)
 }
-$('gs-back')?.addEventListener('click', closeGeneralSettings);
 // (keys typed on the page must not reach the game — walking, spells, slots; only Escape goes on)
-for (const ev of ['keydown', 'keyup']) gsBox?.addEventListener(ev, (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
-$('pause-settings-btn')?.addEventListener('click', openGeneralSettings);
+for (const ev of ['keydown', 'keyup']) settingsBox?.addEventListener(ev, (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
 syncHandVersion(); syncResets();
 // «🧙 Игрок»: the hero's sheet (data refreshed on open and every 0.5 s while the tab is open; the 3D hero is drawn only then)
 const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
@@ -1449,9 +1444,10 @@ const playersTab = new PlayersTabView($('pause-players'), () => game);
 function showPauseTab(id) {
     if (id === 'pause-players') playersTab.show(); else playersTab.hide();
     if (id === 'pause-player') playerSheet.show(); else playerSheet.hide();
+    if (id === 'pause-settings') openGeneralSettings(); else closeGeneralSettings();
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
-    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player'); // (the spell book and the bosses need room)
+    $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player' || id === 'pause-settings'); // (the spell book and the bosses need room)
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
     if (id === 'pause-spells') {
         const cr = game?.config?.mode === 'creative';
