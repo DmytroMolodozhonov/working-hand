@@ -114,6 +114,7 @@ export const IMPERIUS_NO = {
     brightflower: { ru: 'Ярколето', why: 'Ярколето — растение: у цветка нет разума, в который можно вселиться (даже «Империус Максима» его не берёт)' },
     telewilpin: { ru: 'телевильпин', why: 'Телевильпин — растение: у цветка нет разума, в который можно вселиться' },
     carnivore: { ru: 'плотоядная голова', why: 'Плотоядная голова — растение: в ней нет разума, только голод' },
+    diabolos: { ru: 'Дьяволос', icon: '😈', why: 'Нельзя: Дьяволос сам создал заклинание подчинения (вся чёрная магия — его), у него иммунитет — не берёт даже «Империус Максима»' },
     ghost: { ru: 'призрак', icon: '👻', why: 'В призрака нельзя вселиться: у него нет тела и своей воли — он лишь морок замка призраков (не действует даже «Империус Максима»)' },
 };
 export function canTake(kind, maxima, ctx = {}) {
@@ -197,6 +198,7 @@ export function kindOf(sys, c = {}) {
         case 'sx': return 'spencer';
         case 'C': return 'custom'; // (a creature of one's own: CustomCreatures.js)
         case 'g': return 'gargoyle';
+        case 'dv': return 'diabolos'; // (Дьяволос: IMPERIUS_NO — нельзя)
         case 'f': return 'phoenix';
         case 't': return c.skel ? 'skeleton' : 'tree';
         case 'I': return c.type === 'queen' ? 'iceQueen' : c.type === 'monster' ? 'iceMonster' : 'snowman';

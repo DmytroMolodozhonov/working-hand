@@ -872,6 +872,8 @@ export class NetSync {
     bossFree(id) { this.net.send({ t: 'bfree', id }, true); }
     /** Dragons (Dragons.js): the host's state; a guest's blow, scoop; the host's word to a player. */
     dragon(m) { this.net.send({ t: 'drg', ...m }); }
+    /** Дьяволос (Diabolos.js): строка состояния хоста, шары (`dvb`), удары, «потревожили» гостем. */
+    diabolos(m) { this.net.send({ t: m.e === 'b' || m.e === 'bx' ? 'dvb' : 'dvl', ...m }); }
     /** The duel arenas (ArenaDuels.js): the sign-up, the phase, a player's own news, the sounds. */
     arena(m) { this.net.send({ t: 'arn', ...m }); }
     /** The Ice Castle (IceQueen.js): its creatures' state, shots, the queen's magic, the Ice Rod. */
@@ -1172,6 +1174,7 @@ export class NetSync {
             case 'bgrab': if (m.to === this.me) { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) { sp.holding = this.me; g.spiders._seized(sp); } } break;
             case 'bfree': { const sp = g.spiders?.list.find((x) => x.id === m.id); if (sp) sp.holding = null; break; }
             case 'drg': g.dragons?.onNet(m, m.from); break;
+            case 'dvl': case 'dvb': g.diabolos?.onNet(m, m.from, this.net.isHost); break; // (Дьяволос: Diabolos.js)
             case 'arn': g.arenaDuels?.onNet(m, m.from); break; // (the duel arenas: ArenaDuels.js)
             case 'ice': g.iceCastle?.onNet(m, m.from); break; // (the Ice Castle: IceQueen.js)
             case 'bbd': g.blackbeard?.onNet(m, this.net.isHost); break; // (the black ship: its grapnels, the plank, the pistols — Blackbeard.js)

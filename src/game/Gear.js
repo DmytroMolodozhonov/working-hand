@@ -558,6 +558,8 @@ export class Gear {
                     a.hit.add(o);
                     g.ghosts.hit(o, a.dmg, 'arrow', a.by);
                 }
+                // Дьяволос (Diabolos.js): стрела только царапает толстую шкуру и злит — убить нельзя (DEVIL_VS.weapon)
+                if (g.authority && !a.hit.has('diabolos') && g.diabolos?.hitAt?.(p, 0.3, a.dmg, 'arrow', a.by)) a.hit.add('diabolos');
                 // an infernal gargoyle (Gargoyles.js): stone — an arrow hurts it a little (×0.6) and sticks in nothing
                 if (g.authority) for (const o of g.gargoyles?.targets() || []) {
                     if (a.hit.has(o) || gargoyleDist(o, p) > 0.2) continue;

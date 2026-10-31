@@ -253,6 +253,12 @@ const customs = modelBody('C', (g) => g.customCreatures?.list || [], (g, id) => 
 });
 BODIES.C = customs;
 
+// ============================================================ Дьяволос: на прицел попадает, но не берётся никогда (IMPERIUS_NO.diabolos — он создал подчинение)
+BODIES.dv = {
+    list(g, fn) { for (const d of g.diabolos?.list || []) fn(d, d.x, d.y, d.z, 120); },
+    body: (c, out) => c.bodyCapsule(out),
+};
+
 /** (tests) the walkers added here. */
 export const WALKER_SYSTEMS = ['sp', 't', 'I', 's', 'ca', 'ta'];
 export { THREE };

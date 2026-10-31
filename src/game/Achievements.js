@@ -61,16 +61,20 @@ export const ACHIEVEMENTS = [
     { id: 'taronHunter', boss: false, mana: 50, icon: '🪓', title: 'Охотник на Таронов', desc: 'Победить десять Тароны — рогатых великанов с топорами-молотами из подземного мира' },
     { id: 'ghostCastle', boss: false, mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
     { id: 'hellGate', boss: false, mana: 100, icon: '🔥', title: 'Врата ада', desc: 'Открыть пентаграмму ада и спуститься в ад' }, // (HellGate.js: the first passage)
+    // (Дьяволос бессмертен — убить нельзя; ачивка за то, что разбудил: `extra` — для «Высшего мага» не нужна; Diabolos.js)
+    { id: 'devilWoke', boss: false, extra: true, mana: 100, icon: '😈', title: 'Разбудил дьявола', desc: 'Потревожить огромного прикованного дьявола в аду так, чтобы он проснулся' },
 ];
 /** Tarons killed for «Охотник на Таронов» (TaronRules.TARON.ACHIEVEMENT.kills). */
 export const TARON_KILLS = 10;
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
 export const ACH_BY_ID = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));
+/** Те, что нужны для «Высшего мага» (без `extra` — «Разбудил дьявола» не обязательна). */
+export const HIGH_IDS = ACHIEVEMENTS.filter((a) => !a.extra).map((a) => a.id);
 
 /** What these achievements (ids) give: {mana: + to the maximum, regen: × the speed, high}. */
 export function achBonus(done = []) {
     const ids = ACH_IDS.filter((id) => [...done].includes(id));
-    const high = ids.length === ACH_IDS.length;
+    const high = HIGH_IDS.every((id) => ids.includes(id));
     const mana = ids.reduce((s, id) => s + ACH_BY_ID[id].mana, 0) + (high ? ACH.HIGH_MANA : 0);
     return { mana, regen: 1 + ids.length * ACH.REGEN + (high ? ACH.HIGH_REGEN : 0), high };
 }
@@ -139,7 +143,7 @@ export class Achievements {
     get off() { const m = this.game.config?.mode; return m === 'creative' || m === 'test'; }
 
     get count() { return this.done.size; }
-    get high() { return ACH_IDS.every((id) => this.done.has(id)); }
+    get high() { return HIGH_IDS.every((id) => this.done.has(id)); }
     /** × the mana regeneration (Combat). */
     get regenK() { return achBonus(this.done).regen; }
 
@@ -444,7 +448,7 @@ export class Achievements {
 /** The list for the menus (pause, main): done or not, what each gave. */
 export function achievementsHtml(done = new Set(), { world = '' } = {}) {
     const n = ACH_IDS.filter((id) => done.has(id)).length;
-    const high = n === ACH_IDS.length;
+    const high = HIGH_IDS.every((id) => done.has(id));
     const b = achBonus(done);
     const rows = ACHIEVEMENTS.map((a) => {
         const ok = done.has(a.id);

@@ -21,6 +21,7 @@
 /** Each kind of danger: r — the deadly radius round it (m); hear / see — how far it is noticed;
  *  near — within this many metres beyond r it is a level-2 danger (hide); fear — how long it is remembered (s). */
 export const DANGERS = {
+    devil: { r: 40, hear: 600, see: 600, near: 160, fear: 160, ru: 'Дьяволос: огромный дьявол проснулся — рёв, огонь, земля дрожит' },
     blast: { r: 4, hear: 110, see: 110, near: 26, fear: 45, ru: 'взрыв (Бомбардо, молния, взрыв бочки)' },
     ruin: { r: 20, hear: 120, see: 120, near: 30, fear: 70, ru: '«Тотальное разрушение»: земля дрожит, потом всё рушится' },
     circle: { r: 30, hear: 140, see: 140, near: 40, fear: 80, ru: '«Circle Attack»: золотая волна вокруг волшебника, земля рушится кругами' },

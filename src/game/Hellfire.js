@@ -608,7 +608,7 @@ export class Hellfire {
             // the burn: in the fire, or the heat by how close (0 beyond the heat's reach: only the fear)
             const dmg = inside ? D : heat > 0 ? HELLFIRE.HEAT_DMG * heat * K : 0;
             const cr = b.kind === 'z' || b.kind === 's' || b.kind === 'D' ? null : g.duel?._creature?.(b.kind, b.id);
-            if (inside && b.kind !== 'G') g.burning?.ignite(b.kind, b.id, by, undefined, true); // (in the blaze itself the fire sticks to the body: Burning.js)
+            if (inside && b.kind !== 'G' && b.kind !== 'Y') g.burning?.ignite(b.kind, b.id, by, undefined, true); // (in the blaze itself the fire sticks to the body: Burning.js)
             if (dmg > 0) {
                 if (b.kind === 'z') {
                     const z = g.zombieById?.get(b.id);
@@ -618,6 +618,8 @@ export class Hellfire {
                     if (sp) g.spiders.hit(sp, dmg * 2, HELLFIRE.NAME, by);
                 } else if (b.kind === 'D') {
                     g.dragons?.hit?.(g.dragons.byId(b.id), dmg, HELLFIRE.NAME, by); // (even the hellfire: a dragon does not care — DragonKinds.FIRE_KINDS)
+                } else if (b.kind === 'Y') {
+                    g.diabolos?.hit?.(g.diabolos.byId(b.id), dmg, HELLFIRE.NAME, by); // (Дьяволос: адский огонь — его же огонь; только злит — DEVIL_VS.dark)
                 } else if (b.kind === 'I') {
                     const ic = g.iceCastle?.byId(b.id); // (the Ice Castle's creatures: the mightiest fire — ×3.5, IceQueen.FIRE_K)
                     if (ic) g.iceCastle.hit(ic, dmg, HELLFIRE.NAME, by);

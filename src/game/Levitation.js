@@ -175,6 +175,8 @@ export class Levitation {
         for (const o of g.customCreatures?.targets() || []) out.push({ kind: 'custom', obj: o, pos: o.model.position, r: o.r });
         // an infernal gargoyle: a heavy stone body that tears free of «Левиоса» at once (GargoyleRules.TARGETS.Levitation)
         for (const o of g.gargoyles?.targets() || []) out.push({ kind: 'gargoyle', obj: o, pos: o.model.position, r: 1.2 });
+        // Дьяволос: «Левиоса» не поднимет — слишком велик и тяжёл (DEVIL_VS.push); попытка его злит
+        for (const o of g.diabolos?.targets() || []) out.push({ kind: 'diabolos', obj: o, pos: g.diabolos._centre(new THREE.Vector3()), r: 25 });
         // living bodies (not wizards: a charge flies at them — see Game)
         for (const z of g.zombies || []) if (!z.isDying && !z.isFrozen && !z.lev && (!z.isDead || (!z.removable && z.group.visible))) out.push({ kind: 'creature', ck: 'z', obj: z, pos: this._centreOf('z', z), r: 0.9 }); // (a zombie's body too)
         // the bodies of the dead (players, castle people — wizards too, knights…; Death.js): lifted like a thing
@@ -262,6 +264,7 @@ export class Levitation {
         if (best?.kind === 'wizard') best = null; // (a wizard is lifted by a duel charge: Game → aimWizard)
         if (best?.kind === 'dragon') return '🐉 Дракона «Левиоса» не поднимет — он слишком тяжёлый';
         if (best?.kind === 'iceCreature') return '❄️ Ледяная магия держит его на земле — «Левиоса» не поднимет';
+        if (best?.kind === 'diabolos') { this.game.diabolos?.hit?.(best.obj, 0, 'Levitation', this.game.localId); return '😈 Дьяволоса «Левиоса» не поднимет — он слишком огромен'; }
         if (best?.kind === 'gargoyle') { this.game.gargoyles?.shooed?.(best.obj); return '🜏 Горгулья вырвалась из «Левиосы» и рванулась прочь'; }
         if (best?.kind === 'canary') { this.game.canaries?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪨 Канарик вырвался из «Левиосы» — он слишком тяжёлый и сильный, и теперь зол'; }
         if (best?.kind === 'taron') { this.game.tarons?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪓 Тарон вырвался из «Левиосы» — он слишком тяжёлый (только «Левиоса Максима»)'; }

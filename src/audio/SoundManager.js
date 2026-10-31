@@ -17,6 +17,7 @@ import { synthSpencer, SPENCER_SOUNDS } from './SpencerSounds.js';
 import { synthGhost, GHOST_SOUND_IDS } from './GhostSounds.js';
 import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
+import { synthDevil, DEVIL_SOUNDS } from './DiabolosSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
 import { synthTaron, TARON_SOUNDS } from './TaronSounds.js';
@@ -646,6 +647,8 @@ export class SoundManager {
             ...GARGOYLE_SOUNDS.map((k) => ['garg_' + k, () => synthGargoyle(this.context, k)]),
             // (the dragon in a fight — Dragons.js: steps, the landing, wing-beats, the roar, bite, claws, tail)
             ...DRAGON_SOUNDS.map((k) => ['drg_' + k, () => synthDragon(this.context, k)]),
+            // (Дьяволос — Diabolos.js: храп, топот, цепь, рёв, огонь, шары, хлопок, тема босса — хор и барабаны)
+            ...DEVIL_SOUNDS.map((k) => ['dvl_' + k, () => synthDevil(this.context, k)]),
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
             // (the Canaries — Canaries.js: snarls, shouts, grunts, a boulder's thud and the air it cuts)
             ...CANARY_SOUNDS.map((k) => ['canary_' + k, () => synthCanary(this.context, k)]),
@@ -2018,6 +2021,22 @@ export class SoundManager {
         if (!this.sounds[key]) { if (!DRAGON_SOUNDS.includes(kind)) return; this.sounds[key] = synthDragon(this.context, kind); }
         const far = kind === 'roar' || kind === 'land' ? 40 : kind === 'step' ? 22 : 16;
         this._playAt(this.sounds[key], position, volume, far, rate * (0.95 + Math.random() * 0.1));
+    }
+
+    /** Дьяволос (Diabolos.js): 'snore' | 'step' | 'slam' | 'chain' | 'roar' | 'inhale' | 'fire' | 'ball' | 'boom' | 'clap' — в месте; сделано заранее (prewarmStep). */
+    playDevil(position, kind = 'roar', volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'dvl_' + kind;
+        if (!this.sounds[key]) return; // (не готово — не синтезируем в кадре)
+        const far = kind === 'roar' || kind === 'boom' || kind === 'slam' ? 140 : kind === 'step' || kind === 'snore' ? 70 : kind === 'chain' ? 40 : 60;
+        this._playAt(this.sounds[key], position, volume, far, rate * (0.96 + Math.random() * 0.08));
+    }
+
+    /** Тема Дьяволоса: хор (k — громкость: тихо, пока он спит рядом) и барабаны боя (`fight`). */
+    devilTheme(k, fight) {
+        if (!this.context || !this.loaded) return;
+        this._loop('devil', this.enabled && k > 0.01 ? 'dvl_theme' : null, 0.5 * Math.min(1, k));
+        this._loop('devilDrum', this.enabled && fight && k > 0.01 ? 'dvl_drums' : null, 0.55 * Math.min(1, k));
     }
 
     /** The plant creatures (Plants.js): 'rustle' | 'prick' | 'lash' | 'snap' | 'chomp' | 'gulp' | 'spit' | 'burn' | 'fall' at a place — made ahead (prewarmStep). */

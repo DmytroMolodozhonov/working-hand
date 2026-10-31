@@ -761,6 +761,7 @@ export class WaterVortex {
             // (the Ice Castle's creatures: the water splashes on the ice — a snowman is knocked about, IceQueen.ICE_TARGETS.water)
             if (b.kind === 'I') { const c = g.iceCastle?.byId(b.id); if (c) g.iceCastle.push('WaterVortex', f.by, (_p, x) => (x === c ? f.dir.clone().multiplyScalar(10) : null)); this._endFlight(f, 'wall'); return true; }
             if (b.kind === 'D') { this._endFlight(f, 'wall'); return true; }
+            if (b.kind === 'Y') { g.diabolos?.hit?.(g.diabolos.byId(b.id), 0, 'WaterVortex', f.by); this._endFlight(f, 'wall'); return true; } // (Дьяволос: вода шипит паром — DEVIL_VS.water)
             if (b.kind === 'p') {
                 // my own computer knows my shield
                 const from = _a.copy(f.pos).addScaledVector(f.dir, -3);
@@ -1377,6 +1378,7 @@ export class WaterVortex {
             for (const b of g.duel?._bodies?.(e.by) || []) {
                 if (b.kind === 'p' || b.kind === 'b' || rescued.has(`${b.kind}:${b.id}`)) continue;
                 if (b.kind === 'D') { g.dragons?.hit?.(g.dragons.byId(b.id), CD, 'FireMaxima', e.by); continue; } // (fire: a dragon does not care)
+                if (b.kind === 'Y') { if (segDist(e.p, b.a, b.b) <= R + b.r) g.diabolos?.hit?.(g.diabolos.byId(b.id), CD, 'FireMaxima', e.by); continue; } // (Дьяволос огнеупорен — только злит)
                 const mid = _b.copy(b.a).add(b.b).multiplyScalar(0.5);
                 if (segDist(e.p, b.a, b.b) > R + b.r * 0.5 && mid.distanceTo(e.p) > R + b.r) continue;
                 if (b.kind === 'I') { const ic = g.iceCastle?.byId(b.id); if (ic) g.iceCastle.hit(ic, CD, 'FireMaxima', e.by); continue; } // (the Ice Castle: ×2.5 — IceQueen.FIRE_K)

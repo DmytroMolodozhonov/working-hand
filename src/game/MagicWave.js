@@ -41,7 +41,8 @@ export function eachBody(g, fn) {
     for (const c of g.tarons?.list || []) if (!c.dead && c.model) fn('taron', c, new THREE.Vector3(c.model.position.x, c.model.position.y + 3, c.model.position.z)); // (the Tarons: Taron.hit)
     for (const o of g.spencers?.list || []) if (!o.dead && o.group) fn('spencer', o, spencerCenter(o)); // (the invisible bird: the wave kills it)
     for (const o of g.ghosts?.targets?.() || []) fn('ghost', o, new THREE.Vector3(o.position.x, o.position.y + 1.7, o.position.z)); // (the ghosts of the Castle of Ghosts: Circle Attack / Inspirius frighten them, the gods' spells scatter them — GhostRules)
-    for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o)); // (the infernal gargoyles: GargoyleRules.TARGETS)
+    for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o));
+    for (const o of g.diabolos?.list || []) fn('diabolos', o, g.diabolos._centre(new THREE.Vector3())); // (Дьяволос: волна его только злит — DEVIL_VS) // (the infernal gargoyles: GargoyleRules.TARGETS)
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)
@@ -63,7 +64,8 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'spider': g.spiders?.hit(c, dmg, spell, by); break;
         case 'dragon': g.dragons?.hit(c, dmg, spell, by); break;
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;
-        case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break; // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
+        case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break;
+        case 'diabolos': g.diabolos?.hit(c, dmg, spell, by); break; // (бессмертен: «Инспириус», «Бум», «Круговая атака» — только злят) // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
         case 'canary': g.canaries?.hit(c, dmg, spell, by); break;
         case 'taron': g.tarons?.hit(c, dmg, spell, by); break;
         case 'spencer': g.spencers?.hit(c, dmg, spell, by); break;

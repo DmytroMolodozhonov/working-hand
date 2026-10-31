@@ -838,6 +838,7 @@ export class Cauldrons {
         g.ships?.crew?.hitAt?.(at, r, dmg, null, 'Cauldron');
         g.spiders?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.dragons?.hitAt?.(at, r, dmg, 'Cauldron', null);
+        g.diabolos?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.iceCastle?.hitAt?.(at, r, dmg, 'Cauldron', null);
         g.phoenixes?.hitAt?.(at, r, dmg, 'Cauldron', null); // (a phoenix standing there; in the air it is not under it)
         g.gargoyles?.hitAt?.(at, r, dmg, 'Cauldron', null); // (an infernal gargoyle under it: ×1.2, crushed stone)

@@ -206,6 +206,7 @@ const HIT_SPELL = {
     IceBall: 'Ice', IceDuel: 'Ice', IceDuelMaxima: 'IceMaxima', SapiraDuel: 'Sapira', SandsDuel: 'Sands', LevitateDuel: 'Levitation',
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
     // the Ice Queen's own blows (IceQueen.js; IceGiants.QUEEN_VS): the freeze, the spikes and the blade are as dear as «Айс Максима», shards and the gust as «Айс»
+    DevilFire: 'Inferno', DevilBall: 'FireMaxima', DevilFist: 'BombardoMaxima', // (Дьяволос: струя давит щит как огонь — Combat.devilFire; шар и кулак щит ломают — Combat.breakShield)
     QueenFreeze: 'IceMaxima', QueenSpikes: 'IceMaxima', QueenBlade: 'IceMaxima', QueenShard: 'Ice', QueenGust: 'Ice',
 };
 /** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
@@ -947,6 +948,42 @@ export class Combat {
         return false;
     }
 
+    /**
+     * Шар огня / кулак Дьяволоса (DiabolosRules.ballVerdict, слова автора: «если у тебя Protection Maxima и шар попал, ТЕБЕ НИЧЕГО
+     * НЕ БУДЕТ, но САМА ЗАЩИТА СЛОМАЕТСЯ; нужно опять поднять руки и сказать заклинание — каждый раз»): любой щит, что стоит между
+     * мной и `from`, ломается целиком (мана и концентрация не возвращаются). → какой щит был: 'protection' | 'maxima' | 'vortex' |
+     * 'swarm' | 'hand' (щит в руке выбит) | 'gods' (золотую защиту богов шар не ломает) | null (щита нет — удар идёт в меня).
+     */
+    breakShield(from, kind = 'DevilBall') {
+        if (this.dead) return null;
+        const g = this.game, s = this.shield;
+        if (s?.gods && s.left > 0) { this._godsFx?.(from); return 'gods'; }
+        const gv = g.groundVortex;
+        if (gv?.covers?.(from)) { gv.take(from, kind); return 'vortex'; } // (sweepsShield: весь заслон разметало)
+        const sw = g.levMax?.swarm;
+        if (sw?.faces?.(from)) { sw.took(from, kind); return 'swarm'; } // (ItemSwarm.took: вещи выбиты, щит опущен)
+        if (s && s.left > 0 && (s.type === 2 || this.shieldFactor(from) >= 1)) {
+            const dome = s.type === 2;
+            this._shatter(dome ? '💥 Шар Дьяволоса разбил «Protection Maxima» — вас не задело. Поднимите руки и скажите заклинание снова' : '💥 Шар Дьяволоса разбил «Protection» — вас не задело. Скажите заклинание снова');
+            return dome ? 'maxima' : 'protection';
+        }
+        if (g.gear?.shieldFaces?.(from)) { g.gear.shieldTook?.(kind); return 'hand'; }
+        return null;
+    }
+
+    /** Струя огня Дьяволоса давит на щит (DiabolosRules.FIRE.SHIELD_K): щит держит, но платит вдвое больше, чем за пламя. → true: удержал. */
+    devilFire(from, k = 2) {
+        if (this.dead || this.shieldFactor(from) < 1) return false;
+        if (!this._blocked(from, 'DevilFire')) return false;
+        const s = this.shield;
+        if (s && !s.gods && this.manaOn && k > 1) {
+            const extra = shieldHitCost('DevilFire') * (k - 1);
+            if (this.fatigue >= extra) this.fatigue -= extra;
+            else { this.fatigue = 0; this._shatter('💥 Щит не выдержал адского огня — не хватило маны!'); return false; }
+        }
+        return true;
+    }
+
     /** Does my shield stop something coming from `from`? 1 = fully, 0 = no. */
     shieldFactor(from) {
         if (this.game.groundVortex?.covers?.(from)) return 1; // (the earth vortex's shield: the blocks facing the blow — GroundVortex.js)
@@ -1096,6 +1133,7 @@ export class Combat {
     /** Bombardo next to me: damage by distance, the shield takes part of it. */
     explosion(pos, radius, power, byId) {
         if (!this.enabled || this.dead) return;
+        if (byId === 'diabolos') return; // (взрывы Дьяволоса — шар, кулак — по игроку считает его компьютер сам: Diabolos._hitMe, щит ломается — breakShield)
         if (byId && byId === this.game.localId) return; // your own blast doesn't hurt you
         const d = this.center(_v1).distanceTo(pos);
         let dmg = bombardoDamage(d, radius, power);

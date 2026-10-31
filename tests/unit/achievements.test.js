@@ -3,7 +3,7 @@
 // (+1000, +100 %, the suit), the suit's −40 % from spells on top of a magic robe, kept on death.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Achievements, ACH, ACH_IDS, TOWER, achBonus, towerLeft, towerSamples } from '../../src/game/Achievements.js';
+import { Achievements, ACH, ACH_IDS, HIGH_IDS, TOWER, achBonus, towerLeft, towerSamples } from '../../src/game/Achievements.js';
 import { Mana } from '../../src/game/Mana.js';
 import { makeRobe, makeArchmageSuit, wornEffects, soakBlow, wornCode, ROBE_STRONG } from '../../src/game/ArmorTypes.js';
 
@@ -115,14 +115,17 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
 
 test('all nine (Captain Black Moustache, the Castle of Ghosts, the gates of hell and the Taron hunter too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
-    for (const k of ACH_IDS) a.gain(k);
+    for (const k of HIGH_IDS) a.gain(k);
     assert.ok(a.high);
     assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + 50 + ACH.HIGH_MANA);
     assert.ok(Math.abs(a.regenK - (1 + 9 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    const all = achBonus(ACH_IDS);
+    const all = achBonus(HIGH_IDS);
     assert.equal(all.mana, 1925); assert.equal(all.high, true); assert.ok(Math.abs(all.regen - 3.35) < 1e-9);
+    // «Разбудил дьявола» (Diabolos.js): своя награда, но для «Высшего мага» не нужна
+    assert.ok(ACH_IDS.includes('devilWoke') && !HIGH_IDS.includes('devilWoke'));
+    assert.deepEqual(achBonus(['devilWoke']), { mana: 100, regen: 1.15, high: false });
     assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 

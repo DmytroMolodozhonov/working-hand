@@ -580,6 +580,8 @@ export class Duel {
         for (const o of g.ghosts?.targets() || []) o.bodyCapsule(put('G', o.id));
         // infernal gargoyles: a big body (a charge is no match for a flier that dodges — it hits as it hits: Gargoyles.boltHit)
         for (const o of g.gargoyles?.targets() || []) gargoyleBody(o, put('g', o.id));
+        // Дьяволос: огромное тело (брюхо) — заряд долетает и только злит его: «Авада», «Дай» не берут (он их создал — DiabolosRules.DEVIL_VS)
+        for (const o of g.diabolos?.targets() || []) o.bodyCapsule(put('Y', o.id));
         // the Ice Castle's creatures: the queen, the snowmen, the ice monsters (IceQueen.iceBolt says what a charge does)
         for (const c of g.iceCastle?.targets() || []) iceBody(c, put('I', c.id));
         // plant creatures (telewilpins, carnivorous heads): a charge hits the stem and the head (Plants.boltHit says what it does)
@@ -610,6 +612,7 @@ export class Duel {
         if (kind === 'G') { const o = g.ghosts?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'C') { const c = g.customCreatures?.byId(id); return c ? c.bodyCapsule(e) : null; }
         if (kind === 'g') { const o = g.gargoyles?.byId(id); return o ? gargoyleBody(o, e) : null; }
+        if (kind === 'Y') { const o = g.diabolos?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'I') { const c = g.iceCastle?.byId(id); return c ? iceBody(c, e) : null; }
         if (kind === 'P') { const p = g.plants?.byId.get(id); return p && !p.dead ? this._plantBody(p, e) : null; }
         const c = this._creature(kind, id);
@@ -791,6 +794,7 @@ export class Duel {
         if (b.tk === 'a' || b.tk === 'v' || b.tk === 'b' || b.tk === 't' || b.tk === 'c' || b.tk === 'f' || b.tk === 'o' || b.tk === 'N' || b.tk === 'C') { const c = this._creature(b.tk, b.tid); return c ? this._creaturePoint(c, out) : null; }
         if (b.tk === 's') { const sp = g.spiders?.byId(b.tid); return sp ? spiderCenter(sp, out) : null; }
         if (b.tk === 'D') { const dr = g.dragons?.byId(b.tid); return dr ? dragonCenter(dr, out) : null; }
+        if (b.tk === 'Y') return g.diabolos?.byId(b.tid) ? g.diabolos._centre(out) : null;
         if (b.tk === 'I') { const c = g.iceCastle?.byId(b.tid); return c ? iceCenter(c, out) : null; }
         if (b.tk === 'p') {
             if (b.tid === this.me) return g.combat.center(out);
@@ -1096,6 +1100,7 @@ export class Duel {
         if (isLiquidationDuel(b.spell) && this._referee() && (b.tk === 's' || b.tk === 'D' || b.tk === 'I')) { this._end(b, 'hit'); this.game.liquidation?._hurt(b.tk, b.tid, b.front, b.o, b.dir, b.by, 'Liquidation'); return; } // (a boss: the splash's −3, attack and anger as the splash does)
         if (b.tk === 's' && this._referee()) { const sp = this.game.spiders?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (sp) this.game.spiders.boltHit(sp, b.spell, b.by, b.front); return; }
         // («Электром» is held: a hit on a boss starts the lightning on it, so it ends as a hit, not a fizzle)
+        if (b.tk === 'Y' && this._referee()) { const o = this.game.diabolos?.byId(b.tid); this._end(b, 'fizzle'); if (o) this.game.diabolos.boltHit(o, b.spell, b.by); return; } // (Дьяволос: ни один заряд не действует — только злит)
         if (b.tk === 'D' && this._referee()) { const dr = this.game.dragons?.byId(b.tid); this._end(b, b.spell === 'Electrum' ? 'hit' : 'fizzle'); if (dr) this.game.dragons.boltHit(dr, b.spell, b.by, b.front); return; }
         if (b.tk === 'I' && this._referee()) { const c = this.game.iceCastle?.byId(b.tid); this._end(b, 'hit'); if (c) this.game.iceCastle.boltHit(c, b.spell, b.by, b.front); return; }
         // another computer decides (the wizard it touched, or the host): wait for its word

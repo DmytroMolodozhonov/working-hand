@@ -146,7 +146,7 @@ export const HIT_BLOCKS = {
 export const hitBlocks = (kind) => HIT_BLOCKS[kind] ?? 4;
 
 /** The gods' spells (and the ones that break any wall) sweep the shield away. */
-export const sweepsShield = (kind) => /^(AvadaKedavra|Die|TotalDestruction|TotalDestructionMaxima|Inspirius|Boom|Hellfire|PlanetLiquidation|WaterVortexSuperMaxima|LightningStrike|CircleAttackMaxima)$/.test(kind || '');
+export const sweepsShield = (kind) => /^(AvadaKedavra|Die|TotalDestruction|TotalDestructionMaxima|Inspirius|Boom|Hellfire|PlanetLiquidation|WaterVortexSuperMaxima|LightningStrike|CircleAttackMaxima|DevilBall|DevilFist)$/.test(kind || ''); // (DevilBall/DevilFist: Дьяволос ломает любой заслон — DiabolosRules.ballVerdict)
 
 // ------------------------------------------------------------------ gathering
 /** Blocks one full turn of the hand brings at a hand speed (m/s). */

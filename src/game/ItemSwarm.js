@@ -248,6 +248,13 @@ export class ItemSwarm {
         if (!sim) return false;
         const c = g.character.group.position;
         const dx = from.x - c.x, dz = from.z - c.z;
+        if (kind === 'DevilBall' || kind === 'DevilFist') {
+            // шар / кулак Дьяволоса: щит из вещей сломан целиком (DiabolosRules.ballVerdict) — вещи разлетаются, рой снова паровозиком; «Shield» — сказать снова
+            for (let i = 0; i < 3; i++) sim.absorb(dx, dz, 99);
+            sim.mode = 'train';
+            g.hud?.setVoice?.('💥 Шар Дьяволоса разметал щит из вещей — вас не задело. Скажите «Shield» снова', true);
+            return true;
+        }
         if (wallBreaks(isDivine(kind))) {
             // the gods' spells: the wall is swept away
             for (let i = 0; i < 3; i++) sim.absorb(dx, dz, 99);
