@@ -237,6 +237,20 @@ export class HellGate {
         m.offer = this.creative ? null : 'hellBack';
     }
 
+    // ------------------------------------------------------------ the map
+    /** The minimap's marks in hell (Hud.drawMinimap): the devil (always, a pointer with the distance when off the map), the mark back, the Tarons' camps near. */
+    mapMarks() {
+        const P = this.plan;
+        if (!P) return [];
+        const me = this.game.character.group.position;
+        const out = [
+            { x: P.devilSeat.x, z: P.devilSeat.z, name: 'Дьяволос', icon: '😈', always: true },
+            { x: P.returnMark.x, z: P.returnMark.z, name: 'Метка возврата', icon: '⛧', always: true },
+        ];
+        for (const c of P.taronCamps) if (Math.hypot(c.x - me.x, c.z - me.z) < 800) out.push({ x: c.x, z: c.z, name: 'Лагерь Таронов', icon: '🪓' });
+        return out;
+    }
+
     // ------------------------------------------------------------ death, save
     /** After the respawn: never in hell (a bed made there does not count) — the start of the world. */
     onRespawn(p) {

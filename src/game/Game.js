@@ -4073,14 +4073,16 @@ export class Game {
             const others = [...this.remotes].filter(([id, r]) => !r.dead && !this.invis?.hidden(id)).map(([, r]) => r).map((r) => ({ x: r.position.x, z: r.position.z, name: r.name, color: r.color }));
             // on a server: its name on the map and a mark at its start point
             const online = this.net && this.net.active;
-            const server = online && !this.space?.offEarth ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
+            const server = online && !this.space?.offEarth && !this.hellGate?.inHell ? { name: (this.net.isHost ? this.net.info?.name : this.net.serverName) || 'Сервер', players: this.remotes.size + 1, home: this.world.mapResult?.playerSpawn || { x: 0, z: 0 } } : null;
             const castleIdx = this.world.terrain?.data?.sites || this.world.terrain?.data?.castles; // (castles and wizards' towers)
             let castles = castleIdx && !this.space?.offEarth ? castleIdx.nearestForMap(cp) : [];
             if (this.iceCastle?.mapMark && !this.space?.offEarth) castles = castles.concat([this.iceCastle.mapMark]); // (the Ice Castle: only once seen)
             if (this.space?.offEarth) castles = this.space.mapMarks(); // (on another planet: its own marks — the Gods' temple on Venus)
+            const hellNow = !!this.hellGate?.inHell;
+            if (hellNow) castles = this.hellGate.mapMarks(); // (hell: never a mark of the Earth — only its own: the devil, the mark back, the Tarons' camps — HellGate.mapMarks)
             // (in a cave: the cave as far as the hero has seen it — CaveMap.js)
             const cave = this._inCave ? { mem: this.caveMap, L: Math.floor(cp.y + 1.51), data: this.terrain.data, chests: this.chests.filter((c) => c.cave != null), crystals: this.crystals?.clusters } : null;
-            const hm = this.houseMagic, me = hm && !this.space?.offEarth ? hm._key('local') : null;
+            const hm = this.houseMagic, me = hm && !this.space?.offEarth && !hellNow ? hm._key('local') : null;
             const houses = me ? [...hm.list.values()].map((h) => ({ x: h.x, z: h.z, mine: h.owner === me })) : [];
             this.hud.drawMinimap(cp, this.character.group.rotation.y, this.world, this.zombies, others, server, castles, cave, houses);
             if (this.sound && this.sound.loaded) this.sound.updateAmbient(cp, this.zombies, dt * 5);

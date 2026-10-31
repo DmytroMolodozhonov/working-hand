@@ -22,7 +22,7 @@ const ASH = [0x6a6460, 0x4a4442, 0x8a8078], EMBER = [0xff5a14, 0xffa040, 0xff301
 
 const VERT = `varying vec3 vDir;
 void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w; }`;
-const FRAG = `uniform float uT; uniform float uK;
+const FRAG = `uniform float uT; uniform float uK; uniform vec3 uDevil;
 varying vec3 vDir;
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
@@ -43,13 +43,38 @@ void main() {
     vec3 lit = mix(vec3(0.06, 0.018, 0.012), vec3(0.42, 0.1, 0.03), glow * 0.8 + 0.25 * c2); // (the clouds' undersides lit red from below)
     col = mix(col, lit, smoke * 0.85);
     col += vec3(0.9, 0.3, 0.05) * smoothstep(0.92, 1.0, c2) * glow * 0.25; // (sparks of the fire in the smoke)
+    float dv = max(0.0, dot(normalize(vec2(d.x, d.z) + 1e-5), uDevil.xz)); // (the devil's basin: a great glow on the horizon that way — seen from anywhere)
+    col += vec3(0.75, 0.12, 0.02) * pow(dv, 24.0) * exp(-max(up, 0.0) * 3.0) * uDevil.y * (0.85 + 0.15 * sin(uT * 1.3));
     if (d.y < 0.0) col = mix(col, vec3(0.2, 0.05, 0.02), smoothstep(0.0, -0.2, d.y));
     gl_FragColor = vec4(col, uK);
 }`;
 
+const BEACON_V = `varying vec2 vUv; varying float vH;
+void main() { vUv = uv; vH = position.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const BEACON_F = `uniform float uT; uniform float uK; varying vec2 vUv; varying float vH;
+float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+float n1(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); float a = h1(i.x + i.y * 57.0), b = h1(i.x + 1.0 + i.y * 57.0), c = h1(i.x + (i.y + 1.0) * 57.0), d = h1(i.x + 1.0 + (i.y + 1.0) * 57.0); return mix(mix(a, b, f.x), mix(c, d, f.x), f.y); }
+void main() {
+    float y = vUv.y, side = abs(vUv.x - 0.5) * 2.0;
+    float flick = n1(vec2(vUv.x * 9.0, y * 6.0 - uT * 1.6)) * 0.6 + n1(vec2(vUv.x * 23.0, y * 17.0 - uT * 3.1)) * 0.4;
+    float core = (1.0 - side * side) * (1.0 - smoothstep(0.55, 1.0, y)) * (0.55 + 0.45 * flick);
+    vec3 col = mix(vec3(1.0, 0.75, 0.3), vec3(0.85, 0.12, 0.02), smoothstep(0.0, 0.6, y));
+    gl_FragColor = vec4(col * core * 1.4, core * uK * (1.0 - smoothstep(0.85, 1.0, y)));
+}`;
+
+/** The devil's beacon mesh (HellRealm; the tools draw it too): a pillar of fire 420 m high, its foot at the origin. */
+export function makeHellBeacon() {
+    const mat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uK: { value: 0.85 } }, vertexShader: BEACON_V, fragmentShader: BEACON_F, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+    const geo = new THREE.CylinderGeometry(16, 26, 420, 24, 1, true);
+    geo.translate(0, 210, 0);
+    const m = new THREE.Mesh(geo, mat);
+    m.frustumCulled = false; m.renderOrder = 5;
+    return m;
+}
+
 /** The material of hell's sky dome (one program; the tools draw with it too). */
 export function hellSkyMaterial() {
-    return new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uK: { value: 1 } }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false, transparent: true });
+    return new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uK: { value: 1 }, uDevil: { value: new THREE.Vector3(1, 0, 0) } }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false, transparent: true });
 }
 
 export class HellRealm {
@@ -75,8 +100,21 @@ export class HellRealm {
         return m;
     }
 
-    /** (Game.prewarm) The dome's program compiled at loading. */
-    sampleModels() { const d = this._makeDome(); return d ? [new THREE.Mesh(d.geometry, d.material)] : []; }
+    /**
+     * The devil's beacon: a pillar of hell's fire rising out of his basin, hundreds of metres high — the way is seen from anywhere (the author: «Дьявола я так и не
+     * нашёл»). One mesh, additive, not fogged (seen over the haze), the land in front hides it as it should.
+     */
+    _makeBeacon() {
+        if (this.beacon || !this.game.scene) return this.beacon;
+        const m = makeHellBeacon();
+        m.visible = false;
+        this.game.scene.add(m);
+        this.beacon = m;
+        return m;
+    }
+
+    /** (Game.prewarm) The dome's and the beacon's programs compiled at loading. */
+    sampleModels() { const d = this._makeDome(), b = this._makeBeacon(); return [d, b].filter(Boolean).map((o) => new THREE.Mesh(o.geometry, o.material)); }
 
     update(dt) {
         const g = this.game, data = this.data, me = g.character?.group?.position;
@@ -86,10 +124,16 @@ export class HellRealm {
         const k = this.k;
         g.world?.setHell?.(k);
         g.sound?.hellHum?.(k * (g.hellGate?.trans ? 0.4 : 1));
-        if (k <= 0) { if (this.dome) this.dome.visible = false; return; }
+        if (k <= 0) { if (this.dome) this.dome.visible = false; if (this.beacon) this.beacon.visible = false; return; }
         HELL_TIME.t.value += dt;
         const dome = this._makeDome();
-        if (dome) { dome.visible = true; dome.position.copy(me); dome.material.uniforms.uT.value = HELL_TIME.t.value; dome.material.uniforms.uK.value = k; }
+        const S = data.hellPlan?.devilSeat;
+        if (dome) {
+            dome.visible = true; dome.position.copy(me); dome.material.uniforms.uT.value = HELL_TIME.t.value; dome.material.uniforms.uK.value = k;
+            if (S) { const dx = S.x - me.x, dz = S.z - me.z, L = Math.hypot(dx, dz) || 1; dome.material.uniforms.uDevil.value.set(dx / L, L > 60 ? Math.min(1, (L - 60) / 200) : 0, dz / L); }
+        }
+        const bc = S ? this._makeBeacon() : null;
+        if (bc) { bc.visible = true; bc.position.set(S.x, (S.y ?? 14) + 2, S.z); bc.material.uniforms.uT.value = HELL_TIME.t.value; bc.material.uniforms.uK.value = k * 0.85; }
         if (k < 1) return;
         this._sparks(dt, me);
         this._lava(dt, me);
@@ -144,7 +188,8 @@ export class HellRealm {
     }
 
     dispose() {
-        if (this.dome) { this.game.scene?.remove(this.dome); this.dome.geometry.dispose(); this.dome.material.dispose(); this.dome = null; }
+        for (const o of [this.dome, this.beacon]) if (o) { this.game.scene?.remove(o); o.geometry.dispose(); o.material.dispose(); }
+        this.dome = this.beacon = null;
     }
 }
 

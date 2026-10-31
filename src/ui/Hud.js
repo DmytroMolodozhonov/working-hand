@@ -71,7 +71,27 @@ function placeIcon(ctx, kind, s) {
     ctx.scale(u, u);
     ctx.lineWidth = 1.4;
     ctx.lineJoin = 'round';
-    if (kind === 'library') {
+    if (kind === 'devil') {
+        // the devil (Diabolos): a red horned head with burning eyes
+        ctx.fillStyle = '#c4161c'; ctx.strokeStyle = '#1a0000';
+        ctx.beginPath(); ctx.moveTo(-6, -4); ctx.quadraticCurveTo(-12, -9, -9, -14); ctx.quadraticCurveTo(-8, -9, -3, -7); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(6, -4); ctx.quadraticCurveTo(12, -9, 9, -14); ctx.quadraticCurveTo(8, -9, 3, -7); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-8, -5); ctx.quadraticCurveTo(-9, 5, 0, 10); ctx.quadraticCurveTo(9, 5, 8, -5); ctx.quadraticCurveTo(0, -9, -8, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffd040'; ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(-2, 0); ctx.lineTo(-5, 1.5); ctx.closePath(); ctx.moveTo(6, -1); ctx.lineTo(2, 0); ctx.lineTo(5, 1.5); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#1a0000'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-3, 5); ctx.quadraticCurveTo(0, 7, 3, 5); ctx.stroke();
+    } else if (kind === 'hellmark') {
+        // the mark back: a glowing ring with the gate inside
+        ctx.strokeStyle = '#ff6a1a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-4, 6); ctx.lineTo(-4, -1); ctx.quadraticCurveTo(-4, -6, 0, -7); ctx.quadraticCurveTo(4, -6, 4, -1); ctx.lineTo(4, 6); ctx.stroke();
+        ctx.fillStyle = '#ffb040'; ctx.beginPath(); ctx.moveTo(0, -3); ctx.quadraticCurveTo(2.5, 1, 0, 4); ctx.quadraticCurveTo(-2.5, 1, 0, -3); ctx.fill();
+    } else if (kind === 'taron') {
+        // a Tarons' camp: a two-handed axe over a fire
+        ctx.strokeStyle = '#8a5a3a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-8, 8); ctx.lineTo(7, -7); ctx.stroke();
+        ctx.fillStyle = '#b8b8c4'; ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(3, -9); ctx.quadraticCurveTo(11, -9, 10, -2); ctx.lineTo(5, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ff7a1a'; ctx.beginPath(); ctx.moveTo(-3, 9); ctx.quadraticCurveTo(-7, 4, -3, 0); ctx.quadraticCurveTo(-2, 4, 1, 9); ctx.fill();
+    } else if (kind === 'library') {
         // a library: an open book (two pages, a spine, lines of text) with a gold spark
         ctx.fillStyle = '#f3ead2'; ctx.strokeStyle = '#3a2414';
         ctx.beginPath(); ctx.moveTo(0, -5); ctx.quadraticCurveTo(-5, -9, -11, -6); ctx.lineTo(-11, 7); ctx.quadraticCurveTo(-5, 4, 0, 8); ctx.quadraticCurveTo(5, 4, 11, 7); ctx.lineTo(11, -6); ctx.quadraticCurveTo(5, -9, 0, -5); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -892,7 +912,7 @@ export class Hud {
             ctx.font = 'bold 12px sans-serif';
         };
         const badge = (x, y, kind, a = null) => {
-            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : '#ffd76a';
+            const ring = kind === 'tower' ? '#b48be0' : kind === 'ice' ? '#9fe3ff' : kind === 'wizvillage' ? '#7fd7c4' : kind === 'devil' ? '#ff2a14' : kind === 'hellmark' ? '#ff8a3a' : '#ffd76a';
             if (a != null) {
                 // the pointer: which way the place is
                 ctx.save(); ctx.translate(x, y); ctx.rotate(a);
@@ -906,7 +926,7 @@ export class Hud {
         };
         this.minimapCastles = [];
         // village graveyards: a small cross-and-headstone badge, only when it is on the map
-        const SMALL = { '✝': 'grave', '⌂': 'hamlet', '✦': 'magehamlet' }; // (a graveyard, a hamlet of folk / of wizards: Hamlets.js)
+        const SMALL = { '✝': 'grave', '⌂': 'hamlet', '✦': 'magehamlet', '🪓': 'taron' }; // (… a Tarons' camp in hell — HellGate.mapMarks) // (a graveyard, a hamlet of folk / of wizards: Hamlets.js)
         for (const c of castles) {
             const small = SMALL[c.icon];
             if (!small) continue;
@@ -927,7 +947,7 @@ export class Hud {
             ctx.fillStyle = 'rgba(30, 30, 36, 0.9)'; ctx.strokeStyle = '#b8b8c4'; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.arc(gx, gz, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             ctx.save(); ctx.translate(gx, gz + 1); placeIcon(ctx, small, 14); ctx.restore();
-            label(small === 'grave' ? 'Кладбище' : c.name, gx, Math.max(-hh + 12, gz - 13));
+            label(small === 'grave' ? 'Кладбище' : small === 'taron' ? 'Тароны' : c.name, gx, Math.max(-hh + 12, gz - 13));
         }
         // (the Ice Castle — once seen — always among them, however many castles are nearer)
         const shown = castles.filter((q) => !SMALL[q.icon] && q.icon !== '❄' && !q.always).slice(0, 3);
@@ -936,11 +956,11 @@ export class Hud {
         for (const c of shown) {
             const cx = (c.x - charPos.x) * scale, cz = (c.z - charPos.z) * scale;
             const icon = c.icon || '🏰'; // (🧙 a wizards' tower)
-            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : 'castle';
+            const kind = icon === '🧙' ? 'tower' : icon === '❄' ? 'ice' : icon === '✨' ? 'wizvillage' : icon === '😈' ? 'devil' : icon === '⛧' ? 'hellmark' : 'castle';
             this.minimapCastles.push(icon === '🏰' ? c.name : `${icon} ${c.name}`);
             if (inside(cx, cz, BADGE)) {
                 badge(cx, cz, kind);
-                label(c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - BADGE - 4));
+                label(c.name.replace(/^(Замок|Крепость|Академия) /, ''), cx, Math.max(-hh + 12, cz - BADGE - 4)); // (hell: «Дьяволос», «Метка возврата»)
                 const lib = kind === 'wizvillage' ? c.def?.library?.door : null; // (the settlement's library: a little book badge at its door)
                 if (lib) {
                     const lx = (lib.x - charPos.x) * scale, lz = (lib.z - charPos.z) * scale;

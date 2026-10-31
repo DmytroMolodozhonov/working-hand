@@ -146,3 +146,16 @@ test('the gargoyle\'s head: 25 % from a killed one (never from one burnt in the 
     assert.ok(ITEM_INFO.gargoyleHead && ITEM_INFO.gargoyleHead.weight >= 3);
     assert.ok(itemValue({ kind: 'gargoyleHead' }) >= 500);
 });
+
+test('the map in hell: only hell\'s marks — the devil (≤ 1 km), the mark back, the Tarons\' camps; never a castle of the Earth', () => {
+    const t = stub();
+    t.g.terrain.data.hell = true; t.g.terrain.data.hellPlan = hellPlan(5);
+    const P = hellPlan(5);
+    t.g.character.group.position.set(P.spawn.x, 30, P.spawn.z);
+    const marks = t.g.hellGate.mapMarks();
+    const devil = marks.find((m) => m.icon === '😈');
+    assert.ok(devil && devil.always, 'the devil always on the map');
+    assert.ok(Math.hypot(devil.x - P.spawn.x, devil.z - P.spawn.z) <= HELL.DEVIL_DIST_MAX);
+    assert.ok(marks.some((m) => m.icon === '⛧'));
+    assert.ok(marks.every((m) => ['😈', '⛧', '🪓'].includes(m.icon)), 'nothing of the Earth');
+});

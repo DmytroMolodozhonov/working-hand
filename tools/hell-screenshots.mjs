@@ -29,7 +29,7 @@ try {
         const { TerrainData, mergeBuffers, CHUNK } = await import('/src/world/Terrain.js');
         const { applyVoxelDetail, HELL_TIME } = await import('/src/world/VoxelShading.js');
         const { HELL } = await import('/src/world/HellMap.js');
-        const { hellSkyMaterial } = await import('/src/game/HellRealm.js');
+        const { hellSkyMaterial, makeHellBeacon } = await import('/src/game/HellRealm.js');
         const d = new TerrainData();
         d.generate({ seed, mountains: true, seas: true, deepCaves: true, lush: true, slopes: true, hell: true });
         const P = d.hellPlan;
@@ -62,6 +62,7 @@ try {
         const toC = Math.atan2(S.z - sp.z, S.x - sp.x);
         const ex = (x, z) => d.heightAt(Math.round(x), Math.round(z));
         const views = {
+            devil: { cam: [sp.x, sp.y + 4.2, sp.z], look: [S.x, S.y + 60, S.z], R: 8, far: true },
             arrival: { cam: [sp.x + Math.cos(toC) * 18, sp.y + 4.2, sp.z + Math.sin(toC) * 18], look: [sp.x + Math.cos(toC) * 200, sp.y - 8, sp.z + Math.sin(toC) * 200], R: 7 },
             falls: { cam: [fall.pool.x + Math.cos(fall.dir) * 60, fall.top * 0.5 + 8, fall.pool.z + Math.sin(fall.dir) * 60], look: [fall.x, fall.top * 0.6, fall.z], R: 5 },
             bridge: { cam: [br.x0 + (br.x1 - br.x0) * 0.2 + 18, br.y + 10, br.z0 + (br.z1 - br.z0) * 0.2 + 18], look: [(br.x0 + br.x1) / 2, br.y, (br.z0 + br.z1) / 2], R: 5 },
@@ -74,9 +75,12 @@ try {
             if (v.cam[1] < ex(v.cam[0], v.cam[2]) + 3) v.cam[1] = ex(v.cam[0], v.cam[2]) + 5;
             const scene = new THREE.Scene();
             scene.fog = new THREE.Fog(0x3a0f08, 25, 330);
+            if (v.far) scene.fog.far = 260; // (as the game's haze at the usual view distance)
             scene.add(new THREE.AmbientLight(0xff9a70, 0.3), new THREE.HemisphereLight(0x5a1a10, 0xff5a14, 0.62));
             const sun = new THREE.DirectionalLight(0xff6a3a, 0.3); sun.position.set(v.cam[0] + 80, 200, v.cam[2] + 40); sun.target.position.set(v.look[0], 0, v.look[2]); scene.add(sun, sun.target);
             const dome = new THREE.Mesh(new THREE.SphereGeometry(440, 40, 20), hellSkyMaterial()); dome.material.uniforms.uT.value = 40; dome.position.set(v.cam[0], v.cam[1], v.cam[2]); dome.renderOrder = -9; dome.frustumCulled = false; scene.add(dome);
+            { const dx = S.x - v.cam[0], dz = S.z - v.cam[2], L = Math.hypot(dx, dz) || 1; dome.material.uniforms.uDevil.value.set(dx / L, L > 60 ? Math.min(1, (L - 60) / 200) : 0, dz / L); }
+            const beacon = makeHellBeacon(); beacon.position.set(S.x, S.y + 2, S.z); beacon.material.uniforms.uT.value = 40; scene.add(beacon);
             const ccx = Math.floor(v.look[0] / CHUNK), ccz = Math.floor(v.look[2] / CHUNK), kx = Math.floor(v.cam[0] / CHUNK), kz = Math.floor(v.cam[2] / CHUNK);
             const mx = (ccx + kx) >> 1, mz = (ccz + kz) >> 1, R = v.R + Math.ceil(Math.hypot(ccx - kx, ccz - kz) / 2);
             for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) { const m = chunkMesh(mx + dx, mz + dz); if (m) scene.add(m); }
@@ -84,7 +88,7 @@ try {
             camera.position.set(...v.cam); camera.lookAt(...v.look);
             r.render(scene, camera);
             res.push({ name, u: cv.toDataURL('image/png') });
-            for (const m of scene.children.filter((o) => o.isMesh && o !== dome)) scene.remove(m);
+            for (const m of scene.children.filter((o) => o.isMesh && o !== dome && o !== beacon)) scene.remove(m);
         }
         r.dispose();
         return res;
