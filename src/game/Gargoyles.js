@@ -28,6 +28,7 @@ import { addDark } from './DarkMagic.js';
 import { headDrops, HEAD } from './HellRules.js';
 import { newUid } from './ItemTypes.js';
 import { realmAt } from '../world/Planets.js';
+import { skyVisible } from './SkyRules.js';
 import { underworldFactor } from './HellGargoyleRules.js';
 import { RitualFx } from './GargoyleRitual.js';
 import { gargoyleModel, poseGargoyle, gargoyleBody, gargoyleCenter, gargoyleDist, MODEL_SCALE, HIP, gargoyleStats } from './GargoyleModel.js';
@@ -95,6 +96,7 @@ export class Gargoyles {
         if (!this.enabled) return { ok: false, why: 'off' };
         if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth') return { ok: false, why: 'realm' };
         if (isSpent(this.spent, center.x, center.z)) return { ok: false, why: 'spent' };
+        if (skyVisible(g, center.x, center.y, center.z)) return { ok: false, why: 'sky' }; // (the black clouds gather in the sky: a roof / cave / canopy over the circle — SkyRules.js)
         if (this.rituals.some((r) => hdist(r.c, center) < 30 && r.t < GARGOYLE.FIRE_T + GARGOYLE.RELEASE_T + 20)) return { ok: false, why: 'busy' };
         return { ok: true };
     }
@@ -113,6 +115,10 @@ export class Gargoyles {
         if (isSpent(this.spent, center.x, center.z)) {
             if (!silent) g.hud?.setVoice?.('🜏 Пентаграмма выжжена: из неё уже вылетели горгульи — больше она не действует', true);
             return { ok: false, why: 'spent' };
+        }
+        if (skyVisible(g, center.x, center.y, center.z)) {
+            if (!silent) g.hud?.setVoice?.('🜏 Над кругом не видно неба — тучам ритуала не собраться', true);
+            return { ok: false, why: 'sky' };
         }
         const free = !c?.enabled;
         const chk = canStart(c?.fatigue ?? 0, free);

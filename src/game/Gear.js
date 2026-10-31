@@ -27,6 +27,7 @@
  * minutes of rain and dark clouds). The host decides; everybody sees it.
  */
 
+import { skyVisible, skyMessage, mayTell } from './SkyRules.js';
 import * as THREE from 'three';
 import { arrowModel, disposeModel, setBowString, ARROW_SCALE } from './ItemTypes.js';
 import { enchantMul, shieldMul, shieldPlain, enchantAdd } from './Enchant.js';
@@ -617,6 +618,7 @@ export class Gear {
         const ch = g.character;
         const head = ch.head.getWorldPosition(_v);
         if (hm.model.position.y < head.y + 0.3) return; // raise it above the head
+        { const pp = ch.group.position, why = skyVisible(g, pp.x, pp.y, pp.z, { underwater: !!g.swim?.underwater }); if (why) { if (mayTell(this._skyMsg || (this._skyMsg = {}), performance.now())) g.hud.setVoice(skyMessage(why), true); return; } } // (under a roof the sky is hidden — SkyRules.js)
         const tired = g.combat.check('Hammer');
         if (tired) { g.hud.setVoice(tired, true); return; }
         g.combat.pay('Hammer');

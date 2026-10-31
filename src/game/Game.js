@@ -38,6 +38,7 @@ import { Levitation } from './Levitation.js';
 import { LevitationMaxima } from './LevitationMaxima.js';
 import { Accio, accioCatcher } from './Accio.js';
 import { Storm, aimedAtSky } from '../fx/Storm.js';
+import { skyBlockFor, mayTell, lightningLand, skyVisible } from './SkyRules.js';
 import { Inventory } from './Inventory.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
@@ -1932,6 +1933,9 @@ export class Game {
         // off the Earth some spells have nothing to work with: no air for fire, no water, no ground in space (Space.js)
         const offEarth = this.space?.spellBlocked(name) || this.hellGate?.spellBlocked(name); // (and hell: the water and the cold do not work there — HellRules.hellSpellBlock)
         if (offEarth) { if (isFinal) this.hud.setVoice(offEarth, true); return null; }
+        // sky spells (lightning, the sun, rain, thunder, fireworks) need the open sky over the caster — SkyRules.js (before any mana is paid)
+        const noSky = skyBlockFor(this, name);
+        if (noSky) { if (isFinal && mayTell(this._skyMsg || (this._skyMsg = {}), performance.now())) this.hud.setVoice(noSky, true); return null; }
         // Shield: arm stretched out (or a T for Maxima), not raised to the face
         if (name === 'Protection' || name === 'ProtectionMaxima') return this._castProtection(name, isFinal);
         // «Protection Gods» / «… Maxima»: the gods' shield, the same gesture — golden (ProtectionGods.js; works in space too)
@@ -2857,6 +2861,7 @@ export class Game {
                 const hit = this.terrain?.raycast(hand, dir, 50);
                 point = hit ? new THREE.Vector3(hit.x, hit.y, hit.z) : hand.clone().addScaledVector(dir, 30);
             }
+            lightningLand(this, point); // (a target under a roof: the bolt strikes the roof — SkyRules.lightningLand)
             const back = hand.clone().sub(point);
             this.spells.cast('LightningBeam', point, back, null, this.localId);
             if (this.sync) this.sync.spell('LightningBeam', point, back, null);
