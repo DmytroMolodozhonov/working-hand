@@ -423,7 +423,7 @@ export class Diabolos {
         const ahead = this._ahead(d, 45);
         const A = I.armsPose, order = this._order; this._order = null;
         if (order && !(d.cd[order] > 0)) { this._startMove(d, order, this._aimFor(d, order) || ahead); this._note(`😈 по воле того, кто в нём: ${order}`); return; }
-        if (I.fire && !(d.cd.fire > 0)) { this._startMove(d, 'fire', ahead); d.cd.fire = 8; return; }
+        if (I.fire?.start && !(d.cd.fire > 0)) { this._startMove(d, 'fire', ahead); d.cd.fire = 8; return; } // (только начало долгого «У»: ответ «воя» есть всегда — раньше он сам дышал огнём каждые 8 с и стоял)
         if (I.jump && !(d.cd.stomp > 0)) { d.cd.stomp = 2; this._startMove(d, 'stomp', ahead); return; }
         if (A?.left?.ha && A?.right?.ha && !(d.cd.clap > 0)) { // (ладони сошлись перед грудью — хлопок)
             const gap = A.left.ha.distanceTo(A.right.ha), was = this._clapGap ?? gap;
