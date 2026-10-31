@@ -34,7 +34,9 @@ export const DEVIL = {
     BELLY_R: 25,             // м — брюхо (тело для зарядов и ударов: полуширина брюха 0,72 × 35)
     MODEL_H: 3.5,            // рост формы модели (в единицах героя): группа ×35
     get SCALE() { return this.HEIGHT / this.MODEL_H; }, // 35
-    SEAT_MIN_R: 90,          // м — котловина под ним не меньше (тело 17 м + цепь 70 м)
+    SEAT_MIN_R: 90,
+    SEAT_OFF: 40,            // м — сидит так далеко от столба цепи (столб в середине котловины — HellMap)
+    PILLAR_R: 6,             // м — столб: тело не заходит в него (держится в PILLAR_R + RADIUS)          // м — котловина под ним не меньше (тело 17 м + цепь 70 м)
     CHAIN_LEN: 70,           // м — от якоря до копыта (свободный ход)
     CHAIN_SOFT: 0.86,        // доля CHAIN_LEN: дальше цепь натягивается (мягкая пружина), у CHAIN_LEN — жёсткий предел
     CHAIN_LINKS: 44,         // звеньев (каждое ~3,6 м длиной, шаг цепи 1,82 м — звенья продеты друг в друга)
@@ -340,5 +342,11 @@ export function seatFrom(plan) {
     const r = Math.max(+s.r || 0, 0);
     const len = Math.max(30, Math.min(+plan.chainLen || DEVIL.CHAIN_LEN, 200));
     const anchor = a && Number.isFinite(a.x) && Number.isFinite(a.z) ? { x: a.x, y: Number.isFinite(a.y) ? a.y : null, z: a.z } : { x: s.x, y: null, z: s.z + 30 };
-    return { x: s.x, z: s.z, r, anchor, len, small: r > 0 && r < DEVIL.SEAT_MIN_R };
+    let x = s.x, z = s.z;
+    // столб цепи в середине котловины (HellMap: chainAnchor = середина devilSeat) — сидит в SEAT_OFF м от него, лицом к дороге от места прибытия
+    if (Math.hypot(anchor.x - x, anchor.z - z) < DEVIL.SEAT_OFF * 0.5) {
+        const sp = plan.spawn, dx = sp ? sp.x - anchor.x : 0, dz = sp ? sp.z - anchor.z : -1, d = Math.hypot(dx, dz) || 1;
+        x = anchor.x + dx / d * DEVIL.SEAT_OFF; z = anchor.z + dz / d * DEVIL.SEAT_OFF;
+    }
+    return { x, z, r, y: Number.isFinite(s.y) ? s.y : null, cx: s.x, cz: s.z, anchor, len, small: r > 0 && r < DEVIL.SEAT_MIN_R };
 }

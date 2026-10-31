@@ -24,6 +24,7 @@ import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, 
 import { FarShape } from '../core/FarShape.js';
 import { registerKind } from './CreatureImpact.js';
 import { crowdStep } from './CrowdSources.js';
+import { inHell } from '../world/HellMap.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _a = new THREE.Vector3(), _h = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _y = new THREE.Vector3(0, 1, 0);
@@ -73,9 +74,9 @@ export class Diabolos {
     }
     /** План ада от фундамента (HellMap.js — его делает другая сессия): берём, когда появится. */
     _findSite() {
-        const g = this.game;
-        const plan = g.hell?.plan || g.hellPlan || (typeof g.hell?.hellPlan === 'function' ? g.hell.hellPlan() : null);
-        if (plan) this.place(plan);
+        const g = this.game, T = g.terrain?.data || g.world?.terrain?.data, me = g.character?.group?.position;
+        // (TerrainData.hellPlan — HellMap.hellPlan(seed), сделан один раз, ~30 мс: только когда герой у ада, как у Таронов)
+        if (T?.hell && me && inHell(me.x, me.z, 600) && T.hellPlan) this.place(T.hellPlan);
     }
 
     // ================================================================ игроки
@@ -98,7 +99,7 @@ export class Diabolos {
     _load() {
         const g = this.game, s = this.site;
         const seed = Math.abs(Math.round(s.x * 7 + s.z * 13)) % 9973;
-        const y = this._ground(s.x, s.z, 0);
+        const y = this._ground(s.x, s.z, s.y ?? 0);
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? this._ground(s.anchor.x, s.anchor.z, y) + 2.5, z: s.anchor.z };
         // лицом от якоря (цепь тянется за ним назад)
         const yaw = Math.atan2(-(s.x - anchor.x), -(s.z - anchor.z)) + Math.PI;
@@ -313,6 +314,9 @@ export class Diabolos {
         // мягкая пружина: у грани шаг вязнет, у предела — стоит (цепь держит копыто)
         const k = 1 - 0.85 * L.t;
         d.x += (L.x - d.x) * k; d.z += (L.z - d.z) * k;
+        // столб цепи — сквозь него не проходит (обходит боком)
+        const px = d.x - d.anchor.x, pz = d.z - d.anchor.z, pd = Math.hypot(px, pz), keep = DEVIL.PILLAR_R + DEVIL.RADIUS;
+        if (pd < keep) { const kk = keep / (pd || 1); d.x = d.anchor.x + (pd ? px * kk : keep); d.z = d.anchor.z + pz * kk; }
         d.strain += ((L.t > 0.6 ? L.t : 0) - d.strain) * Math.min(1, dt * 3);
         d.walkK = Math.min(1, d.walkK + dt * 1.2) * (L.at ? 0.4 : 1);
         d.walkPh += dt * sp / 7.5 * Math.PI; // (шаг ~15 м)

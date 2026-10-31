@@ -154,11 +154,17 @@ test('выбор хода: лицом к цели, вблизи — копыто
     assert.ok(Math.abs(yawTo(0, 0, 0, 0, -10)) < 1e-9, 'модель смотрит в −Z');
 });
 
-test('место из плана ада (HellMap.hellPlan): малая котловина помечена', () => {
+test('место из плана ада (HellMap.hellPlan): малая котловина помечена', async () => {
     const s = seatFrom({ devilSeat: { x: 100, z: 200, r: 120 }, chainAnchor: { x: 100, y: 5, z: 240 }, chainLen: 70 });
     assert.equal(s.x, 100); assert.equal(s.len, 70); assert.equal(s.small, false); assert.equal(s.anchor.z, 240);
     assert.equal(seatFrom({ devilSeat: { x: 0, z: 0, r: 40 } }).small, true);
     assert.equal(seatFrom(null), null);
+    // как в HellMap: столб в середине котловины — сидит в 40 м от него, лицом к дороге прибытия
+    const h = seatFrom({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 1250, z: 0 } });
+    assert.equal(Math.round(h.x), DEVIL.SEAT_OFF); assert.equal(Math.round(h.z), 0); assert.equal(h.small, false);
+    const { hellPlan } = await import('../../src/world/HellMap.js');
+    const real = seatFrom(hellPlan(12345));
+    assert.ok(real && !real.small, 'план ада: котловина ≥ 90 м');
 });
 
 test('модель: рост ×35 = 122,5 м до макушки, рога выше; копыта на земле стоя и сидя; ≤ 5 отрисовок с цепью и якорем', async () => {
