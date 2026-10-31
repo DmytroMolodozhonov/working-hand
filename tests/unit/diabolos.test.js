@@ -460,3 +460,20 @@ test('божественный меч: пронзил (в руке или зал
         assert.equal(F2.g.chests.length, DEATH.CHESTS, 'сундуки на месте');
     }
 });
+
+test('видит невидимых: невидимый игрок рядом — будит и становится целью, как видимый', async () => {
+    const { SEES_INVISIBLE, DEVIL_SENSES } = await import('../../src/game/DiabolosRules.js');
+    assert.equal(SEES_INVISIBLE, true); assert.ok(DEVIL_SENSES.seesInvisible.on && DEVIL_SENSES.seesInvisible.why);
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(0, 1.95, 300);
+    const { g } = fakeGame(me);
+    g.invis = { aiPos: () => null, hidden: () => true, isInvisible: () => true }; // (для всех остальных существ меня не видно)
+    const dv = new Diabolos(g); g.diabolos = dv;
+    dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+    dv.update(0.016);
+    me.set(0, 1.95, 40); // подошёл вплотную невидимым
+    for (let i = 0; i < 10; i++) dv.update(1 / 30);
+    assert.notEqual(dv.d.mode, 'sleep', 'невидимый подошёл — проснулся');
+    for (let i = 0; i < 30 * 8; i++) dv.update(1 / 30);
+    assert.equal(dv.d.target, 'me', 'невидимый — цель');
+});

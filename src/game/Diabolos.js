@@ -89,6 +89,7 @@ export class Diabolos {
     }
 
     // ================================================================ игроки
+    /** Игроки — по НАСТОЯЩЕМУ месту: он видит невидимых (DiabolosRules.SEES_INVISIBLE — g.invis.aiPos тут не спрашивается). */
     _players() {
         const g = this.game, out = this._pl || (this._pl = []);
         out.length = 0;
