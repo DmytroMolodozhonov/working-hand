@@ -40,7 +40,7 @@ function oneShape(model) {
 }
 import { rollWizardHouseLoot } from './WizardShop.js';
 import { seesInvisible, isGhostItem } from './Invisibles.js';
-import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
+import { ITEM_INFO, makeItemModel, disposeModel, rollKeyItem, rollDragonLoot, rollIceQueenLoot, rollGhostLoot, rollLoot, CHEST_THINGS, rollHouseLoot, rollStoreLoot, rollDungeonLoot, retireScroll, rollPortLoot, freshScrolls, SPELL_RU, SCROLL_SPELL_COLOR, SPELL_RIBBON, newUid, foodHeal } from './ItemTypes.js';
 import { recipeById } from './Potions.js';
 import { cleanSkin, skinOf } from './DarkMagic.js';
 import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
@@ -272,6 +272,7 @@ export class ItemSystem {
         const boss = chest?.room;
         const bossItems = boss === 'dragon' ? rollDragonLoot(rng)
             : boss === 'iceQueen' ? rollIceQueenLoot(rng, String(chest.id).endsWith('0')) // (her own robe in the first chest)
+            : boss === 'diabolos' ? rollGhostLoot(rng, 4).concat(rollKeyItem(rng)) // (Дьяволос, убитый божественным мечом: сильнейшие пентаграммы, высшие волшебные вещи, ключ — самое ценное в игре)
             : boss === 'study' && chest.castle ? rollWizardHouseLoot(rng, true).concat(rollKeyItem(rng), rollKeyItem(rng)) : null; // (the Master's study: rare scrolls, a strong wand, a robe, potions)
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
         const items = (bossItems || (chest?.dungeonFlavor ? rollDungeonLoot(rng, chest.dungeonFlavor, want, chest.dungeonSize) : chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house?.flavor ? rollStoreLoot(rng, house.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);

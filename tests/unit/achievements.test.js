@@ -113,16 +113,16 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
     assert.equal(towerLeft(def, get(() => false), () => false), null, 'not loaded: unknown');
 });
 
-test('all nine (Captain Black Moustache, the Castle of Ghosts, the gates of hell and the Taron hunter too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
+test('all ten (Captain Black Moustache, the Castle of Ghosts, the gates of hell, the Taron hunter and the slayer of Diabolos too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
     for (const k of HIGH_IDS) a.gain(k);
     assert.ok(a.high);
-    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + 50 + ACH.HIGH_MANA);
-    assert.ok(Math.abs(a.regenK - (1 + 9 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
+    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + 50 + 500 + ACH.HIGH_MANA);
+    assert.ok(Math.abs(a.regenK - (1 + 10 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
     const all = achBonus(HIGH_IDS);
-    assert.equal(all.mana, 1925); assert.equal(all.high, true); assert.ok(Math.abs(all.regen - 3.35) < 1e-9);
+    assert.equal(all.mana, 2425); assert.equal(all.high, true); assert.ok(Math.abs(all.regen - 3.5) < 1e-9);
     // «Разбудил дьявола» (Diabolos.js): своя награда, но для «Высшего мага» не нужна
     assert.ok(ACH_IDS.includes('devilWoke') && !HIGH_IDS.includes('devilWoke'));
     assert.deepEqual(achBonus(['devilWoke']), { mana: 100, regen: 1.15, high: false });
@@ -165,10 +165,10 @@ test('death takes the achievements: the practice-grown mana and the achievements
     assert.equal(g.combat.maxFatigue, 80, 'the king again: +50 again');
 });
 
-test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; eight of nine is no High Mage', () => {
+test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; nine of ten is no High Mage', () => {
     const { g, a, credits } = fakeGame({ remotes: ['p2'] });
-    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle', 'hellGate', 'taronHunter']) a.gain(k);
-    assert.equal(a.high, false, 'eight of nine: not yet');
+    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle', 'hellGate', 'taronHunter', 'devilSlayer']) a.gain(k);
+    assert.equal(a.high, false, 'nine of ten: not yet');
     const before = g.combat.maxFatigue;
     a.hit('blackbeard', 'bb', 'p2');
     a.killed('blackbeard', 'bb', 'me', pos(0, 0, 0));

@@ -3,7 +3,9 @@
 <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script></head>
 <body><script type="module">
 import * as THREE from 'three';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, devilHeat } from '/src/entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, devilHeat, devilWound } from '/src/entities/DiabolosModel.js';
+import { Diabolos } from '/src/game/Diabolos.js';
+import { FarShape } from '/src/core/FarShape.js';
 import { ChainRope, DEVIL } from '/src/game/DiabolosRules.js';
 import { ACTS, moodFace, blendFace } from '/src/game/DiabolosActs.js';
 console.log('start', performance.now()); const q = new URLSearchParams(location.search);
@@ -28,6 +30,22 @@ console.log('scene', performance.now()); const m = diabolosModel(); console.log(
 const pose = JSON.parse(q.get('pose') || '{}'); pose.t = +(q.get('t') || 2);
 if (q.get('act')) { const A = ACTS[q.get('act')], k = +(q.get('ak') || 0.5); const b = A.body(k, pose.t); Object.assign(pose, b); pose.actW = 1; pose.face = blendFace(moodFace(q.get('mood') || 'angry', pose.t), A.face(k, pose.t), 1); }
 poseDiabolos(m, pose); m.updateMatrixWorld(true); devilHeat(+(q.get('heat') || 0.6), 2);
+// фазы смерти / хват — теми же позами, что в игре (Diabolos._dyingPose/_grabPose)
+if (q.get('death') != null || q.get('grab') != null) {
+  const fake = { d: { t: 3, sit: 0, mode: 'walk', dying: null }, model: m };
+  const P = { walk: { ph: 0, k: 0 }, look: {}, t: 3, sit: 0, eyes: 1 };
+  let face;
+  if (q.get('death') != null) {
+    const t = +q.get('death');
+    const wound = new THREE.Vector3(0.15, 2.0, -0.62);
+    fake.d.dying = { t, wound };
+    face = Diabolos.prototype._dyingPose.call(fake, fake.d, P);
+    devilWound(wound, 0.12 + Math.max(0, t - 0.6) * 0.32, Math.min(1, 0.4 + t / 10), Math.max(0, Math.min(1, (t - 14.5) / 5)));
+  } else {
+    face = Diabolos.prototype._grabPose.call(fake, fake.d, { side: 'R' }, +q.get('grab'), P, {});
+  }
+  P.face = face; poseDiabolos(m, P); m.updateMatrixWorld(true);
+}
 // цепь от якоря к копыту
 const anchor = { x: +(q.get('ax') || 30), y: 3, z: +(q.get('az') || 70) };
 const an = anchorModel(); an.position.set(anchor.x, 0, anchor.z); scene.add(an);
@@ -43,6 +61,7 @@ hero.position.set(+(q.get('hx') || -40), 1.75, +(q.get('hz') || -50)); scene.add
 const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 50), W / H, 0.5, 3000);
 const cp = (q.get('cam') || '0,60,-260').split(',').map(Number), lk = (q.get('look') || '0,60,0').split(',').map(Number);
 cam.position.set(...cp); cam.lookAt(...lk);
-console.log('render…', performance.now()); r.render(scene, cam); console.log('rendered', performance.now());
+console.log('render…', performance.now()); m.updateMatrixWorld(true); new FarShape(m).set(true); m.updateMatrixWorld(true);
+r.render(scene, cam); console.log('rendered', performance.now());
 window.__done = true;
 </script></body></html>

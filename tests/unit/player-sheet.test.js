@@ -1,3 +1,5 @@
+import { ACH_IDS } from '../../src/game/Achievements.js';
+const ACH_IDS_N = ACH_IDS.length;
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSheet, FIELDS, itemTip, heroName } from '../../src/ui/PlayerSheet.js';
@@ -33,7 +35,7 @@ test('a hero: hp, mana, regen, steadiness, armour, coins', () => {
     assert.equal(byId(s, 'coins').value, '77');
     assert.equal(byId(s, 'darkStage').value, 'презираемый');
     assert.equal(byId(s, 'spells').value, '1 / 2');
-    assert.equal(byId(s, 'ach').value, '1 / 9');
+    assert.equal(byId(s, 'ach').value, `1 / ${ACH_IDS_N}`);
     assert.ok(byId(s, 'worn-helmet').ench);
     const tip = itemTip(byId(s, 'worn-helmet'));
     assert.ok(tip.lines.some((l) => l.includes('зачарование')));

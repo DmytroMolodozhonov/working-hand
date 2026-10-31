@@ -401,7 +401,39 @@ function build() {
 }
 
 // ------------------------------------------------------------------ материалы
-const DEVIL_U = { uTime: { value: 0 }, uHeat: { value: 0.35 } };
+const DEVIL_U = { uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
+const NOISE_GLSL = `
+float dh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float dn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(dh(i), dh(i + vec3(1,0,0)), f.x), mix(dh(i + vec3(0,1,0)), dh(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(dh(i + vec3(0,0,1)), dh(i + vec3(1,0,1)), f.x), mix(dh(i + vec3(0,1,1)), dh(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float dfbm(vec3 p){ return 0.5 * dn(p) + 0.25 * dn(p * 2.03) + 0.125 * dn(p * 4.01); }`;
+/**
+ * Рана божественного меча и распад (DiabolosRules.DEATH): свет от точки удара (uWound.xyz — в координатах модели, w — фронт),
+ * трещины света за фронтом, весь он светится изнутри (uWoundK), в конце — растворяется пеплом с горящей кромкой (uDissolve).
+ * Координаты модели после скиннинга (FarShape: форма — ребёнок корня), без новых источников света.
+ */
+function injectDeath(sh, skin) {
+    sh.uniforms.uWound = DEVIL_U.uWound; sh.uniforms.uWoundK = DEVIL_U.uWoundK; sh.uniforms.uDissolve = DEVIL_U.uDissolve;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vMp;')
+        .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvMp = transformed;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vMp; uniform vec4 uWound; uniform float uWoundK; uniform float uDissolve;` + (skin ? '' : NOISE_GLSL))
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+float dDis = dn(vMp * 6.0 + vec3(1.7)) * 0.7 + 0.3 * (1.0 - clamp(vMp.y / 3.6, 0.0, 1.0));
+if (uDissolve > 0.0 && dDis < uDissolve * 1.05) discard;`);
+    const glow = `
+float dW = distance(vMp, uWound.xyz);
+float dFront = 1.0 - smoothstep(0.0, 0.07, abs(dW - uWound.w));
+float dIn = 1.0 - smoothstep(uWound.w - 0.05, uWound.w + 0.02, dW);
+float dLines = 1.0 - smoothstep(0.0, 0.03, abs(dfbm(vMp * 5.0 + vec3(2.2)) - 0.5));
+float dCore = 1.0 - smoothstep(0.0, 0.18, dW);
+vec3 dGold = vec3(1.0, 0.9, 0.62);
+float dEdge = uDissolve > 0.0 ? 1.0 - smoothstep(0.0, 0.08, dDis - uDissolve * 1.05) : 0.0;`;
+    const add = `totalEmissiveRadiance += dGold * uWoundK * (dFront * 2.5 + dIn * (dLines * 2.4 + 0.06 + 0.3 * uWoundK * uWoundK) + dCore * 3.0) + dGold * dEdge * 3.0;`;
+    if (sh.fragmentShader.includes('#include <emissivemap_fragment>')) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + glow + add);
+    else sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>' + glow + 'diffuseColor.rgb += dGold * uWoundK * (dFront + dIn * dLines) + dGold * dEdge;');
+}
 let _mats = null;
 /** Кожа: поры, складки, трещины с жаром изнутри (шейдер — узор по координатам формы, на видеокарте). */
 function devilMats() {
@@ -413,12 +445,7 @@ function devilMats() {
         sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDp;')
             .replace('#include <begin_vertex>', '#include <begin_vertex>\nvDp = position;');
         sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-varying vec3 vDp; uniform float uTime; uniform float uHeat;
-float dh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-float dn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(dh(i), dh(i + vec3(1,0,0)), f.x), mix(dh(i + vec3(0,1,0)), dh(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(dh(i + vec3(0,0,1)), dh(i + vec3(1,0,1)), f.x), mix(dh(i + vec3(0,1,1)), dh(i + vec3(1,1,1)), f.x), f.y), f.z); }
-float dfbm(vec3 p){ return 0.5 * dn(p) + 0.25 * dn(p * 2.03) + 0.125 * dn(p * 4.01); }`)
+varying vec3 vDp; uniform float uTime; uniform float uHeat;` + NOISE_GLSL)
             .replace('#include <color_fragment>', `#include <color_fragment>
 float dSkin = clamp((vColor.r - vColor.g) * 4.0, 0.0, 1.0);
 float dN = dfbm(vDp * 7.0);
@@ -430,20 +457,32 @@ float dC = abs(dfbm(vDp * 3.2 + vec3(7.1)) - 0.5);
 float dCrack = (1.0 - smoothstep(0.0, 0.018, dC)) * dSkin * smoothstep(0.35, 0.6, dfbm(vDp * 1.3 + vec3(3.3)));
 float dPulse = 0.65 + 0.35 * sin(uTime * 2.1 + dN * 9.0);
 totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * uHeat) + vec3(0.25, 0.04, 0.0) * dCrack * dCrack;`);
+        injectDeath(sh, true);
     };
     skin.customProgramCacheKey = () => 'diabolos-skin';
-    const hard = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+    const hard = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: 0x000000 });
     hard.name = 'diabolos-hard';
+    hard.onBeforeCompile = (sh) => injectDeath(sh, false);
+    hard.customProgramCacheKey = () => 'diabolos-hard';
     const glow = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
     glow.name = 'diabolos-glow';
+    glow.onBeforeCompile = (sh) => injectDeath(sh, false);
+    glow.customProgramCacheKey = () => 'diabolos-glow';
     const chain = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
     chain.name = 'diabolos-chain';
-    for (const m of [skin, hard, glow, chain]) m.userData.shared = true;
-    _mats = { skin, hard, glow, chain };
+    const iron = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }); // (якорь: не растворяется вместе с ним)
+    iron.name = 'diabolos-iron';
+    for (const m of [skin, hard, glow, chain, iron]) m.userData.shared = true;
+    _mats = { skin, hard, glow, chain, iron };
     return _mats;
 }
 /** Жар кожи (0…1: спит — тлеет, в ярости — горит) и время пульса — общие для всех копий формы. */
 export function devilHeat(heat, t) { DEVIL_U.uHeat.value = heat; DEVIL_U.uTime.value = t; }
+/** Рана (точка в координатах модели или null), фронт света (ед. формы), сила свечения 0…1, распад 0…1. */
+export function devilWound(local, front, k, dissolve) {
+    if (local) DEVIL_U.uWound.value.set(local.x, local.y, local.z, front); else DEVIL_U.uWound.value.set(0, -99, 0, 0);
+    DEVIL_U.uWoundK.value = k; DEVIL_U.uDissolve.value = dissolve;
+}
 
 let _geo = null;
 function boneGeos() {
@@ -525,7 +564,7 @@ export function anchorModel() {
         _anchor = mergeParts(parts);
         _anchor.userData.keep = true;
     }
-    const m = new THREE.Mesh(_anchor, devilMats().hard);
+    const m = new THREE.Mesh(_anchor, devilMats().iron);
     m.castShadow = true; m.receiveShadow = true;
     return m;
 }
@@ -649,7 +688,8 @@ export function poseDiabolos(model, P) {
         B['el' + sd].rotation.set(el, 0, s * 0.05);
         B['wr' + sd].rotation.set(0, 0, 0);
         B['ha' + sd].rotation.set(ha, hz, 0);
-        B['ha' + sd].scale.setScalar(1);
+        const sq = (sd === 'L' ? P.squeezeL : P.squeezeR) || 0; // (сжимает кулак: кисть сжимается, пальцы — внутрь)
+        B['ha' + sd].scale.set(1 - sq * 0.16, 1 - sq * 0.22, 1 - sq * 0.12);
     }
     // ноги: копыта на земле. Стоя — под бёдрами, шаг — дуга; сидя — вперёд, колени вверх
     for (const sd of ['L', 'R']) {

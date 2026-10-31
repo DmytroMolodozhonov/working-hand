@@ -14,8 +14,10 @@
  */
 export const DEVIL_SOUNDS = ['snore', 'step', 'slam', 'chain', 'roar', 'inhale', 'fire', 'ball', 'boom', 'clap', 'theme', 'drums',
     // характер (DiabolosActs): бормочет во сне, нюхает, зевает, хрустит, сплёвывает, скребёт рог, вздыхает, хохочет, фыркает, «бе-бе» языком, облизывается, посмеивается, бьёт в грудь
-    'mumble', 'sniff', 'yawn', 'crack', 'spit', 'scrape', 'sigh', 'laugh', 'snort', 'blep', 'lick', 'chuckle', 'beat'];
-const DUR = { mumble: 2.2, sniff: 1.2, yawn: 3.2, crack: 0.9, spit: 0.8, scrape: 1.6, sigh: 2.4, laugh: 3.4, snort: 0.9, blep: 2.4, lick: 1.4, chuckle: 1.8, beat: 0.6, snore: 3.2, step: 1.4, slam: 2.6, chain: 0.9, roar: 3.6, inhale: 1.7, fire: 4.2, ball: 1.1, boom: 2.4, clap: 1.4, theme: 12, drums: 6 };
+    'mumble', 'sniff', 'yawn', 'crack', 'spit', 'scrape', 'sigh', 'laugh', 'snort', 'blep', 'lick', 'chuckle', 'beat',
+    // оторопь и смерть: рёв боли, звон разрывающейся цепи
+    'pain', 'chainBreak'];
+const DUR = { pain: 3.4, chainBreak: 2.6, mumble: 2.2, sniff: 1.2, yawn: 3.2, crack: 0.9, spit: 0.8, scrape: 1.6, sigh: 2.4, laugh: 3.4, snort: 0.9, blep: 2.4, lick: 1.4, chuckle: 1.8, beat: 0.6, snore: 3.2, step: 1.4, slam: 2.6, chain: 0.9, roar: 3.6, inhale: 1.7, fire: 4.2, ball: 1.1, boom: 2.4, clap: 1.4, theme: 12, drums: 6 };
 const TAU = Math.PI * 2;
 
 /** Простой шум (свой генератор — один и тот же звук на всех компьютерах). */
@@ -153,6 +155,15 @@ export function synthDevil(ctx, kind) {
                 if (b % 2) noise(d, sr, at, 0.15, 0.35, 0.5, (k) => Math.exp(-k * 8), R);
                 if (b % 4 === 2) thud(d, sr, at + 0.375, 60, 0.4, 8, 20);
             }
+            break;
+        case 'pain': // рёв боли: голос срывается вверх, хрип, дрожь
+            growl(d, sr, 0, 3.0, 60, 140, 1.0, R, 0.7); growl(d, sr, 0.1, 2.8, 32, 60, 0.6, R, 1.1); noise(d, sr, 0.2, 3.0, 0.4, 0.5, (k) => Math.sin(k * Math.PI) * (0.7 + 0.3 * Math.sin(k * 80)), R);
+            echo(d, sr, [0.4, 0.8], 0.3);
+            break;
+        case 'chainBreak': // звено лопается: удар, звон осколков, звенья сыплются
+            thud(d, sr, 0, 70, 1.0, 12, 30); clank(d, sr, 0, 260, 1.0, R);
+            for (let i = 0; i < 12; i++) clank(d, sr, 0.25 + i * 0.16 + Math.abs(R()) * 0.05, 140 + Math.abs(R()) * 160, 0.4 * (1 - i / 14), R);
+            echo(d, sr, [0.35], 0.3);
             break;
         case 'mumble': // бормотание: низкий голос «слогами», сквозь сон
             for (let i = 0; i < 6; i++) growl(d, sr, 0.1 + i * 0.32, 0.26, 55 + Math.abs(R()) * 25, 45, 0.5 + Math.abs(R()) * 0.4, R, 0.8);

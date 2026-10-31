@@ -1847,6 +1847,12 @@ export class Game {
         if (!name && isFinal && this.vortex?.bubbleOpen?.()) this.hud.setVoice(`🫧 Слышу «${String(text).slice(0, 40)}» — для шара скажите «Bubble» или «Пузырь»`, true);
         if (!name) return null;
         if (this.combat.dead) { this.lastCastWhy = 'вы мертвы'; return null; }
+        // в кулаке Дьяволоса колдовать нельзя — только «стоп» (DiabolosRules.GRAB)
+        if (this.diabolos?.holding && !(name === 'Stand' && /стоп|stop/i.test(text))) {
+            if (isFinal) this.hud.setVoice('😈 В кулаке Дьяволоса не поколдуешь', true);
+            this.lastCastWhy = 'в кулаке Дьяволоса';
+            return null;
+        }
         // the monster form: no wand, no spells — only «стоп» to stop what is mine (MonsterForm.MONSTER_BLOCKS)
         if (this.monster?.active && !(name === 'Stand' && /стоп|stop/i.test(text))) {
             if (isFinal) this.hud.setVoice('🐺 В облике монстра колдовать нельзя — палочки нет', true);

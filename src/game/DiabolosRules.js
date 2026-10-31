@@ -108,6 +108,7 @@ export class ChainRope {
         this.taut = 0;  // 0…1 — натяжение (по прямой копыто–якорь против длины)
         this._acc = 0;
         this.ready = false;
+        this.free = false; // (цепь сорвана с копыта — смерть Дьяволоса: конец лежит свободно)
     }
     /** Уложить цепь по земле от якоря к копыту (загрузка, пробуждение мира). */
     lay(a, h, ground) {
@@ -140,7 +141,9 @@ export class ChainRope {
                 }
             }
             P[0] = a.x; P[1] = a.y; P[2] = a.z;
-            const e = n * 3; P[e] = h.x; P[e + 1] = h.y; P[e + 2] = h.z;
+            const e = n * 3;
+            if (!this.free && h) { P[e] = h.x; P[e + 1] = h.y; P[e + 2] = h.z; }
+            else { for (let c = 0; c < 3; c++) { const v = (P[e + c] - O[e + c]) * 0.985; O[e + c] = P[e + c]; P[e + c] += v + (c === 1 ? -9.8 * H * H : 0); } }
             for (let it = 0; it < iters; it++) {
                 for (let i = 0; i < n; i++) {
                     const j = i * 3, k = j + 3;
@@ -148,12 +151,12 @@ export class ChainRope {
                     const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6;
                     if (d <= L) continue; // (цепь не держит сжатие — звенья складываются)
                     const f = (d - L) / d;
-                    const wa = i === 0 ? 0 : 0.5, wb = i + 1 === n ? 0 : 0.5, s = wa + wb || 1;
+                    const wa = i === 0 ? 0 : 0.5, wb = i + 1 === n && !this.free ? 0 : 0.5, s = wa + wb || 1;
                     P[j] += dx * f * wa / s; P[j + 1] += dy * f * wa / s; P[j + 2] += dz * f * wa / s;
                     P[k] -= dx * f * wb / s; P[k + 1] -= dy * f * wb / s; P[k + 2] -= dz * f * wb / s;
                 }
                 // земля: звено толщиной ~0,6 м лежит на ней, волочится с трением
-                if (ground) for (let i = 1; i < n; i++) {
+                if (ground) for (let i = 1; i < (this.free ? n + 1 : n); i++) {
                     const j = i * 3, g = (typeof ground === 'function' ? ground(P[j], P[j + 2]) : ground[i]) + 0.55; // (массив — земля под каждой точкой, взятая раз в кадр)
                     if (P[j + 1] < g) { P[j + 1] = g; O[j] += (P[j] - O[j]) * 0.35; O[j + 2] += (P[j + 2] - O[j + 2]) * 0.35; O[j + 1] = Math.min(O[j + 1], g); }
                 }
@@ -161,7 +164,8 @@ export class ChainRope {
             for (let i = 1; i < n; i++) { const j = i * 3; const vx = P[j] - O[j], vy = P[j + 1] - O[j + 1], vz = P[j + 2] - O[j + 2]; moved += Math.sqrt(vx * vx + vy * vy + vz * vz); }
         }
         if (steps) this.speed = this.speed * 0.8 + 0.2 * (moved / steps / (n - 1)) / H;
-        const dx = h.x - a.x, dy = h.y - a.y, dz = h.z - a.z;
+        const hx = h ? h.x : P[n * 3], hy = h ? h.y : P[n * 3 + 1], hz = h ? h.z : P[n * 3 + 2];
+        const dx = hx - a.x, dy = hy - a.y, dz = hz - a.z;
         this.taut = Math.max(0, Math.min(1, (Math.sqrt(dx * dx + dy * dy + dz * dz) / (n * L) - 0.7) / 0.3));
         return this;
     }
@@ -177,7 +181,7 @@ export class ChainRope {
 export const MOVES = {
     fist:  { wind: 1.5, hit: 1.75, dur: 3.4, rest: 2.5, reach: 52, dmg: 45, wave: 25, smashK: 3 },   // удар кулаком сверху: ударная волна 25 м
     stomp: { wind: 1.2, hit: 1.5, dur: 2.8, rest: 2.0, reach: 26, dmg: 999, wave: 18, smashK: 3 },  // топтание: под копытом — смерть
-    grab:  { wind: 1.0, hit: 1.4, dur: 4.6, rest: 4.0, reach: 46, dmg: 30, throwM: 60 },            // хват и бросок на 60 м (−30, не смерть)
+    grab:  { wind: 1.6, hit: 2.0, dur: 10.5, rest: 4.0, reach: 46, lift: 3.2, hold: 5, laugh: 7.4, crush: 9.4 }, // хват → подъём → держит (пальцы сжимаются) → хохот → раздавил (GRAB)
     clap:  { wind: 1.1, hit: 1.45, dur: 2.6, rest: 3.0, reach: 60, dmg: 22, cone: 0.6 },           // хлопок ладонями: волна огня конусом
     roar:  { wind: 0.6, hit: 1.0, dur: 3.2, rest: 3.0, reach: 200 },                                // рёв: пугает всех, тремор
     fire:  { wind: 1.6, hit: 1.6, dur: 5.6, rest: 6.0, reach: 115 },                                // струя: вдох 1,6 с + 4 с огня, потом 6 с пауза
@@ -185,6 +189,80 @@ export const MOVES = {
     rage:  { wind: 0, hit: 0.8, dur: 3.6, rest: 1.0, reach: 999, wave: 20, smashK: 1.5 },          // ярость у предела цепи: рывок, рёв, удары по земле
 };
 export const MOVE_IDS = ['fist', 'stomp', 'grab', 'clap', 'roar', 'fire', 'ball', 'rage'];
+
+/**
+ * Хват и раздавливание (слова автора: «если игрок достаточно близко — СХВАТИТЬ кистью, поднять, держать, через несколько секунд
+ * ЗАСМЕЯТЬСЯ и РАЗДАВИТЬ — игрок умирает»). Замах виден 2 с (шаг в сторону — промах: в миг хвата цель должна быть у кисти).
+ * Пока держат — не колдовать (только «стоп»); щиты, вихри, дары, устойчивость, мантия НЕ спасают. Спасение — честный шанс:
+ * сильнейшее божественное («Инспириус», «Бум», «Тотальное разрушение Максима») по нему, пока он держит, — оторопь, и он
+ * РОНЯЕТ жертву (урон от падения). Ход редкий (GRAB.CD) и медленный — его видно заранее.
+ */
+export const GRAB = {
+    CD: 26,              // с между хватами (ярость сокращает — rageTempo)
+    CATCH_R: 14,         // м от кисти в миг хвата: дальше — промах
+    LIFT_H: 105,         // м — поднимает к морде (жертва перед глазами)
+    FALL_DMG: 0.5,       // доля от урона падения: уронил — падение как с этой высоты (обычные правила падения)
+    CREATIVE_DMG: 30,    // в Творческом смерти нет — выпускает с уроном
+};
+/** Кто/что может быть в его кулаке (жертвы). Сейчас хватает игроков; существа — та же лапа, когда цель — существо. */
+export const GRAB_TARGETS = {
+    player:   { grab: true, why: 'игрок: хватает, поднимает, держит, хохочет и раздавливает (Combat.die «devilCrush»); в Творческом — выпускает с уроном' },
+    rider:    { grab: true, why: 'всадник (лошадь, дракон): хватает всадника — тот слетает с седла; дракон без всадника падает/улетает сам' },
+    imperius: { grab: true, why: 'вселившийся «Империусом»: хват разрывает связь — разум возвращается в своё тело, которое он и держит' },
+    humanoid: { grab: true, why: 'жители, волшебники, Тароны: та же лапа (раздавлен), когда цель — они' },
+    animal:   { grab: true, why: 'звери: та же лапа' },
+    dragon:   { grab: false, why: 'дракон велик для кисти — бьёт кулаком' },
+    ghost:    { grab: false, why: 'призрака не схватить — у него нет тела' },
+};
+/** Фаза хвата по времени хода t: 'wind' | 'lift' | 'hold' | 'laugh' | 'crush' | 'done'. */
+export function grabPhase(t) {
+    const M = MOVES.grab;
+    return t < M.hit ? 'wind' : t < M.lift ? 'lift' : t < M.laugh ? 'hold' : t < M.crush ? 'laugh' : t < M.dur ? 'crush' : 'done';
+}
+
+/**
+ * Сильнейшее божественное (слова автора: «Дьяволоса МОЖНО ранить "Инспириусом" и "Бумом"… это не урон — сначала РАСТЕРЯН 2–4 с,
+ * потом ЗЛИТСЯ: ярость нарастает с каждым попаданием, затухает за 60–90 с, и он АКТИВНЕЕ: чаще атакует, быстрее к ближним ходам,
+ * чаще хватает, дольше струя, меньше пауз, злее у предела цепи»). «Тотальное разрушение Максима» — так же, но слабее.
+ */
+export const STUN = {
+    S: [2, 4],           // с растерянности (вздрагивает, морщится, отшатывается, рёв боли — без атаки)
+    RAGE_STEP: { Inspirius: 0.35, Boom: 0.35, TotalDestructionMaxima: 0.2 },
+    RAGE_DECAY: 1 / 75,  // ярости в секунду (полная гаснет за 75 с)
+};
+/** Попало сильнейшее божественное? → {stun (с), rage (+)} или null. r — 0…1 (длительность оторопи). */
+export function godStrike(spell, r = 0.5) {
+    const k = STUN.RAGE_STEP[spell];
+    if (!k) return null;
+    return { stun: (STUN.S[0] + (STUN.S[1] - STUN.S[0]) * r) * (k < 0.3 ? 0.7 : 1), rage: k };
+}
+/** Темп по ярости 0…1: паузы короче, кулдауны короче, струя дольше, хват чаще. */
+export function rageTempo(rage) {
+    const r = Math.max(0, Math.min(1, rage || 0));
+    return { rest: 1 - 0.55 * r, cd: 1 - 0.5 * r, fireTime: 1 + 0.6 * r, grabCd: 1 - 0.6 * r, near: 1 + 0.4 * r };
+}
+
+/**
+ * Смерть (слова автора: убить можно ТОЛЬКО божественным мечом — пронзить в руке или вонзить залпом «Левиоса Максима Атак»;
+ * «место попадания начинает СВЕТИТЬСЯ, он УДИВЛЁН — и начинает светиться, его РАЗЪЕДАЕТ, как рана… трещины света — и он умирает»).
+ * Фазы (с от пронзания): shock — оторопь, взгляд на рану; agony — трещины света разбегаются, держится за рану, рёв, бьёт землю,
+ * цепь трескается и осыпается, беспорядочный огонь; fall — светится изнутри, осыпается золой, падает на колени, рога трескаются,
+ * хрип; ash — вспышка, распадается на светящийся пепел столбом вверх, земля содрогается; потом тишина и СУНДУКИ из пепла.
+ */
+export const DEATH = {
+    T: 20,
+    PHASES: [['shock', 0], ['agony', 1], ['fall', 6], ['ash', 14], ['gone', 20]],
+    CHESTS: 4,            // сундуков босса из пепла (3–5 по правилу)
+    CHEST_R: 14,          // м — кругом у места смерти
+    ACH: 'devilSlayer',
+};
+export function deathPhase(t) {
+    let p = 'shock';
+    for (const [id, t0] of DEATH.PHASES) if (t >= t0) p = id;
+    return p;
+}
+/** Чем пронзили: только божественный клинок убивает (DivineSword.isDivine). via: 'hand' | 'swarm'. */
+export const pierceKills = (via, divine = true) => !!divine && (via === 'hand' || via === 'swarm');
 
 /** Струя огня: ×5 к дракону силы 1 (DragonKinds: 14 + 9 = 23 м; конус 0,7 + 0,17·путь). */
 export const FIRE = {
@@ -261,7 +339,7 @@ export function chooseMove(s) {
 
 // ------------------------------------------------------------------ бессмертие: кто/что на него действует
 /**
- * Таблица «заклинание/удар → что с Дьяволосом». Убить нельзя НИЧЕМ (здоровья нет: урон только злит; сильный удар
+ * Таблица «заклинание/удар → что с Дьяволосом». Убить нельзя НИЧЕМ, кроме божественного меча (DEATH, pierce; здоровья нет: урон только злит; сильный удар
  * на миг сбивает дыхание — `stagger`). Каждое «не действует» — с причиной (журнал «Дьяволос: <заклинание> — причина»).
  */
 const DARK = new Set(['AvadaKedavra', 'Die', 'Imperius', 'ImperiusMaxima', 'Brainrot', 'BrainrotMaxima', 'Hellfire', 'Nihilis', 'Pentagranium', 'MonsterForm', 'Sands']);
@@ -288,6 +366,8 @@ export const DEVIL_VS = {
     control: 'не действует: древний бог, его разум и тело не подчиняются',
     weapon:  'оружие только царапает толстую шкуру — убить его нельзя',
     gods:    'даже заклинания богов его не убивают: боги не убили его — заточили',
+    stun:    'сильнейшее божественное ранит его гордость: растерян 2–4 с, потом ярость растёт — но не убивает',
+    divine:  'божественный клинок — единственное, что его убивает (пронзить: в руке или вонзить залпом)',
     self:    'не направлено на него',
     other:   'не действует: Дьяволос бессмертен',
 };
@@ -299,7 +379,8 @@ export const DEVIL_VS = {
 export function devilVerdict(spell) {
     const s = String(spell || '');
     let cat = 'other';
-    if (s === 'AvadaKedavra' || s === 'Die' || s === 'Sands' || s === 'Nihilis') cat = 'death';
+    if (STUN.RAGE_STEP[s]) cat = 'stun';
+    else if (s === 'AvadaKedavra' || s === 'Die' || s === 'Sands' || s === 'Nihilis') cat = 'death';
     else if (DARK.has(s)) cat = 'dark';
     else if ((GODS.has(s) || isDivine(s)) && !SELF.test(s)) cat = 'gods';
     else if (FIREK.has(s)) cat = 'fire';
@@ -311,7 +392,7 @@ export function devilVerdict(spell) {
     else if (CONTROL.has(s)) cat = 'control';
     else if (SELF.test(s)) cat = 'self';
     const anger = cat !== 'self';
-    const stagger = cat === 'gods' ? 1.2 : cat === 'blast' && /Maxima|Boom|Inspirius/.test(s) ? 0.8 : cat === 'blast' ? 0.3 : 0;
+    const stagger = cat === 'stun' ? 0 : cat === 'gods' ? 1.2 : cat === 'blast' && /Maxima|Boom|Inspirius/.test(s) ? 0.8 : cat === 'blast' ? 0.3 : 0;
     return { acts: false, cat, why: DEVIL_VS[cat], anger, stagger };
 }
 
@@ -320,7 +401,7 @@ export const furyAfter = (fury, dmg) => Math.min(1, (fury || 0) + Math.min(0.25,
 
 // ------------------------------------------------------------------ состояния и сеть
 /** Состояния (номер — в строке сети `dvl`; только дописывать). */
-export const STATES = ['sleep', 'wake', 'stand', 'walk', 'act', 'strain', 'back', 'sit'];
+export const STATES = ['sleep', 'wake', 'stand', 'walk', 'act', 'strain', 'back', 'sit', 'stun', 'dying', 'dead'];
 
 /** После скольких секунд покоя засыпает (детерминированно по зерну). */
 export const sleepDelay = (seed) => DEVIL.SLEEP_AFTER[0] + (DEVIL.SLEEP_AFTER[1] - DEVIL.SLEEP_AFTER[0]) * (((Math.sin(seed * 12.9898) * 43758.5453) % 1 + 1) % 1);

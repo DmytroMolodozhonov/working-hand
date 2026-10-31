@@ -112,6 +112,7 @@ export const VORTEX_TARGETS = {
     C: { push: 'knock', bubble: false, fill: false, carry: false, why: 'своё существо: вода сбивает с ног и тушит, шар его не берёт — у каждого своё тело (CustomCreatures.watered)' },
     b: { push: 'none', bubble: false, fill: false, carry: false, why: 'книги-птицы — не существа для воды' },
     D: { push: 'none', bubble: false, fill: false, carry: false, why: 'дракон: вода лишь плещет по огромному телу (DragonKinds.ON_DRAGON)' },
+    Y: { push: 'none', bubble: false, fill: false, carry: false, why: 'Дьяволос: вода шипит паром на раскалённой коже — не действует (DiabolosRules.DEVIL_VS.water)' },
     I: { push: 'knock', bubble: false, fill: false, carry: false, why: 'Ледяная Королева и ледяные существа: вода плещет по льду (IceQueen.ICE_TARGETS.water)' },
 };
 

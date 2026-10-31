@@ -18,6 +18,11 @@ const SHOTS = {
     'devil-act-chainpull': { act: 'chainPull', ak: 0.45, heat: 1, cam: '150,50,-140', look: '0,55,0' },
     'devil-act-beckon': { act: 'beckon', ak: 0.5, t: 0.4, heat: 0.6, cam: '-90,90,-170', look: '0,90,0' },
     'devil-act-teeth': { act: 'pickTeeth', ak: 0.5, heat: 0.4, mood: 'calm', cam: '-40,108,-80', look: '0,100,-10' },
+    'devil-death-shock': { death: 0.6, cam: '-120,90,-150', look: '0,80,0' },
+    'devil-death-agony': { death: 4, cam: '-140,80,-170', look: '0,75,0' },
+    'devil-death-fall': { death: 11, cam: '-130,60,-160', look: '0,55,0' },
+    'devil-death-ash': { death: 16.5, cam: '-150,70,-180', look: '0,60,0' },
+    'devil-grab': { grab: 6, cam: '-80,110,-150', look: '0,100,0' },
     'devil-chain': { pose: { strain: 1, lean: 1, face: { brow: -1, snarl: 1, ear: -1 }, jaw: 0.8, armL: { raise: 0.6 }, armR: { raise: 0.6 } }, heat: 1, cam: '140,30,-120', look: '-10,30,20' },
 };
 const only = process.argv.find((a) => a.startsWith('--only='))?.slice(7);
@@ -30,7 +35,7 @@ page.on('response', (r) => { if (r.status() >= 400) console.error('404:', r.url(
 fs.mkdirSync(out, { recursive: true });
 for (const [name, s] of Object.entries(SHOTS)) {
     if (only && !name.includes(only)) continue;
-    const u = `http://localhost:${port}/tools/devil-view.html?pose=${encodeURIComponent(JSON.stringify(s.pose || {}))}&heat=${s.heat}&cam=${s.cam}&look=${s.look}${s.act ? `&act=${s.act}&ak=${s.ak}&mood=${s.mood || 'angry'}` : ''}${s.t != null ? `&t=${s.t}` : ''}`;
+    const heat = s.heat ?? 0.7; const u = `http://localhost:${port}/tools/devil-view.html?pose=${encodeURIComponent(JSON.stringify(s.pose || {}))}&heat=${heat}&cam=${s.cam}&look=${s.look}${s.act ? `&act=${s.act}&ak=${s.ak}&mood=${s.mood || 'angry'}` : ''}${s.t != null ? `&t=${s.t}` : ''}${s.death != null ? `&death=${s.death}` : ''}${s.grab != null ? `&grab=${s.grab}` : ''}`;
     await page.goto(u);
     await page.waitForFunction(() => window.__done, null, { timeout: 120000 });
     await page.screenshot({ path: path.join(out, name + '.png') });

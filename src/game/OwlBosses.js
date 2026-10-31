@@ -25,9 +25,10 @@ export const BOSS_WORDS = {
     spider: [/пауч/, /паук/],
     dragon: [/дракон/, /драко/],
     king: [/корол/, /(^|\s)цар/],
+    devilSlayer: [/дьявол/, /сатан/, /(^|\s)ч[её]рт/, /бес(\s|$|а|у)/],
 };
 /** In this order (the more particular first). */
-const ORDER = ['iceQueen', 'blackbeard', 'tower', 'spider', 'dragon', 'king'];
+const ORDER = ['iceQueen', 'blackbeard', 'tower', 'spider', 'dragon', 'devilSlayer', 'king'];
 
 /** «Find / show / lead / where…»: the phrase is a request, not a word in a talk. */
 const ASK = /(найд|найт|наход|ищ|иска|отыщ|покаж|показ|где|веди|отвед|провод|приведи|отнеси|лети|полет|хочу|нужн|ищу)/;
@@ -64,7 +65,7 @@ export function bossOfWords(text) {
 /** «к паучихе» — to whom it leads (a new boss: «к цели …»). */
 export const BOSS_TO = {
     king: 'к королю', iceQueen: 'к Ледяной Королеве', spider: 'к гигантской паучихе', dragon: 'к дракону',
-    blackbeard: 'к капитану Чёрные Усы', tower: 'к Мастеру башни волшебников',
+    blackbeard: 'к капитану Чёрные Усы', tower: 'к Мастеру башни волшебников', devilSlayer: 'к Дьяволосу',
 };
 export function bossTo(id) {
     if (BOSS_TO[id]) return BOSS_TO[id];
@@ -122,6 +123,13 @@ const liveVillager = (g, def, i, role) => () => {
 };
 
 export const BOSS_FINDERS = {
+    // Дьяволос: один, в аду (HellMap.devilSeat); убит божественным мечом — его нет
+    devilSlayer(g) {
+        const D = g.diabolos;
+        if (!D || D.dead) return null;
+        const s = D.site || (() => { const T = g.terrain?.data; const p = T?.hell ? T.hellPlan : null; return p?.devilSeat || null; })();
+        return s ? { x: s.x, z: s.z, live: () => (D.d ? { x: D.d.x, z: D.d.z } : null) } : null;
+    },
     // the king of the nearest castle whose king still lives (CastleLife state: kingDead)
     king(g, from, job) {
         const def = siteSearch(g, from, job, (S) => S.castles, (c) => !g.castleLife?.states?.get(c.id)?.kingDead);

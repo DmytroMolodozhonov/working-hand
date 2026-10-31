@@ -94,9 +94,10 @@ test('бессмертие: ни одно заклинание (все из иг
     assert.equal(devilVerdict('Frozen').cat, 'cold');
     assert.equal(devilVerdict('WindMaxima').cat, 'push');
     assert.equal(devilVerdict('melee').cat, 'weapon');
-    assert.equal(devilVerdict('Boom').cat, 'gods');
-    assert.equal(devilVerdict('Inspirius').cat, 'gods');
-    for (const s of Object.keys(SPELL_SOUND)) if (isDivine(s) && !['death', 'dark', 'self'].includes(devilVerdict(s).cat)) assert.equal(devilVerdict(s).cat, 'gods', s);
+    assert.equal(devilVerdict('Boom').cat, 'stun', '«Бум» — растерян и злится (не убивает)');
+    assert.equal(devilVerdict('Inspirius').cat, 'stun');
+    assert.equal(devilVerdict('TotalDestructionMaxima').cat, 'stun');
+    for (const s of Object.keys(SPELL_SOUND)) if (isDivine(s) && !['death', 'dark', 'self', 'stun'].includes(devilVerdict(s).cat)) assert.equal(devilVerdict(s).cat, 'gods', s);
     assert.equal(devilVerdict('LevitationSuperMaxima').cat, 'gods');
     assert.equal(devilVerdict('Lumos').anger, false, 'свет в руке — не нападение');
     assert.equal(devilVerdict('Bombardo').anger, true);
@@ -343,10 +344,119 @@ test('характер в игре: просыпается по-разному, 
     dv.d.move = null; dv.d.act = null;
     dv.hit(dv.d, 5, 'Bombardo', 'me'); assert.ok(['laugh', 'scoff'].includes(dv.d.act?.id), 'над слабым — смех/фырканье');
     dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'Inferno', 'me'); assert.equal(dv.d.act?.id, 'bask', 'огонь — наслаждается');
-    dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'Boom', 'me'); assert.equal(dv.d.act?.id, 'headShake', 'божественное — трясёт головой');
+    dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'LevitationSuperMaxima', 'me'); assert.equal(dv.d.act?.id, 'headShake', 'божественное — трясёт головой');
     // за цепью — дразнит
     me.set(0, 1.95, -320);
     dv.d.act = null;
     run(60);
     assert.ok(['tongueTaunt', 'beckon', 'chainPull', 'lickLips'].some((id) => seen.has(id)), `дразнит: ${[...seen].join(', ')}`);
+});
+
+test('«Инспириус» / «Бум»: растерян 2–4 с (без атаки), ярость растёт с каждым попаданием, темп выше, потом гаснет — и он засыпает', async () => {
+    const { godStrike, rageTempo, STUN } = await import('../../src/game/DiabolosRules.js');
+    const gs = godStrike('Inspirius', 0.5);
+    assert.ok(gs.stun >= STUN.S[0] && gs.stun <= STUN.S[1]);
+    assert.ok(godStrike('TotalDestructionMaxima', 0.5).rage < gs.rage, 'Максима разрушения — слабее');
+    assert.equal(godStrike('Bombardo'), null);
+    assert.ok(rageTempo(1).rest < rageTempo(0).rest && rageTempo(1).fireTime > 1 && rageTempo(1).grabCd < 1);
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(0, 1.95, 120);
+    const { g } = fakeGame(me);
+    const dv = new Diabolos(g); g.diabolos = dv;
+    dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+    dv.update(0.016);
+    dv.hit(dv.d, 100, 'Inspirius', 'me');
+    assert.equal(dv.d.mode, 'stun', 'спящий просыпается именно так — растерян');
+    const r1 = dv.d.rage;
+    for (let i = 0; i < 30; i++) { dv.update(1 / 30); assert.equal(dv.d.move, null, 'растерян — не атакует'); }
+    dv.hit(dv.d, 100, 'Boom', 'me');
+    assert.ok(dv.d.rage > r1, 'ярость растёт');
+    assert.ok(!dv.d.isDead && !dv.dead);
+    me.set(0, 1.95, -900);
+    for (let i = 0; i < 30 * 240; i++) dv.update(1 / 30);
+    assert.ok(dv.d.rage < 0.01, 'ярость погасла');
+    assert.ok(['sit', 'sleep'].includes(dv.d.mode), dv.d.mode);
+});
+
+test('хват: подошёл — схватил, поднял, держит, хохочет и раздавил (щит не спасает); шаг в сторону — промах; «Инспириус» во время хвата — роняет', async () => {
+    const { MOVES, GRAB, grabPhase } = await import('../../src/game/DiabolosRules.js');
+    assert.deepEqual(['wind', 'lift', 'hold', 'laugh', 'crush'].map((p, i) => grabPhase([0.5, 2.5, 5, 8, 9.6][i])), ['wind', 'lift', 'hold', 'laugh', 'crush']);
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const run = (dv, sec) => { for (let i = 0; i < sec * 30; i++) dv.update(1 / 30); };
+    const setup = () => {
+        const me = new THREE.Vector3(0, 1.95, 200);
+        const F = fakeGame(me);
+        let died = null, shieldAsked = 0;
+        F.g.combat.die = (by, how) => { died = how; F.g.combat.dead = true; };
+        F.g.combat.breakShield = () => { shieldAsked++; return 'maxima'; };
+        const dv = new Diabolos(F.g); F.g.diabolos = dv;
+        dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+        dv.update(0.016); dv.disturb('me', 'тест'); run(dv, 9);
+        const d = dv.d; d.act = null; d.stunT = 0; d.mode = 'walk';
+        return { me, dv, d, F, get died() { return died; }, get shields() { return shieldAsked; } };
+    };
+    // 1) стоит у кисти — смерть
+    let T = setup();
+    T.dv.update(0.016);
+    const fist = () => { T.dv.model.updateMatrixWorld(true); return T.dv.model.userData.bones; };
+    fist();
+    T.dv._startMove(T.d, 'grab', { id: 'me', p: T.me, feet: 0 }); T.d.move.side = 'R';
+    // стоим там, где кисть будет в миг хвата
+    for (let i = 0; i < 30 * MOVES.grab.hit - 2; i++) { const { fistWorld } = await import('../../src/entities/DiabolosModel.js'); T.dv.model.updateMatrixWorld(true); const f = fistWorld(T.dv.model, 'R', new THREE.Vector3()); T.me.set(f.x, 1.95, f.z); T.dv.update(1 / 30); }
+    run(T.dv, 1);
+    assert.ok(T.dv.holding, 'схвачен');
+    run(T.dv, MOVES.grab.crush);
+    assert.equal(T.died, 'devilCrush', 'раздавлен');
+    assert.equal(T.shields, 0, 'щит даже не спрашивают — не спасает');
+    // 2) отошёл во время замаха — промах
+    T = setup();
+    T.dv._startMove(T.d, 'grab', { id: 'me', p: T.me, feet: 0 }); T.d.move.side = 'R';
+    T.me.set(200, 1.95, 200);
+    run(T.dv, 3);
+    assert.equal(T.dv.holding, false, 'промах');
+    // 3) «Инспириус», пока держит — роняет
+    T = setup();
+    T.dv._grabMe('R', 7);
+    run(T.dv, 1);
+    assert.ok(T.dv.holding);
+    T.dv.hit(T.d, 50, 'Inspirius', 'p2');
+    assert.equal(T.dv.holding, false, 'выронил');
+    assert.equal(T.died, null);
+    assert.ok(T.F.g.combat.hp < 100, 'урон от падения');
+});
+
+test('божественный меч: пронзил (в руке или залпом) → 20 с смерти → мёртв навсегда, сундуки из пепла, ачивка; обычный меч не убивает', async () => {
+    const { DEATH, deathPhase } = await import('../../src/game/DiabolosRules.js');
+    assert.equal(deathPhase(0.5), 'shock'); assert.equal(deathPhase(3), 'agony'); assert.equal(deathPhase(8), 'fall'); assert.equal(deathPhase(15), 'ash');
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    for (const via of ['hand', 'swarm']) {
+        const me = new THREE.Vector3(0, 1.95, 60);
+        const F = fakeGame(me); F.g.chests = [];
+        const dv = new Diabolos(F.g); F.g.diabolos = dv;
+        dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+        dv.update(0.016);
+        // обычный клинок — только злит
+        dv.hit(dv.d, 50, 'melee', 'me');
+        assert.ok(!dv.dead && !dv.d.dying);
+        // лезвие касается тела
+        const p = dv.bladeHit(new THREE.Vector3(-40, 50, 0), new THREE.Vector3(0, 50, 0));
+        assert.ok(p, 'лезвие у тела');
+        assert.equal(dv.bladeHit(new THREE.Vector3(500, 5, 500), new THREE.Vector3(501, 5, 500)), null);
+        dv.pierce(p, 'me', { via });
+        assert.ok(dv.d.dying, 'умирает');
+        assert.equal(dv.targets().length, 0, 'больше не цель');
+        for (let i = 0; i < 30 * (DEATH.T + 1); i++) dv.update(1 / 30);
+        assert.ok(dv.dead, 'мёртв');
+        assert.equal(F.g.combat.hp, 100, 'тот, кто держал меч, не гибнет и не ранен');
+        assert.equal(F.g.chests.filter((c) => c.room === 'diabolos').length, DEATH.CHESTS, 'сундуки босса');
+        assert.ok(F.gained.includes(DEATH.ACH), 'ачивка «Победитель Дьяволоса»');
+        assert.deepEqual(dv.snapshot(), { woke: true, dead: true });
+        // загрузка: мёртв навсегда — котловина пуста
+        const F2 = fakeGame(new THREE.Vector3(0, 1.95, 60)); F2.g.chests = [];
+        const dv2 = new Diabolos(F2.g); F2.g.diabolos = dv2; dv2.restore(dv.snapshot());
+        dv2.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+        dv2.update(0.016);
+        assert.equal(dv2.d, null); assert.equal(dv2.targets().length, 0);
+        assert.equal(F2.g.chests.length, DEATH.CHESTS, 'сундуки на месте');
+    }
 });

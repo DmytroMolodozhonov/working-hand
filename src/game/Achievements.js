@@ -62,6 +62,7 @@ export const ACHIEVEMENTS = [
     { id: 'ghostCastle', boss: false, mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
     { id: 'hellGate', boss: false, mana: 100, icon: '🔥', title: 'Врата ада', desc: 'Открыть пентаграмму ада и спуститься в ад' }, // (HellGate.js: the first passage)
     // (Дьяволос бессмертен — убить нельзя; ачивка за то, что разбудил: `extra` — для «Высшего мага» не нужна; Diabolos.js)
+    { id: 'devilSlayer', mana: 500, icon: '⚔️', title: 'Победитель Дьяволоса', desc: 'Уничтожить Дьяволоса — то, что не под силу ни одному заклинанию' }, // (Diabolos.pierce: только божественный меч)
     { id: 'devilWoke', boss: false, extra: true, mana: 100, icon: '😈', title: 'Разбудил дьявола', desc: 'Потревожить огромного прикованного дьявола в аду так, чтобы он проснулся' },
 ];
 /** Tarons killed for «Охотник на Таронов» (TaronRules.TARON.ACHIEVEMENT.kills). */
