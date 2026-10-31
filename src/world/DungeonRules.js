@@ -17,6 +17,7 @@
 export const DUNGEON = {
     CELL: 240, // m: at most one dungeon per cell
     CHANCE: 0.32, // a cell holds one this often (a third of them fail on water, steep land or another site's: about one dungeon to two castles)
+    GROUND_BOOST: 1.3, // the ruins on the ground are this many times likelier than CHANCE (the author found none: +30 %; the cells that had one keep it — only the draw's threshold grows)
     UNDER_SHARE: 0.42, // …and this share of them is under the ground
     MIN_SPAWN: 200, // m: never nearer the world's start
     MARGIN: 5, // m between a dungeon and its cell's edge (a dungeon never leaves its cell)

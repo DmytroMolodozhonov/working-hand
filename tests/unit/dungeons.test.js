@@ -184,3 +184,35 @@ test('the dungeon index: landAt gives the levelled ground only where a dungeon\'
     const lists = t.sites.partsForChunk(Math.floor(ruin.x / 16), Math.floor(ruin.z / 16), 16);
     assert.ok(lists.some((l) => l.length));
 });
+
+test('the ruins on the ground are found: with the Creative recipe a ruin lies within 1.5 km of the start in most worlds; the boost only adds ruins, the halls under the ground stay where they were', () => {
+    const full = { mountains: true, seas: true, lush: true, deepCaves: true, slopes: true, wizHuts: true, furnish: true, dungeons: true, bigHouses: true, buildings: true, apart: true, arenaX2: true, iceArena: true, knightCap: true, queenMap: true, caveLake: true, testGround: true };
+    let near = 0, worlds = 0;
+    const was = DUNGEON.GROUND_BOOST;
+    for (const seed of [1, 7, 21, 42, 99, 123, 555, 2026]) {
+        const t = new TerrainData(); t.generate({ seed, ...full });
+        const D = t.dungeons, ground = [], under = [];
+        for (let gz = -8; gz <= 8; gz++) for (let gx = -8; gx <= 8; gx++) { const s = D.cellOf(gx, gz); if (s) (s.under ? under : ground).push(s.id); }
+        worlds++;
+        const r = (() => { let b = Infinity; for (const id of ground) { const s = D.byId(id); b = Math.min(b, Math.hypot(s.x, s.z)); } return b; })();
+        if (r < 1500) near++;
+        // the same world with no boost: every old ruin and every hall under the ground is still there
+        DUNGEON.GROUND_BOOST = 1;
+        const t0 = new TerrainData(); t0.generate({ seed, ...full });
+        const ground0 = [], under0 = [];
+        for (let gz = -8; gz <= 8; gz++) for (let gx = -8; gx <= 8; gx++) { const s = t0.dungeons.cellOf(gx, gz); if (s) (s.under ? under0 : ground0).push(s.id); }
+        DUNGEON.GROUND_BOOST = was;
+        assert.deepEqual(under, under0);
+        for (const id of ground0) assert.ok(ground.includes(id), id);
+    }
+    assert.ok(near >= worlds - 1, `ruins within 1.5 km in ${near} of ${worlds} worlds`);
+});
+
+test('nearestRuin: a ruin on the ground among the known cells (never an underground hall), nothing when none is known', () => {
+    const t = new TerrainData(); t.generate({ seed: 7, mountains: true, seas: true, lush: true, deepCaves: true, slopes: true, dungeons: true });
+    const D = t.dungeons;
+    assert.equal(new DungeonIndex(1, () => 5, () => false).nearestRuin(0, 0), null);
+    for (let gz = -6; gz <= 6; gz++) for (let gx = -6; gx <= 6; gx++) D.cellOf(gx, gz);
+    const r = D.nearestRuin(0, 0);
+    assert.ok(r && !r.site.under && r.d > 0);
+});

@@ -150,6 +150,7 @@ import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
 import { HELL_FROM_GEN } from '../world/HellMap.js';
+import { allLog } from '../core/AllLog.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
@@ -1444,6 +1445,20 @@ export class Game {
         }
     }
 
+    /** The journal only («Мир»): the nearest ruin on the ground among those the workers have told about; written when it changes (the author's «найди развалину»). */
+    _ruinLog(t, p, dt) {
+        this._ruinT = (this._ruinT || 0) - dt;
+        if (this._ruinT > 0 || !t.dungeons) return;
+        this._ruinT = 10;
+        const r = t.dungeons.nearestRuin(p.x, p.z);
+        if (!r) return;
+        if (this._ruinId === r.site.id && Math.abs(r.d - (this._ruinD || 0)) < 150) return;
+        this._ruinId = r.site.id; this._ruinD = r.d;
+        const a = Math.atan2(r.dx, -r.dz) * 180 / Math.PI; // (0° = north, −z)
+        const dir = ['север', 'северо-восток', 'восток', 'юго-восток', 'юг', 'юго-запад', 'запад', 'северо-запад'][Math.round(((a % 360) + 360) % 360 / 45) % 8];
+        allLog('Мир', `Ближайшая развалина: ${r.site.name}, ${Math.round(r.d)} м, ${dir} (${r.site.x}, ${r.site.z})`);
+    }
+
     /**
      * Caves: a chest in every cave chamber (and sleeping zombies in the dark,
      * in «Свободный мир»); the light fades inside.
@@ -1452,6 +1467,7 @@ export class Game {
         const t = this.terrain?.data;
         if (!t || !t.cavesNear || this.config.map || this.config.mode === 'test') return;
         const p = this.character.group.position;
+        this._ruinLog(t, p, dt);
         this._caveT = (this._caveT || 0) - dt;
         if (this._caveT <= 0) {
             this._caveT = 1;

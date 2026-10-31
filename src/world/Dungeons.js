@@ -96,22 +96,25 @@ export class DungeonIndex {
         const m = zone + DUNGEON.BLEND + 2, step = zone > 20 ? 9 : 5;
         for (let dz = -m; dz <= m; dz += step) for (let dx = -m; dx <= m; dx += step) {
             const h = raw(X + dx, Z + dz);
-            if (raw.water || raw.sea) return null;
-            if (h > 52 || h < 1) return null;
+            if (raw.water || raw.sea) { this._why = 'water'; return null; }
+            if (h > 52 || h < 1) { this._why = 'height'; return null; }
             hs.push(h);
         }
         hs.sort((a, b) => a - b);
-        if (hs[Math.floor(hs.length * 0.92)] - hs[Math.floor(hs.length * 0.08)] > spread + 2) return null;
+        if (hs[Math.floor(hs.length * 0.92)] - hs[Math.floor(hs.length * 0.08)] > spread + 2) { this._why = 'steep'; return null; }
         return Math.max(1, Math.round(hs[hs.length >> 1]));
     }
+
+    /** Optional bench counter (`index.stats = {}`): why the spots of the ground ruins fail. Off in the game. */
+    _count(why) { if (this.stats) this.stats[why] = (this.stats[why] || 0) + 1; }
 
     _decide(gx, gz) {
         const C = DUNGEON.CELL;
         if (offEarth((gx + 1) * C)) return null;
         const rng = createRng((Math.imul(this.seed, 2654435761) ^ Math.imul(gx, 40503) ^ Math.imul(gz, 92821) ^ 0x6d19e) >>> 0);
         rng(); // (the first draw of a fresh generator is the least mixed)
-        if (rng() > DUNGEON.CHANCE) return null;
-        const under = rng() < DUNGEON.UNDER_SHARE;
+        const chance = rng(), under = rng() < DUNGEON.UNDER_SHARE;
+        if (chance > DUNGEON.CHANCE * (under ? 1 : DUNGEON.GROUND_BOOST)) return null; // (same draws in the same order: the old dungeons stay where they were, the ruins only get more)
         const kindId = pickKind(under, rng(), rng());
         const K = KINDS[kindId];
         const seed = Math.floor(rng() * 1e9);
@@ -122,10 +125,10 @@ export class DungeonIndex {
             if (!under) {
                 const m = K.zone + DUNGEON.BLEND + DUNGEON.MARGIN, span = C - 2 * m;
                 const X = Math.round(x0 + m + rng() * span), Z = Math.round(z0 + m + rng() * span), rot = Math.floor(rng() * 4);
-                if (Math.hypot(X, Z) < DUNGEON.MIN_SPAWN + K.zone) continue;
-                if (this.busy(X, Z, K.zone + DUNGEON.BLEND + 4)) continue;
+                if (Math.hypot(X, Z) < DUNGEON.MIN_SPAWN + K.zone) { this._count('spawn'); continue; }
+                if (this.busy(X, Z, K.zone + DUNGEON.BLEND + 4)) { this._count('busy'); continue; }
                 const F = this._ground(X, Z, K.zone, K.spread);
-                if (F == null) continue;
+                if (F == null) { this._count(this._why); continue; }
                 const R = K.zone + DUNGEON.BLEND;
                 return new DungeonSite({
                     id: 'dg' + gx + '_' + gz, gx, gz, type: kindId, under: false, magic: K.magic, size: K.size, name: K.name, seed, want,
@@ -175,6 +178,20 @@ export class DungeonIndex {
             if (s && x + r >= s.x0 && x - r <= s.x1 && z + r >= s.z0 && z - r <= s.z1) out.push(s);
         }
         return out;
+    }
+
+    /**
+     * The nearest ruin ON THE GROUND among the cells already known (never decides a cell: cheap, safe in the frame) — for the journal.
+     * @returns {{site: DungeonSite, d: number, dx: number, dz: number}|null}
+     */
+    nearestRuin(x, z) {
+        let best = null;
+        for (const s of this.cells.values()) {
+            if (!s || s.under) continue;
+            const d = Math.hypot(s.x - x, s.z - z);
+            if (!best || d < best.d) best = { site: s, d, dx: s.x - x, dz: s.z - z };
+        }
+        return best;
     }
 
     /** The dungeon of an id «dg<gx>_<gz>» (or null). */
