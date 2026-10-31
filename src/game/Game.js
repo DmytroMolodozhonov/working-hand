@@ -3426,7 +3426,7 @@ export class Game {
         const out = [];
         for (let m = 0; m < 10; m++) out.push({ ...rollWand(), model: m }); // (every shape of wand; a new wood's colour is made in play)
         out.push({ kind: 'wand', plain: true, model: 0, color: 0x8b5a2b }, { kind: 'weapon', type: 'sword' }, { kind: 'weapon', type: 'axe' }, spellScroll('Bombardo'));
-        for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'taronAxe', 'taronIron', 'redStone', 'bone']) out.push({ kind });
+        for (const kind of ['apple', 'redApple', 'baksadi_pear', 'glowcap_mushroom', 'fern_frond', 'azure_berry', 'sun_herb', 'frost_shard', 'meat', 'steak', 'coins', 'bread', 'cheese', 'pie', 'wool', 'logs', 'crystal', 'flask', 'cannonball', 'arrows', 'web', 'glass', 'backpack', 'bow', 'shield', 'hammer', 'book', 'potion', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'magicPebble', 'gargoyleHead', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'canaryHide', 'taronAxe', 'taronIron', 'redStone', 'bone']) out.push({ kind });
         out.push({ kind: 'coins', magic: true }, { kind: 'armor', piece: 'helmet' }, { kind: 'armor', piece: 'chest' }, { kind: 'robe', magic: true });
         for (const s of this.inventory?.slots || []) if (s) out.push(s);
         for (const sd of ['left', 'right']) { const h = this.items?.held[sd]; if (h) out.push(h.item); }
@@ -3562,6 +3562,7 @@ export class Game {
         for (const m of this.boom?.sampleModels?.() || []) zoo.add(m); // («Бум»: its flying rocks, its shock ring)
         for (const m of this.ultra?.sampleModels?.() || []) zoo.add(m); // («Ультра качество»: the soft lawn)
         if (this.world.terrain?.flora) zoo.add(this.world.terrain.flora.sampleModel()); // (the meadows' tall grass and flowers)
+        for (const m of this.hellRealm?.sampleModels?.() || []) zoo.add(m); // (hell's sky dome — HellRealm.js)
         for (const m of this.pentagranium?.sampleModels?.() || []) zoo.add(m); // («Пентаграниум»: the trail's ribbons, the figure's and the glow's shaders)
         for (const m of this.groundVortex?.sampleModels?.() || []) zoo.add(m); // (the blocks of «Ground Vortex»)
         for (const m of this.groundprud?.sampleModels?.() || []) zoo.add(m); // (the earth of «Groundprud» rising out of the ground)

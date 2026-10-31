@@ -25,6 +25,8 @@ import * as THREE from 'three';
 import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
 import { addDark } from './DarkMagic.js';
+import { headDrops, HEAD } from './HellRules.js';
+import { newUid } from './ItemTypes.js';
 import { realmAt } from '../world/Planets.js';
 import { underworldFactor } from './HellGargoyleRules.js';
 import { RitualFx } from './GargoyleRitual.js';
@@ -409,7 +411,7 @@ export class Gargoyles {
         if (k >= 1) { // ash
             gargoyleCenter(o, _v3);
             this._shatter(_v3, o.scale, false);
-            this._die(o, b.by, true);
+            this._die(o, b.by, true, 'sun'); // (burnt in the sun's beam: nothing is left of it — no head)
         }
     }
 
@@ -677,7 +679,7 @@ export class Gargoyles {
     }
 
     /** It is killed: shatters into stone and embers (the divine spells too). */
-    _die(o, by, shatter = true) {
+    _die(o, by, shatter = true, how = 'kill') {
         if (o.dead) return;
         if (o.carry) this._dropVictim(o, 'killed');
         o.dead = true;
@@ -690,6 +692,7 @@ export class Gargoyles {
         if (this.auth) {
             this._send({ op: 'die', id: o.id, p: [r1(p.x), r1(p.y), r1(p.z)], s: shatter ? 1 : 0 });
             creditKill(g, by, { kind: KILL_KIND });
+            if (headDrops(how)) g.items?.spawnLoose?.({ kind: HEAD.KIND, uid: newUid() }, p.clone(), { vel: new THREE.Vector3((Math.random() - 0.5) * 3, 2.5, (Math.random() - 0.5) * 3) }); // (25 %: the head falls whole — the way back from hell, HellRules.HEAD)
             if (by != null) g.castleLife?.rel?.foeSlain(p, by); // (the people saw the stone monster fall: grateful, and the unrest of the place eases — Rebellion.js)
         }
         this._sound(o, shatter ? 'shatter' : 'crumble', 1);

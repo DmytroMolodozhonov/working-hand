@@ -854,6 +854,9 @@ export class SoundManager {
     /** «Да пусть создастся»: the gods think — their soft choir, as loud as `k` (0…1: near the place; 0 — silent). */
     creationHum(k) { if (this.context && this.loaded) this._loop('creation', this.enabled && k > 0.01 ? 'loopGenesisEpic' : null, 1.8 * Math.min(1, k)); } // («Да пусть создастся»: its epic tune, louder as the creation goes — DivineCreation)
 
+    /** Hell around the hero (HellRealm.js): its hot wind and the lava's rumble, as loud as `k` (0…1; 0 — silent). */
+    hellHum(k) { if (this.context && this.loaded) this._loop('hell', this.enabled && k > 0.01 ? 'loopHell' : null, 0.8 * Math.min(1, k)); }
+
     /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
     _loop(slot, key, k, rate = 1) {
         const loops = this._loops || (this._loops = {});

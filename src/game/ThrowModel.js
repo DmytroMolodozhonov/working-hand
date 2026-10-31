@@ -118,6 +118,7 @@ export const ITEM_PHYS = {
     crystal: { shape: 'round', e: 0.45, mu: 0.3, roll: 0.12, float: false, len: 0.4 },
     dragonEgg: { shape: 'round', e: 0.25, mu: 0.4, roll: 0.05, float: false, len: 0.7 },
     brightCore: { shape: 'round', e: 0.4, mu: 0.3, roll: 0.08, float: false, len: 0.3 },
+    gargoyleHead: { shape: 'round', e: 0.15, mu: 0.7, roll: 0.05, float: false, len: 1.2 }, // (heavy stone: hardly bounces, sinks)
     magicPebble: { shape: 'round', e: 0.5, mu: 0.45, roll: 0.15, float: false, len: 0.2 },
     flask: { shape: 'round', e: 0.3, mu: 0.3, roll: 0.07, float: true, len: 0.45 },
     potion: { shape: 'round', e: 0.3, mu: 0.3, roll: 0.07, float: true, len: 0.45 },

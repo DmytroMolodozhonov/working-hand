@@ -61,6 +61,9 @@ if (uBoomK.y > 0.0) {
     }
 }`;
 
+/** Hell (HellRealm.js): the time that moves the lava (s) — one number for the whole land; 0 elsewhere (the shader is the same program). */
+export const HELL_TIME = { t: { value: 0 } };
+
 export const WARD_HIDE = {
     s: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
     g: { value: new Array(8).fill(0) },
@@ -125,6 +128,7 @@ export function applyVoxelDetail(material) {
         shader.uniforms.uWardN = WARD_HIDE.n;
         shader.uniforms.uBoomC = BOOM_SWELL.c;
         shader.uniforms.uBoomK = BOOM_SWELL.k;
+        shader.uniforms.uHellT = HELL_TIME.t;
         shader.vertexShader = shader.vertexShader
             .replace('#include <common>', '#include <common>\nvarying vec3 vVoxPos;\nvarying vec3 vVoxNormal;\nattribute float voxPat;\nvarying float vVoxPat;\nattribute float voxSky;\nvarying float vVoxSky;\n' + BOOM_PARS)
             .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BOOM_LIFT + '\nvVoxPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvVoxNormal = normalize(mat3(modelMatrix) * normal);\nvVoxPat = voxPat;\nvVoxSky = voxSky;');
@@ -142,6 +146,9 @@ export function applyVoxelDetail(material) {
             .replace('#include <common>', `#include <common>
 ${BOOM_PARS}
 uniform float uSkyComp;
+uniform float uHellT;
+float hellE = 0.0; // (hell's glowing blocks: how much and what colour they shine — set by the pattern, read by the emissive part)
+vec3 hellC = vec3(0.0);
 varying float vVoxSky;
 varying vec3 vVoxPos;
 varying vec3 vVoxNormal;
@@ -331,6 +338,82 @@ float snowflakeAt(vec2 uv) {
         // runes: a faint glowing circle cut into dark stone
         float ring = 1.0 - smoothstep(0.02, 0.04, abs(length(f - 0.5) - 0.32));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.75, 1.0), ring * 0.7);
+    } else if (pat >= 23.0 && pat < 31.0) {
+        // HELL (HellLand.js): the patterns of its stone, the lava and the bone
+        if (pat == 23.0) {
+            // black columnar basalt: on top the polygon tops of the columns, on the sides tall columns with cross-fractures; ash in the joints
+            if (n.y > 0.5) {
+                float e = cobbleEdge(uv * 0.85, layerId + 31.0);
+                float tone = vhash(vec3(floor(uv * 0.85), layerId + 3.0));
+                diffuseColor.rgb *= (0.82 + 0.3 * tone) * (0.55 + 0.45 * smoothstep(0.02, 0.09, e));
+            } else {
+                float cx = uv.x * 1.6 + 0.35 * vnoise(vec2(uv.x * 0.7, layerId * 0.37));
+                float col = fract(cx), id = floor(cx);
+                float joint = smoothstep(0.0, 0.06, col) * smoothstep(1.0, 0.94, col);
+                float frac = 1.0 - (1.0 - smoothstep(0.0, 0.04, abs(fract(q.y * 0.5 + vhash(vec3(id, 2.0, 9.0))) - 0.5) - 0.46)) * 0.6;
+                diffuseColor.rgb *= (0.78 + 0.34 * vhash(vec3(id, layerId * 0.1, 4.0))) * (0.5 + 0.5 * joint) * frac;
+                diffuseColor.rgb += vec3(0.05, 0.012, 0.0) * (1.0 - smoothstep(0.0, 2.0, fract(q.y / 9.0) * 9.0)); // (warm light from below on the foot of a cliff)
+            }
+            if (r > 0.992) diffuseColor.rgb += vec3(0.08, 0.02, 0.0) * kFine; // (a glint of glassy grain)
+        } else if (pat == 24.0) {
+            // obsidian: glassy black with violet depth, conchoidal ripples and a cold sheen, sharp light edges of its fractures
+            float rip = sin((uv.x * 0.9 - uv.y * 1.4) * 7.0 + vnoise(uv * 1.3 + layerId) * 6.0);
+            diffuseColor.rgb *= 0.75 + 0.18 * rip;
+            diffuseColor.rgb += vec3(0.05, 0.025, 0.09) * smoothstep(0.6, 1.0, rip);
+            float ed = abs(fract((uv.x + 0.37 * uv.y) * 0.6 + vhash(vec3(cell, layerId + 2.0))) - 0.5);
+            if (ed < 0.012) diffuseColor.rgb += vec3(0.16, 0.12, 0.2) * kFine;
+        } else if (pat == 25.0) {
+            // red-hot rock: a dark cooled crust broken into plates, molten light in every crack, a breathing glow
+            float e = cobbleEdge(uv * 1.4, layerId + 17.0);
+            float crack = 1.0 - smoothstep(0.015, 0.11, e);
+            float pulse = 0.75 + 0.25 * sin(uHellT * 1.7 + vnoise(uv * 0.4) * 9.0);
+            vec3 hot = mix(vec3(1.0, 0.32, 0.04), vec3(1.0, 0.75, 0.25), crack * crack);
+            diffuseColor.rgb = mix(diffuseColor.rgb * (0.7 + 0.5 * vhash(vec3(floor(uv * 1.4), layerId))), hot, crack * 0.9);
+            hellE = crack * pulse * 1.3 + 0.08; hellC = hot;
+        } else if (pat == 26.0) {
+            // ash: soft grey drifts, fine speckles, now and then a tiny ember
+            float drift = vnoise(uv * vec2(0.6, 1.8) + layerId) * 0.6 + vnoise(uv * 3.1) * 0.4;
+            diffuseColor.rgb *= 0.86 + 0.24 * drift;
+            if (r > 0.995) { diffuseColor.rgb = vec3(1.0, 0.45, 0.1); hellE = 0.9 * kFine; hellC = vec3(1.0, 0.4, 0.08); }
+        } else if (pat == 27.0) {
+            // LAVA: molten rock flowing — bright yellow-orange veins between drifting dark skins on top; on the falls' sides it pours down in streaks
+            vec2 lp = n.y > 0.5 ? q.xz * 0.22 : vec2(uv.x * 0.5, q.y * 0.12 + uHellT * 0.55);
+            vec2 fl = n.y > 0.5 ? vec2(uHellT * 0.045, uHellT * 0.03) : vec2(0.0);
+            float a = vnoise(lp + fl) * 0.6 + vnoise(lp * 2.7 - fl * 1.7 + 3.0) * 0.4;
+            float b = vnoise(lp * 6.3 + fl * 3.0 + 11.0);
+            float skin = smoothstep(0.46, 0.66, a) * (n.y > 0.5 ? 1.0 : 0.4); // (the cooler crust)
+            float vein = 1.0 - smoothstep(0.0, 0.12, abs(a - 0.5));
+            vec3 hot = mix(vec3(0.85, 0.2, 0.02), vec3(1.0, 0.72, 0.26), vein * 0.75 + b * 0.2);
+            if (n.y < 0.5) hot = mix(hot, vec3(1.0, 0.95, 0.6), smoothstep(0.75, 1.0, b)); // (the pour: white-hot streaks)
+            diffuseColor.rgb = mix(hot, vec3(0.16, 0.05, 0.03), skin * 0.85);
+            hellE = (1.0 - skin * 0.85) * (0.95 + 0.15 * sin(uHellT * 2.3 + a * 12.0)); hellC = hot;
+        } else if (pat == 28.0) {
+            // the titans' bone: old ivory, long fibres, porous pits, dark cracks, soot from below
+            float fib = vnoise(vec2(uv.x * 9.0, uv.y * 0.8) + layerId) * 0.5 + 0.5 * vnoise(uv * 2.0);
+            diffuseColor.rgb *= 0.8 + 0.28 * fib;
+            if (vhash(vec3(floor(uv * 5.0), layerId + 8.0)) > 0.9) diffuseColor.rgb *= 0.6 + 0.4 * kFine * 0.0 + 0.4 * (1.0 - kFine); // (pits)
+            float ck = abs(fract(uv.x * 0.7 + uv.y * 0.3 + vhash(vec3(cell, 1.0)) * 2.0) - 0.5);
+            if (ck < 0.015) diffuseColor.rgb *= 0.55;
+            diffuseColor.rgb *= 0.85 + 0.15 * smoothstep(0.0, 1.0, fract(q.y * 0.25));
+        } else if (pat == 29.0) {
+            // black dressed stone (roads, bridges, the pillar): big blocks, worn edges, a dull red heat in the joints
+            vec2 s = n.y > 0.5 ? uv * vec2(0.9, 0.6) : uv * vec2(0.9, 2.0);
+            s.x += mod(floor(s.y), 2.0) * 0.5;
+            vec2 g = fract(s), id = floor(s);
+            float m = min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y));
+            float tone = vhash(vec3(id, layerId + 6.0));
+            diffuseColor.rgb *= (0.78 + 0.35 * tone) * (0.9 + 0.1 * vnoise(uv * 4.0));
+            if (m < 0.035) { diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.07, 0.055, 0.05), 0.8); if (vhash(vec3(id, layerId + 13.0)) > 0.86) { hellE = 0.18 * (1.0 - smoothstep(0.0, 0.035, m)); hellC = vec3(0.9, 0.2, 0.04); } } // (ash in the joints; here and there a seam still smoulders)
+            if (n.y > 0.5 && m > 0.04 && m < 0.08) diffuseColor.rgb *= 1.12; // (the worn rims)
+        } else {
+            // forged iron: dark, hammered, rivets every half metre, blue-violet heat tint and rust
+            vec2 g = fract(uv * 2.0);
+            float riv = 1.0 - smoothstep(0.08, 0.14, length(g - 0.5));
+            float ham = vnoise(uv * 6.0 + layerId) * 0.5 + vnoise(uv * 15.0) * 0.5;
+            diffuseColor.rgb *= 0.7 + 0.35 * ham + 0.3 * riv;
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.16, 0.08), 0.35 * smoothstep(0.55, 0.85, vnoise(uv * 1.2 + 5.0)));
+            diffuseColor.rgb += vec3(0.04, 0.03, 0.08) * smoothstep(0.4, 1.0, vnoise(uv * 0.8));
+        }
     } else if (pat >= 18.0 && pat < 23.0) {
         // the Castle of Ghosts: black stone with a faint chill of violet in it, see-through by 15 % (the dither below)
         if (pat == 18.0) {
@@ -394,6 +477,7 @@ float snowflakeAt(vec2 uv) {
 {
     float vp = floor(vVoxPat + 0.5);
     if (vp == 11.0 || vp == 12.0) totalEmissiveRadiance += diffuseColor.rgb * 0.9; // lanterns and crystal lamps glow at night
+    else if (vp >= 22.5 && vp < 30.5) totalEmissiveRadiance += hellC * hellE; // hell: the lava, the red-hot cracks, the embers in the ash and the joints
     else if (vp >= 17.5 && vp < 21.5) totalEmissiveRadiance += vec3(0.032, 0.03, 0.058) + diffuseColor.rgb * 0.1; // the Castle of Ghosts: a cold glimmer from within, so its black stone is never quite lost in the dark
     else if (vp >= 21.5 && vp < 22.5) totalEmissiveRadiance += diffuseColor.rgb * 1.1; // candle-glow and mirror panels shine pale
     else if (vp == 15.0) totalEmissiveRadiance += diffuseColor.rgb * 0.16; // glacier ice glows from within

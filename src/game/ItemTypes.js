@@ -32,6 +32,7 @@ import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.j
 import { brightCoreModel } from '../fx/BrightFlowerModel.js';
 import { canaryHideModel, boneModel, magicPebbleModel } from '../fx/CanaryModel.js';
 import { taronAxeItemModel, taronIronModel, redStoneModel } from '../fx/TaronModel.js';
+import { gargoyleHeadModel } from '../fx/GargoyleHeadModel.js';
 import { spencerFeatherItem, beslanBundleItem } from '../fx/InvisibleModels.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
@@ -182,6 +183,7 @@ export const ITEM_INFO = {
     taronAxe: { name: 'Топор-молот Тарона', icon: '🪓', weight: 8 }, // (a huge two-handed axe-hammer: heavy, slow, a trophy)
     taronIron: { name: 'Тароново железо', icon: '⛓️', weight: 1.2, stack: 10 },
     redStone: { name: 'Красный камень', icon: '🔴', weight: 0.4, stack: 10 },
+    gargoyleHead: { name: 'Голова горгульи', icon: '🗿', weight: 6 }, // (the key back out of hell: laid on the mark there — HellRules.HEAD; 25 % from a killed gargoyle)
     magicPebble: { name: 'Волшебный камушек', icon: '🔮', weight: 0.15, stack: 10 }, // (a canary's rare find: the price of the pentagram of absolute steadiness — FirmRules.js)
     // the invisible world (Invisibles.js, SecondSight.js): only a hero who sees the invisible sees them lying on the ground
     spencerFeather: { name: 'Перо птички Спенсера', icon: '🪶', weight: 0.03, stack: 10, ghost: true },
@@ -252,6 +254,7 @@ function baseValue(it) {
         case 'taronAxe': return 260;
         case 'taronIron': return 30 * (it.count || 1);
         case 'redStone': return 45 * (it.count || 1);
+        case 'gargoyleHead': return 600; // (a rare curiosity: the only way back from hell)
         case 'magicPebble': return 150 * (it.count || 1);
         case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
@@ -868,6 +871,7 @@ function describeItemBase(it) {
         case 'spencerFeather': return { title: '🪶 Перо птички Спенсера', color: 0xff7ab8, lines: [`Перьев: <b>${it.count || 1}</b>`, 'Светящееся розовое перо невидимой птички. Видно его только тому, кто видит невидимое', 'Чтобы получить это зрение навсегда, положите перо в инвентарь (или в круг) и встаньте в круг «Pentagranium Spectris» — перо сгорит'] };
         case 'beslanGrass': return { title: '🌾 Трава Беслана', color: 0x7ff2e0, lines: [`Пучков: <b>${it.count || 1}</b>`, 'Сияющая трава невидимого мира. Видна только тем, кто видит невидимое', 'Заменяет перо птички Спенсера в пентаграмме видения невидимых'] };
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
+        case 'gargoyleHead': return { title: '🗿 Голова горгульи', color: 0xff6a2a, lines: ['Отбитая каменная голова горгульи: в глазницах ещё тлеет огонь', 'Если вы окажетесь в аду, положите её на метку, через которую пришли, — и врата откроются обратно на Землю'] };
         case 'magicPebble': return { title: '🔮 Волшебный камушек', color: 0xf0b25a, lines: [`Камушков: <b>${it.count || 1}</b>`, 'Гладкий тёмный камушек с янтарной руной, тёплый на ощупь. Его носят болотные карлики — канарики', 'Нужен для пентаграммы абсолютной устойчивости («Pentagranium Firmitas»): положите его на круг — при обряде он растворится светом'] };
         case 'taronAxe': return { title: '🪓 Топор-молот Тарона', color: 0xb8523c, lines: ['Огромный двуручный топор: лезвие с одной стороны, молот с другой', 'Очень тяжёлый — с ним не побегаешь. Трофей тех, кто победил Тарона'] };
         case 'taronIron': return { title: '⛓️ Тароново железо', color: 0x7a6a58, lines: [`Кусков: <b>${it.count || 1}</b>`, 'Ржавое тяжёлое железо с доспехов Тарона'] };
@@ -1209,7 +1213,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
+export const ITEM_SCALE = { gargoyleHead: 2, iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1257,6 +1261,7 @@ function buildItemModel(it) {
         case 'taronAxe': return taronAxeItemModel();
         case 'taronIron': return taronIronModel();
         case 'redStone': return redStoneModel();
+        case 'gargoyleHead': return gargoyleHeadModel();
         case 'magicPebble': return magicPebbleModel();
         case 'bone': return boneModel();
         case 'owlFeather': return owlFeatherModel();

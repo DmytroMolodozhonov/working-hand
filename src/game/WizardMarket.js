@@ -24,6 +24,7 @@ import { newUid, itemValue, wandValue, isMagicItem, rollWand, spellScroll, WAND_
 import { makePiece, makeRobe, armorValue, PIECES } from './ArmorTypes.js';
 import { scrollShopPrice } from './WizardShop.js';
 import { createRng } from '../core/math.js';
+import { pentagramScroll } from './PentagramRules.js';
 
 export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычной цены»)
 /** What the pawnshop / the shady buyer pays for a thing. */
@@ -31,7 +32,7 @@ export const ICE_ROD_PAWN = 10000; // (the author: «посох Ледяной �
 export const pawnPrice = (it) => (it && it.kind === 'iceRod' ? ICE_ROD_PAWN : Math.max(1, Math.round(itemValue(it) * PAWN_RATE)));
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
-const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'magicPebble']);
+const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'gargoyleHead', 'magicPebble']);
 export const fenceTakes = (it) => !!it && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
 
 /** The wands: small (power 3–15), middling (16–30); never stronger. Price: 180 + 11 × power. */
@@ -97,6 +98,8 @@ export function wizardGood(trade, k, n = 0) {
             if (x < 0.79) return { item: { kind: 'owlFeather', uid: newUid(), count: 1 }, price: 90 };
             if (x < 0.86) return { item: { kind: 'spencerFeather', uid: newUid(), count: 1 }, price: 240 }; // (rare: the invisible bird's feather — SecondSight.js)
             if (x < 0.92) return { item: { kind: 'magicPebble', uid: newUid(), count: 1 }, price: 320 }; // (rare: a canary's magic pebble — FirmRules.js)
+            if (x < 0.94) return { item: { kind: 'gargoyleHead', uid: newUid() }, price: 1400 }; // (very rare and dear: the way back from hell — HellRules.HEAD)
+            if (x < 0.95) { const it = freshShopScroll(pentagramScroll('infernum', newUid()), r); return { item: it, price: it.kind === 'scroll' ? 2500 : 35 }; } // (the hell's pentagram: very rare and very dear)
             return { item: { kind: 'apple', uid: newUid(), count: 1 }, price: 35 };
         }
         default: return null; // the pawnshop (and an unknown trade): nothing on the counter

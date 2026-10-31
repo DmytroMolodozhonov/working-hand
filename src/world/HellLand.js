@@ -55,9 +55,11 @@ export function generateHellChunk(cx, cz, P, bedrock) {
             if (f.k !== 'fall') continue;
             const cd = Math.cos(f.dir), sd = Math.sin(f.dir), ex = x - f.x, ez = z - f.z;
             const al = ex * cd + ez * sd, ac = -ex * sd + ez * cd, hw = f.w / 2;
-            if (Math.abs(ac) < hw + 1 && al > -16 && al < -1.5 && h >= f.top - 3) { h = f.top - 2; lava = f.top; } // (русло на плато)
-            if (Math.abs(ac) < hw + (f.top - H.LAVA_Y) * 0.012 && al >= -1.5 && al < 2) fallTop = Math.max(fallTop, f.top); // (колонна лавопада)
-            if (Math.abs(ac) < hw + 2.5 && al > -4 && al < -1) fallHot = true;
+            const deep = f.mesa.r * 0.5; // (how far the cleft runs out to the cliff's face and past it)
+            if (Math.abs(ac) < hw + 1 && al > -14 && al < 0 && h >= f.top - 3) { h = f.top - 2; lava = f.top; } // (the lava's channel on the plateau)
+            if (Math.abs(ac) < hw && al >= 0 && al < 3) { fallTop = Math.max(fallTop, f.top); if (h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = 0; } } // (the column of the fall at the back of the cleft)
+            else if (Math.abs(ac) < hw + 1.5 + al * 0.08 && al >= 3 && al < deep && h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = H.LAVA_Y; } // (the cleft: its floor a stream of lava out to the pool)
+            if (Math.abs(ac) < hw + 3 + al * 0.08 && al > -3 && al < deep) fallHot = true; // (the rock round it red-hot)
         }
         const dm = Math.hypot(x - mark.x, z - mark.z);
         const r1 = hash(x, z, seed + 1), r2 = hash(x >> 1, z >> 1, seed + 2);
@@ -68,11 +70,11 @@ export function generateHellChunk(cx, cz, P, bedrock) {
             else if (L === h) {
                 if (lava) t = BLOCK.HELL_EMBER; // (дно лавы раскалено)
                 else if (kind === 'road') t = BLOCK.HELL_BRICK;
-                else if (kind === 'seat') t = dm < H.SPAWN_R + 1 ? (dm > 4.4 && dm < 5.6 ? BLOCK.HELL_OBSIDIAN : BLOCK.HELL_BRICK) : (r2 < 0.08 ? BLOCK.HELL_EMBER : BLOCK.HELL_OBSIDIAN);
+                else if (kind === 'seat') t = dm < H.SPAWN_R + 1 ? (dm > 4.4 && dm < 5.6 ? BLOCK.HELL_OBSIDIAN : BLOCK.HELL_BRICK) : (Math.abs(P.noise2(x / 13, z / 13)) < 0.03 || Math.abs(P.noise(x / 23 + 7, z / 23)) < 0.02 ? BLOCK.HELL_EMBER : BLOCK.HELL_OBSIDIAN); // (the basin's floor: obsidian split by glowing cracks)
                 else if (h <= H.LAVA_Y + 2) t = r1 < 0.7 ? BLOCK.HELL_EMBER : BLOCK.HELL_BASALT;
                 else if (kind === 'ash') t = r1 < 0.06 ? BLOCK.HELL_BASALT : BLOCK.HELL_ASH;
                 else if (kind === 'obs') t = BLOCK.HELL_OBSIDIAN;
-                else t = r1 < 0.12 ? BLOCK.HELL_ASH : BLOCK.HELL_BASALT;
+                else t = r2 < 0.05 ? BLOCK.HELL_ASH : BLOCK.HELL_BASALT;
             } else if (fallHot && L > h - 40) t = BLOCK.HELL_EMBER;
             else if (kind === 'obs' && L > h - 60) t = (L + (x & 3)) % 9 === 0 ? BLOCK.HELL_BASALT : BLOCK.HELL_OBSIDIAN;
             else t = hash(x >> 2, L, (z >> 2) + seed) < 0.05 ? BLOCK.HELL_OBSIDIAN : hash(x, L, z) < 0.012 ? BLOCK.HELL_EMBER : BLOCK.HELL_BASALT; // (жилы обсидиана, тлеющие вкрапления)

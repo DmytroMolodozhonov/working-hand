@@ -42,7 +42,7 @@ export const HELL = {
     BASE: 18, // слой: обычная земля ада
     LAVA_Y: 3, // слой: верх лавы в озёрах и реках
     SEAT_Y: 14, SEAT_R: 90, MOAT_R0: 96, MOAT_R1: 110, WALL_R: 128, WALL_H: 72, WALL_OUT: 230, // тронная котловина: пол, ров лавы, кольцевая стена
-    ANCHOR_R: 5, ANCHOR_H: 22, RING_R: 8, RING_TUBE: 1.4, RING_Y: 9, // столб цепи в середине котловины и кованое кольцо на нём
+    ANCHOR_R: 7, ANCHOR_H: 34, RING_R: 10.5, RING_TUBE: 1.8, RING_Y: 10, // столб цепи в середине котловины и кованое кольцо на нём
     CHAIN_LEN: 70, // м
     SPAWN_D: 1250, SPAWN_Y: 24, SPAWN_R: 28, MARK_R: 3.5, // плато прибытия и метка возврата
     ROAD_W: 5, // м: половина ширины дороги / моста (проход 8,4 м между парапетами)
@@ -120,6 +120,7 @@ function makePlan(seed) {
     const a0 = rng() * TAU;
     const mx = Math.round(CX + Math.cos(a0) * H.SPAWN_D), mz = Math.round(CZ + Math.sin(a0) * H.SPAWN_D);
     const toC = Math.atan2(CZ - mz, CX - mx); // (от метки — к середине)
+    P.toC = toC;
     P.returnMark = { x: mx, z: mz, y: H.SPAWN_Y, r: H.MARK_R };
     const sx = Math.round(mx + Math.cos(toC) * 8), sz = Math.round(mz + Math.sin(toC) * 8);
     P.spawn = { x: sx, z: sz, y: H.SPAWN_Y, yaw: Math.atan2(-(CX - sx), -(CZ - sz)) }; // (yaw как у героя: лицом к середине — −z вперёд)
@@ -184,12 +185,12 @@ function makePlan(seed) {
         return null;
     };
     // --- плато-столовые горы с лавопадами (два — прямо перед глазами прибывшего)
-    const mesa = (x, z, r, h) => {
+    const mesa = (x, z, r, h, face = null) => {
         const m = { x, z, r, h, falls: [] };
-        const nf = 1 + Math.floor(rng() * 2);
+        const nf = face != null ? 2 : 1 + Math.floor(rng() * 2);
         for (let f = 0; f < nf; f++) {
-            const dir = rng() * TAU, w = 3 + Math.floor(rng() * 3);
-            const fx = x + Math.cos(dir) * (r + 1.5), fz = z + Math.sin(dir) * (r + 1.5);
+            const dir = face != null ? face + (f ? 0.45 : -0.25) : rng() * TAU, w = 3 + Math.floor(rng() * 3);
+            const fx = x + Math.cos(dir) * r * 0.72, fz = z + Math.sin(dir) * r * 0.72; // (the back of a cleft cut into the cliff: the fall pours out of the rock, never stands off it)
             const pool = { x: Math.round(x + Math.cos(dir) * (r + 9)), z: Math.round(z + Math.sin(dir) * (r + 9)), r: 10 + w };
             const fall = { x: Math.round(fx), z: Math.round(fz), top: h - 1, bottom: H.LAVA_Y, w, dir, pool, mesa: m };
             m.falls.push(fall);
@@ -199,7 +200,7 @@ function makePlan(seed) {
         P.mesas.push(m);
         return m;
     };
-    for (let k = 0; k < 2; k++) { const r = 34 + Math.round(rng() * 14), h = 62 + Math.round(rng() * 16); place(r * 1.18 + 14, (x, z) => mesa(x, z, r, h), { x: mx, z: mz, a: toC + (k ? 0.7 : -0.7), spread: 0.5, d0: 190 + r, d1: 330 + r }); }
+    for (let k = 0; k < 2; k++) { const r = 34 + Math.round(rng() * 14), h = 62 + Math.round(rng() * 16); place(r * 1.18 + 14, (x, z) => mesa(x, z, r, h, Math.atan2(mz - z, mx - x)), { x: mx, z: mz, a: toC + (k ? 0.75 : -0.75), spread: 0.4, d0: 170 + r, d1: 280 + r }); } // (their falls face the arrival: the first sight of hell)
     for (let k = 0; k < 12; k++) { const r = 30 + Math.round(rng() * 40), h = 50 + Math.round(rng() * 40); place(r * 1.18 + 14, (x, z) => mesa(x, z, r, h)); }
     // --- вулканы: кратер с озером лавы и фонтаном
     for (let k = 0; k < 4; k++) { const cr0 = 80 + Math.round(rng() * 40); place(cr0, (x, z) => {
@@ -371,7 +372,7 @@ export function groundNoRoads(P, x, z) {
     let h = H.BASE + 10 * macro + 26 * ridge * ridge * ridge + 3 * n(x / 47 + 5, z / 47 - 3) + 1.2 * n2(x / 13, z / 13);
     let kind = 'rock', lava = 0;
     // уступы: высокие склоны — ступенями обрывов по 7 м
-    if (h > 28) { const s = h - 28; h = 28 + Math.floor(s / 7) * 7 + (s % 7) * 0.22; }
+    if (h > 30) { const s = h - 30, st = 11; h = 30 + Math.floor(s / st) * st + Math.pow((s % st) / st, 3) * st; } // (high ground: cliffs of rock, then a slope up to the next)
     // реки лавы: узкие извилистые русла
     const rv = Math.abs(n(x / 340 + 77, z / 340 - 41));
     if (rv < 0.075) h = h + (H.LAVA_Y - 3 - h) * smooth((0.075 - rv) / 0.04);
@@ -391,8 +392,14 @@ export function groundNoRoads(P, x, z) {
         else if (dc < H.WALL_R + wobble) h = H.LAVA_Y + (H.WALL_H - H.LAVA_Y) * smooth((dc - H.MOAT_R1) / (H.WALL_R + wobble - H.MOAT_R1)) + 3 * n2(x / 9, z / 9);
         else h = Math.max(h, H.WALL_H + 4 * n2(x / 11, z / 11) - (H.WALL_H - h) * smooth((dc - H.WALL_R - wobble) / (H.WALL_OUT - H.WALL_R - wobble)));
     }
-    // плато прибытия: балкон над пропастью
+    // плато прибытия: балкон над озером лавы — первое, что видит прибывший (дорога идёт мостом)
     const ds = Math.hypot(x - P.returnMark.x, z - P.returnMark.z);
+    if (ds > H.SPAWN_R + 6 && ds < 300) {
+        let da = Math.atan2(z - P.returnMark.z, x - P.returnMark.x) - P.toC;
+        da = Math.abs(Math.atan2(Math.sin(da), Math.cos(da)));
+        const k = smooth((1.05 - da) / 0.35) * smooth((ds - H.SPAWN_R - 6) / 14) * smooth((300 - ds) / 60);
+        if (k > 0) h = h + (H.LAVA_Y - 4 + 2 * n2(x / 20, z / 20) - h) * k;
+    }
     if (ds < H.SPAWN_R + 10) { const k = smooth((H.SPAWN_R + 10 - ds) / 10); h = h + (H.SPAWN_Y - h) * k; if (ds < H.SPAWN_R) { h = H.SPAWN_Y; kind = 'seat'; } }
     const near = hellNear(P, x, z);
     for (let i = 0; i < near.length; i++) {
@@ -419,12 +426,12 @@ export function groundNoRoads(P, x, z) {
             }
             case 'spire': {
                 const d = Math.hypot(x - f.x, z - f.z), a = Math.atan2(z - f.z, x - f.x) + f.tw;
-                const r = f.r * (1 + 0.11 * Math.sin(a * 5) + 0.12 * n(a * 2, f.x * 0.003)); // (рёбра и выступы по кругу)
+                const r = f.r * (1 + 0.16 * Math.sin(a * 5) + 0.08 * Math.sin(a * 11 + f.tw) + 0.14 * n(a * 2, f.x * 0.003)); // (рёбра и выступы по кругу)
                 const t = d / r;
                 if (t < 1.55) {
                     let s;
                     if (f.lair && t < 0.55) s = f.top; // (площадка логова наверху)
-                    else if (t < 1) s = f.top - (f.top - H.BASE) * 0.7 * Math.pow(t, 2.2) + 1.5 * n2(x / 4, z / 4);
+                    else if (t < 1) { s = f.top - (f.top - H.BASE) * 0.7 * Math.pow(t, 2.2) + 1.5 * n2(x / 4, z / 4); const ledge = 9 + 4 * f.tw; s = Math.floor(s / ledge) * ledge + Math.min(ledge, (s % ledge) * 1.8); } // (ledges and overhangs of the stone up the spire)
                     else { const u = 1 - (t - 1) / 0.55; s = H.BASE + (f.top - H.BASE) * 0.3 * u * u; }
                     if (s > h) { h = s; kind = f.obs && t < 1 ? 'obs' : 'rock'; }
                 }

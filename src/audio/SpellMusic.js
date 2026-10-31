@@ -611,6 +611,35 @@ const FX = {
         noise(o, sr, 0.8, 0.9, 0.04, () => 0.9, swell(0.2, 0.6), r);
         return finish(o, sr, { peak: 0.7 });
     },
+    /** The gates of hell open: a deep cracking boom from under the ground, a roaring rush of fire upwards, a dark minor chord and a far choir's groan. */
+    fxHellOpen(sr) {
+        const o = buf(sr, 2.4), r = rng(353);
+        drum(o, sr, 0, 1.1, 38, 1.0, r);
+        noise(o, sr, 0.05, 1.9, 0.32, (u) => 0.04 + 0.5 * u * (1 - u), swell(0.25, 0.5), r); // (the roar of the fire going up)
+        glide(o, sr, 0, 1.6, 0.2, (u) => 45 + 70 * u * u, swell(0.3, 0.5), 4);
+        pad(o, sr, ['D2', 'F2', 'A2', 'C#3'], 0.3, 2.3, 0.2, { att: 0.4, rel: 0.8, harm: 4, vib: 0.006 });
+        for (const [f, a] of [[311, 0.05], [330, 0.05], [466, 0.03]]) glide(o, sr, 0.6, 1.6, a, (u) => f * (1 - 0.1 * u), swell(0.3, 0.6), 2); // (a groaning choir, out of tune)
+        crackle(o, sr, 0.1, 1.8, 0.2, 30, r);
+        return finish(o, sr, { peak: 0.75 });
+    },
+    /** Down into hell: a fall — a long falling whoosh, the ground's heartbeat, the heat roaring up round you. */
+    fxHellDown(sr) {
+        const o = buf(sr, 2.2), r = rng(359);
+        glide(o, sr, 0, 1.6, 0.16, (u) => 420 - 360 * u, swell(0.15, 0.4), 3);
+        noise(o, sr, 0, 1.8, 0.28, (u) => 0.55 - 0.45 * u, swell(0.2, 0.5), r);
+        for (const t of [0.5, 0.85, 1.5, 1.85]) drum(o, sr, t, 0.35, 44, 0.7, r);
+        pad(o, sr, ['D2', 'A2', 'F3'], 0.6, 2.1, 0.18, { att: 0.4, rel: 0.7, harm: 4 });
+        return finish(o, sr, { peak: 0.75 });
+    },
+    /** Back up to the Earth: the roar falling away below, a rising wind, a cool open chord of daylight. */
+    fxHellUp(sr) {
+        const o = buf(sr, 2.2), r = rng(361);
+        noise(o, sr, 0, 1.2, 0.26, (u) => 0.15 + 0.5 * u, (u) => (1 - u) * (1 - u), r);
+        glide(o, sr, 0.1, 1.5, 0.14, (u) => 160 + 700 * u * u, swell(0.3, 0.5), 2);
+        pad(o, sr, ['D4', 'A4', 'F#5'], 0.9, 2.1, 0.18, { att: 0.3, rel: 0.6, harm: 2, vib: 0.004 });
+        ['D6', 'A6', 'F#6'].forEach((n, k) => bell(o, sr, hz(n), 1.0 + k * 0.2, 0.12, 0.9, 0.3));
+        return finish(o, sr, { peak: 0.7 });
+    },
     /** The rite of absolute steadiness: a deep earth-rumble taking root, a warm low chord rising, then amber bells settling like stones (a firm, grounded tune: C – G – C). */
     fxFirm(sr) {
         const o = buf(sr, 2.0), r = rng(347);
@@ -812,6 +841,16 @@ const FX = {
 
 // ------------------------------------------------------------------ the loops (held spells)
 const LOOPS = {
+    /** Hell around: a hot wind moaning low, the far rumble and bubbling of lava, now and then a sigh of fire. */
+    loopHell(sr) {
+        const o = buf(sr, 6.4), r = rng(367);
+        noise(o, sr, 0, 6.4, 0.16, (u) => 0.03 + 0.03 * Math.sin(u * 6.28 * 2), () => 1, r); // (the hot wind)
+        pad(o, sr, [41.2, 61.7, 62.4], 0, 6.4, 0.22, { att: 0.01, rel: 0, harm: 4, vib: 0.003 }); // (the deep drone)
+        for (const t of [0.7, 2.3, 3.1, 4.6, 5.5]) drum(o, sr, t, 0.5, 30 + 12 * Math.abs(r()), 0.35, r); // (lava's far thuds)
+        crackle(o, sr, 0, 6.4, 0.05, 6, r); // (bubbling, hissing)
+        glide(o, sr, 1.6, 2.2, 0.05, (u) => 180 - 60 * u, (u) => Math.sin(u * Math.PI), 2); // (a moan in the wind)
+        return finish(loopSeam(o, sr), sr, { peak: 0.38 });
+    },
     /** «Левиоса» held: a soft airy hum with a slow tremble. */
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },
     /** «Империус» held: a trance — a soft beating hum (E and B, a little apart), the far heart of the body left behind. */

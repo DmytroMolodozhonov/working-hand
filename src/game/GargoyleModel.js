@@ -76,6 +76,7 @@ function makeBones() {
 // ======================================================================= textures
 let _tex = null;
 /** The canvases: stone, its glowing veins (emissive), the membrane. null without a canvas (tests in node). */
+export function gargoyleTextures() { return textures(); }
 function textures() {
     if (_tex !== null) return _tex || null;
     if (typeof document === 'undefined') { _tex = false; return null; }

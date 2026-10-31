@@ -20,6 +20,7 @@ const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
 const _stormFog = new THREE.Color(0x2b3038);
 const _caveFog = new THREE.Color(0x020203); // (deep in a cave: black beyond the light)
+const _hellFog = new THREE.Color(0x3a0f08), _hellAmb = new THREE.Color(0xff9a70), _hellSky = new THREE.Color(0x5a1a10), _hellGround = new THREE.Color(0xff5a14), _hellSun = new THREE.Color(0xff6a3a); // (hell: the red haze, warm low light, lava's orange from below — setHell)
 const _ghostFog = new THREE.Color(0x474c63); // (the haze round the Castle of Ghosts: a cold grey-violet mist)
 
 /** The night is the last quarter of the day: 6 of the 24 hours (18 hours of daylight). */
@@ -196,7 +197,7 @@ export class VoxelWorld {
         };
         // (every change of day and night writes the base light again: the storm's, the cave's and the rooms' light go on it
         // at once — else the room's light is wiped every ~0.7 s by the day's tick and shows again: a blink)
-        if ((this.storm || 0) > 0 || (this.cave || 0) > 0 || (this.indoor || 0) > 0 || (this.nightVision || 0) > 0) this.setStorm(this.storm || 0);
+        if ((this.storm || 0) > 0 || (this.cave || 0) > 0 || (this.indoor || 0) > 0 || (this.nightVision || 0) > 0 || (this.hell || 0) > 0) this.setStorm(this.storm || 0);
     }
 
     /** The night gift («Pentagranium Noctis»): 0…1 — the dark is 50 % brighter and seen 1.5 times as far (SightRules.js). */
@@ -218,6 +219,17 @@ export class VoxelWorld {
     setGhostHaze(k) {
         if (Math.abs(k - (this.ghostHaze || 0)) < 0.01) return;
         this.ghostHaze = k;
+        if (!this._base) this._rememberBase(this._night ?? 0);
+        this.setStorm(this.storm || 0);
+    }
+
+    /**
+     * HELL (HellRealm.js; 0 = the Earth, 1 = in hell): no sun, no moon, no stars — a dark red haze, a dark sky of smoke (HellRealm's own dome), the light
+     * low and warm, the hemisphere's ground colour the lava's orange (the land lit from below), the sun's light dim red. One set of lights, no new ones.
+     */
+    setHell(k) {
+        if (Math.abs(k - (this.hell || 0)) < 0.01 && !(k === 0 && this.hell > 0) && !(k === 1 && this.hell < 1)) return;
+        this.hell = k;
         if (!this._base) this._rememberBase(this._night ?? 0);
         this.setStorm(this.storm || 0);
     }
@@ -259,6 +271,27 @@ export class VoxelWorld {
         this.sky?.setNightAmount(Math.max(b.night, 0.72 * k));
         this.sky?.setOvercast?.(k); // (the clouds cover the sunset and the stars)
         this.sky?.setClouds((this._cloudsWanted ?? true) || k > 0.1);
+        this._hellLight();
+    }
+
+    /** Hell's light over whatever the day, the storm, the cave made (setHell). */
+    _hellLight() {
+        const h = this.hell || 0;
+        this.hemiLight.groundColor.set(0x6a8f4e);
+        if (this.sky?.mesh) this.sky.mesh.visible = h < 0.98;
+        if (h <= 0) return;
+        const cv = this.cave || 0, dim = 1 - 0.55 * cv;
+        this.ambientLight.color.lerp(_hellAmb, h);
+        this.ambientLight.intensity += (0.3 * dim - this.ambientLight.intensity) * h;
+        this.hemiLight.color.lerp(_hellSky, h);
+        this.hemiLight.groundColor.lerp(_hellGround, h);
+        this.hemiLight.intensity += (0.62 * dim - this.hemiLight.intensity) * h;
+        this.dirLight.color.lerp(_hellSun, h);
+        this.dirLight.intensity += (0.3 * dim - this.dirLight.intensity) * h;
+        if (this.scene.fog) {
+            this.scene.fog.color.lerp(_hellFog, h);
+            if (this.scene.background && this.scene.background.isColor) this.scene.background.lerp(_hellFog, h);
+        }
     }
 
     /**
@@ -986,10 +1019,11 @@ export class VoxelWorld {
             // How far is drawn (settings) × what the graphics level allows; in flight the
             // view opens up by the same metres at every distance, so the land below is visible
             const q = this.viewScale ?? 1, d = this.viewDistance ?? 1;
-            let far = this.fogFar * q * (d + viewBoost * 1.2) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
+            const hk = this.hell || 0, ff = this.fogFar + (95 - this.fogFar) * hk; // (hell: the same haze by «day» and «night» — its eternal dusk)
+            let far = ff * q * (d + viewBoost * 1.2) * (1 + 0.25 * hk) * (1 - 0.4 * (this.storm || 0)) * (1 - 0.45 * (this.ghostHaze || 0)) * fogBoost(this.nightVision || 0, darkness(this._night, this.cave)); // (the night gift: the dark is seen farther)
             if (this.duelFar) far = Math.min(far, this.duelFar); // (the duel-only start: the arena and a little round it, nothing else is made)
             this.scene.fog.far = far;
-            this.scene.fog.near = Math.min(this.fogNear * d + viewBoost * 40, far * 0.5);
+            this.scene.fog.near = Math.min(this.fogNear * d * (1 - 0.7 * (this.hell || 0)) + viewBoost * 40, far * 0.5); // (hell: the red haze begins close)
             if (this.terrain) this.terrain.viewDistance = far + CHUNK_MARGIN;
         }
         if (this.sky && focus) this.sky.position.set(focus.x, focus.y, focus.z);

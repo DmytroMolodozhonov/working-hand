@@ -120,6 +120,7 @@ const GRIPPED = {
     telewilpinLeaf: { axis: 'y', handle: 0.02, pose: 'thin', at: [0.13, -0.115] }, // (a leaf by its short stalk)
     carnivoreHead: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (the torn trap cupped in the fingers)
     brightCore: { axis: 'body', pose: 'ball', at: [0.17, -0.2] }, // (a warm glowing core cupped in the fingers)
+    gargoyleHead: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (the stone head held by its jaw, cupped in the fingers)
     magicPebble: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a smooth pebble cupped in the fingers)
     canaryHide: { axis: 'body', pose: 'block', at: [0.17, -0.214] }, // (a folded hide in the fingers)
     bone: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true }, // (a bone across the palm, like an arrow)
