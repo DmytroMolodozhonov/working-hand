@@ -235,7 +235,7 @@ export function run(move, r, cam, opts = {}) {
         if (pc.arrive < lastArr) continue;
         lastArr = pc.arrive;
         // (the game's own idle step runs once a frame; a picture: at once)
-        const e = T.feed(pc.t, pc.p);
+        const e = T.feed(pc.t, pc.p, opts.alert || 0);
         if (e) ev.push({ e, at: pc.arrive, why: T.why });
         if (opts.trace) { const F = T.flags || {}, m = F.m; opts.trace.push(`${((pc.arrive - (T0g ?? 0)) * 1000).toFixed(0)} ${T.state} ${e || ''} sw ${m?.swap?.toFixed(2)} L ${m?.lu?.toFixed(2)},${m?.lv?.toFixed(2)} R ${m?.ru?.toFixed(2)},${m?.rv?.toFixed(2)} E ${m?.leu?.toFixed(2)},${m?.lev?.toFixed(2)} ${m?.reu?.toFixed(2)},${m?.rev?.toFixed(2)} wv ${m?.wv?.toFixed(2)} s ${T.sL?.toFixed(1)}/${T.sR?.toFixed(1)} st ${F.strict ? 1 : 0}${F.slow ? 'S' : ''}${F.brake ? 'B' : ''} stay ${F.stay?.toFixed(2)}`); }
     }
@@ -292,6 +292,7 @@ export function bench({ seeds = 2, quick = false, old = true } = {}) {
             const cam = { fps, lat, jit: 0.006, noise, drop: 0.03, occl: true, gameFps: [60, 30, 20][Math.floor(r() * 3)] };
             const mv = realMove(r, { start, style, dur, lagR, hold });
             const res = run(mv, r, cam, { old });
+            if (res.T0 == null) continue; // (never reached the pose: not a real cross)
             const x = readReal(res, mv.holdEnd);
             out.real++;
             if (x.tent) tents++;
@@ -347,6 +348,30 @@ export function bench({ seeds = 2, quick = false, old = true } = {}) {
         secs += mv.len;
     }
     out.hourSecs = secs;
+    // ---- a danger near (ShieldAlert ≥ ALERT_ON): the same real crosses and false moves, believed sooner
+    out.aReal = 0; out.aOk = 0; out.aLag = []; out.aLagGame = []; out.aFalseN = 0; out.aFalseOn = 0; out.aFalseWhy = {};
+    {
+        const r = rng(31337);
+        for (const fps of fpsL) for (const lat of CAMS.lat) for (const noise of CAMS.noise) for (const start of STARTS) for (const style of STYLES) {
+            const dur = R(r, 0.15, 0.6), lagR = r() < 0.3 ? R(r, 0.03, 0.12) : 0, hold = R(r, 0.5, 1.6);
+            const cam = { fps, lat, jit: 0.006, noise, drop: 0.03, occl: true, gameFps: 60 };
+            const mv = realMove(r, { start, style, dur, lagR, hold });
+            const res = run(mv, r, cam, { old: false, alert: 1 });
+            if (res.T0 == null) continue; // (this person's «cross» never reached the pose — not a real cross to count)
+            const x = readReal(res, mv.holdEnd);
+            out.aReal++;
+            if (x.ok && res.T0 != null) { out.aOk++; out.aLag.push((x.protectAt - res.T0) * 1000); out.aLagGame.push((x.protectAt - res.firstArr) * 1000); }
+        }
+        for (const [kind, make] of Object.entries(FALSE)) for (const fps of fpsL) for (const noise of CAMS.noise) for (let rep = 0; rep < 3; rep++) {
+            const res = run(make(r), r, { fps, lat: 0.1, jit: 0.006, noise, drop: 0.03, occl: false, gameFps: 60 }, { old: false, alert: 1 });
+            out.aFalseN++;
+            if (res.ev.some((x) => x.e === 'on')) { out.aFalseOn++; out.aFalseWhy[kind] = (out.aFalseWhy[kind] || 0) + 1; }
+        }
+    }
+    out.aOkShare = out.aOk / out.aReal;
+    out.aLagP50 = pct(out.aLag, 0.5); out.aLagP95 = pct(out.aLag, 0.95);
+    out.aLagGameP50 = pct(out.aLagGame, 0.5); out.aLagGameP95 = pct(out.aLagGame, 0.95);
+    out.aFalseShare = out.aFalseOn / out.aFalseN;
     out.hourTentPerMin = out.hourTent / (secs / 60);
     return out;
 }

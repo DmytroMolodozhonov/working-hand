@@ -227,6 +227,7 @@ import { JUMP_ASSIST, ledgePush } from './Jump.js';
 import { Concentration } from './Concentration.js';
 import { bareGate, BARE_HINT } from './BareHand.js';
 import { CrossedShield } from './CrossedArms.js';
+import { ShieldAlert } from './ShieldAlert.js';
 import { CastHints } from './CastHints.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
@@ -684,6 +685,7 @@ export class Game {
         this.servants = new Servants(this); // «Брейнрот» servants of any kind: follow their master, fight for them
         this.livingTrees = new LivingTrees(this); // «Alive»: a tree comes alive and obeys its caster
         this.crossedShield = new CrossedShield(this); // «Protection» by crossing the arms before the chest (CrossedArms.js)
+        this.shieldAlert = new ShieldAlert(this); // (a danger near — a charge flying, a player casting / aiming: the crossed arms' shield is believed sooner)
         this.focus = new Concentration(this); // the rule of concentration: one held spell at a time (Concentration.js)
         this.lightning = null; // my «Lightning Strike» in progress
         this.duel = new Duel(this); // duel magic: charges at creatures, duels
@@ -4002,6 +4004,7 @@ export class Game {
         if (earth) this.burnWreck?.update(dt);
         this.weapons.update(dt, { allowGrab: !(this.combat.dead || this.isDeadLocal || this.imperius?.busy || this.imperius?.puppet) }); // (the dead don't take things; nor a body whose mind is elsewhere / held by another's — «Империус»)
         this.water.update(dt);
+        this.shieldAlert.update(dt);
         this.crossedShield.update(dt);
         this.combat.update(dt);
         this.ghosts?.afterCombat(); // (a ghost's chill slows the legs: after Combat set their speed for this frame)

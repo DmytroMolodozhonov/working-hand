@@ -1144,7 +1144,7 @@ export class NetSync {
                 break;
             case 'invis': if (m.by !== this.me) g.invis?.onNet(m.by, !!m.on); break;
             case 'ddat': if (m.by !== this.me && Array.isArray(m.p)) g.drawdown?.onNet(m.by, vec(m.p)); break;
-            case 'csnd': if (m.by !== this.me && typeof m.n === 'string' && Array.isArray(m.p)) g.sound?.spellCast?.(m.n, vec(m.p)); break;
+            case 'csnd': if (m.by !== this.me && typeof m.n === 'string' && Array.isArray(m.p)) { g.sound?.spellCast?.(m.n, vec(m.p)); g.shieldAlert?.noteCast(m.by, m.p); } break;
             case 'say': if (m.by !== this.me && typeof m.name === 'string') { const now = performance.now(), ago = +m.ago; g.voiceGate?.noteRemote(m.name, now, { by: m.by, began: Number.isFinite(ago) && ago >= 0 && ago < 10000 ? now - ago : null }); } break;
             case 'draw': if (m.by !== this.me) g.wandMagic?.remoteDraw(m.by, m.c, m.p); break;
             case 'spell': {
@@ -1363,7 +1363,7 @@ export class NetSync {
             case 'ws': if (m.by !== this.me) g.waterStorm?.onNet(m); break;
             case 'sburn': if (m.to === this.me && m.item) { if (m.item.kind === 'book') g.books?.learnBurnt?.(m.item); else g.items?.applyScroll?.(m.item); } break; // (my «Инферно» burnt a scroll / a book lying at the host's)
             case 'iceb': if (m.by !== this.me && Array.isArray(m.c)) g.applyIce(m.c.slice(0, 2000)); break; // (ice of «Water forming» + «Frozen»)
-            case 'duel': if (m.by !== this.me && arr(m.o, 3) && arr(m.d, 3) && typeof m.s === 'string') { g.voiceGate?.noteRemote(m.s, performance.now(), { by: m.by }); g.duel.remoteCast(m); } break;
+            case 'duel': if (m.by !== this.me && arr(m.o, 3) && arr(m.d, 3) && typeof m.s === 'string') { g.voiceGate?.noteRemote(m.s, performance.now(), { by: m.by }); g.duel.remoteCast(m); g.shieldAlert?.noteCast(m.by, m.o); } break;
             case 'dend': g.duel.remoteEnd(m.id, m.res); break;
             case 'clash': if (!this.net.isHost) g.duel.remoteClash(m); break;
             case 'clashend': if (!this.net.isHost) g.duel.remoteClashEnd(m); break;

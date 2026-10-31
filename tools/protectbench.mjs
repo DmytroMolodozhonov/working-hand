@@ -22,6 +22,11 @@ export const LIMITS = {
     hourTentPerMin: 1, // unseen guesses a minute in that hour (no mana, no look, no sound — taken back)
     flicker: 0, // a held cross that let the shield drop
     releaseP95: 600, // ms from the arms opening to the shield down
+    // a danger near (ShieldAlert: a charge flying at me, a player casting / aiming, a foe) — believed sooner
+    aOkShare: 0.995,
+    aLagGameP95: 25, // ms (95 %)
+    aLagP50: 95, // ms from the arms in the pose (the camera's latency in it) — sooner than calm
+    aFalseShare: 0, // still no shield from the false moves
 };
 
 const args = process.argv.slice(2);
@@ -36,13 +41,14 @@ for (const [fps, b] of Object.entries(r.byFps)) console.log(`   ${fps} кадр�
 console.log(`с опережением (пробный невидимый щит): ${f(r.tentShare * 100, 1)}% настоящих; мигание при удержании: ${r.flicker}; снятие после разведения рук 95% ${f(r.releaseP95)} мс`);
 console.log(`ложные движения: ${r.falseN}, щит встал ${r.falseOn} ${JSON.stringify(r.falseWhy)} (до: ${r.oldFalseOn}); пробных ${r.falseTent}`);
 console.log(`час ложных движений (${f(r.hourSecs / 60, 1)} мин): щитов ${r.hourOn} ${JSON.stringify(r.hourWhy)}, пробных ${f(r.hourTentPerMin, 2)} в минуту`);
+console.log(`опасность рядом (летит заряд, рядом колдуют/целятся, враг): встал ${f(r.aOkShare * 100, 2)}%, от позы до щита медиана ${f(r.aLagP50)} мс, 95% ${f(r.aLagP95)} мс; от кадра медиана ${f(r.aLagGameP50)} мс, 95% ${f(r.aLagGameP95)} мс; ложных ${r.aFalseOn} из ${r.aFalseN} ${JSON.stringify(r.aFalseWhy)}`);
 if (args.includes('--v') && r.fails.length) console.log('неудачи:', r.fails);
 console.log(`(${((Date.now() - t0) / 1000).toFixed(1)} с)`);
 if (args.includes('--check')) {
     const bad = [];
     for (const [k, lim] of Object.entries(LIMITS)) {
         const v = r[k];
-        if (k === 'okShare' ? !(v >= lim) : !(v <= lim)) bad.push(`${k} = ${f(v, 3)} (порог ${lim})`);
+        if (k === 'okShare' || k === 'aOkShare' ? !(v >= lim) : !(v <= lim)) bad.push(`${k} = ${f(v, 3)} (порог ${lim})`);
     }
     if (bad.length) { console.log('ПРОВАЛ:', bad.join('; ')); process.exit(1); }
     console.log('ok');

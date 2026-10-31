@@ -4,6 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CrossTrack, CrossedShield, CROSS } from '../../src/game/CrossedArms.js';
+import { ShieldAlert, ALERT } from '../../src/game/ShieldAlert.js';
+import * as THREE from 'three';
 import { KEYS, picture, rng, realMove, FALSE, run, bench } from '../../tools/protectsim.mjs';
 
 
@@ -182,4 +184,62 @@ test('the bench (quick): every real cross up within a picture, no false shield',
     assert.ok(r.lagFramesP95 <= 1.05, `lag: ${r.lagFramesP95} pictures`);
     assert.equal(r.falseOn, 0, JSON.stringify(r.falseWhy));
     assert.equal(r.hourOn, 0, JSON.stringify(r.hourWhy));
+});
+
+// ---- a danger near (ShieldAlert): believed sooner — and what counts as a danger
+
+test('a danger near: the same cross is confirmed sooner (one picture enough), and calm stays strict', () => {
+    let calm = 0, alert = 0;
+    for (let seed = 1; seed <= 40; seed++) for (const a of [0, 1]) {
+        const r = rng(seed);
+        const mv = realMove(r, { start: ['hang', 'T', 'forward', 'side'][seed % 4], style: 'chest', dur: 0.3 + (seed % 5) * 0.06, hold: 1 });
+        const T2 = new CrossTrack(), r2 = rng(seed * 3);
+        let on = null;
+        for (let t = 0; t < mv.len && on == null; t += 1 / 30) if (T2.feed(t, picture(mv.mv.at(t), CAM, r2, 0.003, null), a) === 'on') on = t;
+        assert.ok(on != null, `seed ${seed} alert ${a}: up`);
+        if (a) alert += on; else calm += on;
+    }
+    assert.ok(alert < calm, `sooner with a danger near: ${alert / 40} < ${calm / 40}`);
+});
+
+function alertGame() {
+    const me = new THREE.Vector3(0, 2, 0);
+    return {
+        localId: 'me', character: { group: { position: me } }, remotes: new Map(),
+        duel: { bolts: new Map() }, castleLife: { byId: new Map() },
+    };
+}
+
+test('the alert: a charge flying at me (not past, not mine), a player who has just cast near, a foe near; nothing — 0', () => {
+    const g = alertGame(), A = new ShieldAlert(g);
+    A._read(); assert.equal(A.level, 0);
+    g.duel.bolts.set(1, { state: 'flying', by: 'p2', front: new THREE.Vector3(0, 2, -40), dir: new THREE.Vector3(0, 0, 1) });
+    A._read(); assert.equal(A.level, 1, 'flying at me');
+    g.duel.bolts.get(1).dir.set(1, 0, 0);
+    A._read(); assert.equal(A.level, 0, 'flying past, 40 m aside');
+    g.duel.bolts.get(1).dir.set(0, 0, 1); g.duel.bolts.get(1).by = 'me';
+    A._read(); assert.equal(A.level, 0, 'my own charge');
+    g.duel.bolts.clear();
+    A.noteCast('p2', [10, 2, 0]);
+    A._read(); assert.equal(A.level, 0.8, 'a cast 10 m away');
+    A.casts.get('p2').at -= ALERT.CAST_T + 0.1;
+    A._read(); assert.equal(A.level, 0, 'a cast long ago');
+    A.noteCast('p3', [300, 2, 0]);
+    A._read(); assert.equal(A.level, 0, 'a cast far away');
+    A.noteCast('me', [1, 2, 0]);
+    A._read(); assert.equal(A.level, 0, 'my own cast');
+    g.castleLife.byId.set('w', { foe: 'me', x: 20, z: 5 });
+    A._read(); assert.equal(A.level, 0.7, 'a wizard at war with me, near');
+    g.castleLife.byId.get('w').foe = 'p2';
+    A._read(); assert.equal(A.level, 0, 'at war with another');
+});
+
+test('the alert: another player\'s raised hand aimed at me (not aside, not lowered)', () => {
+    const g = alertGame(), A = new ShieldAlert(g);
+    const hand = new THREE.Vector3(0, 2.5, -10), dir = new THREE.Vector3(0, 0, 1);
+    let raised = true;
+    g.remotes.set('p2', { character: { group: { position: new THREE.Vector3(0, 2, -10.5) }, isArmRaised: () => raised, getHandWorldPosition: (s, o) => o.copy(hand), getHandDirection: (s, o) => o.copy(dir) } });
+    A._read(); assert.equal(A.level, 0.7);
+    dir.set(1, 0, 0); A._read(); assert.equal(A.level, 0, 'aimed aside');
+    dir.set(0, 0, 1); raised = false; A._read(); assert.equal(A.level, 0, 'hand down');
 });

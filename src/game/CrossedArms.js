@@ -25,6 +25,7 @@
  *   Допуски (в долях ширины плеч W; «вход» строже «выхода» — гистерезис, чтобы не мигало):
  *     - запястья поменялись местами (насколько левое ушло за правое):  вход ≥ 0,30 W,  выход ≥ 0,05 W
  *     - каждое запястье в пределах плеч по бокам от середины:           вход ≤ 0,9 W,   выход ≤ 1,2 W
+ *     - каждое запястье за серединой тела (или почти, ≤ 0,1 W на своей стороне) — обе кисти с одной стороны: одна рука поперёк, не крест
  *     - высота запястья от линии плеч (вниз +):                         вход −0,35…1,5 W, выход −0,6…2,0 W
  *       (выше — рука у лица/рта, ниже — карман, пояс, руки опущены)
  *     - локти (если видны): каждый на своей стороне тела, ниже линии плеч на 0,4 W (прямые руки махом и растяжка — локти высоко), рука
@@ -42,6 +43,7 @@ export const CROSS = {
     // ---- the fast one (CrossTrack)
     WVIS: 0.4, // the wrists seen this well to start
     WVIS_KEEP: 0.25, // …and to count as seen while held
+    MID: 0.1, // each wrist to start at most this far on its own side of the middle (× W): past it — or nearly
     W_MIN: 0.04, // the shoulders' width in the picture to start (far / turned sideways: the points are too noisy)
     ELBOW_SIDE: -0.15, // each elbow at least this far on its own side of the middle (× W)
     ELBOW_DROP: 0.4, // the elbows at least this far under the shoulder line (× W): crossed arms hang from the shoulders (straight arms swung across, a stretch — the elbows up)
@@ -61,6 +63,15 @@ export const CROSS = {
     TENT_OUT: 0.07, // s out of the loose limits: the guess is dropped
     LOST: 0.25, // s a wrist unseen keeps the state as it is (1–3 pictures)
     STALE: 1.0, // s with no picture at all: the arms are open
+    // ---- a danger near (ShieldAlert.level ≥ ALERT_ON: a charge flying at me, a player casting / aiming, a foe): believed sooner
+    ALERT_ON: 0.5,
+    ALERT: {
+        SLOW: 5, // W/s — «the wrists stand» looser
+        MOVING: 10, // W/s — crossed and not faster than this: confirmed at once (no waiting for the stop)
+        STAY: 0.06, // s crossed in a row
+        PRED_SWAP: -0.1, // the guess from further back (~75 % of the way)
+        PRED_T: 0.2,
+    },
 };
 
 /**
@@ -205,8 +216,11 @@ export class CrossTrack {
     /**
      * @param {number} t the picture's own time, s
      * @param {Array|null} p its 33 raw points (null: nothing to read — not allowed now, no body: counts as open arms)
+     * @param {number} alert 0…1 — a danger near (ShieldAlert): ≥ ALERT_ON — one picture is enough, the guess comes sooner
      */
-    feed(t, p) {
+    feed(t, p, alert = 0) {
+        const A = alert >= CROSS.ALERT_ON ? CROSS.ALERT : null;
+        this.alerted = !!A;
         const dtp = Number.isFinite(this.lastT) ? Math.max(0, Math.min(0.25, t - this.lastT)) : 0;
         this.lastT = t;
         const m = p ? crossMeasure(p, this._m) : null;
@@ -251,36 +265,41 @@ export class CrossTrack {
         this.sL = sL; this.sR = sR;
         if (m.swap >= 0 && this.metAt == null) this.metAt = t; // (the wrists met: the journal's «from the pose's start»)
         if (m.swap < -0.2 && this.state === 'off') this.metAt = null;
-        const strict = m.W >= CROSS.W_MIN && m.swap >= CROSS.SWAP_IN && inZone(m.lu, m.lv, m.ru, m.rv, true) && elbowsOk(m);
+        // (each wrist at or past the body's middle: both on one side is one arm across the chest — a stretch, a hand holding the other — not a cross)
+        const past = m.lu <= CROSS.MID && m.ru >= -CROSS.MID;
+        const strict = m.W >= CROSS.W_MIN && m.swap >= CROSS.SWAP_IN && past && inZone(m.lu, m.lv, m.ru, m.rv, true) && elbowsOk(m);
         const loose = m.swap >= CROSS.SWAP_OUT && inZone(m.lu, m.lv, m.ru, m.rv, false);
         // (crossed in a row: a single picture just off the strict limits — noise — pauses the count, out of the loose ones resets it)
         if (strict && (sL == null || Math.max(sL, sR) <= CROSS.FAST)) this.stayT += dtp;
         else if (!loose || (sL != null && Math.max(sL, sR) > CROSS.FAST)) this.stayT = 0;
         // (still: over ≥ 60 ms, or — a noisy camera, a far person — over ≥ 120 ms, where the noise weighs half)
-        let slow = sL != null && sL <= CROSS.SLOW && sR <= CROSS.SLOW;
+        const SLOW = A ? A.SLOW : CROSS.SLOW;
+        let slow = sL != null && sL <= SLOW && sR <= SLOW;
         if (!slow && strict) {
             const c = this._back(t, 0, CROSS.SPAN2);
             if (c) {
                 const d = t - c.t, xl = m.lu - c.lu, yl = m.lv - c.lv, xr = m.ru - c.ru, yr = m.rv - c.rv;
-                slow = Math.sqrt(xl * xl + yl * yl) / d <= CROSS.SLOW && Math.sqrt(xr * xr + yr * yr) / d <= CROSS.SLOW;
+                slow = Math.sqrt(xl * xl + yl * yl) / d <= SLOW && Math.sqrt(xr * xr + yr * yr) / d <= SLOW;
             }
         }
         const brake = sL != null && pL != null && this._brakes(m, sL, sR, pL, pR, vlu, vlv, vru, vrv);
-        const stays = this.stayT >= CROSS.STAY - 1e-6;
-        const twice = prevSwap != null && prevSwap >= CROSS.SWAP_IN * CROSS.PREV_K; // (the picture before crossed too)
-        const confirm = strict && twice && (slow || brake || stays);
+        const stays = this.stayT >= (A ? A.STAY : CROSS.STAY) - 1e-6;
+        // (the picture before crossed too — a danger near: this one is enough, and a cross still arriving, not too fast, counts)
+        const twice = A ? true : prevSwap != null && prevSwap >= CROSS.SWAP_IN * CROSS.PREV_K;
+        const moving = !!A && sL != null && Math.max(sL, sR) <= A.MOVING;
+        const confirm = strict && twice && (slow || brake || stays || moving);
         this.flags = this.flags || {};
         this.flags.strict = strict; this.flags.loose = loose; this.flags.slow = slow; this.flags.brake = brake; this.flags.stay = this.stayT; this.flags.m = m;
         if (this.state === 'off') {
-            if (confirm) { this.state = 'on'; this.openT = 0; this.why = slow ? 'скрещены, кисти стоят' : brake ? 'скрещены, кисти тормозят в позе' : 'скрещены несколько кадров'; return 'on'; }
+            if (confirm) { this.state = 'on'; this.openT = 0; this.why = (slow ? 'скрещены, кисти стоят' : brake ? 'скрещены, кисти тормозят в позе' : stays ? 'скрещены несколько кадров' : 'скрещены, руки ещё идут'); return 'on'; }
             const fastNow = sL != null && Math.max(sL, sR) > CROSS.GUESS_FAST;
-            const coming = !strict && sL != null && !fastNow && m.W >= CROSS.W_MIN && m.swap >= CROSS.PRED_SWAP && dsw > 0
-                && m.swap + dsw * CROSS.PRED_T >= CROSS.SWAP_IN && inZone(m.lu, m.lv, m.ru, m.rv, true) && elbowsOk(m);
+            const coming = !strict && sL != null && !fastNow && m.W >= CROSS.W_MIN && m.swap >= (A ? A.PRED_SWAP : CROSS.PRED_SWAP) && dsw > 0
+                && m.swap + dsw * (A ? A.PRED_T : CROSS.PRED_T) >= CROSS.SWAP_IN && inZone(m.lu, m.lv, m.ru, m.rv, true) && elbowsOk(m);
             if ((strict && !fastNow && sL != null) || coming) { this.state = 'tent'; this.tentAt = t; this.outT = 0; this.why = strict ? 'скрещены, руки ещё движутся' : 'руки идут к кресту'; return 'tent'; }
             return null;
         }
         if (this.state === 'tent') {
-            if (confirm) { this.state = 'on'; this.openT = 0; this.why = (slow ? 'скрещены, кисти стоят' : brake ? 'скрещены, кисти тормозят в позе' : 'скрещены несколько кадров') + ' (было опережение)'; return 'on'; }
+            if (confirm) { this.state = 'on'; this.openT = 0; this.why = (slow ? 'скрещены, кисти стоят' : brake ? 'скрещены, кисти тормозят в позе' : stays ? 'скрещены несколько кадров' : 'скрещены, руки ещё идут') + ' (было опережение)'; return 'on'; }
             this.outT = loose || m.swap >= CROSS.PRED_SWAP * 0.5 ? 0 : this.outT + dtp;
             if (this.outT >= CROSS.TENT_OUT || t - this.tentAt > CROSS.TENT_MAX || (sL != null && Math.max(sL, sR) > CROSS.GUESS_FAST)) { this.state = 'off'; return 'cancel'; }
             return null;
@@ -330,7 +349,8 @@ export class CrossedShield {
         if (g.active === false) return;
         this._sync();
         this._quiet = 0;
-        const ev = this.track.feed(tMs / 1000, this.blocked() ? null : raw);
+        const ev = this.track.feed(tMs / 1000, this.blocked() ? null : raw, g.shieldAlert?.level || 0);
+        if (ev && this.track.alerted) this._alertWhy = g.shieldAlert?.why || '';
         this._act(ev, tMs);
     }
 
@@ -412,7 +432,7 @@ export class CrossedShield {
         const frame = Number.isFinite(tMs) ? Math.round(now - tMs) : null;
         const met = T.metAt != null && Number.isFinite(tMs) ? Math.round(tMs - T.metAt * 1000) : null;
         const sp = T.sL != null ? `, кисти ${T.sL.toFixed(1)}/${T.sR.toFixed(1)} ш/с` : '';
-        const line = `🛡️ Protection жестом: ${met != null ? `руки сошлись → щит ${met} мс` : 'щит'}${frame != null ? `, кадр → щит ${frame} мс` : ''}; признаки: ${T.why}${sp}${guessed ? '; защита была с опережения' : ''}`;
+        const line = `🛡️ Protection жестом: ${met != null ? `руки сошлись → щит ${met} мс` : 'щит'}${frame != null ? `, кадр → щит ${frame} мс` : ''}; признаки: ${T.why}${sp}${guessed ? '; защита была с опережения' : ''}${T.alerted ? `; опасность рядом: ${this._alertWhy || g.shieldAlert?.why || ''}` : ''}`;
         try { if (g.spellLog) g.spellLog.note(line); else console.info(line); } catch (e) { console.info(line); }
     }
 }
