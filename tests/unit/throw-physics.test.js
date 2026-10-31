@@ -16,13 +16,18 @@ function fakeGame(collision = new CollisionWorld()) {
 function fly(kind, { from = new THREE.Vector3(0, 3, 0), vel = new THREE.Vector3(10, 6, 0), collision, seconds = 6 } = {}) {
     const g = fakeGame(collision);
     const L = g.items.spawnLoose({ kind, uid: kind + Math.random() }, from, { vel });
-    let maxX = -Infinity;
-    for (let i = 0; i < seconds * 60 && !L.rest; i++) { g.items._physics(L, 1 / 60); maxX = Math.max(maxX, L.model.position.x); }
-    return { x: L.model.position.x, maxX, rest: L.rest, L };
+    let maxX = -Infinity, touch = null, bounces = 0, lastVy = 0;
+    for (let i = 0; i < seconds * 60 && !L.rest; i++) {
+        g.items._physics(L, 1 / 60); maxX = Math.max(maxX, L.model.position.x);
+        if (touch === null && L.vel.y >= 0 && lastVy < 0) touch = L.model.position.x; // (the first touch of the ground)
+        if (L.vel.y > 0.5 && lastVy < 0) bounces++;
+        lastVy = L.vel.y;
+    }
+    return { x: L.model.position.x, maxX, touch: touch ?? L.model.position.x, bounces, rest: L.rest, L };
 }
 
 test('flight: the air holds back light flat things — an apple flies over twice as far as a book; a hammer about as far as an apple', () => {
-    const apple = fly('apple').x, book = fly('book').x, hammer = fly('hammer').x;
+    const apple = fly('apple').touch, book = fly('book').touch, hammer = fly('hammer').touch; // (where each first lands)
     assert.ok(apple > 2 * book, `apple ${apple.toFixed(2)} vs book ${book.toFixed(2)}`);
     assert.ok(Math.abs(hammer - apple) / apple < 0.15, `hammer ${hammer.toFixed(2)} vs apple ${apple.toFixed(2)}`);
 });
@@ -76,4 +81,26 @@ test('a fast thrown thing hurts a creature it hits (once) and pushes it along it
     for (let i = 0; i < 60; i++) g.items._physics(L, 1 / 60);
     assert.equal(hits.length, 1, 'one hit');
     assert.ok(hits[0].dmg > 5 && hits[0].dir.x > 0.9 && hits[0].by === 'me', JSON.stringify(hits[0]));
+});
+
+test('landing: an apple hops and rolls on, a book slaps down and slides a little, a pouch of coins plops and stays', () => {
+    const apple = fly('apple', { vel: new THREE.Vector3(8, 2, 0) }), book = fly('book', { vel: new THREE.Vector3(8, 2, 0) }), coins = fly('coins', { vel: new THREE.Vector3(8, 2, 0) });
+    assert.ok(apple.rest && book.rest && coins.rest, 'all come to rest');
+    assert.ok(apple.x - apple.touch > 1.5, `the apple rolls on ${(apple.x - apple.touch).toFixed(2)} m`);
+    assert.ok(book.x - book.touch < apple.x - apple.touch, 'the book slides less than the apple rolls');
+    assert.ok(coins.x - coins.touch < 0.6, `the pouch stays (${(coins.x - coins.touch).toFixed(2)} m)`);
+    assert.ok(apple.bounces >= 1 && coins.bounces === 0, `the apple hops (${apple.bounces}), the pouch does not (${coins.bounces})`);
+});
+
+test('on an airless planet nothing holds a thrown thing back: a book flies as far as an apple', () => {
+    const run = (kind) => {
+        const g = fakeGame();
+        g.items._planetAt = () => ({ gravity: 0.165, air: 'none' }); // (the Moon)
+        const L = g.items.spawnLoose({ kind, uid: kind + 'm' }, new THREE.Vector3(0, 3, 0), { vel: new THREE.Vector3(6, 4, 0) });
+        let touch = null, last = 0;
+        for (let i = 0; i < 1200 && touch === null; i++) { g.items._physics(L, 1 / 60); if (L.vel.y >= 0 && last < 0) touch = L.model.position.x; last = L.vel.y; }
+        return touch;
+    };
+    const a = run('apple'), b = run('book');
+    assert.ok(Math.abs(a - b) / a < 0.03 && a > 25, `apple ${a?.toFixed(1)} m, book ${b?.toFixed(1)} m (light gravity, no air)`);
 });

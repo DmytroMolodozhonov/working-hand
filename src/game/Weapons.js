@@ -21,7 +21,8 @@ import * as THREE from 'three';
 import { Weapon } from '../entities/Weapon.js';
 import { segmentSegmentDistSq, clamp } from '../core/math.js';
 import { bladePower, overpowers, sweptBladeContact } from './BladeClash.js';
-import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast } from './HandRelease.js';
+import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, handLog } from './HandRelease.js';
+import { HandTrack, launchVelocity, launchPoint, spinFor } from './ThrowModel.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { enchantMul } from './Enchant.js';
 import { boneLines } from './CutBodies.js';
@@ -74,7 +75,7 @@ export class WeaponSystem {
     }
 
     _handState() {
-        return { held: null, lastOpen: 0, lastOpenFrame: -1000, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false, drop: new DropGate(), buyDrop: new BuyerGate(), thr: new ThrowDetector(), arm: {} };
+        return { held: null, lastOpen: 0, lastOpenFrame: -1000, rel0: null, relC: null, settle: 0, tipPrev: new THREE.Vector3(), basePrev: new THREE.Vector3(), hasPrev: false, drop: new DropGate(), buyDrop: new BuyerGate(), thr: new ThrowDetector(), trk: new HandTrack(), arm: {} };
     }
 
     spawn(type, position, quaternion, id) {
@@ -338,23 +339,25 @@ export class WeaponSystem {
             // Weapon got taken by the network (another player / host reset)
             if (w.holder == null || w.holder.side !== side) { this._forget(side, hand); return; }
             // Summoned into an open hand («Акцио», a slot): kept until the hand has closed on it once
-            if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); }
+            if (hs.waitClose) { hs.waitClose = false; hs.drop.reset(false); hs.trk.reset(false); }
             if (w.stuckIn) { this._holdStuck(side, hs, w, dt, ch, curl, tracked); return; }
-            if (holdsFast(ch)) { hs.thr.reset(); hs.drop.since = 0; } // (swimming: the strokes never throw or drop it)
+            // (the hand's memory — ThrowModel.HandTrack, as for any thing: the throw or the opening, its moment read back)
+            const ps = this.game.poseSmoother, tt = ps?.eff > 0 ? ps.eff : now;
+            if (ch.armState && ps) {
+                const arm0 = ch.armState(side, hs.arm);
+                const fresh = ps.to !== hs.lastTo; hs.lastTo = ps.to;
+                const seenNow = !!hand && hand.group.visible && (hand._lost === undefined ? tracked : !hand._lost);
+                hs.trk.push({ t: tt, hand: arm0.hand, world: ch.getHandWorldPosition(side, _e), yaw: ch.group.rotation.y, curl: ch.getGripCurl(side), seen: seenNow, fresh, camMs: ps.interval || 50 });
+            }
+            if (holdsFast(ch)) { hs.thr.reset(); hs.drop.since = 0; hs.trk.decide({ t: tt, blocked: true }); } // (swimming: the strokes never throw or drop it)
             else if (ch.armState) {
                 const arm = ch.armState(side, hs.arm);
                 const gt = hs.clock = (hs.clock || 0) + dt * 1000; // (the game's clock: a stalled frame must not cut a swing in two)
-                // a real throw: wind-up, a fast swing, the fingers let go — it flies with the hand's speed
-                const thr = hs.thr.update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(this.game.currentPose, side), weight: w.mass || 1, blurOk: true }); // (a hand lost in the swing's blur after a wind-up behind the shoulder: thrown too)
-                if (thr) {
-                    this.release(side);
-                    w.velocity.fromArray(thr.vWorld);
-                    // aboard a ship: the speed over her deck (she carries it in flight — Ships.attach)
-                    const sh = this.game.ships?.me?.ship;
-                    if (sh) { const pv = this.game.ships.pointVel(sh, w.position.x, w.position.z, {}); w.velocity.x -= pv.x; w.velocity.z -= pv.z; }
-                    w.velocity.clampLength(0, 22);
-                    return;
-                }
+                // a real throw of any kind (overhand, sidearm, underhand…) or a calm opening of the held-out hand
+                const d = ps ? hs.trk.decide({ t: tt, arm, weight: w.mass || 1 }) : null;
+                if (d?.act) { this._letGoTracked(side, w, d, ch); return; }
+                // (no camera pose stream at all — a bare test rig: the old gate, the outstretched hand opened)
+                if (!ps && hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
                 // the outstretched hand clearly opened: it falls out of it
                 // the pawnshop / the shady buyer: the off hand held out over his counter and opened lays it there (BuyerDeal.js)
                 if (side === this.game.off) {
@@ -370,7 +373,7 @@ export class WeaponSystem {
                         return;
                     }
                 }
-                if (hs.drop.update({ now: gt, curl, tracked, ...arm })) { this.release(side); return; }
+
             }
             this._driveHeld(side, dt, ch);
             return;
@@ -540,6 +543,7 @@ export class WeaponSystem {
         hs.hasPrev = false;
         hs.drop.reset(true);
         hs.thr.reset();
+        hs.trk.reset(true);
         w.hover = null;
         w.clearRemote();
         w.attach({ playerId: this.game.localId || 'local', side });
@@ -650,6 +654,37 @@ export class WeaponSystem {
         w.releasedAt = this.game.now();
         w.releasedSide = side;
         if (this.onRelease) this.onRelease(w, side);
+    }
+
+    /**
+     * A held weapon leaves the hand as the hand's memory says (d: ThrowModel decision): the hand's velocity at the
+     * moment the fingers let go (× the flick and its weight, ≤ 10° towards where the eyes look, an arm's limit) plus the
+     * body's own motion; its own spin (the wrist turning it — the rigid body keeps it) and the flick's end-over-end turn;
+     * from where it was then, on along its flight for the decision's time (never into a wall).
+     */
+    _letGoTracked(side, w, d, ch) {
+        const g = this.game;
+        const look = _a.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(new THREE.Quaternion()) : ch.group.quaternion);
+        const lv = launchVelocity(d, w.mass || 1, d.act === 'throw' ? look : null, this._lv || (this._lv = { x: 0, y: 0, z: 0 }));
+        const handNow = ch.getHandWorldPosition(side, _b);
+        const from = _c.copy(w.position);
+        this.release(side);
+        w.velocity.set(lv.x, lv.y, lv.z);
+        const sh = g.ships?.me?.ship;
+        if (sh) { const pv = g.ships.pointVel(sh, w.position.x, w.position.z, {}); w.velocity.x -= pv.x; w.velocity.z -= pv.z; }
+        if (d.act === 'throw') {
+            const fl = spinFor('hammer', w.velocity, null, this._sp || (this._sp = { x: 0, y: 0, z: 0 }));
+            w.angularVelocity.x += fl.x * 0.5; w.angularVelocity.z += fl.z * 0.5; w.angularVelocity.clampLength(0, 30);
+            // where it was when the fingers let go, moved on along its flight (stopped before anything solid)
+            const p = launchPoint(_d.copy(from).sub(handNow).add(_e.set(d.pos.x, d.pos.y, d.pos.z)), w.velocity, d.lag, 14, this._lp || (this._lp = { x: 0, y: 0, z: 0 }));
+            const col = g.collision, n = Math.max(1, Math.ceil(from.distanceTo(_e.set(p.x, p.y, p.z)) / 0.2));
+            if (from.distanceTo(_e) < 3 && col?.pointBlocked) {
+                for (let i = 1; i <= n; i++) { _d.lerpVectors(from, _e, i / n); if (col.pointBlocked(_d.x, _d.y, _d.z)) break; w.position.copy(_d); }
+            }
+            const sp = w.velocity.length();
+            if (sp > 4) g.sound?.playThrow?.(sp, 'long', w.position);
+        }
+        handLog(`${d.act === 'throw' ? 'бросок' : 'отпускание'} оружия (${side === 'right' ? 'правая' : 'левая'}${side === g.off ? ', неосновная' : ', ведущая'}): ${w.type || 'оружие'} ${w.mass || 1} кг — ${d.why}; вылет ${w.velocity.length().toFixed(1)} м/с, вращение ${w.angularVelocity.length().toFixed(1)} рад/с`);
     }
 
     _forget(side, hand) {

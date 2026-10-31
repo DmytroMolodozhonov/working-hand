@@ -47,8 +47,10 @@ import { shieldsNow, bounceOffShields } from './ShieldBounce.js';
 import { PEN_POINTS, Steady, lengthProfile } from '../entities/SimplifiedHand.js';
 import { HandoverPeer, HANDOVER, WHY, giveWhy, takeWhy, TouchTimer } from './Handover.js';
 import { allLog } from '../core/AllLog.js';
-import { DropGate, DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, dropWhy, handLog } from './HandRelease.js';
-import { OffGate } from './OffHandRelease.js';
+import { DROP, ThrowDetector, poseBehind, holdsFast, holdsWhy, handLog } from './HandRelease.js';
+import { HandTrack, launchVelocity, launchPoint, spinFor, physOf, bounce, groundSlide, massGain, speedCap } from './ThrowModel.js';
+import { waterAt } from './CreatureSwim.js';
+import { realmAt } from '../world/Planets.js';
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { WandSwap } from './WandSwap.js';
 import { makePurseModel } from './CoinBelt.js';
@@ -76,6 +78,7 @@ export const TOUCH_MS = 1500;
 const BY_HANDLE = new Set(['wand', 'hammer', 'bow', 'iceRod']);
 const _v = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _inv = new THREE.Matrix4();
 
@@ -156,10 +159,6 @@ const _qa = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const _UPY = new THREE.Vector3(0, 1, 0);
 const _hq = new THREE.Quaternion();
-/** The arm's own mass in a throw (kg-ish): a thing as heavy leaves the hand at ~70% of the hand's speed. */
-const ARM_MASS = 1.2;
-/** The thing leaves the hand faster than the camera sees the hand move (the wrist's flick at the end of the swing). */
-const THROW_GAIN = 1.5;
 /** How much the air holds each thing back (quadratic drag per m/s): its shape over its weight. */
 /**
  * Where a backpack is put on: the hand with it brought to the shoulder or behind the back (a natural swing «over the shoulder»),
@@ -189,10 +188,10 @@ export class ItemSystem {
         this._eatT = 0;
         this._wearT = 0;
         // when a held thing leaves the hand (HandRelease.js): only the outstretched hand opened, or a real throw
-        this._drop = { right: new DropGate(), left: new DropGate() };
         this._dropChest = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over my own chest: HouseMagic.chestUnderHand)
         this._dropBuy = { right: new BuyerGate(), left: new BuyerGate() }; // (the off hand opened over a buyer's counter: BuyerDeal.js)
-        this._offGate = { right: new OffGate(), left: new OffGate() }; // (the off hand opened anywhere: OffHandRelease.js — a wand too)
+        // (every hand's memory of its moves and fingers — ThrowModel.js: the throw or the opening, and its moment, read back from it)
+        this._trk = { right: new HandTrack(), left: new HandTrack() };
         this.swap = new WandSwap(this); // two wands touching ~3 s change hands
         this._thr = { right: new ThrowDetector(), left: new ThrowDetector() };
         this.letLog = new CappedLog(); // (why things left the hands: tests)
@@ -338,10 +337,9 @@ export class ItemSystem {
         const other = this.held[side === 'right' ? 'left' : 'right'];
         if (other && (other.item === item || (item.uid && other.item.uid === item.uid))) return false; // (one thing, one hand: never in both)
         // (into an open hand — «Акцио», a slot: kept until the fingers have closed on it once)
-        this._drop[side].reset(closed);
         this._dropBuy[side].reset();
         this._dropChest[side].reset();
-        this._offGate[side].reset();
+        this._trk[side].reset(closed);
         this._thr[side].reset();
         if (!item.uid) item.uid = 'it' + Math.random().toString(36).slice(2, 10); // (old saves: a book had none)
         const model = makeItemModel(item);
@@ -380,6 +378,7 @@ export class ItemSystem {
         h.thumb = undefined;
         h.q = null;
         h.since = performance.now();
+        this._trk[to].reset(true);
         this.held[to] = h;
         if (this.game.sync) { this.game.sync.itemHold?.(from, null); this.game.sync.itemHold?.(to, h.item); }
         return true;
@@ -656,13 +655,13 @@ export class ItemSystem {
      * The thing leaves the hand with velocity `vel` (world), turned as it was in the hand,
      * spinning with `spin` (the wrist's snap; none: it tumbles a little).
      */
-    _throw(side, vel, { spin = null, why = 'другое' } = {}) {
+    _throw(side, vel, { spin = null, why = 'другое', from = null } = {}) {
         const h = this.held[side];
         if (!h) return;
         const item = h.item;
         handLog(`${ITEM_INFO[item.kind]?.name || item.kind} покинул(а) руку (${side === 'right' ? 'правую' : 'левую'}): ${why}, скорость ${vel.length().toFixed(1)}${this.auth ? '' : ', через сеть: просьба хосту'}`);
         this.letLog.push(why);
-        const pos = h.model.position.clone();
+        const pos = (from || h.model.position).clone();
         const quat = h.model.quaternion.clone();
         this.releaseHand(side);
         this._outOfSolid(pos);
@@ -674,6 +673,70 @@ export class ItemSystem {
             L.thrower = this.game.localId;
         } else this.game.sync?.itemThrow?.(item, pos, v, quat, w);
         this.game.hud.setVoice?.(`✋ ${ITEM_INFO[item.kind]?.name || 'Предмет'} ${v.length() > 3 ? 'брошен' : 'выпал из руки'}`, true);
+    }
+
+    /** 'левая (неосновная)' / 'правая (ведущая)' — for the journal. */
+    _handName(side) {
+        return `${side === 'right' ? 'правая' : 'левая'} (${side === this.game.off ? 'неосновная' : 'ведущая'})`;
+    }
+
+    /**
+     * This frame into the hand's memory (ThrowModel.HandTrack): the hand in the body's space and in the world, the body's
+     * turn, the fingers (as tracked), whether the camera has the hand in this picture, a new picture or not.
+     */
+    _trkPush(side, ch, tt, fresh) {
+        const arm = ch.armState(side, this._arm[side]);
+        const hand = ch.getActiveHands?.()[side];
+        // (the newest picture has the hand's landmarks: SimplifiedHand._lost is false — not «seen within 400 ms»)
+        const seen = !!hand && hand.group.visible && (hand._lost === undefined ? (ch.isHandTracked?.(side) ?? false) : !hand._lost);
+        const w = ch.getHandWorldPosition(side, this._tw || (this._tw = new THREE.Vector3()));
+        const ps = this.game.poseSmoother;
+        this._trk[side].push({ t: tt, hand: arm.hand, world: w, yaw: ch.group.rotation.y, curl: ch.getGripCurl ? ch.getGripCurl(side) : 1, seen, fresh, camMs: ps?.interval || 50 });
+    }
+
+    /**
+     * The thing leaves the hand as the hand's memory says (d: a HandTrack decision — a throw or an opening): with the
+     * hand's own velocity at the moment the fingers began to let go (× the flick and the thing's weight, bent ≤ 10°
+     * towards where the eyes look, limited to what an arm can give it), plus the body's own motion; from where the hand
+     * was then, moved on along its flight for the time the decision took (it has been flying meanwhile — never through a
+     * wall: stopped before it); spinning from the wrist and its shape. The journal «Предметы» gets every number.
+     */
+    _letGo(side, d, why) {
+        const g = this.game, ch = g.character, h = this.held[side];
+        if (!h || !d) return;
+        const kind = h.item.kind, m = ITEM_INFO[kind]?.weight ?? 1;
+        const lk = _a.set(0, 0, -1).applyQuaternion(ch.getHeadQuaternion ? ch.getHeadQuaternion(_hq) : ch.group.quaternion);
+        const v = launchVelocity(d, m, d.act === 'throw' ? lk : null, this._lv || (this._lv = { x: 0, y: 0, z: 0 }));
+        const vel = _e.set(v.x, v.y, v.z);
+        // aboard a ship: the speed over her deck (she carries the thing in flight — Ships.attach)
+        const sh = g.ships?.me?.ship;
+        if (sh) { const pv = g.ships.pointVel(sh, ch.group.position.x, ch.group.position.z, _f); vel.x -= pv.x; vel.z -= pv.z; }
+        // where it left the hand: the thing's offset from the hand now, at the hand's place then, moved on along the flight
+        const handNow = ch.getHandWorldPosition(side, _b);
+        const p0 = _c.copy(h.model.position).sub(handNow).add(_d.set(d.pos.x, d.pos.y, d.pos.z));
+        if (p0.distanceTo(h.model.position) > 3) p0.copy(h.model.position); // (a teleport, a respawn in between: from the hand)
+        const lp = launchPoint(p0, vel, d.lag, 14, this._lp || (this._lp = { x: 0, y: 0, z: 0 }));
+        const from = this._clearPath(h.model.position, _d.set(lp.x, lp.y, lp.z));
+        const spin = spinFor(kind, vel, ch.palmSpin?.[side], this._sp || (this._sp = { x: 0, y: 0, z: 0 }));
+        const sp = vel.length();
+        handLog(`${d.act === 'throw' ? 'бросок' : 'отпускание'} (${this._handName(side)}): ${ITEM_INFO[kind]?.name || kind} ${m} кг — ${why}; рука ${d.speed.toFixed(1)} м/с → вылет ${sp.toFixed(1)} м/с (${vel.x.toFixed(1)}, ${vel.y.toFixed(1)}, ${vel.z.toFixed(1)}), вращение ${Math.hypot(spin.x, spin.y, spin.z).toFixed(1)} рад/с, решено через ${Math.round(d.lag)} мс после разжатия${d.blur ? ', кисть терялась камерой' : ''}`);
+        this._throw(side, vel, { spin: _f.set(spin.x, spin.y, spin.z), why, from });
+        if (d.act === 'throw' && sp > 4) g.sound?.playThrow?.(sp, physOf(kind).shape, from);
+    }
+
+    /** From a (the hand) towards b: the last free point before a block / a body of the world (b itself if clear). */
+    _clearPath(a, b) {
+        const col = this.game.collision;
+        const out = this._cp || (this._cp = new THREE.Vector3());
+        out.copy(a);
+        if (!col?.pointBlocked) return out.copy(b);
+        const d = a.distanceTo(b), n = Math.max(1, Math.ceil(d / 0.2));
+        for (let i = 1; i <= n; i++) {
+            _v2.lerpVectors(a, b, i / n);
+            if (col.pointBlocked(_v2.x, _v2.y, _v2.z)) return out;
+            out.copy(_v2);
+        }
+        return out;
     }
 
     /**
@@ -747,6 +810,12 @@ export class ItemSystem {
         L.chk = 0;
         const col = this.game.collision, p = L.model.position;
         if (!col) return;
+        if (L.afloat) {
+            // floating: stays on the water while there is water (a frozen / drained pond: it falls / lies on what is there)
+            const land = this.game.world?.terrain?.data, wa = land?.get ? waterAt(land, p.x, p.z, p.y - 0.5) : null;
+            if (wa && Math.abs(p.y - (wa.surface - 0.08)) < 0.6) { if (Math.abs(p.y - (wa.surface - 0.08)) > 0.02) { p.y = wa.surface - 0.08; L.sentRest = false; } return; }
+            L.afloat = false; L.rest = false; L.sentRest = false; return;
+        }
         const y0 = p.y;
         // a good that ended up inside / under its standing counter (any way it got there): back on the top
         if (L.perch && p.y < L.perch.top - 0.3 && this._perched(L.perch, p, 3)) p.y = L.perch.top + 0.12;
@@ -813,7 +882,7 @@ export class ItemSystem {
         // aboard a ship: the speed over her deck (she carries the thing in flight — Ships.attach)
         const sh = this.game.ships?.me?.ship;
         if (sh) { const pv = this.game.ships.pointVel(sh, ch.group.position.x, ch.group.position.z, _e); body.x -= pv.x; body.z -= pv.z; }
-        return out.multiplyScalar(thr.speed * THROW_GAIN * Math.sqrt(ARM_MASS / (ARM_MASS + m))).add(body).clampLength(0, 22);
+        return out.multiplyScalar(Math.min(speedCap(m), thr.speed * massGain(m))).add(body); // (ThrowModel: the flick, the weight, an arm's limit)
     }
 
     /** The other, empty hand closes on this thing (taking the bow / the book across): not a drop. */
@@ -914,10 +983,15 @@ export class ItemSystem {
         // letting go: only a real throw (wind-up, swing, the fingers open) or the outstretched hand opened
         // (timed by the game's clock: a stalled frame must not cut a swing in two)
         const gt = this._clock = (this._clock || 0) + dt * 1000;
+        // (the hands' memory runs on the moment the shown pose stands for — PoseSmoother.eff: a hand's speed read off it is
+        // a true speed, not the beat of the frames against the camera's pictures)
+        const ps = g.poseSmoother, tt = ps?.eff > 0 ? ps.eff : now;
+        const fresh = !!ps && ps.to !== this._lastTo; if (ps) this._lastTo = ps.to;
         for (const side of ['right', 'left']) {
             const h = this.held[side];
             if (!h) continue;
             const kind = h.item.kind;
+            this._trkPush(side, ch, tt, fresh);
             // (nor the wand while the hand or the wand rests against the ground, a wall — the author: the ground at the
             // hands' height, the wand touched it and fell — and a moment after: _touching; coins are still laid on a
             // counter by opening the hand on it)
@@ -937,30 +1011,27 @@ export class ItemSystem {
                         || (this._otherHandTakes(side, h) ? 'вещь закреплена: другая рука держит её (правило двух рук)' : null)
                         || 'руки не готовы');
                 }
-                this._thr[side].reset(); this._drop[side].since = 0; continue;
+                this._thr[side].reset(); this._trk[side].decide({ t: tt, blocked: true }); continue;
             }
             const arm = ch.armState(side, this._arm[side]);
             const curl = ch.getGripCurl ? ch.getGripCurl(side) : 1, tracked = ch.isHandTracked ? ch.isHandTracked(side) : false;
-            // (a coin pouch, as the wand: only a real throw — the fingers round a pouch are often seen open, and
-            // the author threw it by accident just taking it; a light thing's lift by the head is no wind-up then)
-            const strict = kind === 'wand' || kind === 'coins';
-            const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight: ITEM_INFO[kind]?.weight ?? 1, blurOk: true, strict });
-            const td = this._thr[side];
-            if (td.why) { handLog(`бросок не засчитан (${side === 'right' ? 'правая' : 'левая'}): ${td.why}`); td.why = null; }
-            if (thr) { this._throw(side, this._throwVelocity(side, thr, new THREE.Vector3()), { spin: ch.palmSpin?.[side], why: `бросок (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)` }); continue; }
-            // (the OFF hand held out and opened: any thing, a wand too, falls as easily as over a buyer's counter — the other
-            // hand keeps its own wand / Protection shield; the leading hand's wand still leaves it only thrown)
-            if (side === g.off) {
-                const og = this._offGate[side].update({ now: gt, curl, tracked, ...arm, heldMs: performance.now() - h.since, wand: kind === 'wand' });
-                if (og.drop) { this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата неосновная рука (пальцы ${curl.toFixed(2)}, рука ${arm.reach.toFixed(2)})` }); continue; }
-                if (og.why && this._offGate[side].mayLog(performance.now())) handLog(`отпускание: левая/неосновная рука ${side === 'right' ? 'правая' : 'левая'}, ${ITEM_INFO[kind]?.name || kind}, пальцы ${curl.toFixed(2)} — не выпала: ${og.why}`);
+            const tk = this._trk[side], weight = ITEM_INFO[kind]?.weight ?? 1;
+            // the LEADING hand's wand (the one that casts): it must never fly off by accident — only a real throw (a wind-up
+            // behind the shoulder, a fast long swing, the fingers seen holding it and then seen opening wide), never an
+            // opened hand (the author holds it by one finger, the other four open). Its flight is read from the hand's memory.
+            if (kind === 'wand' && side !== g.off) {
+                const thr = this._thr[side].update({ now: gt, hand: arm.hand, shoulder: arm.shoulder, vRel: arm.vRel, vWorld: arm.vWorld.toArray(), curl, tracked, behind: poseBehind(g.currentPose, side), weight, blurOk: true, strict: true });
+                const td = this._thr[side];
+                if (td.why) { handLog(`бросок не засчитан (${this._handName(side)}): ${td.why}`); td.why = null; }
+                if (thr) { this._letGo(side, tk.swing(tt), `бросок палочки (замах ${thr.speed.toFixed(1)} м/с, пальцы разжались)`); continue; }
+                this._dropTry(side, kind, curl < DROP.CLOSED && tracked ? 'палочка в ведущей руке не выпадает из разжатой руки — только бросок' : null);
+                continue;
             }
-            // (the wand never falls out of an opened hand — the author holds it by one finger, the other four open:
-            // it leaves the hand only thrown; a pouch only from a hand really opened wide, kept open: DROP.WAND_*)
-            if (kind === 'wand') { this._drop[side].since = 0; this._dropTry(side, kind, curl < DROP.CLOSED && tracked ? 'палочка не выпадает из разжатой руки — только бросок' : null); continue; }
-            if (tracked && curl < DROP.CLOSED) this._dropTry(side, kind, dropWhy(this._drop[side], { now: gt, curl, tracked, ...arm }, strict));
-            else this._dropTry(side, kind, null);
-            if (this._drop[side].update({ now: gt, curl, tracked, ...arm, strict })) this._throw(side, _v.copy(ch.handVelocity[side]).clampLength(0, 2), { why: `разжата вытянутая рука (пальцы ${curl.toFixed(2)})` });
+            // any other thing in either hand, any wand in the off hand: a real throw of any kind, or a calm opening of a
+            // free hand (ThrowModel.HandTrack) — the moment found back where the fingers began to open
+            const d = tk.decide({ t: tt, arm, weight });
+            if (d?.act) { this._letGo(side, d, d.why); continue; }
+            this._dropTry(side, kind, d?.why || null);
         }
         this.swap.update(dt);
         this._eat(dt, ch);
@@ -1051,10 +1122,36 @@ export class ItemSystem {
         // (its land is not made yet — the workers bring it: it waits where it is, instead of making the ground here in a frame)
         const land = this.game.world?.terrain?.data;
         if (!space && land?.landMade && !land.landMade(m.position.x, m.position.z)) return;
-        if (!space) {
-            L.vel.y -= 14 * dt;
-            // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on)
-            L.vel.multiplyScalar(1 / (1 + (AERO[L.item.kind] ?? 0.02) * L.vel.length() * dt));
+        // where it is (twice a second): the Earth, another planet (its own weight; the Moon and Mercury have no air —
+        // nothing holds a thrown thing back there), space
+        const P = physOf(L.item.kind);
+        if (!(L.envT > 0) || space !== L.envSpace) {
+            L.envT = 0.5; L.envSpace = space;
+            const pl = space ? null : this._planetAt?.(m.position);
+            L.grav = space ? 0 : 14 * (pl?.gravity ?? 1);
+            L.air = space || pl?.air === 'none' ? 0 : 1;
+        } else L.envT -= dt;
+        // in water: it slows hard, a light thing comes up and floats, a heavy one sinks slowly to the bottom (a splash going in)
+        const wa = !space && land?.get ? waterAt(land, m.position.x, m.position.z, m.position.y - 0.5) : null;
+        const wet = !!wa && m.position.y < wa.surface;
+        if (wet !== !!L.wet) {
+            if (wet && L.vel.length() > 2) this._splash?.(L, wa.surface);
+            L.wet = wet;
+        }
+        if (wet) {
+            const k = 1 / (1 + 3.5 * dt);
+            L.vel.x *= k; L.vel.z *= k;
+            if (P.float) { L.vel.y += ((wa.surface - 0.08 - m.position.y) * 10 - L.vel.y * 3) * dt; }
+            else { L.vel.y = Math.max(-1.3, L.vel.y * k - 4 * dt); }
+            L.spin.multiplyScalar(1 / (1 + 2 * dt));
+        } else if (!space) {
+            L.vel.y -= L.grav * dt;
+            // the air: quadratic drag by shape and weight (a book flutters, a hammer flies on); none without air
+            if (L.air) L.vel.multiplyScalar(1 / (1 + (AERO[L.item.kind] ?? 0.02) * L.vel.length() * dt));
+        }
+        // floating still at the surface: it rests there (rocked by _restCheck's look — no stepping every frame)
+        if (wet && P.float && Math.abs(m.position.y - (wa.surface - 0.08)) < 0.12 && L.vel.lengthSq() < 0.04) {
+            L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true; L.afloat = true; return;
         }
         // spinning: a real angular velocity about its axis (the wrist's snap), slowly dying
         const wv = L.spin.length();
@@ -1090,13 +1187,18 @@ export class ItemSystem {
             const wallEdge = _v.y <= gy + 0.15 && col.inRock?.(_v.x, _v.y, _v.z) && !col.inRock(m.position.x, m.position.y, m.position.z)
                 && gy > (col.groundAt ? col.groundAt(m.position.x, m.position.z, m.position.y + 0.5) : gy) + 0.3;
             if ((_v.y > gy + 0.15 || wallEdge) && col.pointBlocked?.(_v.x, _v.y, _v.z)) {
-                let hit = false;
+                // off the wall as its stuff and shape say: restitution along the wall's normal, friction along it
+                let hit = false, vin = 0;
                 for (const ax of ['x', 'z', 'y']) {
                     _v2.copy(m.position); _v2[ax] += L.vel[ax] * hs;
-                    if (col.pointBlocked(_v2.x, _v2.y, _v2.z)) { L.vel[ax] *= -0.3; hit = true; }
+                    if (col.pointBlocked(_v2.x, _v2.y, _v2.z)) {
+                        _n.set(0, 0, 0); _n[ax] = L.vel[ax] > 0 ? -1 : 1;
+                        vin = Math.max(vin, bounce(L.vel, _n, P)); hit = true;
+                    }
                 }
-                if (!hit) L.vel.multiplyScalar(-0.3);
-                L.vel.multiplyScalar(0.7); L.spin.multiplyScalar(0.5);
+                if (!hit) { vin = L.vel.length(); L.vel.multiplyScalar(-P.e); }
+                L.spin.multiplyScalar(0.5);
+                if (vin > 3) this._knock?.(L, vin);
                 break;
             }
             m.position.copy(_v);
@@ -1105,8 +1207,23 @@ export class ItemSystem {
         if (m.position.y >= ground + 0.12 && !col.inRock?.(m.position.x, m.position.y, m.position.z)) (L.safe || (L.safe = new THREE.Vector3())).copy(m.position); // (the last place in the open: where it goes back to, if it is ever lost in rock)
         if (m.position.y < ground + 0.12) {
             m.position.y = ground + 0.12;
-            if (L.vel.y < -3) { L.vel.y *= -0.25; L.vel.x *= 0.5; L.vel.z *= 0.5; L.spin.multiplyScalar(0.4); }
-            else {
+            // the ground: it bounces as its stuff says (an apple hops, a book slaps flat), friction takes its sliding speed;
+            // then it slides on, or rolls (a round thing turns as it rolls), and comes to rest — never stopped dead in the air
+            let settled = false;
+            if (L.vel.y < 0) {
+                const vin = bounce(L.vel, _UPY, P);
+                if (vin > 2.5) { this._knock?.(L, vin); L.spin.multiplyScalar(0.55); if (P.shape === 'long') L.spin.x += (Math.random() - 0.5) * vin; } // (a long thing hitting on its end tumbles)
+                if (L.vel.y < 1.1 || L.grav === 0) L.vel.y = 0;
+            }
+            if (L.vel.y === 0) {
+                settled = groundSlide(L.vel, P, L.grav || 14, dt);
+                if (!settled && P.shape === 'round') {
+                    // rolling: turning about the axis across its way (up × v) at v / r
+                    const r = Math.max(0.08, (P.len || 0.3) / 2);
+                    L.spin.set(L.vel.z / r, 0, -L.vel.x / r);
+                } else if (!settled) L.spin.multiplyScalar(Math.max(0, 1 - 6 * dt));
+            }
+            if (settled) {
                 L.vel.set(0, 0, 0); L.spin.set(0, 0, 0); L.rest = true;
                 // (lies down: a shield / a bow flat, a book on its side, the rest upright, keeping its turn about up)
                 if (L.item.kind === 'wand') {
@@ -1123,6 +1240,32 @@ export class ItemSystem {
             }
         }
         if (L.thrower && this.auth && L.vel.lengthSq() > 36) this._thrownHit(L);
+    }
+
+    /** The planet a point is on (null: the Earth / no planets) — Planets.realmAt. */
+    _planetAt(p) {
+        const sp = this.game.space;
+        if (!sp?.planets || p.x < 1e5) return null;
+        const id = realmAt(p.x, p.y, p.z, sp.planets);
+        return id && id !== 'earth' && id !== 'space' ? sp.planets.get?.(id) || null : null;
+    }
+
+    /** A thing falls into water: a splash of drops where it went in, a «плюх» by its weight and speed. */
+    _splash(L, surface) {
+        const g = this.game, p = L.model.position, v = L.vel.length();
+        const n = Math.min(14, 4 + Math.round(v * 1.2));
+        for (let i = 0; i < n; i++) g.fx?.spark?.(_v2.set(p.x, surface + 0.05, p.z), 0xcfe8ff, 0.07, _n.set((Math.random() - 0.5) * 3, 1.5 + Math.random() * v * 0.35, (Math.random() - 0.5) * 3), 0.55);
+        const now = performance.now();
+        if (now - (this._splashAt || -1e9) > 120) { this._splashAt = now; g.sound?.playItemHit?.('splash', v, p); }
+    }
+
+    /** It hits the ground / a wall at `v` m/s: a knock by its stuff (an apple's thump, a wand's clack, a book's slap, a pouch's clink). */
+    _knock(L, v) {
+        const now = performance.now();
+        if (now - (L.knockAt || -1e9) < 90) return;
+        L.knockAt = now;
+        const kind = L.item.kind, P = physOf(kind);
+        this.game.sound?.playItemHit?.(kind === 'coins' ? 'clink' : P.shape, v, L.model.position);
     }
 
     /**

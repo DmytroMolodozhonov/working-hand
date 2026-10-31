@@ -268,6 +268,8 @@ export class HandFilter {
 }
 
 const POSE_KEYS = [0, 11, 12, 13, 14, 15, 16, 23, 24];
+const POSE_ARM_KEYS = new Set([13, 14, 15, 16]); // elbows, wrists
+export const POSE_ARM_DCUTOFF = 4; // (was 1: the arm's speed found ~0.15 s late — the wrist trailed 50–80 ms in a swing; throwbench: 2 throws of 18 000 «fell down», speed error p90 16.4% → 0 and 14.8%)
 
 /** Visibility gating + smoothing for the body landmarks that drive the arms. */
 export class PoseStabilizer {
@@ -276,7 +278,12 @@ export class PoseStabilizer {
         this.held = new Map();
         this.lastPose = null;
         this.lastTime = -Infinity;
-        for (const k of POSE_KEYS) this.filters.set(k, [new OneEuroFilter(2.0, 3.0), new OneEuroFilter(2.0, 3.0), new OneEuroFilter(1.5, 1.0)]);
+        // (the elbows and wrists: POSE_ARM_DCUTOFF — how fast the filter follows the arm's speed; throws read the hand's speed
+        // off the shown poses — ThrowModel, tools/throwbench.mjs measures it through this filter)
+        for (const k of POSE_KEYS) {
+            const dc = POSE_ARM_KEYS.has(k) ? POSE_ARM_DCUTOFF : 1.0;
+            this.filters.set(k, [new OneEuroFilter(2.0, 3.0, dc), new OneEuroFilter(2.0, 3.0, dc), new OneEuroFilter(1.5, 1.0, dc)]);
+        }
     }
 
     /**

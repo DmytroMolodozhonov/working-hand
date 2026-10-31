@@ -19,6 +19,7 @@ import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
+import { synthThrow, THROW_SOUNDS } from './ThrowSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
@@ -654,6 +655,8 @@ export class SoundManager {
             ['bell_big', () => this._synthBell(196, 6.5)], ['bell_small', () => this._synthBell(330, 4.5)], ['anvil', () => this._synthAnvil()],
             // (the duel arena — ArenaDuels.js: the stands' roar and groan, the gong, «3-2-1», the fanfare, applause)
             ...ARENA_SOUNDS.map((k) => ['arena_' + k, () => synthArena(this.context, k)]),
+            // (a thing thrown and landing — Items / ThrowModel: the air it cuts, its knock on the ground by its stuff, water)
+            ...THROW_SOUNDS.map((k) => ['thr_' + k, () => synthThrow(this.context, k)]),
         ]);
         while (list.length) {
             const [key, make] = list.shift();
@@ -1552,6 +1555,29 @@ export class SoundManager {
     }
 
     /** A bone knocking into its place / onto the ground (the risen dead — Skeletons.js): a dry, light clack. */
+    /**
+     * A thing leaves the hand fast (Items._letGo): the air it cuts — louder and higher the faster; a long thing spinning
+     * whirls. Only past ~4 m/s; made ahead (prewarmStep), never in the moment.
+     */
+    playThrow(speed, shape = 'round', position = null) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const buf = this.sounds[shape === 'long' ? 'thr_whirl' : 'thr_whoosh'];
+        if (!buf) return;
+        const k = Math.min(1, Math.max(0, (speed - 4) / 18));
+        const vol = 0.25 + 0.55 * k, rate = 0.85 + 0.45 * k + (Math.random() - 0.5) * 0.08;
+        if (position) this._playAt(buf, position, vol, 6, rate); else this._play(buf, vol * 0.8, rate);
+    }
+
+    /** A thrown / dropped thing hits the ground or a wall ('round' | 'long' | 'flat' | 'soft' | 'clink' | 'splash') at `speed` m/s. */
+    playItemHit(kind, speed, position) {
+        if (!this.enabled || !this.context || !this.loaded) return;
+        const key = { round: 'thr_thump', long: 'thr_clack', flat: 'thr_slap', soft: 'thr_thud', clink: 'thr_clink', splash: 'thr_splash' }[kind] || 'thr_thud';
+        const buf = this.sounds[key];
+        if (!buf || !position) return;
+        const k = Math.min(1, speed / 14);
+        this._playAt(buf, position, 0.25 + 0.6 * k, 5, 0.9 + Math.random() * 0.2);
+    }
+
     playBoneClack(position, volume = 1) {
         if (!this.enabled || !this.context || !this.loaded) return;
         if (!this.sounds.boneClack) this.sounds.boneClack = this._synthKnock(820, 0.09);

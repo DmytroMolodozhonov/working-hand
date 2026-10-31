@@ -66,7 +66,7 @@ const state = (page) => page.evaluate(() => {
     const loose = [...g.items.loose.values()].filter((L) => L.item.uid === 'acc-apple').map((L) => ({ v: Math.hypot(L.vel.x, L.vel.z), thrower: L.thrower || null }));
     const a = g.character.armState('right');
     const why = window.__why || [];
-    const arm = [a.reach, a.forward, a.up, a.speed, a.palmUp, g.character.getGripCurl('right'), g.items._drop.right.armed ? 1 : 0].map((x) => +x.toFixed(2));
+    const arm = [a.reach, a.forward, a.up, a.speed, a.palmUp, g.character.getGripCurl('right'), g.items._trk.right.armed ? 1 : 0].map((x) => +x.toFixed(2));
     return { apple: g.items.held.right?.item.uid || null, sword: g.weapons.hands.left.held?.id || null, loose, arm, why };
 });
 

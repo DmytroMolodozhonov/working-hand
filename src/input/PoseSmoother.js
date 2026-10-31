@@ -27,6 +27,7 @@ export class PoseSmoother {
         this.startedAt = 0;
         this.lastPushAt = 0;
         this.interval = 50; // ms between results (measured)
+        this.eff = 0; this.effFrom = 0; this.effTo = 0; // the moment the shown pose stands for (arrival clock, ms)
     }
 
     /** A new result from the camera pipeline. */
@@ -38,6 +39,11 @@ export class PoseSmoother {
             if (gap > 0 && gap < 250) this.interval = this.interval * 0.8 + gap * 0.2;
         }
         this.lastPushAt = now;
+        // (the time the shown pose stands for: the blend goes from what is shown now to the new picture, so a frame part
+        // way through it shows the moment part way between them — a hand's speed read off the shown poses (ThrowModel) is
+        // then a true speed, not the beat of the game's frames against the camera's pictures)
+        this.effFrom = this.display ? this.eff : now;
+        this.effTo = now;
         this.from = this.display || this.to || pose;
         this.to = pose;
         this.startedAt = now;
@@ -64,6 +70,7 @@ export class PoseSmoother {
         const big = Math.max(0, (this.jump || 0) - 0.25) * 1500; // +150 ms per 0.1 of the image beyond 25%
         const duration = Math.max(16, Math.min(40, this.interval * 0.5)) + Math.min(120, big);
         const k = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / duration));
+        this.eff = this.effFrom + (this.effTo - this.effFrom) * k;
         const out = Object.assign({}, to);
         if (k < 1) {
             out.headRotation = mixAngles(from.headRotation, to.headRotation, k);
