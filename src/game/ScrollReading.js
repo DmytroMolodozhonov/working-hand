@@ -21,6 +21,7 @@ import { holoParts, holoPlain } from './HoloText.js';
 import { Steady } from '../entities/SimplifiedHand.js';
 import { figureOf, figureLines } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
+import { encode, decode, Throttle } from './ScrollNet.js';
 import { paintParchment, schoolOf, artKey } from '../fx/ScrollArt.js';
 
 const MAX_W = 2.2; // m of parchment, fully unrolled
@@ -101,6 +102,44 @@ export function drawParchment(item) {
     tex.wrapS = THREE.ClampToEdgeWrapping;
     tex.anisotropy = 4;
     return tex;
+}
+
+/** The parchment between two rollers (the same for the reader and for everybody who watches). */
+function buildParchment(item) {
+    const tex = drawParchment(item);
+    const mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0x3a3020 });
+    const parch = new THREE.Mesh(new THREE.PlaneGeometry(1, PARCH_H), mat);
+    const rodMat = new THREE.MeshLambertMaterial({ color: 0xf3e2b3 });
+    const knob = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
+    const roller = () => {
+        const r = new THREE.Group();
+        r.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, PARCH_H + 0.04, 10), rodMat));
+        for (const sy of [-1, 1]) { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 8), knob); k.position.y = sy * (PARCH_H / 2 + 0.07); r.add(k); }
+        return r;
+    };
+    const group = new THREE.Group();
+    const rollA = roller(), rollB = roller();
+    group.add(parch, rollA, rollB);
+    return { group, parch, rollA, rollB, tex, mat };
+}
+
+function unrollParts(R, w) {
+    const seen = Math.max(0.05, Math.min(1, w / MAX_W));
+    R.parch.scale.x = w;
+    R.tex.repeat.x = seen;
+    R.tex.offset.x = (1 - seen) / 2;
+    R.rollA.position.x = -w / 2;
+    R.rollB.position.x = w / 2;
+    const thick = 1 - seen * 0.4;
+    R.rollA.scale.set(thick, 1, thick);
+    R.rollB.scale.set(thick, 1, thick);
+}
+
+function disposeParchment(R) {
+    R.group.parent?.remove(R.group);
+    R.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    R.mat.dispose(); R.tex.dispose();
+    R.rollA.children[0].material.dispose(); R.rollA.children[1].material.dispose();
 }
 
 export class ScrollReading {
@@ -197,21 +236,7 @@ export class ScrollReading {
 
     _begin(s, other) {
         const g = this.game;
-        const tex = drawParchment(s.item);
-        const mat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0x3a3020 });
-        const parch = new THREE.Mesh(new THREE.PlaneGeometry(1, PARCH_H), mat);
-        const rodMat = new THREE.MeshLambertMaterial({ color: 0xf3e2b3 });
-        const knob = new THREE.MeshLambertMaterial({ color: 0x5a3a1e });
-        const roller = () => {
-            const r = new THREE.Group();
-            const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, PARCH_H + 0.04, 10), rodMat);
-            r.add(rod);
-            for (const sy of [-1, 1]) { const k = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 8), knob); k.position.y = sy * (PARCH_H / 2 + 0.07); r.add(k); }
-            return r;
-        };
-        const group = new THREE.Group();
-        const rollA = roller(), rollB = roller();
-        group.add(parch, rollA, rollB);
+        const { group, parch, rollA, rollB, tex, mat } = buildParchment(s.item);
         g.scene.add(group);
         s.model.visible = false; // (it is the open one now)
         this.r = { side: s.side, other, item: s.item, model: s.model, open: 0, closeT: 0, w: 0.12, sSign: 1, group, parch, rollA, rollB, tex, mat, c: null };
@@ -275,18 +300,7 @@ export class ScrollReading {
     }
 
     /** The parchment w long between the rollers; the text shows as it unrolls. */
-    _unroll(R, w) {
-        const seen = Math.max(0.05, Math.min(1, w / MAX_W));
-        R.parch.scale.x = w;
-        R.tex.repeat.x = seen;
-        R.tex.offset.x = (1 - seen) / 2;
-        R.rollA.position.x = -w / 2;
-        R.rollB.position.x = w / 2;
-        // the rollers grow thinner as the parchment comes off them
-        const thick = 1 - seen * 0.4;
-        R.rollA.scale.set(thick, 1, thick);
-        R.rollB.scale.set(thick, 1, thick);
-    }
+    _unroll(R, w) { unrollParts(R, w); }
 
     /** How far a point is from the nearer end of a rolled scroll. */
     _endDist(model, p) {
@@ -335,14 +349,68 @@ export class ScrollReading {
         if (!R) return;
         this.r = null;
         const g = this.game;
-        g.scene.remove(R.group);
-        R.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-        R.mat.dispose(); R.tex.dispose();
-        R.rollA.children[0].material.dispose(); R.rollA.children[1].material.dispose();
+        disposeParchment(R);
         R.model.visible = true;
         R.model.scale.setScalar(ITEM_SCALE.scroll || 2);
         const hand = g.character.getActiveHands?.()[R.other];
         if (hand?.setGrip && !g.items.held[R.other] && !g.weapons.hands[R.other].held) hand.setGrip(null);
+    }
+
+    // ------------------------------------------------------------ others see it
+    /** For the others: [second hand 1/2, width cm] while the scroll is open in my hands (also while it rolls back), else undefined. */
+    netState(now = performance.now()) {
+        const R = this.r;
+        const th = this._th || (this._th = new Throttle());
+        return th.value(R ? encode(R.other, R.w) : null, now);
+    }
+
+    /**
+     * Another player's scroll open in their hands (st: netState): the parchment between their fists,
+     * as wide as they have unrolled it. `side` — the hand the scroll is held in. Returns false if it is not open.
+     */
+    placeRemote(ch, model, item, side, st, dt = 0.016) {
+        const u = model.userData;
+        const d = decode(st);
+        if (!d || d.other === side) { this.releaseRemote(model); return false; }
+        let rr = u.remoteScroll;
+        if (!rr) {
+            rr = u.remoteScroll = buildParchment(item);
+            rr.w = d.w; rr.pf = { left: {}, right: {} };
+            this.game.scene.add(rr.group);
+            model.visible = false;
+        }
+        const w0 = this.game.weapons;
+        const hs = _v1.copy(w0.palmFrame(side, rr.pf[side], ch).G);
+        const ho = _v2.copy(w0.palmFrame(d.other, rr.pf[d.other], ch).G);
+        rr.w += (d.w - rr.w) * Math.min(1, dt * 12);
+        const across = _v6.subVectors(ho, hs);
+        if (across.lengthSq() < 1e-4) across.set(1, 0, 0);
+        across.normalize();
+        // which way the text reads: kept like the reader's (upright for whoever looks at it)
+        const cam = this.game.camera;
+        const camRight = _v7.set(1, 0, 0).applyQuaternion(cam.quaternion);
+        if (across.dot(camRight) < -0.15) rr.flip = true; else if (across.dot(camRight) > 0.15) rr.flip = false;
+        const dir = rr.flip ? _v8.copy(across).negate() : across;
+        const eye = ch.head.getWorldPosition(_v4);
+        const centre = _v3.copy(hs).addScaledVector(across, rr.w / 2);
+        const n = _v5.subVectors(eye, centre);
+        n.addScaledVector(dir, -n.dot(dir));
+        if (n.lengthSq() < 1e-6) n.set(0, 1, 0).cross(dir);
+        n.normalize();
+        const up = _v9.crossVectors(n, dir).normalize();
+        _m4.makeBasis(dir, up, n);
+        rr.group.quaternion.setFromRotationMatrix(_m4);
+        rr.group.position.copy(centre);
+        unrollParts(rr, rr.w);
+        return true;
+    }
+
+    releaseRemote(model) {
+        const rr = model.userData.remoteScroll;
+        if (!rr) return;
+        model.userData.remoteScroll = null;
+        disposeParchment(rr);
+        model.visible = true;
     }
 
     dispose() { this._close(); }

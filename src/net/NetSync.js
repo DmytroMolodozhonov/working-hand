@@ -384,6 +384,7 @@ export class NetSync {
                 t: 'p', id: this.me, s: g.character.serializePose(), hp: g.combat.enabled ? g.combat.hp : g.playerHP,
                 c: g.combat.serialize(), ft: Math.round(g.combat.fatigue * 10) / 10, mm: Math.floor(g.combat.maxFatigue || 30), dc: g.duel.myContact(), w: held,
                 bk: g.books?.reading?.netState() || undefined, // (my book open in the hands)
+                sc: g.scrolls?.netState() || undefined, // (my scroll open in the hands: ScrollNet.js)
                 lm: g.wandMagic?.light?.level || undefined, // (my wand's tip shines: everybody sees it, and is lit by it)
                 lf: g.wandMagic?.netFollow?.(), // (my «Lumos Following» light: where it floats)
                 sh: g.ships?.myNet(), // (standing on a ship: my place on its deck)
@@ -997,6 +998,9 @@ export class NetSync {
 
     itemHandover(to, m) { this.net.send({ t: 'hov', by: this.me, to, ...m }, true); }
 
+    /** My scroll burns in my hand: the others see the sparks too (their spiral is the same as mine). */
+    scrollBurn(p) { this.net.send({ t: 'sbfx', by: this.me, p: [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, Math.round(p.z * 10) / 10] }, true); }
+
     itemHold(side, item) {
         this.net.send({ t: 'ihold', by: this.me, side, item }, true);
     }
@@ -1279,6 +1283,7 @@ export class NetSync {
             case 'ithrow': if (this.net.isHost && m.item && typeof m.item === 'object') { const L = g.items?.spawnLoose(m.item, vec(m.p), { vel: vec(m.v), quat: Array.isArray(m.q) ? new THREE.Quaternion().fromArray(m.q).normalize() : null, spin: Array.isArray(m.w) ? vec(m.w) : null }); if (L) L.thrower = m.from; } break;
             case 'igive': if (m.to === this.me && m.item && typeof m.item === 'object') { if (!g.items.takeIntoHand(m.item, m.side === 'left' ? 'left' : 'right') && !g.inventory.storeItem(m.item)) g.items._noRoom?.(m.item); g.hud.setVoice?.('🤝 Вам передали предмет', true); } break; // (hands and slots full: at my feet — it was lost)
             case 'hov': if (m.to === this.me && m.by !== this.me) g.items?.onHandover(m.by, m); break;
+            case 'sbfx': if (m.by !== this.me && arr(m.p, 3)) g.items?.remoteScrollBurn?.(m.p); break;
             case 'ihold': if (m.by !== this.me) g.items?.setRemoteHeld(m.by, m.side, m.item || null); break;
             case 'wspawn': {
                 if (this.net.isHost || !arr(m.s, 11) || !arr(m.hover, 3) || g.weapons.byId.has(m.s[0])) break;

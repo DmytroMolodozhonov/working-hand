@@ -1487,9 +1487,20 @@ export class ItemSystem {
         const s = this.heldOf('scroll');
         if (!s) return false;
         if (retireScroll(s.item)?.kind !== 'scroll') return false; // (an old health / mana scroll: there are none now — it is an apple)
+        this.game.sync?.scrollBurn?.(s.model.getWorldPosition(new THREE.Vector3()));
         const item = this.releaseHand(s.side);
         this.applyScroll(item);
         return true;
+    }
+
+    /** A friend's scroll burns in their hand: the same spiral of sparks as at mine (only the picture — the learning is theirs). */
+    remoteScrollBurn(p) {
+        const g = this.game;
+        const x = +p[0] || 0, y = +p[1] || 0, z = +p[2] || 0;
+        for (let i = 0; i < 40; i++) {
+            const a = (i / 40) * Math.PI * 6;
+            g.fx.spark(_v.set(x + Math.cos(a) * 1.2, y - 0.5 + i * 0.07, z + Math.sin(a) * 1.2), 0xffe9a8, 0.12, _v2.set(-Math.sin(a) * 2, 2.5, Math.cos(a) * 2), 1.2);
+        }
     }
 
     applyScroll(item) {
@@ -1714,7 +1725,7 @@ export class ItemSystem {
         const r = g.remotes.get(id);
         if (!r) return;
         const cur = this.remoteHeld.get(id) || {};
-        if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
+        if (cur[side]) { g.books?.reading?.releaseRemote(cur[side].model); g.scrolls?.releaseRemote(cur[side].model); cur[side].model.parent?.remove(cur[side].model); disposeModel(cur[side].model); cur[side] = null; }
         if (item && side === 'purse') { const model = makePurseModel(item.count || 0, !!item.left); r.character.group.add(model); cur[side] = { item, model }; } // (hangs on their body; the magic pouch — one)
         else if (item) { const model = makeItemModel(item); g.scene.add(model); cur[side] = { item, model }; }
         this.remoteHeld.set(id, cur);
@@ -1730,6 +1741,7 @@ export class ItemSystem {
                 if (!h) continue;
                 // a book open in their hands: as they hold it, at the page they read
                 if (h.item.kind === 'book' && this.game.books?.reading?.placeRemote(ch, h.model, h.item, r.target?.bk || null)) continue;
+                if (h.item.kind === 'scroll' && this.game.scrolls?.placeRemote(ch, h.model, h.item, side, r.target?.sc || null)) continue; // (a scroll open in their hands: unrolled as far as they have)
                 if (h.item.kind === 'wand' || h.item.kind === 'hammer' || h.item.kind === 'iceRod') { this._remoteGrip(ch, side, h); continue; }
                 const grip = ch.getGripObject(side);
                 grip.getWorldPosition(h.model.position);
