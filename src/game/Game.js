@@ -149,6 +149,7 @@ import { Ultra } from './Ultra.js';
 import { FireSystem } from '../world/Fire.js';
 import { NetSync } from '../net/NetSync.js';
 import { hashString } from '../core/math.js';
+import { HELL_FROM_GEN } from '../world/HellMap.js';
 import { BLOCK, isCastleBlock, BASE_COLORS, WORLD_GEN, FURNISH_FROM_GEN, BUILDINGS_FROM_GEN, SPAWN_MAPS_FROM_GEN, HOUSE_SIZE_FROM_GEN, DUNGEON_FROM_GEN, GHOST_CASTLE_FROM_GEN, ARENA_ENTRIES_FROM_GEN, ARENA_X2_FROM_GEN, ICE_ARENA_FROM_GEN, KNIGHT_CAP_FROM_GEN, QUEEN_MAP_FROM_GEN, CAVE_LAKE_FROM_GEN, WATER_LEVEL_Y, TEST_CAVE, TEST_DRAGON_SPOT } from '../world/Terrain.js';
 import { SeaWaves, WAVES } from '../world/Sea.js';
 import { SeaSurface } from '../fx/SeaSurface.js';
@@ -386,6 +387,7 @@ export class Game {
             ghostCastle: this.gen >= GHOST_CASTLE_FROM_GEN, // (the Castle of Ghosts — only a hero who sees the invisible has it in his land: GhostCastleLife.js)
             iceArena: this.gen >= ICE_ARENA_FROM_GEN, // (the Ice Queen's palace on the great ice arena — IceCastle.ICE_CASTLE.ARENA)
             caveLake: this.gen >= CAVE_LAKE_FROM_GEN, // (rock between a cave and a lake — Terrain._nearWater)
+            hell: this.gen >= HELL_FROM_GEN, // (hell: a far map of the same world — HellMap.js; every world: the Earth's land is not changed)
             queenMap: this.gen >= QUEEN_MAP_FROM_GEN, // (the Ice Queen on a map of her own, far from everything — QueenMap.js; only the Creative test ground)
             knightCap: this.gen >= KNIGHT_CAP_FROM_GEN, // (10–15 knights a castle, each at a post — KnightPosts.js)
             arenaX2: this.gen >= ARENA_X2_FROM_GEN, // (the duel arenas twice as wide — DuelArenas.ARENA_X2)

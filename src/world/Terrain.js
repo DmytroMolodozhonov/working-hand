@@ -40,6 +40,8 @@ import { PlanetRegistry, SPACE, slotAt, offEarth } from './Planets.js';
 import { isEnchanted, enchantMayBreak } from './EnchantedStone.js';
 import { planetHeight, generatePlanetChunk, planetFaceColor } from './PlanetSurface.js';
 import { IceCastleMapSite, inQueenMap, queenChunk } from './QueenMap.js';
+import { hellPlan, hellChunk, inHell, hellFloor } from './HellMap.js';
+import { generateHellChunk } from './HellLand.js';
 import { SHAPE, canShape, shapeTop, shapeBottom, shapeHas, isCeilShape, cornerHeights, shapeDiag, FULL_FACES, sideCovered, SHAPE_COUNT } from './BlockShapes.js';
 
 export const BLOCK = {
@@ -72,7 +74,13 @@ export const BLOCK = {
     // the Castle of Ghosts (GhostCastle.js; only a hero who sees the invisible has it in his land): black stone, black brick, a floor of black tiles,
     // the slate of the spires, a pale candle-glow set in the walls. Enchanted stone's kind: weak, but no ordinary spell breaks it (EnchantedStone.js)
     GHOST_STONE: 73, GHOST_BRICK: 74, GHOST_TILE: 75, GHOST_ROOF: 76, GHOST_LAMP: 77,
+    // HELL (HellMap.js, HellLand.js — the far map of hell, the pentagram «Pentagranium Infernum»): columnar black basalt, glassy obsidian, red-hot rock
+    // with glowing veins, ash, lava (solid to walk on — it burns: HellLava.js), the titans' bone, dressed black stone of the roads and bridges, forged iron
+    // (the ring of the devil's chain). 78–85 are hell's; the next free number is 86.
+    HELL_BASALT: 78, HELL_OBSIDIAN: 79, HELL_EMBER: 80, HELL_ASH: 81, HELL_LAVA: 82, HELL_BONE: 83, HELL_BRICK: 84, HELL_IRON: 85,
 };
+/** A block of hell's land (HellLand.js). */
+export const isHellBlock = (t) => t >= BLOCK.HELL_BASALT && t <= BLOCK.HELL_IRON;
 /** A block of another planet's ground (its colour comes from the planet: PlanetSurface.planetFaceColor). */
 export const isPlanetBlock = (t) => t >= BLOCK.REGOLITH && t <= BLOCK.PLANET_LEAF;
 /** The land itself, not built (carveColumn's `gone` leaves it out). */
@@ -82,7 +90,7 @@ export const isPalaceIce = (t) => t >= BLOCK.ICE_WALL && t <= BLOCK.ICE_DARK;
 /** Built by people (castles, villages): wrecking it is a crime there. */
 export const isCastleBlock = (t) => t >= BLOCK.CS_GREY && t <= BLOCK.RUNE;
 /** Surface pattern drawn by the voxel shader (0 = the usual pixel pattern). */
-export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22 };
+export const PATTERN = { NONE: 0, ASHLAR: 1, COBBLE: 2, BRICK: 3, PLANKS: 4, TILES: 5, CLOTH: 6, GOLD: 7, STRAW: 8, FURROWS: 9, BOOKS: 10, GLOW: 11, CRYSTAL: 12, RUNES: 13, GRASS: 14, GLACIER: 15, SNOWFLAKE: 16, SNOW: 17, GHOST_STONE: 18, GHOST_BRICK: 19, GHOST_TILE: 20, GHOST_ROOF: 21, GHOST_LAMP: 22, HELL_BASALT: 23, HELL_OBSIDIAN: 24, HELL_EMBER: 25, HELL_ASH: 26, HELL_LAVA: 27, HELL_BONE: 28, HELL_BRICK: 29, HELL_IRON: 30 };
 const PATTERN_OF = {};
 /** Tree kinds: trunk and leaf blocks. */
 export const TREE_KINDS = [
@@ -216,6 +224,14 @@ export const BASE_COLORS = {
     [BLOCK.GHOST_TILE]: 0x2a2833,
     [BLOCK.GHOST_ROOF]: 0x17161d,
     [BLOCK.GHOST_LAMP]: 0xa9b8ff,
+    [BLOCK.HELL_BASALT]: 0x2a2626,
+    [BLOCK.HELL_OBSIDIAN]: 0x1a1420,
+    [BLOCK.HELL_EMBER]: 0x5a1c10,
+    [BLOCK.HELL_ASH]: 0x4a4542,
+    [BLOCK.HELL_LAVA]: 0xff5a10,
+    [BLOCK.HELL_BONE]: 0xc8b896,
+    [BLOCK.HELL_BRICK]: 0x2e2a2c,
+    [BLOCK.HELL_IRON]: 0x3a3634,
 };
 Object.assign(PATTERN_OF, {
     [BLOCK.CS_GREY]: PATTERN.ASHLAR, [BLOCK.CS_SAND]: PATTERN.ASHLAR, [BLOCK.CS_DARK]: PATTERN.ASHLAR, [BLOCK.CS_WHITE]: PATTERN.ASHLAR,
@@ -231,6 +247,8 @@ Object.assign(PATTERN_OF, {
     [BLOCK.ICE_WALL]: PATTERN.GLACIER, [BLOCK.ICE_DARK]: PATTERN.GLACIER, [BLOCK.ICE_GLOW]: PATTERN.CRYSTAL, [BLOCK.ICE_FLOOR]: PATTERN.SNOWFLAKE, [BLOCK.SNOW]: PATTERN.SNOW,
     [BLOCK.ENCHANTED]: PATTERN.ASHLAR, [BLOCK.ENCHANTED_SEAT]: PATTERN.ASHLAR, [BLOCK.ARCANE_WARD]: PATTERN.ASHLAR,
     [BLOCK.GHOST_STONE]: PATTERN.GHOST_STONE, [BLOCK.GHOST_BRICK]: PATTERN.GHOST_BRICK, [BLOCK.GHOST_TILE]: PATTERN.GHOST_TILE, [BLOCK.GHOST_ROOF]: PATTERN.GHOST_ROOF, [BLOCK.GHOST_LAMP]: PATTERN.GHOST_LAMP,
+    [BLOCK.HELL_BASALT]: PATTERN.HELL_BASALT, [BLOCK.HELL_OBSIDIAN]: PATTERN.HELL_OBSIDIAN, [BLOCK.HELL_EMBER]: PATTERN.HELL_EMBER, [BLOCK.HELL_ASH]: PATTERN.HELL_ASH,
+    [BLOCK.HELL_LAVA]: PATTERN.HELL_LAVA, [BLOCK.HELL_BONE]: PATTERN.HELL_BONE, [BLOCK.HELL_BRICK]: PATTERN.HELL_BRICK, [BLOCK.HELL_IRON]: PATTERN.HELL_IRON,
 });
 /** Generation 5: the same, and the grass has its own (patches and shimmer of colour in the shader). */
 const PATTERN_OF_LUSH = Object.assign({}, PATTERN_OF, { [BLOCK.GRASS]: 14 });
@@ -658,8 +676,10 @@ export class TerrainData {
     }
 
     /** Set the world recipe. Chunks are generated lazily from it. */
-    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false } = {}) {
+    generate({ seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, ghostSeen = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false } = {}) {
         this.seed = seed;
+        this.hell = !!hell; // (hell: a far map of this world — HellMap.js; in every world, the Earth's land is not touched)
+        this._hellPlan = null;
         this.mountains = mountains;
         this.lush = !!(mountains && lush); // (generation 5: the new landscape — Landscape.js)
         this.slopes = !!(this.lush && slopes); // (generation 6: ramps and slabs in the land and the buildings — BlockShapes.js)
@@ -786,6 +806,27 @@ export class TerrainData {
             fn.land = earthH.land;
             this.heightAt = fn;
         }
+        if (this.hell) {
+            // hell (HellMap.js): its floor — the ground, the lava or a bridge's deck (the arches and bones over it are not the floor)
+            const inner = this.heightAt, self = this;
+            const fn = (ix, iz) => {
+                if (ix >= SPACE.ZONE_X && inHell(ix, iz, 2)) {
+                    const h = hellFloor(self.hellPlan, ix, iz);
+                    fn.water = 0; fn.sea = false; fn.beach = false; fn.bank = false; fn.kind = KIND.LAND;
+                    fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+                    fn.iceRock = true; // (no grass, no trees)
+                    return h;
+                }
+                const h = inner(ix, iz);
+                fn.water = inner.water; fn.sea = inner.sea; fn.beach = inner.beach; fn.bank = inner.bank; fn.kind = inner.kind;
+                fn.mesa = inner.mesa; fn.emer = inner.emer; fn.moon = inner.moon; fn.fant = inner.fant; fn.iceRock = inner.iceRock;
+                return h;
+            };
+            fn.water = 0; fn.sea = false; fn.beach = false; fn.kind = KIND.LAND;
+            fn.mesa = fn.emer = fn.moon = fn.fant = 0;
+            fn.land = inner.land;
+            this.heightAt = fn;
+        }
         this._caves = new Map();
         this._lairs = new Map(); // (dragons' lairs high in the mountains: DragonLairs.js)
         this._isles = new Map(); // (generation 5: the floating islands)
@@ -802,7 +843,7 @@ export class TerrainData {
         let c = this.chunks.get(key);
         // (the far zone between the planets — where a hero in space is kept, Space.js: nothing at all
         //  there, one shared empty chunk, never kept: a flight there makes no ground)
-        if (!c && cx >= ZONE_CX && this.mountains && !this.planetOfChunk(cx, cz) && !(this.queenMap && queenChunk(cx, cz, CHUNK))) return emptyChunk();
+        if (!c && cx >= ZONE_CX && this.mountains && !this.planetOfChunk(cx, cz) && !(this.queenMap && queenChunk(cx, cz, CHUNK)) && !(this.hell && hellChunk(cx, cz, CHUNK))) return emptyChunk();
         if (!c) {
             c = this._generateChunk(cx, cz);
             this.chunks.set(key, c);
@@ -841,7 +882,11 @@ export class TerrainData {
         this.version++; // (what was remembered about those blocks — CastleLife._walkable — is asked again)
     }
 
+    /** Hell's plan (HellMap.hellPlan — worked out the first time it is asked for). */
+    get hellPlan() { return this._hellPlan || (this._hellPlan = hellPlan(this.seed)); }
+
     _generateChunk(cx, cz) {
+        if (this.hell && cx >= ZONE_CX && hellChunk(cx, cz, CHUNK)) return generateHellChunk(cx, cz, this.hellPlan, this.bedrockTop ?? OLD_BEDROCK);
         const planet = this.planetOfChunk(cx, cz);
         if (planet) return generatePlanetChunk(cx, cz, planet, this.bedrockTop ?? OLD_BEDROCK);
         if (this.lush) return this._generateLush(cx, cz);
