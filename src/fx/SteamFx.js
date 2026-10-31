@@ -2,7 +2,7 @@
  * SteamFx.js — the steam of «Visible Godi» as everybody sees it (the rules: game/VisibleGodi.js).
  *
  * The wand breathes out a fat white steam; where the wand moves it leaves puffs — the hero paints a cloud on a wall.
- * Every computer draws every hero's steam (the puffs arrive as 'vgs' messages); only the caster looks THROUGH it.
+ * Every computer draws every hero's steam (the puffs arrive as 'vgs' messages); anyone whose gaze goes through it (or who stands in it) looks THROUGH it (SeeThroughFx, from their own camera).
  *
  * Cheap and layered (CLAUDE.md «Запрет на примитив» + «Производительность»): one Points object per hero (the local one
  * and a pool of a few remote ones), one shader made on the loading screen (every body's material is a clone of the same
@@ -93,12 +93,14 @@ class Body {
         this.points.visible = false;
         scene.add(this.points);
         this.next = 0; this.births = new Float64Array(SEE.OWNER_MAX).fill(-1e9); // (per puff: when it was born, s)
+        this.ppos = new Float32Array(SEE.OWNER_MAX * 3); this.seeds = new Uint32Array(SEE.OWNER_MAX); // (per puff: where, and its seed — whoever looks through the steam needs them)
         this.jet = 0; this.jetOn = false; this.touched = 0;
     }
 
     add(x, y, z, seed, now) {
         const slot = this.next; this.next = (this.next + 1) % SEE.OWNER_MAX;
         this.births[slot] = now;
+        this.ppos[slot * 3] = x; this.ppos[slot * 3 + 1] = y; this.ppos[slot * 3 + 2] = z; this.seeds[slot] = seed >>> 0;
         const r = rng(seed);
         for (let k = 0; k < K; k++) {
             const v = slot * K + k;
@@ -190,6 +192,25 @@ export class SteamBodies {
             const u = b.mat.uniforms;
             u.uNow.value = now; u.uJet.value = b.jet; u.uPx.value = this._px || 700;
         }
+    }
+
+    /**
+     * Every live puff of every hero (mine and the others': whoever's gaze goes through the steam sees through it — the author's rule)
+     * as { x, y, z, t0, seed } into `out` (records are reused: no garbage per call). Returns `out`.
+     */
+    gather(out, now = performance.now() / 1000) {
+        let n = 0;
+        for (const b of this.bodies.values()) {
+            for (let i = 0; i < SEE.OWNER_MAX; i++) {
+                const t0 = b.births[i];
+                if (now - t0 >= SEE.PUFF_LIFE) continue;
+                const q = out[n] || (out[n] = { x: 0, y: 0, z: 0, t0: 0, seed: 0 });
+                q.x = b.ppos[i * 3]; q.y = b.ppos[i * 3 + 1]; q.z = b.ppos[i * 3 + 2]; q.t0 = t0; q.seed = b.seeds[i];
+                n++;
+            }
+        }
+        out.length = n;
+        return out;
     }
 
     /** Hide every body while another picture of the scene is drawn (the lens must not look through the steam itself); false restores. */

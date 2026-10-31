@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { SEE, LENS, VISIBLE_TARGETS, modeOf, lensZoom, lensCloud, traceLens, lensNear, lensFar, traceView, puffStrength } from '../../src/game/VisibleGodi.js';
 import { SeeThroughFx } from '../../src/fx/SeeThroughFx.js';
+import { SteamBodies } from '../../src/fx/SteamFx.js';
+import { VisibleGodi } from '../../src/game/VisibleGodi.js';
 import { firstSpellGain } from '../../src/game/Mana.js';
 
 const O = { x: 0, y: 0, z: 0 }, D = { x: 0, y: 0, z: 1 };
@@ -171,5 +173,71 @@ test('lens picture: in the open the weak computer draws fewer, a cloud behind th
     const before = fx.stats.lensPasses;
     for (let i = 0; i < 60; i++) { const t = 3 + i / 60; fx.setPuffs([puff(0, 0, 4, t - 5, 2)], t); fx.render(t); }
     assert.equal(fx.stats.lensPasses, before, 'behind the eyes: no lens picture');
+    fx.dispose();
+});
+
+// ------------------------------------------------------------------ anyone who looks through the steam (the author's rule)
+function viewer(eyeAt, lookAt = { x: 0, y: 0, z: 10 }) {
+    const cam = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 600);
+    cam.position.set(eyeAt.x, eyeAt.y, eyeAt.z);
+    cam.lookAt(lookAt.x, lookAt.y, lookAt.z);
+    cam.updateMatrixWorld(true);
+    const sb = new SteamBodies({ scene: new THREE.Scene(), renderer: { domElement: { height: 720 } }, camera: cam });
+    const calls = [];
+    const g = {
+        localId: 'me', camera: cam, terrain: { data: null }, ships: { list: new Map() }, wards: { list: new Map(), mine: () => false }, doors: null,
+        combat: { dead: false, drain() { return true; } }, hud: { setVoice() {} }, perf: { note() {} }, mana: { calls, success(n) { calls.push(n); } },
+        steam: sb, seeFx: { on: null, coverage: 1, lens: 1, setOn(o) { this.on = o; }, setTarget(i) { this.target = i; }, setLens(l) { this.l = l; }, setPuffs(p) { this.puffs = p; } },
+    };
+    return { g, v: new VisibleGodi(g), sb, calls };
+}
+const tick = (v, n = 3) => { for (let i = 0; i < n; i++) v.update(0.1); };
+
+test('anyone looks through the steam: a viewer who is NOT the caster gets the window when another hero\'s steam is in front of the eyes; looking away — nothing', () => {
+    const now = performance.now() / 1000;
+    const { g, v, sb, calls } = viewer({ x: 0, y: 0, z: 0 });
+    tick(v);
+    assert.ok(!v.on && g.seeFx.on !== true, 'no steam at all: nothing is followed');
+    v.onNet('bob', { k: 'p', p: [0, 0, 6], s: 11 }); // bob's puff six metres ahead
+    sb.update(0.1, now);
+    for (let i = 0; i < 3; i++) { sb.bodies.get('bob').births.fill(now - 3, 0, 1); }
+    tick(v);
+    assert.equal(g.seeFx.on, true, 'bob\'s steam is in front of my eyes: my window works');
+    assert.ok(v.all.length >= 1 && g.seeFx.puffs.length >= 1, 'his puffs are the ones I look through');
+    assert.ok(g.seeFx.l, 'open air: the lens, from my own camera');
+    assert.equal(v.on, false);
+    v.update(1); // (more seconds: still not the caster)
+    assert.deepEqual(calls, [], 'the +5 cells and the mana are the caster\'s only');
+    // I turn my back to it: nothing
+    g.camera.lookAt(0, 0, -10); g.camera.updateMatrixWorld(true);
+    tick(v);
+    assert.equal(g.seeFx.on, false, 'not looking through it: only the steam itself');
+    // bob\'s steam ends: nothing
+    v.onNet('bob', { k: 'o' });
+    g.camera.lookAt(0, 0, 10); g.camera.updateMatrixWorld(true);
+    tick(v);
+    assert.equal(g.seeFx.on, false);
+});
+
+test('anyone: a viewer who walked INTO the steam gets the window / lens all round (a disc over the whole screen), the lens looks where he looks', () => {
+    const now = performance.now() / 1000;
+    const out = {};
+    const r = lensCloud([puff(0, 0, 0.5, now - 3, 5), puff(0.7, 0, 0.5, now - 3, 6)], now, O, D, out);
+    assert.ok(r && r.inside === true, 'the eyes inside a puff');
+    assert.ok(Math.abs(r.z - LENS.NEAR) < 1e-9 && Math.abs(r.x) < 1e-9, 'the lens looks along the gaze');
+    const front = lensCloud([puff(0, 0, 6, now - 3, 5)], now, O, D, {});
+    assert.ok(front && !front.inside);
+    // the picture: an inside viewer's disc covers the screen even when no puff is projectable
+    const renderer = fakeRenderer();
+    const camera = new THREE.PerspectiveCamera(75, 16 / 9, 0.1, 600);
+    camera.updateMatrixWorld(true);
+    const fx = new SeeThroughFx({ renderer, scene: new THREE.Scene(), camera, quality: { current: { pixelRatio: 1 } } });
+    fx.setOn(true);
+    fx.setTarget({ state: 'open' });
+    fx.setLens(r);
+    for (let i = 0; i < 90; i++) { const t = i / 60; fx.setPuffs([puff(0, 0, 0.5, t - 3, 5)], t); fx.render(t); }
+    assert.ok(fx.coverage >= 1, 'a disc over the screen');
+    assert.ok(fx.stats.lensPasses > 20, 'the lens picture is drawn: ' + fx.stats.lensPasses);
+    assert.equal(fx.mat.uniforms.uN.value >= 1, true);
     fx.dispose();
 });

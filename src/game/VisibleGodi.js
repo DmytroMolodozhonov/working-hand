@@ -37,7 +37,11 @@
  * of the game's own fog is the limit. Several clouds: the window is the one nearest to the centre of the gaze.
  * The wall mode above is not changed: it starts whenever the first solid thing is within REACH.
  *
- * Others see the steam (messages 'vgs': a puff / the end); only the caster looks through it.
+ * EVERYONE who looks through the steam sees through it (the author: «туман работает для любого, кто смотрит сквозь него или входит
+ * в него»): the puffs of all heroes arrive on every computer ('vgs': a puff / the end), and each viewer's own camera follows its own
+ * gaze through them — the window of the wall look and the lens are drawn for that viewer (SeeThroughFx, a second pass of their own,
+ * only while some steam is in front of their eyes or round them: eyes inside a puff — the window is the whole cloud round them).
+ * Nothing is sent for it. Mana and the first-time cells are the caster's only.
  */
 
 import { BLOCK } from '../world/Terrain.js';
@@ -80,6 +84,7 @@ export const LENS = {
     NEAR: 3, // m: the lens picture is drawn from here (the hand and wand are nearer: not in the picture)
     MAX_LEN: 80, // m: how far the lens ray looks for the first solid thing (the zoom picture itself sees as far as the scene)
     STEP: 0.25, // m: the lens ray's step (the first thing is only needed roughly; the chink check is GAP_MAX)
+    INSIDE: 1.5, // m: the eyes this near a puff's middle are INSIDE the steam (the window is the whole cloud round the viewer)
     COS_MIN: 0.5, // the cloud must be within 60° of the gaze to be the window
     REAL: 12, // m: the first solid thing at least this far (or none) — a far look that counts for the first-time cells
     FIRST: 5, // cells of the mana maximum the first time the lens showed something far (Mana.FIRST_SPELL.VisibleGodiLens)
@@ -241,16 +246,19 @@ export function lensZoom(n, span, newest = 99) {
  * `puffs`: [{ x, y, z, t0, seed }], `now`: the clock of t0.
  */
 export function lensCloud(puffs, now, o, d, out) {
-    let best = -1, bc = LENS.COS_MIN;
+    let best = -1, bc = LENS.COS_MIN, near = LENS.INSIDE;
     for (let i = 0; i < puffs.length; i++) {
         const q = puffs[i];
         if (puffStrength(now - q.t0) < 0.25) continue;
         const dx = q.x - o.x, dy = q.y - o.y, dz = q.z - o.z, L = Math.hypot(dx, dy, dz);
+        if (L < near) { near = L; best = i; bc = 2; continue; } // (the eyes are inside this puff: it wins over any in front)
+        if (bc === 2) continue;
         if (L < 0.4) continue;
         const c = (dx * d.x + dy * d.y + dz * d.z) / L;
         if (c > bc) { bc = c; best = i; }
     }
     if (best < 0) return null;
+    out.inside = bc === 2;
     const seeds = out.seeds || (out.seeds = new Set());
     seeds.clear();
     const mem = out._mem || (out._mem = []);
@@ -278,6 +286,7 @@ export function lensCloud(puffs, now, o, d, out) {
     out.n = mem.length; out.span = Math.max(0, youngest - oldest); // (how long the jet painted this cloud: first puff to last) out.newest = newest;
     out.zoom = lensZoom(out.n, out.span, newest);
     out.seed = puffs[best].seed;
+    if (out.inside) { out.x = o.x + d.x * LENS.NEAR; out.y = o.y + d.y * LENS.NEAR; out.z = o.z + d.z * LENS.NEAR; } // (inside the steam: the lens looks where the viewer looks)
     return out;
 }
 
@@ -333,8 +342,8 @@ export const puffStrength = (age) => Math.min(1, Math.max(0, age / 0.6)) * (1 - 
 
 /** ON WHOM AND ON WHAT (CLAUDE.md). `does`: see | none | blocked. */
 export const VISIBLE_TARGETS = {
-    me: { does: 'see', why: 'только я вижу тучку: она на моём экране' },
-    players: { does: 'see', why: 'другие игроки ВИДЯТ пар и нарисованную тучку (сообщения «vgs»), но смотрят на неё снаружи; сквозь стены смотрит только колдующий' },
+    me: { does: 'see', why: 'я и любой другой, кто смотрит сквозь пар (или вошёл в него), — у каждого своя картинка по его камере' },
+    players: { does: 'see', why: 'пар видят ВСЕ (сообщения «vgs»); сквозь него смотрит КАЖДЫЙ, чей взгляд проходит через клубы (клуб на линии глаз) или кто вошёл в туман (окно/линза во весь клуб); не пересекающий пар взглядом видит только сам пар; второй проход строится у самого зрителя, сеть не нужна; мана и +5 ячеек — только колдующему' },
     steam: { does: 'none', why: 'пар не толкает, не ранит, не пугает, не горит и не мешает ходить (коллизий у него нет); его конечное количество — SEE.STEAM порций, потом струя иссякает; пар редеет за PUFF_LIFE с' },
     servants: { does: 'none', why: 'мои слуги ничего не замечают' },
     zombies: { does: 'see', why: 'зомби за стеной я вижу; они меня и заклинание не замечают — на них оно не действует' },
@@ -383,6 +392,8 @@ export class VisibleGodi {
         this._doorAt = -1; // m along the ray where a door's leaf is
         this._cx = NaN; this._cz = NaN; this._made = true; // (the chunk last asked about: is its land made?)
         this.rays = 0; // (tests/log) how many rays were followed
+        this.all = []; // every live puff of every hero (SteamBodies.gather): what a viewer looks through
+        this.viewing = false; // some steam is in front of / round my eyes: the look is followed and the window may be drawn
         this.puffs = []; // my painted steam: { x, y, z, t0 (s, performance clock), seed } — the picture's mask and the net's copy
         this.steam = SEE.STEAM; // puffs left in the jet
         this.jet = null; // { tip, head } now (SteamFx draws the thread of steam between them)
@@ -391,7 +402,7 @@ export class VisibleGodi {
         this.lens = null; // the lens now (lensCloud's record + `ray`), or null
         this._lensRec = { x: 0, y: 0, z: 0, n: 0, span: 0, newest: 0, zoom: 3, seed: 0, seeds: new Set(), ray: { first: Infinity, thin: false, exit: 0 }, near: LENS.NEAR };
         this._ld = { x: 0, y: 0, z: 0 };
-        this._lensWorked = false; // the first far look through the lens: its +5 cells were asked for
+        this._lensWorked = false; // (the caster's) the first far look through the lens: its +5 cells were asked for
         this.sample = (x, y, z, t) => this._sample(x, y, z, t);
     }
 
@@ -479,7 +490,8 @@ export class VisibleGodi {
         this.steam = SEE.STEAM;
         this.jet = null;
         this.lens = null;
-        g.seeFx?.setOn?.(on);
+        this.viewing = on; this._scanT = 0;
+        g.seeFx?.setOn?.(on); // (others' steam in front of the eyes switches it on again at the next look: _viewTick)
         g.steam?.setJet?.('local', null, null, false);
         if (!on) { g.steam?.clear?.('local'); g.sync?.steamOff?.(); }
         g.perf?.note?.(on ? '👁️ Visible Godi: включена' : '👁️ Visible Godi: выключена' + (why ? ' (' + why + ')' : ''));
@@ -506,41 +518,75 @@ export class VisibleGodi {
 
     update(dt) {
         const g = this.game;
-        if (!this.on) return;
-        if (g.combat?.dead || g.isDeadLocal) { this.set(false, 'dead'); return; }
-        if (g.combat?.drain(SEE.DRAIN * dt, dt) === false) { this.set(false, 'mana'); return; }
+        if (this.on) {
+            if (g.combat?.dead || g.isDeadLocal) this.set(false, 'dead');
+            else if (g.combat?.drain(SEE.DRAIN * dt, dt) === false) this.set(false, 'mana');
+            else this._paint(dt);
+        }
+        this._viewTick(dt);
+    }
+
+    /**
+     * Looking through steam is for ANYONE (the author: «туман работает для любого, кто смотрит сквозь него или входит в него»):
+     * every computer follows the gaze of its own viewer through all the steam it has (mine and the others' puffs: they all arrive
+     * as 'vgs'); the window / the lens is drawn from my own camera. Only when some steam is near the eyes and in front of them
+     * (or round them) is anything followed; only the caster pays mana and gets the first-time cells.
+     */
+    _viewTick(dt) {
+        const g = this.game, fx = g.seeFx, now = performance.now() / 1000;
         this._scanT -= dt;
-        if (this._scanT <= 0) {
-            this._scanT = SEE.SCAN_T;
-            const i = this.scan();
+        if (this._scanT > 0) { if (this.viewing) fx?.setPuffs?.(this.all, now); return; }
+        this._scanT = SEE.SCAN_T;
+        if (g.steam?.gather) g.steam.gather(this.all, now); else { this.all.length = 0; for (const q of this.puffs) this.all.push(q); }
+        const cam = g.camera, e = cam?.matrixWorld?.elements;
+        if (!e || (!this.on && (!this.all.length || !this._steamNear(e, now)))) { // (the caster's own look is always followed, as before; anyone else's only with steam near)
+            if (this.viewing) { this.viewing = false; this.lens = null; this.info = { state: 'open', first: Infinity, exit: 0, thick: 0, clear: 1, why: null, name: '', segs: [], stopAt: Infinity }; fx?.setLens?.(null); fx?.setTarget?.(this.info); fx?.setOn?.(false); }
+            return;
+        }
+        if (!this.viewing) { this.viewing = true; fx?.setOn?.(true); }
+        const i = this.scan();
+        if (this.on) {
             if (i.state === 'blocked') {
                 this._hint('blocked', BLOCK_HINT);
                 g.perf?.note?.(`👁️ Visible Godi: взгляд не пущен (${i.name})`);
-            } else if (i.state === 'see' && i.clear >= SEE.WORKED && !this._worked && g.seeFx?.coverage !== 0) {
+            } else if (i.state === 'see' && i.clear >= SEE.WORKED && !this._worked && fx?.coverage !== 0) {
                 this._worked = true;
-                g.mana?.success?.('VisibleGodi'); // (the first real look behind a wall: +5 cells, once)
+                g.mana?.success?.('VisibleGodi'); // (the first real look behind a wall: +5 cells, once — the caster's only)
                 g.perf?.note?.(`👁️ Visible Godi: первый просвет — ${i.name}, ${i.thick.toFixed(1)} м, ясность ${Math.round(i.clear * 100)}%`);
             }
-            this._scanLens(i);
         }
-        this._paint(dt);
-        g.seeFx?.setTarget?.(this.info);
-        g.seeFx?.setLens?.(this.lens);
-        g.seeFx?.setPuffs?.(this.puffs, performance.now() / 1000);
+        this._scanLens(i);
+        fx?.setTarget?.(this.info);
+        fx?.setLens?.(this.lens);
+        fx?.setPuffs?.(this.all, now);
+    }
+
+    /** Is some live steam in front of the eyes (within the look's reach) or round them? Cheap: one pass over the puffs. */
+    _steamNear(e, now) {
+        const dx = -e[8], dy = -e[9], dz = -e[10], l = Math.hypot(dx, dy, dz) || 1;
+        const R = SEE.MAX_LEN + 10;
+        for (let i = 0; i < this.all.length; i++) {
+            const q = this.all[i];
+            if (puffStrength(now - q.t0) < 0.1) continue;
+            const x = q.x - e[12], y = q.y - e[13], z = q.z - e[14], L = Math.hypot(x, y, z);
+            if (L < LENS.INSIDE) return true;
+            if (L < R && (x * dx + y * dy + z * dz) / (l * L) > 0.15) return true;
+        }
+        return false;
     }
 
     /** The lens for the ray just followed: only when there is no near wall (modeOf) and a cloud is in front of the gaze. */
     _scanLens(info) {
         const g = this.game, L = this._lensRec;
         this.lens = null;
-        if (modeOf(info) !== 'lens' || !this.puffs.length) return;
+        if (modeOf(info) !== 'lens' || !this.all.length) return;
         const e = g.camera?.matrixWorld?.elements;
         if (!e) return;
         const d = this._ld;
         d.x = -e[8]; d.y = -e[9]; d.z = -e[10];
         const l = Math.hypot(d.x, d.y, d.z) || 1; d.x /= l; d.y /= l; d.z /= l;
         _o.x = e[12]; _o.y = e[13]; _o.z = e[14];
-        if (!lensCloud(this.puffs, performance.now() / 1000, _o, d, L)) return;
+        if (!lensCloud(this.all, performance.now() / 1000, _o, d, L)) return;
         // the lens ray: from the eyes to the cloud's centre
         d.x = L.x - _o.x; d.y = L.y - _o.y; d.z = L.z - _o.z;
         const m = Math.hypot(d.x, d.y, d.z) || 1; d.x /= m; d.y /= m; d.z /= m;
@@ -549,7 +595,7 @@ export class VisibleGodi {
         traceLens(this.sample, _o, d, L.ray);
         L.near = lensNear(L.ray);
         this.lens = L;
-        if (!this._lensWorked && lensFar(L.ray) && g.seeFx?.coverage > 0 && g.seeFx?.lens > 0.5) {
+        if (this.on && !this._lensWorked && lensFar(L.ray) && g.seeFx?.coverage > 0 && g.seeFx?.lens > 0.5) {
             this._lensWorked = true;
             g.mana?.success?.('VisibleGodiLens'); // (the first far look through the lens: +5 cells, once)
             g.perf?.note?.(`👁️ Visible Godi: первая линза — увеличение ×${L.zoom.toFixed(1)}, дальше ${Number.isFinite(L.ray.first) ? Math.round(L.ray.first) + ' м' : 'открытое небо/даль'}`);

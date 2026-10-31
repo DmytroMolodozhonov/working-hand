@@ -243,15 +243,25 @@ export class SeeThroughFx {
             const inv = cam.matrixWorldInverse, f = 1 / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)), asp = cam.aspect;
             if (lensMode) {
                 // where the lens's centre is on the screen now (the cloud must be in front of the eyes)
-                _pv.set(L.x, L.y, L.z).applyMatrix4(inv);
-                const z = -_pv.z;
-                if (z < 0.4) { u.uN.value = 0; return 0; }
-                this._cuv.x = 0.5 + _pv.x * f / z / asp; this._cuv.y = 0.5 + _pv.y * f / z; this._cuv.ok = true;
+                if (L.inside) { this._cuv.x = 0.5; this._cuv.y = 0.5; this._cuv.ok = true; } // (inside the steam: the lens is the middle of the screen)
+                else {
+                    _pv.set(L.x, L.y, L.z).applyMatrix4(inv);
+                    const z = -_pv.z;
+                    if (z < 0.4) { u.uN.value = 0; return 0; }
+                    this._cuv.x = 0.5 + _pv.x * f / z / asp; this._cuv.y = 0.5 + _pv.y * f / z; this._cuv.ok = true;
+                }
+            }
+            // the eyes INSIDE a puff (the author: a viewer who walked into the steam sees the window / lens all round): one disc over the whole screen
+            let inside = 0;
+            const e = cam.matrixWorld.elements;
+            for (let i = 0; i < P.length; i++) {
+                const q = P[i], dx = q.x - e[12], dy = q.y - e[13], dz = q.z - e[14];
+                if (dx * dx + dy * dy + dz * dz < LENS.INSIDE * LENS.INSIDE) inside = Math.max(inside, puffStrength(this._now - q.t0) * this.open);
             }
             for (let i = P.length - 1; i >= 0 && n < 40; i--) {
                 const q = P[i], age = this._now - q.t0, w = puffStrength(age) * this.open;
                 if (w <= 0.01) continue;
-                if (lensMode && !L.seeds.has(q.seed)) continue; // (one window: the cloud of the lens; the other clouds are only steam)
+                if (lensMode && !L.inside && !L.seeds.has(q.seed)) continue; // (one window: the cloud of the lens; the other clouds are only steam)
                 _pv.set(q.x, q.y, q.z).applyMatrix4(inv);
                 const z = -_pv.z;
                 if (z < 0.4 || z > 40) continue;
@@ -260,6 +270,10 @@ export class SeeThroughFx {
                 if (Math.abs(sx) > 0.5 * asp + r || Math.abs(sy) > 0.5 + r) continue;
                 list[n++].set(sx, sy, r, w);
                 if (lensMode) { x0 = Math.min(x0, 0.5 + (sx - r) / asp); x1 = Math.max(x1, 0.5 + (sx + r) / asp); y0 = Math.min(y0, 0.5 + sy - r); y1 = Math.max(y1, 0.5 + sy + r); }
+            }
+            if (inside > 0.01 && n < 40) {
+                list[n++].set(0, 0, 2.4, inside);
+                if (lensMode) { x0 = 0; x1 = 1; y0 = 0; y1 = 1; }
             }
             if (lensMode && n) {
                 // the crop of the lens picture: the window's box (the screen's own shape), a margin round it
