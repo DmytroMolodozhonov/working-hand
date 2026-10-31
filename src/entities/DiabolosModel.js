@@ -731,10 +731,11 @@ export function poseDiabolos(model, P) {
         const p = ph + s;
         const stride = walk * 0.42, lift = walk * 0.18 * Math.max(0, Math.sin(p));
         const tz = fe[2] - Math.cos(p) * stride * (1 - sit) - sit * 0.95 - (P.strain || 0) * (sd === 'L' ? -0.25 : 0.2);
+        const kk = sd === 'R' ? (P.kick || 0) * (1 - sit) : 0; // (пинок: копыто вперёд и вверх, замах — назад)
         const tx = fe[0] * (1 + sit * 0.35);
-        const ty = fe[1] + lift * (1 - sit) + (P.stomp && sd === 'R' ? P.stomp * 0.7 : 0);
+        const ty = fe[1] + lift * (1 - sit) + (P.stomp && sd === 'R' ? P.stomp * 0.7 : 0) + Math.abs(kk) * 0.55;
         B['th' + sd].rotation.order = 'XYZ';
-        legIK(B, sd, tx, ty, tz, hipsPitch);
+        legIK(B, sd, tx, ty, tz - kk * 1.3, hipsPitch);
         B['th' + sd].rotation.z = (sd === 'L' ? -1 : 1) * (0.06 + sit * 0.22);
     }
     // хвост: качается, сидя — лежит на земле

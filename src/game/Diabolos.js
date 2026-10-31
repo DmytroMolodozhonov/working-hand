@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from './DiabolosRules.js';
-import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, chooseMove, devilVerdict, furyAfter,
+import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, JOINTS } from '../entities/DiabolosModel.js';
 import { Chest } from '../entities/Chest.js';
@@ -36,6 +36,8 @@ const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sph
 const r2 = (x) => Math.round(x * 100) / 100;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const ID = 'diabolos';
+const ROCKS_MAX = 10;    // глыб пинка в воздухе одновременно
+const ROCK_R = 2.3;      // м — радиус глыбы (масштаб формы)
 const NET_DT = 0.2;      // с между строками состояния хоста
 const SEEN_R = 4000;     // м: в аду ближе этого — загружен (виден с плато прибытия и издали; ад теперь без края — дальше не держим)
 const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
@@ -51,6 +53,7 @@ export class Diabolos {
         this.model = null; this.one = null; this.chainMesh = null; this.anchor = null;
         this.rope = new ChainRope();
         this.balls = [];          // шары огня в воздухе {id, p, v, t, mine (хост), dead}
+        this._rockPool = [];      // глыбы пинка (ROCKS_MAX)
         this._ballPool = [];      // их меши (не больше BALL.MAX — общие форма и материал)
         this.held = null;         // меня держит в кулаке: {t, side}
         this.everWoke = false;    // сохранение: будили когда-нибудь (ачивка у разбудившего)
@@ -123,7 +126,7 @@ export class Diabolos {
             id: ID, isDiabolos: true, ck: 'Y', seed, x: s.x, y, z: s.z, yaw, anchor,
             mode: 'sleep', modeT: 0, sit: 1, sleep: 1, eyes: 0.04, heat: 0.25, fury: 0,
             target: null, grudge: new Map(), lostT: 0, calmT: 0, sleepAt: sleepDelay(seed),
-            move: null, rest: 0, cd: { fire: 0, ball: 0, grab: 0, clap: 0, roar: 0, rage: 0 },
+            move: null, rest: 0, cd: { fire: 0, ball: 0, grab: 0, clap: 0, roar: 0, rage: 0, kick: 0 }, recent: [], walkShare: 0.5, walkFor: 0, peek: false, losT: 0, hidden: false, lastSeen: null,
             walkPh: 0, walkK: 0, strain: 0, stagger: 0, look: { yaw: 0, pitch: 0 }, aimDir: new THREE.Vector3(0, 0, -1),
             rage: 0, stunT: 0, dying: null,
             act: null, actNext: 4, lastAct: null, reactT: 0, intimidated: false, wakeWhy: '', rnd: seed * 0.618 % 1,
@@ -137,6 +140,7 @@ export class Diabolos {
         m.userData.creature = this.d;
         this.d.group = m;
         g.scene?.add(m);
+        m.userData.farRadius = DEVIL.SCALE * 3.2; // (сфера отсечения — на ВСЮ гору 122 м: без неё FarShape брал 4 м у ног, и он «мигал», когда ноги уходили с экрана — жалоба автора)
         this.one = new FarShape(m);
         this.one.set(true);
         const n = DEVIL.CHAIN_LINKS;
@@ -168,6 +172,8 @@ export class Diabolos {
         this._remains = false;
         for (const b of this.balls) this._ballGone(b, false);
         this.balls.length = 0;
+        for (const m of this._rockPool) g.scene?.remove(m);
+        this._rockPool.length = 0;
         for (const m of this._ballPool) g.scene?.remove(m); // (пул шаров — тоже прочь: вдали ничего не висит в сцене)
         this._ballPool.length = 0;
         if (this.held) this._release(false);
@@ -282,15 +288,40 @@ export class Diabolos {
         const L = leash(d.anchor.x, d.anchor.z, tgt.p.x - fo.x, tgt.p.z - fo.z, fo.x, fo.z, this.site.len);
         const beyond = L.t >= 1 && L.d >= this.site.len * 0.99 && Math.hypot(tgt.p.x - d.anchor.x, tgt.p.z - d.anchor.z) > this.site.len + DEVIL.RADIUS;
         const turn = yawTo(d.yaw, d.x, d.z, tgt.p.x, tgt.p.z);
-        const choice = d.stagger > 0 ? null : chooseMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest,
-            fireCd: d.cd.fire, ballCd: d.cd.ball, grabCd: d.cd.grab, clapCd: d.cd.clap, roarCd: d.cd.roar, rageCd: d.cd.rage, air: tgt.feet - d.y > 30 });
+        // видит ли цель (раз в 0,5 с: от груди к ней; за скалой/столбом — подходит туда, где видел, и заглядывает)
+        d.losT -= dt;
+        if (d.losT <= 0) {
+            d.losT = 0.5;
+            const los = this.game.collision?.lineOfSight?.(d.x, d.y + 40, d.z, tgt.p.x, tgt.p.y, tgt.p.z, 1);
+            d.hidden = los === false;
+            if (!d.hidden) d.lastSeen = { x: tgt.p.x, z: tgt.p.z };
+        }
+        d.walkShare += ((d.walkFor > 0 ? 1 : 0) - d.walkShare) * Math.min(1, dt / 20); // (доля ходьбы за ~20 с)
+        if (d.stagger > 0) { this._walk(d, 0, null); return; }
+        if (d.walkFor > 0) { // идёт: к цели (или туда, где видел) — до ближней полосы или пока не кончился заход
+            d.walkFor -= dt;
+            const to = d.peek && d.lastSeen ? d.lastSeen : tgt.p;
+            const dd = Math.hypot(to.x - d.x, to.z - d.z);
+            if (dd < (d.peek ? 24 : DIRECTOR.CLOSE * 0.7) || (beyond && d.strain > 0.85) || (d.peek && !d.hidden)) {
+                d.walkFor = 0;
+                if (d.peek) { d.peek = false; if (d.hidden) { this._act(d, 'idle', true, 'lookAround'); return; } }
+            } else { this._walk(d, dt, to); return; }
+        }
+        const plan = planMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest, cd: d.cd, air: tgt.feet - d.y > 30, high: tgt.feet - d.y > 110,
+            hidden: d.hidden && !!d.lastSeen, recent: d.recent, walkShare: d.walkShare, fury: d.fury, rage: d.rage, lastAct: d.lastAct }, () => { d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280; return d.rnd; });
+        const attack = plan.kind === 'move' && !plan.bluff;
         // характер: перед первым ударом — устрашение; цель за цепью и ему нечем ответить — дразнит (язык, «иди сюда», рвёт цепь)
-        if (choice && choice !== 'turn' && choice !== 'walk' && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
-        if (beyond && (choice === null || choice === 'roar' || choice === 'walk') && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) return; }
-        if (choice === 'turn' || choice === null) { this._turn(d, turn, dt); if (choice === null && !beyond && dist > MOVES.fist.reach * 0.8) this._walk(d, dt, tgt.p); else this._walk(d, 0, null); return; }
-        if (choice === 'walk') { this._walk(d, dt, tgt.p); return; }
-        this._startMove(d, choice, tgt);
+        if (attack && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
+        if (beyond && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); return; } }
+        switch (plan.kind) {
+            case 'turn': case 'wait': this._turn(d, turn, dt); this._walk(d, 0, null); return;
+            case 'walk': d.walkFor = plan.t; d.peek = !!plan.peek; this._remember(d, 'walk'); this._walk(d, dt, d.peek && d.lastSeen ? d.lastSeen : tgt.p); this._note(`😈 Дьяволос: решение — ${d.peek ? 'идёт заглянуть, где вы' : 'идёт к цели'}`); return;
+            case 'act': if (this._act(d, 'idle', true, plan.id)) this._remember(d, 'act'); else this._walk(d, 0, null); return;
+            default: this._remember(d, plan.bluff ? 'bluff' : plan.id); this._startMove(d, plan.id, tgt, plan.bluff); return;
+        }
     }
+    /** Память последних ходов (режиссёр не повторяет один ход больше 2 раз подряд). */
+    _remember(d, id) { d.recent.unshift(id); if (d.recent.length > 6) d.recent.length = 6; }
 
     _setMode(d, mode) {
         if (d.mode === mode) return;
@@ -394,16 +425,17 @@ export class Diabolos {
     }
 
     // ---- ходы
-    _startMove(d, id, tgt) {
+    _startMove(d, id, tgt, bluff = false) {
         const M = MOVES[id];
-        d.move = { id, t: 0, hit: false, to: tgt.id, aim: tgt.p.clone(), feet: tgt.feet, side: Math.random() < 0.5 ? 'L' : 'R', n: 0, fireT: 0, sweep: Math.random() < 0.5 ? -1 : 1 };
+        d.move = { id, bluff, t: 0, hit: false, to: tgt.id, aim: tgt.p.clone(), feet: tgt.feet, side: Math.random() < 0.5 ? 'L' : 'R', n: 0, fireT: 0, sweep: Math.random() < 0.5 ? -1 : 1 };
         d.mode = 'act'; d.modeT = 0;
         const T = rageTempo(d.rage); // (ярость от божественного: чаще, ближе, дольше)
         if (id === 'fire') { d.cd.fire = (18 - 6 * d.fury) * T.cd; d.move.fireLen = FIRE.TIME * T.fireTime; }
         if (id === 'ball') d.cd.ball = (3.2 - 1.4 * d.fury) * T.cd;
         if (id === 'grab') d.cd.grab = GRAB.CD * T.grabCd;
         if (id === 'clap') d.cd.clap = 9;
-        if (id === 'roar') d.cd.roar = 12;
+        if (id === 'roar') d.cd.roar = bluff ? 7 : 12;
+        if (id === 'kick') d.cd.kick = 5;
         if (id === 'rage') d.cd.rage = 7;
         this._sendSoon = true;
         this._note(`😈 Дьяволос: ход ${id} → ${tgt.id === this.game.localId ? 'вы' : tgt.id} (${Math.round(Math.hypot(tgt.p.x - d.x, tgt.p.z - d.z))} м)`);
@@ -431,7 +463,8 @@ export class Diabolos {
             case 'fist': this._slam(d, fistWorld(this.model, m.side, _a).setY(d.y), MOVES.fist.wave, 'fist'); break;
             case 'stomp': this._slam(d, hoofWorld(this.model, 'R', _a), MOVES.stomp.wave, 'stomp'); break;
             case 'clap': this._clap(d); break;
-            case 'roar': g.castleLife?.alarm?.(this.model.position, 'devil', null, 220); this._tremor(d, this.model.position, 60, 0.6); break;
+            case 'roar': g.castleLife?.alarm?.(this.model.position, 'devil', null, 220); if (!m.bluff) this._tremor(d, this.model.position, 60, 0.6); break; // (блеф: рёв и рывок вперёд — без удара)
+            case 'kick': this._kickRocks(d, m); break;
             case 'ball': this._spitBall(d, m); break;
             case 'grab': {
                 if (m.to == null) break;
@@ -559,13 +592,47 @@ export class Diabolos {
         this._addBall(id, o, v, true);
         this.game.sync?.diabolos?.({ e: 'b', id, o: [r2(o.x), r2(o.y), r2(o.z)], v: [r2(v.x), r2(v.y), r2(v.z)] });
     }
-    _addBall(id, o, v, mine) {
+    /** (хост) Пинок: копыто подбрасывает глыбы базальта дугой к цели (разброс по месту цели; шаг в сторону — промах). */
+    _kickRocks(d, m) {
+        const K = MOVES.kick, o0 = hoofWorld(this.model, 'R', _a).clone();
+        o0.y = this._ground(o0.x, o0.z, d.y) + 4;
+        this._slamFx(o0, 14, 'kick');
+        for (let i = 0; i < K.n; i++) {
+            if (this._rocks() >= ROCKS_MAX) break;
+            const ax = m.aim.x + (Math.random() - 0.5) * K.r * 2.4, az = m.aim.z + (Math.random() - 0.5) * K.r * 2.4;
+            const o = _u.set(o0.x + (Math.random() - 0.5) * 6, o0.y + Math.random() * 3, o0.z + (Math.random() - 0.5) * 6);
+            const dx = ax - o.x, dz = az - o.z, hd = Math.hypot(dx, dz) || 1;
+            const T = 1.1 + hd / 70 + Math.random() * 0.35; // (высокая дуга: видно, куда летит)
+            const ty = (m.feet ?? m.aim.y) + 0.5;
+            const v = new THREE.Vector3(dx / T, (ty - o.y) / T + 0.5 * BALL.GRAVITY * T, dz / T);
+            const id = ++this._ballN;
+            this._addBall(id, o, v, true, true);
+            this.game.sync?.diabolos?.({ e: 'b', id, rk: 1, o: [r2(o.x), r2(o.y), r2(o.z)], v: [r2(v.x), r2(v.y), r2(v.z)] });
+        }
+    }
+    _rocks() { let n = 0; for (const b of this.balls) if (b.rock) n++; return n; }
+    _addBall(id, o, v, mine, rock = false) {
+        if (rock) {
+            const b = { id, rock: true, p: o.clone(), v: v.clone(), t: 0, mine, mesh: this._rockMesh(), trail: 0, spin: new THREE.Vector3(Math.random() * 4, Math.random() * 4, Math.random() * 4) };
+            b.mesh.position.copy(o); b.mesh.visible = true;
+            const s = ROCK_R * (0.7 + Math.random() * 0.6); b.mesh.scale.set(s, s * (0.75 + Math.random() * 0.3), s * (0.8 + Math.random() * 0.4)); b.r = s;
+            this.balls.push(b);
+            return;
+        }
         const b = { id, p: o.clone(), v: v.clone(), t: 0, mine, mesh: this._ballMesh(), trail: 0 };
         b.mesh.position.copy(o);
         b.mesh.visible = true;
         this.balls.push(b);
         this.game.sound?.playDevil?.(o, 'ball', 1.1);
         this.game.fx?.lightFlash?.(o, 0xff7a1a, 3, 0.25, 60);
+    }
+    _rockMesh() {
+        let m = this._rockPool.find((x) => !x.visible);
+        if (m) return m;
+        m = rockModel();
+        this.game.scene?.add(m);
+        this._rockPool.push(m);
+        return m;
     }
     _ballMesh() {
         let m = this._ballPool.find((x) => !x.visible);
@@ -584,7 +651,17 @@ export class Diabolos {
             b.v.y -= BALL.GRAVITY * dt;
             b.p.addScaledVector(b.v, dt);
             b.mesh.position.copy(b.p);
-            b.mesh.rotation.y += dt * 4; b.mesh.rotation.x += dt * 3;
+            if (b.rock) {
+                b.mesh.rotation.x += b.spin.x * dt; b.mesh.rotation.y += b.spin.y * dt; b.mesh.rotation.z += b.spin.z * dt;
+                b.trail -= dt;
+                if (b.trail <= 0 && fx?.smoke) { b.trail = 0.07; fx.smoke.spawn(b.p.x, b.p.y, b.p.z, 0, 0.6, 0, 0x3a2a22, 1.6, 1.1, { shrink: -1 }); }
+                let hit = b.t > BALL.LIFE || b.p.y < this._ground(b.p.x, b.p.z, -1e9) + b.r * 0.6;
+                const coll = g.collision;
+                if (!hit && coll?.lineOfSight && coll.lineOfSight(_v.x, _v.y, _v.z, b.p.x, b.p.y, b.p.z, 0.5) === false) hit = true;
+                if (!hit) for (const q of this._players()) { _w.set(q.p.x, q.p.y - 0.8, q.p.z); if (_w.distanceTo(b.p) < b.r + 1.4) { hit = true; break; } }
+                if (hit) this._rockLand(b);
+                continue;
+            }
             const s = 1 + 0.12 * Math.sin(b.t * 31);
             b.mesh.scale.setScalar(BALL.R * s);
             // след: жар, искры, дым (как снаряды Королевы — свечение и след)
@@ -601,6 +678,26 @@ export class Diabolos {
             if (hit && (b.mine || !this.auth)) this._explodeBall(b, true);
             else if (hit) this._explodeBall(b, true);
         }
+    }
+    /** Глыба упала: пыль, осколки, гул; ломает немного камня (хост), ранит моего игрока рядом (каждый — своего). */
+    _rockLand(b, tell = true) {
+        const g = this.game, p = b.p, fx = g.fx;
+        b.mesh.visible = false;
+        const i = this.balls.indexOf(b); if (i >= 0) this.balls.splice(i, 1);
+        g.sound?.playDevil?.(p, 'step', 0.7, 1.4);
+        if (fx?.smoke) for (let k = 0; k < 10; k++) fx.smoke.spawn(p.x, p.y, p.z, (Math.random() - 0.5) * 8, 2 + Math.random() * 4, (Math.random() - 0.5) * 8, 0x4a3a30, 3, 1.4, { shrink: -1.4 });
+        if (fx?.glow) for (let k = 0; k < 14; k++) fx.glow.spawn(p.x, p.y, p.z, (Math.random() - 0.5) * 16, 4 + Math.random() * 8, (Math.random() - 0.5) * 16, 0xff6a1a, 0.6 + Math.random() * 0.6, 0.5, { shrink: -1 });
+        if (this.auth) {
+            g.explode?.(p.clone(), 2.2, ID, 0.6);
+            if (tell) g.sync?.diabolos?.({ e: 'bx', id: b.id, p: [r2(p.x), r2(p.y), r2(p.z)] });
+        }
+        const me = g.character?.group?.position;
+        if (!me || g.isDeadLocal || g.combat?.dead) return;
+        const K = MOVES.kick, dist = Math.hypot(me.x - p.x, me.y - 0.8 - p.y, me.z - p.z);
+        if (dist > K.r) return;
+        const push = _u.set(me.x - p.x, 0, me.z - p.z).normalize().multiplyScalar(8 * (1 - dist / K.r)).setY(3);
+        if ((g.combat?.shieldFactor?.(p) ?? 0) >= 1) { g.knockback?.add?.(push.clone().multiplyScalar(0.3)); return; } // (камень — не заклинание: щит держит его бесплатно, как снежок)
+        this._hurtMe(Math.round(K.dmg * (1 - dist / K.r * 0.6)), 'melee', p, push.clone(), `🪨 Глыба из-под копыта Дьяволоса!`);
     }
     _explodeBall(b, tell) {
         const g = this.game, p = b.p;
@@ -935,6 +1032,7 @@ export class Diabolos {
         P.lean = mv?.id === 'fist' || mv?.id === 'grab' ? hitK * 0.8 : mv?.id === 'rage' ? 0.6 : 0;
         P.strain = d.strain;
         P.stomp = mv?.id === 'stomp' ? (k < M.hit ? wind : Math.max(0, 1 - after * 3)) * (k < M.hit ? 1 : 0) : 0;
+        P.kick = mv?.id === 'kick' ? (k < M.hit ? -0.35 * wind : Math.max(0, 1 - after * 1.6)) * (k < M.hit ? 1 : 1) : 0; // (замах ногой назад, потом пинок вперёд)
         P.stretch = wakeK;
         P.eyes = d.eyes;
         // мимика: настроение, поверх — ход боя или поступок
@@ -1318,8 +1416,8 @@ export class Diabolos {
                 else d.move.aim.set(+ax, +ay, +az);
                 return;
             }
-            case 'b': if (!isHost && this.d && Array.isArray(m.o)) this._addBall(m.id, _v.fromArray(m.o), _w.fromArray(m.v), false); return;
-            case 'bx': { if (isHost) return; const b = this.balls.find((x) => x.id === m.id); if (b) { b.p.fromArray(m.p); this._ballGone(b, true); this.balls.splice(this.balls.indexOf(b), 1); this._meBall(b.p); } return; }
+            case 'b': if (!isHost && this.d && Array.isArray(m.o)) this._addBall(m.id, _v.fromArray(m.o), _w.fromArray(m.v), false, !!m.rk); return;
+            case 'bx': { if (isHost) return; const b = this.balls.find((x) => x.id === m.id); if (b?.rock) { b.p.fromArray(m.p); this._rockLand(b, false); return; } if (b) { b.p.fromArray(m.p); this._ballGone(b, true); this.balls.splice(this.balls.indexOf(b), 1); this._meBall(b.p); } return; }
             case 'slam': if (!isHost && this.d && Array.isArray(m.p)) { _h.fromArray(m.p); const R = MOVES[m.k]?.wave ?? 20; this._slamFx(_h, R, m.k); this._tremor(this.d, _h, 60, 0.8); this._meSlam(_h, R, m.k); } return;
             case 'grab': if (m.to === g.localId && this.model) this._grabMe(m.s === 'L' ? 'L' : 'R'); return;
             case 'woke': if (m.to === g.localId) g.achievements?.gain?.('devilWoke'); return;
@@ -1366,7 +1464,7 @@ export class Diabolos {
         const m = diabolosModel();
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
-        return [m, c, anchorModel(), ballModel()];
+        return [m, c, anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {
@@ -1434,3 +1532,48 @@ registerKind('Y', {
     // «не действует»: слишком велик (DiabolosRules.DEVIL_VS.push) — толчок только злит, если это нападение
     immune: (g, c, o) => { if (o?.spell && o.spell !== 'DiabolosSlam' && o.by != null) g.diabolos?.hit(c, 0, o.spell, o.by); return true; },
 });
+
+// ------------------------------------------------------------------ глыба пинка: базальт с прожилками жара
+let _rockGeo = null, _rockMat = null;
+/** Глыба из-под копыта: неровный многогранник (вершины сдвинуты шумом), тёмный базальт со сколами и тлеющими прожилками (шейдер). */
+export function rockModel() {
+    if (!_rockGeo) {
+        _rockGeo = new THREE.IcosahedronGeometry(1, 1);
+        const P = _rockGeo.attributes.position, col = [];
+        for (let i = 0; i < P.count; i++) {
+            const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+            const n = 0.72 + 0.5 * Math.abs(Math.sin(x * 5.1 + y * 3.7) * Math.cos(z * 4.3 - x * 2.1));
+            P.setXYZ(i, x * n, y * n * 0.86, z * n);
+            const k = 0.12 + 0.1 * Math.abs(Math.sin(i * 12.9898) * 43758.5453 % 1);
+            col.push(k * 1.25, k * 0.95, k * 0.85);
+        }
+        _rockGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        _rockGeo = _rockGeo.toNonIndexed ? _rockGeo.toNonIndexed() : _rockGeo;
+        _rockGeo.computeVertexNormals();
+        _rockGeo.userData.keep = true;
+        _rockMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, emissive: 0x000000 });
+        _rockMat.name = 'diabolos-rock';
+        _rockMat.userData.shared = true;
+        _rockMat.onBeforeCompile = (sh) => {
+            sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRp;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRp = position;');
+            sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vRp;
+float rh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float rn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(rh(i), rh(i + vec3(1,0,0)), f.x), mix(rh(i + vec3(0,1,0)), rh(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(rh(i + vec3(0,0,1)), rh(i + vec3(1,0,1)), f.x), mix(rh(i + vec3(0,1,1)), rh(i + vec3(1,1,1)), f.x), f.y), f.z); }`)
+                .replace('#include <color_fragment>', `#include <color_fragment>
+float rN = 0.6 * rn(vRp * 4.0) + 0.4 * rn(vRp * 11.0);
+diffuseColor.rgb *= 0.7 + 0.6 * rN;`)
+                .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float rC = 1.0 - smoothstep(0.0, 0.05, abs(rn(vRp * 2.6 + vec3(3.1)) - 0.5));
+totalEmissiveRadiance += vec3(1.0, 0.35, 0.05) * rC * 0.9;`);
+        };
+        _rockMat.customProgramCacheKey = () => 'diabolos-rock';
+    }
+    const m = new THREE.Mesh(_rockGeo, _rockMat);
+    m.castShadow = true;
+    m.visible = false;
+    m.name = 'diabolos-rock';
+    return m;
+}

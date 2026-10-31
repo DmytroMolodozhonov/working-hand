@@ -477,3 +477,43 @@ test('видит невидимых: невидимый игрок рядом �
     for (let i = 0; i < 30 * 8; i++) dv.update(1 / 30);
     assert.equal(dv.d.target, 'me', 'невидимый — цель');
 });
+
+test('режиссёр боя: за 2 минуты — не меньше 6 разных ходов, ходьба ≥ 30 % времени, один ход не больше 2 раз подряд (жалоба автора: «одно и то же»)', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { planMove } = await import('../../src/game/DiabolosRules.js');
+    // чистые правила: тот же ход третий раз подряд — никогда
+    for (let i = 0; i < 300; i++) {
+        const r = planMove({ dist: 50, faced: true, rest: 0, cd: {}, recent: ['kick', 'kick'] });
+        assert.notEqual(r.id, 'kick');
+    }
+    assert.equal(planMove({ dist: 50, faced: false, rest: 0, cd: {}, recent: [] }).kind, 'turn');
+    assert.equal(planMove({ dist: 80, faced: true, rest: 0, cd: {}, recent: [], hidden: true }).peek, true, 'спрятался — идёт заглянуть');
+    for (let i = 0; i < 200; i++) { const r = planMove({ dist: 20, faced: true, rest: 0, cd: {}, recent: [], air: true }); assert.ok(!['stomp', 'kick', 'fist'].includes(r.id), 'в воздухе копыто не достаёт'); }
+    // в игре: игрок ходит кругом в пределах цепи
+    const me = new THREE.Vector3(0, 1.95, -60);
+    const { g } = fakeGame(me);
+    const dv = new Diabolos(g);
+    g.diabolos = dv;
+    dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: DEVIL.CHAIN_LEN });
+    dv.update(0.016);
+    dv.boltHit(dv.d, 'Bombardo', 'me');
+    for (let i = 0; i < 30 * 12; i++) dv.update(1 / 30); // (проснулся, устрашил)
+    const ids = [];
+    let walk = 0, n = 0, t = 0;
+    dv.log.length = 0;
+    for (let i = 0; i < 30 * 120; i++) {
+        t += 1 / 30;
+        const a = t * 0.08, R = 55 + 35 * Math.sin(t * 0.05);
+        me.set(Math.sin(a) * R, 1.95, 40 - Math.cos(a) * R - 40);
+        g.combat.hp = 100;
+        dv.update(1 / 30);
+        n++; if (dv.d.walkFor > 0 || dv.d.walkK > 0.5) walk++;
+    }
+    for (const l of dv.log) { const m = /ход (\w+)/.exec(l); if (m) ids.push(m[1]); }
+    const acts = dv.log.filter((l) => /^😈 Дьяволос: [А-Яа-яё]/.test(l) && !/решение|ход|stand|walk|act/.test(l)).length;
+    const distinct = new Set(ids).size + (acts ? 1 : 0);
+    console.log(`разных ${distinct}: ${[...new Set(ids)].join(",")}; поступков ${acts}; ходьба ${(walk / n * 100).toFixed(0)} %`);
+    assert.ok(distinct >= 6, `разных ходов ${distinct}: ${[...new Set(ids)].join(',')} + поступков ${acts}`);
+    assert.ok(walk / n >= 0.3, `ходьба ${(walk / n * 100).toFixed(0)} %`);
+    for (let i = 2; i < ids.length; i++) assert.ok(!(ids[i] === ids[i - 1] && ids[i] === ids[i - 2]), `три раза подряд: ${ids[i]}`);
+});

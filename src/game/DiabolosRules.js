@@ -197,8 +197,9 @@ export const MOVES = {
     fire:  { wind: 1.6, hit: 1.6, dur: 5.6, rest: 6.0, reach: 115 },                                // струя: вдох 1,6 с + 4 с огня, потом 6 с пауза
     ball:  { wind: 1.3, hit: 1.3, dur: 2.2, rest: 1.6, reach: 220 },                                // шар огня из пасти
     rage:  { wind: 0, hit: 0.8, dur: 3.6, rest: 1.0, reach: 999, wave: 20, smashK: 1.5 },          // ярость у предела цепи: рывок, рёв, удары по земле
+    kick:  { wind: 0.9, hit: 1.25, dur: 2.5, rest: 1.6, reach: 140, n: 5, dmg: 18, r: 6 },          // пинок камней: копыто подбрасывает глыбы к цели (дуга видна, шаг в сторону — промах)
 };
-export const MOVE_IDS = ['fist', 'stomp', 'grab', 'clap', 'roar', 'fire', 'ball', 'rage'];
+export const MOVE_IDS = ['fist', 'stomp', 'grab', 'clap', 'roar', 'fire', 'ball', 'rage', 'kick']; // (только дописывать: индекс уходит по сети)
 
 /**
  * Хват и раздавливание (слова автора: «если игрок достаточно близко — СХВАТИТЬ кистью, поднять, держать, через несколько секунд
@@ -330,6 +331,71 @@ export function ballVerdict({ shield = null, armor = false, d = 0 } = {}) {
  * faced (повёрнут к цели), rest (с до готовности), fireCd, ballCd, grabCd, roarCd, rageCd, air (цель высоко над землёй)}
  * → id хода | 'walk' | 'turn' | null
  */
+/**
+ * Режиссёр боя (жалоба автора: «он просто метает шары, одно и то же… должен ХОДИТЬ, проявлять себя больше и разнообразнее»).
+ * Вес каждого хода — по расстоянию (ближе — ближние, дальше — ходьба к пределу цепи, шары, струя), по тому, что он уже делал
+ * (тот же ход больше 2 раз подряд — никогда, недавний — реже), по доле ходьбы (меньше 30 % — ходит чаще), цель в воздухе
+ * (копыто и пинок не достают), за цепью (только дальнее, рёв, ярость), спрятался (идёт к месту, где видел, и заглядывает).
+ * Между ударами — поступки характера (оглядывается, чешет рог, тянет цепь, бьёт в грудь…) и блеф (рёв без атаки).
+ * s: {dist, beyond, atLeash, faced, rest, cd: {id: с}, air, high, hidden, recent: [id новые первыми], walkShare 0…1, fury, rage}
+ * → {kind: 'move'|'walk'|'act'|'turn'|'wait', id?, t? (с ходьбы), bluff?, peek?}
+ */
+export const DIRECTOR = {
+    SAME_MAX: 2,          // один ход подряд не больше 2 раз
+    RECENT_K: 0.45,       // ход из последних трёх — вес ×0,45
+    WALK_SHARE: 0.3,      // ходьбы меньше 30 % — ходьба ×3
+    WALK_T: [2.2, 5],     // с — один заход ходьбы
+    CLOSE: 30, MID: 62,   // м — полосы расстояния (от середины тела до цели)
+    ACT_W: 0.55,          // вес поступка характера между ударами
+    BLUFF_W: 0.35,        // вес рёва-блефа
+    BATTLE_ACTS: ['lookAround', 'scratchHorn', 'chainPull', 'chestBeat', 'knuckleCrack', 'headShake', 'tongueTaunt', 'sighSit', 'stretch'],
+};
+const BANDS = { // вес хода по полосе: близко / средне / далеко (дальше FIRE.LEN — только то, что долетает)
+    stomp: [3, 0, 0], grab: [2, 1.6, 0], fist: [2.2, 2.4, 0], clap: [1.2, 2, 0], kick: [1.4, 2, 1.6],
+    ball: [0.4, 1, 1.8], fire: [0.3, 1.2, 2.4], roar: [0.4, 0.6, 0.8], rage: [0.2, 0.2, 0.2],
+};
+const ACT_CD = { fire: 'fire', ball: 'ball', grab: 'grab', clap: 'clap', roar: 'roar', rage: 'rage', kick: 'kick' };
+export function planMove(s, rnd = Math.random) {
+    if (s.hidden && !s.beyond) return { kind: 'walk', t: DIRECTOR.WALK_T[1], peek: true }; // (за скалой: подходит и заглядывает)
+    if (!s.faced) return { kind: 'turn' }; // (лицом к цели: не плюёт и не бьёт, пока не развернулся — кружат вокруг, он поворачивается)
+    const d = s.dist, recent = s.recent || [], cd = s.cd || {};
+    if (s.rest > 0) return !s.beyond && d > DIRECTOR.CLOSE ? { kind: 'walk', t: s.rest } : { kind: 'wait' }; // (переводит дух — идёт ближе)
+    const band = d <= DIRECTOR.CLOSE ? 0 : d <= DIRECTOR.MID ? 1 : 2;
+    const hits = recent.filter((x) => MOVES[x]); // (только удары: ходьба и поступки между ними не «разбавляют» повтор)
+    const W = [];
+    for (const id in BANDS) {
+        const M = MOVES[id];
+        let w = BANDS[id][band];
+        if (id === 'rage') w = s.atLeash && s.beyond ? 3 : (s.fury || 0) > 0.6 || (s.rage || 0) > 0.3 ? 0.9 : w; // (у предела цепи; в ярости бьёт по земле)
+        if (id === 'roar') w += s.beyond ? 0.8 : 0;
+        if (w <= 0 || d > M.reach || (cd[ACT_CD[id]] ?? 0) > 0) continue;
+        if (s.air && (id === 'stomp' || id === 'kick' || id === 'fist')) continue; // (в воздухе копыто и кулак по земле не достают)
+        if (s.high && id === 'grab') continue; // (выше руки)
+        if (hits[0] === id && hits[1] === id) continue; // (не больше 2 раз подряд)
+        if (hits.slice(0, 3).includes(id)) w *= DIRECTOR.RECENT_K;
+        W.push(['move', id, w]);
+    }
+    if (!s.beyond && d > DIRECTOR.CLOSE * 0.8) {
+        let w = band === 2 ? 2.4 : 1.4;
+        if ((s.walkShare ?? 1) < DIRECTOR.WALK_SHARE) w *= 3;
+        if (recent[0] === 'walk' && recent[1] === 'walk') w *= 0.3;
+        W.push(['walk', null, w]);
+    }
+    if (recent[0] !== 'act') W.push(['act', null, DIRECTOR.ACT_W * (s.beyond ? 1.6 : 1)]);
+    if (recent[0] !== 'bluff' && (cd.roar ?? 0) <= 0) W.push(['bluff', 'roar', DIRECTOR.BLUFF_W]);
+    let sum = 0;
+    for (const w of W) sum += w[2];
+    if (sum <= 0) return { kind: 'wait' };
+    let r = rnd() * sum;
+    let pick = W[W.length - 1];
+    for (const w of W) { r -= w[2]; if (r <= 0) { pick = w; break; } }
+    if (pick[0] === 'walk') return { kind: 'walk', t: DIRECTOR.WALK_T[0] + rnd() * (DIRECTOR.WALK_T[1] - DIRECTOR.WALK_T[0]) };
+    if (pick[0] === 'act') { const L = DIRECTOR.BATTLE_ACTS.filter((a) => a !== s.lastAct); return { kind: 'act', id: L[Math.floor(rnd() * L.length) % L.length] }; }
+    if (pick[0] === 'bluff') return { kind: 'move', id: 'roar', bluff: true };
+    return { kind: 'move', id: pick[1] };
+}
+
+/** (прежний строгий выбор — для сравнения; игра берёт planMove) */
 export function chooseMove(s) {
     if (s.rest > 0) return null;
     if (!s.faced) return 'turn'; // (лицом к цели: не плюёт и не бьёт, пока не развернулся)
