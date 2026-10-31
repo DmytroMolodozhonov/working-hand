@@ -292,8 +292,36 @@ export function lateInSpeech(spell, command, meta, now) {
     // the spell said again and again («инферно инферно инферно»): every word is the spell — slow, not talk
     const words = norm(meta.written || '').split(' ').filter(Boolean), cmd = letters(command || '');
     const repeated = own === 1 && words.every((w) => Math.abs(letters(w).length - cmd.length) <= 2 && lettersLike(w, command || ''));
-    if (repeated) return null;
+    if (repeated || repeatedSpell(meta.written, command)) return null;
     return `слово из длинной речи, дошло через ${Math.round(lag)} мс — это не сказанное заклинание`;
+}
+
+const FILLERS = new Set(['ну', 'давай', 'ну давай', 'так', 'вот', 'ещё', 'еще', 'и', 'а']);
+/**
+ * The phrase is one spell said again and again in a breath («авладыки тавр аватар авлатавр» = «Авада Кедавра» ×2; «инферно инферно инферно»):
+ * the words fall into 2…6 equal groups, each written like the spell (a «ну», «давай» beside them is no word). One spell, not a long speech
+ * (the author's journal: «слово из длинной речи, дошло через 5486 мс»).
+ */
+export function repeatedSpell(written, command) {
+    const cmdWords = norm(command || '').split(' ').filter(Boolean);
+    const words = norm(written || '').split(' ').filter((w) => w && !FILLERS.has(w));
+    if (!cmdWords.length || words.length < 2) return false;
+    const cmdLen = letters(command || '').length;
+    for (let k = 2; k <= 6; k++) {
+        if (words.length < k) break;
+        // groups by letters: each takes words until it holds about one spell's letters
+        const total = words.reduce((n, w) => n + letters(w).length, 0);
+        if (Math.abs(total / k - cmdLen) > Math.max(2, cmdLen * 0.25)) continue;
+        const groups = [];
+        let cur = [], curLen = 0, target = total / k;
+        for (const w of words) {
+            cur.push(w); curLen += letters(w).length;
+            if (curLen >= target * 0.9 && groups.length < k - 1) { groups.push(cur.join(' ')); cur = []; curLen = 0; }
+        }
+        if (cur.length) groups.push(cur.join(' '));
+        if (groups.length === k && groups.every((g) => Math.abs(letters(g).length - cmdLen) <= Math.max(2, cmdLen * 0.25) && lettersLike(g, command || '')) && groups.every((g) => lettersLike(g, groups[0]) && lettersLike(groups[0], g))) return true;
+    }
+    return false;
 }
 
 /** A short spell («Даст», «Джолт», «Айс», «Ап») must fit this much better than needed while running or in noise. */
@@ -395,6 +423,23 @@ export function battleOwn(h, fit) {
     if (Number.isFinite(h.snr) && h.snr < LOUD_OWN_SNR) return false;
     return norm(h.canonical || '').split(' ').filter(Boolean).length <= 2;
 }
+/**
+ * The author's journal (Avada Kedavra, ~6 tries, 3 lost at +0.5 against 0.6): a costly / deadly spell said with the wand RAISED AND AIMED
+ * (not just «ждёт команду»), the mouth seen moving, my voice ≥ 10 dB over the noise, and the spell known — the thin margin is lowered:
+ * −0.3; when 60 %+ of its words are written like it, −0.4. Talk has no aimed wand and no lips: the old line stays (never lower than 0.2).
+ */
+export const STRONG_CTX_EASE = 0.3;
+export const STRONG_CTX_EASE_WORDS = 0.4;
+export const STRONG_CTX_SNR = 10;
+export const STRONG_CTX_FLOOR = 0.2;
+export function strongEase(h) {
+    if (!DANGEROUS.has(h.spell) || !h.handAimed || h.lips !== true || h.known === false) return 0;
+    if (Number.isFinite(h.snr) && h.snr < STRONG_CTX_SNR) return 0;
+    const cw = norm(h.canonical || '').split(' ').filter(Boolean), ww = norm(h.written || '').split(' ').filter(Boolean);
+    if (cw.length < 2 || !ww.length) return STRONG_CTX_EASE;
+    const got = cw.filter((c) => ww.some((w) => lettersLike(w, c))).length;
+    return got / cw.length >= 0.6 ? STRONG_CTX_EASE_WORDS : STRONG_CTX_EASE;
+}
 export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
@@ -434,7 +479,12 @@ export function soundTrust(h) {
     if (short && !battle && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
     if (short && h.running) { need = Math.max(need, 0.8); why.push('на бегу'); }
     // («Дай» asks the raised hand aimed right at the target besides: its letters said clearly are enough)
-    if (DANGEROUS.has(h.spell)) { need = Math.max(need, battle ? BATTLE_FIT : like ? (h.spell === 'Die' ? 0.3 : 0.6) : 1.5); why.push('сильное заклинание'); }
+    if (DANGEROUS.has(h.spell)) {
+        let dn = battle ? BATTLE_FIT : like ? (h.spell === 'Die' ? 0.3 : 0.6) : 1.5;
+        const ease = strongEase(h);
+        if (ease && like && !battle) dn = Math.max(STRONG_CTX_FLOOR, dn - ease); // (letters not like the spell: the old +1.5 — unchanged)
+        need = Math.max(need, dn); why.push('сильное заклинание');
+    }
     if (h.lips === false) { need = Math.max(need, 1.5); why.push('губы не двигались'); }
     if (fit >= need) return null;
     return `узнано неуверенно: запас ${fit.toFixed(1)}, нужно ${need} (${why.join(', ')})`;

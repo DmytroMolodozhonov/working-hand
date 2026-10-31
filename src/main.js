@@ -589,6 +589,15 @@ let lastJournal = null;
 let lastCast = null; // the last spell the voice cast {spell, at, seg} (SpellPhrase.afterCast)
 const letterCount = (t) => String(t || '').replace(/[^a-zа-яё]/gi, '').length;
 
+/** The wand hand is up and pointing (the camera's armLift ≥ 0.5 on the hand that casts), not just «ждёт команду»: a deadly spell's thin margin eases (SpellPhrase.strongEase). */
+function handAimed() {
+    const lift = game?.currentPose?.armLift;
+    if (!lift) return false;
+    const side = game.wandSide?.() || game.magicHand || game.lastMagicHand;
+    const v = side === 'left' ? lift.left : side === 'right' ? lift.right : Math.max(lift.left || 0, lift.right || 0);
+    return (v || 0) >= 0.5 && Date.now() - (game.lastMagicTime || 0) < 2500;
+}
+
 function journal(command, isFinal, meta, spell, ok, why, source = '') {
     const log = game?.spellLog;
     if (!log || !command) return;
@@ -795,7 +804,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (meta) { meta.lips = lips; meta.running = running; }
             const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips })
                 // (found by its sound: how sure, weighed with how like the spell the written letters are, the lips, the run)
-                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, snr: meta.snr, combat: !!game.inFight?.(), holding: !!(game.focus?.held?.() || game.combat?.shield || game.flight?.active), hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
+                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, snr: meta.snr, combat: !!game.inFight?.(), handAimed: handAimed(), known: game.voice?.native?.knows ? !!game.voice.native.knows(spoken) : undefined, holding: !!(game.focus?.held?.() || game.combat?.shield || game.flight?.active), hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
             if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
             // «стоп, раскрой свои секреты»: first the stop (what I hold lets go), then the spell
             if (spoken !== 'Stand' && game.focus?.held?.() && stopFirst(meta?.written || command)) {
