@@ -1150,9 +1150,27 @@ class Pipeline:
         # sea 2 of 8 spells heard through it, 5 of 8 without; with music 5 and 8)
         use_clean = self.aec and share >= 0.1
         src = self.clean if use_clean else self.raw
-        lp = self.ctc.logprobs(src[np.arange(a, b) % self.L])
+        idx = np.arange(a, b) % self.L
+        lp = self.ctc.logprobs(src[idx])
+        used = "aec" if use_clean else "mic"
+        # The author's journal 21:46: with loud speakers (a fight: the knights shout) the cleaned sound gave «васи», «возан», «ак» for
+        # «Frozen», «Accio», «Wind» — the canceller cut my own voice along with the game's. When my voice stands well above the
+        # noise in the plain microphone and the canceller took much of it away, read that sound too and keep the one the network is surer of.
+        if use_clean:
+            try:
+                xr, xc = self.raw[idx], src[idx]
+                k0 = len(xr) // FRAME
+                if k0:
+                    peak = lambda x: float(20 * np.log10(np.sqrt((x[:k0 * FRAME].reshape(k0, FRAME) ** 2).mean(axis=1)).max() + 1e-9))  # noqa: E731
+                    pr, pc_ = peak(xr), peak(xc)
+                    if pr - self.floor_raw >= RAW_ALT_SNR and pr - pc_ >= RAW_ALT_LOSS:
+                        lp2 = self.ctc.logprobs(xr)
+                        if _confidence(np, lp2) > _confidence(np, lp) * RAW_ALT_GAIN:
+                            lp, used, use_clean = lp2, "mic2", False
+            except Exception as e:  # noqa: BLE001 - the second look is only a help
+                sys.stderr.write(f"raw alt: {e}\n")
         ev = {"type": "seg", "id": job["id"], "final": job["final"], "cut": bool(job.get("cut")), "t0": to_ms(a), "t1": to_ms(b),
-              "T": int(lp.shape[0]), "lp": _pack(np, lp), "src": "aec" if use_clean else "mic"}
+              "T": int(lp.shape[0]), "lp": _pack(np, lp), "src": used}
         ev["far"] = round(share, 2)
         ev["q"] = round(float(job.get("q") or 0.0), 3)  # s of quiet at the look's end (the speech itself ended at t1 − q)
         x = src[np.arange(a, b) % self.L]
@@ -1204,6 +1222,18 @@ def offline(mic, ref=None, aec=True, partial_every=SEG["partial"], threads=2):
             next_look = k + int(partial_every * SR)
     offline.levels = {"db": list(pipe.lv), "raw": list(pipe.lv_raw), "far": list(pipe.lv_far)}  # (the 10 ms levels: voicebench's echo guard)
     return out
+
+
+RAW_ALT_SNR = 20.0   # dB: my voice in the plain microphone above its background — loud enough to read as it is
+RAW_ALT_LOSS = 6.0   # dB: the canceller took at least this much of the loudest moment away (it cut my voice, or the game's was louder)
+RAW_ALT_GAIN = 1.1   # the plain sound must make the network this much surer to be taken
+
+
+def _confidence(np, lp):
+    """How sure the network is of the letters it wrote: the mean strength of the frames that are letters (not blank/space)."""
+    p = np.exp(lp[:, 1:LETTERS - 1].max(axis=1))
+    on = p[p > 0.5]
+    return float(on.sum() / max(1, len(p)))
 
 
 def _pack(np, lp):

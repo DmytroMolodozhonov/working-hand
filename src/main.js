@@ -794,7 +794,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
             if (meta) { meta.lips = lips; meta.running = running; }
             const noise = bodyNoise({ spell: spoken, text: command, native: !!meta?.native, fit: meta?.fit, len: meta?.len, snr: meta?.snr, running, lips })
                 // (found by its sound: how sure, weighed with how like the spell the written letters are, the lips, the run)
-                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, snr: meta.snr, holding: !!(game.focus?.held?.() || game.combat?.shield || game.flight?.active), hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
+                || (meta?.native && meta.sure && !meta.byWords ? soundTrust({ spell: spoken, canonical: command, written: meta.near ?? meta.written, fit: meta.fit, len: meta.len, far: meta.refChecked ? Math.min(meta.far || 0, TRUSTED_FAR) : meta.far, running, lips, snr: meta.snr, combat: !!game.inFight?.(), holding: !!(game.focus?.held?.() || game.combat?.shield || game.flight?.active), hope: !!(game.voice?.native?.duelHot || game.duelOnly || game.arenaDuels?.mode) }) : null);
             if (noise) { journal(command, isFinal, meta || { lips, running }, spoken, false, `отсеяно: ${noise}`); return; }
             // «стоп, раскрой свои секреты»: first the stop (what I hold lets go), then the spell
             if (spoken !== 'Stand' && game.focus?.held?.() && stopFirst(meta?.written || command)) {

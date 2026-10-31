@@ -382,10 +382,24 @@ export function lettersLike(written, spellWords) {
 export const STOP_HELD_FIT = 0;
 export const LOUD_OWN_FIT = 1.5;
 export const LOUD_OWN_SNR = 15;
+/**
+ * The author's journal 21:46 (a fight, the knights shout, the speakers sound all the time): «Frozen», «Create a bridge», «Wind» said loudly
+ * with the mouth seen moving were all refused because the network's letters («васи», «возан») did not look like the spell.
+ * In a fight (`combat`), a battle spell of one or two words, my mouth seen moving, my voice above the noise and the fit not below zero,
+ * the letters are not asked for (nor the speakers' share): it is mine. Talk is not in a fight; stillness of the lips still refuses.
+ */
+export const BATTLE_SPELLS = new Set(['Frozen', 'Expelliarmus', 'Stupefy', 'Protection', 'ProtectionMaxima', 'Stand', 'Accio', 'Bombardo', 'BombardoMaxima', 'Ice', 'Sands', 'Jolt', 'Wind', 'WindMaxima', 'Fire', 'Disarmor', 'Disarm']);
+export const BATTLE_FIT = 0.1;
+export function battleOwn(h, fit) {
+    if (!h.combat || h.lips !== true || !BATTLE_SPELLS.has(h.spell) || !(fit >= 0)) return false;
+    if (Number.isFinite(h.snr) && h.snr < LOUD_OWN_SNR) return false;
+    return norm(h.canonical || '').split(' ').filter(Boolean).length <= 2;
+}
 export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
-    const like = lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
+    const battle = battleOwn(h, fit);
+    const like = battle || lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
     if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical, fit)) return 'обычное слово («интересно» и т.п.), а не заклинание';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
     const short = len <= SHORT_LEN;
@@ -416,11 +430,11 @@ export function soundTrust(h) {
     // «Fire», «Ahead»: one-syllable words the network gives a thin fit (+0…+0.2) even said clearly («эхит» for «эхед»);
     // with the letters like it and the camera seeing my own mouth move, that thin fit is enough (echo, speakers, running keep their checks)
     const ownWord = MOUTH_SURE.has(h.spell) && like && h.lips === true;
-    if (short && !ownWord) { need = Math.max(need, 0.3); why.push('короткое'); }
-    if (short && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
+    if (short && !ownWord) { need = Math.max(need, battle ? BATTLE_FIT : 0.3); why.push('короткое'); }
+    if (short && !battle && (h.far || 0) >= 0.5) { need = Math.max(need, 1); why.push('звучали колонки'); }
     if (short && h.running) { need = Math.max(need, 0.8); why.push('на бегу'); }
     // («Дай» asks the raised hand aimed right at the target besides: its letters said clearly are enough)
-    if (DANGEROUS.has(h.spell)) { need = Math.max(need, like ? (h.spell === 'Die' ? 0.3 : 0.6) : 1.5); why.push('сильное заклинание'); }
+    if (DANGEROUS.has(h.spell)) { need = Math.max(need, battle ? BATTLE_FIT : like ? (h.spell === 'Die' ? 0.3 : 0.6) : 1.5); why.push('сильное заклинание'); }
     if (h.lips === false) { need = Math.max(need, 1.5); why.push('губы не двигались'); }
     if (fit >= need) return null;
     return `узнано неуверенно: запас ${fit.toFixed(1)}, нужно ${need} (${why.join(', ')})`;

@@ -41,6 +41,7 @@ export function formatEntry(e) {
     if (m.far > 0) parts.push(`колонки звучали ${Math.round(m.far * 100)}% времени${m.refChecked ? ', сверено со звуком колонок — это не эхо' : ''}`);
     if (m.native) parts.push(m.aec ? 'звук колонок убирается из микрофона' : 'звук колонок НЕ убирается (лучше наушники)');
     if (m.src === 'aec') parts.push('читался очищенный звук');
+    else if (m.src === 'mic2') parts.push('читался сырой звук (очищенный съедал голос)');
     // whose voice: the camera saw the mouth move with it (or not), running in front of the camera
     if (m.lips === true) parts.push('губы двигались — ваш голос');
     else if (m.lips === false) parts.push('губы НЕ двигались');

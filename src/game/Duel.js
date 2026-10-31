@@ -70,6 +70,8 @@ import { DUEL_RANGE, emptyRange } from './DuelRange.js';
 export { segmentToSegment } from './SegmentContact.js';
 
 /** The duel charges' own cast sounds (SpellMusic FX); the rest — Sapira's. */
+/** Own charges that leave a reason in the spell journal (`_chargeStart/_chargeEnd`): hit, miss (angle), shield, range. */
+const LOGGED_CHARGES = new Set(['Ice', 'IceMaxima', 'Frozen', 'Disarmor', 'Expelliarmus', 'Stupefy']);
 const DUEL_FX = { Stupefy: 'fxStupefy', AvadaKedavra: 'fxAvada', Expelliarmus: 'fxExpel', Disarmor: 'fxDisarmor', LiquidationDuel: 'fxLiquidDuel', LiquidationMaximaDuel: 'fxLiquidDuelMax' };
 export { JERK, sharpJerk } from './Jerk.js';
 
@@ -838,6 +840,7 @@ export class Duel {
         if (reach != null) b.rng = emptyRange(reach, !!pickBody(origin, dir, this._bodies(this.me, reach + 5), reach));
         b.aim = tk === 'p' ? tid : null; // (whom it was cast at: Leviosa tells why it did not lift them)
         const g = this.game;
+        if (LOGGED_CHARGES.has(spell)) this._chargeStart(b, origin, dir, tk);
         if (g.sync) g.sync.duelCast(b);
         if (isIceCharge(spell)) { g.sound?.playIce?.(); this.ice.cast(origin, dir); return b; }
         // the strong charges: their sound comes from the card (SpellMusic.SPELL_SOUND — Game.castLocalSpell); a flash here
@@ -1438,9 +1441,46 @@ export class Duel {
         for (let i = 0; i < 24; i++) g.fx.spark(p, i % 3 ? 0xd2b48c : 0xf3e2b3, 0.14, _v2.set((Math.random() - 0.5) * 4, Math.random() * 2.5, (Math.random() - 0.5) * 4), 1.0);
     }
 
+    /**
+     * The author's complaint: «Frozen» / «Disarmor» said right, but nothing froze — and no way to tell why. Own charge at launch: whom the hand
+     * pointed at, and (if nobody) the nearest body in front and how many degrees off the line it was. The ending is in `_chargeEnd`.
+     */
+    _chargeStart(b, origin, dir, tk) {
+        const KIND = { p: 'игрок', z: 'зомби', a: 'животное', v: 'житель/рыцарь/волшебник', c: 'моряк', t: 'дерево', b: 'книга-птица', o: 'паук', N: 'ледяное существо', C: 'сундук/вещь', f: 'дракон' };
+        let near = null;
+        for (const e of this._bodies(this.me, 60)) {
+            const mid = _v3.addVectors(e.a, e.b).multiplyScalar(0.5);
+            const to = _v1.subVectors(mid, origin);
+            const d = to.length();
+            if (d < 0.5 || d > 60) continue;
+            const ang = Math.acos(Math.max(-1, Math.min(1, to.dot(dir) / d))) * 57.2958;
+            if (!near || ang < near.ang) near = { ang, d, kind: e.kind, id: e.id, r: e.r };
+        }
+        b.dbg = { tk, near, kinds: KIND, t0: performance.now() };
+    }
+
+    _chargeEnd(b, res) {
+        const d = b.dbg, g = this.game;
+        if (!d || b.by !== this.me) return;
+        const name = DUEL_SPELLS[b.spell]?.name || b.spell;
+        const who = (k, id) => (d.kinds[k] || k) + (id != null && k !== 'p' ? ` #${id}` : '');
+        let why;
+        if (res === 'hit') why = `попал в «${who(b.tk, b.tid)}»; что с целью дальше (броня/мантия/устойчивость/иммунитет) — в строках «действие»`;
+        else if (res === 'blocked') why = `защита поглотила (Protection, сфера дома, купол арены или божественная защита цели)`;
+        else {
+            const rng = b.rng ?? legacyRange(b.spell);
+            if (b.traveled > rng) why = `вне дальности: пролетел ${Math.round(b.traveled)} м из ${Math.round(rng)} (дальность зависит от маны)`;
+            else if (d.near) why = `промах / преграда на ${Math.round(b.traveled)} м: ближайшее тело — «${who(d.near.kind, d.near.id)}» в ${Math.round(d.near.d)} м, ${Math.round(d.near.ang)}° от линии палочки${d.near.ang > 12 ? ' (рука смотрела мимо)' : ' (линия была верной — на пути стена, дверь, корабль или земля)'}`;
+            else why = `никого на линии палочки; пролетел ${Math.round(b.traveled)} м (стена, дверь или земля на пути)`;
+        }
+        const aimed = d.tk !== 'n' ? `цель под рукой: «${who(d.tk, b.tid)}»` : 'на цель рука не указывала';
+        g.spellLog?.note?.(`🎯 ${name} → ${aimed}; ${why}; летел ${Math.round(performance.now() - d.t0)} мс`);
+    }
+
     _end(b, res, broadcast = true) {
         if (!this.bolts.has(b.id)) return;
         this.bolts.delete(b.id);
+        if (b.dbg) this._chargeEnd(b, res);
         if (res === 'hit' && b.by === this.me) this._manaHit(b.spell);
         if (res === 'hit' && b.by === this.me && b.spell === 'Electrum') this.game.strong?.startElectrum(b.side, b.tk, b.tid); // (now the lightning is held on it)
         else this._pressShield(b, res);
