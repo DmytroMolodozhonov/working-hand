@@ -22,6 +22,8 @@
 
 import { enchantAdd } from './Enchant.js';
 import * as THREE from 'three';
+import { darkMageHead, HEAD } from './HellRules.js';
+import { darkOfEntry } from './DarkMagic.js';
 import { FarShape } from '../core/FarShape.js';
 
 /**
@@ -277,6 +279,7 @@ export class ItemSystem {
         const want = Math.max(1, CHEST_THINGS - extra.length); // (an ordinary chest: three things, its coin pouch one of them; a boss's chest is as the boss is)
         const items = (bossItems || (chest?.dungeonFlavor ? rollDungeonLoot(rng, chest.dungeonFlavor, want, chest.dungeonSize) : chest?.flavor && chest.castle && !royal ? rollStoreLoot(rng, chest.flavor, want) : house?.flavor ? rollStoreLoot(rng, house.flavor, want) : house ? (house.def?.kind === 'tower' || house.def?.kind === 'wizvillage' || house.def?.mage ? rollWizardHouseLoot(rng, house.rich, want, house.def?.type === 'magehut') : rollHouseLoot(rng, house.rich, want)) : kind === 'port' ? rollPortLoot(rng, want) : rollLoot(rng, { key: royal ? 1 : key, royal, count: want, deep: chest?.cave != null }))).concat(extra);
         freshScrolls(items, rng); // (a scroll the opener already knows never comes again)
+        { const d = house?.def; if (d?.kind === 'hamlet' && d.people?.length === 1 && darkMageHead(darkOfEntry(d, d.people[0], d.id + ':0') > 0, rng())) items.push({ kind: HEAD.KIND, uid: newUid() }); } // (a lone black mage's chest: 0.5 % a gargoyle's head — HellRules.darkMageHead)
         const q = chest?.mesh ? chest.mesh.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
         const across = new THREE.Vector3(1, 0, 0).applyQuaternion(q).setY(0).normalize();
         const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize();

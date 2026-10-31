@@ -28,7 +28,11 @@ export const INFERNUM = {
 };
 
 /** Голова горгульи: выпадает из убитой горгульи (оружием, заклинанием — не от луча «To the Sun»: та сгорела). */
-export const HEAD = { CHANCE: 0.25, KIND: 'gargoyleHead' };
+export const HEAD = { CHANCE: 0.25, DARK_MAGE: 0.005, KIND: 'gargoyleHead' }; // (25 % from a killed gargoyle; 0.5 % from a black mage — a wanderer's body, a lone black mage's chest)
+/** The head is NEVER bought or sold anywhere (the author): no shop has it, no merchant, fence or pawnbroker takes it, no price is named. */
+export const unsellable = (it) => !!it && it.kind === HEAD.KIND;
+/** A black mage's head (0.5 %): only a black mage — a wanderer, or a lone wizard in his own house — never a plain one, a castle, a dungeon, a ship. */
+export const darkMageHead = (isDarkMage, r = Math.random()) => !!isDarkMage && r < HEAD.DARK_MAGE;
 /** Выпала ли голова? `how`: 'kill' (оружие, заклинание, падение) | 'sun' (сгорела в луче «To the Sun») | 'ritual' (ушла сама). `r` — случайное 0…1. */
 export const headDrops = (how, r = Math.random()) => how === 'kill' && r < HEAD.CHANCE;
 

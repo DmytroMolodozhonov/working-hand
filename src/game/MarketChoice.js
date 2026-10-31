@@ -54,7 +54,7 @@ const NOUN = {
     apple: ['золотое яблоко', 'n', 'яблоко'], redApple: ['яблоко', 'n', 'яблоко'], meat: ['сырое мясо', 'n'], steak: ['стейк', 'm'], book: ['книга', 'f'],
     arrows: ['стрелы', 'p'], bread: ['хлеб', 'm'], cheese: ['сыр', 'm'], pie: ['пирог', 'm'], wool: ['шерсть', 'f'], flask: ['колба', 'f'],
     potion: ['зелье', 'n'], web: ['паутина', 'f'], glass: ['осколки стекла', 'p'], crystal: ['кристалл маны', 'm'], phoenixFeather: ['перо феникса', 'n', 'перо'],
-    gargoyleHead: ['голова горгульи', 'f', 'голова'], magicPebble: ['волшебный камушек', 'm', 'камушек'], owlFeather: ['перо совы', 'n', 'перо'], spencerFeather: ['перо птички Спенсера', 'n', 'перо'], beslanGrass: ['трава Беслана', 'f', 'трава'], telewilpinLeaf: ['листок телевильпина', 'm'], carnivoreHead: ['головка плотоядной', 'f'], brightCore: ['сердцевина Ярколета', 'f'], canaryHide: ['кожа канарика', 'f'], bone: ['кость', 'f'], minotaurHorn: ['рог минотавра', 'm'], dragonEgg: ['яйцо дракона', 'n'], robe: ['мантия', 'f'],
+    magicPebble: ['волшебный камушек', 'm', 'камушек'], owlFeather: ['перо совы', 'n', 'перо'], spencerFeather: ['перо птички Спенсера', 'n', 'перо'], beslanGrass: ['трава Беслана', 'f', 'трава'], telewilpinLeaf: ['листок телевильпина', 'm'], carnivoreHead: ['головка плотоядной', 'f'], brightCore: ['сердцевина Ярколета', 'f'], canaryHide: ['кожа канарика', 'f'], bone: ['кость', 'f'], minotaurHorn: ['рог минотавра', 'm'], dragonEgg: ['яйцо дракона', 'n'], robe: ['мантия', 'f'],
 };
 const PIECE_NOUN = { helmet: ['шлем', 'm'], chest: ['нагрудник', 'm'], legs: ['поножи', 'p'] };
 const POTION_OF = { heal: 'зелье лечения', invis: 'зелье невидимости' };

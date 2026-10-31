@@ -8,7 +8,7 @@ import { PENT_NAMES, pentagramWords, pentagramSpell } from '../../src/game/Penta
 import { figureOf, CAST_COST } from '../../src/game/PentagramRules.js';
 import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
 import { OFFERINGS, assess } from '../../src/game/PentagramOfferings.js';
-import { INFERNUM, anyBody, hellSpellBlock, HELL_TARGETS, HEAD, headDrops } from '../../src/game/HellRules.js';
+import { INFERNUM, anyBody, hellSpellBlock, HELL_TARGETS, HEAD, headDrops, unsellable, darkMageHead } from '../../src/game/HellRules.js';
 import { HellGate } from '../../src/game/HellGate.js';
 import { HELL, hellPlan } from '../../src/world/HellMap.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -145,7 +145,23 @@ test('the gargoyle\'s head: 25 % from a killed one (never from one burnt in the 
     assert.equal(n, 1000);
     assert.equal(headDrops('sun', 0), false); assert.equal(headDrops('ritual', 0), false);
     assert.ok(ITEM_INFO.gargoyleHead && ITEM_INFO.gargoyleHead.weight >= 3);
-    assert.ok(itemValue({ kind: 'gargoyleHead' }) >= 500);
+});
+
+test('the head is never bought or sold (the author): no price, no fence, no pawn, no shop; 0.5 % from a black mage only', async () => {
+    const { fenceTakes, pawnPrice, wizardGood } = await import('../../src/game/WizardMarket.js');
+    const { lootOfVillager } = await import('../../src/game/Death.js');
+    const head = { kind: 'gargoyleHead', uid: 'h' };
+    assert.equal(itemValue(head), 0); assert.equal(fenceTakes(head), false); assert.equal(pawnPrice(head), 0); assert.ok(unsellable(head));
+    for (let n = 0; n < 400; n++) for (let k = 0; k < 6; k++) assert.notEqual(wizardGood('curios', k, n)?.item?.kind, 'gargoyleHead', 'no shop sells it');
+    // the chance: 0.5 % (a table of r), only a black mage
+    let n = 0; for (let i = 0; i < 20000; i++) if (darkMageHead(true, (i + 0.5) / 20000)) n++;
+    assert.equal(n, 100);
+    for (let i = 0; i < 2000; i++) assert.equal(darkMageHead(false, i / 2000), false, 'a plain mage never');
+    // a dead black wanderer: the head now and then; a plain one never
+    const seq = (vals) => { let i = 0; return () => vals[i++ % vals.length]; };
+    assert.ok(lootOfVillager('wanderer', { darkHead: true }, seq([0.5, 0.5, 0.001])).some((it) => it.kind === 'gargoyleHead'));
+    assert.ok(!lootOfVillager('wanderer', { darkHead: false }, seq([0.5, 0.5, 0.001])).some((it) => it.kind === 'gargoyleHead'));
+    assert.ok(!lootOfVillager('knight', { darkHead: true }, seq([0.001])).some((it) => it.kind === 'gargoyleHead'));
 });
 
 test('the map in hell: only hell\'s marks — the devil (≤ 1 km), the mark back, the Tarons\' camps; never a castle of the Earth', () => {

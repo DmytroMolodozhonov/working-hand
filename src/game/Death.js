@@ -39,6 +39,7 @@ import { LEGACY, legacyOwner, absorbLegacy } from './Legacy.js';
 import { wizardWand, WAND_TOOLS } from './Expelliarmus.js';
 import { pentagramScroll, figureIds } from './PentagramRules.js';
 import { darkMageLevel } from './DarkMagic.js';
+import { darkMageHead, HEAD } from './HellRules.js';
 import { DARK_DEATH } from './VitalityRules.js';
 
 export const DEATH = {
@@ -94,12 +95,13 @@ export function wizardPurse(role, rank = null) {
 }
 
 /** What an armed villager drops: a knight / the king — the sword, the shield, coins. Others — nothing. */
-export function lootOfVillager(role, { shield = false, coins = null, rank = null, dark = false } = {}, rng = Math.random) {
+export function lootOfVillager(role, { shield = false, coins = null, rank = null, dark = false, darkHead = false } = {}, rng = Math.random) {
     const wr = wizardPurse(role, rank);
     if (wr) {
         const out = [{ kind: 'coins', uid: newUid(), count: coins != null ? coins : wr[0] + Math.floor(rng() * (wr[1] - wr[0] + 1)) }]; // (a wizard's pouch; the wand falls from his hand — dropHeld)
         // (rarely a wizard carries a drawing-scroll of a pentagram: wanderers and black mages most — Pentagrams.js)
         if (rng() < (role === 'wanderer' ? 0.1 : rank === 'master' || rank === 'elder' ? 0.06 : 0.02) * (dark ? 3 : 1)) out.push(pentagramScroll(figureIds()[Math.floor(rng() * figureIds().length) % figureIds().length], newUid()));
+        if (darkMageHead(darkHead, rng())) out.push({ kind: HEAD.KIND, uid: newUid() }); // (a black mage — a wanderer or a lone one — 0.5 %: a gargoyle's head, the way back from hell — HellRules)
         return out;
     }
     if (role !== 'knight' && role !== 'king') return [];
@@ -366,7 +368,7 @@ export class DeathSystem {
         // what was in the hand falls from it (the wand, the staff, the sword, the bow…: dropHeld)
         const held = this.dropHeld(v, { x: v.x, y: v.y, z: v.z });
         // (a sword knocked out by «Экспеллиармус», or just fallen from the hand: not a second one)
-        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
+        const drops = lootOfVillager(v.role, { shield: !!v.model?.shield, rank: v.entry?.rank || null, dark: v.wizard && darkMageLevel(v.id, v.role === 'wanderer' ? 'wanderer' : 'lone') > 0, darkHead: v.wizard && v.dark > 0 && (v.role === 'wanderer' || (v.cs?.def?.kind === 'hamlet' && v.cs.def.people?.length === 1)), coins: v.role === 'king' ? kingPurse(v.cs?.def) : null }).filter((d) => !((v.disarmed || held?.kind === 'weapon') && d.kind === 'weapon'));
         // (a knight's / the king's plates, a wizard's magic robe: things by the body — «Gather» / «Suit Up» take them; Armor.js)
         const steel = g.armor?.villagerLoot(v) || [];
         drops.push(...steel);

@@ -255,7 +255,7 @@ function baseValue(it) {
         case 'taronAxe': return 260;
         case 'taronIron': return 30 * (it.count || 1);
         case 'redStone': return 45 * (it.count || 1);
-        case 'gargoyleHead': return 600; // (a rare curiosity: the only way back from hell)
+        case 'gargoyleHead': return 0; // (never bought or sold anywhere — HellRules.unsellable: no price is named)
         case 'magicPebble': return 150 * (it.count || 1);
         case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
