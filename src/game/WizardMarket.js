@@ -23,17 +23,18 @@
 import { newUid, itemValue, wandValue, isMagicItem, rollWand, spellScroll, WAND_DIRS, freshShopScroll } from './ItemTypes.js';
 import { makePiece, makeRobe, armorValue, PIECES } from './ArmorTypes.js';
 import { scrollShopPrice } from './WizardShop.js';
+import { isDivine } from './DivineSword.js';
 import { createRng } from '../core/math.js';
 import { pentagramScroll } from './PentagramRules.js';
 
 export const PAWN_RATE = 0.6; // (the author: «на 40 % ниже обычной цены»)
 /** What the pawnshop / the shady buyer pays for a thing. */
 export const ICE_ROD_PAWN = 10000; // (the author: «посох Ледяной Королевы будет стоить 10 тысяч монет у скупщика вещей» — a flat price, no 40 % off)
-export const pawnPrice = (it) => (it && it.kind === 'iceRod' ? ICE_ROD_PAWN : Math.max(1, Math.round(itemValue(it) * PAWN_RATE)));
+export const pawnPrice = (it) => (isDivine(it) ? 0 : it && it.kind === 'iceRod' ? ICE_ROD_PAWN : Math.max(1, Math.round(itemValue(it) * PAWN_RATE))); // (the gods' sword: 0 — no buyer takes it, CastleTalk._offerSell)
 
 /** Magic things the shady buyer of a town never takes (the magic ones, potions and their rare ingredients). */
 const NOT_FOR_FENCE = new Set(['potion', 'crystal', 'phoenixFeather', 'owlFeather', 'spencerFeather', 'beslanGrass', 'dragonEgg', 'iceRod', 'minotaurHorn', 'web', 'hammer', 'telewilpinLeaf', 'carnivoreHead', 'brightCore', 'gargoyleHead', 'magicPebble']);
-export const fenceTakes = (it) => !!it && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
+export const fenceTakes = (it) => !!it && !isDivine(it) && !isMagicItem(it) && !NOT_FOR_FENCE.has(it.kind) && itemValue(it) > 0;
 
 /** The wands: small (power 3–15), middling (16–30); never stronger. Price: 180 + 11 × power. */
 export const WAND_POWER = { small: [3, 15], middle: [16, 30], max: 30 };

@@ -41,6 +41,7 @@
  * «На кого и на что» (CLAUDE.md): MAXIMA_TARGETS below.
  */
 
+import { isDivine } from './DivineSword.js';
 import { isEnchanted } from '../world/EnchantedStone.js';
 import * as THREE from 'three';
 import { BLOCK, TREE_KINDS, BASE_COLORS, WATER_LEVEL_Y, patternOf } from '../world/Terrain.js';
@@ -549,6 +550,18 @@ export class LevitationMaxima {
         if (early && early.name === 'Levitation' && now - early.at < 3000 && g.levitation?.active) g.levitation.release(true);
         const h = g.builder?._hand?.();
         if (!h) return say('✋ Поднимите руку (или палочку) и направьте её на то, что хотите поднять');
+        // the divine sword (DivineSword.js) is a gift of the gods that magic CAN lift: the hand at it — Leviosa Maxima holds it as Leviosa does, «Атак» sends it
+        const lw = g.levitation && !g.levitation.state ? g.levitation._pick?.() : null;
+        if (lw?.kind === 'weapon' && isDivine(lw.obj)) {
+            const tired = g.combat?.check?.(LEV_MAX.NAME);
+            if (tired) return say(tired);
+            const no = g.levitation.cast();
+            if (no) return say(no);
+            g.combat?.pay?.(LEV_MAX.NAME);
+            this._last = now;
+            g.hud?.setVoice?.('🪶 <b>Левиоса Максима!</b> Клинок парит у вашей руки. «Атак» — он полетит вперёд; «стоп» — опустится', true);
+            return LEV_MAX.NAME;
+        }
         const aim = this.pick(h.o, h.d);
         if (!aim) return say('🪶 Направьте руку на людей, животных, дерево, дом, стену, землю или корабль — не дальше 60 м — и скажите «Вингардиум Левиоса Максима»');
         if (aim.no) return say(aim.no);

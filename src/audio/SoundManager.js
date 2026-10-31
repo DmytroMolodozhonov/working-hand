@@ -863,6 +863,9 @@ export class SoundManager {
     /** Hell around the hero (HellRealm.js): its hot wind and the lava's rumble, as loud as `k` (0…1; 0 — silent). */
     hellHum(k) { if (this.context && this.loaded) this._loop('hell', this.enabled && k > 0.01 ? 'loopHell' : null, 0.8 * Math.min(1, k)); }
 
+    /** The divine sword near me: its quiet shining hum, as loud as `k` (0…1, by distance; 0 — silent). DivineSwordFx. */
+    divineHum(k) { if (this.context && this.loaded) this._loop('divine', this.enabled && k > 0.01 ? 'loopDivineHum' : null, 0.5 * Math.min(1, k)); }
+
     /** A named looping voice playing sound `key` (null: stopped) at loudness `k` and `rate`. */
     _loop(slot, key, k, rate = 1) {
         const loops = this._loops || (this._loops = {});

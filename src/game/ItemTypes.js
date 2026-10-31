@@ -49,6 +49,7 @@ import { DRAGON_KINDS } from './DragonKinds.js';
 import { rollChestArmor, armorValue, describeArmor, makePiece, makeRobe, PIECES } from './ArmorTypes.js';
 import { armorItemModel } from '../entities/ArmorLook.js';
 import { iceRodModel } from './IceModels.js';
+import { isDivine } from './DivineSword.js';
 import { scaleCoins } from './CoinScale.js';
 import { figureOf, figureIds, pentagramScroll } from './PentagramRules.js';
 import { pentagramSpell } from './PentagramWords.js';
@@ -219,7 +220,7 @@ function baseValue(it) {
     switch (it.kind) {
         case 'wand': return wandValue(it);
         case 'dragonEgg': return 700;
-        case 'weapon': return it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
+        case 'weapon': return isDivine(it) ? 5000 : it.magic ? 120 + 2 * (it.bonus || 0) : (it.type === 'axe' ? 18 : 15);
         case 'shield': return it.magic ? 90 + (it.max || 0) : 15 + 5 * (it.type || 0);
         case 'scroll': return it.stat === 'flight' || it.stat === 'spell' || it.stat === 'pentagram' ? 220 : 60;
         case 'backpack': return 30 + 5 * (it.slots || 3);
@@ -269,8 +270,8 @@ function baseValue(it) {
  * by «Акцио» like any thing. The Ice Rod; the creative pedestals are another (World.createPedestal).
  */
 export const GOD_GIFTS = new Set(['iceRod']);
-export const isGodGift = (it) => !!it && (it.godGift === true || GOD_GIFTS.has(it.kind));
-export const isMagicItem = (it) => !!it && (it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || (it.kind === 'book' && !it.lore) || it.magic === true || (it.kind === 'scroll'));
+export const isGodGift = (it) => !!it && (it.godGift === true || GOD_GIFTS.has(it.kind) || isDivine(it)); // (the divine sword too — DivineSword.js)
+export const isMagicItem = (it) => !!it && (isDivine(it) || it.kind === 'wand' || it.kind === 'hammer' || it.kind === 'iceRod' || (it.kind === 'book' && !it.lore) || it.magic === true || (it.kind === 'scroll'));
 
 const SHIELD_KINDS = [
     { name: 'Деревянный щит', color: 0x8b5a2b, rim: 0x5a3a1e },
@@ -823,6 +824,7 @@ function describeItemBase(it) {
             return { title: '🪄 Волшебная палочка', color: it.color, lines };
         }
         case 'weapon':
+            if (isDivine(it)) return { title: '⚔️ Божественный меч', color: 0xffe6a8, lines: ['Клинок, светящийся неземным светом. Говорят, он способен на то, что не под силу ни одному заклинанию', 'Рубит и колет, как меч, но его касание губит любое существо, как бы оно ни было сильно', 'Это дар богов: его не уничтожит ни одно заклинание'] };
             return it.magic
                 ? { title: `✨ Волшебный ${it.type === 'axe' ? 'топор' : 'меч'}`, color: 0x9fd8ff, lines: [`Урон больше на <b>${it.bonus}%</b>`, 'Разбивает обычный «Protection», которого коснётся'] }
                 : { title: it.type === 'axe' ? '🪓 Топор' : '🗡️ Меч', color: 0xaaaaaa, lines: ['Обычный, не волшебный'] };

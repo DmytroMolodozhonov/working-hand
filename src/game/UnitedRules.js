@@ -9,6 +9,7 @@
  */
 
 import { humanoidBody } from './PentagramOfferings.js';
+import { divineSwordItem } from './DivineSword.js';
 const VILLAGERS = new Set(['v']);
 
 export const UNITED = {
@@ -48,9 +49,21 @@ export function uniteKind(it) {
 /** Вид «для сравнения»: объединять можно только вещи одного вида (палочка+палочка, щит+щит, меч+меч, шлем+шлем…). */
 const speciesOf = (it) => (it.kind === 'weapon' ? `weapon:${it.type}` : it.kind === 'armor' ? `armor:${it.piece}` : it.kind);
 
-/** Можно ли объединить `a` и `b`. → {ok, why?} (why — подсказка игроку, по действию). */
+/**
+ * ТАЙНА ИГРЫ (слова автора; нигде в справочнике, свитках и подсказках не говорится): Ледяной Жезл Королевы + ВОЛШЕБНЫЙ меч (уточнение автора:
+ * «вместе с магическим мечом, а не обычным»; `weapon` `sword` `magic`, не объединённый, не божественный) — единственная пара РАЗНЫХ вещей, которую
+ * обряд принимает: вместо суммы бафов рождается «Божественный меч» (DivineSword.js). Жезл (дар богов) обрядом расходуется.
+ */
+export const magicSword = (it) => !!it && it.kind === 'weapon' && it.type === 'sword' && it.magic === true && !it.united && !it.godGift;
+export const divineRecipe = (a, b) => !!a && !!b && ((a.kind === 'iceRod' && magicSword(b)) || (b.kind === 'iceRod' && magicSword(a)));
+/** Вещь, которую круг считает «предметом для обряда» (объединяемая — или Ледяной Жезл: его годность решает пара, `canUnite`). */
+export const riteThing = (it) => !!it && (it.kind === 'iceRod' || !!uniteKind(it));
+
+/** Можно ли объединить `a` и `b`. → {ok, why?, divine?} (why — подсказка игроку, по действию; про тайный рецепт не говорит). */
 export function canUnite(a, b) {
     if (!a || !b) return { ok: false, why: 'Нужно положить в круг два предмета одного вида' };
+    if (divineRecipe(a, b)) return { ok: true, divine: true };
+    if (a.kind === 'iceRod' || b.kind === 'iceRod') return { ok: false, why: 'Предметы разного вида не объединяются: нужны два одинаковых — палочка и палочка, щит и щит' }; // (the rod with anything else: the usual answer, nothing given away)
     const ka = uniteKind(a), kb = uniteKind(b);
     if (!ka) return { ok: false, why: 'Первый предмет не объединить: нужна волшебная вещь с бафами — палочка, щит, меч, лук, броня…' };
     if (!kb) return { ok: false, why: 'Второй предмет не объединить: нужна волшебная вещь с бафами — палочка, щит, меч, лук, броня…' };
@@ -118,6 +131,7 @@ export function mergeGeneric(a, b, { uid, enchSum = () => null } = {}) {
 export function mergeItems(a, b, opts = {}) {
     const c = canUnite(a, b);
     if (!c.ok) return c;
+    if (c.divine) return { ok: true, divine: true, capped: false, item: divineSwordItem(opts.uid) }; // (the secret: the gods' sword)
     const r = a.kind === 'wand' ? mergeWands(a, b, opts) : mergeGeneric(a, b, opts);
     return { ok: true, ...r };
 }
@@ -142,6 +156,8 @@ export const UNITED_TARGETS = {
     castlePeople: { does: 'alarm', why: 'чёрная магия: жители пугаются как у других чёрных пентаграмм (castleLife.alarm "dark")' },
     bodies: { does: 'consume', why: 'одиночная игра: тело убитого человекоподобного (житель, рыцарь, волшебник, моряк) растворяется в пламени; в сетевой игре — только тело убитого настоящего игрока; кости не подходят' },
     items: { does: 'unite', why: 'два предмета одного вида исчезают, появляется один со сложенными бафами; головка плотоядной тоже исчезает; другие вещи в круге не трогаются' },
+    iceRodAndSword: { does: 'divine', why: 'тайна: Ледяной Жезл + волшебный меч → «Божественный меч» (DivineSword.js), белое-золотое слияние; жезл расходуется' },
+    weapons: { does: 'unite', why: 'мечи и топоры — настоящие вещи оружия (WeaponSystem): лежащие в круге берутся так же, результат — тоже оружие' },
     zombies: { does: 'none', why: 'не задевает' }, animals: { does: 'none', why: 'не задевает' }, sailors: { does: 'none', why: 'на палубе пентаграмма не создаётся' },
     spells: { does: 'none', why: 'не преграда для зарядов' },
 };

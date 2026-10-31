@@ -26,6 +26,8 @@ import { HandTrack, launchVelocity, launchPoint, spinFor } from './ThrowModel.js
 import { clampToCounter, BuyerGate } from './BuyerDeal.js';
 import { enchantMul } from './Enchant.js';
 import { boneLines } from './CutBodies.js';
+import { isDivine, diabolosTouch, pierceDiabolos, DIVINE } from './DivineSword.js';
+import { divineTick } from '../fx/DivineSwordFx.js';
 
 const GRAB_RADIUS = 0.55; // palm-to-handle distance that allows a grab
 const CLOSE_CURL = 0.55; // fingers closed
@@ -168,6 +170,7 @@ export class WeaponSystem {
         }
 
         this._anchorImpaled();
+        if (!this.game.headless) divineTick(this, dt); // (the divine sword's light, sparks, trail and hum — DivineSwordFx)
         // Blade against another player's blade: stopped, metal rings
         if (ch) this._bladeClash(dt, now);
 
@@ -500,7 +503,7 @@ export class WeaponSystem {
     grab(w, side, t = 0.5) {
         const ch = this.game.character;
         const hs = this.hands[side];
-        if (hs.held) return false;
+        if (hs.held || w.ritual) return false; // (in a pentagram's rite: the magic holds it — UnitedPower)
         if (w.stuckIn) this._unstick(w, false);
         this._palmFrame(ch, side);
 
@@ -745,11 +748,16 @@ export class WeaponSystem {
             if (bodyVel.lengthSq() > tipVel.lengthSq()) tipVel.copy(bodyVel);
             if (tipVel.length() > handSpeed * 1.25 + 1) tipVel.setLength(handSpeed * 1.25 + 1);
             const speed = tipVel.length();
-            if (speed >= MIN_SWING_SPEED) {
+            if (speed >= (isDivine(w) ? DIVINE.TOUCH_SPEED : MIN_SWING_SPEED)) { // (the divine sword: a moving touch is enough — it kills)
                 // Swept test: interpolate the blade between last and this frame so a
                 // fast swing (or a slow computer) can't skip through a body.
                 const moved = Math.max(hs.tipPrev.distanceTo(tip), hs.basePrev.distanceTo(base));
                 const steps = Math.min(8, Math.max(1, Math.ceil(moved / 0.4)));
+                // the divine sword: a real blow (edge or point) on Diabolos pierces him — his own test of the blade and of the point's path (DivineSword.js)
+                if (isDivine(w) && now(this) - (hs.divineAt || -1e9) > 600) {
+                    const p = diabolosTouch(this.game, base, tip) || diabolosTouch(this.game, hs.tipPrev, tip);
+                    if (p && pierceDiabolos(this.game, p, this.game.localId, hs === lev ? 'swarm' : 'hand')) { hs.divineAt = now(this); this.game.fx?.lightFlash?.(p, DIVINE.GOLD, 6, 0.5, 30); }
+                }
                 for (const z of zombies) {
                     if (z.isDead) continue;
                     const zp = z.group.position;
@@ -807,6 +815,7 @@ export class WeaponSystem {
                     if (dir.lengthSq() < 1e-4) dir.subVectors(zp, this.game.character.group.position).setY(0);
                     dir.normalize();
                     w.lastHitTime = now(this);
+                    if (isDivine(w)) { this.game.sound?.playSpellFxAt?.('fxDivineStrike', _f, 0.9, 1, 10); this.game.fx?.spark?.(_f, DIVINE.COLOR, 0.25, _e.set(0, 1.5, 0), 0.5); }
                     if (stab) {
                         // Run through: double damage, no cut, and the blade stays in the body
                         // (still in the hand: drawn back it comes out, the hand opened it stays in)

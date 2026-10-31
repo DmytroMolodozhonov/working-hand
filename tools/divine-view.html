@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Divine sword</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.js" } }</script>
+</head><body>
+<script type="module">
+// The divine sword beside the plain one (tools/divine-sword-screenshots.mjs): ?cam=side|close|hilt|far &night=1 &w= &h=
+import * as THREE from 'three';
+import { Weapon } from '../src/entities/Weapon.js';
+import { divineClock } from '../src/entities/DivineSwordModel.js';
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 640, H = +q.get('h') || 640, night = q.get('night') === '1', cam = q.get('cam') || 'side';
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(night ? 0x0a0e1c : 0x8fb6d8);
+scene.fog = new THREE.Fog(scene.background, 30, 160);
+scene.add(new THREE.HemisphereLight(night ? 0x334466 : 0xdfefff, night ? 0x101010 : 0x4a5a3a, night ? 0.35 : 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, night ? 0.15 : 1.1); sun.position.set(5, 10, 6); scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: night ? 0x1e2a1e : 0x5d7a45, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+const up = new THREE.Quaternion();
+const d = new Weapon(scene, 'divine', { renderer, position: new THREE.Vector3(0.9, 2.2, 0), quaternion: up });
+const s = new Weapon(scene, 'sword', { renderer, position: new THREE.Vector3(-0.9, 2.0, 0), quaternion: up });
+d.mesh.updateMatrixWorld(true); s.mesh.updateMatrixWorld(true);
+const bd = new THREE.Box3().setFromObject(d.model), bs = new THREE.Box3().setFromObject(s.model);
+const sz = (b) => b.getSize(new THREE.Vector3()).toArray().map((v) => +v.toFixed(2));
+window.__sizes = { divine: sz(bd), sword: sz(bs) };
+// a hero's height for scale: a 3.5 m post
+const post = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3.5, 0.15), new THREE.MeshStandardMaterial({ color: 0x884422 })); post.position.set(-2.6, 1.75, 0); scene.add(post);
+const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 500);
+const C = { side: [[0, 2.3, 7.5], [0, 2.1, 0]], close: [[1.6, 3.3, 2.0], [0.9, 3.0, 0]], hilt: [[1.4, 1.4, 1.2], [0.9, 1.1, 0]], far: [[0, 6, 45], [0, 2, 0]] }[cam] || [[0, 2.3, 7.5], [0, 2.1, 0]];
+camera.position.fromArray(C[0]); camera.lookAt(new THREE.Vector3().fromArray(C[1]));
+if (cam === 'far') { d.position.set(0, 2.2, 0); s.mesh.visible = false; }
+divineClock.value = 1.3;
+renderer.render(scene, camera);
+window.__shot = () => { divineClock.value += 0.05; renderer.render(scene, camera); };
+window.__ready = true;
+</script></body></html>

@@ -97,6 +97,7 @@ const PLAIN = { melee: 1, arrow: 1, fist: 1, punch: 1, Cauldron: 1, Ward: 1, fal
  */
 export function iceDamage(type, kind, dmg) {
     if (!(dmg > 0)) return 0;
+    if (kind === 'DivineSword') return dmg; // (the divine sword's touch kills anyone — DivineSword.js)
     // cold: nothing (only an evil snowman's snowball breaks another evil snowman — the rod's war)
     if (COLD_KINDS.has(kind) && !(kind === 'snow' && type === 'snowman')) return 0;
     // a spell of the gods (the scrolls of their library — «Бум», «Planet Liquidation»…): every boss is open to it

@@ -521,6 +521,28 @@ const TUNES = {
 
 // ------------------------------------------------------------------ the short effects
 const FX = {
+    /** The divine sword is born (Unitas: the rod and the sword become one): a hush, a white-gold choir rising from below, a great bright
+     *  chord (C major over a low C) with a gong, a shower of high bells like falling light (1.95 s: an effect). */
+    fxDivineBirth(sr) {
+        const o = buf(sr, 1.95), r = rng(911);
+        noise(o, sr, 0, 0.55, 0.06, (u) => 0.1 + 0.5 * u, swell(0.6, 0.4), r);
+        glide(o, sr, 0, 0.6, 0.12, (u) => 130 + 390 * u * u, swell(0.4, 0.3), 3);
+        pad(o, sr, ['C3', 'G3', 'C4'], 0.05, 0.6, 0.22, { att: 0.4, rel: 0.1, harm: 3, vib: 0.004 });
+        drum(o, sr, 0.55, 0.9, 48, 1.4, r); // the gong of the flash
+        pad(o, sr, ['C2', 'C3', 'G3', 'C4', 'E4', 'G4', 'C5', 'E5'], 0.55, 1.9, 0.62, { att: 0.03, rel: 0.7, harm: 4, vib: 0.006 }); // the choir and the light
+        for (const n of ['C3', 'G3', 'C4', 'E4']) brass(o, sr, hz(n), 0.55, 1.0, 0.07);
+        for (let k = 0; k < 12; k++) bell(o, sr, hz(['C7', 'G6', 'E6', 'C6', 'G5', 'E7', 'D7'][k % 7]), 0.6 + k * 0.08, 0.07, 1.0, 0.35);
+        reverb(o, sr, 0.3, 0.5);
+        return finish(o, sr, { peak: 0.92 });
+    },
+    /** The divine sword strikes: a bright ring of pure metal over a soft thump and a little sparkling tail (0.9 s). */
+    fxDivineStrike(sr) {
+        const o = buf(sr, 0.95), r = rng(913);
+        drum(o, sr, 0, 0.5, 90, 0.35, r);
+        noise(o, sr, 0, 0.18, 0.2, (u) => 0.9 - 0.6 * u, (u) => (1 - u) ** 3, r);
+        for (const [n, a] of [['E6', 0.16], ['B6', 0.12], ['E7', 0.08], ['G#5', 0.1]]) bell(o, sr, hz(n), 0.005, a, 0.85, 0.5);
+        return finish(o, sr, { peak: 0.75 });
+    },
     /** «Люмос»: a soft light rising — a shimmer gliding up. */
     fxLumos(sr) { const o = buf(sr, 0.8); glide(o, sr, 0, 0.8, 0.3, (u) => 900 + 1500 * u, (u) => Math.min(1, u * 8) * (1 - u), 2); bell(o, sr, 2637, 0.12, 0.15, 0.6); return finish(o, sr, { peak: 0.6 }); },
     /** «Люмос Максима»: a big light — a chord of shimmers swelling. */
@@ -850,6 +872,14 @@ const LOOPS = {
         crackle(o, sr, 0, 6.4, 0.05, 6, r); // (bubbling, hissing)
         glide(o, sr, 1.6, 2.2, 0.05, (u) => 180 - 60 * u, (u) => Math.sin(u * Math.PI), 2); // (a moan in the wind)
         return finish(loopSeam(o, sr), sr, { peak: 0.38 });
+    },
+    /** The divine sword near you: a quiet, high, shining hum — two soft fifths breathing against each other, a faint airy shimmer (loops). */
+    loopDivineHum(sr) {
+        const o = buf(sr, 4.8), r = rng(917);
+        pad(o, sr, ['C5', 'G5', 'C6'], 0, 4.8, 0.14, { att: 0.01, rel: 0.01, harm: 2, vib: 0.003, det: 0.003 });
+        pad(o, sr, ['E5', 'B5'], 0, 4.8, 0.05, { att: 0.01, rel: 0.01, harm: 1, vib: 0.006 });
+        noise(o, sr, 0, 4.8, 0.03, () => 0.8, (u) => 0.6 + 0.4 * Math.sin(u * 4 * Math.PI), r);
+        return finish(loopSeam(o, sr, 0.6), sr, { peak: 0.4 });
     },
     /** «Левиоса» held: a soft airy hum with a slow tremble. */
     loopLev(sr) { const o = buf(sr, 2.3), r = rng(101); pad(o, sr, [440, 660], 0, 2.3, 0.3, { att: 0.01, rel: 0, harm: 1, vib: 0.004 }); noise(o, sr, 0, 2.3, 0.05, () => 0.3, () => 1, r); return finish(loopSeam(o, sr), sr, { peak: 0.4 }); },

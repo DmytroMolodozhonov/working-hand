@@ -378,6 +378,7 @@ export class Liquidation {
         }
         if (h.kind === 'weapon') {
             const w = h.w;
+            if (w.godGift) { this._burst(h.at, max, 12); say('✨ Это дар богов — никакое заклинание его не уничтожит'); return; } // (the divine sword)
             if (w.magic && !max) { this._burst(h.at, max, 12); say('✨ Это волшебное оружие — его возьмёт только «Liquidation Максима»'); return; }
             this._dust(w.position, 0x9ca3ad);
             if (auth && g.weapons.byId?.has(w.id)) { g.weapons.remove(w); g.sync?.weaponGone?.(w); }

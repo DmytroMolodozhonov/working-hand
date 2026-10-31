@@ -54,6 +54,7 @@ import { DANGERS } from './Danger.js';
 import { stallTrade, counterZone, SHOPS } from './MarketGoods.js';
 import { BODY_H } from '../entities/Character.js';
 import { wizardGood, pawnPrice, fenceTakes } from './WizardMarket.js';
+import { isDivine } from './DivineSword.js';
 import { DealPrices, dealKey, overCounter, counterOffset } from './BuyerDeal.js';
 import { BuyerSigns } from './BuyerSigns.js';
 import { bookSpells } from './BookBirds.js';
@@ -1435,6 +1436,13 @@ export class CastleTalk {
     /** The buyer looks at a thing lying on his counter: refuses it, or names the (kept) sum. found: {uid|wid, item, pos} */
     _offerSell(v, stall, key, found) {
         const g = this.game;
+        if (isDivine(found.item)) { // (the gods' sword: nobody buys it — DivineSword.js)
+            if (this._refused === (found.uid || found.wid)) return;
+            this._refused = found.uid || found.wid;
+            v.talking = 4;
+            this._sayReply(v, 'Нет-нет… Такую вещь я не возьму ни за какие деньги. Уберите её с моего прилавка.', 6);
+            return;
+        }
         if (stall.fence && !fenceTakes(found.item)) {
             if (this._refused === (found.uid || found.wid)) return;
             this._refused = found.uid || found.wid;

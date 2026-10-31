@@ -72,7 +72,7 @@ export const OWL = {
 };
 
 /** The spells «уровня свитка» (only a scroll teaches them): they hurt an owl. Every other kind — it darts away. */
-export const isStrong = (kind) => SCROLL_KINDS.has(kind);
+export const isStrong = (kind) => SCROLL_KINDS.has(kind) || kind === 'DivineSword'; // (the divine sword: no dodging its touch)
 
 /**
  * ON WHOM AND ON WHAT (CLAUDE.md «На кого и на что»): every blow, spell and thing that can reach an

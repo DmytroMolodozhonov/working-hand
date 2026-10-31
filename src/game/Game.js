@@ -100,6 +100,8 @@ import { setNearShadow } from '../core/Shadows.js';
 import { SunBeam } from '../fx/SunBeam.js';
 import { SunContest } from './SunContest.js';
 import { buildWeapon } from '../entities/WeaponModels.js';
+import { divineGlow } from '../entities/DivineSwordModel.js';
+import { isDivine as isDivineThing, DIVINE_KIND } from './DivineSword.js';
 import { ItemIcons } from '../ui/ItemIcons.js';
 import { Spiders, spiderModel } from './Spider.js';
 import { Diabolos } from './Diabolos.js';
@@ -1089,6 +1091,12 @@ export class Game {
     /** The local player's weapon/fist hit something. */
     onLocalHit(z, dmg, dir, isWeapon, hit = null, weapon = null) {
         this.invis?.noted(this.localId); // (a blow gives an invisible me away: about where)
+        // the divine sword: its touch kills anyone (the author) — the creatures that ignore a plain blade (a living tree, the ice ones, an owl) take it as `DivineSword`
+        if (isWeapon && isDivineThing(weapon)) {
+            if (z.isLivingTree) { this.livingTrees.hit(z, dmg, DIVINE_KIND, this.localId); return; }
+            if (z.isIce) { this.iceCastle.hit(z, dmg, DIVINE_KIND, this.localId); return; }
+            if (z.isOwl) { this.owls.hit(z, dmg, DIVINE_KIND, this.localId); return; }
+        }
         if (z.isPlayer) { this.combat.hitRemote(z, dmg, !!weapon?.magic, isWeapon ? hit : null); return; }
         if (z.isAnimal) { this.animals.hit(z, dmg, dir, this.localId); return; }
         if (z.isVillager) { this.castleLife.hit(z, dmg, dir, this.localId, { magic: !!weapon?.magic, weapon: !!isWeapon, hard: !!hit?.hard }); return; }
@@ -3591,7 +3599,7 @@ export class Game {
         for (const kind of Object.keys(ITEM_INFO)) {
             try { const m = makeItemModel({ kind, uid: 'prewarm' }); if (m?.isObject3D) { m.userData.farRadius = 2.5; new FarShape(m, { cache: false }).set(true); zoo.add(m); } } catch (e) { /* (a thing that needs more than its kind) */ }
         }
-        for (const t of ['sword', 'axe']) { try { const { group } = buildWeapon(t, this.renderer); new FarShape(group, { cache: false }).set(true); zoo.add(group); } catch (e) { /* (no model here) */ } }
+        for (const t of ['sword', 'axe', 'divine']) { try { const { group } = buildWeapon(t, this.renderer); new FarShape(group, { cache: false }).set(true); if (t === 'divine') group.add(divineGlow()); zoo.add(group); } catch (e) { /* (no model here) */ } } // (the divine sword: its solid shape and its three glow shaders — DivineSwordModel)
         // what a flight comes upon (a harbour's ships, a dragon over the mountains, carts on the roads, a
         // dragon's gold): their shaders compiled now — the first one seen in flight froze the picture
         try {

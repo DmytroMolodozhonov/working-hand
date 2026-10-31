@@ -18,6 +18,8 @@ import * as THREE from 'three';
 import { FarShape, dropTwin } from '../core/FarShape.js';
 import { buildWeapon, WEAPON_SPECS } from './WeaponModels.js';
 import { glowShell } from '../fx/EnchantGlow.js';
+import { divineGlow } from './DivineSwordModel.js';
+import { DIVINE } from '../game/DivineSword.js';
 
 const GRAVITY = -14;
 const _v1 = new THREE.Vector3();
@@ -35,12 +37,13 @@ let NEXT_ID = 1;
 export class Weapon {
     /**
      * @param {THREE.Scene} scene
-     * @param {string} type 'sword' | 'axe'
+     * @param {string} type 'sword' | 'axe' | 'divine' (the gods' sword — DivineSword.js)
      * @param {object} opts {position, quaternion, renderer, id}
      */
     constructor(scene, type, opts = {}) {
         this.scene = scene;
-        this.type = type === 'axe' ? 'axe' : 'sword';
+        this.type = type === 'axe' ? 'axe' : type === 'divine' ? 'divine' : 'sword';
+        this.godGift = this.type === 'divine'; // (a gift of the gods: no spell destroys it — ItemTypes.isGodGift)
         this.id = opts.id ?? `w${NEXT_ID++}`;
         // headless: physics only (unit tests / servers)
         const { group, spec } = opts.headless
@@ -104,6 +107,13 @@ export class Weapon {
         // Magic weapons: a little glow and a tint; hit harder by `bonus` %
         this.magic = false;
         this.bonus = 0;
+        // the divine sword's light: three additive layers on the mesh (not in the one shape — own shaders), placed as the model is
+        if (this.type === 'divine' && !opts.headless) {
+            this._divine = divineGlow();
+            this._divine.scale.setScalar(this.S);
+            this._divine.position.copy(this.model.position);
+            this.mesh.add(this._divine);
+        }
     }
 
     /** Look of a magic weapon (a soft blue glow, slightly tinted metal). */
@@ -143,6 +153,7 @@ export class Weapon {
 
     /** Damage multiplier of this weapon (magic ones hit harder). */
     get damageScale() {
+        if (this.type === 'divine') return DIVINE.KILL; // (the gods' sword: its touch kills anyone — DivineSword.js)
         return this.magic ? 1 + (this.bonus || 0) / 100 : 1;
     }
 
@@ -202,6 +213,7 @@ export class Weapon {
      */
     step(dt, collision) {
         this.contactHard = 0;
+        if (this.ritual) { this.mesh.updateMatrixWorld(true); return; } // (a rite moves it — UnitedPower: no physics, no network following)
         if (this.remoteTarget) {
             this._followRemote(dt);
             return;

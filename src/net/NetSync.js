@@ -1094,7 +1094,7 @@ export class NetSync {
             }
             case 'wnew': {
                 if (g.weapons.byId.has(m.w) || !arr(m.s, 11)) break;
-                const w = g.weapons.markMagic(g.weapons.spawn(m.type === 'axe' ? 'axe' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w), m.s[10]);
+                const w = g.weapons.markMagic(g.weapons.spawn(m.type === 'axe' ? 'axe' : m.type === 'divine' ? 'divine' : 'sword', vec(m.s.slice(2, 5)), new THREE.Quaternion(m.s[5], m.s[6], m.s[7], m.s[8]), m.w), m.s[10]);
                 if (m.free) this.weaponOwners.delete(m.w); else this.weaponOwners.set(m.w, m.owner || m.from);
                 w.setRemoteTarget(m.s);
                 break;

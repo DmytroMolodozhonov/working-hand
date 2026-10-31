@@ -467,7 +467,7 @@ export class Inventory {
 
     _storeWeapon(w, slot = null) {
         const g = this.game;
-        const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined };
+        const item = { kind: 'weapon', type: w.type, id: w.id, magic: !!w.magic, bonus: w.bonus || 0, ench: w.ench || undefined, ...(w.godGift ? { godGift: true } : {}) };
         // (room first: with no free cell the weapon STAYS in the hand — it used to be let out of the hand's records
         // but kept its holder, and floated about «held» by nobody: it vanished, turned up behind walls, came back)
         const own = slot != null && !this.slots[slot];
@@ -839,7 +839,7 @@ export class Inventory {
 
     static emojiOf(it) {
         if (!it) return '';
-        if (it.kind === 'weapon') return it.type === 'axe' ? '🪓' : '🗡️';
+        if (it.kind === 'weapon') return it.type === 'axe' ? '🪓' : it.type === 'divine' ? '⚔️' : '🗡️';
         return ITEM_INFO[it.kind]?.icon || '❔';
     }
 
@@ -1113,7 +1113,7 @@ export class Inventory {
                 if (!l && !r) icon.textContent = '✋';
                 for (const t of [l, r]) if (t) this._pic(icon, t, Inventory.emojiOf(t));
             }
-            this.handCell.title = l || r ? 'В руках: ' + [l, r].filter(Boolean).map((t) => (t.kind === 'weapon' ? (t.type === 'axe' ? 'Топор' : 'Меч') : ITEM_INFO[t.kind]?.name || 'Предмет')).join(', ') : 'Свободная рука';
+            this.handCell.title = l || r ? 'В руках: ' + [l, r].filter(Boolean).map((t) => (t.kind === 'weapon' ? (t.type === 'axe' ? 'Топор' : t.type === 'divine' ? 'Божественный меч' : 'Меч') : ITEM_INFO[t.kind]?.name || 'Предмет')).join(', ') : 'Свободная рука';
         }
         this.cells.forEach((c, i) => {
             const s = this.slots[i];
@@ -1137,7 +1137,8 @@ export class Inventory {
             } else if (s.kind === 'weapon') {
                 this._pic(icon, s, Inventory.emojiOf(s));
                 if (s.magic) icon.classList.add('magic');
-                c.title = (s.type === 'axe' ? 'Топор' : 'Меч') + (s.magic ? ' (магический)' : '');
+                c.title = (s.type === 'axe' ? 'Топор' : s.type === 'divine' ? 'Божественный меч' : 'Меч') + (s.magic ? ' (магический)' : '');
+                if (s.type === 'divine') icon.classList.add('magic');
             } else if (s.kind === 'armor' || s.kind === 'robe') {
                 // a piece of armour / a robe: its own model drawn small; until then its little drawn picture (Armor.js)
                 if (!this.game.itemIcons?.url(s)) icon.innerHTML = armorIcon(s.kind === 'robe' ? 'robe' : s.piece, s.named ? 3 : s.magic ? 2 : 1, s.color || 0);

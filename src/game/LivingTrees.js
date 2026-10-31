@@ -96,7 +96,7 @@ export const MIGHTY_ON_TREES = new Set(['Electrum', 'Pilbidrio', 'Die', 'Lightni
 /** These tear it apart (splinters; killed — it falls like a felled trunk) instead of burning it. */
 const TEARS = new Set(['Pilbidrio', 'Die', 'Bombardo', 'BombardoMaxima', 'TotalDestruction', 'TotalDestructionMaxima', 'CircleAttack', 'CircleAttackMaxima', 'Inspirius', 'Boom', 'Nihilis']);
 /** How much of a blow of `kind` a living tree takes. */
-export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) ? dmg : 0);
+export const aliveDamage = (kind, dmg) => (FIRE.has(kind) || MIGHTY_ON_TREES.has(kind) || kind === 'DivineSword' ? dmg : 0); // (the divine sword's touch kills anything — DivineSword.js)
 /** The caster's mana after dt seconds of their living tree (Creative: no limit). */
 export const aliveDrain = (mana, dt, creative = false, rate = ALIVE.DRAIN) => (creative ? mana : Math.max(0, mana - rate * dt));
 /** How fast my servants drain my mana: «Alive» 0.5 a second, each one of «Alive Maxima» 1. */

@@ -17,5 +17,7 @@ description: Чек-лист добавления новой пентаграм�
 
 - Если обряду нужны вещи/тела на круге — `PentagramOfferings.js` (`OFFERINGS`, `humanoidBody`; любое тело — `any: true` → `HellRules.anyBody`, туши зверей тоже идут) + `Offerings.js` (мана при слове, если в `OFFERINGS` `mana: 0`); переход куда-то — образец `HellGate.js` (`heroApply.pending` ждёт землю); если дар навсегда — образец `Firmitas.js`/`SecondSight.js` (флаг героя в сохранение, `captureLegacy/wipeHero/absorbLegacy`).
 
+- Обряд с вещами в круге: мечи и топоры — НЕ `Items.loose`, а `Weapon` системы оружия (`g.weapons.weapons`); образец — `UnitedPower._contents`/`weaponThing` (`w.ritual` держит физику и запрещает хват), результат-оружие — `weapons.spawn` + `sync.weaponAppeared`.
+
 ## Если чего-то не хватило
 Нашёл новое место в коде или ошибку, которую пришлось ловить, — допиши строкой в нужный пункт и закоммить вместе с работой. Правила — сначала в CLAUDE.md, потом сюда; не дублируй его, устаревшее удаляй.

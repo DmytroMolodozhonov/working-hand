@@ -322,7 +322,7 @@ export class DeathSystem {
         const g = this.game;
         const id = d.id && !g.weapons.byId.has(d.id) ? d.id : undefined;
         const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ'));
-        const w = g.weapons.markMagic(g.weapons.spawn(d.type === 'axe' ? 'axe' : 'sword', p, q, id), d.magic ? d.bonus : 0);
+        const w = g.weapons.markMagic(g.weapons.spawn(d.type === 'axe' ? 'axe' : d.type === 'divine' ? 'divine' : 'sword', p, q, id), d.magic ? d.bonus : 0);
         if (d.ench) w.ench = d.ench;
         w.wake?.();
         if (g.sync) { g.sync.weaponAppeared?.(w); g.sync._localRelease?.(w); }

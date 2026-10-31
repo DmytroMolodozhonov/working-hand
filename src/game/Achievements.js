@@ -64,6 +64,8 @@ export const ACHIEVEMENTS = [
     // (Дьяволос бессмертен — убить нельзя; ачивка за то, что разбудил: `extra` — для «Высшего мага» не нужна; Diabolos.js)
     { id: 'devilSlayer', mana: 500, icon: '⚔️', title: 'Победитель Дьяволоса', desc: 'Уничтожить Дьяволоса — то, что не под силу ни одному заклинанию' }, // (Diabolos.pierce: только божественный меч)
     { id: 'devilWoke', boss: false, extra: true, mana: 100, icon: '😈', title: 'Разбудил дьявола', desc: 'Потревожить огромного прикованного дьявола в аду так, чтобы он проснулся' },
+    // (the divine sword's first making: `extra` — not needed for «Высший маг»; its secret is never told: the line says only what was done)
+    { id: 'divineBlade', boss: false, extra: true, mana: 100, icon: '⚔️', title: 'Божественный клинок', desc: 'Создать божественный меч' }, // (UnitedPower — DivineSword.js)
 ];
 /** Tarons killed for «Охотник на Таронов» (TaronRules.TARON.ACHIEVEMENT.kills). */
 export const TARON_KILLS = 10;

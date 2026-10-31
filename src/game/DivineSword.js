@@ -2,11 +2,12 @@
  * DivineSword.js — «Божественный меч» (the gods' sword): the shared API (rules + `makeDivineSword`; THREE only for a vector).
  *
  * The secret of the game (CLAUDE.md, the author's words): the only way to destroy Diabolos is a rite — the pentagram of united power
- * (`Pentagranium Unitas`) with the Ice Queen's rod and a plain classic sword in its circle. The two wind up in a white-gold spiral and
+ * (`Pentagranium Unitas`) with the Ice Queen's rod and a MAGIC sword in its circle (the author: «с магическим мечом, а не обычным»). The two wind up in a white-gold spiral and
  * become ONE new thing: the divine sword. Nowhere in the lore, the codex or a scroll is it said how to make it.
  *
  * In the game it is a real weapon of the weapon system (`Weapon` type `'divine'`, held like a sword — SwordGrip, chops, stabs, cuts off
- * limbs, breaks blocks like a sword); in a cell it is `{kind: 'weapon', type: 'divine', godGift: true}`. A gift of the gods: no spell, fire,
+ * limbs, breaks blocks like a sword). Its TOUCH KILLS anyone (the author: «своим прикосновением может убить кого угодно… не важно, сколько хп»):
+ * a moving blade (≥ DIVINE.TOUCH_SPEED — not one lying or hanging still) that reaches a creature's body deals DIVINE.KILL; in a cell it is `{kind: 'weapon', type: 'divine', godGift: true}`. A gift of the gods: no spell, fire,
  * lava, ice, «Liquidation», the owner's death… destroys it (`ItemTypes.isGodGift`), but Levitation lifts and throws it.
  *
  * Contract with Diabolos (Diabolos.js, another session): the sword only asks — `game.diabolos.bladeHit(a, b)` → the world point where the
@@ -15,11 +16,15 @@
  */
 import { Vector3 } from 'three';
 
+/** The `kind` of its blow where a creature asks what hit it (LivingTrees.aliveDamage, IceQueen.iceDamage, Owls.isStrong: it always counts). */
+export const DIVINE_KIND = 'DivineSword';
+
 /** Weapon types that are divine (more divine things later: one place). */
 export const DIVINE_KINDS = new Set(['divine']);
 
 export const DIVINE = {
-    DMG_K: 1.5, // ordinary creatures take 1.5× the damage of a plain sword
+    KILL: 1e6, // the touch of the blade: any creature dies, whatever its health (the author)
+    TOUCH_SPEED: 1.0, // m/s of the blade: a touch while it moves (in the hand, thrown, flying) — never while it just lies / hangs still
     COLOR: 0xfff1c4, // white-gold
     GOLD: 0xffc84a,
     WHITE: 0xffffff,
@@ -33,9 +38,9 @@ export function isDivine(x) {
     return DIVINE_KINDS.has(x.type) && (x.kind === undefined || x.kind === 'weapon');
 }
 
-/** What a blow of this thing does: {mul — damage on ordinary creatures, pierces — can it pierce Diabolos}. */
+/** What a blow of this thing does: {kill — its touch kills anyone, dmg — the damage it deals, pierces — can it pierce Diabolos}. */
 export function divineStrikeHit(item) {
-    return isDivine(item) ? { mul: DIVINE.DMG_K, pierces: true } : { mul: 1, pierces: false };
+    return isDivine(item) ? { kill: true, dmg: DIVINE.KILL, pierces: true } : { kill: false, dmg: 0, pierces: false };
 }
 
 /** The cell/save record of a divine sword. */
@@ -76,13 +81,15 @@ export function pierceDiabolos(game, point, by, via = 'hand') {
 /** «Кто/что» (CLAUDE.md): what the divine sword does and what is done to it. */
 export const DIVINE_TARGETS = {
     diabolos: { does: 'pierce', why: 'единственное, что его уничтожает: удар остриём/лезвием в руке или вонзился, запущенный Левиосой «Атак» → diabolos.pierce' },
-    creatures: { does: 'hit', why: 'как меч: рубит, колет, отрубает части; урон ×1,5' },
-    players: { does: 'hit', why: 'как меч (сеть — как у всякого оружия), урон ×1,5' },
-    iceQueen: { does: 'hit', why: 'как меч, ×1,5' },
+    creatures: { does: 'kill', why: 'касание движущимся клинком убивает любое существо, сколько бы ни было здоровья (слова автора); рубит, колет, отрубает части' },
+    players: { does: 'kill', why: 'касание убивает (сеть — как у всякого оружия); щит Protection держит удар по своим правилам' },
+    iceQueen: { does: 'kill', why: 'касание убивает и её' },
     ghosts: { does: 'none', why: 'призраков не убить (GHOST_SPELLS): клинок проходит сквозь' },
     blocks: { does: 'break', why: 'ломает блоки как острый меч; заколдованный камень и дары богов — нет' },
     spells: { does: 'none', why: 'его не уничтожает НИ ОДНО заклинание (дар богов, isGodGift): взрывы, Инспириус, Total Destruction, огонь, лава, лёд, Gather, Liquidation' },
     levitation: { does: 'lift', why: 'Левиоса и Левиоса Максима поднимают его и швыряют «Атак» (исключение из правила даров богов)' },
+    lava: { does: 'none', why: 'не горит и не плавится: лава ада, огонь дракона, Адский огонь — дар богов' },
+    blasts: { does: 'push', why: 'взрывы, Бум, Инспириус, Total Destruction, волна — подбрасывают, как любое оружие, но не ломают' },
     death: { does: 'stay', why: 'смерть владельца: падает у тела, не исчезает' },
     shop: { does: 'refuse', why: 'ломбард и скупщик не берут' },
 };

@@ -168,7 +168,7 @@ export class Rigging {
         const g = this.game;
         for (const hs of g.weapons?.heldWeapons?.() || []) {
             const w = hs.held;
-            if (!w || (w.type !== 'sword' && w.type !== 'axe')) { continue; }
+            if (!w || (w.type !== 'sword' && w.type !== 'axe' && w.type !== 'divine')) { continue; }
             const tip = w.getTipPosition(_a);
             const last = this._lastTip.get(w);
             this._lastTip.set(w, tip.clone());

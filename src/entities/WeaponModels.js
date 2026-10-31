@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { DIVINE_SPEC, buildDivineSword } from './DivineSwordModel.js';
 
 let ENV = null;
 let TEX = null;
@@ -36,6 +37,7 @@ export const WEAPON_SPECS = {
         com: [0.04, 0.62, 0],
         stiffness: 20,
     },
+    divine: DIVINE_SPEC, // «Божественный меч» (DivineSword.js, DivineSwordModel.js): a longer, lighter sword
 };
 
 /** Tiny gradient environment (sky above, grass below) for metal reflections. */
@@ -192,6 +194,7 @@ export function buildWeapon(type, renderer) {
     const tex = textures();
     const group = new THREE.Group();
     group.name = type;
+    if (type === 'divine') return buildDivineSword(env);
 
     if (type === 'axe') {
         const haftMat = new THREE.MeshStandardMaterial({ map: tex.wood, roughness: 0.75, metalness: 0.0 });

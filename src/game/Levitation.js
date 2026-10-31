@@ -16,6 +16,7 @@
  * body to the caster's hand; «Protection» towards the caster breaks free.
  */
 
+import { isDivine, diabolosTouch, pierceDiabolos } from './DivineSword.js';
 import * as THREE from 'three';
 import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
@@ -117,6 +118,7 @@ export function armIn(shoulder, hand, pos, r) {
 }
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
+const _from = new THREE.Vector3(); // (the divine sword's place last frame: its path is tested against Diabolos)
 const _q1 = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
 const _q3 = new THREE.Quaternion();
@@ -151,7 +153,7 @@ export class Levitation {
         const g = this.game;
         const out = [];
         for (const w of g.weapons.weapons) {
-            if (w.holder || w.remoteTarget) continue;
+            if (w.holder || w.remoteTarget || w.ritual) continue; // (in a rite: the pentagram holds it)
             out.push({ kind: 'weapon', obj: w, pos: w.position });
         }
         for (const b of g.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
@@ -416,6 +418,9 @@ export class Levitation {
         for (const z of g.zombies) if (!z.isDead && !z.isThrall) consider(z.group.position, { kind: 'z', z });
         for (const [id, r] of g.remotes) if (!r.dead) consider(r.position, { kind: 'p', id, r });
         for (const a of g.animals?.list || []) if (!a.dead) consider(a.group.position, { kind: 'a', a });
+        // the divine sword seeks Diabolos first (DivineSword.js: only it pierces him) — anywhere within 60 m
+        const D = isDivine(w) ? g.diabolos : null;
+        if (D && !D.dead && D.position && D.position.distanceTo(w.position) < 60) best = { d: 0, pos: D.position, target: { kind: 'd', D } };
         const dir = g.character.getHandDirection(s.side, new THREE.Vector3());
         s.attack = { target: best ? best.target : null, dir, t: 0 };
         this._sparkle(w.position, 25);
@@ -427,8 +432,9 @@ export class Levitation {
         const w = s.obj;
         const A = s.attack;
         A.t += dt;
-        const tp = A.target ? (A.target.kind === 'z' ? A.target.z.group.position : A.target.kind === 'p' ? A.target.r.position : A.target.a.group.position) : null;
-        const goal = tp ? _v1.copy(tp).add(_v2.set(0, 0.9, 0)) : _v1.copy(w.position).addScaledVector(A.dir, 30);
+        const tp = A.target ? (A.target.kind === 'd' ? A.target.D.aimPoint?.() || A.target.D.position : A.target.kind === 'z' ? A.target.z.group.position : A.target.kind === 'p' ? A.target.r.position : A.target.a.group.position) : null;
+        const goal = tp ? _v1.copy(tp).add(_v2.set(0, A.target.kind === 'd' ? 0 : 0.9, 0)) : _v1.copy(w.position).addScaledVector(A.dir, 30);
+        const from = isDivine(w) ? _from.copy(w.position) : null;
         const to = _v2.subVectors(goal, w.position);
         const d = to.length();
         const step = Math.min(d, 22 * dt);
@@ -439,9 +445,20 @@ export class Levitation {
         w.drive.quaternion.setFromUnitVectors(_v3.set(0, 1, 0), to);
         w.quaternion.copy(w.drive.quaternion);
         w.velocity.copy(to).multiplyScalar(22);
-        if (Math.random() < 0.8) this.game.fx.spark(w.position, 0xc9a8ff, 0.08, _v3.copy(to).multiplyScalar(-3), 0.4);
-        const dead = A.target && (A.target.kind === 'z' ? A.target.z.isDead : A.target.kind === 'p' ? A.target.r.dead : A.target.a.dead);
-        if (A.target && !dead && d < 1.0) {
+        if (Math.random() < 0.8) this.game.fx.spark(w.position, from ? 0xfff1c4 : 0xc9a8ff, from ? 0.14 : 0.08, _v3.copy(to).multiplyScalar(-3), 0.4);
+        // the divine sword pierces Diabolos when its path this frame goes through him (his own test — DivineSword.diabolosTouch)
+        if (from) {
+            w.getTipPosition(_v3);
+            const hit = diabolosTouch(g, from, _v3);
+            if (hit && pierceDiabolos(g, hit, g.localId, 'swarm')) {
+                this.state = null; w.drive = null; w.holder = null;
+                if (g.sync) g.sync._localRelease(w);
+                g.hud.setVoice('⚔️ Клинок вонзился!', true);
+                return;
+            }
+        }
+        const dead = A.target && (A.target.kind === 'd' ? !!A.target.D.dead || !g.diabolos : A.target.kind === 'z' ? A.target.z.isDead : A.target.kind === 'p' ? A.target.r.dead : A.target.a.dead);
+        if (A.target && !dead && d < 1.0 && A.target.kind !== 'd') { // (Diabolos: only his own test above decides the hit)
             // hit: it sticks in
             this.state = null;
             w.drive = null;
