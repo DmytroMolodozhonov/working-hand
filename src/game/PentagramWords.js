@@ -25,9 +25,16 @@ export const PENT_NAMES = {
     night: { en: 'Noctis', say: ['ноктис', 'ноктес', 'ноктиз'], stems: ['noctis', 'noktis', 'noctes', 'ноктис', 'ноктес', 'нокт ис', 'ноктиз'] },
     sight: { en: 'Spectris', say: ['спектрис', 'спектрес', 'спектрэс'], stems: ['spectris', 'spektris', 'spectres', 'спектрис', 'спектрес', 'спектрэс', 'спектриз', 'спекрис'] },
     firm: { en: 'Firmitas', say: ['фирмитас', 'фермитас', 'фирмитес', 'фирмитэс'], stems: ['firmitas', 'firmitus', 'фирмитас', 'фермитас', 'фирмитес', 'фирмитэс', 'фирмитус', 'фирмитос', 'фермитес'] },
-    infernum: { en: 'Infernum', say: ['инфернум', 'инфэрнум', 'инфернус'], stems: ['infernum', 'infernus', 'infernom', 'инфернум', 'инфэрнум', 'инфернус', 'инфёрнум', 'инфер нум', 'инфернам'] },
+    infernum: { en: 'Infernum', say: ['инфернум', 'инфэрнум', 'инфернус', 'инферно'], stems: ['infernum', 'infernus', 'infernom', 'inferno', 'инфернум', 'инфэрнум', 'инфернус', 'инфёрнум', 'инфер нум', 'инфернам', 'инферно', 'инфэрно', 'инфёрно'] }, // («…Инферно»: the author says it so — with «Пентаграниум» in the phrase it is the gates of hell, never the fire spell)
     gargoyles: { en: 'Gargoylis', say: ['гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргульес', 'гаргулес', 'гаргулис'], stems: ['gargoylis', 'gargoyles', 'gargules', 'gargulis', 'gargoyl', 'гаргойлис', 'гаргоилис', 'гаргойлес', 'гаргойлз', 'гаргульес', 'гаргулес', 'гаргулис', 'гаргуль', 'гаргул', 'гаргойл', 'гаргоил'] },
 };
+
+/** «Infernum» said with no first word (the first word was in the phrase before a pause, or misheard): the hell pentagram's name,
+ *  never the fire spell «Инферно» (its word «инфер…» is inside it). matchSpell and SpellSpotter check it. */
+export const INFERNUM_WORD = /инф[еэё]р?\s?ну[мсн]|infern[uo][msn]/;
+
+/** «Пентаграниум» (first word) is in the phrase: then only a pentagram may come of it — no other spell's word inside the name. */
+export const pentFirstSaid = (text) => PENT_FIRST.some((w) => String(text || '').toLowerCase().includes(w));
 
 /** «Pentagranium Teleportis» — заклинание пентаграммы `id` (для справочника, свитков и подсказок). */
 export const pentagramSpell = (id) => (PENT_NAMES[id] ? `Pentagranium ${PENT_NAMES[id].en}` : null);

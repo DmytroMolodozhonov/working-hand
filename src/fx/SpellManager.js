@@ -31,7 +31,7 @@ import { visibleGodiWords } from '../game/VisibleGodiWords.js';
 import { nihilisWords } from '../game/NihilisWords.js';
 import { groundVortexWords, shieldWords } from '../game/GroundVortexWords.js';
 import { flyingMaximaWords } from '../game/Space.js';
-import { pentagramWords } from '../game/PentagramWords.js';
+import { pentagramWords, pentFirstSaid, INFERNUM_WORD } from '../game/PentagramWords.js';
 import { creationWords } from '../game/CreationWords.js';
 import { segmentToSegment } from '../game/SegmentContact.js';
 
@@ -149,6 +149,9 @@ export function matchSpell(text) {
     if (boomWords(s)) return 'Boom';
     // «Pentagranium <Name>» («Пентаграниум Телепортис»…): ONE pentagram per phrase — the first word AND its own English name (PentagramWords.js); the lone «Пентаграниум» is no spell
     if (pentagramWords(s)) return 'Pentagranium';
+    // («Пентаграниум» with no name heard yet — or a name not known: nothing. The words of the name never cast another spell:
+    //  «Пентаграниум Инфернум / Инферно» must not end as the fire «Инферно» — author)
+    if (pentFirstSaid(s)) return null;
     // «Nihilis Atra» («нихилис атра»): BOTH words — never «нигилист» in talk (NihilisWords.js)
     if (nihilisWords(s)) return 'Nihilis';
     // «Give Me My Power» («Гив ми май пауэр», «Верни мне мою силу»): your power back from your own skeleton (Legacy.js)
@@ -305,7 +308,7 @@ export function matchSpell(text) {
     if (has('танд', 'thun', 'гром')) return 'Thunderwave';
     // «Fire» (a campfire) before Inferno: «Инферно» never contains these words
     if (has('fire', 'файр', 'фаер', 'фаир', 'фаэр', 'файер', 'костёр', 'костер', 'костр')) return 'Fire';
-    if (has('инфер', 'infer', 'огон')) return 'Inferno';
+    if (has('инфер', 'infer', 'огон') && !INFERNUM_WORD.test(s)) return 'Inferno'; // («Инфернум» alone: the hell pentagram's name, not the fire)
     if (has('санд', 'sand', 'сенд', 'send', 'санс', 'sans', 'песо', 'peso', 'цент', 'cent', 'даст', 'dust', 'sun', 'son', 'sam', 'set', 'sed')) return 'Sands';
     // «Айс» only as a word of its own: inside other words it is everywhere («лучше», «получилось»,
     // «следующий», «наиболее», «найс», «this»…) and cast itself in the middle of a talk

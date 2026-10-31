@@ -78,3 +78,29 @@ test('текст: «вита» как часть другого слова — �
     for (const t of ['пентаграниум витамины', 'pentagranium vitamin']) assert.equal(pentagramWords(t), null, t);
     assert.equal(pentagramWords('пентаграниум вита'), 'life');
 });
+
+test('«Пентаграниум Инфернум» (и «…Инферно») — врата ада, никогда не огонь «Инферно»; ни на обрывке, ни после паузы', () => {
+    for (const t of ['пентаграниум инфернум', 'пентаграниум инферно', 'Pentagranium Infernum', 'pentagranium inferno', 'пентаграниум инфэрнум']) {
+        assert.equal(pentagramWords(t), 'infernum', t);
+        assert.equal(matchSpell(t), 'Pentagranium', t);
+    }
+    // ещё говорится / имя после паузы — ничего, а не огонь
+    for (const t of ['пентаграниум', 'пентаграниум инфер', 'пентаграниум инф', 'инфернум', 'инфернус', 'infernum']) assert.notEqual(matchSpell(t), 'Inferno', t);
+    // само «Инферно» осталось огнём
+    assert.equal(matchSpell('инферно'), 'Inferno');
+    assert.equal(matchSpell('inferno'), 'Inferno');
+});
+
+test('слух: «Пентаграниум Инфернум/Инферно» — пентаграмма; обрывок и одно «инфернум» — не огонь', () => {
+    for (const t of ['пентаграниум инфернум', 'пентаграниум инферно']) {
+        const h = said(t);
+        assert.equal(h.sure, true, t);
+        assert.equal(pentagramWords(h.text), 'infernum', t);
+    }
+    for (const [t, o] of [['пентаграниум инфер', { final: false }], ['пентаграниум инферн', { final: false }], ['инфернум', {}], ['инфернус', {}]]) {
+        const h = said(t, o);
+        assert.notEqual(h.spell?.spell, 'Inferno', t);
+        assert.notEqual(h.sure && matchSpell(h.text), 'Inferno', t);
+    }
+    assert.equal(matchSpell(said('инферно').text), 'Inferno');
+});

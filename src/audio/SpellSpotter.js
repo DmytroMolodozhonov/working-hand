@@ -18,7 +18,7 @@
  */
 
 import { matchSpell } from '../fx/SpellManager.js';
-import { pentagramSaid, PENT_FIRST } from '../game/PentagramWords.js';
+import { pentagramSaid, PENT_FIRST, INFERNUM_WORD } from '../game/PentagramWords.js';
 import { NIHILIS_SAID } from '../game/NihilisWords.js';
 
 export const LETTERS = ' абвгдежзийклмнопрстуфхцчшщъыьэюя';
@@ -444,6 +444,9 @@ export function hear(lp, T, o = {}) {
     const need = best ? threshold(best.len, far, snr) : 0;
     if (!best || best.avg < need) return { text: written, written, spell: null, sure: false, echo: false, far, best, pentWeak: PENT_FIRST.some((w) => written.includes(w)) }; // (pentWeak: «Пентаграниум» was said, but no pentagram with it — a hint)
     // («Pentagranium»: the name itself must be heard — not the first word alone, not a near-miss of the name)
+    // («Пентаграниум …» said: only a pentagram may come of it — «Пентаграниум Инфернум» never ends as «Инферно»; «…Инфернум» after a
+    //  pause is the name still, not the fire spell — author)
+    if (best.spell !== 'Pentagranium' && (PENT_FIRST.some((w) => written.includes(w)) || (best.spell === 'Inferno' && INFERNUM_WORD.test(written)))) return { text: written, written, spell: null, sure: false, echo: false, far, best, pentWeak: true };
     if (best.spell === 'Pentagranium' && !pentNameHeard(P, best, open)) return { text: written, written, spell: null, sure: false, echo: false, far, best, pentWeak: true };
     // (a phrase still being said: the spell must be over — nothing heard after it. «Бомбардо…» may yet
     // be «Бомбардо Максима», «лет…» «Let the Hellfire come», «вин…» «Вингардиум»: the next look tells)
