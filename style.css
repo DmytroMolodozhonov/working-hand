@@ -1186,8 +1186,8 @@ body {
 .hud-notify-item {
     background: rgba(10, 12, 20, 0.8);
     color: #fff;
-    font-weight: bold;
-    font-size: 15px;
+    font-weight: 600;
+    font-size: 13px;
     padding: 5px 12px;
     border-radius: 8px;
     border-left: 4px solid #2ecc71;
@@ -1863,3 +1863,22 @@ body:has(#main-menu:not(.hidden)) #webcam-preview { display: none !important; }
 .hero-ranks { list-style: none; margin: 6px 0 0; padding: 0; flex: 1 1 100%; font-size: 12px; opacity: 0.9; }
 .hero-ranks li { padding: 2px 0; }
 @media (hover: hover) { .hero-ranks .mp-hint { display: none; } }
+
+/* Escape → «Игроки» (PlayersTab.js) */
+#pause-players { text-align: left; }
+#pause-players .pl-voice { color: #bfeecd; font-size: 0.9rem; margin-bottom: 8px; }
+#pause-players .pl-empty { color: #a4b0be; padding: 10px 0; }
+#pause-players .pl-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin-bottom: 4px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); color: #fff; font-size: 0.95rem; }
+#pause-players .pl-row.me { background: rgba(120, 220, 255, 0.14); }
+#pause-players .pl-row.loading { opacity: 0.7; }
+#pause-players .pl-row i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff; flex: none; }
+#pause-players .pl-name { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pause-players .pl-role { color: #ffe066; font-size: 0.8rem; }
+#pause-players .pl-state { font-size: 0.8rem; min-width: 110px; text-align: right; }
+#pause-players .ok { color: #7bed9f; }
+#pause-players .warn { color: #eccc68; }
+#pause-players .bad { color: #ff6b81; }
+#pause-players .dim { color: rgba(255, 255, 255, 0.5); }
+#pause-players .talk { color: #7dffb0; }
+#pause-players .pl-voice-marks { min-width: 54px; text-align: right; }
+#pause-players .pl-v { margin-left: 4px; }

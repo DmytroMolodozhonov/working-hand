@@ -20,6 +20,7 @@ import { Game } from './game/Game.js';
 import { Network, MAX_PLAYERS, netLog } from './net/Network.js';
 import { renderMagicTab, renderItemsTab, renderMechanicsTab, renderBossesTab, SPELLS } from './ui/Codex.js';
 import { PlayerSheetView } from './ui/PlayerSheet.js';
+import { PlayersTabView } from './ui/PlayersTab.js';
 import { makePlayerPreview } from './ui/PlayerPreview.js';
 import { listWorlds, loadWorld, deleteWorld, updateWorldMeta, cleanWorldName, NAME_MAX, setGameVersion, worldVersionLabel, worldHoverNote, worldSpawnLabel } from './game/WorldSave.js';
 import { CharacterEditor, activeLook, activeName } from './ui/CharacterEditor.js';
@@ -1149,6 +1150,7 @@ async function startGameInner(config, welcome) {
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
             hud.show(true);
+            game.sync?.markScreenOpen(); // (network game: «ready» to the others — only now my avatar may appear for them)
             if (creativeRestartNow) game.keeper?.save(); // replace the old saved attempt with the pristine world
             applyFps();
         };
@@ -1437,7 +1439,9 @@ const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
     openCodex: () => { const b = document.querySelector('[data-pause-tab="pause-spells"]'); if (b && !b.hidden) showPauseTab('pause-spells'); },
     makeCharacter: makePlayerPreview,
 });
+const playersTab = new PlayersTabView($('pause-players'), () => game);
 function showPauseTab(id) {
+    if (id === 'pause-players') playersTab.show(); else playersTab.hide();
     if (id === 'pause-player') playerSheet.show(); else playerSheet.hide();
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
@@ -1466,10 +1470,11 @@ function togglePauseMenu(show) {
         pauseHands.sync();
         // «✨ Заклинания»: in Creative all of them (not on a map); in the other modes the ones the hero can say now
         const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
+        document.querySelector('[data-pause-tab="pause-players"]').hidden = !(net && net.active && game?.sync); // (only in a network game)
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = creativeMap;
         document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
         showPauseTab('pause-main');
-    } else playerSheet.hide();
+    } else { playerSheet.hide(); playersTab.hide(); }
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
     if (game && !(net && net.active)) game.paused = open;

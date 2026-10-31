@@ -12,8 +12,8 @@ import { KD_NAME } from '../game/Impact.js';
 import { wrapPi, stepAngle, neckLimit, TWIST } from './RemoteTwist.js';
 import { safeLegs } from '../input/LegSafe.js';
 import { decodeFace, applyFaceDiff } from '../entities/FaceExpr.js';
+import { PLAYER_COLORS } from './PlayerPresence.js';
 
-const COLORS = [0xe67e22, 0x9b59b6, 0x1abc9c, 0xe74c3c, 0xf1c40f, 0x2ecc71, 0xecf0f1, 0x34495e];
 const _sh = { x: 0, y: 0, z: 0 };
 const _q = new THREE.Quaternion();
 const _d = new THREE.Vector3();
@@ -28,7 +28,7 @@ export class RemoteAvatar {
         this.character = new VoxelCharacter(scene, { remote: true });
         this.character.setShowHands(true);
         // Different shirt colour per player so friends are easy to tell apart.
-        const shirt = COLORS[colorIndex % COLORS.length];
+        const shirt = PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
         this.color = shirt; // (also the player's dot on the minimap)
         this.character.body.material.color.setHex(shirt);
         this.character.leftArmAnchor.children[0].material.color.setHex(shirt);
@@ -65,6 +65,7 @@ export class RemoteAvatar {
     setDead(dead) {
         this.dead = dead;
         clearTimeout(this._hideT);
+        if (!this._placed) return; // (not yet standing where it is: stays hidden — update() shows it)
         // (knocked down as they died — Avada, a blast: the body is seen falling first)
         if (dead && this.character.knockedDown && typeof setTimeout === 'function') this._hideT = setTimeout(() => { if (this.dead) this.character.group.visible = false; }, 1200);
         else this.character.group.visible = !dead;
@@ -201,6 +202,7 @@ export class RemoteAvatar {
         // how fast the body moves (my hands striking it measure their speed against it)
         if (this._ppOk && dt > 0) { _d.subVectors(g, this._pp).divideScalar(dt); if (_d.lengthSq() < 900) this.vel.lerp(_d, 0.3); else this.vel.set(0, 0, 0); }
         this._pp.copy(g); this._ppOk = true;
+        if (!this._placed) { this._placed = true; ch.group.visible = !this.dead; } // (the first frame at its real place: only now drawn)
         // (the head turns only so far from the chest; sent further round, the body — and the legs — are put round to meet it)
         const nk = neckLimit(Number.isFinite(+s.s.hy) ? +s.s.hy : 0);
         const bodyTo = (Number.isFinite(+s.s.ry) ? +s.s.ry : ch.group.rotation.y) + nk.turn;

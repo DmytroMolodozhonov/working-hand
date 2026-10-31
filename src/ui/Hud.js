@@ -544,32 +544,19 @@ export class Hud {
     }
 
     /**
-     * The voice chat's small box under the players' list (VoiceChat.js, 4× a second; redrawn only on a change):
-     * who speaks now, my own voice going out, the «talk» key. null — gone.
+     * The voice chat's state (VoiceChat.js, 4× a second). NOT drawn in the live game any more (the author: the list covered the coins):
+     * the Escape → «Игроки» tab reads it.
      */
     voiceChat(st) {
-        let box = this._vcBox;
-        if (!st || st.mode === 'off' || (st.mode === 'own' && !st.speakers.length)) { if (box) box.classList.add('hidden'); return; }
-        if (!box) {
-            box = this._vcBox = document.createElement('div');
-            box.id = 'vc-hud';
-            (this.el.mp?.parentNode || document.body).insertBefore(box, this.el.mp?.nextSibling || null);
-        }
-        const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        const rows = [];
-        if (st.mode !== 'own') {
-            if (st.mic === 'denied' || st.mic === 'busy' || st.mic === 'absent') rows.push('<div class="vc-row vc-warn">🎙✖ ваш голос не идёт</div>');
-            else if (st.ptt) rows.push(`<div class="vc-row ${st.down ? 'vc-me' : 'vc-dim'}">${st.down ? '🎙 говорите' : `🎙 зажмите ${esc(st.key || 'T')} — говорить`}</div>`);
-            else if (st.me) rows.push('<div class="vc-row vc-me">🎙 вас слышат</div>');
-        }
-        for (const n of st.speakers) rows.push(`<div class="vc-row vc-talk"><span class="vc-wave"></span>${esc(n)}</div>`);
-        const html = rows.join('');
-        box.classList.toggle('hidden', !html);
-        if (box.innerHTML !== html) box.innerHTML = html;
+        this.voiceState = st || null;
+        this._vcBox?.classList.add('hidden');
     }
 
-    /** «Подключился: Имя» at the bottom left (above the minimap); fades after a few seconds. */
-    notify(text, ms = 5000) {
+    /**
+     * Short notices at the bottom left, like in Minecraft: «Игрок X подключился» (≤ 4 at once, the oldest goes first, each ~5 s and fades).
+     * `color` — the player's colour (a number): a dot in front of the text. No sound, nothing moves.
+     */
+    notify(text, ms = 5000, color = null) {
         let box = this._notifyBox;
         if (!box) {
             box = this._notifyBox = document.createElement('div');
@@ -578,9 +565,10 @@ export class Hud {
         }
         const item = document.createElement('div');
         item.className = 'hud-notify-item';
+        if (typeof color === 'number') item.style.borderLeftColor = '#' + color.toString(16).padStart(6, '0');
         item.textContent = text;
         box.appendChild(item);
-        while (box.children.length > 5) box.firstChild.remove();
+        while (box.children.length > 4) box.firstChild.remove();
         setTimeout(() => { item.style.opacity = '0'; }, ms);
         setTimeout(() => item.remove(), ms + 600);
     }
@@ -630,11 +618,10 @@ export class Hud {
         el.classList.toggle('low', frac < 0.05);
     }
 
+    /** The players' list is NOT shown in the live game (it covered the coins counter): only in Escape → «Игроки» (main.js). */
     setMultiplayer(html) {
-        if (!this.el.mp) return;
-        if (!html) { this.el.mp.classList.add('hidden'); return; }
-        this.el.mp.classList.remove('hidden');
-        if (this.el.mp.innerHTML !== html) this.el.mp.innerHTML = html;
+        this.playersHtml = html || '';
+        this.el.mp?.classList.add('hidden');
     }
 
     /** Terrain for the minimap (the world is endless: a window around the player is drawn). */

@@ -48,6 +48,8 @@ import * as THREE from 'three';
 import { RemoteAvatar } from './RemoteAvatar.js';
 import { encodeFace, faceDiff } from '../entities/FaceExpr.js';
 import { playerSnapshot, applyPlayerSnapshot } from '../game/WorldSave.js';
+import { PlayerPresence, noticeText } from './PlayerPresence.js';
+import { netLog } from './Network.js';
 import { keepIn } from '../game/HouseWards.js';
 import { runBoom } from '../world/BoomCarve.js';
 import { LUMOS } from '../game/WandMagic.js';
@@ -82,6 +84,14 @@ export class NetSync {
         this.hudTimer = 0;
         this.weaponOwners = new Map(); // weaponId -> playerId
         this.knownZombies = new Set();
+        // who is in the world and when the others may see them (PlayerPresence.js): an avatar only AFTER «ready» + look + a real pose
+        this.presence = new PlayerPresence({ log: (t) => netLog(t) }); // (the journal «Мультиплеер»: join / ready / leave / where he appeared; voice is never logged)
+        this._bornAt = performance.now();
+        this._screenOpen = false; // my loading screen closed (main.js → markScreenOpen)
+        this._gotWelcome = false; // the host's world state applied (it carries where I stood last time)
+        this.looks = new Map(); // id → how the player looks (comes before his avatar does)
+        this.models = new Map();
+        this._ready = false; // I told the others «ready»: only from now my pose goes out
         this._off = [
             net.on('message', (m) => this._onMessage(m)),
             net.on('peer-join', (p) => this._onJoin(p)),
@@ -92,7 +102,6 @@ export class NetSync {
         ws.onGrab = (w, side) => this._localGrab(w, side);
         ws.onRelease = (w, side) => this._localRelease(w, side);
         this._syncPlayerList(net.playerList());
-        this._announce = true; // from now on, joins/leaves are shown on screen
     }
 
     dispose() {
@@ -106,42 +115,52 @@ export class NetSync {
 
     // ============================================================== players
     _syncPlayerList(list) {
-        const ids = new Set(list.map((p) => p.id));
-        for (const p of list) {
-            if (p.id === this.me || this.game.remotes.has(p.id)) continue;
-            const av = new RemoteAvatar(this.game.scene, p.id, p.name, p.color); av.log = (t) => this.game.perf?.note?.(t);
-            this.game.remotes.set(p.id, av);
-            if (this.looks?.has(p.id)) av.setLook(this.looks.get(p.id));
-            av.setHeroModel(this.models?.get(p.id));
-            if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${p.name}`);
-            this._lookSoon = true; // a newcomer: tell them how I look
-        }
-        for (const id of [...this.game.remotes.keys()]) if (!ids.has(id)) this._onLeave(id);
+        const left = this.presence.setList(list, this.me, performance.now());
+        for (const id of left) this._onLeave(id, true);
+        for (const id of [...this.game.remotes.keys()]) if (!list.some((p) => p.id === id)) this._onLeave(id);
+        for (const p of list) if (p.id !== this.me) this._tryShow(p.id);
     }
 
-    _onJoin({ id, name }) {
-        if (!this.game.remotes.has(id)) {
-            const info = this.net.players.get(id);
-            const av = new RemoteAvatar(this.game.scene, id, name, info?.color || 1); av.log = (t) => this.game.perf?.note?.(t);
-            this.game.remotes.set(id, av);
-            if (this.looks?.has(id)) av.setLook(this.looks.get(id));
-            av.setHeroModel(this.models?.get(id));
-            if (this._announce) this.game.hud.notify?.(`🟢 Подключился: ${name}`);
-        }
+    /** The avatar is made only when the player is ready, his look is known and a real pose came: at once at HIS place, never at the start. */
+    _tryShow(id) {
+        const g = this.game;
+        if (g.remotes.has(id) || !this.presence.canShow(id)) return;
+        const e = this.presence.byId.get(id);
+        const av = new RemoteAvatar(g.scene, id, e.name, e.color); av.log = (t) => g.perf?.note?.(t);
+        av.character.group.visible = false; // (shown by its first update(), when it already stands where it is)
+        av.setLook(this.looks.get(id));
+        av.setHeroModel(this.models?.get(id));
+        av.applyState(e.pose);
+        const p = e.pose.s.p;
+        av.character.group.position.set(p[0], p[1], p[2]);
+        g.remotes.set(id, av);
+        const r = this.presence.shown(id, performance.now());
+        if (r?.notice) this._notice(r.notice);
+        this._lookSoon = true; // a newcomer: tell them how I look
+    }
+
+    _notice(n) { this.game.hud.notify?.(noticeText(n), 5000, n.color); }
+
+    _onJoin({ id }) {
+        // (no avatar here: he is still loading. His «ready» + look + pose make it — _tryShow)
+        this._syncPlayerList(this.net.playerList());
         // Late joiner: send the whole world state
         this.sendLook();
         this.game.inventory?.purse?.resend(); // (the coin pouches on my belt)
         if (this.net.isHost) {
             const msg = this.welcomeMessage();
-            msg.you = this.game.keeper?.playerFor(this.net.players.get(id)?.pid, this.net.players.get(id)?.name || name) || null; // a player coming back gets their things (by their own lasting id, not by a name someone else may have too)
+            const info = this.net.players.get(id);
+            msg.you = this.game.keeper?.playerFor(info?.pid, info?.name || 'Игрок') || null; // a player coming back gets their things (by their own lasting id, not by a name someone else may have too)
             this.net.sendTo(id, msg);
         }
     }
 
-    _onLeave(id) {
+    _onLeave(id, fromPresence = false) {
+        if (!fromPresence) this.presence.leave(id, performance.now());
+        this.looks?.delete(id);
+        this.models?.delete(id);
         const r = this.game.remotes.get(id);
         if (r) {
-            if (this._announce) this.game.hud.notify?.(`🔴 Вышел: ${r.name}`);
             this.game.bleeding?.clearCuts(r.character);
             r.dispose();
             this.game.remotes.delete(id);
@@ -181,6 +200,7 @@ export class NetSync {
             zombies: g.zombies.map((z) => z.serialize()),
             ice: g.iceCells,
             players: this.net.playerList(),
+            ready: [...(this._ready ? [this.me] : []), ...[...this.presence.byId.values()].filter((e) => e.ready).map((e) => e.id)], // (who is already in the world: a newcomer draws only them)
             dayStart: g.dayStart,
             doors: g.doors?.snapshot() || [],
             locks: g.locks?.snapshot() || null, // («Алохомора»: unlocked chests, doors, gates; the doors locked now)
@@ -282,8 +302,31 @@ export class NetSync {
             this.net.players = new Map(msg.players.map((p) => [p.id, { name: p.name, color: p.color }]));
             this._syncPlayerList(msg.players);
         }
+        for (const id of Array.isArray(msg.ready) ? msg.ready.slice(0, 40) : []) if (typeof id === 'string' && id !== this.me) { this.presence.markReady(id); this._tryShow(id); }
+        this._gotWelcome = true; // (my place from the last time came with it: 'you' above)
+        this._tryReady();
         if (msg.you && !this._gotMine) { this._gotMine = true; applyPlayerSnapshot(g, msg.you); g.inventory?.ensureStarterWand(); g.hud.update(g.playerHP, g.maxHP, g.killCount, g.punchCount); }
         if (msg.pents) g.pentagranium?.netRestore?.(msg.pents); // (after my own things: their pentagrams would replace the list)
+    }
+
+    /** main.js: my loading screen closed. A guest also waits for the host's world state (it puts me where I stood). */
+    markScreenOpen() { this._screenOpen = true; this._screenAt = performance.now(); this._tryReady(); }
+
+    _tryReady() {
+        if (this._ready || !this._screenOpen) return;
+        if (!this.net.isHost && !this._gotWelcome) return; // (update() lets go after 20 s: the host may never answer)
+        this._ready = true;
+        this.sendLook();
+        this.net.send({ t: 'ready', by: this.me }, true);
+        netLog(`я ${this.net.name}: ready, место ${this.game.character?.group?.position ? ['x', 'y', 'z'].map((k) => Math.round(this.game.character.group.position[k])).join(', ') : '?'}`);
+    }
+
+    /** Every frame: a «ready» that waited too long for the welcome; «отключился» notices whose time came. */
+    _tickPresence() {
+        const now = performance.now();
+        if (!this._screenOpen && now - this._bornAt > 120000) { this._screenOpen = true; this._screenAt = now; netLog('экран загрузки не сообщил о готовности за 2 мин — считаю, что готов'); }
+        if (!this._ready && this._screenOpen && now - this._screenAt > 20000) { this._gotWelcome = true; netLog('мир хоста не пришёл за 20 с — говорю ready без него'); this._tryReady(); }
+        for (const n of this.presence.due(now)) this._notice(n);
     }
 
     /** My things changed hands (thrown, given, paid, sold, a body, a sword pocketed): the host hears of it within ~0.3 s, not up to 8 s
@@ -326,8 +369,10 @@ export class NetSync {
         this._mineT = (this._mineT || 0) + dt;
         if (this._mineT > 8) { this._mineT = 0; this._sendMine(); }
         this.pTimer += dt;
+        this._tickPresence(dt);
         // (through the slow go-between: ~8 times a second instead of 20)
-        if (this.pTimer >= (this.net.relayed ? 0.12 : 0.05)) {
+        // (my pose goes out only after «ready»: still loading, I stand at the start place — the others must not see that)
+        if (this.pTimer >= (this.net.relayed ? 0.12 : 0.05) && this._ready) {
             this.pTimer = 0;
             const held = [];
             for (const hs of g.weapons.heldWeapons()) held.push(hs.held.serialize());
@@ -987,9 +1032,11 @@ export class NetSync {
         if (!g.active && m.t !== 'welcome') return;
         switch (m.t) {
             case 'p': {
-                const r = g.remotes.get(m.id || m.from);
+                const pid = m.id || m.from;
+                const r = g.remotes.get(pid);
                 if (!poseOk(m.s)) break; // (a broken pose drew nothing but errors every frame)
                 if (r) r.applyState(m);
+                else if (typeof pid === 'string' && pid !== this.me) { this.presence.gotPose(pid, m); this._tryShow(pid); } // (not shown yet: remember the last pose; a pose from one not ready is dropped)
                 g.boards?.remotePose(m.id || m.from, m.bd); // (the surfboard they carry or ride)
                 for (const ws of Array.isArray(m.w) ? m.w : []) {
                     if (!arr(ws, 11)) continue;
@@ -1147,13 +1194,24 @@ export class NetSync {
             case 'arm': if (m.by !== this.me) g.armor?.onNet(m, m.by || m.from); break;
             case 'look': {
                 if (m.by === this.me || !m.look) break;
-                this.looks = this.looks || new Map();
+                if (typeof m.by !== 'string') break;
                 this.looks.set(m.by, m.look);
-                (this.models = this.models || new Map()).set(m.by, m.hm === 'real' ? 'real' : 'std');
+                this.models.set(m.by, m.hm === 'real' ? 'real' : 'std');
                 g.remotes.get(m.by)?.setLook(m.look);
                 g.remotes.get(m.by)?.setHeroModel(m.hm);
+                this.presence.gotLook(m.by);
+                this._tryShow(m.by);
                 break;
             }
+            // «ready»: the player's loading screen closed and he stands where he stood — only now his avatar may be made
+            case 'ready': {
+                const id = typeof m.by === 'string' ? m.by : m.from;
+                if (!id || id === this.me) break;
+                if (this.presence.markReady(id) && !this.looks.has(id)) this.net.send({ t: 'lookq', to: id }, true); // (his look was lost on the way: ask again)
+                this._tryShow(id);
+                break;
+            }
+            case 'lookq': if (m.to === this.me) this.sendLook(); break;
             case 'an': if (!this.net.isHost) g.animals?.applyNet(rows(m.l)); break;
             case 'vil': if (!this.net.isHost) g.castleLife?.applyNet(rows(m.l, 4, (id) => typeof id === 'string')); break;
             case 'vhit': if (this.net.isHost && m.by !== this.me) { const v = g.castleLife?.byId.get(m.id); if (v) { const f = +m.mg || 0; g.castleLife.hit(v, Math.min(30, +m.dmg || 1), Array.isArray(m.d) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null, m.by, { magic: !!(f & 1), weapon: !!(f & 2), spell: !!(f & 4), pierce: !!(f & 8), hard: !!(f & 16) }); } } break;
@@ -1319,7 +1377,8 @@ export class NetSync {
                 if (m.killer === this.me) g.killCount++;
                 if (m.killer === this.me && m.k === 'Hellfire') applyCredit(g, { dark: 1 }); // (чёрная магия: человек убит моим Hellfire — HellKills.js)
                 if (m.killer === this.me) g.duel?.opponentDied?.(m.by, Number(m.mm) || 30, r?.group?.position ? [r.group.position.x, r.group.position.y - 2, r.group.position.z] : null); // (mana: a duel won for real, or a kill)
-                g.hud.setVoice(killer ? `💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})` : `💀 ${escapeHtml(who)} погиб`, true);
+                if (killer) g.hud.setVoice(`💀 ${escapeHtml(who)} побеждён (${escapeHtml(killer)})`, true);
+                else if (r) this._notice({ kind: 'death', name: who, color: r.color });
                 break;
             }
             case 'prespawn': {
