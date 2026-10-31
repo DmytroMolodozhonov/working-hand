@@ -67,6 +67,7 @@ import { EXPELLIARMUS } from './Expelliarmus.js';
 import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
+import { WANDER, wandererClass, missZone, isLoud, missVerdict, wandererLag, dieOf, isWeak, commonerDecide, commonerText, missText } from './WandererMind.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { Bodyguard, isLord } from './Bodyguard.js';
 import { CastleWatch } from './CastleWatch.js';
@@ -1430,6 +1431,9 @@ export class CastleLife {
             return;
         }
         if (v.climb) { this._climbStep(v, dt); return; }
+        // a road fighter's own reaction time passed (WandererMind): now he acts; a commoner's decision runs out (the fear is gone)
+        if (v.wLag && (v.wLag.t -= dt) <= 0) { const f = v.wLag.fn; v.wLag = null; if (!v.dead) f(); }
+        if (v.wm && v.wm.until && Date.now() > v.wm.until) this._wanderCalm(v);
         // startled (a spell flew past, a blast near — Startle.js): a flinch and a turn to where it came from
         if (v.flinchT > 0) {
             v.flinchT -= dt;
@@ -1820,7 +1824,7 @@ export class CastleLife {
         const d = fp ? Math.hypot(fp.x - v.x, fp.z - v.z) : Infinity;
         // they don't stop at the edge of their land: only when the enemy got well
         // away from them (~20 m) beyond it — or very far from the castle
-        const gone = !fp || (!this._inLand(cs.def, fp, 30) && (d > LEASH || !this._inLand(cs.def, fp, 160)));
+        const gone = !fp || (!this._inLand(cs.def, fp, 30) && (d > LEASH || !this._inLand(cs.def, fp, 160))) || (v.wm?.stance === 'attack' && d > WANDER.LEASH); // (an ordinary traveller does not chase far: WandererMind.LEASH)
         // (the whole castle against them — or only this one, angry at this player: a blow, a theft)
         const grudge = v.grudge && v.grudge.id === v.foe && v.grudge.until > Date.now();
         if (v.lesson && (gone || Date.now() > v.lesson.until || v.lesson.casts >= LESSON.MAX_CASTS || this._pupilDown(v.foe))) { this._lessonOver(v); return; }
@@ -2814,6 +2818,7 @@ export class CastleLife {
         // the hidden wanted level: a kill, or a real blow (not a bump in a crowd) — only what somebody saw (Blame.js)
         const real = killed || opts.spell || opts.weapon || opts.magic || opts.pierce || opts.fire || dmg > 1;
         const deed = () => { if (by && real) this.deed(by, killed ? (v.role === 'king' || v.role === 'master' ? 'killChief' : 'kill') : 'hurt'); };
+        if (!killed && by && !opts.via && this._wClass(v) === 'commoner') this.wanderAttacked(v, by, 'attacked'); // (an ordinary traveller struck: 90 % hit back — WandererMind)
         // a blow without magic (a fist, a slap, a blade) on one person is between the two of them:
         // they tell you off, take offence, or — a hard blow — fight YOU; no guards (only a rampage brings them)
         if (!killed && by && !opts.via && !opts.spell && !opts.pierce && !opts.magic && !(opts.weapon && v.role === 'king') && this._personal(v, by, dmg, opts)) { deed(); return; }
@@ -2886,18 +2891,24 @@ export class CastleLife {
      * (Blame.js) — the fighters go for him, the others run; he doesn't — the fighters search the place it came
      * from, the others run from it. The ones near hear the cry. `by`: a player's id (others: nothing).
      */
-    startle(v, by, from, { hit = false } = {}) {
+    startle(v, by, from, { hit = false, miss = null, loud = false, blocked = false } = {}) {
         if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by)) return false;
         const cs = v.cs, now = Date.now();
         if (!cs || v.foe || by === this.state(cs.def.id).owner) return false; // (fighting already; the king may do as he likes)
         if (this.game.arenaDuels?.calm(v, by)) return false; // (the arena's legal duel: spells flying there are the show — ArenaDuels.js)
+        const wc = this._wClass(v); // (a road person: knight / wizard / ordinary — WandererMind.js)
+        if (miss != null && wc !== 'knight' && wc !== 'wizard') return false; // (the wide ring of a miss is for the road's fighters only; castle people keep the old narrow one)
+        if (wc && isLord(v, by, this.lordOf(cs, by))) return false;
+        if (wc === 'commoner' && hit) { this.wanderAttacked(v, by, 'attacked'); this._callNear(v, null, from, by); return true; } // (a spell that hit and did not hurt: still an attack)
         if (now - (v.startleAt || 0) < (hit ? 300 : STARTLE.AGAIN_MS)) return false; // (a volley: one threat; a hit told once)
+        if (miss != null && this._wanderMissAt(v, by, from, miss, loud, wc, now, blocked)) return true;
+        if (miss != null) return false;
         v.startleAt = now;
         if (v.sleep) this.night?.wake?.(v, 'alarm');
         v.readyUntil = now + STARTLE.READY_MS; // (a wizard has his shield ready for the next one: WizardFight._notice)
         if (!(v.stunT > 0) && !v.lev) { v.flinchT = STARTLE.FLINCH; v.flinchFrom = { x: from.x, z: from.z }; }
         const knows = this._knows(v, by, null, null);
-        if (v.party) this.game.travelers?.alert?.(v.party, knows ? by : null); // (a cart stops, the riders get down)
+        if (v.party) this.game.travelers?.alert?.(v.party, knows && (wc !== 'commoner' || hit) ? by : null); // (a cart stops, the riders get down; a shot that missed travellers is no blow at them)
         if (v.seated && v.job !== 'cart') v.seated = false;
         const r = startleReaction({ fights: this._fights(v), knows });
         if (r === 'fight' || r === 'flee') {
@@ -2918,6 +2929,81 @@ export class CastleLife {
         return true;
     }
 
+    // ------------------------------------------------------------ the people of the roads (WandererMind.js)
+    /** 'knight' | 'wizard' | 'commoner' | null — a road person (Travelers.js). */
+    _wClass(v) { return wandererClass({ role: v.role, wizard: !!v.wizard, siteKind: v.cs?.def?.kind }); }
+
+    /** (host) A road knight / wizard and a miss `d` m from his body: turn, watch, or fight (zones and chances: WandererMind). True: handled. */
+    _wanderMissAt(v, by, from, d, loud, wc, now, blocked) {
+        const zone = missZone(d, { loud, blocked });
+        if (!zone) return false;
+        const knows = this._knows(v, by, null, null);
+        v.missN = (v.missN || 0) + 1;
+        const verdict = missVerdict({ cls: wc, rank: v.rank, zone, knows, roll: dieOf(v.id, v.missN, 'm') });
+        v.startleAt = now;
+        if (v.sleep) this.night?.wake?.(v, 'alarm');
+        v.readyUntil = now + STARTLE.READY_MS;
+        if (!(v.stunT > 0) && !v.lev) { v.flinchT = STARTLE.FLINCH; v.flinchFrom = { x: from.x, z: from.z }; }
+        this.alog?.decision(v, missText(`${v.title || ''} ${v.name || ''}`.trim(), d, zone, verdict));
+        if (v.party) this.game.travelers?.alert?.(v.party, verdict.act === 'fight' ? by : null);
+        if (verdict.act === 'fight') {
+            const go = () => { if (v.dead || v.foe) return; v.cs.hostile.set(by, now + HOSTILE_MS); v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; this._say(v, pick(v.wizard ? WIZ_SHOUT.fight : SHOUT.knight), 3); };
+            const lag = wandererLag(wc, v.rank);
+            if (lag.t > 0.3) v.wLag = { t: lag.t, fn: go }; else go();
+        } else if (verdict.act === 'search') {
+            if (v.wizard && this.wizards?.answerShot?.(v, by, from)) { /* (shield up; the hunt goes after his reaction time) */ } else { v.investigate = { x: from.x, y: from.y ?? v.y, z: from.z, by: null, t: STARTLE.SEARCH_S }; v.path = null; v.lookT = 0; }
+            this._say(v, pick(v.wizard ? SHOUT.startledWiz : SHOUT.startled), 3);
+        } // ('turn': the flinch above faces the source; the shield stays ready — WizardFight._notice reads readyUntil)
+        this._callNear(v, verdict.act === 'fight' ? by : null, from, by);
+        return true;
+    }
+
+    /**
+     * (host) An ordinary traveller is attacked (`kind` 'attacked': struck, hit by a spell, hurt, or his party was) or saw a killing
+     * ('witness'). One die per person per episode from his id (WandererMind.commonerDecide), kept 60 s: 90 % (witness: 50 %) he hits back
+     * with what he has (fists, a pitchfork, a stone), the rest — and the weak, always — run from the culprit.
+     */
+    wanderAttacked(v, by, kind = 'attacked') {
+        if (!this.auth || !v || v.dead || !this._isPlayer(by) || this._wClass(v) !== 'commoner') return false;
+        const cs = v.cs, now = Date.now();
+        if (isLord(v, by, this.lordOf(cs, by))) return false;
+        const d = commonerDecide({ id: v.id, weak: isWeak(v), kind, prev: v.wm, now });
+        v.wm = d.mem;
+        if (d.fresh) this.alog?.decision(v, commonerText(`${v.title || ''} ${v.name || ''}`.trim(), d));
+        if (v.wmBrave0 === undefined) v.wmBrave0 = !!v.roadBrave;
+        v.roadBrave = d.stance === 'attack'; // (_fights: fists and a pitchfork; the others never fight — even a naturally brave one of the seed)
+        if (v.seated && v.job !== 'cart') v.seated = false;
+        if (d.stance === 'attack') {
+            if (d.fresh || !v.foe) { cs.hostile.set(by, now + WANDER.MEMORY_S * 1000); v.foe = by; v.path = null; v.investigate = null; v.fleeT = 0; v.fear = null; if (d.fresh) this._say(v, pick(['Ах ты так?! Получай!', 'Не дам в обиду своих!', 'А ну, отойди от нас!', 'Сейчас я тебе покажу!']), 3); }
+        } else if (d.fresh) {
+            if (v.foe === by) v.foe = null;
+            const bp = this._playerPos(by);
+            this.fright?.scare?.(v, 'attacker', bp ? { x: bp.x, y: bp.y - 1.95, z: bp.z } : { x: v.x, y: v.y, z: v.z }, by);
+            this._say(v, pick(SHOUT.help), 3);
+        }
+        return true;
+    }
+
+    /** (host) The decision runs out: no endless fear or fight — back to the road (the cart waits for CALM — Travelers). */
+    _wanderCalm(v) {
+        const wm = v.wm; v.wm = { n: wm.n || 0, until: 0 };
+        if (v.wmBrave0 !== undefined) { v.roadBrave = v.wmBrave0; v.wmBrave0 = undefined; }
+        if (wm.stance === 'attack' && v.foe && !this._fights(v)) { v.foe = null; v.path = null; }
+        this.alog?.decision(v, 'странник: решение выдохлось — снова по своим делам');
+    }
+
+    /** (host) A person was killed by a player: the ordinary travellers who see it (≤ 40 m, a free line) throw their die — 50 / 50. */
+    _wanderWitness(dead, by) {
+        const pos = { x: dead.x, y: dead.y, z: dead.z };
+        const R = WANDER.WITNESS_R;
+        for (const o of this.byId.values()) {
+            if (o === dead || o.dead || Math.abs(o.x - pos.x) > R || Math.abs(o.z - pos.z) > R) continue;
+            if (this._wClass(o) !== 'commoner' || Math.hypot(o.x - pos.x, o.z - pos.z) > R || !this._sees(o, pos)) continue;
+            if (o.party) this.game.travelers?.alert?.(o.party, null);
+            this.wanderAttacked(o, by, 'witness');
+        }
+    }
+
     /** (host) The cry of `v`: the fighters near with nothing to do come — at the culprit if he is known, else to look where it came from. */
     _callNear(v, known, from, by) {
         for (const o of v.cs.active.values()) {
@@ -2935,11 +3021,19 @@ export class CastleLife {
      */
     passBy(p, q, by, from, hitId = null) {
         if (!this.auth || !this._isPlayer(by)) return;
-        const R = STARTLE.BOLT_R + BODY_R;
-        const minX = Math.min(p.x, q.x) - R, maxX = Math.max(p.x, q.x) + R, minZ = Math.min(p.z, q.z) - R, maxZ = Math.max(p.z, q.z) + R;
+        const R0 = STARTLE.BOLT_R + BODY_R, RW = WANDER.ZONE.NEAR + BODY_R; // (the road's knights and wizards notice a miss up to 15 m: WandererMind)
+        const minX = Math.min(p.x, q.x) - RW, maxX = Math.max(p.x, q.x) + RW, minZ = Math.min(p.z, q.z) - RW, maxZ = Math.max(p.z, q.z) + RW;
         for (const v of this.byId.values()) {
             if (v.dead || v.foe || v.id === hitId || v.x < minX || v.x > maxX || v.z < minZ || v.z > maxZ) continue;
-            if (segDist2(p.x, p.y, p.z, q.x, q.y, q.z, v.x, v.y + 2.4, v.z) > R * R) continue;
+            const d2 = segDist2(p.x, p.y, p.z, q.x, q.y, q.z, v.x, v.y + 2.4, v.z);
+            const wc = this._wClass(v);
+            if (wc === 'knight' || wc === 'wizard') {
+                const d = Math.max(0, Math.sqrt(d2) - BODY_R);
+                const blocked = !this._sees(v, { x: q.x, y: q.y - 0.5, z: q.z }); // (a wall between: not seen; a quiet charge is not heard)
+                this.startle(v, by, from, { miss: d, loud: false, blocked });
+                continue;
+            }
+            if (d2 > R0 * R0) continue;
             this.startle(v, by, from);
         }
     }
@@ -2948,11 +3042,18 @@ export class CastleLife {
     startleAround(p, r, by, from = null) {
         if (!this.auth || !this._isPlayer(by)) return;
         const bp = from || this._playerPos(by) || p;
-        const R = r + STARTLE.BLAST_R;
+        const R = r + STARTLE.BLAST_R, RW = r + WANDER.ZONE.HEARD; // (a blast is loud: the road's fighters hear it up to 30 m beyond it, a wall or not)
         for (const v of this.byId.values()) {
-            if (v.dead || v.foe || Math.abs(v.x - p.x) > R || Math.abs(v.z - p.z) > R) continue;
+            if (v.dead || v.foe || Math.abs(v.x - p.x) > RW || Math.abs(v.z - p.z) > RW) continue;
             const d = Math.hypot(v.x - p.x, v.z - p.z);
-            if (d > R || d < r + 1) continue;
+            if (d < r + 1) continue;
+            const wc = this._wClass(v);
+            if (wc === 'knight' || wc === 'wizard') {
+                const blocked = !this._sees(v, p);
+                this.startle(v, by, bp, { miss: d - r, loud: true, blocked });
+                continue;
+            }
+            if (d > R) continue;
             this.startle(v, by, bp);
         }
     }
@@ -3042,6 +3143,7 @@ export class CastleLife {
         const aware = !!v.wizard && by != null && this._isPlayer(by) && (v.foe === by || v.grudge?.id === by || this.knowsFrom(v, by, null, null, v.cs?.castSeen));
         this.rel?.onHit(v, by, true); // (a killing: the town's opinion of the hero — Relations.js)
         v.dead = true;
+        if (by != null && this._isPlayer(by)) this._wanderWitness(v, by); // (the travellers who saw it: 50 / 50 — WandererMind)
         v.seated = false; // (a seated body is drawn 1.7 m lower — it sank through the floor: the dead king on his throne)
         this.cmds?.clear(v);
         this.talk?.speech?.cancelKey?.(v.id); // (the dead say nothing: his line stops, his queue is dropped)

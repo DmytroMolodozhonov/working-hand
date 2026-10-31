@@ -370,7 +370,8 @@ export class Travelers {
         for (const v of P.members) {
             if (v.dead) continue;
             if (v.seated && !v.horse) this._getDown(v);
-            if (L._fights(v)) {
+            if (isPlayer && L._wClass?.(v) === 'commoner') L.wanderAttacked(v, by, 'attacked'); // (ordinary travellers: 90 % hit back, the rest run — WandererMind.js)
+            else if (L._fights(v)) {
                 if (isPlayer && !v.foe) { v.foe = by; v.path = null; if (v.roadBrave && Math.random() < 0.7) L._say(v, pick(BRAVE_LINES), 3); }
             } else if (at && !v.fear && !(v.horse && v.seated)) L.fright?.scare?.(v, 'attacker', at, by);
             if (!said && Math.random() < 0.8) { said = true; L._say(v, pick(ALARM[P.kind])); }
