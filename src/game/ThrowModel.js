@@ -47,7 +47,7 @@ export const RELEASE = {
     // its velocity at the release is read that much later in the buffer (throwbench: the direction's error 10° → 2–3°)
     POS_LAG_MS: 25,
     FAST: 6, FAST_WIN_MS: 60, // (a hand this fast: its speed read on a shorter line)
-    TRACE_MAX: 1.7, TRACE_MIN: 0.5, // (the filter's cut given back: at most this much; only a swing this fast in the picture, per s)
+    TRACE_MAX: 1.5, TRACE_MIN: 0.5, // (the filter's cut given back: at most this much; only a swing this fast in the picture, per s)
     GAP_WIN_K: 1.6, // (the swing's peak in a gap: found on a wider line)
     VEL_WIN_CAM: 1.6, // (the velocity's window: at least this many camera pictures — the blend's steps averaged out)
     THROW_MIN: 2.4, // m/s against the body (game metres: the hero is 3.5 m tall): slower is a drop from a moving hand

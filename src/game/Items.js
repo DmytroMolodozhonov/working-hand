@@ -691,6 +691,7 @@ export class ItemSystem {
         const seen = !!hand && hand.group.visible && (hand._lost === undefined ? (ch.isHandTracked?.(side) ?? false) : !hand._lost);
         const w = ch.getHandWorldPosition(side, this._tw || (this._tw = new THREE.Vector3()));
         const ps = this.game.poseSmoother;
+        this._trk[side].trace = ps && this.game.poseService?.wristTrace?.[side] || null; // (the filter's cut on a fast swing given back)
         this._trk[side].push({ t: tt, hand: arm.hand, world: w, yaw: ch.group.rotation.y, curl: ch.getGripCurl ? ch.getGripCurl(side) : 1, seen, fresh, camMs: ps?.interval || 50 });
     }
 

@@ -11,6 +11,7 @@
  * run on the main thread (slower, but still works).
  */
 
+import { WristTrace } from '../game/ThrowModel.js';
 import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js';
 import { PoseInterpreter } from './PoseInterpreter.js';
 import { matchSticks } from './RealStick.js';
@@ -806,6 +807,14 @@ export class PoseService {
         if (r.faceLandmarks !== undefined) this._lastFace = r.faceLandmarks;
 
         const pose = this.poseGuard.process(r.poseLandmarks, t);
+        // (the wrists raw and filtered, picture by picture: a throw gives back the peak the filter cut off — ThrowModel.WristTrace;
+        // its clock — the moment the picture reached the game, as the shown pose's)
+        if (pose && r.poseLandmarks) {
+            const tr = this.wristTrace || (this.wristTrace = { left: new WristTrace(), right: new WristTrace() }), now = performance.now();
+            const L = r.poseLandmarks[15], R = r.poseLandmarks[16], fl = pose[15], fr = pose[16];
+            if (L && fl) tr.left.push(now, L.x, L.y, fl.x, fl.y);
+            if (R && fr) tr.right.push(now, R.x, R.y, fr.x, fr.y);
+        }
         const assigned = assignHands(r.hands || [], pose || r.poseLandmarks);
         const results = {
             poseLandmarks: pose,

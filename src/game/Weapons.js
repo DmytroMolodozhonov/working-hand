@@ -347,6 +347,7 @@ export class WeaponSystem {
                 const arm0 = ch.armState(side, hs.arm);
                 const fresh = ps.to !== hs.lastTo; hs.lastTo = ps.to;
                 const seenNow = !!hand && hand.group.visible && (hand._lost === undefined ? tracked : !hand._lost);
+                hs.trk.trace = this.game.poseService?.wristTrace?.[side] || null;
                 hs.trk.push({ t: tt, hand: arm0.hand, world: ch.getHandWorldPosition(side, _e), yaw: ch.group.rotation.y, curl: ch.getGripCurl(side), seen: seenNow, fresh, camMs: ps.interval || 50 });
             }
             if (holdsFast(ch)) { hs.thr.reset(); hs.drop.since = 0; hs.trk.decide({ t: tt, blocked: true }); } // (swimming: the strokes never throw or drop it)
