@@ -37,7 +37,8 @@ export const DEVIL = {
     SEAT_MIN_R: 90,
     SEAT_OFF: 40,            // м — сидит так далеко от столба цепи (столб в середине котловины — HellMap)
     PILLAR_R: 6,             // м — столб: тело не заходит в него (держится в PILLAR_R + RADIUS)          // м — котловина под ним не меньше (тело 17 м + цепь 70 м)
-    CHAIN_LEN: 70,           // м — от якоря до копыта (свободный ход)
+    CHAIN_LEN: 70,           // м — от якоря до копыта (свободный ход; в котловине — до её края: PIT_REACH)
+    PIT_REACH: 0.95,         // доля радиуса котловины — цепь не короче (копыто доходит почти до рва лавы)
     CHAIN_SOFT: 0.86,        // доля CHAIN_LEN: дальше цепь натягивается (мягкая пружина), у CHAIN_LEN — жёсткий предел
     CHAIN_LINKS: 44,         // звеньев (каждое ~3,6 м длиной, шаг цепи 1,82 м — звенья продеты друг в друга)
     LINK_LEN: 3.6,           // м — длина звена
@@ -498,7 +499,8 @@ export function seatFrom(plan) {
     const s = plan?.devilSeat, a = plan?.chainAnchor;
     if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.z)) return null;
     const r = Math.max(+s.r || 0, 0);
-    const len = Math.max(30, Math.min(+plan.chainLen || DEVIL.CHAIN_LEN, 200));
+    // (цепь — на всю котловину до рва: автор «должно быть больше возможностей ходить, по крайней мере по этой яме»; план даёт 70 — мало)
+    const len = Math.max(30, Math.min(Math.max(+plan.chainLen || DEVIL.CHAIN_LEN, (+s.r || 0) * DEVIL.PIT_REACH), 200));
     const anchor = a && Number.isFinite(a.x) && Number.isFinite(a.z) ? { x: a.x, y: Number.isFinite(a.y) ? a.y : null, z: a.z } : { x: s.x, y: null, z: s.z + 30 };
     let x = s.x, z = s.z;
     // столб цепи в середине котловины (HellMap: chainAnchor = середина devilSeat) — сидит в SEAT_OFF м от него, лицом к дороге от места прибытия

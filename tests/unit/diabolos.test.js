@@ -157,7 +157,7 @@ test('выбор хода: лицом к цели, вблизи — копыто
 
 test('место из плана ада (HellMap.hellPlan): малая котловина помечена', async () => {
     const s = seatFrom({ devilSeat: { x: 100, z: 200, r: 120 }, chainAnchor: { x: 100, y: 5, z: 240 }, chainLen: 70 });
-    assert.equal(s.x, 100); assert.equal(s.len, 70); assert.equal(s.small, false); assert.equal(s.anchor.z, 240);
+    assert.equal(s.x, 100); assert.equal(s.len, Math.round(120 * DEVIL.PIT_REACH)); // (цепь — на всю котловину, не короче плана) assert.equal(s.small, false); assert.equal(s.anchor.z, 240);
     assert.equal(seatFrom({ devilSeat: { x: 0, z: 0, r: 40 } }).small, true);
     assert.equal(seatFrom(null), null);
     // как в HellMap: столб в середине котловины — сидит в 40 м от него, лицом к дороге прибытия
@@ -233,7 +233,7 @@ test('Дьяволос в игре: спит → разбудили → идёт
         const fo = dv._footOff(dv.d);
         maxHoof = Math.max(maxHoof, Math.hypot(dv.d.x + fo.x - dv.d.anchor.x, dv.d.z + fo.z - dv.d.anchor.z));
     }
-    assert.ok(maxHoof <= DEVIL.CHAIN_LEN + 0.5, `копыто ушло на ${maxHoof.toFixed(1)} м`);
+    assert.ok(maxHoof <= dv.site.len + 0.5, `копыто ушло на ${maxHoof.toFixed(1)} м`);
     assert.ok(dv.d.strain > 0.5 || dv.log.some((l) => /ход rage|ход fire|ход ball/.test(l)), 'у грани злится и бьёт издалека');
     // ушёл совсем далеко — забыл, вернулся, сел, уснул
     me.set(0, 1.95, -600);
@@ -346,7 +346,7 @@ test('характер в игре: просыпается по-разному, 
     dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'Inferno', 'me'); assert.equal(dv.d.act?.id, 'bask', 'огонь — наслаждается');
     dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'LevitationSuperMaxima', 'me'); assert.equal(dv.d.act?.id, 'headShake', 'божественное — трясёт головой');
     // за цепью — дразнит
-    me.set(0, 1.95, -320);
+    me.set(0, 1.95, -235);
     dv.d.act = null;
     run(60);
     assert.ok(['tongueTaunt', 'beckon', 'chainPull', 'lickLips'].some((id) => seen.has(id)), `дразнит: ${[...seen].join(', ')}`);
@@ -569,7 +569,7 @@ test('«Империус Максима» на Дьяволоса: только 
     let maxHoof = 0;
     for (let i = 0; i < 30 * 40; i++) { d.update(1 / 30); const fo = d._footOff(d.d); maxHoof = Math.max(maxHoof, Math.hypot(d.d.x + fo.x - d.d.anchor.x, d.d.z + fo.z - d.d.anchor.z)); }
     assert.ok(d.d.z < z0 - 20, `ушёл ${(z0 - d.d.z).toFixed(0)} м`);
-    assert.ok(maxHoof <= DEVIL.CHAIN_LEN + 0.5, 'цепь держит и под Империусом');
+    assert.ok(maxHoof <= d.site.len + 0.5, 'цепь держит и под Империусом');
     I.walk = 0; I.strikeNow = true;
     d.update(1 / 30);
     assert.ok(d.d.move && ['fist', 'stomp'].includes(d.d.move.id), 'удар по воле');

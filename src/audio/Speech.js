@@ -230,7 +230,11 @@ export class Speech {
         if (opts.reply && this._ducked) this.duck(false);
         // (the player speaks / casts: a new line waits — its sound would cover the spell, and its making takes the
         // processor the voice's network needs; it is said as soon as the player is done — duck(false))
-        if (this._ducked && !this._current && !opts.append) {
+        // (opts.over — босс, который отвечает на бой (Дьяволос): рука поднята для магии почти всё время боя, и его реплики копились
+        //  «на потом» и заменяли друг друга — не звучала ни одна (жалоба автора). Он говорит сразу, но приглушённо, пока рука поднята
+        //  (уровень 0,55); ждёт только пока игрок на самом деле говорит (уровень DUCK_LEVEL): распознаванию не мешает)
+        const overNow = opts.over && this._ducked && (this._duckLevel ?? DUCK_LEVEL) > DUCK_LEVEL + 0.01;
+        if (this._ducked && !this._current && !opts.append && !overNow) {
             if (this._pending?.opts.onEnd) this._safeCall(this._pending.opts.onEnd, false);
             this._pending = { text: clean, opts: o };
             return true;
@@ -308,8 +312,8 @@ export class Speech {
         if (on === !!this._ducked && (!on || level === this._duckLevel)) return;
         this._ducked = on;
         this._duckLevel = level;
-        // (the lines held meanwhile: the newest is said now)
-        if (!on && !this._current && this._pending) { const p = this._pending; this._pending = null; this._speak(p.text, p.opts); }
+        // (the lines held meanwhile: the newest is said now; a boss's line (over) — as soon as only the hand is up)
+        if ((!on || (this._pending?.opts?.over && level > DUCK_LEVEL + 0.01)) && !this._current && this._pending) { const p = this._pending; this._pending = null; this._speak(p.text, p.opts); }
         const g = this._duck, ctx = this._ctx;
         if (!g?.gain || !ctx) return;
         const now = ctx.currentTime || 0;

@@ -409,3 +409,26 @@ test('speech: cancelKey drops the dead speaker\'s queued line, a far live voice 
     assert.equal(sp._live({ live: () => ({ volume: 0 }) }).volume, 0);
     assert.equal(sp._live({ live: () => { throw new Error('x'); } }).volume, 0);
 });
+
+test('Speech: голос босса (opts.over — Дьяволос) звучит, пока рука поднята для магии (приглушённо), и ждёт, только пока игрок говорит', async () => {
+    const { ctx, played } = fakeAudio();
+    const nv = fakeNeural();
+    const s = new Speech({ neural: nv, audioContext: () => ctx, master: () => 1 });
+    s.duck(true, 0.55); // (рука поднята, игрок молчит)
+    assert.equal(s.say('Щекотно.', { voiceKey: 'diabolos', role: 'devil', over: true }), true);
+    await tick();
+    assert.equal(played.length, 1, 'сказал сразу');
+    played[0].onended();
+    s.duck(true); // (игрок говорит заклинание)
+    s.say('Взрывай дальше.', { voiceKey: 'diabolos', role: 'devil', over: true });
+    await tick();
+    assert.equal(played.length, 1, 'ждёт, пока игрок говорит');
+    s.duck(true, 0.55); // (договорил, рука ещё поднята)
+    await tick();
+    assert.equal(played.length, 2, 'сказал, как только игрок договорил');
+    // житель — как раньше: ждёт, пока рука опущена
+    played[1].onended();
+    s.say('Свежий хлеб!', { voiceKey: 'm1', role: 'merchant' });
+    await tick();
+    assert.equal(played.length, 2);
+});

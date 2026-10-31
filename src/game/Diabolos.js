@@ -41,7 +41,7 @@ const ID = 'diabolos';
 const ROCKS_MAX = 10;    // глыб пинка в воздухе одновременно
 const ROCK_R = 2.3;      // м — радиус глыбы (масштаб формы)
 const NET_DT = 0.2;
-const DEVIL_VOICE = { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1 }; // (бас: роль devil — VoiceCast)      // с между строками состояния хоста
+const DEVIL_VOICE = { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, over: true }; // (бас: роль devil — VoiceCast)      // с между строками состояния хоста
 const SEEN_R = 4000;     // м: в аду ближе этого — загружен (виден с плато прибытия и издали; ад теперь без края — дальше не держим)
 const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
 const POSE_FAR = 420;    // м: дальше — поза реже
@@ -62,7 +62,7 @@ export class Diabolos {
         this.everWoke = false;    // сохранение: будили когда-нибудь (ачивка у разбудившего)
         this.log = [];            // (тесты и журнал) что было
         this._sitePoll = 0; this._netT = 0; this._poseT = 0; this._frame = 0;
-        this._gy = new Float64Array(DEVIL.CHAIN_LINKS + 1);
+        this._gy = new Float64Array(201); // (высоты земли под звеньями: звеньев не больше 200)
         this._talkT = 0; this._lines = new Map(); // речь: пауза между репликами, недавние реплики по ситуациям (DiabolosTalk)
         this._told = new Map();   // заклинание → время: «не действует» пишется в журнал не чаще раза в 10 с
         this._ballN = 0;
@@ -151,13 +151,12 @@ export class Diabolos {
         m.userData.farRadius = DEVIL.SCALE * 3.2; // (сфера отсечения — на ВСЮ гору 122 м: без неё FarShape брал 4 м у ног, и он «мигал», когда ноги уходили с экрана — жалоба автора)
         this.one = new FarShape(m);
         this.one.set(true);
-        const n = DEVIL.CHAIN_LINKS;
-        this._makeChain(n, true);
+        this.rope = new ChainRope(Math.ceil(this.site.len * 1.12 / DEVIL.LINK_PITCH)); // (звеньев — на длину цепи этой котловины)
+        this._makeChain(this.rope.n, true);
         this._fires(y);
         this.anchor = anchorModel();
         this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z);
         g.scene?.add(this.anchor);
-        this.rope = new ChainRope();
         this._pose(0);
         this._note('😈 Дьяволос в мире (спит)');
         this._creativeSword();
@@ -1456,7 +1455,7 @@ export class Diabolos {
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? y + 2.5, z: s.anchor.z };
         this.anchor = anchorModel(); this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z); g.scene?.add(this.anchor);
         // цепь: лежит от кольца в сторону места, где он сидел
-        const R = this.rope.ready ? this.rope : new ChainRope();
+        const R = this.rope.ready ? this.rope : new ChainRope(Math.ceil(this.site.len * 1.12 / DEVIL.LINK_PITCH));
         R.free = true;
         if (!R.ready) R.lay(anchor, { x: s.x, y: y + 0.6, z: s.z }, (x, z) => this._ground(x, z, y));
         for (let i = 0; i < 240; i++) R.step(1 / 60, anchor, null, (x, z) => this._ground(x, z, y));
@@ -1689,10 +1688,9 @@ export function rockModel() {
             col.push(k * 1.25, k * 0.95, k * 0.85);
         }
         _rockGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-        _rockGeo = _rockGeo.toNonIndexed ? _rockGeo.toNonIndexed() : _rockGeo;
         _rockGeo.computeVertexNormals();
         _rockGeo.userData.keep = true;
-        _rockMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, flatShading: true, emissive: 0x000000 });
+        _rockMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: 0x000000 });
         _rockMat.name = 'diabolos-rock';
         _rockMat.userData.shared = true;
         _rockMat.onBeforeCompile = (sh) => {
