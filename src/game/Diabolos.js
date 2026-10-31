@@ -22,7 +22,7 @@ import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from '
 import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, JOINTS } from '../entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, JOINTS } from '../entities/DiabolosModel.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
 import { FarShape } from '../core/FarShape.js';
@@ -146,11 +146,7 @@ export class Diabolos {
         this.one = new FarShape(m);
         this.one.set(true);
         const n = DEVIL.CHAIN_LINKS;
-        this.chainMesh = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), n);
-        this.chainMesh.frustumCulled = false; // (звенья по всей котловине: сфера формы им не верна)
-        this.chainMesh.castShadow = true; this.chainMesh.receiveShadow = true;
-        this.chainMesh.name = 'diabolos-chain';
-        g.scene?.add(this.chainMesh);
+        this._makeChain(n, true);
         this.anchor = anchorModel();
         this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z);
         g.scene?.add(this.anchor);
@@ -158,6 +154,24 @@ export class Diabolos {
         this._pose(0);
         this._note('😈 Дьяволос в мире (спит)');
         this._creativeSword();
+    }
+
+    /** Цепь: звенья (InstancedMesh) + ореол божественного света — вторая InstancedMesh с ТЕМИ ЖЕ матрицами (2 отрисовки, без ламп). */
+    _makeChain(n, alive) {
+        const g = this.game;
+        this.chainMesh = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), n);
+        this.chainMesh.frustumCulled = false; // (звенья по всей котловине: сфера формы им не верна)
+        this.chainMesh.castShadow = true; this.chainMesh.receiveShadow = true;
+        this.chainMesh.name = 'diabolos-chain';
+        g.scene?.add(this.chainMesh);
+        this.chainGlow = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), n);
+        this.chainGlow.instanceMatrix = this.chainMesh.instanceMatrix;
+        this.chainGlow.frustumCulled = false;
+        this.chainGlow.name = 'diabolos-chain-glow';
+        this.chainGlow.renderOrder = 2;
+        this.chainGlow.visible = alive;
+        g.scene?.add(this.chainGlow);
+        if (alive) devilChainLight(1);
     }
 
     _unload() {
@@ -169,6 +183,7 @@ export class Diabolos {
             this.model = null; this.one = null;
         }
         if (this.chainMesh) { g.scene?.remove(this.chainMesh); this.chainMesh.dispose?.(); this.chainMesh = null; }
+        if (this.chainGlow) { g.scene?.remove(this.chainGlow); this.chainGlow = null; }
         if (this.anchor) { g.scene?.remove(this.anchor); this.anchor = null; }
         this._dropChests();
         this._remains = false;
@@ -1329,6 +1344,7 @@ export class Diabolos {
             if (t >= D.nextFire) { D.nextFire = t + 1.1 + Math.random(); const a = Math.random() * Math.PI * 2; this._flameBurst(mouthWorld(this.model, _a).clone(), _w.set(Math.cos(a), 0, Math.sin(a)), 70, 0.8); g.sound?.playDevil?.(p, 'fire', 0.9); }
         }
         if (t >= D.chainT && !this.rope.free) { this.rope.free = true; g.sound?.playDevil?.(eyeletWorld(this.model, _a), 'chainBreak', 1.6); this._note('😈 Дьяволос: цепь лопнула'); }
+        if (this.rope.free) { const k = Math.max(0, 1 - (t - D.chainT) / 4); devilChainLight(k); if (this.chainGlow) this.chainGlow.visible = k > 0.01; } // (цепь лопнула — божественный свет гаснет за 4 с)
         if (ph === 'fall' || ph === 'ash') {
             // осыпается золой и светом; рога трескаются (искры у рогов)
             const fx = g.fx;
@@ -1379,10 +1395,8 @@ export class Diabolos {
         if (!R.ready) R.lay(anchor, { x: s.x, y: y + 0.6, z: s.z }, (x, z) => this._ground(x, z, y));
         for (let i = 0; i < 240; i++) R.step(1 / 60, anchor, null, (x, z) => this._ground(x, z, y));
         this.rope = R;
-        this.chainMesh = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), R.n);
-        this.chainMesh.frustumCulled = false; this.chainMesh.name = 'diabolos-chain';
+        this._makeChain(R.n, false); devilChainLight(0); // (мёртв: цепь лопнула и погасла)
         this._linksFrom(R);
-        g.scene?.add(this.chainMesh);
         this._makeChests(y);
     }
     _linksFrom(R) {
@@ -1515,7 +1529,8 @@ export class Diabolos {
         const m = diabolosModel();
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
-        return [m, c, anchorModel(), ballModel(), rockModel()];
+        const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), 2);
+        return [m, c, cg, anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {

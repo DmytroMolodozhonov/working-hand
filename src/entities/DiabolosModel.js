@@ -419,7 +419,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------ материалы
-const DEVIL_U = { uFarK: { value: 1 }, uSeeFar: { value: 1900 }, uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
+const DEVIL_U = { uChainOn: { value: 1 }, uFarK: { value: 1 }, uSeeFar: { value: 1900 }, uTime: { value: 0 }, uHeat: { value: 0.35 }, uWound: { value: new THREE.Vector4(0, -99, 0, 0) }, uWoundK: { value: 0 }, uDissolve: { value: 0 } };
 const NOISE_GLSL = `
 float dh(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float dn(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
@@ -500,8 +500,25 @@ totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * 
     glow.name = 'diabolos-glow';
     glow.onBeforeCompile = (sh) => injectDeath(sh, false, 0.5); // (глаза, пасть, жар — сквозь дымку ярче)
     glow.customProgramCacheKey = () => 'diabolos-glow';
-    const chain = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+    // Цепь сияет божественным светом (слова автора): боги сковали его — звенья светлого металла, по ним бегут волны белого золота
+    // и руны-кольца, металл блестит там, где звенья трутся; свет — эмиссия (без ламп), сквозь дымку ада видна издалека.
+    const chain = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: 0x000000 });
     chain.name = 'diabolos-chain';
+    chain.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = DEVIL_U.uTime; sh.uniforms.uChainOn = DEVIL_U.uChainOn;
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCw; varying vec3 vCl;')
+            .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvec4 cW = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\ncW = instanceMatrix * cW;\n#endif\nvCw = (modelMatrix * cW).xyz; vCl = position;');
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vCw; varying vec3 vCl; uniform float uTime; uniform float uChainOn;')
+            .replace('#include <color_fragment>', `#include <color_fragment>
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.86, 0.66), 0.55 * uChainOn);`)
+            .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float cWave = 0.5 + 0.5 * sin((vCw.x + vCw.z) * 0.22 - uTime * 2.6);
+float cRune = smoothstep(0.82, 1.0, sin(atan(vCl.y, vCl.x) * 9.0 + uTime * 1.3)) * smoothstep(0.2, 0.0, abs(length(vCl.xy) - 1.0));
+float cEdge = smoothstep(0.55, 1.0, abs(vCl.x));
+vec3 cGold = vec3(1.0, 0.86, 0.52), cWhite = vec3(1.0, 0.97, 0.88);
+totalEmissiveRadiance += uChainOn * (cGold * (0.35 + 0.55 * cWave) + cWhite * (cRune * 1.6 + cEdge * 0.35 * cWave));`);
+    };
+    chain.customProgramCacheKey = () => 'diabolos-chain-holy';
     const iron = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }); // (якорь: не растворяется вместе с ним)
     iron.name = 'diabolos-iron';
     for (const m of [skin, hard, glow, chain, iron]) m.userData.shared = true;
@@ -604,6 +621,39 @@ export function anchorModel() {
 }
 /** Материал цепи (Diabolos.js делает InstancedMesh). */
 export const chainMaterial = () => devilMats().chain;
+let _chainGlow = null;
+/** Ореол цепи: те же звенья, раздутые по нормали, мягкое золотое свечение по краю (аддитивно, без ламп). Вторая InstancedMesh с ТЕМИ ЖЕ матрицами. */
+export function chainGlowMaterial() {
+    if (_chainGlow) return _chainGlow;
+    _chainGlow = new THREE.ShaderMaterial({
+        uniforms: { uTime: DEVIL_U.uTime, uChainOn: DEVIL_U.uChainOn },
+        vertexShader: `uniform float uTime; varying float vRim; varying float vW;
+void main() {
+  vec3 p = position + normal * 0.32;
+  vec4 w = vec4(p, 1.0);
+  #ifdef USE_INSTANCING
+  w = instanceMatrix * w;
+  #endif
+  vec4 wp = modelMatrix * w;
+  vW = 0.5 + 0.5 * sin((wp.x + wp.z) * 0.22 - uTime * 2.6);
+  vec4 mv = viewMatrix * wp;
+  vec3 n = normalize(mat3(viewMatrix) * mat3(modelMatrix) * normal);
+  vRim = 1.0 - abs(dot(n, normalize(-mv.xyz)));
+  gl_Position = projectionMatrix * mv;
+}`,
+        fragmentShader: `uniform float uChainOn; varying float vRim; varying float vW;
+void main() {
+  float a = pow(vRim, 2.2) * (0.35 + 0.45 * vW) * uChainOn;
+  gl_FragColor = vec4(vec3(1.0, 0.85, 0.5) * a, a);
+}`,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    _chainGlow.name = 'diabolos-chain-glow';
+    _chainGlow.userData.shared = true;
+    return _chainGlow;
+}
+/** Свет цепи: 1 — сияет; 0 — погасла (он мёртв, цепь лопнула и лежит тёмным металлом). */
+export function devilChainLight(k) { DEVIL_U.uChainOn.value = k; }
 
 // ------------------------------------------------------------------ позы
 const _e = new THREE.Euler(), _t = new THREE.Vector3(), _m4 = new THREE.Matrix4();

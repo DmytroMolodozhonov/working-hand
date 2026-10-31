@@ -3,7 +3,7 @@
 <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script></head>
 <body><script type="module">
 import * as THREE from 'three';
-import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, devilHeat, devilWound } from '/src/entities/DiabolosModel.js';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, chainGlowMaterial, anchorModel, eyeletWorld, devilHeat, devilWound } from '/src/entities/DiabolosModel.js';
 import { Diabolos } from '/src/game/Diabolos.js';
 import { FarShape } from '/src/core/FarShape.js';
 import { ChainRope, DEVIL } from '/src/game/DiabolosRules.js';
@@ -55,6 +55,7 @@ const cm = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), rope.n); cm.
 const a = {}, b = {}, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), R90 = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI / 2);
 for (let i = 0; i < rope.n; i++) { rope.at(i, a); rope.at(i + 1, b); const d = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z).normalize(); Q.setFromUnitVectors(Y, d); if (i % 2) Q.multiply(R90); M.compose(new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2), Q, new THREE.Vector3(1, 1, 1)); cm.setMatrixAt(i, M); }
 scene.add(cm);
+const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), rope.n); cg.instanceMatrix = cm.instanceMatrix; cg.renderOrder = 2; scene.add(cg);
 // герой рядом для масштаба (3,5 м)
 const hero = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 3.5, 12), new THREE.MeshLambertMaterial({ color: 0x3a6ad0 }));
 hero.position.set(+(q.get('hx') || -40), 1.75, +(q.get('hz') || -50)); scene.add(hero);
