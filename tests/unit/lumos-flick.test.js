@@ -65,7 +65,7 @@ function lumosGame() {
     return g;
 }
 
-test('«Flashlight»: only while the Lumos shines; a narrow beam where the wand points (the system\'s one spot light); again — the plain light', () => {
+test('«Flashlight»: only while the Lumos shines; a soft beam where the wand points (the system\'s one spot light); again — the plain light', () => {
     const g = lumosGame(), W = new WandMagic(g);
     const lights = () => { let n = 0; g.scene.traverse((o) => { if (o.isLight) n++; }); return n; };
     const n0 = lights();
@@ -75,7 +75,7 @@ test('«Flashlight»: only while the Lumos shines; a narrow beam where the wand 
     assert.equal(g.combat.fatigue, 100 - 2 - 3);
     W.update(1 / 60);
     assert.ok(W.beam.intensity > 0 && W.beamCone.visible, 'the beam shines');
-    assert.ok(W.beam.angle < 0.3, 'narrow');
+    assert.ok(W.beam.angle < 0.7 && W.beam.penumbra === 1, 'a soft spot, not a wide floodlight');
     assert.equal(lights(), n0, 'no new light in the scene (the shaders stay)');
     W._said.LumosFlashlight = -1e9;
     W.cast('LumosFlashlight', true);
@@ -113,4 +113,25 @@ test('followStep: a damped spring — it reaches its place without wobbling roun
     for (let i = 0; i < 240; i++) { followStep(p, v, target, 1 / 60); over = Math.max(over, p.x - 3); }
     assert.ok(Math.abs(p.x - 3) < 0.02, 'there: ' + p.x);
     assert.ok(over < 0.1, 'hardly past it: ' + over);
+});
+
+test('«Flashlight»: soft, scattered, brighter — a wide spot with a smooth fall to the rim, no sharp cone', async () => {
+    const { LUMOS, beamFalloff, beamIntensity, beamReach } = await import('../../src/game/WandMagic.js');
+    // the old beam: spot 0.2 rad, penumbra .45, strength 2.2 + 1.1·level, reach 26 + 6/level
+    assert.ok(LUMOS.BEAM_SPOT > 2 * 0.2, 'the light spreads wider than the old narrow cone');
+    assert.equal(LUMOS.BEAM_PENUMBRA, 1, 'all of the spot is penumbra');
+    assert.ok(LUMOS.BEAM_ANGLE <= 0.2, 'the scare core of the gargoyles stays as it was');
+    // falls smoothly: 1 on the axis, monotone, 0 at the rim, no jump anywhere
+    assert.equal(beamFalloff(0), 1);
+    assert.ok(Math.abs(beamFalloff(LUMOS.BEAM_SPOT)) < 1e-9);
+    let prev = 1, maxStep = 0;
+    for (let i = 1; i <= 100; i++) { const v = beamFalloff(LUMOS.BEAM_SPOT * i / 100); assert.ok(v <= prev + 1e-12); maxStep = Math.max(maxStep, prev - v); prev = v; }
+    assert.ok(maxStep < 0.05, 'no hard edge: ' + maxStep.toFixed(3));
+    // brighter and farther than before (level 1 and Максима 5; and in a cave's dark)
+    for (const lv of [1, 3, 5]) {
+        assert.ok(beamIntensity(lv, 0) >= 1.1 * (2.2 + lv * 1.1), 'level ' + lv);
+        assert.ok(beamReach(lv) > 26 + 6 * (lv - 1));
+        assert.ok(beamIntensity(lv, 1) > beamIntensity(lv, 0), 'darker cave — stronger');
+    }
+    assert.ok(beamIntensity(5, 1) < 40, 'not blown out to flat white');
 });

@@ -3571,6 +3571,7 @@ export class Game {
         for (const m of glowSamples()) zoo.add(m); // (the rune shell of an enchanted thing)
         zoo.add(logStackModel(0x8b5a2b, 1)); // (a log in the hand: bark and rings — LogModel.js)
         for (const m of this.gargoyles?.sampleModels?.() || []) zoo.add(m); // (the gargoyle's skinned stone, glow and membrane; the ritual's flame wall, glow and cloud)
+        for (const m of this.wandMagic?.sampleModels?.() || []) zoo.add(m); // (the flashlight's soft beam: its shader)
         for (const m of this.sun?.sampleModels?.() || []) zoo.add(m); // («To the Sun»: the beam's column, the heart at the clouds, a ring of shock, a shaft of the sun — SunBeam.js)
         for (const m of this.customPlants?.sampleModels?.() || []) zoo.add(m); // (a plant of one's own: its lit body, its glow)
         for (const m of this.customCreatures?.sampleModels?.() || []) zoo.add(m); // (a creature of one's own: its skin, plain colours, glowing eyes, a see-through wing)

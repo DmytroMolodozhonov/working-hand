@@ -57,10 +57,28 @@ export const LUMOS = {
     LIFE: 15, // s from the throw: then it is gone (time to see where it went — down a cave tunnel)
     FADE: 3, // s of fading out at the end
     AGAIN: 1500, // ms: the same word heard again (the speech's final result) is not a second cast
-    BEAM_ANGLE: 0.2, // rad: the flashlight's narrow beam
-    BEAM_REACH: 26, // m (+ BEAM_PER_LEVEL a level: Максима farther)
-    BEAM_PER_LEVEL: 6,
+    BEAM_ANGLE: 0.2, // rad: the bright core of the flashlight (what scares the gargoyles — Gargoyles.lightCone)
+    BEAM_SPOT: 0.52, // rad: the spot light's outer angle: light is spread wide and fades to nothing at the edge
+    BEAM_PENUMBRA: 1, // the whole spot is penumbra: no sharp rim of the patch on the wall
+    BEAM_DECAY: 1.5, // lighter than the square: it reaches farther, still fades softly
+    BEAM_REACH: 34, // m (+ BEAM_PER_LEVEL a level: Максима farther)
+    BEAM_PER_LEVEL: 8,
+    BEAM_BASE: 2.8, // the spot's strength (+ BEAM_LEVEL a level, + BEAM_CAVE in a cave's dark)
+    BEAM_LEVEL: 1.2,
+    BEAM_CAVE: 1.0,
+    BEAM_HALO: 1.7, // the glow round the tip is this much bigger in the flashlight mode (a soft halo)
+    CONE_ANGLE: 0.38, // rad: half-angle of the beam seen in dust and fog
 };
+
+/** How bright the beam is at an angle off its axis (1 on the axis, 0 at the spot's edge): the light's own smooth fall, no sharp rim. */
+export function beamFalloff(angle, spot = LUMOS.BEAM_SPOT) {
+    const k = Math.min(1, Math.max(0, Math.abs(angle) / spot));
+    return Math.pow(Math.cos(k * Math.PI / 2), 2);
+}
+/** The beam's strength for a level (and how dark the cave is, 0…1). */
+export const beamIntensity = (level, cave = 0) => LUMOS.BEAM_BASE + level * LUMOS.BEAM_LEVEL + cave * LUMOS.BEAM_CAVE;
+/** The beam's reach for a level. */
+export const beamReach = (level) => LUMOS.BEAM_REACH + LUMOS.BEAM_PER_LEVEL * (level - 1);
 
 let _glowTex = null;
 /** A soft glow (a light seen by the eye: bright in the middle, fading out — not a ball). */
@@ -126,11 +144,41 @@ export function followStep(p, v, target, dt, tv = null) {
     p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
 }
 
-/** The flashlight's beam seen in the air: a faint cone, its apex at the origin, along −Y (one shared form). */
-function makeBeamCone() {
-    const geo = new THREE.ConeGeometry(1, 1, 18, 1, true);
+/** The flashlight's beam seen in dust and fog: a soft volume, its apex at the origin, along −Y (one shared form and one shader).
+ *  No sharp outline: the shell fades to the sides (its own normal against the eye), to the apex and to the far end, and a slow noise
+ *  «breathes» in it like dust in the light. */
+const BEAM_VERT = `
+varying vec3 vN; varying vec3 vV; varying vec3 vW; varying float vT;
+void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+    vT = clamp(-position.y, 0.0, 1.0);
+    vW = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * mv;
+}`;
+const BEAM_FRAG = `
+uniform float uTime; uniform float uGain; uniform vec3 uColor;
+varying vec3 vN; varying vec3 vV; varying vec3 vW; varying float vT;
+float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float vn(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+void main() {
+    float side = abs(dot(normalize(vN), normalize(vV)));
+    float core = pow(side, 2.2);                         // dense in the middle of the beam, gone at its rim
+    float along = smoothstep(0.0, 0.16, vT) * pow(1.0 - vT, 1.35);
+    float dust = 0.72 + 0.5 * vn(vW * 0.55 + vec3(0.0, uTime * 0.12, uTime * 0.09)) + 0.2 * vn(vW * 1.7 - vec3(uTime * 0.2, 0.0, 0.0));
+    float a = core * along * dust * uGain;
+    gl_FragColor = vec4(uColor * a, a);
+}`;
+export function makeBeamCone() {
+    const geo = new THREE.ConeGeometry(1, 1, 24, 1, true);
     geo.translate(0, -0.5, 0);
-    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xfff1c8, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uGain: { value: 0.2 }, uColor: { value: new THREE.Color(0xfff1c8) } },
+        vertexShader: BEAM_VERT, fragmentShader: BEAM_FRAG,
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }));
     m.renderOrder = 4;
     m.frustumCulled = false;
     return m;
@@ -174,7 +222,7 @@ export class WandMagic {
         this.lights = [new THREE.PointLight(0xfff6d8, 0, 14, 2), new THREE.PointLight(0xfff6d8, 0, 14, 2)];
         for (const l of this.lights) game.scene.add(l);
         // «Flashlight»: the system's one spot light, from the start too (intensity 0), and its faint cone
-        this.beam = new THREE.SpotLight(0xfff6d8, 0, LUMOS.BEAM_REACH, LUMOS.BEAM_ANGLE, 0.45, 1.5);
+        this.beam = new THREE.SpotLight(0xfff6d8, 0, LUMOS.BEAM_REACH, LUMOS.BEAM_SPOT, LUMOS.BEAM_PENUMBRA, LUMOS.BEAM_DECAY);
         game.scene.add(this.beam); game.scene.add(this.beam.target);
         this.beamCone = makeBeamCone();
         this.beamCone.visible = false;
@@ -373,16 +421,20 @@ export class WandMagic {
     _updateBeam(tip, dir) {
         const l = this.light, on = !!(l && l.beam && tip && dir);
         if (!on) { if (this.beam.intensity) this.beam.intensity = 0; this.beamCone.visible = false; return; }
-        const reach = LUMOS.BEAM_REACH + LUMOS.BEAM_PER_LEVEL * (l.level - 1);
+        const reach = beamReach(l.level);
         this.beam.position.copy(tip);
         this.beam.target.position.copy(tip).addScaledVector(dir, 10);
         this.beam.target.updateMatrixWorld();
         this.beam.distance = reach;
-        this.beam.intensity = 2.2 + l.level * 1.1 + (this.game.world?.cave || 0) * 0.8;
-        const len = Math.min(reach * 0.45, 12);
+        this.beam.intensity = beamIntensity(l.level, this.game.world?.cave || 0);
+        const len = Math.min(reach * 0.5, 16);
         this.beamCone.position.copy(tip);
         this.beamCone.quaternion.setFromUnitVectors(_v.set(0, -1, 0), dir);
-        this.beamCone.scale.set(Math.tan(LUMOS.BEAM_ANGLE) * len, len, Math.tan(LUMOS.BEAM_ANGLE) * len);
+        const rad = Math.tan(LUMOS.CONE_ANGLE) * len;
+        this.beamCone.scale.set(rad, len, rad);
+        const u = this.beamCone.material.uniforms;
+        u.uTime.value = this._flick || 0;
+        u.uGain.value = 0.2 + 0.1 * (this.game.world?.cave || 0); // (denser in the dark: the dust shows)
         this.beamCone.visible = true;
         // the infernal gargoyles flee the beam (no harm — GargoyleRules.TARGETS.LumosFlashlight): four times a second is enough
         const now = performance.now();
@@ -390,6 +442,9 @@ export class WandMagic {
         // the ghosts of the Castle of Ghosts shy from a bright beam a few metres ahead (they vanish for a while — GhostRules.GHOST_SPELLS.Lumos): once a second
         if (now - (this._ghostScareAt || 0) > 1000) { this._ghostScareAt = now; this.game.ghosts?.scare?.(_v.copy(tip).addScaledVector(dir, Math.min(reach * 0.3, 5)), 3.5, false); }
     }
+
+    /** The flashlight's soft beam is compiled at loading (Game.prewarm). */
+    sampleModels() { return [new THREE.Mesh(this.beamCone.geometry, this.beamCone.material)]; }
 
     /** Another player put out their thrown light. */
     outBy(by) {
@@ -505,7 +560,7 @@ export class WandMagic {
     _placeLights() {
         const cam = this.game.camera?.position;
         const src = [];
-        if (this.light) src.push({ p: this.light.glow.position, level: this.light.beam ? Math.max(0.5, this.light.level * 0.35) : this.light.level }); // (a flashlight: the glow round the tip is small — the beam does the lighting)
+        if (this.light) src.push({ p: this.light.glow.position, level: this.light.beam ? Math.max(0.8, this.light.level * 0.6) : this.light.level }); // (a flashlight: a soft light round the tip too, the beam does the rest)
         if (this.follow) src.push({ p: this.follow.pos, level: this.follow.level });
         for (const e of this.remoteFollow.values()) src.push({ p: e.glow.position, level: e.level });
         for (const t of this.thrown) src.push({ p: t.pos, level: t.level * this._fade(t) });
@@ -681,7 +736,7 @@ export class WandMagic {
             const tip = this.tip(new THREE.Vector3(), _v2);
             this._updateBeam(tip, _v2);
             this.light.glow.position.copy(tip);
-            this.light.glow.scale.setScalar(glowSize(this.light.level) * (1 + Math.sin(this._flick * 2.3) * 0.05));
+            this.light.glow.scale.setScalar(glowSize(this.light.level) * (this.light.beam ? LUMOS.BEAM_HALO : 1) * (1 + Math.sin(this._flick * 2.3) * 0.05));
             if (manaRules(g)) g.combat.fatigue = Math.max(0, g.combat.fatigue - dt * 0.08 * this.light.level);
         }
         if (!this.light || !hasWand) this._updateBeam(null, null);

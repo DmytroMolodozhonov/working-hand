@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><title>flashlight</title>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.js" } }</script></head>
+<body style="margin:0;background:#000"><script type="module">
+// «Flashlight» before/after (tools/flashlight-screenshots.mjs): ?mode=old|new &scene=cave|night|wall
+import * as THREE from 'three';
+import { LUMOS, beamIntensity, beamReach, makeBeamCone } from '../src/game/WandMagic.js';
+const q = new URLSearchParams(location.search), mode = q.get('mode') || 'new', sc = q.get('scene') || 'cave';
+const W = +q.get('w') || 640, H = +q.get('h') || 400;
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(W, H); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(sc === 'night' ? 0x050914 : 0x020203);
+s.fog = new THREE.FogExp2(sc === 'night' ? 0x050914 : 0x020203, 0.012);
+const cam = new THREE.PerspectiveCamera(70, W / H, 0.1, 200); cam.position.set(1.2, 1.7, 3); cam.lookAt(0, 1.4, -14);
+s.add(new THREE.AmbientLight(0x303850, sc === 'night' ? 0.45 : 0.08));
+const mat = new THREE.MeshStandardMaterial({ color: 0x8a7f72, roughness: 0.95 });
+const rnd = (() => { let a = 7; return () => (a = (a * 1664525 + 1013904223) >>> 0) / 4294967296; })();
+const addBox = (x, y, z, w, h, d) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); s.add(m); };
+addBox(0, -0.5, -10, 40, 1, 40);
+if (sc === 'wall') addBox(0, 4, -9, 14, 10, 1); else { addBox(0, 4, -22, 24, 12, 1); addBox(-8, 4, -10, 1, 10, 24); addBox(8, 4, -10, 1, 10, 24);
+    for (let i = 0; i < 26; i++) addBox((rnd() - .5) * 14, rnd() * 3, -4 - rnd() * 16, 0.8 + rnd() * 1.6, 0.8 + rnd() * 2.4, 0.8 + rnd() * 1.6); }
+const level = +q.get('level') || 1, cave = sc === 'cave' ? 1 : 0;
+const tip = new THREE.Vector3(0.9, 1.9, 2.2), dir = new THREE.Vector3(-0.04, -0.03, -1).normalize();
+let beam, cone;
+if (mode === 'old') {
+    beam = new THREE.SpotLight(0xfff6d8, 2.2 + level * 1.1 + cave * 0.8, 26 + 6 * (level - 1), 0.2, 0.45, 1.5);
+    const len = Math.min((26 + 6 * (level - 1)) * 0.45, 12), rad = Math.tan(0.2) * len;
+    const geo = new THREE.ConeGeometry(1, 1, 18, 1, true); geo.translate(0, -0.5, 0);
+    cone = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xfff1c8, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    cone.scale.set(rad, len, rad);
+} else {
+    beam = new THREE.SpotLight(0xfff6d8, beamIntensity(level, cave), beamReach(level), LUMOS.BEAM_SPOT, LUMOS.BEAM_PENUMBRA, LUMOS.BEAM_DECAY);
+    cone = makeBeamCone(); const len = Math.min(beamReach(level) * 0.5, 16), rad = Math.tan(LUMOS.CONE_ANGLE) * len;
+    cone.scale.set(rad, len, rad); cone.material.uniforms.uGain.value = 0.2 + 0.1 * cave; cone.material.uniforms.uTime.value = 3;
+    const pt = new THREE.PointLight(0xfff6d8, Math.max(0.8, level * 0.6) * 1.0, 10 + level * 6, 2); pt.position.copy(tip); s.add(pt);
+}
+beam.position.copy(tip); beam.target.position.copy(tip).addScaledVector(dir, 10); s.add(beam, beam.target);
+cone.position.copy(tip); cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir); s.add(cone);
+r.render(s, cam); window.__ready = true;
+</script></body></html>
