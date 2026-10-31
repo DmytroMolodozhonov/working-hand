@@ -40,12 +40,99 @@ export const ARM = {
     UPPER: 1.0, FORE: 0.9, // the game's bones
     GIRDLE_UP: 0.12, GIRDLE_BACK: 0.14, GIRDLE_FWD: 0.12, // the shoulder girdle's travel (m)
     GIRDLE_K: 0.35, // its smoothing per frame
+    // ——— steadiness (the author: «когда я поднимаю руку вверх, она может шататься, дрожать»; tools/armstab.mjs) ———
+    // An arm in the picture's plane (down, up, sideways) shows nearly its whole length, and there √(L² − l²) is steepest:
+    // the camera's 2–3 % of noise on l made a depth of ±15°, and the in front / behind choice flipped on it several times
+    // a second — the raised arm swung ±17° forward and back on its own. So:
+    // a segment seen at ≥ (1 − dz) of its length lies in the plane (no depth out of the noise; the rest rescaled): dz = NOISE_K × the
+    // noise of l / L, learnt on this camera and this distance (a far player is noisier) while the arm is still
+    PLANE_E: 0.2, // the depth's softness at the plane (planeDepth)
+    NOISE_K: 3.5, DZ_LO: 0.02, DZ_HI: 0.08,
+    NOISE_PX: 0.0028, // the prior: the camera's noise on a segment's length in the picture (height units; ≈ 1 cm of a real arm)
+    NOISE_MEAN: 0.12, NOISE_T: 2.0, // s: the length's own mean (its noise is what is off it); how slowly the noise is learnt
+    NOISE_STILL: 1.2, // rad/s: only while the segment barely turns (a moving arm's length changes on purpose)
+    REBASE: 0.3, // a side changing with the segment nearer the plane than this (of its length) glides there (DirFilter.rebase)
+    SIGN_HYST: 0.06, // a side (in front / behind) changes only when the other is better by this much (no flicker on noise)
+    // the drawn directions, an adaptive 1€ on each segment's direction (the joints' angles, not the points): still — barely
+    // moves (the noise cut), moving — follows at once (a swing, a throw keep their speed: tools/armstab.mjs, throwbench)
+    F_MIN: 0.4, // Hz: the cutoff when still
+    F_BETA: 12, // Hz more per rad/s of the arm's turn …
+    F_W0: 1.2, // … past this (rad/s: the camera's noise, averaged, looks like a slow turn — it must not open the filter)
+    F_DCUT: 3, // Hz: how fast the turn's speed is followed
+    F_MAX: 30, // Hz
+    D_MIN: 1, // Hz: a segment's depth (out of the picture's plane) when the arm is still …
+    D_NEAR: 0.25, D_FAR: 60, // … and at once when it is well out of the plane (> D_NEAR of the segment: the noise there is small)
+    D_JUMP: 0.1, D_FAST: 80, // … and at once when it changes by more than this share of the segment (a real move in depth)
 };
+
+/**
+ * A unit direction's adaptive 1€ filter (pure, fixed memory): the cutoff from the turn's speed — the signed velocity averaged
+ * (the camera's noise mostly cancels in it, unlike |the step|, which the noise alone keeps high) — past a dead band: still —
+ * F_MIN (the noise cut), turning — up to F_MAX (a swing, a throw keep their speed). tools/armstab.mjs chose the numbers:
+ * the camera's noise, already smoothed upstream (PoseStabilizer), is a slow wander no filter tells from a slow move without a
+ * lag — these halve it and keep a swing ≤ 60 ms late; a hard or soft dead band, a look ahead gave less for more lag.
+ */
+export class DirFilter {
+    constructor(o = ARM) {
+        this.o = o; this.on = false;
+        this.x = 0; this.y = 0; this.z = 0; // what is drawn
+        this.px = 0; this.py = 0; this.pz = 0; this.vx = 0; this.vy = 0; this.vz = 0; // the input before, its velocity
+        this.w = 0; // the turn's speed now (rad/s)
+    }
+    reset() { this.on = false; this.w = 0; }
+    /** The input jumps here by itself (the solver chose the other side): not a turn — it must not open the filter. */
+    rebase(x, y, z) { if (this.on) { this.px = x; this.py = y; this.pz = z; } }
+    /** In: a unit direction (x, y, z), the frame's dt (s). The drawn direction into `out`. */
+    step(x, y, z, dt, out) {
+        const o = this.o;
+        if (!this.on || !(dt > 0) || dt > 0.5) {
+            this.x = this.px = x; this.y = this.py = y; this.z = this.pz = z;
+            this.vx = this.vy = this.vz = 0; this.w = 0; this.on = true;
+        } else {
+            const ad = alpha(o.F_DCUT, dt);
+            this.vx += ad * ((x - this.px) / dt - this.vx); this.vy += ad * ((y - this.py) / dt - this.vy); this.vz += ad * ((z - this.pz) / dt - this.vz);
+            this.px = x; this.py = y; this.pz = z;
+            this.w = Math.hypot(this.vx, this.vy, this.vz);
+            const a = alpha(Math.min(o.F_MAX, o.F_MIN + o.F_BETA * Math.max(0, this.w - o.F_W0)), dt);
+            this.x += (x - this.x) * a; this.y += (y - this.y) * a; this.z += (z - this.z) * a;
+            const l = Math.hypot(this.x, this.y, this.z) || 1;
+            this.x /= l; this.y /= l; this.z /= l;
+        }
+        out.x = this.x; out.y = this.y; out.z = this.z;
+        return out;
+    }
+}
+
+function alpha(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
 
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 
+function noiseState() { return { m: 0, v: -1 }; }
+
+/**
+ * The noise of a segment's length (l / L): learnt while it is still, the prior until then (NOISE_PX / L). Returns dz.
+ */
+function planeDz(N, L, l, w, dt) {
+    const q = l / (L || 1), prior = ARM.NOISE_PX / (L || 1);
+    if (N.v < 0) { N.m = q; N.v = prior * prior; }
+    N.m += (q - N.m) * alpha(1 / (2 * Math.PI * ARM.NOISE_MEAN), dt);
+    if (w < ARM.NOISE_STILL) { const r = q - N.m; N.v += (r * r - N.v) * alpha(1 / (2 * Math.PI * ARM.NOISE_T), dt); }
+    // (never far below the prior: a still arm in a perfectly still picture must not make the depth twitchy again)
+    const sd = noiseSd(N, L);
+    return clamp(ARM.NOISE_K * sd, ARM.DZ_LO, ARM.DZ_HI);
+}
+
+/** The camera's noise of a segment's direction (rad): as of its length (the same picture noise across it). */
+function noiseSd(N, L) { const prior = ARM.NOISE_PX / (L || 1); return Math.max(N.v > 0 ? Math.sqrt(N.v) : prior, prior * 0.5); }
+
+function depthStep(prev, d, L, w, dt) {
+    if (prev < 0 || !(dt > 0)) return d;
+    const k = alpha(Math.min(ARM.F_MAX, ARM.D_MIN + ARM.F_BETA * Math.max(0, w - ARM.F_W0) + ARM.D_FAST * Math.max(0, Math.abs(d - prev) / L - ARM.D_JUMP)), dt);
+    return prev + (d - prev) * k;
+}
+
 function sideState() {
-    return { Lu: 0, Lf: 0, su: -1, sf: -1, zu: 0, zf: 0, gx: 0, gy: 0, gz: 0, seen: false };
+    return { Lu: 0, Lf: 0, su: -1, sf: -1, zu: 0, zf: 0, gx: 0, gy: 0, gz: 0, du: -1, df: -1, seen: false, fu: new DirFilter(), ff: new DirFilter(), nu: noiseState(), nf: noiseState() };
 }
 
 export class ArmSolver {
@@ -82,14 +169,17 @@ export class ArmSolver {
         // learn this player's lengths
         if (!S.seen) { S.Lu = Math.max(pu, lu); S.Lf = Math.max(pf, lf); S.seen = true; }
         S.Lu = this._learn(S.Lu, lu, pu); S.Lf = this._learn(S.Lf, lf, pf);
-        const du = Math.sqrt(Math.max(0, S.Lu * S.Lu - lu * lu)), df = Math.sqrt(Math.max(0, S.Lf * S.Lf - lf * lf));
+        let du = planeDepth(S.Lu, lu, planeDz(S.nu, S.Lu, lu, S.fu.w, dt)), df = planeDepth(S.Lf, lf, planeDz(S.nf, S.Lf, lf, S.ff.w, dt));
+        // (the depth itself smoothed — still: slowly, turning: at once: a picture whose length dipped past the noise band put
+        // the arm 7° out of the plane for one picture, and that jump opened the direction's filter — a twitch of 10 cm)
+        du = S.du = depthStep(S.du, du, S.Lu, S.fu.w, dt); df = S.df = depthStep(S.df, df, S.Lf, S.ff.w, dt);
         const ru = du / S.Lu, rf = df / S.Lf; // how far out of the picture's plane (0 … 1)
         // the camera's depth (bigger z = further from the camera = behind), smoothed
         const zu = ((elbow.z || 0) - (shoulder.z || 0)) * aspect, zf = ((wrist.z || 0) - (elbow.z || 0)) * aspect;
         S.zu += (zu - S.zu) * ema(ARM.Z_SMOOTH); S.zf += (zf - S.zf) * ema(ARM.Z_SMOOTH);
         const eu = clamp(S.zu / (ARM.Z_FULL * S.Lu), -1.5, 1.5), ef = clamp(S.zf / (ARM.Z_FULL * S.Lf), -1.5, 1.5);
         const sx = side === 'left' ? -1 : 1;
-        let best = Infinity, bsu = S.su, bsf = S.sf;
+        let best = Infinity, bsu = S.su, bsf = S.sf, cur = Infinity;
         for (let k = 0; k < 4; k++) {
             const su = k & 1 ? 1 : -1, sf = k & 2 ? 1 : -1;
             let c = 0;
@@ -106,10 +196,22 @@ export class ArmSolver {
             const wx = ex + f.x * ARM.FORE, wy = ey + f.y * ARM.FORE, wz = ez + f.z * ARM.FORE;
             if (Math.abs(wx) < ARM.TORSO_X && wz > -ARM.TORSO_Z && wz < ARM.TORSO_Z && wy > ARM.TORSO_Y0 && wy < ARM.TORSO_Y1) c += ARM.ANATOMY;
             if (Math.abs(ex) < ARM.TORSO_X && ez > -ARM.TORSO_Z && ez < ARM.TORSO_Z && ey > ARM.TORSO_Y0 && ey < ARM.TORSO_Y1) c += ARM.ANATOMY;
+            if (su === S.su && sf === S.sf) cur = c;
             if (c < best - 1e-9) { best = c; bsu = su; bsf = sf; }
         }
+        if (cur - best < ARM.SIGN_HYST) { bsu = S.su; bsf = S.sf; } // (the other side only when clearly better)
+        const flipU = bsu !== S.su, flipF = bsf !== S.sf;
         S.su = bsu; S.sf = bsf;
-        const u = this._dir(out.u, ux, uy, bsu * du), f = this._dir(out.f, fx, fy, bsf * df);
+        let u = this._dir(out.u, ux, uy, bsu * du), f = this._dir(out.f, fx, fy, bsf * df);
+        // (the other side: the drawn arm glides there — the jump is the solver's, not the player's turn: it must not open the
+        // filter, or the arm was thrown 20–40 cm in a frame)
+        // (near the plane only: a flip far out of it is a real move the solver saw clearly — drawn at once)
+        if (flipU && du < ARM.REBASE * S.Lu) S.fu.rebase(u.x, u.y, u.z);
+        if (flipF && df < ARM.REBASE * S.Lf) S.ff.rebase(f.x, f.y, f.z);
+        out.rawU = out.rawU || { x: 0, y: 0, z: 0 }; out.rawF = out.rawF || { x: 0, y: 0, z: 0 };
+        out.rawU.x = u.x; out.rawU.y = u.y; out.rawU.z = u.z; out.rawF.x = f.x; out.rawF.y = f.y; out.rawF.z = f.z;
+        // the drawn directions: still — steady, moving — at once (DirFilter)
+        if (this.filter !== false) { u = S.fu.step(u.x, u.y, u.z, dt, u); f = S.ff.step(f.x, f.y, f.z, dt, f); }
         // the shoulder girdle: up with a raised arm, back with an arm drawn behind, forward with a reach
         const reachF = Math.max(0, -(u.z * ARM.UPPER + f.z * ARM.FORE) / (ARM.UPPER + ARM.FORE));
         const gy = ARM.GIRDLE_UP * Math.max(0, u.y);
@@ -140,6 +242,18 @@ export class ArmSolver {
         o.x = x / l; o.y = y / l; o.z = d / l;
         return o;
     }
+}
+
+/**
+ * A segment's depth (out of the picture's plane) from its whole length L and the length l it shows: √(L² − l²), but a
+ * segment seen at ≥ (1 − dz) of its length lies in the plane — there √ is steepest and the camera's noise on l
+ * alone made ±15° of depth (the raised arm swung forward and back by itself).
+ */
+export function planeDepth(L, l, dz = ARM.DZ_LO) {
+    const q = Math.min(1, l / (L * (1 - dz) || 1)), e = Math.max(0, 1 - q * q), E2 = ARM.PLANE_E * ARM.PLANE_E;
+    // (√e is infinitely steep at e = 0: the noise just past the band still kicked out ±10°; e / √(e + E²) is not — the same
+    // depth for a segment well out of the plane, a gentle one near it)
+    return L * e * Math.sqrt(1 + E2) / Math.sqrt(e + E2);
 }
 
 /** The old way (Character.getRelativeDirection), kept for comparison (tools/armbench.mjs). Body space, z back. */

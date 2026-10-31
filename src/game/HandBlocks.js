@@ -68,17 +68,84 @@ export function handPushBack(S, points, solid, out, gap = HAND_GAP) {
     return best > 0 ? out : null;
 }
 
-const _e = new THREE.Vector3();
+/**
+ * Where a point P inside something is put on its surface, seen from O (outside): the first solid point E on O → P; the face
+ * entered there (its normal, by the block's cell crossed); P slid along that face to it (the hand lies on the wall WHERE the
+ * player put it, not dragged back towards the shoulder) — if that place is free and seen from O; else E itself. The move
+ * P → there into `out` (null: P is free from O).
+ */
+export function slideOut(O, P, solid, out, gap = HAND_GAP, pref = null) {
+    const e = firstSolid(O, P, solid, _e);
+    slideOut.n.set(0, 0, 0);
+    if (!e) return null;
+    // (the face the hand lay on last frame first, if it still takes the hand out the same short way: on a stepped slope a
+    // fingertip near a step's edge must not swap between the step's top and its front frame by frame)
+    if (pref && pref.lengthSq() > 0.5 && outAlong(P, pref, solid, _sl, gap) && !firstSolid(O, _sl, solid, _e2)) {
+        slideOut.n.copy(pref);
+        return out.subVectors(_sl, P);
+    }
+    const dx = P.x - O.x, dy = P.y - O.y, dz = P.z - O.z, len = Math.hypot(dx, dy, dz) || 1;
+    const ux = dx / len, uy = dy / len, uz = dz / len;
+    // the face crossed: the cell (as the world's blocks: x, z rounded, y + 1.5 floored) that changes just past E
+    const fx = e.x + ux * 0.03, fy = e.y + uy * 0.03, fz = e.z + uz * 0.03;
+    let nx = 0, ny = 0, nz = 0;
+    const cx = Math.round(fx) - Math.round(e.x), cy = Math.floor(fy + 1.5) - Math.floor(e.y + 1.5), cz = Math.round(fz) - Math.round(e.z);
+    const ax = cx ? Math.abs(ux) : -1, ay = cy ? Math.abs(uy) : -1, az = cz ? Math.abs(uz) : -1;
+    if (ax >= ay && ax >= az && ax > 0) nx = -Math.sign(ux); else if (ay >= az && ay > 0) ny = -Math.sign(uy); else if (az > 0) nz = -Math.sign(uz);
+    if (nx || ny || nz) {
+        const d = (e.x - P.x) * nx + (e.y - P.y) * ny + (e.z - P.z) * nz + gap; // (how far P is under the face)
+        const sx = P.x + nx * d, sy = P.y + ny * d, sz = P.z + nz * d;
+        _sl.set(sx, sy, sz);
+        if (d > 0 && !solid(sx, sy, sz) && !firstSolid(O, _sl, solid, _e2)) { slideOut.n.set(nx, ny, nz); return out.set(nx * d, ny * d, nz * d); }
+    }
+    // (a corner, a slope, not a block: back along the line to where it went in)
+    return out.set(e.x - ux * gap - P.x, e.y - uy * gap - P.y, e.z - uz * gap - P.z);
+}
+
+slideOut.n = new THREE.Vector3(); // the face's normal the last slideOut slid along (0: it went back along the line)
+
+/** P moved along n out of the solid (to its first free point + gap, ≤ 0.6 m) into out; false — not out within that. */
+function outAlong(P, n, solid, out, gap) {
+    let lo = 0, hi = -1;
+    for (let k = 1; k <= 8; k++) { const t = k * 0.075; if (!solid(P.x + n.x * t, P.y + n.y * t, P.z + n.z * t)) { hi = t; break; } lo = t; }
+    if (hi < 0) return false;
+    for (let i = 0; i < 5; i++) { const m = (lo + hi) / 2; if (solid(P.x + n.x * m, P.y + n.y * m, P.z + n.z * m)) lo = m; else hi = m; }
+    out.set(P.x + n.x * (hi + gap), P.y + n.y * (hi + gap), P.z + n.z * (hi + gap));
+    return !solid(out.x, out.y, out.z);
+}
+
+const _e = new THREE.Vector3(), _e2 = new THREE.Vector3(), _sl = new THREE.Vector3();
 const _S = new THREE.Vector3();
+const _O = new THREE.Vector3();
+const _C = new THREE.Vector3();
 const _W = new THREE.Vector3();
+const _E0 = new THREE.Vector3();
+const _pole = new THREE.Vector3();
 const _push = new THREE.Vector3();
-const _keep = new THREE.Vector3();
+const _p1 = new THREE.Vector3();
+const _D = new THREE.Vector3();
+const _T = new THREE.Vector3();
+const _ax = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _base = new THREE.Vector3();
+
+/** How a hand at a wall is held (HandBlocks.keepOut). */
+export const HOLD = {
+    PASSES: 3, // the arm bent again while a fingertip is still in (the hand turns with the forearm)
+    SNAP: 0.02, // m: the needed hold changing by less than this follows at once (the hand stays ON the surface, no lag, no shake)
+    BACK_T: 0.05, // s: a hold that is no longer needed (the hand taken out of the wall) lets go this smoothly (~0.15 s)
+    BEND_T: 0.08, // s
+    BEND_DEF: 0.3, // m: the usual way's weight against the player's elbow off the line (a bent arm: 0.3…0.9 off it)
+    SWIVEL: [0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, 3.0], // rad: the elbow turned about the shoulder–hand line, nearest first
+};
+
+const hold = () => ({ K: new THREE.Vector3(), pole: new THREE.Vector3(), sw: 0, fail: 0, n: new THREE.Vector3(), nPrev: new THREE.Vector3() });
 
 export class HandBlocks {
     constructor(game) {
         this.game = game;
         this.pushed = { left: 0, right: 0 }; // m the hand was held back this frame (tests, other systems)
-        this._held = { left: new THREE.Vector3(), right: new THREE.Vector3() }; // the push of the last frames (no trembling at a wall)
+        this._mem = new WeakMap(); // per body: each hand's hold (the last frames: no trembling at a wall), its elbow's swivel
         this._at = { left: 0, right: 0 };
         this._pts = Array.from({ length: 8 }, () => new THREE.Vector3());
         this.solid = (x, y, z) => this._solid(x, y, z);
@@ -125,43 +192,156 @@ export class HandBlocks {
         // never goes into the counter either — the hand stops so that the thing lies on it
         const low = ch === this.game.character ? this.game.items?.held?.[side]?.low : null;
         if (low) { out[n] = out[n] || new THREE.Vector3(); out[n].copy(out[0]).add(low); n++; }
-        return out.slice(0, n);
+        this._n = n;
+        return out;
     }
 
-    /** Hold one body's hands out of the blocks (after its arms are posed this frame). */
-    keepOut(ch) {
+    /** The biggest move that takes every point of the hand out (slid along the surface), from O; null — all free. */
+    _need(O, ch, side, out, M) {
+        const pts = this._points(ch, side), n = this._n;
+        let best = 0;
+        for (let i = 0; i < n; i++) {
+            const m = slideOut(O, pts[i], this.solid, _p1, HAND_GAP, M?.nPrev);
+            if (!m) continue;
+            const l = m.lengthSq();
+            if (l > best) { best = l; out.copy(m); if (M) M.n.copy(slideOut.n); }
+        }
+        return best > 0 ? out : null;
+    }
+
+    /**
+     * Hold one body's hands out of the blocks (after its arms are posed this frame). No feedback: each frame the hold is found
+     * from the arm as posed now (the camera's), then smoothed on its own — the old way bent the arm by the last frames'
+     * remembered push and measured again from there, so a hand at a wall or a slope went in and out frame by frame
+     * («истерика»), the elbow jumped to a default bend at every touch, and a shoulder already in the wall (standing
+     * sideways at it: the shoulder is 0.7 from the body's middle, the body's edge 0.48) let the whole arm through.
+     */
+    keepOut(ch, dtIn = null) {
         if (!ch?.leftArmAnchor || !ch.reachHand) return;
+        let mem = this._mem.get(ch);
+        if (!mem) this._mem.set(ch, mem = { left: hold(), right: hold() });
+        const now = performance.now();
         for (const side of ['left', 'right']) {
             if (ch.limbs && ch.limbs[side + 'Arm'] != null) continue; // (a cut-off arm: its stump)
-            (side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor).getWorldPosition(_S);
-            let total = 0;
-            // the push is remembered: it grows at once (never into the wall) and lets go slowly, so a hand
-            // pressed on a wall does not tremble in and out of it frame by frame
-            const keep = ch === this.game.character ? this._held[side] : _keep.set(0, 0, 0);
-            const now = performance.now(), dt = Math.min(0.1, Math.max(0, (now - (this._at[side] || now)) / 1000));
+            const M = mem[side];
+            const dt = dtIn ?? Math.min(0.1, Math.max(0, (now - (this._at[side] || now)) / 1000));
             if (ch === this.game.character) this._at[side] = now;
-            keep.multiplyScalar(Math.exp(-14 * dt));
-            if (keep.lengthSq() > 1e-8) ch.reachHand(side, ch.getHandWorldPosition(side, _W).add(keep), 1, 0);
-            for (let pass = 0; pass < 2; pass++) { // (the arm bent once more, if a fingertip is still in)
-                const push = handPushBack(_S, this._points(ch, side), this.solid, _push);
-                if (!push) break;
-                total += push.length();
-                keep.add(push);
-                ch.reachHand(side, ch.getHandWorldPosition(side, _W).add(push), 1, 0);
+            const arm = side === 'left' ? ch.leftArmAnchor : ch.rightArmAnchor, elbow = side === 'left' ? ch.leftElbowAnchor : ch.rightElbowAnchor;
+            arm.getWorldPosition(_S);
+            // where the hand is looked at from: the shoulder — or, when the shoulder itself is in the wall, the point where the
+            // line from the chest to it enters the wall (a hand never goes on through)
+            if (!this._origin(arm, _S, _O)) { M.K.set(0, 0, 0); if (ch === this.game.character) this.pushed[side] = 0; continue; }
+            // the arm as posed now: its hand, its elbow's bend (kept while the hand is held)
+            ch.getHandWorldPosition(side, _W);
+            elbow.getWorldPosition(_E0);
+            this._bendWay(ch, side, _S, _E0, _W, _pole);
+            // (and smoothed: its way turns over ~0.1 s, never flips in a frame)
+            if (M.pole.lengthSq() > 1e-8 && dt > 0) { M.pole.lerp(_pole.normalize(), 1 - Math.exp(-dt / HOLD.BEND_T)); _pole.copy(M.pole); }
+            M.pole.copy(_pole.normalize());
+            // the hold this frame needs (from the arm as posed — never from the last frame's bend)
+            _D.set(0, 0, 0);
+            let bent = false;
+            M.n.set(0, 0, 0);
+            for (let pass = 0; pass < HOLD.PASSES; pass++) {
+                const m = this._need(_O, ch, side, _push, M);
+                if (!m) break;
+                _D.add(m);
+                ch.reachHand(side, _T.copy(_W).add(_D), 1, 0, _pole);
+                bent = true;
             }
-            total = Math.max(total, keep.length());
-            if (ch === this.game.character) this.pushed[side] = total;
+            // smoothed on its own: more, or as good as the same — at once (never into the wall; the hand stays ON the surface
+            // while the player presses: the camera's noise into the wall is cut there), less — let go smoothly, never into it
+            const K = M.K;
+            if (_D.lengthSq() >= K.lengthSq() - 1e-8 || K.distanceTo(_D) < HOLD.SNAP) K.copy(_D);
+            else {
+                K.lerp(_D, 1 - Math.exp(-Math.max(0, dt) / HOLD.BACK_T));
+                if (K.lengthSq() < 1e-8) K.set(0, 0, 0);
+                ch.reachHand(side, _T.copy(_W).add(K), 1, 0, _pole);
+                bent = true;
+                const m = this._need(_O, ch, side, _push, M);
+                if (m) { K.add(m); ch.reachHand(side, _T.copy(_W).add(K), 1, 0, _pole); }
+            }
+            M.nPrev.copy(M.n);
+            // the elbow (and the arm's middle) out of the wall too: turned about the shoulder–hand line, the nearest way free
+            this._elbowOut(ch, side, arm, elbow, M, bent ? _T.copy(_W).add(K) : _T.copy(_W));
+            if (ch === this.game.character) this.pushed[side] = K.length();
         }
     }
 
-    update() {
+    /**
+     * The way the elbow bends when the hand is held: the player's own elbow off the shoulder–hand line — and, for an arm
+     * nearly straight (that off is only the camera's noise, a random way every frame: the held arm's elbow jumped about), a
+     * human's usual way (down, out, a little back) weighs in, so the bend stays put.
+     */
+    _bendWay(ch, side, S, E, H, out) {
+        _ax.subVectors(H, S);
+        const l = _ax.length();
+        out.subVectors(E, S);
+        if (l < 1e-6) return out;
+        _ax.multiplyScalar(1 / l);
+        out.addScaledVector(_ax, -out.dot(_ax)); // (off the line)
+        ch.group.getWorldQuaternion(_q);
+        _C.set(side === 'left' ? -0.3 : 0.3, -1, 0.35).applyQuaternion(_q);
+        _C.addScaledVector(_ax, -_C.dot(_ax));
+        const lc = _C.length();
+        if (lc > 1e-6) out.addScaledVector(_C, HOLD.BEND_DEF / lc);
+        return out;
+    }
+
+    /** O: the shoulder S, or (S in a wall) the chest's line to it where it enters the wall; false — even the chest is in. */
+    _origin(arm, S, O) {
+        if (!this.solid(S.x, S.y, S.z)) { O.copy(S); return true; }
+        // (the chest: the body's middle at the shoulder's height — the arm's anchor's parent, x 0)
+        arm.parent.localToWorld(_C.set(0, arm.position.y, arm.position.z));
+        if (this.solid(_C.x, _C.y, _C.z)) return false;
+        const e = firstSolid(_C, S, this.solid, _e);
+        if (!e) { O.copy(S); return true; }
+        O.copy(e).addScaledVector(_p1.subVectors(_C, S).normalize(), HAND_GAP);
+        return true;
+    }
+
+    /** The elbow, the upper arm's and the forearm's middles in a wall: the elbow turned about the shoulder–hand line. */
+    _elbowOut(ch, side, arm, elbow, M, H) {
+        const S = arm.getWorldPosition(_S);
+        if (!this._armIn(S, elbow)) { M.sw *= 0.8; M.fail = 0; return; }
+        // (no way round last time — the whole arm in the rock, the shoulder in a wall: looked for again only now and then)
+        if (M.fail > 0 && (M.fail++ % 8) !== 0) return;
+        // (nearest the last frame's turn first: no jumping between two ways round)
+        const tries = HOLD.SWIVEL;
+        _ax.subVectors(H, S);
+        if (_ax.lengthSq() < 1e-6) return;
+        _ax.normalize();
+        elbow.getWorldPosition(_E0);
+        const base = _base.subVectors(_E0, S);
+        let done = false;
+        for (let i = -1; i < tries.length && !done; i++) {
+            const a = i < 0 ? M.sw : M.sw + tries[i];
+            if (i < 0 && !M.sw) continue;
+            _q.setFromAxisAngle(_ax, a);
+            _pole.copy(base).applyQuaternion(_q);
+            ch.reachHand(side, H, 1, 0, _pole);
+            if (!this._armIn(arm.getWorldPosition(_S), elbow)) { M.sw = a; done = true; }
+        }
+        if (!done) { _pole.copy(base); ch.reachHand(side, H, 1, 0, _pole); M.fail = Math.max(1, M.fail); } // (no way: as it was)
+        else M.fail = 0;
+    }
+
+    _armIn(S, elbow) {
+        const E = elbow.getWorldPosition(_C);
+        if (this.solid(E.x, E.y, E.z)) return true;
+        if (this.solid((S.x + E.x) / 2, (S.y + E.y) / 2, (S.z + E.z) / 2)) return true;
+        const F = _e2.set(0, 0, 0.45).applyMatrix4(elbow.matrixWorld); // (the forearm's middle: 0.9 / 2)
+        return this.solid(F.x, F.y, F.z);
+    }
+
+    update(dt = null) {
         const g = this.game;
         if (!g.character || g.flight?.active) return; // (flying: the hands are the wings' — nothing in reach)
-        this.keepOut(g.character);
+        this.keepOut(g.character, dt);
     }
 
     /** The other players' heroes, as drawn here (after they are posed this frame). */
-    updateRemotes() {
-        for (const r of this.game.remotes?.values?.() || []) if (!r.dead && r.character?.group?.visible) this.keepOut(r.character);
+    updateRemotes(dt = null) {
+        for (const r of this.game.remotes?.values?.() || []) if (!r.dead && r.character?.group?.visible) this.keepOut(r.character, dt);
     }
 }

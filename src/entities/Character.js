@@ -361,7 +361,9 @@ export class VoxelCharacter {
     updateArmsLookAt(poseData, dt = 1 / 60) {
         // 0.55 per frame at 60 FPS, frame-rate independent (the pose is already smoothed
         // upstream; more smoothing here only made the arms trail behind the player)
-        const armK = 1 - Math.pow(0.45, Math.min(0.1, dt) * 60);
+        // (the arm's own filter is ArmSolver's — still steady, moving at once — DirFilter: one smoothing, not two; this one is
+        // only for a pose without the solver's picture)
+        const armK = this.armSmooth === false ? 1 : 1 - Math.pow(0.45, Math.min(0.1, dt) * 60);
         this.restoreArms(); // (from the tracked arms, not from a hand shown holding a bow's string)
         if (!poseData.leftShoulder || !poseData.leftElbow || !poseData.leftWrist ||
             !poseData.rightShoulder || !poseData.rightElbow || !poseData.rightWrist) {
@@ -375,6 +377,7 @@ export class VoxelCharacter {
         // the arms as a human arm moves (ArmSolver: this player's lengths, in front of / behind the body from the camera's
         // depth and anatomy, the shoulder girdle) — the old getRelativeDirection always put the arm in front
         const AS = this.armSolver || (this.armSolver = new ArmSolver());
+        if (this.armSmooth === undefined) this.armSmooth = false; // (ArmSolver filters the directions)
         const aspect = poseData.aspect || 1, adt = Math.min(0.2, Math.max(0.001, dt));
         AS.shoulders(poseData.rightShoulder, poseData.leftShoulder, aspect, adt);
         const so = this._armOut || (this._armOut = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
@@ -674,7 +677,7 @@ export class VoxelCharacter {
      * seeing the player's own arm.
      * @param {number} fingers  how far beyond the wrist the point is (it is in the fingers)
      */
-    reachHand(side, point, w = 1, fingers = 0) {
+    reachHand(side, point, w = 1, fingers = 0, poleDir = null) {
         if (!(w > 0)) return;
         const arm = side === 'left' ? this.leftArmAnchor : this.rightArmAnchor;
         const elbow = side === 'left' ? this.leftElbowAnchor : this.rightElbowAnchor;
@@ -691,7 +694,9 @@ export class VoxelCharacter {
         this.group.getWorldQuaternion(_qBody);
         _up.set(0, 1, 0).applyQuaternion(_qBody);
         const S = arm.getWorldPosition(_r1);
-        const pole = _r2.set(side === 'left' ? -0.3 : 0.3, -0.5, -1).applyQuaternion(_qBody);
+        // (poleDir: the elbow bends that way — HandBlocks gives the player's own elbow, so a hand stopped at a wall keeps the
+        // arm's bend and never jumps to a «default» elbow and back as it touches and leaves the wall)
+        const pole = poleDir ? _r2.copy(poleDir) : _r2.set(side === 'left' ? -0.3 : 0.3, -0.5, -1).applyQuaternion(_qBody);
         const L1 = this.BONE_LENGTH_UPPER, L2 = this.BONE_LENGTH_LOWER;
         armReach(S, point, L1, L2, pole, _r3, _r4);
         if (fingers > 0) {

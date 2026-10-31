@@ -99,7 +99,8 @@ test('the drawing hand on the string: the hero\'s arm bends to it in front of th
     const ch = new VoxelCharacter(new THREE.Scene());
     const pose = new PoseInterpreter().process({ poseLandmarks: frame({ archer: 'left', draw: 1, leftCurl: null, rightCurl: null }).poseLandmarks }, { videoWidth: 640, videoHeight: 480 });
     const dt = 1 / 60;
-    for (let i = 0; i < 90; i++) { ch.updateArmsLookAt(pose, dt); ch.update(dt, null, false); }
+    // (settled: the arm's own filter — ArmSolver.DirFilter, steady when still — takes a few seconds to its last 0.01 mm)
+    for (let i = 0; i < 400; i++) { ch.updateArmsLookAt(pose, dt); ch.update(dt, null, false); }
     const tracked = ch.getHandWorldPosition('right', new THREE.Vector3());
     // the nock in front of the bow shoulder (where the drawn arrow's back end is)
     const S = ch.leftArmAnchor.getWorldPosition(new THREE.Vector3());

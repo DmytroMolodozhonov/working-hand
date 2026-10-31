@@ -25,6 +25,7 @@ export const HANDS = {
     REMOTE_MS: 4000, // the other players' line at most this often
     RAISED_UP: -0.3, // sin of the arm's elevation: above this the arm is raised
     CAM_MS: 5000, // the camera's line («камера: …») at most this often, only on a change
+    SHAKE_CM: 2.5, JUMP_CM: 6, WALL_FLIPS: 3, // an arm held still trembling more than this (tools/armstab.mjs: ~1 cm with a noisy camera)
 };
 
 /**
@@ -137,6 +138,53 @@ export function remoteLine(name, st) {
     return `${name}: пакетов ${f1(st.rate)}/с, последний ${Math.round(st.age)} мс назад, самый долгий промежуток ${Math.round(st.maxGap)} мс${st.maxGap > 600 ? ' (рывок!)' : ''}, кисти в пакете: левая ${st.lh ? 'есть' : 'нет'}, правая ${st.rh ? 'есть' : 'нет'}${bad ? ' — связь с этим игроком плохая' : ''}`;
 }
 
+/**
+ * The arm's trembling, as drawn (pure, fixed memory): the hand in the body's space each game frame; its fast part (off a
+ * 0.3 s mean) RMS over a second, the biggest jump in one frame, how often it turns back in and out of a wall it is held at.
+ * The author: «рука… начинает дрожать, у неё истерика» — a line in «Руки» when it trembles, to send.
+ */
+export class ArmShake {
+    constructor() { this.reset(); }
+    reset() { this.mx = this.my = this.mz = 0; this.px = this.py = this.pz = 0; this.on = false; this.s2 = 0; this.n = 0; this.jump = 0; this.wallN = 0; this.flips = 0; this.dir = 0; this.acc = 0; this.t = 0; }
+    /** One frame: the hand (body space, m), dt (s), how far it is held off a wall now (m). */
+    step(x, y, z, dt, held) {
+        if (!this.on) { this.mx = this.px = x; this.my = this.py = y; this.mz = this.pz = z; this.on = true; return; }
+        const k = 1 - Math.exp(-Math.max(0, dt) / 0.3);
+        const ox = this.mx, oy = this.my, oz = this.mz;
+        this.mx += (x - this.mx) * k; this.my += (y - this.my) * k; this.mz += (z - this.mz) * k;
+        // (only while the arm is held about still — the mean moving slower than 0.5 m/s: a swing is not a trembling)
+        const ms = dt > 0 ? Math.sqrt((this.mx - ox) ** 2 + (this.my - oy) ** 2 + (this.mz - oz) ** 2) / dt : 0;
+        const jx = x - this.px, jy = y - this.py, jz = z - this.pz;
+        this.px = x; this.py = y; this.pz = z;
+        this.t += dt;
+        if (ms > 0.5) return;
+        const dx = x - this.mx, dy = y - this.my, dz = z - this.mz;
+        this.s2 += dx * dx + dy * dy + dz * dz; this.n++;
+        this.jump = Math.max(this.jump, Math.sqrt(jx * jx + jy * jy + jz * jz));
+        if (held > 0.005) {
+            // (back and forth: the frame-to-frame move along its biggest axis turning, past 3 mm)
+            this.wallN++;
+            const a = Math.abs(jx) > Math.abs(jy) ? (Math.abs(jx) > Math.abs(jz) ? jx : jz) : (Math.abs(jy) > Math.abs(jz) ? jy : jz);
+            this.acc += a;
+            if (Math.abs(this.acc) > 0.003) { const sg = Math.sign(this.acc); if (this.dir && sg !== this.dir) this.flips++; this.dir = sg; this.acc = 0; }
+        }
+    }
+    /** The last second (or so): { cm, jumpCm, wall (share of frames held), flips (a second) }; starts the next. */
+    take() {
+        const r = { n: this.n, cm: this.n ? Math.sqrt(this.s2 / this.n) * 100 : 0, jumpCm: this.jump * 100, wall: this.n ? this.wallN / this.n : 0, flips: this.t > 0 ? this.flips / this.t : 0, s: this.t };
+        this.s2 = 0; this.n = 0; this.jump = 0; this.wallN = 0; this.flips = 0; this.t = 0;
+        return r;
+    }
+}
+
+/** Is that second's arm trembling worth a line? (cm of a still arm's noise is ~1; a twitch, «hysterics» at a wall). */
+export function shakeLine(r, fps) {
+    if (!(r.s > 0.5) || r.n < 20) return null; // (held still for at least a third of a second)
+    const bad = r.cm > HANDS.SHAKE_CM || r.jumpCm > HANDS.JUMP_CM || r.flips > HANDS.WALL_FLIPS;
+    if (!bad) return null;
+    return `рука: дрожь ${f1(r.cm)} см, рывок за кадр ${f1(r.jumpCm)} см, частота поз ${fps}/с, касание стены ${r.wall > 0.05 ? `${Math.round(r.wall * 100)}% времени, туда-сюда ${f1(r.flips)}/с` : 'нет'}`;
+}
+
 export class HandsLog {
     constructor(game) {
         this.game = game;
@@ -151,6 +199,8 @@ export class HandsLog {
         this._remoteAt = 0;
         this._remoteSig = new Map();
         this._arm = { left: {}, right: {} };
+        this.shake = { left: new ArmShake(), right: new ArmShake() };
+        this._shakeAt = 0;
     }
 
     /** A camera picture came (Game.setPose): cheap counters only. */
@@ -170,6 +220,7 @@ export class HandsLog {
 
     /** Every game frame; looks at the hands 10 times a second. */
     update(dt) {
+        this._shakeStep(dt);
         this._acc += dt * 1000;
         if (this._acc < HANDS.SAMPLE_MS) return;
         this._acc = 0;
@@ -192,6 +243,27 @@ export class HandsLog {
         if (!line || line.key === this._camKey) return;
         this._camKey = line.key;
         allLog('Руки', line.text, line.bad ? 'warn' : 'info');
+    }
+
+    /** The arms' trembling, every frame (cheap: the hand into the body's space); a line a second at most, when it trembles. */
+    _shakeStep(dt) {
+        const g = this.game, ch = g.character;
+        if (!ch?.getHandWorldPosition || !ch.group) return;
+        ch.group.updateMatrixWorld?.();
+        const inv = this._inv || (this._inv = ch.group.matrixWorld.clone());
+        inv.copy(ch.group.matrixWorld).invert();
+        const v = this._v || (this._v = ch.group.position.clone());
+        for (const side of ['left', 'right']) {
+            ch.getHandWorldPosition(side, v).applyMatrix4(inv);
+            this.shake[side].step(v.x, v.y, v.z, dt, g.handBlocks?.pushed?.[side] || 0);
+        }
+        const now = performance.now();
+        if (now - this._shakeAt < 1000) return;
+        this._shakeAt = now;
+        for (const side of ['right', 'left']) {
+            const line = ch.isHandTracked?.(side) === false ? null : shakeLine(this.shake[side].take(), this._poseTimes.length);
+            if (line) allLog('Руки', `${SIDE[side]}: ${line}`, 'warn');
+        }
     }
 
     _event(side, now, text) {

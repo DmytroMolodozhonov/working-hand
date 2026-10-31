@@ -3869,7 +3869,7 @@ export class Game {
         this._updatePlayer(dt);
         this.imperius?.afterPlayer(dt); // («Империус»: the body asked for a walk — the creature walks; the body stays)
         this.ledge.update(dt); // (palms on a ledge's edge, pulled down: the body up — before the hands are stopped at the rock)
-        this.handBlocks.update(); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
+        this.handBlocks.update(dt); // (the arms posed: a hand at a counter or a wall stops on it — before anything is reached)
         this._updateChests(dt);
         if (!isTest) this._checkVictory();
         mark('игрок');
@@ -4007,7 +4007,7 @@ export class Game {
 
         for (const r of this.remotes.values()) r.update(dt, this.ships, this.space);
         this.voiceChat?.frame(dt); // (the players' voice chat: where each friend is heard, the «говорит» marks — VoiceChat.js)
-        this.handBlocks.updateRemotes(); // (their hands neither go into the walls here)
+        this.handBlocks.updateRemotes(dt); // (their hands neither go into the walls here)
         this.handHold.update(dt); // (hands holding hands: after the others' arms are set)
         this._keepBodiesApart(); // (again: the others have moved; before my place is sent)
         this.ships?.attach(); // (who stands on which ship now)
@@ -4660,11 +4660,20 @@ export class Game {
     _raisedHand() {
         const lift = this.currentPose?.armLift;
         if (!lift) return this.character.isHandRaised();
-        const NEED = 0.12; // (~28°)
-        const l = lift.left > NEED, r = lift.right > NEED;
-        if (!l && !r) return null;
-        const side = l && r ? (lift.left >= lift.right ? 'left' : 'right') : l ? 'left' : 'right';
-        return { side, bothLevel: l && r && Math.abs(lift.left - lift.right) < 0.25 };
+        // (with a hysteresis: an arm held just at the line, the camera's noise must not switch the gesture — and the side, «both»
+        // — on and off a few times a second: raised past 0.12 (~28°), down again only under 0.09; the other hand takes over
+        // only when clearly higher)
+        const H = this._liftHys || (this._liftHys = { left: false, right: false, side: null, both: false });
+        const ON = 0.12, OFF = 0.09;
+        H.left = lift.left > (H.left ? OFF : ON); H.right = lift.right > (H.right ? OFF : ON);
+        const l = H.left, r = H.right;
+        if (!l && !r) { H.side = null; H.both = false; return null; }
+        let side = l && r ? (lift.left >= lift.right ? 'left' : 'right') : l ? 'left' : 'right';
+        if (l && r && H.side && side !== H.side && Math.abs(lift.left - lift.right) < 0.06) side = H.side;
+        H.side = side;
+        const gap = Math.abs(lift.left - lift.right);
+        H.both = l && r && gap < (H.both ? 0.3 : 0.25);
+        return { side, bothLevel: H.both };
     }
 
     _updateMagicGesture() {
