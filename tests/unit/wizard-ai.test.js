@@ -9,7 +9,7 @@ const top = (m) => { m.group.updateMatrixWorld(true); return new THREE.Box3().se
 const run = (m, s, state) => { for (let i = 0; i < Math.round(s * 60); i++) m.update(1 / 60, state); };
 const seq = (...xs) => { let i = 0; return () => xs[Math.min(i++, xs.length - 1)]; };
 
-test('wizards look like wizards: robes, pointed hats, wands (a staff on the road), the Master — an old man with a long white beard to the belt (as Dumbledore)', () => {
+test('wizards look like wizards: robes, pointed hats, wands (a wanderer too), the Master — an old man with a long white beard to the belt (as Dumbledore)', () => {
     // (wizards are appended to the roles: every older look stays the same)
     assert.deepEqual(ROLES.slice(0, 5), ['builder', 'farmer', 'merchant', 'knight', 'king']);
     for (const role of WIZARD_ROLES) {
@@ -17,7 +17,7 @@ test('wizards look like wizards: robes, pointed hats, wands (a staff on the road
             const L = villagerLook(seed, role, role === 'master' ? false : undefined);
             assert.ok(L.wizard && L.dress, `${role} robe`);
             assert.ok(L.hat.startsWith('wizard'), `${role} hat`);
-            assert.equal(L.tool, role === 'wanderer' ? 'staff' : 'wand');
+            assert.equal(L.tool, 'wand');
             const m = new VillagerModel(L);
             assert.ok(m.hat && m.hatTop, 'the hat is its own mesh');
             assert.ok(m.meshCount <= 12, `${role}: ${m.meshCount} meshes`);
@@ -57,7 +57,7 @@ test('casting: the wand continues the forearm and points where the wizard aims (
     }
     const w = new VillagerModel(villagerLook(9, 'wanderer'));
     run(w, 1, { mode: 'cast' });
-    assert.ok(w.getWandTip(new THREE.Vector3()).distanceTo(w.getRightHandWorldPosition(new THREE.Vector3())) > 2, 'a staff is long');
+    assert.ok(w.getWandTip(new THREE.Vector3()).distanceTo(w.getRightHandWorldPosition(new THREE.Vector3())) < 1.3, 'a wanderer holds an ordinary wand');
     for (const mode of ['practice', 'shield', 'offer']) run(m, 0.5, { mode });
 });
 

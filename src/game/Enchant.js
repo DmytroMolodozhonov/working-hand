@@ -66,7 +66,7 @@ export function enchantKind(it) {
     if (it.kind === 'weapon') return 'weapon';
     if (it.kind === 'bow') return 'bow';
     if (it.kind === 'shield') return 'shield';
-    if (it.kind === 'wand') return 'wand'; // (a wizard's wand and a wanderer's staff: both kind 'wand')
+    if (it.kind === 'wand') return 'wand'; //
     if (it.kind === 'hammer') return 'hammer';
     if (it.kind === 'backpack') return 'backpack';
     return null; // блоки, монеты, еда, свитки, книги, зелья, ингредиенты, Ледяной Жезл (дар богов) …
@@ -188,6 +188,6 @@ export const ENCHANT_PENTAGRAM = {
 export const ENCHANT_TARGETS = {
     me: { does: 'pay', why: 'платит 30 % текущей маны; видит обряд' },
     players: { does: 'look', why: 'видят столб света и парящий предмет (сообщение «ench»), платит тот, кто начал' },
-    items: { does: 'enchant', why: 'один предмет за раз: доспехи, мантии, оружие, лук, щит, палочка/посох, молот Тора, рюкзак; блоки, монеты, еда, свитки, книги, зелья, ингредиенты, дары богов — нельзя' },
+    items: { does: 'enchant', why: 'один предмет за раз: доспехи, мантии, оружие, лук, щит, палочка, молот Тора, рюкзак; блоки, монеты, еда, свитки, книги, зелья, ингредиенты, дары богов — нельзя' },
     creatures: { does: 'none', why: 'на существ не действует; стоящий в круге не ранится' },
 };

@@ -11,7 +11,6 @@
  *   - a wizard of a tower (a wand in the hand): the same; until the wizard gets it back he
  *     has no wand (no «Люмос», no practising). He runs to fetch it; if a player was quicker,
  *     the wand is the player's. Stuck on the way for long — he calls it back with «Акцио».
- *     A wanderer's staff (≈2.5 m, heavy) is not knocked out: he is only pushed back.
  *   - a knight / the king: the sword flies off (a real weapon, anyone can take it); without it
  *     he fights with his fists (half the damage) and drops no sword when he falls.
  *   - zombies, animals, sailors, villagers with tools: nothing to disarm — a small push.
@@ -134,11 +133,11 @@ export function knockOutOfMyHand(game, rng = Math.random) {
     return null;
 }
 
-/** A wizard's own wand, rolled: a student's plain one, a robed one's strong one; a wanderer's is a staff. */
-function rollWizardWand(v) {
+/** A wizard's own wand, rolled: a student's plain one, a robed one's strong one; a wanderer's too (no staffs in the game). */
+export function rollWizardWand(v) {
     const w = v.robe ? (({ power, ...x }) => ({ ...x, power: Math.max(power || 0, 35 + Math.floor(Math.random() * 16)) }))(rollWand())
         : v.role === 'student' ? { ...starterWand(), color: 0x6b4a2b } : rollWand();
-    if (v.model?.toolKind === 'staff' || v.role === 'wanderer') { w.staff = true; w.plain = false; } // (a long staff: a wand all the same — ItemTypes.wandModel draws it long)
+    if (v.role === 'wanderer') w.plain = false; // (a wanderer's wand is a real one, not a student's)
     return w;
 }
 
@@ -151,8 +150,8 @@ export function wizardWand(v, roll = wizardWandOf) {
     return v.wandItem;
 }
 
-/** The kinds of things in a castle person's hand that are a wand (VillagerModel tools): a wand, a wanderer's staff. */
-export const WAND_TOOLS = new Set(['wand', 'staff']);
+/** The kinds of things in a castle person's hand that are a wand (VillagerModel tools): a wand. */
+export const WAND_TOOLS = new Set(['wand']);
 
 /**
  * (host) «Экспеллиармус» reached a castle person `v`: a wizard's wand / a knight's sword flies off.

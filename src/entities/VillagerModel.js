@@ -34,7 +34,7 @@ export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'studen
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'staff', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
 export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
@@ -43,7 +43,7 @@ const COMMAND_SET = new Set(COMMAND_MODES);
 /** Asleep the body lies with its middle at the group's place: the feet this far behind it (the head ahead, local +Z). */
 export const SLEEP_HALF = 2.05;
 /** How far up the tool the tip of a wand / a staff is (tool-local y). */
-export const TIP_Y = { wand: 1.05, staff: 2.45 };
+export const TIP_Y = { wand: 1.05 };
 /** group.position.y = ground surface + this (feet at local −1.95). */
 export const VILLAGER_FOOT_OFFSET = 1.95;
 /** Sitting: group.position.y = seat top + this (thighs 0.5 thick; feet reach the floor for a seat 0.7 high). */
@@ -294,7 +294,7 @@ export function strippedLook(L) {
 export const RANK_TRIM = { novice: 0xd8d4c8, adept: 0xc8d4ea, teacher: 0xe0b84a, master: GOLD, elder: 0x7fe0c8 };
 const RANK_LEVEL = { novice: 0, adept: 1, teacher: 2, master: 3, elder: 2 };
 
-/** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer: a staff), the Master — a long beard. */
+/** Wizards: a robe to the ground, a pointed hat, a wand (a wanderer too: no staffs in the game, only the Ice Rod), the Master — a long beard. */
 function wizardLook(L, r, pick) {
     const role = L.role;
     L.wizard = true;
@@ -314,7 +314,7 @@ function wizardLook(L, r, pick) {
     L.accent = role === 'master' ? GOLD : role === 'wanderer' ? 0x8a7a5a : role === 'student' ? 0xd8d4c8 : 0xc0c8d8;
     L.hatColor = role === 'student' ? shade(L.dressColor, 0.8) : role === 'wanderer' ? shade(L.dressColor, 0.85) : shade(L.dressColor, 0.9);
     L.hat = role === 'master' ? 'wizardTall' : role === 'wanderer' ? 'wizardWide' : 'wizard';
-    L.tool = role === 'wanderer' ? 'staff' : 'wand';
+    L.tool = 'wand';
     L.boots = pick([0x3a2a1a, 0x2b2b2b, 0x4a3020]);
     if (role === 'master') {
         // (the author: the Master — an old man with a long white beard down to the belt, as Dumbledore)
@@ -991,11 +991,6 @@ function toolBoxes(kind) {
             b(B, 0.06, 0.75, 0.06, 0, 0.55, 0, 0x2a1d2e);
             b(B, 0.1, 0.1, 0.1, 0, 0.97, 0, 0xc58bff, Math.PI / 4, 0, Math.PI / 4);
             break;
-        case 'staff':
-            b(B, 0.1, 2.4, 0.1, 0, 1.0, 0, 0x5a3a1e);
-            b(B, 0.14, 0.12, 0.14, 0, 2.2, 0, 0x3a2414);
-            b(B, 0.2, 0.2, 0.2, 0, 2.38, 0, 0x8fe3ff, Math.PI / 4, 0, Math.PI / 4);
-            break;
         case 'longbow': {
             // a knight's bow: the grip in the fist, the stave up and down across the forearm (local Z),
             // the string behind it (towards the archer), an arrow on the string along the arm
@@ -1302,6 +1297,7 @@ export class VillagerModel {
     // ---------------------------------------------------------------- tools
     /** 'none'|'hammer'|'hoe'|'pitchfork'|'sword'|'bigsword'|'basket'|'pouch' */
     setHeldTool(kind) {
+        if (kind === 'staff') kind = 'wand'; // (an old saved look: the staffs are gone, a wand instead)
         if (!TOOLS.includes(kind)) kind = 'none';
         if (kind === this.toolKind && (this.tool || kind === 'none')) return;
         if (this.tool) {
@@ -1449,7 +1445,7 @@ export class VillagerModel {
         return this.handSlot.getWorldPosition(out);
     }
 
-    /** World position of the tip of a wand / a staff (else the hand). */
+    /** World position of the tip of a wand (else the hand). */
     getWandTip(out = new THREE.Vector3()) {
         const y = TIP_Y[this.toolKind];
         if (!this.tool || y == null) return this.getRightHandWorldPosition(out);
@@ -1627,7 +1623,7 @@ export class VillagerModel {
             T.hx = -0.2 * clamp01((speed - 2.5) / 3);
             if (state.slope) T.hx -= slopeLean(state.slope); // (uphill: the body leans into the hill; downhill a little back — HillWay.js)
             T.cape = -(0.14 + Math.min(0.5, speed * 0.1));
-            if (mode === 'walk' || mode === 'run') gaitPose(T, this.style.gait, s, gk, t, this.toolKind === 'staff');
+            if (mode === 'walk' || mode === 'run') gaitPose(T, this.style.gait, s, gk, t);
             rate = 28;
             breathe = 0;
         }

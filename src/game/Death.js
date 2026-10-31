@@ -113,14 +113,14 @@ export function lootOfVillager(role, { shield = false, coins = null, rank = null
 /**
  * What falls from a dead creature's hand (the author: «если персонаж умер, палочка или предмет в руке сразу
  * же выпадает из его руки»): the tool in its hand (VillagerModel tools) → a thing of the world.
- *   'wand'   — its own wand (a wanderer's staff: a staff-wand) — a loose thing: picked up, «Акцио», cast with;
+ *   'wand'   — its own wand — a loose thing: picked up, «Акцио», cast with;
  *   'sword'  — a real sword (the king's: magic +25); 'axe' — an axe;
  *   'bow'    — a bow (a knight archer's longbow).
  * Not here — no such thing among the world's things (yet), it goes with the body: a farmer's hoe and pitchfork,
  * a builder's hammer (the hammer item is the magic one), a basket, a pouch, a bucket, a paddle, a pistol.
  * The Ice Queen's Rod falls by her own death (IceQueen._die); a player's hands — playerDied (everything drops).
  */
-export const HELD_DROP = { wand: 'wand', staff: 'wand', sword: 'sword', bigsword: 'sword', rapier: 'sword', cutlass: 'sword', axe: 'axe', longbow: 'bow' };
+export const HELD_DROP = { wand: 'wand', sword: 'sword', bigsword: 'sword', rapier: 'sword', cutlass: 'sword', axe: 'axe', longbow: 'bow' };
 
 /** The thing that falls from creature `c`'s hand (its model's tool), or null. Never twice: knocked out already — nothing. */
 export function heldDrop(c) {

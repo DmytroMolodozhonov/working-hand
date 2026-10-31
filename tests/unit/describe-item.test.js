@@ -14,8 +14,7 @@ test('describeItem answers for every item kind', () => {
     }
 });
 
-test('staff, plain and rolled wands are described', () => {
-    assert.match(describeItem({ kind: 'wand', staff: true, power: 5 }).title, /осох/);
+test('plain and rolled wands are described (no staffs any more)', () => {
     assert.ok(describeItem({ kind: 'wand', plain: true }).lines.length);
     assert.ok(describeItem(rollWand()).lines.length >= 4);
 });

@@ -65,15 +65,15 @@ test('segDist2: how close a charge passes', () => {
     assert.ok(STARTLE.BOLT_R > 2);
 });
 
-test('death: the wand / the staff / the sword falls from the hand as a thing on the ground (Акцио takes it)', () => {
+test('death: the wand / the sword falls from the hand as a thing on the ground (Акцио takes it)', () => {
     const model = (tool) => ({ toolKind: tool, setHeldTool(k) { this.toolKind = k; } });
     const loose = [], swords = [];
     const g = { items: { auth: true, spawnLoose: (item, p, o) => loose.push({ item, p: p.clone(), vel: o.vel }) }, weapons: { byId: new Map(), spawn: (type) => { const w = { type }; swords.push(w); return w; }, markMagic: (w) => w } };
     const D = Object.create(DeathSystem.prototype);
     D.game = g;
-    const wiz = { role: 'wanderer', wizard: true, x: 1, y: 0, z: 2, model: model('staff') };
+    const wiz = { role: 'wanderer', wizard: true, x: 1, y: 0, z: 2, model: model('wand') };
     const d = D.dropHeld(wiz);
-    assert.ok(d.kind === 'wand' && d.staff, 'the staff');
+    assert.ok(d.kind === 'wand' && !d.staff, 'the wand');
     assert.equal(loose.length, 1);
     assert.ok(loose[0].p.y > 1, 'from the hand, it falls');
     assert.equal(wiz.model.toolKind, 'none');

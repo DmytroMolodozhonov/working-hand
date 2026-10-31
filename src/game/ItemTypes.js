@@ -192,12 +192,12 @@ export const ITEM_INFO = {
  * A wand's worth — one rule for the market's price and for what a buyer pays (WizardMarket: the wand seller asks it,
  * the pawnshop gives 60 % of it). Before, a buyer reckoned 150 + 2 × power while the market asked 180 + 11 × power:
  * the author sold a wand stronger than the market's for ~100. 180 + 11 × its power; 60 less with no direction (the
- * market's own wands always have one); a wanderer's staff (every spell 15 % stronger for 15 % less mana) 120 more.
+ * market's own wands always have one).
  */
 export function wandValue(it) {
     if (it.plain) return 20;
     if (it.dragon) return 900;
-    return Math.max(20, 180 + 11 * (it.power || 0) + (it.staff ? 120 : it.dir ? 0 : -60));
+    return Math.max(20, 180 + 11 * (it.power || 0) + (it.dir ? 0 : -60));
 }
 
 /**
@@ -273,10 +273,21 @@ let _uid = Math.floor(Math.random() * 1e6);
  * The scrolls that raised the health or the mana cells are gone from the game (the author: «не вижу смысла»). One that an old save
  * (or an old client) still holds is turned into a plain apple, in place (the same uid, so a hand/slot/chest keeps its place). Returns the item.
  */
+/**
+ * (the author: «посохи вообще убрать, остался только Ледяной Жезл») An old wizard's / wanderer's staff (a wand with `staff: true`)
+ * is an ordinary wand now: the flag goes, everything else (power, favourite spells, directions, enchantment, colour, uid) stays.
+ */
+export function retireStaff(it) {
+    if (it && it.kind === 'wand' && 'staff' in it) delete it.staff;
+    return it;
+}
+
 export function retireScroll(it) {
     if (it && it.kind === 'scroll' && (it.stat === 'hp' || it.stat === 'fatigue')) {
         for (const k of Object.keys(it)) if (k !== 'uid') delete it[k];
         it.kind = 'apple'; it.count = 1;
+    } else if (it && it.kind === 'wand' && 'staff' in it) {
+        retireStaff(it);
     }
     return it;
 }
@@ -287,6 +298,7 @@ export function retireScrollsIn(node, depth = 0) {
     let n = 0;
     if (Array.isArray(node)) { for (const x of node) n += retireScrollsIn(x, depth + 1); return n; }
     if (node.kind === 'scroll' && (node.stat === 'hp' || node.stat === 'fatigue')) { retireScroll(node); return 1; }
+    if (node.kind === 'wand' && 'staff' in node) { retireStaff(node); n++; }
     for (const k of Object.keys(node)) { const v = node[k]; if (v && typeof v === 'object') n += retireScrollsIn(v, depth + 1); }
     return n;
 }
@@ -788,7 +800,6 @@ function describeItemBase(it) {
     if (!it.kind) return { title: 'Предмет', color: 0xaaaaaa, lines: ['Обычная вещь, не магическая'] };
     switch (it.kind) {
         case 'wand': {
-            if (it.staff) return { title: '🪄 Посох странника', color: it.color, lines: ['Длинный посох с кристаллом — колдует, как палочка', 'Все заклинания на <b>15%</b> сильнее и на <b>15%</b> меньше маны', `Сила посоха: <b>+${it.power || 0}%</b> в бою`] };
             if (it.plain) return { title: '🪄 Обычная деревянная палочка', color: it.color, lines: ['Все заклинания на <b>15%</b> сильнее, чем голой рукой', 'Других свойств нет'] };
             if (it.dragon) return { title: '🐉 Палочка дракона', color: 0xc0141c, lines: ['Тёмно-алое дерево, светится, как угли', 'Все огненные заклинания на <b>60%</b> сильнее: «Инферно», «Fire», «Fire Maxima», «Let the Hellfire Come»', 'Маны — как обычно', 'Остальные заклинания — на <b>15%</b> сильнее, как с любой палочкой'] };
             if (it.united) { const u = describeUnited(it); return { title: u.title, color: u.color, lines: ['Все заклинания на <b>15%</b> сильнее', ...u.lines] }; }
@@ -878,18 +889,6 @@ const cyl = (r1, r2, h, m, x = 0, y = 0, z = 0, seg = 8) => { const c = new THRE
  */
 function wandModel(it) {
     const g = new THREE.Group();
-    if (it.staff) {
-        // a wanderer's staff (knocked out of his hand, or fallen from it): a long dark shaft, a pale crystal on top
-        const col = new THREE.Color(it.color ?? 0x8b5a2b);
-        const wood = mat(col.clone().multiplyScalar(0.45).getHex());
-        g.add(cyl(0.035, 0.045, 1.5, wood, 0, 0.75));
-        g.add(cyl(0.055, 0.05, 0.08, mat(0x3a2414), 0, 1.5));
-        const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.075), new THREE.MeshBasicMaterial({ color: 0x8fe3ff }));
-        c.position.y = 1.6;
-        g.add(c);
-        g.userData.tipY = 1.65;
-        return g;
-    }
     if (it.plain) {
         // a plain wooden wand: a turned handle and a tapering shaft, no metal, no light
         const wood = mat(0x6b4423), dark = mat(0x4a2e17);

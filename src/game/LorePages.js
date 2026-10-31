@@ -215,16 +215,16 @@ function bust(x, cx, cy, s, o) {
 }
 
 export const PICTURES = {
-    /** Coprus the Clever: proud, in a crimson robe, a tall staff; a beaten dragon behind him. */
+    /** Coprus the Clever: proud, in a crimson robe, a wand in his hand; a beaten dragon behind him. */
     coprus(x, X, Y, W, H) {
         x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#f0a050'], [0.55, '#c0502a'], [1, '#3a1a14']]); x.fillRect(X, Y, W, H);
         // the dragon's dark silhouette, its head down
         const dx = X + 120, dy = Y + 70;
         poly(x, [[dx - 90, dy + 40], [dx - 40, dy - 30], [dx, dy - 10], [dx + 30, dy - 60], [dx + 60, dy - 20], [dx + 90, dy + 30], [dx + 40, dy + 10], [dx, dy + 40]], 'rgba(40,20,20,0.75)');
         poly(x, [[dx + 60, dy + 20], [dx + 95, dy + 60], [dx + 70, dy + 70], [dx + 50, dy + 40]], 'rgba(40,20,20,0.75)');
-        // the staff
-        x.strokeStyle = '#4a2a14'; x.lineWidth = 6; x.beginPath(); x.moveTo(X + 34, Y + H); x.lineTo(X + 40, Y + 40); x.stroke();
-        ell(x, X + 40, Y + 36, 10, 10, radial(x, X + 40, Y + 36, 12, [[0, '#ffffff'], [0.4, '#ffd76a'], [1, 'rgba(255,160,40,0)']]));
+        // the wand
+        x.strokeStyle = '#4a2a14'; x.lineWidth = 4; x.beginPath(); x.moveTo(X + 34, Y + H - 40); x.lineTo(X + 52, Y + H - 110); x.stroke();
+        ell(x, X + 52, Y + H - 114, 8, 8, radial(x, X + 52, Y + H - 114, 10, [[0, '#ffffff'], [0.4, '#ffd76a'], [1, 'rgba(255,160,40,0)']]));
         bust(x, X + 110, Y + 125, 0.9, { skin: '#e8b88a', robe: '#7a1414', trim: '#d4af37', hair: '#2a1a10', beard: '#2a1a10', beardLen: 14, eyes: '#2a2a40', proud: true, lips: '#7a2a20' });
     },
     /** Jovalilius Pravdius Notan: an old wise man, a long white beard, glasses, a blue starry hat; a goblet. */

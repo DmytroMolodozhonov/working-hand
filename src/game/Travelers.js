@@ -6,7 +6,7 @@
  * the wizards' a little rarer»).
  *
  * Who goes (the host decides, every ROAD.EVERY s, a chance; never more than ROAD.MAX parties):
- *  - wandering wizards (1–2, «Странник»), on foot, with their staffs;
+ *  - wandering wizards (1–2, «Странник»), on foot, with their wands;
  *  - knights errant (1–2), on foot, sword and bow;
  *  - a people's cart: a horse, a driver and 1–2 more going to town (farmers, builders, merchants);
  *  - a wizards' carriage: two horses, a driver and 1–2 more wizards with a chest of valuables;
@@ -195,7 +195,7 @@ export class Travelers {
     /**
      * A traveller who went out of sight (the party is taken away far off: nothing piles up) is remembered in a small
      * note by his place and number (`killed` keeps the dead): wounded and angry at a player he stays so — the same
-     * wizard (the roster is fixed by the place's id and number: kind, name, rank, look, staff), never a stranger.
+     * wizard (the roster is fixed by the place's id and number: kind, name, rank, look), never a stranger.
      */
     _sleepNote(v) {
         const hurt = v.hp < (v.maxHp ?? v.hp) || v.armor < (v.maxArmor ?? v.armor);

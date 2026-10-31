@@ -520,7 +520,7 @@ export class WizardLife {
         const back = () => {
             g.items.pickUp(lw.uid, '#' + v.id, 'right'); // (gone from the world for everybody)
             v.noWand = false; v.lostWand = null;
-            v.model?.setHeldTool(v.wandItem?.staff ? 'staff' : 'wand'); // (a wanderer's staff back in his hand)
+            v.model?.setHeldTool('wand'); // (his wand back in his hand)
         };
         if (lw.t > EXPELLIARMUS.FETCH_GIVE_UP) { L._say(v, 'Акцио!', 3); back(); return true; }
         if (!it.rest) { v.mode = 'idle'; v.speed = 0; v.yaw = turn(v.yaw, Math.atan2(-(p.x - v.x), -(p.z - v.z)), dt * 6); return true; }

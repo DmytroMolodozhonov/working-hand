@@ -960,7 +960,7 @@ const quad = ({ L = 0.5, H = 0.45, leg = 0.32, neck = 0.15, head = 0.13, snout =
     if (horns) out.push(['k', 0.06, hy + head * 0.6, hz - 0.02, 0.18, hy + head * 0.6 + horns, hz + 0.05, 0.035, 0.008, 'a'], ['k', -0.06, hy + head * 0.6, hz - 0.02, -0.18, hy + head * 0.6 + horns, hz + 0.05, 0.035, 0.008, 'a']);
     return out;
 };
-const humanoid = ({ hat = null, crown = false, sword = false, staff = false, robe = false }) => {
+const humanoid = ({ hat = null, crown = false, sword = false, wand = false, robe = false }) => {
     const out = [
         ['c', 0.07, 0.02, 0, 0.07, 0.42, 0, 0.055], ['c', -0.07, 0.02, 0, -0.07, 0.42, 0, 0.055],
         ['e', 0, 0.58, 0, 0.14, 0.2, 0.08], ['c', 0.17, 0.72, 0, 0.21, 0.45, 0.04, 0.04], ['c', -0.17, 0.72, 0, -0.21, 0.45, 0.04, 0.04],
@@ -971,7 +971,7 @@ const humanoid = ({ hat = null, crown = false, sword = false, staff = false, rob
     if (hat === 'helmet') out.push(['e', 0, 0.9, 0, 0.085, 0.07, 0.09, 'a']);
     if (crown) out.push(['c', 0, 0.94, 0, 0, 0.98, 0, 0.065, 'a'], ['k', 0.05, 0.96, 0, 0.05, 1.0, 0, 0.015, 0.003, 'a'], ['k', -0.05, 0.96, 0, -0.05, 1.0, 0, 0.015, 0.003, 'a'], ['k', 0, 0.96, 0.05, 0, 1.0, 0.05, 0.015, 0.003, 'a']);
     if (sword) out.push(['c', 0.22, 0.42, 0.06, 0.22, 0.98, 0.06, 0.018, 'a'], ['c', 0.17, 0.45, 0.06, 0.27, 0.45, 0.06, 0.016, 'a'], ['e', -0.24, 0.55, 0.06, 0.03, 0.14, 0.1]);
-    if (staff) out.push(['c', -0.22, 0.02, 0.04, -0.22, 0.98, 0.04, 0.018], ['e', -0.22, 0.99, 0.04, 0.035, 0.035, 0.035, 'a']);
+    if (wand) out.push(['c', -0.22, 0.5, 0.06, -0.22, 0.72, 0.06, 0.012], ['e', -0.22, 0.73, 0.06, 0.02, 0.02, 0.02, 'a']);
     return out;
 };
 const SCULPT = {
@@ -997,7 +997,7 @@ const SCULPT = {
         out.push(['c', 0.1, 0.38, 0.05, 0.05, 0.75, 0.12, 0.06], ['e', 0.05, 0.8, 0.18, 0.08, 0.06, 0.12], ['e', 0.09, 0.83, 0.25, 0.015, 0.015, 0.015, 'a'], ['e', 0.01, 0.83, 0.25, 0.015, 0.015, 0.015, 'a']);
         return out;
     },
-    knight: () => humanoid({ hat: 'helmet', sword: true }), king: () => humanoid({ crown: true, robe: true }), wizard: () => humanoid({ hat: 'wizard', staff: true, robe: true }), human: () => humanoid({}),
+    knight: () => humanoid({ hat: 'helmet', sword: true }), king: () => humanoid({ crown: true, robe: true }), wizard: () => humanoid({ hat: 'wizard', wand: true, robe: true }), human: () => humanoid({}),
     heart: () => [['e', 0.17, 0.66, 0, 0.24, 0.24, 0.13], ['e', -0.17, 0.66, 0, 0.24, 0.24, 0.13], ['k', 0, 0.58, 0, 0, 0.0, 0, 0.38, 0.02]],
     star: () => { const out = [['e', 0, 0.5, 0, 0.16, 0.16, 0.08]]; for (let k = 0; k < 5; k++) { const a = Math.PI / 2 + k * Math.PI * 2 / 5; out.push(['k', 0, 0.5, 0, Math.cos(a) * 0.48, 0.5 + Math.sin(a) * 0.48, 0, 0.12, 0.01]); } return out; },
     skull: () => [['e', 0, 0.55, 0, 0.36, 0.34, 0.36], ['e', 0, 0.25, 0.1, 0.24, 0.18, 0.24], ['e', 0.14, 0.55, 0.3, 0.09, 0.09, 0.08, 'h'], ['e', -0.14, 0.55, 0.3, 0.09, 0.09, 0.08, 'h'], ['e', 0, 0.38, 0.33, 0.04, 0.06, 0.05, 'h']],

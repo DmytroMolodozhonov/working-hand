@@ -2,7 +2,7 @@
  * WandSwap.js — swapping wands between the hands (the author: «в одной руке одна палочка, в другой — другая;
  * свёл руки так, чтобы палочки касались, и подождал около 3 секунд — палочки поменялись местами»).
  *
- * A wand (or a staff) in EACH hand, the wands themselves touching (any part of one against the other,
+ * A wand in EACH hand, the wands themselves touching (any part of one against the other,
  * not the hands) and kept so for SWAP_TIME seconds: a glow and sparks grow at the touch, then the wands
  * change hands (the one in the working hand casts now). Parted early (longer than a blink of the camera
  * losing a hand) — it starts over. Never by accident: both hands must hold wands, and only a touch counts.

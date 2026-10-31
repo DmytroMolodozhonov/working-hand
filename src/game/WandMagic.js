@@ -549,7 +549,7 @@ export class WandMagic {
             things.push({ pos: bk.model.position, item: { kind: 'book', id: bk.id, spells: bk.spells, ...(bk.spells?.includes('Flight') ? { swift: true } : {}) } });
         }
         for (const { pos } of g.runner?.accioTargets?.() || []) things.push({ pos, run: true, item: { kind: 'book', runbook: true } });
-        // the things in the hands (a second wand or a staff in the other hand counts; only the casting wand does not)
+        // the things in the hands (a second wand in the other hand counts; only the casting wand does not)
         for (const s of ['left', 'right']) {
             const it = g.items.held[s], w = g.weapons.hands[s].held;
             if (it && it.item !== this.wand) things.push({ pos: it.model.position, item: it.item, held: true });

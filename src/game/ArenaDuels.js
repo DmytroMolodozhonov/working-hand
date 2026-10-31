@@ -81,7 +81,7 @@ export function stewardLook(seed, female, castleColor) {
     const L = villagerLook(seed, 'merchant', female, { castleColor });
     return Object.assign(L, {
         steward: true, dress: true, dressColor: 0x4b2a7a, shirt: 0xf1ead6, pants: 0x2c1a4a, accent: 0xd8a62a,
-        hat: 'beret', hatColor: 0x3a1f66, plume: false, shield: false, tool: 'staff', boots: 0x2b1a14,
+        hat: 'beret', hatColor: 0x3a1f66, plume: false, shield: false, tool: 'wand', boots: 0x2b1a14,
     });
 }
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _h = new THREE.Vector3();

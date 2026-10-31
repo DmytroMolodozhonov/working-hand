@@ -39,7 +39,7 @@ export function bodyOk(b, { multiplayer = false } = {}) {
 /** Можно ли объединять вещь: волшебные вещи с бафами/зачарованием (палочка — любая, кроме простой, посоха и палочки дракона). */
 export function uniteKind(it) {
     if (!it) return null;
-    if (it.kind === 'wand') return it.plain || it.staff || it.dragon ? null : 'wand';
+    if (it.kind === 'wand') return it.plain || it.dragon ? null : 'wand';
     if (it.kind === 'weapon' || it.kind === 'bow' || it.kind === 'shield' || it.kind === 'backpack' || it.kind === 'hammer' || it.kind === 'robe') return it.archmage ? null : it.kind;
     if (it.kind === 'armor') return 'armor';
     return null;

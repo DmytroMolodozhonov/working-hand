@@ -19,7 +19,7 @@ export const GAITS = {
     stately: { amp: 0.8, cad: 0.8, knee: 0, lean: 0.05, arm: 0.25 }, // upright and slow, a hand behind the back
     brisk:   { amp: 0.9, cad: 1.35, knee: 0.05, lean: -0.14, arm: 1.3 }, // hurrying, short quick steps
     sneak:   { amp: 0.7, cad: 0.75, knee: 0.45, lean: -0.3, arm: 0.2 }, // crouched, soft steps, the hands ready
-    elder:   { amp: 0.55, cad: 0.85, knee: 0.2, lean: -0.32, arm: 0.3 }, // bent, short steps (a staff to lean on)
+    elder:   { amp: 0.55, cad: 0.85, knee: 0.2, lean: -0.32, arm: 0.3 }, // bent, short steps
     swagger: { amp: 1.05, cad: 0.95, knee: 0, lean: 0.03, arm: 1.4 }, // the shoulders rolling, the arms swinging wide
     march:   { amp: 1.1, cad: 1.05, knee: 0.1, lean: 0.02, arm: 1.2 }, // a soldier's step
 };
@@ -78,7 +78,7 @@ function wand(T, w) { T.wrist = w - PI - T.aRX; }
  * The walk's own manner, after the plain walk cycle has been set (VillagerModel.update). `gk` 1 at a
  * walk → 0 at a run (a run is a run for anybody); `s` sin of the step's phase.
  */
-export function gaitPose(T, gait, s, gk, t, staff) {
+export function gaitPose(T, gait, s, gk, t) {
     const G = GAITS[gait] || GAITS.plain;
     if (G === GAITS.plain || gk <= 0) return;
     const arm = lerp(1, G.arm, gk);
@@ -100,7 +100,6 @@ export function gaitPose(T, gait, s, gk, t, staff) {
             break;
         case 'elder':
             T.headX += 0.3 * gk;
-            if (staff) { T.aRX = lerp(T.aRX, 0.5 + s * 0.15, gk); wand(T, PI - 0.35 + s * 0.1); } // (leaning on the staff: upright, it goes ahead with each step)
             T.aLZ += 0.15 * gk;
             break;
         case 'swagger':

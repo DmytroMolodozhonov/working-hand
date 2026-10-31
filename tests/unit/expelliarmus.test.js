@@ -132,7 +132,7 @@ test('«Protection» blocks it: the wand stays in the hand', () => {
     assert.equal(c.g.items.held.right, null);
 });
 
-test('a tower wizard loses the wand (it flies off), a knight his sword; a wanderer his staff', () => {
+test('a tower wizard loses the wand (it flies off), a knight his sword; a wanderer his wand too', () => {
     const spawned = [], swords = [];
     const g = {
         items: { spawnLoose: (item, pos, o) => spawned.push({ item, vel: o.vel }) },
@@ -153,10 +153,10 @@ test('a tower wizard loses the wand (it flies off), a knight his sword; a wander
     assert.equal(swords.length, 1);
     assert.ok(swords[0].velocity.y > 5, 'the sword flies');
     // the author: «неважно, жезл или палочка — должен выпасть»
-    const wanderer = { wizard: true, role: 'wanderer', x: 0, y: 0, z: 0, model: model('staff') };
+    const wanderer = { wizard: true, role: 'wanderer', x: 0, y: 0, z: 0, model: model('wand') };
     assert.equal(disarmVillager(g, wanderer), 'wand');
     assert.equal(wanderer.model.toolKind, 'none');
-    assert.ok(spawned.at(-1).item.kind === 'wand' && spawned.at(-1).item.staff, 'his staff lies on the ground (a staff-wand)');
+    assert.ok(spawned.at(-1).item.kind === 'wand' && !spawned.at(-1).item.staff, 'his wand lies on the ground (no staffs)');
 });
 
 test('disarming a wizard (or a knight) is an attack: the castle takes it as one — he fights back once his wand is back', () => {

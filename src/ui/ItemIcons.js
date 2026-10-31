@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 
 /** The properties a thing's model is drawn by (all whole numbers, flags or names). */
-const LOOK = ['model', 'color', 'plain', 'staff', 'dragon', 'type', 'magic', 'spell', 'stat', 'piece', 'named', 'archmage', 'of', 'rec', 'ward', 'swift', 'cooked'];
+const LOOK = ['model', 'color', 'plain', 'dragon', 'type', 'magic', 'spell', 'stat', 'piece', 'named', 'archmage', 'of', 'rec', 'ward', 'swift', 'cooked'];
 
 /** At most this many pictures are kept (a look not seen for long is made again if it comes back). */
 export const ICON_CACHE_MAX = 160;
