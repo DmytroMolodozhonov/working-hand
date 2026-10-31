@@ -96,14 +96,17 @@ function hornAlong(pts, r0, { rings = 30, sides = 12, ridges = 0, chips = 0, c0 
 /** Суставы стоя (единицы формы: рост 3,5; ноги на 0; смотрит в −Z). */
 export const JOINTS = {
     hips: [0, 1.5, 0.02], spine: [0, 1.82, 0.04], chest: [0, 2.32, 0.06], neck: [0, 2.86, 0.0], head: [0, 3.06, -0.06], jaw: [0, 3.06, -0.1],
-    eyes: [0, 3.24, -0.33], maw: [0, 3.0, -0.3],
+    eyeL: [-0.12, 3.24, -0.33], pupL: [-0.12, 3.24, -0.36], browL: [-0.13, 3.31, -0.33], earL: [-0.22, 3.3, 0.02], maw: [0, 3.0, -0.3],
+    lip: [0, 3.02, -0.42], nose: [0, 2.99, -0.46], tongue1: [0, 2.965, -0.16], tongue2: [0, 2.965, -0.28], tongue3: [0, 2.965, -0.38],
     shL: [-0.74, 2.7, 0.08], elL: [-0.92, 2.0, 0.14], wrL: [-0.96, 1.36, 0.02], haL: [-0.96, 1.36, 0.02],
     thL: [-0.33, 1.48, 0.02], knL: [-0.35, 1.03, -0.16], hoL: [-0.36, 0.6, 0.15], feL: [-0.37, 0.17, -0.02],
     tail: [0, 1.42, 0.5], tail2: [0, 1.22, 0.72], tail3: [0, 1.0, 0.82],
 };
 for (const k of Object.keys(JOINTS)) if (k.endsWith('L')) { const j = JOINTS[k]; JOINTS[k.slice(0, -1) + 'R'] = [-j[0], j[1], j[2]]; }
 const PARENT = {
-    hips: null, spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck', jaw: 'head', eyes: 'head', maw: 'jaw',
+    hips: null, spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck', jaw: 'head', maw: 'jaw',
+    eyeL: 'head', pupL: 'eyeL', eyeR: 'head', pupR: 'eyeR', browL: 'head', browR: 'head', earL: 'head', earR: 'head', lip: 'head', nose: 'head',
+    tongue1: 'jaw', tongue2: 'tongue1', tongue3: 'tongue2',
     shL: 'chest', elL: 'shL', wrL: 'elL', haL: 'wrL', shR: 'chest', elR: 'shR', wrR: 'elR', haR: 'wrR',
     thL: 'hips', knL: 'thL', hoL: 'knL', feL: 'hoL', thR: 'hips', knR: 'thR', hoR: 'knR', feR: 'hoR',
     tail: 'hips', tail2: 'tail', tail3: 'tail2',
@@ -254,7 +257,7 @@ function build() {
         for (const s of [-1, 1]) {
             const ear = sweep([v3(s * 0.22, 3.3, 0.02), v3(s * 0.38, 3.36, 0.06), v3(s * 0.56, 3.42, 0.14)], (t) => [0.08 * (1 - t) + 0.005, 0.02, 0], { rings: 8, sides: 8,
                 bump: (t, ang) => 1 - (s > 0 ? 0.6 * g1(t - 0.6, 0.05) * g1(ad(ang, 0), 0.6) : 0), color: (t) => mix(SKIN, [0.3, 0.05, 0.04], t) });
-            put(S, 'head', ear);
+            put(S, s < 0 ? 'earL' : 'earR', ear);
         }
         // бородка (козлиная) — на челюсти; брови-гребни — шерсть
         for (let i = 0; i < 10; i++) for (const s of [-1, 1]) put(S, 'head', tint(coneGeo(4), FUR), aim(v3(s * (0.08 + i * 0.02), 3.36 - i * 0.004, -0.27 - i * 0.004), v3(s * 0.8, 0.3, -0.2), [0.02, 0.07, 0.012]));
@@ -273,12 +276,25 @@ function build() {
         for (let i = 0; i < 6; i++) { const s = i < 3 ? -1 : 1, k = i % 3; put(H, 'head', tint(coneGeo(5), TOOTH), aim(v3(s * (0.03 + k * 0.025), 3.0, -0.44 + k * 0.03), v3(0, -1, 0), [0.012, 0.04, 0.012])); }
         // кольцо в носу (ржавое)
         const ring = tint(new THREE.TorusGeometry(0.05, 0.012, 6, 16), RUST).rotateY(Math.PI / 2);
-        put(H, 'head', ring.translate(0, 2.98, -0.47));
+        put(H, 'nose', ring.translate(0, 2.98, -0.47));
+        // ноздри: раздуваются (кость носа), тёмные провалы с жаром внутри
+        for (const s of [-1, 1]) {
+            put(S, 'nose', blob([s * 0.055, 3.01, -0.455], [0.045, 0.03, 0.035], { color: mul(SKIN, 0.85), w: 12, h: 8 }));
+            put(G, 'nose', blob([s * 0.055, 3.0, -0.485], [0.016, 0.01, 0.006], { color: [0.9, 0.3, 0.05], w: 8, h: 6 }));
+        }
+        // верхняя губа (кость lip): поднимается в оскал — открывает клыки; морщины над ней
+        put(S, 'lip', blob([0, 3.0, -0.415], [0.17, 0.035, 0.06], { color: (x, y) => mul(SKIN, 0.85 + 2 * Math.max(0, Math.sin(y * 300)) ** 6 * 0.2), bump: (nx, ny) => 1 - 0.15 * Math.max(0, -ny), w: 18, h: 10 }));
     }
     // глаза: светятся, зрачок-щель (тёмная «твёрдая» щель поверх)
     for (const s of [-1, 1]) {
-        put(G, 'eyes', blob([s * 0.12, 3.24, -0.33], [0.055, 0.04, 0.035], { color: GLOW, w: 12, h: 8 }));
-        put(H, 'eyes', blob([s * 0.12, 3.24, -0.364], [0.008, 0.032, 0.006], { color: [0.03, 0.01, 0.0], w: 6, h: 6 }));
+        const sd = s < 0 ? 'L' : 'R';
+        put(G, 'eye' + sd, blob([s * 0.12, 3.24, -0.33], [0.055, 0.04, 0.035], { color: GLOW, w: 12, h: 8 }));
+        put(H, 'pup' + sd, blob([s * 0.12, 3.24, -0.364], [0.008, 0.032, 0.006], { color: [0.03, 0.01, 0.0], w: 6, h: 6 }));
+        // веки: тяжёлые складки кожи над глазом (опускаются вместе с бровью — кость брови)
+        put(S, 'brow' + sd, blob([s * 0.125, 3.3, -0.335], [0.085, 0.03, 0.05], { color: mul(SKIN, 0.8), w: 14, h: 8 }));
+        // брови: костяной валик с жёсткой щетиной — главная часть мимики (хмурится, удивляется, вскидывает одну)
+        put(S, 'brow' + sd, blob([s * 0.13, 3.325, -0.33], [0.1, 0.03, 0.045], { color: BACKC, w: 14, h: 8 }));
+        for (let i = 0; i < 7; i++) put(S, 'brow' + sd, tint(coneGeo(4), mul(FUR, 0.8 + hash(i * 3 + (s > 0 ? 9 : 0)) * 0.5)), aim(v3(s * (0.05 + i * 0.022), 3.345 + i * 0.004, -0.35), v3(s * 0.9, 0.5, -0.1), [0.012, 0.06 + i * 0.006, 0.008]));
     }
     // ===== челюсть (jaw): тяжёлая, бивни вверх, бородка
     {
@@ -292,6 +308,18 @@ function build() {
     }
     // пасть изнутри: жар (свечение, раздувается перед огнём — кость maw)
     put(G, 'maw', blob([0, 3.0, -0.3], [0.12, 0.05, 0.12], { color: [1, 0.36, 0.06], w: 12, h: 8 }));
+    // язык: длинный, мясистый, тёмно-красный, с бороздой посередине и сосочками; на конце — раздвоен (три кости: гнётся и извивается)
+    {
+        const TONG = [0.5, 0.06, 0.08], TIP = [0.35, 0.03, 0.06];
+        const seg = (z0, z1, w0, w1, c) => sweep([v3(0, 2.965, z0), v3(0, 2.966, (z0 + z1) / 2), v3(0, 2.965, z1)], (t) => [w0 + (w1 - w0) * t, (w0 + (w1 - w0) * t) * 0.35, 0], {
+            rings: 8, sides: 14,
+            bump: (t, a) => 1 - 0.25 * g1(ad(a, Math.PI / 2), 0.25) + 0.04 * Math.sin(t * 40 + a * 9), // (борозда сверху, бугорки)
+            color: (t, a) => mul(c, 0.8 + 0.3 * Math.max(0, Math.sin(t * 70 + a * 11)) ** 3 - 0.2 * g1(ad(a, Math.PI / 2), 0.25)) });
+        put(S, 'tongue1', seg(-0.14, -0.29, 0.075, 0.065, TONG));
+        put(S, 'tongue2', seg(-0.27, -0.39, 0.065, 0.05, TONG));
+        put(S, 'tongue3', seg(-0.37, -0.45, 0.05, 0.04, mix(TONG, TIP, 0.5)));
+        for (const s of [-1, 1]) put(S, 'tongue3', hornAlong([v3(s * 0.012, 2.965, -0.44), v3(s * 0.035, 2.966, -0.5), v3(s * 0.05, 2.968, -0.55)], 0.022, { rings: 6, sides: 8, c0: TIP, c1: [0.25, 0.02, 0.04], tipK: 0.15 })); // (раздвоенный кончик)
+    }
 
     // ===== руки: плечо, предплечье (кандалы), кисть с когтями
     for (const sd of ['L', 'R']) {
@@ -567,8 +595,32 @@ export function poseDiabolos(model, P) {
     B.neck.rotation.set(-sl * 0.45 + lp * 0.4 + (P.inhale || 0) * 0.35, ly * 0.35, 0);
     B.head.rotation.set(-sl * 0.25 + lp * 0.55 + (P.fireAim || 0) + (P.inhale || 0) * 0.3, ly * 0.4, Math.sin(t * 0.37) * 0.03 * sl);
     B.jaw.rotation.set(-(P.jaw || 0) * 0.55 - sl * 0.05 * (0.5 + 0.5 * Math.sin(t * 0.9)), 0, 0);
+    // мимика (P.face): брови, веки каждого глаза, зрачки, уши, оскал, ноздри, язык
+    const F = P.face || {};
     const eo = Math.max(0.04, P.eyes ?? 1);
-    B.eyes.scale.set(1, eo, 1);
+    const lidL = Math.max(0.04, eo * (F.lidL ?? F.lid ?? 1)), lidR = Math.max(0.04, eo * (F.lidR ?? F.lid ?? 1));
+    B.eyeL.scale.set(1, lidL, 1); B.eyeR.scale.set(1, lidR, 1);
+    const pw = F.pupil ?? 1;
+    B.pupL.scale.set(pw, 1, 1); B.pupR.scale.set(pw, 1, 1);
+    for (const sd of ['L', 'R']) {
+        const s = sd === 'L' ? -1 : 1;
+        const br = (F.brow ?? 0) + (sd === 'L' ? F.browL ?? 0 : F.browR ?? 0); // −1 нахмурен … +1 вскинут
+        const bb = B['brow' + sd], r = R['brow' + sd];
+        bb.position.set(r.x, r.y + br * 0.03 - (1 - Math.min(1, sd === 'L' ? lidL : lidR)) * 0.012, r.z);
+        bb.rotation.set(-br * 0.12, 0, s * ((F.tilt ?? 0) * 0.35 - Math.min(0, br) * 0.25)); // (хмурится — внутренние концы вниз; tilt — «домиком»)
+        const ear = (F.ear ?? 0) + (sd === 'L' ? F.earL ?? 0 : F.earR ?? 0); // −1 прижаты назад … +1 торчком вперёд
+        B['ear' + sd].rotation.set(0, s * ear * 0.5, s * ear * 0.25 + Math.sin(t * 0.7 + s) * 0.03);
+    }
+    B.lip.rotation.set(-(F.snarl ?? 0) * 0.35, 0, 0);
+    B.lip.position.set(R.lip.x, R.lip.y + (F.snarl ?? 0) * 0.025, R.lip.z);
+    B.nose.scale.set(1 + (F.nostril ?? 0) * 0.35, 1 + (F.nostril ?? 0) * 0.15, 1);
+    // язык: out 0…1 — высунут (длиннее, вперёд), wag — болтает (вбок/вверх-вниз), curl — облизывается (кончик вверх)
+    const to = F.tongue ?? 0, wag = F.wag ?? 0, lick = F.lick ?? 0;
+    B.tongue1.position.set(R.tongue1.x, R.tongue1.y - to * 0.02, R.tongue1.z - to * 0.2);
+    B.tongue1.scale.set(1, 1, 1 + to * 0.6);
+    B.tongue1.rotation.set(to * 0.25 + Math.sin(t * 9) * wag * 0.15, Math.sin(t * 7) * wag * 0.35, 0);
+    B.tongue2.rotation.set(Math.sin(t * 9 + 1) * wag * 0.35 - lick * 0.8, Math.sin(t * 7 + 1) * wag * 0.45, 0);
+    B.tongue3.rotation.set(Math.sin(t * 9 + 2) * wag * 0.45 - lick * 0.9, Math.sin(t * 7 + 2) * wag * 0.6, 0);
     const mw = P.maw || 0;
     B.maw.scale.set(0.3 + mw * 1.4, 0.3 + mw * 1.6, 0.3 + mw * 1.4);
     // руки

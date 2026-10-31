@@ -1,0 +1,46 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Дьяволос — стенд</title>
+<style>html,body{margin:0;background:#120806;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js"}}</script></head>
+<body><script type="module">
+import * as THREE from 'three';
+import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, devilHeat } from '/src/entities/DiabolosModel.js';
+import { ChainRope, DEVIL } from '/src/game/DiabolosRules.js';
+console.log('start', performance.now()); const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 1280, H = +q.get('h') || 800;
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(W, H); r.shadowMap.enabled = true; document.body.appendChild(r.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a0805); scene.fog = new THREE.Fog(0x2a0c06, 260, 900);
+scene.add(new THREE.HemisphereLight(0xff9a60, 0x200604, 0.55));
+const sun = new THREE.DirectionalLight(0xffc89a, 0.9); sun.position.set(-120, 260, -160); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -200, right: 200, top: 200, bottom: -200, far: 800 }); sun.shadow.mapSize.set(2048, 2048); scene.add(sun);
+const lava = new THREE.PointLight(0xff4a10, 1.2, 500); lava.position.set(60, 20, -120); scene.add(lava);
+// земля ада: тёмный базальт с трещинами лавы
+const gc = document.createElement('canvas'); gc.width = gc.height = 512; const c2 = gc.getContext('2d');
+c2.fillStyle = '#2a1a16'; c2.fillRect(0, 0, 512, 512);
+for (let i = 0; i < 4000; i++) { c2.fillStyle = `rgba(${20 + Math.random() * 40},${10 + Math.random() * 20},${8 + Math.random() * 14},0.6)`; c2.fillRect(Math.random() * 512, Math.random() * 512, 3 + Math.random() * 8, 3 + Math.random() * 8); }
+c2.strokeStyle = '#ff5a10'; c2.lineWidth = 2; for (let i = 0; i < 26; i++) { c2.beginPath(); let x = Math.random() * 512, y = Math.random() * 512; c2.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 80; y += (Math.random() - 0.5) * 80; c2.lineTo(x, y); } c2.stroke(); }
+const gt = new THREE.CanvasTexture(gc); gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(30, 30);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ map: gt, emissive: 0x200400, emissiveMap: gt }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+console.log('scene', performance.now()); const m = diabolosModel(); console.log('model', performance.now()); m.scale.setScalar(DEVIL.SCALE); m.rotation.y = +(q.get('yaw') || 0); scene.add(m);
+const pose = JSON.parse(q.get('pose') || '{}'); pose.t = 2;
+poseDiabolos(m, pose); m.updateMatrixWorld(true); devilHeat(+(q.get('heat') || 0.6), 2);
+// цепь от якоря к копыту
+const anchor = { x: +(q.get('ax') || 30), y: 3, z: +(q.get('az') || 70) };
+const an = anchorModel(); an.position.set(anchor.x, 0, anchor.z); scene.add(an);
+const rope = new ChainRope(); const h = eyeletWorld(m, new THREE.Vector3());
+for (let i = 0; i < 240; i++) rope.step(1 / 60, anchor, h, () => 0);
+const cm = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), rope.n); cm.castShadow = true;
+const a = {}, b = {}, M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0), R90 = new THREE.Quaternion().setFromAxisAngle(Y, Math.PI / 2);
+for (let i = 0; i < rope.n; i++) { rope.at(i, a); rope.at(i + 1, b); const d = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z).normalize(); Q.setFromUnitVectors(Y, d); if (i % 2) Q.multiply(R90); M.compose(new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2), Q, new THREE.Vector3(1, 1, 1)); cm.setMatrixAt(i, M); }
+scene.add(cm);
+// герой рядом для масштаба (3,5 м)
+const hero = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 3.5, 12), new THREE.MeshLambertMaterial({ color: 0x3a6ad0 }));
+hero.position.set(+(q.get('hx') || -40), 1.75, +(q.get('hz') || -50)); scene.add(hero);
+const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 50), W / H, 0.5, 3000);
+const cp = (q.get('cam') || '0,60,-260').split(',').map(Number), lk = (q.get('look') || '0,60,0').split(',').map(Number);
+cam.position.set(...cp); cam.lookAt(...lk);
+console.log('render…', performance.now()); r.render(scene, cam); console.log('rendered', performance.now());
+window.__done = true;
+</script></body></html>
