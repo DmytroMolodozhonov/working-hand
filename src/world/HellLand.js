@@ -9,7 +9,7 @@
  */
 
 import { BLOCK, CHUNK, MIN_LAYER, MAX_LAYER } from './Terrain.js';
-import { HELL, hellGround, hellNear } from './HellMap.js';
+import { HELL, hellGround, hellNear, mesaEdge } from './HellMap.js';
 
 const smoothSin = (t) => Math.sin(Math.PI * (t < 0 ? 0 : t > 1 ? 1 : t));
 function hash(x, z, s) {
@@ -48,18 +48,21 @@ export function generateHellChunk(cx, cz, P, bedrock) {
         let h = c.h, lava = c.lava;
         const kind = c.kind, deck = c.deck, pier = c.pier, parapet = c.parapet, along = c.along;
         const near = hellNear(P, x, z);
-        // (лавопады: русло лавы на плато к краю и стена, облитая лавой — раскалённая)
-        let fallTop = -999, fallHot = false;
+        // (лавопады: лава вырывается из раскалённого грота в теле скалы — над ним каменный навес, под ним колонна до озера, перед ней расщелина с ручьём лавы)
+        let fallTop = -999, fallHot = false, hotTop = -999, roofLo = 0, roofHi = -999;
+        const h0 = h; // (the rock's own top before anything is cut)
         for (let i = 0; i < near.length; i++) {
             const f = near[i];
             if (f.k !== 'fall') continue;
-            const cd = Math.cos(f.dir), sd = Math.sin(f.dir), ex = x - f.x, ez = z - f.z;
+            // (coordinates from the cliff's face where the fall leaves it: `al` out from the rock, `ac` across)
+            const M = f.mesa, rf = f._rf ?? (f._rf = mesaEdge(P, M, f.dir) - 0.5);
+            const cd = Math.cos(f.dir), sd = Math.sin(f.dir), ex = x - (M.x + cd * rf), ez = z - (M.z + sd * rf);
             const al = ex * cd + ez * sd, ac = -ex * sd + ez * cd, hw = f.w / 2;
-            const deep = f.mesa.r * 0.5; // (how far the cleft runs out to the cliff's face and past it)
-            if (Math.abs(ac) < hw + 1 && al > -14 && al < 0 && h >= f.top - 3) { h = f.top - 2; lava = f.top; } // (the lava's channel on the plateau)
-            if (Math.abs(ac) < hw && al >= 0 && al < 3) { fallTop = Math.max(fallTop, f.top); if (h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = 0; } } // (the column of the fall at the back of the cleft)
-            else if (Math.abs(ac) < hw + 1.5 + al * 0.08 && al >= 3 && al < deep && h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = H.LAVA_Y; } // (the cleft: its floor a stream of lava out to the pool)
-            if (Math.abs(ac) < hw + 3 + al * 0.08 && al > -3 && al < deep) fallHot = true; // (the rock round it red-hot)
+            const roofY = f.top + 4 + (f.w >> 1); // (the grotto's vault)
+            if (al < 0 && al >= -9 && Math.abs(ac) < hw + 0.6 - Math.max(0, -al - 4) * 0.22 && h0 > roofY) { h = f.top - 2; lava = f.top; roofLo = roofY - Math.round(2 * (-al / 9)); roofHi = h0; } // (the grotto in the rock: a pool of lava on its floor, its vault lower inside)
+            else if (al >= 0 && al < 2.5 && Math.abs(ac) < hw + al * 0.15) { fallTop = Math.max(fallTop, f.top); if (h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = 0; } } // (the tongue over the lip and the fall down the cliff's face)
+            else if (al >= 2.5 && al < 16 && Math.abs(ac) < hw + 1 + al * 0.12 && h > H.LAVA_Y - 2) { h = H.LAVA_Y - 2; lava = H.LAVA_Y; } // (a stream of lava down the scree to the pool)
+            if (al > -12 && al < 4 && Math.abs(ac) < hw + 3) { fallHot = true; hotTop = Math.max(hotTop, roofY + 1 + ((x * 7 + z * 13) & 1)); } // (the rock round the mouth and down the face red-hot — not above the vault)
         }
         const dm = Math.hypot(x - mark.x, z - mark.z);
         const r1 = hash(x, z, seed + 1), r2 = hash(x >> 1, z >> 1, seed + 2);
@@ -75,7 +78,7 @@ export function generateHellChunk(cx, cz, P, bedrock) {
                 else if (kind === 'ash') t = r1 < 0.06 ? BLOCK.HELL_BASALT : BLOCK.HELL_ASH;
                 else if (kind === 'obs') t = BLOCK.HELL_OBSIDIAN;
                 else t = r2 < 0.05 ? BLOCK.HELL_ASH : BLOCK.HELL_BASALT;
-            } else if (fallHot && L > h - 40) t = BLOCK.HELL_EMBER;
+            } else if (fallHot && L > h - 40 && L <= hotTop) t = BLOCK.HELL_EMBER;
             else if (kind === 'obs' && L > h - 60) t = (L + (x & 3)) % 9 === 0 ? BLOCK.HELL_BASALT : BLOCK.HELL_OBSIDIAN;
             else t = hash(x >> 2, L, (z >> 2) + seed) < 0.05 ? BLOCK.HELL_OBSIDIAN : hash(x, L, z) < 0.012 ? BLOCK.HELL_EMBER : BLOCK.HELL_BASALT; // (жилы обсидиана, тлеющие вкрапления)
             blocks[((L - MIN_LAYER) * CHUNK + lz) * CHUNK + lx] = t;
@@ -91,8 +94,9 @@ export function generateHellChunk(cx, cz, P, bedrock) {
             if (pier) for (let L = h + 1; L < deck - archD; L++) put(lx, lz, L, BLOCK.HELL_BRICK);
             over = true;
         }
-        // --- колонна лавопада (с края плато до озера)
+        // --- колонна лавопада (из грота до озера) и каменный свод над гротом
         if (fallTop > base) { for (let L = base + 1; L <= fallTop; L++) put(lx, lz, L, BLOCK.HELL_LAVA); over = true; }
+        if (roofHi >= roofLo) { for (let L = roofLo; L <= roofHi; L++) put(lx, lz, L, L < roofLo + 2 ? BLOCK.HELL_EMBER : BLOCK.HELL_BASALT); over = true; } // (the vault glows from the lava under it)
         // --- формы над землёй
         for (let i = 0; i < near.length; i++) {
             const f = near[i];

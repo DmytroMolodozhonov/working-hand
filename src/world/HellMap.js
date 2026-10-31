@@ -192,7 +192,7 @@ function makePlan(seed) {
             const dir = face != null ? face + (f ? 0.45 : -0.25) : rng() * TAU, w = 3 + Math.floor(rng() * 3);
             const fx = x + Math.cos(dir) * r * 0.72, fz = z + Math.sin(dir) * r * 0.72; // (the back of a cleft cut into the cliff: the fall pours out of the rock, never stands off it)
             const pool = { x: Math.round(x + Math.cos(dir) * (r + 9)), z: Math.round(z + Math.sin(dir) * (r + 9)), r: 10 + w };
-            const fall = { x: Math.round(fx), z: Math.round(fz), top: h - 1, bottom: H.LAVA_Y, w, dir, pool, mesa: m };
+            const fall = { x: Math.round(fx), z: Math.round(fz), top: Math.round(H.LAVA_Y + (h - 1 - H.LAVA_Y) * (0.5 + 0.2 * rng())), bottom: H.LAVA_Y, w, dir, pool, mesa: m }; // (top: the glowing grotto in the cliff the lava pours out of — rock over it, never the open sky)
             m.falls.push(fall);
             P.lavaFalls.push(fall);
             P.fountains.push({ x: pool.x, z: pool.z, y: H.LAVA_Y, h: 6 + w * 2, fall: true });
@@ -352,6 +352,11 @@ function buildIndex(P) {
     P.noise2 = createNoise2D((P.seed ^ 0x13a7) >>> 0);
 }
 
+/** Где край плато `m` в направлении `a` (м от середины): неровный обрыв — общий для земли и для лавопадов (HellLand: грот на самом склоне). */
+export function mesaEdge(P, m, a) {
+    return m.r * (1 + 0.12 * P.noise(Math.cos(a) * 2 + m.x * 0.01, Math.sin(a) * 2) + 0.05 * P.noise2(a * 5, m.z * 0.01));
+}
+
 const EMPTY = [];
 /** Формы плана, задевающие клетку столбца (x, z). */
 export function hellNear(P, x, z) {
@@ -406,8 +411,7 @@ export function groundNoRoads(P, x, z) {
         const f = near[i];
         switch (f.k) {
             case 'mesa': {
-                const d = Math.hypot(x - f.x, z - f.z), a = Math.atan2(z - f.z, x - f.x);
-                const r = f.r * (1 + 0.12 * n(Math.cos(a) * 2 + f.x * 0.01, Math.sin(a) * 2) + 0.05 * n2(a * 5, f.z * 0.01));
+                const d = Math.hypot(x - f.x, z - f.z), r = mesaEdge(P, f, Math.atan2(z - f.z, x - f.x));
                 if (d < r) { h = f.h + Math.round(1.5 * n2(x / 6, z / 6)); kind = 'ash'; }
                 else if (d < r + 12) { const t = (d - r) / 12; h = Math.max(h, f.h - (f.h - h) * Math.pow(t, 0.35) - 2); } // (подножие — осыпь)
                 break;
@@ -444,6 +448,8 @@ export function groundNoRoads(P, x, z) {
                 break;
             }
             case 'fall': {
+                const M = f.mesa;
+                if (Math.hypot(x - M.x, z - M.z) < mesaEdge(P, M, Math.atan2(z - M.z, x - M.x)) + 1) break; // (the pool never eats into the cliff: the fall pours down its face)
                 const d = Math.hypot(x - f.pool.x, z - f.pool.z);
                 if (d < f.pool.r + 6) { const k = smooth((f.pool.r + 6 - d) / 6); h = h + (H.LAVA_Y - 3 - h) * k; }
                 break;
