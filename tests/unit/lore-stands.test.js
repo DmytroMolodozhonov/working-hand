@@ -16,7 +16,7 @@ import { BOOK, setBookAngle } from '../../src/game/BookModel.js';
 const world = (seed) => { const t = new TerrainData(); t.generate({ seed, mountains: true }); return t; };
 
 function checkSpots(spots, label) {
-    assert.equal(spots.length, LORE_BOOKS.length, `${label}: a stand for every book`);
+    assert.ok(spots.length >= LORE_BOOKS.length - 1 && spots.length <= LORE_BOOKS.length, `${label}: a stand for (nearly) every book — the newest rotates by place`);
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
         const d = Math.hypot(spots[i].x - spots[j].x, spots[i].z - spots[j].z);
         assert.ok(d >= 1.9 || Math.abs(spots[i].y - spots[j].y) > 3, `${label}: stands ${i} and ${j} apart (${d.toFixed(2)})`);

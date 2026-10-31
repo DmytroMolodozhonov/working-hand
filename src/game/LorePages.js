@@ -258,6 +258,30 @@ export const PICTURES = {
         for (let i = 0; i < 14; i++) ell(x, X + 20 + ((i * 53) % 160), Y + 20 + ((i * 37) % 120), 2.5, 3.5, 'rgba(230,250,255,0.9)');
         x.lineCap = 'butt';
     },
+    /** Diabolos: a horned giant chained by the hoof in the dark under the world, a red glow far below (an engraving). */
+    diabolos(x, X, Y, W, H) {
+        x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#120508'], [0.7, '#3a0c10'], [1, '#7a1a12']]); x.fillRect(X, Y, W, H);
+        ell(x, X + W / 2, Y + H, 130, 70, radial(x, X + W / 2, Y + H, 140, [[0, 'rgba(255,120,40,0.7)'], [1, 'rgba(120,20,10,0)']]));
+        const cx = X + W / 2;
+        // the sleeping giant: a hunched shoulder, a bowed head, two horns
+        poly(x, [[cx - 80, Y + 250], [cx - 70, Y + 150], [cx - 40, Y + 110], [cx + 40, Y + 110], [cx + 72, Y + 160], [cx + 84, Y + 250]], '#0a0305');
+        ell(x, cx, Y + 100, 30, 34, '#0a0305');
+        poly(x, [[cx - 22, Y + 82], [cx - 50, Y + 40], [cx - 56, Y + 20], [cx - 36, Y + 52], [cx - 10, Y + 70]], '#1a0a0c');
+        poly(x, [[cx + 22, Y + 82], [cx + 50, Y + 40], [cx + 56, Y + 20], [cx + 36, Y + 52], [cx + 10, Y + 70]], '#1a0a0c');
+        x.strokeStyle = 'rgba(200,120,70,0.5)'; x.lineWidth = 1.2;
+        for (let i = 0; i < 9; i++) { x.beginPath(); x.moveTo(cx - 70 + i * 17, Y + 140 + (i % 3) * 8); x.lineTo(cx - 60 + i * 17, Y + 240); x.stroke(); } // (engraving hatching)
+        // the chain: links down from the hoof to a ring in the rock
+        for (let i = 0; i < 9; i++) { x.strokeStyle = '#a89070'; x.lineWidth = 3; x.beginPath(); x.ellipse(cx + 60 + i * 2, Y + 200 + i * 6, 6, 3.5, i % 2 ? 0.2 : 1.3, 0, Math.PI * 2); x.stroke(); }
+        stars(x, X, Y, W, 60, 14, '#c88a60');
+    },
+    /** The chain by the hoof: a hoof, heavy links, the ring in the stone. */
+    diabolosChain(x, X, Y, W, H) {
+        x.fillStyle = grad(x, 0, Y, 0, Y + H, [[0, '#1a0a0c'], [1, '#4a1410']]); x.fillRect(X, Y, W, H);
+        poly(x, [[X + 40, Y + 40], [X + 90, Y + 30], [X + 110, Y + 100], [X + 60, Y + 120]], '#0a0305');
+        x.fillStyle = '#c8a050'; x.fillRect(X + 56, Y + 112, 50, 8); // the cuff
+        for (let i = 0; i < 8; i++) { x.strokeStyle = i % 2 ? '#b09a7a' : '#8a7458'; x.lineWidth = 5; x.beginPath(); x.ellipse(X + 90 + i * 12, Y + 130 + i * 12, 12, 6, i % 2 ? 0.4 : 1.2, 0, Math.PI * 2); x.stroke(); }
+        ell(x, X + 190, Y + 232, 22, 22, '#2a2a30'); ell(x, X + 190, Y + 232, 12, 12, '#0a0a10');
+    },
     /** The high gods: golden figures of light over Venus, the Sun, the planets. */
     gods(x, X, Y, W, H) {
         x.fillStyle = '#05060f'; x.fillRect(X, Y, W, H);

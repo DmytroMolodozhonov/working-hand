@@ -135,6 +135,27 @@ export const LORE_BOOKS = [
             { p: 'Только достойные могут это.' },
         ],
     },
+    {
+        id: 'diabolos',
+        title: 'Бог Дьяволос',
+        sub: 'Тот, кто спит в цепях',
+        cover: 0x4a0d10, trim: 0xc8863a,
+        pages: [
+            { pic: 'diabolos', caption: 'Дьяволос в оковах' },
+            { h: 'Один из первых' },
+            { p: 'Дьяволос (Diabolos) был одним из первых богов, ещё до того, как у мира появились горы и моря. Ему, как и другим, было дано знание — и ему досталось самое опасное: знание тьмы.' },
+            { p: 'Он не просто узнал её — он создал чёрную магию. Каждое тёмное слово, каждое заклинание, после которого не встают, и каждый рисунок на земле, что зовёт силу из глубин, — всё это придумал он.' },
+            { h: 'Наказание' },
+            { p: 'Чёрная магия принесла миру столько горя, что боги собрались и решили: так больше нельзя. Дьяволоса не убили — боги не убивают друг друга. Его заковали цепью за копыто и опустили в подземный мир.' },
+            { p: 'С тех пор он спит. Цепь не рвётся, а сон глубок. Говорят, если приложить ухо к самой глубокой пещере, можно услышать, как он дышит.' },
+            { h: 'Отец тьмы' },
+            { p: 'Смертельная магия не берёт того, кто её создал: она была его детищем, и она его знает. Потому не вздумайте проверять на нём то, что работает на людях.' },
+            { p: 'Тех, кто спускается к нему с оружием и дерзостью, сказания не любят: он не злой по натуре, он просто сильнее всех, кто о нём рассказывает. Не будите его.' },
+            { pic: 'diabolosChain', caption: 'Цепь за копыто' },
+            { h: 'Те, кто остался рядом' },
+            { p: 'Предание гласит, что у Дьяволоса были слуги — тяжёлые, рогатые, с большими топорами. Без дела им нечего стало делать, и они раздобрели от безделья. Ещё говорят, что над его сном кружат каменные сторожа. Но так ли это — никто не проверял и вернулся.' },
+        ],
+    },
 ];
 
 export const LORE_BY_ID = new Map(LORE_BOOKS.map((b) => [b.id, b]));
@@ -154,8 +175,19 @@ export function loreItem(id, uid) {
  */
 export function loreForSite(def) {
     const spots = def?.lore || [];
-    const ids = def?.loreBooks || LORE_IDS;
+    let ids = def?.loreBooks || LORE_IDS;
+    // a library with fewer stands than there are books: the newest book (the god in chains) takes the place of
+    // one of the older ones, which one — by the site's own coordinates (so the books are spread over the libraries)
+    if (!def?.loreBooks && spots.length && spots.length < ids.length) {
+        const old = ids.filter((i) => i !== ROTATING);
+        const h = (Math.abs(Math.floor((def.x || 0) * 73856093) ^ Math.floor((def.z || 0) * 19349663)) + 3) % LORE_IDS.length;
+        ids = old.slice(0, spots.length);
+        if (h < ids.length) ids[h] = ROTATING;
+    }
     const out = [];
     for (let i = 0; i < spots.length && i < ids.length; i++) if (LORE_BY_ID.has(ids[i])) out.push({ id: ids[i], at: spots[i] });
     return out;
 }
+
+/** The book that the libraries with too few stands share out by place. */
+export const ROTATING = 'diabolos';

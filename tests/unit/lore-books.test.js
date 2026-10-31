@@ -10,7 +10,7 @@ import { isDivine } from '../../src/game/ProtectionGods.js';
 import { howLearned } from '../../src/game/SpellBook.js';
 
 test('lore books: the author\'s seven, no spells, every picture painted, the text fits the pages', () => {
-    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'flyingMaxima']);
+    assert.deepEqual(LORE_BOOKS.map((b) => b.id), ['coprus', 'jovalilius', 'liliazina', 'gods', 'iceQueen', 'blackbeard', 'flyingMaxima', 'diabolos']);
     const measure = (font, s) => s.length * (font.includes('19px') ? 10 : 7.5); // (about a serif's width)
     for (const b of LORE_BOOKS) {
         const it = loreItem(b.id, 'u1');
@@ -34,11 +34,26 @@ test('lore books: on the desk of the one tower\'s library; a site gives its own 
         const t = new TerrainData(); t.generate({ seed, mountains: true });
         const w = t.towers.only();
         const list = loreForSite(w);
-        assert.equal(list.length, LORE_BOOKS.length, `seed ${seed}: all the books`);
+        assert.equal(list.length, Math.min(w.lore.length, LORE_BOOKS.length), `seed ${seed}: a book on every stand`);
         for (const { at } of list) assert.ok(Math.hypot(at.x - w.x, at.z - w.z) < 15 && at.y > w.F + 5, 'inside the tower, on an upper floor');
     }
     assert.deepEqual(loreForSite({ lore: [{ x: 1, y: 2, z: 3 }] }).map((b) => b.id), ['coprus']);
     assert.deepEqual(loreForSite({}), []);
+});
+
+test('lore books: the god in chains reaches the libraries by place (7 stands, 8 books), no book twice', () => {
+    const seen = new Set();
+    for (let i = 0; i < 40; i++) {
+        const spots = Array.from({ length: 7 }, () => ({ x: 0, y: 0, z: 0 }));
+        const ids = loreForSite({ x: i * 311, z: i * 97 - 500, lore: spots }).map((b) => b.id);
+        assert.equal(ids.length, 7);
+        assert.equal(new Set(ids).size, 7);
+        if (ids.includes('diabolos')) seen.add(i);
+    }
+    assert.ok(seen.size >= 20 && seen.size < 40, 'a part of the libraries has it: ' + seen.size);
+    const book = LORE_BOOKS.find((b) => b.id === 'diabolos');
+    assert.ok(book.pages.length >= 4 && book.cover === 0x4a0d10);
+    assert.ok(!/ад\b|числ/i.test(book.pages.map((p) => p.p || '').join(' ')), 'no «ад» (the underworld)');
 });
 
 test('«Flying Maxima» is a spell of the gods, given (never a scroll)', () => {
