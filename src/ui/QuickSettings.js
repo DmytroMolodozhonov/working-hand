@@ -134,7 +134,22 @@ export function setupQuickSettings(box, ctx, doc = document) {
     const choose = (v) => { for (const k in radios) radios[k].checked = k === v; };
     apply.addEventListener('click', () => { ctx.setHands(picked()); choose(handClamp(ctx.handsNow())); paintHands(); });
     reset.addEventListener('click', () => { ctx.setHands(HAND_DEFAULT); choose(HAND_DEFAULT); paintHands(); });
-    const sync = () => { for (const p of rows) p(); choose(handClamp(ctx.handsNow())); paintHands(); };
+    // the hero's model: the standard one or the detailed one (RealisticBody) — at once, as in «Настройки»
+    const mrow = doc.createElement('div'); mrow.className = 'pause-audio-row';
+    const mlab = doc.createElement('label'); mlab.className = 'pause-audio-label'; mlab.textContent = 'Модель героя';
+    const mline = doc.createElement('div'); mline.className = 'pause-audio-ctl pause-radios';
+    const mradios = {};
+    for (const [v, name] of [['std', 'Стандартная'], ['real', 'Детальная']]) {
+        const l = doc.createElement('label'); const r = doc.createElement('input');
+        r.type = 'radio'; r.name = 'pause-quick-model'; r.value = v; stop(r);
+        r.addEventListener('change', () => { if (r.checked) ctx.setHero?.(v); });
+        l.append(r, name); mline.appendChild(l); mradios[v] = r;
+    }
+    const mhint = doc.createElement('div'); mhint.className = 'pause-audio-hint';
+    mhint.textContent = 'Детальная — тот же герой, но гибкий, как человек: гнётся в спине, шее, локтях и коленях, лицо повторяет вашу мимику.';
+    if (ctx.heroNow) { mrow.append(mlab, mline, mhint); box.appendChild(mrow); }
+    const paintModel = () => { const now = ctx.heroNow?.() === 'real' ? 'real' : 'std'; for (const k in mradios) mradios[k].checked = k === now; };
+    const sync = () => { for (const p of rows) p(); choose(handClamp(ctx.handsNow())); paintHands(); paintModel(); };
     sync();
     return { sync };
 }

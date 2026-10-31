@@ -1,16 +1,23 @@
 /**
- * RealRig.js — the bones of the «Реалистичный» hero and their places at rest (no THREE: the worker builds the skin
- * against them, the game moves them).
+ * RealRig.js — the bones of the «Детальный» hero (the settings' «Реалистичная» model) and their places at rest (no
+ * THREE: the worker builds the skin against them, the game moves them).
  *
- * Sizes are the world's (a block is 1 m) and the standard hero's, measured on its model (Box3): the feet on the floor
- * (group y − 2.0), the eyes 4.15 m over them (the first-person camera — Character.getHeadPosition), the crown 4.48, the
- * arms as long as the hero's own (1.0 + 0.9 from the shoulder to the wrist: the hands go where the game puts them — the
- * grip, the wand, the blows), the hands as big as the hands the game holds things with (SimplifiedHand: palm
- * 0.28 × 0.45 × 0.14, fingers 0.32…0.52). The rest is a slim grown-up person's proportions (a 1.75 m man ×2.56):
- * shoulders 1.07 across, chest 0.82, waist 0.70, hips 0.87, neck 0.31, head 0.40 × 0.50 × 0.63.
+ * The author: «взять стандартный скин и больше его детализировать с точки зрения полигонов — не пытаться сделать
+ * реалистичным». So it IS the standard hero (VoxelCharacter) — the same sizes, colours, the same pixel face — only
+ * cut from more pieces, with soft chamfers, and bending like a body: the torso in three blocks on a spine of four
+ * bones, a neck, the shoulders' caps, the elbows and knees their own blocks, the hands' fingers in three joints each,
+ * feet in shoes with soles and toes. Every size is the standard's (Box3 of its model):
+ *   the head 1.2 cube from 3.5 to 4.7 over the floor (the hair box over it to 4.8), the torso 1.2 × 1.5 × 0.8 from
+ *   2.0 to 3.5, the arms from the game's anchors (x ±0.70 at 3.25) — 0.4-thick upper arm 1.0 long, 0.35 forearm 0.9
+ *   (the game's own: the hands go where the game puts them, the drawn arm never stretched), the legs 0.5 thick from
+ *   their pivots (x ±0.30 at 2.0) to the floor, the hands the game's (SimplifiedHand: palm 0.28 × 0.45 × 0.14).
+ *
+ * The head and the clothes' pieces are sculpted in the older, smaller measures and put into these by two simple maps
+ * (`HEADX`: the head scaled about a point; `toNewH`: the torso's heights) — the shader reads the patterns back in the
+ * same measures (`toOldH`), so every cloth keeps its place.
  *
  * Space: the hero's group (x right, y up, z back — the hero faces −z). The rest pose is an «A»: the arms 45° down and
- * out (they never melt into the sides), the legs a little apart.
+ * out (they never melt into the sides), the legs straight down.
  */
 
 /** Height over the floor → the group's y. */
@@ -18,15 +25,29 @@ export const FLOOR = -2.0;
 export const Y = (h) => h + FLOOR;
 
 const S2 = Math.SQRT1_2;
+/** The head: old measures → new (scaled about C): the old head block (0.41 × 0.6 × 0.49) becomes the standard's 1.2 cube. */
+export const HEADX = { C: [0, Y(4.25), 0], S: [2.93, 2.0, 2.45] };
+export function headX(p) { const C = HEADX.C, S = HEADX.S; return [C[0] + (p[0] - C[0]) * S[0], C[1] + (p[1] - C[1]) * S[1], C[2] + (p[2] - C[2]) * S[2]]; }
+/** A normal through the head's map (the inverse-transposed scale). */
+export function headXn(n) { const S = HEADX.S, x = n[0] / S[0], y = n[1] / S[1], z = n[2] / S[2], l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; }
+/** The torso: old heights (hip 2.26, shoulder 3.48) ↔ new (2.0, 3.25); old widths ×1.5, depths ×1.55. */
+export const BODYX = { oldHip: 2.26, oldTop: 3.48, hip: 2.0, top: 3.25, x: 1.5, z: 1.55 };
+const KT = (BODYX.top - BODYX.hip) / (BODYX.oldTop - BODYX.oldHip);
+export const toNewH = (h) => (h <= BODYX.oldHip ? h * BODYX.hip / BODYX.oldHip : BODYX.hip + (h - BODYX.oldHip) * KT);
+export const toOldH = (h) => (h <= BODYX.hip ? h * BODYX.oldHip / BODYX.hip : BODYX.oldHip + (h - BODYX.hip) / KT);
+/** A body-piece point in old measures → new (a skirt, a cloak, a pauldron). */
+export function bodyX(p) { return [p[0] * BODYX.x, Y(toNewH(p[1] - FLOOR)), p[2] * BODYX.z]; }
+
 export const ANAT = {
-    crown: 4.48, eyes: 4.15, chin: 3.83, neckBase: 3.6,
-    shoulder: [0.55, Y(3.48), 0.02], // (the right one; the left is mirrored)
+    crown: 4.7, eyes: 4.15, chin: 3.5, neckBase: 3.5,
+    shoulder: [0.70, Y(3.25), 0.0], // (the right one — the game's arm anchor; the left is mirrored)
     armDir: [S2, -S2, 0], L1: 1.0, L2: 0.9,
-    hip: [0.24, Y(2.26), 0.02],
-    legDir: norm3([0.075, -1, 0]), Lth: 1.02, Lsh: 1.08,
-    foot: 0.67, // (heel to toe)
-    eye: [0.08, Y(4.15), -0.19], eyeR: 0.033,
-    jaw: [0, Y(4.06), -0.02], // (the jaw's hinge, between the ears)
+    hip: [0.3, Y(2.0), 0.0], // (the game's leg pivot)
+    legDir: [0, -1, 0], Lth: 0.96, Lsh: 0.9,
+    foot: 0.7, // (heel to toe)
+    // (the face is painted on the head's front — RealSkinMaterial; these only for the bones that stay)
+    eye: [0.085, Y(4.225), -0.205], eyeR: 0.04,
+    jaw: [0, Y(3.95), -0.02],
 };
 /** The hand the game holds things with (SimplifiedHand.js): its palm and fingers' places in the palm. */
 export const PALM = { W: 0.28, H: 0.45, D: 0.14 };
@@ -129,20 +150,21 @@ export function legRest() {
     const Hj = ANAT.hip, K = add3(Hj, v, ANAT.Lth), A = add3(K, v, ANAT.Lsh);
     const thigh = m4Frame(x, y, v, Hj), shin = m4Frame(x, y, v, K);
     const foot = m4T(A[0], A[1], A[2]);
-    const ball = [A[0] + 0.01, Y(0.05), A[2] - 0.40];
+    const ball = [A[0], Y(0.06), A[2] - 0.4];
     const toes = m4T(ball[0], ball[1], ball[2]);
     return { Hj, K, A, ball, thigh, shin, foot, toes };
 }
 
+/** The spine's bones at rest: [bone, height over the floor, z]. */
+export const SPINE_REST = [['hips', 2.15, 0], ['spine', 2.5, 0], ['chest', 2.85, 0], ['upperChest', 3.15, 0], ['neck', 3.42, 0], ['head', 3.58, 0]];
+
 /** Every bone's rest matrix in the group's space (index = B[name]). */
 export function restPose() {
     const R = new Array(BONE_COUNT);
-    const at = (h, z = 0.03) => m4T(0, Y(h), z);
-    R[B.hips] = at(2.45, 0.02); R[B.spine] = at(2.72, 0.05); R[B.chest] = at(3.05, 0.04); R[B.upperChest] = at(3.35, 0.03);
-    R[B.neck] = at(3.6, 0.04); R[B.head] = at(3.93, 0.02);
+    for (const [n, h, z] of SPINE_REST) R[B[n]] = m4T(0, Y(h), z);
     const arm = armRest(), leg = legRest();
     const both = (nameR, nameL, m) => { R[B[nameR]] = m; R[B[nameL]] = m4MirrorX(m); };
-    both('clavR', 'clavL', m4T(0.06, Y(3.56), -0.02));
+    both('clavR', 'clavL', m4T(0.12, Y(3.35), 0));
     both('upperArmR', 'upperArmL', arm.upper); both('forearmR', 'forearmL', arm.fore); both('twistR', 'twistL', arm.twist);
     both('handR', 'handL', arm.hand);
     for (const f of FINGER_NAMES) {
@@ -150,15 +172,16 @@ export function restPose() {
         for (let i = 0; i < 3; i++) both(f + i + 'R', f + i + 'L', m4Mul(arm.hand, fr[i]));
     }
     both('thighR', 'thighL', leg.thigh); both('shinR', 'shinL', leg.shin); both('footR', 'footL', leg.foot); both('toesR', 'toesL', leg.toes);
-    // the face: its bones at their places, turned as the head
+    // the face: its bones at their places (sculpted in the head's old measures, put where the head is drawn)
+    const at = (p) => { const q = headX(p); return m4T(q[0], q[1], q[2]); };
     const E = ANAT.eye;
-    R[B.jaw] = m4T(ANAT.jaw[0], ANAT.jaw[1], ANAT.jaw[2]);
-    both('eyeR', 'eyeL', m4T(E[0], E[1], E[2]));
-    both('lidUpR', 'lidUpL', m4T(E[0], E[1], E[2])); both('lidLoR', 'lidLoL', m4T(E[0], E[1], E[2]));
-    both('browInR', 'browInL', m4T(0.045, Y(4.225), -0.245)); both('browOutR', 'browOutL', m4T(0.13, Y(4.225), -0.2));
-    both('cornerR', 'cornerL', m4T(0.052, Y(3.925), -0.232));
-    R[B.lipUp] = m4T(0, Y(3.94), -0.255); R[B.lipLo] = m4T(0, Y(3.91), -0.25);
-    both('cheekR', 'cheekL', m4T(0.11, Y(4.0), -0.2));
-    R[B.nose] = m4T(0, Y(4.0), -0.275);
+    R[B.jaw] = at(ANAT.jaw);
+    both('eyeR', 'eyeL', at(E));
+    both('lidUpR', 'lidUpL', at(E)); both('lidLoR', 'lidLoL', at(E));
+    both('browInR', 'browInL', at([0.045, Y(4.225), -0.245])); both('browOutR', 'browOutL', at([0.13, Y(4.225), -0.2]));
+    both('cornerR', 'cornerL', at([0.052, Y(3.925), -0.232]));
+    R[B.lipUp] = at([0, Y(3.94), -0.255]); R[B.lipLo] = at([0, Y(3.91), -0.25]);
+    both('cheekR', 'cheekL', at([0.11, Y(4.0), -0.2]));
+    R[B.nose] = at([0, Y(4.0), -0.275]);
     return R;
 }

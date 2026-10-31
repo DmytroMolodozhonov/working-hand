@@ -1358,6 +1358,8 @@ const pauseQuick = setupQuickSettings($('pause-quick'), {
     handOn: () => !!(poseService.isRunning || poseService.injected),
     handsNow: () => document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
     setHands: (v) => { const r = document.querySelector(`input[name="hand-version"][value="${v}"]`); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } },
+    heroNow: () => $('hero-model')?.value || 'std',
+    setHero: (v) => { const el = $('hero-model'); if (el && el.value !== v) { el.value = v; el.dispatchEvent(new Event('change')); } },
 });
 const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode', 'hints-mode']);
 const applyHandedness = () => {

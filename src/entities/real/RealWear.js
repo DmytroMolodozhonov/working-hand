@@ -1,23 +1,24 @@
 /**
  * RealWear.js — what the «Реалистичный» hero has on (no THREE: built in the worker per look, cached): the hair of
  * the look's style (Appearance.HAIR_STYLES — short, long, a bun, a crew cut's spikes, a mohawk, bald, a ponytail,
- * curls), a beard, the eyelashes, the hat (a cap, a beanie, the wizard's hat, a top hat, a hood, a headband, a cowboy
+ * curls) in thick locks (the hair material draws them as cut layers — the world's style, no single hairs), a beard, the hat (a cap, a beanie, the wizard's hat, a top hat, a hood, a headband, a cowboy
  * hat), glasses, and the clothes' parts the body's own surface cannot be: a skirt, a kilt, a cloak, a hoodie's hood.
  *
  * Every vertex as the body's (RealBuild: info / mix / limb), except the hair's: its `mix` is the way the hair lies
- * (xyz) and the layer (w: 0 the dense under-layer, 1…2 the strands above it — the hair material draws strands).
+ * (xyz). Everything on the head is sculpted in the head's OLD measures and drawn through RealRig.HEADX; the body's
+ * pieces (a skirt, a cloak, the robe, the pauldrons) in the torso's old measures, drawn through RealRig.bodyX.
  */
 import { Shape, sphere, ellipsoid, cone, cap, hcone, etorus, plane, bump, meshSdf, norm, cross, add, mul, sub, dot } from './RealSdf.js';
 import { simplify } from './RealSimplify.js';
-import { headShape, PART } from './RealAnatomy.js';
-import { ANAT, B, Y } from './RealRig.js';
+import { headShape, skullBox, PART } from './RealAnatomy.js';
+import { ANAT, B, Y, headX, headXn, bodyX, BODYX } from './RealRig.js';
 
 const I3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const H = (y) => y - Y(0);
 const SKULL = { c: [0, Y(4.21), 0.03], r: [0.2, 0.25, 0.245] };
-/** The skull's surface pushed out by t (an ellipsoid a little bigger: a cap, hair, a hat). */
-const skull = (t, o) => ellipsoid(SKULL.c, [SKULL.r[0] + t, SKULL.r[1] + t, SKULL.r[2] + t], I3, o);
+/** The head's block pushed out by t (a cap, hair, a hat: blocks over the block — the world's style). */
+const skull = (t, o) => skullBox(t, o);
 /** Keeps what is over the hairline (higher in front, lower at the back). */
 const hairline = (front = 4.3, back = 4.04) => plane([0, -1, -(front - back) / 0.45], -(Y((front + back) / 2) + 0.025 * (front - back) / 0.45));
 
@@ -91,7 +92,7 @@ function hairShape(style, hat) {
     const front = style === 4 ? 4.35 : 4.31, back = style === 1 ? 3.6 : style === 6 ? 3.6 : 4.02;
     const keep = [hairline(front, back)];
     shape.inter(keep, 0, 0.02);
-    for (const s of [1, -1]) cuts.push(sphere([0.215 * s, Y(4.1), 0.03], 0.075, o)); // (round the ears)
+    for (const s of [1, -1]) cuts.push(sphere([0.235 * s, Y(4.16), 0.02], 0.045, o)); // (round the ears)
     if (style === 1) cuts.push(ellipsoid([0, Y(3.95), -0.2], [0.17, 0.3, 0.16], I3, o), cone([0, Y(3.5), 0.05], [0, Y(3.95), 0.02], 0.14, 0.13, o)); // (the face, the neck)
     if (style === 4) for (const s of [1, -1]) cuts.push(ellipsoid([0.16 * s, Y(4.3), 0.03], [0.12, 0.25, 0.3], I3, o)); // (the shaved sides)
     if (hat) cuts.push(hatInside(hat));
@@ -101,7 +102,7 @@ function hairShape(style, hat) {
 /** Under a hat no hair is seen (it only shows below it). */
 function hatInside(hat) {
     const low = { 1: 4.27, 2: 4.24, 3: 4.36, 4: 4.38, 6: 3.9, 7: 4.28, 8: 4.36, 20: 4.12, 21: 3.9 }[hat] ?? 4.3; // (20 a helmet, 21 a robe's hood)
-    return ellipsoid([0, Y(low + 0.5), 0.03], [0.32, 0.5, 0.34], I3, { part: PART.head });
+    return cap([0, Y(low + 0.5), 0], I3, 0.6, 0.5, 0, { part: PART.head }); // (all the hair over its band: the block head's corners too)
 }
 
 function beardShape() {
@@ -270,7 +271,7 @@ class Pack {
     }
 }
 
-function add3(pack, m, fn, keep = 1, layers = [0]) {
+function add3(pack, m, fn, keep = 1, layers = [0], pmap = null) {
     let idx = m.idx, map = null, count = m.n;
     if (keep < 1) { const r = simplify(m.pos, m.idx, Math.round(m.idx.length / 3 * keep), m.zone); idx = r.idx; map = r.keep; count = r.count; }
     const order = new Int32Array(count);
@@ -281,7 +282,7 @@ function add3(pack, m, fn, keep = 1, layers = [0]) {
             const v = order[i], p = [m.pos[v * 3], m.pos[v * 3 + 1], m.pos[v * 3 + 2]], n = [m.nor[v * 3], m.nor[v * 3 + 1], m.nor[v * 3 + 2]];
             const r = fn(p, n, m.zone[v], layer);
             r.info[1] = m.ao[v];
-            pack.vertex(p, n, r.w, r.info, r.mix, r.limb);
+            pack.vertex(pmap ? pmap.p(p) : p, pmap ? pmap.n(n) : n, r.w, r.info, r.mix, r.limb);
         }
         for (let t = 0; t < idx.length; t++) pack.idx.push(base + idx[t]);
     }
@@ -305,62 +306,43 @@ function flowAt(p, n) {
     return norm(t);
 }
 
-/** The lashes: a fringe along each upper and lower lid's edge (the hair material draws the hairs). */
-function lashes(pack) {
-    const E = ANAT.eye, R = ANAT.eyeR + 0.0115;
-    for (const sx of [1, -1]) for (const upper of [1, 0]) {
-        const N = 18, base = pack.n, bone = B[(upper ? 'lidUp' : 'lidLo') + (sx < 0 ? 'L' : 'R')];
-        for (let i = 0; i <= N; i++) {
-            const t = -1 + (2 * i) / N, dx = t * 0.035, dy = (upper ? 1 : -1) * 0.0118 * Math.sqrt(Math.max(0, 1 - t * t)) + 0.002;
-            const dz = -Math.sqrt(Math.max(0, R * R - dx * dx - dy * dy));
-            const b0 = [E[0] * sx + dx * sx, E[1] + dy, E[2] + dz];
-            const L = (upper ? 0.013 : 0.007) * (0.6 + 0.4 * Math.sqrt(Math.max(0, 1 - t * t)));
-            const tip = [b0[0] + dx * sx * 0.08, b0[1] + (upper ? 1 : -1) * L * 0.6, b0[2] - L * 0.8];
-            const n = norm([0, upper ? 0.4 : -0.4, -1]);
-            pack.vertex(b0, n, { [bone]: 1 }, [14, 1, 0, 0], [i / N, 0, 0, 0], [0, 0, 0, 0]);
-            pack.vertex(tip, n, { [bone]: 1 }, [14, 1, 0, 0], [i / N, 1, 0, 0], [0, 0, 0, 0]);
-        }
-        for (let i = 0; i < N; i++) { const a = base + i * 2; pack.idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-    }
-}
-
 /**
  * The look's pieces: {hair (the hair material: hair, beard, lashes), headAcc (hat, glasses), bodyAcc (skirt, cloak, hood)}.
  * `lod` 0 near / 1 far (coarser, one hair layer).
  */
 export function buildRealWear(key, lod = 0) {
     const [hair, hat, glasses, beard, bottom, top, helm = 0, chest = 0, legs = 0, robe = 0] = String(key).split('.').map(Number);
-    const cell = lod ? 0.018 : 0.0085, layers = lod ? [0] : [0, 1, 2];
+    const cell = lod ? 0.018 : 0.0085, layers = [0];
+    const HM = { p: headX, n: headXn }, BM = { p: bodyX, n: (n) => { const x = n[0] / BODYX.x, z = n[2] / BODYX.z, l = Math.hypot(x, n[1], z) || 1; return [x / l, n[1] / l, z / l]; } };
     const hairPack = new Pack(), headPack = new Pack(), bodyPack = new Pack();
     const head = headShape();
     const aoOf = (sh) => ({ dist: (x, y, z) => Math.min(sh.dist(x, y, z), head.dist(x, y, z)) });
     const hs = hairShape(hair, helm ? 20 : robe ? 21 : hat);
     if (hs) {
         const m = meshSdf(hs, [-0.34, Y(3.55), -0.4], [0.34, Y(4.65), 0.42], cell, { aoShape: aoOf(hs) });
-        add3(hairPack, m, (p, n, zone, layer) => { const f = flowAt(p, n); return { w: headW(p), info: [13, 1, 0, 0], mix: [f[0], f[1], f[2], layer], limb: [0, 0, 0, 0] }; }, lod ? 0.6 : 0.35, layers);
+        add3(hairPack, m, (p, n, zone, layer) => { const f = flowAt(p, n); return { w: headW(p), info: [13, 1, 0, 1], mix: [f[0], f[1], f[2], layer], limb: [0, 0, 0, 0] }; }, lod ? 0.5 : 0.22, layers, HM);
     }
     if (beard) {
         const m = meshSdf(beardShape(), [-0.24, Y(3.75), -0.3], [0.24, Y(4.15), 0.1], cell, { aoShape: aoOf(beardShape()) });
         add3(hairPack, m, (p, n, zone, layer) => {
             const h = H(p[1]), jaw = sm(3.93, 3.89, h) * sm(0.04, -0.1, p[2]);
-            return { w: { [B.jaw]: jaw, [B.head]: 1 - jaw }, info: [15, 1, 0, 0], mix: [0, -1, 0, layer], limb: [0, 0, 0, 0] };
-        }, lod ? 0.6 : 0.4, layers);
+            return { w: { [B.jaw]: jaw, [B.head]: 1 - jaw }, info: [15, 1, 0, 1], mix: [0, -1, 0, layer], limb: [0, 0, 0, 0] };
+        }, lod ? 0.5 : 0.25, layers, HM);
     }
-    if (!lod) lashes(hairPack);
     const hatS = helm ? helmetShape(helm) : robe ? robeHoodShape() : hat ? hatShape(hat) : null;
     if (hatS) {
         const big = helm || robe || hat === 6;
         const m = meshSdf(hatS, [-0.47, Y(3.5), -0.47], [0.47, Y(5.1), 0.47], lod ? 0.022 : big ? 0.011 : 0.009, { aoShape: aoOf(hatS) });
-        add3(headPack, m, (p, n, zone) => ({ w: headW(p), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.6 : big ? 0.3 : 0.4);
+        add3(headPack, m, (p, n, zone) => ({ w: headW(p), info: [zone, 1, 0, 1], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.5 : big ? 0.2 : 0.28, [0], HM);
     }
     if (glasses) {
         const m = meshSdf(glassesShape(), [-0.22, Y(4.1), -0.28], [0.22, Y(4.22), 0.05], lod ? 0.008 : 0.0032, { ao: false });
-        add3(headPack, m, () => ({ w: { [B.head]: 1 }, info: [11, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), 0.5);
+        add3(headPack, m, () => ({ w: { [B.head]: 1 }, info: [11, 1, 0, 1], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), 0.5, [0], HM);
     }
     for (const [bs, lo, hi, cell, keep] of [[bodyAccShape(bottom, top), [-0.68, Y(1.3), -0.5], [0.68, Y(3.8), 0.52], 0.014, 0.5], [armourBodyShape(chest, robe), [-0.95, Y(0.2), -0.62], [0.95, Y(3.78), 0.62], 0.02, 0.35]]) {
         if (!bs) continue;
         const m = meshSdf(bs, lo, hi, lod ? cell * 2.2 : cell, { ao: true });
-        add3(bodyPack, m, (p, n, zone) => ({ w: accW(p, zone), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.7 : keep);
+        add3(bodyPack, m, (p, n, zone) => ({ w: accW(p, zone), info: [zone, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }), lod ? 0.6 : keep * 0.6, [0], BM);
     }
     return { hair: hairPack.done(), headAcc: headPack.done(), bodyAcc: bodyPack.done() };
 }
@@ -377,6 +359,7 @@ function accW(p, zone) {
         w[p[0] < 0 ? B.thighR : B.thighL] = low * 0.2;
         return w;
     }
+    // (the old heights of the spine's bones: the piece is weighted where it was sculpted)
     const k = [[B.hips, 2.45], [B.spine, 2.72], [B.chest, 3.05], [B.upperChest, 3.35]];
     if (h <= 2.45) { w[B.hips] = 1; return w; }
     for (let i = 0; i < k.length - 1; i++) if (h <= k[i + 1][1]) { const t = (h - k[i][1]) / (k[i + 1][1] - k[i][1]); w[k[i][0]] = 1 - t; w[k[i + 1][0]] = t; return w; }

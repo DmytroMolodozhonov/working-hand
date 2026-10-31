@@ -3,7 +3,8 @@
  * session, the result is shared by every such hero): the body with both hands, the head with its eyes, teeth and
  * tongue; each with the bones that move every vertex (≤ 4, smooth over the joints) and what the vertex is:
  *
- *   info  = (zone, ao, flush, 0)    zone: 0 skin, 3 eye, 4 teeth, 5 tongue (the separate pieces); ao: how hidden;
+ *   info  = (zone, ao, flush, head) zone: 0 skin, 3 eye (the separate pieces); ao: how hidden; head: 1 on the head's
+ *                                    own mesh (its patterns are read in the head's old measures — RealRig.HEADX);
  *                                    flush: how red the skin is there (cheeks, nose, ears, knuckles, knees…)
  *   mix   = (lip, nail, mouth, 0)   the skin's own places (they melt into the skin: blended, not numbered)
  *   limb  = (arm, armC, leg, legC)  how much of an arm / a leg it is and where along it (0 the shoulder / hip,
@@ -11,13 +12,17 @@
  */
 import { meshSdf } from './RealSdf.js';
 import { simplify } from './RealSimplify.js';
-import { bodyShape, headShape, handShape, teethShape, BOUNDS, PART } from './RealAnatomy.js';
-import { ANAT, B, Y, FINGER_NAMES, FINGERS, PALM, restPose, armRest, legRest, fingerRest, m4Apply, m4Dir, m4Inv } from './RealRig.js';
+import { bodyShape, headShape, handShape, BOUNDS, PART } from './RealAnatomy.js';
+import { ANAT, B, Y, FINGER_NAMES, FINGERS, SPINE_REST, restPose, armRest, legRest, fingerRest, m4Apply, m4Inv, m4Dir, headX, headXn } from './RealRig.js';
 
-/** Cell sizes and how many triangles are kept (LOD 0: near; 1: far and the shadow). */
+/**
+ * Cell sizes and how many triangles are kept (LOD 0: near; 1: far and the shadow). The world's style: soft facets
+ * (the shader shades each facet a little on its own — RealSkinMaterial), so the skin is thinned hard: ~4× fewer
+ * triangles than the «real» one had (77 000 → ~17 000 near).
+ */
 export const LODS = [
-    { body: 0.026, head: 0.0065, hand: 0.0078, keep: { body: 0.55, head: 0.24, hand: 0.4 }, teeth: 0.0035, ao: true },
-    { body: 0.055, head: 0.02, hand: 0.016, keep: { body: 0.7, head: 0.7, hand: 0.7 }, teeth: 0.007, ao: true },
+    { body: 0.03, head: 0.006, hand: 0.01, keep: { body: 0.12, head: 0.06, hand: 0.3 }, ao: true },
+    { body: 0.06, head: 0.02, hand: 0.017, keep: { body: 0.45, head: 0.45, hand: 0.5 }, ao: true },
 ];
 
 const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -59,7 +64,7 @@ const addW = (w, b, x) => { if (x > 0) w[b] = (w[b] || 0) + x; };
 function scaleW(w, k) { for (const b in w) w[b] *= k; return w; }
 
 // ------------------------------------------------------------------ the body's weights
-const SPINE = [[B.hips, 2.45], [B.spine, 2.72], [B.chest, 3.05], [B.upperChest, 3.35], [B.neck, 3.6]];
+const SPINE = SPINE_REST.slice(0, 5).map(([n, h]) => [B[n], h]);
 function spineW(w, h, k = 1) {
     if (h <= SPINE[0][1]) { addW(w, SPINE[0][0], k); return; }
     for (let i = 0; i < SPINE.length - 1; i++) {
@@ -68,9 +73,9 @@ function spineW(w, h, k = 1) {
     }
     addW(w, B.neck, k);
 }
-/** The neck (in the body and in the head the same: the body's neck stays inside the head's). */
+/** The neck (in the body and in the head the same: the body's neck stays inside the head's) — new heights. */
 function neckW(w, h, k = 1) {
-    const a = sm(3.5, 3.66, h), b = sm(3.8, 3.97, h);
+    const a = sm(3.36, 3.48, h), b = sm(3.52, 3.62, h);
     addW(w, B.upperChest, k * (1 - a)); addW(w, B.neck, k * a * (1 - b)); addW(w, B.head, k * a * b);
 }
 
@@ -115,7 +120,7 @@ function bodyVertex(p, part) {
         flush = 0.3 * Math.exp(-((c - ANAT.Lth) ** 2) / 0.012) * (p[2] < 0 ? 1 : 0.3); // (the knee)
     } else if (part === PART.foot || part === PART.toe) {
         const ballZ = LEG.ball[2], toes = part === PART.toe ? sm(ballZ + 0.03, ballZ - 0.05, p[2]) : 0;
-        const shin = sm(0.22, 0.4, h);
+        const shin = sm(0.28, 0.46, h);
         addW(w, B['shin' + s], shin);
         addW(w, B['foot' + s], (1 - shin) * (1 - toes));
         addW(w, B['toes' + s], (1 - shin) * toes);
@@ -127,11 +132,11 @@ function bodyVertex(p, part) {
         // the torso; near the shoulders some of the collarbone and the arm, near the hips some of the thigh
         const S = [ARM.S[0] * (p[0] < 0 ? -1 : 1), ARM.S[1], ARM.S[2]];
         const dS = Math.hypot(p[0] - S[0], p[1] - S[1], p[2] - S[2]);
-        const kS = (1 - sm(0.1, 0.36, dS)) * sm(0.18, 0.32, Math.abs(p[0]));
-        const pit = kS * sm(3.45, 3.25, h) * 0.45; // (the armpit's skin goes with the arm)
+        const kS = (1 - sm(0.12, 0.42, dS)) * sm(0.28, 0.44, Math.abs(p[0]));
+        const pit = kS * sm(3.22, 3.0, h) * 0.45; // (the armpit's skin goes with the arm)
         const Hj = [LEG.Hj[0] * (p[0] < 0 ? -1 : 1), LEG.Hj[1], LEG.Hj[2]];
         const dH = Math.hypot(p[0] - Hj[0], p[1] - Hj[1], p[2] - Hj[2]);
-        const kH = (1 - sm(0.08, 0.32, dH)) * sm(2.42, 2.15, h) * 0.4;
+        const kH = (1 - sm(0.1, 0.38, dH)) * sm(2.2, 1.95, h) * 0.4;
         const rest = 1 - kS - kH;
         spineW(w, h, Math.max(0, rest));
         addW(w, B['clav' + s], kS - pit); addW(w, B['upperArm' + s], pit);
@@ -142,33 +147,16 @@ function bodyVertex(p, part) {
 
 // ------------------------------------------------------------------ the head's weights (and the face's bones)
 const g3 = (p, c, r) => Math.exp(-(((p[0] - c[0]) / r[0]) ** 2 + ((p[1] - c[1]) / r[1]) ** 2 + ((p[2] - c[2]) / r[2]) ** 2));
+/** (p: the head's OLD measures, as it is sculpted; the neck's bones go by the drawn heights) */
 function headVertex(p, part) {
     const w = W(), h = H(p[1]), s = sideOf(p[0]), sx = p[0] < 0 ? -1 : 1, ax = Math.abs(p[0]);
+    const hn = H(headX(p)[1]);
     const mix = [part === PART.lip ? 1 : 0, 0, part === PART.mouthIn ? 1 : 0, 0];
-    if (part === PART.neck) { neckW(w, h); return { w, info: [0, 1, 0, 1], mix, limb: [0, 0, 0, 0] }; }
+    if (part === PART.neck) { neckW(w, hn); return { w, info: [0, 1, 0, 1], mix, limb: [0, 0, 0, 0] }; }
     const face = W();
-    const E = ANAT.eye, ec = [E[0] * sx, E[1], E[2]];
-    const dE = Math.hypot(p[0] - ec[0], p[1] - ec[1], p[2] - ec[2]);
-    // the lids: round the eyeball, in front of it — the upper one over its middle, the lower under it
-    if (dE < 0.072 && p[2] < ec[2] + 0.012) {
-        const near = 1 - sm(0.05, 0.072, dE), dy = p[1] - ec[1];
-        addW(face, B['lidUp' + s], near * sm(-0.004, 0.01, dy) * 0.95);
-        addW(face, B['lidLo' + s], near * sm(0.004, -0.01, dy) * 0.8);
-    }
-    // the brows (over the eyes only)
-    if (h > 4.18) {
-        addW(face, B['browIn' + s], 0.85 * g3(p, [0.045 * sx, Y(4.225), -0.245], [0.035, 0.032, 0.05]));
-        addW(face, B['browOut' + s], 0.85 * g3(p, [0.13 * sx, Y(4.225), -0.2], [0.045, 0.032, 0.06]));
-    }
-    // the mouth: the corners, the upper and lower lips, the cheeks round them, the nose's wings
-    addW(face, B['corner' + s], 0.9 * g3(p, [0.052 * sx, Y(3.925), -0.232], [0.024, 0.022, 0.035]));
-    addW(face, B.lipUp, 0.8 * g3(p, [0, Y(3.94), -0.255], [0.045, 0.016, 0.035]) * sm(3.92, 3.932, h));
-    addW(face, B.lipLo, 0.55 * g3(p, [0, Y(3.91), -0.25], [0.042, 0.016, 0.035]) * sm(3.93, 3.918, h));
-    addW(face, B['cheek' + s], 0.6 * g3(p, [0.1 * sx, Y(4.0), -0.2], [0.05, 0.045, 0.05]));
-    addW(face, B.nose, 0.5 * g3(p, [0, Y(4.0), -0.295], [0.04, 0.025, 0.03]));
-    // the jaw: the chin, the lower lip, the jaw's front (and a little of the throat under it)
-    let jaw = sm(3.93, 3.9, h) * sm(0.05, -0.11, p[2]) * (1 - sm(0.12, 0.19, ax));
-    if (part === PART.mouthIn && h < 3.925) jaw = Math.max(jaw, 0.9);
+    // (the brows and the mouth are PAINTED on the face and move in the shader — RealSkinMaterial `uFace`: no skin is
+    // pulled round the mouth — the author: «этот рот… невероятно крипово»)
+    const jaw = 0;
     let sum = 0;
     for (const b in face) sum += face[b];
     if (sum > 0.95) { scaleW(face, 0.95 / sum); sum = 0.95; }
@@ -176,10 +164,10 @@ function headVertex(p, part) {
     addW(w, B.jaw, restK * jaw);
     addW(w, B.head, restK * (1 - jaw));
     // (the head's bottom at the neck: as the neck)
-    if (h < 3.86 && p[2] > -0.12) { const k = sm(3.86, 3.78, h); scaleW(w, 1 - k); neckW(w, h, k); }
+    if (hn < 3.62) { const k = sm(3.62, 3.5, hn); scaleW(w, 1 - k); neckW(w, hn, k); }
     for (const b in face) addW(w, b, face[b]);
-    const flush = 0.5 * g3(p, [0.1 * sx, Y(4.02), -0.2], [0.06, 0.05, 0.06]) + 0.45 * g3(p, [0, Y(4.02), -0.295], [0.03, 0.03, 0.03])
-        + (part === PART.ear ? 0.45 : 0) + 0.2 * g3(p, [0, Y(3.86), -0.22], [0.05, 0.03, 0.04]) + (part === PART.lid ? 0.2 : 0);
+    const flush = 0.45 * g3(p, [0.12 * sx, Y(4.0), -0.25], [0.045, 0.035, 0.05]) + 0.3 * g3(p, [0, Y(4.07), -0.27], [0.03, 0.03, 0.03])
+        + (part === PART.ear ? 0.35 : 0);
     return { w, info: [0, 1, Math.min(1, flush), 1], mix, limb: [0, 0, 0, 0] };
 }
 
@@ -216,7 +204,7 @@ function handVertex(p, part, zone, s) {
 }
 
 // ------------------------------------------------------------------ putting the meshes together
-function addMesh(pack, m, vertexFn, { xf = null, mirror = false, keep = 1, extra = null } = {}) {
+function addMesh(pack, m, vertexFn, { xf = null, map: pmap = null, mirror = false, keep = 1, extra = null } = {}) {
     let idx = m.idx, map = null, count = m.n;
     if (keep < 1) {
         // (thinned once: the left hand is the right one mirrored)
@@ -231,6 +219,7 @@ function addMesh(pack, m, vertexFn, { xf = null, mirror = false, keep = 1, extra
         let p = [m.pos[v * 3], m.pos[v * 3 + 1], m.pos[v * 3 + 2]], n = [m.nor[v * 3], m.nor[v * 3 + 1], m.nor[v * 3 + 2]];
         const r = vertexFn(p, m.part[v], m.zone[v]);
         if (xf) { p = m4Apply(xf, p); n = m4Dir(xf, n); }
+        if (pmap) { p = pmap.p(p); n = pmap.n(n); }
         if (mirror) { p[0] = -p[0]; n[0] = -n[0]; }
         r.info[1] = m.ao[v];
         if (extra) extra(r, p);
@@ -242,31 +231,14 @@ function addMesh(pack, m, vertexFn, { xf = null, mirror = false, keep = 1, extra
     }
 }
 
-/** A sphere of an eye (its cornea a little forward), bound to its eye's bone. */
-function addEye(pack, side) {
-    const sx = side === 'L' ? -1 : 1, c = [ANAT.eye[0] * sx, ANAT.eye[1], ANAT.eye[2]], R = ANAT.eyeR;
-    const NU = 28, NV = 18, base = pack.n;
-    for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
-        const th = (j / NV) * Math.PI, ph = (i / NU) * Math.PI * 2;
-        // (around −z, the eye's front: the pole looks forward)
-        const n = [Math.sin(th) * Math.cos(ph), Math.sin(th) * Math.sin(ph), -Math.cos(th)];
-        const bulge = th < 0.62 ? 0.0045 * Math.cos(th / 0.62 * Math.PI / 2) ** 2 : 0;
-        const p = [c[0] + n[0] * (R + bulge), c[1] + n[1] * (R + bulge), c[2] + n[2] * (R + bulge)];
-        pack.vertex(p, n, { [B['eye' + side]]: 1 }, [3, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]);
-    }
-    for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) {
-        const a = base + j * (NU + 1) + i, b = a + 1, c2 = a + NU + 1, d = c2 + 1;
-        pack.tri(a, b, c2); pack.tri(b, d, c2);
-    }
-}
-
 /**
  * The whole skin, both LODs. Returns {lods: [{body, head}, …], rest: Float64Array[]} (the meshes' arrays as
  * Pack.done gives them; `rest` — every bone's rest matrix).
  */
 export function buildRealBody(lodList = [0, 1]) {
     const rest = restPose();
-    const shapes = { body: bodyShape(), head: headShape(), hand: handShape(), teeth: teethShape() };
+    const shapes = { body: bodyShape(), head: headShape(), hand: handShape() };
+    const HM = { p: headX, n: headXn };
     const lods = [];
     for (const li of lodList) {
         const L = LODS[li];
@@ -279,16 +251,11 @@ export function buildRealBody(lodList = [0, 1]) {
         addMesh(body, hm, (p, part, zone) => handVertex(p, part, zone, 'R'), { xf: handR, keep: L.keep.hand });
         // (the left hand: the right one mirrored — and its bones the left ones)
         addMesh(body, hm, (p, part, zone) => handVertex(p, part, zone, 'L'), { xf: handR, mirror: true, keep: L.keep.hand });
-        // ---- the head: skin, eyes, teeth, tongue
+        // ---- the head: skin and eyes (sculpted in the old measures, drawn in the new; no teeth, no tongue)
         const head = new Pack();
-        const aoAll = { dist: (x, y, z) => Math.min(shapes.head.dist(x, y, z), shapes.body.dist(x, y, z)) };
+        const aoAll = { dist: (x, y, z) => shapes.head.dist(x, y, z) };
         const hd = meshSdf(shapes.head, BOUNDS.head[0], BOUNDS.head[1], L.head, { ao: L.ao, aoShape: aoAll });
-        addMesh(head, hd, headVertex, { keep: L.keep.head });
-        addEye(head, 'L'); addEye(head, 'R');
-        const tm = meshSdf(shapes.teeth.teeth, BOUNDS.teeth[0], BOUNDS.teeth[1], L.teeth, { ao: false });
-        addMesh(head, tm, (p, part, zone) => ({ w: { [zone ? B.jaw : B.head]: 1 }, info: [4, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }));
-        const gm = meshSdf(shapes.teeth.tongue, BOUNDS.tongue[0], BOUNDS.tongue[1], L.teeth * 1.2, { ao: false });
-        addMesh(head, gm, () => ({ w: { [B.jaw]: 1 }, info: [5, 1, 0, 0], mix: [0, 0, 0, 0], limb: [0, 0, 0, 0] }));
+        addMesh(head, hd, headVertex, { keep: L.keep.head, map: HM });
         lods.push({ body: body.done(), head: head.done() });
     }
     return { lods, rest };

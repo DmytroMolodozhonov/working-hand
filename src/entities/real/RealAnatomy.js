@@ -5,8 +5,8 @@
  * The parts (`PART`) tell the mesh what each place is: the weights (which bones move it), the clothes (torso, arm,
  * leg, foot), the colours (lips, nails, the inside of the mouth).
  */
-import { Shape, sphere, ellipsoid, cone, box, plane, etorus, bump, add, sub, mul, norm, cross, frameZ, dot } from './RealSdf.js';
-import { ANAT, Y, FINGERS, FINGER_NAMES, PALM, armRest, legRest, fingerRest, m4Apply, m4Dir } from './RealRig.js';
+import { Shape, sphere, ellipsoid, cone, box, plane, bump, add, sub, mul, norm, cross, dot } from './RealSdf.js';
+import { ANAT, Y, FINGERS, FINGER_NAMES, armRest, legRest, fingerRest, m4Apply, m4Dir } from './RealRig.js';
 
 export const PART = {
     torso: 1, neck: 2, arm: 3, leg: 4, foot: 5, toe: 6, head: 7, lip: 8, nail: 9, ear: 10, nose: 11, mouthIn: 12,
@@ -28,212 +28,102 @@ function both(list, make) {
 }
 
 // ================================================================== the body (torso, arms, legs, feet)
-/** @param {number} neckShrink the body's neck a little thinner: hidden in the head's own (the head is a mesh of its own). */
-export function bodyShape(neckShrink = 0.008) {
+/** A box with soft chamfers whose OUTER half-sizes are `half` (the chamfer cut from them, not added). */
+function rbox(c, half, frame, r, o) {
+    return box(c, [Math.max(1e-3, half[0] - r), Math.max(1e-3, half[1] - r), Math.max(1e-3, half[2] - r)], frame, r, o);
+}
+
+/** A box along a limb from `a`, `len` long (its middle at a + u·len/2), `w` across the hinge, `d` the other way. */
+function limbBox(a, u, frame, t0, t1, w, d, round, part, X, F) {
+    const c = add(a, mul(u, (t0 + t1) / 2));
+    return rbox(X(c), [(t1 - t0) / 2, w, d], F(frame), round, { part });
+}
+
+/**
+ * The body: the standard hero's boxes (the same sizes and places), cut finer — the torso in three blocks (chest,
+ * belly, pelvis) that bend on the spine, the shoulders' caps, a neck under the head, the elbow and the knee their own
+ * blocks between the arm's and the leg's two, the feet in shoes (a sole, a toe cap). Soft chamfers on every edge; the
+ * blocks melt only a little where they meet (the skin bends there without seams). No muscles — not a «real» body.
+ * @param {number} neckShrink the body's neck a little thinner: hidden in the head's own.
+ */
+export function bodyShape(neckShrink = 0) {
     const torso = [], arms = [], legs = [], feet = [], cuts = [];
     const P = PART;
-    const e = (c, r, f = I3, part = P.torso) => ellipsoid(c, r, f, { part });
-    // ---- the torso: pelvis, belly, waist, the rib cage, the chest
+    const bx = (c, h, r = 0.06, part = P.torso, f = I3) => rbox(c, h, f, r, { part });
+    // ---- the torso (the standard's 1.2 × 1.5 × 0.8 from 2.0 to 3.5) in three blocks
     torso.push(
-        e([0, Y(2.42), 0.02], [0.4, 0.24, 0.24]),
-        e([0, Y(2.6), -0.03], [0.32, 0.2, 0.2]),
-        e([0, Y(2.84), 0.03], [0.3, 0.24, 0.205]),
-        e([0, Y(3.12), 0.03], [0.37, 0.36, 0.255]),
-        e([0, Y(3.38), 0.035], [0.4, 0.2, 0.235]),
-        e([0, Y(2.86), -0.1], [0.2, 0.3, 0.12]), // (the belly's muscles)
+        bx([0, Y(3.15), 0], [0.6, 0.35, 0.4], 0.07), // the chest
+        bx([0, Y(2.6), 0], [0.57, 0.22, 0.38], 0.06), // the belly (a little narrower: the waist)
+        bx([0, Y(2.2), 0], [0.59, 0.2, 0.39], 0.06), // the pelvis
     );
-    both(torso, (X, F) => [
-        e(X([0.16, Y(3.28), -0.13]), [0.16, 0.11, 0.075]), // the chest's muscle
-        cone(X([0.07, Y(3.66), 0.07]), X([0.44, Y(3.57), 0.04]), 0.085, 0.085, { part: P.torso }), // the trapezius
-        e(X([0.19, Y(3.3), 0.17]), [0.14, 0.17, 0.07]), // the shoulder blade
-        e(X([0.27, Y(3.1), 0.08]), [0.1, 0.25, 0.16]), // the broad back muscle
-        e(X([0.25, Y(2.62), 0.0]), [0.1, 0.16, 0.17]), // the flank
-        ellipsoid(X([0.15, Y(2.27), 0.13]), [0.165, 0.2, 0.15], I3, { part: P.glute }),
-        cone(X([0.04, Y(3.6), -0.12]), X([0.42, Y(3.62), -0.045]), 0.024, 0.022, { part: P.torso }), // the collarbone
-    ]);
-    // ---- the neck (thinner than the head's: the head's mesh covers it)
-    torso.push(cone([0, Y(3.52), 0.04], [0, Y(3.86), 0.0], 0.148 - neckShrink, 0.13 - neckShrink, { part: P.neck }));
-    // the spine's groove, the navel
-    cuts.push(
-        cone([0, Y(2.62), 0.25], [0, Y(3.0), 0.285], 0.016, 0.018, { part: P.torso }),
-        cone([0, Y(3.0), 0.285], [0, Y(3.42), 0.272], 0.018, 0.014, { part: P.torso }),
-        sphere([0, Y(2.72), -0.228], 0.014, { part: P.torso }),
-    );
-    // ---- the arms (A-pose: 45° down and out)
+    // ---- the neck (under the head's block)
+    torso.push(bx([0, Y(3.56), 0], [0.2 - neckShrink, 0.1, 0.18 - neckShrink], 0.05, P.neck));
+    // the seam between the chest and the belly, the belt's line (a little cut in: the blocks read as blocks)
+    cuts.push(bx([0, Y(2.82), 0], [0.7, 0.012, 0.5], 0.005), bx([0, Y(2.4), 0], [0.7, 0.01, 0.5], 0.005));
+    // ---- the arms (A-pose: 45° down and out): the standard's 0.4 upper arm and 0.35 forearm, never longer than the game's
     const A = armRest(), u = A.u, ax = [Math.SQRT1_2, Math.SQRT1_2, 0], zb = [0, 0, 1];
     const af = [u, ax, zb];
     both(arms, (X, F) => {
-        const S = A.S, E = A.E, W = A.W, at = (p, t, o = [0, 0, 0]) => X(add(add(p, mul(u, t)), o));
+        const S = A.S, E = A.E;
         return [
-            ellipsoid(at(S, 0.06, [0, 0.04, 0]), [0.22, 0.15, 0.155], F(af), { part: P.arm }), // the deltoid
-            cone(at(S, 0.05), at(E, -0.03), 0.125, 0.088, { part: P.arm }),
-            ellipsoid(at(S, 0.55, [0, 0, -0.045]), [0.3, 0.085, 0.07], F(af), { part: P.arm }), // the biceps
-            ellipsoid(at(S, 0.42, [0, 0, 0.05]), [0.33, 0.08, 0.072], F(af), { part: P.arm }), // the triceps
-            sphere(at(E, 0), 0.07, { part: P.arm }),
-            sphere(at(E, 0, [0, 0, 0.045]), 0.032, { part: P.arm }), // the point of the elbow
-            cone(at(E, 0), at(W, 0), 0.09, 0.05, { part: P.arm, flat: 0.8, flatAxis: zb }),
-            ellipsoid(at(E, 0.25), [0.3, 0.09, 0.068], F(af), { part: P.arm }), // the forearm's muscles
-            ellipsoid(at(W, -0.01), [0.04, 0.052, 0.038], F(af), { part: P.arm }),
+            rbox(X(S), [0.23, 0.23, 0.23], F(af), 0.07, { part: P.arm }), // the shoulder's cap
+            limbBox(S, u, af, 0.0, 0.9, 0.2, 0.2, 0.05, P.arm, X, F),
+            rbox(X(E), [0.12, 0.185, 0.185], F(af), 0.07, { part: P.arm }), // the elbow
+            limbBox(E, u, af, 0.05, 0.86, 0.175, 0.175, 0.045, P.arm, X, F),
         ];
     });
-    // ---- the legs
-    const L = legRest(), v = ANAT.legDir, lx = norm(cross([0, 0, 1], v)), lf = [v, lx, [0, 0, 1]];
+    // ---- the legs: the standard's 0.5 legs, the knee its own block
+    const L = legRest(), v = ANAT.legDir, lx = [1, 0, 0], lf = [v, lx, [0, 0, 1]];
     both(legs, (X, F) => {
-        const H = L.Hj, K = L.K, An = L.A, at = (p, t, o = [0, 0, 0]) => X(add(add(p, mul(v, t)), o));
+        const H = L.Hj, K = L.K;
         return [
-            cone(at(H, 0), at(K, -0.05), 0.2, 0.112, { part: P.leg }),
-            ellipsoid(at(H, 0.5, [0, 0, -0.07]), [0.42, 0.14, 0.12], F(lf), { part: P.leg }), // the quadriceps
-            ellipsoid(at(K, -0.17, [-0.06, 0, -0.05]), [0.1, 0.07, 0.07], F(lf), { part: P.leg }), // its inner head over the knee
-            ellipsoid(at(H, 0.45, [0, 0, 0.08]), [0.4, 0.12, 0.1], F(lf), { part: P.leg }), // the hamstrings
-            ellipsoid(at(H, 0.28, [-0.08, 0, 0]), [0.3, 0.09, 0.12], F(lf), { part: P.leg }), // the inner thigh
-            sphere(at(K, 0), 0.108, { part: P.leg }),
-            sphere(at(K, 0, [0, 0.02, -0.098]), 0.05, { part: P.leg }), // the kneecap
-            cone(at(K, 0), at(An, -0.03), 0.104, 0.062, { part: P.leg }),
-            ellipsoid(at(K, 0.3, [-0.035, 0, 0.065]), [0.25, 0.062, 0.075], F(lf), { part: P.leg }), // the calf
-            ellipsoid(at(K, 0.28, [0.035, 0, 0.06]), [0.24, 0.058, 0.07], F(lf), { part: P.leg }),
-            ellipsoid(at(K, 0.35, [0.02, 0, -0.048]), [0.3, 0.045, 0.045], F(lf), { part: P.leg }), // along the shin bone
-            sphere(at(An, 0, [-0.052, 0.012, 0]), 0.036, { part: P.leg }), // the ankle bones
-            sphere(at(An, 0, [0.056, -0.004, 0.005]), 0.034, { part: P.leg }),
+            limbBox(H, v, lf, -0.1, 0.88, 0.25, 0.25, 0.05, P.leg, X, F),
+            rbox(X(K), [0.13, 0.255, 0.255], F(lf), 0.07, { part: P.leg }), // the knee
+            limbBox(K, v, lf, 0.08, 0.86, 0.24, 0.24, 0.05, P.leg, X, F),
         ];
     });
-    // ---- the feet
+    // ---- the feet: a shoe — the sole, the toe cap a little rounder
     both(feet, (X) => {
-        const An = L.A, out = [];
-        out.push(
-            sphere(X([An[0], Y(0.085), An[2] + 0.09]), 0.085, { part: P.foot }), // the heel
-            cone(X([An[0], Y(0.085), An[2] + 0.06]), X([An[0] - 0.005, Y(0.055), An[2] - 0.38]), 0.085, 0.066, { part: P.foot, flat: 0.62, flatAxis: [0, 1, 0] }),
-            ellipsoid(X([An[0], Y(0.15), An[2] - 0.12]), [0.072, 0.07, 0.17], I3, { part: P.foot }), // the instep
-            ellipsoid(X([An[0], Y(0.17), An[2]]), [0.07, 0.09, 0.08], I3, { part: P.foot }),
-        );
-        // the toes: the big one inside, the little ones shorter
-        const tz = [0.135, 0.115, 0.1, 0.085, 0.07], tr = [0.031, 0.02, 0.019, 0.018, 0.016];
-        for (let i = 0; i < 5; i++) {
-            const x0 = An[0] - 0.058 + i * 0.031, z0 = An[2] - 0.37 + i * 0.012;
-            out.push(cone(X([x0, Y(0.04), z0]), X([x0 + i * 0.004, Y(0.032), z0 - tz[i]]), tr[i] * 1.1, tr[i], { part: P.toe, flat: 0.8, flatAxis: [0, 1, 0] }));
-        }
-        return out;
+        const An = L.A;
+        return [
+            rbox(X([An[0], Y(0.13), An[2] - 0.06]), [0.26, 0.13, 0.32], I3, 0.05, { part: P.foot }),
+            rbox(X([An[0], Y(0.1), An[2] - 0.3]), [0.255, 0.1, 0.12], I3, 0.07, { part: P.toe }),
+        ];
     });
     return new Shape()
-        .union(torso, 0.07)
-        .union(arms, 0.045, 0.06)
-        .union(legs, 0.05, 0.055)
-        .union(feet, 0.03, 0.045)
-        .cut(cuts, 0, 0.02)
-        .inter([plane([0, -1, 0], -Y(0.0))], 0, 0.012); // (the soles flat on the floor)
+        .union(torso, 0.03)
+        .union(arms, 0.04, 0.05)
+        .union(legs, 0.04, 0.05)
+        .union(feet, 0.02, 0.04)
+        .cut(cuts, 0, 0.01)
+        .inter([plane([0, -1, 0], -Y(0.0))], 0, 0.01); // (the soles flat on the floor)
 }
 
-// ================================================================== the head (with its neck)
+// ================================================================== the head
+/** The head's block (the OLD measures — RealRig.HEADX makes it the standard's 1.2 cube): hats and hair sit on it. */
+export const HEAD_BOX = { c: [0, Y(4.175), 0.0], h: [0.205, 0.3, 0.245], r: 0.022 };
+/** The head's block pushed out by t (a cap, hair, a hat, a helmet: blocks over the block). */
+export function skullBox(t, o) { return rbox(HEAD_BOX.c, [HEAD_BOX.h[0] + t, HEAD_BOX.h[1] + t, HEAD_BOX.h[2] + t], I3, HEAD_BOX.r + t * 0.5, o); }
+
 /**
- * Sculpted, not stacked: one smooth skull–face–jaw, then pushed and pressed like clay (the brow's ridge, the sockets,
- * the cheekbones and the hollows under them, the mouth's mound, the chin, the jaw's corners, the temples), then the
- * nose, the lips, the lids round the eyeballs, the ears with their rims — and cut: the eyes' slits, the mouth, the
- * nostrils, the ears' hollows.
+ * The standard hero's head: its cube with soft edges, a nose block, small ears. The face is the standard's pixel face
+ * (the look's eyes and mouth), PAINTED on the front by the shader and moving with the player's face (RealSkinMaterial
+ * `uFace*`: blinking, looking, the brows, a smile, an open mouth, an «о») — no eyeballs, lips or teeth.
+ * Sculpted in the head's OLD measures; RealRig.HEADX makes it the drawn head.
  */
 export function headShape() {
-    const P = PART, skull = [], lips = [], ears = [], neck = [], cuts = [], nose = [], lids = [], bumps = [], earCuts = [];
-    const e = (c, r, part = P.head, f = I3) => ellipsoid(c, r, f, { part });
-    const E = ANAT.eye;
-    skull.push(
-        e([0, Y(4.21), 0.03], [0.2, 0.25, 0.245]), // the skull
-        e([0, Y(4.04), -0.06], [0.165, 0.21, 0.18]), // the face
-        e([0, Y(3.92), -0.075], [0.14, 0.1, 0.155]), // the jaw
-        e([0, Y(3.86), -0.19], [0.052, 0.04, 0.045]), // the chin
-    );
-    const bm = (c, sig, amp) => bumps.push(bump(c, sig, amp, I3, { part: P.head }));
-    bm([0, Y(4.2), -0.225], [0.03, 0.025, 0.04], 0.018); // between the brows
-    for (const sx of [1, -1]) {
-        bm([0.075 * sx, Y(4.215), -0.205], [0.06, 0.018, 0.04], 0.026); // the brow's ridge
-        bm([0.06 * sx, Y(4.33), -0.19], [0.06, 0.06, 0.06], 0.008); // the forehead's two mounds
-        bm([0.085 * sx, Y(4.155), -0.2], [0.04, 0.03, 0.05], -0.01); // the socket
-        bm([0.12 * sx, Y(4.07), -0.17], [0.035, 0.022, 0.05], 0.02); // the cheekbone
-        bm([0.12 * sx, Y(3.98), -0.16], [0.03, 0.03, 0.05], -0.004); // the hollow under it
-        bm([0.085 * sx, Y(4.0), -0.2], [0.035, 0.035, 0.04], 0.01); // the cheek
-        bm([0.135 * sx, Y(3.92), 0.0], [0.03, 0.03, 0.03], 0.012); // the jaw's corner
-        bm([0.175 * sx, Y(4.21), -0.1], [0.035, 0.035, 0.035], -0.012); // the temple
-        bm([0.045 * sx, Y(3.96), -0.235], [0.008, 0.028, 0.02], -0.003); // the fold from the nose to the mouth
-    }
-    bm([0, Y(3.94), -0.22], [0.05, 0.04, 0.05], 0.02); // the mouth's mound
-    bm([0, Y(3.86), -0.225], [0.03, 0.025, 0.03], 0.008); // the chin's point
-    bm([0, Y(3.888), -0.235], [0.03, 0.01, 0.03], -0.006); // the dip under the lower lip
-    bm([0, Y(3.962), -0.252], [0.006, 0.015, 0.02], -0.003); // the groove over the upper lip
-    // the lids: skin round each eyeball (cut open below)
-    both(lids, (X) => [sphere(X(E), ANAT.eyeR + 0.011, { part: P.lid })]);
-    // the nose: a narrow bridge widening to the tip, the wings, the strip between the nostrils
-    nose.push(
-        cone([0, Y(4.19), -0.228], [0, Y(4.045), -0.272], 0.013, 0.021, { part: P.nose, flat: 0.8, flatAxis: [1, 0, 0] }),
-        sphere([0, Y(4.03), -0.278], 0.019, { part: P.nose }),
-        cone([0, Y(4.015), -0.278], [0, Y(3.995), -0.262], 0.008, 0.007, { part: P.nose }),
-    );
-    both(nose, (X) => [e(X([0.025, Y(4.003), -0.257]), [0.016, 0.014, 0.019], P.nose)]);
-    // the lips: the upper one with its bow's middle, the fuller lower one
-    lips.push(
-        e([0, Y(3.938), -0.247], [0.05, 0.011, 0.014], P.lip),
-        sphere([0, Y(3.935), -0.257], 0.008, { part: P.lip }),
-        e([0, Y(3.912), -0.243], [0.045, 0.013, 0.016], P.lip),
-    );
-    // the ears: a thin shell, its rim, the lobe, the tragus; the hollow cut into it
-    both(ears, (X, F) => {
-        const n = norm([1, 0, -0.3]), up0 = [0, 0.97, 0.25], up = norm(sub(up0, mul(n, dot(up0, n)))), fw = cross(up, n);
-        const fr = [fw, up, n], c = [0.205, Y(4.115), 0.04];
-        const at = (a, b, k) => X(add(add(add(c, mul(fw, a)), mul(up, b)), mul(n, k)));
-        return [
-            ellipsoid(X(c), [0.055, 0.1, 0.012], F(fr), { part: P.ear }),
-            etorus(at(0, 0.005, 0.004), 0.058, 0.102, 0.011, F(fr), { part: P.ear }),
-            etorus(at(-0.006, -0.005, 0.006), 0.03, 0.058, 0.007, F(fr), { part: P.ear }),
-            ellipsoid(at(0.005, -0.095, 0), [0.022, 0.026, 0.012], F(fr), { part: P.ear }),
-            sphere(at(0.045, -0.02, 0.006), 0.011, { part: P.ear }),
-        ];
-    });
-    both(earCuts, (X) => {
-        const n = norm([1, 0, -0.3]), up0 = [0, 0.97, 0.25], up = norm(sub(up0, mul(n, dot(up0, n)))), fw = cross(up, n), c = [0.205, Y(4.115), 0.04];
-        return [sphere(X(add(add(add(c, mul(fw, 0.012)), mul(up, -0.015)), mul(n, 0.027))), 0.026, { part: P.ear })];
-    });
-    // the neck: its muscles, the throat's ridge, the nape
-    neck.push(
-        cone([0, Y(3.48), 0.04], [0, Y(3.9), 0.0], 0.148, 0.13, { part: P.neck }),
-        e([0, Y(3.74), -0.125], [0.025, 0.035, 0.02], P.neck),
-        e([0, Y(3.75), 0.1], [0.12, 0.12, 0.08], P.neck),
-    );
-    both(neck, (X) => [cone(X([0.13, Y(4.0), 0.07]), X([0.035, Y(3.6), -0.1]), 0.035, 0.03, { part: P.neck })]);
-    // cut away: the eyeballs' room, the eyes' slits (the outer corner a little higher), the nostrils
-    const tilt = [[Math.cos(0.08), Math.sin(0.08), 0], [-Math.sin(0.08), Math.cos(0.08), 0], [0, 0, 1]];
-    both(cuts, (X, F) => [
-        ellipsoid(X([E[0], E[1] + 0.002, E[2] - 0.038]), [0.037, 0.0115, 0.04], F(tilt), { part: P.lid }),
-        ellipsoid(X([0.012, Y(3.996), -0.27]), [0.0075, 0.005, 0.011], I3, { part: P.nose }),
-    ]);
-    const mouth = [
-        ellipsoid([0, Y(3.925), -0.17], [0.055, 0.035, 0.065], I3, { part: P.mouthIn }),
-        ellipsoid([0, Y(3.925), -0.255], [0.047, 0.0065, 0.03], I3, { part: P.mouthIn }),
-    ];
+    const P = PART;
+    const skull = [skullBox(0, { part: P.head })];
+    // the nose: the standard's 2 × 2 pixel nose (0.15 m) as a little block
+    const nose = [rbox([0, Y(4.1375), -0.257], [0.026, 0.0375, 0.016], I3, 0.008, { part: P.nose })];
+    const ears = [], earCuts = [];
+    both(ears, (X) => [rbox(X([0.215, Y(4.16), 0.02]), [0.018, 0.045, 0.03], I3, 0.008, { part: P.ear })]);
+    both(earCuts, (X) => [rbox(X([0.232, Y(4.16), 0.02]), [0.008, 0.025, 0.015], I3, 0.004, { part: P.ear })]);
     return new Shape()
-        .union(skull, 0.08)
-        .bumps(bumps)
-        .union(neck, 0.06, 0.06)
-        .union(lids, 0, 0.03)
-        .union(nose, 0.02, 0.025)
-        .union(lips, 0.006, 0.01)
-        .union(ears, 0.008, 0.02)
-        .cut(earCuts, 0, 0.006)
-        .cut(cuts, 0, 0.007)
-        .cut(mouth, 0.01, 0.004);
-}
-
-/** The teeth (two rows round the arc behind the lips) and the tongue. */
-export function teethShape() {
-    const up = [], lo = [], tongue = [];
-    const C = [0, Y(3.925), -0.19];
-    for (const [row, list, y] of [[0, up, 0.007], [1, lo, -0.009]]) {
-        for (let i = -4; i <= 4; i++) {
-            if (i === 0) continue;
-            const a = (Math.abs(i) - 0.5) * 0.2 * Math.sign(i);
-            const r = 0.046, c = [C[0] + Math.sin(a) * r, C[1] + y, C[2] - Math.cos(a) * r];
-            const w = Math.abs(i) <= 2 ? 0.0085 : 0.0095;
-            const f = frameZ([Math.sin(a), 0, -Math.cos(a)]);
-            list.push(box(c, [w * (row ? 0.85 : 1), 0.0095 * (Math.abs(i) <= 2 ? 1 : 0.85), 0.006], [f[0], f[1], f[2]], 0.0025, { part: PART.teeth, zone: row }));
-        }
-    }
-    tongue.push(ellipsoid([0, Y(3.905), -0.18], [0.038, 0.012, 0.05], I3, { part: PART.tongue }));
-    return { teeth: new Shape().union(up, 0.003).union(lo, 0.003), tongue: new Shape().union(tongue, 0) };
+        .union(skull, 0)
+        .union(nose, 0.006, 0.01)
+        .union(ears, 0.004, 0.008)
+        .cut(earCuts, 0, 0.003);
 }
 
 // ================================================================== the hand (the right one, in its palm's space)
@@ -244,47 +134,39 @@ export function teethShape() {
 export function handShape() {
     const P = PART, palm = [], fingers = [], nails = [];
     palm.push(
-        box([0.005, 0.0, 0.0], [0.105, 0.19, 0.028], I3, 0.032, { part: P.palm, zone: 15 }),
+        box([0.005, 0.0, 0.0], [0.105, 0.19, 0.036], I3, 0.034, { part: P.palm, zone: 15 }),
         ellipsoid([-0.072, -0.1, -0.03], [0.055, 0.1, 0.04], [norm([0.9, 0.42, 0]), norm([-0.42, 0.9, 0]), [0, 0, 1]], { part: P.palm, zone: 15 }), // the thumb's mound
         ellipsoid([0.095, -0.08, -0.024], [0.04, 0.12, 0.036], I3, { part: P.palm, zone: 15 }), // the little finger's side
         ellipsoid([0, 0.19, 0.008], [0.125, 0.04, 0.04], I3, { part: P.palm, zone: 15 }), // the knuckles' ridge
         cone([0, -0.19, 0], [0, -0.36, 0], 0.062, 0.058, { part: P.palm, zone: 16, flat: 0.74, flatAxis: [0, 0, 1] }), // the wrist
     );
     for (const f of ['index', 'middle', 'ring', 'pinky']) palm.push(sphere([FINGERS[f].x, 0.205, 0.024], 0.03, { part: P.palm, zone: 15 }));
+    // the fingers: soft-chamfered blocks per bone (the world's style — no thin «real» fingers), as thick as the game's,
+    // a little thinner to the tip, a flat nail on the last one
     FINGER_NAMES.forEach((f, fi) => {
         const c = FINGERS[f], seg = c.len / 3, R = fingerRest(f);
         const thumb = f === 'thumb';
-        const r0 = thumb ? 0.046 : c.w * 0.45, r3 = thumb ? 0.03 : c.w * 0.33;
-        const rr = (t) => r0 + (r3 - r0) * t; // (thinner to the tip)
+        const r0 = thumb ? 0.05 : c.w * 0.54, r3 = thumb ? 0.04 : c.w * 0.45;
         for (let i = 0; i < 3; i++) {
             const M = R[i], at = (p) => m4Apply(M, p), dir = (p) => m4Dir(M, p);
-            const t0 = i / 3, t1 = (i + 1) / 3;
-            const ra = rr(t0), rb = rr(t1);
+            const ra = r0 + (r3 - r0) * (i / 2);
             const zone = fi * 3 + i;
-            const flat = { part: P.finger, zone, flat: 0.86, flatAxis: dir([0, 0, 1]) };
-            const y0 = i === 0 ? (thumb ? -0.02 : -0.03) : 0, y1 = i === 2 ? seg - rb * 0.9 : seg;
-            fingers.push(cone(at([0, y0, 0]), at([0, y1, 0]), ra, i === 2 ? rb * 0.95 : rb, flat));
-            if (i > 0) fingers.push(sphere(at([0, 0, 0.003]), ra * 1.06, { part: P.finger, zone })); // (the joint a little thicker)
-            if (i === 2) {
-                // the pad, the tip, the nail on the back
-                const f3 = [dir([1, 0, 0]), dir([0, 1, 0]), dir([0, 0, 1])];
-                fingers.push(ellipsoid(at([0, seg * 0.58, -rb * 0.22]), [rb * 0.98, seg * 0.42, rb * 0.82], f3, { part: P.finger, zone }));
-                nails.push(ellipsoid(at([0, seg * 0.62, rb * 0.66]), [rb * 0.8, seg * 0.36, rb * 0.3], f3, { part: P.nail, zone }));
-            }
+            const f3 = [dir([1, 0, 0]), dir([0, 1, 0]), dir([0, 0, 1])];
+            const y0 = i === 0 ? (thumb ? -0.03 : -0.035) : -ra * 0.25, y1 = seg + (i === 2 ? 0 : ra * 0.25);
+            fingers.push(rbox(at([0, (y0 + y1) / 2, 0]), [ra, (y1 - y0) / 2, ra * 0.9], f3, ra * (i === 2 ? 0.75 : 0.55), { part: P.finger, zone }));
+            if (i === 2) nails.push(rbox(at([0, seg * 0.66, ra * 0.82]), [ra * 0.7, seg * 0.3, 0.008], f3, 0.006, { part: P.nail, zone }));
         }
     });
     return new Shape()
         .union(palm, 0.03)
-        .union(fingers, 0.006, 0.028)
-        .union(nails, 0, 0.004);
+        .union(fingers, 0.012, 0.028)
+        .union(nails, 0, 0.003);
 }
 
 /** The boxes the meshes are made in (the group's / the palm's space): [lo, hi]. */
 export const BOUNDS = {
-    body: [[-2.02, Y(-0.02), -0.62], [2.02, Y(3.9), 0.45]],
-    head: [[-0.27, Y(3.5), -0.37], [0.27, Y(4.52), 0.32]],
-    teeth: [[-0.065, Y(3.895), -0.26], [0.065, Y(3.945), -0.16]],
-    tongue: [[-0.05, Y(3.88), -0.25], [0.05, Y(3.93), -0.13]],
+    body: [[-2.3, Y(-0.02), -0.8], [2.3, Y(3.84), 0.62]],
+    head: [[-0.27, Y(3.5), -0.37], [0.27, Y(4.52), 0.32]], // (the old measures: HEADX makes them the drawn head)
     hand: [[-0.58, -0.37, -0.12], [0.22, 0.78, 0.12]],
 };
 export { dot, sub };

@@ -1,31 +1,33 @@
 /**
- * RealisticBody.js — the «Реалистичный» hero (a test model, chosen in the settings; the standard one stays the
- * default): a slim real person's body over the game's own hero, drawn by the video card.
+ * RealisticBody.js — the «Детальный» hero (in the settings «Модель героя → Детальная»; the standard one stays the
+ * default): the standard hero cut finer and bending like a body — the same sizes, colours and pixel face, more pieces,
+ * real joints (the author: «не реалистичный внешне — гибкий, как человек»), drawn by the video card.
  *
  * The game keeps its hero as it is — the arms' anchors, the hands' palms and fingers, the legs' pivots, the head —
  * and every game rule (grips, blows, the wand, the walls) goes on measuring them. This model is only how that hero
  * LOOKS: a skin of ~70 bones put where the game's parts are every frame —
- *   the spine (it leans in a squat and a run, sways with the steps, tilts with the player's own shoulders), the
- *   collarbones (they lift with a raised arm, come forward with a reach), the arms (from the real shoulder to exactly
- *   where the game's hand is, the elbow where the camera saw it — never into the chest; the forearm twisting with the
- *   palm), the palms and all fifteen finger bones (the game's own), the legs (the feet ON the floor: the knees bend
- *   in a squat and a step, the heels lift at the push-off and in a deep squat; in the air the game's leg pivots and
- *   a bend as the moment asks — a jump's tuck, a swim's kick, the surfboard's stance), the head on the neck, and the
- *   face: the jaw, the eyes looking, the lids blinking, the brows, the lips' corners, the cheeks (FaceExpr.js — the
+ *   the spine (4 bones: it leans in a squat and a run, sways with the steps, takes what the neck cannot turn, breathes),
+ *   the collarbones (they lift with a raised arm, come forward with a reach — and reach after a far wrist: the arm is
+ *   never stretched), the arms (from the game's shoulder to exactly the game's wrist, the elbow where the camera saw it,
+ *   swung as little as it takes to keep the wrist within its range and out of the chest — RealJoints), the palms and
+ *   all fifteen finger bones (the game's own), the legs (the feet ON the floor: the knees bend in a squat and a step,
+ *   the heels lift at the push-off; in the air the game's leg pivots and a bend as the moment asks), the head on the
+ *   neck within its range, and the face — the standard's pixel face painted by the shader and alive (FaceExpr.js — the
  *   camera's face, or the face of the look blinking by itself).
  * One shape per material (the skin with the clothes on it; the head as its own shape so the first-person eyes can
  * hide it), its bones moved by the video card; a far, unseen copy casts the shadow. The shapes are made once in a
  * worker (real/realbody.worker.js) and shared by every such hero.
  *
- * Not drawn on it (the standard model shows itself again meanwhile): armour and the dark lord's outfit, a cut-off
- * limb, the monster form, the «V2» detailed hands.
+ * Drawn on it: armour and the robe, the dark lord's outfit, cut-off limbs and head (the wound through the cut). Not
+ * drawn (the standard model shows itself meanwhile): the monster form (its own body), the «V2» detailed hands.
  */
 import { LEG_SAFE, safeRaise } from '../input/LegSafe.js';
 import * as THREE from 'three';
-import { BONE_COUNT, BONE_NAMES, B, ANAT, FLOOR, FINGER_NAMES, restPose, armRest, legRest } from './real/RealRig.js';
+import { BONE_COUNT, BONE_NAMES, B, ANAT, FLOOR, FINGER_NAMES, HEADX, restPose, armRest, legRest } from './real/RealRig.js';
 import { realSkinMaterial, realProxyMaterial, realHairMaterial } from './real/RealSkinMaterial.js';
 import { wearKey } from './real/RealWear.js';
 import { FaceReader, neutralFace, restFace, idleFace, FACE_KEYS } from './FaceExpr.js';
+import { JOINTS, splitHeadTurn, clampNeck, elbowCost, breathPeriod, breathAt } from './real/RealJoints.js';
 
 export const REAL = {
     LOD_FAR: 22, // (m: farther — the coarse shape)
@@ -107,8 +109,8 @@ function toGeometries(data) {
 
 // ------------------------------------------------------------------ the look → the material
 const TOP = [ // [sleeve end (along the arm 0…1), bottom edge (h), neck line (h), thickness, worn over the trousers]
-    [0.36, 2.5, 3.6, 0.02, 1], [0.99, 2.45, 3.66, 0.035, 1], [0.36, 2.5, 3.6, 0.02, 1], [0.99, 2.5, 3.6, 0.022, 1], [0.99, 2.38, 3.64, 0.035, 1],
-    [0.36, 2.5, 3.6, 0.02, 1], [0.99, 2.5, 3.64, 0.03, 1], [0.6, 1.75, 3.6, 0.025, 1], [0.99, 1.9, 3.64, 0.025, 1], [0.99, 2.55, 3.66, 0.018, 0],
+    [0.53, 2.5, 3.6, 0.02, 1], [0.99, 2.45, 3.66, 0.035, 1], [0.53, 2.5, 3.6, 0.02, 1], [0.99, 2.5, 3.6, 0.022, 1], [0.99, 2.38, 3.64, 0.035, 1],
+    [0.53, 2.5, 3.6, 0.02, 1], [0.99, 2.5, 3.64, 0.03, 1], [0.6, 1.75, 3.6, 0.025, 1], [0.99, 1.9, 3.64, 0.025, 1], [0.99, 2.55, 3.66, 0.018, 0],
 ];
 const BOT = [ // [leg end (0…1 along the leg), waist (h), thickness, flare]
     [0.98, 2.66, 0.026, 0], [0.36, 2.66, 0.026, 0], [0, 2.66, 0.02, 0], [0.98, 2.68, 0.026, 0], [0.98, 2.66, 0.032, 0],
@@ -141,8 +143,8 @@ export function applyLookUniforms(u, look) {
     u.uShoe.value.set(sh, S[0], S[1], S[2]);
     u.uLook.value.set(T[4], 0, 0, 0);
     const f = L.face | 0;
-    u.uFx.value.z = f % 7 === 3 ? 1 : 0; // freckles
-    u.uFx.value.w = f % 4 === 1 ? 1 : 0; // a blush
+    // the standard's pixel face (Appearance.drawFace): its eye style, mouth style, freckles, a blush
+    u.uFaceS.value.set(f % 6, Math.floor(f / 6) % 5, f % 7 === 3 ? 1 : 0, f % 4 === 1 ? 1 : 0);
 }
 
 /**
@@ -186,7 +188,9 @@ const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3
 const UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
 /** The limbs' working points (one set: the heroes are posed one after another, a limb at a time). */
 const _A = {};
-for (const k of ['Sg', 'Eg', 'Wg', 'Sv', 'E', 'u', 'df', 'H', 'td', 'tdir', 'knee', 'A', 'th', 'sh']) _A[k] = new THREE.Vector3();
+for (const k of ['Sg', 'Eg', 'Wg', 'Sv', 'E', 'Et', 'ax', 'pole', 'pole0', 'palmY', 'u', 'df', 'H', 'td', 'tdir', 'knee', 'A', 'th', 'sh']) _A[k] = new THREE.Vector3();
+/** The elbow's swings tried round the shoulder–wrist line (rad; the game's own first). */
+const SWINGS = [0, 0.35, -0.35, 0.7, -0.7, 1.1, -1.1, 1.5];
 for (const k of ['F0', 'footQ', 'thigh', 'shin']) _A[k] = new THREE.Quaternion();
 const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -246,6 +250,7 @@ export class RealisticBody {
         ch.group.add(this.rig);
         this.material = realSkinMaterial();
         this.u = this.material.userData.u;
+        this.materialCut = realSkinMaterial({ cut: true, u: this.u }); // (worn while a limb is cut off: the wound through the cut)
         this.hairMat = realHairMaterial();
         this.wear = {}; // hair / headAcc / bodyAcc meshes of the look
         this.meshes = null;
@@ -326,7 +331,8 @@ export class RealisticBody {
             m.userData.farOne = true;
             m.userData.realSkin = true;
             m.castShadow = false; m.receiveShadow = false;
-            m.visible = this.shown;
+            m.visible = this.shown && !(this._headOff && k !== 'bodyAcc');
+            if (k === 'bodyAcc' && this.meshes.body.material === this.materialCut) m.material = this.materialCut;
             this.ch.group.add(m);
             this.wear[k] = m;
         }
@@ -344,8 +350,7 @@ export class RealisticBody {
     _needStandard() {
         const ch = this.ch;
         if (!this.meshes) return true;
-        if (ch.limbs) for (const k in ch.limbs) if (ch.limbs[k] != null) return true;
-        if ((ch.size || 1) !== 1) return true;
+        if ((ch.size || 1) !== 1) return true; // (the monster form: its own body — MonsterBody)
         if (ch.handVersion === 'v2') return true;
         return false;
     }
@@ -356,12 +361,35 @@ export class RealisticBody {
         const sig = (parts ? parts.length : 0) + ':' + JSON.stringify(this.ch.armorCode || null);
         if (sig !== this._armorSig) { this._armorSig = sig; if (this.meshes) this.setLook(this.ch.look); }
         const want = this.on && !this._needStandard();
+        if (want) this._cuts();
         if (want === this.shown) { if (want) this._layers(); return; }
         this.shown = want;
         this._hideStandard(want);
         if (this.meshes) for (const m of Object.values(this.meshes)) m.visible = want;
         for (const m of Object.values(this.wear)) m.visible = want;
+        if (want && this._headOff) for (const m of [this.meshes.head, this.meshes.headShadow, this.wear.hair, this.wear.headAcc]) if (m) m.visible = false;
         if (want) this._layers();
+    }
+
+    /**
+     * A cut-off limb (LimbSurgery: `ch.limbs` = {leftArm: d, rightLeg: d, head: true}, d along the game's limb): the
+     * skin past the cut is not drawn (the shader), the wound shows through it (the two-sided material while any is cut),
+     * a cut-off head — the head and all on it hidden, the neck cut at its foot.
+     */
+    _cuts() {
+        const L = this.ch.limbs, c = this.u.uCut.value;
+        const arm = (d) => (d == null ? 99 : Math.min(d, ANAT.L1 + ANAT.L2) / (ANAT.L1 + ANAT.L2));
+        const leg = (d) => (d == null ? 99 : Math.min(d, 1.95) / 1.95);
+        c.set(arm(L?.leftArm), arm(L?.rightArm), leg(L?.leftLeg), leg(L?.rightLeg));
+        const head = !!L?.head;
+        this.u.uLook.value.z = head ? 1 : 0;
+        const any = head || c.x < 50 || c.y < 50 || c.z < 50 || c.w < 50;
+        const mat = any ? this.materialCut : this.material;
+        if (this.meshes.body.material !== mat) { this.meshes.body.material = mat; if (this.wear.bodyAcc) this.wear.bodyAcc.material = mat; }
+        if (head !== !!this._headOff) {
+            this._headOff = head;
+            for (const m of [this.meshes.head, this.meshes.headShadow, this.wear.hair, this.wear.headAcc]) if (m) m.visible = !head && this.shown;
+        }
     }
 
     /** First person: the head (and what is on it) unseen by my own camera; its shadow still there. */
@@ -439,18 +467,28 @@ export class RealisticBody {
         lean.p += (wantP - lean.p) * kk; lean.r += (wantR - lean.r) * kk;
         const yaw = walking ? Math.sin(cyc) * 0.09 * (0.4 + runK) : 0;
         const bob = walking ? (Math.cos(2 * cyc) * 0.5 - 0.5) * 0.04 * (0.4 + runK) : 0;
-        _v.copy(RP[B.hips]); _v.y += bob;
-        _e.set(-lean.p * 0.15, -yaw * 0.6, lean.r * 0.15, 'YXZ');
-        compose(M[B.hips].matrix, _v, _q.setFromEuler(_e));
-        this._chain(B.spine, B.hips, lean, yaw, 0.3);
-        this._chain(B.chest, B.spine, lean, yaw, 0.32);
-        this._chain(B.upperChest, B.chest, lean, yaw, 0.33);
-        // ---- the head on the neck: the game's head's turn (and the face's tilt)
+        // ---- the head's turn (the game's head, and the face's tilt): the neck turns what it can, the chest the rest
         const face = this._faceNow(dt);
         _qh.copy(ch.head.quaternion);
         if (face.roll) _qh.multiply(_q2.setFromAxisAngle(_z.set(0, 0, 1), -face.roll * 0.3)); // (the player tilts to the left shoulder: the hero to his)
+        _e.setFromQuaternion(_qh, 'YXZ');
+        const sp = splitHeadTurn(_e.y, _e.x, _e.z, this._split || (this._split = { neck: { y: 0, x: 0, z: 0 }, spine: { y: 0, x: 0, z: 0 } })).spine;
+        // ---- the breath: the chest rises, the shoulders with it (quicker after a run)
+        this._breathPh = ((this._breathPh || 0) + dt * Math.PI * 2 / breathPeriod(walking ? runK : 0)) % (Math.PI * 2000);
+        const br = this._br = ch.knockedDown ? 0 : breathAt(this._breathPh);
+        _v.copy(RP[B.hips]); _v.y += bob;
+        _e.set(-lean.p * 0.15, -yaw * 0.6, lean.r * 0.15, 'YXZ');
+        compose(M[B.hips].matrix, _v, _q.setFromEuler(_e));
+        this._chain(B.spine, B.hips, lean, yaw, 0.3, sp, 0.3, 0);
+        this._chain(B.chest, B.spine, lean, yaw, 0.32, sp, 0.33, br * JOINTS.breath.chest);
+        this._chain(B.upperChest, B.chest, lean, yaw, 0.33, sp, 0.37, br * JOINTS.breath.chest * 0.6);
+        // the head where the player looks, within the neck's range from the chest; the neck half way
         _m.copy(M[B.upperChest].matrix).decompose(_v2, _q3, _sc);
-        _qn.copy(_q3).slerp(_qh, 0.45);
+        _q.copy(_q3).invert().multiply(_qh);
+        _e.setFromQuaternion(_q, 'YXZ');
+        clampNeck(_e);
+        _qh.copy(_q3).multiply(_q.setFromEuler(_e));
+        _qn.copy(_q3).slerp(_qh, 0.5);
         this._child(B.neck, B.upperChest, _qn);
         this._child(B.head, B.neck, _qh);
         this._face(face);
@@ -463,12 +501,13 @@ export class RealisticBody {
         for (const b of M) b.matrixWorldNeedsUpdate = true;
     }
 
-    /** A spine bone on its parent: the parent's place + its rest offset, turned by its share of the lean. */
-    _chain(b, parent, lean, yaw, k) {
+    /** A spine bone on its parent: the parent's place + its rest offset, turned by its share of the lean, of the head's
+     * turn the neck could not take (`sp`, its share `sk`) and of the breath (a little back). */
+    _chain(b, parent, lean, yaw, k, sp, sk, breath) {
         const P = this.bones[parent].matrix;
         _v.copy(RP[b]).sub(RP[parent]).applyMatrix4(_m2.copy(P).setPosition(0, 0, 0)).add(_v2.setFromMatrixPosition(P));
         _q.setFromRotationMatrix(P);
-        _e.set(-lean.p * k, yaw * k * 1.3, lean.r * k, 'YXZ');
+        _e.set(-lean.p * k + sp.x * sk + breath, yaw * k * 1.3 + sp.y * sk, lean.r * k + sp.z * sk, 'YXZ');
         _q.multiply(_q2.setFromEuler(_e));
         compose(this.bones[b].matrix, _v, _q);
     }
@@ -490,7 +529,8 @@ export class RealisticBody {
         const Wg = _A.Wg.setFromMatrixPosition(hand.group.matrixWorld).applyMatrix4(_Gi);
         const a = _v3.subVectors(Eg, Sg).normalize();
         // the collarbone: up with a raised arm, forward with a reach
-        const lift = clamp((Math.asin(clamp(a.y, -1, 1)) + 0.25) * 0.32, 0, 0.38), prot = clamp(-a.z * 0.22, -0.08, 0.22);
+        const C = JOINTS.clav;
+        const lift = clamp((Math.asin(clamp(a.y, -1, 1)) + 0.25) * 0.32, 0, C.lift) + (this._br || 0) * JOINTS.breath.shoulders, prot = clamp(-a.z * 0.22, -C.back, C.fwd);
         _m.copy(M[B.upperChest].matrix);
         _q.setFromRotationMatrix(_m);
         _e.set(0, sx * prot, sx * lift, 'YXZ');
@@ -499,18 +539,20 @@ export class RealisticBody {
         // the real shoulder on its collarbone
         const Cm = M[B['clav' + s]].matrix;
         const Sv = _A.Sv.copy(RP[B['upperArm' + s]]).sub(RP[B['clav' + s]]).applyQuaternion(_q2.setFromRotationMatrix(Cm)).add(_v2.setFromMatrixPosition(Cm));
-        // the elbow: towards where the game's is, never into the chest
+        // the arm is never stretched (the author: «длинные руки — жесть»): the wrist further than the arm reaches — the
+        // shoulder girdle reaches after it (forward / up, as a person's does), not the bones longer
         const L1 = ANAT.L1, L2 = ANAT.L2;
-        let k = Sv.distanceTo(Wg) / (L1 + L2);
-        k = k > 1 ? Math.min(1.25, k * 1.0005) : 1;
-        const pole = _v2.subVectors(Eg, Sv);
-        const E = _A.E;
-        twoBone(Sv, Wg, L1 * k, L2 * k, pole, E);
-        const loc = _v3.copy(E).applyMatrix4(_m2.copy(M[B.upperChest].matrix).invert());
-        if ((loc.x / 0.42) ** 2 + ((loc.z - 0.0) / 0.3) ** 2 < 1 && loc.y < 0.4 && loc.y > -1.2) {
-            pole.add(_v3.set(sx * 0.9, 0, 0.2));
-            twoBone(Sv, Wg, L1 * k, L2 * k, pole, E);
+        let dSW = Sv.distanceTo(Wg);
+        if (dSW > L1 + L2 - 1e-4) {
+            const reach = Math.min(0.3, dSW - (L1 + L2) + 1e-4);
+            Sv.addScaledVector(_v2.subVectors(Wg, Sv).normalize(), reach);
+            dSW = Sv.distanceTo(Wg);
         }
+        const k = dSW > L1 + L2 ? Math.min(1.03, dSW / (L1 + L2) + 1e-4) : 1; // (a last hair, never seen: ≤ 3 %)
+        // the elbow: near where the camera saw it, swung round the shoulder–wrist line as little as it takes to keep the
+        // wrist within its bend and the elbow out of the chest (RealJoints.elbowCost)
+        const E = _A.E;
+        this._elbow(s, sx, Sv, Wg, Eg, L1 * k, L2 * k, hand, E);
         const u = _A.u.subVectors(E, Sv).normalize();
         const df = _A.df.subVectors(Wg, E).normalize();
         // the upper arm: swung from its rest, turned so the elbow's hinge is where the arm bends
@@ -550,6 +592,35 @@ export class RealisticBody {
         }
         // how deep the sleeve folds
         if (s === 'L') this.u.uBend.value.x = clamp(bend / 2.2, 0, 1); else this.u.uBend.value.y = clamp(bend / 2.2, 0, 1);
+    }
+    /** Chooses the drawn elbow (into `E`): the game's own swing first; a few swings round the shoulder–wrist line if the
+     * wrist would bend past its range or the elbow go into the chest. */
+    _elbow(s, sx, Sv, Wg, Eg, L1, L2, hand, E) {
+        const axis = _A.ax.subVectors(Wg, Sv).normalize();
+        const pole0 = _A.pole0.subVectors(Eg, Sv);
+        _m.copy(_Gi).multiply(hand.palm.matrixWorld);
+        const palmY = _A.palmY.setFromMatrixColumn(_m, 1).normalize();
+        _m2.copy(this.bones[B.upperChest].matrix).invert();
+        let best = Infinity;
+        for (let i = 0; i < SWINGS.length; i++) {
+            const sw = SWINGS[i];
+            const pole = _A.pole.copy(pole0);
+            if (sw) pole.applyAxisAngle(axis, sw * sx);
+            twoBone(Sv, Wg, L1, L2, pole, _A.Et);
+            const df = _v3.subVectors(Wg, _A.Et).normalize();
+            const wristDeg = df.angleTo(palmY) * 57.2958;
+            // (how deep in the chest: the elbow and the forearm's middle, in the upper chest's space)
+            let inside = 0;
+            for (const t of [0, 0.5]) {
+                const p = _v.copy(_A.Et).lerp(Wg, t).applyMatrix4(_m2);
+                const r = (p.x / 0.62) ** 2 + (p.z / 0.4) ** 2;
+                if (r < 1 && p.y < 0.35 && p.y > -1.25) inside = Math.max(inside, 1 - r);
+            }
+            const c = elbowCost(sw, wristDeg, inside);
+            if (c < best) { best = c; E.copy(_A.Et); }
+            if (i === 0 && c < 0.02) break; // (the game's own swing is fine: as it is)
+        }
+        return E;
     }
     _childQ(b, parent, q) {
         const P = this.bones[parent].matrix;
@@ -661,7 +732,8 @@ export class RealisticBody {
         const at = (b, dx = 0, dy = 0, dz = 0, rot = null, base = B.head) => {
             const Hm = M[base].matrix;
             _q.setFromRotationMatrix(Hm);
-            _v.copy(RP[b]).sub(RP[base]).add(_v3.set(dx, dy, dz)).applyQuaternion(_q).add(_v2.setFromMatrixPosition(Hm));
+            // (the face's moves are sculpted in the head's old measures: as big as the drawn head)
+            _v.copy(RP[b]).sub(RP[base]).add(_v3.set(dx * HEADX.S[0], dy * HEADX.S[1], dz * HEADX.S[2])).applyQuaternion(_q).add(_v2.setFromMatrixPosition(Hm));
             compose(M[b].matrix, _v, rot ? _q2.copy(_q).multiply(rot) : _q);
         };
         // the jaw opens round its hinge (and comes a little forward)
@@ -684,6 +756,11 @@ export class RealisticBody {
             at(B['corner' + s], sx * (Math.max(0, f.wide) * 0.016 + Math.max(0, smile) * 0.01 - pucker * 0.022), smile * 0.026 - f.jaw * 0.03, Math.max(0, smile) * 0.012 - pucker * 0.016);
             at(B['cheek' + s], 0, Math.max(0, smile) * 0.018 + f.squint * 0.012, -Math.max(0, smile) * 0.006);
         }
+        // the painted face (RealSkinMaterial.faceAt): what the camera's face says now
+        const u = this.u;
+        u.uFaceA.value.set(f.blinkL, f.blinkR, f.gazeX, f.gazeY);
+        u.uFaceB.value.set((f.smileL + f.smileR) / 2, f.jaw, f.wide, (f.browL + f.browR) / 2);
+        u.uFaceC.value.set(Math.max(0, -f.browIn), f.squint, 0, 0);
         const pucker = Math.max(0, -f.wide);
         at(B.lipUp, 0, -0.0105 + f.lipUp * 0.012 + f.jaw * 0.004, -pucker * 0.02);
         at(B.lipLo, 0, 0.0095 - f.jaw * 0.004, -pucker * 0.018, null, B.jaw);
@@ -698,6 +775,7 @@ export class RealisticBody {
         for (const m of Object.values(this.wear)) m.parent?.remove(m);
         this.rig.parent?.remove(this.rig);
         this.material.dispose();
+        this.materialCut.dispose();
         this.hairMat.dispose();
         this.skeleton?.dispose?.();
         this.meshes = null;
@@ -713,7 +791,7 @@ export function realSamples() {
     geo.setAttribute('skinWeight', new THREE.BufferAttribute(w, 4));
     for (const a of ['aInfo', 'aMix', 'aLimb']) geo.setAttribute(a, new THREE.BufferAttribute(new Float32Array(n * 4).fill(0.5), 4));
     const out = [];
-    for (const mat of [realSkinMaterial(), realProxyMaterial(), realHairMaterial()]) {
+    for (const mat of [realSkinMaterial(), realSkinMaterial({ cut: true }), realProxyMaterial(), realHairMaterial()]) {
         const bone = new THREE.Bone();
         const sm2 = new THREE.SkinnedMesh(geo, mat);
         sm2.add(bone);
