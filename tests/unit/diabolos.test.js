@@ -562,13 +562,13 @@ test('«Империус Максима» на Дьяволоса: только 
     const d = new Diabolos(g); g.diabolos = d;
     d.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: DEVIL.CHAIN_LEN });
     d.update(0.016);
-    const I = { yaw: Math.PI, walk: 1 }; // (на юг, +z)
+    const I = { yaw: 0, walk: 1 }; // (на север, −z: от столба)
     g.imperius = { step: (sys, c, dt) => { d.driven(c, I, dt); return true; } };
     d.d.imp = { by: 'me', mine: true };
     const z0 = d.d.z;
     let maxHoof = 0;
     for (let i = 0; i < 30 * 40; i++) { d.update(1 / 30); const fo = d._footOff(d.d); maxHoof = Math.max(maxHoof, Math.hypot(d.d.x + fo.x - d.d.anchor.x, d.d.z + fo.z - d.d.anchor.z)); }
-    assert.ok(d.d.z > z0 + 20, `ушёл ${(d.d.z - z0).toFixed(0)} м`);
+    assert.ok(d.d.z < z0 - 20, `ушёл ${(z0 - d.d.z).toFixed(0)} м`);
     assert.ok(maxHoof <= DEVIL.CHAIN_LEN + 0.5, 'цепь держит и под Империусом');
     I.walk = 0; I.strikeNow = true;
     d.update(1 / 30);
