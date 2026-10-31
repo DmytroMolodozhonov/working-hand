@@ -53,6 +53,9 @@ test('lore books: the god in chains reaches the libraries by place (7 stands, 8 
     assert.ok(seen.size >= 20 && seen.size < 40, 'a part of the libraries has it: ' + seen.size);
     const book = LORE_BOOKS.find((b) => b.id === 'diabolos');
     assert.ok(book.pages.length >= 4 && book.cover === 0x4a0d10);
+    const all = book.title + ' ' + book.sub + ' ' + book.pages.map((p) => (p.p || '') + ' ' + (p.h || '') + ' ' + (p.caption || '')).join(' ');
+    assert.ok(!/меч|жезл|unitas|объедин/i.test(all), 'the secret: no sword, rod, Unitas, uniting in the book');
+    assert.match(all, /божеств|богов/i);
     assert.ok(!/ад\b|числ/i.test(book.pages.map((p) => p.p || '').join(' ')), 'no «ад» (the underworld)');
 });
 
