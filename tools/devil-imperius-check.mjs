@@ -7,7 +7,7 @@ const out = path.resolve(arg('--out', 'docs/media'));
 const srv = await startServer(Number(arg('--port', 8199)));
 const browser = await launch({});
 try {
-    const { page } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 640, height: 400 } });
+    const { page } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1100, height: 650 } });
     await startFromMenu(page, 'creative').catch(async (e) => { if (!/Timeout/.test(e.message)) throw e; await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 600000 }); });
     await waitHudVisible(page, 180000);
     const r1 = await page.evaluate(async () => {

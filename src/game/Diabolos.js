@@ -28,7 +28,6 @@ import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
 import { FarShape } from '../core/FarShape.js';
 import { registerKind } from './CreatureImpact.js';
-import { crowdStep } from './CrowdSources.js';
 import { inHell } from '../world/HellMap.js';
 import { ACTS, ACT_IDS, pickAct, actGap, moodFace, moveFace, blendFace } from './DiabolosActs.js';
 
@@ -416,7 +415,7 @@ export class Diabolos {
         d.mode = d.move ? 'act' : 'walk'; d.sit = Math.max(0, d.sit - dt); d.target = null; d.act = null;
         for (const k in d.cd) d.cd[k] = Math.max(0, d.cd[k] - dt);
         this._ctlArms = I.armsPose || null;
-        if (Number.isFinite(I.yaw)) { let a = I.yaw - d.yaw; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; this._turn(d, a, dt); }
+        if (Number.isFinite(I.yaw)) { let a = I.yaw - d.yaw; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; this._turn(d, a, dt * 2.2); } // (по воле того, кто в нём, — поворот вдвое живее)
         const walking = (I.walk || 0) > 0.02 && !d.move;
         if (walking) this._walkAhead(d, dt, I.run ? 1.35 : 1);
         else this._walk(d, 0, null);
@@ -557,7 +556,7 @@ export class Diabolos {
         d.walkPh += Math.abs(k) * 3;
     }
 
-    /** Шаг к точке (или стоит): Pilot/crowdStep обходит игроков и других; цепь держит копыто у предела. */
+    /** Шаг к точке (или стоит): прямо (бог не обходит мелочь у ног); цепь держит копыто у предела, столб — обходит. */
     _walk(d, dt, to) {
         if (!to || dt <= 0) { d.walkK = Math.max(0, d.walkK - dt * 1.5); d.strain = Math.max(0, d.strain - dt); return; }
         const dx = to.x - d.x, dz = to.z - d.z, dist = Math.hypot(dx, dz) || 1;
@@ -565,13 +564,9 @@ export class Diabolos {
         this._turn(d, ang, dt);
         if (Math.abs(ang) > 1.1) return; // (сначала развернуться всем телом)
         const sp = DEVIL.WALK * (1 - 0.5 * Math.min(1, Math.abs(ang)));
-        let sx = dx / dist * sp * dt, sz = dz / dist * sp * dt;
-        try {
-            // (как у всех ходящих: crowdStep даёт НАПРАВЛЕНИЕ (доля скорости), шаг = направление × скорость × dt; раньше направление шло как шаг —
-            //  без скорости и времени кадра пилот его не понимал, и он топтался на месте и плевался шарами — жалоба автора)
-            const a = crowdStep(this.game, d, { x: d.x, y: d.y, z: d.z }, dx / dist, dz / dist, Math.max(0.5, dist), { r: DEVIL.RADIUS * 0.8, speed: sp, dt, look: 30, dy: 80, id: 9001, skip: (b) => b.ref === d });
-            if (a && Number.isFinite(a.x)) { sx = a.x * sp * dt; sz = a.z * sp * dt; }
-        } catch (_) { /* (толпа не сломает шаг: идёт прямо) */ }
+        // (бог ростом 122 м идёт прямо: общий «пилот» обхода принимал уступы земли, чаши огня и людей у ног за стены — и он еле полз
+        //  (замер в игре: 1,3 м/с вместо 5,2). Держат его только цепь и столб; люди у ног — под копытом)
+        const sx = dx / dist * sp * dt, sz = dz / dist * sp * dt;
         const fo = this._footOff(d);
         const L = leash(d.anchor.x, d.anchor.z, d.x + sx, d.z + sz, fo.x, fo.z, this.site.len);
         // мягкая пружина: у грани шаг вязнет, у предела — стоит (цепь держит копыто)
