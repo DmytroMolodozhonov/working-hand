@@ -78,6 +78,7 @@ import { creditKill, hellKilled } from './Mana.js';
 import { hellRecent } from './HellKills.js';
 import { darkHit } from './VitalityRules.js';
 import { VillagerFear } from './VillagerFear.js';
+import { MonsterFearLife } from './MonsterFearLife.js';
 import { Rebuild } from './Rebuild.js';
 import { NightLife } from './NightLife.js';
 import { Wanted, wreckPoints, wantedTactics } from './Wanted.js';
@@ -317,6 +318,7 @@ export class CastleLife {
         this.court = new CourtLife(this); // the treasury, the people's troubles, the vizier who reports and leads (Court.js)
         this.alog = new ActionLog(this, gameJournal); // the full journal of what the people in dealings do and why (ActionLog.js)
         this.cmds = new VillagerCommands(this); // the player's plain-word commands: poses, walks, formations, spars (VillagerCommands.js)
+        this.mfear = new MonsterFearLife(game); // the hero in the monster form: who runs, who fights, who scatters the darkness (MonsterFear.js)
         this.fright = new VillagerFear(this); // danger: they hide in houses, run out of the gates, look out, come out (VillagerFear.js)
         this.rebuild = new Rebuild(this); // after it: the builders put the castle back as it was (Rebuild.js)
         this.chores = new Chores(this); // what the people do all day by their houses, at the well, the market (Chores.js)
@@ -1453,6 +1455,8 @@ export class CastleLife {
         if (v.seated && v.job === 'ride' && g.travelers?.step(v, dt)) return; // (in the saddle: Riders.js leads the horse — and gets down to fight)
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
         if (!v.seated && (v.wallT = (v.wallT || 0) - dt) <= 0) { v.wallT = 0.5; this._unwall(v); }
+        // the hero is a monster (MonsterFear.js): most run, a quarter of the knights fight, the wizards who know «Nihilis Atra» scatter it
+        if (this.mfear.step(v, dt)) return;
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())
         if (v.fireT > 0 && this._fireStep(v, dt)) return;
         // «Брейнрот»: a servant follows its master and fights for them
@@ -3846,6 +3850,7 @@ export class CastleLife {
             for (const cs of this.castles.values()) if (cs.awake && !isStallSite(cs.def) && !isGuestSite(cs.def)) { if (isWizSite(cs.def) && cs.def.kind !== 'hamlet') this.wizards.crowd(cs, dt); else this._crowd(cs, dt); }
             this.hamlets.update(dt);
             this.fright.update(dt);
+            this.mfear.update(dt);
             this.rebuild.update(dt);
             this.night?.update(dt);
             this.found.update(dt); // (a body of their own found: the alarm, the search — BodyFound.js)
