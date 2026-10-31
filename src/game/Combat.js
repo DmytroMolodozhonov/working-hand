@@ -65,7 +65,7 @@ export const SPELL_COST = {
     ProtectionGodsMaxima: 300, // … its dome: then 5 a second (the author: 300 + 5)
     Bombardo: 15,
     BombardoMaxima: 25,
-    Thunderwave: 40, // (the author: very strong — 40 a cast; it hits everyone in the zone at once)
+    Thunderwave: 200, // (the author: 200 a cast — it hits everyone in the zone at once and only Protection Maxima / the gods hold it; 200 mana is easy to reach in 1–2 hours)
     Sapira: 20,
     Inferno: 10,
     Fire: 4, // a campfire

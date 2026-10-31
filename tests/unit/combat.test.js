@@ -73,7 +73,7 @@ test('fatigue: 30 points, +1 per second, spells cost fatigue, not enough → the
     assert.equal(SPELL_COST.ProtectionMaxima, 20);
     assert.equal(SPELL_COST.Bombardo, 15);
     assert.equal(SPELL_COST.BombardoMaxima, 25);
-    assert.equal(SPELL_COST.Thunderwave, 40);
+    assert.equal(SPELL_COST.Thunderwave, 200);
     assert.equal(combat.check('BombardoMaxima'), null);
     combat.pay('BombardoMaxima');
     assert.equal(combat.fatigue, 5);
@@ -172,7 +172,7 @@ test('Protection Maxima: needs a T-pose, costs 20, then 1 a second until «ст�
     assert.equal(c.dropShield(), true, '«стоп» puts it out');
     c.castProtection(true); // (not enough mana: 4 < 20)
     assert.equal(c.shield, null);
-    c.fatigue = 200; // (Thunderwave is 40 now: each held blow costs half)
+    c.fatigue = 500; // (Thunderwave is 200 now: each held blow costs half)
     assert.equal(c.castProtection(true), null);
     assert.equal(c.hitBySpell('Thunderwave', FRONT, 'enemy'), false);
     assert.equal(c.hitBySpell('Thunderwave', BEHIND, 'enemy'), false);

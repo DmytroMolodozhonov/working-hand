@@ -1,4 +1,4 @@
-// «Thunderwave» (ThunderWave.js): 40 mana, −10 to everyone in ONE zone, not through walls; an ordinary «Protection» and
+// «Thunderwave» (ThunderWave.js): 200 mana, −10 to everyone in ONE zone, not through walls; an ordinary «Protection» and
 // plain armour do not stop it (the blow is from above), «Protection Maxima» and magic armour do.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ const O = { x: 0, y: 2, z: 0 };
 const D = { x: 0, y: 0, z: -1 };
 
 test('cost 40, damage 10', () => {
-    assert.equal(SPELL_COST.Thunderwave, 40);
+    assert.equal(SPELL_COST.Thunderwave, 200);
     assert.equal(THUNDER.DAMAGE, 10);
     assert.equal(DAMAGE.Thunderwave, 10);
 });
