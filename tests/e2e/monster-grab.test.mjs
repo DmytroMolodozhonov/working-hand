@@ -36,22 +36,32 @@ test('лапа монстра: схватить свинью, раздавить
     for (let i = 0; i < 80 && !(await page.evaluate(() => window.__zns.game.monster.phase === 'on')); i++) await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 3, 33);
     assert.equal(await page.evaluate(() => window.__zns.game.monster.phase), 'on');
     await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 10, 33);
+    // какой кадр камеры даёт «держу, не давлю» (кривая пальцев кадра → getGripCurl у каждой кисти своя): 0,66…0,72
+    let LIGHT = 0.72;
+    const seenCurls = [];
+    for (const c of [0.55, 0.6, 0.65, 0.7, 0.72, 0.75, 0.8]) {
+        await feed(page, { arms: 'forward', leftCurl: c, rightCurl: c }, 8, 33);
+        const v = await page.evaluate(() => window.__zns.game.character.getGripCurl('right'));
+        seenCurls.push([c, +v.toFixed(2)]);
+        if (v >= 0.66 && v <= 0.72) { LIGHT = c; break; }
+    }
+    await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 15, 33);
 
     // хват
     await pigAtPalm(page, 'mg-pig1');
     let held = null;
     for (let i = 0; i < 20 && !held; i++) {
-        await feed(page, { arms: 'forward', leftCurl: 0.72, rightCurl: 0.72 }, 1, 33);
+        await feed(page, { arms: 'forward', leftCurl: LIGHT, rightCurl: LIGHT }, 1, 33);
         held = await page.evaluate(() => { const g = window.__zns.game, M = g.monsterGrab.mine; return M.right?.id || M.left?.id || null; });
     }
     assert.equal(held, 'mg-pig1', 'свинья в лапе ' + await page.evaluate(() => window.__zns.game.hud.voiceText?.()));
-    await feed(page, { arms: 'forward', leftCurl: 0.72, rightCurl: 0.72 }, 20, 33);
+    await feed(page, { arms: 'forward', leftCurl: LIGHT, rightCurl: LIGHT }, 20, 33);
     const near = await page.evaluate(() => {
         const g = window.__zns.game, pig = g.animals.byId.get('mg-pig1'), side = g.monsterGrab.mine.right ? 'right' : 'left';
         const palm = g.character.getHandWorldPosition(side, new window.__zns.THREE.Vector3());
         return { d: pig.group.position.distanceTo(palm), lev: !!pig.lev?.paw, hp: pig.hp, dead: pig.dead };
     });
-    assert.ok(near.lev && near.d < 5, 'у ладони ' + JSON.stringify(near));
+    assert.ok(near.lev && near.d < 5, 'у ладони ' + JSON.stringify({ near, seenCurls, LIGHT }));
     assert.ok(!near.dead, 'лёгкий кулак не убивает');
 
     // раздавить
@@ -68,11 +78,11 @@ test('лапа монстра: схватить свинью, раздавить
     await pigAtPalm(page, 'mg-pig2');
     held = null;
     for (let i = 0; i < 20 && !held; i++) {
-        await feed(page, { arms: 'forward', leftCurl: 0.72, rightCurl: 0.72 }, 1, 33);
+        await feed(page, { arms: 'forward', leftCurl: LIGHT, rightCurl: LIGHT }, 1, 33);
         held = await page.evaluate(() => { const M = window.__zns.game.monsterGrab.mine; return M.right?.id || M.left?.id || null; });
     }
     assert.equal(held, 'mg-pig2');
-    await feed(page, { arms: 'forward', leftCurl: 0.72, rightCurl: 0.72 }, 20, 33);
+    await feed(page, { arms: 'forward', leftCurl: LIGHT, rightCurl: LIGHT }, 20, 33);
     await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 30, 33);
     await feed(page, { arms: 'forward', leftCurl: 0, rightCurl: 0 }, 60, 33);
     const f = await page.evaluate(() => {
