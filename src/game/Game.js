@@ -137,6 +137,7 @@ import { Phoenixes, phoenixModel } from './Phoenixes.js';
 import { Owls } from './Owls.js';
 import { Canaries } from './Canaries.js';
 import { Taron } from './Taron.js';
+import { HellPatrol } from './HellPatrol.js';
 import { Plants } from './Plants.js';
 import { MagicFloraLife } from './MagicFloraLife.js';
 import { plantSamples } from '../fx/PlantModels.js';
@@ -664,6 +665,7 @@ export class Game {
         this.plants = new Plants(this); // plant creatures: telewilpins (thorny red glowing flowers) and carnivorous heads (Plants.js)
         this.customPlants = new CustomPlants(this); // plants of one's own («Да пусть создастся дерево / цветок …»: CustomPlants.js)
         this.customCreatures = new CustomCreatures(this); // creatures of one's own («Да пусть создастся существо …»: CustomCreatures.js)
+        this.hellPatrol = new HellPatrol(this); // the underworld's gargoyle patrols: groups of 1–3 circle over their lairs, now and then 1–3 attack (HellPatrol.js)
         this.tarons = new Taron(this); // the Tarons of the underworld: fat horned giants with axe-hammers, in camps (Taron.js; the camps come from the underworld's plan)
         this.canaries = new Canaries(this); // the swamp Canaries: small strong people who hurl boulders at trespassers (Canaries.js)
         this.spencers = new SpencerBirds(this); // the invisible bird of Spencer: pink and glowing, seen only by one who sees the invisible (SpencerBirds.js)
@@ -3916,7 +3918,7 @@ export class Game {
         if (earth && !duelOnly) this.phoenixes.update(dt);
         if (earth && !duelOnly) this.owls.update(dt);
         if (earth && !duelOnly) this.canaries.update(dt);
-        if (!duelOnly) this.tarons.update(dt);
+        if (!duelOnly) { this.tarons.update(dt); this.hellPatrol.update(dt); }
         if (earth && !duelOnly) { this.spencers.update(dt); this.beslan.update(dt); }
         this.ghosts?.update(dt); // (everywhere: off the Earth / in the duel-only start it puts its ghosts away by itself)
         if (!duelOnly) { this.customCreatures?.update(dt); this.customPlants?.update(dt); } // (creatures of one's own: on the Earth and the planets with air)
@@ -4911,6 +4913,7 @@ export class Game {
         this.owls?.dispose();
         this.canaries?.dispose();
         this.tarons?.dispose();
+        this.hellPatrol?.dispose();
         this.spencers?.dispose();
         this.ghosts?.dispose();
         this.beslan?.dispose();

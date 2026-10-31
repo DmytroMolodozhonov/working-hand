@@ -113,15 +113,16 @@ test('how much of a tower stands: whole ≈ 1, two thirds of the walls gone → 
     assert.equal(towerLeft(def, get(() => false), () => false), null, 'not loaded: unknown');
 });
 
-test('all eight (Captain Black Moustache, the Castle of Ghosts and the gates of hell too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
+test('all nine (Captain Black Moustache, the Castle of Ghosts, the gates of hell and the Taron hunter too) → «Высший маг»: +1000 more, +100 % more, the suit comes into a slot', () => {
     const { g, a } = fakeGame();
     for (const k of ACH_IDS) a.gain(k);
     assert.ok(a.high);
-    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + ACH.HIGH_MANA);
-    assert.ok(Math.abs(a.regenK - (1 + 8 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
+    assert.equal(g.combat.maxFatigue, 30 + 50 + 100 + 100 + 150 + 200 + 75 + 100 + 100 + 50 + ACH.HIGH_MANA);
+    assert.ok(Math.abs(a.regenK - (1 + 9 * ACH.REGEN + ACH.HIGH_REGEN)) < 1e-9);
     const suit = g.inventory.slots.find((it) => it?.archmage);
     assert.ok(suit && suit.kind === 'robe' && suit.magic, 'the suit is mine');
-    assert.deepEqual(achBonus(ACH_IDS), { mana: 1875, regen: 3.2, high: true });
+    const all = achBonus(ACH_IDS);
+    assert.equal(all.mana, 1925); assert.equal(all.high, true); assert.ok(Math.abs(all.regen - 3.35) < 1e-9);
     assert.deepEqual(achBonus(['tower']), { mana: 200, regen: 1.15, high: false });
 });
 
@@ -161,10 +162,10 @@ test('death takes the achievements: the practice-grown mana and the achievements
     assert.equal(g.combat.maxFatigue, 80, 'the king again: +50 again');
 });
 
-test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; seven of eight is no High Mage', () => {
+test('Captain Black Moustache (a stub until his ship is in): everyone who fought him gets +75; eight of nine is no High Mage', () => {
     const { g, a, credits } = fakeGame({ remotes: ['p2'] });
-    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle', 'hellGate']) a.gain(k);
-    assert.equal(a.high, false, 'seven of eight: not yet');
+    for (const k of ['king', 'iceQueen', 'spider', 'dragon', 'tower', 'ghostCastle', 'hellGate', 'taronHunter']) a.gain(k);
+    assert.equal(a.high, false, 'eight of nine: not yet');
     const before = g.combat.maxFatigue;
     a.hit('blackbeard', 'bb', 'p2');
     a.killed('blackbeard', 'bb', 'me', pos(0, 0, 0));
@@ -185,4 +186,18 @@ test('Creative and the test ground: no achievements at all (the author: it is on
     const { g } = fakeGame();
     g.config = { ...(g.config || {}), mode: 'freeworld' };
     assert.equal(g.achievements.gain('king', { quiet: true }), true, 'the free world: it counts');
+});
+
+test('«Охотник на Таронов»: ten Tarons killed by me (not by another player) → +50; the count is saved and death takes it', () => {
+    const { g, a } = fakeGame();
+    const before = g.combat.maxFatigue;
+    for (let i = 0; i < 9; i++) a.taronKill('me');
+    a.taronKill('p2'); // (somebody else's kill is not mine)
+    assert.equal(a.done.has('taronHunter'), false);
+    a.taronKill('me');
+    assert.ok(a.done.has('taronHunter'));
+    assert.equal(g.combat.maxFatigue, before + 50 + 0);
+    assert.equal(a.snapshot().tk, 10);
+    a.onDeath();
+    assert.equal(a.taronKills, 0);
 });

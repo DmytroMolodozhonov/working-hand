@@ -26,6 +26,7 @@ import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
 import { addDark } from './DarkMagic.js';
 import { realmAt } from '../world/Planets.js';
+import { underworldFactor } from './HellGargoyleRules.js';
 import { RitualFx } from './GargoyleRitual.js';
 import { gargoyleModel, poseGargoyle, gargoyleBody, gargoyleCenter, gargoyleDist, MODEL_SCALE, HIP, gargoyleStats } from './GargoyleModel.js';
 import {
@@ -541,6 +542,7 @@ export class Gargoyles {
         const p = o.model.position;
         const isSummoner = (v) => v.k === 'p' && v.id === o.by;
         for (const v of this.victims) {
+            if (o.patrol && v.k !== 'p') continue; // (the underworld's patrols hunt players only — and never the Tarons, which are not in this list)
             if (v.roofed || !mayHunt(v.k === 'p' ? 'player' : v.k === 'v' ? 'villager' : v.k === 'a' ? 'animal' : v.k === 'z' ? 'zombie' : 'sailor', { isSummoner: isSummoner(v), age: o.age })) continue;
             if (v.claims >= GARGOYLE.PACK && o.target?.key !== v.k + v.id) continue;
             const d = hdist(v.pos, p) + Math.abs(v.pos.y - p.y) * 0.4 - (o.aggro && o.aggro.id === v.id ? 20 : 0);
@@ -561,6 +563,7 @@ export class Gargoyles {
         if (this._boltOn && kind === 'Lightning') return; // (the ritual's own bolts are its own)
         if (o.imp?.immune?.(kind)) return;
         const h = harmOf(kind, dmg);
+        if (o.patrol && underworldFactor(kind) === 0) { this._sparks(o, 5, 0xffb060); return; } // (in the underworld fire and lava do not hurt them at all)
         this._note({ ev: 'harm', id: o.id, kind, does: h.does, dmg: h.dmg, by });
         if (h.scare > 0 && h.does !== 'immune') this.scare(o, from || this._player(by)?.pos || o.home, h.scare); // (the hellfire, «Circle Attack», «Inspirius», the Lumos' beam: it flees from them)
         if (h.does === 'scare') return; // (a light: it only drives it away)
@@ -679,6 +682,7 @@ export class Gargoyles {
         if (o.carry) this._dropVictim(o, 'killed');
         o.dead = true;
         const g = this.game;
+        if (o.patrol) g.hellPatrol?.onDie(o);
         const p = gargoyleCenter(o, new THREE.Vector3());
         this._note({ ev: 'die', id: o.id, by, shatter });
         this._shatter(p, o.scale, shatter);
@@ -854,6 +858,8 @@ export class Gargoyles {
                 return;
             }
         }
+        // a patrol of the underworld (HellPatrol.js): circles over its lair; an attacker (1–3 of a group) falls through to the hunt below — on players only
+        if (o.patrol && this.game.hellPatrol?.drive(o, dt)) { this._separate(o, dt); return; }
         // choose prey
         o.rethink -= dt;
         if (o.target && !this._targetOk(o)) o.target = null;

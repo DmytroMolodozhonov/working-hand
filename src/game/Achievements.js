@@ -58,9 +58,12 @@ export const ACHIEVEMENTS = [
     { id: 'dragon', mana: 150, icon: '🐉', title: 'Убить дракона', desc: 'Победить любого дракона' },
     { id: 'blackbeard', mana: 75, icon: '🏴‍☠️', title: 'Убить капитана Чёрные Усы', desc: 'Победить пирата капитана Чёрные Усы на его чёрном корабле' },
     { id: 'tower', mana: 200, icon: '🏚️', title: 'Уничтожить башню волшебников', desc: 'Убить Мастера башни и по-настоящему разрушить саму башню (снести не меньше двух третей её стен)' },
+    { id: 'taronHunter', boss: false, mana: 50, icon: '🪓', title: 'Охотник на Таронов', desc: 'Победить десять Тароны — рогатых великанов с топорами-молотами из подземного мира' },
     { id: 'ghostCastle', boss: false, mana: 100, icon: '👻', title: 'Замок призраков', desc: 'Найти замок призраков (его видит только тот, кто видит невидимое) и войти в его стены' },
     { id: 'hellGate', boss: false, mana: 100, icon: '🔥', title: 'Врата ада', desc: 'Открыть пентаграмму ада и спуститься в ад' }, // (HellGate.js: the first passage)
 ];
+/** Tarons killed for «Охотник на Таронов» (TaronRules.TARON.ACHIEVEMENT.kills). */
+export const TARON_KILLS = 10;
 export const ACH_IDS = ACHIEVEMENTS.map((a) => a.id);
 export const ACH_BY_ID = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.id, a]));
 
@@ -309,6 +312,7 @@ export class Achievements {
 
     /** I died: the achievements are lost — their cells, their quicker mana, «Высший маг» (won again by beating the bosses again). */
     onDeath() {
+        this.taronKills = 0; // (death takes the Taron kills too)
         if (!this.done.size) return;
         this.done.clear();
         this._applyBonus();
@@ -408,13 +412,21 @@ export class Achievements {
     }
 
     // ------------------------------------------------------------ the save
-    snapshot() { return { done: [...this.done], suit: this.suitGiven }; }
+    /** (the Tarons, Taron.die) A Taron killed by `by`: my kill counts if it is mine; ten — «Охотник на Таронов». */
+    taronKill(by) {
+        if (this.off || (by !== this.game.localId && by !== 'local' && by !== 'H')) return;
+        this.taronKills = (this.taronKills || 0) + 1;
+        if (this.taronKills >= TARON_KILLS) this.gain('taronHunter');
+    }
+
+    snapshot() { return { done: [...this.done], suit: this.suitGiven, tk: this.taronKills || 0 }; }
 
     restore(s) {
         if (!s || this.off) return;
         const wasHigh = this.high;
         for (const k of Array.isArray(s.done) ? s.done : []) if (ACH_BY_ID[k]) this.done.add(k);
         if (s.suit) this.suitGiven = true;
+        this.taronKills = Math.max(this.taronKills || 0, s.tk | 0);
         this._applyBonus();
         if (this.high && !wasHigh && !this.suitGiven) this._giveSuit(true);
         this._mirror();

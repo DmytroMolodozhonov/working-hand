@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="tr-s" cx="0.45" cy="0.4" r="0.7"><stop offset="0" stop-color="#d27668"/><stop offset="0.6" stop-color="#b8574a"/><stop offset="1" stop-color="#7a2e26"/></radialGradient>
+    <linearGradient id="tr-h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a7c60"/><stop offset="0.5" stop-color="#e6dcc0"/><stop offset="1" stop-color="#bfb294"/></linearGradient>
+    <linearGradient id="tr-m" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4a4640"/><stop offset="0.5" stop-color="#9a968c"/><stop offset="1" stop-color="#4a4640"/></linearGradient>
+    <radialGradient id="tr-g" cx="0.5" cy="1" r="0.8"><stop offset="0" stop-color="#ff7a2a" stop-opacity="0.55"/><stop offset="1" stop-color="#ff7a2a" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="14" fill="#1c0d0c"/>
+  <rect width="128" height="128" rx="14" fill="url(#tr-g)"/>
+  <!-- the axe-hammer behind: haft, blade, hammer -->
+  <rect x="96" y="14" width="6" height="104" rx="2" fill="#5a3c22" stroke="#2a1a10" stroke-width="1.2" transform="rotate(14 99 66)"/>
+  <path d="M100 18 Q122 22 122 40 Q122 52 106 54 L102 42 Z" fill="url(#tr-m)" stroke="#2a2a28" stroke-width="1.4" transform="rotate(14 99 66)"/>
+  <rect x="84" y="16" width="14" height="22" rx="2" fill="url(#tr-m)" stroke="#2a2a28" stroke-width="1.4" transform="rotate(14 99 66)"/>
+  <!-- shoulders and belly -->
+  <path d="M10 124 Q12 92 40 88 L88 88 Q116 92 118 124 Z" fill="url(#tr-s)" stroke="#4a1a14" stroke-width="2"/>
+  <path d="M40 90 L88 112 M88 90 L40 112" stroke="#3a2616" stroke-width="5" opacity="0.9"/>
+  <path d="M18 108 Q30 100 46 104" stroke="#7a2e26" stroke-width="2" fill="none" opacity="0.7"/>
+  <!-- the horns -->
+  <path d="M38 40 Q20 34 16 14 Q30 22 44 32 Z" fill="url(#tr-h)" stroke="#5a5040" stroke-width="1.6"/>
+  <path d="M90 40 Q108 34 112 14 Q98 22 84 32 Z" fill="url(#tr-h)" stroke="#5a5040" stroke-width="1.6"/>
+  <!-- the swollen head -->
+  <ellipse cx="64" cy="66" rx="34" ry="30" fill="url(#tr-s)" stroke="#4a1a14" stroke-width="2"/>
+  <ellipse cx="42" cy="76" rx="14" ry="13" fill="#c4665a" opacity="0.55"/><ellipse cx="86" cy="76" rx="14" ry="13" fill="#c4665a" opacity="0.55"/>
+  <ellipse cx="64" cy="92" rx="22" ry="9" fill="#a84a3c" stroke="#4a1a14" stroke-width="1.4"/>
+  <path d="M34 52 Q64 42 94 52 L92 58 Q64 50 36 58 Z" fill="#8a3a30" stroke="#4a1a14" stroke-width="1.2"/>
+  <!-- small deep eyes, a pig's nose, the wide mouth with tusks -->
+  <ellipse cx="50" cy="62" rx="6" ry="3.6" fill="#2a0c0a"/><ellipse cx="78" cy="62" rx="6" ry="3.6" fill="#2a0c0a"/>
+  <circle cx="50" cy="62" r="2.1" fill="#e0b838"/><circle cx="78" cy="62" r="2.1" fill="#e0b838"/>
+  <ellipse cx="64" cy="76" rx="9" ry="6.5" fill="#cf7466" stroke="#4a1a14" stroke-width="1.2"/>
+  <ellipse cx="60" cy="77" rx="2.2" ry="2.8" fill="#3a1410"/><ellipse cx="68" cy="77" rx="2.2" ry="2.8" fill="#3a1410"/>
+  <path d="M44 86 Q64 94 84 86" stroke="#2a0c0a" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M50 87 L47 76 L55 86 Z" fill="#f0e8d0" stroke="#6a5a44" stroke-width="1"/><path d="M78 87 L81 76 L73 86 Z" fill="#f0e8d0" stroke="#6a5a44" stroke-width="1"/>
+</svg>

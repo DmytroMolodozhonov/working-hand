@@ -24,6 +24,7 @@ import { BODY_R } from './Crowd.js';
 import { registerKind } from './CreatureImpact.js';
 import { newUid } from './ItemTypes.js';
 import { BLOCK, isWood } from '../world/Terrain.js';
+import { inHell } from '../world/HellMap.js';
 
 const TAU = Math.PI * 2;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _p = new THREE.Vector3();
@@ -157,7 +158,10 @@ export class Taron {
     update(dt) {
         if (!this.enabled) return;
         const g = this.game;
-        if (!this.plan && g.hell?.plan?.taronCamps) this.setPlan(g.hell.plan); // (the foundation's plan appeared)
+        if (!this.plan && !this._planTried) { // (the underworld's plan: TerrainData.hellPlan — HellMap.hellPlan(seed), made once, ~30 ms, at the first frame near the far map)
+            const me0 = g.character.group.position, T = g.terrain?.data;
+            if (T?.hell && inHell(me0.x, me0.z, 600)) { this._planTried = true; this.setPlan(T.hellPlan); }
+        }
         const targets = this._targets || (this._targets = []);
         targets.length = 0;
         if (!this.active) { if (this.list.length) for (const t of [...this.list]) this._remove(t, true); return; }
@@ -525,11 +529,11 @@ export class Taron {
             if (L.iron) g.items?.spawnLoose?.({ kind: 'taronIron', uid: newUid(), count: L.iron }, at.clone(), { vel: vel() });
             if (L.stone) g.items?.spawnLoose?.({ kind: 'redStone', uid: newUid(), count: L.stone }, at.clone(), { vel: vel() });
             if (L.axe && !t.disarmed) g.items?.spawnLoose?.({ kind: 'taronAxe', uid: newUid(), count: 1 }, at.clone(), { vel: vel() });
-            this._send({ op: 'die', id: t.id });
+            this._send({ op: 'die', id: t.id, by: by === 'local' ? g.localId : by });
             this.kills++;
             g.mana?.taronKill?.(by, kind, this.kills);
-            g.achievements?.taronKill?.(this.kills);
         }
+        g.achievements?.taronKill?.(by); // (every computer counts its own player's kills: «Охотник на Таронов» — ten)
     }
 
     // ============================================================ the network
@@ -561,7 +565,7 @@ export class Taron {
                 if (t.dead) continue;
                 t.net = { x: e[1], y: e[2], z: e[3], yaw: e[4], mode: MODES[e[5]] || 'idle', t: e[6], speed: e[7], hp: e[8], side: e[9] ? 'hammer' : 'blade' };
             }
-        } else if (m.op === 'die' && !isHost) { const t = this.byIdMap.get(m.id); if (t) this.die(t, 'net', null); }
+        } else if (m.op === 'die' && !isHost) { const t = this.byIdMap.get(m.id); if (t) this.die(t, 'net', typeof m.by === 'string' ? m.by : null); }
         else if (m.op === 'say' && !isHost) { const t = this.byIdMap.get(m.id); if (t) g.sound?.playTaron?.(t.model.position, m.k, 1); }
         else if (m.op === 'wind' && !isHost) { const t = this.byIdMap.get(m.id); if (t) { t.side = m.side; g.sound?.playTaron?.(t.model.position, 'wind', 1); } }
         else if (m.op === 'hit' && isHost) { const t = this.byIdMap.get(m.id); if (t) this.hit(t, +m.dmg || 0, m.kind || 'melee', m.by || null); }

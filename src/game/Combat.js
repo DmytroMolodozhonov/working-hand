@@ -59,7 +59,6 @@ export const PVP = {
 
 /** Fatigue cost of each spell (stronger = more tiring). */
 export const SPELL_COST = {
-    TaronBlade: 36, TaronHammer: 20, // (the Tarons' axe-hammer: a shield pays half — TARON.SHIELD_MANA 18 / 10 — Taron.js)
     Protection: 5,
     ProtectionMaxima: 20,
     ProtectionGods: 100, // the gods' shield: then 3 a second while it holds (ProtectionGods.js; the author: 100 + 3)
@@ -208,8 +207,6 @@ const HIT_SPELL = {
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
     // the Ice Queen's own blows (IceQueen.js; IceGiants.QUEEN_VS): the freeze, the spikes and the blade are as dear as «Айс Максима», shards and the gust as «Айс»
     QueenFreeze: 'IceMaxima', QueenSpikes: 'IceMaxima', QueenBlade: 'IceMaxima', QueenShard: 'Ice', QueenGust: 'Ice',
-    // the Tarons' axe-hammer (Taron.js): the blade is a strong blow (as «Бомбардо Максима»), the hammer's butt as «Бомбардо»
-    TaronBlade: 'TaronBlade', TaronHammer: 'TaronHammer',
 };
 /** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
 const NOT_A_SPELL = new Set(['Bounce', 'melee', 'arrow', 'web', 'poison', 'bite', 'dragonFire', 'phoenixFire', 'Cannon']);
@@ -226,8 +223,11 @@ const BEAM_KINDS = new Set(['Electrum', 'Inferno', 'Ice', 'Wind', 'WindMaxima', 
  * What a spell stopped by a «Protection» / «Protection Maxima» costs the one holding it:
  * half of that spell's own mana (the author's rule: «Авада Кедавра» 25 → 12.5).
  */
+/** What a shield pays for a blow that is no spell (the Tarons' axe-hammer — Taron.js: the blade 36 → half 18, the hammer's butt 20 → 10). */
+const BLOW_COST = { TaronBlade: 36, TaronHammer: 20 };
 export function shieldHitCost(kind) {
     if (!kind || NOT_A_SPELL.has(kind)) return 0;
+    if (BLOW_COST[kind]) return BLOW_COST[kind] / 2;
     const cost = SPELL_COST[HIT_SPELL[kind] || kind];
     return (cost ?? 10) / 2; // (an unnamed spell: as an ordinary one, 10)
 }
