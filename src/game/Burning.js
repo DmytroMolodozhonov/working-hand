@@ -34,6 +34,8 @@ export const BURN = {
     FAR: 90,
     TTL: 4, // s a guest believes the host's list without an update
     FLAME_RATE: 34, // flames a second on a nearby body
+    LAVA_K: 2, // a LAVA fire (hell — HellRealm: whoever gets into lava catches it) burns twice as hard: ×2 a second, bigger flames (the author)
+    LAVA_TIME: 12, // s it keeps burning after the lava (longer than a plain fire: until put out — «Firefighting», a roll on the ground… water does not stay in hell)
 };
 
 /** Kinds of bodies that can burn (Duel._bodies kinds). */
@@ -60,6 +62,7 @@ export const BURN_TARGETS = {
     phoenix: { does: 'none', why: 'феникс рождён из огня' },
     owl: { does: 'none', why: 'сова не горит — слишком магическая (слова автора); чует огонь и улетает от него (Owls.TARGETS)' },
     canary: { does: 'own', why: 'канарик горит своим способом: Canaries.hit (огонь) — горит 6 с, −2 HP в секунду, бежит прочь; лагерь злится на того, кто поджёг' },
+    lava: { does: 'burn', why: 'лава ада поджигает всякого, кто в неё попал (HellRealm), — огонь вдвое сильнее (BURN.LAVA_K) и горит дольше (LAVA_TIME), и после выхода из лавы, пока не потушат «Firefighting»; вода в аду не держится; огнеупорные (Тароны, горгульи ада, Дьяволос, драконы) не горят' },
     taron: { does: 'own', why: 'Тарон горит как всякое живое существо (Taron.hit: огонь — обычный урон), но адский огонь и лава — свои, не жгут' },
     custom: { does: 'own', why: 'созданное существо горит, если само не дышит огнём (CustomCreatures.hit «fire»): огненному огонь нипочём' },
     plant: { does: 'own', why: 'телевильпины и плотоядные головы горят своим способом, быстро: −12 HP/с (Plants.js, PlantLife.BURN); на теле существа не горят; Ярколето огнём не вредит и не злится — оно само из огня (PlantLife.BRIGHT_TARGETS)' },
@@ -136,10 +139,10 @@ export class Burning {
      * Only the creature's own computer decides about a player (me: here; others: ignored); the host — about the rest.
      * @returns true if it burns now
      */
-    ignite(kind, id, by = null, time = BURN.TIME, hell = false) {
+    ignite(kind, id, by = null, time = BURN.TIME, hell = false, lava = false) {
         const g = this.game;
         if (!BURNS.has(kind)) return false;
-        if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time); }
+        if (kind === 'p') { if (id !== g.localId && id !== 'local') return false; return this._igniteMe(by, time, lava); }
         if (!g.authority) return false;
         const k = key(kind, id);
         let b = this.list.get(k);
@@ -151,13 +154,14 @@ export class Burning {
             this.list.set(k, b);
             this._start(b, e);
         }
-        b.left = Math.min(BURN.TIME, Math.max(b.left, time));
+        if (lava) b.k = BURN.LAVA_K;
+        b.left = Math.min(b.k > 1 ? BURN.LAVA_TIME : BURN.TIME, Math.max(b.left, time));
         if (by) b.by = by;
         b.hell = !!hell; // (the last fire to touch it: a death by the Hellfire's burn counts for the caster — HellKills.js)
         return true;
     }
 
-    _igniteMe(by, time) {
+    _igniteMe(by, time, lava = false) {
         const g = this.game, c = g.combat;
         if (g.isDeadLocal || c?.dead) return false;
         if (g.config?.mode === 'creative' && !c?.enabled) return false; // (Творческий: no harm to burn)
@@ -174,7 +178,8 @@ export class Burning {
             g.hud?.damageFlash?.();
             this._sendMe(true);
         }
-        this.me.left = Math.min(BURN.TIME, Math.max(this.me.left, time));
+        if (lava && !(this.me.k > 1)) { this.me.k = BURN.LAVA_K; this._sendMe(true); }
+        this.me.left = Math.min(this.me.k > 1 ? BURN.LAVA_TIME : BURN.TIME, Math.max(this.me.left, time));
         if (by) this.me.by = by;
         return true;
     }
@@ -305,8 +310,9 @@ export class Burning {
         m.tickT += BURN.TICK;
         if (c?.frozen) c.frozenLeft = 0;
         // (the fire goes round a shield; worn armour resists it: Combat.damage → Armor.absorb with kind 'fire')
-        if (c?.enabled) c.damage(BURN.DMG, m.by && m.by !== g.localId ? m.by : null, 'fire');
-        else g.damageLocalPlayer?.(BURN.DMG);
+        const dmg = BURN.DMG * (m.k || 1); // (a lava fire: twice as hard)
+        if (c?.enabled) c.damage(dmg, m.by && m.by !== g.localId ? m.by : null, m.k > 1 ? 'lava' : 'fire');
+        else g.damageLocalPlayer?.(dmg);
         g.sound?.playSpellFx?.('fxCrackle', null, 0.6, 1);
     }
 
@@ -362,7 +368,7 @@ export class Burning {
 
     /** One burn on a creature of the host's (the same number for all: BURN.DMG; the dispatcher is Hellfire's). */
     _hurt(b, e, mid) {
-        const g = this.game, by = b.by || null, d = BURN.DMG;
+        const g = this.game, by = b.by || null, d = BURN.DMG * (b.k || 1); // (a lava fire: ×2)
         const dir = _a.set(0, 0, 0);
         if (b.kind === 'z') {
             const z = g.zombieById?.get(b.id);
@@ -452,15 +458,15 @@ export class Burning {
         const cam = g.camera?.position;
         const pool = this._pool || (this._pool = []);
         let nd = 0;
-        const add = (kind, id) => {
+        const add = (kind, id, k = 1) => {
             let e = pool[nd];
-            if (!e) e = pool[nd] = { kind, id, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 };
-            if (g.duel?._bodyOf?.(kind, id, e)) { nd++; return e; }
+            if (!e) e = pool[nd] = { kind, id, a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0, k: 1 };
+            if (g.duel?._bodyOf?.(kind, id, e)) { e.k = k; nd++; return e; }
             return null;
         };
-        if (this.me) add('p', g.localId);
-        for (const b of this.list.values()) add(b.kind, b.id);
-        for (const s of this.shown.values()) { if (s.kind === 'p' && s.id === g.localId) continue; if (!this.list.has(key(s.kind, s.id))) add(s.kind, s.id); }
+        if (this.me) add('p', g.localId, this.me.k || 1);
+        for (const b of this.list.values()) add(b.kind, b.id, b.k || 1);
+        for (const s of this.shown.values()) { if (s.kind === 'p' && s.id === g.localId) continue; if (!this.list.has(key(s.kind, s.id))) add(s.kind, s.id, s.k || 1); }
         const draw = this._draw || (this._draw = []);
         draw.length = nd;
         for (let i = 0; i < nd; i++) draw[i] = pool[i];
@@ -473,7 +479,8 @@ export class Burning {
             const dist = cam ? cam.distanceTo(e.a) : 0;
             if (dist > BURN.FAR) continue;
             const full = i < BURN.FULL && dist < BURN.FULL_R;
-            const rate = full ? BURN.FLAME_RATE : 3;
+            const big = e.k > 1 ? 1.5 : 1; // (a lava fire: more and bigger tongues, higher)
+            const rate = (full ? BURN.FLAME_RATE : 3) * big;
             let n = Math.floor(rate * dt);
             if (Math.random() < rate * dt - n) n++;
             const H = Math.max(1, e.a.distanceTo(e.b) + e.r * 2), W = Math.max(0.3, e.r);
@@ -484,8 +491,8 @@ export class Burning {
                 const z = e.a.z + (e.b.z - e.a.z) * t + (Math.random() - 0.5) * W * 1.6;
                 const tongue = Math.random() < 0.7;
                 // tongues of flame run up the body (feet, back, arms, head); the odd spark and a dark wisp of smoke above
-                fx.glow.spawn(x, y, z, (Math.random() - 0.5) * 0.6, 1.6 + Math.random() * 1.8 * (H / 4), (Math.random() - 0.5) * 0.6,
-                    pick(FLAME), (tongue ? 0.28 : 0.12) * (0.7 + H / 6) * (0.6 + Math.random() * 0.8), 0.35 + Math.random() * 0.35, { shrink: 0.9, spin: 3 });
+                fx.glow.spawn(x, y, z, (Math.random() - 0.5) * 0.6, (1.6 + Math.random() * 1.8 * (H / 4)) * big, (Math.random() - 0.5) * 0.6,
+                    pick(FLAME), (tongue ? 0.28 : 0.12) * (0.7 + H / 6) * (0.6 + Math.random() * 0.8) * big, 0.35 + Math.random() * 0.35, { shrink: 0.9, spin: 3 });
                 if (full && Math.random() < 0.35) {
                     fx.smoke.spawn(x, y + H * 0.2, z, (Math.random() - 0.5) * 0.5, 1.2 + Math.random(), (Math.random() - 0.5) * 0.5,
                         pick(DARK), 0.3 + Math.random() * 0.3, 1.2 + Math.random() * 0.8, { gravity: -0.2, shrink: -0.3, spin: 1 });
@@ -525,7 +532,7 @@ export class Burning {
     // ============================================================= network
     _sendMe(on) {
         this._sentMe = on;
-        this.game.sync?.burn?.(on);
+        this.game.sync?.burn?.(on, on && this.me?.k > 1 ? 2 : 0);
     }
 
     _net(dt) {
@@ -533,9 +540,9 @@ export class Burning {
         this._netT -= dt;
         if (this._netT > 0) return;
         this._netT = 1;
-        if (this.me) this.game.sync?.burn?.(true); // (renewed: the others forget it after a few seconds without news)
+        if (this.me) this.game.sync?.burn?.(true, this.me.k > 1 ? 2 : 0); // (renewed: the others forget it after a few seconds without news)
         if (g.authority) {
-            const l = [...this.list.values()].map((b) => [b.kind, b.id]);
+            const l = [...this.list.values()].map((b) => (b.k > 1 ? [b.kind, b.id, 2] : [b.kind, b.id]));
             const s = JSON.stringify(l);
             if (l.length || this._sentList !== '[]' && this._sentList !== '') { this._sentList = s; g.sync?.burnList?.(l); }
         }
@@ -545,7 +552,7 @@ export class Burning {
     onNet(m) {
         if (!m || m.by == null || m.by === this.game.localId) return;
         const k = key('p', m.by);
-        if (m.on) this.shown.set(k, { kind: 'p', id: m.by, ttl: BURN.TTL + 2 }); else this.shown.delete(k);
+        if (m.on) this.shown.set(k, { kind: 'p', id: m.by, ttl: BURN.TTL + 2, k: m.bl === 2 ? BURN.LAVA_K : 1 }); else this.shown.delete(k);
     }
 
     /** 'burnl' from the host: the burning creatures (guests). */
@@ -555,7 +562,7 @@ export class Burning {
         for (const [k, s] of this.shown) if (s.kind !== 'p') this.shown.delete(k);
         for (const e of m.l.slice(0, 200)) {
             if (!Array.isArray(e) || !BURNS.has(e[0])) continue;
-            this.shown.set(key(e[0], e[1]), { kind: e[0], id: e[1], ttl: BURN.TTL });
+            this.shown.set(key(e[0], e[1]), { kind: e[0], id: e[1], ttl: BURN.TTL, k: e[2] === 2 ? BURN.LAVA_K : 1 });
             if (e[0] === 'z') { const z = g.zombieById?.get(e[1]); if (z) z.burning = 0.6; }
         }
     }

@@ -658,8 +658,8 @@ export class NetSync {
     }
 
     /** I catch fire / stopped burning (Burning.js: each computer decides its own player). */
-    burn(on) {
-        this.net.send({ t: 'burn', by: this.me, on: on ? 1 : 0 }, true);
+    burn(on, lava = 0) {
+        this.net.send({ t: 'burn', by: this.me, on: on ? 1 : 0, ...(lava ? { bl: 2 } : {}) }, true); // (bl 2: a lava fire — twice as strong, bigger flames: Burning.BURN.LAVA_K)
     }
 
     /** (the host) the burning creatures: [[kind, id], …] (Burning.onList). */

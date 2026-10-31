@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import { HELL, inHell, hellFountains } from '../world/HellMap.js';
-import { LAVA, ABYSS_Y } from './HellRules.js';
+import { LAVA, ABYSS_Y, lavaBurnsItem } from './HellRules.js';
 import { HELL_TIME } from '../world/VoxelShading.js';
 import { BLOCK } from '../world/Terrain.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -137,6 +137,7 @@ export class HellRealm {
         if (k < 1) return;
         this._sparks(dt, me);
         this._lava(dt, me);
+        this._lavaWorld(dt, me);
     }
 
     /** Ash and embers round me; the fountains of the craters and the pools of the falls near me. */
@@ -180,11 +181,36 @@ export class HellRealm {
         this._hurtT -= dt;
         if (this._hurtT > 0) return;
         this._hurtT = 0.25;
+        g.burning?.ignite?.('p', g.localId, null, LAVA.BURN_S * 3, false, true); // (the lava's fire: twice as strong, it goes on after the lava — Burning.BURN.LAVA_K)
         if (!c.enabled) return; // (Creative without «Обычное здоровье»: the lava glows, it does not kill)
-        g.burning?.ignite?.('p', g.localId, null, LAVA.BURN_S);
         if (c.hp - LAVA.DPS * 0.25 <= 0) c.die?.(null, 'lava');
         else c.damage?.(LAVA.DPS * 0.25, null, 'lava');
         for (let i = 0; i < 6; i++) g.fx?.spark(_v.set(me.x + (Math.random() - 0.5), fy + 0.2, me.z + (Math.random() - 0.5)), EMBER[i % 4], 0.2, _d.set((Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2), 0.8);
+    }
+
+    /**
+     * (the host) Creatures and things in the lava near me: a creature that can burn catches the lava's fire (Burning: Tarons, hell's gargoyles, the devil, dragons
+     * are not in its list — fireproof); a wooden / paper / cloth thing lying on lava burns away, metal and stone lie there whole.
+     */
+    _lavaWorld(dt, me) {
+        const g = this.game, data = this.data;
+        this._lwT = (this._lwT || 0) - dt;
+        if (this._lwT > 0 || !g.authority) return;
+        this._lwT = 0.3;
+        const lavaAt = (x, y, z) => data.get(Math.round(x), Math.round(y - 0.4), Math.round(z)) === BLOCK.HELL_LAVA || data.get(Math.round(x), Math.round(y + 0.3), Math.round(z)) === BLOCK.HELL_LAVA;
+        for (const e of g.duel?._bodies?.(g.localId, 160) || []) {
+            if (e.kind === 'p' || !['z', 'v', 'a', 'c'].includes(e.kind)) continue;
+            const lo = e.a.y < e.b.y ? e.a : e.b;
+            if (Math.hypot(lo.x - me.x, lo.z - me.z) < 160 && lavaAt(lo.x, lo.y - (e.r || 0), lo.z)) g.burning?.ignite?.(e.kind, e.id, null, LAVA.BURN_S * 3, false, true);
+        }
+        for (const [uid, L] of g.items?.loose || []) {
+            const p = L.model?.position;
+            if (!p || L.held || Math.hypot(p.x - me.x, p.z - me.z) > 160 || !lavaAt(p.x, p.y, p.z)) continue;
+            if (!lavaBurnsItem(L.item)) continue;
+            for (let i = 0; i < 14; i++) g.fx?.spark(_v.set(p.x + (Math.random() - 0.5), p.y + 0.3, p.z + (Math.random() - 0.5)), EMBER[i % 4], 0.2, _d.set((Math.random() - 0.5) * 2, 2 + Math.random() * 3, (Math.random() - 0.5) * 2), 1);
+            g.items.removeLoose(uid);
+            g.sync?.itemGone?.(uid, null, null);
+        }
     }
 
     dispose() {

@@ -134,3 +134,25 @@ test('BURN_TARGETS: every creature and thing is decided, with a reason', () => {
     assert.equal(BURN_TARGETS.dragon.does, 'none');
     assert.equal(BURN_TARGETS.zombies.does, 'burn');
 });
+
+test('the lava\'s fire (hell): twice as strong as a plain fire, it burns on after the lava, the others see it big (bl 2); fireproof kinds never catch it', () => {
+    const g = world(), B = g.burning, sent = [];
+    g.sync = { burn: (on, lava) => sent.push([on, lava]), burnList() {} };
+    assert.ok(B.ignite('p', 'me', null, 4 * 3, false, true));
+    assert.equal(B.me.k, BURN.LAVA_K); assert.equal(BURN.LAVA_K, 2);
+    assert.ok(sent.some(([on, lava]) => on && lava === 2), 'the flag goes to the others');
+    for (let i = 0; i < 25; i++) B.update(0.1);
+    assert.ok(g.hurt.length >= 2 && g.hurt.every((h) => h.d === BURN.DMG * 2 && h.kind === 'lava'), 'twice the burn: ' + JSON.stringify(g.hurt));
+    assert.ok(B.me, 'still burning after the lava is left');
+    // a villager in lava: ×2 too
+    assert.ok(B.ignite('v', 1, null, 12, false, true));
+    const v = B.list.get('v:1'); assert.equal(v.k, 2);
+    for (let i = 0; i < 12; i++) B.update(0.1);
+    assert.ok(g.hurt.some((h) => h.v === 1 && h.d === BURN.DMG * 2));
+    // a plain fire after: the lava's strength stays until it goes out
+    B.ignite('p', 'me'); assert.equal(B.me.k, 2);
+    // fireproof kinds (Tarons 'T', gargoyles, dragons 'D', the devil): not in the list of the burning
+    for (const k of ['T', 'D', 'g', 'G', 'dv']) assert.equal(B.ignite(k, 'x', null, 12, false, true), false, k);
+    // the guests see the lava's fire big
+    B.onNet({ by: 'p2', on: 1, bl: 2 }); assert.equal(B.shown.get('p:p2').k, 2);
+});

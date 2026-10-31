@@ -132,7 +132,8 @@ test('save and death: the way back is kept; a dead hero is never reborn in hell'
 });
 
 test('the spells in hell: water and cold do not work (with the reason); fire, Levitation, Lumos, flight do', () => {
-    for (const n of ['Waterball', 'WaterVortex', 'LetItRain', 'Frozen', 'Ice', 'IceMaxima', 'Snowman', 'IceCastle', 'IceBridge', 'Firefighting']) assert.ok(hellSpellBlock(n), n);
+    for (const n of ['Waterball', 'WaterVortex', 'LetItRain', 'Frozen', 'Ice', 'IceMaxima', 'Snowman', 'IceCastle', 'IceBridge']) assert.ok(hellSpellBlock(n), n);
+    assert.equal(hellSpellBlock('Firefighting'), null, '«Firefighting» takes the air, not water: it puts out the lava\'s fire');
     for (const n of ['Inferno', 'Fire', 'Levitation', 'Bombardo', 'Lumos', 'Flying', 'GiveMyPower', 'Stop']) assert.equal(hellSpellBlock(n), null, n);
     assert.match(hellSpellBlock('Frozen'), /тают/); assert.match(hellSpellBlock('Waterball'), /испаряется/);
     for (const k of ['me', 'players', 'bodies', 'items', 'gargoyles', 'mounts', 'imperius', 'duel', 'creative', 'death', 'save', 'lava']) assert.ok(HELL_TARGETS[k]?.why, k);

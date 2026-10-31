@@ -34,6 +34,10 @@ export const headDrops = (how, r = Math.random()) => how === 'kill' && r < HEAD.
 
 /** Лава: горит, как огонь, и убивает быстро (герою ~3 с); существа ада огнеупорны. */
 export const LAVA = { DPS: 8, BURN_S: 4, REACH: 0.6, TEXT: 'Вас сожгла лава' };
+/** Вещи, которые лава сжигает (дерево, бумага, ткань, кожа, еда, травы); металл, камень, кристаллы, стекло — лежат на лаве целыми. */
+export const LAVA_BURNS = new Set(['scroll', 'book', 'wand', 'bow', 'arrows', 'logs', 'wool', 'bread', 'cheese', 'pie', 'meat', 'steak', 'apple', 'redApple', 'baksadi_pear', 'backpack', 'fern_frond', 'web', 'canaryHide', 'robe', 'owlFeather', 'spencerFeather', 'beslanGrass', 'carnivoreHead', 'telewilpinLeaf', 'glowcap_mushroom', 'azure_berry', 'sun_herb']);
+export const lavaBurnsItem = (it) => !!it && (LAVA_BURNS.has(it.kind) || (it.kind === 'shield' && !it.magic && it.type === 0));
+
 /** Падение в пропасть ада: ниже этого слоя — смерть (лава там на дне). */
 export const ABYSS_Y = HELL.LAVA_Y - 6;
 
@@ -78,7 +82,7 @@ export const HELL_TEXT = {
  * Заклинания в аду (как `spaceSpellBlock` для космоса): вода и холод в адском жаре испаряются и тают — не действуют, с причиной. Остальное (Левиоса, Бомбардо,
  * огонь, Инферно, Люмос, полёт, «стоп», «Give Me My Power»…) работает. Огонь на лаве бессмыслен, но произносится.
  */
-const STEAM = /^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|WaveAttack|WaveAttackMaxima|Drawdown|DrawdownMaxima|LetItRain|AirBubble|AirBubbleMaxima|Firefighting|FirefightingMaxima)$/;
+const STEAM = /^(Waterball|WaterForming|WaterVortex|WaterVortexSuperMaxima|WaveAttack|WaveAttackMaxima|Drawdown|DrawdownMaxima|LetItRain|AirBubble|AirBubbleMaxima)$/; // («Firefighting» is no water — it takes the air away: it works in hell too and puts out the lava's fire)
 const COLD = /^(Ice|IceMaxima|Frozen|IceCastle|IceBridge|Snowman)$/;
 export function hellSpellBlock(name) {
     if (STEAM.test(name || '')) return '♨️ В адском жаре вода испаряется, не успев появиться — это заклинание здесь не действует';
@@ -103,7 +107,7 @@ export const HELL_TARGETS = {
     imperius: { does: 'none', why: 'под Империусом в чужом теле врата не пускают (сначала «стоп»)' },
     duel: { does: 'none', why: 'во время дуэли и на арене врата не пускают' },
     space: { does: 'none', why: 'в космосе нет земли — пентаграмма не ложится; на других планетах рисуется, врата ведут в тот же ад' },
-    lava: { does: 'burn', why: 'лава жжёт: 8 HP/с и горение — «Вас сожгла лава»; существа ада огнеупорны' },
+    lava: { does: 'burn', why: 'лава жжёт: 8 HP/с, пока в ней, и поджигает огнём вдвое сильнее обычного (Burning.BURN.LAVA_K), который горит и после выхода, пока не потушат «Firefighting»; существа ада и драконы огнеупорны; деревянные и бумажные вещи на лаве сгорают (LAVA_BURNS), металл и камень лежат целыми' },
     abyss: { does: 'kill', why: 'падение в пропасть ада — смерть' },
     spells: { does: 'mixed', why: 'вода и холод в аду не действуют (испаряются / тают — hellSpellBlock); остальное как на Земле' },
     creative: { does: 'free', why: 'в Творческом жертва и голова не нужны: круг открыт сразу' },
