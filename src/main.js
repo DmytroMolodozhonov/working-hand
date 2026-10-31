@@ -227,9 +227,8 @@ document.querySelectorAll('#tab-settings .sub-tab').forEach((btn) => {
     window.addEventListener('zns-llm-state', (e) => show(e.detail));
 })();
 // Settings → «Журнал»; and the app launcher keeps running while this window is open
-setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title: 'Заклинания (эта игра)', text: game.spellLog.text() } : null));
+setupLogPanel(document, () => (game?.spellLog ? { name: 'zns-spells.log', title: 'Заклинания (эта игра)', text: game.spellLog.text() } : null), setupAllLogsPanel(document));
 hookAllLog(); allLog('Игра', `=== игра открыта ${new Date().toLocaleString('ru-RU')}`);
-setupAllLogsPanel(document);
 keepLauncherAlive();
 watchServer(); // (the game's program closed while the window is open: said plainly, and back by itself)
 
