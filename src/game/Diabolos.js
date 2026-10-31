@@ -25,6 +25,7 @@ import { FarShape } from '../core/FarShape.js';
 import { registerKind } from './CreatureImpact.js';
 import { crowdStep } from './CrowdSources.js';
 import { inHell } from '../world/HellMap.js';
+import { ACTS, ACT_IDS, pickAct, actGap, moodFace, moveFace, blendFace } from './DiabolosActs.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _a = new THREE.Vector3(), _h = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(1, 1, 1), _y = new THREE.Vector3(0, 1, 0);
@@ -109,6 +110,7 @@ export class Diabolos {
             target: null, grudge: new Map(), lostT: 0, calmT: 0, sleepAt: sleepDelay(seed),
             move: null, rest: 0, cd: { fire: 0, ball: 0, grab: 0, clap: 0, roar: 0, rage: 0 },
             walkPh: 0, walkK: 0, strain: 0, stagger: 0, look: { yaw: 0, pitch: 0 }, aimDir: new THREE.Vector3(0, 0, -1),
+            act: null, actNext: 4, lastAct: null, reactT: 0, intimidated: false, wakeWhy: '', rnd: seed * 0.618 % 1,
             snoreT: 0, stepSide: 0, group: null, isDead: false, damageCooldown: 0, t: 0, wakeT: 0,
             bodyCapsule: (out) => this._capsule(out),
         };
@@ -180,6 +182,9 @@ export class Diabolos {
     // ================================================================ разум (хост)
     _think(d, dt, ps) {
         d.modeT += dt;
+        d.reactT = Math.max(0, d.reactT - dt);
+        if (d.act) { d.act.t += dt; if (d.act.t >= ACTS[d.act.id].dur) { d.lastAct = d.act.id; d.act = null; this._sendSoon = true; } }
+        d.actNext -= dt;
         d.rest = Math.max(0, d.rest - dt);
         for (const k in d.cd) d.cd[k] = Math.max(0, d.cd[k] - dt);
         d.stagger = Math.max(0, d.stagger - dt);
@@ -206,20 +211,36 @@ export class Diabolos {
         let tgt = null, best = Infinity;
         for (const q of ps) if (d.grudge.has(q.id)) { const dd = Math.hypot(q.p.x - d.x, q.p.z - d.z); if (dd < best) { best = dd; tgt = q; } }
         d.target = tgt?.id ?? null;
+        // кто-то из тех, на кого он зол, погиб — торжествует (ачивок за него нет: убить его нельзя, а он — может)
+        for (const [id] of d.grudge) {
+            const dead = id === this.game.localId ? (this.game.isDeadLocal || this.game.combat?.dead) : this.game.remotes?.get(id)?.dead;
+            if (dead) { d.grudge.delete(id); if (!d.move) this._act(d, 'killed', true); }
+        }
         switch (d.mode) {
-            case 'sleep': d.sit = 1; return;
-            case 'wake': if (d.modeT >= WAKE.GROGGY) this._setMode(d, 'stand'); return; // (потягивается, смотрит)
+            case 'sleep': d.sit = 1; if (!d.act && d.actNext <= 0) this._act(d, 'sleep'); return;
+            case 'wake':
+                // просыпается не сразу: один глаз → потягивается/зевает (или сразу обнюхивает того, кто подошёл вплотную)
+                if (!d.act) {
+                    if (d.modeT < 0.2) this._act(d, 'wake', true, 'wakeOneEye');
+                    else if (d.wakeStep !== 2 && d.modeT < 4) { d.wakeStep = 2; this._act(d, /вплотную/.test(d.wakeWhy) ? 'closeLook' : 'wake', true, /вплотную/.test(d.wakeWhy) ? 'sniffClose' : null); }
+                    else this._setMode(d, 'stand');
+                }
+                if (d.modeT > 9) { d.act = null; this._setMode(d, 'stand'); }
+                return;
             case 'sit':
                 if (d.target) { this._setMode(d, 'wake'); return; }
-                if (d.modeT >= d.sleepAt) this._setMode(d, 'sleep');
+                if (d.modeT >= d.sleepAt && !d.act) { this._setMode(d, 'sleep'); return; }
+                if (!d.act && d.actNext <= 0) this._act(d, 'idle');
                 return;
             default: break;
         }
         if (d.move) { this._moveTick(d, dt, tgt); return; }
+        if (d.act) { this._walk(d, 0, null); return; } // (пока поступок — стоит; удар подождёт)
         if (!tgt) {
             d.lostT += dt;
             if (d.lostT > DEVIL.LOSE_T || !d.grudge.size) { this._goBack(d, dt); return; }
             this._walk(d, dt, null);
+            if (d.actNext <= 0) this._act(d, 'idle'); // (потерял — нюхает воздух, осматривается)
             return;
         }
         d.lostT = 0;
@@ -231,6 +252,9 @@ export class Diabolos {
         const turn = yawTo(d.yaw, d.x, d.z, tgt.p.x, tgt.p.z);
         const choice = d.stagger > 0 ? null : chooseMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest,
             fireCd: d.cd.fire, ballCd: d.cd.ball, grabCd: d.cd.grab, clapCd: d.cd.clap, roarCd: d.cd.roar, rageCd: d.cd.rage, air: tgt.feet - d.y > 30 });
+        // характер: перед первым ударом — устрашение; цель за цепью и ему нечем ответить — дразнит (язык, «иди сюда», рвёт цепь)
+        if (choice && choice !== 'turn' && choice !== 'walk' && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
+        if (beyond && (choice === null || choice === 'roar' || choice === 'walk') && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) return; }
         if (choice === 'turn' || choice === null) { this._turn(d, turn, dt); if (choice === null && !beyond && dist > MOVES.fist.reach * 0.8) this._walk(d, dt, tgt.p); else this._walk(d, 0, null); return; }
         if (choice === 'walk') { this._walk(d, dt, tgt.p); return; }
         this._startMove(d, choice, tgt);
@@ -239,7 +263,8 @@ export class Diabolos {
     _setMode(d, mode) {
         if (d.mode === mode) return;
         d.mode = mode; d.modeT = 0;
-        if (mode === 'sit') d.sleepAt = sleepDelay(d.seed + d.t);
+        if (mode === 'sit') { d.sleepAt = sleepDelay(d.seed + d.t); d.intimidated = false; this._act(d, 'sitDown', true); }
+        if (mode === 'wake') d.wakeStep = 0;
         if (mode === 'wake') { d.wakeT = d.t; this.game.sound?.playDevil?.(this.model.position, 'roar', 1.2, 0.85); }
         this._sendSoon = true;
         this._note(`😈 Дьяволос: ${mode}`);
@@ -255,6 +280,7 @@ export class Diabolos {
         const g = this.game;
         if (by != null && by !== ID) d.grudge.set(by, { t: DEVIL.GRUDGE_T, why });
         if (d.mode === 'sleep' || d.mode === 'sit' || d.mode === 'back') {
+            d.wakeWhy = why;
             this._setMode(d, d.mode === 'back' ? 'stand' : 'wake');
             this._note(`😈 Дьяволос: решение — проснулся: ${why}${by != null ? ` (${by === g.localId ? 'вы' : 'игрок ' + by})` : ''}`);
             if (!this.everWoke) this.everWoke = true;
@@ -609,7 +635,7 @@ export class Diabolos {
         this.log.push(`ball:${shield || 'none'}:${v.dmg}`);
         const push = _u.set(me.x - p.x, 0, me.z - p.z).normalize().multiplyScalar(10 * (1 - dist / BALL.BLAST_R)).setY(4);
         if (v.breaks && !v.dmg) { g.knockback?.add?.(push.clone().multiplyScalar(0.3)); return; }
-        if (shield === 'gods') return;
+        if (shield === 'gods') { if (this.auth && this.d) this._act(this.d, 'surprised', true); return; } // (шар не взял золотую защиту — удивлён)
         this._hurtMe(v.dmg, 'fire', p, push.clone(), `🔥 Шар огня Дьяволоса: −${v.dmg}`);
         if (!v.ignite) g.burning?.extinguish?.('p', g.localId);
     }
@@ -661,6 +687,28 @@ export class Diabolos {
     }
     /** Меня держат: тело ведёт кулак (Game: физика героя выключена, как в лапах паучихи). */
     get holding() { return !!this.held; }
+
+    // ================================================================ характер: поступки (DiabolosActs)
+    /** (хост) Начать поступок ситуации `sit` (или прямо `id`). force — даже если таймер не дошёл. → начат ли. */
+    _act(d, sit, force = false, id = null) {
+        if (!d || d.move) return false;
+        if (!force && d.actNext > 0) return false;
+        d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280; // (детерминированный выбор: тот же мир — тот же характер)
+        const pick = id || pickAct(sit, d.rnd, d.lastAct);
+        if (!pick) return false;
+        d.act = { id: pick, t: 0, snd: 0, fx: 0 };
+        d.actNext = ACTS[pick].dur + actGap(sit, (d.rnd * 7.13) % 1);
+        this._sendSoon = true;
+        this._note(`😈 Дьяволос: ${ACTS[pick].ru}`);
+        return true;
+    }
+    /** (хост) Реакция на удар по категории (DEVIL_VS): над слабым смеётся, огнём наслаждается, божественное жалит. Не чаще раза в 7 с. */
+    _react(d, cat, wasAwake) {
+        if (!wasAwake || d.reactT > 0 || d.move) return;
+        d.reactT = 7;
+        const sit = cat === 'fire' ? 'hitFire' : cat === 'gods' ? 'hitDivine' : 'hitWeak';
+        this._act(d, sit, true);
+    }
 
     // ================================================================ попадания по нему (все места поиска целей)
     /** Заряд дуэли (Duel, вид 'Y'). */
@@ -722,7 +770,9 @@ export class Diabolos {
         if (!this.auth) { g.sync?.diabolos?.({ e: 'hit', by, s: String(spell || '').slice(0, 24) }); return; }
         d.fury = furyAfter(d.fury, dmg || 10);
         d.stagger = Math.max(d.stagger, v.stagger);
+        const wasAwake = d.mode !== 'sleep' && d.mode !== 'sit';
         this.disturb(by, 'по нему попали');
+        this._react(d, v.cat, wasAwake);
     }
 
     /** Тело для зарядов и ударов: от таза до плеч (сидя — ниже), радиус брюха. */
@@ -792,7 +842,7 @@ export class Diabolos {
                 default: return null;
             }
         };
-        const wakeK = d.mode === 'wake' ? clamp(Math.sin(clamp(d.modeT / WAKE.GROGGY, 0, 1) * Math.PI), 0, 1) : 0;
+        const wakeK = 0; // (пробуждение играют поступки: один глаз, потягивается, зевает — DiabolosActs)
         const P = this._P || (this._P = { walk: {}, look: {} });
         P.sit = d.sit; P.sleep = d.sleep; P.t = d.t; P.breath = d.mode === 'act' ? 1 : 0.6;
         P.walk.ph = d.walkPh; P.walk.k = d.walkK * (1 - d.sit);
@@ -811,6 +861,26 @@ export class Diabolos {
         P.stomp = mv?.id === 'stomp' ? (k < M.hit ? wind : Math.max(0, 1 - after * 3)) * (k < M.hit ? 1 : 0) : 0;
         P.stretch = wakeK;
         P.eyes = d.eyes;
+        // мимика: настроение, поверх — ход боя или поступок
+        const mood = d.mode === 'sleep' ? 'sleep' : d.strain > 0.6 ? 'strain' : mv ? 'attack' : d.target != null ? 'angry' : 'calm';
+        let face = moodFace(mood, d.t);
+        if (mv) face = blendFace(face, moveFace(mv.id, k / (M.dur || 1)), 1);
+        P.actW = 0; P.head = null; P.shake = 0; P.shrug = 0; P.tail = 0;
+        const ac = d.act && ACTS[d.act.id];
+        if (ac) {
+            const ak = Math.min(1, d.act.t / ac.dur);
+            const w = Math.min(1, ak / 0.12, (1 - ak) / 0.12);
+            face = blendFace(face, ac.face(ak, d.t), w);
+            const b = ac.body(ak, d.t) || {};
+            P.actW = w;
+            for (const key in b) {
+                if (key === 'armL' || key === 'armR') P[key] = b[key];
+                else if (key === 'head') P.head = b.head;
+                else if (key === 'heat') d.heat = Math.max(d.heat, b.heat);
+                else if (typeof b[key] === 'number') P[key] = (key in P && typeof P[key] === 'number' ? P[key] * (1 - w) : 0) + b[key] * w;
+            }
+        }
+        P.face = face;
         poseDiabolos(m, P);
     }
 
@@ -852,6 +922,13 @@ export class Diabolos {
     _sounds(d, dt) {
         const g = this.game, me = g.character?.group?.position;
         if (!me) return;
+        const ac = d.act && ACTS[d.act.id];
+        if (ac) {
+            const ak = d.act.t / ac.dur;
+            // (счётчик — отдельно: `g.sound?.…(…++)` без звука не вычислил бы аргумент — цикл без конца)
+            while (ac.snd && d.act.snd < ac.snd.length && ak >= ac.snd[d.act.snd].t) { const kind = ac.snd[d.act.snd].k; d.act.snd++; g.sound?.playDevil?.(mouthWorld(this.model, _a), kind, 1.2); }
+            while (ac.fx && d.act.fx < ac.fx.length && ak >= ac.fx[d.act.fx].t) { const kind = ac.fx[d.act.fx].k; d.act.fx++; this._actFx(kind); }
+        }
         const dist = Math.hypot(me.x - d.x, me.z - d.z);
         // тема босса: тихо во сне рядом, сильно в бою
         const near = clamp(1 - (dist - 150) / 400, 0, 1);
@@ -880,6 +957,25 @@ export class Diabolos {
         }
     }
 
+    /** Частицы поступков: дым из ноздрей, из пасти, кольца дыма. */
+    _actFx(kind) {
+        const fx = this.game.fx;
+        if (!fx?.smoke || !this.model) return;
+        const o = mouthWorld(this.model, _a);
+        const yaw = this.d.yaw, fx0 = -Math.sin(yaw), fz0 = -Math.cos(yaw);
+        if (kind === 'smokeRing') {
+            // кольцо: 14 клубов по кругу, летят вперёд-вверх вместе
+            for (let i = 0; i < 14; i++) {
+                const a = i / 14 * Math.PI * 2, rx = Math.cos(a) * 3, ry = Math.sin(a) * 3;
+                fx.smoke.spawn(o.x + fz0 * rx, o.y + 3 + ry, o.z - fx0 * rx, fx0 * 6, 2.5, fz0 * 6, 0x6a5a54, 2.2, 4, { shrink: -0.4 });
+            }
+            return;
+        }
+        const n = kind === 'mouthSmoke' ? 18 : 10;
+        for (let i = 0; i < n; i++) fx.smoke.spawn(o.x + (Math.random() - 0.5) * 3, o.y + (kind === 'mouthSmoke' ? 0 : 2.5), o.z + (Math.random() - 0.5) * 3,
+            fx0 * (3 + Math.random() * 3), 1.5 + Math.random() * 2, fz0 * (3 + Math.random() * 3), i % 2 ? 0x3a302c : 0x5a4a44, 2.5 + Math.random() * 2, 3, { shrink: -0.8 });
+    }
+
     _sound(id, wind = false) {
         const g = this.game, p = this.model?.position;
         if (!p) return;
@@ -897,7 +993,7 @@ export class Diabolos {
         if (!d || !g.sync?.diabolos || !(g.remotes?.size)) return;
         const m = d.move;
         g.sync.diabolos({ e: 'st', r: [r2(d.x), r2(d.y), r2(d.z), r2(d.yaw), STATES.indexOf(d.mode), m ? MOVE_IDS.indexOf(m.id) : -1, m ? r2(m.t) : 0, m?.side === 'L' ? 0 : 1, r2(d.strain), r2(d.fury), d.target ?? '',
-            m ? r2(m.aim.x) : 0, m ? r2(m.feet ?? m.aim.y) : 0, m ? r2(m.aim.z) : 0, m?.sweep ?? 1] });
+            m ? r2(m.aim.x) : 0, m ? r2(m.feet ?? m.aim.y) : 0, m ? r2(m.aim.z) : 0, m?.sweep ?? 1, d.act ? ACT_IDS.indexOf(d.act.id) : -1, d.act ? r2(d.act.t) : 0] });
     }
     /** (гость) Сообщение хоста / (хост) просьба гостя. */
     onNet(m, from, isHost = this.auth) {
@@ -906,8 +1002,15 @@ export class Diabolos {
         switch (m.e) {
             case 'st': {
                 if (isHost || !this.d || !Array.isArray(m.r)) return;
-                const [x, y, z, yaw, si, mi, mt, sd, strain, fury, tgt, ax, ay, az, sw] = m.r;
+                const [x, y, z, yaw, si, mi, mt, sd, strain, fury, tgt, ax, ay, az, sw, ai, at] = m.r;
                 const d = this.d;
+                const aid = ACT_IDS[ai];
+                if (!aid) d.act = null;
+                else if (!d.act || d.act.id !== aid || Math.abs(d.act.t - at) > 0.6) {
+                    // (пришёл посреди поступка: уже прошедшие звуки не играем разом)
+                    const A = ACTS[aid], k0 = (+at || 0) / A.dur;
+                    d.act = { id: aid, t: +at || 0, snd: (A.snd || []).filter((x) => x.t < k0).length, fx: (A.fx || []).filter((x) => x.t < k0).length };
+                }
                 d.nx = +x; d.ny = +y; d.nz = +z; d.nyaw = +yaw;
                 d.mode = STATES[si] || d.mode; d.strain = +strain || 0; d.fury = +fury || 0; d.target = tgt === '' ? null : tgt;
                 const id = MOVE_IDS[mi];
@@ -922,7 +1025,7 @@ export class Diabolos {
             case 'grab': if (m.to === g.localId && this.model) this._grabMe(m.s === 'L' ? 'L' : 'R'); return;
             case 'woke': if (m.to === g.localId) g.achievements?.gain?.('devilWoke'); return;
             case 'dist': if (isHost) this.disturb(from ?? m.by, String(m.why || 'потревожили').slice(0, 40)); return;
-            case 'hit': if (isHost && this.d) { const v = devilVerdict(m.s); if (v.anger) { this.d.fury = furyAfter(this.d.fury, 10); this.d.stagger = Math.max(this.d.stagger, v.stagger); this.disturb(from ?? m.by, 'по нему попали'); } } return;
+            case 'hit': if (isHost && this.d) { const v = devilVerdict(m.s); if (v.anger) { const aw = this.d.mode !== 'sleep' && this.d.mode !== 'sit'; this.d.fury = furyAfter(this.d.fury, 10); this.d.stagger = Math.max(this.d.stagger, v.stagger); this.disturb(from ?? m.by, 'по нему попали'); this._react(this.d, v.cat, aw); } } return;
             default: return;
         }
     }
@@ -938,6 +1041,7 @@ export class Diabolos {
             d.yaw += a * k;
         }
         d.modeT += dt;
+        if (d.act) { d.act.t += dt; if (d.act.t >= ACTS[d.act.id].dur) d.act = null; }
         if (d.move) {
             const M = MOVES[d.move.id];
             const prev = d.move.t;

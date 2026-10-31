@@ -427,9 +427,9 @@ float dWr = smoothstep(0.45, 0.5, abs(fract(dfbm(vDp * vec3(3.0, 11.0, 3.0)) * 6
 diffuseColor.rgb *= (0.82 + 0.34 * dN) * (1.0 - 0.22 * dPore * dSkin) * (1.0 - 0.12 * dWr * dSkin);`)
             .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 float dC = abs(dfbm(vDp * 3.2 + vec3(7.1)) - 0.5);
-float dCrack = (1.0 - smoothstep(0.0, 0.035, dC)) * dSkin;
+float dCrack = (1.0 - smoothstep(0.0, 0.018, dC)) * dSkin * smoothstep(0.35, 0.6, dfbm(vDp * 1.3 + vec3(3.3)));
 float dPulse = 0.65 + 0.35 * sin(uTime * 2.1 + dN * 9.0);
-totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.35 + 1.4 * uHeat) + vec3(0.25, 0.04, 0.0) * dCrack * dCrack;`);
+totalEmissiveRadiance += vec3(1.0, 0.32, 0.04) * dCrack * dPulse * (0.3 + 1.1 * uHeat) + vec3(0.25, 0.04, 0.0) * dCrack * dCrack;`);
     };
     skin.customProgramCacheKey = () => 'diabolos-skin';
     const hard = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
@@ -587,13 +587,17 @@ export function poseDiabolos(model, P) {
     // спина и грудь: дыхание (брюхо и грудь раздуваются), сидя — сутулится вперёд
     const hunch = sit * 0.42 + sl * 0.12;
     B.spine.rotation.set(-hunch * 0.5 + (P.stretch || 0) * 0.25, 0, 0);
-    B.spine.scale.set(1 + br * 0.018, 1, 1 + br * 0.03);
+    // смех трясёт брюхо (shake), пожатие плеч (shrug)
+    const sh = (P.shake || 0) * Math.sin(t * 23) * 0.025, shr = P.shrug || 0;
+    B.spine.scale.set(1 + br * 0.018 + sh, 1 - sh * 0.5, 1 + br * 0.03 + sh * 1.4);
     B.chest.rotation.set(-hunch * 0.45 + (P.stretch || 0) * 0.3 - (P.lean || 0) * 0.25 + (P.inhale || 0) * 0.15, (P.look?.yaw || 0) * 0.25, 0);
     B.chest.scale.set(1 + br * 0.02, 1 + br * 0.01, 1 + br * 0.025);
     // голова: к цели (шея и голова делят поворот), во сне — на грудь
     const ly = Math.max(-0.9, Math.min(0.9, P.look?.yaw || 0)), lp = Math.max(-0.6, Math.min(0.7, P.look?.pitch || 0));
-    B.neck.rotation.set(-sl * 0.45 + lp * 0.4 + (P.inhale || 0) * 0.35, ly * 0.35, 0);
-    B.head.rotation.set(-sl * 0.25 + lp * 0.55 + (P.fireAim || 0) + (P.inhale || 0) * 0.3, ly * 0.4, Math.sin(t * 0.37) * 0.03 * sl);
+    const HD = P.head || {}, hy = HD.yaw || 0, hp = HD.pitch || 0, hr = HD.roll || 0;
+    B.neck.rotation.set(-sl * 0.45 + lp * 0.4 + (P.inhale || 0) * 0.35 + hp * 0.4, ly * 0.35 + hy * 0.4, hr * 0.3);
+    B.head.rotation.set(-sl * 0.25 + lp * 0.55 + (P.fireAim || 0) + (P.inhale || 0) * 0.3 + hp * 0.6, ly * 0.4 + hy * 0.6, Math.sin(t * 0.37) * 0.03 * sl + hr * 0.7);
+    B.chest.position.y = R.chest.y + shr * 0.06; // (плечи вверх)
     B.jaw.rotation.set(-(P.jaw || 0) * 0.55 - sl * 0.05 * (0.5 + 0.5 * Math.sin(t * 0.9)), 0, 0);
     // мимика (P.face): брови, веки каждого глаза, зрачки, уши, оскал, ноздри, язык
     const F = P.face || {};
@@ -632,10 +636,19 @@ export function poseDiabolos(model, P) {
         let sx = -swing + sit * 0.75 + fwd * 1.3 + raise * 2.6 - slam * 2.2 + grab * 1.2 + clap * 1.35 + (P.stretch || 0) * 2.4;
         let sz = s * (0.18 + 0.1 * sit - raise * 0.25 + clap * -0.1 + (P.stretch || 0) * 0.35 + (P.strain || 0) * 0.25);
         const sy = s * (clap * 0.7 + grab * 0.15);
-        B['sh' + sd].rotation.set(sx, sy, sz);
-        B['el' + sd].rotation.set(0.35 + sit * 0.55 + raise * 0.6 - slam * 0.3 + grab * 0.5 + clap * 0.2 - (P.stretch || 0) * 0.2, 0, s * 0.05);
+        let el = 0.35 + sit * 0.55 + raise * 0.6 - slam * 0.3 + grab * 0.5 + clap * 0.2 - (P.stretch || 0) * 0.2, ha = -0.1 + grab * 0.6 + slam * 0.3, hz = s * clap * 0.6;
+        // поступок (DiabolosActs): углы рук напрямую — плавно поверх обычной позы (P.actW — вес поступка)
+        const rot = A.rot, w = rot ? (P.actW ?? 1) : 0;
+        if (w > 0) {
+            sx += ((rot.sx ?? sx) - sx) * w;
+            sz += (s * (rot.ab ?? 0.18) - sz) * w;
+            el += ((rot.el ?? el) - el) * w;
+            ha += ((rot.ha ?? ha) - ha) * w;
+        }
+        B['sh' + sd].rotation.set(sx, sy + (rot ? s * (rot.tw || 0) * w : 0), sz + s * shr * 0.12);
+        B['el' + sd].rotation.set(el, 0, s * 0.05);
         B['wr' + sd].rotation.set(0, 0, 0);
-        B['ha' + sd].rotation.set(-0.1 + grab * 0.6 + slam * 0.3, s * clap * 0.6, 0);
+        B['ha' + sd].rotation.set(ha, hz, 0);
         B['ha' + sd].scale.setScalar(1);
     }
     // ноги: копыта на земле. Стоя — под бёдрами, шаг — дуга; сидя — вперёд, колени вверх
@@ -651,7 +664,8 @@ export function poseDiabolos(model, P) {
         B['th' + sd].rotation.z = (sd === 'L' ? -1 : 1) * (0.06 + sit * 0.22);
     }
     // хвост: качается, сидя — лежит на земле
-    B.tail.rotation.set(-0.7 * sit + Math.sin(t * 0.8) * 0.12, Math.sin(t * 0.6) * 0.25 * (1 - sl * 0.7), 0);
+    const tl = 1 + (P.tail || 0) * 3; // (поступок: хвост хлещет)
+    B.tail.rotation.set(-0.7 * sit + Math.sin(t * 0.8) * 0.12, Math.sin(t * 0.6 * tl) * 0.25 * tl * (1 - sl * 0.7 * (P.tail ? 0 : 1)), 0);
     B.tail2.rotation.set(0.2 + Math.sin(t * 0.8 + 0.6) * 0.15, Math.sin(t * 0.6 + 0.5) * 0.3, 0);
     B.tail3.rotation.set(Math.sin(t * 0.8 + 1.2) * 0.2, 0, 0);
 }

@@ -292,3 +292,61 @@ test('звуки и подключение: всё синтезируется з
     assert.match(src('src/net/NetSync.js'), /case 'dvl': case 'dvb'/, 'сеть');
     assert.match(src('src/game/WorldSave.js'), /diabolos: g\.diabolos\?\.snapshot/, 'сохранение');
 });
+
+test('характер: 20+ поступков с мимикой; у каждого своё лицо; у каждой ситуации есть поступок; звуки все синтезируются', async () => {
+    const { ACTS, ACT_IDS, SITUATIONS, ACT_SOUNDS, pickAct, moodFace, blendFace } = await import('../../src/game/DiabolosActs.js');
+    assert.ok(ACT_IDS.length >= 20, `поступков ${ACT_IDS.length}`);
+    assert.deepEqual([...ACT_IDS].sort(), Object.keys(ACTS).sort(), 'ACT_IDS — все поступки');
+    const faces = new Set();
+    for (const id of ACT_IDS) {
+        const A = ACTS[id];
+        assert.ok(A.ru && A.dur > 0 && A.when.length, id);
+        for (const k of [0, 0.3, 0.5, 0.8, 1]) {
+            const f = A.face(k, 2.3), b = A.body(k, 2.3);
+            for (const v of Object.values(f)) assert.ok(Number.isFinite(v), `${id}: лицо`);
+            for (const v of Object.values(b)) if (typeof v === 'number') assert.ok(Number.isFinite(v), `${id}: тело`);
+        }
+        faces.add(JSON.stringify(Object.entries(A.face(0.5, 2.3)).map(([key, v]) => [key, Math.round(v * 10)]).sort()));
+    }
+    assert.equal(faces.size, ACT_IDS.length, 'у каждого поступка своя мимика');
+    for (const s of SITUATIONS) assert.ok(pickAct(s, 0.5), `ситуация ${s} без поступка`);
+    assert.equal(pickAct('taunt', 0.1), pickAct('taunt', 0.1), 'детерминированно');
+    assert.notEqual(pickAct('sleep', 0.01, 'snoreDeep'), 'snoreDeep', 'не повторяет подряд');
+    // язык (просьба автора): дразнит — язык высунут и болтается
+    const tt = ACTS.tongueTaunt.face(0.5, 1);
+    assert.ok(tt.tongue > 0.9 && tt.wag > 0.9);
+    assert.ok(ACTS.lickLips.face(0.4, 1).lick > 0.5);
+    assert.ok(blendFace(moodFace('angry', 0), { brow: 1 }, 1).brow === 1);
+    const { DEVIL_SOUNDS, synthDevil } = await import('../../src/audio/DiabolosSounds.js');
+    for (const k of ACT_SOUNDS) assert.ok(DEVIL_SOUNDS.includes(k), `звук ${k}`);
+    const ctx = { sampleRate: 22050, createBuffer: (c, n) => { const a = new Float32Array(n); return { getChannelData: () => a }; } };
+    for (const k of DEVIL_SOUNDS) { const d = synthDevil(ctx, k).getChannelData(); assert.ok(d.length > 100 && d.every(Number.isFinite), k); }
+});
+
+test('характер в игре: просыпается по-разному, над слабым смеётся, огнём наслаждается, божественное жалит, за цепью — дразнит', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(0, 1.95, 200);
+    const { g } = fakeGame(me);
+    const dv = new Diabolos(g); g.diabolos = dv;
+    dv.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: 70 });
+    dv.update(0.016);
+    const seen = new Set();
+    const run = (sec) => { for (let i = 0; i < sec * 30; i++) { dv.update(1 / 30); if (dv.d?.act) seen.add(dv.d.act.id); } };
+    run(60);
+    assert.ok([...seen].some((id) => ['snoreDeep', 'earFlick', 'sleepScratch', 'sleepMumble', 'smokePuff'].includes(id)), 'во сне живой');
+    dv.disturb('me', 'по нему попали');
+    run(8);
+    assert.ok(seen.has('wakeOneEye'), 'открывает один глаз');
+    assert.ok(seen.has('stretch') || seen.has('yawn'), 'потягивается или зевает');
+    me.set(0, 1.95, 140);
+    run(4);
+    dv.d.move = null; dv.d.act = null;
+    dv.hit(dv.d, 5, 'Bombardo', 'me'); assert.ok(['laugh', 'scoff'].includes(dv.d.act?.id), 'над слабым — смех/фырканье');
+    dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'Inferno', 'me'); assert.equal(dv.d.act?.id, 'bask', 'огонь — наслаждается');
+    dv.d.act = null; dv.d.reactT = 0; dv.hit(dv.d, 5, 'Boom', 'me'); assert.equal(dv.d.act?.id, 'headShake', 'божественное — трясёт головой');
+    // за цепью — дразнит
+    me.set(0, 1.95, -320);
+    dv.d.act = null;
+    run(60);
+    assert.ok(['tongueTaunt', 'beckon', 'chainPull', 'lickLips'].some((id) => seen.has(id)), `дразнит: ${[...seen].join(', ')}`);
+});

@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, devilHeat } from '/src/entities/DiabolosModel.js';
 import { ChainRope, DEVIL } from '/src/game/DiabolosRules.js';
+import { ACTS, moodFace, blendFace } from '/src/game/DiabolosActs.js';
 console.log('start', performance.now()); const q = new URLSearchParams(location.search);
 const W = +q.get('w') || 1280, H = +q.get('h') || 800;
 const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -24,7 +25,8 @@ const gt = new THREE.CanvasTexture(gc); gt.wrapS = gt.wrapT = THREE.RepeatWrappi
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ map: gt, emissive: 0x200400, emissiveMap: gt }));
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
 console.log('scene', performance.now()); const m = diabolosModel(); console.log('model', performance.now()); m.scale.setScalar(DEVIL.SCALE); m.rotation.y = +(q.get('yaw') || 0); scene.add(m);
-const pose = JSON.parse(q.get('pose') || '{}'); pose.t = 2;
+const pose = JSON.parse(q.get('pose') || '{}'); pose.t = +(q.get('t') || 2);
+if (q.get('act')) { const A = ACTS[q.get('act')], k = +(q.get('ak') || 0.5); const b = A.body(k, pose.t); Object.assign(pose, b); pose.actW = 1; pose.face = blendFace(moodFace(q.get('mood') || 'angry', pose.t), A.face(k, pose.t), 1); }
 poseDiabolos(m, pose); m.updateMatrixWorld(true); devilHeat(+(q.get('heat') || 0.6), 2);
 // цепь от якоря к копыту
 const anchor = { x: +(q.get('ax') || 30), y: 3, z: +(q.get('az') || 70) };
