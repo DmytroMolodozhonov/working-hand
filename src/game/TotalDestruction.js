@@ -314,6 +314,7 @@ export class TotalDestruction {
         g.ghosts?.hitAt(at, R, BLAST * P, d.name, by); // (a ghost: the blast does nothing — GhostRules)
         g.owls?.hitAt(at, R, BLAST * P, d.name, by); // (a scroll's spell: it kills an owl)
         g.canaries?.hitAt(at, R, BLAST * P, d.name, by);
+        g.tarons?.hitAt(at, R, BLAST * P, d.name, by);
         g.customCreatures?.hitAt(at, R, BLAST * P, d.name, by);
         g.customPlants?.hitAt(at, R, BLAST * P, d.name, by); // (a plant of one's own breaks) // (a creature of one's own) // (a canary: the blast hurts it, the camp turns on the caster)
         g.gargoyles?.hitAt(at, R, BLAST * P, d.name, by); // (an infernal gargoyle: the blast breaks stone)

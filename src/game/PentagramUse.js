@@ -77,6 +77,7 @@ export const PENTAGRAM_USE_TARGETS = {
     phoenix: { does: 'none', why: 'не действует' },
     owl: { does: 'none', why: 'не действует' },
     canary: { does: 'none', why: 'не действует' },
+    taron: { does: 'none', why: 'не действует' },
     spencer: { does: 'none', why: 'не действует' },
     ghost: { does: 'none', why: 'не действует: призрак бестелесный' },
     custom: { does: 'none', why: 'не действует' },

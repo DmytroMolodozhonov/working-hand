@@ -123,6 +123,9 @@ const GRIPPED = {
     magicPebble: { axis: 'body', pose: 'ball', at: [0.2, -0.272] }, // (a smooth pebble cupped in the fingers)
     canaryHide: { axis: 'body', pose: 'block', at: [0.17, -0.214] }, // (a folded hide in the fingers)
     bone: { axis: 'body', pose: 'thin', at: [0.13, -0.115], turn: true }, // (a bone across the palm, like an arrow)
+    taronAxe: { axis: 'y', handle: 0.1, pose: 'power', at: [0.13, -0.148] }, // (a Taron's axe-hammer: held like Thor's hammer)
+    taronIron: { axis: 'body', pose: 'block', at: [0.17, -0.214] },
+    redStone: { axis: 'body', pose: 'ball', at: [0.2, -0.272] },
     wool: { axis: 'body', pose: 'wool', at: [0.22, -0.374] },
     dragonEgg: { axis: 'body', pose: 'wool', at: [0.22, -0.42] }, // (big: the fingers spread round it; the other hand may hold it too)
     bread: { axis: 'body', pose: 'block', at: [0.17, -0.214] },

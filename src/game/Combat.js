@@ -59,6 +59,7 @@ export const PVP = {
 
 /** Fatigue cost of each spell (stronger = more tiring). */
 export const SPELL_COST = {
+    TaronBlade: 36, TaronHammer: 20, // (the Tarons' axe-hammer: a shield pays half — TARON.SHIELD_MANA 18 / 10 — Taron.js)
     Protection: 5,
     ProtectionMaxima: 20,
     ProtectionGods: 100, // the gods' shield: then 3 a second while it holds (ProtectionGods.js; the author: 100 + 3)
@@ -207,6 +208,8 @@ const HIT_SPELL = {
     Lightning: 'LightningStrike', Bombardo: 'Bombardo', BombardoMax: 'BombardoMaxima',
     // the Ice Queen's own blows (IceQueen.js; IceGiants.QUEEN_VS): the freeze, the spikes and the blade are as dear as «Айс Максима», shards and the gust as «Айс»
     QueenFreeze: 'IceMaxima', QueenSpikes: 'IceMaxima', QueenBlade: 'IceMaxima', QueenShard: 'Ice', QueenGust: 'Ice',
+    // the Tarons' axe-hammer (Taron.js): the blade is a strong blow (as «Бомбардо Максима»), the hammer's butt as «Бомбардо»
+    TaronBlade: 'TaronBlade', TaronHammer: 'TaronHammer',
 };
 /** Not spells (a ball bounced off, a blow): a shield stops them for nothing. */
 const NOT_A_SPELL = new Set(['Bounce', 'melee', 'arrow', 'web', 'poison', 'bite', 'dragonFire', 'phoenixFire', 'Cannon']);

@@ -125,6 +125,9 @@ export const ITEM_PHYS = {
     wand: { shape: 'long', e: 0.3, mu: 0.45, float: true, len: 0.75 },
     iceRod: { shape: 'long', e: 0.35, mu: 0.15, float: true, len: 2.2 },
     hammer: { shape: 'long', e: 0.15, mu: 0.6, float: false, len: 0.9 },
+    taronAxe: { shape: 'long', e: 0.1, mu: 0.7, float: false, len: 1.1 }, // (heavy: a dull thud, no bounce)
+    taronIron: { shape: 'round', e: 0.15, mu: 0.7, roll: 0.4, float: false, len: 0.3 },
+    redStone: { shape: 'round', e: 0.3, mu: 0.5, roll: 0.2, float: false, len: 0.2 },
     bone: { shape: 'long', e: 0.35, mu: 0.5, float: true, len: 0.7 },
     logs: { shape: 'long', e: 0.2, mu: 0.6, float: true, len: 1.2 },
     arrows: { shape: 'long', e: 0.2, mu: 0.5, float: true, len: 1.0 },

@@ -31,6 +31,7 @@ import { irMaterial } from '../fx/Iridescent.js';
 import { telewilpinLeafModel, carnivoreHeadItemModel } from '../fx/PlantModels.js';
 import { brightCoreModel } from '../fx/BrightFlowerModel.js';
 import { canaryHideModel, boneModel, magicPebbleModel } from '../fx/CanaryModel.js';
+import { taronAxeItemModel, taronIronModel, redStoneModel } from '../fx/TaronModel.js';
 import { spencerFeatherItem, beslanBundleItem } from '../fx/InvisibleModels.js';
 import * as THREE from 'three';
 import { woolModel, logsModel } from './BedModels.js';
@@ -177,6 +178,10 @@ export const ITEM_INFO = {
     // the Canaries (Canaries.js): the plain spoils of a swamp people — hide and bones (for crafting later)
     canaryHide: { name: 'Кожа канарика', icon: '🟫', weight: 0.5, stack: 10 },
     bone: { name: 'Кость', icon: '🦴', weight: 0.3, stack: 20 },
+    // the Tarons' spoils (Taron.js)
+    taronAxe: { name: 'Топор-молот Тарона', icon: '🪓', weight: 8 }, // (a huge two-handed axe-hammer: heavy, slow, a trophy)
+    taronIron: { name: 'Тароново железо', icon: '⛓️', weight: 1.2, stack: 10 },
+    redStone: { name: 'Красный камень', icon: '🔴', weight: 0.4, stack: 10 },
     magicPebble: { name: 'Волшебный камушек', icon: '🔮', weight: 0.15, stack: 10 }, // (a canary's rare find: the price of the pentagram of absolute steadiness — FirmRules.js)
     // the invisible world (Invisibles.js, SecondSight.js): only a hero who sees the invisible sees them lying on the ground
     spencerFeather: { name: 'Перо птички Спенсера', icon: '🪶', weight: 0.03, stack: 10, ghost: true },
@@ -244,6 +249,9 @@ function baseValue(it) {
         case 'carnivoreHead': return 140 * (it.count || 1);
         case 'brightCore': return 180 * (it.count || 1);
         case 'canaryHide': return 20 * (it.count || 1);
+        case 'taronAxe': return 260;
+        case 'taronIron': return 30 * (it.count || 1);
+        case 'redStone': return 45 * (it.count || 1);
         case 'magicPebble': return 150 * (it.count || 1);
         case 'bone': return 6 * (it.count || 1);
         case 'armor': case 'robe': return armorValue(it);
@@ -861,6 +869,9 @@ function describeItemBase(it) {
         case 'beslanGrass': return { title: '🌾 Трава Беслана', color: 0x7ff2e0, lines: [`Пучков: <b>${it.count || 1}</b>`, 'Сияющая трава невидимого мира. Видна только тем, кто видит невидимое', 'Заменяет перо птички Спенсера в пентаграмме видения невидимых'] };
         case 'telewilpinLeaf': return { title: '🍁 Листок телевильпина', color: 0xff3a1c, lines: [`Листков: <b>${it.count || 1}</b>`, 'Красный светящийся листок с колючего цветка телевильпина', 'Пока ни на что не годится — это ингредиент для будущих зелий'] };
         case 'magicPebble': return { title: '🔮 Волшебный камушек', color: 0xf0b25a, lines: [`Камушков: <b>${it.count || 1}</b>`, 'Гладкий тёмный камушек с янтарной руной, тёплый на ощупь. Его носят болотные карлики — канарики', 'Нужен для пентаграммы абсолютной устойчивости («Pentagranium Firmitas»): положите его на круг — при обряде он растворится светом'] };
+        case 'taronAxe': return { title: '🪓 Топор-молот Тарона', color: 0xb8523c, lines: ['Огромный двуручный топор: лезвие с одной стороны, молот с другой', 'Очень тяжёлый — с ним не побегаешь. Трофей тех, кто победил Тарона'] };
+        case 'taronIron': return { title: '⛓️ Тароново железо', color: 0x7a6a58, lines: [`Кусков: <b>${it.count || 1}</b>`, 'Ржавое тяжёлое железо с доспехов Тарона'] };
+        case 'redStone': return { title: '🔴 Красный камень', color: 0xc43a22, lines: [`Камней: <b>${it.count || 1}</b>`, 'Тёмно-красный камень с огненной жилой — будто остывшая лава'] };
         case 'canaryHide': return { title: '🟫 Кожа канарика', color: 0x8a6a44, lines: [`Кож: <b>${it.count || 1}</b>`, 'Грубая плотная кожа болотного жителя, с жёлтой бахромой из перьев', 'Её можно продать на рынке; позже из неё будут делать вещи'] };
         case 'bone': return { title: '🦴 Кость', color: 0xe6dcba, lines: [`Костей: <b>${it.count || 1}</b>`, 'Крепкая жёлтая кость. Её можно продать на рынке; позже из костей будут делать украшения и инструменты'] };
         case 'brightCore': return { title: '🔥 Сердцевина Ярколета', color: 0xffa21f, lines: [`Сердцевин: <b>${it.count || 1}</b>`, 'Тёплая светящаяся сердцевина огненного цветка Ярколето: внутри ещё живёт огонь', 'Её можно продать на рынке. Позже из неё будут варить зелья — храните про запас'] };
@@ -1198,7 +1209,7 @@ function meatModel(cooked) {
  * How big each kind of thing is next to the hero (~4.8 m tall: everything is
  * about 2.5× a real person's things). The models are drawn smaller and scaled.
  */
-export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, spencerFeather: 2, beslanGrass: 2 };
+export const ITEM_SCALE = { iceRod: 2.1, bow: 2.4, shield: 2.2, wand: 2.2, scroll: 2, hammer: 2.1, backpack: 1.6, arrows: 1, book: 1.6, apple: 1.8, redApple: 1.8, baksadi_pear: 1.7, glowcap_mushroom: 1.6, fern_frond: 1.6, azure_berry: 1.8, sun_herb: 1.8, frost_shard: 1.8, coins: 1.8, bread: 1.8, cheese: 1.8, pie: 1.8, meat: 1.8, steak: 1.8, bronzeHorn: 2.2, minotaurHorn: 2.4, flask: 1.8, potion: 1.8, crystal: 1.8, web: 1.8, glass: 1.8, phoenixFeather: 2, owlFeather: 2, telewilpinLeaf: 2.2, carnivoreHead: 2, brightCore: 2, canaryHide: 2, bone: 2, magicPebble: 2.4, taronAxe: 1.6, taronIron: 2, redStone: 2.2, spencerFeather: 2, beslanGrass: 2 };
 
 export function makeItemModel(it) {
     const m = buildItemModel(it);
@@ -1243,6 +1254,9 @@ function buildItemModel(it) {
         case 'carnivoreHead': return carnivoreHeadItemModel();
         case 'brightCore': return brightCoreModel();
         case 'canaryHide': return canaryHideModel();
+        case 'taronAxe': return taronAxeItemModel();
+        case 'taronIron': return taronIronModel();
+        case 'redStone': return redStoneModel();
         case 'magicPebble': return magicPebbleModel();
         case 'bone': return boneModel();
         case 'owlFeather': return owlFeatherModel();

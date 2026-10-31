@@ -171,6 +171,7 @@ export class Levitation {
         for (const o of g.owls?.targets() || []) out.push({ kind: 'owl', obj: o, pos: o.model.position, r: 0.5 });
         // a swamp canary: heavy and very strong — it tears free of «Левиоса» (the camp turns on the caster)
         for (const o of g.canaries?.targets() || []) out.push({ kind: 'canary', obj: o, pos: o.model.position, r: 1.1 });
+        for (const o of g.tarons?.targets() || []) out.push({ kind: 'taron', obj: o, pos: o.model.position, r: 3 }); // (a Taron: too heavy for the plain «Левиоса»)
         for (const o of g.customCreatures?.targets() || []) out.push({ kind: 'custom', obj: o, pos: o.model.position, r: o.r });
         // an infernal gargoyle: a heavy stone body that tears free of «Левиоса» at once (GargoyleRules.TARGETS.Levitation)
         for (const o of g.gargoyles?.targets() || []) out.push({ kind: 'gargoyle', obj: o, pos: o.model.position, r: 1.2 });
@@ -263,6 +264,7 @@ export class Levitation {
         if (best?.kind === 'iceCreature') return '❄️ Ледяная магия держит его на земле — «Левиоса» не поднимет';
         if (best?.kind === 'gargoyle') { this.game.gargoyles?.shooed?.(best.obj); return '🜏 Горгулья вырвалась из «Левиосы» и рванулась прочь'; }
         if (best?.kind === 'canary') { this.game.canaries?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪨 Канарик вырвался из «Левиосы» — он слишком тяжёлый и сильный, и теперь зол'; }
+        if (best?.kind === 'taron') { this.game.tarons?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪓 Тарон вырвался из «Левиосы» — он слишком тяжёлый (только «Левиоса Максима»)'; }
         if (best?.kind === 'ghost') { this.game.ghosts?.hit(best.obj, 0, 'Levitation', this.game.localId); return '👻 Призрак бестелесный — «Левиоса» его не берёт'; }
         if (best?.kind === 'spencer') { this.game.spencers?.hit(best.obj, 0, 'Levitation'); return '🪶 Птичка выскользнула из «Левиосы» и улетела'; }
         if (best?.kind === 'owl') { this.game.owls?.hit(best.obj, 0, 'Levitation'); return '🦉 Сова выскользнула из «Левиосы» и улетела'; }

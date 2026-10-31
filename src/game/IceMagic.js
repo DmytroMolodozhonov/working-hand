@@ -82,6 +82,7 @@ export const ICE_MAGIC_TARGETS = {
     phoenix: { does: 'none', why: 'феникс не задет' },
     owl: { does: 'none', why: 'сова не задета — вспархивает' },
     canary: { does: 'none', why: 'лёд замораживает канарика на несколько секунд (Canaries.hit — Frozen); урона нет' },
+    taron: { does: 'slow', why: 'холод замедляет Тарона на несколько секунд (Taron.hit — Frozen), урона нет; в подземном мире лёд слаб' },
     spencer: { does: 'none', why: 'птичка Спенсера не задета — вспархивает' },
     ghost: { does: 'none', why: 'не действует: призраки и так холодны, лёд им не помеха' },
     custom: { does: 'none', why: 'лёд растёт вокруг — созданное существо отходит; дышащему холодом всё равно' },

@@ -75,6 +75,7 @@ export const FIREFIGHT_TARGETS = {
     phoenix: { does: 'лёгкий толчок; пылающий феникс гаснет и бросает свою огненную атаку (улетает); без урона', why: 'без воздуха его огонь гаснет (Phoenixes.watered)' },
     owl: { does: 'не действует (не со свитка): сова чует, как уходит воздух, увёртывается и улетает', why: 'на умную сову действуют только заклинания со свитка (Owls.TARGETS)' },
     canary: { does: 'толчок водой, без урона; пламя на нём гаснет', why: 'канарик — обычное живое существо: вода и ветер его отталкивают, лагерь сердится на того, кто облил (Canaries.hit)' },
+    taron: { does: 'вода и ветер почти не двигают великана; пламя на нём гаснет', why: 'Тарон — тяжёлое живое существо: вода гасит огонь на нём, но не сдвигает (устойчивость 85)' },
     spencer: { does: 'не действует: птичка Спенсера вспугивается водой и улетает', why: 'вода птичку лишь вспугивает (SpencerRules.SPENCER_TARGETS.water)' },
     ghost: { does: 'не действует: призрак бестелесный — вода проходит сквозь него', why: 'вода призрака не берёт (GhostRules.GHOST_SPELLS.Water)' },
     custom: { does: 'толчок водой, без урона; пламя на нём гаснет', why: 'созданное существо — живое: вода его не ранит' },
@@ -306,6 +307,7 @@ export class Firefighting {
             if (b.kind === 'g') g.gargoyles?.watered?.(body, null, sp.by); // (an infernal gargoyle: water only pushes it)
             if (b.kind === 'C') g.customCreatures?.watered?.(body, null, sp.by); // (a creature of one's own: water shoves it)
             if (b.kind === 'N') g.canaries?.hit?.(body, 0, 'Water', sp.by); // (a canary: water puts its flame out, shoves it, angers the camp)
+            if (b.kind === 'T') g.tarons?.hit?.(body, 0, 'Water', sp.by); // (a Taron: water puts his flame out, hardly shoves him)
             if (b.kind === 'S') g.spencers?.hit?.(body, 0, 'Water', sp.by); // (the invisible bird: water startles it)
             if (b.kind === 'o') g.owls?.watered?.(body, null, sp.by); // (an owl: not a scroll's — it darts away)
         }

@@ -81,6 +81,7 @@ export const LIQUIDATION_TARGETS = {
     phoenix: { does: 'hurt', why: '−3, это нападение' },
     owl: { does: 'none', why: 'не со свитка: сова увёртывается и улетает (Owls.TARGETS)' },
     canary: { does: 'hurt', why: 'обычный урон; лагерь сердится на колдующего (Canaries.hit)' },
+    taron: { does: 'hurt', why: 'обычный урон; лагерь сердится на колдующего (Taron.hit)' },
     spencer: { does: 'hurt', why: 'урон «Ликвидации» убивает маленькую птичку Спенсера — падает её перо' },
     ghost: { does: 'none', why: 'не действует: призрак бестелесный — урон «Ликвидации» его не берёт' },
     custom: { does: 'hurt', why: 'обычный урон созданному существу (CustomCreatures.hit)' },

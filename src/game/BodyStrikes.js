@@ -150,6 +150,7 @@ export class BodyStrikes {
         // a swamp canary within reach (Canaries.js): a fist hurts it (×0.4) and makes the whole camp angry
         for (const c of g.customCreatures?.list || []) if (!c.dead && c.born >= 1 && near(c.model.position)) out.push({ key: 'C:' + c.id, creature: c, owner: c, parts: creatureParts(c), centre: c.model.position, vel: c.vel });
         for (const c of g.canaries?.list || []) if (!c.dead && near(c.model.position)) out.push({ key: 'N:' + c.id, creature: c, owner: c, parts: creatureParts(c), centre: c.model.position });
+        for (const c of g.tarons?.list || []) if (!c.dead && near(c.model.position)) out.push({ key: 'T:' + c.id, creature: c, owner: c, parts: creatureParts(c), centre: c.model.position }); // (a Taron: a fist hurts a little, his camp turns on you)
         // the invisible bird of Spencer within reach: a fist kills it (a seer sees it; the little body is there for everybody)
         for (const o of g.spencers?.list || []) if (!o.dead && near(o.model.position)) out.push({ key: 'S:' + o.id, creature: o, owner: o, parts: creatureParts(o), centre: o.model.position, vel: o.vel });
         // an infernal gargoyle within reach (Gargoyles.js): a fist hurts it (×0.8: stone); a shove moves it a little

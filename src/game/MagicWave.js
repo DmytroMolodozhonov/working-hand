@@ -38,6 +38,7 @@ export function eachBody(g, fn) {
     for (const o of g.owls?.list || []) if (!o.dead && o.group) fn('owl', o, owlCenter(o));
     for (const c of g.customCreatures?.list || []) if (!c.dead && c.born >= 1) fn('custom', c, g.customCreatures.centre(c)); // (creatures of one's own — CustomCreatures.TARGETS)
     for (const c of g.canaries?.list || []) if (!c.dead && c.model) fn('canary', c, new THREE.Vector3(c.model.position.x, c.model.position.y + 1.2, c.model.position.z)); // (the swamp Canaries: Canaries.hit)
+    for (const c of g.tarons?.list || []) if (!c.dead && c.model) fn('taron', c, new THREE.Vector3(c.model.position.x, c.model.position.y + 3, c.model.position.z)); // (the Tarons: Taron.hit)
     for (const o of g.spencers?.list || []) if (!o.dead && o.group) fn('spencer', o, spencerCenter(o)); // (the invisible bird: the wave kills it)
     for (const o of g.ghosts?.targets?.() || []) fn('ghost', o, new THREE.Vector3(o.position.x, o.position.y + 1.7, o.position.z)); // (the ghosts of the Castle of Ghosts: Circle Attack / Inspirius frighten them, the gods' spells scatter them — GhostRules)
     for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o)); // (the infernal gargoyles: GargoyleRules.TARGETS)
@@ -64,6 +65,7 @@ export function hitBody(g, kind, c, pos, dmg, dir, spell, by, treeKind = null) {
         case 'phoenix': g.phoenixes?.hit(c, dmg, spell, by); break;
         case 'gargoyle': g.gargoyles?.hit(c, dmg, spell, by); break; // (stone: Inspirius / Boom — the gods' — shatter it; Circle Attack hurts and shoves)
         case 'canary': g.canaries?.hit(c, dmg, spell, by); break;
+        case 'taron': g.tarons?.hit(c, dmg, spell, by); break;
         case 'spencer': g.spencers?.hit(c, dmg, spell, by); break;
         case 'ghost': g.ghosts?.hit(c, dmg, spell, by); break; // (never hurt: GhostRules.ghostSpell — scared / scattered / nothing)
         case 'custom': g.customCreatures?.hit(c, dmg, spell, by); break; // (a creature of one's own: its own immunities — CustomCreatures.hit) // (a canary: the wave hurts it; the camp turns on the caster)

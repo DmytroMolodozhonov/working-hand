@@ -196,7 +196,34 @@ const canaries = modelBody('ca', (g) => g.canaries?.list || [], (g, id) => g.can
     release(g, c) { c.speed = 0; c.mode = 'idle'; c._impAtk = 0; g.canaries?._set?.(c, 'idle'); },
 });
 
+// ============================================================ the Tarons of the underworld («Империус Максима» only: a heavy stubborn mind)
+const tarons = modelBody('ta', (g) => g.tarons?.list || [], (g, id) => g.tarons?.byId(id) || null, {
+    free: (c) => !c.dead && c.model && !c.lev,
+    up: () => 6,
+    head: (c) => c.model.userData?.head || null,
+    drive(g, c, I, dt) {
+        const T = g.tarons;
+        c.target = null; c.wander = null;
+        if (c.stun > 0) { c.stun -= dt; c.mode = 'flinch'; c.speed = 0; return; }
+        const speed = I.walk > 0.02 ? 2.45 * (0.4 + 0.6 * Math.min(1, I.walk * 1.4)) : 0; // (still HALF the player's speed, whoever drives him)
+        const w = walk(g, c, c.model.position, I, speed, BODY_R.taron, 8, dt, 6);
+        c.speed = w > 0 ? speed : 0;
+        c.walk += w * 1.1;
+        c.mode = w > 0 ? 'walk' : 'idle';
+        if (I.strikeNow && !(c._impCd > 0)) { c._impCd = 2.2; c._impAtk = 1.4; c.stT = 0; c.side = Math.random() < 0.35 ? 'hammer' : 'blade'; c.p = 0; }
+        c._impCd = Math.max(0, (c._impCd || 0) - dt);
+        if (c._impAtk > 0) { c._impAtk -= dt; c.stT += dt; c.mode = c.stT < 0.9 ? 'windup' : 'swing'; c.p = c.stT < 0.9 ? c.stT / 0.9 : Math.min(1, (c.stT - 0.9) / 0.5); if (!c._hitDone && c.stT >= 1.2) { c._hitDone = true; T?._strike?.(c); } }
+        else c._hitDone = false;
+        c._impWalk = w > 0 ? 1 : 0;
+        T?._animate?.(c, dt, 0);
+    },
+    anim(g, c, dt, v, atk) { c.speed = v; c.mode = atk ? 'swing' : v > 0.2 ? 'walk' : 'idle'; c.walk += v * dt * 1.1; if (atk) { c.stT = (c.stT || 0) + dt; c.p = Math.min(1, c.stT / 0.5); } g.tarons?._animate?.(c, dt, 0); },
+    struck: (g, c, I) => (I?.strikeNow ? { reach: 7, dmg: 22 } : null), // (his axe-hammer)
+    release(g, c) { c.speed = 0; c.mode = 'idle'; c._impAtk = 0; g.tarons?._set?.(c, 'idle'); },
+});
+
 BODIES.sp = spiders;
+BODIES.ta = tarons;
 BODIES.t = trees;
 BODIES.I = ice;
 BODIES.s = sailors;
@@ -227,5 +254,5 @@ const customs = modelBody('C', (g) => g.customCreatures?.list || [], (g, id) => 
 BODIES.C = customs;
 
 /** (tests) the walkers added here. */
-export const WALKER_SYSTEMS = ['sp', 't', 'I', 's', 'ca'];
+export const WALKER_SYSTEMS = ['sp', 't', 'I', 's', 'ca', 'ta'];
 export { THREE };

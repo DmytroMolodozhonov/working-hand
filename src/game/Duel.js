@@ -150,6 +150,7 @@ export const JOLT_TARGETS = {
     blackship: 'Captain Black Moustache: thrown back as a man — unless his rapier beats the charge aside (Sailors.parryBolt); a skeleton: thrown back, no harm (no duel charge harms it — Sailors.pirateBoneDamage)',
     phoenix: 'a light bird: thrown back through the air, tumbling, no damage; an attack (it flies off) — Phoenixes.boltHit',
     owl: 'no effect: a simple charge — the clever owl darts away untouched (and no longer loves the caster) — Owls.boltHit',
+    taron: 'a giant, 100 HP: «Авада» kills (black magic works on him), «Остолбеней» stuns 2 s, «Экспеллиармус» knocks the axe-hammer out of his hands, the rest hurts; the camp turns on the caster (Taron.boltHit; TaronRules.TARGETS)',
     canary: 'a stocky heavy body (the knight\'s mass): it reels back a step or two, drops its boulder, may be thrown down; no damage; the camp turns on the caster (Canaries.boltHit)',
     spencer: 'kills: a harmful charge is deadly for so small a body (the feather falls); a disarming or lifting one only startles it — SpencerRules.DUEL_DEADLY',
     ghost: 'no effect: a ghost has no body — the charge passes through it (GhostRules.GHOST_SPELLS; a hint to the caster once); only «Nihilis Atra» (exorcise), «Wind», the scares and the gods\' spells act on it — Ghosts.boltHit',
@@ -567,6 +568,8 @@ export class Duel {
         for (const f of g.phoenixes?.targets() || []) phoenixBody(f, put('f', f.id));
         // the swamp Canaries: a stocky body (Canaries.boltHit says what a charge does: «Авада» kills, «Остолбеней» stuns, the rest hurts)
         for (const c of g.canaries?.targets() || []) this._canaryBody(c, put('N', c.id));
+        // the Tarons of the underworld: a giant (Taron.boltHit says what a charge does)
+        for (const c of g.tarons?.targets() || []) this._taronBody(c, put('T', c.id));
         // creatures of one's own («Да пусть создастся»): their own body (CustomCreatures.boltHit says what a charge does)
         for (const c of g.customCreatures?.targets() || []) c.bodyCapsule(put('C', c.id));
         // clever owls: a small body (only «Авада Кедавра», a scroll's, hurts one — Owls.boltHit)
@@ -602,6 +605,7 @@ export class Duel {
         if (kind === 'f') { const f = g.phoenixes?.byId(id); return f ? phoenixBody(f, e) : null; }
         if (kind === 'o') { const o = g.owls?.byId(id); return o ? owlBody(o, e) : null; }
         if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? this._canaryBody(c, e) : null; }
+        if (kind === 'T') { const c = g.tarons?.byId(id); return c && !c.dead ? this._taronBody(c, e) : null; }
         if (kind === 'S') { const o = g.spencers?.byId(id); return o ? spencerBody(o, e) : null; }
         if (kind === 'G') { const o = g.ghosts?.byId(id); return o ? o.bodyCapsule(e) : null; }
         if (kind === 'C') { const c = g.customCreatures?.byId(id); return c ? c.bodyCapsule(e) : null; }
@@ -614,6 +618,12 @@ export class Duel {
     }
 
     /** A canary's body for a charge: a short stout line from its feet to its crown. */
+    _taronBody(c, e) {
+        const p = c.model.position, k = c.look?.size || 1;
+        e.a.set(p.x, p.y + 0.8, p.z); e.b.set(p.x, p.y + 6.0 * k, p.z);
+        e.r = 1.7 * k;
+        return e;
+    }
     _canaryBody(c, e) {
         const p = c.model.position, k = c.look?.size || 1;
         e.a.set(p.x, p.y + 0.35, p.z); e.b.set(p.x, p.y + 1.85 * k, p.z);
@@ -767,6 +777,7 @@ export class Duel {
         if (kind === 'f') return g.phoenixes?.byId(id) || null; // (a phoenix)
         if (kind === 'o') return g.owls?.byId(id) || null; // (a clever owl)
         if (kind === 'N') { const c = g.canaries?.byId(id); return c && !c.dead ? c : null; } // (a swamp canary)
+        if (kind === 'T') { const c = g.tarons?.byId(id); return c && !c.dead ? c : null; } // (a Taron)
         if (kind === 'S') return g.spencers?.byId(id) || null; // (the invisible bird of Spencer)
         if (kind === 'G') return g.ghosts?.byId(id) || null; // (a ghost of the Castle of Ghosts)
         if (kind === 'C') return g.customCreatures?.byId(id) || null; // (a creature of one's own)
@@ -1208,6 +1219,8 @@ export class Duel {
         if (c.isPhoenix) { g.phoenixes?.boltHit(c, spell, byId); return; }
         // a swamp canary: «Авада» kills, a stun stuns, the others hurt and anger the camp (Canaries.boltHit)
         if (c.isCanary) { g.canaries?.boltHit(c, spell, byId); return; }
+        // a Taron: «Авада» kills, a stun stuns, «Экспеллиармус» takes his axe, the rest hurt (Taron.boltHit)
+        if (c.isTaron) { g.tarons?.boltHit(c, spell, byId); return; }
         // a creature of one's own: «Авада» kills, «Остолбеней» stuns, the rest hurt (CustomCreatures.boltHit)
         if (c.isCustom) { g.customCreatures?.boltHit(c, spell, byId); return; }
         // a clever owl: «Авада Кедавра» (a scroll's) −25; every other charge — it darts away (Owls.TARGETS)

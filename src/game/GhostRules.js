@@ -85,6 +85,7 @@ export const GHOST_WORLD = {
     phoenix: { does: 'none', why: 'феникс не замечает призраков' },
     owl: { does: 'none', why: 'сова не видит призраков' },
     canary: { does: 'none', why: 'канарики не видят призраков' },
+    taron: { does: 'none', why: 'Тароны призраков не видят и в замке призраков не бывают' },
     spencer: { does: 'none', why: 'птичка Спенсера и призраки — оба невидимые, друг друга не трогают' },
     custom: { does: 'none', why: 'созданные существа не видят замка' },
     gargoyles: { does: 'none', why: 'горгульи не видят призраков' },

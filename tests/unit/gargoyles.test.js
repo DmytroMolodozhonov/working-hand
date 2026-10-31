@@ -308,7 +308,7 @@ test('the leash: a gargoyle that got out of LEASH m turns back to the pentagram'
 
 test('every place that looks for creatures knows the gargoyles', () => {
     const g = src('src/game/Game.js');
-    assert.match(g, /this\.gargoyles\.targets\(\)(, this\.canaries\.targets\(\))?(, this\.customCreatures\.targets\(\))?\), dt\)/, 'swords and axes (Weapons.checkHits)');
+    assert.match(g, /this\.gargoyles\.targets\(\)(, this\.canaries\.targets\(\))?(, this\.tarons\.targets\(\))?(, this\.customCreatures\.targets\(\))?\), dt\)/, 'swords and axes (Weapons.checkHits)');
     assert.match(g, /z\.isGargoyle\) \{ this\.gargoyles\.hit/, 'a blow lands on it');
     assert.match(g, /lightningAt: .*this\.gargoyles\?\.hitAt/, 'lightning');
     assert.match(g, /this\.gargoyles\?\.hitAt\(pos, radius, BLAST \* power/, 'blasts');

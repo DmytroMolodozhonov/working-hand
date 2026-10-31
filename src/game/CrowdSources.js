@@ -86,6 +86,12 @@ export function crowdOf(g) {
             const p = c.model.position;
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.canary, ref: c, id: c.id, kind: 'canary' });
         }
+        // the Tarons of the underworld (Taron.js): 3.2 m across (a belly) — the others walk round them, they walk round the others
+        for (const c of g.tarons?.list || []) {
+            if (c.dead || !c.model) continue;
+            const p = c.model.position;
+            push({ x: p.x, y: p.y, z: p.z, r: c.r || BODY_R.taron, ref: c, id: c.id, kind: 'taron' });
+        }
         // creatures of one's own («Да пусть создастся»: CustomCreatures.js) on the ground (a flying one is above everybody), as big as each is
         for (const c of g.customCreatures?.list || []) {
             if (c.dead || c.born < 1 || c.flying) continue;

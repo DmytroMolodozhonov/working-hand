@@ -106,6 +106,7 @@ export const VORTEX_TARGETS = {
     g: { push: 'splash', bubble: false, fill: false, carry: false, why: 'горгулья — быстрый летун, уходит из шара' },
     o: { push: 'none', bubble: false, fill: false, carry: false, why: 'сова — вода не её враг: уворачивается' },
     N: { push: 'knock', bubble: false, fill: false, carry: false, why: 'канарик тяжёл и упрям: шар его не заберёт, но вода сбивает с ног, тушит на нём огонь, лагерь сердится на колдующего (Canaries.hit)' },
+    T: { push: 'none', bubble: false, fill: false, carry: false, why: 'Тарон слишком тяжёл: шар не заберёт и не собьёт с ног, вода тушит на нём огонь, лагерь сердится на колдующего (Taron.hit)' },
     S: { push: 'none', bubble: false, fill: false, carry: false, why: 'птичка Спенсера слишком мала для шара: вода лишь вспугивает её (SpencerRules.SPENCER_TARGETS.water)' },
     G: { push: 'none', bubble: false, fill: false, carry: false, why: 'призрак бестелесный: вода проходит сквозь него, шар его не берёт — не действует' },
     C: { push: 'knock', bubble: false, fill: false, carry: false, why: 'своё существо: вода сбивает с ног и тушит, шар его не берёт — у каждого своё тело (CustomCreatures.watered)' },
@@ -841,6 +842,7 @@ export class WaterVortex {
         else if (tk === 'g') g.gargoyles?.watered?.(cr, null, by); // (an infernal gargoyle: water pushes it, no harm)
         else if (tk === 'C') g.customCreatures?.watered?.(cr, null, by); // (a creature of one's own)
         else if (tk === 'N') g.canaries?.hit?.(cr, 0, 'Water', by); // (a canary: water shoves it and angers the camp)
+        else if (tk === 'T') g.tarons?.hit?.(cr, 0, 'Water', by); // (a Taron: water puts his fire out, angers the camp)
         else if (tk === 'S') { g.spencers?.hit?.(cr, 0, 'Water', by); return; } // (the invisible bird: water startles it, no harm)
         else if (tk === 'o') { g.owls?.watered?.(cr, null, by); return; } // (an owl: water is no scroll's spell — it darts away untouched)
         // reeling or off its feet, drawn the same for every creature (CreatureImpact)
@@ -1395,6 +1397,7 @@ export class WaterVortex {
                     else if (b.kind === 'g') g.gargoyles?.hit?.(cr, CD, 'FireMaxima', e.by); // (hellish: fire does not touch an infernal gargoyle)
                     else if (b.kind === 'C') g.customCreatures?.hit?.(cr, CD, 'FireMaxima', e.by);
                     else if (b.kind === 'N') g.canaries?.hit?.(cr, CD, 'FireMaxima', e.by); // (a canary burns and runs)
+                    else if (b.kind === 'T') g.tarons?.hit?.(cr, CD, 'FireMaxima', e.by); // (a Taron burns)
                     else if (b.kind === 'G') g.ghosts?.hit?.(cr, 0, 'Fire', e.by); // (a ghost: fire passes through it — GhostRules)
                     else if (b.kind === 'S') g.spencers?.hit?.(cr, 3, 'FireMaxima', e.by); // (the invisible bird: burnt)
                     else if (b.kind === 'o') g.owls?.hit?.(cr, 0, 'FireMaxima', e.by); // (an owl: not a scroll's — it darts away)

@@ -19,6 +19,7 @@ import { synthGargoyle, GARGOYLE_SOUNDS } from './GargoyleSounds.js';
 import { synthDragon, DRAGON_SOUNDS } from './DragonSounds.js';
 import { synthPlant, PLANT_SOUNDS } from './PlantSounds.js';
 import { synthCanary, CANARY_SOUNDS } from './CanarySounds.js';
+import { synthTaron, TARON_SOUNDS } from './TaronSounds.js';
 import { synthThrow, THROW_SOUNDS } from './ThrowSounds.js';
 import * as THREE from 'three';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
@@ -648,6 +649,7 @@ export class SoundManager {
             ...PLANT_SOUNDS.map((k) => ['plant_' + k, () => synthPlant(this.context, k)]),
             // (the Canaries — Canaries.js: snarls, shouts, grunts, a boulder's thud and the air it cuts)
             ...CANARY_SOUNDS.map((k) => ['canary_' + k, () => synthCanary(this.context, k)]),
+            ...TARON_SOUNDS.map((k) => ['taron_' + k, () => synthTaron(this.context, k)]),
             // (the people's chores — Chores.js: the axe, the broom, a ball caught, the lute, a potion's bubble)
             ['chore_chop', () => this._synthKnock(140, 0.28)], ['chore_sweep', () => this._synthSizzle(0.32)], ['chore_catch', () => this._synthKnock(240, 0.1)],
             ['chore_pluck', () => this._synthPluck(330, 0.9)], ['chore_bubble', () => this._synthKnock(520, 0.12)],
@@ -2029,6 +2031,14 @@ export class SoundManager {
         const key = 'canary_' + kind;
         if (!this.sounds[key]) { if (!CANARY_SOUNDS.includes(kind)) return; this.sounds[key] = synthCanary(this.context, kind); }
         this._playAt(this.sounds[key], position, volume, kind === 'thud' || kind === 'grr' || kind === 'hit' ? 30 : 18, rate * (0.96 + Math.random() * 0.08));
+    }
+
+    /** The Tarons (Taron.js): a roar, a heavy step, the axe-hammer's wind-up and blow at a place — made ahead (prewarmStep). */
+    playTaron(position, kind = 'grunt', volume = 1, rate = 1) {
+        if (!this.enabled || !this.context || !position) return;
+        const key = 'taron_' + kind;
+        if (!this.sounds[key]) { if (!TARON_SOUNDS.includes(kind)) return; this.sounds[key] = synthTaron(this.context, kind); }
+        this._playAt(this.sounds[key], position, volume, kind === 'roar' || kind === 'blade' || kind === 'hammer' || kind === 'die' ? 60 : kind === 'step' ? 45 : 30, rate * (0.96 + Math.random() * 0.08));
     }
 
     /** The duel arena (ArenaDuels.js): 'cheer' | 'groan' | 'gong' | 'beep' | 'fanfare' | 'clap' at a place — made ahead (prewarmStep). */

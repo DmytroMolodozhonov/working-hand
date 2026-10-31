@@ -62,6 +62,7 @@ export const BRIDGE_TARGETS = {
     phoenix: { does: 'none', why: 'не касается' },
     owl: { does: 'none', why: 'не касается' },
     canary: { does: 'none', why: 'не касается' },
+    taron: { does: 'none', why: 'не касается' },
     spencer: { does: 'none', why: 'не касается' },
     ghost: { does: 'none', why: 'не касается: призрак бестелесный' },
     custom: { does: 'none', why: 'не касается' },

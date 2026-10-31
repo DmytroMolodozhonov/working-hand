@@ -522,6 +522,15 @@ export class Gear {
                     a.hit.add(o);
                     g.customCreatures.hit(o, a.dmg, 'arrow', a.by);
                 }
+                // a Taron (Taron.js): an arrow hurts him (a huge target: 7 m tall, 2 m across); his camp turns on the shooter
+                if (g.authority) for (const o of g.tarons?.targets() || []) {
+                    if (a.hit.has(o)) continue;
+                    const cp = o.model.position;
+                    if (Math.hypot(cp.x - p.x, cp.z - p.z) > 2.2 || p.y < cp.y || p.y > cp.y + 7) continue;
+                    a.hit.add(o);
+                    g.tarons.hit(o, a.dmg, 'arrow', a.by);
+                    if (!o.dead) this._stick(a, o.model);
+                }
                 // a swamp canary (Canaries.js): an arrow hurts it; its camp turns on the shooter
                 if (g.authority) for (const o of g.canaries?.targets() || []) {
                     if (a.hit.has(o)) continue;

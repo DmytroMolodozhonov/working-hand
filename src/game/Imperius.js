@@ -63,7 +63,7 @@ export const imperiusOf = (name) => (name === 'ImperiusMaxima' ? IMPERIUS_MAXIMA
  * Who may be taken (the author's rule «кто/что × как»): kind → {ru, plain, magic, boss, fly, why}.
  * plain: the plain «Империус» takes it; else only «Максима». `why`: said when the plain one cannot.
  * Kinds (ImperiusControl's adapters): z zombie, v castle / village person (by role), w a wizard of the game,
- * a animal (by type), s sailor, D dragon, sp the giant spider, b book-bird, o owl, g infernal gargoyle, f phoenix, t living tree /
+ * a animal (by type), ta Taron (the underworld), s sailor, D dragon, sp the giant spider, b book-bird, o owl, g infernal gargoyle, f phoenix, t living tree /
  * risen skeleton, I the Ice Castle's creatures, pl a player.
  */
 export const IMPERIUS_TARGETS = {
@@ -91,6 +91,7 @@ export const IMPERIUS_TARGETS = {
     phoenix: { ru: 'феникс', magic: true, fly: true },
     tree: { ru: 'ожившее дерево', magic: true },
     skeleton: { ru: 'скелет', magic: true },
+    taron: { ru: 'Тарон', magic: true }, // (a heavy stubborn mind of an underworld giant: only «Максима» takes it; he still walks at half the player's speed — Taron.js, adapter BODIES.ta)
     // (a servant of «Брейнрот» is its own kind: taken, it forgets its master for good — ImperiusControl._claim)
     snowman: { ru: 'снеговик', magic: true },
     iceMonster: { ru: 'ледяной монстр', magic: true },
@@ -192,6 +193,7 @@ export function kindOf(sys, c = {}) {
         case 'b': return 'bookbird';
         case 'o': return 'owl';
         case 'ca': return 'canary';
+        case 'ta': return 'taron';
         case 'sx': return 'spencer';
         case 'C': return 'custom'; // (a creature of one's own: CustomCreatures.js)
         case 'g': return 'gargoyle';

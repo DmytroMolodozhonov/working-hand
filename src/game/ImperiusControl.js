@@ -472,6 +472,7 @@ export class ImperiusControl {
         for (const t of g.livingTrees?.list || []) if (!t.isDead) consider('t', t.id, t.model.position.x, t.model.position.y, t.model.position.z);
         for (const cc of g.customCreatures?.list || []) if (!cc.dead && cc.born >= 1) consider('C', cc.id, cc.model.position.x, cc.model.position.y, cc.model.position.z); // (a creature of one's own: only the Maxima)
         for (const cn of g.canaries?.list || []) if (!cn.dead) consider('ca', cn.id, cn.model.position.x, cn.model.position.y, cn.model.position.z); // (a swamp canary)
+        for (const tn of g.tarons?.list || []) if (!tn.dead) consider('ta', tn.id, tn.model.position.x, tn.model.position.y, tn.model.position.z); // (a Taron: only «Империус Максима»)
         for (const ic of g.iceCastle?.list || []) if (!ic.dead) consider('I', ic.id, ic.model.position.x, ic.model.position.y, ic.model.position.z);
         for (const sv of g.ships?.crew?.byId?.values?.() || []) if (!sv.dead) consider('sl', sv.id, sv.x, sv.y, sv.z);
         if (!g.isDeadLocal) consider('p', g.localId, g.character.group.position.x, g.character.group.position.y - 1.95, g.character.group.position.z); // (my own body too: hurt, the mind comes back)
@@ -492,6 +493,7 @@ export class ImperiusControl {
         const n = Math.max(1, Math.min(20, dmg | 0)); // (a dragon's bite 14 at most — DRAGON.BITE)
         if (tk === 'C') { const cc = g.customCreatures?.byId(tid); if (cc) g.customCreatures.hit(cc, n, 'melee', by); return; }
         if (tk === 'ca') { const cn = g.canaries?.byId(tid); if (cn && !cn.dead) g.canaries.hit(cn, n, 'melee', by); return; } // (a canary struck by a possessed creature)
+        if (tk === 'ta') { const tn = g.tarons?.byId(tid); if (tn && !tn.dead) g.tarons.hit(tn, n, 'melee', by); return; } // (a Taron struck by a possessed creature)
         if (tk === 'sl') { const v = g.ships?.crew?.byId?.get(tid); if (v && !v.dead) g.ships.crew.hit(v, n, d, by, { via: 'servant' }); return; } // (a sailor)
         g.servants?.damage?.({ k: tk, id: tid }, n, d, by, 'servant', src);
     }

@@ -189,6 +189,7 @@ export const NPC_STEADY = {
     zombie: [1, 10], animal: [1, 10], horse: [10, 20], other: [5, 15],
     canary: [40, 55], // (the swamp canaries: stocky and very strong — they hold their ground better than a knight: Canaries.js)
     custom: [20, 50], // (a creature of one's own: by its size — CustomCreatures)
+    taron: [85, 85], // (a Taron: a 7 m giant, the heaviest body there is — TaronRules.TARON.STEADY: spells hardly move him — Taron.js)
     gargoyle: [20, 30], // (an infernal gargoyle — a heavy stone body held up by wings: Gargoyles.js)
 };
 /** A wizard's rank when the entry has none: by his road role. */
@@ -200,6 +201,7 @@ export function steadyKind(ck, c) {
     const role = c.role || c.entry?.role;
     if (ck === 'z') return 'zombie';
     if (ck === 'G') return 'gargoyle';
+    if (ck === 'T') return 'taron';
     if (ck === 'N') return 'canary';
     if (ck === 'C') return 'custom'; // (a creature of one's own: by its kind — NPC_STEADY.custom)
     if (ck === 'a') return c.type === 'horse' ? 'horse' : 'animal';

@@ -31,6 +31,7 @@ export const THUNDER_TARGETS = {
     sailors: '−10; a black ship\'s skeleton by Sailors.pirateBoneDamage (the kind is passed); the black ship itself is not hurt (Ships.isCursed)',
     customCreatures: '−10, thrown back like a beast of its size (CustomCreatures.hit)',
     canaries: '−10, thrown back (the knight\'s mass); the camp turns on the caster (Canaries.hit)',
+    taron: '−10, no push (a heavy body: steadiness 85); the camp turns on the caster (Taron.hit)',
     spider: '−10', dragons: '−10 (DragonKinds.ON_DRAGON)', phoenixes: '−10 (Phoenixes.TARGETS)', owls: '−10 (a scroll\'s spell hurts it — Owls.TARGETS)',
     livingTrees: '−10 (thunder is like lightning: MIGHTY_ON_TREES)', bookBirds: 'knocked down',
     iceCastle: '−10 to the queen, her monsters and every snowman (a scroll spell: IceQueen.iceDamage)',
@@ -104,6 +105,7 @@ function strike(game, kind, id, at, o, by) {
         case 'f': { const f = game.phoenixes?.byId(id); if (f) game.phoenixes.hit(f, dmg, K, by); break; }
         case 'o': { const w = game.owls?.byId(id); if (w) game.owls.hit(w, dmg, K, by); break; }
         case 'N': { const w = game.canaries?.byId(id); if (w) game.canaries.hit(w, dmg, K, by); break; }
+        case 'T': { const w = game.tarons?.byId(id); if (w) game.tarons.hit(w, dmg, K, by); break; }
         case 'G': { const w = game.ghosts?.byId(id); if (w) game.ghosts.hit(w, dmg, K, by); break; } // (a ghost of the Castle of Ghosts: the thunder passes through it — GhostRules; the caster is told once)
         case 'S': { const w = game.spencers?.byId(id); if (w) game.spencers.hit(w, dmg, K, by); break; } // (the invisible bird: thunder kills it)
         case 'C': { const w = game.customCreatures?.byId(id); if (w) game.customCreatures.hit(w, dmg, K, by); break; } // (a creature of one's own) // (a swamp canary)
