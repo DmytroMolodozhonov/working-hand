@@ -225,7 +225,7 @@ export class Drawdown {
         }
         if (!moved) return;
         this._dust(at, P.r, name === 'DrawdownMaxima' ? 22 : 12);
-        g.sound?.playRumble?.() || g.sound?.playExplosion?.(at, at, 0.3);
+        g.sound?.playLandThud?.(at, g.character?.group?.position) || g.sound?.playExplosion?.(at, at, 0.3);
         const me = g.character?.group.position;
         if (me && me.distanceTo(at) < P.r + 6) g.fx.shake = Math.max(g.fx.shake || 0, name === 'DrawdownMaxima' ? 0.5 : 0.3);
         if (!g.authority) return;

@@ -199,6 +199,8 @@ export { levBlocked };
 const GROUND = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.BEDROCK, BLOCK.SAND, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.WATER, BLOCK.ICE, BLOCK.ICE_SHAPE]);
 /** A village's ground round a house (not the house itself). */
 const YARD = new Set([BLOCK.PATH, BLOCK.FARMLAND, BLOCK.WHEAT, BLOCK.VEG, BLOCK.FLOWERS]);
+/** How far (m) behind the ground hit a tree beside the line still counts (the hand points a little low). */
+export const TREE_SLACK = 3;
 const isTreeBlock = (t) => TREE_KINDS.some((k) => k.wood === t || k.leaves === t);
 
 /** The blocks of a house record `h` (Castles.js: c, r): everything built from its floor up, not the ground. */
@@ -669,7 +671,13 @@ export class LevitationMaxima {
             }
         }
         // a block: a tree or a house
-        const cell = g.builder?._hitCell?.(o, d, R);
+        let cell = g.builder?._hitCell?.(o, d, R);
+        // (a hand never points exactly, and «чуть вниз» lands in the soil at the trunk's foot: a tree beside the line wins over the ground — and over
+        //  nothing at all; a built wall / a house pointed at truly stays what it is)
+        if (!cell || cell.type === BLOCK.AIR || isEarth(cell.type) || GROUND.has(cell.type) || YARD.has(cell.type)) {
+            const near = g.livingTrees?._treeNearRay?.(o, d, cell ? Math.min(R, cell.point.distanceTo(o) + TREE_SLACK) : R);
+            if (near) cell = { x: near.x, L: near.L, z: near.z, type: near.type, point: new THREE.Vector3(near.x, near.L - 1, near.z) };
+        }
         if (cell && (!best || cell.point.distanceTo(o) < best.dist)) {
             const dist = cell.point.distanceTo(o);
             const data = g.world?.terrain?.data || g.terrain?.data;
@@ -682,7 +690,7 @@ export class LevitationMaxima {
             else if (isBuilt(cell.type)) best = { kind: 'wall', dist, cell };
         }
         const inst = g.builder?._treeOnRay?.(o, d, R);
-        if (inst && (!best || Math.hypot(inst.x - o.x, inst.z - o.z) < best.dist)) best = { kind: 'inst', dist: Math.hypot(inst.x - o.x, inst.z - o.z), inst };
+        if (inst && (!best || Math.hypot(inst.x - o.x, inst.z - o.z) < best.dist + (best.kind === 'earth' ? TREE_SLACK : 0))) best = { kind: 'inst', dist: Math.hypot(inst.x - o.x, inst.z - o.z), inst };
         if (!best) return null;
         if (best.kind === 'thing') {
             const L = g.items?.loose?.get(best.uid);
@@ -1397,7 +1405,7 @@ export class LevitationMaxima {
         }
         g.fx?.debrisFrom?.(items, _v1.set(L.base.x, L.base.y - 1, L.base.z), 80);
         g.sound?.playCrack?.(L.base, 1);
-        g.sound?.playRumble?.(L.base, g.character?.group?.position);
+        g.sound?.playLandThud?.(L.base, g.character?.group?.position);
         g.fx && (g.fx.shake = Math.max(g.fx.shake || 0, L.kind === 'house' ? 0.5 : 0.3));
     }
 

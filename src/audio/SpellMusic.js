@@ -767,6 +767,10 @@ const FX = {
     /** The gods' shield goes out: a golden chime falling softly, a breath of air. */
     endGods(sr) { const o = buf(sr, 1.2), r = rng(163); ['A5', 'F#5', 'D5'].forEach((n, k) => bell(o, sr, hz(n), k * 0.12, 0.14, 0.9, 0.2)); noise(o, sr, 0, 0.9, 0.08, (u) => 0.2 - 0.15 * u, swell(0.1, 0.7), r); return finish(o, sr, { peak: 0.45 }); },
     /** Lifted thing let go (Levitation's end): a soft falling sigh. */
+    // (the object is set down: a soft low «lowering» note, 0,3 s — the end of a held «Левиоса» / «Drawdown»; no tail longer than the act itself)
+    endSet(sr) { const o = buf(sr, 0.32), r = rng(211); glide(o, sr, 0, 0.3, 0.3, (u) => 190 - 80 * u, swell(0.04, 0.6), 2); noise(o, sr, 0, 0.12, 0.12, (u) => 0.12 * (1 - u), swell(0.1, 0.8), r); return finish(o, sr, { peak: 0.4 }); },
+    // (a tree / a house lands: one short low thud, under a second — the 5 s rumble swelled to its loudest at the very end)
+    endThud(sr) { const o = buf(sr, 0.7), r = rng(223); noise(o, sr, 0, 0.5, 0.35, (u) => 0.2 * (1 - u) + 0.02, swell(0.03, 0.7), r); glide(o, sr, 0, 0.6, 0.4, (u) => 70 - 35 * u, swell(0.02, 0.8)); drum(o, sr, 0, 0.5, 60, 0.45, r); return finish(o, sr, { peak: 0.55 }); },
     endLev(sr) { const o = buf(sr, 0.6); glide(o, sr, 0, 0.6, 0.25, (u) => 700 - 450 * u, swell(0.05, 0.7), 2); return finish(o, sr, { peak: 0.4 }); },
     /** The living tree is a tree again: a long wood groan and a dull thud. */
     endAlive(sr) { const o = buf(sr, 1.4), r = rng(89); glide(o, sr, 0, 1.1, 0.25, (u) => 120 - 60 * u + 6 * Math.sin(u * 70), swell(0.1, 0.3), 6); drum(o, sr, 1, 0.5, 55, 0.4, r); return finish(o, sr, { peak: 0.6 }); },
@@ -962,10 +966,13 @@ export const SPELL_SOUND = {
     Stand: { cast: 'house_block' }, Stop: { cast: 'fxStop' },
 };
 
+/** How a held sound ends (the author: «the sound outlived the animation»): the loop fades out in FADE s, the end note is at most TAIL s long. */
+export const RELEASE = { FADE: 0.35, TAIL: 0.5 };
+
 /** The held spells (Concentration.HELD keys): the quiet loop while held, the sound when it ends (null: its own). */
 export const HELD_SOUND = {
-    Levitation: { loop: 'loopLev', end: 'endLev' }, LevitationMaxima: { loop: 'loopLev', rate: 0.8, end: 'endLev' },
-    PlanetMove: { loop: 'loopLev', rate: 0.6, end: 'endLev' },
+    Levitation: { loop: 'loopLev', end: 'endSet' }, LevitationMaxima: { loop: 'loopLev', rate: 0.8, end: 'endSet' },
+    PlanetMove: { loop: 'loopLev', rate: 0.6, end: 'endSet' },
     Alive: { loop: 'loopAlive', end: 'endAlive' },
     Build: { loop: 'loopBuild', end: 'fxStop' },
     WardBeam: { loop: 'loopStrengthen', end: 'fxStop' }, // («Strengthen House»: the beam feeding a sphere)
@@ -978,7 +985,7 @@ export const HELD_SOUND = {
     Imperius: { loop: 'loopImperius', end: 'endImperius' }, // (the mind in another body; the end — the mind back home)
     Puppet: { loop: 'loopImperius', rate: 0.8, end: 'endImperius' }, // (my body held by another's mind — «Империус Максима» on me)
     DragonTame: { loop: 'loopDragonCalm', end: 'fxStop' }, // («Brain Rot Maxima» held: the dragon calmed — DragonRide.js)
-    Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'fxStop' },
+    Lightning: { loop: 'loopBeam', end: 'fxStop' }, Beam: { loop: 'loopBeam', end: 'fxStop' }, Drawdown: { loop: 'loopBeam', rate: 0.7, end: 'endSet' },
     Inferno: { loop: 'loopFire', end: 'fxNox' },
     Waterball: { loop: 'loopWater', end: null },
     // (their own sounds go on while they are held: the hum of a house, the dome, the ice, the storm…)

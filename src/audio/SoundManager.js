@@ -42,7 +42,7 @@ const FILES = [
 
 /** Runs a sound-making generator to its end (when it is needed now). */
 import { SPACE_SOUNDS } from './SpaceSounds.js';
-import { SPELL_GEN, SPELL_SOUND, HELD_SOUND, SPELL_SR } from './SpellMusic.js';
+import { SPELL_GEN, SPELL_SOUND, HELD_SOUND, SPELL_SR, RELEASE } from './SpellMusic.js';
 
 function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.value; }
 
@@ -275,7 +275,7 @@ export class SoundManager {
         this.music.state = 'idle';
         for (const item of this.ambientPool) if (item.sound.isPlaying) item.sound.stop();
         for (const v of this.voices) if (v.isPlaying) v.stop();
-        for (const a of Object.values(this._loops || {})) if (a.isPlaying) a.stop(); // (the held spells' loops, space's pad)
+        for (const a of Object.values(this._loops || {})) { a._fade = null; if (a.isPlaying) a.stop(); } // (the held spells' loops, space's pad)
         if (this._spellTheme?.isPlaying) this._spellTheme.stop();
         this._heldNow = null;
     }
@@ -813,14 +813,40 @@ export class SoundManager {
         if (!this.context || !this.loaded) return;
         const was = this._heldNow || null;
         if (held !== was) {
-            const prev = HELD_SOUND[was];
-            const stopped = prev?.end === 'fxStop' && performance.now() - (this._stopAt || -1e9) < 800; // («стоп» rang already)
-            if (prev?.end && !stopped && this.sounds[prev.end]) this._spell(this.sounds[prev.end], 0.8, prev.rate || 1);
+            this.releaseHeld(was);
             this._heldNow = held;
         }
         const h = HELD_SOUND[held];
         this._loop('held', this.enabled && h?.loop ? h.loop : null, 0.4, h?.rate || 1);
         this._loop('flight', this.enabled && flight > 0.02 ? 'loopFlight' : null, 0.5 * Math.min(1, flight), 0.8 + 0.4 * Math.min(1, flight));
+        this.tickLoops();
+    }
+
+    /**
+     * A held spell ends (let go, fell, «стоп», mana, death): its end note plays at once and the loop fades out
+     * in RELEASE.FADE s (the same for every held spell; the loop is tied to the act of holding, not to its sample).
+     */
+    releaseHeld(kind) {
+        const prev = HELD_SOUND[kind];
+        if (!prev) return;
+        const stopped = prev.end === 'fxStop' && this._now() - (this._stopAt || -1e9) < 800; // («стоп» rang already)
+        if (prev.end && !stopped && this.sounds[prev.end]) this._spell(this.sounds[prev.end], 0.8, prev.rate && prev.end !== 'endSet' ? prev.rate : 1);
+        const a = this._loops?.held;
+        if (a?.isPlaying && !a._fade) a._fade = { t0: this._now(), k: a._k ?? 0.4 };
+    }
+
+    _now() { return this._clock ? this._clock() : performance.now(); }
+
+    /** Every frame: the loops that are fading out go quieter and stop (so nothing is cut off, and nothing stays). */
+    tickLoops() {
+        const now = this._now();
+        for (const a of Object.values(this._loops || {})) {
+            const f = a._fade;
+            if (!f) continue;
+            const u = (now - f.t0) / (RELEASE.FADE * 1000);
+            if (u >= 1) { a._fade = null; a._k = 0; if (a.isPlaying) a.stop(); continue; }
+            a.setVolume(f.k * (1 - u) * (1 - u) * (this.spellVolume ?? 1));
+        }
     }
 
     /** «Да пусть создастся»: the gods think — their soft choir, as loud as `k` (0…1: near the place; 0 — silent). */
@@ -830,12 +856,28 @@ export class SoundManager {
     _loop(slot, key, k, rate = 1) {
         const loops = this._loops || (this._loops = {});
         let a = loops[slot];
-        if (!key || !this.sounds[key]) { if (a?.isPlaying) a.stop(); return; }
+        if (!key || !this.sounds[key]) {
+            // (stopped: it fades out — RELEASE.FADE — instead of being cut off)
+            if (a?.isPlaying && !a._fade) a._fade = { t0: this._now(), k: a._k ?? k };
+            return;
+        }
         if (!a) { a = loops[slot] = new THREE.Audio(this.effectsListener); a.setLoop(true); }
+        if (a._fade && a._key === key && a.isPlaying) { // (the same sound asked for again while it fades: it is held again)
+            a._fade = null;
+        } else if (a._fade) { a._fade = null; if (a.isPlaying) a.stop(); }
         if (a._key !== key) { if (a.isPlaying) a.stop(); a.setBuffer(this.sounds[key]); a._key = key; }
+        a._k = k;
         a.setVolume(k * (this.spellVolume ?? 1));
         if (a.playbackRate !== rate) a.setPlaybackRate(rate);
         if (!a.isPlaying) { try { a.play(); } catch (e) { /* not resumed yet */ } }
+    }
+
+    /** A tree / a house comes down: one short low thud (never the 5 s rumble: it outlived the fall). */
+    playLandThud(position, listenerPos) {
+        if (!this.context || !this.sounds.endThud) return false;
+        const d = listenerPos && position ? position.distanceTo(listenerPos) : 0;
+        this._spell(this.sounds.endThud, Math.max(0.15, 1.6 - d / 70), 0.95 + Math.random() * 0.1);
+        return true;
     }
 
     /** «Circle Attack»'s music made ahead (early in the game, not on the first cast): call every frame until true. */

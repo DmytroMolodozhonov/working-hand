@@ -30,7 +30,7 @@ export const METHOD_GROUP = {
     // the fall of buildings (Game._fallStarted/_fallLanded, MonsterTransform): the general «звуки» slider
     playCollapse: E, playGiveWay: E,
     playThunder: S, playWhoosh: S, playInferno: S, playSapira: S, playSand: S, playIce: S, playJolt: S, playBombardoCast: S,
-    playExplosion: S, playRumble: S, playCircleAttack: S, playSpace: S, playSpellFx: S, playSpellFxAt: S, spellCast: S,
+    playExplosion: S, playRumble: S, playLandThud: S, playCircleAttack: S, playSpace: S, playSpellFx: S, playSpellFxAt: S, spellCast: S,
     playInspiriusCast: S, playInspiriusZap: S, playInspiriusBlast: S, playBoomSwell: S, playBoomBlast: S,
     playWaterRise: S, playSplash: S, playSplashAt: E, playBubblePop: S, playMagic: S, playHouseHum: S,
     playHouseTheme: S, playCastleTheme: S, breakHouseTheme: S, wardHum: S, playWardSet: S, playSeal: S,
