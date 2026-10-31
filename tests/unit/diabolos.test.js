@@ -598,3 +598,21 @@ test('«Империус Максима»: руки Дьяволоса повт�
     assert.equal(dv.heardOrder('шар огня'), true);
     assert.equal(dv.heardOrder('привет'), false);
 });
+
+test('сидит лицом ОТ столба цепи (к дороге): под «Империусом» шаг вперёд не упирается в столб; упёрся — обходит боком', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { g } = fakeGame(new THREE.Vector3(0, 1.95, -150));
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 0, z: -800 } });
+    d.update(0.016);
+    const fx = -Math.sin(d.d.yaw), fz = -Math.cos(d.d.yaw), ax = d.d.anchor.x - d.d.x, az = d.d.anchor.z - d.d.z;
+    assert.ok(fx * ax + fz * az < 0, 'спиной к столбу');
+    // идёт прямо на столб — обходит, а не стоит
+    const I = { yaw: Math.atan2(ax, az) + Math.PI, walk: 1 };
+    g.imperius = { step: (sys, c, dt) => { d.driven(c, I, dt); return true; } };
+    d.d.imp = { by: 'x', mine: true };
+    let path = 0, px = d.d.x, pz = d.d.z;
+    for (let i = 0; i < 30 * 20; i++) { d.update(1 / 30); path += Math.hypot(d.d.x - px, d.d.z - pz); px = d.d.x; pz = d.d.z; }
+    assert.ok(path > 60, `прошёл ${path.toFixed(0)} м`);
+    assert.ok(Math.hypot(d.d.x - d.d.anchor.x, d.d.z - d.d.anchor.z) >= DEVIL.PILLAR_R + DEVIL.RADIUS - 0.5, 'сквозь столб не прошёл');
+});

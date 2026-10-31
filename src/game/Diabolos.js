@@ -124,7 +124,7 @@ export class Diabolos {
         const y = Number.isFinite(gy) ? gy : s.y != null ? s.y + 1 : 0;
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? this._ground(s.anchor.x, s.anchor.z, y) + 2.5, z: s.anchor.z };
         // лицом от якоря (цепь тянется за ним назад)
-        const yaw = Math.atan2(-(s.x - anchor.x), -(s.z - anchor.z)) + Math.PI;
+        const yaw = Math.atan2(-(s.x - anchor.x), -(s.z - anchor.z)); // (вперёд = (−sin, −cos): ОТ столба, к дороге; было «+π» — сидел лицом к столбу, и под Империусом шёл прямо в него)
         this.d = {
             id: ID, isDiabolos: true, ck: 'Y', seed, x: s.x, y, z: s.z, yaw, anchor,
             mode: 'sleep', modeT: 0, sit: 1, sleep: 1, eyes: 0.04, heat: 0.25, fury: 0,
@@ -574,7 +574,11 @@ export class Diabolos {
         d.x += (L.x - d.x) * k; d.z += (L.z - d.z) * k;
         // столб цепи — сквозь него не проходит (обходит боком)
         const px = d.x - d.anchor.x, pz = d.z - d.anchor.z, pd = Math.hypot(px, pz), keep = DEVIL.PILLAR_R + DEVIL.RADIUS;
-        if (pd < keep) { const kk = keep / (pd || 1); d.x = d.anchor.x + (pd ? px * kk : keep); d.z = d.anchor.z + pz * kk; }
+        if (pd < keep) { // (упёрся в столб — выталкивает на край и ведёт вдоль него, в ту сторону, куда шёл: обходит, а не стоит)
+            const kk = keep / (pd || 1); d.x = d.anchor.x + (pd ? px * kk : keep); d.z = d.anchor.z + pz * kk;
+            const nx = (d.x - d.anchor.x) / keep, nz = (d.z - d.anchor.z) / keep, side = (sx * nz - sz * nx) >= 0 ? 1 : -1, st = Math.hypot(sx, sz);
+            d.x += nz * side * st; d.z += -nx * side * st;
+        }
         d.strain += ((L.t > 0.6 ? L.t : 0) - d.strain) * Math.min(1, dt * 3);
         d.walkK = Math.min(1, d.walkK + dt * 1.2) * (L.at ? 0.4 : 1);
         d.walkPh += dt * sp / 7.5 * Math.PI; // (шаг ~15 м)
@@ -586,7 +590,7 @@ export class Diabolos {
         if (d.mode !== 'back') this._setMode(d, 'back');
         if (dist > 4) { this._walk(d, dt, { x: s.x, z: s.z }); return; }
         // на месте: разворот лицом от якоря и сесть
-        const want = Math.atan2(-(s.x - d.anchor.x), -(s.z - d.anchor.z)) + Math.PI;
+        const want = Math.atan2(-(s.x - d.anchor.x), -(s.z - d.anchor.z)); // (лицом от столба)
         let a = want - d.yaw; while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2;
         if (Math.abs(a) > 0.1) { this._turn(d, a, dt); return; }
         d.grudge.clear();

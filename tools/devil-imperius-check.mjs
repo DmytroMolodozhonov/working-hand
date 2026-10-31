@@ -28,10 +28,12 @@ try {
         const ch = g.character; let run = true;
         Object.defineProperty(ch, 'isRunning', { get: () => run, set() {}, configurable: true });
         Object.defineProperty(ch, 'runIntensity', { get: () => (run ? 0.8 : 0), set() {}, configurable: true });
-        const t0 = D.t; while (D.t - t0 < 10) await sleep(100);
+        const t0 = D.t, trace = []; let last = -1;
+        while (D.t - t0 < 10) { await sleep(100); const s1 = Math.floor(D.t - t0); if (s1 !== last) { last = s1; const E = g.diabolos.d; trace.push([s1, Math.round(E.x - p0.x), Math.round(E.z - p0.z), +E.yaw.toFixed(2), E.move?.id || '-', +E.walkK.toFixed(2), +E.strain.toFixed(2), +im.I.walk.toFixed(2), +(im.I.yaw - E.yaw).toFixed(2), E === D ? 'same' : 'NEW', g.diabolos.site.len, Math.round(Math.hypot(E.x - g.diabolos.site.anchor.x, E.z - g.diabolos.site.anchor.z))]); } }
+        window.__trace = trace;
         run = false;
         const p1 = { x: D.x, z: D.z };
-        return { ok: rr, phase: im.phase, kind: im.kind, walked: Math.round(Math.hypot(p1.x - p0.x, p1.z - p0.z)), walk: im.I.walk, mode: D.mode, eye: im._eye, imp: !!D.imp };
+        return { ok: rr, phase: im.phase, kind: im.kind, walked: Math.round(Math.hypot(p1.x - p0.x, p1.z - p0.z)), walk: im.I.walk, mode: D.mode, eye: im._eye, imp: !!D.imp, trace: window.__trace };
     });
     console.log(JSON.stringify(r1));
     await page.screenshot({ path: path.join(out, 'devil-imperius-back.png') });
