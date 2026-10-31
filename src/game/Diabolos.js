@@ -37,6 +37,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const ID = 'diabolos';
 const NET_DT = 0.2;      // с между строками состояния хоста
+const SEEN_R = 4000;     // м: в аду ближе этого — загружен (виден с плато прибытия и издали; ад теперь без края — дальше не держим)
 const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
 const POSE_FAR = 420;    // м: дальше — поза реже
 const CHAIN_NEAR = 520;  // м: дальше цепь не считается (лежит, как легла)
@@ -182,7 +183,7 @@ export class Diabolos {
         if (!this.site) return;
         const ps = this._players();
         let near = Infinity;
-        for (const q of ps) near = Math.min(near, inHell(q.p.x, q.p.z) ? 0 : Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z)); // (в аду — виден отовсюду: гора в 122 м над дымкой; автор не нашёл его с плато прибытия в 1250 м)
+        for (const q of ps) { const dd = Math.hypot(q.p.x - this.site.x, q.p.z - this.site.z); near = Math.min(near, inHell(q.p.x, q.p.z) && dd < SEEN_R ? 0 : dd); } // (в аду — виден отовсюду: гора в 122 м над дымкой; автор не нашёл его с плато прибытия в 1250 м)
         if (g.isDeadLocal && !ps.length && this.d) near = Infinity;
         if (this._remains) { if (near > DEVIL.ACTIVE_R * 1.15) this._unload(); return; } // (убит: только цепь, якорь, сундуки)
         if (!this.d) { if (near < DEVIL.ACTIVE_R && (this.site.y != null || Number.isFinite(this._ground(this.site.x, this.site.z, NaN)))) this._load(); else return; }
