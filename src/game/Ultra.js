@@ -1,5 +1,5 @@
 /**
- * Ultra.js — «Ультра качество» (Настройки → Графика): an addition to the usual picture, switched on
+ * Ultra.js — «Ультра качество» (Общие настройки → Графика): an addition to the usual picture, switched on
  * and off at any moment, like the best shader packs of Minecraft. The usual mode is not touched at
  * all: with ultra off nothing of it is made, drawn or updated (the world's shaders carry its code
  * from the loading screen and skip it — UltraUniforms.js).

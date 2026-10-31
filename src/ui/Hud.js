@@ -42,7 +42,7 @@ export function setMinimapSize(pct) {
 if (typeof window !== 'undefined') window.addEventListener?.('resize', () => { if (setMinimapSize.pct) setMinimapSize(); });
 
 /**
- * The slots' size at the bottom (the hotbar: hand, slots, pouch), % of the usual (settings / Escape → «Размер панели
+ * The slots' size at the bottom (the hotbar: hand, slots, pouch), % of the usual (Общие настройки → Графика → «Размер панели
  * предметов»): the whole panel scales from its bottom middle, the bars above it (mana, air) rise with it. Never wider than
  * the window (the hotbar has up to 7+ slots). 100% by default.
  */

@@ -323,7 +323,7 @@ export class PoseInterpreter {
         this.faceSolver = faceSolver;
         this.faceReader = new FaceReader(); // (the face's muscles for the «Реалистичный» hero — FaceExpr.js)
         this.shoulderHistory = [];
-        this.walkMode = 'old'; // (Настройки → Ходьба: 'old' — the body's bob, 'legs' — steps on the spot: StepReader)
+        this.walkMode = 'old'; // (Общие настройки → Игра → Ходьба: 'old' — the body's bob, 'legs' — steps on the spot: StepReader)
         this.steps = new StepReader();
         this.prevWrists = null;
         this.wasCrouching = false;

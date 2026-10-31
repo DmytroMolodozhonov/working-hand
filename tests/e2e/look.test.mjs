@@ -44,7 +44,7 @@ test('look: the new name, the logo, «Мои миры» first, «Создать 
     await page.click('.mode-card[data-mode="creative"]');
     assert.equal(await page.isVisible('.map-list-grid'), false);
     const tabs = await page.$$eval('.tab-btn', (els) => els.map((e) => e.textContent.trim()));
-    assert.ok(tabs.includes('🎮 Одиночная игра') && tabs.includes('⚙️ Настройки'), tabs.join(','));
+    assert.ok(tabs.includes('🎮 Одиночная игра') && tabs.includes('⚙️ Общие настройки'), tabs.join(','));
     const opts = await page.$$eval('#mp-mode option', (els) => els.map((o) => [o.value, o.textContent.replace(/^\S+\s/, '')]));
     assert.deepEqual(opts, [['creative', 'Творческий'], ['freeworld', 'Выживание']]);
     const body = await page.evaluate(() => document.body.innerText);
@@ -170,7 +170,7 @@ test('look: code served as plain text or a missing game file — the note says w
     await page.close();
 });
 
-test('look: the menu is one fixed-size window with its own buttons; the pause menu has «Звук»', async () => {
+test('look: the menu is one fixed-size window with its own buttons; the pause menu has only the key buttons + «Общие настройки»', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 1366, height: 768 } });
     await page.waitForSelector('.tab-btn');
     const size = () => page.$eval('#main-menu > .menu-container', (el) => { const r = el.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.left), Math.round(r.top)]; });
@@ -192,19 +192,28 @@ test('look: the menu is one fixed-size window with its own buttons; the pause me
     });
     await startFromMenu(page, 'creative');
     assert.equal(await page.evaluate(() => window.__fs), 1);
-    // Escape → pause → «Звук»: the music volume changes the game's sound and the remembered setting
+    // Escape → pause: only the key buttons; «Общие настройки» opens the SAME page over it (no leaving the world)
     await page.keyboard.press('Escape');
     await page.waitForSelector('#pause-menu:not(.hidden)');
-    await page.click('[data-pause-tab="pause-audio"]');
-    assert.ok(await page.isVisible('#pause-music-vol'));
-    assert.ok(!(await page.isVisible('#pause-continue-btn')), 'the «Меню» page is hidden while «Звук» is open');
-    await page.$eval('#pause-music-vol', (el) => { el.value = '65'; el.dispatchEvent(new Event('input')); });
-    assert.equal(await page.$eval('#music-vol', (el) => el.value), '65');
+    for (const gone of ['pause-audio', 'pause-graphics', 'pause-creative', 'pause-quick', 'pause-hands']) assert.equal(await page.$('#' + gone), null, gone + ' is gone from the pause menu');
+    assert.ok(await page.isVisible('#pause-continue-btn') && await page.isVisible('#pause-settings-btn') && await page.isVisible('#pause-exit-btn'));
+    await page.click('#pause-settings-btn');
+    assert.ok(await page.isVisible('#general-settings'));
+    assert.equal(await page.evaluate(() => document.getElementById('tab-settings').parentElement.id), 'gs-body', 'the main menu page itself moved in');
+    await page.click('#general-settings .sub-tab[data-sub="set-audio"]');
+    await page.$eval('#music-vol', (el) => { el.value = '65'; el.dispatchEvent(new Event('input')); });
     assert.match(await page.textContent('#music-vol-val'), /65%/);
     assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('zns-settings'))['music-vol']), '65');
-    await page.$eval('#pause-audio-ambient-toggle', (el) => { el.value = '0'; el.dispatchEvent(new Event('change')); });
+    await page.$eval('#audio-ambient-toggle', (el) => { el.value = '0'; el.dispatchEvent(new Event('change')); });
     assert.equal(await page.evaluate(() => window.__zns.game.sound.ambientEnabled), false);
-    // opening the pause again starts on «Меню»
+    // the hand version is in ONE place (no copy in a «Творческий» tab); the camera is off here → disabled with the reason
+    await page.click('#general-settings .sub-tab[data-sub="set-view"]');
+    assert.equal(await page.locator('input[name="hand-version"]').count(), 4);
+    // Escape closes the settings (the pause stays), the next Escape continues, the next opens the pause on «Меню»
+    await page.keyboard.press('Escape');
+    assert.ok(!(await page.isVisible('#general-settings')));
+    assert.equal(await page.evaluate(() => document.getElementById('tab-settings').parentElement.id !== 'gs-body'), true, 'the page is back in the main menu');
+    assert.equal(await page.evaluate(() => !document.getElementById('pause-menu').classList.contains('hidden')), true);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.waitForSelector('#pause-menu:not(.hidden)');

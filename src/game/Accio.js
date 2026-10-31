@@ -73,7 +73,7 @@ export class Accio {
         const ch = g.character;
         let best = null;
         // (a dragon is no thing: «Акцио» does not act on it — DragonKinds.ON_DRAGON.Accio; its egg is a thing: it flies)
-        // the thing comes into a free hand: the leading one (Настройки → «Ведущая рука»: a right-hander's
+        // the thing comes into a free hand: the leading one (Общие настройки → Игра → «Ведущая рука»: a right-hander's
         // right) whichever hand points, the other only when the leading one is busy (accioCatcher)
         const free = (sd) => !g.weapons.hands[sd].held && !g.items?.held[sd] && !g.boards?.handBusy(sd);
         // (the author: a thing comes only into the SECONDARY («дочерняя») hand — the one opposite the wand hand; it must be empty,

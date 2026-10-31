@@ -63,3 +63,45 @@ test('preview grows with the value, stays in the box', () => {
     assert.ok(previewScale('minimap-size', 60) < previewScale('minimap-size', 200));
     assert.equal(previewScale('hotbar-size', 160), 1);
 });
+
+// ---- «Общие настройки»: one page, nothing twice, the pause has only the key buttons
+const page = () => readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+test('the pause menu has only the key buttons — no settings copies', () => {
+    const html = page();
+    const pause = html.slice(html.indexOf('<div id="pause-menu"'), html.indexOf('<div id="general-settings"'));
+    for (const id of ['pause-continue-btn', 'pause-settings-btn', 'pause-exit-btn']) assert.ok(pause.includes(`id="${id}"`), id);
+    for (const gone of ['pause-audio', 'pause-graphics', 'pause-creative', 'pause-quick', 'pause-hands', 'data-pause-tab="pause-audio"', 'data-pause-tab="pause-graphics"', 'data-pause-tab="pause-creative"']) assert.ok(!pause.includes(gone), gone);
+    assert.ok(!/<input|<select/.test(pause), 'no controls in the pause menu');
+});
+test('every setting is in ONE place: no id twice, the hand version once', () => {
+    const html = page();
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+    const seen = new Set(), dup = [];
+    for (const id of ids) { if (seen.has(id)) dup.push(id); seen.add(id); }
+    assert.deepEqual(dup, []);
+    assert.equal((html.match(/name="hand-version"/g) || []).length, 4);
+    assert.ok(html.includes('data-tab="tab-settings">⚙️ Общие настройки'));
+});
+test('«Общие настройки»: every sub-tab has its page, every page its tab, none is empty', () => {
+    const html = page();
+    const pane = html.slice(html.indexOf('<div id="tab-settings"'), html.indexOf('<div id="tab-editor"'));
+    const tabs = [...pane.matchAll(/data-sub="([\w-]+)"/g)].map((m) => m[1]);
+    const panes = [...pane.matchAll(/<div id="(set-[\w-]+)" class="sub-pane/g)].map((m) => m[1]);
+    assert.deepEqual(tabs, panes);
+    assert.deepEqual(tabs.slice(0, 5), ['set-view', 'set-graphics', 'set-audio', 'set-voice', 'set-hero']);
+    for (const [id, must] of [['set-view', 'handedness'], ['set-view', 'hand-version-v2'], ['set-view', 'cam-smooth'], ['set-graphics', 'minimap-size'], ['set-graphics', 'hotbar-size'], ['set-graphics', 'view-distance'], ['set-audio', 'music-vol'], ['set-voice', 'voice-engine'], ['set-voice', 'set-voicechat'], ['set-hero', 'hero-model']]) {
+        const from = pane.indexOf(`<div id="${id}"`);
+        const next = panes[panes.indexOf(id) + 1];
+        const part = pane.slice(from, next ? pane.indexOf(`<div id="${next}"`) : undefined);
+        assert.ok(part.includes(`id="${must}"`), `${must} in ${id}`);
+    }
+});
+test('the sliders have «Сбросить» with the usual values of the table', () => {
+    const html = page();
+    for (const q of QUICK) assert.ok(html.includes(`data-reset="${q.id}" data-def="${q.def}"`), q.id);
+    assert.ok(html.includes('id="hand-version-reset"'));
+});
+test('index.html: every <div> is closed (a missing one once broke the whole menu layout)', () => {
+    const html = page();
+    assert.equal((html.match(/<div\b/g) || []).length, (html.match(/<\/div>/g) || []).length);
+});

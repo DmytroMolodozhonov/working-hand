@@ -37,9 +37,10 @@ try {
             await page.keyboard.press('Escape');
             await sleep(300);
             await shot(page, `${tag}-11-pause`);
-            await page.click('[data-pause-tab="pause-audio"]');
+            await page.click('#pause-settings-btn');
             await sleep(200);
-            await shot(page, `${tag}-11b-pause-audio`);
+            await shot(page, `${tag}-11b-general-settings`);
+            await page.keyboard.press('Escape');
             await page.keyboard.press('Escape');
             await page.evaluate(() => { document.getElementById('pause-menu').classList.add('hidden'); document.getElementById('death-screen').classList.remove('hidden'); });
             await shot(page, `${tag}-12-death`);

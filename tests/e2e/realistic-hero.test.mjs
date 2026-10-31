@@ -1,5 +1,5 @@
 /**
- * The «Реалистичный» hero in the game (Настройки → Графика → «Модель героя»): it appears, its bones follow the
+ * The «Реалистичный» hero in the game (Общие настройки → Модель героя): it appears, its bones follow the
  * camera's body, hands and face (synthetic poses), nothing in the console; the Creative mirror reflects it.
  * Run: ZNS_TEST_PORT=8231 node --test tests/e2e/realistic-hero.test.mjs  (a picture: ZNS_SKIN_SHOT=/path.png)
  */

@@ -44,7 +44,7 @@ test('«Игрок» is the second tab; cards show HP, mana, name; the 3D hero d
         assert.ok(await painted() > 2000, 'opening ' + (i + 2) + ' paints the hero');
     }
     // other tab: the preview is given back
-    await page.click('[data-pause-tab="pause-audio"]');
+    await page.click('[data-pause-tab="pause-main"]');
     assert.equal(await page.evaluate(() => document.getElementById('pause-player').classList.contains('active')), false);
     assert.deepEqual(realErrors(errors), []);
     await page.close();

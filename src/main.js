@@ -14,7 +14,6 @@ import { PoseService } from './input/PoseService.js';
 import { setHandSmoothness } from './input/HandSmooth.js';
 import { VoiceService } from './input/VoiceService.js';
 import { SoundManager } from './audio/SoundManager.js';
-import { setupQuickSettings } from './ui/QuickSettings.js';
 import { Hud, setMinimapSize, setHotbarSize, lastWords } from './ui/Hud.js';
 import { MapEditor } from './ui/MapEditor.js';
 import { setupTestMode } from './ui/TestMode.js';
@@ -36,7 +35,6 @@ import { decide as echoDecide, clearFit, ECHO } from './audio/EchoGuard.js';
 import { setupVoiceChatUi } from './ui/VoiceChatUi.js';
 import { TalkFlow, STILL, readiness } from './ai/TalkFlow.js';
 import { startCamera } from './ui/CameraPanel.js';
-import { setupPauseAudio, PAUSE_GRAPHICS_IDS } from './ui/PauseAudio.js';
 import { hintPolicy } from './ui/HintPolicy.js';
 import { viewDistanceScale } from './game/Quality.js';
 import { setupWindowControls, enterGameFullscreen, becomeAppWindow, rememberWindowSize } from './ui/WindowControls.js';
@@ -340,7 +338,7 @@ minimapSize?.addEventListener('input', (e) => {
     if (v) v.textContent = e.target.value + '%';
 });
 setMinimapSize(minimapSize?.value || 120);
-// The slots' size at the bottom (settings / Escape → «Размер панели предметов»)
+// The slots' size at the bottom (Общие настройки → Графика)
 const hotbarSize = $('hotbar-size');
 hotbarSize?.addEventListener('input', (e) => {
     setHotbarSize(e.target.value);
@@ -731,7 +729,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (game && game.active) {
         game._voiceMeta = meta; // (when the words were said: the journal counts how late the spell came — Game.castLocalSpell)
         // the words being caught: a big short line, only in Creative (partly a developer mode)
-        hud.heard(command, game.config?.mode === 'creative' && !!$('show-heard-toggle')?.checked); // (off by default; switched in the settings or the pause menu)
+        hud.heard(command, game.config?.mode === 'creative' && !!$('show-heard-toggle')?.checked); // (off by default; switched in «Общие настройки»)
         // talking to a villager near me, the hand not raised to cast: words they understand are words,
         // not a spell («собери войско» is not «Gather», «спасибо» is not «Rescue», «в атаку» is an order)
         // (first: they cast nothing, so the checks below that a spell is really mine — loudness, lips,
@@ -967,8 +965,8 @@ async function showVoiceMic() {
     el.innerHTML = (t ? t + '<br>' : '') + MIC_HINT;
 }
 setInterval(() => {
-    const inPause = !!$('pause-audio')?.offsetParent;
-    if ($('voice-mic-status')?.offsetParent || inPause) showVoiceMic().then(() => { if (inPause) pauseAudio.sync(); });
+    if ($('voice-mic-status')?.offsetParent) showVoiceMic();
+    if (settingsOpen()) { syncHandVersion(); voiceChatUi.sync(); } // (the camera may start or stop while the page is open)
 }, 3000);
 setTimeout(showVoiceMic, 1500);
 
@@ -990,7 +988,7 @@ function startHandRecording() {
 // ------------------------------------------------------------------ keyboard
 window.addEventListener('keydown', (e) => {
     // Escape: the pause menu (continue / back to the main menu)
-    if (e.key === 'Escape' && game && game.active) { e.preventDefault(); togglePauseMenu(); return; }
+    if (e.key === 'Escape' && game && game.active) { e.preventDefault(); if (settingsOpen()) closeGeneralSettings(); else togglePauseMenu(); return; } // («Общие настройки» is over the pause: Escape closes it first, the next Escape continues)
     if (!game || !game.active || e.target.tagName === 'INPUT') return;
     if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
     // F9: a 10-second recording of the hands for the developer (HandRecorder.js)
@@ -1316,7 +1314,7 @@ $('test-mode-btn').addEventListener('click', async () => {
     game.start();
 });
 
-const backToMenu = () => { net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
+const backToMenu = () => { try { closeGeneralSettings(); } catch (e) { /* leaving anyway */ } net.sayGoodbye(); net.leave(); window.location.href = window.location.origin + window.location.pathname; };
 
 // ------------------------------------------------------------------ the menu window's own buttons
 setupWindowControls({
@@ -1348,22 +1346,8 @@ $('show-fps-toggle')?.addEventListener('change', (e) => {
     applyFps();
 });
 applyFps();
-// «🔊 Звук» in the pause menu: the sound settings without leaving the game
-const pauseAudio = setupPauseAudio($('pause-audio'));
-// «🎙 Голосовой чат»: in «Создать сервер» (the mode for everybody) and in Escape → «🔊 Звук» (VoiceChatUi.js)
-const voiceChatUi = setupVoiceChatUi({ pane: $('pause-audio'), create: $('mp-create') });
-// «🖥 Графика» in the pause menu: the same graphics settings, applied at once
-const pauseGraphics = setupPauseAudio($('pause-graphics'), PAUSE_GRAPHICS_IDS);
-// «Правша / Левша» in the pause menu (every mode): the same control as in «Настройки», applied at once
-// «Быстрые настройки» (the first tab): camera smoothness, sensitivity, sizes, hand version — the same controls as in «Настройки»
-const pauseQuick = setupQuickSettings($('pause-quick'), {
-    handOn: () => !!(poseService.isRunning || poseService.injected),
-    handsNow: () => document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
-    setHands: (v) => { const r = document.querySelector(`input[name="hand-version"][value="${v}"]`); if (r) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } },
-    heroNow: () => $('hero-model')?.value || 'std',
-    setHero: (v) => { const el = $('hero-model'); if (el && el.value !== v) { el.value = v; el.dispatchEvent(new Event('change')); } },
-});
-const pauseHands = setupPauseAudio($('pause-hands'), ['handedness', 'walk-mode', 'hints-mode']);
+// «🎙 Голосовой чат»: in «Создать сервер» (the mode for everybody) and in «Общие настройки → Голос и чат» (VoiceChatUi.js)
+const voiceChatUi = setupVoiceChatUi({ pane: $('set-voicechat'), create: $('mp-create') });
 const applyHandedness = () => {
     const left = $('handedness')?.value === 'left';
     poseService.interpreter.leftHanded = left; // (the body's places mirrored: PoseInterpreter.bodyPlaces)
@@ -1382,57 +1366,6 @@ $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.wo
 $('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
 $('ultra-quality')?.addEventListener('change', (e) => { game?.ultra?.set(e.target.value === 'on'); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
-// «🛠 Творческий» in the pause menu: hand version and «show what I said», changed on the go.
-// Each control mirrors the one in the settings (same value, same saving).
-const pauseCreative = (() => {
-    const box = $('pause-creative');
-    const row = (title, ctl, hint) => {
-        const r = document.createElement('div'); r.className = 'pause-audio-row';
-        const l = document.createElement('label'); l.className = 'pause-audio-label'; l.textContent = title;
-        const c = document.createElement('div'); c.className = 'pause-audio-ctl'; c.appendChild(ctl);
-        r.append(l, c);
-        let h = null;
-        if (hint !== undefined) { h = document.createElement('div'); h.className = 'pause-audio-hint'; r.appendChild(h); }
-        box.appendChild(r);
-        return h;
-    };
-    const radios = document.createElement('div'); radios.className = 'pause-radios'; radios.style.display = 'contents';
-    const names = { v2: 'V2 (Точная)', v3: 'V3 (Стабильная)', v4: 'V4 (Новая)', v5: 'V5 (Новая)' };
-    const rs = {};
-    for (const v of Object.keys(names)) {
-        const lab = document.createElement('label'); const r = document.createElement('input');
-        r.type = 'radio'; r.name = 'pause-hand-version'; r.value = v;
-        r.addEventListener('change', () => {
-            const src = document.querySelector(`input[name="hand-version"][value="${v}"]`);
-            if (src) { src.checked = true; src.dispatchEvent(new Event('change', { bubbles: true })); }
-            sync();
-        });
-        r.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
-        lab.append(r, names[v]); radios.appendChild(lab); rs[v] = r;
-    }
-    const hHint = row('Версия кистей рук', radios, '');
-    box.firstChild.querySelector('.pause-audio-ctl').classList.add('pause-radios');
-    const chk = document.createElement('input'); chk.type = 'checkbox';
-    const lab = document.createElement('label'); lab.className = 'pause-check'; lab.append(chk, 'Показывать, что вы сказали');
-    chk.addEventListener('change', () => {
-        const src = $('show-heard-toggle');
-        if (src) { src.checked = chk.checked; src.dispatchEvent(new Event('change', { bubbles: true })); }
-        if (!chk.checked) hud.heard('', false);
-    });
-    chk.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
-    const cHint = row('Сказанное', lab, '');
-    cHint.textContent = 'На экране видно, что услышал микрофон (а что нет — не видно).';
-    function sync() {
-        const cur = document.querySelector('input[name="hand-version"]:checked')?.value || 'v3';
-        for (const v in rs) rs[v].checked = v === cur;
-        chk.checked = !!$('show-heard-toggle')?.checked;
-        // V5 needs the camera program: if it can't start, say why (the same words as the game's notice)
-        const why = cur === 'v5' ? poseService._noticed : '';
-        hHint.textContent = why && !why.startsWith('Кисти V5 включились') ? why : (cur === 'v5' ? 'Кисти V5: ищутся с отдельной программой камеры.' : '');
-    }
-    sync();
-    return { sync };
-})();
 // the hero's model changes the running game at once: mine is drawn so, and the others are told (NetSync.sendLook)
 $('hero-model')?.addEventListener('change', () => {
     const v = $('hero-model').value === 'real' ? 'real' : 'std';
@@ -1448,9 +1381,62 @@ for (const r of document.querySelectorAll('input[name="hand-version"]')) {
         game.character.setHandVersion(r.value);
         if (game.config) game.config.handVersion = r.value;
         poseService._setHands?.(r.value === 'v5' ? 'v5' : '');
-        pauseCreative.sync();
+        syncHandVersion();
     });
 }
+// ------------------------------------------------------------------ «Общие настройки»: one page, in the main menu and (over the pause) in the game
+// The page is #tab-settings itself: in the game it moves into the window while it is open and goes back after — one code, one set of values.
+const HAND_WHY_OFF = 'Камера выключена — кисти рук сейчас не распознаются.';
+function syncHandVersion() {
+    const radios = [...document.querySelectorAll('input[name="hand-version"]')];
+    if (!radios.length) return;
+    const cur = radios.find((r) => r.checked)?.value || 'v3';
+    const on = !game?.active || !!(poseService.isRunning || poseService.injected); // (in the main menu the choice is made before the game)
+    for (const r of radios) r.disabled = !on;
+    const rs = $('hand-version-reset'); if (rs) rs.disabled = !on || cur === 'v3';
+    const why = cur === 'v5' ? poseService._noticed : '';
+    const h = $('hand-version-hint');
+    if (h) h.textContent = !on ? HAND_WHY_OFF : (why && !why.startsWith('Кисти V5 включились') ? why : (cur === 'v5' ? 'Кисти V5: ищутся с отдельной программой камеры.' : ''));
+}
+$('hand-version-reset')?.addEventListener('click', () => { const r = document.querySelector('input[name="hand-version"][value="v3"]'); if (r && !r.disabled) { r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); } syncHandVersion(); });
+// «Сбросить» by a slider: the usual value, applied at once like a drag
+function syncResets() {
+    document.querySelectorAll('.set-reset[data-reset]').forEach((b) => { const el = $(b.dataset.reset); if (el) b.disabled = String(el.value) === b.dataset.def; });
+}
+document.querySelectorAll('.set-reset[data-reset]').forEach((b) => {
+    const el = $(b.dataset.reset);
+    el?.addEventListener('input', syncResets);
+    b.addEventListener('click', () => { if (!el) return; el.value = b.dataset.def; el.dispatchEvent(new Event('input', { bubbles: true })); syncResets(); });
+});
+$('show-heard-toggle')?.addEventListener('change', (e) => { if (!e.target.checked) hud.heard('', false); });
+const gsBox = $('general-settings');
+const settingsPane = $('tab-settings');
+let settingsHome = null, settingsWasActive = false;
+const settingsOpen = () => !!gsBox && !gsBox.classList.contains('hidden');
+function openGeneralSettings() {
+    if (!gsBox || !settingsPane || settingsOpen()) return;
+    settingsHome = document.createComment('tab-settings'); // (where the page lives in the main menu)
+    settingsPane.before(settingsHome);
+    settingsWasActive = settingsPane.classList.contains('active');
+    settingsPane.classList.add('active');
+    $('gs-body').appendChild(settingsPane);
+    gsBox.classList.remove('hidden');
+    applyFps(); syncHandVersion(); syncResets(); voiceChatUi.sync(); showVoiceMic();
+    $('gs-back')?.focus();
+}
+function closeGeneralSettings() {
+    if (!settingsOpen()) return;
+    gsBox.classList.add('hidden');
+    if (settingsHome?.parentNode) { settingsHome.replaceWith(settingsPane); }
+    settingsPane.classList.toggle('active', settingsWasActive);
+    settingsHome = null;
+    // (a log being followed stops with the page: the main menu opens on a quiet one)
+}
+$('gs-back')?.addEventListener('click', closeGeneralSettings);
+// (keys typed on the page must not reach the game — walking, spells, slots; only Escape goes on)
+for (const ev of ['keydown', 'keyup']) gsBox?.addEventListener(ev, (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
+$('pause-settings-btn')?.addEventListener('click', openGeneralSettings);
+syncHandVersion(); syncResets();
 // «🧙 Игрок»: the hero's sheet (data refreshed on open and every 0.5 s while the tab is open; the 3D hero is drawn only then)
 const playerSheet = new PlayerSheetView($('pause-player'), () => game, {
     spells: [...new Set(SPELLS.map((s) => matchSpell(s.name)).filter(Boolean))],
@@ -1466,9 +1452,6 @@ function showPauseTab(id) {
     document.querySelectorAll('.pause-tab').forEach((b) => b.classList.toggle('active', b.dataset.pauseTab === id));
     document.querySelectorAll('.pause-pane').forEach((p) => p.classList.toggle('active', p.id === id));
     $('pause-menu').classList.toggle('pause-wide', id === 'pause-spells' || id === 'pause-bosses' || id === 'pause-player'); // (the spell book and the bosses need room)
-    if (id === 'pause-audio') { pauseAudio.sync(); voiceChatUi.sync(); }
-    if (id === 'pause-graphics') pauseGraphics.sync();
-    if (id === 'pause-creative') pauseCreative.sync();
     // (outside Creative each spell is marked: ✅ its first-success mana had, ☐ +N not yet — Mana.spellsUsed)
     if (id === 'pause-spells') {
         const cr = game?.config?.mode === 'creative';
@@ -1484,24 +1467,26 @@ function togglePauseMenu(show) {
     const open = show ?? el.classList.contains('hidden');
     if (open) {
         applyFps();
-        pauseAudio.sync();
-        voiceChatUi.sync();
-        pauseGraphics.sync();
-        pauseHands.sync();
-        pauseQuick.sync();
         // «✨ Заклинания»: in Creative all of them (not on a map); in the other modes the ones the hero can say now
         const creativeMap = game?.config?.mode === 'creative' && !!game?.config?.map;
         document.querySelector('[data-pause-tab="pause-players"]').hidden = !(net && net.active && game?.sync); // (only in a network game)
         document.querySelector('[data-pause-tab="pause-spells"]').hidden = creativeMap;
-        document.querySelector('[data-pause-tab="pause-creative"]').hidden = game?.config?.mode !== 'creative';
         showPauseTab('pause-main');
-    } else { playerSheet.hide(); playersTab.hide(); }
+    } else { closeGeneralSettings(); playerSheet.hide(); playersTab.hide(); }
     el.classList.toggle('hidden', !open);
     if (open && document.pointerLockElement) document.exitPointerLock();
     if (game && !(net && net.active)) game.paused = open;
 }
 $('pause-continue-btn').onclick = () => togglePauseMenu(false);
+let exitAsk = 0;
 $('pause-exit-btn').onclick = async () => {
+    // (a mis-click must not throw the player out: the first press asks, the second — within 4 s — leaves)
+    if (!exitAsk) {
+        $('pause-exit-btn').textContent = '⟲ Точно выйти? Нажмите ещё раз';
+        exitAsk = setTimeout(() => { exitAsk = 0; $('pause-exit-btn').textContent = '⟲ Выйти в главное меню'; }, 4000);
+        return;
+    }
+    clearTimeout(exitAsk);
     $('pause-exit-btn').disabled = true;
     $('pause-exit-btn').textContent = '💾 Сохраняем мир...';
     try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }

@@ -1,5 +1,5 @@
 /**
- * VoiceChatUi.js — the voice chat's settings: «Создать сервер» (the mode, chosen by the host) and Escape → «🔊 Звук» →
+ * VoiceChatUi.js — the voice chat's settings: «Создать сервер» (the mode, chosen by the host) and Escape → «Общие настройки» →
  * «🎙 Голосовой чат» (the mode on the go, the friends' loudness, the microphone and the output, «нажми и говори», the
  * browser's echo / noise / gain cleaning, who is heard now). The texts tell the player what each thing gives him and how
  * to use it (CLAUDE.md: «Описания для игрока»).
@@ -18,7 +18,7 @@ const el = (doc, tag, cls, text) => { const e = doc.createElement(tag); if (cls)
 const noKeys = (ctl) => ctl.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
 
 /**
- * @param {object} o  { pane (the Escape «Звук» tab), create (the «Создать сервер» box), doc }
+ * @param {object} o  { pane (the «Голос и чат» page of «Общие настройки»), create (the «Создать сервер» box), doc }
  * @returns {{attach(vc), sync(), createMode(): string}}
  */
 export function setupVoiceChatUi({ pane, create, doc = document } = {}) {
@@ -43,7 +43,7 @@ export function setupVoiceChatUi({ pane, create, doc = document } = {}) {
         create.insertBefore(hint, host);
     }
 
-    // ------------------------------------------------------------ Escape → «Звук» → «Голосовой чат»
+    // ------------------------------------------------------------ «Общие настройки» → «Голос и чат»
     const box = pane ? el(doc, 'div', 'vc-pane') : null;
     const ctl = {};
     if (box) {

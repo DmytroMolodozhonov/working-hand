@@ -1,5 +1,5 @@
 /**
- * Every sound of the game belongs to one volume group of the settings (Настройки → Звук). The author: «звуки не
+ * Every sound of the game belongs to one volume group of the settings (Общие настройки → Звук). The author: «звуки не
  * регулируются в настройках — например, разрушение домов». The table is the guard: tests/unit/sound-groups.test.js
  * fails for a SoundManager `play*`/`spell*` method (or any new audio source) that has no group.
  *
