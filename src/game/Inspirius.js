@@ -413,7 +413,7 @@ export class Inspirius {
                 hitBody(g, kind, c, q, inspiriusDamage(dist), dir, INSP.NAME, b.by, INSP.NAME);
                 const th = inspiriusThrow(dist);
                 throwBody(g, kind, c, dir.clone().multiplyScalar(th.speed), th.toss, INSP.NAME, b.by, p);
-            });
+            }, p);
             for (const w of g.weapons?.weapons || []) {
                 if (w.holder || w._insp === b) continue;
                 const dist = w.position.distanceTo(p);

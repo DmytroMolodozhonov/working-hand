@@ -27,7 +27,7 @@ import { gargoyleCenter } from './GargoyleModel.js';
  * Every creature there is, as fn(kind, creature, position) — kind: 'zombie', 'villager',
  * 'animal', 'sailor', 'spider', 'dragon', 'phoenix', 'owl', 'gargoyle', 'tree', 'book'.
  */
-export function eachBody(g, fn) {
+export function eachBody(g, fn, at = null) {
     for (const z of g.zombies || []) if (!z.isDead && z.group) fn('zombie', z, z.group.position);
     for (const v of g.castleLife?.byId?.values() || []) if (!v.dead) fn('villager', v, new THREE.Vector3(v.x, v.y + 1.2, v.z));
     for (const a of g.animals?.list || []) if (!a.dead && a.group) fn('animal', a, a.group.position);
@@ -42,7 +42,7 @@ export function eachBody(g, fn) {
     for (const o of g.spencers?.list || []) if (!o.dead && o.group) fn('spencer', o, spencerCenter(o)); // (the invisible bird: the wave kills it)
     for (const o of g.ghosts?.targets?.() || []) fn('ghost', o, new THREE.Vector3(o.position.x, o.position.y + 1.7, o.position.z)); // (the ghosts of the Castle of Ghosts: Circle Attack / Inspirius frighten them, the gods' spells scatter them — GhostRules)
     for (const o of g.gargoyles?.list || []) if (!o.dead && o.group && o.mode !== 'crumble') fn('gargoyle', o, gargoyleCenter(o));
-    for (const o of g.diabolos?.list || []) fn('diabolos', o, g.diabolos._centre(new THREE.Vector3())); // (Дьяволос: волна его только злит — DEVIL_VS) // (the infernal gargoyles: GargoyleRules.TARGETS)
+    for (const o of g.diabolos?.list || []) fn('diabolos', o, at && g.diabolos.nearest ? g.diabolos.nearest(at, new THREE.Vector3()) : g.diabolos._centre(new THREE.Vector3())); // (at: ближайшая к взрыву точка тела — он 122 м ростом: середина в 70 м над ногами, и взрыв у ног его «не доставал» — жалоба автора про «Инспириус») // (Дьяволос: волна его только злит — DEVIL_VS) // (the infernal gargoyles: GargoyleRules.TARGETS)
     for (const t of g.livingTrees?.list || []) if (!t.isDead && t.model) fn('tree', t, t.model.position);
     for (const b of g.books?.birds?.values() || []) if (b.state !== 'fall' && b.model) fn('book', b, b.model.position);
     for (const c of g.iceCastle?.list || []) if (!c.dead && c.model) fn('ice', c, c.model.position); // (the Ice Castle: IceQueen.iceDamage)

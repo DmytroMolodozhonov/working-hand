@@ -517,3 +517,30 @@ test('режиссёр боя: за 2 минуты — не меньше 6 ра�
     assert.ok(walk / n >= 0.3, `ходьба ${(walk / n * 100).toFixed(0)} %`);
     for (let i = 2; i < ids.length; i++) assert.ok(!(ids[i] === ids[i - 1] && ids[i] === ids[i - 2]), `три раза подряд: ${ids[i]}`);
 });
+
+test('речь: бас (роль devil — ниже всех), троллит при попытках убить; ни слова о том, чем его убить (тайна игры)', async () => {
+    const { LINES, CAT_TALK, pickLine } = await import('../../src/game/DiabolosTalk.js');
+    const { castNeural } = await import('../../src/audio/VoiceCast.js');
+    const dv = castNeural({ role: 'devil', voiceKey: 'diabolos' }), king = castNeural({ role: 'king', voiceKey: 'k' });
+    assert.ok(dv.f0 < 70 && dv.f0 < king.f0, `бас ${dv.f0.toFixed(0)} Гц`);
+    for (const [s, L] of Object.entries(LINES)) for (const l of L) assert.ok(!/меч(\s|$|[,.!?а-я])|клинок|клинк|жезл|посох|божествен|unitas|пентагр|рецепт|ритуал/i.test(l), `${s}: ${l}`);
+    for (const c of Object.values(CAT_TALK)) assert.ok(LINES[c]?.length, c);
+    assert.notEqual(pickLine('blast', 0.1, [0, 1, 2]), 0);
+    // «Инспириус» у копыт: тело в 122 м — взрыв у ног попадает (раньше мерили от середины в 70 м над землёй)
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { eachBody } = await import('../../src/game/MagicWave.js');
+    const me = new THREE.Vector3(0, 1.95, -80);
+    const { g, said } = fakeGame(me);
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 120 }, chainAnchor: { x: 0, y: 4, z: 40 }, chainLen: DEVIL.CHAIN_LEN });
+    d.update(0.016);
+    d.boltHit(d.d, 'Bombardo', 'me');
+    for (let i = 0; i < 30 * 12; i++) d.update(1 / 30);
+    const at = new THREE.Vector3(d.d.x + 25, 1, d.d.z);
+    let near = null;
+    eachBody(g, (kind, c, q) => { if (kind === 'diabolos') near = q.distanceTo(at); }, at);
+    assert.ok(near < 15, `до тела ${near?.toFixed(1)} м (Инспириус бьёт на 60)`);
+    d.hit(d.d, 50, 'Inspirius', 'me');
+    assert.ok(d.d.stunT > 0, 'растерян');
+    assert.ok(said.some((s) => /Дьяволос: «/.test(s)), 'что-то сказал');
+});

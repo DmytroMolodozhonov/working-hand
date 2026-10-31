@@ -265,7 +265,7 @@ export class CircleAttack {
             const th = circleThrow(dist, f);
             throwBody(g, kind, c, dir.clone().multiplyScalar(th.speed), th.toss, f.name, d.by, p);
             hitBody(g, kind, c, q, circleDamage(dist, f), dir, f.name, d.by, f.name);
-        });
+        }, p);
         // a ship in the circle takes the wave's blow; the weapons lying there jump
         if (!d.shipT && front >= f.R * 0.5) { d.shipT = true; g.ships?.blast?.(p, f.R, d.max ? 3 : 2, d.by); g.houses?.hitAt?.(p, f.R); }
         for (const w of g.weapons?.weapons || []) {

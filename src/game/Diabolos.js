@@ -19,6 +19,7 @@
 
 import * as THREE from 'three';
 import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from './DiabolosRules.js';
+import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, JOINTS } from '../entities/DiabolosModel.js';
@@ -60,6 +61,7 @@ export class Diabolos {
         this.log = [];            // (тесты и журнал) что было
         this._sitePoll = 0; this._netT = 0; this._poseT = 0; this._frame = 0;
         this._gy = new Float64Array(DEVIL.CHAIN_LINKS + 1);
+        this._talkT = 0; this._lines = new Map(); // речь: пауза между репликами, недавние реплики по ситуациям (DiabolosTalk)
         this._told = new Map();   // заклинание → время: «не действует» пишется в журнал не чаще раза в 10 с
         this._ballN = 0;
         this.everDead = false;    // сохранение: убит божественным мечом — навсегда (котловина пуста, цепь лежит, сундуки)
@@ -218,7 +220,7 @@ export class Diabolos {
         d.rage = Math.max(0, d.rage - STUN.RAGE_DECAY * dt);
         if (d.stunT > 0) { // растерян: вздрагивает, морщится, ревёт от боли — без атаки
             d.stunT -= dt; d.move = null; d.act = null; this._walk(d, 0, null);
-            if (d.stunT <= 0) this._setMode(d, 'stand');
+            if (d.stunT <= 0) { this._setMode(d, 'stand'); this._say('stunOver', true); }
             return;
         }
         if (d.act) { d.act.t += dt; if (d.act.t >= ACTS[d.act.id].dur) { d.lastAct = d.act.id; d.act = null; this._sendSoon = true; } }
@@ -252,7 +254,7 @@ export class Diabolos {
         // кто-то из тех, на кого он зол, погиб — торжествует (ачивок за него нет: убить его нельзя, а он — может)
         for (const [id] of d.grudge) {
             const dead = id === this.game.localId ? (this.game.isDeadLocal || this.game.combat?.dead) : this.game.remotes?.get(id)?.dead;
-            if (dead) { d.grudge.delete(id); if (!d.move) this._act(d, 'killed', true); }
+            if (dead) { d.grudge.delete(id); if (!d.move) this._act(d, 'killed', true); this._say('killed', true); }
         }
         switch (d.mode) {
             case 'sleep': d.sit = 1; if (!d.act && d.actNext <= 0) this._act(d, 'sleep'); return;
@@ -309,16 +311,47 @@ export class Diabolos {
         }
         const plan = planMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest, cd: d.cd, air: tgt.feet - d.y > 30, high: tgt.feet - d.y > 110,
             hidden: d.hidden && !!d.lastSeen, recent: d.recent, walkShare: d.walkShare, fury: d.fury, rage: d.rage, lastAct: d.lastAct }, () => { d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280; return d.rnd; });
+        // подначки в бою без повода (и мушке в воздухе)
+        d.talkIdle = (d.talkIdle ?? TALK.IDLE_EVERY[0]) - dt;
+        if (d.talkIdle <= 0) { d.talkIdle = TALK.IDLE_EVERY[0] + d.rnd * (TALK.IDLE_EVERY[1] - TALK.IDLE_EVERY[0]); this._say(tgt.feet - d.y > 30 ? 'fly' : 'idle'); }
         const attack = plan.kind === 'move' && !plan.bluff;
         // характер: перед первым ударом — устрашение; цель за цепью и ему нечем ответить — дразнит (язык, «иди сюда», рвёт цепь)
         if (attack && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
-        if (beyond && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); return; } }
+        if (beyond && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); this._say(dist > this.site.len + 90 ? 'run' : 'taunt'); return; } }
         switch (plan.kind) {
             case 'turn': case 'wait': this._turn(d, turn, dt); this._walk(d, 0, null); return;
-            case 'walk': d.walkFor = plan.t; d.peek = !!plan.peek; this._remember(d, 'walk'); this._walk(d, dt, d.peek && d.lastSeen ? d.lastSeen : tgt.p); this._note(`😈 Дьяволос: решение — ${d.peek ? 'идёт заглянуть, где вы' : 'идёт к цели'}`); return;
+            case 'walk': if (plan.peek) this._say('hide'); d.walkFor = plan.t; d.peek = !!plan.peek; this._remember(d, 'walk'); this._walk(d, dt, d.peek && d.lastSeen ? d.lastSeen : tgt.p); this._note(`😈 Дьяволос: решение — ${d.peek ? 'идёт заглянуть, где вы' : 'идёт к цели'}`); return;
             case 'act': if (this._act(d, 'idle', true, plan.id)) this._remember(d, 'act'); else this._walk(d, 0, null); return;
             default: this._remember(d, plan.bluff ? 'bluff' : plan.id); this._startMove(d, plan.id, tgt, plan.bluff); return;
         }
+    }
+    /** (хост) Реплика ситуации: бас и текст у всех рядом (сеть — `say`). Не чаще TALK.GAP, важное — всегда. */
+    _say(sit, urgent = false) {
+        const d = this.d;
+        if (!d || !this.auth || !LINES[sit]) return;
+        const now = d.t;
+        if (!urgent && now - this._talkT < TALK.GAP) return;
+        if (urgent && now - this._talkT < 1.2) return; // (не перебивает сам себя на полуслове)
+        const last = this._lines.get(sit) || [];
+        d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280;
+        const i = pickLine(sit, d.rnd, last);
+        if (i < 0) return;
+        last.unshift(i); if (last.length > Math.max(1, LINES[sit].length - 1)) last.length = Math.max(1, LINES[sit].length - 1);
+        this._lines.set(sit, last);
+        this._talkT = now;
+        this._speak(sit, i);
+        this.game.sync?.diabolos?.({ e: 'say', s: SITS.indexOf(sit), i });
+    }
+    /** Сказать у себя: текст внизу экрана и бас (роль `devil` — VoiceCast), если я рядом. */
+    _speak(sit, i) {
+        const g = this.game, d = this.d, text = LINES[sit]?.[i];
+        if (!d || !text) return;
+        const me = g.character?.group?.position;
+        if (!me || Math.hypot(me.x - d.x, me.z - d.z) > TALK.HEAR_R) return;
+        g.hud?.setVoice?.(`😈 Дьяволос: «${text}»`, true);
+        const talk = g.castleLife?.talk;
+        if (talk?.voiceOn && talk.speech?.supported) talk.speech.say(text, { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, shout: /!$/.test(text) });
+        this._note(`😈 Дьяволос говорит: «${text}»`);
     }
     /** Память последних ходов (режиссёр не повторяет один ход больше 2 раз подряд). */
     _remember(d, id) { d.recent.unshift(id); if (d.recent.length > 6) d.recent.length = 6; }
@@ -345,6 +378,7 @@ export class Diabolos {
         if (d.mode === 'sleep' || d.mode === 'sit' || d.mode === 'back') {
             d.wakeWhy = why;
             this._setMode(d, d.mode === 'back' ? 'stand' : 'wake');
+            this._say('woke', true);
             this._note(`😈 Дьяволос: решение — проснулся: ${why}${by != null ? ` (${by === g.localId ? 'вы' : 'игрок ' + by})` : ''}`);
             if (!this.everWoke) this.everWoke = true;
             if (by === g.localId || by === 'local') g.achievements?.gain?.('devilWoke');
@@ -450,6 +484,7 @@ export class Diabolos {
         if (tgt && m.t < M.hit) { this._turn(d, yawTo(d.yaw, d.x, d.z, tgt.p.x, tgt.p.z) * 0.6, dt); m.aim.copy(tgt.p); m.feet = tgt.feet; }
         if (prev < M.wind * 0.3 && m.t >= M.wind * 0.3) this._sound(m.id, true);
         if (!m.hit && m.t >= M.hit) { m.hit = true; this._strike(d, m); }
+        if (m.id === 'grab' && m.victim != null && prev < M.laugh && m.t >= M.laugh) this._say('crush', true);
         if (m.id === 'fire' && m.t >= M.hit && m.t < M.hit + (m.fireLen || FIRE.TIME)) this._fireStep(d, m, dt);
         if (m.id === 'rage') { d.strain = 1; if (Math.floor(prev / 0.9) !== Math.floor(m.t / 0.9) && m.t > 0.5) this._slam(d, hoofWorld(this.model, m.n++ % 2 ? 'R' : 'L', _a), MOVES.rage.wave, 'rage'); }
         if (m.id === 'fire' && m.fireLen > FIRE.TIME && m.t >= M.dur - 0.01 && m.t < M.hit + m.fireLen + 0.5) { /* (дольше струя) */ }
@@ -472,6 +507,7 @@ export class Diabolos {
                 // (замах был виден 2 с: в миг хвата цель должна быть у кисти — шаг в сторону, и промах)
                 if (!q || Math.hypot(q.p.x - _a.copy(fistWorld(this.model, m.side, _a)).x, q.p.z - _a.z) > GRAB.CATCH_R) { m.missed = true; this._note('😈 Дьяволос: хват — промах'); break; }
                 m.victim = q.id;
+                this._say('grab', true);
                 if (q.local) this._grabMe(m.side, MOVES.grab.crush - MOVES.grab.hit); else g.sync?.diabolos?.({ e: 'grab', to: q.id, s: m.side, c: r2(MOVES.grab.crush - MOVES.grab.hit) });
                 this._note(`😈 Дьяволос: решение — схватил ${q.local ? 'вас' : q.id}`);
                 break;
@@ -875,7 +911,7 @@ export class Diabolos {
     hitAt(pos, r, dmg, spell, by) {
         const d = this.d;
         if (!d || by === ID || !pos) return false;
-        if (this._centre(_v).distanceTo(pos) > r + DEVIL.BELLY_R) { this.noise(pos, by); return false; }
+        if (this.nearest(pos, _v).distanceTo(pos) > r) { this.noise(pos, by); return false; }
         this._struck(spell, by, dmg);
         return true;
     }
@@ -931,6 +967,7 @@ export class Diabolos {
         const gs = godStrike(spell, d.rnd);
         if (gs) { this._stun(d, gs, by); return; }
         this._react(d, v.cat, wasAwake);
+        if (wasAwake && by != null && by !== ID) this._say(CAT_TALK[v.cat] || 'blast'); // (особенно троллит, когда его пытаются уничтожить)
     }
 
     /** Тело для зарядов и ударов: от таза до плеч (сидя — ниже), радиус брюха. */
@@ -940,6 +977,17 @@ export class Diabolos {
         out.a.set(d.x, d.y + bot * S, d.z);
         out.b.set(d.x, d.y + top * S, d.z);
         out.r = DEVIL.BELLY_R;
+        return out;
+    }
+    /** Ближайшая к точке `at` точка его тела (капсула: ноги… плечи) — взрыв у копыт попадает, а не «мимо середины в 70 м над землёй». */
+    nearest(at, out) {
+        const c = this._capsule(this._cap2 || (this._cap2 = { a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 }));
+        const d = this.d, foot = d.y + 2; // (копыта и голени — тоже тело: низ капсулы опускается до земли)
+        const y = clamp(at.y, foot, c.b.y);
+        out.set(c.a.x, y, c.a.z);
+        const dx = at.x - out.x, dz = at.z - out.z, h = Math.hypot(dx, dz);
+        const r = y < c.a.y ? DEVIL.RADIUS * 0.7 : c.r;
+        if (h > 1e-6) { const k = Math.min(r, h) / h; out.x += dx * k; out.z += dz * k; }
         return out;
     }
     _centre(out) { const d = this.d; return out.set(d.x, d.y + (d.sit > 0.5 ? 1.3 : 2.0) * DEVIL.SCALE, d.z); }
@@ -1225,6 +1273,7 @@ export class Diabolos {
         this.game.sync?.diabolos?.({ e: 'drop' });
         for (const [id] of this.game.remotes || []) this.game.sync?.diabolos?.({ e: 'drop', to: id });
         this.game.sound?.playDevil?.(this.model.position, 'pain', 1.6);
+        this._say('stun', true);
         this._note(`😈 Дьяволос растерян (${gs.stun.toFixed(1)} с), ярость ${Math.round(d.rage * 100)}%`);
     }
 
@@ -1260,6 +1309,7 @@ export class Diabolos {
     _startDying(d, point, by, t0) {
         d.dying = { t: t0, by, wound: this.model.worldToLocal(point.clone()), nextSlam: 1.4, nextFire: 1.8, chainT: 3.2, flash: false, ash: 0 };
         d.move = null; d.act = null; d.stunT = 0; d.mode = 'dying';
+        this._say('dying', true);
         if (this.held) this._release('drop'); // (держал игрока — роняет)
         this.balls.forEach((b) => this._ballGone(b, false)); this.balls.length = 0;
         this.game.castleLife?.alarm?.(this.model.position, 'devil', null, 400); // (Тароны, горгульи — пугаются: Danger)
@@ -1396,6 +1446,7 @@ export class Diabolos {
         if (!m) return;
         const g = this.game;
         switch (m.e) {
+            case 'say': if (!isHost) this._speak(SITS[m.s], m.i); return;
             case 'st': {
                 if (isHost || !this.d || this.d.dying || !Array.isArray(m.r)) return;
                 const [x, y, z, yaw, si, mi, mt, sd, strain, fury, tgt, ax, ay, az, sw, ai, at] = m.r;

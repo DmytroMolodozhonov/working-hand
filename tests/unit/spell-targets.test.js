@@ -196,7 +196,7 @@ test('the phoenix: blades, arrows, fists, «Левиоса», water, fire and «
 
 test('«Circle Attack» and «Inspirius»: their waves reach every creature; their tables say what they do to everyone and everything', async () => {
     // (MagicWave.eachBody: where both waves look for whom to hurt and throw)
-    check('MagicWave.eachBody (Circle Attack, Inspirius)', body(src('src/game/MagicWave.js'), 'export function eachBody(g, fn) {'), ALL);
+    check('MagicWave.eachBody (Circle Attack, Inspirius)', body(src('src/game/MagicWave.js'), 'export function eachBody(g, fn, at = null) {'), ALL);
     const hb = body(src('src/game/MagicWave.js'), 'export function hitBody(');
     for (const k of ['zombie', 'villager', 'animal', 'sailor', 'spider', 'dragon', 'phoenix', 'owl', 'tree', 'book', 'ice']) assert.match(hb, new RegExp(`case '${k}'`), `hitBody forgets ${k}`);
     const { CIRCLE_TARGETS } = await import('../../src/game/CircleAttack.js');

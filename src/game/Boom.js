@@ -403,7 +403,7 @@ export class Boom {
                 hitBody(g, kind, cr, q, boomDamage(dist), dir, BOOM.NAME, b.by, BOOM.NAME);
                 const th = boomThrow(dist);
                 throwBody(g, kind, cr, dir.clone().multiplyScalar(th.speed), th.toss, BOOM.NAME, b.by, c);
-            });
+            }, c);
             for (const w of g.weapons?.weapons || []) {
                 if (w.holder || w._boom === b) continue;
                 const dist = w.position.distanceTo(c);

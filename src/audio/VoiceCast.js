@@ -42,6 +42,7 @@ const ROLES = {
     wizard: { male: ['M5', 'M2', 'M3', 'M1'], female: ['F3', 'F5', 'F1', 'F4'], pitch: 0.98, speed: 0.92 },
     sailor: { male: ['M3', 'M1', 'M4', 'M2'], pitch: 0.99, speed: 1.04 },
     villager: { pitch: 1, speed: 1.02 },
+    devil: { male: ['M5'], pitch: 0.74, speed: 0.8, deep: true }, // (Дьяволос: самый низкий голос, ещё на четверть ниже — бас ~64 Гц, медленно и тяжело)
 };
 
 export function hash(str) {
@@ -80,12 +81,12 @@ export function castNeural(opts = {}) {
     const voice = pool[h % pool.length];
     const f0 = VOICE_F0[voice];
     // own pitch ±5 %, own pace ±7 %
-    let pitch = role.pitch * (0.95 + unit(h, 8) * 0.1);
+    let pitch = role.pitch * (role.deep ? 1 : 0.95 + unit(h, 8) * 0.1);
     let speed = role.speed * (0.93 + unit(h, 16) * 0.14);
     if (opts.shout) { pitch *= 1.05; speed *= 1.1; }
     // never across the gender line (and never cartoonish)
     if (female) pitch = clamp(pitch, Math.max(0.92, FEMALE_MIN_F0 / f0), 1.1);
-    else pitch = clamp(pitch, 0.9, Math.min(1.08, MALE_MAX_F0 / f0));
+    else pitch = clamp(pitch, role.deep ? 0.7 : 0.9, Math.min(1.08, MALE_MAX_F0 / f0));
     speed = clamp(speed, 0.8, 1.25);
     return { voice, female, pitch, speed, f0: f0 * pitch };
 }
@@ -130,6 +131,7 @@ const SYS_ROLE = {
     advisor: { rate: 0.93, pitch: 0.88 },
     wizard: { rate: 0.92, pitch: 0.85 },
     sailor: { rate: 1.04, pitch: 0.92 },
+    devil: { rate: 0.78, pitch: 0.1 }, // (Дьяволос: ниже некуда)
 };
 
 /** Web Speech pitch (0..2) and rate for a speaker: role × gender × own jitter. */
