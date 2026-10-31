@@ -468,6 +468,7 @@ export class Beds {
     /** The hero lies down in a bed. */
     lieDown(b) {
         if (!b || this.game.monster?.active) return; // (the monster form does not fit a bed)
+        if (this.game.hellGate?.inHell) { this.game.hud.setVoice('🔥 В аду не уснуть — здесь не отдохнуть и не возродиться', true); return; } // (hell: no sleep, no home — HellRules)
         this.lying = b.id;
         this._upT = 0; this._bedJump = this.game.currentPose?.jump?.jumps; this._stillT = 0; this._healT = 0; this._waitSaid = false;
         this._noSleepSaid = this._isNight() || !this.game.dayCycle; // (laid down by day: once, when the hero keeps still and sleep does not come)
