@@ -117,12 +117,13 @@ export class HellGate {
         const g = this.game, plan = this.plan;
         if (!plan || g.isDeadLocal || g.combat?.dead) { this.inside = null; return; }
         const down = m.id !== BACK_ID;
+        if (down && this.inHell) { this._hint('already', '🔥 Вы и так в аду — эти врата ведут сюда же. Назад — через метку, с головой горгульи'); this.inside = null; return; } // (a gate drawn in hell: never a way out, and the way back is not overwritten)
         const me = g.character.group.position;
         let to;
         if (down) {
             this.from = { x: Math.round(m.x * 10) / 10, y: Math.round(m.y * 10) / 10, z: Math.round(m.z * 10) / 10 };
             const s = plan.spawn;
-            to = { x: s.x, z: s.z, layer: s.y, up: 3, down: 3, yaw: Math.atan2(HELL.CX - s.x, HELL.CZ - s.z) + Math.PI };
+            to = { x: s.x, z: s.z, layer: s.y, up: 3, down: 3, yaw: Math.atan2(HELL.CX - s.x, HELL.CZ - s.z) }; // (a bearing: facing the middle of hell — HeroApply._land)
         } else {
             const f = this.from || { x: 0, y: 0, z: 0 };
             // (beside the pentagram, not on it: the circle there may still be open — 5 m off, on dry land; HeroApply.safeNear looks round for it)
