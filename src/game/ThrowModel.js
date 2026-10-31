@@ -46,6 +46,8 @@ export const RELEASE = {
     // …and the hand's own position comes through the wrist's 1€ filter and the blend between pictures ~40 ms later still:
     // its velocity at the release is read that much later in the buffer (throwbench: the direction's error 10° → 2–3°)
     POS_LAG_MS: 25,
+    FAST: 6, FAST_WIN_MS: 60, // (a hand this fast: its speed read on a shorter line)
+    TRACE_MAX: 1.7, TRACE_MIN: 0.5, // (the filter's cut given back: at most this much; only a swing this fast in the picture, per s)
     GAP_WIN_K: 1.6, // (the swing's peak in a gap: found on a wider line)
     VEL_WIN_CAM: 1.6, // (the velocity's window: at least this many camera pictures — the blend's steps averaged out)
     THROW_MIN: 2.4, // m/s against the body (game metres: the hero is 3.5 m tall): slower is a drop from a moving hand
@@ -179,6 +181,42 @@ export function bendToward(d, aim, max) {
     return d;
 }
 
+/**
+ * The wrist as the camera saw it (raw) and as the game's filter passed it on (filtered), picture by picture, in the
+ * picture's units — so the peak the filter cut off a sharp swing can be given back: ratio(t0, t1) = the raw swing's
+ * fastest speed over the filtered one's in that time (1 when the hand is slow or nothing is known). Filled by
+ * PoseService for each wrist; pure.
+ */
+export class WristTrace {
+    constructor(n = 32) {
+        this.n = n; this.len = 0; this.head = -1;
+        this.buf = Array.from({ length: n }, () => ({ t: 0, rx: 0, ry: 0, fx: 0, fy: 0 }));
+    }
+    push(t, rx, ry, fx, fy) {
+        if (!Number.isFinite(rx) || !Number.isFinite(fx)) return;
+        this.head = (this.head + 1) % this.n;
+        const e = this.buf[this.head];
+        e.t = t; e.rx = rx; e.ry = ry; e.fx = fx; e.fy = fy;
+        if (this.len < this.n) this.len++;
+    }
+    _at(i) { return this.buf[(this.head - i + this.n * 4) % this.n]; }
+    /** The raw swing's peak speed over the filtered one's within [t0, t1] (speeds over two pictures: less noise). */
+    ratio(t0, t1, minSpeed = 0.5) {
+        let rMax = 0, fMax = 0;
+        for (let i = 0; i + 2 < this.len; i++) {
+            const a = this._at(i), b = this._at(i + 2);
+            if (a.t < t0) break;
+            if (a.t > t1 + 60) continue;
+            const dt = (a.t - b.t) / 1000;
+            if (!(dt > 0)) continue;
+            rMax = Math.max(rMax, Math.hypot(a.rx - b.rx, a.ry - b.ry) / dt);
+            fMax = Math.max(fMax, Math.hypot(a.fx - b.fx, a.fy - b.fy) / dt);
+        }
+        if (fMax < minSpeed || rMax <= fMax) return 1; // (a slow hand: the noise would only add)
+        return Math.min(RELEASE.TRACE_MAX, rMax / fMax);
+    }
+}
+
 /** One hand's memory and decision. */
 export class HandTrack {
     constructor(n = 96) {
@@ -196,7 +234,7 @@ export class HandTrack {
         this.len = 0; this.head = -1;
         this.armed = armed; // (a thing that came into an open hand: kept until the fingers closed on it once)
         this.openSince = -1; this.lostAt = -1; this.lostPeak = null; this.preLostCurl = 0;
-        this.heldSince = -1; this.gap = null; this._deferSp = 0;
+        this.heldSince = -1; this.gap = null; this._deferSp = 0; // (this.trace: a WristTrace, set by the owner)
         this.state = 'held';
         this.camMs = 50;
     }
@@ -253,6 +291,19 @@ export class HandTrack {
         const v = this._v;
         v.n = n;
         const den = n * stt - st * st;
+        // (a slow computer draws few frames: the window holds too few of them — the chord between the frames either side of
+        // t; only with none on a side, a wider window)
+        if (n < 3 || den < 1e-9) {
+            let a = null, b = null;
+            for (let i = 0; i < this.len; i++) { const e = this._at(i); if (e.t > t) b = e; else { a = e; break; } }
+            if (a && b && b.t - a.t >= 8 && b.t - a.t <= 3 * win) {
+                const dt = (b.t - a.t) / 1000;
+                v.x = (b.x - a.x) / dt; v.y = (b.y - a.y) / dt; v.z = (b.z - a.z) / dt;
+                v.wx = (b.wx - a.wx) / dt; v.wy = (b.wy - a.wy) / dt; v.wz = (b.wz - a.wz) / dt; v.n = 2;
+                return Math.hypot(v.x, v.y, v.z);
+            }
+            if (win < 400 && this.len >= 3) return this.velAt(t, win * 1.6);
+        }
         if (n < 2 || den < 1e-9) { v.x = v.y = v.z = v.wx = v.wy = v.wz = 0; return -1; }
         v.x = (n * stx - st * sx) / den; v.y = (n * sty - st * sy) / den; v.z = (n * stz - st * sz) / den;
         v.wx = (n * stwx - st * swx) / den; v.wy = (n * stwy - st * swy) / den; v.wz = (n * stwz - st * swz) / den;
@@ -334,14 +385,27 @@ export class HandTrack {
      */
     _launch(tr, now, o) {
         const R = RELEASE;
+        o.cut = 1;
         const tv = tr + R.POS_LAG_MS; // (the hand's position timeline)
         const pk = this._pk || (this._pk = { t: 0, speed: -1 });
         pk.t = tv; pk.speed = this.velAt(tv);
+        // (a fast hand: a shorter line — a sharp push from the chest peaks for ~0.1 s, the long line halves it; the camera's
+        // noise is small against such a speed)
+        if (pk.speed > R.FAST) { const s2 = this.velAt(tv, Math.max(R.FAST_WIN_MS, R.VEL_WIN_CAM * this.camMs * 0.75)); if (s2 > pk.speed) pk.speed = s2; else this.velAt(tv); }
         if (pk.speed < 0) this.velAt(now);
         const v = this._v;
         o.vRel.x = v.x; o.vRel.y = v.y; o.vRel.z = v.z;
         o.v.x = v.wx; o.v.y = v.wy; o.v.z = v.wz;
         o.speed = Math.max(0, pk.speed);
+        // (the filter cut off the swing's peak: given back as the raw camera picture says — PoseService's wrist trace)
+        if (this.trace && o.speed > R.FAST) {
+            const k = this.trace.ratio(tv - R.POS_LAG_MS - 160, tv + 40, R.TRACE_MIN);
+            if (k > 1) {
+                const c = Math.cos(this._near(tv)?.yaw || 0), sn = Math.sin(this._near(tv)?.yaw || 0), d = k - 1;
+                o.v.x += d * (o.vRel.x * c + o.vRel.z * sn); o.v.y += d * o.vRel.y; o.v.z += d * (-o.vRel.x * sn + o.vRel.z * c);
+                o.vRel.x *= k; o.vRel.y *= k; o.vRel.z *= k; o.speed *= k; o.cut = k;
+            }
+        }
         const e = this._near(pk.speed >= 0 ? pk.t : tv) || this._at(0);
         o.pos.x = e.wx; o.pos.y = e.wy; o.pos.z = e.wz; o.yaw = e.yaw;
         o.at = tr; o.lag = now - tr;

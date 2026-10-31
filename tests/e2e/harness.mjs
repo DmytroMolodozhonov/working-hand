@@ -91,7 +91,8 @@ export async function startFromMenu(page, mode = 'creative', { zombies = 0, smoo
     }
     if (smooth) await page.evaluate(() => { const c = document.getElementById('smooth-world'); if (c) c.checked = true; }); // («Гладкий мир»: the newest world generation)
     await page.click('#start-btn');
-    await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 90000 });
+    // (a container without a real graphics card compiles the shaders for minutes: ZNS_START_TIMEOUT=ms)
+    await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: Number(process.env.ZNS_START_TIMEOUT) || 90000 });
 }
 
 export async function waitHudVisible(page, timeout = 60000) {

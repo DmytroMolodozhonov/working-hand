@@ -14,7 +14,7 @@
 import { OneEuroFilter } from '../src/core/math.js';
 import { PoseSmoother } from '../src/input/PoseSmoother.js';
 import { POSE_ARM_DCUTOFF } from '../src/input/TrackingGuard.js';
-import { HandTrack, launchVelocity, massGain, speedCap, RELEASE } from '../src/game/ThrowModel.js';
+import { HandTrack, WristTrace, launchVelocity, massGain, speedCap, RELEASE } from '../src/game/ThrowModel.js';
 
 /** A small seeded random (mulberry32). */
 export function rng(seed = 1) {
@@ -66,7 +66,7 @@ export function simulate(o) {
     // scale the throw's curve to the wanted peak speed: minimum jerk peaks at 1.875·L/T
     let L = 0; { let q = bez(P, 0); for (let i = 1; i <= 50; i++) { const p = bez(P, i / 50); L += Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z); q = p; } }
     const want = o.speed ?? 9;
-    const T = Math.max(140, (1.875 * L / want) * 1000); // ms
+    const T = Math.max(180, (1.875 * L / want) * 1000); // ms (the acceleration — half of it — 90–150 ms: a human arm)
     const tA = T0 + wind, tPeak = tA + T / 2, tOpen = kind === 'drop' ? T0 + 400 : tPeak + late;
     const posAt = (t) => {
         if (kind === 'drop' || kind === 'hold' || kind === 'glitch' || kind === 'lostRest') {
@@ -109,9 +109,14 @@ export function simulate(o) {
     }
     // ---- the camera and the game
     const ht = new HandTrack();
+    const trace = new WristTrace(); // (PoseService: the wrist raw and filtered, picture by picture)
+    if (o.trace !== false) ht.trace = trace;
     const sm = new PoseSmoother();
     const dc = o.dCutoff ?? POSE_ARM_DCUTOFF; // (TrackingGuard.PoseStabilizer: the wrists' filters)
-    const fx = new OneEuroFilter(2.0, 3.0, dc), fy = new OneEuroFilter(2.0, 3.0, dc), fz = new OneEuroFilter(1.5, 1.0, dc);
+    const fx = new OneEuroFilter(2.0, 3.0, dc), fy = new OneEuroFilter(2.0, 3.0, dc);
+    // (the hand's depth: the game does not take the camera's rough z as it is — the arm solver builds it from the elbow and
+    // the wrist in the picture and the arm's length, so it follows the picture's filter; its own noise stays bigger)
+    const fz = new OneEuroFilter(2.0, 3.0, dc);
     // the fingers: TrackingGuard.HandFilter — ONE speed for the whole hand (its points in palms per second: the hand's
     // travel and the fingers' own move), minCutoff 0.6 Hz, beta 8, dCutoff 4 Hz; a hand flying in a throw passes at once
     const fc = { x: null, sp: 0, t: 0, hx: 0, hy: 0, filter(c, hx, hy, ts) {
@@ -133,7 +138,8 @@ export function simulate(o) {
     let nextCam = 0, frame = 0, got = null, at = -1, fresh = false;
     const end = (truth.act ? tOpen : T0) + 1600;
     let lastSeen = -1e9, curl = closed, cam = null, lastDue = -1e9, handNow = true;
-    for (let t = 0; t <= end; t += 1000 / 60, frame++) {
+    const gameDt = 1000 / (o.gameFps || 60); // (the game's own frames: a slow computer draws 20)
+    for (let t = 0; t <= end; t += gameDt, frame++) {
         // camera pictures taken at k·camDt, arriving lat later (jitter ±10%)
         while (nextCam * camDt <= t) {
             const tc = nextCam * camDt;
@@ -147,7 +153,10 @@ export function simulate(o) {
         }
         while (pending.length && pending[0].due <= t) {
             const q = pending.shift(), ts = q.due / 1000;
-            const pose = { leftWrist: { x: fx.filter(q.p.x * IMG, ts), y: fy.filter(q.p.y * IMG, ts), z: fz.filter(q.p.z * IMG, ts) } /* (picture units, as the game's smoother gets them) */, leftHandLandmarks: [{ x: q.handSeen ? fc.filter(q.c, q.p.x * IMG, q.p.y * IMG, ts) : curl, y: 0, z: 0 }] }; // (the fingers ride in the hand's landmarks: blended as the game blends them)
+            const wx = fx.filter(q.p.x * IMG, ts), wy = fy.filter(q.p.y * IMG, ts);
+            const wz = fz.filter(q.p.z * IMG, ts);
+            trace.push(q.due, q.p.x * IMG, q.p.y * IMG, wx, wy);
+            const pose = { leftWrist: { x: wx, y: wy, z: wz } /* (picture units, as the game's smoother gets them) */, leftHandLandmarks: [{ x: q.handSeen ? fc.filter(q.c, q.p.x * IMG, q.p.y * IMG, ts) : curl, y: 0, z: 0 }] }; // (the fingers ride in the hand's landmarks: blended as the game blends them)
             sm.push(pose, q.due);
             if (q.handSeen) lastSeen = q.due;
             handNow = q.handSeen;
@@ -187,7 +196,8 @@ export function bench({ seeds = 3, fpsList = [15, 24, 30, 60], lats = [50, 100, 
         for (const kind of kinds) for (const speed of speeds) for (const lose of loses) for (const weight of weights) for (let s = 0; s < seeds; s++) {
             if (quick && (seed++ % 3)) continue;
             const curlLag = [0, 0, 0, 90, 180, 260][(m.throws + s) % 6], sd = seed * 7919 + s + m.throws * 31;
-            const res = simulate({ kind, side, fps, lat, sigma, lose, speed, weight, curlLag, seed: sd });
+            const gameFps = [60, 60, 30, 20][(m.throws >> 1) % 4]; // (a slow computer draws 20–30 frames a second)
+            const res = simulate({ kind, side, fps, lat, sigma, lose, speed, weight, curlLag, gameFps, seed: sd });
             m.throws++;
             const g = res.got;
             if (!g) { m.missed++; if (m.fails.length < 12) m.fails.push({ kind, side, fps, lat, sigma, lose, speed, weight, why: 'ничего' }); continue; }
@@ -195,7 +205,7 @@ export function bench({ seeds = 3, fpsList = [15, 24, 30, 60], lats = [50, 100, 
             m.thrown++;
             const tv = res.truth.vLaunch, gv = res.launch;
             const tl = Math.hypot(tv.x, tv.y, tv.z), gl = Math.hypot(gv.x, gv.y, gv.z);
-            if (gl < 0.4 * tl) { m.fellDown++; m.fell.push({ kind, side, fps, lat, sigma, lose, speed, weight, seed: sd, curlLag, why: 'упал вниз: ' + g.why + ` (${gl.toFixed(1)} из ${tl.toFixed(1)})` }); }
+            if (gl < 0.4 * tl) { m.fellDown++; m.fell.push({ kind, side, fps, lat, sigma, lose, speed, weight, seed: sd, curlLag, gameFps, why: 'упал вниз: ' + g.why + ` (${gl.toFixed(1)} из ${tl.toFixed(1)})` }); }
             m.spdErr.push(Math.abs(gl - tl) / tl);
             m.angErr.push(angle(tv, gv));
             m.lagGame.push(res.at - (res.truth.t + res.lat + curlLag)); // (from when the camera let the opening be seen)

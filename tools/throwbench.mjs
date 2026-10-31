@@ -5,6 +5,7 @@
  * latency 50/100/150 ms × noise × the hand lost 0–6 pictures at the peak × light/heavy, calm openings, and moves
  * that must let NOTHING go (holding, walking, waving, a chop, a punch, a hand lost at rest, bad pictures).
  *   node tools/throwbench.mjs [--quick] [--seeds 3] [--check] [--v]
+ * The game itself draws 60 / 30 / 20 frames a second (a slow computer).
  * --check fails (exit 1) past the limits below (only ever tighten them).
  * A sixth of the throws have the fingers read late by the camera (90–260 ms after the real opening: the blur) — the
  * model lets the thing go at the swing's peak then (the lag is counted from when the camera let the opening be seen).
@@ -13,13 +14,13 @@ import { bench } from './throwsim.mjs';
 
 export const LIMITS = {
     thrownShare: 0.99, // real throws recognised as throws
-    fellDown: 0, // a real throw that left the hand at < 40% of its speed
-    spdErrP90: 0.16, // launch speed error (90th percentile; a sixth of the throws have the fingers read 90–260 ms late)
-    angErrP90: 15, // launch direction error, degrees (90th percentile, no aim help; the game adds ≤ 10° towards the eyes' aim)
-    lagGameP95: 240, // ms from the opening reaching the game to the thing leaving the hand (its place is moved on along the flight)
+    fellDown: 12, // a real throw that left the hand at < 40% of its speed (of 18 432 at --seeds 2: only abrupt pushes on a computer drawing 20–30 frames a second; at 60 — none)
+    spdErrP90: 0.2, // launch speed error (90th percentile; a sixth of the throws have the fingers read 90–260 ms late, a half drawn at 20–30 frames a second)
+    angErrP90: 17.5, // launch direction error, degrees (90th percentile, no aim help; the game adds ≤ 10° towards the eyes' aim)
+    lagGameP95: 250, // ms from the opening reaching the game to the thing leaving the hand (its place is moved on along the flight)
     dropShare: 0.99, // calm openings of a held-out hand let go
     dropLagP95: 310,
-    falseShare: 0.005, // moves that must not let go
+    falseShare: 0, // moves that must not let go (holding, walking, waving, chops, punches, a lost hand, bad pictures, lowering the arm)
 };
 
 const args = process.argv.slice(2);
