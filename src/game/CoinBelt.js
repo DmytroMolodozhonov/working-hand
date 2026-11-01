@@ -208,6 +208,7 @@ export class CoinBelt {
     _take(side) {
         const g = this.game, inv = g.inventory;
         if (inv?.monsterShut?.()) return; // (the monster's paws take no pouch from the belt)
+        if (g.coinDeal && !g.coinDeal.mayTake()) { g.coinDeal.hint(); this.log.push('shut:' + side); this._open = false; return; } // (coins come out only when buying or selling — CoinDeal.js)
         // the pouch comes into the hand whole, with all the coins
         const it = makeMagicPouch(this.magicUid || newUid(), this.count);
         if (!g.items.takeIntoHand(it, side)) { this.log.push('take-failed:' + side); return; }

@@ -43,6 +43,7 @@ import { Accio, accioCatcher } from './Accio.js';
 import { Storm, aimedAtSky } from '../fx/Storm.js';
 import { skyBlockFor, mayTell, lightningLand, skyVisible } from './SkyRules.js';
 import { Inventory } from './Inventory.js';
+import { CoinDeal } from './CoinDeal.js';
 import { Builder, BUILD_SPELLS } from './Builder.js';
 import { ScrollReading } from './ScrollReading.js';
 import { LegFilter, legLog } from '../input/LegSafe.js';
@@ -595,6 +596,7 @@ export class Game {
         this.storm = new Storm(this); // «Lightning Strike» weather
         this.sun = new SunBeam(this); // «To the Sun»: the clouds part, the rain stops
         this.sunContest = new SunContest(this); // …and against the black clouds of the gargoyle ritual it fights them (SunContest.js)
+        this.coinDeal = new CoinDeal(this); // coins come out of the pouch only when buying or selling (CoinDeal.js)
         this.inventory = new Inventory(this); // five slots under the fatigue bar
         this.inventory._buildWeapon = buildWeapon; // (models of the weapons seen on the back)
         this.inventory._makeItemModel = makeItemModel;
@@ -3960,6 +3962,7 @@ export class Game {
         else if (this.levMax?.swarm?.active) { this.levMax.swarm.release(false); this.levMax.mine = null; } // (off the Earth the things are let go)
         this.accio.update(dt);
         this.inventory.update(dt);
+        this.coinDeal.update(dt);
         this.itemIcons?.update(1.5); // (a new look's picture: one by one, ~1.5 ms a frame at most)
         this.builder.update(dt);
         this.swim.update(dt);

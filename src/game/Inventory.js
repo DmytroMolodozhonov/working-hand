@@ -810,7 +810,7 @@ export class Inventory {
         for (let k = 1; k <= n; k++) {
             const i = (start + k) % n;
             if (i === this.slots.length) { // the pouch cell: the best pouch of the belt comes into the hand
-                if (!this.purse.any) continue;
+                if (!this.purse.any || (this.game.coinDeal && !this.game.coinDeal.mayTake())) continue; // (no deal: the pouch is not in the circle)
                 const g = this.game;
                 if (g.items?.held[side] || g.weapons.hands[side].held) { this.game.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); return false; }
                 this._putBackHand(side);
@@ -1105,6 +1105,7 @@ export class Inventory {
         const hs = sides.find((sd) => g.items?.held[sd]?.item.kind === 'coins' && this.purse.canTie(g.items.held[sd].item));
         if (hs) { this._cyc = null; this.purse._tieOn(hs); this._render(); return; }
         if (!this.purse.any) { g.hud.toast?.('💰 Мешочков на поясе нет'); return; }
+        if (g.coinDeal && !g.coinDeal.mayTake()) { g.coinDeal.hint(); return; }
         const free = sides.find((sd) => !g.items?.held[sd] && !g.weapons.hands[sd].held);
         if (!free) { g.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); return; }
         this._putBackHand(free);
