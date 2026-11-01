@@ -658,7 +658,7 @@ export class ArenaDuels {
     step(v, dt) {
         const A = this.list.get(v.arena?.id);
         if (!A) { v.arena = null; return false; }
-        if (v.foe || v.fleeT > 0 || v.investigate) { if (v.arena.kind === 'fan') { A.fans.delete(v); this._freeSeat(A, v); } if (v.arena.kind === 'steward') A.steward = null; v.arena = null; return false; } // (a real fight / fright: the arena is not his now)
+        if (v.foe || v.fleeT > 0 || v.investigate) { this.life?.alog?.decision?.(v, `арена: ушёл из-под её власти (${v.arena.kind}, этап ${A.duel?.phase || '-'}): ${v.foe ? 'враг' : v.fleeT > 0 ? 'испуг' : 'розыск'}; y−пол ${(v.y - A.def.floorY).toFixed(1)}`); if (v.arena.kind === 'fan') { A.fans.delete(v); this._freeSeat(A, v); } if (v.arena.kind === 'steward') A.steward = null; v.arena = null; return false; } // (a real fight / fright: the arena is not his now)
         const k = v.arena.kind;
         if (k === 'fan') return this._fan(A, v, dt);
         if (k === 'leave') return this._leave(A, v, dt);
@@ -1506,6 +1506,7 @@ export class ArenaDuels {
         this._toMark(A);
         A.duel = { a, b: null, p: m.id, phase: 'count', t: 0, go: 0, offT: 0, pull: null, trophy: null, said: 0, atMark: true };
         this.log.push('mode:' + a.id + ':' + (a.entry?.rank || '?'));
+        L.alog?.decision?.(a, `арена дуэльного режима: радиус ${A.def.axis?.r}, пол ${A.def.floorY}, волшебник y−пол ${(a.y - A.def.floorY).toFixed(1)}, экран открыт ${g.revealed !== false}, земля готова ${this._groundReady(A)} (сборка с ожиданием земли)`);
         this._logStart(A, a);
         this._fx(A, 'beep', A.def.centre);
         this._send(A);
