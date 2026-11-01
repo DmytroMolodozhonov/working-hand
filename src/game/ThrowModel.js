@@ -72,6 +72,11 @@ export const RELEASE = {
     SHAPE_FWD: 0.25, SHAPE_UP: 0.4, DOWN_SPEED: 5, // a throw goes forward (this share of its speed) or up (a lob) — not down and back along the body
     // a calm opening lets go only from a free hand: held out, not hanging, palm not up (an apple on a flat palm stays)
     REACH: 0.6, FORWARD: 0.2, LEVEL: -0.75, PALM_UP: 0.6,
+    // the arm lowered (sin of its elevation): the thing stays with open fingers until the arm is brought up again. The
+    // secondary (child) hand is the game's hand — held well down it lets nothing go (the author: «если дочернюю руку держит
+    // внизу, сильно опущенной, предмет не должен выпадать, даже если кисть разжата»); in and out differ (no flicker)
+    LOW_IN_SEC: -0.5, LOW_OUT_SEC: -0.3, // (secondary: lowered below ~30° under level, raised again above ~17°)
+    LOW_IN: -0.75, LOW_OUT: -0.6, // (the leading hand: as before, with a hysteresis)
     HELD_MS: 400, // in the hand at least this long (taken just now: the fingers still closing)
     THROW_HELD_MS: 250, // (a throw: this long)
     LEARN: 0.02, // how fast the closed / open levels of this hand are learnt (per camera picture)
@@ -238,7 +243,7 @@ export class HandTrack {
         this.len = 0; this.head = -1;
         this.armed = armed; // (a thing that came into an open hand: kept until the fingers closed on it once)
         this.openSince = -1; this.lostAt = -1; this.lostPeak = null; this.preLostCurl = 0;
-        this.heldSince = -1; this.gap = null; this._deferSp = 0; // (this.trace: a WristTrace, set by the owner)
+        this.heldSince = -1; this.gap = null; this._deferSp = 0; this.armLow = false; // (this.trace: a WristTrace, set by the owner)
         this.state = 'held';
         this.camMs = 50;
     }
@@ -419,7 +424,7 @@ export class HandTrack {
 
     /**
      * Decide this frame. ctx: { t, arm {reach, forward, up, palmUp} (the arm now), weight (kg), strict (the leading
-     * hand's wand: never let go by opening, never thrown from a hand the camera lost), blocked (a reason nothing may
+     * hand's wand: never let go by opening, never thrown from a hand the camera lost), secondary (the off/child hand: held low it keeps the thing), blocked (a reason nothing may
      * leave the hand now: swimming, reading… — or null) }.
      * @returns {object|null} null — nothing; else {act:'throw'|'drop', why, at (ms), lag, speed, v (world velocity of the hand
      *   at release), vRel (body space), pos (the hand's world position at release), travel, curl, peak, blur}
@@ -431,6 +436,12 @@ export class HandTrack {
         const e = this._at(0), t = ctx.t;
         o.act = null; o.why = null; o.blur = false; o.curl = e.c; o.peak = 0; o.late = 0;
         if (ctx.blocked) { this.openSince = -1; this.lostAt = -1; return null; }
+        // ---- the arm lowered along the body: a latch with a hysteresis (only from a picture of a seen hand)
+        if (e.seen && ctx.arm && Number.isFinite(ctx.arm.up)) {
+            const sec = !!ctx.secondary, u = ctx.arm.up;
+            if (u < (sec ? R.LOW_IN_SEC : R.LOW_IN)) this.armLow = true;
+            else if (u > (sec ? R.LOW_OUT_SEC : R.LOW_OUT)) this.armLow = false;
+        }
         // ---- the camera lost the hand
         if (!e.seen) {
             if (this.lostAt < 0) { this.lostAt = t; this.preLostCurl = this._gripMax(t); this.lostPeak = null; }
@@ -550,7 +561,7 @@ export class HandTrack {
         else if (t - this.heldSince < R.HELD_MS) why = 'вещь только что взята';
         else if (!(a.reach > R.REACH)) why = `рука прижата к телу (вытянута на ${(a.reach ?? 0).toFixed(2)} из ${R.REACH})`;
         else if (!(a.forward > R.FORWARD)) why = `рука не перед собой (${(a.forward ?? 0).toFixed(2)})`;
-        else if (!(a.up > R.LEVEL)) why = 'рука висит вниз вдоль тела';
+        else if (this.armLow || !(a.up > R.LEVEL)) why = ctx.secondary ? 'дочерняя рука опущена вниз — вещь остаётся в ней' : 'рука висит вниз вдоль тела';
         else if (a.palmUp != null && !(a.palmUp < R.PALM_UP)) why = 'ладонь смотрит вверх — вещь лежит на ней';
         if (why) { o.why = why; return o; }
         if (openFor < Math.max(R.DROP_CONFIRM_MS, R.DROP_CONFIRM_CAM * this.camMs) && !back) return null;

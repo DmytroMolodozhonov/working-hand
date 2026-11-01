@@ -59,13 +59,13 @@ test('the sweep (quick): ≥ 99% of throws, 0 «fell down», speed error ≤ 21%
 });
 
 /** A hand pushed through by hand: closed, held out still, then the fingers open at `curlTo`; returns the decision. */
-function openHand({ arm = { reach: 0.9, forward: 0.8, up: 0, palmUp: 0 }, curlTo = 0.1, closed = 0.9, seen = true, frames = 40 } = {}) {
+function openHand({ secondary = false, arm = { reach: 0.9, forward: 0.8, up: 0, palmUp: 0 }, curlTo = 0.1, closed = 0.9, seen = true, frames = 40 } = {}) {
     const h = new HandTrack();
     let t = 0, d = null;
-    for (let i = 0; i < 60; i++, t += 16.7) { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl: closed, seen: true, fresh: true, camMs: 33 }); h.decide({ t, arm }); }
+    for (let i = 0; i < 60; i++, t += 16.7) { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl: closed, seen: true, fresh: true, camMs: 33 }); h.decide({ t, arm, secondary }); }
     for (let i = 0; i < frames; i++, t += 16.7) {
         h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl: curlTo, seen, fresh: true, camMs: 33 });
-        d = h.decide({ t, arm });
+        d = h.decide({ t, arm, secondary });
         if (d?.act) return d;
     }
     return d;
@@ -105,4 +105,40 @@ test('launch: the flick and the weight (a hammer leaves slower than an apple), a
     assert.ok(Math.abs(Math.asin(d.y) - Math.PI / 18) < 1e-6);
     const w = spinFor('wand', { x: 0, y: 0, z: -12 }, null);
     assert.ok(Math.abs(w.x) > 5 && Math.abs(w.y) < 1e-9, 'a long thing turns end over end');
+});
+
+// the author: "если дочернюю руку держит внизу, прямо сильно опущенной, то предмет не должен выпадать, даже если кисть разжата"
+const ARM = (up, forward = 0.8) => ({ reach: 0.9, forward, up, palmUp: 0 });
+test('the child hand held low keeps the thing with open fingers; held out forward it falls', () => {
+    for (const up of [-0.55, -0.7, -0.9, -1]) assert.equal(openHand({ secondary: true, arm: ARM(up) })?.act ?? null, null, `up ${up}`);
+    assert.equal(openHand({ secondary: true, arm: ARM(0) }).act, 'drop');
+    assert.equal(openHand({ secondary: true, arm: ARM(-0.2) }).act, 'drop', 'a little under level is still held out');
+    assert.equal(openHand({ secondary: false, arm: ARM(-0.6) }).act, 'drop', 'the leading hand: the old level');
+    assert.equal(openHand({ secondary: false, arm: ARM(-0.9) })?.act ?? null, null);
+    assert.match(openHand({ secondary: true, arm: ARM(-0.8) })?.why || '', /опущена/);
+});
+
+test('a hand raised from low with open fingers: nothing falls until it is held out (hysteresis, no flicker)', () => {
+    const run = (ups) => {
+        const h = new HandTrack(); let t = 0, got = null;
+        const push = (curl, up) => { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl, seen: true, fresh: true, camMs: 33 }); const d = h.decide({ t, arm: ARM(up), secondary: true }); if (d?.act && !got) got = { ...d, up }; t += 16.7; };
+        for (let i = 0; i < 60; i++) push(0.9, -0.9); // gripped, hanging
+        for (const up of ups) push(0.1, up); // open, the arm coming up
+        return got;
+    };
+    assert.equal(run([-0.9, -0.8, -0.6, -0.45, -0.35]), null, 'still lowered — within the hysteresis');
+    assert.equal(run([-0.9, -0.5, -0.45, -0.4, -0.35, -0.4, -0.5, -0.45]), null, 'flicker near the level — still nothing');
+    const out = run(Array.from({ length: 40 }, (_, i) => -0.9 + i * 0.03));
+    assert.ok(out === null || out.up > RELEASE.LOW_OUT_SEC, 'if it falls — only once the arm is above the exit level');
+});
+
+test('a real throw from a low arm (underhand, at the feet) still flies with the child hand', () => {
+    const h = new HandTrack(); let t = 0, got = null;
+    for (let i = 0; i < 40; i++, t += 16.7) { h.push({ t, hand: { x: 0, y: -1.2, z: 0.3 }, world: { x: 0, y: 2, z: 0 }, curl: 0.9, seen: true, fresh: true, camMs: 16.7 }); h.decide({ t, arm: ARM(-0.8), secondary: true }); }
+    for (let i = 0; i < 30; i++, t += 16.7) { // swing forward (z back is +: forward = −z) and up, fingers open halfway
+        const k = i / 29;
+        h.push({ t, hand: { x: 0, y: -1.2 + k * 0.9, z: 0.3 - k * 3.4 }, world: { x: 0, y: 2, z: -k * 3.4 }, curl: k < 0.4 ? 0.9 : 0.1, seen: true, fresh: true, camMs: 16.7 });
+        const d = h.decide({ t, arm: ARM(-0.8 + k * 0.5), secondary: true }); if (d?.act === 'throw' && !got) got = d;
+    }
+    assert.ok(got, 'the underhand throw is a throw, whatever the arm level');
 });

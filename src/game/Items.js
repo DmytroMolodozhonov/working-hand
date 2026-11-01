@@ -1027,7 +1027,7 @@ export class ItemSystem {
             }
             // any other thing in either hand, any wand in the off hand: a real throw of any kind, or a calm opening of a
             // free hand (ThrowModel.HandTrack) — the moment found back where the fingers began to open
-            const d = tk.decide({ t: tt, arm, weight });
+            const d = tk.decide({ t: tt, arm, weight, secondary: side === g.off });
             if (d?.act) { this._letGo(side, d, d.why); continue; }
             this._dropTry(side, kind, d?.why || null);
         }
