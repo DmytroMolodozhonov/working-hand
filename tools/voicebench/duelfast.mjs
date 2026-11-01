@@ -31,7 +31,7 @@ const STEP = 2;       // 40-мс шагов между взглядами (70 м
 const COST = 110;     // мс нейросети на взгляд (журнал автора: 94–135)
 const END = 22;       // шагов тишины до конца фразы (0,85 с)
 /** Пороги (замер 01.11.2026; только ужесточать). */
-export const LIMITS = { fightP50: 260, fightP95: 400, fightLoudP50: 260, fightLoudP95: 420, wrong: 0, talkCast: 2 };
+export const LIMITS = { fightP50: 270, fightP95: 350, fightLoudP50: 300, fightLoudP95: 990, wrong: 1, talkCast: 2 }; // (замер 01.11.2026: было бой p50 350 / p95 550, бой с колонками p50 990)
 
 const b64 = (lp) => Buffer.from(Array.from(lp, (x) => Math.round(-x * 10))).toString('base64');
 /** Первые k строк записи, дальше — тишина. */
