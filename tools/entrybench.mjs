@@ -21,7 +21,9 @@ const window0 = () => 0;
 /** --check: пороги входа (только ужесточать). */
 const LIMITS = { afterMs: 120, longestMs: 9000, firstFrameS: 100, groundS: 200 }; // (в контейнере видеокарта программная — шейдеры и буферы в ней медленные: 29.10 до правки самая долгая задача 30 с, после 7 с; на настоящей видеокарте в разы меньше. Только ужесточать)
 
-const port = 8900 + Math.floor(Math.random() * 100);
+// (a kept profile: the same port each time — another port is another site for the browser, with its own storage; the
+// launcher's port stays the same at home)
+const port = opt('profile-dir', null) ? 8977 : 8900 + Math.floor(Math.random() * 100);
 const srv = await startServer(port);
 const PROFILE_DIR = opt('profile-dir', null); // (a kept profile: run twice — the first start is cold, the second warm)
 const NOCACHE = args.includes('--no-cache');
