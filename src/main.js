@@ -692,6 +692,7 @@ function earlyTalk(command) {
 
 voice.onResult = (command, isFinal = true, held = false, meta = null) => {
     if (!command) return;
+    if (isFinal && game?.active && game.arenaDuels?.askVoice?.(command)) return; // (the duel mode's «Вы проиграли. Ещё раз?» window: «ещё раз» / «выйти» — ArenaDuels.askVoice)
     // (in a beam clash my «Максима» shouted over and over is heard as one stream of «максимум максиму сим…»: it is one shout — MaximaShout.js)
     if (game?.active && game.duel?.clashes?.some((c) => c.a.by === game.localId || c.b.by === game.localId)) command = collapseMaxima(command);
     // the pause menu (Esc) is open: nothing said is heard — no spell, no word to a villager

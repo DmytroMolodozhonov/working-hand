@@ -211,7 +211,7 @@ test('a duellist under the arena floor is lifted back; stun/ice are cleared at a
     assert.match(src, /clearEffects\(\) \{[\s\S]*this\.stunLeft = 0;[\s\S]*this\.frozenLeft = 0/);
     const ad = fs.readFileSync(new URL('../../src/game/ArenaDuels.js', import.meta.url), 'utf8');
     assert.match(ad, /c\?\.clearEffects\?\.\(\);/);
-    assert.match(ad, /stopDuelMode\(\) \{ this\._unpause\(\); this\.game\.combat\?\.clearEffects/);
+    assert.match(ad, /stopDuelMode\(\) \{[^\n]*this\._unpause\(\); this\.game\.combat\?\.clearEffects/);
 });
 
 test('the duel mode waits for the loading screen and the floor\'s land before the wizard comes out', () => {

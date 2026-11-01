@@ -45,3 +45,17 @@ test('one opponent at a time: a leftover duellist is released before the next co
     const src = fs.readFileSync(new URL('../../src/game/ArenaDuels.js', import.meta.url), 'utf8');
     assert.match(src, /one opponent at a time/);
 });
+
+test('death in the duel mode: «Вы проиграли. Ещё раз?» with two buttons; the voice «ещё раз» / «выйти»', () => {
+    const clicks = [];
+    const box = { querySelector: (q) => ({ click: () => clicks.push(q) }) };
+    const self = { mode: { asking: true }, endUi: { open: true, box } };
+    assert.equal(AD.askVoice.call(self, 'Ещё раз'), true);
+    assert.equal(AD.askVoice.call(self, 'выйти'), true);
+    assert.equal(AD.askVoice.call(self, 'привет'), false);
+    assert.deepEqual(clicks, ['.go', '.out']);
+    assert.equal(AD.askVoice.call({ mode: { asking: false }, endUi: { open: true, box } }, 'ещё раз'), false, 'not asking: the words are not ours');
+    const src = fs.readFileSync(new URL('../../src/game/ArenaDuels.js', import.meta.url), 'utf8');
+    assert.match(src, /title: 'Вы проиграли\. Ещё раз\?'/);
+    assert.doesNotMatch(src.slice(src.indexOf('    duelDeath() {'), src.indexOf('    _deathAsk(A) {')), /this\._resetArena\(\);/, 'death asks first, resets only on «Ещё раз»');
+});

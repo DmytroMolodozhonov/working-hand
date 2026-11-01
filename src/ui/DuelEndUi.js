@@ -56,7 +56,7 @@ export class DuelEndUi {
      * поменять, не выходя в главное меню; «Начать дуэль заново» или «Выйти в меню».
      * @param {{hero:object, lost?:boolean, onStart:(hero:object)=>void, onExit:()=>void}} o
      */
-    showAgain({ hero, onStart, onExit, lost = false, title = null, go = 'Начать дуэль заново' }) {
+    showAgain({ hero, onStart, onExit, lost = false, title = null, go = 'Начать дуэль заново', simple = false }) {
         this._css();
         this.hideBox();
         if (document.pointerLockElement) document.exitPointerLock?.(); // (the mouse is free for the buttons)
@@ -64,13 +64,16 @@ export class DuelEndUi {
         w.className = 'duel-again';
         w.innerHTML = `<div><h3>${title || (lost ? 'Хотите сразиться ещё раз?' : 'Хотите повторить дуэль?')}</h3><div class="duel-again-panel"></div>
             <div style="text-align:center"><button class="go" type="button">${go}</button><button class="out" type="button">Выйти в меню</button></div></div>`;
-        const panel = mountHeroPanel(w.querySelector('.duel-again-panel'), 'hero-again');
-        panel.set(hero);
-        w.querySelector('#hero-again-spawn')?.closest('.hero-row')?.setAttribute('hidden', ''); // (the place is the arena: it is not changed here)
-        w.querySelector('.go').onclick = () => { const h = panel.read(); this.hide(); onStart?.(h); };
+        const panelEl = w.querySelector('.duel-again-panel');
+        const panel = simple ? null : mountHeroPanel(panelEl, 'hero-again'); // (simple: just the question and two buttons — «Вы проиграли. Ещё раз?»)
+        if (simple) panelEl.remove(); else { panel.set(hero); w.querySelector('#hero-again-spawn')?.closest('.hero-row')?.setAttribute('hidden', ''); } // (the place is the arena: it is not changed here)
+        w.querySelector('.go').onclick = () => { const h = panel ? panel.read() : hero; this.hide(); onStart?.(h); };
         w.querySelector('.out').onclick = () => { this.hide(); onExit?.(); };
         document.body.appendChild(w);
     }
+
+    /** Is the «ещё раз?» window up now (for the voice and the keys). */
+    get open() { return !!this.box; }
 
     hideBox() { this.box?.remove(); this.box = null; }
     hide() { this.banner?.remove(); this.banner = null; this.hideBox(); }

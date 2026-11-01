@@ -54,4 +54,25 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
         assert.ok(o.y >= -0.1, 'the wizard is not under the floor at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(!o.dead && !o.foe && !o.fl, 'not fleeing / fighting the hero at ' + o.t + ' s');
     }
+    // the hero falls: «Вы проиграли. Ещё раз?» — no silent respawn; «ещё раз» by voice starts a fresh round
+    const death = await page.evaluate(async () => {
+        const g = window.__zns.game, AD = g.arenaDuels;
+        const step = (dt) => { g.levitation.update(dt); g.items.update(dt); g.castleLife.update(dt); AD.update(dt); g.duel.update(dt); g.creatureImpact.update(dt); };
+        const handled = AD.duelDeath();
+        const asked = { handled, open: AD.endUi.open, asking: !!AD.mode.asking, title: AD.endUi.box?.querySelector('h3')?.textContent };
+        const keep = AD.list.get(AD.mode.arenaId).fans.size;
+        for (let i = 0; i < 40; i++) step(0.05);
+        asked.stillAsking = AD.endUi.open; asked.fansKept = AD.list.get(AD.mode.arenaId).fans.size === keep;
+        asked.voice = AD.askVoice('ещё раз');
+        asked.closed = !AD.endUi.open; asked.asking2 = !!AD.mode.asking;
+        for (let i = 0; i < 400; i++) { step(0.05); if (i % 50 === 0) await new Promise((r) => setTimeout(r, 0)); }
+        const A = AD.list.get(AD.mode.arenaId);
+        asked.newDuel = !!A.duel; asked.hp = g.combat.hp > 0 && !g.combat.dead;
+        return asked;
+    });
+    assert.ok(death.handled && death.open && death.asking, 'the question is up: ' + JSON.stringify(death));
+    assert.match(death.title, /Вы проиграли/);
+    assert.ok(death.stillAsking && death.fansKept, 'it waits for the answer: ' + JSON.stringify(death));
+    assert.ok(death.voice && death.closed && !death.asking2, 'the voice «ещё раз» answers: ' + JSON.stringify(death));
+    assert.ok(death.newDuel && death.hp, 'a fresh round follows: ' + JSON.stringify(death));
 });

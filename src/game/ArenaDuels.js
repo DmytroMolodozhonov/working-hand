@@ -1446,7 +1446,7 @@ export class ArenaDuels {
 
     _unpause() { if (this.mode?.paused) { this.game.paused = false; this.mode.paused = false; } }
 
-    stopDuelMode() { this._unpause(); this.game.combat?.clearEffects?.(); this.mode = null; this.fr = null; this.my = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
+    stopDuelMode() { if (this._askKeys) { window.removeEventListener('keydown', this._askKeys, true); this._askKeys = null; } this._unpause(); this.game.combat?.clearEffects?.(); this.mode = null; this.fr = null; this.my = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
 
     /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
     _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
@@ -1824,8 +1824,46 @@ export class ArenaDuels {
         if (D) {
             if (D.phase !== 'over') this._end(A, D, 'a', 'dead');
         }
-        this._resetArena(); // (the old wizard and the crowd go at once, nobody keeps anger: the next duel starts clean)
+        this._deathAsk(A); // (the old wizard and the crowd stay till the answer; «Вы проиграли. Ещё раз?»)
         return true;
+    }
+
+    /**
+     * The hero fell in the duel mode: no death screen — «Вы проиграли. Ещё раз?» with two buttons (the mouse, Enter / Esc, or the voice
+     * «ещё раз» / «выйти»). «Ещё раз» — a new round on the mark with full health and mana; «Выйти в меню» — the world is saved. Multiplayer:
+     * each player has his own window.
+     */
+    _deathAsk(A) {
+        const m = this.mode;
+        if (!m) return;
+        const g = this.game, p = g.character.group.position;
+        this._toMark(A); // (up on the mark, health and mana full: the next round is fresh)
+        m.holdPin = { x: p.x, z: p.z }; m.hold = true; m.lost = true; m.winT = null;
+        this.endUi.hide();
+        if (!g.net?.active) { g.paused = true; m.paused = true; } // (the world stands still while the question is open)
+        m.asking = true;
+        this.endUi.showAgain({
+            lost: true, simple: true, title: 'Вы проиграли. Ещё раз?', go: 'Ещё раз', hero: { ...(g.hero || {}), foe: m.foe },
+            onStart: () => { m.asking = false; if (this._askKeys) { window.removeEventListener('keydown', this._askKeys, true); this._askKeys = null; } this._unpause(); this._resetArena(); this._resetHero?.(); this._wandBack?.(); this._toMark(A); m.hold = false; m.holdPin = null; },
+            onExit: () => { m.asking = false; this._unpause(); this.endUi.hide(); window.__zns?.exitToMenu?.(); },
+        });
+        this._askKeys = (e) => {
+            if (!m.asking) return;
+            if (e.code === 'Enter') { e.preventDefault(); this.endUi.box?.querySelector('.go')?.click(); }
+            else if (e.code === 'Escape') { e.preventDefault(); this.endUi.box?.querySelector('.out')?.click(); }
+        };
+        window.addEventListener('keydown', this._askKeys, true);
+    }
+
+    /** (main.js voice) While the loss window is up: «ещё раз» presses the first button, «выйти» the second. true: heard, nothing else to do with it. */
+    askVoice(text) {
+        const m = this.mode;
+        if (!m?.asking || !this.endUi.open) return false;
+        const t = String(text).toLowerCase().replace(/ё/g, 'е');
+        const has = (words) => words.some((w) => t === w || t.startsWith(w + ' ') || t.endsWith(' ' + w) || t.includes(' ' + w + ' ')); // (\b does not know Cyrillic)
+        if (has(['еще раз', 'снова', 'заново', 'повтори', 'повторить', 'давай еще'])) { this.endUi.box.querySelector('.go')?.click(); return true; }
+        if (has(['выйти', 'выход', 'выйди', 'в меню', 'хватит'])) { this.endUi.box.querySelector('.out')?.click(); return true; }
+        return false;
     }
 
     // ------------------------------------------------------------------ the lit places
