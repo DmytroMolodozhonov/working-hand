@@ -107,35 +107,37 @@ test('launch: the flick and the weight (a hammer leaves slower than an apple), a
     assert.ok(Math.abs(w.x) > 5 && Math.abs(w.y) < 1e-9, 'a long thing turns end over end');
 });
 
-// the author: "если дочернюю руку держит внизу, прямо сильно опущенной, то предмет не должен выпадать, даже если кисть разжата"
+// the author: «если дочерняя рука не выше 30 градусов, то предмет не может выпасть из руки, даже если кисть разжата»
 const ARM = (up, forward = 0.8) => ({ reach: 0.9, forward, up, palmUp: 0 });
-test('the child hand held low keeps the thing with open fingers; held out forward it falls', () => {
-    for (const up of [-0.55, -0.7, -0.9, -1]) assert.equal(openHand({ secondary: true, arm: ARM(up) })?.act ?? null, null, `up ${up}`);
-    assert.equal(openHand({ secondary: true, arm: ARM(0) }).act, 'drop');
-    assert.equal(openHand({ secondary: true, arm: ARM(-0.2) }).act, 'drop', 'a little under level is still held out');
+const SIN = (deg) => Math.sin(deg * Math.PI / 180);
+test('the child hand not higher than 30° over level keeps the thing with open fingers; raised higher it falls', () => {
+    for (const deg of [-90, -60, -30, 0, 10, 20, 28]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) })?.act ?? null, null, `${deg}°`);
+    for (const deg of [33, 45, 60, 80]) assert.equal(openHand({ secondary: true, arm: ARM(SIN(deg)) }).act, 'drop', `${deg}°`);
     assert.equal(openHand({ secondary: false, arm: ARM(-0.6) }).act, 'drop', 'the leading hand: the old level');
     assert.equal(openHand({ secondary: false, arm: ARM(-0.9) })?.act ?? null, null);
-    assert.match(openHand({ secondary: true, arm: ARM(-0.8) })?.why || '', /опущена/);
+    assert.match(openHand({ secondary: true, arm: ARM(0) })?.why || '', /30°/);
 });
 
-test('a hand raised from low with open fingers: nothing falls until it is held out (hysteresis, no flicker)', () => {
-    const run = (ups) => {
+test('a hand raised from low with open fingers: nothing falls until it is above 30°; no flicker on the line', () => {
+    const run = (degs) => {
         const h = new HandTrack(); let t = 0, got = null;
-        const push = (curl, up) => { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl, seen: true, fresh: true, camMs: 33 }); const d = h.decide({ t, arm: ARM(up), secondary: true }); if (d?.act && !got) got = { ...d, up }; t += 16.7; };
-        for (let i = 0; i < 60; i++) push(0.9, -0.9); // gripped, hanging
-        for (const up of ups) push(0.1, up); // open, the arm coming up
+        const push = (curl, deg) => { h.push({ t, hand: { x: -0.6, y: 0.5, z: -1.6 }, world: { x: 0, y: 4, z: -1.6 }, curl, seen: true, fresh: true, camMs: 33 }); const d = h.decide({ t, arm: ARM(SIN(deg)), secondary: true }); if (d?.act && !got) got = { ...d, deg }; t += 16.7; };
+        for (let i = 0; i < 60; i++) push(0.9, -60); // gripped, hanging
+        for (const deg of degs) push(0.1, deg); // open, the arm coming up
         return got;
     };
-    assert.equal(run([-0.9, -0.8, -0.6, -0.45, -0.35]), null, 'still lowered — within the hysteresis');
-    assert.equal(run([-0.9, -0.5, -0.45, -0.4, -0.35, -0.4, -0.5, -0.45]), null, 'flicker near the level — still nothing');
-    const out = run(Array.from({ length: 40 }, (_, i) => -0.9 + i * 0.03));
-    assert.ok(out === null || out.up > RELEASE.LOW_OUT_SEC, 'if it falls — only once the arm is above the exit level');
+    assert.equal(run([-60, -20, 0, 15, 25, 29]), null, 'still not above 30°');
+    assert.equal(run([26, 29.5, 27, 29.8, 26, 29, 28, 29.9]), null, 'a flicker just under the line: nothing');
+    const hys = run([40, 40, 40, 28, 27, 28, 27, 27, 27, 27]); // raised, then dipping to 27° (above the 25° lower level): still raised
+    assert.ok(hys && hys.deg < 30, 'raised past 30° it stays raised down to 25° (it falls at 27–28°, no flicker)');
+    const up = run([-60, 0, 20, 40, 45, 50, 50, 50, 50, 50]);
+    assert.ok(up && up.deg > 30, 'it falls only once the arm is above 30°');
 });
 
 test('a real throw from a low arm (underhand, at the feet) still flies with the child hand', () => {
     const h = new HandTrack(); let t = 0, got = null;
     for (let i = 0; i < 40; i++, t += 16.7) { h.push({ t, hand: { x: 0, y: -1.2, z: 0.3 }, world: { x: 0, y: 2, z: 0 }, curl: 0.9, seen: true, fresh: true, camMs: 16.7 }); h.decide({ t, arm: ARM(-0.8), secondary: true }); }
-    for (let i = 0; i < 30; i++, t += 16.7) { // swing forward (z back is +: forward = −z) and up, fingers open halfway
+    for (let i = 0; i < 30; i++, t += 16.7) {
         const k = i / 29;
         h.push({ t, hand: { x: 0, y: -1.2 + k * 0.9, z: 0.3 - k * 3.4 }, world: { x: 0, y: 2, z: -k * 3.4 }, curl: k < 0.4 ? 0.9 : 0.1, seen: true, fresh: true, camMs: 16.7 });
         const d = h.decide({ t, arm: ARM(-0.8 + k * 0.5), secondary: true }); if (d?.act === 'throw' && !got) got = d;

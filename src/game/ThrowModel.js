@@ -75,7 +75,10 @@ export const RELEASE = {
     // the arm lowered (sin of its elevation): the thing stays with open fingers until the arm is brought up again. The
     // secondary (child) hand is the game's hand — held well down it lets nothing go (the author: «если дочернюю руку держит
     // внизу, сильно опущенной, предмет не должен выпадать, даже если кисть разжата»); in and out differ (no flicker)
-    LOW_IN_SEC: -0.5, LOW_OUT_SEC: -0.3, // (secondary: lowered below ~30° under level, raised again above ~17°)
+    // (secondary, the author: «если дочерняя рука не выше 30 градусов, предмет не может выпасть, даже если кисть разжата»: the arm
+    // not higher than 30° over level — level, forward-low, hanging — keeps the thing; it counts as raised above 30° and as
+    // lowered again under 25°, like the «hand raised» gesture's hysteresis, Game._raisedHand)
+    LOW_IN_SEC: Math.sin(25 * Math.PI / 180), LOW_OUT_SEC: Math.sin(30 * Math.PI / 180),
     LOW_IN: -0.75, LOW_OUT: -0.6, // (the leading hand: as before, with a hysteresis)
     HELD_MS: 400, // in the hand at least this long (taken just now: the fingers still closing)
     THROW_HELD_MS: 250, // (a throw: this long)
@@ -243,7 +246,7 @@ export class HandTrack {
         this.len = 0; this.head = -1;
         this.armed = armed; // (a thing that came into an open hand: kept until the fingers closed on it once)
         this.openSince = -1; this.lostAt = -1; this.lostPeak = null; this.preLostCurl = 0;
-        this.heldSince = -1; this.gap = null; this._deferSp = 0; this.armLow = false; // (this.trace: a WristTrace, set by the owner)
+        this.heldSince = -1; this.gap = null; this._deferSp = 0; this.armLow = null; // (null: not known yet; this.trace: a WristTrace, set by the owner)
         this.state = 'held';
         this.camMs = 50;
     }
@@ -439,8 +442,10 @@ export class HandTrack {
         // ---- the arm lowered along the body: a latch with a hysteresis (only from a picture of a seen hand)
         if (e.seen && ctx.arm && Number.isFinite(ctx.arm.up)) {
             const sec = !!ctx.secondary, u = ctx.arm.up;
-            if (u < (sec ? R.LOW_IN_SEC : R.LOW_IN)) this.armLow = true;
-            else if (u > (sec ? R.LOW_OUT_SEC : R.LOW_OUT)) this.armLow = false;
+            const lo = sec ? R.LOW_IN_SEC : R.LOW_IN, hi = sec ? R.LOW_OUT_SEC : R.LOW_OUT;
+            if (this.armLow === null) this.armLow = u < hi; // (the first picture: raised only past the upper level)
+            else if (u < lo) this.armLow = true;
+            else if (u > hi) this.armLow = false;
         }
         // ---- the camera lost the hand
         if (!e.seen) {
@@ -561,7 +566,7 @@ export class HandTrack {
         else if (t - this.heldSince < R.HELD_MS) why = 'вещь только что взята';
         else if (!(a.reach > R.REACH)) why = `рука прижата к телу (вытянута на ${(a.reach ?? 0).toFixed(2)} из ${R.REACH})`;
         else if (!(a.forward > R.FORWARD)) why = `рука не перед собой (${(a.forward ?? 0).toFixed(2)})`;
-        else if (this.armLow || !(a.up > R.LEVEL)) why = ctx.secondary ? 'дочерняя рука опущена вниз — вещь остаётся в ней' : 'рука висит вниз вдоль тела';
+        else if (this.armLow || (!ctx.secondary && !(a.up > R.LEVEL))) why = ctx.secondary ? 'дочерняя рука не выше 30° над горизонталью — вещь остаётся в ней' : 'рука висит вниз вдоль тела';
         else if (a.palmUp != null && !(a.palmUp < R.PALM_UP)) why = 'ладонь смотрит вверх — вещь лежит на ней';
         if (why) { o.why = why; return o; }
         if (openFor < Math.max(R.DROP_CONFIRM_MS, R.DROP_CONFIRM_CAM * this.camMs) && !back) return null;
