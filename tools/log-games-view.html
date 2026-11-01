@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><body style="background:#10151c;color:#dfe4ea;font-family:sans-serif;padding:16px;width:900px">
+<h3>📜 Журнал</h3>
+<div style="display:flex;gap:8px;margin-bottom:10px"><button id="a" class="menu-btn">📋 Скопировать последнюю игру</button><button id="b" class="menu-btn">📋 Скопировать всё</button></div>
+<pre id="log-text" style="height:420px;overflow:auto;background:rgba(0,0,0,0.45);border-radius:8px;padding:10px;font-size:0.75rem;white-space:pre-wrap;margin:0"></pre>
+<script type="module">
+import { renderGames, bindCopy } from '../src/ui/LogGamesView.js';
+import { frameStart } from '../src/core/LogGames.js';
+const g = (h, m, n) => frameStart(`=== игра началась 01.11.2026, ${h}:${m}:00 — журнал заклинаний`) + Array.from({length:n},(_, i)=>`${h}:${String(+m+Math.floor(i/6)).padStart(2,'0')}:${String(i*10%60).padStart(2,'0')} Люмос → ✅ сработало`).join('\n');
+const v = renderGames(document, document.getElementById('log-text'), g('10','05',30) + '\n' + g('12','37',40) + '\n' + g('15','20',25));
+bindCopy(document, document.getElementById('a'), v.lastText); bindCopy(document, document.getElementById('b'), v.allText);
+window.v = v;
+</script>

@@ -36,6 +36,7 @@ import http.server
 import json
 import mimetypes
 import os
+import re
 import shutil
 import time
 import urllib.request
@@ -215,6 +216,15 @@ def log_files():
     paths.append(PERF_LOG)
     paths.append(ALL_LOG)
     return paths
+
+
+GAME_RULE = "═" * 64
+GAME_START_RE = re.compile(r"=== (?:игра началась|старт)(?![а-яё])")
+
+
+def frame_start(line):
+    """A «new game» line goes into a frame of ═══ with empty lines around (the viewer splits the journal into games by it)."""
+    return "\n" + GAME_RULE + "\n" + line + "\n" + GAME_RULE + "\n\n"
 
 
 def append_all_log(text):
@@ -702,7 +712,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
             if path == "/api/alllog":
                 # a batch of lines from the game's «Общие логи» (every few seconds, not per line)
                 lines = self._read_json().get("lines") or []
-                text = "".join(str(l)[:2000].replace("\r", " ").replace("\n", " ") + "\n" for l in lines[:1000])
+                text = "".join((frame_start(x) if GAME_START_RE.search(x) else x + "\n") for x in (str(l)[:2000].replace("\r", " ").replace("\n", " ") for l in lines[:1000]))
                 if text:
                     append_all_log(text)
                 return self._json(200, {"status": "ok"})
@@ -716,7 +726,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                     print("  [Заклинания] журнал пишется в " + os.path.join(ROOT, SPELL_LOG))
                 if line:
                     with open(SPELL_LOG, "a", encoding="utf-8") as f:
-                        f.write(line + "\n")
+                        f.write(frame_start(line) if line.startswith("===") else line + "\n")
                 return self._json(200, {"status": "ok"})
 
             if path == "/api/perflog":
@@ -727,7 +737,7 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                         os.replace(PERF_LOG, PERF_LOG + ".old")
                     print("  [FPS-дневник] пишется в " + os.path.join(ROOT, PERF_LOG))
                 with open(PERF_LOG, "a", encoding="utf-8") as f:
-                    f.write(time.strftime("%H:%M:%S ") + line + "\n")
+                    f.write(frame_start(time.strftime("%H:%M:%S ") + line) if line.startswith("===") else time.strftime("%H:%M:%S ") + line + "\n")
                 if not line.startswith("==="):
                     # the short version: FPS, frame times and the camera network first
                     parts = line.split(" | ")

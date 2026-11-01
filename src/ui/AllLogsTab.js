@@ -2,6 +2,7 @@
 // a search, a level filter and «copy everything / the last 5 minutes / save to a file». Drawn only while that item is chosen in the journal list.
 
 import { ALL, ALL_LOG, formatEntry, clockOf } from '../core/AllLog.js';
+import { renderGames } from './LogGamesView.js';
 
 const SHOW_MAX = 1500; // lines drawn at once (the newest of the filtered)
 const COLORS = { error: '#ff6b81', warn: '#eccc68', info: '#dfe4ea' };
@@ -16,7 +17,7 @@ export function setupAllLogsPanel(doc = document) {
     const follow = doc.getElementById('alllog-follow');
     const info = doc.getElementById('log-path');
     const off = new Set(); // tags switched off
-    let timer = null, shownTags = '', active = false;
+    let timer = null, shownTags = '', active = false, view = null;
 
     const filters = (extra = {}) => ({
         tags: ALL.tagsSeen().filter((t) => !off.has(t)),
@@ -45,16 +46,11 @@ export function setupAllLogsPanel(doc = document) {
         drawTags();
         const list = ALL.query(filters());
         const tail = list.length > SHOW_MAX ? list.slice(-SHOW_MAX) : list;
-        const frag = doc.createDocumentFragment();
-        for (const e of tail) {
-            const row = doc.createElement('div');
-            row.style.color = COLORS[e.level] || COLORS.info;
-            row.textContent = formatEntry(e);
-            frag.appendChild(row);
+        if (!tail.length) { box.textContent = ALL.items.length ? 'По этим условиям ничего нет.' : 'Пока пусто.'; view = null; }
+        else {
+            const colors = tail.map((e) => COLORS[e.level] || COLORS.info);
+            view = renderGames(doc, box, tail.map(formatEntry).join('\n'), { rowStyle: (i) => colors[i] });
         }
-        box.textContent = '';
-        if (!tail.length) box.textContent = ALL.items.length ? 'По этим условиям ничего нет.' : 'Пока пусто.';
-        else box.appendChild(frag);
         if (info) info.textContent = `Показано ${tail.length} из ${list.length}${list.length ? ` (с ${clockOf(list[0].t)})` : ''}; всего в памяти ${ALL.items.length}. Файл zns-all.log лежит в папке игры (последние ~20 МБ).`;
         if (follow?.checked) box.scrollTop = box.scrollHeight;
     };
@@ -105,5 +101,6 @@ export function setupAllLogsPanel(doc = document) {
         timer = setInterval(() => { if (active && box.offsetParent) draw(); else stop(); }, 2000);
     };
     const hide = () => { active = false; tools.style.display = 'none'; stop(); };
-    return { show, hide, draw, text: () => ALL.textOf(ALL.query(filters())) };
+    return { show, hide, draw, text: () => ALL.textOf(ALL.query(filters())),
+        lastText: () => view?.lastText() || ALL.textOf(ALL.query(filters())) };
 }

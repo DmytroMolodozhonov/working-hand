@@ -1,3 +1,5 @@
+import { renderGames, bindCopy } from './LogGamesView.js';
+
 // Settings → «Журнал»: what the game and its launcher wrote (read through server.py /api/logs),
 // and the «this window is open» line the app launcher watches (it quits when no window is left).
 
@@ -19,13 +21,15 @@ export function setupLogPanel(doc = document, live = null, all = null) {
     const refresh = doc.getElementById('log-refresh');
     const copy = doc.getElementById('log-copy');
     if (!sel || !pre) return null;
+    const copyLast = doc.getElementById('log-copy-last');
     let logs = [];
+    let view = null; // the games of the journal shown (for the copy buttons)
 
     const show = () => {
         if (sel.value === ALL_ITEM && all) { all.show(); return; }
         all?.hide();
         const l = logs.find((x) => x.name === sel.value) || logs[0];
-        pre.textContent = l ? (l.text || '(пока пусто)') : 'Журнал пока пуст.';
+        view = renderGames(doc, pre, l ? (l.text || '(пока пусто)') : 'Журнал пока пуст.');
         pre.scrollTop = pre.scrollHeight;
         // (where the file is: it can be sent as it is)
         if (where) where.textContent = l?.path ? `Файл: ${l.path}` : l ? 'Файла нет — нажмите «Скопировать» и пришлите текст.' : '';
@@ -62,20 +66,9 @@ export function setupLogPanel(doc = document, live = null, all = null) {
     };
     sel.addEventListener('change', show);
     refresh?.addEventListener('click', () => (sel.value === ALL_ITEM && all ? all.draw() : load()));
-    copy?.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(sel.value === ALL_ITEM && all ? all.text() : pre.textContent);
-            copy.textContent = '✅ Скопировано';
-        } catch (e) {
-            const range = doc.createRange();
-            range.selectNodeContents(pre);
-            const s = getSelection();
-            s.removeAllRanges();
-            s.addRange(range);
-            copy.textContent = 'Выделено — нажмите Ctrl+C';
-        }
-        setTimeout(() => { copy.textContent = '📋 Скопировать'; }, 2000);
-    });
+    const isAll = () => sel.value === ALL_ITEM && all;
+    bindCopy(doc, copy, () => (isAll() ? all.text() : view?.allText() || ''));
+    bindCopy(doc, copyLast, () => (isAll() ? all.lastText() : view?.lastText() || ''));
     // loaded when the tab is opened (and again with «Обновить»)
     doc.querySelector('#tab-settings .sub-tab[data-sub="set-log"]')?.addEventListener('click', load);
     doc.querySelector('#tab-settings')?.addEventListener('click', (e) => { if (e.target.closest?.('.sub-tab') && !e.target.closest('[data-sub="set-log"]')) all?.hide(); });
