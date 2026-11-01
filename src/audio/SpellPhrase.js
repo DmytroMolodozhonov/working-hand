@@ -443,10 +443,27 @@ export function strongEase(h) {
     const got = cw.filter((c) => ww.some((w) => lettersLike(w, c))).length;
     return got / cw.length >= 0.6 ? STRONG_CTX_EASE_WORDS : STRONG_CTX_EASE;
 }
+/** The written letters are not like this spell but like another one (its own words). → that other spell, or null. */
+export function lettersOfOther(written, spell, canonical = '') {
+    const fold = (x) => letters(x).replace(/[аеёиоуыэюя]/g, 'а');
+    const w = fold(written);
+    if (w.length < 4 || lettersLike(written, canonical)) return null;
+    const pre = (a, b) => { let k = 0; while (k < a.length && k < b.length && a[k] === b[k]) k++; return k; };
+    const own = pre(w, fold(canonical));
+    // (another fight word the letters begin like — 4+ letters in common, more than with the chosen one)
+    for (const other of BATTLE_SPELLS) {
+        if (other === spell) continue;
+        for (const x of SAID_BY.get(other) || []) if (pre(w, fold(x.phrase)) >= Math.max(4, own + 2)) return other;
+    }
+    return null;
+}
+
 export function soundTrust(h) {
     if (!h?.spell || !Number.isFinite(h.fit)) return null;
     const fit = h.fit;
-    const battle = battleOwn(h, fit);
+    // (the fight's «letters not asked for» never takes a spell whose letters are another spell's: «экспили» is «Экспеллиармус», not
+    //  «Сапира» — the author's journal 13:41: «Сапира» went off from the start of «Экспеллиармус», the real one was then refused)
+    const battle = battleOwn(h, fit) && !lettersOfOther(h.written ?? '', h.spell, h.canonical);
     const like = battle || lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
     if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical, fit)) return 'обычное слово («интересно» и т.п.), а не заклинание';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;

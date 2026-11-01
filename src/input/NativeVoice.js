@@ -165,6 +165,7 @@ function upgradeOf(seg, h, d) {
  * «Overgrown» went off at +0 from the start of «Пентаграниум Инфернум», and the real pentagram then was refused).
  */
 export const PENT_PIECE = /т[еаоэиы]?гр[аеэоя]н|пент[аоеэ]г/;
+export const EXPEL_START = /(^|\s)[эеи]?кс?п/;
 const pentPiece = (t) => PENT_PIECE.test(String(t || '').toLowerCase().replace(/ё/g, 'е'));
 
 function lookAtRows(d, seg, lp, refRows) {
@@ -180,6 +181,8 @@ function lookAtRows(d, seg, lp, refRows) {
     const next = { ...seg };
     let say = null, echo = null;
     if (pentPiece(h.written)) next.pent = true;
+    // («эксп…» still being said is «Экспеллиармус» on its way: no other spell out of it yet — «Сапира» from «экспили», journal 13:41)
+    if (!d.final && h.sure && h.spell.spell !== 'Expelliarmus' && EXPEL_START.test(h.written)) h = { ...h, text: h.written, spell: null, sure: false, echo: false, best: h.spell, early: true };
     // (a pentagram's phrase: only the pentagram itself may come of it — anything else is as if not heard)
     if (next.pent && h.sure && h.spell?.spell !== 'Pentagranium') h = { ...h, text: h.written, spell: null, sure: false, echo: false, best: h.spell, pentWeak: true };
     if (h.sure && h.echo) {

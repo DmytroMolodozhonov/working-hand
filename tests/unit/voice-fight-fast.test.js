@@ -145,3 +145,16 @@ test('«Пентаграниум …» в кусках: из фразы не с�
     // (без куска «пентагран» те же слова — заклинания, как раньше)
     assert.ok(castsOf('инферно').includes('Inferno'), 'одно «инферно» — Инферно');
 });
+
+// Журнал автора 13:41: «экспеллиармус» → сработала «Сапира» (буквами «экспили», запас +0,5), потом настоящее отсеяно.
+import { lettersOfOther } from '../../src/audio/SpellPhrase.js';
+import { EXPEL_START } from '../../src/input/NativeVoice.js';
+test('«экспили», «экспря», «эксплярн», «экспилиармус» — никогда не Сапира', () => {
+    const base = { lips: true, far: 0.3, snr: 24, combat: true, hope: true, spell: 'Sapira', canonical: 'сапира', fit: 0.5 };
+    for (const w of ['экспили', 'экспря', 'эксплярн', 'экспилиармус']) {
+        assert.ok(EXPEL_START.test(w), w);
+        assert.notEqual(soundTrust({ ...base, written: w }), null, `«${w}» дал Сапиру`);
+    }
+    assert.equal(lettersOfOther('эпря', 'Sapira', 'сапира'), null);
+    assert.equal(soundTrust({ ...base, written: 'эпря', fit: 0.3 }), null); // (чужие буквы, но не другого заклинания — бой, губы: моё)
+});
