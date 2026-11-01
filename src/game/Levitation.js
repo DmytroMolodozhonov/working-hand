@@ -317,6 +317,7 @@ export class Levitation {
             this.game.death.liftBody(s.obj); // (the caster's hand carries it; the others see it — Death.onNetMove)
         } else if (s.kind === 'weapon') {
             const w = s.obj;
+            if (isDivine(w)) s.firm = true; // (божественный меч держится, пока держат заклинание: резкий взмах руки его не роняет — жалоба автора «поднялся, а потом заклятие рассеялось»)
             w.hover = null;
             w.attach({ levitate: true, side: null });
             if (this.game.sync) this.game.sync._localGrab(w, 'levitate');
@@ -366,7 +367,7 @@ export class Levitation {
         want.y = Math.max(want.y + 0.3, floorUnder(this.game.collision, want.x, want.z, Math.max(want.y, s.target.y)) + 0.6);
         s.target.lerp(want, 1 - Math.exp(-dt * LEVITATE.FOLLOW));
 
-        if (this._jerked(s, ch)) { this.release(false); return; }
+        if (!s.firm && this._jerked(s, ch)) { this.release(false); return; }
 
         // Rotation follows the wrist: turn / tilt / twist the hand and the object does
         // the same (amplified) — a floating sword can be swung like this

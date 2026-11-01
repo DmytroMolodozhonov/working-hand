@@ -277,7 +277,7 @@ test('звуки и подключение: всё синтезируется з
     assert.match(g.slice(g.indexOf('    explode(')), /this\.diabolos\?\.hitAt\(pos, radius/, 'взрывы');
     assert.match(g, /this\.diabolos\?\.hitRay\(o, d, len, width/, 'лучи (birdRay)');
     assert.match(g, /this\.diabolos\?\.hitRay\(o, d, len, 0\.6, 0, 'Inferno'/, 'Инферно');
-    assert.match(g, /z\.isDiabolos\) \{ this\.diabolos\.hit/, 'оружие и кулаки');
+    assert.match(g, /z\.isDiabolos\) \{ if \(isWeapon && isDivineThing\(weapon\)\) \{ this\.diabolos\.pierce[^\n]*this\.diabolos\.hit/, 'оружие и кулаки (божественный меч — pierce, без «нельзя убить»)');
     assert.match(g, /this\.diabolos\.targets\(\)/, 'клинки ищут его');
     assert.match(g, /best\?\.k === 'Y'/, '«Брейнрот» отказывает');
     assert.match(g, /sampleModels\(\)/, 'прогрев шейдеров');
@@ -679,4 +679,46 @@ test('цель за цепью: идёт до предела цепи (а не �
     for (let i = 0; i < 30 * 40; i++) { g.combat.hp = 100; d.update(1 / 30); path += Math.hypot(d.d.x - px, d.d.z - pz); px = d.d.x; pz = d.d.z; strain = Math.max(strain, d.d.strain); }
     assert.ok(path >= 30, `шёл к краю цепи: ${path.toFixed(0)} м`);
     assert.ok(strain > 0.6, 'дошёл до предела — цепь натянута');
+});
+
+test('тело — не призрак: влёт в брюхо, голову, рога, руку, ногу с 8 сторон на 30 м/с — остановка/скольжение по коже, не внутри и не насквозь; стоит и сидит', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { DEVIL_BODY } = await import('../../src/game/DiabolosBody.js');
+    const me = new THREE.Vector3(0, 1.95, -300);
+    const { g } = fakeGame(me);
+    g.collision.addMover = (m) => { g._mover = m; }; g.collision.removeMover = () => {};
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 0, z: -800 } });
+    for (const sit of [0, 1]) {
+        d.update(0.016);
+        d.d.sit = sit; d.d.mode = sit ? 'sleep' : 'stand'; d._animate(d.d, 0.016); d._bodyStep(d.d, d._players());
+        const B = d.body;
+        assert.ok(B?.on && g._mover === B, 'тело — кусок мира (Collision mover)');
+        const parts = ['belly', 'chest', 'head', 'horn', 'arm', 'fist', 'leg', 'hoof'];
+        for (const part of parts) {
+            const i = DEVIL_BODY.findIndex((e) => e.part === part);
+            const cap = B.capsule(i), tgt = cap.a.clone().lerp(cap.b, 0.5);
+            for (let k = 0; k < 8; k++) {
+                const a = k / 8 * Math.PI * 2, dir = new THREE.Vector3(Math.cos(a), part === 'hoof' ? 0 : -0.25, Math.sin(a)).normalize();
+                const pos = tgt.clone().addScaledVector(dir, -60), prev = pos.clone(), vel = dir.clone().multiplyScalar(30);
+                let touched = false;
+                for (let s = 0; s < 90; s++) {
+                    prev.copy(pos); pos.addScaledVector(vel, 1 / 30);
+                    vel.copy(dir).multiplyScalar(30); // (игрок держит курс прямо в него)
+                    if (d.pushOut(pos, 0.7, pos.y - 2, 3.5, vel.clone(), prev)) touched = true;
+                    assert.ok(!B.pointBlocked(pos.x, pos.y - 0.2, pos.z), `${part} ${k}: не внутри тела`);
+                }
+                assert.ok(touched, `${part} ${k}: упёрся`);
+                // (тонкое — копыто, рог, рука — можно обогнуть, скользя; сквозь — никогда: проверено выше)
+                if (cap.r > 12) assert.ok(pos.clone().sub(tgt).dot(dir) < cap.r + 1, `${part} ${k}: не прошёл насквозь (${pos.clone().sub(tgt).dot(dir).toFixed(1)} м за серединой)`);
+            }
+        }
+        // идёт пешком: упирается боком, как в стену; на копыто — можно встать
+        const hoof = B.capsule(DEVIL_BODY.findIndex((e) => e.part === 'hoof'));
+        const top = B.floorAt(hoof.a.x, hoof.a.z, hoof.a.y + hoof.r + 0.5);
+        assert.ok(top != null && top > hoof.a.y, 'на копыто можно встать');
+    }
+    // своим глазам и шарам его тело не мешает
+    g.collision.lineOfSight = (ax, ay, az, bx, by, bz) => !d.body.pointBlocked(ax, ay, az);
+    assert.notEqual(d._los(g.collision, d.d.x, d.d.y + 100, d.d.z, 0, 0, -300, 1), false, 'видит из своей головы');
 });

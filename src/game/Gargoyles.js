@@ -1208,6 +1208,8 @@ export class Gargoyles {
                     if (o.imp && !o.burn && g.imperius?.step('g', o, dt)) { o.age += dt; if (o.age >= o.life) this._startCrumble(o); o.pitch = o.a.pitch || 0; o.roll = o.a.roll || 0; o.model.rotation.set(o.pitch, o.yaw, o.roll); continue; }
                     this._think(o, dt);
                 }
+                const dvb = g.diabolos?.body; // (Дьяволос — тело: горгульи ада его облетают, не сквозь — DiabolosBody)
+                if (dvb?.on) for (const o of this.list) if (!o.dead && dvb.hasXZ(o.model.position.x, o.model.position.z, 3)) dvb.pushOut(o.model.position, 1.4, o.model.position.y - 1.2, 3);
             }
         } else {
             for (const o of this.list) {

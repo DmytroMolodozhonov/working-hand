@@ -1837,6 +1837,8 @@ export class Dragons {
             }
         }
         for (const d of this.list) { this._breathe(d, dt); this._shadow(d); if (this.auth && (d.imp || d.smashT > 0)) this.smash.update(d, dt); }
+        const dvb = g.diabolos?.body; // (Дьяволос — настоящее тело: дракон и всадник на нём не пролетают сквозь — DiabolosBody)
+        if (dvb?.on) for (const d of this.list) if (!d.dead && dvb.hasXZ(d.model.position.x, d.model.position.z, 6 * d.size)) dvb.pushOut(d.model.position, 2.4 * d.size, d.model.position.y, 4.5 * d.size);
         this._pushMeOut();
         this._updateHands(dt);
         this._bar();

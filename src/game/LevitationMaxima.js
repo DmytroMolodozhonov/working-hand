@@ -547,6 +547,12 @@ export class LevitationMaxima {
             return 'Stop';
         }
         // (the first words were heard as the plain «Левиоса» a moment ago: that was this — undo it)
+        const lifted = g.levitation?.state;
+        if (lifted?.kind === 'weapon' && isDivine(lifted.obj)) { // (божественный меч уже поднят первыми словами «Левиоса…» — не роняем и не поднимаем заново: просто держим)
+            if (early?.name === 'Levitation') g._interimCast = null;
+            this._last = now;
+            return LEV_MAX.NAME;
+        }
         if (early && early.name === 'Levitation' && now - early.at < 3000 && g.levitation?.active) g.levitation.release(true);
         const h = g.builder?._hand?.();
         if (!h) return say('✋ Поднимите руку (или палочку) и направьте её на то, что хотите поднять');
@@ -559,6 +565,7 @@ export class LevitationMaxima {
             if (no) return say(no);
             g.combat?.pay?.(LEV_MAX.NAME);
             this._last = now;
+            if (!isFinal) g._interimCast = { name: LEV_MAX.NAME, at: now }; // (финал той же фразы не должен «сказать ещё раз» — это отпустило бы меч)
             g.hud?.setVoice?.('🪶 <b>Левиоса Максима!</b> Клинок парит у вашей руки. «Атак» — он полетит вперёд; «стоп» — опустится', true);
             return LEV_MAX.NAME;
         }
@@ -572,6 +579,7 @@ export class LevitationMaxima {
             if (!this.swarm.start(h.side, aim.desc.u, g.localId)) return say('🪶 Эту вещь сейчас не поднять');
             g.combat?.pay?.(LEV_MAX.NAME);
             this._last = now;
+            if (!isFinal) g._interimCast = { name: LEV_MAX.NAME, at: now }; // (финал той же фразы не должен «сказать ещё раз» — это отпустило бы меч)
             g._interimCast = isFinal ? null : { name: LEV_MAX.NAME, at: now };
             this.mine = { id: (g.localId || 'h') + ':m' + (++this._seq), side: h.side, players: [], t: 0, kind: 'swarm', emptyT: 0 };
             g.hud?.setVoice?.(`🪶 <b>Левиоса Максима!</b> Вещь послушна. Не говорите заклинание снова — просто указывайте палочкой на другие вещи (до ${SWARM.MAX_ITEMS}), и они пойдут за палочкой. Рукой кругами — вихрь, «Shield» — щит, «Атак» — залп; «стоп» — вещи упадут`, true);

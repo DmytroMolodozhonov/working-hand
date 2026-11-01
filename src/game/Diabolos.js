@@ -24,6 +24,7 @@ import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
 import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, swordSpot, SWORD_SPOT, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, aimArms, JOINTS } from '../entities/DiabolosModel.js';
+import { DevilBody, BODY_TARGETS, segSeg } from './DiabolosBody.js';
 import { DevilFires } from '../fx/DevilFires.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
@@ -37,6 +38,7 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vect
 const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
 const r2 = (x) => Math.round(x * 100) / 100;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+export const SWORD_ID = 'divine-hell'; // (божественный меч у котловины — во всех режимах, один на мир)
 const ID = 'diabolos';
 /**
  * Случайное число 0…1 для его решений (mulberry32 на целом состоянии d.rs; тот же мир — тот же характер). Было «rnd·9301+49297 mod 233280» по
@@ -204,6 +206,7 @@ export class Diabolos {
 
     _unload() {
         const g = this.game;
+        if (this.body) { this.body.on = false; g.collision?.removeMover?.(this.body); this._bodyIn = false; }
         this._proxK = 1; devilFar(1);
         if (this.model) {
             this.one?.set(false); this.one?.dispose?.();
@@ -253,6 +256,7 @@ export class Diabolos {
         if (!this.d) return; // (умер в этот кадр — останки уже на месте)
         if (this._yGuess) { const gy = this._ground(d.x, d.z, NaN); if (Number.isFinite(gy)) { d.y = gy; this._yGuess = false; } } // (пол котловины пришёл от воркеров)
         this._animate(d, dt);
+        this._bodyStep(d, ps);
         this._farProxy(d);
         this._balls(dt);
         if (this.held) this._holdStep(dt);
@@ -356,7 +360,7 @@ export class Diabolos {
         d.losT -= dt;
         if (d.losT <= 0) {
             d.losT = 0.5;
-            const los = this.game.collision?.lineOfSight?.(d.x, d.y + 40, d.z, tgt.p.x, tgt.p.y, tgt.p.z, 1);
+            const los = this._los(this.game.collision, d.x, d.y + 40, d.z, tgt.p.x, tgt.p.y, tgt.p.z, 1);
             d.hidden = los === false;
             if (!d.hidden) d.lastSeen = { x: tgt.p.x, z: tgt.p.z };
         }
@@ -861,7 +865,7 @@ export class Diabolos {
                 if (b.trail <= 0 && fx?.smoke) { b.trail = 0.07; fx.smoke.spawn(b.p.x, b.p.y, b.p.z, 0, 0.6, 0, 0x3a2a22, 1.6, 1.1, { shrink: -1 }); }
                 let hit = b.t > BALL.LIFE || b.p.y < this._ground(b.p.x, b.p.z, -1e9) + b.r * 0.6;
                 const coll = g.collision;
-                if (!hit && coll?.lineOfSight && coll.lineOfSight(_v.x, _v.y, _v.z, b.p.x, b.p.y, b.p.z, 0.5) === false) hit = true;
+                if (!hit && this._los(coll, _v.x, _v.y, _v.z, b.p.x, b.p.y, b.p.z, 0.5) === false) hit = true;
                 if (!hit) for (const q of this._players()) { _w.set(q.p.x, q.p.y - 0.8, q.p.z); if (_w.distanceTo(b.p) < b.r + 1.4) { hit = true; break; } }
                 if (hit) this._rockLand(b);
                 continue;
@@ -876,7 +880,7 @@ export class Diabolos {
             // во что попал: стена (блоки), земля, игрок — взрыв
             let hit = b.t > BALL.LIFE;
             const coll = g.collision;
-            if (!hit && coll?.lineOfSight && coll.lineOfSight(_v.x, _v.y, _v.z, b.p.x, b.p.y, b.p.z, 0.5) === false) hit = true;
+            if (!hit && this._los(coll, _v.x, _v.y, _v.z, b.p.x, b.p.y, b.p.z, 0.5) === false) hit = true;
             if (!hit && b.p.y < this._ground(b.p.x, b.p.z, -1e9) + 0.5) hit = true;
             if (!hit) for (const q of this._players()) { _w.set(q.p.x, q.p.y - 0.8, q.p.z); if (_w.distanceTo(b.p) < BALL.R + 1.2) { hit = true; break; } }
             if (hit && (b.mine || !this.auth)) this._explodeBall(b, true);
@@ -1114,8 +1118,9 @@ export class Diabolos {
 
     _struck(spell, by, dmg = 0) {
         const d = this.d, g = this.game;
-        if (!d) return;
+        if (!d || d.dying || this.everDead) return; // (уже умирает от божественного меча: никаких «его нельзя убить» — жалоба автора)
         if (by === 'local') by = g.localId;
+        if (/^divine/i.test(String(spell || '')) || d.t - (this._piercedAt ?? -99) < 3) return; // (сам меч — только pierce; гость ждёт ответа хоста)
         const v = devilVerdict(spell);
         const now = d.t;
         if (by === g.localId && (now - (this._told.get(spell) ?? -99)) > 10) {
@@ -1161,6 +1166,54 @@ export class Diabolos {
     _centre(out) { const d = this.d; return out.set(d.x, d.y + (d.sit > 0.5 ? 1.3 : 2.0) * DEVIL.SCALE, d.z); }
 
     // ================================================================ вид
+    /** Тело для коллизий (DiabolosBody): капсулы по позе — только когда рядом кто-то есть; кусок мира (Collision mover), пока жив и не осыпался. */
+    _bodyStep(d, ps) {
+        const g = this.game;
+        let near = Infinity;
+        for (const q of ps) near = Math.min(near, Math.hypot(q.p.x - d.x, q.p.z - d.z));
+        const alive = this.model && !(d.dying && d.dying.t > 15.5); // (осыпался в пепел — тела нет)
+        if (!alive || near > 420) { if (this.body?.on) this.body.on = false; return; }
+        if (!this.body) this.body = new DevilBody(DEVIL.SCALE);
+        if (!this._bodyIn) { g.collision?.addMover?.(this.body); this._bodyIn = true; }
+        this.body.paused = !!this.held; // (я у него в кулаке: кулак — не стена, меня из него не выталкивает)
+        this.body.update(this.model);
+    }
+    /** Видно ли по прямой — его собственным глазам/шарам его тело не мешает (тело — кусок мира для всех остальных). */
+    _los(coll, ax, ay, az, bx, by, bz, step) {
+        if (!coll?.lineOfSight) return undefined;
+        const B = this.body, was = B?.paused;
+        if (B) B.paused = true;
+        try { return coll.lineOfSight(ax, ay, az, bx, by, bz, step); } finally { if (B) B.paused = was; }
+    }
+    /** Тело `pos` (ноги feet, высота h, радиус rad) вне его кожи и вне цепи; `vel` — гасится скорость в него (скольжение), `from` — прошлое место (быстрый полёт). */
+    pushOut(pos, rad, feet, h, vel = null, from = null) {
+        if (!this.d || this.held) return false;
+        let hit = !!this.body?.on && this.body.pushOut(pos, rad, feet, h, vel, from);
+        if (this._chainPush(pos, rad, feet ?? pos.y, h, vel)) hit = true;
+        return hit;
+    }
+    /** Цепь не проходится: звенья (Ø ≈ 2 м) мягко отталкивают — половина глубины за кадр. */
+    _chainPush(pos, rad, feet, h, vel) {
+        const R = this.rope, d = this.d;
+        if (!R?.ready || !this.chainMesh || !d) return false;
+        if (Math.hypot(pos.x - d.anchor.x, pos.z - d.anchor.z) > R.n * R.pitch + 10) return false;
+        const o = this._co || (this._co = {}), r = 1.05 + rad, P = R.p;
+        let hit = false;
+        for (let i = 0; i < R.n; i++) {
+            const a = i * 3, b = a + 3;
+            if (Math.abs(P[a] - pos.x) > 6 || Math.abs(P[a + 2] - pos.z) > 6) continue;
+            const d2 = segSeg(pos.x, feet + rad, pos.z, pos.x, feet + Math.max(h - rad, rad), pos.z, P[a], P[a + 1], P[a + 2], P[b], P[b + 1], P[b + 2], o);
+            if (d2 >= r * r) continue;
+            let nx = o.x1 - o.x2, nz = o.z1 - o.z2;
+            const L = Math.hypot(nx, nz) || 1; nx /= L; nz /= L;
+            const dy = o.y1 - o.y2, need = Math.sqrt(Math.max(0, r * r - dy * dy)) - L;
+            if (need <= 0) continue;
+            pos.x += nx * need * 0.5; pos.z += nz * need * 0.5;
+            if (vel) { const vn = vel.x * nx + vel.z * nz; if (vn < 0) { vel.x -= vn * nx; vel.z -= vn * nz; } }
+            hit = true;
+        }
+        return hit;
+    }
     _animate(d, dt) {
         const want = d.mode === 'sleep' ? 1 : 0;
         d.sleep += (want - d.sleep) * Math.min(1, dt * (want ? 0.4 : 1.6));
@@ -1469,6 +1522,7 @@ export class Diabolos {
         const d = this.d, g = this.game;
         if (!d || d.dying || this.everDead || !point) return false;
         if (by === 'local') by = g.localId;
+        this._piercedAt = d.t;
         if (!this.auth) { g.sync?.diabolos?.({ e: 'pierce', p: [r2(point.x), r2(point.y), r2(point.z)], by, via }); return true; }
         this._note(`😈 Дьяволос: решение — пронзён божественным мечом (${via === 'swarm' ? 'залпом' : 'в руке'}) — умирает`);
         this._startDying(d, point, by, 0);
@@ -1597,29 +1651,31 @@ export class Diabolos {
     /** Божественный меч Творческого, пока лежит на земле (не в руке, не в сумке): {x, z} — для миникарты (HellGate.mapMarks). */
     swordMark() {
         const g = this.game;
-        if (g.config?.mode !== 'creative') return null;
-        const w = (g.weapons?.weapons || []).find((x) => x.id === 'divine-creative');
+        const w = (g.weapons?.weapons || []).find((x) => x.id === SWORD_ID || x.id === 'divine-creative');
         if (!w || w.holder || !w.position || w.removed) return null;
         return w.position;
     }
     /** Творческий: божественный меч на ступенчатом постаменте у края котловины (swordSpot) — с дороги видно, «Левиоса Максима» + «Атак» долетают. */
     _swordRoad() { const s = this.site, sp = this.game.terrain?.data?.hellPlan?.spawn; return sp ? Math.atan2(sp.z - (s.cz ?? s.z), sp.x - (s.cx ?? s.x)) : Math.atan2(s.z - s.anchor.z, s.x - s.anchor.x); }
+    // (слова автора: «место такое, что туда хрен попадёшь, пусть валяется» — меч лежит здесь в ЛЮБОМ режиме; вне Творческого — один раз на мир:
+    //  подняли, унесли, пропал — второй не появляется (`swordPlaced` в сохранении); в Творческом — раз за игру)
     _creativeSword() {
         const g = this.game, s = this.site;
-        if (g.config?.mode !== 'creative') return;
         const P = swordSpot(s, this._swordRoad());
         const floor = s.y != null ? s.y + 1 : this._ground(P.x, P.z, 0);
         this._pedestal(P, floor);
         if (this._swordGiven || !this.auth) return;
-        if ((g.weapons?.weapons || []).some((w) => w.id === 'divine-creative')) { this._swordGiven = true; return; }
-        try { makeDivineSword(g, P.x, floor + P.h + 0.3, P.z, { id: 'divine-creative', hover: false, yaw: P.yaw }); this._swordGiven = true; } catch (e) { console.warn('divine sword', e); }
+        const creative = g.config?.mode === 'creative' || g.config?.mode === 'test';
+        if ((g.weapons?.weapons || []).some((w) => w.id === SWORD_ID || w.id === 'divine-creative')) { this._swordGiven = true; this.swordPlaced = true; return; }
+        if (this.swordPlaced && !creative) { this._swordGiven = true; return; }
+        try { if (makeDivineSword(g, P.x, floor + P.h + 0.3, P.z, { id: SWORD_ID, hover: false, yaw: P.yaw })) { this._swordGiven = true; this.swordPlaced = true; this._note('😈 божественный меч лежит на постаменте у котловины'); } } catch (e) { console.warn('divine sword', e); }
     }
     /** Постамент: три ступени по 1 м (герой шагает), чёрный камень с золотыми кромками; у каждой ступени — коллизия. */
     _pedestal(P, floor) {
         const g = this.game;
         if (this._ped) return;
         const m = new THREE.Mesh(pedestalGeo(), pedestalMat());
-        m.position.set(P.x, floor, P.z); m.rotation.y = P.yaw; m.castShadow = true; m.receiveShadow = true; m.name = 'diabolos-sword-pedestal';
+        m.position.set(P.x, floor, P.z); // (без поворота: коллизия ступеней — коробки по осям мира, вид совпадает с ними) m.castShadow = true; m.receiveShadow = true; m.name = 'diabolos-sword-pedestal';
         g.scene?.add(m);
         const boxes = [];
         let y = floor;
@@ -1701,8 +1757,8 @@ export class Diabolos {
     }
 
     // ================================================================ сохранение
-    snapshot() { return { woke: !!this.everWoke, ...(this.everDead ? { dead: true } : {}) }; }
-    restore(s) { this.everWoke = !!s?.woke; this.everDead = !!s?.dead; } // (после загрузки он спит: обиды не сохраняются; убит — навсегда)
+    snapshot() { return { woke: !!this.everWoke, ...(this.everDead ? { dead: true } : {}), ...(this.swordPlaced ? { sw: true } : {}) }; }
+    restore(s) { this.everWoke = !!s?.woke; this.everDead = !!s?.dead; this.swordPlaced = !!s?.sw; } // (после загрузки он спит: обиды не сохраняются; убит — навсегда)
 
     /** Образцы для прогрева шейдеров (Game.prewarm): модель на FarShape, звено, якорь, шар. */
     sampleModels() {
@@ -1839,7 +1895,8 @@ function pedestalGeo() {
             parts.push({ geo: tint(new THREE.BoxGeometry(rx ? 0.12 : w + 0.1, 0.12, rx ? w + 0.1 : 0.12), gold), pos: [sx, y + h - 0.02, sz] });
         y += h;
     }
-    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + Math.PI / 4; parts.push({ geo: tint(new THREE.CylinderGeometry(0.22, 0.3, 1.4, 6), gold), pos: [Math.cos(a) * 2.2, y + 0.7, Math.sin(a) * 2.2] }); } // (четыре золотых столбика по углам верха)
+    const topW = SWORD_SPOT.TIERS[SWORD_SPOT.TIERS.length - 1][0];
+    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + Math.PI / 4; parts.push({ geo: tint(new THREE.CylinderGeometry(0.3, 0.42, 2, 6), gold), pos: [Math.cos(a) * topW * 0.44, y + 1, Math.sin(a) * topW * 0.44] }); } // (четыре золотых столбика по углам верха)
     _pedGeo = mergeParts(parts);
     _pedGeo.userData.keep = true;
     return _pedGeo;

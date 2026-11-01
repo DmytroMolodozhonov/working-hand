@@ -1113,7 +1113,7 @@ export class Game {
         if (z.isBoss) { this.spiders.hit(z, dmg, 'melee'); return; }
         if (z.isIce) { this.iceCastle.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (the Ice Castle's creatures: IceQueen.iceDamage)
         if (z.isPhoenix) { this.phoenixes.hit(z, dmg, isWeapon ? 'melee' : 'punch', this.localId); return; }
-        if (z.isDiabolos) { this.diabolos.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (Дьяволос: оружие только царапает — убить нельзя, DEVIL_VS.weapon)
+        if (z.isDiabolos) { if (isWeapon && isDivineThing(weapon)) { this.diabolos.pierce(weapon.getTipPosition?.(new THREE.Vector3()) || weapon.position, this.localId, { via: weapon.holder ? 'hand' : 'swarm' }); return; } this.diabolos.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (божественный меч — только смерть, без «нельзя убить») // (Дьяволос: оружие только царапает — убить нельзя, DEVIL_VS.weapon)
         if (z.isGargoyle) { this.gargoyles.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (stone: a blow hurts it, a fist less — GargoyleRules.TARGETS)
         if (z.isPlant) { this.plants.hit(z.plant, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a telewilpin / a carnivorous head: a blade hurts, a fist hardly — PlantLife.plantDamage)
         if (z.isCustom) { this.customCreatures.hit(z, dmg, isWeapon ? 'melee' : 'fist', this.localId); return; } // (a creature of one's own: CustomCreatures.hit)
@@ -4302,6 +4302,19 @@ export class Game {
             ch.roofNeed = this._roofNeed(ch.group.position); // (rock right over the head: the body stays low under it)
         } else ch.roofNeed = 0;
         this._keepInsideMap(ch.group.position);
+        // Дьяволос — настоящее тело (DiabolosBody): ни идя, ни летя (до 30 м/с и быстрее) сквозь него не пройти — выталкивает вдоль кожи, скользишь; цепь тоже
+        const dvb = this.diabolos?.body;
+        if (dvb?.on && !this.isDeadLocal) {
+            const P = ch.group.position, prev = this._dvPrev || (this._dvPrev = P.clone());
+            const v = this._dvVel || (this._dvVel = new THREE.Vector3());
+            v.set(0, ch.verticalVelocity || 0, 0);
+            const S = ch.size || 1;
+            if (this.diabolos.pushOut(P, PLAYER_RADIUS * S, this._feetY(P), (ch.bodyHeight?.() ?? BODY_H), v, P.distanceToSquared(prev) < 3600 ? prev : null)) {
+                if (ch.verticalVelocity != null) ch.verticalVelocity = v.y;
+                if (flight.active) flight.speed *= 0.9; // (трение о кожу)
+            }
+            prev.copy(P);
+        } else if (this._dvPrev) this._dvPrev.copy(ch.group.position);
         // a house's sphere of protection: only its owner and the ones let in come through (HouseWards.js)
         if (this.wards?.list.size && !this.isDeadLocal) this.wards.keepOut(ch.group.position, ch.group.position.y - PLAYER_GROUND_OFFSET, 3.5, dt);
         // Other players are solid: stopped here already, before the things in my hands are put
