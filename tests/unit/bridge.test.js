@@ -140,10 +140,13 @@ test('the material is what is around: stone, sandstone, snow, ice, planks, castl
     assert.equal(M(BLOCK.PLANKS, BLOCK.PLANKS).near, BLOCK.PLANKS);
     assert.equal(M(BLOCK.COBBLE, BLOCK.GRASS).far, BLOCK.COBBLE); // (the wall at one end, grass at the other: the wall's)
     assert.equal(M(BLOCK.GRASS, BLOCK.CS_WHITE).near, BLOCK.CS_WHITE);
-    // grass at both ends: stone if stone is about, planks only if planks / logs are, else earth
-    assert.equal(M(BLOCK.GRASS, BLOCK.DIRT, [BLOCK.GRASS, BLOCK.STONE, BLOCK.STONE, BLOCK.GRASS]).near, BLOCK.STONE);
-    assert.equal(M(BLOCK.GRASS, BLOCK.GRASS, [BLOCK.GRASS, BLOCK.PLANKS, BLOCK.WOOD, BLOCK.WOOD]).near, BLOCK.PLANKS);
-    assert.equal(M(BLOCK.GRASS, BLOCK.GRASS, [BLOCK.GRASS, BLOCK.GRASS, BLOCK.LEAVES, BLOCK.LEAVES]).near, BLOCK.DIRT);
+    // grass at the ends (the author: «трава рядом — мост из земли-травы, не из дерева»): the ground itself, whatever stands about (stone, planks, logs)
+    assert.equal(M(BLOCK.GRASS, BLOCK.DIRT, [BLOCK.GRASS, BLOCK.STONE, BLOCK.STONE, BLOCK.GRASS]).near, BLOCK.GRASS);
+    assert.equal(M(BLOCK.GRASS, BLOCK.GRASS, [BLOCK.GRASS, BLOCK.PLANKS, BLOCK.WOOD, BLOCK.WOOD]).near, BLOCK.GRASS);
+    assert.equal(M(BLOCK.GRASS, BLOCK.GRASS, [BLOCK.GRASS, BLOCK.GRASS, BLOCK.LEAVES, BLOCK.LEAVES]).far, BLOCK.GRASS);
+    assert.equal(M(BLOCK.DIRT, BLOCK.DIRT, [BLOCK.WOOD, BLOCK.WOOD]).near, BLOCK.DIRT);
+    // trunks about never decide a bridge's material (air/water ends: planks only from real planks)
+    assert.equal(M(BLOCK.AIR, BLOCK.WATER, [BLOCK.WOOD, BLOCK.WOOD, BLOCK.BIRCH]).near, BLOCK.STONE);
     // nothing fit round the hero (air, water, leaves): stone; over water at both ends: what is around
     assert.equal(M(BLOCK.AIR, BLOCK.WATER, []).near, BLOCK.STONE);
     assert.equal(M(BLOCK.WATER, BLOCK.AIR, [BLOCK.SNOW, BLOCK.SNOW]).far, BLOCK.SNOW);

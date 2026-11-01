@@ -87,6 +87,7 @@ export const BRIDGE_TARGETS = {
  * god's gift (the bridge only lays; it never copies what no spell makes).
  */
 export const EARTH = -1;
+const TRUNKS = new Set(['WOOD', 'BIRCH', 'SPRUCE', 'CHERRY', 'DARK'].map((k) => BLOCK[k]).filter((v) => v != null)); // (trunks: planks only where the wood is the bridge's own end)
 export const BRIDGE_MATERIAL_OF = (() => {
     const B = BLOCK, m = {};
     const put = (list, to) => { for (const k of list) if (B[k] != null) m[B[k]] = to ?? B[k]; };
@@ -112,9 +113,16 @@ export function bridgeMaterials(nearB, farB, around = []) {
     const pick = (b) => { const v = BRIDGE_MATERIAL_OF[b]; return v === undefined || v === EARTH ? null : v; };
     const nm = pick(nearB), fm = pick(farB);
     let a = null;
+    // (the author: «трава рядом — мост из ЗЕМЛИ-ТРАВЫ, не из дерева»): both ends are no fit and one of them is ground → the ground itself;
+    // the trees about (trunks) never decide what a bridge over grass is made of
+    if (nm == null && fm == null) {
+        const earthOf = (b) => (BRIDGE_MATERIAL_OF[b] === EARTH ? (b === BLOCK.DIRT || b === BLOCK.FARMLAND || b === BLOCK.PATH ? BLOCK.DIRT : b) : null);
+        const e = earthOf(nearB) ?? earthOf(farB);
+        if (e != null) return { near: e, far: e };
+    }
     if (nm == null || fm == null) {
         const n = new Map(); let earth = 0;
-        for (const b of around) { const v = BRIDGE_MATERIAL_OF[b]; if (v === undefined) continue; if (v === EARTH) earth++; else n.set(v, (n.get(v) || 0) + 1); }
+        for (const b of around) { const v = BRIDGE_MATERIAL_OF[b]; if (v === undefined || TRUNKS.has(b)) continue; if (v === EARTH) earth++; else n.set(v, (n.get(v) || 0) + 1); }
         let best = 0;
         for (const [v, c] of n) if (c > best) { best = c; a = v; }
         if (a == null) a = earth || BRIDGE_MATERIAL_OF[nearB] === EARTH || BRIDGE_MATERIAL_OF[farB] === EARTH ? BLOCK.DIRT : BLOCK.STONE;
