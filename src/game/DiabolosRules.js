@@ -510,3 +510,16 @@ export function seatFrom(plan) {
     }
     return { x, z, r, y: Number.isFinite(s.y) ? s.y : null, cx: s.x, cz: s.z, anchor, len, small: r > 0 && r < DEVIL.SEAT_MIN_R };
 }
+
+/**
+ * Место божественного меча в Творческом (автор: «слишком близко, внизу ямы — чуть дальше, на горке, со стороны дороги; оттуда
+ * «Левиоса Максима» + «Атак» должны долететь»): у края котловины (r = 0,98 её радиуса), в стороне от дороги прибытия на SWORD_ANG
+ * (не на самой дороге), на ступенчатом постаменте; от его места 50–75 м. site — seatFrom, road — угол на дорогу от середины.
+ */
+export const SWORD_SPOT = { R_K: 0.98, ANG: 0.5, TIERS: [[9, 1], [7, 1], [5, 1]] }; // (ступени: ширина, высота — по 1 м: герой шагает)
+export function swordSpot(site, road) {
+    const cx = site.cx ?? site.x, cz = site.cz ?? site.z, R = Math.max(40, (site.r || 90) * SWORD_SPOT.R_K);
+    const a = road + SWORD_SPOT.ANG;
+    const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+    return { x, z, yaw: Math.atan2(-(cx - x), -(cz - z)), seat: Math.hypot(x - site.x, z - site.z), h: SWORD_SPOT.TIERS.reduce((s, t) => s + t[1], 0) };
+}

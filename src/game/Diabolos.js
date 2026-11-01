@@ -18,9 +18,10 @@
  */
 
 import * as THREE from 'three';
+import { mergeParts } from '../core/MergeGeometry.js';
 import { GRAB, STUN, DEATH, godStrike, rageTempo, grabPhase, deathPhase } from './DiabolosRules.js';
 import { TALK, LINES, SITS, CAT_TALK, pickLine } from './DiabolosTalk.js';
-import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, devilVerdict, furyAfter,
+import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wakes, planMove, DIRECTOR, swordSpot, SWORD_SPOT, devilVerdict, furyAfter,
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, aimArms, JOINTS } from '../entities/DiabolosModel.js';
 import { DevilFires } from '../fx/DevilFires.js';
@@ -37,10 +38,20 @@ const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sph
 const r2 = (x) => Math.round(x * 100) / 100;
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const ID = 'diabolos';
+/**
+ * Случайное число 0…1 для его решений (mulberry32 на целом состоянии d.rs; тот же мир — тот же характер). Было «rnd·9301+49297 mod 233280» по
+ * ДРОБИ: деление на 233280 без переполнения сходится к 0,2201 — через пару шагов он всегда выбирал одно и то же (ход, поступок, точку прогулки).
+ */
+function devilRand(d) {
+    let s = (d.rs = ((d.rs ?? Math.floor(d.seed * 2654435761)) + 0x6D2B79F5) | 0);
+    s = Math.imul(s ^ (s >>> 15), s | 1);
+    s ^= s + Math.imul(s ^ (s >>> 7), s | 61);
+    return ((s ^ (s >>> 14)) >>> 0) / 4294967296;
+}
 const ROCKS_MAX = 10;    // глыб пинка в воздухе одновременно
 const ROCK_R = 2.3;      // м — радиус глыбы (масштаб формы)
 const NET_DT = 0.2;
-const DEVIL_VOICE = { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, over: true }; // (бас: роль devil — VoiceCast)      // с между строками состояния хоста
+const DEVIL_VOICE = { voiceKey: 'diabolos', role: 'devil', female: false, volume: 1, over: true }; // (автор: голос на 30 % громче — Speech.ROLE_BOOST.devil, через мягкий ограничитель, без хрипа; подписи на экране нет — только голос, текст — в журнал) // (бас: роль devil — VoiceCast)      // с между строками состояния хоста
 const SEEN_R = 4000;     // м: в аду ближе этого — загружен (виден с плато прибытия и издали; ад теперь без края — дальше не держим)
 const PROXY_D = 640;     // м: дальше от камеры — рисуется ближе и меньше в ту же сторону (тот же угол; дальняя плоскость камеры 1000 м)
 const POSE_FAR = 420;    // м: дальше — поза реже
@@ -71,6 +82,10 @@ export class Diabolos {
     }
     /** Убит навсегда (божественный меч перестаёт спрашивать — DivineSword). */
     get dead() { return this.everDead; }
+    /** Где он (ноги) — для поиска целей (Levitation.attack: божественный меч ищет его). Нет в мире — null. */
+    get position() { const d = this.d; return d && !d.dying ? (this._pos || (this._pos = new THREE.Vector3())).set(d.x, d.y, d.z) : null; }
+    /** Куда лететь брошенному в него: середина брюха (меч летит прямо и вонзается — bladeHit по его пути). */
+    aimPoint() { const d = this.d; if (!d || d.dying) return null; return (this._aim || (this._aim = new THREE.Vector3())).set(d.x, d.y + (d.sit > 0.5 ? 1.0 : 1.55) * DEVIL.SCALE, d.z); }
 
     get auth() { return this.game.authority !== false; }
     /** Существо для поиска целей (заряды, удары): пока загружен. */
@@ -198,6 +213,7 @@ export class Diabolos {
         if (this.chainMesh) { g.scene?.remove(this.chainMesh); this.chainMesh.dispose?.(); this.chainMesh = null; }
         if (this.chainGlow) { g.scene?.remove(this.chainGlow); this.chainGlow = null; }
         this.fires?.dispose(); devilFireLight(0);
+        if (this._ped) { g.scene?.remove(this._ped.m); for (const id of this._ped.boxes) if (id != null) g.collision?.removeBox?.(id); this._ped = null; }
         if (this.anchor) { g.scene?.remove(this.anchor); this.anchor = null; }
         this._dropChests();
         this._remains = false;
@@ -309,12 +325,25 @@ export class Diabolos {
         if (d.move) { this._moveTick(d, dt, tgt); return; }
         if (d.act) { this._walk(d, 0, null); return; } // (пока поступок — стоит; удар подождёт)
         if (!tgt) {
+            // бодрствует, а цели нет (разбудили шумом, цель ушла/спряталась): 40–90 с гуляет по котловине на своей цепи, останавливается,
+            // оглядывается, нюхает воздух — потом возвращается и садится (автор: «даже не потревоженный, но бодрствующий — гулять»)
             d.lostT += dt;
-            if (d.lostT > DEVIL.LOSE_T || !d.grudge.size) { this._goBack(d, dt); return; }
-            this._walk(d, dt, null);
-            if (d.actNext <= 0) this._act(d, 'idle'); // (потерял — нюхает воздух, осматривается)
+            if (d.lostT > 40 + (d.seed % 51)) { this._goBack(d, dt); return; }
+            if (d.mode === 'back') this._setMode(d, 'walk');
+            d.strollT = (d.strollT || 0) + dt;
+            if (!d.stroll || d.strollT > 18 || Math.hypot(d.stroll.x - d.x, d.stroll.z - d.z) < 9) {
+                const first = !d.stroll;
+                d.rnd = devilRand(d);
+                const a = d.rnd * Math.PI * 2, r = DEVIL.PILLAR_R + DEVIL.RADIUS + 8 + ((d.rnd * 7.31) % 1) * Math.max(10, this.site.len * 0.8 - DEVIL.PILLAR_R - DEVIL.RADIUS - 8);
+                d.stroll = { x: d.anchor.x + Math.cos(a) * r, z: d.anchor.z + Math.sin(a) * r };
+                d.strollT = 0;
+                if (!first && this._act(d, 'idle', true, ['lookAround', 'sniffAir', 'scratchHorn', 'chainPull', 'stretch'][Math.floor(d.rnd * 5) % 5])) return;
+                this._note('😈 Дьяволос: решение — гуляет по котловине');
+            }
+            this._walk(d, dt, d.stroll);
             return;
         }
+        d.stroll = null;
         d.lostT = 0;
         const dist = Math.hypot(tgt.p.x - d.x, tgt.p.z - d.z);
         // цель за цепью? (копыто не дойдёт до неё — она дальше предела от якоря + досягаемость)
@@ -342,7 +371,7 @@ export class Diabolos {
             } else { this._walk(d, dt, to); return; }
         }
         const plan = planMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest, cd: d.cd, air: tgt.feet - d.y > 30, high: tgt.feet - d.y > 110,
-            hidden: d.hidden && !!d.lastSeen, recent: d.recent, walkShare: d.walkShare, fury: d.fury, rage: d.rage, lastAct: d.lastAct }, () => { d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280; return d.rnd; });
+            hidden: d.hidden && !!d.lastSeen, recent: d.recent, walkShare: d.walkShare, fury: d.fury, rage: d.rage, lastAct: d.lastAct }, () => { d.rnd = devilRand(d); return d.rnd; });
         // подначки в бою без повода (и мушке в воздухе)
         d.talkIdle = (d.talkIdle ?? TALK.IDLE_EVERY[0]) - dt;
         if (d.talkIdle <= 0) { d.talkIdle = TALK.IDLE_EVERY[0] + d.rnd * (TALK.IDLE_EVERY[1] - TALK.IDLE_EVERY[0]); this._say(tgt.feet - d.y > 30 ? 'fly' : 'idle'); }
@@ -365,7 +394,7 @@ export class Diabolos {
         if (!urgent && now - this._talkT < TALK.GAP) return;
         if (urgent && now - this._talkT < 1.2) return; // (не перебивает сам себя на полуслове)
         const last = this._lines.get(sit) || [];
-        d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280;
+        d.rnd = devilRand(d);
         const i = pickLine(sit, d.rnd, last);
         if (i < 0) return;
         last.unshift(i); if (last.length > Math.max(1, LINES[sit].length - 1)) last.length = Math.max(1, LINES[sit].length - 1);
@@ -397,7 +426,6 @@ export class Diabolos {
         if (!d || !text) return;
         const me = g.character?.group?.position;
         if (!me || Math.hypot(me.x - d.x, me.z - d.z) > TALK.HEAR_R) return;
-        g.hud?.setVoice?.(`😈 Дьяволос: «${text}»`, true);
         const talk = g.castleLife?.talk;
         if (talk?.voiceOn && talk.speech?.supported) { if (!talk.speech.neural?.ready) talk.speech.preload?.(); talk.speech.say(text, { ...DEVIL_VOICE, shout: /!$/.test(text) }); } // (игрок говорит заклинание — реплика ждёт, пока он договорит: не мешает распознаванию)
         this._note(`😈 Дьяволос говорит: «${text}»`);
@@ -1024,7 +1052,7 @@ export class Diabolos {
     _act(d, sit, force = false, id = null) {
         if (!d || d.move) return false;
         if (!force && d.actNext > 0) return false;
-        d.rnd = (d.rnd * 9301 + 49297) % 233280 / 233280; // (детерминированный выбор: тот же мир — тот же характер)
+        d.rnd = devilRand(d); // (детерминированный выбор: тот же мир — тот же характер)
         const pick = id || pickAct(sit, d.rnd, d.lastAct);
         if (!pick) return false;
         d.act = { id: pick, t: 0, snd: 0, fx: 0 };
@@ -1573,13 +1601,29 @@ export class Diabolos {
         if (!w || w.holder || !w.position || w.removed) return null;
         return w.position;
     }
+    /** Творческий: божественный меч на ступенчатом постаменте у края котловины (swordSpot) — с дороги видно, «Левиоса Максима» + «Атак» долетают. */
+    _swordRoad() { const s = this.site, sp = this.game.terrain?.data?.hellPlan?.spawn; return sp ? Math.atan2(sp.z - (s.cz ?? s.z), sp.x - (s.cx ?? s.x)) : Math.atan2(s.z - s.anchor.z, s.x - s.anchor.x); }
     _creativeSword() {
         const g = this.game, s = this.site;
-        if (this._swordGiven || g.config?.mode !== 'creative' || !this.auth) return;
+        if (g.config?.mode !== 'creative') return;
+        const P = swordSpot(s, this._swordRoad());
+        const floor = s.y != null ? s.y + 1 : this._ground(P.x, P.z, 0);
+        this._pedestal(P, floor);
+        if (this._swordGiven || !this.auth) return;
         if ((g.weapons?.weapons || []).some((w) => w.id === 'divine-creative')) { this._swordGiven = true; return; }
-        const a = Math.atan2(s.x - s.anchor.x, s.z - s.anchor.z) + Math.PI / 2;
-        const x = s.x + Math.sin(a) * 25, z = s.z + Math.cos(a) * 25;
-        try { makeDivineSword(g, x, this._ground(x, z, s.y ?? 0) + 0.3, z, { id: 'divine-creative', hover: false, yaw: a }); this._swordGiven = true; } catch (e) { console.warn('divine sword', e); }
+        try { makeDivineSword(g, P.x, floor + P.h + 0.3, P.z, { id: 'divine-creative', hover: false, yaw: P.yaw }); this._swordGiven = true; } catch (e) { console.warn('divine sword', e); }
+    }
+    /** Постамент: три ступени по 1 м (герой шагает), чёрный камень с золотыми кромками; у каждой ступени — коллизия. */
+    _pedestal(P, floor) {
+        const g = this.game;
+        if (this._ped) return;
+        const m = new THREE.Mesh(pedestalGeo(), pedestalMat());
+        m.position.set(P.x, floor, P.z); m.rotation.y = P.yaw; m.castShadow = true; m.receiveShadow = true; m.name = 'diabolos-sword-pedestal';
+        g.scene?.add(m);
+        const boxes = [];
+        let y = floor;
+        for (const [w, h] of SWORD_SPOT.TIERS) { boxes.push(g.collision?.addBox?.({ minX: P.x - w / 2, maxX: P.x + w / 2, minY: y, maxY: y + h, minZ: P.z - w / 2, maxZ: P.z + w / 2, kind: 'pedestal' })); y += h; }
+        this._ped = { m, boxes };
     }
 
     // ================================================================ сеть
@@ -1665,7 +1709,7 @@ export class Diabolos {
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
         const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), 2);
-        return [m, c, cg, ...DevilFires.samples(), anchorModel(), ballModel(), rockModel()];
+        return [m, c, cg, new THREE.Mesh(pedestalGeo(), pedestalMat()), ...DevilFires.samples(), anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {
@@ -1778,3 +1822,30 @@ totalEmissiveRadiance += vec3(1.0, 0.35, 0.05) * rC * 0.9;`);
     return m;
 }
 
+
+// ------------------------------------------------------------------ постамент божественного меча (Творческий)
+let _pedGeo = null, _pedMat = null;
+function pedestalGeo() {
+    if (_pedGeo) return _pedGeo;
+    const parts = [];
+    const stone = (x, y, z) => { const n = Math.abs(Math.sin(x * 12.9 + y * 78.2 + z * 37.7) * 43758.5) % 1; const k = 0.07 + 0.05 * n; return [k * 1.1, k * 0.95, k * 1.0]; };
+    const gold = [0.85, 0.66, 0.26];
+    const tint = (g, f) => { const P = g.getAttribute('position'), c = new Float32Array(P.count * 3); for (let i = 0; i < P.count; i++) { const k = typeof f === 'function' ? f(P.getX(i), P.getY(i), P.getZ(i)) : f; c[i * 3] = k[0]; c[i * 3 + 1] = k[1]; c[i * 3 + 2] = k[2]; } g.setAttribute('color', new THREE.BufferAttribute(c, 3)); if (g.getAttribute('uv')) g.deleteAttribute('uv'); return g; };
+    let y = 0;
+    for (const [w, h] of SWORD_SPOT.TIERS) {
+        parts.push({ geo: tint(new THREE.BoxGeometry(w, h, w, 3, 1, 3), stone), pos: [0, y + h / 2, 0] });
+        for (const [sx, sz, rx] of [[0, w / 2, 0], [0, -w / 2, 0], [w / 2, 0, 1], [-w / 2, 0, 1]]) // (золотая кромка по верху ступени)
+            parts.push({ geo: tint(new THREE.BoxGeometry(rx ? 0.12 : w + 0.1, 0.12, rx ? w + 0.1 : 0.12), gold), pos: [sx, y + h - 0.02, sz] });
+        y += h;
+    }
+    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + Math.PI / 4; parts.push({ geo: tint(new THREE.CylinderGeometry(0.22, 0.3, 1.4, 6), gold), pos: [Math.cos(a) * 2.2, y + 0.7, Math.sin(a) * 2.2] }); } // (четыре золотых столбика по углам верха)
+    _pedGeo = mergeParts(parts);
+    _pedGeo.userData.keep = true;
+    return _pedGeo;
+}
+function pedestalMat() {
+    if (_pedMat) return _pedMat;
+    _pedMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
+    _pedMat.name = 'diabolos-pedestal'; _pedMat.userData.shared = true;
+    return _pedMat;
+}

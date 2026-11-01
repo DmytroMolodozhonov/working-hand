@@ -17,6 +17,7 @@
  */
 
 import { isDivine, diabolosTouch, pierceDiabolos } from './DivineSword.js';
+const DIVINE_SEEK_R = 140; // м: божественный меч по «Атак» находит Дьяволоса так далеко (он огромен: с края котловины до брюха ~75–90 м)
 import * as THREE from 'three';
 import { rayToSegment, segmentToSegment, BODY } from './Duel.js';
 import { refusal } from './Hints.js';
@@ -420,7 +421,10 @@ export class Levitation {
         for (const a of g.animals?.list || []) if (!a.dead) consider(a.group.position, { kind: 'a', a });
         // the divine sword seeks Diabolos first (DivineSword.js: only it pierces him) — anywhere within 60 m
         const D = isDivine(w) ? g.diabolos : null;
-        if (D && !D.dead && D.position && D.position.distanceTo(w.position) < 60) best = { d: 0, pos: D.position, target: { kind: 'd', D } };
+        // (он 122 м ростом: до брюха с края котловины ~75–90 м — раньше искали ближе 60 м и летели ≤ 3 с, и меч не долетал; к тому же у него не было
+        //  position/aimPoint — меч его вообще не находил. Теперь: ближе 140 м, время полёта — по расстоянию)
+        const da = D && !D.dead ? D.aimPoint?.() : null;
+        if (da && da.distanceTo(w.position) < DIVINE_SEEK_R) best = { d: 0, pos: da, target: { kind: 'd', D } };
         const dir = g.character.getHandDirection(s.side, new THREE.Vector3());
         s.attack = { target: best ? best.target : null, dir, t: 0 };
         this._sparkle(w.position, 25);
@@ -481,7 +485,7 @@ export class Levitation {
             g.hud.setVoice('🗡️ Оружие вонзилось!', true);
             return;
         }
-        if (A.t > 3 || (!A.target && A.t > 1.6)) this.release(false);
+        if (A.t > (A.target?.kind === 'd' ? DIVINE_SEEK_R / 22 + 1.5 : 3) || (!A.target && A.t > 1.6)) this.release(false);
     }
 
     /** World orientation of the hand (the palm when hands are shown). */

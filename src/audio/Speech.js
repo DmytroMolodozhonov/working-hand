@@ -44,7 +44,7 @@ export function loudness(pcm) {
 }
 
 /** Louder by role: a knight's low voice was the quietest (the author: «голос рыцарей тише… +50%»). */
-export const ROLE_BOOST = { knight: 1.5 };
+export const ROLE_BOOST = { knight: 1.5, devil: 1.3 }; // (Дьяволос: автор — «на 30 % громче»; мягкий ограничитель не даёт хрипеть)
 
 /** A soft limiter: up to 0.7 untouched, above it rounds off toward 1 (never clips) — a low voice with high peaks can be as loud as the others. */
 export function softLimit(x) {

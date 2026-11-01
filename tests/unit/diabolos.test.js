@@ -542,7 +542,8 @@ test('речь: бас (роль devil — ниже всех), троллит п
     assert.ok(near < 15, `до тела ${near?.toFixed(1)} м (Инспириус бьёт на 60)`);
     d.hit(d.d, 50, 'Inspirius', 'me');
     assert.ok(d.d.stunT > 0, 'растерян');
-    assert.ok(said.some((s) => /Дьяволос: «/.test(s)), 'что-то сказал');
+    assert.ok(d.log.some((s) => /говорит: «/.test(s)), 'что-то сказал (голосом; на экране подписи нет)');
+    assert.ok(!said.some((s) => /Дьяволос: «/.test(s)), 'подписи реплик на экране нет (автор)');
 });
 
 test('«Империус Максима» на Дьяволоса: только Максима, шанс 35 % (в Творческом — всегда); в нём — ходит на цепи и бьёт; вырвался — зол', async () => {
@@ -576,7 +577,7 @@ test('«Империус Максима» на Дьяволоса: только 
     d.d.imp = null;
     d.brokeFree('me');
     assert.ok(d.d.grudge.has('me'));
-    assert.ok(said.some((s) => /голову|тело|бог/.test(s)), 'сказал что-то злое');
+    assert.ok(d.log.some((s) => /говорит: «.*(голову|тело|бог)/.test(s)), 'сказал что-то злое');
 });
 
 test('«Империус Максима»: руки Дьяволоса повторяют руки того, кто в нём (вперёд — вперёд, вверх — вверх, левая — левой)', async () => {
@@ -615,4 +616,53 @@ test('сидит лицом ОТ столба цепи (к дороге): под
     for (let i = 0; i < 30 * 20; i++) { d.update(1 / 30); path += Math.hypot(d.d.x - px, d.d.z - pz); px = d.d.x; pz = d.d.z; }
     assert.ok(path > 60, `прошёл ${path.toFixed(0)} м`);
     assert.ok(Math.hypot(d.d.x - d.d.anchor.x, d.d.z - d.d.anchor.z) >= DEVIL.PILLAR_R + DEVIL.RADIUS - 0.5, 'сквозь столб не прошёл');
+});
+
+test('Творческий: меч на постаменте у края котловины (50–75 м от его места), «Левиоса Максима» + «Атак» оттуда долетает и вонзается', async () => {
+    const { swordSpot } = await import('../../src/game/DiabolosRules.js');
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { g } = fakeGame(new THREE.Vector3(0, 1.95, -300));
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 800, z: 0 } });
+    d.update(0.016);
+    const P = swordSpot(d.site, 0);
+    assert.ok(P.seat >= 50 && P.seat <= 75, `от его места ${P.seat.toFixed(0)} м`);
+    assert.ok(P.h >= 3, 'на постаменте (горка)');
+    // Levitation.attack находит его (раньше у него не было position/aimPoint — меч его не видел) и летит к брюху
+    const aim = d.aimPoint();
+    assert.ok(aim && d.position, 'есть куда целиться');
+    const from = new THREE.Vector3(P.x, 15 + P.h + 0.3, P.z), dist = from.distanceTo(aim);
+    assert.ok(dist < 140, `до брюха ${dist.toFixed(0)} м — в досягаемости броска`);
+    // полёт 22 м/с прямо к брюху: его тело встречается на пути (bladeHit — его собственная проверка), и он умирает от меча
+    const p = from.clone(), dir = aim.clone().sub(from).normalize();
+    let hit = null;
+    for (let t = 0; t < 140 / 22 + 1.5 && !hit; t += 1 / 30) { const q = p.clone(); p.addScaledVector(dir, 22 / 30); hit = d.bladeHit(q, p); }
+    assert.ok(hit, 'клинок встретил его тело на пути');
+    d.pierce(hit, 'me', { via: 'swarm' });
+    assert.ok(d.d.dying, 'вонзился — умирает');
+});
+
+test('ходит и хватает: потревожили — за 60 с проходит ≥ 30 м, подходит и пробует схватить; без цели, но бодрствует — гуляет, потом садится', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(60, 1.95, -60);
+    const { g } = fakeGame(me);
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 800, z: 0 } });
+    d.update(0.016);
+    d.boltHit(d.d, 'Bombardo', 'me');
+    let path = 0, px = d.d.x, pz = d.d.z;
+    for (let i = 0; i < 30 * 60; i++) { g.combat.hp = 100; d.update(1 / 30); path += Math.hypot(d.d.x - px, d.d.z - pz); px = d.d.x; pz = d.d.z; }
+    assert.ok(path >= 30, `прошёл ${path.toFixed(0)} м`);
+    assert.ok(d.log.some((l) => /ход grab/.test(l)), `пробовал схватить: ${d.log.filter((l) => /ход /.test(l)).map((l) => /ход (\w+)/.exec(l)[1]).join(',')}`);
+    // разбудили шумом (без обидчика): гуляет 40–90 с, оглядывается, потом садится
+    const { g: g2 } = fakeGame(new THREE.Vector3(0, 1.95, -500));
+    const e = new Diabolos(g2); g2.diabolos = e;
+    e.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 800, z: 0 } });
+    e.update(0.016);
+    e.disturb(null, 'шум');
+    let walk = 0; px = e.d.x; pz = e.d.z;
+    for (let i = 0; i < 30 * 35; i++) { e.update(1 / 30); walk += Math.hypot(e.d.x - px, e.d.z - pz); px = e.d.x; pz = e.d.z; }
+    assert.ok(walk > 25, `гулял ${walk.toFixed(0)} м`);
+    for (let i = 0; i < 30 * 150; i++) e.update(1 / 30);
+    assert.ok(['sit', 'sleep'].includes(e.d.mode), `успокоился и сел: ${e.d.mode}`);
 });
