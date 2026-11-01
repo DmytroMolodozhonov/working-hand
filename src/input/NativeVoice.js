@@ -291,6 +291,19 @@ export class NativeVoice {
         return { from: a + this.off - 200, to: b + this.off };
     }
 
+    /**
+     * The game tells the voice program a fight is on and whether a friend is on the server (only when it changes): in a fight with
+     * nobody else the program skips the speakers' second pass of the network on a phrase still being said — half the time a look
+     * took in a loud duel (the author's journal 15:01: 270–290 ms against 107).
+     */
+    setFight(hot, friends) {
+        const v = `${hot ? 1 : 0}${friends ? 1 : 0}`;
+        if (v === this._hint || !this.es) return;
+        this._hint = v;
+        fetch('/api/voice/hint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fight: !!hot, friends: !!friends }) })
+            .catch(() => { this._hint = null; });
+    }
+
     /** The microphones voice_native.py can listen to → {devices: [{key, name, default}], current, wanted, fallback} */
     async devices() {
         try {
@@ -352,6 +365,14 @@ export class NativeVoice {
         this.segs.clear();
     }
 
+    /** Why the spell network is where it is — once per change (the spell journal shows it once, not on every line). */
+    _devWhy() {
+        const w = this.status?.deviceWhy || null;
+        if (!w || w === this._devTold) return null;
+        this._devTold = w;
+        return w;
+    }
+
     _event(d) {
         if (d.type === 'status') { this.status = { ...(this.status || {}), ...d }; if (d.state === 'error') { this.stop(); this.onFail?.(); } return; }
         if (d.type === 'lv') { this._clock(d.t); this.onLevel?.(d); if (Number.isFinite(d.q)) this.onQuiet?.(d.q); return; }
@@ -373,7 +394,7 @@ export class NativeVoice {
             // (q: s of quiet already after the words; cut: the look missed the phrase's start — TalkFlow waits for its end)
             q: Number.isFinite(d.q) ? d.q : null, cut: !!d.cut,
             // (the speech network's own time on this look, and when its sound had ended — the talk's stopwatch tells why words come late)
-            cost: d.cost, dev: this.status?.device || null, soundEnd: Number.isFinite(d.t1) && this.off != null ? d.t1 + this.off : null };
+            cost: d.cost, dev: this.status?.device || null, devWhy: this._devWhy(), soundEnd: Number.isFinite(d.t1) && this.off != null ? d.t1 + this.off : null };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
         // (when the speech itself ended — the quiet heard after it taken off: the talk's stopwatch starts there)
         if (Number.isFinite(d.q) && Number.isFinite(meta.to) && !r.heard.spell) meta.end = meta.to - d.q * 1000;

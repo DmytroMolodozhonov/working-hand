@@ -26,6 +26,7 @@ API:
   GET    /api/voice/status    — нейросеть голоса вне браузера (voice_native.py): есть ли, скачана ли, работает ли
   GET    /api/voice/stream    — что она услышала (Server-Sent Events)
   GET    /api/voice/devices   — микрофоны, которые она может слушать
+  POST   /api/voice/hint      — бой/друзья на сервере ({"fight", "friends"}): в бою без друзей колонки не сверяются посреди фразы
   POST   /api/voice/mic       — выбрать микрофон для заклинаний ({"key": …}; "" — как в системе)
   POST   /api/voice/ref       — голоса друзей из голосового чата игры (16 кГц, int16): эхоподавителю, где нет копии колонок
   POST   /api/record          — запись руки (F9 в игре) → папка recordings/
@@ -747,6 +748,15 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 data = self.rfile.read(length)
                 from voice_native import VOICE
                 VOICE.page_ref(data)
+                return self._json(200, {"ok": True})
+
+            if path == "/api/voice/hint":
+                # the game's state the voice needs: a fight is on, a friend on the server or not (this computer's game only)
+                if not is_own_page(self.client_address[0], self.headers):
+                    return self._json(403, {"status": "error", "message": "only the game on this computer"})
+                from voice_native import VOICE
+                d = self._read_json()
+                VOICE.set_hint(bool(d.get("fight")), bool(d.get("friends")))
                 return self._json(200, {"ok": True})
 
             if path == "/api/voice/mic":

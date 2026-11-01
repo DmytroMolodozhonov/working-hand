@@ -75,7 +75,7 @@ export function latencyStages(m = {}) {
     const quiet = Number.isFinite(m.soundEnd) ? Math.max(0, m.soundEnd - m.to) : NaN;
     if (Number.isFinite(quiet)) p.push(`тишина после слова ${Math.round(quiet)}`);
     const cost = Number.isFinite(m.cost) ? m.cost : NaN;
-    if (Number.isFinite(cost)) p.push(`нейросеть ${Math.round(cost)}${m.dev === 'GPU' ? ' (видеокарта)' : m.dev === 'CPU' ? ' (процессор)' : ''}`);
+    if (Number.isFinite(cost)) p.push(`нейросеть ${Math.round(cost)}${m.dev === 'GPU' ? ' (видеокарта)' : m.dev === 'CPU' ? ' (процессор)' : ''}${m.devWhy ? ` — почему: ${String(m.devWhy).slice(0, 120)}` : ''}`);
     const game = Number.isFinite(m.gameMs) ? m.gameMs : 0;
     if (Number.isFinite(quiet) && Number.isFinite(cost)) p.push(`доставка ${Math.max(0, Math.round(m.lag - quiet - cost - game))}`);
     p.push(`игра ${num(game, 1)}`);

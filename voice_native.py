@@ -786,6 +786,7 @@ class NativeVoice:
         self.mic_fallback = False  # the chosen one is not there: the default listens
         self._mic_change = threading.Event()
         self.aec = False
+        self.fight_solo = False  # (the page: a fight is on and no friend is on the server — set_hint, /api/voice/hint)
         # the friends' voices of the game's voice chat, sent by the page (/api/voice/ref): where there is no «loopback»
         # (macOS, Linux) the echo canceller gets them as its copy of the speakers — the exact sound the game plays
         self._page = None
@@ -956,6 +957,10 @@ class NativeVoice:
         page.push(np.frombuffer(data, dtype=np.int16), time.perf_counter())
         self.page_last = time.time()
 
+    def set_hint(self, fight=False, friends=False):
+        """The page: a duel / a fight is on, and whether a friend is on the server (his voice may come out of the speakers)."""
+        self.fight_solo = bool(fight) and not bool(friends)
+
     def set_mic(self, key):
         """The microphone chosen in the settings ("" / "default" — the system's): taken at once, the
         capture opens again on it (the networks stay loaded)."""
@@ -1064,6 +1069,7 @@ class NativeVoice:
                 job = jobs.popleft()
                 busy.set()
                 try:
+                    pipe.fight_solo = self.fight_solo
                     ev = pipe.look(job, lambda i: self.ms(mic.t0 + i / SR))
                     self.cost = ev.get("cost", 0)
                     self._emit(ev)
@@ -1206,6 +1212,7 @@ class Pipeline:
         self.fdaf = None        # FdafEcho or None (ZNS_VOICE_AEC_MODE: webrtc | fdaf | both)
         self.use_webrtc = True  # WebRTC's canceller on the microphone (its echo cancelling is off in mode fdaf: only the high-pass filter)
         self.ref_at = -10 ** 9  # the end (sample) of the last partial look that carried the speakers' rows
+        self.fight_solo = False  # (the page: a duel / a fight with no friend on the server — set_hint)
         self.lv, self.lv_raw, self.lv_far = [], [], []
 
     def frame(self, m, r):
@@ -1352,6 +1359,11 @@ class Pipeline:
         # them the page can tell a friend's echo from my own spell at once, and does not wait for the phrase's end — the author:
         # «Дискорд не должен мешать»; without them the spell waited ~1 s more than with nothing playing)
         ref_due = job["final"] or ev["far"] < 0.25 or (b - self.ref_at) >= int(REF_EVERY * SR)
+        # (a fight with nobody else on the server — the page says so: /api/voice/hint — nobody's voice but the game's can come out of the
+        #  speakers, and the page knows the game's lines: the speakers' second pass of the network doubled every look in a loud duel —
+        #  the author's journal 15:01: 270–290 ms against 107. The phrase's end still carries them.)
+        if self.fight_solo and not job["final"]:
+            ref_due = False
         if loud >= 3 and ref_due:
             self.ref_at = b
             rl = self.ctc.logprobs(self.refl[np.arange(max(0, lo), b) % self.L])

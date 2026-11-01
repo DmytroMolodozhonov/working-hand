@@ -4025,6 +4025,7 @@ export class Game {
             this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.() || this.arenaDuels?.meFighting?.());
             // (a friend's voice may come out of the speakers: then the look must carry the speakers' rows to tell an echo — NativeVoice.fightClear)
             this.voice.native.friends = (this.remotes?.size || 0) > 0;
+            this.voice.native.setFight?.(this.voice.native.duelHot, this.voice.native.friends);
         }
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth && !duelOnly) this.servants.update(dt);
