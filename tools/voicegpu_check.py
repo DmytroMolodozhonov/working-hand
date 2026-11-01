@@ -36,7 +36,7 @@ def main():
         return 1
 
     import voice_native as vn
-    from voice_native import CtcNet, VoiceNet, GpuCtc, gpu_verdict, models_dir
+    from voice_native import CtcNet, VoiceNet, GpuCtc, gpu_verdict, models_dir, gpu_model_for
 
     d = models_dir()
     ctc_dir = os.path.join(d, vn.MODEL_DIR)
@@ -71,7 +71,7 @@ def main():
     # 1) the video card's program, with its real messages (the game hides its stderr)
     say("\nЗапускаю программу видеокарты (voice_gpu.py) …")
     t0 = time.time()
-    p = subprocess.run([sys.executable, os.path.join(ROOT, "voice_gpu.py"), ctc_dir, ort_dir or ""], input=b"", capture_output=True, timeout=180)
+    p = subprocess.run([sys.executable, os.path.join(ROOT, "voice_gpu.py"), ctc_dir, ort_dir or "", gpu_model_for(ctc_dir, say) or ""], input=b"", capture_output=True, timeout=180)
     say(f"  завершилась за {time.time() - t0:.1f} с, код {p.returncode}")
     err = (p.stderr or b"").decode("utf-8", "replace").strip()
     if err:
@@ -85,7 +85,9 @@ def main():
     say("\nСравнение процессора и видеокарты (как делает игра) …")
     cpu = VoiceNet(CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS") or vn.voice_threads())))
     try:
-        g = GpuCtc(ctc_dir, ort_dir)
+        gm = gpu_model_for(ctc_dir, say)
+        say(f"  модель для карты: {gm or 'сжатая (model.int8.onnx)'}")
+        g = GpuCtc(ctc_dir, ort_dir, model=gm)
     except Exception as e:  # noqa: BLE001
         say(f"ВИДЕОКАРТА НЕ ПОДХОДИТ: {e}")
         return 3

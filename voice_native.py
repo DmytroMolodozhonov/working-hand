@@ -278,13 +278,13 @@ class GpuCtc:
     """The same network on the video card, in a program of its own (voice_gpu.py: its own onnxruntime with DirectML / CUDA / CoreML).
     run(feats) → (T, 34). Raises when the program is gone (the caller goes back to the processor)."""
 
-    def __init__(self, folder, ort_dir=None, timeout=120):
+    def __init__(self, folder, ort_dir=None, timeout=120, model=None):
         import json
         import subprocess
         import struct
         self.struct = struct
         flags = 0x08000000 if sys.platform.startswith("win") else 0  # (CREATE_NO_WINDOW; NORMAL priority: it is on the path of every spell)
-        self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "voice_gpu.py"), folder, ort_dir or ""],
+        self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "voice_gpu.py"), folder, ort_dir or "", model or ""],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
         self.lock = threading.Lock()
         got = [None]
@@ -335,6 +335,44 @@ class GpuCtc:
             self.p.kill()
         except Exception:  # noqa: BLE001
             pass
+
+
+GPU_MODEL = "model.gpu.onnx"  # the int8 network rebuilt with float layers (voice_dequant.py): DirectML runs it on the card itself
+ONNX_TOOLS_DIR = os.path.join(ROOT, "vendor", "onnx-tools")  # (the onnx package, only for that rebuild: in a folder of its own, like vendor/ort-gpu)
+
+
+def gpu_model_for(folder, log=print):
+    """(the video card's check, its own thread) model.gpu.onnx next to model.int8.onnx: made once (≈10 s), kept in the user's models folder
+    (updates of the game do not touch it). Why: the int8 layers (DynamicQuantizeLinear, MatMulInteger, ConvInteger) DirectML does not run on
+    the card — every look went back and forth to the processor and was no faster, so the voice stayed «(процессор)». → its file name, or None
+    (could not: the int8 file is tried as before, the reason in the log)."""
+    import subprocess
+    dst = os.path.join(folder, GPU_MODEL)
+    if os.path.isfile(dst):
+        return GPU_MODEL
+    if os.environ.get("ZNS_VOICE_GPU_MODEL") == "0":
+        return None
+    try:
+        if not os.path.isdir(os.path.join(ONNX_TOOLS_DIR, "onnx")):
+            if os.environ.get("ZNS_NO_PIP"):
+                return None
+            log("  Голос: готовлю нейросеть для видеокарты (один раз)…")
+            r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q", "--target", ONNX_TOOLS_DIR, "onnx"],
+                               capture_output=True, text=True, timeout=1800)
+            if r.returncode != 0:
+                log("  Голос: не удалось поставить onnx: " + ((r.stderr or r.stdout or "").strip().splitlines() or [""])[-1])
+                return None
+        flags = 0x08000000 if sys.platform.startswith("win") else 0
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "voice_dequant.py"), os.path.join(folder, "model.int8.onnx"), dst],
+                           capture_output=True, text=True, timeout=900, creationflags=flags)
+        if r.returncode != 0 or not os.path.isfile(dst):
+            log("  Голос: не удалось собрать модель для видеокарты: " + ((r.stderr or r.stdout or "").strip().splitlines() or ["?"])[-1])
+            return None
+        log("  Голос: модель для видеокарты готова — " + (r.stdout or "").strip())
+        return GPU_MODEL
+    except Exception as e:  # noqa: BLE001
+        log(f"  Голос: модель для видеокарты не собрана ({type(e).__name__}: {e})")
+        return None
 
 
 def gpu_verdict(np, cpu_run, gpu_run, feats_list, cpu_ms, gpu_ms):
@@ -393,7 +431,8 @@ class VoiceNet:
                 else:
                     from hand_v5 import ort_gpu_dir  # (installs onnxruntime-directml into vendor/ort-gpu once: the hands use it too)
                     ort_dir = ort_gpu_dir(lambda m: print(m.replace("[Камера] Кисти V5", "Голос")))
-            g = GpuCtc(folder, ort_dir)
+            gpu_model = gpu_model_for(folder)  # (the float layers the card runs itself; None — the int8 file as before)
+            g = GpuCtc(folder, ort_dir, model=gpu_model)
             rng = np.random.default_rng(7)
             feats = [rng.normal(-6, 3, (n, 64)).astype(np.float32) for n in (120, 300)]
             z = feats[1]
@@ -407,7 +446,7 @@ class VoiceNet:
                 return sorted(ts)[2]
             cpu_ms, gpu_ms = best(self.cpu.run), best(g.run)
             use, why = gpu_verdict(np, self.cpu.run, g.run, feats, cpu_ms, gpu_ms)
-            prov = g.info.get("provider", "?")
+            prov = g.info.get("provider", "?") + (" · обычная модель" if gpu_model else " · сжатая модель")
             if use:
                 self.gpu, self.device, self.why = g, "GPU", f"{prov}: {why}"
                 print("  Голос: нейросеть распознавания на видеокарте — " + self.why)

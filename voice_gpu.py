@@ -52,6 +52,7 @@ def gpu_providers(have):
 def main():
     folder = sys.argv[1]
     ort_dir = sys.argv[2] if len(sys.argv) > 2 and sys.argv[2] else None
+    model = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else "model.int8.onnx"  # (model.gpu.onnx: the float layers the card runs itself — voice_dequant.py)
     inp, out = sys.stdin.buffer, sys.stdout.buffer
     sys.stdout = sys.stderr  # (nothing but the answers on the real stdout)
     try:
@@ -76,7 +77,7 @@ def main():
         if "DmlExecutionProvider" in want:
             so.enable_mem_pattern = False  # (DirectML wants these two off)
             so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        s = ort.InferenceSession(os.path.join(folder, "model.int8.onnx"), so, providers=want + ["CPUExecutionProvider"])
+        s = ort.InferenceSession(os.path.join(folder, model), so, providers=want + ["CPUExecutionProvider"])
         used = s.get_providers()[0]
         if used == "CPUExecutionProvider" and not cpu_ok:
             _send(out, b"HELO", json.dumps({"ok": False, "why": "видеокарта не приняла сеть"}).encode())
@@ -95,7 +96,7 @@ def main():
         for _ in range(5):
             run(z)
         ms = (time.perf_counter() - t) / 5 * 1000
-        _send(out, b"HELO", json.dumps({"ok": True, "provider": used, "providers": have, "ms": round(ms, 1)}).encode())
+        _send(out, b"HELO", json.dumps({"ok": True, "provider": used, "providers": have, "ms": round(ms, 1), "model": model}).encode())
         while True:
             tag = _read(inp, 4)
             n = struct.unpack("<I", _read(inp, 4))[0]
