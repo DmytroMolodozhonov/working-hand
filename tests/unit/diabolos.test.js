@@ -722,3 +722,44 @@ test('тело — не призрак: влёт в брюхо, голову, р
     g.collision.lineOfSight = (ax, ay, az, bx, by, bz) => !d.body.pointBlocked(ax, ay, az);
     assert.notEqual(d._los(g.collision, d.d.x, d.d.y + 100, d.d.z, 0, 0, -300, 1), false, 'видит из своей головы');
 });
+
+test('смерть от меча — эффектно: крик удивления голосом, рёв, лучи из трещин, разлёт кусков, кольца по земле, купол, ослепительный финал, потом тишина и зарево гаснет; «нельзя убить» не говорится', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const { DEATH_FX } = await import('../../src/fx/DevilDeathFx.js');
+    const me = new THREE.Vector3(0, 1.95, -150);
+    const { g, said } = fakeGame(me);
+    const sounds = [];
+    g.sound = { playDevil: (p, k, v) => sounds.push({ k, t: d.d?.dying?.t ?? 99 }), devilTheme() {} };
+    const notes = [];
+    g.spellLog = { note: (t) => notes.push(t) };
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 0, z: -800 } });
+    d.update(0.016);
+    const lines = [];
+    d._speak = (sit, i) => lines.push(sit);
+    assert.ok(d.pierce(d.aimPoint(), 'me', { via: 'swarm' }));
+    // меч касается тела дальше (оружие, взрыв) — ни одной подсказки «нельзя убить»
+    d.hit(d.d, 999, 'melee', 'me'); d.hit(d.d, 999, 'Inspirius', 'me');
+    assert.ok(!said.some((t) => /нельзя убить|не убивает|не берёт/.test(t)), `подсказки: ${said.join(' | ')}`);
+    assert.equal(lines[0], 'dying', 'первым — крик удивления');
+    let maxShards = 0, maxRays = 0, rings = 0, dome = false;
+    for (let i = 0; i < 30 * 32; i++) {
+        d.update(1 / 30);
+        const F = d.deathFx;
+        if (F?.shard) maxShards = Math.max(maxShards, F.shard.filter((x) => x.live).length);
+        if (F?.rays) maxRays = Math.max(maxRays, F.rays.count);
+        if (F?.rings) rings = Math.max(rings, F.rings.filter((r) => r.t >= 0).length);
+        if (F?.domeT != null) dome = true;
+    }
+    const kinds = sounds.map((s) => s.k);
+    assert.ok(kinds.includes('shriek') && kinds.includes('pain') && kinds.includes('finale'), `звуки: ${kinds.join(',')}`);
+    const fin = sounds.find((s) => s.k === 'finale');
+    assert.ok(fin.t > 10 && fin.t < 11.5, 'финал начинается так, что его удар — в миг распада');
+    assert.ok(lines.filter((x) => x === 'agony').length >= 1, 'кричит и посреди смерти');
+    assert.ok(maxRays >= DEATH_FX.RAYS * 0.8, `лучи: ${maxRays}`);
+    assert.ok(maxShards >= 20, `разлёт кусков: ${maxShards}`);
+    assert.ok(rings >= 1 && dome, 'кольца по земле и купол-вспышка');
+    assert.equal(d.everDead, true);
+    assert.equal(d.glowK, 0, 'зарево и столб огня погасли');
+    assert.ok(!d.deathFx.on, 'эффект убран (ничего не копится)');
+});

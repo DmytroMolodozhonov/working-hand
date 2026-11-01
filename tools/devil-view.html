@@ -49,6 +49,29 @@ if (q.get('death') != null || q.get('grab') != null) {
   }
   P.face = face; poseDiabolos(m, P); m.updateMatrixWorld(true);
 }
+// смерть: разлёт (DevilDeathFx) — те же события, что в игре (Diabolos._dyingTick), проигранные до момента снимка
+if (q.get('death') != null) {
+  const { DevilDeathFx } = await import('/src/fx/DevilDeathFx.js');
+  const { DevilBody } = await import('/src/game/DiabolosBody.js');
+  const body = new DevilBody(DEVIL.SCALE); body.update(m);
+  const sparks = { spark() {}, glow: { spawn(x, y, z, vx, vy, vz, col, s, life) { if (glowN < 400) { glowP.push([x, y, z, vx, vy, vz, col, s, life]); glowN++; } } } };
+  let glowN = 0; const glowP = [];
+  const fx = new DevilDeathFx({ scene, fx: sparks }); const T = +q.get('death');
+  fx.start(new THREE.Vector3(0, 70, 0), 0, 12345); fx.ring(new THREE.Vector3());
+  const E = { chain: 3.2, fall: 6, burst: 6, ash: 14, ring2: 14.35 };
+  for (let t = 0; t < T; t += 1 / 30) {
+    if (E.chain && t >= E.chain) { E.chain = 0; fx.ring(eyeletWorld(m, new THREE.Vector3())); fx.burst(body, 4, 0.4); }
+    if (E.fall && t >= E.fall) { E.fall = 0; fx.ring(new THREE.Vector3()); fx.burst(body, 8, 0.6); }
+    if (E.burst && t >= E.burst && t < 13.8) { E.burst = t + 1.6; fx.burst(body, 3, 0.5 + t / 28); }
+    if (E.ash && t >= E.ash) { E.ash = 0; fx.flash(); fx.ring(new THREE.Vector3()); fx.burst(body, 26, 1); }
+    if (E.ring2 && t >= E.ring2) { E.ring2 = 0; fx.ring(new THREE.Vector3()); }
+    fx.update(1 / 30, t, body, q.get('flash') ? new THREE.Vector3() : null);
+    for (const g of glowP) { g[0] += g[3] / 30; g[1] += g[4] / 30; g[2] += g[5] / 30; g[4] -= 4 / 30; g[8] -= 1 / 30; }
+  }
+  // искры фонтана: точки (в игре — общий пул fx.glow)
+  const live = glowP.filter((g) => g[8] > 0);
+  if (live.length) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(live.flatMap((g) => g.slice(0, 3)), 3)); scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff0c8, size: 2.2, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }))); }
+}
 // цепь от якоря к копыту
 const anchor = { x: +(q.get('ax') || 30), y: 3, z: +(q.get('az') || 70) };
 const an = anchorModel(); an.position.set(anchor.x, 0, anchor.z); scene.add(an);

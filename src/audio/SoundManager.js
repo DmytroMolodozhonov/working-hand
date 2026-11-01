@@ -2124,7 +2124,7 @@ export class SoundManager {
         if (!this.enabled || !this.context || !position) return;
         const key = 'dvl_' + kind;
         if (!this.sounds[key]) return; // (не готово — не синтезируем в кадре)
-        const far = kind === 'roar' || kind === 'boom' || kind === 'slam' ? 140 : kind === 'step' || kind === 'snore' ? 70 : kind === 'chain' ? 40 : 60;
+        const far = kind === 'finale' ? 900 : kind === 'shriek' || kind === 'pain' ? 260 : kind === 'roar' || kind === 'boom' || kind === 'slam' ? 140 : kind === 'step' || kind === 'snore' ? 70 : kind === 'chain' ? 40 : 60;
         this._playAt(this.sounds[key], position, volume, far, rate * (0.96 + Math.random() * 0.08));
     }
 

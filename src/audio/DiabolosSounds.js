@@ -16,8 +16,10 @@ export const DEVIL_SOUNDS = ['snore', 'step', 'slam', 'chain', 'roar', 'inhale',
     // характер (DiabolosActs): бормочет во сне, нюхает, зевает, хрустит, сплёвывает, скребёт рог, вздыхает, хохочет, фыркает, «бе-бе» языком, облизывается, посмеивается, бьёт в грудь
     'mumble', 'sniff', 'yawn', 'crack', 'spit', 'scrape', 'sigh', 'laugh', 'snort', 'blep', 'lick', 'chuckle', 'beat',
     // оторопь и смерть: рёв боли, звон разрывающейся цепи
-    'pain', 'chainBreak'];
-const DUR = { pain: 3.4, chainBreak: 2.6, mumble: 2.2, sniff: 1.2, yawn: 3.2, crack: 0.9, spit: 0.8, scrape: 1.6, sigh: 2.4, laugh: 3.4, snort: 0.9, blep: 2.4, lick: 1.4, chuckle: 1.8, beat: 0.6, snore: 3.2, step: 1.4, slam: 2.6, chain: 0.9, roar: 3.6, inhale: 1.7, fire: 4.2, ball: 1.1, boom: 2.4, clap: 1.4, theme: 12, drums: 6 };
+    'pain', 'chainBreak',
+    // финал смерти (божественный меч): нарастающий звон и хор → гулкий низкий удар → «стеклянный» треск → долгий белый выдох; крик удивления
+    'finale', 'shriek'];
+const DUR = { finale: 10, shriek: 2.6, pain: 3.4, chainBreak: 2.6, mumble: 2.2, sniff: 1.2, yawn: 3.2, crack: 0.9, spit: 0.8, scrape: 1.6, sigh: 2.4, laugh: 3.4, snort: 0.9, blep: 2.4, lick: 1.4, chuckle: 1.8, beat: 0.6, snore: 3.2, step: 1.4, slam: 2.6, chain: 0.9, roar: 3.6, inhale: 1.7, fire: 4.2, ball: 1.1, boom: 2.4, clap: 1.4, theme: 12, drums: 6 };
 const TAU = Math.PI * 2;
 
 /** Простой шум (свой генератор — один и тот же звук на всех компьютерах). */
@@ -201,6 +203,40 @@ export function synthDevil(ctx, kind) {
             break;
         case 'chuckle': // смешок: «хм-хм-хм» сквозь зубы
             for (let i = 0; i < 4; i++) growl(d, sr, 0.1 + i * 0.3, 0.2, 62, 55, 0.6, R, 0.5);
+            break;
+        case 'finale': { // ослепительный конец: 0–3,2 с звон и хор растут вверх, 3,2 с — удар, треск стекла, потом белый выдох до тишины
+            const T0 = 3.2;
+            for (let i = 0; i < Math.floor(T0 * sr); i++) { // звон (колокольчики, негармонические) и хор «а» — восходящий, крещендо
+                const t = i / sr, k = t / T0, up = 1 + 0.6 * k * k;
+                let x = 0;
+                for (const [f, a] of [[220, 0.5], [277, 0.4], [330, 0.45], [440, 0.35], [554, 0.25], [660, 0.2], [880, 0.12]]) x += Math.sin(TAU * f * up * t * (1 + 0.004 * Math.sin(TAU * 5.5 * t + f))) * a;
+                for (const f of [1760, 2349, 2960, 3520]) x += Math.sin(TAU * f * up * t) * 0.05 * (0.5 + 0.5 * Math.sin(TAU * (7 + f / 900) * t)); // мерцающий звон
+                d[i] += x * Math.pow(k, 1.6) * 0.5;
+            }
+            thud(d, sr, T0, 34, 1.6, 1.6, 20); thud(d, sr, T0 + 0.02, 52, 0.9, 3, 26); // гулкий низкий удар
+            noise(d, sr, T0, 0.25, 1.0, 0.95, (k) => Math.exp(-k * 9), R);
+            for (let i = 0; i < 26; i++) { // стекло: короткие высокие звоны-осколки и щелчки
+                const at = T0 + 0.02 + Math.abs(R()) * 0.9;
+                const i0 = Math.floor(at * sr), f = 2400 + Math.abs(R()) * 5200, amp = 0.16 * (1 - (at - T0));
+                for (let j = 0; j < Math.floor(0.35 * sr) && i0 + j < d.length; j++) { const t = j / sr; d[i0 + j] += (Math.sin(TAU * f * t) + 0.5 * Math.sin(TAU * f * 2.71 * t)) * Math.exp(-t * 18) * amp; }
+                noise(d, sr, at, 0.015, 0.3, 0.98, (k) => 1 - k, R);
+            }
+            { // долгий белый выдох: шум светлеет и тает, медленно опускаясь
+                const i0 = Math.floor((T0 + 0.1) * sr), n = d.length - i0;
+                let lp = 0, lp2 = 0;
+                for (let i = 0; i < n; i++) {
+                    const k = i / n, cut = 0.5 * (1 - k) + 0.03;
+                    lp += (R() - lp) * cut; lp2 += (lp - lp2) * cut;
+                    d[i0 + i] += (lp * 0.6 + lp2 * 0.4) * 0.55 * Math.min(1, i / (0.4 * sr)) * Math.pow(1 - k, 1.4);
+                }
+            }
+            echo(d, sr, [0.45, 0.9, 1.4], 0.32);
+            break;
+        }
+        case 'shriek': // крик удивления и боли: голос рвётся вверх, ломается, хрип
+            growl(d, sr, 0, 0.9, 70, 190, 1.0, R, 0.5); growl(d, sr, 0.85, 1.6, 180, 60, 0.9, R, 0.9); growl(d, sr, 0.05, 2.3, 35, 48, 0.5, R, 1.1);
+            noise(d, sr, 0.1, 2.3, 0.35, 0.45, (k) => Math.sin(k * Math.PI) * (0.6 + 0.4 * Math.sin(k * 70)), R);
+            echo(d, sr, [0.4, 0.8], 0.3);
             break;
         case 'beat': // кулак в грудь: глухой барабан
             thud(d, sr, 0, 40, 1.2, 10, 10); noise(d, sr, 0, 0.08, 0.5, 0.3, (k) => 1 - k, R);

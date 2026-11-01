@@ -25,6 +25,7 @@ import { DEVIL, WAKE, MOVES, MOVE_IDS, FIRE, BALL, STATES, ChainRope, leash, wak
     inDevilFire, ballSpeed, ballVerdict, ballDamage, sleepDelay, yawTo, FACE_OK, seatFrom } from './DiabolosRules.js';
 import { diabolosModel, poseDiabolos, chainLinkGeo, chainMaterial, anchorModel, eyeletWorld, mouthWorld, fistWorld, hoofWorld, devilHeat, devilWound, devilFar, chainGlowMaterial, devilChainLight, devilFireLight, aimArms, JOINTS } from '../entities/DiabolosModel.js';
 import { DevilBody, BODY_TARGETS, segSeg } from './DiabolosBody.js';
+import { DevilDeathFx } from '../fx/DevilDeathFx.js';
 import { DevilFires } from '../fx/DevilFires.js';
 import { Chest } from '../entities/Chest.js';
 import { makeDivineSword } from './DivineSword.js';
@@ -238,6 +239,11 @@ export class Diabolos {
         if (this._sitePoll <= 0) { this._sitePoll = 1; if (!this.site) this._findSite(); }
         if (!this.site) return;
         this.fires?.update(dt, this.game.character?.group?.position);
+        if (this.deathFx?.on && !this.d?.dying) { // (после смерти: осколки долетают и тают, кольца добегают, экран светлеет обратно — потом всё убирается)
+            this._afterT = (this._afterT || 0) + dt;
+            this.deathFx.update(dt, DEATH.T + this._afterT, null, g.character?.group?.position);
+            if (this._afterT > 10) this.deathFx.stop();
+        }
         if (this.d) this._voiceWarm(dt);
         const ps = this._players();
         let near = Infinity;
@@ -397,7 +403,7 @@ export class Diabolos {
         if (!d || !this.auth || !LINES[sit]) return;
         const now = d.t;
         if (!urgent && now - this._talkT < TALK.GAP) return;
-        if (urgent && now - this._talkT < 1.2) return; // (не перебивает сам себя на полуслове)
+        if (urgent && sit !== 'dying' && now - this._talkT < 1.2) return; // (смертельный крик — всегда; иначе не перебивает сам себя на полуслове)
         const last = this._lines.get(sit) || [];
         d.rnd = devilRand(d);
         const i = pickLine(sit, d.rnd, last);
@@ -1178,6 +1184,8 @@ export class Diabolos {
         this.body.paused = !!this.held; // (я у него в кулаке: кулак — не стена, меня из него не выталкивает)
         this.body.update(this.model);
     }
+    /** Зарево его котловины на небе и столб огня (HellRealm): 1 — жив; умирает — гаснет к распаду; мёртв — 0 (тучи и зарево гаснут). */
+    get glowK() { if (this.everDead) return 0; const D = this.d?.dying; return D ? clamp(1 - (D.t - 12) / 6, 0, 1) : 1; }
     /** Видно ли по прямой — его собственным глазам/шарам его тело не мешает (тело — кусок мира для всех остальных). */
     _los(coll, ax, ay, az, bx, by, bz, step) {
         if (!coll?.lineOfSight) return undefined;
@@ -1429,7 +1437,7 @@ export class Diabolos {
         const dist = Math.hypot(me.x - d.x, me.z - d.z);
         // тема босса: тихо во сне рядом, сильно в бою
         const near = clamp(1 - (dist - 150) / 400, 0, 1);
-        g.sound?.devilTheme?.(near * (d.mode === 'sleep' || d.mode === 'sit' ? 0.25 : 1), d.mode !== 'sleep' && d.mode !== 'sit');
+        g.sound?.devilTheme?.(d.dying ? (d.dying.t < 12.5 ? near * (1 - d.dying.t / 12.5) : 0) : near * (d.mode === 'sleep' || d.mode === 'sit' ? 0.25 : 1), !d.dying && d.mode !== 'sleep' && d.mode !== 'sit'); // (умирает — тема стихает: к финалу тишина)
         if (d.mode === 'sleep') {
             d.snoreT -= dt;
             if (d.snoreT <= 0) {
@@ -1537,7 +1545,13 @@ export class Diabolos {
         if (this.held) this._release('drop'); // (держал игрока — роняет)
         this.balls.forEach((b) => this._ballGone(b, false)); this.balls.length = 0;
         this.game.castleLife?.alarm?.(this.model.position, 'devil', null, 400); // (Тароны, горгульи — пугаются: Danger)
-        this.game.sound?.playDevil?.(this.model.position, 'pain', 1.8, 0.9);
+        // крик удивления (басом, голосом — «А-а-а?! Что это… такое?!») и рёв боли следом; дальше — разлёт (DevilDeathFx), финал — ослепительный звук
+        this.game.sound?.playDevil?.(mouthWorld(this.model, _a), 'shriek', 2, 0.92);
+        const c = this._centre(new THREE.Vector3());
+        (this.deathFx || (this.deathFx = new DevilDeathFx(this.game))).start(c, d.y, (Math.round(point.x * 7 + point.z * 13) ^ 0x5bd1e995) >>> 0);
+        this.deathFx.ring(_a.set(d.x, d.y, d.z));
+        const D = d.dying;
+        D.ev = { roar: 1.9, agony: 6.2, agony2: 10.5, finale: 14 - 3.2, burst: 6, fall: 6, ring2: 14.35 };
     }
     /** Таймлайн смерти: одинаково у всех (хост начал, гости — по сообщению «die»). */
     _dyingTick(d, dt) {
@@ -1564,12 +1578,23 @@ export class Diabolos {
             if (Math.random() < dt * 1.5 && fx?.spark) fx.spark(_w.set(d.x, d.y + 3.6 * DEVIL.SCALE, d.z), 0xfff0c0, 1, _u.set((Math.random() - 0.5) * 20, 10, (Math.random() - 0.5) * 20), 1.2);
             if (Math.random() < dt * 0.5) g.sound?.playDevil?.(p, 'crack', 1.2, 0.6);
         }
+        // события смерти (одинаково у всех: время от пронзания)
+        const E = D.ev || {};
+        if (E.roar != null && t >= E.roar) { E.roar = null; g.sound?.playDevil?.(mouthWorld(this.model, _a), 'pain', 2, 0.88); g.sound?.playDevil?.(p, 'roar', 1.6, 0.8); }
+        if (E.agony != null && t >= E.agony) { E.agony = null; this._say('agony', true); }
+        if (E.agony2 != null && t >= E.agony2) { E.agony2 = null; this._say('agony', true); }
+        if (E.fall != null && t >= E.fall) { E.fall = null; this.deathFx?.ring(_a.set(d.x, d.y, d.z)); this.deathFx?.burst(this.body, 8, 0.6); this._tremor(d, p, 200, 0.8); }
+        if (E.burst != null && t >= E.burst && t < 13.8) { E.burst = t + 1.2 + Math.random(); this.deathFx?.burst(this.body, 2 + (Math.random() * 2 | 0), 0.5 + t / 28); }
+        if (E.finale != null && t >= E.finale) { E.finale = null; g.sound?.playDevil?.(_w.set(d.x, d.y + 60, d.z), 'finale', 2.2, 1); } // (звон и хор растут — на 14-й с удар, треск, выдох)
         if (ph === 'ash' && !D.flash) {
             D.flash = true;
             g.fx?.lightFlash?.(_w.set(d.x, d.y + 60, d.z), 0xfff4d0, 10, 1.2, 400);
             this._tremor(d, p, 300, 1.4);
-            g.sound?.playDevil?.(p, 'boom', 1.8, 0.7);
+            this.deathFx?.flash(); this.deathFx?.ring(_a.set(d.x, d.y, d.z)); this.deathFx?.burst(this.body, 26, 1);
         }
+        if (E.ring2 != null && t >= E.ring2) { E.ring2 = null; this.deathFx?.ring(_a.set(d.x, d.y, d.z)); }
+        if (this.rope.free && E.chainRing !== true) { E.chainRing = true; this.deathFx?.ring(eyeletWorld(this.model, _a)); this.deathFx?.burst(this.body, 4, 0.4); }
+        this.deathFx?.update(dt, t, this.body, g.character?.group?.position);
         if (ph === 'ash' && g.fx?.glow) for (let i = 0; i < 10; i++) { // столб светящегося пепла вверх
             const a = Math.random() * Math.PI * 2, r = Math.random() * 30 * (1 - dissolve * 0.5);
             g.fx.glow.spawn(d.x + Math.cos(a) * r, d.y + Math.random() * 120, d.z + Math.sin(a) * r, Math.cos(a) * 2, 18 + Math.random() * 20, Math.sin(a) * 2, Math.random() < 0.7 ? 0xfff2c8 : 0xffb050, 2 + Math.random() * 3, 3, { shrink: -0.5, spin: 1 });
@@ -1579,8 +1604,8 @@ export class Diabolos {
     _died(d) {
         const g = this.game;
         this.everDead = true;
-        g.sound?.playDevil?.(this.model.position, 'sigh', 1.6, 0.6); // (последний выдох — потом тишина)
-        g.sound?.devilTheme?.(0, false);
+        this._afterT = 0;
+        g.sound?.devilTheme?.(0, false); // (финал уже выдохнул — тишина; пепел оседает)
         devilWound(null, 0, 0, 0);
         this._note('😈 Дьяволос мёртв — из пепла остались сундуки');
         const keepRope = this.rope;
@@ -1766,7 +1791,7 @@ export class Diabolos {
         new FarShape(m).set(true);
         const c = new THREE.InstancedMesh(chainLinkGeo(), chainMaterial(), 2);
         const cg = new THREE.InstancedMesh(chainLinkGeo(), chainGlowMaterial(), 2);
-        return [m, c, cg, new THREE.Mesh(pedestalGeo(), pedestalMat()), ...DevilFires.samples(), anchorModel(), ballModel(), rockModel()];
+        return [m, c, cg, new THREE.Mesh(pedestalGeo(), pedestalMat()), ...DevilFires.samples(), ...DevilDeathFx.samples(), anchorModel(), ballModel(), rockModel()];
     }
 
     _note(t) {

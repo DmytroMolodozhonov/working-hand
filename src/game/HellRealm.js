@@ -136,10 +136,12 @@ export class HellRealm {
         const S = data.hellPlan?.devilSeat;
         if (dome) {
             dome.visible = true; dome.position.copy(me); dome.material.uniforms.uT.value = HELL_TIME.t.value; dome.material.uniforms.uK.value = k;
-            if (S) { const dx = S.x - me.x, dz = S.z - me.z, L = Math.hypot(dx, dz) || 1; dome.material.uniforms.uDevil.value.set(dx / L, L > 60 ? Math.min(1, (L - 60) / 200) : 0, dz / L); }
+            if (S) { const dx = S.x - me.x, dz = S.z - me.z, L = Math.hypot(dx, dz) || 1; dome.material.uniforms.uDevil.value.set(dx / L, (L > 60 ? Math.min(1, (L - 60) / 200) : 0) * (g.diabolos?.glowK ?? 1), dz / L); } // (убит — зарево гаснет)
         }
         const bc = S ? this._makeBeacon() : null;
-        if (bc) { bc.visible = true; bc.position.set(S.x, (S.y ?? 14) + 2, S.z); bc.material.uniforms.uT.value = HELL_TIME.t.value; bc.material.uniforms.uK.value = k * 0.85; }
+        const gk = g.diabolos?.glowK ?? 1;
+        if (bc) { bc.visible = gk > 0.01; // (столб огня гаснет вместе с ним)
+             bc.position.set(S.x, (S.y ?? 14) + 2, S.z); bc.material.uniforms.uT.value = HELL_TIME.t.value; bc.material.uniforms.uK.value = k * 0.85 * gk; }
         if (k < 1) return;
         this._sparks(dt, me);
         this._lava(dt, me);

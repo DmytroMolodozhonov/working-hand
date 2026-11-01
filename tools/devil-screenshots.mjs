@@ -22,6 +22,9 @@ const SHOTS = {
     'devil-death-agony': { death: 4, cam: '-140,80,-170', look: '0,75,0' },
     'devil-death-fall': { death: 11, cam: '-130,60,-160', look: '0,55,0' },
     'devil-death-ash': { death: 16.5, cam: '-150,70,-180', look: '0,60,0' },
+    'devil-death-burst': { death: 14.5, cam: '-260,90,-330', look: '0,60,0' },
+    'devil-death-flash': { death: 14.2, flash: 1, cam: '-260,90,-330', look: '0,60,0' },
+    'devil-death-wide': { death: 9, cam: '-300,120,-380', look: '0,50,0' },
     'devil-grab': { grab: 6, cam: '-80,110,-150', look: '0,100,0' },
     'devil-fires': { fires: 1, pose: { face: { brow: -1, snarl: 0.6, ear: -0.5 }, jaw: 0.3 }, heat: 0.7, cam: '-60,12,-150', look: '0,70,0' },
     'devil-fires-wide': { fires: 1, pose: { sit: 1, sleep: 1, eyes: 0.04 }, heat: 0.3, cam: '-170,60,-230', look: '0,30,30' },
@@ -37,7 +40,7 @@ page.on('response', (r) => { if (r.status() >= 400) console.error('404:', r.url(
 fs.mkdirSync(out, { recursive: true });
 for (const [name, s] of Object.entries(SHOTS)) {
     if (only && !name.includes(only)) continue;
-    const heat = s.heat ?? 0.7; const u = `http://localhost:${port}/tools/devil-view.html?pose=${encodeURIComponent(JSON.stringify(s.pose || {}))}&heat=${heat}&cam=${s.cam}&look=${s.look}${s.act ? `&act=${s.act}&ak=${s.ak}&mood=${s.mood || 'angry'}` : ''}${s.t != null ? `&t=${s.t}` : ''}${s.death != null ? `&death=${s.death}` : ''}${s.grab != null ? `&grab=${s.grab}` : ''}${s.fires ? '&fires=1' : ''}`;
+    const heat = s.heat ?? 0.7; const u = `http://localhost:${port}/tools/devil-view.html?pose=${encodeURIComponent(JSON.stringify(s.pose || {}))}&heat=${heat}&cam=${s.cam}&look=${s.look}${s.act ? `&act=${s.act}&ak=${s.ak}&mood=${s.mood || 'angry'}` : ''}${s.t != null ? `&t=${s.t}` : ''}${s.death != null ? `&death=${s.death}` : ''}${s.grab != null ? `&grab=${s.grab}` : ''}${s.fires ? '&fires=1' : ''}${s.flash ? '&flash=1' : ''}`;
     await page.goto(u);
     await page.waitForFunction(() => window.__done, null, { timeout: 120000 });
     await page.screenshot({ path: path.join(out, name + '.png') });
