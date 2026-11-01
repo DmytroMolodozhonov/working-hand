@@ -1303,7 +1303,7 @@ export class ItemSystem {
         if (item.home) { const home = item.home; delete item.home; if (toId && toId[0] !== '#') this.game.castleLife?.tookFromHome?.(home, toId); }
         if (this.game.sync) this.game.sync.itemGone?.(uid, toId, side);
         handLog(`поднят(а) с земли: ${ITEM_INFO[item.kind]?.name || item.kind}, id ${item.uid}, кто: ${toId === this.game.localId ? 'я' : (toId || '?')}${side ? ', рука ' + (side === 'right' ? 'правая' : 'левая') : ''}`);
-        if (toId === this.game.localId) this._gotItem(item, side);
+        if (toId === this.game.localId) { const inv = this.game.inventory; if (inv?.watch) inv.watch('подбор с земли/Акцио', () => this._gotItem(item, side)); else this._gotItem(item, side); }
     }
 
     /** The hand at an unpaid good: how to buy it (now and then). */
@@ -1316,7 +1316,7 @@ export class ItemSystem {
 
     _gotItem(item, side) {
         delete item.home; // (it is mine now)
-        if (this.game.inventory?.hasUid?.(item.uid)) return; // (already mine — a second message about it: never two of one thing)
+        if (this.game.inventory?.hasUid?.(item.uid)) { handLog(`подобранная вещь уже есть у меня и не добавлена: ${ITEM_INFO[item.kind]?.name || item.kind}, id ${item.uid}`); return; } // (already mine — a second message about it: never two of one thing)
         // my own lost wand back: the plain stand-in given meanwhile goes (Inventory.gotWand)
         if (item.kind === 'wand') this.game.inventory?.gotWand?.(item);
         // a bundle of logs goes back into the wood stack (Beds.js)
@@ -1365,7 +1365,7 @@ export class ItemSystem {
         // (a bow stays in the hand that closed on it: the other hand takes it across by itself — Gear)
         // («Акцио» brings it into an open hand: kept until the fingers close on it; a hand that closed on it re-arms at once)
         if (!this.takeIntoHand(item, side) && !this.takeIntoHand(item, side === 'right' ? 'left' : 'right')) {
-            this.game.inventory.storeItem?.(item);
+            if (!this.game.inventory.storeItem?.(item)) this._noRoom(item); // (hands and slots full: at my feet — it used to vanish)
             return;
         }
         this.game.hud.setVoice?.(`✋ ${ITEM_INFO[item.kind]?.name || 'Предмет'} в руке${item.kind === 'wand' ? ' — скажите «Раскрой свои секреты»' : ''}`, true);

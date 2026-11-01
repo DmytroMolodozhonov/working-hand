@@ -35,6 +35,7 @@ import { armorName } from './ArmorTypes.js';
 import { accioCatcher } from './Accio.js';
 import { logStackModel, logIconUrl } from './LogModel.js';
 import { ENCHANT_TIERS } from './Enchant.js';
+import { handLog } from './HandRelease.js';
 
 export const SLOT_COUNT = 5;
 export const STACK = 100;
@@ -322,15 +323,50 @@ export class Inventory {
         if (!item || item.kind !== 'wand' || item.spare || !item.uid || item.uid !== this.ownWand) return false;
         const g = this.game;
         const k = this.slots.findIndex((x) => x?.kind === 'wand' && x.spare && x !== item);
-        if (k >= 0) this.slots[k] = null;
+        if (k >= 0) { handLog(`палочка-замена убрана из ячейки ${k + 1}: вернулась своя, id ${item.uid}`); this.slots[k] = null; }
         else {
-            const side = ['left', 'right'].find((sd) => g.items?.held[sd]?.item.kind === 'wand' && g.items.held[sd].item.spare && g.items.held[sd].item !== item);
-            if (!side) return false;
-            const it = g.items.releaseHand(side);
-            if (this.inHand?.item === it) this.inHand = null;
+            // (a stand-in IN A HAND is never taken away: the author lost a wand from the leading hand when the own one came into the other.
+            // It stays, as an ordinary wand — two wands are seen, nothing «disappears».)
+            for (const sd of ['left', 'right']) {
+                const h = g.items?.held[sd]?.item;
+                if (h && h.kind === 'wand' && h.spare && h !== item) { delete h.spare; handLog(`палочка-замена в руке (${sd === 'right' ? 'правая' : 'левая'}) остаётся: вернулась своя, id ${h.uid}`); }
+            }
+            return false;
         }
         this._render();
         return true;
+    }
+
+    /**
+     * Watchman against lost things (the author: «палочка в основной руке просто пропала»): every thing (by uid) that was in a slot
+     * or a hand before `fn` must be in a slot, a hand, on the ground or in a weapon hand after it — else a line «вещь потеряна: откуда»
+     * goes to the journal (tag «Предметы»). Returns what `fn` returned.
+     */
+    watch(label, fn) {
+        const before = this.tally();
+        const r = fn();
+        this.lostSince(before, label);
+        return r;
+    }
+
+    /** uid → thing for everything of mine held in slots and hands. */
+    tally() {
+        const m = new Map();
+        for (const x of this.slots) if (x?.uid) m.set(x.uid, x);
+        const h = this.game.items?.held;
+        for (const sd of ['left', 'right']) { const x = h?.[sd]?.item; if (x?.uid) m.set(x.uid, x); }
+        return m;
+    }
+
+    lostSince(before, label) {
+        const g = this.game, now = this.tally(), lost = [];
+        for (const [uid, x] of before) {
+            if (now.has(uid) || g.items?.loose?.has(uid)) continue;
+            if (x.kind === 'blocks' || x.kind === 'coins') continue; // (turned into resources / the purse: not a loss)
+            lost.push(uid);
+            handLog(`⚠ вещь потеряна: ${ITEM_INFO[x.kind]?.name || x.kind}, id ${uid}, откуда: ${label}`);
+        }
+        return lost;
     }
 
     /** Is the thing with this uid mine already (in a slot or a hand)? (one thing — one place: never twice) */
@@ -371,6 +407,7 @@ export class Inventory {
     /** Put an item (weapon / book) into a free slot (the chosen one first). */
     store(item) {
         retireScroll(item); // (an old health / mana scroll from an old save or client: an apple now)
+        if (item && !this.slots.includes(item) && item.uid && this.hasUid(item.uid)) handLog(`вещь не добавлена в ячейку: такой id уже есть у меня (${item.kind}, id ${item.uid})`);
         if (item && (this.slots.includes(item) || (item.uid && this.hasUid(item.uid)))) { this._render(); return true; } // (already mine: never a second entry of it)
         let i = this.selected >= 0 && !this.slots[this.selected] ? this.selected : this.slots.findIndex((s) => !s);
         if (i < 0) { this.game.hud.toast?.('🎒 Вещь не помещается: все ячейки заняты, нужна свободная ячейка'); return false; }
@@ -395,10 +432,12 @@ export class Inventory {
     select(i, side = null) {
         if (i >= 0 && this.monsterShut()) return; // (the free hand, -1, stays: it takes nothing)
         if (i === this.selected && (this.inHand || i < 0)) return;
-        this._putBackHand(side);
-        const n = this.slots.length + 1;
-        this.selected = ((((i + 1) % n) + n) % n) - 1;
-        this._takeIntoHand(side);
+        this.watch('выбор ячейки', () => {
+            this._putBackHand(side);
+            const n = this.slots.length + 1;
+            this.selected = ((((i + 1) % n) + n) % n) - 1;
+            this._takeIntoHand(side);
+        });
         this._render();
     }
 
@@ -438,7 +477,7 @@ export class Inventory {
         if (s.kind === 'res') { this.inHand = { kind: 'res', stack: s, side }; return; } // (seen in a free hand: resSide)
         // any other thing (wand, scroll, shield, food…)
         if (g.items && !g.items.held[D] && !g.weapons.hands[D].held) {
-            g.items.takeIntoHand(s, D);
+            if (!g.items.takeIntoHand(s, D)) return; // (refused: stays in the cell, never lost)
             this.slots[this.selected] = null;
             this.inHand = { kind: 'item', item: s, side: D };
         }
@@ -658,7 +697,9 @@ export class Inventory {
      * The wand's pocket (the left one): put the wand away (from whichever hand holds it), or draw
      * it — always into the RIGHT hand (the left only if the right is busy), whichever hand went in.
      */
-    wandPocket(side) {
+    wandPocket(side) { return this.watch('карман палочки', () => this._wandPocket(side)); }
+
+    _wandPocket(side) {
         if (this.monsterShut()) return false;
         const g = this.game;
         const holder = ['right', 'left'].find((sd) => g.items?.held[sd]?.item.kind === 'wand');
@@ -911,7 +952,7 @@ export class Inventory {
             return true;
         }
         if (g.items && !g.items.held[side] && !g.weapons.hands[side].held) {
-            g.items.takeIntoHand(s, side);
+            if (!g.items.takeIntoHand(s, side)) return false; // (the hand refused: the thing STAYS in its cell — it used to vanish from both)
             this.slots[i] = null;
             return true;
         }
