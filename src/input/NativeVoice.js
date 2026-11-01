@@ -291,7 +291,11 @@ export class NativeVoice {
         if ((d.far || 0) >= 0.25 && !d.final) { const w = this._when(d, {}); d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to); }
         d.duel = !!this.duelHot;
         d.knows = this.knows; // (spell → does the hero know it: set by the game)
+        // (the game's own time on this look — finding the spell in the letters, on the page's thread: the journal's «разбор»)
+        const t0 = performance.now();
         const r = lookAt(d, this.segs.get(d.id));
+        const ms = performance.now() - t0, lc = this.lookCost || (this.lookCost = { n: 0, sum: 0, max: 0 });
+        lc.n++; lc.sum += ms; lc.max = Math.max(lc.max, ms);
         this.onLetters?.(r.heard?.written || '', d); // (what was written so far — the dragon's «У» of «Империус Максима»: DragonHowl)
         if (d.final) this.segs.delete(d.id); else this.segs.set(d.id, r.seg);
         while (this.segs.size > 20) this.segs.delete(this.segs.keys().next().value);

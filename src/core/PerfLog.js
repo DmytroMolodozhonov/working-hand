@@ -115,10 +115,11 @@ export class PerfLog {
         // found thousands of its results «in 5 s») and its counter restarts with a new network
         this._aiPrev = st.results ?? null;
         // the voice: which hears (the program on this computer / the browser's Google), the program's time per
-        // look at a phrase, and how late after the word the spells came (average / worst)
-        const vs = g.voice, nv = vs?.native, vc = nv?.cost, vl = g.stats?.voice;
-        const voice = vs ? `голос ${vs.engine === 'native' ? 'на компьютере' : 'в браузере'}${vc?.n ? `, взгляд ${Math.round(vc.sum / vc.n)}/${Math.round(vc.max)} мс` : ''}${vl?.n ? `, заклинания через ${Math.round(vl.sum / vl.n)}/${Math.round(vl.max)} мс после слова (${vl.n}, после конца фразы ${vl.final})` : ''}` : '';
-        if (nv) nv.cost = null;
+        // look at a phrase, the game's own time finding the spell in it («разбор», lookAt on the page's thread), and how late
+        // after the word the spells came (average / worst)
+        const vs = g.voice, nv = vs?.native, vc = nv?.cost, vk = nv?.lookCost, vl = g.stats?.voice;
+        const voice = vs ? `голос ${vs.engine === 'native' ? 'на компьютере' : 'в браузере'}${vc?.n ? `, взгляд ${Math.round(vc.sum / vc.n)}/${Math.round(vc.max)} мс` : ''}${vk?.n ? `, разбор в игре ${(vk.sum / vk.n).toFixed(1)}/${vk.max.toFixed(1)} мс` : ''}${vl?.n ? `, заклинания через ${Math.round(vl.sum / vl.n)}/${Math.round(vl.max)} мс после слова (${vl.n}, после конца фразы ${vl.final})` : ''}` : '';
+        if (nv) { nv.cost = null; nv.lookCost = null; }
         if (g.stats) g.stats.voice = null;
         const info = g.renderer?.info;
         const mem = globalThis.performance?.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} МБ` : '';

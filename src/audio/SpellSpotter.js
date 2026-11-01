@@ -279,12 +279,98 @@ export function spot(P, toks, { openStart = true, openEnd = true } = {}) {
 /** Longer phrases a little ahead: «Бомбардо Максима» over the «Бомбардо» inside it. */
 export const BONUS = 0.15;
 
+/**
+ * All the phrases of a vocabulary as one tree of their letters (a trie): «криейт э …», «протекшн …», every «… максима» share
+ * their beginning. spot's table for a phrase's first k letters never looks at the letters after them, so one table over the tree
+ * gives every phrase exactly what spot gives it — the same numbers bit for bit, the same order of comparisons — with each shared
+ * beginning counted once (VOCAB: 20 569 states of spot → 7 101). States: 0 the root's «nothing new», node i: 1+2i its letter, 2+2i
+ * the «nothing new» after it. (Was 14 ms per look on the page's own thread — the author's rule: nothing longer than 2–3 ms in a frame.)
+ */
+const TRIES = new WeakMap();
+function trieOf(vocab) {
+    let tr = TRIES.get(vocab);
+    if (tr) return tr;
+    const key = new Map(), lab = [], pBlank = [], pTok = [], first = [];
+    const ends = new Int32Array(vocab.length).fill(-1);
+    vocab.forEach((w, k) => {
+        let node = -1, path = '';
+        for (const tok of w.toks) {
+            path += ',' + tok;
+            let i = key.get(path);
+            if (i === undefined) {
+                i = lab.length;
+                key.set(path, i);
+                lab.push(tok);
+                pBlank.push(node < 0 ? 0 : 2 + 2 * node);
+                pTok.push(node >= 0 && lab[node] !== tok ? 1 + 2 * node : -1); // (spot's skip: a letter after a different one)
+                first.push(node < 0 ? 1 : 0);
+            }
+            node = i;
+        }
+        ends[k] = node;
+    });
+    tr = { n: lab.length, lab: Int32Array.from(lab), pBlank: Int32Array.from(pBlank), pTok: Int32Array.from(pTok), first: Uint8Array.from(first), ends };
+    TRIES.set(vocab, tr);
+    return tr;
+}
+
+/** spot() of every phrase of the vocabulary at once (over its trie): → [{pen, a, b}] in the vocabulary's order (null: no letters). */
+export function spotAll(P, vocab = VOCAB, { openStart = true, openEnd = true } = {}) {
+    const { lp, T, mx, quiet } = P;
+    const tr = trieOf(vocab), { n, lab, pBlank, pTok, first, ends } = tr;
+    const S = 1 + 2 * n, K = vocab.length;
+    let dp = new Float64Array(S).fill(NEG), st = new Int32Array(S);
+    let nd = new Float64Array(S), ns = new Int32Array(S);
+    const pen = new Float64Array(K).fill(NEG), pa = new Int32Array(K), pb = new Int32Array(K);
+    const c = new Float64Array(V);
+    for (let t = 0; t < T; t++) {
+        const enter = t === 0 ? openStart : quiet[t - 1] && (openStart || t >= EDGE);
+        const row = t * V, top = mx[t];
+        for (let v = 0; v < V; v++) c[v] = lp[row + v] - top;
+        const cb = c[BLANK];
+        let v = dp[0], o = st[0];
+        if (enter && v < 0) { v = 0; o = t; }
+        nd[0] = v + cb; ns[0] = o;
+        for (let i = 0, ts = 1; i < n; i++, ts += 2) {
+            // the letter: stay, come from the «nothing new» before it, or skip it (from the letter before, when it differs)
+            v = dp[ts]; o = st[ts];
+            const q = pBlank[i];
+            if (dp[q] > v) { v = dp[q]; o = st[q]; }
+            const r = pTok[i];
+            if (r >= 0 && dp[r] > v) { v = dp[r]; o = st[r]; }
+            if (first[i] && enter && v < 0) { v = 0; o = t; }
+            nd[ts] = v + c[lab[i]]; ns[ts] = o;
+            // the «nothing new» after it
+            const bs = ts + 1;
+            v = dp[bs]; o = st[bs];
+            if (dp[ts] > v) { v = dp[ts]; o = st[ts]; }
+            nd[bs] = v + cb; ns[bs] = o;
+        }
+        let tmp = dp; dp = nd; nd = tmp;
+        const ti = st; st = ns; ns = ti;
+        if (t === T - 1 ? openEnd : quiet[t + 1] && (openEnd || t < T - 1 - EDGE)) {
+            for (let k = 0; k < K; k++) {
+                const e = ends[k];
+                if (e < 0) continue;
+                const ts = 1 + 2 * e, bs = ts + 1;
+                if (dp[bs] > pen[k]) { pen[k] = dp[bs]; pa[k] = st[bs]; pb[k] = t; }
+                if (dp[ts] > pen[k]) { pen[k] = dp[ts]; pa[k] = st[ts]; pb[k] = t; }
+            }
+        }
+    }
+    const out = new Array(K);
+    for (let k = 0; k < K; k++) out[k] = ends[k] < 0 ? null : { pen: pen[k], a: pa[k], b: pb[k] };
+    return out;
+}
+
 /** Every way of saying every spell, scored against the sound: [{w, avg (cost per letter, ≤ 0), score, a, b}]. */
 export function scoreAll(P, vocab = VOCAB, open = {}) {
     const out = [];
-    for (const w of vocab) {
+    const all = spotAll(P, vocab, open);
+    for (let k = 0; k < vocab.length; k++) {
+        const w = vocab[k];
         if (!w.toks.length) continue;
-        const r = spot(P, w.toks, open);
+        const r = all[k];
         if (r.pen <= NEG / 2) continue;
         const avg = r.pen / w.toks.length;
         out.push({ w, avg, score: avg + BONUS * w.len, a: r.a, b: r.b });
