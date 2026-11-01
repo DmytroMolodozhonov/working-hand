@@ -46,10 +46,11 @@ async function run(label, query) {
             const h = (bytes, s = 0x811c9dc5) => { for (let i = 0; i < bytes.length; i++) { s ^= bytes[i]; s = Math.imul(s, 0x01000193) >>> 0; } return s >>> 0; };
             const hx = (a) => h(new Uint8Array(a.buffer, a.byteOffset, a.byteLength)).toString(16);
             const out = { sounds: {}, soundShape: {}, icons: {}, body: null, world: null, state: null, cache: null };
+            const kept = new Set([...(g.sound?._synthed || []), ...(g.sound?._fromCache || [])]); // (what the cache may hold)
             for (const [k, b] of Object.entries(g.sound?.sounds || {})) {
-                if (!(b instanceof AudioBuffer)) continue;
+                if (!(b instanceof AudioBuffer) || !kept.has(k)) continue;
                 out.soundShape[k] = `${b.numberOfChannels}×${b.length}@${b.sampleRate}`;
-                out.sounds[k] = Array.from({ length: b.numberOfChannels }, (_, i) => hx(b.getChannelData(i))).join(',');
+                out.sounds[k] = b.sampleRate + ':' + Array.from({ length: b.numberOfChannels }, (_, i) => hx(b.getChannelData(i))).join(',');
             }
             // (the pictures: each decoded to its pixels — a data URL or a blob, the same picture gives the same pixels)
             const cv = document.createElement('canvas'); cv.width = cv.height = 80;
@@ -93,13 +94,21 @@ try {
     const warm = await run('тёплый    ', '');
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const cmp = (name, ok, why = '') => { console.log(`  ${ok ? '✓' : '✗'} ${name}${ok ? '' : ' — ' + why}`); if (!ok) bad.push(name); };
-    cmp('звуки: тот же набор и размеры (без кеша = холодный = тёплый)', same(ref.soundShape, cold.soundShape) && same(cold.soundShape, warm.soundShape), 'разные наборы/длины');
+    // (many sounds and pictures are random by design — a new variant each start, with no cache too: «случайные» are told
+    // apart as those where two fresh starts — без кеша and холодный — already differ; the rest must be the same everywhere)
+    const shapeDiff = Object.keys(ref.soundShape).filter((k) => ref.soundShape[k] !== warm.soundShape[k] && ref.soundShape[k] === cold.soundShape[k]);
+    const missing = Object.keys(ref.soundShape).filter((k) => !(k in warm.soundShape)).concat(Object.keys(warm.soundShape).filter((k) => !(k in ref.soundShape)));
+    cmp('звуки: тот же набор и размеры (без кеша = тёплый)', !shapeDiff.length && !missing.length, [...shapeDiff, ...missing].slice(0, 8).join(', '));
+    const randS = Object.keys(ref.sounds).filter((k) => ref.sounds[k] !== cold.sounds[k]).length;
+    console.log(`  (звуков со случайностью — разные в двух запусках без кеша: ${randS} из ${Object.keys(ref.sounds).length})`);
     const diffS = Object.keys(warm.sounds).filter((k) => cold.sounds[k] !== warm.sounds[k]);
     cmp('звуки: тёплый запуск играет ровно то, что записал холодный (бит в бит)', diffS.length === 0, diffS.slice(0, 6).join(', '));
     const diffI = Object.keys(warm.icons).filter((k) => k in cold.icons && cold.icons[k] !== warm.icons[k]);
     cmp('иконки вещей: тёплый = холодный по пикселям', diffI.length === 0, diffI.slice(0, 6).join(', '));
-    const diffR = Object.keys(warm.icons).filter((k) => k in ref.icons && ref.icons[k] !== warm.icons[k]);
-    cmp('иконки вещей: тёплый = без кеша по пикселям', diffR.length === 0, diffR.slice(0, 6).join(', '));
+    const randI = Object.keys(ref.icons).filter((k) => k in cold.icons && ref.icons[k] !== cold.icons[k]);
+    const diffR = Object.keys(warm.icons).filter((k) => k in ref.icons && k in cold.icons && ref.icons[k] === cold.icons[k] && ref.icons[k] !== warm.icons[k]);
+    cmp('иконки вещей: тёплый = без кеша по пикселям (кроме случайных по природе)', diffR.length === 0, diffR.slice(0, 6).join(', '));
+    if (randI.length) console.log(`  (иконки со случайной текстурой — разные и без кеша: ${randI.join(', ')})`);
     cmp('тело «Детальной» модели: бит в бит во всех трёх', ref.body === cold.body && cold.body === warm.body, `${ref.body} / ${cold.body} / ${warm.body}`);
     cmp('мир у старта: те же блоки', ref.world === cold.world && cold.world === warm.world, `${ref.world} / ${cold.world} / ${warm.world}`);
     cmp('состояние игры (место героя, вещи, сид, поколение)', ref.state === cold.state && cold.state === warm.state, `${ref.state} / ${warm.state}`);

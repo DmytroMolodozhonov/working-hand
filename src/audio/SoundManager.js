@@ -61,6 +61,8 @@ export class SoundManager {
         this.camera = camera;
         this.audioListener = new THREE.AudioListener();
         camera.add(this.audioListener);
+        this._synthed = new Set(); // (the sounds synthesized on this thread by the warm-up: the boot cache keeps exactly these)
+        this._fromCache = new Set(); // (and the ones read back from it)
         this.sounds = { death: null, thunder: null, inferno: null, sapira: null, hits: [], ice: null, sand: null, shatter: null };
         this.music = { ambient: [], battle: null, current: null, currentIndex: 0, state: 'idle', volume: 0.2 };
         this.battleTimer = 0;
@@ -197,7 +199,7 @@ export class SoundManager {
     }
 
     /** The cache's key of the sounds made on the loading screen (the build is in the cache's name; the rate changes every sample). */
-    _soundCacheKey() { return `sound/warm-${this.context.sampleRate}-${this.context.destination?.channelCount ?? 2}`; }
+    _soundCacheKey() { return `sound/warm2-${this.context.sampleRate}-${this.context.destination?.channelCount ?? 2}`; }
 
     /** The kept sounds put back (each an AudioBuffer of the same rate, the same samples). @returns the set of their names */
     async _readSoundCache() {
@@ -209,9 +211,9 @@ export class SoundManager {
             if (!tree || tree.sr !== this.context.sampleRate || !Array.isArray(tree.list)) return got;
             for (const e of tree.list) {
                 if (!e || typeof e.k !== 'string' || this.sounds[e.k] || !Array.isArray(e.ch) || !e.ch.length) continue;
-                const len = e.ch[0].length;
-                if (!len || e.ch.some((c) => !(c instanceof Float32Array) || c.length !== len)) continue;
-                const b = this.context.createBuffer(e.ch.length, len, tree.sr);
+                const len = e.ch[0].length, sr = e.sr; // (each sound its own rate: some are made at 24 kHz or at half the card's)
+                if (!len || !(sr >= 3000 && sr <= 384000) || e.ch.some((c) => !(c instanceof Float32Array) || c.length !== len)) continue;
+                const b = this.context.createBuffer(e.ch.length, len, sr);
                 e.ch.forEach((c, i) => b.copyToChannel(c, i));
                 this.sounds[e.k] = b;
                 got.add(e.k);
@@ -222,14 +224,17 @@ export class SoundManager {
 
     /** Every sound made on this loading screen (not the files, not the ones read back) kept for the next start. */
     _writeSoundCache(had, cached) {
+        this._fromCache = cached;
         const list = [];
         let fresh = 0;
         for (const [k, b] of Object.entries(this.sounds)) {
-            if (had.has(k) || !(b instanceof AudioBuffer)) continue;
+            // (only what the warm-up synthesized here or read back: not the files, not the ones the workers make — the spells'
+            // tunes, the houses' themes — they cost this thread nothing)
+            if (had.has(k) || !(b instanceof AudioBuffer) || !(this._synthed.has(k) || cached.has(k))) continue;
             if (!cached.has(k)) fresh++;
             const ch = [];
             for (let i = 0; i < b.numberOfChannels; i++) ch.push(b.getChannelData(i));
-            list.push({ k, ch });
+            list.push({ k, sr: b.sampleRate, ch });
         }
         if (!fresh || !list.length) return; // (everything came from the disk: nothing new to keep)
         readyBootCache().then((cache) => cache?.putTree('sound', this._soundCacheKey(), { sr: this.context.sampleRate, list })).catch(() => {});
@@ -687,6 +692,7 @@ export class SoundManager {
         do { r = gen.next(); } while (!r.done && performance.now() - t0 < budgetMs);
         if (!r.done) return false;
         this.sounds[key] = r.value;
+        this._synthed.add(key); // (made here, on this thread: kept for the next start — _writeSoundCache)
         delete gens[key];
         return true;
     }
@@ -744,7 +750,7 @@ export class SoundManager {
         ]);
         while (list.length) {
             const [key, make] = list.shift();
-            if (!this.sounds[key]) { this.sounds[key] = make(); return list.length > 0; }
+            if (!this.sounds[key]) { this.sounds[key] = make(); this._synthed.add(key); return list.length > 0; }
         }
         return false;
     }
@@ -976,8 +982,8 @@ export class SoundManager {
     /** «Inspirius»' sounds made ahead, a little a frame: @returns true when all are made. */
     prepareInspirius() {
         if (!this.context) return true;
-        if (!this.sounds.inspCast) { this.sounds.inspCast = this._synthElectric(1.4, true); return false; }
-        if (!this.sounds.inspZap) { this.sounds.inspZap = this._synthElectric(0.3, false); return false; }
+        if (!this.sounds.inspCast) { this.sounds.inspCast = this._synthElectric(1.4, true); this._synthed.add('inspCast'); return false; }
+        if (!this.sounds.inspZap) { this.sounds.inspZap = this._synthElectric(0.3, false); this._synthed.add('inspZap'); return false; }
         return this._prepare('inspBlast', () => this._synthMegaBlastGen(6));
     }
 
