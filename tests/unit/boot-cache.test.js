@@ -81,9 +81,9 @@ test('кеш: промах → запись → попадание; битая �
     const t = await c.getTree('sound', 'sound/k');
     assert.deepEqual([...t.list[0].ch[0]], [0.5, -0.5]);
     // (повреждённый файл на диске)
-    const e = st.m.get('sound/k'); new Uint8Array(e.buf)[e.buf.byteLength - 2] ^= 1;
+    const e = st.m.get('sound/k@0'); new Uint8Array(e.buf)[e.buf.byteLength - 2] ^= 1;
     assert.equal(await c.getTree('sound', 'sound/k'), null);
-    assert.equal(st.m.has('sound/k'), false, 'битая запись удалена');
+    assert.equal(st.m.has('sound/k@0'), false, 'битая запись удалена');
     assert.equal(c.stats.sound.bad, 1);
     assert.match(c.line(), /звуки 1 из кеша \/ 2 заново \(1 битых\)/);
 });
@@ -118,8 +118,8 @@ test('предел размера: старые записи уходят пер
     for (const k of ['a', 'b', 'c', 'd']) await c.put('icon', 'icon/' + k, null, [new Uint8Array(1000)]);
     await c.trim();
     const left = [...st.m.keys()];
-    assert.ok(!left.includes('icon/a') && !left.includes('icon/b'), 'старые удалены: ' + left);
-    assert.ok(left.includes('icon/d'));
+    assert.ok(!left.includes('icon/a@0') && !left.includes('icon/b@0'), 'старые удалены: ' + left);
+    assert.ok(left.includes('icon/d@0'));
     const total = (await st.list()).reduce((a, r) => a + r.size, 0);
     assert.ok(total <= 3000);
 });
@@ -150,4 +150,20 @@ test('таймер этапов загрузки: строка в журнал',
     assert.equal(B.end('нет такого'), 0);
     B.reset();
     assert.equal(B.rows.length, 0);
+});
+
+test('обновление игры: стирается только тот вид, чей код изменился; старая версия записи удаляется', async () => {
+    const st = memStore();
+    const v1 = new BootCache({ store: st, build: 'b1', kinds: { sound: 's1', realbody: 'r1' } });
+    await v1.put('sound', 'sound/w', null, [new Uint8Array(8)]);
+    await v1.put('realbody', 'realbody/v1', null, [new Uint8Array(8)]);
+    await v1.put('icon', 'icon/g', null, [new Uint8Array(8)]);
+    // (обновление: изменились файлы звуков и что-то ещё в игре, тело героя — нет)
+    const v2 = new BootCache({ store: st, build: 'b2', kinds: { sound: 's2', realbody: 'r1' } });
+    assert.equal(await v2.get('sound', 'sound/w'), null, 'код звуков другой — заново');
+    assert.ok(await v2.get('realbody', 'realbody/v1'), 'код тела тот же — из кеша');
+    assert.equal(await v2.get('icon', 'icon/g'), null, 'у иконок нет своей версии — вся сборка');
+    await v2.put('sound', 'sound/w', null, [new Uint8Array(8)]);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.ok(st.m.has('sound/w@s2') && !st.m.has('sound/w@s1'), 'старая версия записи удалена: ' + [...st.m.keys()]);
 });

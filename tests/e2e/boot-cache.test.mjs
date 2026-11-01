@@ -42,13 +42,14 @@ test('кеш загрузки живёт между запусками брау�
             // (испортим запись на диске: должна не прочитаться и удалиться)
             const name = (await caches.keys()).find((k) => k.startsWith('zns-boot-'));
             const cc = await caches.open(name);
-            const r = await cc.match('/__zns-boot/sound/test');
+            const url = (await cc.keys()).map((q) => new URL(q.url).pathname).find((u) => u.startsWith('/__zns-boot/sound/test@'));
+            const r = await cc.match(url);
             const buf = await r.arrayBuffer();
             new Uint8Array(buf)[buf.byteLength - 3] ^= 0xff;
-            await cc.put('/__zns-boot/sound/test', new Response(buf));
+            await cc.put(url, new Response(buf));
             const bad = await c.getTree('sound', 'sound/test');
             await new Promise((r2) => setTimeout(r2, 200));
-            const gone = !(await cc.match('/__zns-boot/sound/test'));
+            const gone = !(await cc.match(url));
             return { got: t && Array.from(t.list[0].ch[0]), bad, gone, line: c.line() };
         });
         assert.deepEqual(second.got, [0.25, -1, 3.5]);

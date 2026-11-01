@@ -138,11 +138,52 @@ def game_version():
     # (build: a hash of every game file's name, size and time — the boot cache's key, BootCache.js: any change of the
     # game, an update or an edit, gives another build and the kept results of the old one are never read)
     build = build_id()
+    kinds = kind_builds()
     # (zns: the game's own marker — the launcher never takes another program on this port for the game)
-    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else "", "zns": "zns-game", "build": build}
+    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else "", "zns": "zns-game", "build": build, "kinds": kinds}
 
 
 _BUILD = {"id": "", "at": 0.0}
+
+
+# What each kind of the boot cache is made from (BootCache.js): only a change in THESE files makes that kind anew — an
+# update of the game that does not touch them keeps it (the author updates many times a day: the whole cache went at each).
+# The library three.js is in every kind. A kind not here uses the whole build.
+KIND_FILES = {
+    "sound": ("src/audio", "src/fx/SpellManager.js", "src/game/NihilisWords.js", "src/game/PentagramWords.js"),
+    "realbody": ("src/entities/real",),
+    "realwear": ("src/entities/real",),
+}
+_KINDS = {"v": None, "at": 0.0}
+
+
+def kind_builds():
+    """A hash of the CONTENTS of each kind's files (not their times: a fresh copy of the same code keeps the cache)."""
+    now = time.time()
+    if _KINDS["v"] is not None and now - _KINDS["at"] < 5:
+        return _KINDS["v"]
+    import hashlib
+    common = hashlib.sha1()
+    try:
+        st = os.stat(os.path.join("vendor", "three", "three.module.js"))
+        common.update(str(st.st_size).encode())
+    except OSError:
+        pass
+    out = {}
+    for kind, tops in KIND_FILES.items():
+        h = common.copy()
+        for top in tops:
+            files = [top] if os.path.isfile(top) else sorted(os.path.join(b_, f) for b_, _d, fs in os.walk(top) for f in fs)
+            for fp in files:
+                try:
+                    with open(fp, "rb") as fh:
+                        h.update(fp.replace(os.sep, "/").encode() + b"\0" + fh.read() + b"\0")
+                except OSError:
+                    pass
+        out[kind] = h.hexdigest()[:16]
+    _KINDS["v"] = out
+    _KINDS["at"] = now
+    return out
 
 
 def build_id():

@@ -180,8 +180,11 @@ export function decodeRecord(buf, kind, key) {
  * @param {(s: string) => void} [o.log]
  */
 export class BootCache {
-    constructor({ store = null, enabled = true, maxBytes = BOOT.MAX_BYTES, log = null, now = () => Date.now() } = {}) {
+    constructor({ store = null, enabled = true, maxBytes = BOOT.MAX_BYTES, log = null, now = () => Date.now(), build = '', kinds = {} } = {}) {
         this.store = store;
+        // (the version of each kind: a hash of ITS code from the server — an update of other files keeps it; no own — the whole build)
+        this.build = build;
+        this.kinds = kinds || {};
         this.enabled = !!(enabled && store);
         this.maxBytes = maxBytes;
         this.log = log;
@@ -191,6 +194,9 @@ export class BootCache {
         this.why = enabled ? (store ? '' : 'нет хранилища') : 'выключен';
     }
 
+    /** The name a record is kept under: its key + the version of its kind's code (another version is another record). */
+    _name(kind, key) { return `${key}@${this.kinds[kind] || this.build || '0'}`; }
+
     _s(kind) { return this.stats[kind] || (this.stats[kind] = { hit: 0, miss: 0, bad: 0, put: 0, bytes: 0, ms: 0 }); }
 
     /** A kept result, or null (missing / broken / off). A broken record is deleted. */
@@ -198,6 +204,7 @@ export class BootCache {
         if (!this.enabled || !BOOT.KINDS.includes(kind)) return null;
         const s = this._s(kind), t = Date.now();
         try {
+            key = this._name(kind, key);
             const buf = await this.store.get(key);
             if (!buf) { s.miss++; return null; }
             const r = decodeRecord(buf, kind, key);
@@ -211,8 +218,11 @@ export class BootCache {
     async put(kind, key, meta, arrays) {
         if (!this.enabled || !this.writable || !BOOT.KINDS.includes(kind)) return false;
         try {
-            const buf = encodeRecord(kind, key, meta, arrays);
-            await this.store.put(key, buf, this.now());
+            const name = this._name(kind, key);
+            const buf = encodeRecord(kind, name, meta, arrays);
+            await this.store.put(name, buf, this.now());
+            // (the same key of an older version of the code: never read again — gone now, not only at the size limit)
+            this.store.list().then((all) => { for (const e of all) if (e.name !== name && e.name.startsWith(key + '@')) this.store.delete(e.name).catch(() => {}); }).catch(() => {});
             const s = this._s(kind); s.put++;
             return true;
         } catch (e) {
@@ -356,14 +366,16 @@ export function initBootCache({ log = null } = {}) {
         const query = typeof location !== 'undefined' ? location.search : '';
         if (!bootCacheWanted(stored, query)) { bootCache = new BootCache({ store: null, enabled: false }); bootCache.why = 'выключен (настройки или --no-cache)'; return bootCache; }
         if (!CacheStore.available()) { bootCache = new BootCache({ store: null }); bootCache.why = 'браузер не даёт хранилище'; return bootCache; }
-        let build = '';
+        let build = '', kinds = {};
         try {
             const r = await Promise.race([fetch('/api/version', { cache: 'no-store' }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
-            build = (await r.json())?.build || '';
+            const v = await r.json();
+            build = v?.build || '';
+            kinds = v?.kinds && typeof v.kinds === 'object' ? v.kinds : {};
         } catch (e) { /* no server's build */ }
         if (!/^[0-9a-f]{8,40}$/.test(build)) { bootCache = new BootCache({ store: null }); bootCache.why = 'нет версии сборки от сервера'; return bootCache; }
-        bootCache = new BootCache({ store: new CacheStore(hashText(build + '|' + BOOT.FORMAT)), log });
-        bootCache.build = build;
+        // (one cache for every version of the game — each record carries the version of its own code, _name)
+        bootCache = new BootCache({ store: new CacheStore('f' + BOOT.FORMAT), log, build, kinds });
         return bootCache;
     })();
     return _init;
