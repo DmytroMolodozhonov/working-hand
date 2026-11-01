@@ -43,6 +43,7 @@ import * as THREE from 'three';
 import { isWood, TREE_KINDS } from '../world/Terrain.js';
 import { mergeParts } from '../core/MergeGeometry.js';
 import { forgedGateModel, GATE_VARIANTS } from './GateModel.js';
+import { inWard } from './HouseWards.js';
 
 const WOOD_NEEDED = 12;
 const W = 1.6, H = 3.6, T = 0.18; // a full-size door
@@ -189,6 +190,36 @@ export const DOOR_PUSH = {
 };
 /** How hard each pushing spell blows on a leaf (m/s across it, before falling off with distance). */
 export const DOOR_SPELLS = { Wind: 13, WindMaxima: 39, Overgrown: 16, OvergrownMaxima: 32, Jolt: 20, JoltMaxima: 60 };
+
+/**
+ * A body walking into a shut, unlocked door opens it (as one pushes a door in life — no handle, no «Алохомора»).
+ * Numbers: the hero is ~3.5 m, a door 3×6 (W/H here are the old 1.6×3.6 of a made door; a house's own is its `w`).
+ */
+export const DOOR_WALK = {
+    NEAR: 4.5, // m (|dx|+|dz|): only doors this close are looked at (the rest cost nothing)
+    REACH: 0.95, // m: from the leaf's plane — the body is stopped by the door's box at ~0.55, so «against the door» is within this
+    SIDE: 0.12, // m: past the jamb a body still counts as at the door
+    FACE: 0.6, // cos: the body faces the leaf within ~53° of its normal (sideways / backing — no)
+    HOLD: 0.18, // s: pressed against it this long (a brush does not open it)
+    SPEED: 2.4, // rad/s: how fast the pushed leaf swings away
+    OPEN_TO: 1.25, // rad: it is pushed open this far (the body then goes through; _bodiesPush keeps it off the body)
+    CLOSE_AFTER: 4, // s: nobody in the doorway for this long — it swings shut by itself
+    CLOSE_SPEED: 1.5, // rad/s
+    CLEAR: 1.2, // m: «in the doorway» for the closing (beyond the jamb + this)
+};
+
+/**
+ * Does a body push this door open (pure)? (lx, lz): the body in the door's frame (centre of the leaf at the origin, x along it,
+ * z through it); (fx, fz): its facing in that frame (unit); walking: the legs go. Returns the sign of the angle the leaf swings
+ * to — AWAY from the body (+1: the body at +Z, the leaf goes to −Z) — or 0.
+ */
+export function walkOpenSign(lx, lz, fx, fz, walking, lw) {
+    if (!walking) return 0;
+    if (Math.abs(lx) > lw / 2 + DOOR_WALK.SIDE || Math.abs(lz) > DOOR_WALK.REACH) return 0;
+    const sg = lz >= 0 ? 1 : -1;
+    if (-sg * fz < DOOR_WALK.FACE) return 0; // (the face is not turned to the leaf: sideways, or a back to it)
+    return sg;
+}
 
 /**
  * The swing of a leaf over dt (pure): angle a, angular speed w → {a, w, hit} (hit: 'frame' when the
@@ -346,6 +377,8 @@ export class Doors {
         this._swing(dt);
         // a body walking into an open leaf pushes it away from itself (it doesn't go through)
         this._bodiesPush();
+        // a shut, unlocked door that I walk into opens (and shuts again by itself when nobody is in it)
+        this._walkOpen(dt);
         // the hands on the doors: the handle held by closed fingers, a free hand against a leaf
         if (g.currentPose && !g.isDeadLocal) this._hands(dt);
         else this.releaseAll();
@@ -649,6 +682,78 @@ export class Doors {
         }
     }
 
+    /** May I (my body) push this door at all? Every «no» is a reason from the author's list. */
+    _walkMay(door) {
+        const g = this.game;
+        if (door.lifted || door.holdSide || door.ship || door.gate || door.ice || door.metal || door.forged || door.wrecked) return false; // (a ship's bulkhead: its crew; the forged gates and the Ice Castle's: their own rules)
+        if (this.carried?.door === door || door.spin || Math.abs(door.a) >= 0.05) return false;
+        if (g.wards?.list?.size) for (const w of g.wards.list.values()) if (inWard(w, door) && !g.wards.mine(w)) return false; // (a house under a ward: not for a stranger)
+        return true;
+    }
+
+    /**
+     * My body against a shut door: the legs walk, the face is turned to the leaf, pressed against it a moment —
+     * an unlocked door swings open away from me; a locked one rattles as before. Only my own body (every computer
+     * does its own; the angle goes to the others like the hand's). Only the doors within DOOR_WALK.NEAR: no garbage.
+     */
+    _walkOpen(dt) {
+        const g = this.game, ch = g.character;
+        const me = ch?.group.position;
+        if (!me) return;
+        const busy = g.isDeadLocal || !ch.isRunning || g.knock?.down || g.combat?.immobile || g.beds?.lying || g.animals?.riding || g.dragonRide?.busy || g.flight?.busy || g.flight?.active || ch.swimY != null || g.levitation?.lifted || g.imperius?.active || g._inDuel?.();
+        const ry = ch.group.rotation?.y || 0;
+        const fwx = -Math.sin(ry), fwz = -Math.cos(ry);
+        for (const door of this.list.values()) {
+            const w = door.walk;
+            if (w) { this._walkMove(door, w, dt); continue; }
+            const near = Math.abs(door.x - me.x) + Math.abs(door.z - me.z) <= DOOR_WALK.NEAR;
+            if (busy || !near || me.y < door.y - 2.5 || me.y > door.y + (door.h || H) + 1) { if (door._walkT) door._walkT = 0; continue; }
+            const c = Math.cos(door.ry), s = Math.sin(door.ry);
+            const dx = me.x - door.x, dz = me.z - door.z;
+            const sg = walkOpenSign(dx * c - dz * s, dx * s + dz * c, fwx * c - fwz * s, fwx * s + fwz * c, true, door.w || W);
+            if (!sg || !this._walkMay(door)) { if (door._walkT) door._walkT = 0; continue; }
+            door._walkT = (door._walkT || 0) + dt;
+            if (door._walkT < DOOR_WALK.HOLD) continue;
+            door._walkT = 0;
+            if (g.locks?.doorLocked?.(door)) { this._rattle(door); continue; } // (locked: the old reaction — it rattles, the hint)
+            door.walk = { sign: sg, open: true, t: 0 };
+        }
+    }
+
+    /** The leaf pushed by a body swings open; later, with nobody in the doorway, it swings shut. */
+    _walkMove(door, w, dt) {
+        const g = this.game;
+        if (!this.list.has(door.id) || door.lifted || door.holdSide || door.wrecked || g.locks?.doorLocked?.(door)) { door.walk = null; return; } // (taken by a hand, lifted, locked by «Lock», broken: the old rules)
+        const was = door.a;
+        if (w.open) {
+            const to = w.sign * DOOR_WALK.OPEN_TO;
+            let a = door.a + w.sign * DOOR_WALK.SPEED * dt;
+            if (Math.abs(a) >= DOOR_WALK.OPEN_TO) { a = to; w.open = false; w.t = 0; }
+            const stop = this._bodyInSwing(door, was, a, true); // (never through a body: the leaf stops on it — not on mine: it swings away from me)
+            if (stop != null) { a = stop; if (Math.abs(a - was) < 1e-3) w.open = false; }
+            this._setAngle(door, a);
+            if (Math.abs(door.a) < Math.abs(a) - 0.02) w.open = false; // (a wall / a bed on that side: it stands where it stopped)
+        } else {
+            if (door.a === 0) { door.walk = null; return; }
+            // somebody still in the doorway (me, a friend, a villager, an animal): it waits — never shut onto a body
+            let busy = false;
+            const lw = door.w || W;
+            this._eachBody((x, y, z, rad) => {
+                if (busy || Math.abs(x - door.x) > lw + DOOR_WALK.CLEAR || Math.abs(z - door.z) > lw + DOOR_WALK.CLEAR) return;
+                if (y < door.y - 2.5 || y > door.y + (door.h || H) + 0.5) return;
+                busy = true;
+            });
+            w.t = busy ? 0 : w.t + dt;
+            if (w.t < DOOR_WALK.CLOSE_AFTER) return;
+            const a = Math.sign(door.a) * Math.max(0, Math.abs(door.a) - DOOR_WALK.CLOSE_SPEED * dt);
+            const stop = this._bodyInSwing(door, door.a, a);
+            if (stop != null) { w.t = DOOR_WALK.CLOSE_AFTER - 0.5; return; }
+            this._setAngle(door, a);
+            if (a === 0) { this._ring(door, 0.06); door.walk = null; }
+        }
+        if (Math.abs(door.a - (door._sentA ?? 0)) > 0.05 || (door.a === 0 && door._sentA)) { door._sentA = door.a; g.sync?.doorAngle?.(door.id, door.a); }
+    }
+
     /**
      * The way a leaf opens AWAY from somebody at (x, z) (+1 / −1: the sign of its angle): the people
      * push it open in the direction they walk. A leaf already open keeps its way (they go through it).
@@ -661,11 +766,12 @@ export class Doors {
     }
 
     /** Is there a body between the leaf's angles a0 → a1? The angle the leaf stops at, or null. */
-    _bodyInSwing(door, a0, a1) {
+    _bodyInSwing(door, a0, a1, skipMe = false) {
         const lw = door.w || W;
         const lo = Math.min(a0, a1), hi = Math.max(a0, a1);
         let stop = null;
-        const test = (x, y, z, rad) => {
+        const test = (x, y, z, rad, isMe) => {
+            if (skipMe && isMe) return;
             if (Math.abs(x - door.x) > lw + 2 || Math.abs(z - door.z) > lw + 2) return;
             if (y < door.y - 2.5 || y > door.y + (door.h || H) + 0.5) return;
             const L = this._local(door, _q.set(x, y, z), _q);
