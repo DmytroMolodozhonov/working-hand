@@ -466,6 +466,22 @@ export class VoxelCharacter {
     }
 
     /** Both wrists above the top of the head ("руки вверх") — the flight gesture. */
+    /** How high each wrist is above its shoulder, as a part of the arm's length (1 = straight up, 0 = level, −1 = hanging). */
+    armsRaise() {
+        this.group.updateMatrixWorld(true);
+        this.group.getWorldQuaternion(_qBody);
+        _up.set(0, 1, 0).applyQuaternion(_qBody);
+        const armLen = this.BONE_LENGTH_UPPER + this.BONE_LENGTH_LOWER;
+        const out = { left: -1, right: -1, lost: { left: this.handLost('left'), right: this.handLost('right') } };
+        for (const side of ['left', 'right']) {
+            if (out.lost[side]) continue;
+            const shoulder = (side === 'left' ? this.leftArmAnchor : this.rightArmAnchor).getWorldPosition(_v3);
+            const hand = this.getHandWorldPosition(side, _v1);
+            out[side] = Math.max(-1, Math.min(1, hand.sub(shoulder).dot(_up) / armLen));
+        }
+        return out;
+    }
+
     areBothHandsUp() {
         if (this.handLost('left') || this.handLost('right')) return false;
         this.group.updateMatrixWorld(true);

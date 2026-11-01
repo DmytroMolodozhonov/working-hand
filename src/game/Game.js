@@ -26,6 +26,7 @@ import { SpellLog } from '../core/SpellLog.js';
 import { LONGER_OF } from '../audio/SpellSpotter.js';
 import { WeaponSystem } from './Weapons.js';
 import { FlightController, FLIGHT } from './Flight.js';
+import { poseHint, PoseHinter, FULL as ARM_FULL } from './PoseHint.js';
 import { PoseSmoother } from '../input/PoseSmoother.js';
 import { WaterMagic } from './WaterMagic.js';
 import { WaterVortex, bubbleLike } from './WaterVortex.js';
@@ -1934,6 +1935,7 @@ export class Game {
         if (this._godsBanned(name)) { if (isFinal) this.hud.setVoice('⚡ Боги наложили запрет на использование божественных заклинаний на Земле', true); return null; }
         // «Flying Maxima»: out of the air, into space (Space.js) — only in flight
         if (name === 'FlyingMaxima') {
+            if (!this.flight.active && this.space.state === 'off' && this.space.realm !== 'space' && this._poseHint('FlyingMaxima')) return null;
             const tired = this.combat.check(name);
             if (tired) { if (isFinal) this.hud.setVoice(tired, true); return null; }
             const r = this.space.cast(isFinal);
@@ -2746,8 +2748,8 @@ export class Game {
      */
     _castLightning(isFinal) {
         if (this.lightning) return null;
-        const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
-        if (!armsUp) { if (isFinal) this.hud.setVoice('⛈️ Поднимите <b>обе руки вверх</b> и скажите «Lightning Strike»', true); return null; }
+        if (isFinal && this._poseHint('LightningStrike')) return null;
+        if (!isFinal && poseHint('LightningStrike', this._poseSnap())) return null;
         const tired = this.combat.check('LightningStrike');
         if (tired) { this.hud.setVoice(tired, true); return null; }
         this.combat.pay('LightningStrike');
@@ -4558,6 +4560,32 @@ export class Game {
         return this.knowsSpell(name);
     }
 
+    /** Снимок позы рук для PoseHint (высота кистей, видит ли камера, в полёте ли). */
+    _poseSnap() {
+        const ch = this.character, r = ch.armsRaise();
+        return {
+            seen: !!(this.currentPose && this.currentPose.hasPose) || this.config?.mode === 'test',
+            lost: r.lost, raise: { left: r.left, right: r.right },
+            flying: !!this.flight.active,
+            grace: Date.now() - (this._armsFullAt || 0) < 1500,
+        };
+    }
+
+    /**
+     * Позы не хватает → ОДНА подсказка «я вас услышал, но…» (не чаще раза в 2,5 с, без траты маны, строка в журнал).
+     * @returns {boolean} true — поза не годится, заклинание не срабатывает
+     */
+    _poseHint(name) {
+        const h = poseHint(name, this._poseSnap());
+        if (!h) return false;
+        const hinter = this._poseHinter || (this._poseHinter = new PoseHinter());
+        if (hinter.pass()) {
+            this.hud.setVoice(h.text, true);
+            this.lastCastWhy = 'подсказка: ' + h.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        } else if (!this.lastCastWhy) this.lastCastWhy = 'подсказка (повтор, не показана): ' + h.code;
+        return true;
+    }
+
     startFlight(force = false) {
         if (this.flight.active) return false;
         if (this.knock?.down) return false; // (get up first)
@@ -4572,11 +4600,7 @@ export class Game {
             this.hud.setVoice('🚫 На картах «Флайн» не работает — только в режимах «Творческий», «Хардкор» и «Выживание»', true);
             return false;
         }
-        const armsUp = this.character.areBothHandsUp() || Date.now() - (this._armsUpAt || 0) < 1500;
-        if (!force && !armsUp) {
-            this.hud.setVoice('🦸 Для полёта поднимите <b>обе руки вверх</b> и скажите «Флайн»', true);
-            return false;
-        }
+        if (!force && this._poseHint('Flight')) return false; // (руки не подняты на всю длину — одна понятная подсказка, мана не тратится)
         this.flight.start();
         this.character.flying = true;
         if (this.sound) this.sound.playBombardoCast();
@@ -4787,6 +4811,7 @@ export class Game {
         }
         // Remember when both arms were up (the flight word may come a moment later)
         if (tracked && this.character.areBothHandsUp()) this._armsUpAt = Date.now();
+        if (tracked) { const r = this.character.armsRaise(); if (r.left >= ARM_FULL && r.right >= ARM_FULL) this._armsFullAt = Date.now(); }
     }
 
     _updateCamera(dt) {
