@@ -350,6 +350,7 @@ export class Diabolos {
         const fo = this._footOff(d);
         const L = leash(d.anchor.x, d.anchor.z, tgt.p.x - fo.x, tgt.p.z - fo.z, fo.x, fo.z, this.site.len);
         const beyond = L.t >= 1 && L.d >= this.site.len * 0.99 && Math.hypot(tgt.p.x - d.anchor.x, tgt.p.z - d.anchor.z) > this.site.len + DEVIL.RADIUS;
+        const atLeash = leash(d.anchor.x, d.anchor.z, d.x, d.z, fo.x, fo.z, this.site.len).t > 0.8; // (у предела ли он сам — по настоящему расстоянию до столба; «натяжение» от рёва ярости раньше обманывало его, и он стоял)
         const turn = yawTo(d.yaw, d.x, d.z, tgt.p.x, tgt.p.z);
         // видит ли цель (раз в 0,5 с: от груди к ней; за скалой/столбом — подходит туда, где видел, и заглядывает)
         d.losT -= dt;
@@ -365,12 +366,12 @@ export class Diabolos {
             d.walkFor -= dt;
             const to = d.peek && d.lastSeen ? d.lastSeen : tgt.p;
             const dd = Math.hypot(to.x - d.x, to.z - d.z);
-            if (dd < (d.peek ? 24 : DIRECTOR.CLOSE * 0.7) || (beyond && d.strain > 0.85) || (d.peek && !d.hidden)) {
+            if (dd < (d.peek ? 24 : DIRECTOR.CLOSE * 0.7) || (beyond && atLeash) || (d.peek && !d.hidden)) {
                 d.walkFor = 0;
                 if (d.peek) { d.peek = false; if (d.hidden) { this._act(d, 'idle', true, 'lookAround'); return; } }
             } else { this._walk(d, dt, to); return; }
         }
-        const plan = planMove({ dist, beyond, atLeash: d.strain > 0.85, faced: Math.abs(turn) < FACE_OK, rest: d.rest, cd: d.cd, air: tgt.feet - d.y > 30, high: tgt.feet - d.y > 110,
+        const plan = planMove({ dist, beyond, atLeash, faced: Math.abs(turn) < FACE_OK, rest: d.rest, cd: d.cd, air: tgt.feet - d.y > 30, high: tgt.feet - d.y > 110,
             hidden: d.hidden && !!d.lastSeen, recent: d.recent, walkShare: d.walkShare, fury: d.fury, rage: d.rage, lastAct: d.lastAct }, () => { d.rnd = devilRand(d); return d.rnd; });
         // подначки в бою без повода (и мушке в воздухе)
         d.talkIdle = (d.talkIdle ?? TALK.IDLE_EVERY[0]) - dt;
@@ -378,7 +379,7 @@ export class Diabolos {
         const attack = plan.kind === 'move' && !plan.bluff;
         // характер: перед первым ударом — устрашение; цель за цепью и ему нечем ответить — дразнит (язык, «иди сюда», рвёт цепь)
         if (attack && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
-        if (beyond && d.strain > 0.6 && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); this._say(dist > this.site.len + 90 ? 'run' : 'taunt'); return; } }
+        if (beyond && atLeash && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); this._say(dist > this.site.len + 90 ? 'run' : 'taunt'); return; } }
         switch (plan.kind) {
             case 'turn': case 'wait': this._turn(d, turn, dt); this._walk(d, 0, null); return;
             case 'walk': if (plan.peek) this._say('hide'); d.walkFor = plan.t; d.peek = !!plan.peek; this._remember(d, 'walk'); this._walk(d, dt, d.peek && d.lastSeen ? d.lastSeen : tgt.p); this._note(`😈 Дьяволос: решение — ${d.peek ? 'идёт заглянуть, где вы' : 'идёт к цели'}`); return;
