@@ -151,7 +151,14 @@ export class ItemIcons {
     }
 
     /** The same, a few pictures at a time with the thread given back between (the loading screen stays alive). */
-    async warmAsync(items, budget = 12) {
+    warmAsync(items, budget = 12) {
+        // (started early — with the world's drawing, main.js — and asked again by Game.warmUp: the same work, once)
+        if (this._warmP) return this._warmP;
+        this._warmP = this._warmAsync(items, budget).finally(() => { this._warmP = null; });
+        return this._warmP;
+    }
+
+    async _warmAsync(items, budget) {
         // (the boot cache: the pictures of the last start of this build, on this video card, are read back — BootCache.js)
         const kept = await this._readKept();
         this._collect = new Map();
