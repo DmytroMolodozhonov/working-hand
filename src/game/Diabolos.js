@@ -139,7 +139,7 @@ export class Diabolos {
         // (пол котловины ещё не сделан воркерами — издали: слой пола из плана ада, верх блока = слой + 1; придёт земля — уточнится)
         const gy = this._ground(s.x, s.z, NaN);
         this._yGuess = !Number.isFinite(gy);
-        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y + 1 : 0;
+        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y - 0.5 : 0;
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? this._ground(s.anchor.x, s.anchor.z, y) + 2.5, z: s.anchor.z };
         // лицом от якоря (цепь тянется за ним назад)
         const yaw = Math.atan2(-(s.x - anchor.x), -(s.z - anchor.z)); // (вперёд = (−sin, −cos): ОТ столба, к дороге; было «+π» — сидел лицом к столбу, и под Империусом шёл прямо в него)
@@ -201,7 +201,7 @@ export class Diabolos {
     _fires(y) {
         const s = this.site, sp = this.game.terrain?.data?.hellPlan?.spawn;
         const road = sp ? Math.atan2(sp.z - s.cz, sp.x - s.cx) : Math.atan2(s.z - s.anchor.z, s.x - s.anchor.x);
-        (this.fires || (this.fires = new DevilFires(this.game))).build(s.cx ?? s.x, s.cz ?? s.z, s.y != null ? s.y + 1 : y, road);
+        (this.fires || (this.fires = new DevilFires(this.game))).build(s.cx ?? s.x, s.cz ?? s.z, s.y != null ? s.y - 0.5 : y, road);
         devilFireLight(1);
     }
 
@@ -1620,7 +1620,7 @@ export class Diabolos {
         // (пол котловины ещё не сделан воркерами — издали: слой пола из плана ада, верх блока = слой + 1; придёт земля — уточнится)
         const gy = this._ground(s.x, s.z, NaN);
         this._yGuess = !Number.isFinite(gy);
-        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y + 1 : 0;
+        const y = Number.isFinite(gy) ? gy : s.y != null ? s.y - 0.5 : 0;
         const anchor = { x: s.anchor.x, y: s.anchor.y ?? y + 2.5, z: s.anchor.z };
         this.anchor = anchorModel(); this.anchor.position.set(anchor.x, anchor.y - 3, anchor.z); g.scene?.add(this.anchor);
         // цепь: лежит от кольца в сторону места, где он сидел
@@ -1687,7 +1687,7 @@ export class Diabolos {
     _creativeSword() {
         const g = this.game, s = this.site;
         const P = swordSpot(s, this._swordRoad());
-        const floor = s.y != null ? s.y + 1 : this._ground(P.x, P.z, 0);
+        const floor = s.y != null ? s.y - 0.5 : this._ground(P.x, P.z, 0);
         this._pedestal(P, floor);
         if (this._swordGiven || !this.auth) return;
         const creative = g.config?.mode === 'creative' || g.config?.mode === 'test';

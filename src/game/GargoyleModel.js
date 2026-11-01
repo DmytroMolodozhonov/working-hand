@@ -19,6 +19,7 @@
  */
 
 import * as THREE from 'three';
+import { localSkin, localBind } from '../core/LocalSkin.js';
 
 export const HIP = 1.25; // m: from the hip down to the soles (the bind pose)
 export const MODEL_SCALE = 0.9; // × the table's numbers
@@ -473,12 +474,12 @@ export function gargoyleModel(variant = 0) {
     const g = new THREE.Group();
     g.name = 'gargoyle';
     const bones = makeBones();
-    const skel = new THREE.Skeleton(bones, S.inverses.map((m) => m.clone()));
+    const skel = localSkin(new THREE.Skeleton(bones, S.inverses.map((m) => m.clone())), g); // (горгульи ада — вдали от начала мира: кости относительно модели)
     g.add(bones[0]);
     const body = new THREE.SkinnedMesh(S.hi.stone, S.mats[variant % 3]);
     const glow = new THREE.SkinnedMesh(S.hi.glow, S.glow);
     const mem = new THREE.SkinnedMesh(S.mem, S.membrane);
-    for (const m of [body, glow, mem]) { g.add(m); m.bind(skel, new THREE.Matrix4()); m.frustumCulled = false; }
+    for (const m of [body, glow, mem]) { g.add(m); m.bind(skel, new THREE.Matrix4()); localBind(m, g); m.frustumCulled = false; }
     body.castShadow = true;
     const byName = {};
     bones.forEach((b) => { byName[b.name] = b; });

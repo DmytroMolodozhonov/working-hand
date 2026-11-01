@@ -763,3 +763,36 @@ test('смерть от меча — эффектно: крик удивлени
     assert.equal(d.glowK, 0, 'зарево и столб огня погасли');
     assert.ok(!d.deathFx.on, 'эффект убран (ничего не копится)');
 });
+
+test('постамент меча стоит НА полу котловины (настоящая земля ада): от пола по ступеням поднимаешься шагом, без прыжка', async () => {
+    const { TerrainData } = await import('../../src/world/Terrain.js');
+    const { CollisionWorld } = await import('../../src/world/Collision.js');
+    const { swordSpot, SWORD_SPOT } = await import('../../src/game/DiabolosRules.js');
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const data = new TerrainData(); data.generate({ seed: 4242, hell: true, worldGen: 22 });
+    const col = new CollisionWorld(); col.setTerrain(data);
+    const plan = data.hellPlan;
+    const { g } = fakeGame(new THREE.Vector3(plan.devilSeat.x, 16, plan.devilSeat.z - 300));
+    g.collision = col; g.terrain = { data };
+    g.weapons = { weapons: [], spawnLying: (t, x, y, z, yaw, id) => { const w = { id, type: t, position: new THREE.Vector3(x, y, z) }; g.weapons.weapons.push(w); return w; } };
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place(plan);
+    d.update(0.016);
+    const P = swordSpot(d.site, d._swordRoad());
+    const cx = d.site.cx ?? d.site.x, cz = d.site.cz ?? d.site.z, L = Math.hypot(cx - P.x, cz - P.z), ux = (cx - P.x) / L, uz = (cz - P.z) / L; // (к середине котловины — там ровный пол)
+    const floor = col.groundAt(P.x + ux * 14, P.z + uz * 14, 30); // (пол рядом, вне постамента)
+    const ped = [...col.boxes.values()].filter((b) => b.kind === 'pedestal').sort((a, b) => a.minY - b.minY);
+    assert.equal(ped.length, SWORD_SPOT.TIERS.length);
+    assert.ok(Math.abs(ped[0].minY - floor) < 0.05, `низ постамента ${ped[0].minY} = пол ${floor} (раньше висел на 1,5 м выше — не запрыгнуть)`);
+    // идём от края к середине: каждая ступень — не выше шага героя (1,05 м)
+    let feet = floor;
+    for (let k = 0; k <= 60; k++) {
+        const x = P.x + ux * (14 - k * 0.2333), z = P.z + uz * (14 - k * 0.2333);
+        const gnd = col.standAt(x, z, feet + 1.1);
+        assert.ok(gnd - feet <= 1.05, `ступень ${(gnd - feet).toFixed(2)} м выше шага`);
+        feet = Math.max(gnd, feet - 0.5);
+    }
+    assert.ok(Math.abs(feet - (floor + P.h)) < 0.05, `наверху: ${feet} vs ${floor + P.h}`);
+    const w = g.weapons.weapons.find((x) => x.id === 'divine-hell');
+    assert.ok(w && Math.abs(w.position.y - (floor + P.h + 0.3)) < 0.05, 'меч лежит на верхней ступени');
+});

@@ -15,6 +15,7 @@
  * multi-material ones, own shaders, cut-out shadows (leaves with a custom depth material).
  */
 import * as THREE from 'three';
+import { localSkin, localBind } from './LocalSkin.js';
 import { farBatchAdd, farBatchRemove, farBatchBuilt } from './FarBatch.js';
 
 export const FAR_SHAPE = { CACHE_MAX: 96 };
@@ -201,7 +202,7 @@ export class FarShape {
         farBatchBuilt(this); // (out of its batch: its own meshes, new, drawn until it is still again)
         this._drop();
         if (!list.length) return;
-        this.skeleton = new THREE.Skeleton(list.slice(), list.map(() => new THREE.Matrix4()));
+        this.skeleton = localSkin(new THREE.Skeleton(list.slice(), list.map(() => new THREE.Matrix4())), this.root); // (кости — относительно модели: вдали от начала мира (ад) не дрожат — LocalSkin)
         // (a bucket: one material (or the plain-coloured family), one set of camera layers, one shadow — as its parts had them)
         const by = new Map();
         for (const p of list) {
@@ -224,6 +225,7 @@ export class FarShape {
             // (a material that changes as the game goes — a sparkle's pulse, a glow: its twin follows it before each draw)
             if (!bake) mesh.onBeforeRender = syncTwin;
             mesh.bind(this.skeleton, _ident);
+            localBind(mesh, this.root);
             mesh.castShadow = b.cs && shadowsOn;
             mesh.userData._cs = b.cs; // (Shadows.setNearShadow switches it near/far as its parts)
             mesh.receiveShadow = anyRecv;

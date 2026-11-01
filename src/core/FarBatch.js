@@ -133,6 +133,11 @@ class Batch {
         sk.update = function () { batch.pose(this); }; // (the parts' own world matrices: copied, not computed)
         const mesh = new THREE.SkinnedMesh(geo, this.mat);
         mesh.bind(sk, _ident);
+        // (пакет стоит в своей точке, кости — относительно неё: вдали от начала мира (ад, x ≈ 480 000) 32-битные числа шейдера не дрожат — LocalSkin)
+        this.ox = this.placed ? this.cx : 0; this.oz = this.placed ? this.cz : 0;
+        mesh.bindMode = 'detached';
+        mesh.position.set(this.ox, 0, this.oz);
+        mesh.updateMatrix();
         mesh.matrixAutoUpdate = false;
         mesh.castShadow = this.cs;
         mesh.receiveShadow = this.rs;
@@ -155,7 +160,7 @@ class Batch {
         for (const s of this.slots) {
             const o = s.base * 16, B = s.bones;
             if (s.dead || !s.shape.on || !s.shown) { out.fill(0, o, o + B.length * 16); continue; }
-            for (let i = 0; i < B.length; i++) out.set(B[i].matrixWorld.elements, o + i * 16);
+            for (let i = 0; i < B.length; i++) { const k = o + i * 16; out.set(B[i].matrixWorld.elements, k); out[k + 12] -= this.ox || 0; out[k + 14] -= this.oz || 0; }
         }
         if (sk.boneTexture) sk.boneTexture.needsUpdate = true;
     }
@@ -175,9 +180,9 @@ class Batch {
         m.visible = any;
         if (!any) return;
         const S = m.geometry.boundingSphere;
-        S.center.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+        S.center.set((x0 + x1) / 2 - (this.ox || 0), (y0 + y1) / 2, (z0 + z1) / 2 - (this.oz || 0)); // (сфера — в своих координатах пакета)
         S.radius = Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2 + r + FAR_BATCH.MARGIN;
-        this.cx = S.center.x; this.cz = S.center.z; this.placed = true;
+        this.cx = S.center.x + (this.ox || 0); this.cz = S.center.z + (this.oz || 0); this.placed = true;
     }
 
     dispose() {

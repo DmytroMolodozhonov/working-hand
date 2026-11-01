@@ -23,6 +23,7 @@
  */
 import { LEG_SAFE, safeRaise } from '../input/LegSafe.js';
 import * as THREE from 'three';
+import { localSkin, localBind } from '../core/LocalSkin.js';
 import { readyBootCache, cacheKey } from '../core/BootCache.js';
 import { BONE_COUNT, BONE_NAMES, B, ANAT, FLOOR, FINGER_NAMES, HEADX, restPose, armRest, legRest } from './real/RealRig.js';
 import { realSkinMaterial, realProxyMaterial, realHairMaterial } from './real/RealSkinMaterial.js';
@@ -290,12 +291,12 @@ export class RealisticBody {
     }
 
     _build(lib) {
-        const sk = new THREE.Skeleton(this.bones, lib.inverses.map((m) => m.clone()));
+        const sk = localSkin(new THREE.Skeleton(this.bones, lib.inverses.map((m) => m.clone())), this.ch.group); // (кости относительно героя — в аду не дрожит: LocalSkin)
         this.skeleton = sk;
         const mk = (geo, mat, name) => {
             const m = new THREE.SkinnedMesh(geo, mat);
             m.name = name;
-            m.bind(sk, new THREE.Matrix4());
+            m.bind(sk, new THREE.Matrix4()); localBind(m, this.ch.group);
             m.raycast = () => {}; // (the game's own parts are what is hit)
             m.userData.farOne = true; // (a body's copy leaves it out — Death._copy — and takes the standard parts)
             m.userData.realSkin = true;
@@ -342,7 +343,7 @@ export class RealisticBody {
             if (!L[k]) continue;
             const m = new THREE.SkinnedMesh(L[k], k === 'hair' ? this.hairMat : this.material);
             m.name = 'real-' + k;
-            m.bind(this.skeleton, new THREE.Matrix4());
+            m.bind(this.skeleton, new THREE.Matrix4()); localBind(m, this.ch.group);
             m.raycast = () => {};
             m.userData.farOne = true;
             m.userData.realSkin = true;
