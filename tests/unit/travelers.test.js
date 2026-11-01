@@ -1,10 +1,17 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { CollisionWorld } from '../../src/world/Collision.js';
 import { Carriages, CART, wayFree, cartToWorld } from '../../src/game/Carriages.js';
 import { Travelers, ROAD, pickKind } from '../../src/game/Travelers.js';
 import { BLOCK } from '../../src/world/Terrain.js';
+
+// (почему так: дорожные компании сами бросают кубики — размер, лошади, слова; тест с настоящим Math.random падал примерно раз в четыре
+//  прогона. Теперь числа идут по фиксированному зерну: каждый запуск одинаковый)
+const realRandom = Math.random;
+let _seed = 20260711;
+Math.random = () => { _seed = (_seed + 0x6d2b79f5) | 0; let t = Math.imul(_seed ^ (_seed >>> 15), 1 | _seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+after(() => { Math.random = realRandom; });
 
 /** Flat dry ground (layer 0) with optional walls: the carts and the people of the roads on it. */
 function fakeGame({ walls = [] } = {}) {
@@ -24,7 +31,7 @@ function fakeGame({ walls = [] } = {}) {
         character: { group: new THREE.Group() }, isDeadLocal: false,
         animals: {
             list: [], byId: new Map(),
-            _spawn(type, pos, o) { const a = { id: nid++, type, group: new THREE.Group(), walkT: 0, hp: 50, dead: false }; a.group.position.copy(pos); this.list.push(a); this.byId.set(a.id, a); return a; },
+            _spawn(type, pos, o) { const a = { id: nid++, type, group: new THREE.Group(), model: new THREE.Group(), walkT: 0, hp: 50, dead: false }; a.group.position.copy(pos); this.list.push(a); this.byId.set(a.id, a); return a; },
             _remove(a) { this.list.splice(this.list.indexOf(a), 1); this.byId.delete(a.id); },
             _animate() {}, _look: (o) => o.set(0, 0, -1),
         },
