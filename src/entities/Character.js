@@ -7,6 +7,14 @@
  */
 
 import { ArmSolver } from './ArmSolver.js';
+
+/** The drawn arm's per-frame smoothing: what is left of the way to the tracked arm after a frame at 60 FPS (armK = 1 − K^(dt·60)). */
+/**
+ * The drawn arm's per-frame smoothing (the author 01.11: «с палочкой рука подрагивает»; tools/armstab.mjs «рывки в движении»):
+ * K — what is left of the way to the tracked arm after a frame at 60 FPS (armK = 1 − K^(dt·60));
+ * FAST — rad a frame (at 60 FPS) from which a turn is followed more and more (twice it: at once) — swings, a throw's wind-up.
+ */
+export const ARM_SMOOTH = { K: 0.5, FAST: 0.1, RAMP: 1 };
 import * as THREE from 'three';
 import { applyLook } from './Appearance.js';
 import { SimplifiedHand } from './SimplifiedHand.js';
@@ -351,19 +359,24 @@ export class VoxelCharacter {
         return out.set(dx * 8, dy * 8, dz).normalize();
     }
 
-    _smoothLookAt(obj, worldTarget, speed) {
+    _smoothLookAt(obj, worldTarget, speed, fast = 0) {
         _q1.copy(obj.quaternion);
         obj.lookAt(worldTarget);
         _q2.copy(obj.quaternion);
+        // (fast > 0: a big turn this frame — a swing, a throw's wind-up — is followed at once; only the small steps of the
+        // camera's pictures (the arm moving a wand) are smoothed)
+        if (fast > 0 && speed < 1) {
+            const ang = 2 * Math.acos(Math.min(1, Math.abs(_q1.dot(_q2))));
+            speed += (1 - speed) * Math.max(0, Math.min(1, (ang - fast) / (fast * ARM_SMOOTH.RAMP)));
+        }
         obj.quaternion.copy(_q1).slerp(_q2, speed);
     }
 
     updateArmsLookAt(poseData, dt = 1 / 60) {
         // 0.55 per frame at 60 FPS, frame-rate independent (the pose is already smoothed
         // upstream; more smoothing here only made the arms trail behind the player)
-        // (the arm's own filter is ArmSolver's — still steady, moving at once — DirFilter: one smoothing, not two; this one is
-        // only for a pose without the solver's picture)
-        const armK = this.armSmooth === false ? 1 : 1 - Math.pow(0.45, Math.min(0.1, dt) * 60);
+        // (the arm's directions: ArmSolver's DirFilter, then this light per-frame smoothing of the drawn bones — armSmooth)
+        const armK = this.armSmooth === false ? 1 : 1 - Math.pow(this.armSmoothK ?? 0.45, Math.min(0.1, dt) * 60);
         this.restoreArms(); // (from the tracked arms, not from a hand shown holding a bow's string)
         if (!poseData.leftShoulder || !poseData.leftElbow || !poseData.leftWrist ||
             !poseData.rightShoulder || !poseData.rightElbow || !poseData.rightWrist) {
@@ -377,7 +390,10 @@ export class VoxelCharacter {
         // the arms as a human arm moves (ArmSolver: this player's lengths, in front of / behind the body from the camera's
         // depth and anatomy, the shoulder girdle) — the old getRelativeDirection always put the arm in front
         const AS = this.armSolver || (this.armSolver = new ArmSolver());
-        if (this.armSmooth === undefined) this.armSmooth = false; // (ArmSolver filters the directions)
+        // (a light smoothing of the drawn arm, frame by frame — the camera's 30 pictures a second shown at 60+ FPS come in steps,
+        // and with nothing after ArmSolver the arm moving a wand went in jerks; the author 01.11: «с палочкой рука подрагивает».
+        // It was here before ArmSolver (0.45), switched off with it; 0.5 — tools/armstab.mjs «рывки в движении» and pointbench)
+        if (this.armSmooth === undefined) { this.armSmooth = true; this.armSmoothK = ARM_SMOOTH.K; }
         const aspect = poseData.aspect || 1, adt = Math.min(0.2, Math.max(0.001, dt));
         AS.shoulders(poseData.rightShoulder, poseData.leftShoulder, aspect, adt);
         const so = this._armOut || (this._armOut = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
@@ -391,13 +407,13 @@ export class VoxelCharacter {
             armAnchor.up.copy(_up);
             _v2.copy(armAnchor.position);
             armAnchor.parent.localToWorld(_v2).add(_v1);
-            this._smoothLookAt(armAnchor, _v2, armK);
+            this._smoothLookAt(armAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
             armAnchor.updateMatrixWorld(true);
             // Forearm
             _v1.set(so.f.x, so.f.y, so.f.z).applyQuaternion(_qBody);
             elbowAnchor.up.copy(_up);
             elbowAnchor.getWorldPosition(_v2).add(_v1);
-            this._smoothLookAt(elbowAnchor, _v2, armK);
+            this._smoothLookAt(elbowAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
         };
         solveArm(this.leftArmAnchor, this.leftElbowAnchor, poseData.leftShoulder, poseData.leftElbow, poseData.leftWrist, 'left');
         solveArm(this.rightArmAnchor, this.rightElbowAnchor, poseData.rightShoulder, poseData.rightElbow, poseData.rightWrist, 'right');

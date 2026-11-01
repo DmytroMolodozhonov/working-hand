@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ArmSolver, DirFilter, planeDepth, ARM } from '../../src/entities/ArmSolver.js';
-import { still, swing, step, run, POSES, LIMITS } from '../../tools/armstab.mjs';
+import { still, swing, step, run, moving, POSES, LIMITS } from '../../tools/armstab.mjs';
 
 test('an arm held still does not tremble — up, down, sideways, forward (good and noisy camera)', () => {
     for (const [noise, cmL, degL, spL] of [[0.3, LIMITS.goodCm, LIMITS.goodDeg, LIMITS.goodSpeed], [1, LIMITS.noisyCm, LIMITS.noisyDeg, LIMITS.noisySpeed]]) {
@@ -111,4 +111,12 @@ test('the direction\'s filter: a DELIBERATE slow turn (the wand\'s careful aim, 
         if (i > 60) maxDev = Math.max(maxDev, Math.abs(Math.atan2(o.y, o.x)));
     }
     assert.ok(maxDev < 0.006, 'a flicker of «one way» on noise: ' + (maxDev * 57.3).toFixed(2) + '°');
+});
+
+test('the arm moving a wand (aiming, waving, circles) goes smoothly — no jerks of the camera\'s pictures or of the carry ahead', () => {
+    // (01.11, the author: «с палочкой рука подрагивает» — 11 / 36 / 38 mm a frame²; before the arm's rework 2.4 / 5.1 / 7.7)
+    const r = moving({ seeds: 1 });
+    assert.ok(r.aim <= LIMITS.moveAim, `aiming: ${r.aim.toFixed(1)}`);
+    assert.ok(r.wave <= LIMITS.moveWave, `waving: ${r.wave.toFixed(1)}`);
+    assert.ok(r.circle <= LIMITS.moveCircle, `circles: ${r.circle.toFixed(1)}`);
 });

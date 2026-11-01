@@ -9,7 +9,7 @@
  * VoxelCharacter.updateArmsLookAt (ArmSolver, the bones) → HandBlocks (the hand never in a block) → where the hand and
  * the arm are drawn.
  *
- *   node tools/armstab.mjs [--check] [--v] [--only still|swing|step|wall]
+ *   node tools/armstab.mjs [--check] [--v] [--only still|swing|moving|step|wall]
  *
  * Metrics (game metres → cm; the hero's arm is 1.9 m from the shoulder):
  *   still — (a good camera and a noisy one) the drawn hand's trembling while the player holds the arm still (RMS about its mean, cm; the forearm's, degrees),
@@ -38,7 +38,14 @@ export const LIMITS = {
     // the arm's own filter was switched off on a usual camera (for the wand's slow aim) and this went 2…3 → 22…38 cm/s (the
     // author: «руки начали трястись»); with the filter back (opened by a deliberate move): 2…7 cm/s; very noisy: 155…210 → ≤ 170
     goodSpeed: 8, noisySpeed: 185,
-    swingLagMs: 50, swingAmp3: 0.92, // a swing up to 3 Hz: drawn ≥ 92 %, ≤ 50 ms late (before: 48 ms; the camera's filter and the blend between pictures)
+    // «рывки в движении» — the arm moving a wand (a careful aim, waving, circles; a usual camera): the drawn hand's jerk frame
+    // to frame (mm per frame², RMS) — a smooth move has next to none, the camera's 30 pictures a second drawn as steps and a
+    // carry ahead switching on/off at a picture make it. Before the arm's rework (31.10, before ArmSolver): 2.4 / 5.1 / 7.7;
+    // 01.11 (the author: «с палочкой рука подрагивает») 11 / 36 / 38; with the drawn arm's light smoothing and a gliding carry: ≤ 6 / 16 / 17
+    moveAim: 7, moveWave: 19, moveCircle: 18,
+    // (01.11: 50 → 52 — the drawn arm's light smoothing back (the arm moving a wand: jerks 38 → 15) costs ~1 ms on a 1 Hz swing;
+    // the author asked for the steady arm; the swing's own lag is the camera's filter and the blend, ~49 ms without it)
+    swingLagMs: 52, swingAmp3: 0.92, // a swing up to 3 Hz: drawn ≥ 92 %, ≤ 50 ms late (before: 48 ms; the camera's filter and the blend between pictures)
     overshoot: 0.03, // a quick move and a stop
     // the hand at a wall, a usual camera: never in it, still while pressed, no twitch (before: a shoulder at the wall let the
     // arm 38 cm through; 0.6…0.8 cm in and out, 3…9 times a second, twitches of up to 18 cm)
@@ -145,6 +152,34 @@ export function still({ seeds = 3, noise = 1 } = {}) {
 
 /** The angle of a direction in a plane (a, b: the plane's axes). */
 const angIn = (v, a, b) => Math.atan2(v.dot(b), v.dot(a));
+
+/** The wand arm: the upper arm a little down and out, the forearm pointing (yaw from straight ahead, right +; pitch up +). */
+function wandArm(yaw, pitch) {
+    const y = yaw / DEG, p = pitch / DEG, f = [Math.sin(y) * Math.cos(p), Math.sin(p), -Math.cos(y) * Math.cos(p)];
+    return [norm([f[0] * 0.6 + 0.35, f[1] * 0.6 - 0.45, f[2] * 0.6]), f];
+}
+export const WAND_MOVES = {
+    aim: (t) => wandArm(-10 + 12 * t, 3), // a careful aim, 12°/s
+    wave: (t) => wandArm(15 + 12 * Math.sin(2 * Math.PI * t), 5 + 6 * Math.sin(2 * Math.PI * t * 0.7)), // waving the wand, 1 Hz ±12°
+    circle: (t) => wandArm(15 + 15 * Math.cos(4.4 * t), 5 + 15 * Math.sin(4.4 * t)), // circles, 0.7 Hz
+};
+
+/** The arm moving a wand: the drawn hand's jerk frame to frame (mm per frame², RMS; relative to the body). */
+export function moving({ seeds = 2, noise = 0.3 } = {}) {
+    const res = {};
+    for (const [name, arm] of Object.entries(WAND_MOVES)) {
+        let mm = 0;
+        for (let s = 0; s < seeds; s++) {
+            const fr = run({ arm, seconds: 6, seed: 3 + s * 11, noise }).filter((x) => x.t > 2);
+            const h = fr.map((x) => x.hand.clone().sub(x.ch.group.position));
+            let s2 = 0;
+            for (let i = 2; i < h.length; i++) s2 += h[i].clone().sub(h[i - 1]).sub(h[i - 1]).add(h[i - 2]).lengthSq();
+            mm += Math.sqrt(s2 / (h.length - 2)) * 1000 / seeds;
+        }
+        res[name] = mm;
+    }
+    return res;
+}
 
 /** A swing (both segments, the whole arm turning about the shoulder in the picture's plane) at f Hz: drawn amplitude and lag. */
 export function swing({ freqs = [1, 2, 3, 4, 6], seeds = 2 } = {}) {
@@ -265,6 +300,7 @@ export function all(opts = {}) {
         good: !o || o === 'still' ? still({ noise: 0.3 }) : null,
         still: !o || o === 'still' ? still() : null,
         swing: !o || o === 'swing' ? swing() : null,
+        moving: !o || o === 'moving' ? moving() : null,
         step: !o || o === 'step' ? step() : null,
         wall: !o || o === 'wall' ? wall({ only: opts.wall, noise: 0.3 }) : null,
         wallNoisy: !o || o === 'wall' ? wall({ only: opts.wall, noise: 1 }) : null, // (shown, no limits: see verdict)
@@ -289,6 +325,9 @@ export function verdict(r) {
         if (+f <= 3 && v.amp < LIMITS.swingAmp3) bad.push(`взмах ${f} Гц: ${(v.amp * 100).toFixed(0)} % < ${LIMITS.swingAmp3 * 100}`);
         if (+f <= 3 && v.lagMs > LIMITS.swingLagMs) bad.push(`взмах ${f} Гц: ${v.lagMs.toFixed(0)} мс > ${LIMITS.swingLagMs}`);
     }
+    if (r.moving) for (const [k, lim] of [['aim', LIMITS.moveAim], ['wave', LIMITS.moveWave], ['circle', LIMITS.moveCircle]]) {
+        if (r.moving[k] > lim) bad.push(`рывки в движении (${k}): ${r.moving[k].toFixed(1)} мм/кадр² > ${lim}`);
+    }
     if (r.step && r.step.overshoot > LIMITS.overshoot) bad.push(`остановка: перелёт ${(r.step.overshoot * 100).toFixed(1)} % > ${LIMITS.overshoot * 100}`);
     if (r.wall) for (const [k, v] of Object.entries(r.wall)) {
         if (v.depthCm > LIMITS.wallDepthCm) bad.push(`стена ${k}: в ней ${v.depthCm.toFixed(1)} см > ${LIMITS.wallDepthCm}`);
@@ -304,6 +343,7 @@ export function print(r) {
     if (r.good) console.log('покой, хорошая камера (дрожь кисти, см / предплечья, ° / рывки кисти, см/с): ' + Object.entries(r.good).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
     if (r.still) console.log('покой, шумная камера: ' + Object.entries(r.still).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
     if (r.swing) console.log('взмахи (видно %, опоздание мс): ' + Object.entries(r.swing).map(([k, v]) => `${k} Гц ${f(v.amp * 100, 0)} % ${f(v.lagMs, 0)}`).join(', '));
+    if (r.moving) console.log('рывки в движении, рука с палочкой (мм за кадр², наведение / помахивание / круги): ' + Object.values(r.moving).map((v) => f(v, 1)).join(' / '));
     if (r.step) console.log(`остановка: перелёт ${f(r.step.overshoot * 100, 1)} %`);
     if (r.wallNoisy) console.log('у стены, шумная камера (без порогов): ' + Object.entries(r.wallNoisy).map(([k, v]) => `${k} ${f(v.depthCm, 1)}; ${f(v.cm)} / ${f(v.ncm)}; ${f(v.flips, 1)}; рывок ${f(v.jump, 1)}`).join(', '));
     if (r.wall) console.log('у стены, обычная камера (в ней см; дрожь всего / в стену и обратно, см; туда-сюда /с; рывок за кадр, см): ' + Object.entries(r.wall).map(([k, v]) => `${k} ${f(v.depthCm, 1)}; ${f(v.cm)} / ${f(v.ncm)}; ${f(v.flips, 1)}; рывок ${f(v.jump, 1)}`).join(', '));

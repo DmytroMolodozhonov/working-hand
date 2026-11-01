@@ -26,7 +26,7 @@ const ARM_KEYS = { left: ['leftShoulder', 'leftElbow', 'leftWrist'], right: ['ri
 /** How far ahead of the picture the arms and hands are shown (see the top; numbers from tools/handbench/pointbench.mjs). */
 export const PREDICT = {
     ON: true,
-    EXTRA: 0.04, // s beyond the picture's known age: the camera's own delay before the program has it + what the filters still trail
+    EXTRA: 0.07, // s beyond the picture's known age: the camera's own delay before the program has it + what the filters still trail
     MAX: 0.14, // s: never further ahead than this
     VEL_CUT: 5, // Hz: the velocity steadied (the filtered points' step from picture to picture)
     HAND_LO: 0.9, HAND_HI: 1.8, // palm sizes a second: below LO the hand is still (not carried), from HI carried fully
@@ -41,6 +41,10 @@ export const PREDICT = {
     // past where it stopped (a careful aim, ≤ ~2 widths a second, is carried fully)
     FAST: [3, 5],
     FAST_HOLD: [120, 280], // ms after a fast swing before the arm is carried again (it slows down: no overshoot)
+    // s: the carried velocity and the carry's strength glide over this (the author 01.11: «с палочкой рука подрагивает» —
+    // turned on, off or back (a turning point) at a picture, the carry jumped the arm 30 times a second; the arm's own
+    // trembling while waving the wand 38 → 15, tools/armstab.mjs «рывки в движении»), EXTRA a little more for its lag
+    OFF_T: 0.1,
     RUN: 3, // pictures in a row moving one way before a move is carried fully (from the 2nd: a part)
 };
 const _alpha = (cut, dt) => 1 / (1 + 1 / (2 * Math.PI * cut * dt));
@@ -103,6 +107,7 @@ export class PoseSmoother {
             P.gain[side] = w ? _ramp(ws, PREDICT.ARM_LO, PREDICT.ARM_HI) * (1 - _ramp(ws, PREDICT.FAST[0], PREDICT.FAST[1])) * calm * _ramp(Math.hypot(w.x, w.y) / Math.max(1e-9, w.m), PREDICT.ONE_WAY[0], PREDICT.ONE_WAY[1]) : 0;
             if (w) P.gain[side] *= _ramp(w.run || 0, 1, PREDICT.RUN);
             P.calm[side] = calm;
+            P.sw = P.sw || {}; P.sw[side] = sw;
             P.cap[side] = w ? PREDICT.ARM_MAX * sw / Math.max(1e-6, Math.hypot(w.ux, w.uy)) : 0; // (s: the carry's limit along the wrist)
         }
         for (const key of HAND_KEYS) {
@@ -136,18 +141,38 @@ export class PoseSmoother {
     }
 
     /** `out` carried `lead` s ahead along the velocities (in place). */
-    _carry(out, lead) {
-        const P = this.pv;
+    _carry(out, lead, dts = 0) {
+        const P = this.pv, O = this.off || (this.off = {});
         for (const side of ['left', 'right']) {
-            const g = this.hold[side] ? 0 : P.gain[side] * Math.min(lead, P.cap[side]);
-            if (!(g > 0)) continue;
+            const hold = this.hold[side];
+            const gain = hold ? 0 : P.gain[side];
+            const lim = PREDICT.ARM_MAX * (P.sw?.[side] ?? 0.25); // (the most a point is carried: shoulders' widths × the carry's strength)
+            const gm = this._gsm || (this._gsm = { left: 0, right: 0 });
+            gm[side] += (gain - gm[side]) * (hold || !(PREDICT.OFF_T > 0) ? 1 : Math.min(1, dts / PREDICT.OFF_T));
+            const a = hold || !(PREDICT.OFF_T > 0) ? 1 : Math.min(1, dts / PREDICT.OFF_T);
             for (const k of ARM_KEYS[side]) {
                 const p = out[k], v = P.vel[k];
-                if (p && v) out[k] = { ...p, x: p.x + v.ux * g, y: p.y + v.uy * g };
+                const o = O[k] || (O[k] = { x: 0, y: 0 });
+                // (the carried VELOCITY glides — a picture that turns the carry on, off, or back (a turning point) must not jump
+                // the arm; the time ahead is this frame's own, so a steady move is carried fully; a hand held for a throw: none
+                // at once — ThrowModel reads the true speed)
+                const tx = p && v ? v.ux * gain : 0, ty = p && v ? v.uy * gain : 0;
+                o.x += (tx - o.x) * a; o.y += (ty - o.y) * a;
+            }
+            // (one time ahead for the whole arm — its shape kept: at most ARM_MAX shoulders' widths of the wrist's travel)
+            const ow = O[side + 'Wrist'], ws = ow ? Math.hypot(ow.x, ow.y) : 0;
+            const t = ws > 1e-9 ? Math.min(lead, lim * gm[side] / ws) : lead;
+            for (const k of ARM_KEYS[side]) {
+                const p = out[k], o = O[k];
+                if (p && (o.x !== 0 || o.y !== 0)) out[k] = { ...p, x: p.x + o.x * t, y: p.y + o.y * t };
             }
         }
         for (const key of HAND_KEYS) {
-            const g = this.hold[key === 'leftHandLandmarks' ? 'left' : 'right'] ? 0 : P.gain[key] * Math.min(lead, P.cap[key]), lm = out[key], v = P.hv[key];
+            const hold = this.hold[key === 'leftHandLandmarks' ? 'left' : 'right'];
+            // (the hand's carry strength glides too: the palm — and the wand in it — must not jump when it turns on or off)
+            const gm = this._gsm || (this._gsm = { left: 0, right: 0 });
+            gm[key] = (gm[key] ?? 0) + ((hold ? 0 : P.gain[key]) - (gm[key] ?? 0)) * (hold || !(PREDICT.OFF_T > 0) ? 1 : Math.min(1, dts / PREDICT.OFF_T));
+            const g = hold ? 0 : gm[key] * Math.min(lead, P.cap[key]), lm = out[key], v = P.hv[key];
             if (!(g > 0) || !lm || lm.length < 21 || !v) continue;
             const c = new Array(lm.length), asp = v.asp, ka = v.a * g, kb = Math.max(-0.6, Math.min(0.6, v.b * g)); // (≤ ~35° of turn carried)
             for (let i = 0; i < lm.length; i++) {
@@ -209,7 +234,9 @@ export class PoseSmoother {
         // never carried (`hold`), so the hands' memory (ThrowModel) reads its true speed off it)
         this.eff = this.effFrom + (this.effTo - this.effFrom) * k;
         const out = Object.assign({}, to);
-        if (lead > 0) this._carry(out, lead);
+        const dts = this._lastSample == null ? 0 : Math.max(0, Math.min(0.1, (now - this._lastSample) / 1000));
+        this._lastSample = now;
+        if (PREDICT.ON) this._carry(out, lead, dts);
         this.armMove.left = PREDICT.ON ? this.pv.gain.left : -1; this.armMove.right = PREDICT.ON ? this.pv.gain.right : -1; // (ArmSolver: how deliberately each arm moves — opens its filter; -1 unknown)
         out.armMove = this.armMove;
         if (k < 1) {
