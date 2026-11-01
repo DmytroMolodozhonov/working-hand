@@ -233,6 +233,7 @@ import { bareGate, BARE_HINT } from './BareHand.js';
 import { CrossedShield } from './CrossedArms.js';
 import { ShieldAlert } from './ShieldAlert.js';
 import { CastHints } from './CastHints.js';
+import { spellPhrase } from '../audio/SpellPhrase.js';
 import { netLog } from '../net/Network.js';
 import { castingHand, aimedUpOrSelf, pointsUp } from './WandAim.js';
 import { restartsCreative } from './CreativeRestart.js';
@@ -1764,6 +1765,7 @@ export class Game {
         const held = [];
         hud.hintFilter = (html) => { held.push(html); return false; };
         let name = null;
+        this._whyCode = null;
         try { name = this._castLocalSpell(text, isFinal); } finally { hud.hintFilter = null; }
         if (!held.length) return name;
         const html = held[held.length - 1];
@@ -1774,7 +1776,8 @@ export class Game {
         const talking = !intent && !!this.castleLife?.talk?._listener?.();
         const hints = this._castHints || (this._castHints = new CastHints());
         if (name) { hud.setVoice(html, true); return name; } // (the spell went off: its own line about it)
-        const v = hints.phrase({ text, name: matchSpell(text), isFinal, intent, talking });
+        const handDown = this._whyCode === 'handDown'; // (a known spell said clearly, the wand hand below ~30°: say what to do)
+        const v = hints.phrase({ text, name: matchSpell(text), isFinal, intent, talking, handDown, clear: handDown && spellPhrase(text).ok });
         if (v.ok && hints.pass(html)) hud.setVoice(html, true);
         else if (!v.ok && isFinal) netLog(`🎙️ подсказка не показана (${v.why}): «${String(text).slice(0, 60)}» → ${String(html).replace(/<[^>]+>/g, '')}`);
         return name;
@@ -2163,6 +2166,7 @@ export class Game {
      */
     _why(code, name = null, extra = null) {
         const gate = this._hintGate || (this._hintGate = new HintGate(2000));
+        this._whyCode = code;
         const text = refusal(code, { ...extra, name: name ? SPELL_RU[baseSpell(name)] || name : null });
         // (the journal gets the reason every time — the screen's hint is held back by the gate, the journal's line is not)
         if (text && !this.lastCastWhy) this.lastCastWhy = String(text).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();

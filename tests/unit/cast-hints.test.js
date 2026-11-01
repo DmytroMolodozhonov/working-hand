@@ -54,3 +54,24 @@ test('mana short: the bar and its figures get the red flash class', async () => 
     assert.ok(fake.el.manaNum.classList.contains('short'));
     clearTimeout(fake.el.fatigue._shortT); clearTimeout(fake.el.manaNum._shortT);
 });
+
+test('cast hints: wand hand low + a clear spell said → «raise your hand» (even with no gesture); talk and villagers → none', () => {
+    const p = { text: 'бомбардо', name: 'Bombardo', isFinal: true, intent: false, talking: false, handDown: true, clear: true };
+    const ok = (o) => new CastHints(clock().now).phrase({ ...p, ...o }).ok; // (a fresh player each time: a repeat would let it through anyway)
+    assert.equal(ok({}), true, 'hand down, clear spell');
+    assert.equal(ok({ handDown: false }), false, 'hand up: this hint is not for it');
+    assert.equal(ok({ clear: false }), false, 'not a clear spell phrase');
+    assert.equal(ok({ talking: true }), false, 'talking to a villager');
+    assert.equal(ok({ isFinal: false }), false, 'unfinished phrase');
+    assert.equal(ok({ text: 'ну вот я сегодня читал про бомбардо и думаю что это интересно' }), false, 'long speech');
+});
+
+test('cast hints: the same advice is not repeated every phrase (left-handed is the same: the side is the wand hand)', async () => {
+    const { refusal } = await import('../../src/game/Hints.js');
+    const html = refusal('handDown', { name: 'Бомбардо' });
+    assert.match(html, /поднимите руку с палочкой выше/);
+    const c = clock(), h = new CastHints(c.now);
+    assert.equal(h.pass(html), true);
+    c.t += 3000; assert.equal(h.pass(html), false);
+    c.t += HINT_REPEAT_MS; assert.equal(h.pass(html), true);
+});

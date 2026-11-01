@@ -34,7 +34,7 @@ test('hints: the fall line names who did it and how long; the lying line tells h
 });
 
 test('hints: why a recognized spell did not work', () => {
-    assert.match(refusal('handDown', { name: 'Бомбардо' }), /«Бомбардо».*рука опущена.*Поднимите руку/);
+    assert.match(refusal('handDown', { name: 'Бомбардо' }), /«Бомбардо».*поднимите руку с палочкой выше/);
     assert.match(refusal('cooldown'), /Слишком быстро/);
     assert.match(refusal('maximaAlone'), /вместе с заклинанием/);
     assert.match(refusal('busy', { name: 'Адский огонь' }), /Уже действует «Адский огонь».*Стоп/);

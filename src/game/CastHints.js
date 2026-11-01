@@ -30,7 +30,7 @@ export class CastHints {
      * A phrase was heard. @returns {{ok: boolean, why: string}} may advice about it be shown
      * @param {{text: string, name: string|null, isFinal: boolean, intent: boolean, talking: boolean}} p
      */
-    phrase({ text, name, isFinal, intent, talking }) {
+    phrase({ text, name, isFinal, intent, talking, handDown = false, clear = false }) {
         if (!isFinal) return { ok: false, why: 'фраза ещё не закончена' };
         const t = this.now();
         const key = name || String(text ?? '').trim().toLowerCase();
@@ -38,6 +38,8 @@ export class CastHints {
         this._last = { name: key, at: t };
         if (wordCount(text) > FOCUSED_WORDS) return { ok: false, why: 'длинная фраза — обычная речь' };
         if (talking && !intent) return { ok: false, why: 'разговор с жителем' };
+        // the hand is down and the spell was said clearly (not talk, nobody to talk to): that is exactly who needs «raise your hand»
+        if (handDown && clear && !talking) return { ok: true, why: '' };
         if (!intent && !repeat) return { ok: false, why: 'нет жеста и не повтор' };
         return { ok: true, why: '' };
     }

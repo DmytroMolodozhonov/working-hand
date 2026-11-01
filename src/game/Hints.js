@@ -77,7 +77,7 @@ export function lyingMessage(kind) {
 export function refusal(code, d = {}) {
     const name = d.name ? `«${d.name}»` : 'заклинание';
     switch (code) {
-        case 'handDown': return `✋ Не сработало ${name}: рука опущена. Поднимите руку и направьте её на цель`;
+        case 'handDown': return `✋ Чтобы ${name} сработало, поднимите руку с палочкой выше — и направьте её на цель`;
         case 'cooldown': return '⏳ Слишком быстро — подождите секунду и скажите ещё раз';
         case 'maximaAlone': return '✨ «Максима» говорится вместе с заклинанием, например «Бомбардо Максима»';
         case 'busy': return `⏳ Уже действует ${name} — сначала скажите «Стоп»`;
