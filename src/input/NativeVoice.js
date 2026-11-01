@@ -112,7 +112,13 @@ export const FIGHT_EDGE_LEN = 5;
 const FIGHT_EDGE_NOT = new Set(['AvadaKedavra']);
 const edgeOk = (h, d) => !!d.duel && duelFast(h.spell.spell, d) && !FIGHT_EDGE_NOT.has(h.spell.spell) && h.spell.len >= FIGHT_EDGE_LEN
     && h.tail >= DUEL_QUIET && fitOf(h, d) >= DUEL_FIT && Number.isFinite(d.q) && d.q >= FIGHT_Q;
-const fightClear = (h, d) => !!d.duel && !d.friends && duelFast(h.spell.spell, d) && h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) >= FIGHT_LOUD_FIT;
+const fightClear = (h, d) => !d.friends && ((!!d.duel && duelFast(h.spell.spell, d)) || !!d.solo) && h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) >= FIGHT_LOUD_FIT;
+/**
+ * «Alone»: nobody to talk to — no friend on the server and no call heard (the author: «если я ни с кем в Discord, Telegram или в игре
+ * не говорю — можно без проверки»). A call is a voice in the speakers the game did not play itself (its own lines it knows — GameVoices);
+ * one heard keeps the check on for CALL_HOLD. Alone, a clear spell over the game's loud sounds is cast without waiting for the speakers' copy.
+ */
+export const CALL_HOLD = 60000;
 const fitOf = (h, d) => h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity);
 
 /** How much better than needed a spell must fit to cast while the game's voices play, before the phrase's end. */
@@ -296,11 +302,18 @@ export class NativeVoice {
      * nobody else the program skips the speakers' second pass of the network on a phrase still being said — half the time a look
      * took in a loud duel (the author's journal 15:01: 270–290 ms against 107).
      */
+    /** Nobody to talk to: no friend on the server, no call heard for CALL_HOLD (see CALL_HOLD). */
+    alone() {
+        return !this.friends && !(performance.now() - (this.callAt ?? -1e12) < CALL_HOLD);
+    }
+
     setFight(hot, friends) {
-        const v = `${hot ? 1 : 0}${friends ? 1 : 0}`;
+        // (alone the speakers need no second look either — not only in a fight)
+        const skip = !friends && (!!hot || this.alone());
+        const v = `${skip ? 1 : 0}`;
         if (v === this._hint || !this.es) return;
         this._hint = v;
-        fetch('/api/voice/hint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fight: !!hot, friends: !!friends }) })
+        fetch('/api/voice/hint', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fight: skip, friends: !!friends }) })
             .catch(() => { this._hint = null; });
     }
 
@@ -381,9 +394,15 @@ export class NativeVoice {
         // (the network's time per look at a phrase: the journal shows it — zns-perf.log «голос»)
         if (Number.isFinite(d.cost)) { const c = this.cost || (this.cost = { n: 0, sum: 0, max: 0 }); c.n++; c.sum += d.cost; c.max = Math.max(c.max, d.cost); }
         // (the speakers played the game's own voices then — villagers, wizards: not a friend's)
-        if ((d.far || 0) >= 0.25 && !d.final) { const w = this._when(d, {}); d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to); }
+        if ((d.far || 0) >= 0.25) {
+            const w = this._when(d, {});
+            d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to);
+            // (a voice in the speakers that is not the game's own line: a call — Discord, Telegram — or a friend: the check stays on)
+            if (!d.game && !this.duelHot) this.callAt = performance.now();
+        }
         d.duel = !!this.duelHot;
         d.friends = !!this.friends; // (a friend on the server: his voice may be in the speakers — fightClear)
+        d.solo = this.alone();
         d.knows = this.knows; // (spell → does the hero know it: set by the game)
         const r = lookAt(d, this.segs.get(d.id));
         this.onLetters?.(r.heard?.written || '', d); // (what was written so far — the dragon's «У» of «Империус Максима»: DragonHowl)

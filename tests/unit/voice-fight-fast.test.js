@@ -158,3 +158,23 @@ test('«экспили», «экспря», «эксплярн», «экспил
     assert.equal(lettersOfOther('эпря', 'Sapira', 'сапира'), null);
     assert.equal(soundTrust({ ...base, written: 'эпря', fit: 0.3 }), null); // (чужие буквы, но не другого заклинания — бой, губы: моё)
 });
+
+// Автор: «если я ни с кем в Discord, Telegram или в игре не говорю — можно без проверки» (колонок посреди фразы).
+import { NativeVoice, CALL_HOLD } from '../../src/input/NativeVoice.js';
+test('один (без друзей и звонка): ясное заклинание при громких колонках — сразу; с другом — ждёт сверки', () => {
+    let alone = 0, friend = 0;
+    for (const r of [...said('инферно'), ...said('экспеллиармус'), ...said('остолбеней')]) {
+        if (firstSay(r, { far: 0.5, solo: true }).say?.settled) alone++;
+        if (firstSay(r, { far: 0.5, solo: true, friends: true }).say?.settled) friend++;
+    }
+    assert.ok(alone >= 3, `один: сразу ${alone} из 6`);
+    assert.equal(friend, 0);
+    const nv = new NativeVoice();
+    assert.equal(nv.alone(), true);
+    nv.callAt = performance.now(); // (в колонках чужой голос — звонок)
+    assert.equal(nv.alone(), false);
+    nv.callAt = performance.now() - CALL_HOLD - 1;
+    assert.equal(nv.alone(), true);
+    nv.friends = true;
+    assert.equal(nv.alone(), false);
+});
