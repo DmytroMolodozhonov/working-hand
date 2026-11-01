@@ -1730,7 +1730,7 @@ export class ArenaDuels {
             this.endUi.showAgain({
                 hero: { ...(g.hero || {}) }, title: 'Выберите свою силу для дуэли с другом', go: 'Я готов',
                 onStart: (h) => { g.hero = { ...h, spawn: 'arena', friendSame: false }; if (g.config) g.config.hero = g.hero; this._resetHero(); this.endUi.hide(); ready(); },
-                onExit: () => { document.getElementById('pause-exit-btn')?.click(); },
+                onExit: () => { this.endUi.hide(); window.__zns?.exitToMenu?.(); },
             });
         } else ready();
     }
@@ -1764,7 +1764,7 @@ export class ArenaDuels {
             lost: !!m.lost,
             hero: { ...(this.game.hero || {}), foe: m.foe },
             onStart: (hero) => { this._applyHero(hero); this.endUi.hide(); this._unpause(); this._resetArena(); m.hold = false; m.holdPin = null; },
-            onExit: () => { this._unpause(); document.getElementById('pause-exit-btn')?.click(); }, // (the same way out as the pause menu: the world is saved)
+            onExit: () => { this._unpause(); this.endUi.hide(); window.__zns?.exitToMenu?.(); }, // (the same way out as the pause menu: the world is saved)
         });
     }
 

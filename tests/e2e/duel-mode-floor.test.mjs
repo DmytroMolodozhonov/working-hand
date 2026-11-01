@@ -19,6 +19,7 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
     const res = await page.evaluate(async () => {
         const g = window.__zns.game, AD = g.arenaDuels, out = [];
         const step = (dt) => { g.levitation.update(dt); g.items.update(dt); g.castleLife.update(dt); AD.update(dt); g.duel.update(dt); g.creatureImpact.update(dt); };
+        const seatDev = () => { const A0 = AD.list.get(AD.mode?.arenaId); if (!A0) return null; let n = 0, seated = 0, maxH = 0, maxV = 0, moving = 0, noArena = 0; for (const v of g.castleLife.byId.values()) { const s = v.arena?.seat; if (v.arena?.kind !== 'fan') continue; n++; if (!v.seated || !s) { moving++; continue; } seated++; maxH = Math.max(maxH, Math.hypot(v.x - s.x, v.z - s.z)); maxV = Math.max(maxV, Math.abs(v.y - s.y)); } return { n, seated, moving, maxH: +maxH.toFixed(2), maxV: +maxV.toFixed(2), tot: A0.fans.size }; };
         const fans = () => { const A0 = AD.list.get(AD.mode?.arenaId); if (!A0) return null; let on = 0, off = 0, low = 0, minDy = 1e9; for (const v of g.castleLife.byId.values()) { if (!v.arena || v.arena.id !== A0.id) continue; } const all = [...g.castleLife.byId.values()].filter((v) => !v.dead && Math.hypot(v.x - A0.def.centre.x, v.z - A0.def.centre.z) < 80); for (const v of all) { if (v.arena?.id === A0.id) on++; else off++; const dy = v.y - A0.def.floorY; if (dy < -0.5) low++; minDy = Math.min(minDy, dy); } return { on, off, low, minDy: +minDy.toFixed(1) }; };
         for (let i = 0; i < 1200; i++) {
             step(0.05);
@@ -38,12 +39,12 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
             if (i % 10) continue;
             const A = AD.list.get(AD.mode?.arenaId), D = A?.duel;
             const a = D?.a;
-            out.push({ t: (i * 0.05).toFixed(0), ph: D?.phase, mode: !!AD.mode, arena: a?.arena && { k: a.arena.kind, leg: a.arena.leg }, y: a && +(a.y - A.def.floorY).toFixed(2), foe: !!a?.foe, fl: a?.fleeT > 0, inv: !!a?.investigate, dead: a?.dead, fans: fans(), vy: a?.vy, d: a && +Math.hypot(a.x - A.def.centre.x, a.z - A.def.centre.z).toFixed(1) });
+            out.push({ t: (i * 0.05).toFixed(0), ph: D?.phase, mode: !!AD.mode, arena: a?.arena && { k: a.arena.kind, leg: a.arena.leg }, y: a && +(a.y - A.def.floorY).toFixed(2), foe: !!a?.foe, fl: a?.fleeT > 0, inv: !!a?.investigate, dead: a?.dead, fans: fans(), sd: seatDev(), vy: a?.vy, d: a && +Math.hypot(a.x - A.def.centre.x, a.z - A.def.centre.z).toFixed(1) });
             await new Promise((r) => setTimeout(r, 0));
         }
         return { out, log: [...AD.log].slice(-15) };
     });
-    let pf = ''; for (const o of res.out) { const k = JSON.stringify(o.fans); if (k !== pf) console.log('t=' + o.t, k); pf = k; }
+    let pf = ''; for (const o of res.out) { const k = JSON.stringify(o.sd); if (k !== pf) console.log('t=' + o.t, k); pf = k; }
     for (const o of res.out) {
         assert.ok(o.arena && o.arena.k === 'duel', 'the wizard is still in the duel at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(o.y >= -0.1, 'the wizard is not under the floor at ' + o.t + ' s: ' + JSON.stringify(o));

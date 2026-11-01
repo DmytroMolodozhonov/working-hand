@@ -1504,10 +1504,15 @@ $('pause-exit-btn').onclick = async () => {
     clearTimeout(exitAsk);
     $('pause-exit-btn').disabled = true;
     $('pause-exit-btn').textContent = '💾 Сохраняем мир...';
+    await leaveToMenu();
+};
+/** Save the world and go to the main menu at once (no «are you sure»: the window the player pressed «Выйти» in is the question — the duel's «ещё раз?», the boss retry). */
+async function leaveToMenu() {
     try { game?.sync?._sendMine?.(); } catch (e) { /* ignore */ }
     try { await Promise.race([game?.keeper?.save?.(), new Promise((r) => setTimeout(r, 3000))]); } catch (e) { /* the page still leaves */ }
     backToMenu();
-};
+}
+window.__zns = Object.assign(window.__zns || {}, { exitToMenu: leaveToMenu });
 window.addEventListener('pagehide', () => {
     try { if (game?.sync) game.groundVortex?.returnAll?.(); } catch (e) { /* closing */ } // (blocks held by «Ground Vortex» back into the ground: the others see it)
     try { game?.sync?._sendMine?.(); } catch (e) { /* closing */ }

@@ -35,7 +35,7 @@ export class BossRetry {
         this.ui.showAgain({
             hero: { ...g.hero }, title: 'Вы пали. Хотите попробовать ещё раз?', go: 'Начать бой заново',
             onStart: (hero) => this._again(hero),
-            onExit: () => { g.paused = false; this.busy = false; document.getElementById('pause-exit-btn')?.click(); },
+            onExit: () => { g.paused = false; this.busy = false; window.__zns?.exitToMenu?.(); },
         });
         return true;
     }
