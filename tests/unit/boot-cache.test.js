@@ -32,8 +32,8 @@ test('запись читается назад бит в бит (типы мас
 });
 
 test('битая запись не читается: любой байт, обрезка, чужой вид/ключ, чужой формат', () => {
-    const buf = encodeRecord('icon', 'icon/a', { k: 1 }, [new Uint8Array(1000).map((_, i) => i * 7)]);
-    for (const at of [3, 9, 20, 40, buf.byteLength - 1, buf.byteLength >> 1]) {
+    const buf = encodeRecord('icon', 'icon/a', { k: 1 }, [new Uint8Array(1003).map((_, i) => i * 7)]); // (1003: the record ends in padding)
+    for (const at of [3, 9, 12, 20, 40, buf.byteLength - 1, buf.byteLength - 3, buf.byteLength >> 1]) {
         const b = buf.slice(0);
         new Uint8Array(b)[at] ^= 0x10;
         assert.equal(decodeRecord(b, 'icon', 'icon/a'), null, 'испорчен байт ' + at);

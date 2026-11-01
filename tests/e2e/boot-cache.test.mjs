@@ -10,8 +10,10 @@ import { startServer, launch, openPage } from './harness.mjs';
 test('кеш загрузки живёт между запусками браузера и не отдаёт битое', { timeout: 240000 }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zns-bootcache-'));
     const srv = await startServer(8700 + Math.floor(Math.random() * 100));
+    const opened = [];
     const open = async (query = '') => {
         const browser = await launch({ userDataDir: dir, viewport: { width: 640, height: 360 } });
+        opened.push(browser);
         const { page } = await openPage(browser, srv.url + query, { noCamera: true, viewport: { width: 640, height: 360 } });
         return { browser, page };
     };
@@ -61,7 +63,9 @@ test('кеш загрузки живёт между запусками брау�
         assert.match(off.line, /выключен/);
         await browser.close();
     } finally {
+        for (const b of opened) await b.close().catch(() => {});
         srv.stop();
-        fs.rmSync(dir, { recursive: true, force: true });
+        // (the browser may still write its own files a moment after closing: the folder goes when it can)
+        try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch (e) { /* (a temporary folder) */ }
     }
 });

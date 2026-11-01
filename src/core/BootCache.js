@@ -23,7 +23,7 @@
  */
 
 export const BOOT = {
-    FORMAT: 2, // (the records' layout: raised when it changes — every old record is then of another cache)
+    FORMAT: 3, // (the records' layout: raised when it changes — every old record is then of another cache)
     MAX_BYTES: 500 * 1024 * 1024,
     PREFIX: 'zns-boot-',
     MAGIC: 0x424e535a, // ('ZNSB')
@@ -117,8 +117,8 @@ const dec = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
 
 /**
  * One record: [magic u32][format u32][header length u32][checksum u32][header JSON][pad to 8][array 0][pad][array 1]…
- * The header: {kind, key, meta, parts: [{t, n}]} (t: the array's type, n: its bytes). The checksum is over the header and
- * every array's bytes.
+ * The header: {kind, key, meta, parts: [{t, n}]} (t: the array's type, n: its bytes). The checksum is over every byte after
+ * the first 16 (the header, the arrays, the padding).
  * @returns {ArrayBuffer}
  */
 export function encodeRecord(kind, key, meta, arrays = []) {
@@ -131,12 +131,8 @@ export function encodeRecord(kind, key, meta, arrays = []) {
     const buf = new ArrayBuffer(size);
     const u8 = new Uint8Array(buf), dv = new DataView(buf);
     u8.set(head, 16);
-    let sum = sum32(head);
-    arrays.forEach((a, i) => {
-        const b = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
-        u8.set(b, at[i]);
-        sum = sum32(b, sum);
-    });
+    arrays.forEach((a, i) => u8.set(new Uint8Array(a.buffer, a.byteOffset, a.byteLength), at[i]));
+    const sum = sum32(u8.subarray(16)); // (everything after the first 16 bytes: the header, the arrays and the padding between)
     dv.setUint32(0, BOOT.MAGIC, true);
     dv.setUint32(4, BOOT.FORMAT, true);
     dv.setUint32(8, head.length, true);
@@ -160,16 +156,16 @@ export function decodeRecord(buf, kind, key) {
         const head = JSON.parse(dec.decode(headBytes));
         if (head.kind !== kind || head.key !== key || !Array.isArray(head.parts)) return null;
         const pad = (n) => (n + 7) & ~7;
-        let at = pad(16 + hl), sum = sum32(headBytes);
+        if (sum32(u8.subarray(16)) !== sum0) return null; // (any byte of the record changed: not read)
+        let at = pad(16 + hl);
         const arrays = [];
         for (const p of head.parts) {
             const T = TYPES[p.t];
             if (!T || !(p.n >= 0) || p.n % T.BYTES_PER_ELEMENT || at + p.n > buf.byteLength) return null;
-            sum = sum32(u8.subarray(at, at + p.n), sum);
             arrays.push(new T(buf, at, p.n / T.BYTES_PER_ELEMENT));
             at = pad(at + p.n);
         }
-        if (at !== buf.byteLength || sum !== sum0) return null;
+        if (at !== buf.byteLength) return null;
         return { meta: head.meta, arrays };
     } catch (e) { return null; }
 }

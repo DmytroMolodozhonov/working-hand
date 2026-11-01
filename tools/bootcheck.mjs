@@ -109,7 +109,7 @@ try {
     if (!/из кеша/.test(warm.cache || '') || /звуки 0 из кеша/.test(warm.cache || '')) { console.log('  ✗ тёплый запуск ничего не взял из кеша'); bad.push('попадания'); }
 } finally {
     srv.stop();
-    if (!opt('keep', null)) fs.rmSync(DIR, { recursive: true, force: true });
+    if (!opt('keep', null)) try { fs.rmSync(DIR, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch (e) { /* (a temporary folder) */ }
 }
 console.log(bad.length ? `РАЗЛИЧИЯ: ${bad.join('; ')} — этот вид данных убрать из BOOT.KINDS` : 'ОК: с кешем и без — одинаково');
 process.exit(CHECK && bad.length ? 1 : 0);
