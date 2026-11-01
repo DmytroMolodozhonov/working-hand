@@ -44,6 +44,7 @@ function setup(d) {
     cl.game = g;
     cl._walkable = CastleLife.prototype._walkable; cl._airFree = CastleLife.prototype._airFree; cl._ground = CastleLife.prototype._ground;
     cl._walkable = cl._walkable.bind(cl); cl._airFree = cl._airFree.bind(cl); cl._ground = cl._ground.bind(cl);
+    cl._walkCell = CastleLife.prototype._walkCell.bind(cl); // (_walkable asks it for the blocks' answer and remembers it — the fake CastleLife needs it too)
     cl._pushOut = CastleLife.prototype._pushOut?.bind(cl);
     const v = { id: 'cs1_1:2', isVillager: true, role: 'farmer', model, group: model.group, x: 1, y: FLOOR_Y, z: 0, yaw: 0, dead: false, stunT: 0, vy: 0, mode: 'idle', speed: 0 };
     model.group.position.set(v.x, v.y + 1.95, v.z);

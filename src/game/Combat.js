@@ -660,6 +660,11 @@ export class Combat {
         if (this.manaOn) this.fatigue = Math.max(0, this.fatigue - this.costOf(name, extra));
     }
 
+    /** Mana back a second: the base pace × the mantle × the achievements × the cells of the maximum (ManaRegen.js). */
+    manaRegenRate() {
+        return PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * regenCellsK(this.maxFatigue);
+    }
+
     /**
      * A held spell (the «Инферно» flame) takes `amount` mana now; over its `dt` seconds no
      * mana comes back either (like a held «Protection»).
@@ -670,7 +675,7 @@ export class Combat {
         if (!this.manaOn) return true;
         const bw = this.game.breakward; // (метка «слом защиты»: мана кончилась — заклинание держится на чёрной силе, Breakward.js)
         if (this.fatigue <= 0) return bw?.holdDry() || false;
-        const left = this.fatigue - amount - PVP.FATIGUE_REGEN * dt;
+        const left = this.fatigue - amount - this.manaRegenRate() * dt; // (what the frame gave back is taken again: a held spell costs exactly its price)
         if (left <= 0 && bw?.marked) { this.fatigue = 0; return bw.holdDry(); }
         this.fatigue = Math.max(0, left);
         return true;
@@ -1320,7 +1325,7 @@ export class Combat {
         const holding = this.shield?.drain != null;
         const tree = !!this.game.livingTrees?.draining;
         // (a held «Protection» spends the strength instead of it coming back)
-        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + PVP.FATIGUE_REGEN * (this.game.armor?.stat('manaRegen') ?? 1) * (this.game.achievements?.regenK ?? 1) * regenCellsK(this.maxFatigue) * dt); // (achievements: +15 % each, «Высший маг» +100 %; every 100 cells of the maximum +10 %: ManaRegen.js)
+        if (!this.dead && !holding && !tree) this.fatigue = Math.min(this.maxFatigue || PVP.MAX_FATIGUE, this.fatigue + this.manaRegenRate() * dt); // (achievements: +15 % each, «Высший маг» +100 %; every 100 cells of the maximum +10 %: ManaRegen.js)
         this._regenTierCheck();
         this.game.breakward?.step(dt);
         if (holding) {

@@ -31,12 +31,12 @@ test('«Даст» is a duel charge (cost of «Sands»), sandy coloured', () => 
     assert.equal(DUEL_SPELL_NAME.SandsDuel, 'Sands');
 });
 
-test('«Даст» on me: 5 s slowed (every mode), 3 HP in the free world', () => {
+test('«Даст» on me: 5 s slowed (every mode), no damage — it only slows and shoves', () => {
     for (const mode of ['freeworld', 'creative']) {
         const { g, ev } = fakeGame(mode);
         duelOf(g).applyToMe('SandsDuel', 'enemy');
         assert.equal(g.character.slowScale, SLOW.SCALE, mode);
-        assert.equal(g.combat.hp, mode === 'freeworld' ? PVP.MAX_HP - 3 : PVP.MAX_HP);
+        assert.equal(g.combat.hp, PVP.MAX_HP); // (почему: единый урон Damage.js — у «Даст» 0, он только замедляет и толкает)
         for (let i = 0; i < 240; i++) g.combat.update(1 / 60);
         assert.equal(g.character.slowScale, SLOW.SCALE, `${mode}: still slowed after 4 s`);
         assert.match(ev.status, /замедлены/);

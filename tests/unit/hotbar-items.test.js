@@ -136,11 +136,11 @@ test('«Акцио»: bones (the meat all taken) are no target; a wand lying by 
     assert.equal(ac.cast(), null);
     assert.equal(ac.state?.L, L, 'the wand flies, not the pig');
     assert.equal(pulled, null);
-    // the wand far off the pointing: the pig's meat comes into the free hand
+    // the wand far off the pointing: the pig's meat comes into the secondary hand
     ac.state = null; L.accio = false;
     wandAt.set(8, 0.1, 0);
     assert.equal(ac.cast(), null);
-    assert.equal(gotMeat, 'right');
+    assert.equal(gotMeat, 'left', 'a body: the secondary («дочерняя») hand takes it — the author: things, books and bodies come to that hand only; the wand hand is for a wand'); // (g.dom = right)
     // bones only: nothing there to summon — it never stands in the way
     pig.meat = 0; pig.bones = {};
     wandAt.set(0, 0.1, -4);

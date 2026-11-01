@@ -65,7 +65,7 @@ export function noise3(x, y, z, seed = 0) {
  * @param {(x:number, z:number) => boolean} o.blocked  no cave here (water, a village…)
  * @param {boolean} [o.test]  the creative test cave (more branches, always chests)
  */
-export function growCaveSystem({ id, rng, start, H, blocked, test = false }) {
+export function growCaveSystem({ id, rng, start, H, blocked, test = false, steer = null }) {
     const s = { id, test, segs: [], chambers: [], chests: [], start, seed: Math.floor(rng() * 1e9) };
     let branches = test ? 5 : 2 + Math.floor(rng() * 3);
     const deepest = { y: Infinity, at: null };
@@ -97,8 +97,19 @@ export function growCaveSystem({ id, rng, start, H, blocked, test = false }) {
             if (rng() < 0.07) wide = 1.2 + rng(); // (now and then a wider stretch)
             wide *= 0.75;
             const pitch = open > 0 ? entryPitch : y > goal + 1.5 ? -0.3 - rng() * 0.22 : (rng() - 0.5) * 0.25;
-            const nx = x + Math.cos(pitch) * Math.cos(yaw) * CAVES.STEP;
-            const nz = z + Math.cos(pitch) * Math.sin(yaw) * CAVES.STEP;
+            let nx = x + Math.cos(pitch) * Math.cos(yaw) * CAVES.STEP;
+            let nz = z + Math.cos(pitch) * Math.sin(yaw) * CAVES.STEP;
+            // (the creative test cave only: the Ice Queen's palace stands on its mountain — a tunnel that meets it turns
+            //  aside instead of ending there, so the cave still reaches its great hall and chests. Natural caves unchanged.)
+            const L = CAVES.STEP * (steer ? 5 : 3), ahead = (da) => (steer || blocked)(x + Math.cos(pitch) * Math.cos(yaw + da) * L, z + Math.cos(pitch) * Math.sin(yaw + da) * L);
+            if (test && open <= 0 && ahead(0)) {
+                for (const da of [-0.3, 0.3, -0.6, 0.6, -0.9, 0.9, -1.3, 1.3, -1.9, 1.9]) {
+                    if (ahead(da)) continue;
+                    yaw += da * 0.6; // (a gentle turn each step, looking ahead — not a corner)
+                    nx = x + Math.cos(pitch) * Math.cos(yaw) * CAVES.STEP; nz = z + Math.cos(pitch) * Math.sin(yaw) * CAVES.STEP;
+                    break;
+                }
+            }
             let ny = y + Math.sin(pitch) * CAVES.STEP;
             if (open <= 0) {
                 if (blocked(nx, nz)) break; // (a dead end before the water / the village)

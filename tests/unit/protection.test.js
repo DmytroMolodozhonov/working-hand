@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Combat, PVP, shieldHitCost } from '../../src/game/Combat.js';
 import { bounceOffShields } from '../../src/game/ShieldBounce.js';
+import { DAMAGE, blastDamage } from '../../src/game/Damage.js';
 
 /** One player at the origin facing −Z; `wand`: the hand holding a wand. */
 function fakeGame({ armOut = 'right', tPose = false, wand = null, leftUp = 0 } = {}) {
@@ -59,7 +60,7 @@ test('out of mana: the shield shatters and the spell goes on through', () => {
     c.fatigue = 4; // (Sapira would cost 10)
     assert.equal(c.hitBySpell('Sapira', FRONT, 'enemy'), true, 'it hit me');
     assert.equal(c.shield, null);
-    assert.equal(c.hp, 16);
+    assert.equal(c.hp, PVP.MAX_HP - DAMAGE.Sapira); // (почему: единый урон Damage.js — Сапира 10 для всех, раньше было 4)
     assert.equal(c.fatigue, 0);
     assert.equal(c.serialize()[4], 1, 'the others see it shatter');
     assert.ok(voice.some((t) => /разбит/.test(t)));
@@ -81,7 +82,9 @@ test('the dome: proof against a blast (it pays half the spell); out of mana a bl
     c.fatigue = 3;
     c.explosion(new THREE.Vector3(1, 1, 1), 3.6, 1, 'enemy');
     assert.equal(c.shield, null, 'Bombardo (15) needs 7.5: shattered');
-    assert.ok(c.hp <= 10, `the whole blast, not a quarter (hp ${c.hp})`);
+    // (почему так: урон взрыва теперь единый и падает с расстоянием — Damage.blastDamage; без купола он приходит целиком)
+    const whole = blastDamage(Math.hypot(1, 0.5, 1), 3.6, 1);
+    assert.ok(Math.abs(c.hp - (hp - whole)) < 0.5, `the whole blast, not a quarter (hp ${c.hp}, expected ${hp - whole})`);
 });
 
 test('a wand in one hand: the shield goes up at the wand; at the other hand only when it is raised higher', () => {

@@ -642,6 +642,7 @@ const TREE_CROWN_REACH = [[0, 0], [1, 1], [5, 0], [-5, 0], [0, 5], [0, -5], [4, 
 /** Shapes per kind of the real trees (TreeBuild.TREE_GEN.VARIANTS — kept the same here: no import of the builder in the recipe). */
 const TREE_VARIANTS = 12;
 const TREE_CELL = 12; // one possible tree per 12×12 m cell
+const _PALACE_RING = [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14], [10, 10], [-10, 10], [10, -10], [-10, -10]];
 const CAVE_CELL = 90; // at most one cave per 90×90 m
 const TREE_MIN_DIST = 128; // trees closer to spawn are the original (instanced) ones
 /** Generation 5's floating islands: at most one (with its small ones) per CELL×CELL m. */
@@ -1461,7 +1462,16 @@ export class TerrainData {
         let s = null;
         if (this.test && gx === Math.floor(T.X / CAVE_CELL) && gz === Math.floor(T.Z / CAVE_CELL)) {
             const m = testCaveMouth();
-            s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: m.x, ground: top(m.x, m.z), z: m.z, yaw: Math.PI, pitch: -0.04, open: 2 }, H: top, blocked: wet });
+            // (the Ice Queen's palace stands on this mountain: its columns count as open sky for the cave light, and its ground is
+            //  never carved — so the test cave's tunnels steer 14 m clear of it: no daylight leaking in from the side, no tunnel cut off at its wall)
+            const nearPalace = (x, z) => {
+                if (wet(x, z)) return true;
+                if (!this.sites) return false;
+                const ix = Math.round(x), iz = Math.round(z);
+                for (const [ox, oz] of _PALACE_RING) if (this.sites.landAt(ix + ox, iz + oz)) return true;
+                return false;
+            };
+            s = growCaveSystem({ id: 'cvtest', test: true, rng: createRng((this.seed * 31 + 777) >>> 0), start: { x: m.x, ground: top(m.x, m.z), z: m.z, yaw: Math.PI, pitch: -0.04, open: 2 }, H: top, blocked: wet, steer: nearPalace });
         } else {
             const h = hash01(gx * 7 + 3, gz * 13 + 5, this.seed + 101);
             if (h < CAVES.CHANCE) {

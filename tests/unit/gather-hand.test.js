@@ -52,7 +52,7 @@ test('the chosen resource is never in the hand with the wand, and leaves the han
     Object.assign(g, { inventory: inv, character: { getGripObject: () => grip, getHandDirection: (s, v) => v.set(1, 0, 0) } });
     const beds = Object.create(Beds.prototype);
     beds.game = g; // (no sync: this computer decides — Beds.auth)
-    g.items.spawnLoose = (item) => { spawned.push(item); return {}; };
+    g.items.spawnLoose = (item) => { spawned.push(item); g.items.loose.set(item.uid, {}); return {}; }; // (a thing that never reached the world goes back to the cells — Beds._vanishGuard; so the fake registers it)
     const it = beds.throwWood(null, 'left');
     assert.equal(it.kind, 'blocks');
     assert.equal(it.block, BLOCK.DIRT);

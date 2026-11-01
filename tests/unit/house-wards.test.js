@@ -439,7 +439,8 @@ test('the barrier is not seen — it shows where a stranger comes close; pushing
     assert.ok(gs.voice.includes(refusal('wardBarrier')));
     // in Creative: shoved, no harm
     const gc = fakeGame({ id: 'P3', host: false });
-    gc.config.mode = 'creative'; gc.impact = { apply() {} }; gc.combat.enabled = true; gc.combat.hp = 20; gc.combat.damage = (n) => { gc.combat.hp -= n; };
+    gc.config.mode = 'creative'; gc.impact = { apply() {} }; gc.combat.enabled = false; // (почему false: в Творческом бой выключен, кроме «Обычного здоровья» — там урон как в свободном мире, это решение автора)
+    gc.combat.hp = 20; gc.combat.damage = (n) => { gc.combat.hp -= n; };
     const Wc = new HouseWards(gc);
     Wc.applyNet(W.netList());
     const pc = new THREE.Vector3(-5.9, 0, 0);

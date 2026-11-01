@@ -88,7 +88,7 @@ test('no buyer takes it: the fence refuses, the pawnshop price is 0, the merchan
     assert.ok(!fenceTakes(it));
     assert.equal(pawnPrice(it), 0);
     assert.ok(isMagicItem(it));
-    assert.match(fs.readFileSync(new URL('../../src/game/CastleTalk.js', import.meta.url), 'utf8'), /if \(isDivine\(found\.item\)\)/);
+    assert.match(fs.readFileSync(new URL('../../src/game/CastleTalk.js', import.meta.url), 'utf8'), /if \(isDivine\(found\.item\)( \|\| unsellable\(found\.item\))?\)/); // (the gargoyle head joined the same refusal — HellRules.unsellable)
 });
 
 test('the description: «вы», no recipe, no Diabolos; the codex and the Unitas scroll never tell the secret', () => {

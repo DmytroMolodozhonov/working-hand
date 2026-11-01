@@ -44,7 +44,7 @@ test('creative test ground: a sea castle close by — its village starts ~60 m o
 
 test('creative test ground: a rocky mountain with a cave system — its mouth towards the pedestals, winding deep down, branching, chests in its chambers', () => {
     const d = make(true), H = d.heightAt;
-    const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 5).find((c) => c.id === 'cvtest');
+    const cv = d.cavesNear(TEST_CAVE.X, TEST_CAVE.Z, 90).find((c) => c.id === 'cvtest');
     assert.ok(cv, 'the test cave');
     let top = 0;
     for (let x = TEST_CAVE.X - 30; x <= TEST_CAVE.X + 50; x += 2) for (let z = TEST_CAVE.Z - 30; z <= TEST_CAVE.Z + 30; z += 2) top = Math.max(top, H(x, z));

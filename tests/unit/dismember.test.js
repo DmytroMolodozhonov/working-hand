@@ -459,7 +459,9 @@ test('victim: my head off kills me at full health; shield, plate, a stale life, 
         game.sync.weaponOwners.set('w1', 'enemy');
         if (opts.shield) game.gear = { shieldFaces: () => true, shieldTook() { game.shieldTook = true; } };
         if (opts.plate) game.character.look = { top: 5 };
-        if (opts.creative) game.config.mode = 'creative';
+        // (почему так: боевая система в Творческом сама выключена, кроме режима «Обычное здоровье» — Combat.enabled; в заглушке
+        //  игры она всегда включена, поэтому Творческий с обычным здоровьем «как в свободном мире» здесь показываем явно)
+        if (opts.creative) { game.config.mode = 'creative'; game.combat.enabled = false; }
         return game;
     };
     const head = { limb: 'head', d: 0, n: [0, 1, 0], v: [5, 0, 0], lf: 0 };

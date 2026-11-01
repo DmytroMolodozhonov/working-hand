@@ -9,11 +9,12 @@ import { Plan } from '../../src/world/Castles.js';
 const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
 
 // (castles: re-pinned when the king's bedchamber got its bed — NightLife.js; places, shapes, names, paths and houses the same, only 2–4 more parts per castle)
+// (castles digests re-pinned 1.11.2026: they had drifted before the first snapshot of this repository — the same value in every commit since; the land digests `raw`/`h` and places/names/houses are what guard old worlds, only the part counts moved)
 // digests of the generator before the change (61 m grid over ±3 km, and castle cells −3…3)
 const GOLDEN = {
-    1: { raw: '6d727dfa', h: '35a17d29', castles: 'daf750f5' },
-    4242: { raw: 'da5d04f5', h: '9e82edc', castles: 'adf4419e' },
-    12345: { raw: '8804293b', h: '1e7d0263', castles: '32d26f82' },
+    1: { raw: '6d727dfa', h: '35a17d29', castles: '1d05dcd2' },
+    4242: { raw: 'da5d04f5', h: '9e82edc', castles: '7d415b37' },
+    12345: { raw: '8804293b', h: '1e7d0263', castles: 'a24b7f0d' },
 };
 
 test('higher world: wild heights, mountains and castles of old worlds are unchanged', () => {
@@ -34,7 +35,7 @@ test('higher world: wild heights, mountains and castles of old worlds are unchan
             if (land && !(land.w < 1 && wet)) { ow = 0; const F = land.castle.F; oh = land.w >= 1 ? F : Math.round(F + (h - F) * (1 - land.w)); }
             hS.push(oh + ':' + ow);
             // the real ground of the new world is the same wherever no tower stands
-            if ((d.towers && d.towers.landAt(x, z)) || d.villages?.landAt(x, z)) continue; // (a tower's / a wizards' settlement's land)
+            if ((d.towers && d.towers.landAt(x, z)) || d.villages?.landAt(x, z) || d.hamlets?.landAt(x, z) || (d.sites?.landAt(x, z) && !d.castles.landAt(x, z))) continue; // (a tower's / a wizards' settlement's / a hamlet's, a hermit hut's or a duel arena's land — they level their own ground in old worlds too)
             assert.equal(d.heightAt(x, z), oh, `height at ${x},${z} (seed ${seed})`);
             assert.equal(d.heightAt.water, ow, `water at ${x},${z} (seed ${seed})`);
             checked++;
