@@ -93,7 +93,7 @@ export class RelationsLife {
      * `show`: the "+3" by the bars (only for the hero's own, and only when it is seen).
      */
     bump(v, pid, d, { show = true } = {}) {
-        if (!v || v.dead || !this.life.enabled) return;
+        if (!v || v.dead || !this.life.enabled || this.game.arenaDuels?.peace?.()) return; // (the duel mode: no hatred, no friendship — the relations stay)
         if (!this.auth) {
             if (pid === this.game.localId) this.game.sync?.villagerOrder?.(v.id, 'rel', { d });
             return;

@@ -654,10 +654,22 @@ export class ArenaDuels {
     }
 
     // ------------------------------------------------------------------ the people (CastleLife._think → step)
+    /** The duel mode (Creative «Перед дуэлью»): every spell is allowed, nobody turns hostile to the hero, nothing is a crime (CLAUDE.md). */
+    peace() { return !!this.mode; }
+
+    /** (host) A wizard of the arena forgets any anger, fear and search: they came from a spell of the hero, which in this mode is only the show. */
+    _calmDown(v) {
+        if (v.foe != null) v.foe = null;
+        v.grudge = null; v.fleeFrom = null; v.fleeAt = null; v.fear = null; v.lesson = null; v.hunt = null;
+        if (v.fleeT > 0) v.fleeT = 0;
+        if (v.investigate) v.investigate = null;
+    }
+
     /** (host) A wizard of the arena this frame: true — handled here. */
     step(v, dt) {
         const A = this.list.get(v.arena?.id);
         if (!A) { v.arena = null; return false; }
+        if (this.mode && v.arena) this._calmDown(v); // (the duel mode: nobody is anybody's enemy — the spectators are the scenery, the opponent fights by the duel's rules)
         if (v.foe || v.fleeT > 0 || v.investigate) { this.life?.alog?.decision?.(v, `арена: ушёл из-под её власти (${v.arena.kind}, этап ${A.duel?.phase || '-'}): ${v.foe ? 'враг' : v.fleeT > 0 ? 'испуг' : 'розыск'}; y−пол ${(v.y - A.def.floorY).toFixed(1)}`); if (v.arena.kind === 'fan') { A.fans.delete(v); this._freeSeat(A, v); } if (v.arena.kind === 'steward') A.steward = null; v.arena = null; return false; } // (a real fight / fright: the arena is not his now)
         const k = v.arena.kind;
         if (k === 'fan') return this._fan(A, v, dt);
@@ -1483,6 +1495,9 @@ export class ArenaDuels {
             const p = g.character.group.position;
             p.x = m.pin.x; p.z = m.pin.z; g.knockback?.set?.(0, 0, 0);
         }
+        for (const w of cs.active.values()) this._calmDown(w); // (no anger anywhere in the tower while the mode runs)
+        if (cs.hostile.size) cs.hostile.clear();
+        cs.wizAlarmUntil = 0;
         this._rememberWand();
         this._keepPlayerOnFloor(A);
         if (m.winT != null) { m.winT += dt; if (m.winT >= (m.askAfter ?? AGAIN_AFTER)) { m.winT = null; this._askAgain(); } }
@@ -1493,6 +1508,7 @@ export class ArenaDuels {
         // the next duel: the opponent on his place, the player on his, the count 10…1
         const marks = A.def.gates;
         if (!this._groundReady(A)) return; // (the loading screen / the workers have not brought the floor yet: a wizard put on it would sink through)
+        for (const w of cs.active.values()) if (w.arena?.id === A.id && w.arena.kind === 'duel') this._release(w, true); // (one opponent at a time: a leftover of the last duel goes before the next comes)
         const a = this._foe(A, cs, foeRanks(m.foe));
         if (!a) { A.restT = 3; return; }
         const o = marks[1].mark;

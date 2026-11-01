@@ -2751,6 +2751,7 @@ export class CastleLife {
 
     /** (host) A player did something to the people (Wanted.js): nobody sees the number, they feel it. */
     deed(by, kind, extra = 0) {
+        if (this.game.arenaDuels?.peace?.()) return; // (the duel mode: nothing is a crime)
         if (!this.auth || !this._isPlayer(by)) return;
         this.wanted.add(by, kind, Date.now() / 1000, extra);
     }
@@ -2896,7 +2897,7 @@ export class CastleLife {
      * from, the others run from it. The ones near hear the cry. `by`: a player's id (others: nothing).
      */
     startle(v, by, from, { hit = false, miss = null, loud = false, blocked = false } = {}) {
-        if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by)) return false;
+        if (!this.auth || !v || v.dead || v.servantOf != null || !from || !this._isPlayer(by) || this.game.arenaDuels?.peace?.()) return false;
         const cs = v.cs, now = Date.now();
         if (!cs || v.foe || by === this.state(cs.def.id).owner) return false; // (fighting already; the king may do as he likes)
         if (this.game.arenaDuels?.calm(v, by)) return false; // (the arena's legal duel: spells flying there are the show — ArenaDuels.js)
@@ -3424,7 +3425,7 @@ export class CastleLife {
      * near take fright (VillagerFear). A guest tells the host, who runs the people.
      */
     alarm(pos, kind, by = null, r = null) {
-        if (!this.enabled || !pos) return;
+        if (!this.enabled || !pos || this.game.arenaDuels?.peace?.()) return; // (the duel mode: spells are the show, nobody is afraid or angry)
         this.game.buildingFx?.alarm(pos, r || 60); // (the church bell tolls the alarm — BuildingFx.js)
         if (!this.auth) { this.game.sync?.villagerDanger?.([Math.round(pos.x), Math.round(pos.y ?? 0), Math.round(pos.z)], kind, r); return; }
         this.fright.add(kind, pos, { r });
@@ -3447,7 +3448,7 @@ export class CastleLife {
      * @param {boolean} [loud]  a blast (heard far) or quiet work (seen near)
      */
     damaged(pos, by, blocks, loud = true, { r = null, kind = null, via = viaOfKind(kind) } = {}) {
-        if (!this.enabled || !this.index) return;
+        if (!this.enabled || !this.index || this.game.arenaDuels?.peace?.()) return; // (the duel mode: nobody minds)
         const g = this.game;
         if (!this.auth) { if (by === g.localId) g.sync?.villagerVandal?.([Math.round(pos.x), Math.round(pos.y), Math.round(pos.z)], blocks, loud ? 1 : 0, r); return; }
         this.night?.noise(pos, loud ? 40 : 14); // (a pane breaking, a wall coming down: the sleepers near wake)

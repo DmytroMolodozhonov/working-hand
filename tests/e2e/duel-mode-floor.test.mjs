@@ -33,13 +33,14 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
                     if (i === 440) g.explode(P.clone().set(w.x, w.y + 2, w.z), 8, me, 1);
                     if (i === 520) g.creatureImpact.spellHit(w, 'Bombarda', P, me, null, {});
                     if (i === 600) g.castleLife.startle?.(w, me, P, { hit: true });
+                    if (i === 601) { for (const v of g.castleLife.byId.values()) if (v.arena?.kind === 'fan') { v.foe = me; v.fleeT = 6; v.investigate = { x: v.x, y: v.y, z: v.z, t: 20 }; } g.castleLife.alarm?.({ x: w.x, y: w.y, z: w.z }, 'hellfire', me, 60); g.castleLife.deed?.(me, 'vandal', 5); }
                     if (i === 680) g.castleLife.alarm?.({ x: w.x, y: w.y, z: w.z }, 'explosion', me, 40);
                 }
             }
             if (i % 10) continue;
             const A = AD.list.get(AD.mode?.arenaId), D = A?.duel;
             const a = D?.a;
-            out.push({ t: (i * 0.05).toFixed(0), ph: D?.phase, mode: !!AD.mode, arena: a?.arena && { k: a.arena.kind, leg: a.arena.leg }, y: a && +(a.y - A.def.floorY).toFixed(2), foe: !!a?.foe, fl: a?.fleeT > 0, inv: !!a?.investigate, dead: a?.dead, fans: fans(), sd: seatDev(), vy: a?.vy, d: a && +Math.hypot(a.x - A.def.centre.x, a.z - A.def.centre.z).toFixed(1) });
+            out.push({ t: (i * 0.05).toFixed(0), ph: D?.phase, mode: !!AD.mode, arena: a?.arena && { k: a.arena.kind, leg: a.arena.leg }, y: a && +(a.y - A.def.floorY).toFixed(2), foe: !!a?.foe, fl: a?.fleeT > 0, inv: !!a?.investigate, dead: a?.dead, fans: fans(), sd: seatDev(), foes: [...g.castleLife.byId.values()].filter((v) => v.foe != null).length, duelists: [...g.castleLife.byId.values()].filter((v) => v.arena?.kind === 'duel').length, vy: a?.vy, d: a && +Math.hypot(a.x - A.def.centre.x, a.z - A.def.centre.z).toFixed(1) });
             await new Promise((r) => setTimeout(r, 0));
         }
         return { out, log: [...AD.log].slice(-15) };
@@ -47,6 +48,8 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
     let pf = ''; for (const o of res.out) { const k = JSON.stringify(o.sd); if (k !== pf) console.log('t=' + o.t, k); pf = k; }
     for (const o of res.out) {
         assert.ok(!o.sd || o.sd.maxH < 0.5 && o.sd.maxV < 0.3, 'the fans sit on their seats at ' + o.t + ' s: ' + JSON.stringify(o.sd));
+        assert.equal(o.foes, 0, 'nobody is the hero\'s enemy at ' + o.t + ' s');
+        assert.ok(o.duelists <= 1, 'one opponent at a time at ' + o.t + ' s');
         assert.ok(o.arena && o.arena.k === 'duel', 'the wizard is still in the duel at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(o.y >= -0.1, 'the wizard is not under the floor at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(!o.dead && !o.foe && !o.fl, 'not fleeing / fighting the hero at ' + o.t + ' s');
