@@ -214,3 +214,31 @@ test('ThrowDetector (the wand, strict): an overhand throw from by the head flies
     assert.equal(run(true), true, 'a swing down from by the head, the fingers open: thrown');
     assert.equal(run(false), false, 'raised and pointed forward with the fingers loose: stays');
 });
+
+// the author: «в основной руке пропала защита от выпадения палочки» — the leading hand's wand (Items: strict detector, never
+// the DropGate / HandTrack) leaves only by a real throw, whatever the fingers and the arm do
+test('the wand in the leading hand: open fingers with the arm held out, lowered, coming up from low, or a calm wave never throw it; a real strong throw does', () => {
+    const feed = (path, curlAt) => {
+        const det = new ThrowDetector();
+        let hit = null;
+        for (let t = 0, i = 0; t < 6000; t += 33, i++) {
+            const p = path(t);
+            const r = det.update({ now: t, hand: p.hand, shoulder: SH, vRel: p.v, vWorld: [p.v.x, p.v.y, p.v.z], curl: curlAt(t), tracked: true, weight: 0.15, blurOk: true, strict: true, behind: !!p.behind });
+            if (r && !hit) hit = r;
+        }
+        return hit;
+    };
+    const open = (t) => (t < 1500 ? 0.9 : 0.05); // gripped, then the fingers open and stay open
+    const still = (hand) => () => ({ hand, v: V(0, 0, 0) });
+    assert.equal(feed(still(V(0.7, 1.25, -1.9)), open), null, 'held out in front, opened');
+    assert.equal(feed(still(V(0.7, 0.0, -0.3)), open), null, 'hanging at the side, opened');
+    assert.equal(feed(still(V(0.7, 0.4, -1.3)), open), null, 'lowered in front, opened');
+    // coming up from low to the front while the fingers are open (a slow raise)
+    assert.equal(feed((t) => { const k = Math.min(1, Math.max(0, (t - 1500) / 1500)); return { hand: V(0.7, 0.1 + 1.15 * k, -0.3 - 1.6 * k), v: V(0, k > 0 && k < 1 ? 0.8 : 0, k > 0 && k < 1 ? -0.9 : 0) }; }, open), null, 'raised from low, open');
+    // a calm wave of the wand up and down by the head, fingers open
+    assert.equal(feed((t) => ({ hand: V(0.8, 1.55 + 0.2 * Math.sin(t / 250), -0.6), v: V(0, 0.8 * Math.cos(t / 250), 0) }), open), null, 'a calm wave');
+    // a real strong throw: drawn back behind the shoulder, a hard long swing forward, the fingers open
+    const det = new ThrowDetector();
+    const throwPath = overhand(det, { strict: true, behind: true, start: V(0.8, 1.75, 0.3), vRel: V(0, -3, -12), n: 5 });
+    assert.ok(throwPath && throwPath.speed > 7, 'a real strong throw flies');
+});
