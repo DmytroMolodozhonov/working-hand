@@ -34,7 +34,7 @@ export const ROLES = ['builder', 'farmer', 'merchant', 'knight', 'king', 'studen
 export const WIZARD_LOOK_ROLES = new Set(['student', 'teacher', 'seller', 'master', 'wanderer', 'townwiz', 'mage']);
 import { HAND, CHORE_HAND, KEEP_WAND, SIT_CHORES, PROPS, choreBody, carryBody, choreThings } from './ChoreAnim.js';
 
-export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol'];
+export const TOOLS = ['none', 'hammer', 'hoe', 'pitchfork', 'sword', 'bigsword', 'basket', 'pouch', 'wand', 'longbow', 'bucket', 'rapier', 'cutlass', 'axe', 'pistol', 'knife'];
 export const MODES = ['idle', 'walk', 'run', 'sit', 'bow', 'talk', 'work', 'attack', 'block', 'flee', 'dead', 'cheer', 'climb', 'cast', 'practice', 'shield', 'offer', 'shoot', 'sleep', 'sleepMat', 'situp', 'flail', 'swim', 'paddle', 'brace', 'flinch', 'chore', 'ride', ...ARENA_MODES, ...COMMAND_MODES];
 /** Lying asleep (on a bed / on a straw mat on the floor): see VillagerModel._updateSleep and src/game/NightLife.js. */
 export const SLEEP_MODES = new Set(['sleep', 'sleepMat']);
@@ -964,6 +964,17 @@ function toolBoxes(kind) {
             b(B, 0.2, 2.0, 0.06, 0, 1.38, 0, 0xeef2f6);
             b(B, 0.06, 1.7, 0.07, 0, 1.25, 0, 0xb8c2cc);
             b(B, 0.12, 0.18, 0.06, 0, 2.46, 0, 0xeef2f6);
+            break;
+        case 'knife': // a kitchen knife (the crowd of a village takes it from the kitchen — Audacity.js): a worn wooden grip with rivets, a bolster, a broad blade with a spine and a point
+            b(B, 0.1, 0.42, 0.08, 0, 0.02, 0, 0x6b4426); // grip
+            b(B, 0.11, 0.05, 0.09, 0, -0.2, 0, 0x4a2f1a); // the butt cap
+            for (const y of [-0.08, 0.1]) b(B, 0.115, 0.045, 0.045, 0, y, 0, 0xc9b27a); // rivets
+            b(B, 0.12, 0.07, 0.1, 0, 0.26, 0, IRON); // bolster
+            b(B, 0.11, 0.72, 0.03, 0, 0.66, 0, 0xdfe5ea); // blade
+            b(B, 0.035, 0.72, 0.05, 0.05, 0.66, 0, 0x9aa3ad); // the spine (thicker, darker)
+            b(B, 0.07, 0.12, 0.03, -0.015, 1.06, 0, 0xdfe5ea, 0, 0, 0.35); // the belly curving to the point
+            b(B, 0.04, 0.1, 0.03, -0.02, 1.13, 0, 0xeef2f6, 0, 0, 0.7); // the point
+            b(B, 0.012, 0.66, 0.032, -0.05, 0.64, 0, 0xf4f7fa); // the bright edge
             break;
         case 'bucket': // a wooden bucket of water, hanging from the hand by its bail (see HANGING)
             b(B, 0.05, 0.05, 0.5, 0, 0.02, 0, IRON);

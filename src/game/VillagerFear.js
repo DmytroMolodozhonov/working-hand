@@ -168,6 +168,7 @@ export class VillagerFear {
     _fearful(v) {
         if (v.dead || v.wizard || v.servantOf != null || v.handLink || v.lev || v.sleep) return false; // (asleep: NightLife wakes them first)
         if (v.foe || v.order) return false; // (in a fight / under the king's orders)
+        if (v.aud || v.mob) return false; // (in the crowd / out of the village: AudacityLife leads them)
         return v.role !== 'knight';
     }
 

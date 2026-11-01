@@ -46,6 +46,8 @@ import { ARMOR } from './ArmorTypes.js';
 import { VillagerCommands } from './VillagerCommands.js';
 import { RelationsLife } from './RelationsLife.js';
 import { RebellionLife } from './RebellionLife.js';
+import { AudacityLife } from './AudacityLife.js';
+import { MOB as MOB_RULES } from './Audacity.js';
 import { SocialLife } from './SocialLife.js';
 import { CourtLife } from './CourtLife.js';
 import { JusticeLife } from './JusticeLife.js';
@@ -313,6 +315,7 @@ export class CastleLife {
         this.hallClaims = new Claims(); // who stands where before the throne (ThroneHall.js)
         this.orders = new VillagerOrders(this); // what the people agreed to do (the king's orders)
         this.reb = new RebellionLife(this); // the hidden unrest of a place toward its owner (Rebellion.js)
+        this.aud = new AudacityLife(this); // the player's audacity in a place: the crowd that falls on him together, the timid who leave the village (Audacity.js)
         this.rel = new RelationsLife(this); // the three bars of every person to the hero, grudges, plots (Relations.js)
         this.social = new SocialLife(this); // goals, companions, a friend steps in, praise and sneers at magic, tired of friendship (Lives.js)
         this.justice = new JusticeLife(this); // arrests, the jail, searches (Justice.js)
@@ -726,7 +729,7 @@ export class CastleLife {
         for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
         // too far from everyone: goes home (disappears)
         for (const v of [...cs.active.values()]) {
-            if (v.job !== 'wander' || v.foe) continue;
+            if (v.job !== 'wander' || v.foe || v.aud) continue; // (the ones in the crowd / out of the village are not 'gone home')
             const near = players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 100);
             if (!near && this._vanish(v, 'ушёл дальше 100 м от всех игроков')) count--;
         }
@@ -1175,7 +1178,7 @@ export class CastleLife {
     /** Standing is right for it now (asleep, talking, waiting for a player, at its post, in a fight…): not «stuck». */
     _standsFine(v) {
         if (v.dead || v.sleep || v.handLink || v.lev || v.climb || v.seated || v.talking > 0 || v.stunT > 0 || v.bowing > 0 || v.giveT > 0) return 'state';
-        if (v.foe || v.follow || v.investigate || v.fleeT > 0 || v.fireT > 0 || v.order || v.servantOf != null || v.fear || v.chore || v.waitT > 0) return 'busy';
+        if (v.foe || v.follow || v.investigate || v.fleeT > 0 || v.fireT > 0 || v.order || v.servantOf != null || v.fear || v.chore || v.waitT > 0 || v.aud) return 'busy';
         if (v.mode !== 'walk' && v.mode !== 'run' && v.mode !== 'idle') return 'mode';
         if (v.job === 'king' || v.job === 'guard' || v.job === 'stall' || (v.post && Math.hypot(v.post.x - v.x, v.post.z - v.z) < 2)) return 'post';
         if (v.wallW?.noWay > 0) return 'wall'; // (it stands off a shut wall on purpose, and lets go of the goal by itself)
@@ -1528,6 +1531,7 @@ export class CastleLife {
         if (v.magicPieces && !v.stripped && v.armor < v.maxArmor && v.hp > 0) v.armor = Math.min(v.maxArmor, v.armor + ARMOR.REGEN * (v.maxArmor / 40) * dt); // (magic pieces mend by themselves)
         if (v.foe != null && isLord(v, v.foe, this.lordOf(cs, v.foe))) { v.foe = null; v.grudge = null; v.lesson = null; } // (whatever happened — a shove, a blast, a spell: never at the king)
         if (v.gOwner != null && this.guard.step(v, dt)) return; // (a bodyguard: the king's enemy first, the formation round him)
+        if (v.aud && this.aud.step(v, dt)) return; // (the crowd musters / the timid leave the village — AudacityLife.js)
         if (v.foe) { this._fight(v, dt); return; }
         if (v.order && this.orders.step(v, dt)) return; // (the king's orders: hunt, defend)
         if (v.investigate && this._investigate(v, dt)) return;
@@ -1874,7 +1878,7 @@ export class CastleLife {
         // the squad's plan gives some of them other work than the sword: bows, holding the ways
         // down, climbing up, an ambush, a runner, the king's guard (KnightTactics)
         if (v.tac && !MELEE.has(v.tac.role) && this._tacStep(v, fp, d, dt)) return;
-        const style = v.tac?.style || null;
+        const style = v.tac?.style || (v.mob ? MOB_RULES.STYLE : null); // (the crowd: up to five at once, all round him)
         const RUSH = style?.speed === 'walk' && d < 20 ? WALK * 1.3 : RUN; // (a shield wall, drivers: at a steady walk)
         if (d > 11 || (d > 6 && !this._sees(v, fp))) {
             // far or behind walls: along the paths
@@ -2716,7 +2720,7 @@ export class CastleLife {
         const sq = v.cs?.squads?.get(v.foe);
         if (sq) sq.blows++;
         // (its sword knocked out by «Экспеллиармус»: fists)
-        const base = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : STATS[v.role].dmg;
+        const base = v.disarmed ? Math.max(1, Math.round(STATS[v.role].dmg * EXPELLIARMUS.FIST)) : Math.max(STATS[v.role].dmg, v.mob ? v.mobDmg || 1 : 0); // (the crowd's fork / hammer / knife: 2)
         const dmg = Math.round(base * wantedTactics(this.wantedLevel(v.foe)).dmg); // (a known murderer: they hit harder)
         if (v.foe === this.game.localId) this.struck(dmg, v.x, v.z, v.title);
         else this.game.sync?.villagerStrike?.(v.foe, dmg, v.x, v.z, v.title);
@@ -3269,7 +3273,7 @@ export class CastleLife {
     }
 
     /** Does this one fight (knights, the king; the tower's wizards but a timid student)? */
-    _fights(v) { return v.role === 'knight' || (v.role === 'king' && !!v.kingFight) || (!!v.wizard && WizardFight.fights(v)) || !!v.roadBrave; } // (a brave one of the road's folk too: Travelers.roadBrave)
+    _fights(v) { return v.role === 'knight' || (v.role === 'king' && !!v.kingFight) || (!!v.wizard && WizardFight.fights(v)) || !!v.roadBrave || !!v.mob; } // (a brave one of the road's folk too: Travelers.roadBrave; the village crowd while it lasts: AudacityLife)
 
     /** A shield up: a knight's in the shield wall / holding a place, a wizard's hand shield. */
     /**
@@ -3394,6 +3398,7 @@ export class CastleLife {
         }
         const was = cs.hostile.get(by) > Date.now();
         cs.hostile.set(by, Date.now() + HOSTILE_MS);
+        this.aud?.deed(cs, by, killed ? 'slay' : victim ? 'hurt' : 'rob', witnesses, { victim }); // (the player's audacity in this place: those who saw it and knew him — Audacity.js)
         const kingHit = victim && victim.role === 'king';
         for (const w of witnesses) {
             if (this._fights(w)) { w.foe = by; if (Math.random() < 0.6) this._say(w, pick(w.wizard ? WIZ_SHOUT.fight : w.role === 'king' ? SHOUT.king : SHOUT.knight)); }
@@ -3506,12 +3511,13 @@ export class CastleLife {
             const hear = loud ? HEAR_BOOM : 30;
             let seen = false;
             let comers = 0;
+            const wit = []; // (who saw the culprit: Audacity.js — at most 8 are asked, a blast is rare)
             for (const v of cs.active.values()) {
                 if (v.dead) continue;
                 const d = Math.hypot(v.x - pos.x, v.z - pos.z);
                 if (d > hear) continue;
                 // a blast draws every eye: whoever saw the culprit do it knows who it was (Blame.js: not a fire that spread)
-                if (bp && blocks > 0 && !seen && this._knows(v, by, pos, via)) seen = true;
+                if (bp && blocks > 0 && (!seen || wit.length < 8) && this._knows(v, by, pos, via)) { seen = true; if (v.sleep?.phase !== 'lie') wit.push(v); }
                 if (v.role === 'knight') {
                     // (a blast from a charge: one seen about with a wand is suspect; a fire, the ground — nobody to look for)
                     // (nobody is named: he goes to look at the place; only what he SEES decides — _investigate)
@@ -3520,6 +3526,7 @@ export class CastleLife {
             }
             if (!isPlayer || blocks <= 0) continue;
             if (!counted && seen) { counted = true; this.deed(by, wreckPoints(blocks)); }
+            if (seen && wit.length) this.aud?.deed(cs, by, kind === 'fire' ? 'arson' : 'wreck', wit, { n: blocks }); // (a fire among the houses / wreckage in front of their eyes — Audacity.js)
             st.wrecked = (st.wrecked || 0) + blocks;
             // a big blast: more knights run out of the barracks and the gate to see
             if (loud && comers < 4) this._sendGuards(cs, pos, seen ? by : null, 4 - comers);
@@ -3695,6 +3702,7 @@ export class CastleLife {
             if (this._sees(v, bp)) seers.push({ v, fam });
         }
         if (!seers.length) return false;
+        this.aud?.deed(cs, by, 'rob', seers.map((s) => s.v)); // (seen robbing: the audacity grows — Audacity.js)
         // only the thief, and only the family goes for them (the neighbours shout) — a theft is no war: no guards
         const until = Date.now() + THEFT_MS;
         let owners = 0;
@@ -3730,11 +3738,23 @@ export class CastleLife {
         return this.theft(cs.def, home.h, by, this._playerPos(by) || cs.def.houses[home.h].inside);
     }
 
+    /** (host) The people who saw something done at `pos` and knew it was `by` (Blame.js) — `also` are counted as seeing. */
+    _seers(cs, by, pos, also = []) {
+        const out = [...also];
+        for (const w of cs.active.values()) {
+            if (out.length >= 12) break; // (enough: it is a count, not a roll call)
+            if (w.dead || out.includes(w) || w.sleep?.phase === 'lie' || Math.hypot(w.x - pos.x, w.z - pos.z) > SEE) continue;
+            if (this._sees(w, { x: pos.x, y: pos.y + 1.5, z: pos.z }) && this._knows(w, by, pos, null)) out.push(w);
+        }
+        return out;
+    }
+
     /** A villager saw / suffered a crime (theft, threats) by a player. */
     reportCrime(v, by, kind = 'crime') {
         if (!v || v.dead) return;
         if (!this.auth) { this.game.sync?.villagerCrime?.(v.id, kind); return; }
         // (a thing carried off from the market: the merchant goes for the thief himself — no guards)
+        if (kind === 'theft' && by) this.aud?.deed(v.cs, by, 'rob', this._seers(v.cs, by, { x: v.x, y: v.y, z: v.z }, [v])); // (taken from a stall: he and those who saw it)
         if (kind === 'theft' && by && by !== this.state(v.cs.def.id).owner) { v.grudge = { id: by, until: Date.now() + THEFT_MS }; v.foe = by; v.fleeT = 0; v.path = null; return; }
         if (kind === 'theft') this.rel?.theft(v, by);
         this._offence(v.cs, by, v, false, { x: v.x, y: v.y, z: v.z });
@@ -3742,6 +3762,7 @@ export class CastleLife {
 
     /** A player died: the castles forget them. */
     playerDied(id) {
+        this.aud?.playerDied(id);
         for (const cs of this.castles.values()) {
             cs.hostile.delete(id);
             for (const v of cs.active.values()) if (v.foe === id) { v.foe = null; v.grudge = null; }
@@ -3891,6 +3912,7 @@ export class CastleLife {
             this.guard.update(dt);
             this.rel?.update(dt);
             this.reb?.update(dt);
+            this.aud?.update(dt);
             this.alog?.update(dt);
             this.social?.update(dt);
             this.court?.update(dt);
@@ -4087,7 +4109,7 @@ export class CastleLife {
             if (hp < v.hp || armor < v.armor) v.barT = 8;
             v.hp = hp; v.armor = armor; v.seated = !!seated; v.speed = speed;
             if (v.role === 'knight') { v.fx = fx ?? 0; v.aimPitch = pitch ?? 0; } // (a bow in his hands, where it aims)
-            else if (!v.wizard) this.fright.applyFx(v, fx | 0); // (a bucket of water in the hands)
+            else if (!v.wizard) { this.fright.applyFx(v, fx | 0); this.aud?.applyFx(v, fx | 0); } // (a bucket of water / the crowd's fork, hammer, knife in the hands)
             if (v.wizard) {
                 // (a wizard's small magic, and where the wand aims; a blink: there at once, in a puff of smoke)
                 if ((fx & 128) && !(v.fx & 128)) { this.wizards.fx.smoke(v); v.x = x; v.y = y; v.z = z; this.wizards.fx.smoke(v); }
