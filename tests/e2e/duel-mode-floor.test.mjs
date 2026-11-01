@@ -41,6 +41,9 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
         }
         return { out, log: [...AD.log].slice(-15) };
     });
-    console.log(JSON.stringify(res.out.filter((o) => +o.t >= 14)));
-    console.log(JSON.stringify(res.log));
+    for (const o of res.out) {
+        assert.ok(o.arena && o.arena.k === 'duel', 'the wizard is still in the duel at ' + o.t + ' s: ' + JSON.stringify(o));
+        assert.ok(o.y >= -0.1, 'the wizard is not under the floor at ' + o.t + ' s: ' + JSON.stringify(o));
+        assert.ok(!o.dead && !o.foe && !o.fl, 'not fleeing / fighting the hero at ' + o.t + ' s');
+    }
 });
