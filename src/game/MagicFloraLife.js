@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { BLOCK, BAKSADI_FROM_GEN } from '../world/Terrain.js';
 import { BIOMES } from '../world/Landscape.js';
-import { FLORA, FLORA_KINDS, FLORA_ORDER, FLORA_OF_ITEM, BURN_TIME, SCATTER_MAX, floraGroupIn, floraHarm } from './MagicFlora.js';
+import { FLORA, FLORA_KINDS, FLORA_ORDER, FLORA_OF_ITEM, BURN_TIME, SCATTER_MAX, floraGroupIn, floraHarm, plantFoot } from './MagicFlora.js';
 import { floraBody, floraPick, floraMaterials, FLORA_MATERIAL, FLORA_VARIANTS, FLORA_CLOCK } from '../fx/FloraModels.js';
 import { newUid, ITEM_INFO } from './ItemTypes.js';
 
@@ -110,7 +110,9 @@ export class MagicFloraLife {
             if (t.get(x, top + 1, z) === BLOCK.WATER || t.get(x, top + 1, z) === BLOCK.SNOW && e.kind !== 'frostcrystal') continue;
             if ((t.sites || t.castles)?.landAt?.(x, z) || t.isIsland?.(x, z)) continue; // (not in castles, villages, towers; not on islands)
             if (Math.abs(t.topLayer(x + 2, z) - top) > 2 || Math.abs(t.topLayer(x, z + 2) - top) > 2 || Math.abs(t.topLayer(x - 2, z) - top) > 2 || Math.abs(t.topLayer(x, z - 2) - top) > 2) continue; // (a steep slope: nothing grows)
-            const pl = { ...m, kind: e.kind, y: top - 0.5, picks: [], boxId: null, burn: 0, group: out };
+            const foot = plantFoot(t, e.kind, x, z, m.scale, (ix, tl, iz) => t.get(ix, tl, iz) === BLOCK.WATER || t.get(ix, tl + 1, iz) === BLOCK.WATER);
+            if (!foot) continue; // (no solid ground under the whole foot: a hollow, water, a cliff — it does not grow here)
+            const pl = { ...m, kind: e.kind, y: foot.y, picks: [], boxId: null, burn: 0, group: out };
             const spots = floraBody(e.kind, m.variant).userData.picks;
             const was = this.picked.get(m.id);
             for (let i = 0; i < spots.length; i++) {

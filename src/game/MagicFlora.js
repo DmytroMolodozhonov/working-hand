@@ -62,6 +62,32 @@ export const FLORA_KINDS = {
         harm: { fire: 'melt', blast: 'destroy', lightning: 'destroy', cold: 'none', gods: 'destroy', alive: 'none', push: 'none' },
     },
 };
+/**
+ * Where a plant's foot stands on the real ground. The ground is not flat under its mound: in the smooth world (generation 6+) the
+ * top block is a ramp or a slab, and the neighbouring columns of the foot are other heights. The plant was set at ONE column's
+ * top (`top − 0.5`) — over a ramp or on the low side it hung in the air, with a gap under the mound. Now the whole footprint
+ * (the centre and two rings) is read with `surfaceY`: the foot stands on the LOWEST of those points (the high side sinks into the
+ * ground — a grown-in foot, never a gap); a footprint over water / an empty column / a cliff (spread > `MAX_SPREAD`) grows nothing.
+ * `t` — TerrainData (surfaceY, topLayer, get). Returns { y, spread } or null.
+ */
+export const FOOT_R = { glowcap: 1.3, giantfern: 0.9, azureberry: 0.9, sunherb: 0.7, frostcrystal: 0.8 }; // (m at scale 1: the mound / the foot)
+export const MAX_SPREAD = 2; // (m: more height between the foot's points — a slope too steep for a mound)
+export function plantFoot(t, kind, x, z, scale, water) {
+    const r = (FOOT_R[kind] || 0.8) * scale;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < 25; i++) {
+        const ring = i === 0 ? 0 : i <= 8 ? 0.5 : 1, a = (i <= 8 ? i - 1 : i - 9) / (i <= 8 ? 8 : 16) * Math.PI * 2 + 0.3;
+        const px = x + Math.cos(a) * r * ring, pz = z + Math.sin(a) * r * ring;
+        const ix = Math.round(px), iz = Math.round(pz), top = t.topLayer(ix, iz);
+        if (!(top > -1e5)) return null; // (an empty column)
+        if (water && water(ix, top, iz)) return null; // (water over the foot: it would stand in the water)
+        const y = t.surfaceY(px, pz);
+        if (y < lo) lo = y;
+        if (y > hi) hi = y;
+    }
+    return hi - lo > MAX_SPREAD ? null : { y: lo - 0.05, spread: hi - lo }; // (a hair into the ground between the sample points)
+}
+
 export const FLORA_ORDER = Object.keys(FLORA_KINDS);
 
 /** The things the plants give (merged into ItemTypes.ITEM_INFO). Ids are fixed: potions use them. `heal`: food. */
