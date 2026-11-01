@@ -46,7 +46,10 @@ export class BootTimer {
     /** One line for the journal: «⏱ загрузка 12,3 с: звуки 1,2 · мир 3,4 · …». */
     line(title = 'загрузка') {
         const f = (ms) => (ms / 1000).toFixed(1).replace('.', ',');
-        const parts = this.rows.map((r) => `${r.name} ${f(r.ms)}`);
+        // (short enough not to be cut in the console: the stages in the order they began, only those of 0,3 s and more;
+        // «∥» — went on at the same time as the others; the inner steps «· …» are left out — their sum is their stage)
+        const parts = this.rows.filter((r) => r.ms >= 300 && !r.name.startsWith('·')).sort((a, b) => a.at - b.at)
+            .map((r) => `${r.name.replace(' (параллельно)', '∥').replace(/ \(.*\)$/, '')} ${f(r.ms)}`);
         return `⏱ ${title} ${f(this.total())} с: ${parts.join(' · ')}${this.notes.length ? ' | ' + this.notes.join('; ') : ''}`;
     }
 
