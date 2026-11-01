@@ -1477,7 +1477,7 @@ export class ArenaDuels {
             if (v.seated || !v.arena) continue;
             const s = v.arena.seat || this._seat(A, v);
             if (!s) continue;
-            v.arena.seat = s; v.arena.leg = 2; v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
+            v.arena.seat = s; v.arena.leg = 2; if (A.def.visit) v.arena.vleg = 5; /* (the visitors' road is done: the fan is already on his seat — _enterVisit would walk him off it along the road) */ v.seated = true; v.x = s.x; v.y = s.y; v.z = s.z; v.speed = 0;
         }
         if (m.freezeUntil && performance.now() < m.freezeUntil && m.pin) { // (the first seconds of a duel: the hero cannot step off his place)
             const p = g.character.group.position;

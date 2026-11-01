@@ -46,6 +46,7 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
     });
     let pf = ''; for (const o of res.out) { const k = JSON.stringify(o.sd); if (k !== pf) console.log('t=' + o.t, k); pf = k; }
     for (const o of res.out) {
+        assert.ok(!o.sd || o.sd.maxH < 0.5 && o.sd.maxV < 0.3, 'the fans sit on their seats at ' + o.t + ' s: ' + JSON.stringify(o.sd));
         assert.ok(o.arena && o.arena.k === 'duel', 'the wizard is still in the duel at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(o.y >= -0.1, 'the wizard is not under the floor at ' + o.t + ' s: ' + JSON.stringify(o));
         assert.ok(!o.dead && !o.foe && !o.fl, 'not fleeing / fighting the hero at ' + o.t + ' s');
