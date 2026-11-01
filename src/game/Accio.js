@@ -30,6 +30,19 @@ export function accioCatcher(free, dom = 'right') {
     return free(dom) ? dom : free(off) ? off : null;
 }
 
+/** s: how rarely the «raise the second hand» tip may show (not on every cast). */
+export const HAND_TIP_GAP = 8;
+export const HAND_TIP = '🪄 Чтобы поймать предмет, поднимите вторую руку (без палочки) перед собой — он прилетит прямо в неё';
+
+/**
+ * Show the tip? Pure (tests). A thing is flying (`flying`) into the secondary («дочерняя») hand (`caughtSide === secondary`),
+ * that hand hangs down (`raised` false) and the tip was not shown in the last HAND_TIP_GAP seconds.
+ */
+export function handTipDue({ flying, caughtSide, secondary, raised, now, last = -Infinity }) {
+    if (!flying || caughtSide !== secondary || raised) return false;
+    return now - last >= HAND_TIP_GAP;
+}
+
 /** A dead animal «Акцио» acts on: a body, not yet bones (its meat all taken), nor one held by «Левиоса». Pure (tests). */
 export function accioBody(a) {
     return !!a && !!a.dead && !a.lev && !a.bones;
@@ -48,6 +61,19 @@ export class Accio {
     constructor(game) {
         this.game = game;
         this.state = null; // {w, side, t}
+    }
+
+    /** After a cast: the second hand hangs down while a thing flies to it — tell the player to lift it (rarely). */
+    handTip() {
+        const g = this.game, st = this.state;
+        if (!st || !st.side) return null;
+        const sec = g.dom === 'left' ? 'right' : 'left';
+        const lift = g.currentPose?.armLift;
+        const raised = g.character.isArmRaised(sec) || !!(lift && lift[sec] > ACCIO.LIFT);
+        const now = performance.now() / 1000;
+        if (!handTipDue({ flying: true, caughtSide: st.side, secondary: sec, raised, now, last: this._tipAt })) return null;
+        this._tipAt = now;
+        return HAND_TIP;
     }
 
     get active() {

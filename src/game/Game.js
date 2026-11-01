@@ -3098,6 +3098,8 @@ export class Game {
         if (hint) { if (!this.lastCastWhy) this.lastCastWhy = String(hint).replace(/^🪄\s*/, ''); if (isFinal) this.hud.setVoice(hint, true); return null; }
         this.combat.pay('Accio');
         this._lastAccio = now;
+        const tip = this.accio.handTip(); // (the second hand hangs down: a short tip, not more often than every few seconds)
+        if (tip) this.hud.setVoice(tip, true);
         this._interimCast = isFinal ? null : { name: 'Accio', at: now };
         return 'Accio';
     }
