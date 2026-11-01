@@ -401,7 +401,7 @@ export class Game {
             hell: this.gen >= HELL_FROM_GEN, // (hell: a far map of the same world — HellMap.js; every world: the Earth's land is not changed)
             queenMap: this.gen >= QUEEN_MAP_FROM_GEN, // (the Ice Queen on a map of her own, far from everything — QueenMap.js; only the Creative test ground)
             knightCap: this.gen >= KNIGHT_CAP_FROM_GEN, // (10–15 knights a castle, each at a post — KnightPosts.js)
-            arenaX2: this.gen >= ARENA_X2_FROM_GEN, // (the duel arenas twice as wide — DuelArenas.ARENA_X2)
+            arenaX2: this.gen >= ARENA_X2_FROM_GEN && !(config.mode === 'creative' && this.hero?.spawn === 'arena'), // (the real world's arenas twice as wide — DuelArenas.ARENA_X2; NOT the duel-only start: it keeps the former size)
             arenaEntries: this.gen >= ARENA_ENTRIES_FROM_GEN, // (the duel arenas' visitors' stair and the steward's stall — DuelArenas.entries)
             bigArena: config.mode === 'creative' && this.hero?.spawn === 'arena', // (the duel-only start: its arena is 2.4× bigger — DuelArenas.ARENA_BIG)
             meshTrees: this.config.realTrees, // (real trees, not blocks — TreeBuild.js, Trees.js)

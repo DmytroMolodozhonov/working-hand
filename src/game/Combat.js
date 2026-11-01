@@ -577,6 +577,16 @@ export class Combat {
         this._hudKey = '';
     }
 
+    /** A fresh start (a new duel / round, leaving the arena): stun, ice, slowing and a knock-down are gone — nothing carries over. */
+    clearEffects() {
+        const had = this.stunLeft > 0 || this.frozenLeft > 0 || this.slowLeft > 0;
+        const knocked = this.stunLeft > 0 && (this.stunKind === 'quake' || this.stunKind === 'water' || this.stunKind === 'fall');
+        this.stunLeft = 0; this.stunBy = null; this.frozenLeft = 0; this.frozenBy = null; this.chill = 0; this.slowLeft = 0;
+        if (this.game.character) this.game.character.slowScale = 1;
+        if (knocked) this.game.character.knockedDown = false;
+        if (had) { this.game.hud.setStatus?.(''); this.game.hud.setFrozenOverlay?.(0); this._hudKey = ''; }
+    }
+
     /** Do the mana rules work: «Выживание» always; Creative only with a finite mana («Настройки героя», HeroSetup.js). */
     get manaOn() {
         return this.game.config?.mode === 'creative' ? this.game.hero?.infiniteMana === false : this.enabled;

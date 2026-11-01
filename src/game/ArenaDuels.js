@@ -1434,7 +1434,7 @@ export class ArenaDuels {
 
     _unpause() { if (this.mode?.paused) { this.game.paused = false; this.mode.paused = false; } }
 
-    stopDuelMode() { this._unpause(); this.mode = null; this.fr = null; this.my = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
+    stopDuelMode() { this._unpause(); this.game.combat?.clearEffects?.(); this.mode = null; this.fr = null; this.my = null; this.endUi.hide(); if (this.game.world) this.game.world.duelFar = 0; }
 
     /** The rank of the one the roster's number `idx` is (the tower's ranks — WizardAI), without waking him. */
     _rankOf(cs, idx) { try { return this.life._roster(cs.def, idx)?.rank || null; } catch (e) { return null; } }
@@ -1540,6 +1540,7 @@ export class ArenaDuels {
         ch.airTop = null; ch.landing = null; g.knock?.reset?.(); // (no fall counted from before the move: the hero stands, he does not land hard)
         this._last = { x: M.x, y: ch.group.position.y, z: M.z };
         const c = g.combat;
+        c?.clearEffects?.(); // (a stun / ice from before the duel does not go on into the new one)
         if (c?.enabled) { c.hp = c.maxHp || c.hp; c.fatigue = c.maxFatigue || c.fatigue; g.playerHP = c.hp; }
     }
 
@@ -1914,6 +1915,19 @@ export class ArenaDuels {
         return true;
     }
 
+    /**
+     * A duellist who sank below the arena's floor (the ground under him not made yet / a wrong height) is put back on it: the floor is
+     * enchanted stone, nobody is ever under it. Only inside the floor's round; the lying and the carried are left.
+     */
+    _liftToFloor(A, v) {
+        const fy = A.def.floorY;
+        if (!(fy > 0 || fy === 0) || v.lev || v.dead || !onArenaFloor(A.def, v.x, v.z, 0)) return false;
+        if (v.y >= fy - 0.4) return false;
+        v.y = fy; if (v.vy) v.vy = 0; v.path = null;
+        this.life?.alog?.decision?.(v, 'ниже пола арены — поднят на пол');
+        return true;
+    }
+
     /** (every frame) The bodies of the duel at each arena: the wizards, this computer's hero, the loose wands and things. */
     _cage(dt) {
         const g = this.game, me = g.character?.group?.position;
@@ -1922,7 +1936,7 @@ export class ArenaDuels {
             if (!this._cageOn(A)) { if (A.cageItems) { A.cageItems = false; for (const L of g.items?.loose?.values?.() || []) if (L.arenaIn === A.id) L.arenaIn = null; } continue; }
             const C = this._cageOf(A);
             if (!C) continue;
-            if (this.auth && A.duel) for (const v of [A.duel.a, A.duel.b]) if (v && !v.dead) this.cageNpc(v);
+            if (this.auth && A.duel) for (const v of [A.duel.a, A.duel.b]) if (v && !v.dead) { this._liftToFloor(A, v); this.cageNpc(v); }
             // this computer's hero, when he is the one fighting (the duel mode and the friend's too: _keepPlayerOnFloor holds the floor's edge)
             const pl = this.auth ? A.duel?.p : A.pl, ph = this.auth ? A.duel?.phase : A.ph;
             if ((pl === g.localId && (ph === 'count' || ph === 'fight' || ph === 'over')) || this.mode?.arenaId === A.id) this._cagePlayer(A, C);

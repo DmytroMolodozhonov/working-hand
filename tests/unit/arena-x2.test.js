@@ -4,6 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { TerrainData, BLOCK, ARENA_X2_FROM_GEN, WORLD_GEN } from '../../src/world/Terrain.js';
 import { ARENA, ARENA_X2, ARENA_BIG, ARENA_BIG_X2, ARENA_ROUND, ARENA_ROUND_X2, onArenaFloor } from '../../src/world/DuelArenas.js';
 import { dollSpots, TIER_ORDER, FIG } from '../../src/game/ArenaSteward.js';
@@ -172,19 +173,43 @@ test('the cage gives back a little speed (a wall, not a trap) and lets a body at
     assert.ok(w.x * nx + w.z * nz < 0 && Math.abs(w.x * nx + w.z * nz) < 30 * 0.4, 'the speed goes back, weaker');
 });
 
-test('the duel-only mode (Creative «Перед дуэлью»): the arena is twice as wide as before too, the circles and figures as ever', () => {
-    let big = 0;
+test('the duel-only mode (Creative «Перед дуэлью»): the arena keeps the FORMER size (Game turns arenaX2 off for it), the circles and figures as ever', () => {
     for (const seed of [1, 5, 11, 15, 22, 31, 36, 2026]) {
         const t = new TerrainData();
-        t.generate({ seed, mountains: true, seas: true, lush: true, deepCaves: true, test: true, bigArena: true, arenaEntries: true, arenaX2: true });
+        t.generate({ seed, mountains: true, seas: true, lush: true, deepCaves: true, test: true, bigArena: true, arenaEntries: true, arenaX2: false });
         const a = t.sites.arenas.ofTower(t.towers.only());
         assert.ok(a, `seed ${seed}: an arena`);
-        if (a.axis.r === ARENA_BIG_X2.W) big++; else assert.equal(a.axis.r, ARENA_BIG.W, 'else the earlier big one');
+        assert.equal(a.axis.r, ARENA_BIG.W, 'the former duel-mode size, not x2');
         const P = a.gates[0].mark, F = a.gates[1].mark;
         assert.ok(dist(P, F) < DUEL.RANGE, 'within a charge\'s reach');
         assert.ok(dist(P, a.gates[0].out) >= 0.8 * 2 * a.axis.r, 'the hero\'s circle far from the gate');
         const d = dollSpots(a);
         for (const [p, q] of pairs(d)) assert.ok(dist(p, q) >= 1.3);
+        const C = cageOf(a);
+        assert.equal(cageClamp(C, { x: P.x, y: a.floorY, z: P.z }, null), null, 'the hero\'s mark is inside the cage');
+        assert.equal(cageClamp(C, { x: F.x, y: a.floorY, z: F.z }, null), null, 'the wizard\'s mark is inside the cage');
     }
-    assert.ok(big >= 4, 'most of them have room for the twice-as-wide one: ' + big);
+});
+
+test('Game: the duel-only start keeps arenaX2 off, the real world has it on', () => {
+    const src = fs.readFileSync(new URL('../../src/game/Game.js', import.meta.url), 'utf8');
+    assert.match(src, /arenaX2: this\.gen >= ARENA_X2_FROM_GEN && !\(config\.mode === 'creative' && this\.hero\?\.spawn === 'arena'\)/);
+});
+
+test('a duellist under the arena floor is lifted back; stun/ice are cleared at a new duel', () => {
+    const t = new TerrainData();
+    t.generate({ seed: 1, mountains: true, seas: true, lush: true, deepCaves: true, test: true, bigArena: true, arenaEntries: true, arenaX2: false });
+    const a = t.sites.arenas.ofTower(t.towers.only());
+    const A = { def: a };
+    const v = { x: a.centre.x, z: a.centre.z, y: a.floorY - 3, vy: -2 };
+    assert.equal(ArenaDuels.prototype._liftToFloor.call({ life: null }, A, v), true);
+    assert.equal(v.y, a.floorY);
+    const up = { x: a.centre.x, z: a.centre.z, y: a.floorY + 1 };
+    assert.equal(ArenaDuels.prototype._liftToFloor.call({ life: null }, A, up), false, 'above the floor: untouched');
+    // Combat.clearEffects
+    const src = fs.readFileSync(new URL('../../src/game/Combat.js', import.meta.url), 'utf8');
+    assert.match(src, /clearEffects\(\) \{[\s\S]*this\.stunLeft = 0;[\s\S]*this\.frozenLeft = 0/);
+    const ad = fs.readFileSync(new URL('../../src/game/ArenaDuels.js', import.meta.url), 'utf8');
+    assert.match(ad, /c\?\.clearEffects\?\.\(\);/);
+    assert.match(ad, /stopDuelMode\(\) \{ this\._unpause\(\); this\.game\.combat\?\.clearEffects/);
 });
