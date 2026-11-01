@@ -27,7 +27,7 @@ test('duel mode: the wizards stay on the floor, nobody leaves the duel', async (
                     const dir = { x: 1, y: 0, z: 0 };
                     if (i === 300) g.castleLife.hit(w, 4, dir, me, { kind: 'Stupefy' });
                     if (i === 340) g.creatureImpact.spellHit(w, 'Stupefy', P, me, null, { down: 5 });
-                    if (i === 440) g.explode({ x: w.x, y: w.y + 2, z: w.z }, 8, me, 1);
+                    if (i === 440) g.explode(P.clone().set(w.x, w.y + 2, w.z), 8, me, 1);
                     if (i === 520) g.creatureImpact.spellHit(w, 'Bombarda', P, me, null, {});
                     if (i === 600) g.castleLife.startle?.(w, me, P, { hit: true });
                     if (i === 680) g.castleLife.alarm?.({ x: w.x, y: w.y, z: w.z }, 'explosion', me, 40);
