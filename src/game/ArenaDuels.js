@@ -1484,7 +1484,7 @@ export class ArenaDuels {
         if (!a) { A.restT = 3; return; }
         const o = marks[1].mark;
         a.arena.side = 1; a.arena.leg = 2; a.x = o.x; a.z = o.z; a.y = o.y; a.speed = 0; a.yaw = yawTo(o.x, o.z, marks[0].mark.x, marks[0].mark.z);
-        A.owed = null; // (no coins at the lectern here: the duel is the whole game)
+        A.owed = []; // (no coins at the lectern here: the duel is the whole game)
         a.castCd = 0.3; a.castT = 0; a.prep = null; a.dodge = null; // (ready: his first spell goes the moment the fight begins)
         a.noWand = false; a.hp = a.maxHp; a.mana = a.maxMana ?? a.mana; L._ground?.(a);
         m.freezeUntil = performance.now() + 5000; m.pin = { x: A.def.gates[0].mark.x, z: A.def.gates[0].mark.z };
