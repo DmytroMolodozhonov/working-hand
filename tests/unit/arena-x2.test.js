@@ -213,3 +213,14 @@ test('a duellist under the arena floor is lifted back; stun/ice are cleared at a
     assert.match(ad, /c\?\.clearEffects\?\.\(\);/);
     assert.match(ad, /stopDuelMode\(\) \{ this\._unpause\(\); this\.game\.combat\?\.clearEffects/);
 });
+
+test('the duel mode waits for the loading screen and the floor\'s land before the wizard comes out', () => {
+    const mk = (revealed, made) => ({ game: { revealed, world: { terrain: { data: { landMade: () => made } } } } });
+    const t = new TerrainData();
+    t.generate({ seed: 1, mountains: true, seas: true, lush: true, deepCaves: true, test: true, bigArena: true, arenaEntries: true, arenaX2: false });
+    const A = { def: t.sites.arenas.ofTower(t.towers.only()) };
+    const f = ArenaDuels.prototype._groundReady;
+    assert.equal(f.call(mk(false, true), A), false, 'the screen is still closed');
+    assert.equal(f.call(mk(true, false), A), false, 'the land is not brought yet');
+    assert.equal(f.call(mk(true, true), A), true);
+});

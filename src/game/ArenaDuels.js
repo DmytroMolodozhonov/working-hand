@@ -1451,6 +1451,18 @@ export class ArenaDuels {
         return v || this._recruit(A, cs, 'duel', free); // (no one of that rank: the nearest — anyone free)
     }
 
+    /** The arena's floor is made and shown: the screen is open, the land under the marks, the centre and the floor's ring is brought by the workers. */
+    _groundReady(A) {
+        const g = this.game;
+        if (g.revealed === false) return false;
+        const data = g.world?.terrain?.data || g.terrain?.data;
+        if (!data?.landMade) return true;
+        const c = A.def.centre, r = A.def.axis?.r || 20;
+        const pts = [c, A.def.gates[0].mark, A.def.gates[1].mark, { x: c.x + r, z: c.z }, { x: c.x - r, z: c.z }, { x: c.x, z: c.z + r }, { x: c.x, z: c.z - r }];
+        for (const q of pts) if (!data.landMade(q.x, q.z)) return false;
+        return true;
+    }
+
     /** (host) Every step of the mode: the fans in their seats at once, then the next duel with the count. */
     _modeStep(dt) {
         const m = this.mode, g = this.game, A = this.list.get(m.arenaId), L = this.life;
@@ -1480,6 +1492,7 @@ export class ArenaDuels {
         if (A.fans.size < Math.min(A.want, 4)) return; // (the stands must be filling up first)
         // the next duel: the opponent on his place, the player on his, the count 10…1
         const marks = A.def.gates;
+        if (!this._groundReady(A)) return; // (the loading screen / the workers have not brought the floor yet: a wizard put on it would sink through)
         const a = this._foe(A, cs, foeRanks(m.foe));
         if (!a) { A.restT = 3; return; }
         const o = marks[1].mark;
