@@ -121,7 +121,7 @@ export function crowdVillage(L, cs, dt) {
     for (const v of cs.active.values()) if (v.job === 'wander' && !v.dead) count++;
     for (const v of [...cs.active.values()]) {
         if (v.job !== 'wander' || v.foe) continue;
-        if (!players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 100)) { L._deactivate(v); count--; }
+        if (!players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 100) && L._vanish(v, 'ушёл дальше 100 м от всех игроков')) count--;
     }
     if (count >= want) return;
     // out of a house (or into the street from a garden), not right before the player's eyes

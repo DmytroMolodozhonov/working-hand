@@ -99,6 +99,8 @@ export class Speech {
     get voices() { return this._voices.slice(); }
 
     get speaking() { return !!this._current; }
+    /** Whose line is being said now (voiceKey), or null. */
+    get currentKey() { return this._current ? this._current.voiceKey : null; }
 
     setEngine(engine) {
         this.engine = engine === 'system' ? 'system' : 'neural';

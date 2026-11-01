@@ -285,6 +285,9 @@ export class CastleTalk {
         // (nor a shout of another — the army's «За короля!» after my order: one voice would cut the other; while my
         // partner's answer is heard, the others' words show over their heads — false: CastleLife shows the bubble)
         if (P && P !== v && !this._urgent && this.speech.speaking && performance.now() - (P.talkedAt || -1e9) < 4000) return false;
+        // (my partner's line is being said now — however long ago I spoke, a stranger's remark does not cut it: «реплика оборвалась,
+        // когда я отвернулся» — a bystander's greeting/ambient line came while I looked elsewhere)
+        if (P && P !== v && !P.dead && !this._urgent && !shout && this.speech.currentKey === P.id) { this.life.alog?.decision(v, `реплика не сказана — не перебиваю речь собеседника #${P.id}`); return false; }
         this._lastSpoken = text;
         // a spell's word said aloud (a wizard practising, a cry in a duel): my microphone may hear it
         // from the speakers — it must not cast that spell from my hand (VoiceGate echo, until it is said)
@@ -292,7 +295,10 @@ export class CastleTalk {
         const until = performance.now() + Math.min(8000, 400 + text.length * 70);
         for (const sp of spellsIn(text)) this.game.voiceGate?.noteRemote(sp, until);
         // an answer in a talk: what is written over the head is what you hear — now, not after older lines
-        if (this._urgent) this.speech.cancel();
+        if (this._urgent) {
+            if (this.speech.speaking && this.speech.currentKey !== v.id) this.life.alog?.decision(v, `реплика прервана — причина: срочная реплика #${v.id} перебила речь #${this.speech.currentKey}`);
+            this.speech.cancel();
+        }
         const now = performance.now();
         this._spoken = (this._spoken || []).filter((l) => now - l.at < 12000);
         this._spoken.push({ text, at: now });

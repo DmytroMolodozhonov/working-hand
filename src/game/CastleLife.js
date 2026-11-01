@@ -67,6 +67,7 @@ import { EXPELLIARMUS } from './Expelliarmus.js';
 import { teaches, placeOf, darkOfEntry, isDark } from './DarkMagic.js';
 import { setDarkVillager } from '../entities/DarkSkin.js';
 import { STARTLE, segDist2, startleReaction } from './Startle.js';
+import { VANISH, inTalkWith, vanishVerdict } from './Vanish.js';
 import { WANDER, wandererClass, missZone, isLoud, missVerdict, wandererLag, dieOf, isWeak, commonerDecide, commonerText, missText } from './WandererMind.js';
 import { VillagerOrders } from './VillagerOrders.js';
 import { Bodyguard, isLord } from './Bodyguard.js';
@@ -486,6 +487,34 @@ export class CastleLife {
         if (v.bar) { this.game.scene.remove(v.bar.sprite); v.bar.tex.dispose(); v.bar.sprite.material.dispose(); }
     }
 
+    inTalkWith(v, now = performance.now()) { return inTalkWith(v, now); }
+
+    /**
+     * Policy removal («ушёл, ему пора»): an ordinary traveller goes away on his feet; he is not deleted while a player talks with him,
+     * and not before a player's eyes close by (Vanish.js). → true: removed; false: kept (the caller waits and asks again). `why` goes to
+     * the journal («Жители» — «решение: убран — причина …»). Whole places falling asleep and the dead still use `_deactivate` directly.
+     */
+    _vanish(v, why, now = performance.now()) {
+        const r = vanishVerdict(v, { watched: this._watched(v), now, since: v.vanishSince });
+        v.vanishSince = r.since;
+        if (!r.go) {
+            if (v.vanishLog !== r.held) { v.vanishLog = r.held; this.alog?.decision(v, `убирать не стал (${why}) — ${r.held}`); }
+            return false;
+        }
+        v.vanishLog = null;
+        this.alog?.decision(v, `убран — причина: ${why}${r.held ? ' (ждал слишком долго)' : ''}`);
+        this._deactivate(v);
+        return true;
+    }
+
+    /** A player stands within VANISH.SEE m and sees him (no wall between). */
+    _watched(v) {
+        for (const pl of this._players()) {
+            if (Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < VANISH.SEE && this._sees(v, pl.p)) return true;
+        }
+        return false;
+    }
+
     /** All living villagers near the local player (targets for weapons and fists). */
     targets(reach = 40) {
         const out = [];
@@ -699,7 +728,7 @@ export class CastleLife {
         for (const v of [...cs.active.values()]) {
             if (v.job !== 'wander' || v.foe) continue;
             const near = players.some((pl) => Math.hypot(pl.p.x - v.x, pl.p.z - v.z) < 100);
-            if (!near) { this._deactivate(v); count--; }
+            if (!near && this._vanish(v, 'ушёл дальше 100 м от всех игроков')) count--;
         }
         if (count >= want) return;
         // someone comes out of a house (or walks in along a road) 25-70 m away from a player
@@ -1657,7 +1686,11 @@ export class CastleLife {
                 if (this._followPath(v, dt, v.walk || WALK)) {
                     v.path = null;
                     if (v.chorePlan && this.chores.arrive(v)) break; // (came to do the chore)
-                    if (v.goingHome) { if (!this.night?.arriveHome(v)) this._deactivate(v); return; } // went into the house (at night: to bed)
+                    if (v.goingHome) {
+                        if (this.inTalkWith(v) || this._watched(v)) { if (this._vanish(v, 'дошёл до дома')) return; v.waitT = 2; v.path = null; v.speed = 0; v.mode = 'idle'; this._ground(v); return; } // (a talk / a player's eyes: stands a moment, then goes in)
+                        if (!this.night?.arriveHome(v)) this._vanish(v, 'дошёл до дома, зашёл внутрь');
+                        return;
+                    } // went into the house (at night: to bed)
                     // they stay a good while where they came (shopping, chatting, working)
                     v.waitT = v.purpose === 'chat' ? 15 + Math.random() * 30 : 10 + Math.random() * 35;
                     if (v.purpose === 'chat' && v.chatWith && !v.chatWith.dead) v.chatWith.waitT = Math.max(v.chatWith.waitT, 12);

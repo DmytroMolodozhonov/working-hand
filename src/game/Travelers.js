@@ -30,6 +30,7 @@ import * as THREE from 'three';
 import { CART, wayFree } from './Carriages.js';
 import { Riders } from './Riders.js';
 import { outOfSight } from './Animals.js';
+import { inTalkWith } from './Vanish.js';
 import { WANDER_GRID } from '../world/WizardTowers.js';
 import { CappedLog } from '../core/CappedLog.js';
 import { earthly } from '../world/Planets.js';
@@ -511,6 +512,9 @@ export class Travelers {
         const c = P.cart;
         const x = alive[0]?.x ?? c?.x, z = alive[0]?.z ?? c?.z;
         if (x == null) return true;
+        // (a player talks with one of them — or talked a moment ago: they stay, whatever the distance/the view says)
+        if (alive.some((v) => inTalkWith(v))) { if (!P.keptLog) { P.keptLog = true; L.alog?.decision(alive[0], 'странники не убраны — с ними говорят'); } return false; }
+        P.keptLog = false;
         const players = L._players();
         const dmin = Math.min(...players.map((pl) => Math.hypot(pl.p.x - x, pl.p.z - z)), Infinity);
         const look = g.animals?._look?.(_look);
