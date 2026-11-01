@@ -65,6 +65,7 @@ export class PoseSmoother {
         // the arms NOT carried this frame (the game sets it: a hand holding a thing it may throw — ThrowModel needs the arm's
         // true speed; carried, a throw was sped up and slowed down by the carry: tools/throwbench.mjs 9 % → 41 % speed error)
         this.hold = { left: false, right: false };
+        this.armMove = { left: 0, right: 0 };
     }
 
     /** The velocities of the arms' and hands' points from the newest picture (its own time `ts`, ms). */
@@ -209,6 +210,8 @@ export class PoseSmoother {
         this.eff = this.effFrom + (this.effTo - this.effFrom) * k;
         const out = Object.assign({}, to);
         if (lead > 0) this._carry(out, lead);
+        this.armMove.left = PREDICT.ON ? this.pv.gain.left : -1; this.armMove.right = PREDICT.ON ? this.pv.gain.right : -1; // (ArmSolver: how deliberately each arm moves — opens its filter; -1 unknown)
+        out.armMove = this.armMove;
         if (k < 1) {
             out.headRotation = mixAngles(from.headRotation, to.headRotation, k);
             out.bodyRotation = mixNum(from.bodyRotation, to.bodyRotation, k);

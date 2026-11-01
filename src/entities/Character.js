@@ -382,7 +382,7 @@ export class VoxelCharacter {
         AS.shoulders(poseData.rightShoulder, poseData.leftShoulder, aspect, adt);
         const so = this._armOut || (this._armOut = { u: { x: 0, y: 0, z: 0 }, f: { x: 0, y: 0, z: 0 }, g: { x: 0, y: 0, z: 0 } });
         const solveArm = (armAnchor, elbowAnchor, shoulder, elbow, wrist, side) => {
-            AS.solve(side, shoulder, elbow, wrist, aspect, so, adt);
+            AS.solve(side, shoulder, elbow, wrist, aspect, so, adt, poseData.armMove ? poseData.armMove[side] : -1);
             // the shoulder girdle (up with a raised arm, back with an arm drawn behind, forward with a reach)
             armAnchor.position.set(side === 'left' ? -0.7 : 0.7, 0.5 + so.g.y, so.g.z);
             armAnchor.updateMatrixWorld(true);

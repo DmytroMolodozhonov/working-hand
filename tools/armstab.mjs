@@ -33,12 +33,16 @@ export const LIMITS = {
     // ×0.3: ≈ 0.4 cm of a real arm per point, as tools/handbench/pointing.mjs's 720p webcam) and a very noisy one (×1: ≈ 1.4 cm;
     // MediaPipe's depth far worse). Before (the side flipping on the noise, √ steep at the plane): 6…10 cm / 3…4° and
     // 18…21 cm / 8…10°
-    goodCm: 1.6, goodDeg: 1.1, noisyCm: 6.0, noisyDeg: 4.5,
+    goodCm: 0.8, goodDeg: 0.6, noisyCm: 5.5, noisyDeg: 4.0,
+    // «рывки в покое» — how fast the still hand is drawn moving (cm/s RMS, frame to frame): what the eye sees as trembling. 31.10
+    // the arm's own filter was switched off on a usual camera (for the wand's slow aim) and this went 2…3 → 22…38 cm/s (the
+    // author: «руки начали трястись»); with the filter back (opened by a deliberate move): 2…7 cm/s; very noisy: 155…210 → ≤ 170
+    goodSpeed: 8, noisySpeed: 185,
     swingLagMs: 50, swingAmp3: 0.92, // a swing up to 3 Hz: drawn ≥ 92 %, ≤ 50 ms late (before: 48 ms; the camera's filter and the blend between pictures)
     overshoot: 0.03, // a quick move and a stop
     // the hand at a wall, a usual camera: never in it, still while pressed, no twitch (before: a shoulder at the wall let the
     // arm 38 cm through; 0.6…0.8 cm in and out, 3…9 times a second, twitches of up to 18 cm)
-    wallDepthCm: 1, wallCm: 0.5, wallFlips: 7, wallJumpCm: 4,
+    wallDepthCm: 1, wallCm: 0.5, wallFlips: 4, wallJumpCm: 3, // (31.10, the filter back: 1.3 /s, 2.2 cm; without it 7 /s, 4 cm)
 };
 
 const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -94,7 +98,11 @@ export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1
             const g = guard.process(lm, tc * 1000);
             const P = (i) => ({ x: g[i].x, y: g[i].y, z: g[i].z || 0 });
             const pose = { aspect, leftShoulder: P(11), leftElbow: P(13), leftWrist: P(15), rightShoulder: P(12), rightElbow: P(14), rightWrist: P(16), nose: P(0) };
-            sm.push(pose, tc * 1000 + 25); // (the picture reaches the game a little later)
+            // (the picture reaches the game a little later; its own time as PoseService gives it — the program's stamp, 35 ms
+            // before it arrives: PoseSmoother.PREDICT carries the arm ahead by that age as in the game — tools/handbench/pointing.mjs)
+            const at = tc * 1000 + 25 + (r() - 0.5) * 12;
+            pose.ts = at - 35;
+            sm.push(pose, at);
             camCount++;
             nextCam += 1 / camHz + (r() - 0.5) * 0.008;
         }
@@ -119,13 +127,18 @@ const rmsAng = (a) => { const m = mean3(a).normalize(); let s = 0; for (const v 
 export function still({ seeds = 3, noise = 1 } = {}) {
     const res = {};
     for (const name of Object.keys(POSES)) {
-        let cm = 0, deg = 0;
+        let cm = 0, deg = 0, sp = 0;
         for (let s = 0; s < seeds; s++) {
             const fr = run({ arm: () => POSES[name], seconds: 5.5, seed: 11 + s * 31 + name.length, noise }).filter((f) => f.t > 2.5);
             cm = Math.max(cm, rms3(fr.map((f) => f.hand)) * 100);
             deg = Math.max(deg, rmsAng(fr.map((f) => f.fore)));
+            // «рывки в покое»: how fast the still hand is drawn moving, frame to frame (cm/s RMS) — what the eye sees as trembling
+            // (a slow wander of 1 cm is not seen; the same 1 cm jumping picture to picture is: 31.10 the hand at rest went 2…3 → 22…38)
+            let s2 = 0;
+            for (let i = 1; i < fr.length; i++) s2 += fr[i].hand.distanceToSquared(fr[i - 1].hand) / (fr[i].t - fr[i - 1].t) ** 2;
+            sp = Math.max(sp, Math.sqrt(s2 / (fr.length - 1)) * 100);
         }
-        res[name] = { cm, deg };
+        res[name] = { cm, deg, sp };
     }
     return res;
 }
@@ -265,10 +278,11 @@ export function all(opts = {}) {
  */
 export function verdict(r) {
     const bad = [];
-    for (const [key, cmL, degL, name] of [['good', LIMITS.goodCm, LIMITS.goodDeg, 'хорошая камера'], ['still', LIMITS.noisyCm, LIMITS.noisyDeg, 'шумная камера']]) {
+    for (const [key, cmL, degL, spL, name] of [['good', LIMITS.goodCm, LIMITS.goodDeg, LIMITS.goodSpeed, 'хорошая камера'], ['still', LIMITS.noisyCm, LIMITS.noisyDeg, LIMITS.noisySpeed, 'шумная камера']]) {
         if (r[key]) for (const [k, v] of Object.entries(r[key])) {
             if (v.cm > cmL) bad.push(`покой (${name}) ${k}: ${v.cm.toFixed(2)} см > ${cmL}`);
             if (v.deg > degL) bad.push(`покой (${name}) ${k}: ${v.deg.toFixed(2)}° > ${degL}`);
+            if (v.sp > spL) bad.push(`покой (${name}) ${k}: рывки ${v.sp.toFixed(1)} см/с > ${spL}`);
         }
     }
     if (r.swing) for (const [f, v] of Object.entries(r.swing)) {
@@ -287,8 +301,8 @@ export function verdict(r) {
 
 export function print(r) {
     const f = (x, d = 2) => x.toFixed(d);
-    if (r.good) console.log('покой, хорошая камера (дрожь кисти, см / предплечья, °): ' + Object.entries(r.good).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)}`).join(', '));
-    if (r.still) console.log('покой, шумная камера: ' + Object.entries(r.still).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)}`).join(', '));
+    if (r.good) console.log('покой, хорошая камера (дрожь кисти, см / предплечья, ° / рывки кисти, см/с): ' + Object.entries(r.good).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
+    if (r.still) console.log('покой, шумная камера: ' + Object.entries(r.still).map(([k, v]) => `${k} ${f(v.cm)} / ${f(v.deg)} / ${f(v.sp, 1)}`).join(', '));
     if (r.swing) console.log('взмахи (видно %, опоздание мс): ' + Object.entries(r.swing).map(([k, v]) => `${k} Гц ${f(v.amp * 100, 0)} % ${f(v.lagMs, 0)}`).join(', '));
     if (r.step) console.log(`остановка: перелёт ${f(r.step.overshoot * 100, 1)} %`);
     if (r.wallNoisy) console.log('у стены, шумная камера (без порогов): ' + Object.entries(r.wallNoisy).map(([k, v]) => `${k} ${f(v.depthCm, 1)}; ${f(v.cm)} / ${f(v.ncm)}; ${f(v.flips, 1)}; рывок ${f(v.jump, 1)}`).join(', '));

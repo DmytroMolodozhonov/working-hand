@@ -9,11 +9,13 @@ import { ArmSolver, DirFilter, planeDepth, ARM } from '../../src/entities/ArmSol
 import { still, swing, step, run, POSES, LIMITS } from '../../tools/armstab.mjs';
 
 test('an arm held still does not tremble — up, down, sideways, forward (good and noisy camera)', () => {
-    for (const [noise, cmL, degL] of [[0.3, LIMITS.goodCm, LIMITS.goodDeg], [1, LIMITS.noisyCm, LIMITS.noisyDeg]]) {
+    for (const [noise, cmL, degL, spL] of [[0.3, LIMITS.goodCm, LIMITS.goodDeg, LIMITS.goodSpeed], [1, LIMITS.noisyCm, LIMITS.noisyDeg, LIMITS.noisySpeed]]) {
         const r = still({ seeds: 1, noise });
         for (const [k, v] of Object.entries(r)) {
             assert.ok(v.cm <= cmL, `noise ${noise}, ${k}: the hand trembles ${v.cm.toFixed(2)} cm`);
             assert.ok(v.deg <= degL, `noise ${noise}, ${k}: the forearm trembles ${v.deg.toFixed(2)}°`);
+            // (31.10: the arm's filter off on a usual camera — the still hand jumped picture to picture, 22…38 cm/s; «руки трясутся»)
+            assert.ok(v.sp <= spL, `noise ${noise}, ${k}: the still hand is drawn moving ${v.sp.toFixed(1)} cm/s (picture-to-picture trembling)`);
         }
     }
 });
@@ -53,7 +55,7 @@ test('the depth at the picture\'s plane is gentle (√ was infinitely steep: the
     assert.ok(ARM.DZ_HI > ARM.DZ_LO);
 });
 
-test('the direction\'s filter (a very noisy camera): still — steady, turning — at once; a side flip glides (does not open it)', () => {
+test('the direction\'s filter: still — steady, turning — at once; a side flip glides (does not open it)', () => {
     const F = new DirFilter(), o = { x: 0, y: 0, z: 0 };
     F.step(1, 0, 0, 1 / 60, o);
     // noise ±1° about +x: the drawn direction moves far less
@@ -85,4 +87,28 @@ test('the solver keeps fixed memory (no garbage a frame)', () => {
     for (let i = 0; i < 200; i++) s.solve('right', p(0.4, 0.4, 0), p(0.3, 0.4 + (i % 3) * 0.002, 0), p(0.2, 0.4, 0), 1, out, 1 / 60);
     assert.equal(Object.keys(s.right).length, keys);
     assert.ok(Number.isFinite(out.u.x) && Number.isFinite(out.f.y));
+});
+
+test('the direction\'s filter: a DELIBERATE slow turn (the wand\'s careful aim, PoseSmoother\'s armMove) is followed closely, the same noise with no move is cut', () => {
+    // a careful aim at 12°/s (0.21 rad/s — under the swing's dead band): with the move known, the filter keeps up within ~2 pictures
+    const F = new DirFilter(), o = { x: 0, y: 0, z: 0 };
+    let th = 0;
+    for (let i = 0; i < 120; i++) { th += 0.21 / 60; F.step(Math.cos(th), Math.sin(th), 0, 1 / 60, o, 1); }
+    const behindAim = th - Math.atan2(o.y, o.x);
+    assert.ok(behindAim < 0.21 * 0.08, `a deliberate aim: ${(behindAim / 0.21 * 1000).toFixed(0)} ms behind`);
+    // the same slow turn with no move known (armMove 0 — the camera's noise passing as a slow wander): steady, far behind
+    const G = new DirFilter();
+    th = 0;
+    for (let i = 0; i < 120; i++) { th += 0.21 / 60; G.step(Math.cos(th), Math.sin(th), 0, 1 / 60, o, 0); }
+    assert.ok(th - Math.atan2(o.y, o.x) > 0.21 * 0.2, 'no move: not followed at once');
+    // a picture or two of «one way» on noise does not open it (ONE_RISE): ±1° noise with armMove flickering 1 one frame in 10
+    const H = new DirFilter();
+    H.step(1, 0, 0, 1 / 60, o);
+    let maxDev = 0;
+    for (let i = 0; i < 240; i++) {
+        const a = (i % 2 ? 1 : -1) * 0.017;
+        H.step(Math.cos(a), Math.sin(a), 0, 1 / 60, o, i % 10 === 0 ? 1 : 0);
+        if (i > 60) maxDev = Math.max(maxDev, Math.abs(Math.atan2(o.y, o.x)));
+    }
+    assert.ok(maxDev < 0.006, 'a flicker of «one way» on noise: ' + (maxDev * 57.3).toFixed(2) + '°');
 });
