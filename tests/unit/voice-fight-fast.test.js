@@ -95,3 +95,53 @@ test('повтор одного слова нейросетью («акцию а
     assert.doesNotMatch(String(soundTrust(h)), /внутри фразы/);
     assert.match(String(soundTrust({ ...h, written: 'ну давай возьми акцию сейчас' })), /внутри фразы|непохож|не похож|неуверенно/);
 });
+
+// Журнал автора 13:00 (сразу после первого «раннего коммита»): из начала «Пентаграниум Инфернум» сработали «Инферно» (буквами
+// «энтегранью», запас +0) и «Овергроун» («етграни»), а сама пентаграмма отсеялась. Причина: ArenaDuels.meFighting считал боем весь
+// режим «Перед дуэлью» (теперь — только раунд) + фраза с куском «пентагран» не защищена. Теперь из такой фразы — только пентаграмма.
+import { LETTERS, SPACE as SP } from '../../src/audio/SpellSpotter.js';
+import { PENT_PIECE } from '../../src/input/NativeVoice.js';
+import { matchSpell as ms } from '../../src/fx/SpellManager.js';
+/** Строки нейросети «как будто сказано» `text`: каждая буква — 2 шага, между словами пауза. */
+function spoken(text, quiet = 25) {
+    const rows = [];
+    const put = (k) => { const r = new Float32Array(V).fill(-12); r[k] = 0; rows.push(r); };
+    for (let i = 0; i < 4; i++) put(BLANK);
+    for (const ch of text) {
+        if (ch === ' ') { put(SP); put(BLANK); put(BLANK); continue; }
+        const k = LETTERS.indexOf(ch);
+        if (k < 0) continue;
+        put(k); put(BLANK);
+    }
+    for (let i = 0; i < quiet; i++) put(BLANK);
+    const lp = new Float32Array(rows.length * V);
+    rows.forEach((r, i) => lp.set(r, i * V));
+    return { T: rows.length, lp };
+}
+/** Все взгляды на фразу (посреди и в конце) → заклинания, которые игра получила бы. */
+function castsOf(text, d = {}) {
+    const { T, lp } = spoken(text);
+    const out = [];
+    let seg = {};
+    for (let k = 10; k <= T; k += 2) {
+        const final = k === T || k + 2 > T;
+        const p = lp.subarray(0, k * V);
+        const o = lookAt({ id: 1, final, T: k, lp: b64(p), t1: k * 40, far: 0, q: 0.3, ...d }, seg);
+        seg = o.seg;
+        const name = o.say && !o.say.talkOnly ? ms(o.say.text) : null;
+        if (name) out.push(name);
+        if (final) break;
+    }
+    return out;
+}
+test('«Пентаграниум …» в кусках: из фразы не срабатывает ни одно другое заклинание (в бою и нет)', () => {
+    const pieces = ['энтегранью инферно', 'етграни инферно', 'интегранюинтернум', 'пентограним инфернум', 'пентаграниум инфернус',
+        'пентаграниум спектрис', 'пентаграниум монструм', 'пентаграниум ноктис', 'пентаграниум фирмитас', 'етграни овергроун'];
+    for (const t of pieces) for (const duel of [false, true]) {
+        const other = castsOf(t, { duel }).filter((n) => n !== 'Pentagranium');
+        assert.deepEqual(other, [], `«${t}»${duel ? ' (бой)' : ''}: сработало ${other.join(', ')}`);
+    }
+    assert.ok(PENT_PIECE.test('энтегранью') && PENT_PIECE.test('етграни') && PENT_PIECE.test('пентограним'));
+    // (без куска «пентагран» те же слова — заклинания, как раньше)
+    assert.ok(castsOf('инферно').includes('Inferno'), 'одно «инферно» — Инферно');
+});

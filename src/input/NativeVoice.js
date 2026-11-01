@@ -159,6 +159,14 @@ function upgradeOf(seg, h, d) {
     return base && FIGHT_UPGRADE.get(base) === h.spell.spell && fitOf(h, d) >= UPGRADE_FIT ? base : null;
 }
 
+/**
+ * «Пентаграниум …» as the network writes it in pieces («энтегранью», «етграни», «интегранюинтернум», «пентограним»): a phrase that
+ * has it is a pentagram's — no other spell is cast out of it, from any look at it (the author's journal 13:00: «Инферно» and
+ * «Overgrown» went off at +0 from the start of «Пентаграниум Инфернум», and the real pentagram then was refused).
+ */
+export const PENT_PIECE = /т[еаоэиы]?гр[аеэоя]н|пент[аоеэ]г/;
+const pentPiece = (t) => PENT_PIECE.test(String(t || '').toLowerCase().replace(/ё/g, 'е'));
+
 function lookAtRows(d, seg, lp, refRows) {
     const ref = refRows;
     let h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr });
@@ -171,6 +179,9 @@ function lookAtRows(d, seg, lp, refRows) {
     }
     const next = { ...seg };
     let say = null, echo = null;
+    if (pentPiece(h.written)) next.pent = true;
+    // (a pentagram's phrase: only the pentagram itself may come of it — anything else is as if not heard)
+    if (next.pent && h.sure && h.spell?.spell !== 'Pentagranium') h = { ...h, text: h.written, spell: null, sure: false, echo: false, best: h.spell, pentWeak: true };
     if (h.sure && h.echo) {
         echo = h.spell.canonical;
     } else if (h.sure) {
@@ -210,7 +221,10 @@ function lookAtRows(d, seg, lp, refRows) {
         next.last = null;
         // the words as written: talk to a villager (and a spell only the written words show — not
         // while the speakers play: there the written words may be the friend's)
-        const loose = matchSpell(h.written);
+        const loose0 = matchSpell(h.written);
+        // (a pentagram's phrase: its written words never cast another spell either)
+        const pentOther = !!next.pent && !!loose0 && loose0 !== 'Pentagranium';
+        const loose = pentOther ? null : loose0;
         // (while the speakers play, a faint phrase is what the echo canceller left of them: not words of mine)
         const faint = (d.far || 0) >= 0.25 && Number.isFinite(d.peak) && Number.isFinite(d.floor) && d.peak < d.floor + ((d.far || 0) >= 0.5 ? 22 : 15);
         // (and a look at a phrase still being said while the speakers play: its end will tell)
@@ -229,6 +243,8 @@ function lookAtRows(d, seg, lp, refRows) {
                 next.fired = byWords.canonical;
                 next.settled = true;
             }
+        } else if (pentOther) {
+            // (nothing handed on: the game would read the words as that other spell)
         } else if (h.written && !faint && !early && (!loose || talkOnly || (d.final && (d.far || 0) < 0.25))) say = { text: h.written, isFinal: !!d.final, talkOnly };
     }
     return { say, echo, heard: h, seg: next };

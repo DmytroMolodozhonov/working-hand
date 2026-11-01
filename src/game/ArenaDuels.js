@@ -1948,7 +1948,9 @@ export class ArenaDuels {
             const pl = this.auth ? A.duel?.p : A.pl, ph = this.auth ? A.duel?.phase : A.ph;
             if (pl === g.localId && (ph === 'count' || ph === 'fight')) return true;
         }
-        return !!this.mode && !this.mode.paused;
+        // (not the whole «Перед дуэлью» mode: between rounds, at the steward, walking about — no fight. It was, and the fight's
+        //  looser voice rules then cast «Инферно» / «Overgrown» out of pieces of «Пентаграниум Инфернум» — the author's journal 13:00)
+        return false;
     }
 
     /** (every frame) The bodies of the duel at each arena: the wizards, this computer's hero, the loose wands and things. */
