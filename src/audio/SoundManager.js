@@ -52,6 +52,9 @@ function finish(gen) { let r; do { r = gen.next(); } while (!r.done); return r.v
 /** m: a zombie this near is heard growling (Звук зомби.wav, from its start, from where it stands). */
 export const ZOMBIE_HEAR = 8;
 
+/** The effects' loudness while the player speaks (−10.5 dB): a spell's word must reach the microphone over the fight's noise. */
+export const DUCK_LEVEL = 0.3;
+
 export class SoundManager {
     constructor(camera) {
         this.camera = camera;
@@ -69,7 +72,13 @@ export class SoundManager {
         // All effects, including spells, share a live master gain. Music and speech remain independent.
         this.effectsGain = this.context.createGain();
         this.effectsGain.gain.value = this.globalVolume;
-        this.effectsGain.connect(this.audioListener.getInput());
+        // (while the player speaks, the effects go ~10 dB quieter: the charges, the blasts, the spells' music of a fight
+        // filled the microphone and a spell came 0.5–1.2 s late — duckEffects; its own node, the volume slider stays as it is)
+        this.duckGain = this.context.createGain();
+        this.duckGain.gain.value = 1;
+        this.effectsGain.connect(this.duckGain);
+        this.duckGain.connect(this.audioListener.getInput());
+        this._ducked = false;
         const listener = this.audioListener;
         this.effectsListener = {
             context: this.context, getInput: () => this.effectsGain,
@@ -83,6 +92,22 @@ export class SoundManager {
         this._posIdx = 0;
         this.loaded = false;
         this.scene = null;
+    }
+
+    /**
+     * The effects quieter while the player speaks (Game._duckVoices): at once (≈20 ms) when the voice starts, back softly (≈0.25 s)
+     * when it is over — a short dip, no clicks. Only the effects: music and the villagers' voices have their own ways.
+     */
+    duckEffects(on) {
+        on = !!on;
+        if (on === this._ducked || !this.duckGain) return;
+        this._ducked = on;
+        const g = this.duckGain.gain, t = this.context.currentTime;
+        try {
+            g.cancelScheduledValues(t);
+            g.setValueAtTime(g.value, t);
+            g.setTargetAtTime(on ? DUCK_LEVEL : 1, t, on ? 0.02 : 0.25);
+        } catch (e) { g.value = on ? DUCK_LEVEL : 1; }
     }
 
     get context() {

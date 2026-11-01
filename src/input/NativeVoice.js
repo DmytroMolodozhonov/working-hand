@@ -79,7 +79,40 @@ export const DUEL_HOT_FAST = new Set(['Ice', 'Sands']);
 export const DUEL_FIT = 0.5;
 /** ms of quiet after a duel one-word spell that is enough to cast it (the author: the slow cast loses the clash 20:80). */
 export const DUEL_QUIET = 80;
-const duelFast = (spell, d) => DUEL_FAST.has(spell) || (!!d.duel && DUEL_HOT_FAST.has(spell));
+/**
+ * In a fight (a duel, an arena duel, a charge flying at me — d.duel) these spells do not wait for their «… Максима» either (the
+ * author: «Бомбардо» and «Фрозен» came 0.55–0.6 s after the last letter, the tower's head answers in 0.15–0.35 s): the plain one is
+ * cast at once, and a «… Максима» heard right after it in the same breath makes the Maxima go too, the plain one's mana given back
+ * (Game.castUpgrade, UPGRADE_MS) — so «Бомбардо Максима» is never lost. Only spells whose one longer form is their Maxima.
+ */
+export const FIGHT_UPGRADE = new Map([['Bombardo', 'BombardoMaxima'], ['Frozen', 'IceMaxima'], ['Ice', 'IceMaxima'], ['Jolt', 'JoltMaxima']]);
+/** ms after the plain spell in which its «… Максима» still upgrades it (Game.castUpgrade). */
+export const UPGRADE_MS = 1500;
+/** How much better than needed the «… Максима» must fit to upgrade (a tail of noise after the plain word is no «Максима»). */
+export const UPGRADE_FIT = 0.3;
+const duelFast = (spell, d) => DUEL_FAST.has(spell) || (!!d.duel && (DUEL_HOT_FAST.has(spell) || FIGHT_UPGRADE.has(spell)));
+/**
+ * In a fight the speakers play all the time (the charges, the explosions, the wizard's shouts): a look without the speakers' rows
+ * used to wait for the next one that had them (every 0.25 s — voice_native.py REF_EVERY) or for the phrase's end. With no friend
+ * on the server nobody's voice but the game's can come out of the speakers, and the game knows its own lines (main.js fromGame);
+ * a duel's spell heard clearly is cast at once.
+ */
+export const FIGHT_LOUD_FIT = 0.6;
+/**
+ * The early commit in a fight. A look at an unfinished phrase never let a spell end in its last EDGE (4) steps — a word cut there
+ * («сунд|ук») reads as a pause, and the network leaves gaps of up to 3 «nothing» steps inside a word: so a spell came no sooner than
+ * 200 ms after its last letter (+ the look, + the network: the author's 340–590 ms). In a fight a duel's word may end 1 step from the
+ * cut — only when the voice program's own speech detector (silero, independent of the letters) has heard real quiet after it
+ * (d.q ≥ FIGHT_Q), the spell is clear (DUEL_FIT) and long enough (FIGHT_EDGE_LEN letters: «айс», «даст» hide in other words) —
+ * never «Авада» (its full check stays).
+ */
+export const FIGHT_EDGE = 1;
+export const FIGHT_Q = 0.06;
+export const FIGHT_EDGE_LEN = 5;
+const FIGHT_EDGE_NOT = new Set(['AvadaKedavra']);
+const edgeOk = (h, d) => !!d.duel && duelFast(h.spell.spell, d) && !FIGHT_EDGE_NOT.has(h.spell.spell) && h.spell.len >= FIGHT_EDGE_LEN
+    && h.tail >= DUEL_QUIET && fitOf(h, d) >= DUEL_FIT && Number.isFinite(d.q) && d.q >= FIGHT_Q;
+const fightClear = (h, d) => !!d.duel && !d.friends && duelFast(h.spell.spell, d) && h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) >= FIGHT_LOUD_FIT;
 const fitOf = (h, d) => h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity);
 
 /** How much better than needed a spell must fit to cast while the game's voices play, before the phrase's end. */
@@ -120,9 +153,17 @@ export function lookAt(d, seg = {}) {
     return r;
 }
 
+/** The plain spell cast at once in a fight whose «… Максима» this look heard (→ the plain spell), or null. */
+function upgradeOf(seg, h, d) {
+    const base = seg.upSpell;
+    return base && FIGHT_UPGRADE.get(base) === h.spell.spell && fitOf(h, d) >= UPGRADE_FIT ? base : null;
+}
+
 function lookAtRows(d, seg, lp, refRows) {
     const ref = refRows;
-    const h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr });
+    let h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr, edge: d.duel && !d.final ? FIGHT_EDGE : undefined });
+    // (a spell ending nearer the cut than a look usually allows: only the fight's early commit takes it — else as if not heard yet)
+    if (h.sure && h.zone && !edgeOk(h, d)) h = { ...h, text: h.written, spell: null, sure: false, echo: false, best: h.spell, early: true };
     const next = { ...seg };
     let say = null, echo = null;
     if (h.sure && h.echo) {
@@ -133,11 +174,14 @@ function lookAtRows(d, seg, lp, refRows) {
             // (already cast as settled from this phrase: its end is no second word — nor a piece of it heard
             // again: «Бомбардо Максима» cast, its end read as «Бомбардо», is no second «Бомбардо»; another
             // spell after it in the same phrase — the explosion, the echo — only when heard clearly: AFTER_FIT)
-            const again = next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
-            if (!again) say = { text: h.text, isFinal: true };
+            // («Бомбардо» cast at once in a fight, the phrase ends «… Максима»: the upgrade — FIGHT_UPGRADE)
+            const up = upgradeOf(next, h, d);
+            const again = !up && next.fired && (next.fired === name ? next.settled : partOf(next.fired, name) || (h.spell.avg - threshold(h.spell.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity) < AFTER_FIT));
+            if (!again) say = up ? { text: h.text, isFinal: true, upgrade: up } : { text: h.text, isFinal: true };
             if (!next.fired || !again) next.fired = name;
+            if (up) next.upSpell = null;
         } else if ((next.last === name || (h.spell.avg >= SURE_AT_ONCE && h.spell.len >= AT_ONCE_LEN) || h.tail >= (h.spell.len >= AT_ONCE_LEN ? QUIET_AT_ONCE_LONG : QUIET_AT_ONCE)
-            || (duelFast(h.spell.spell, d) && h.tail >= DUEL_QUIET && fitOf(h, d) >= DUEL_FIT)) && ((d.far || 0) < 0.25 || d.ref || gameClear(h, d))) {
+            || (duelFast(h.spell.spell, d) && h.tail >= DUEL_QUIET && fitOf(h, d) >= DUEL_FIT)) && ((d.far || 0) < 0.25 || d.ref || gameClear(h, d) || fightClear(h, d))) {
             // (while the speakers play, only a look that has their sound too may cast: it can tell an echo —
             // or, when what plays is the game's own voices (it knows their words: GameVoices) and the spell is
             // clear: at the wizards' tower the spell waited for the phrase's end, 2–3 s, behind their talk)
@@ -147,9 +191,13 @@ function lookAtRows(d, seg, lp, refRows) {
                 if (next.fired !== name && next.more !== name) { say = { text: h.text, isFinal: false, more: true }; next.more = name; }
             } else if (next.fired !== name) {
                 // settled: nothing can follow that would make it another spell — as good as the phrase's end
-                say = { text: h.text, isFinal: false, settled: true };
+                // (in a fight «Бомбардо» is settled at once — fightNow: its «… Максима» may still upgrade it — FIGHT_UPGRADE)
+                const up = upgradeOf(next, h, d);
+                const fightNow = !up && !!d.duel && FIGHT_UPGRADE.has(h.spell.spell) && goesOnKnown(h.spell.phrase, d.knows);
+                say = { text: h.text, isFinal: false, settled: true, ...(up ? { upgrade: up } : null), ...(fightNow ? { fightNow: true } : null) };
                 next.fired = name;
                 next.settled = true;
+                next.upSpell = fightNow ? h.spell.spell : null;
             }
         }
         next.last = name;
@@ -290,6 +338,7 @@ export class NativeVoice {
         // (the speakers played the game's own voices then — villagers, wizards: not a friend's)
         if ((d.far || 0) >= 0.25 && !d.final) { const w = this._when(d, {}); d.game = Number.isFinite(w.from) && !!soundingLine(w.from - 600, w.to); }
         d.duel = !!this.duelHot;
+        d.friends = !!this.friends; // (a friend on the server: his voice may be in the speakers — fightClear)
         d.knows = this.knows; // (spell → does the hero know it: set by the game)
         const r = lookAt(d, this.segs.get(d.id));
         this.onLetters?.(r.heard?.written || '', d); // (what was written so far — the dragon's «У» of «Империус Максима»: DragonHowl)
@@ -310,7 +359,7 @@ export class NativeVoice {
         if (sp) { meta.fit = sp.avg - threshold(sp.len, d.far || 0, Number.isFinite(d.snr) ? d.snr : Infinity); meta.len = sp.len; }
         meta.refChecked = !!d.ref && !r.echo; // (the speakers' own rows were compared with the microphone's: no echo of them — SpellPhrase.trustedFar)
         if (r.echo) { if (d.final || !r.seg.echoed) { r.seg.echoed = true; this.onEcho?.(r.echo, meta); } return; }
-        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled, repeat: !!r.repeat });
+        if (r.say) this.onResult?.(r.say.text, r.say.isFinal, { ...meta, sure: !!r.heard.sure || !!r.say.byWords, byWords: !!r.say.byWords, talkOnly: !!r.say.talkOnly, more: !!r.say.more, settled: !!r.say.settled, repeat: !!r.repeat, fightNow: !!r.say.fightNow, upgrade: r.say.upgrade || null });
         else if (d.final && !r.seg.fired) {
             // (nothing handed on: the closest spell and how far it was from counting — the spell journal)
             const b = r.heard.best;

@@ -598,6 +598,24 @@ function handAimed() {
     return (v || 0) >= 0.5 && Date.now() - (game.lastMagicTime || 0) < 2500;
 }
 
+/**
+ * Cast what the voice heard: in a fight «Бомбардо» went at once (meta.fightNow) and its «… Максима» heard right after (meta.upgrade)
+ * makes the Maxima go too, paid once (Game.castUpgrade). The game's time on the cast goes to the journal (meta.gameMs).
+ */
+function castVoice(command, final, meta) {
+    const t = performance.now();
+    let name;
+    const up = meta?.upgrade ? game.castUpgrade(meta.upgrade, command) : undefined;
+    if (up !== undefined) { name = up; if (meta) meta.upgraded = !!up; }
+    else {
+        const before = game.combat?.fatigue;
+        name = game.castLocalSpell(command, final);
+        if (name && meta?.fightNow) game.noteFightBase(matchSpell(command), before);
+    }
+    if (meta) meta.gameMs = performance.now() - t;
+    return name;
+}
+
 function journal(command, isFinal, meta, spell, ok, why, source = '') {
     const log = game?.spellLog;
     if (!log || !command) return;
@@ -819,7 +837,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
         if (meta?.native && meta.aec) {
             const said = matchSpell(command);
             // (settled: the voice already waited for a possible «… Максима» / «… Хаус» — as good as the phrase's end)
-            const name = game.castLocalSpell(command, isFinal || !!meta.settled);
+            const name = castVoice(command, isFinal || !!meta?.settled, meta);
             if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg, to: meta?.to };
             if (said) journal(command, isFinal, meta, said, !!name, name ? '' : castWhy(said), 'микрофон игрока');
             else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');
@@ -866,7 +884,7 @@ voice.onResult = (command, isFinal = true, held = false, meta = null) => {
                 if (isFinal || held) netLog(`заклинание «${command}» моё: ${gate.sure ? 'рот двигался вместе с голосом' : 'лица не видно — друг этого заклинания не говорил'}`);
             }
         }
-        const name = game.castLocalSpell(command, isFinal || !!meta?.settled);
+        const name = castVoice(command, isFinal || !!meta?.settled, meta);
         if (name) lastCast = { spell: name, at: performance.now(), seg: meta?.seg, to: meta?.to };
         if (heard) journal(command, isFinal || held, meta, heard, !!name, name ? '' : castWhy(heard), 'микрофон игрока');
         else journal(command, isFinal, meta, null, false, 'обычная речь — заклинания нет', 'микрофон игрока');

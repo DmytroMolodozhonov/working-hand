@@ -6,6 +6,7 @@
  * ones from main.js; see the README for the list of fixes.
  */
 
+import { FIGHT_UPGRADE, UPGRADE_MS } from '../input/NativeVoice.js';
 import { marketDef, buildMarketStall } from './CreativeMarket.js';
 import { guestDef } from './CreativeGuest.js';
 import { deepAt, swimStep, SWIMMERS, splashes } from './CreatureSwim.js';
@@ -1780,9 +1781,16 @@ export class Game {
      * plain microphone level, which the speakers themselves would raise.
      */
     _duckVoices() {
+        const now = performance.now();
+        // (the effects — the charges, the blasts, the spells' music — quieter at once while my voice is heard (not for a raised
+        // hand alone: in a fight the hands are up all the time): the author's duel — the spell lost in the fight's noise)
+        if (now - (this._fxDuckAt || 0) >= 50) {
+            this._fxDuckAt = now;
+            const lips = this.voiceGate.lipsMoved(now, 400) === true;
+            this.sound?.duckEffects?.(lips || now - (this.voice?.speakingAt || -1e9) < 450);
+        }
         const sp = this.castleLife?.talk?.speech;
         if (!sp?.duck) return;
-        const now = performance.now();
         if (now - (this._duckCheckAt || 0) < 100) return;
         this._duckCheckAt = now;
         if (this.voiceGate.lipsMoved(now, 700) === true) { this._speakingAt = now; this._voicedAt = now; }
@@ -2273,6 +2281,34 @@ export class Game {
      * that charge becomes the Maxima (the rest of its mana is paid; none left — it stays a «Джолт») — never a
      * second charge. false: no such early «Джолт» (an ordinary cast).
      */
+    /** A spell cast at once in a fight (NativeVoice.FIGHT_UPGRADE: «Бомбардо», «Фрозен», «Айс», «Джолт»): its «… Максима» may still come. */
+    noteFightBase(spell, manaBefore) {
+        if (!FIGHT_UPGRADE.has(spell)) return;
+        const paid = Number.isFinite(manaBefore) && Number.isFinite(this.combat?.fatigue) ? Math.max(0, manaBefore - this.combat.fatigue) : 0;
+        this._fightBase = { spell, at: performance.now(), paid };
+    }
+
+    /**
+     * «… Максима» heard right after a plain spell cast at once in a fight (UPGRADE_MS): the Maxima goes too and the plain one's
+     * mana comes back — paid once, at the Maxima's price (the plain one is already flying: «докинуть»); «Джолт Максима» makes
+     * the «Джолт» already flying grow (_joltUpgrade). → the spell cast / null (refused), undefined: no such plain spell (cast as usual).
+     * (A pause between the two, no mana for the Maxima, the duel ended: the plain spell stays, nothing is lost or paid twice.)
+     */
+    castUpgrade(base, text) {
+        const b = this._fightBase;
+        if (!b || b.spell !== base || !(performance.now() - b.at <= UPGRADE_MS)) return undefined;
+        this._fightBase = null;
+        if (base === 'Jolt') { this._interimCast = { name: 'Jolt', at: Date.now() }; return this.castLocalSpell(text, true); }
+        // (the pause between two spells is for two words, not one word and its «Максима»)
+        const last = this.lastSpellCastTime, lastDuel = this._lastDuelCast, early = this._interimCast;
+        this.lastSpellCastTime = 0; this._lastDuelCast = 0; this._interimCast = null;
+        const name = this.castLocalSpell(text, true);
+        if (name) {
+            if (b.paid > 0 && this.combat?.manaOn) this.combat.fatigue = Math.min(this.combat.maxFatigue || this.combat.fatigue + b.paid, this.combat.fatigue + b.paid);
+        } else { this.lastSpellCastTime = last; this._lastDuelCast = lastDuel; this._interimCast = early; }
+        return name;
+    }
+
     _joltUpgrade() {
         const early = this._interimCast;
         if (!early || early.name !== 'Jolt' || Date.now() - early.at > 3000) return false;
@@ -3969,7 +4005,12 @@ export class Game {
         this.focus.update(); // (death, a stun, the ice, a fall: what I hold stops; the mark on the screen)
         this._duckVoices();
         // (a duel going on or a charge flying at me: the duel's words are cast at once — NativeVoice.duelHot)
-        if (this.voice?.native) this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.());
+        // (and the arena duel itself: the author's duel with the tower's head — «Бомбардо», «Фрозен» waited 0.4–0.6 s for a «Максима»)
+        if (this.voice?.native) {
+            this.voice.native.duelHot = !!(this._inDuel?.() || this.duel?.underFire?.() || this.arenaDuels?.meFighting?.());
+            // (a friend's voice may come out of the speakers: then the look must carry the speakers' rows to tell an echo — NativeVoice.fightClear)
+            this.voice.native.friends = (this.remotes?.size || 0) > 0;
+        }
         if (this.voice?.native && !this.voice.native.knows) this.voice.native.knows = (spell) => this.knowsSpell(spell);
         if (earth && !duelOnly) this.servants.update(dt);
         this.invis?.update(dt);

@@ -1928,6 +1928,16 @@ export class ArenaDuels {
         return true;
     }
 
+    /** Is this computer's hero fighting an arena duel right now (the count or the fight)? — the voice casts the duel's words at once (NativeVoice.duelHot). */
+    meFighting() {
+        const g = this.game;
+        for (const A of this.list.values()) {
+            const pl = this.auth ? A.duel?.p : A.pl, ph = this.auth ? A.duel?.phase : A.ph;
+            if (pl === g.localId && (ph === 'count' || ph === 'fight')) return true;
+        }
+        return !!this.mode && !this.mode.paused;
+    }
+
     /** (every frame) The bodies of the duel at each arena: the wizards, this computer's hero, the loose wands and things. */
     _cage(dt) {
         const g = this.game, me = g.character?.group?.position;

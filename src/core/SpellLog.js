@@ -49,12 +49,37 @@ export function formatEntry(e) {
     if (m.gameLine) parts.push(`в это время голос игры: «${String(m.gameLine).slice(0, 50)}»`);
     const src = e.source ? ` [${e.source}]` : '';
     const fast = e.ok && Number.isFinite(m.lag) ? ` за ${Math.round(m.lag)} мс после последней буквы${Number.isFinite(m.fromStart) ? ` (${Math.round(m.fromStart)} мс от начала слова)` : ''}${Number.isFinite(m.cost) ? `, нейросеть думала ${Math.round(m.cost)} мс` : ''}` : '';
+    const st = e.ok ? latencyStages(m) : '';
     const spell = e.spell ? ` → ${e.spell}` : ' → заклинания нет';
     // (a spell that did not work: how long after the word it was tried — a late look at the hand is a gesture that is gone)
     const late = !e.ok && e.spell && Number.isFinite(m.lag) ? ` [слово → проверка: ${Math.round(m.lag)} мс]` : '';
-    const out = e.ok ? ` → ✅ сработало${fast}` : e.why ? ` → ❌ ${e.why}${late}` : '';
+    const how = m.upgraded ? ' (усилено «Максимой» — заплачено один раз)' : m.fightNow ? ' (бой: сразу, «… Максима» следом усилит)' : '';
+    const out = e.ok ? ` → ✅ сработало${fast}${how}${st ? ` [${st}]` : ''}` : e.why ? ` → ❌ ${e.why}${late}` : '';
     const note = e.note ? ` (${e.note})` : '';
     return `${clock(e.at || new Date())} 🎙️ «${String(e.text ?? '').slice(0, 120)}» (${parts.join(', ')})${src}${spell}${out}${note}`;
+}
+
+/**
+ * Where the time went, from the start of the word to the charge leaving the wand (pure: tests) — the author sends this line:
+ * «задержка: слово N → тишина после слова N → нейросеть N → доставка N → игра N мс». '' when the voice did not tell its times.
+ *   слово          the word itself (its first to its last letter)
+ *   тишина         the sound after the last letter the deciding look had heard (the quiet the voice waited for + the look's step)
+ *   нейросеть      the speech network's time on that look
+ *   доставка       from the network's answer to the page's decision (the server, the page busy with a frame)
+ *   игра           the game's own checks and the cast (the charge leaves the wand in this same frame)
+ */
+export function latencyStages(m = {}) {
+    if (!Number.isFinite(m.lag) || !Number.isFinite(m.to)) return '';
+    const p = [];
+    if (Number.isFinite(m.from)) p.push(`слово ${Math.max(0, Math.round(m.to - (m.from + 200)))}`);
+    const quiet = Number.isFinite(m.soundEnd) ? Math.max(0, m.soundEnd - m.to) : NaN;
+    if (Number.isFinite(quiet)) p.push(`тишина после слова ${Math.round(quiet)}`);
+    const cost = Number.isFinite(m.cost) ? m.cost : NaN;
+    if (Number.isFinite(cost)) p.push(`нейросеть ${Math.round(cost)}`);
+    const game = Number.isFinite(m.gameMs) ? m.gameMs : 0;
+    if (Number.isFinite(quiet) && Number.isFinite(cost)) p.push(`доставка ${Math.max(0, Math.round(m.lag - quiet - cost - game))}`);
+    p.push(`игра ${num(game, 1)}`);
+    return `задержка: ${p.join(' → ')} мс`;
 }
 
 /**

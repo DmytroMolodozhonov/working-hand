@@ -246,7 +246,7 @@ export function greedy(P, from = 0, to = P.T) {
  * → {pen: total (≤ 0), a, b: its first and last 40 ms}
  */
 export const EDGE = 4;
-export function spot(P, toks, { openStart = true, openEnd = true } = {}) {
+export function spot(P, toks, { openStart = true, openEnd = true, edge = EDGE } = {}) {
     const { lp, T, mx, quiet } = P;
     const N = toks.length, S = 2 * N + 1;
     const lab = new Int16Array(S), skip = new Uint8Array(S);
@@ -268,7 +268,7 @@ export function spot(P, toks, { openStart = true, openEnd = true } = {}) {
         }
         let tmp = dp; dp = nd; nd = tmp;
         const ti = st; st = ns; ns = ti;
-        if (t === T - 1 ? openEnd : quiet[t + 1] && (openEnd || t < T - 1 - EDGE)) {
+        if (t === T - 1 ? openEnd : quiet[t + 1] && (openEnd || t < T - 1 - edge)) {
             if (dp[S - 1] > pen) { pen = dp[S - 1]; a = st[S - 1]; b = t; }
             if (S > 1 && dp[S - 2] > pen) { pen = dp[S - 2]; a = st[S - 2]; b = t; }
         }
@@ -436,7 +436,8 @@ export function hear(lp, T, o = {}) {
     const written = greedy(P);
     const far = o.far || 0;
     const snr = Number.isFinite(o.snr) ? o.snr : Infinity;
-    const open = { openStart: !o.cut, openEnd: o.final !== false };
+    // (edge: a fight's look may let a spell end nearer the cut — NativeVoice FIGHT_EDGE; the spell found there is marked `zone`)
+    const open = { openStart: !o.cut, openEnd: o.final !== false, edge: Number.isFinite(o.edge) ? o.edge : EDGE };
     const best = bestSpell(P, far, open, VOCAB, snr);
     // (the spell's span may begin in the quiet before it — «nothing new» costs it nothing there: «так… (pause)
     // Инферно» then counted «так» as letters round it, a sentence. Its own letters start at its first sound.)
@@ -472,5 +473,6 @@ export function hear(lp, T, o = {}) {
     // before it in the same breath must not make the spell's own letters look unlike it (SpellPhrase.soundTrust)
     const near = greedy(P, best.a - NEAR, best.b + 1 + NEAR);
     // tail: ms heard after the spell (a look at a phrase still being said: nothing but quiet there)
-    return { text, written, near, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40 };
+    // zone: it ends where a look at an unfinished phrase usually may not (EDGE) — a fight's early commit decides (NativeVoice)
+    return { text, written, near, spell: best, sure: true, echo, far, extra, tail: (T - 1 - best.b) * 40, zone: o.final === false && T - 1 - best.b <= EDGE };
 }
