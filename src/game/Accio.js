@@ -15,7 +15,8 @@ export const ACCIO = {
     SPEED: 18, // m/s the object flies at
     CATCH: 0.8, // m from the hand: caught
     MAX_TIME: 6, // s (60 m at SPEED 18 is 3.3 s): gives up if it can't get there (stuck behind a wall)
-    LIFT: 0.06, // the arm lifted this much from hanging (1 − cos: ~20°) is enough — a thing close by the feet
+    LIFT: 0.034, // the arm lifted this much from hanging (1 − cos: 15°) is enough — a thing close by the feet (the author: «для Акцио не 30°, а 15° и выше»; the other spells keep ~28°, Game._raisedHand)
+    LIFT_OFF: 0.026, // …and it stays «lifted» down to ~13.5° (no flicker on the edge)
     WIDE_ONE: 1.05, // rad (~60°): the only thing in reach comes though the hand points off it
     WIDE_FEW: 0.7, // rad (~40°): two or three things in reach
     NEAR: 0.6, // m: a thing this close may be off the pointing a little more (the hand points down at it)
@@ -57,6 +58,14 @@ export const ACCIO_STUCK = ACCIO.MAX_TIME + 4;
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
+/** The arm is lifted enough for «Акцио» (armLift = 1 − cos from hanging): 15° up, 13,5° down (hysteresis); `was` — it was lifted a moment ago. */
+export function accioLifted(v, was = false) {
+    return typeof v === 'number' && v > (was ? ACCIO.LIFT_OFF : ACCIO.LIFT);
+}
+
+/** Said clearly, but both arms hang lower than 15°: what to do (the second hand's tip is HAND_TIP — a different thing). */
+export const HAND_DOWN_HINT = '🪄 Чтобы Акцио сработало, поднимите руку чуть выше и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м';
+
 export class Accio {
     constructor(game) {
         this.game = game;
@@ -69,7 +78,7 @@ export class Accio {
         if (!st || !st.side) return null;
         const sec = g.dom === 'left' ? 'right' : 'left';
         const lift = g.currentPose?.armLift;
-        const raised = g.character.isArmRaised(sec) || !!(lift && lift[sec] > ACCIO.LIFT);
+        const raised = g.character.isArmRaised(sec) || !!(lift && accioLifted(lift[sec], this._up?.[sec]));
         const now = performance.now() / 1000;
         if (!handTipDue({ flying: true, caughtSide: st.side, secondary: sec, raised, now, last: this._tipAt })) return null;
         this._tipAt = now;
@@ -112,7 +121,9 @@ export class Accio {
         let nearL = null, nearSide = null; // (the thing nearest the line of an arm: taken even outside the cone when there are few things about — see below)
         const inRangeUids = new Set();
         for (const side of ['right', 'left']) {
-            if (!ch.isArmRaised(side) && !(lift && lift[side] > ACCIO.LIFT)) continue;
+            const up = ch.isArmRaised(side) || !!(lift && accioLifted(lift[side], this._up?.[side]));
+            (this._up || (this._up = {}))[side] = up;
+            if (!up) continue;
             dg.raised++;
             const catcher = free(sec) ? sec : null; // (things, books, bodies: the secondary hand only)
             const wandHand = free(g.dom) ? g.dom : catcher; // (a WAND called back: into the wand hand first — the author: «призвать палочку» with the main hand is allowed)
@@ -205,6 +216,7 @@ export class Accio {
             const why = !dg.raised ? 'рука не поднята' : dg.noHand ? 'обе руки заняты' : !dg.inRange ? `в радиусе ${ACCIO.RANGE} м вещей нет (на земле всего ${dg.loose}${dg.nearestAny != null ? `, ближайшая в ${Math.round(dg.nearestAny)} м` : ''}${dg.wands ? `; палочек ${dg.wands}, ближайшая в ${Math.round(dg.wandD)} м (${dg.wandNote})` : '; палочек на земле нет'})` : `рука не наведена на вещь: ближайшая к линии руки — на ${Math.round(dg.nearAng * 57.3)}° в сторону, в ${Math.round(dg.nearD)} м (допуск ${Math.round(ACCIO.CONE * 57.3)}°); вещей в радиусе ${dg.inRange} из ${dg.loose}`;
             g.lastCastWhy = 'цель не найдена: ' + why;
             const busy = !free(sec);
+            if (!dg.raised) { g._whyCode = 'handDown'; return HAND_DOWN_HINT; } // (shown even without a gesture: Game._castWithHints0)
             return busy ? '🪄 Вторая рука занята — сначала освободите её, тогда Акцио сработает' : '🪄 Поднимите руку и направьте её на предмет (меч, лук, щит, палочку, доску…) не дальше 60 м — и скажите «Акцио»';
         }
         if (best.body) {
