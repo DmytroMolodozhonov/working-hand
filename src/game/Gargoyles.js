@@ -28,6 +28,7 @@ import { addDark } from './DarkMagic.js';
 import { headDrops, HEAD } from './HellRules.js';
 import { newUid } from './ItemTypes.js';
 import { realmAt } from '../world/Planets.js';
+import { inHell } from '../world/HellMap.js';
 import { skyVisible } from './SkyRules.js';
 import { underworldFactor } from './HellGargoyleRules.js';
 import { RitualFx } from './GargoyleRitual.js';
@@ -94,7 +95,7 @@ export class Gargoyles {
     canRitual(center) {
         const g = this.game;
         if (!this.enabled) return { ok: false, why: 'off' };
-        if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth') return { ok: false, why: 'realm' };
+        if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth' || inHell(center.x, center.z)) return { ok: false, why: 'realm' }; // (hell: only its patrol — HellRules.HELL_CREATURES)
         if (isSpent(this.spent, center.x, center.z)) return { ok: false, why: 'spent' };
         if (skyVisible(g, center.x, center.y, center.z)) return { ok: false, why: 'sky' }; // (the black clouds gather in the sky: a roof / cave / canopy over the circle — SkyRules.js)
         if (this.rituals.some((r) => hdist(r.c, center) < 30 && r.t < GARGOYLE.FIRE_T + GARGOYLE.RELEASE_T + 20)) return { ok: false, why: 'busy' };
@@ -108,7 +109,7 @@ export class Gargoyles {
     startRitual(center, { by = this.game.localId, silent = false } = {}) {
         const g = this.game, c = g.combat;
         if (!this.enabled) return { ok: false, why: 'off' };
-        if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth') {
+        if (!center || realmAt(center.x, center.y, center.z, g.space?.planets) !== 'earth' || inHell(center.x, center.z)) {
             if (!silent) g.hud?.setVoice?.('🜏 Здесь пентаграмма горгулий молчит', true);
             return { ok: false, why: 'realm' };
         }

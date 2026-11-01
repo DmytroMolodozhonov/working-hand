@@ -50,7 +50,7 @@ import { registerKind } from './CreatureImpact.js';
 import { creditKill } from './Mana.js';
 import { SCROLL_KINDS } from './IceQueen.js';
 import { PHOENIX } from './Phoenixes.js';
-import { realmAt } from '../world/Planets.js';
+import { realmAt, earthly } from '../world/Planets.js';
 import { crowdStep } from './CrowdSources.js';
 import { bossOfWords, bossTo, BOSS_FINDERS } from './OwlBosses.js';
 import { irMaterial, IR } from '../fx/Iridescent.js';
@@ -541,7 +541,7 @@ export class Owls {
         return best;
     }
 
-    _earth(p) { return realmAt(p.x, p.y, p.z, this.game.space?.planets) === 'earth'; }
+    _earth(p) { return earthly(p) && realmAt(p.x, p.y, p.z, this.game.space?.planets) === 'earth'; } // (`earthly` too: hell, the Queen's map lie past the planets — realmAt calls them «earth»)
 
     _ground(x, z) { const y = this.game.collision?.groundY?.(x, z); return Number.isFinite(y) ? y : 0; }
 

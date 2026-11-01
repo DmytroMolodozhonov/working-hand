@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import { CANARIES as C, hash, campLuck, campCandidate, campMembers, campRocks, solveThrow, spreadAt, pebbleDrop } from './CanaryRules.js';
 import { canaryModel, canaryLook, canaryMaterial, poseCanary, rockGeometry, ROCK_VARIANTS, campGeometry, campLayout, reedGeometry, POSE_T } from '../fx/CanaryModel.js';
 import { BLOCK, CANARIES_FROM_GEN } from '../world/Terrain.js';
+import { earthly } from '../world/Planets.js';
 import { FarShape } from '../core/FarShape.js';
 import { crowdStep, crowdNear } from './CrowdSources.js';
 import { BODY_R } from './Crowd.js';
@@ -129,7 +130,7 @@ export class Canaries {
                 const key = gx + ',' + gz, have = this.cells.get(key);
                 if (have !== undefined && have !== 'wait') continue; // (looked at already: a camp, or none)
                 looked++;
-                this.cells.set(key, this._findCamp(gx, gz, seed));
+                this.cells.set(key, earthly({ x: (gx + 0.5) * CELL, y: 0, z: (gz + 0.5) * CELL }) ? this._findCamp(gx, gz, seed) : null); // (only the Earth's marshes: never hell, the Queen's map, a planet — HellRules.HELL_SYSTEMS)
             }
         }
         // load the found ones that a player is near

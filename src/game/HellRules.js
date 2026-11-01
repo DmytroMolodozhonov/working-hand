@@ -16,7 +16,7 @@
  *   Творческий: круг открыт сразу и всё время, голова не нужна.
  */
 
-import { HELL } from '../world/HellMap.js';
+import { HELL, inHell } from '../world/HellMap.js';
 
 export const INFERNUM = {
     COST: 150, // маны при слове
@@ -101,6 +101,64 @@ export function hellSpellBlock(name) {
     if (COLD.test(name || '')) return '♨️ В адском жаре лёд и снег тают, не успев появиться — это заклинание здесь не действует';
     if (name === 'BrainrotMaxima') return '🐉 В аду нет земных драконов — «Брейнрот Максима» некого успокоить';
     return null;
+}
+
+/**
+ * КТО ЖИВЁТ В АДУ (правка автора: «в аду есть сова — убрать; только оговорённые существа»). Белый список — ровно эти; всё остальное в аду не рождается и,
+ * оказавшись там (прилетело за героем, сохранение), убирается (`hellForeign`/`hellSweep` в HellRealm, хост, раз в секунду). Питомцы и призывы игрока
+ * (ездовая лошадь, приручённый дракон, ожившее дерево, добрый снеговик) — не «лишние»: их привёл игрок.
+ */
+export const HELL_CREATURES = {
+    diabolos: { sys: 'diabolos', why: 'бог ада, прикован в котловине' },
+    taron: { sys: 'tarons', why: 'Тароны — лагеря ада' },
+    hellGargoyle: { sys: 'gargoyles', why: 'горгульи ада — только патруль (`o.patrol`); горгульи ритуала Земли в ад не попадают (ритуал — только под небом Земли)' },
+    players: { sys: null, why: 'герой и другие игроки' },
+};
+/**
+ * Все остальные системы существ и почему их в аду нет. `spawn` — как запрет на рождение устроен (`earthly`: x < ZONE_X − 64, ад x ≥ 462016; `offEarth` —
+ * места мира: замки, деревни, логова, данжи, пещеры, болота — в аду их нет), `sweep` — убирается ли случайно попавший (система с `list` и `_remove`).
+ */
+export const HELL_SYSTEMS = {
+    owls: { spawn: 'earthly (раньше — realmAt: ад за планетами считался «Землёй», и сова рождалась и вела героя по аду — исправлено)', sweep: true },
+    phoenixes: { spawn: 'earthly', sweep: true },
+    animals: { spawn: 'earthly (стада, яблони)', sweep: true, keep: 'ездовая лошадь героя и лошади повозок игрока' },
+    spencers: { spawn: 'earthly (рядом с видящим на Земле)', sweep: true },
+    spiders: { spawn: 'earthly (ночь, логово, пещера паучихи — места Земли)', sweep: true },
+    dragons: { spawn: 'earthly (логова Земли)', sweep: true, keep: 'приручённый дракон (`d.tame`)' },
+    zombies: { spawn: 'earthly (ZombieSpawn: тьма Земли, пещеры)', sweep: false },
+    books: { spawn: 'earthly (книги-птицы)', sweep: false },
+    runner: { spawn: 'earthly (бегущая книга)', sweep: false },
+    travelers: { spawn: 'earthly (дороги Земли)', sweep: false },
+    canaries: { spawn: 'offEarth (лагеря на болотах Земли)', sweep: false },
+    ghosts: { spawn: 'offEarth (только в Замке призраков Земли)', sweep: false },
+    castleLife: { spawn: 'offEarth (жители, рыцари, король — места Земли)', sweep: false },
+    wizards: { spawn: 'offEarth (башня, города, одиночки)', sweep: false },
+    sailors: { spawn: 'море Земли (в аду моря нет)', sweep: false },
+    iceCastle: { spawn: 'карта Королевы / дворец Земли', sweep: false },
+    livingTrees: { spawn: 'призыв игрока («Alive») — не лишнее', sweep: false },
+};
+const _posOf = (c) => c?.pos || c?.position || c?.model?.position || c?.mesh?.position || c?.group?.position || null;
+/** Лишнее ли существо этой системы в аду (стоит в аду и не питомец игрока)? */
+export function hellForeign(sysKey, c, game = null) {
+    const S = HELL_SYSTEMS[sysKey], p = _posOf(c);
+    if (!S || !p || !inHell(p.x, p.z) || c.dead) return false;
+    if (sysKey === 'animals' && (c === game?.animals?.riding || c.carriage || c.owner)) return false;
+    if (sysKey === 'dragons' && c.tame) return false;
+    return true;
+}
+/** (хост) Убрать из ада всё лишнее: системы с `list` и `_remove`. → сколько убрано по системам { owls: 1 … }. */
+export function hellSweep(game) {
+    const out = {};
+    for (const k in HELL_SYSTEMS) {
+        if (!HELL_SYSTEMS[k].sweep) continue;
+        const sys = game?.[k];
+        if (!sys?.list || typeof sys._remove !== 'function') continue;
+        for (let i = sys.list.length - 1; i >= 0; i--) {
+            const c = sys.list[i];
+            if (hellForeign(k, c, game)) { sys._remove(c); out[k] = (out[k] || 0) + 1; }
+        }
+    }
+    return out;
 }
 
 /** НА КОГО / НА ЧТО (CLAUDE.md): «Пентаграмма ада» и сам ад. */

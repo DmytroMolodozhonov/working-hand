@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import { HELL, inHell, hellFountains } from '../world/HellMap.js';
-import { LAVA, ABYSS_Y, lavaBurnsItem } from './HellRules.js';
+import { LAVA, ABYSS_Y, lavaBurnsItem, hellSweep } from './HellRules.js';
 import { HELL_TIME } from '../world/VoxelShading.js';
 import { BLOCK } from '../world/Terrain.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
@@ -119,6 +119,12 @@ export class HellRealm {
     update(dt) {
         const g = this.game, data = this.data, me = g.character?.group?.position;
         if (!me || !data?.hell) return;
+        // (host, once a second: only hell's own creatures live in hell — HellRules.HELL_CREATURES; an owl that flew after the hero is taken away)
+        if (g.authority !== false && (this._sweepT = (this._sweepT || 0) - dt) <= 0) {
+            this._sweepT = 1;
+            const gone = hellSweep(g);
+            for (const k in gone) g.perf?.note?.(`🔥 Ад: убрано лишнее существо — ${k} × ${gone[k]}`);
+        }
         const want = inHell(me.x, me.z) ? 1 : 0;
         if (want !== this.k) this.k = want > this.k ? Math.min(1, this.k + dt * 1.5) : Math.max(0, this.k - dt * 1.5);
         const k = this.k;
