@@ -604,7 +604,7 @@ export class WizardFight {
         const dx = fp.x - v.x, dz = fp.z - v.z, L = Math.hypot(dx, dz);
         if (L < 1.5) return false;
         const ux = dx / L, uz = dz / L, fy = fp.y - 1.95;
-        for (const o of v.cs.active.values()) {
+        for (const o of v.cs?.active?.values() ?? []) { // (a free wizard — a wanderer, a duellist — has no castle: nobody of his own in the line)
             if (o === v || o === foe || o.dead) continue; // (the arena's duel: the foe is a wizard of the same tower — he is the target, not «one of his own» in the way)
             const ox = o.x - v.x, oz = o.z - v.z;
             const f = ox * ux + oz * uz;

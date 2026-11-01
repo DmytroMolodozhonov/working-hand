@@ -126,6 +126,12 @@ export const SPELL_PHYSICS = {
     Levitation: null, LevitationMaxima: null, /* (lifts — no push: LevitationMaxima.js) */ LevitateDuel: null, Ice: null, IceDuel: null, IceMaxima: null, IceDuelMaxima: null, Hammer: null,
     // (the strong duel spells push nobody: a haze, a beam of light that bursts or not, a lightning, the black light — StrongMagic)
     Accentric: null, Pilbidrio: null, Electrum: null, Die: null,
+    SuitUp: null, // (the armour goes on, nobody is pushed — Armor.js)
+    LumosFlashlight: null, LumosAhead: null, LumosFollowing: null, // (the Lumos' modes: light only)
+    CreateHouse: null, ImproveHouse: null, IceCastle: null, IceBridge: null, // (building by magic: nobody is pushed)
+    AliveMaxima: null, FlyingMaxima: null, // (a tree comes alive / the flight of a thing or a body: no push by the spell itself)
+    LiquidationDuel: { push: 2, jolt: 1.5 }, LiquidationMaximaDuel: { push: 2, jolt: 1.5 }, // (the duel charge of «Liquidation»: the same splash)
+    StrengthenHouse: null, // (a beam feeds the house ward: nobody is pushed — HouseWards.js)
     Disarmor: null, // (its throw is «Джолт»'s own — Duel._joltCreature / applyToMe)
     Fire: { push: 0, jolt: 0.6 },
     Inferno: { push: 1.5, jolt: 0.6 },

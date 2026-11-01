@@ -34,20 +34,25 @@ function wiz(role, rank, fx, id) {
 }
 const push = (v, x = 60) => ({ v: new THREE.Vector3(x, 0, 0), by: 'me', spell: 'WindMaxima', from: new THREE.Vector3(0, 0, 0) });
 
-test('wizard, no shield: Wind Maxima fells even the Master', () => {
+// (почему обновлено: у волшебников есть «метка абсолютной устойчивости» — Steadiness.creatureAbsolute: у Мастера она всегда, у остальных
+//  по жребию от id; такого не валит ни Wind Maxima, он только шатается в позе «устоял». Поэтому «валится» проверяем на новичке БЕЗ метки)
+const NOVICE = 'cs0_0:n2'; // (no mark — see creatureAbsolute)
+test('wizard, no shield: Wind Maxima fells a novice; the Master (absolute steadiness mark) only reels', () => {
     const { v, ci } = wiz('master', 'master', 0, 'cs0_0:m');
     assert.equal(creatureSteady('v', v), 100);
-    assert.equal(ci.apply(v, push(v)), 'knockdown');
+    assert.equal(ci.apply(v, push(v)), 'stagger');
+    const n = wiz('student', 'novice', 0, NOVICE);
+    assert.equal(n.ci.apply(n.v, push(n.v)), 'knockdown');
 });
 test('wizard, hand shield in front: the Master (100) stays, a novice falls', () => {
     const m = wiz('master', 'master', FX.SHIELD, 'cs0_0:m');
     assert.equal(m.ci.apply(m.v, push(m.v)), 'stagger');
-    const n = wiz('student', 'novice', FX.SHIELD, 'cs0_0:n');
+    const n = wiz('student', 'novice', FX.SHIELD, NOVICE);
     assert.ok(creatureSteady('v', n.v) < 79);
     assert.equal(n.ci.apply(n.v, push(n.v)), 'knockdown');
 });
-test('wizard, hand shield but the wind from behind: falls like without a shield', () => {
-    const m = wiz('master', 'master', FX.SHIELD, 'cs0_0:m');
+test('wizard, hand shield but the wind from behind: a novice falls like without a shield', () => {
+    const m = wiz('student', 'novice', FX.SHIELD, NOVICE);
     m.v.yaw = -Math.PI / 2; // (faces +X, away from the caster)
     assert.equal(m.ci.apply(m.v, push(m.v)), 'knockdown');
 });

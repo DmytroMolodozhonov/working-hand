@@ -54,6 +54,7 @@ export const WORK_PERIOD = 0.9; // s, one hammer / hoe stroke
 
 const LEG_UP = 1.0; // thigh length
 const LEG_LOW = 0.95; // shin + foot
+const FOOT_HALF = 0.2; // half the depth of the boot's box (its corner dips when the shin tilts)
 const REST_WRIST = -1.1; // tool tilt in the hand: forward and a little up
 const DEFAULT_SPEED = { walk: 1.6, run: 5, flee: 5.5 };
 
@@ -1983,8 +1984,10 @@ export class VillagerModel {
         // keep the lower foot on the ground (legs swinging would otherwise lift the body)
         let y = VILLAGER_FOOT_OFFSET;
         if (!sitting) {
-            const dl = LEG_UP * Math.cos(P.lL) + LEG_LOW * Math.cos(P.lL + P.kL);
-            const dr = LEG_UP * Math.cos(P.lR) + LEG_LOW * Math.cos(P.lR + P.kR);
+            // (the boot is a box 0.6 deep: tilted by the shin it dips its corner below the ankle — the weight-shift sway of Charisma bent a knee
+            //  and the foot sank 6 cm into the floor; the lowest corner is what stands on the ground)
+            const dl = LEG_UP * Math.cos(P.lL) + LEG_LOW * Math.cos(P.lL + P.kL) + FOOT_HALF * Math.abs(Math.sin(P.lL + P.kL));
+            const dr = LEG_UP * Math.cos(P.lR) + LEG_LOW * Math.cos(P.lR + P.kR) + FOOT_HALF * Math.abs(Math.sin(P.lR + P.kR));
             y = Math.max(dl, dr);
         }
         this.pelvis.position.y = y + P.bounce;

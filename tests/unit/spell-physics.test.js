@@ -69,6 +69,7 @@ test('Thunderwave at 10 m throws me on my back and hurts; held by the dome (Prot
     const s = me();
     s.combat.shield = { type: 2, side: 'right', left: 50 }; // (the dome: an ordinary Protection does not stop Thunderwave — it comes from above)
     s.combat.shieldFactor = () => 1;
+    s.combat.fatigue = s.combat.maxFatigue = 500; // (почему: Thunderwave стоит 200 маны, купол платит половину — без маны купол разбивается и удар проходит)
     s.combat.hitBySpell('Thunderwave', FRONT10, 'enemy', push.clone());
     assert.equal(s.combat.hp, 20);
     assert.equal(s.knock.down, false, 'never a fall behind a shield (at most a step back)');
@@ -79,6 +80,7 @@ test('Sapira and Lightning knock down by their push; Inferno only drifts', () =>
     a.combat.hitBySpell('Sapira', FRONT10, 'enemy');
     assert.equal(a.knock.state, 'falling');
     const b = me();
+    b.combat.hp = b.combat.maxHp = 40; // (почему: молния бьёт на 20 — Damage.Lightning, весь запас новичка; мёртвый уже не падает)
     b.combat.hitBySpell('Lightning', new THREE.Vector3(1, 0, 0), 'enemy');
     assert.equal(b.knock.state, 'falling', 'electrocuted: always off the feet');
     assert.equal(b.knock.dir, 'left', 'away from the strike');

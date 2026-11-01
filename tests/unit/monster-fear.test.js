@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest';
+// (было на vitest, которого в проекте нет и который не ставится: тест не запускался вовсе — переведён на встроенный node:test, проверки те же)
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { decide, MFEAR, dispelStep, noticeDelay, MONSTER_FEAR_TARGETS } from '../../src/game/MonsterFear.js';
 
+const expect = (v) => ({
+    toBe: (x) => assert.equal(v, x),
+    toBeLessThan: (x) => assert.ok(v < x, `${v} < ${x}`),
+    toBeGreaterThan: (x) => assert.ok(v > x, `${v} > ${x}`),
+});
 const N = 10000;
 const share = (mk, pick) => { let c = 0; for (let i = 0; i < N; i++) if (pick(decide(mk(i)))) c++; return c / N; };
 const near = (x, t) => Math.abs(x - t) < 0.015;
