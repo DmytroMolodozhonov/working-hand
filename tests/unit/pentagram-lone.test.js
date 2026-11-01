@@ -6,7 +6,7 @@ import { lookAt } from '../../src/input/NativeVoice.js';
 import { encode, V, BLANK } from '../../src/audio/SpellSpotter.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
 import { spellPhrase } from '../../src/audio/SpellPhrase.js';
-import { pentagramWords } from '../../src/game/PentagramWords.js';
+import { pentagramWords, pentFirstSaid } from '../../src/game/PentagramWords.js';
 
 /** Строки сети для фразы: буква — 3 кадра, между буквами тишина; tail — тишина в конце. */
 function rows(phrase, tail) {
@@ -49,4 +49,15 @@ test('повторы слов схлопываются: «Пентаграниу
         assert.equal(pentagramWords(o.text), 'life', o.p);
         assert.equal(matchSpell(o.text), 'Pentagranium', o.p);
     }
+});
+
+// настоящий журнал автора: «Пентаграниум Инфернум» слышится буквами «энтегранью» / «етграни» — это НЕ Инферно / Overgrown
+test('искажённое первое слово («энтегранью», «етграни», «интегранюинтернум», «пентограним инфернум») не колдует другие заклинания', () => {
+    for (const t of ['энтегранью', 'етграни', 'интегранюинтернум', 'энтегранью инфер', 'етграни овергроун']) {
+        assert.ok(pentFirstSaid(t), t);
+        assert.equal(matchSpell(t), null, t);
+        for (const o of looks(t)) assert.ok(!o.sure && !matchSpell(o.text), `«${o.p}» → ${o.text}`);
+    }
+    assert.equal(matchSpell('пентограним инфернум'), 'Pentagranium', 'настоящее имя Infernum — пентаграмма, не огонь Инферно');
+    for (const t of ['интеграция данных', 'инфернум', 'овергроун', 'привет как дела', 'пентагон']) assert.equal(pentFirstSaid(t), false, t);
 });

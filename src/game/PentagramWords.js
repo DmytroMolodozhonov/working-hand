@@ -34,7 +34,9 @@ export const PENT_NAMES = {
 export const INFERNUM_WORD = /инф[еэё]р?\s?ну[мсн]|infern[uo][msn]/;
 
 /** «Пентаграниум» (first word) is in the phrase: then only a pentagram may come of it — no other spell's word inside the name. */
-export const pentFirstSaid = (text) => PENT_FIRST.some((w) => String(text || '').toLowerCase().includes(w));
+/** …also as the network writes it badly («энтегранью», «етграни», «интегранюинтернум», «пентограним»): the start «?нт…гран». */
+export const PENT_LIKE = /(пент|энт|ент|инт|ет)[а-я]{0,3}гран|тегран|пентагр|pentagr/;
+export const pentFirstSaid = (text) => { const s = String(text || '').toLowerCase(); return PENT_FIRST.some((w) => s.includes(w)) || PENT_LIKE.test(s); };
 
 /** «Pentagranium Teleportis» — заклинание пентаграммы `id` (для справочника, свитков и подсказок). */
 export const pentagramSpell = (id) => (PENT_NAMES[id] ? `Pentagranium ${PENT_NAMES[id].en}` : null);
