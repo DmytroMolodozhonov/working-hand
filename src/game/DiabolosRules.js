@@ -360,7 +360,8 @@ export function planMove(s, rnd = Math.random) {
     if (s.hidden && !s.beyond) return { kind: 'walk', t: DIRECTOR.WALK_T[1], peek: true }; // (за скалой: подходит и заглядывает)
     if (!s.faced) return { kind: 'turn' }; // (лицом к цели: не плюёт и не бьёт, пока не развернулся — кружат вокруг, он поворачивается)
     const d = s.dist, recent = s.recent || [], cd = s.cd || {};
-    if (s.rest > 0) return !s.beyond && d > DIRECTOR.CLOSE ? { kind: 'walk', t: s.rest } : { kind: 'wait' }; // (переводит дух — идёт ближе)
+    const canWalk = !s.beyond || !s.atLeash; // (цель за цепью — идёт до предела цепи и там рвётся; раньше за цепью он не ходил вовсе — замер в игре: 0 м за 40 с)
+    if (s.rest > 0) return canWalk && d > DIRECTOR.CLOSE ? { kind: 'walk', t: s.rest } : { kind: 'wait' }; // (переводит дух — идёт ближе)
     const band = d <= DIRECTOR.CLOSE ? 0 : d <= DIRECTOR.MID ? 1 : 2;
     const hits = recent.filter((x) => MOVES[x]); // (только удары: ходьба и поступки между ними не «разбавляют» повтор)
     const W = [];
@@ -377,8 +378,8 @@ export function planMove(s, rnd = Math.random) {
         if (hits.slice(0, 3).includes(id)) w *= DIRECTOR.RECENT_K;
         W.push(['move', id, w]);
     }
-    if (!s.beyond && d > DIRECTOR.CLOSE * 0.8) {
-        let w = band === 2 ? 2.4 : 1.4;
+    if (canWalk && d > DIRECTOR.CLOSE * 0.8) {
+        let w = s.beyond ? 3.2 : band === 2 ? 2.4 : 1.4;
         if ((s.walkShare ?? 1) < DIRECTOR.WALK_SHARE) w *= 3;
         if (recent[0] === 'walk' && recent[1] === 'walk') w *= 0.3;
         W.push(['walk', null, w]);

@@ -378,7 +378,7 @@ export class Diabolos {
         const attack = plan.kind === 'move' && !plan.bluff;
         // характер: перед первым ударом — устрашение; цель за цепью и ему нечем ответить — дразнит (язык, «иди сюда», рвёт цепь)
         if (attack && !d.intimidated) { d.intimidated = true; if (this._act(d, 'intimidate')) return; }
-        if (beyond && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); this._say(dist > this.site.len + 90 ? 'run' : 'taunt'); return; } }
+        if (beyond && d.strain > 0.6 && plan.kind !== 'move' && d.actNext <= 0 && Math.abs(turn) < 0.8) { if (this._act(d, 'taunt')) { this._remember(d, 'act'); this._say(dist > this.site.len + 90 ? 'run' : 'taunt'); return; } }
         switch (plan.kind) {
             case 'turn': case 'wait': this._turn(d, turn, dt); this._walk(d, 0, null); return;
             case 'walk': if (plan.peek) this._say('hide'); d.walkFor = plan.t; d.peek = !!plan.peek; this._remember(d, 'walk'); this._walk(d, dt, d.peek && d.lastSeen ? d.lastSeen : tgt.p); this._note(`😈 Дьяволос: решение — ${d.peek ? 'идёт заглянуть, где вы' : 'идёт к цели'}`); return;

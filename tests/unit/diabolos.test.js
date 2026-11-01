@@ -666,3 +666,17 @@ test('ходит и хватает: потревожили — за 60 с про
     for (let i = 0; i < 30 * 150; i++) e.update(1 / 30);
     assert.ok(['sit', 'sleep'].includes(e.d.mode), `успокоился и сел: ${e.d.mode}`);
 });
+
+test('цель за цепью: идёт до предела цепи (а не стоит) и там рвётся', async () => {
+    const { Diabolos } = await import('../../src/game/Diabolos.js');
+    const me = new THREE.Vector3(150, 1.95, 0);
+    const { g } = fakeGame(me);
+    const d = new Diabolos(g); g.diabolos = d;
+    d.place({ devilSeat: { x: 0, z: 0, r: 90, y: 14 }, chainAnchor: { x: 0, y: 23, z: 0 }, chainLen: 70, spawn: { x: 800, z: 0 } });
+    d.update(0.016);
+    d.boltHit(d.d, 'Bombardo', 'me');
+    let path = 0, px = d.d.x, pz = d.d.z, strain = 0;
+    for (let i = 0; i < 30 * 40; i++) { g.combat.hp = 100; d.update(1 / 30); path += Math.hypot(d.d.x - px, d.d.z - pz); px = d.d.x; pz = d.d.z; strain = Math.max(strain, d.d.strain); }
+    assert.ok(path >= 30, `шёл к краю цепи: ${path.toFixed(0)} м`);
+    assert.ok(strain > 0.6, 'дошёл до предела — цепь натянута');
+});
