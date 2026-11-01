@@ -21,8 +21,9 @@ const nvAt = args.indexOf('--nv');
 const NV = await import(nvAt >= 0 ? new URL(args[nvAt + 1], 'file://' + process.cwd() + '/').href : '../../src/input/NativeVoice.js');
 const CHECK = args.includes('--check'), VERB = args.includes('--v');
 const rows = JSON.parse(fs.readFileSync(new URL('../../tests/fixtures/voice-spells.json', import.meta.url), 'utf8'));
+const DUEL_ONLY = args.includes('--duel-only'); // (только боевые слова, без речи — быстро)
 const spells = rows.filter((r) => r.kind === 'spell');
-const talk = rows.filter((r) => r.kind !== 'spell');
+const talk = DUEL_ONLY ? [] : rows.filter((r) => r.kind !== 'spell');
 
 /** Боевые заклинания дуэли (их задержку и меряем). */
 export const DUEL_WORDS = new Set(['джолт', 'остолбеней', 'экспеллиармус', 'сапира', 'айс', 'даст', 'бомбардо', 'фрозен', 'акцио', 'авада кедавра', 'джолт максима', 'бомбардо максима']);
@@ -59,6 +60,8 @@ function gameTakes(o, d) {
 
 /** Одна запись, одна сцена → {name, lag} (lag: мс от последней буквы, null — не сработало). */
 function run(r, scene) {
+    const want = r.kind === 'spell' ? matchSpell(r.text) : null;
+    let base = null;
     const full = NV.lookAt({ id: 1, final: true, T: r.T, lp: r.lp, far: 0 }, {});
     const endK = full.heard.spell ? full.heard.spell.b + 1 : r.T;
     // (q: the voice program's speech detector — s of quiet at the look's end. Here: the «nothing» steps at the end of the look,
@@ -73,10 +76,12 @@ function run(r, scene) {
         const o = NV.lookAt(d, seg);
         seg = o.seg;
         const name = gameTakes(o, d);
-        if (name) return { name, lag: (k - endK) * 40 + COST, k };
+        // (в бою «Бомбардо» летит сразу, а «… Максима» следом — усиление: ждём его, задержка — по нему)
+        if (name && want && name !== want && NV.FIGHT_UPGRADE?.get?.(name) === want) { base = base || name; continue; }
+        if (name) return { name, lag: (k - endK) * 40 + COST, k, base };
         if (final) break;
     }
-    return { name: null, lag: null };
+    return { name: base, lag: null };
 }
 
 const pct = (a, p) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
@@ -87,6 +92,7 @@ for (const sc of scenes) {
     const lags = [], all = [];
     let ok = 0, wrong = 0, talkCast = 0, n = 0;
     for (const r of spells) {
+        if (DUEL_ONLY && !DUEL_WORDS.has(r.text)) continue;
         const want = matchSpell(r.text);
         const o = run(r, sc);
         const isDuel = DUEL_WORDS.has(r.text);

@@ -2458,6 +2458,9 @@ export class Game {
         const now = performance.now(), me = this.localId, p = this.character.group.position;
         if (now - (this.combat?.hurtAt || -1e9) < 8000) return true;
         if (this.duel && this._inDuel()) return true;
+        // (the arena duel itself, a charge flying at me: the author's duel with the tower's head — «Айс», «Даст», «Сапира» heard as
+        //  «эс», «ас», «эпря» were refused as talk: the fight's own rules for the duel's words — SpellPhrase.battleOwn — never came on)
+        if (this.arenaDuels?.meFighting?.() || this.duel?.underFire?.()) return true;
         for (const cs of this.castleLife?.castles?.values?.() || []) {
             if (cs.hostile?.get(me) > Date.now()) return true;
             for (const v of cs.active?.values?.() || []) if (!v.dead && v.foe === me && Math.hypot(v.x - p.x, v.z - p.z) < 30) return true;

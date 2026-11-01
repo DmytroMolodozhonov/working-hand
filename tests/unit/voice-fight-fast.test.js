@@ -76,3 +76,22 @@ test('журнал: задержка по этапам', () => {
     assert.match(s, /слово 400 → тишина после слова 100 → нейросеть 110 → доставка 49 → игра 1.2 мс/);
     assert.equal(latencyStages({}), '');
 });
+
+// Журнал автора 12:47 (дуэль на арене с главой башни): «сапира» буквами «эпря», «айс» — «эс», «даст» — «ас» отсеяны как
+// «короткое заклинание: буквы не похожи — это обычная речь»: игра не считала дуэль на арене боем (Game.inFight), поэтому
+// правило боевых слов (губы двигались, громко) не включалось; «Сапира» в списке боевых не было.
+import { soundTrust } from '../../src/audio/SpellPhrase.js';
+test('дуэль: короткие боевые слова с непохожими буквами — мои, если губы двигались и громко', () => {
+    const base = { lips: true, far: 0.3, snr: 24, combat: true, hope: true };
+    assert.equal(soundTrust({ ...base, spell: 'Sapira', canonical: 'сапира', written: 'эпря', fit: 0.3 }), null);
+    assert.equal(soundTrust({ ...base, spell: 'Ice', canonical: 'айс', written: 'эс', fit: 0.3 }), null);
+    assert.equal(soundTrust({ ...base, spell: 'Sands', canonical: 'даст', written: 'ас', fit: 0.3 }), null);
+    // (вне боя или без движения губ — как раньше: обычная речь)
+    assert.notEqual(soundTrust({ ...base, combat: false, spell: 'Sapira', canonical: 'сапира', written: 'эпря', fit: 0.3 }), null);
+    assert.notEqual(soundTrust({ ...base, lips: null, spell: 'Ice', canonical: 'айс', written: 'эс', fit: 0.3 }), null);
+});
+test('повтор одного слова нейросетью («акцию акцию акцию») — не «разговор»', () => {
+    const h = { lips: true, snr: 24, spell: 'Accio', canonical: 'акцио', written: 'акцию акцию акцию акцию', fit: 1.2 };
+    assert.doesNotMatch(String(soundTrust(h)), /внутри фразы/);
+    assert.match(String(soundTrust({ ...h, written: 'ну давай возьми акцию сейчас' })), /внутри фразы|непохож|не похож|неуверенно/);
+});

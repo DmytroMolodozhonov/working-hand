@@ -161,9 +161,14 @@ function upgradeOf(seg, h, d) {
 
 function lookAtRows(d, seg, lp, refRows) {
     const ref = refRows;
-    let h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr, edge: d.duel && !d.final ? FIGHT_EDGE : undefined });
-    // (a spell ending nearer the cut than a look usually allows: only the fight's early commit takes it — else as if not heard yet)
-    if (h.sure && h.zone && !edgeOk(h, d)) h = { ...h, text: h.written, spell: null, sure: false, echo: false, best: h.spell, early: true };
+    let h = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: !!d.final, cut: !!d.cut, snr: d.snr });
+    // (the fight's early commit: the usual look found nothing sure yet, and the speech detector already hears quiet — look once more
+    // letting a spell end nearer the cut; only a duel's word clear enough is taken from it, anything else stays as the usual look had it.
+    // A second look only then: a look is ~15 ms of the page's time)
+    if (!h.sure && d.duel && !d.final && Number.isFinite(d.q) && d.q >= FIGHT_Q) {
+        const z = hear(lp, d.T, { ref, refT: d.refT, refLead: d.refLead, far: d.far || 0, final: false, cut: !!d.cut, snr: d.snr, edge: FIGHT_EDGE });
+        if (z.sure && z.zone && edgeOk(z, d)) h = z;
+    }
     const next = { ...seg };
     let say = null, echo = null;
     if (h.sure && h.echo) {

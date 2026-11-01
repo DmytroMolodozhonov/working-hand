@@ -419,7 +419,7 @@ export const LOUD_OWN_SNR = 15;
  * In a fight (`combat`), a battle spell of one or two words, my mouth seen moving, my voice above the noise and the fit not below zero,
  * the letters are not asked for (nor the speakers' share): it is mine. Talk is not in a fight; stillness of the lips still refuses.
  */
-export const BATTLE_SPELLS = new Set(['Frozen', 'Expelliarmus', 'Stupefy', 'Protection', 'ProtectionMaxima', 'Stand', 'Accio', 'Bombardo', 'BombardoMaxima', 'Ice', 'Sands', 'Jolt', 'Wind', 'WindMaxima', 'Fire', 'Disarmor', 'Disarm']);
+export const BATTLE_SPELLS = new Set(['Frozen', 'Expelliarmus', 'Stupefy', 'Sapira', 'Protection', 'ProtectionMaxima', 'Stand', 'Accio', 'Bombardo', 'BombardoMaxima', 'Ice', 'Sands', 'Jolt', 'Wind', 'WindMaxima', 'Fire', 'Disarmor', 'Disarm']);
 export const BATTLE_FIT = 0.1;
 export function battleOwn(h, fit) {
     if (!h.combat || h.lips !== true || !BATTLE_SPELLS.has(h.spell) || !(fit >= 0)) return false;
@@ -469,7 +469,8 @@ export function soundTrust(h) {
         // a loud, clear word with the mouth seen moving, the letters of the network off («акцио» written «аксо», «акцу», «акцию»): mine
         const loudOwn = h.lips === true && fit >= LOUD_OWN_FIT && !DANGEROUS.has(h.spell) && (!Number.isFinite(h.snr) || h.snr >= LOUD_OWN_SNR);
         if (!like && !tiny && !loudOwn) return 'короткое заклинание: буквы не похожи — это обычная речь';
-        const said = norm(h.written ?? '').split(' ').filter(Boolean).length, own = norm(h.canonical || '').split(' ').filter(Boolean).length;
+        // (the network on a long look sometimes writes one word over and over — «эсплямус акцию акцию акцию»: one word, not a sentence)
+        const said = norm(h.written ?? '').split(' ').filter((w, i, a) => w && w !== a[i - 1]).length, own = norm(h.canonical || '').split(' ').filter(Boolean).length;
         if (said > own + 2) return 'короткое заклинание внутри фразы — это разговор';
     }
     let need = 0;
