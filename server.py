@@ -147,19 +147,42 @@ def game_version():
 _BUILD = {"id": "", "at": 0.0}
 
 
-# What each kind of the boot cache is made from (BootCache.js): only a change in THESE files makes that kind anew — an
-# update of the game that does not touch them keeps it (the author updates many times a day: the whole cache went at each).
-# The library three.js is in every kind. A kind not here uses the whole build.
-KIND_FILES = {
-    "sound": ("src/audio", "src/fx/SpellManager.js", "src/game/NihilisWords.js", "src/game/PentagramWords.js"),
-    "realbody": ("src/entities/real",),
-    "realwear": ("src/entities/real",),
+# What each kind of the boot cache is made from (BootCache.js): the version of a kind is a hash of the CONTENTS of every
+# file its result depends on — found by following the imports (static and import('…')) from its root modules. An update of
+# the game that does not touch them keeps that kind (the author updates many times a day: the whole cache went at each).
+# A new kind: its root modules here (the module that makes the result and the ones the game hands it, e.g. the icons'
+# makeItemModel / buildWeapon). The library three.js is in every kind.
+KIND_ROOTS = {
+    "sound": ("src/audio/SoundManager.js",),
+    "realbody": ("src/entities/real/RealBuild.js", "src/entities/real/realbody.worker.js"),
+    "realwear": ("src/entities/real/RealWear.js", "src/entities/real/realbody.worker.js"),
+    "icon": ("src/ui/ItemIcons.js", "src/game/ItemTypes.js", "src/entities/WeaponModels.js"),
 }
 _KINDS = {"v": None, "at": 0.0}
+_IMPORT_RE = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s+)['"](\.{1,2}/[^'"]+)['"]""", re.M)
+
+
+def import_closure(roots):
+    """Every game file reachable from these modules by their relative imports (sorted)."""
+    seen, todo = set(), [os.path.normpath(r) for r in roots]
+    while todo:
+        f = todo.pop()
+        if f in seen or not os.path.isfile(f):
+            continue
+        seen.add(f)
+        try:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        base = os.path.dirname(f)
+        for m in _IMPORT_RE.finditer(text):
+            todo.append(os.path.normpath(os.path.join(base, m.group(1))))
+    return sorted(seen)
 
 
 def kind_builds():
-    """A hash of the CONTENTS of each kind's files (not their times: a fresh copy of the same code keeps the cache)."""
+    """A hash of the contents of each kind's files (not their times: a fresh copy of the same code keeps the cache)."""
     now = time.time()
     if _KINDS["v"] is not None and now - _KINDS["at"] < 5:
         return _KINDS["v"]
@@ -171,16 +194,14 @@ def kind_builds():
     except OSError:
         pass
     out = {}
-    for kind, tops in KIND_FILES.items():
+    for kind, roots in KIND_ROOTS.items():
         h = common.copy()
-        for top in tops:
-            files = [top] if os.path.isfile(top) else sorted(os.path.join(b_, f) for b_, _d, fs in os.walk(top) for f in fs)
-            for fp in files:
-                try:
-                    with open(fp, "rb") as fh:
-                        h.update(fp.replace(os.sep, "/").encode() + b"\0" + fh.read() + b"\0")
-                except OSError:
-                    pass
+        for fp in import_closure(roots):
+            try:
+                with open(fp, "rb") as fh:
+                    h.update(fp.replace(os.sep, "/").encode() + b"\0" + fh.read() + b"\0")
+            except OSError:
+                pass
         out[kind] = h.hexdigest()[:16]
     _KINDS["v"] = out
     _KINDS["at"] = now
