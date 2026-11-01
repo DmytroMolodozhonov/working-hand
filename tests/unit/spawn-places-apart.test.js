@@ -160,3 +160,34 @@ test('Ледяная Королева: в любом сиде, с ледяной
         assert.ok(at, `seed ${seed}, арена ${iceArena}: нет твёрдого места`);
     }
 });
+
+test('«Ад»: в списке мест; герой спускается через тёмный переход на твёрдую землю ада, воздух над головой, Дьяволос ≤ 1 км; Земля мира та же; назад — к началу мира', async () => {
+    const { SPAWN_SPOTS } = await import('../../src/game/SpawnSpots.js');
+    const { HELL, hellPlan } = await import('../../src/world/HellMap.js');
+    const { HellGate } = await import('../../src/game/HellGate.js');
+    const THREE = await import('three');
+    const spot = SPAWN_SPOTS.find((s) => s.id === 'hellmap');
+    assert.ok(spot && spot.label === 'Ад', 'в списке пишется просто «Ад»');
+    for (const seed of [1, 2026]) {
+        const t = new TerrainData();
+        t.generate({ seed, mountains: true, seas: true, lush: true, deepCaves: true, test: true, slopes: true, furnish: true, apart: true, hell: true });
+        const e = make(seed);
+        for (const [x, z] of [[0, 0], [40, -30], [-300, 200]]) assert.equal(t.heightAt(x, z), e.heightAt(x, z), 'Земля этого мира не меняется (на возврат)');
+        const P = t.hellPlan, s = P.spawn;
+        const L = stand(t, s.x, s.z, s.y, 3, 3);
+        assert.ok(L != null, `seed ${seed}: твёрдо под ногами и 6 слоёв воздуха`);
+        assert.ok(Math.hypot(P.devilSeat.x - s.x, P.devilSeat.z - s.z) <= HELL.DEVIL_DIST_MAX, 'Дьяволос ближе 1 км');
+        void hellPlan;
+    }
+    // the passage: through the gate's own dark, the way back — to the start of the world
+    const g = { config: { mode: 'creative' }, hud: { setVoice() {} }, terrain: { data: { hell: true, hellPlan: hellPlan(1) } }, character: { group: { position: new THREE.Vector3(0, 22, 0) } }, heroApply: { pending: null, _hover() {} }, perf: { note() {} }, achievements: { gain() {} } };
+    g.hellGate = new HellGate(g);
+    assert.ok(g.hellGate.startIn(), 'переход начался');
+    for (let i = 0; i < 10; i++) g.hellGate.update(0.1);
+    assert.equal(g.heroApply.pending?.id, 'hell');
+    assert.equal(g.heroApply.pending.t.layer, HELL.SPAWN_Y);
+    assert.equal(g.hellGate.from.start, 1);
+    assert.deepEqual(g.hellGate._where({ id: 'hell:back' }), { x: 3, z: 3 }, 'назад — к начальной площадке');
+    const back = new HellGate(g); back.restore(g.hellGate.snapshot());
+    assert.equal(back.from.start, 1, 'сохранение помнит, что вход был с начала мира');
+});

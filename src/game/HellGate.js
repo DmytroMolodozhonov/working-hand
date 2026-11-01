@@ -70,8 +70,8 @@ export class HellGate {
     // ------------------------------------------------------------ per frame
     update(dt) {
         const g = this.game, P = this.P;
+        if (this.trans) { this._transStep(dt); return; } // (the passage goes on with or without pentagrams — «Где появиться: Ад» needs none)
         if (!P) return;
-        if (this.trans) { this._transStep(dt); return; }
         this._backMark(dt);
         const me = g.character?.group?.position;
         if (!me) return;
@@ -120,7 +120,7 @@ export class HellGate {
         if (!plan) return null;
         if (m.id !== BACK_ID) return this.inHell ? null : plan.spawn;
         const f = this.from || { x: 0, y: 0, z: 0 };
-        return { x: f.x + 5.5, z: f.z };
+        return f.start ? { x: 3, z: 3 } : { x: f.x + 5.5, z: f.z };
     }
 
     /** The workers make the land of the other side now, with what they have spare (TerrainView.prefetch; once in a while — cheap). */
@@ -149,7 +149,20 @@ export class HellGate {
         return null;
     }
 
-    _go(m) {
+    /**
+     * «Где появиться: Ад» (Творческий, SpawnSpots): the hero goes down as through the gates — the same dark, the same wait for the land — and the
+     * way back from the mark is the start of the world (`from.start`). Already in hell (a saved game) — nothing. → started?
+     */
+    startIn() {
+        const g = this.game, me = g.character?.group?.position;
+        if (!this.plan || !me || !g.heroApply) return false;
+        if (this.inHell) return true;
+        this.trans = null;
+        this._go({ id: 'start', x: me.x, y: me.y - PLAYER_GROUND_OFFSET, z: me.z }, { start: true });
+        return !!this.trans;
+    }
+
+    _go(m, o = null) {
         const g = this.game, plan = this.plan;
         if (!plan || g.isDeadLocal || g.combat?.dead) { this.inside = null; return; }
         const down = m.id !== BACK_ID;
@@ -157,12 +170,13 @@ export class HellGate {
         const me = g.character.group.position;
         let to;
         if (down) {
-            this.from = { x: Math.round(m.x * 10) / 10, y: Math.round(m.y * 10) / 10, z: Math.round(m.z * 10) / 10 };
+            this.from = o?.start ? { x: 3, y: 0, z: 3, start: 1 } : { x: Math.round(m.x * 10) / 10, y: Math.round(m.y * 10) / 10, z: Math.round(m.z * 10) / 10 };
             const s = plan.spawn;
             to = { x: s.x, z: s.z, layer: s.y, up: 3, down: 3, yaw: Math.atan2(HELL.CX - s.x, HELL.CZ - s.z) }; // (a bearing: facing the middle of hell — HeroApply._land)
         } else {
             const f = this.from || { x: 0, y: 0, z: 0 };
-            // (beside the pentagram, not on it: the circle there may still be open — 5 m off, on dry land; HeroApply.safeNear looks round for it)
+            if (f.start) to = { x: 3, z: 3, yaw: 0 }; // (came by «Где появиться: Ад»: back to the start of the world, on dry land)
+            else // (beside the pentagram, not on it: the circle there may still be open — 5 m off, on dry land; HeroApply.safeNear looks round for it)
             to = { x: f.x + 5.5, z: f.z, yaw: 0, layer: Math.round(f.y + 0.5), up: 10, down: 10 }; // (firm ground by the pentagram's own layer: a shore by the water counts too)
         }
         this.inside = null;
@@ -309,7 +323,7 @@ export class HellGate {
     restore(s) {
         if (!s) return;
         const f = s.from;
-        this.from = f && Number.isFinite(+f.x) && Number.isFinite(+f.z) ? { x: +f.x, y: +f.y || 0, z: +f.z } : null;
+        this.from = f && Number.isFinite(+f.x) && Number.isFinite(+f.z) ? { x: +f.x, y: +f.y || 0, z: +f.z, ...(f.start ? { start: 1 } : null) } : null;
         this.been = !!s.been;
     }
 

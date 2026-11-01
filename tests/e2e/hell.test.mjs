@@ -96,3 +96,42 @@ test('the hell: the pentagram, the offering, the passage down, the head of a gar
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 }, { timeout: 3000000 });
+
+test('«Где появиться: Ад» (Творческий): through the dark passage onto the land of hell, the land round drawn before the screen opens; the mark leads back to the start', async () => {
+    const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
+    await startFromMenu(page, 'creative', { smooth: true }).catch(async (e) => {
+        if (!/Timeout/.test(e.message)) throw e;
+        await page.waitForFunction(() => window.__zns.game && window.__zns.game.active, null, { timeout: 420000 });
+    });
+    await waitHudVisible(page, 120000);
+    const r = await page.evaluate(async () => {
+        const g = window.__zns.game, d = g.terrain.data, sleep = (ms) => new Promise((res) => setTimeout(res, ms)), me = g.character.group.position, out = {};
+        g.hero.spawn = 'hellmap';
+        g.heroApply.requestSpawn();
+        out.started = !!g.hellGate.trans;
+        for (let i = 0; i < 4000 && !(g.hellGate.inHell && !g.heroApply.pending && !g.hellGate.trans); i++) await sleep(100);
+        out.inHell = g.hellGate.inHell; out.pass = g.hellGate.lastPass; out.miss = g.world.terrain.ringMissing(me.x, me.z, 200);
+        const sp = d.hellPlan.spawn; out.dist = Math.hypot(me.x - sp.x, me.z - sp.z);
+        out.feet = me.y - 2 - (d.heightAt(Math.round(me.x), Math.round(me.z)) - 0.5);
+        out.from = g.hellGate.from;
+        const bm = g.pentagranium.marks.get('hell:back');
+        for (let i = 0; i < 1200 && !(g.pentagranium.marks.get('hell:back')?.gateOpen > 0); i++) await sleep(100);
+        const m = g.pentagranium.marks.get('hell:back');
+        out.markOpen = m?.gateOpen > 0; void bm;
+        if (!m) return out;
+        await sleep(4500); // (just arrived: the circle under the feet does not take one back at once — step off and on again)
+        me.set(m.x + 8, m.y + 2.1, m.z); await sleep(600); me.set(m.x, m.y + 2.1, m.z); g.character.verticalVelocity = 0;
+        for (let i = 0; i < 4000 && (g.hellGate.inHell || g.heroApply.pending || g.hellGate.trans); i++) await sleep(100);
+        out.back = !g.hellGate.inHell; out.backDist = Math.hypot(me.x, me.z);
+        return out;
+    });
+    console.log(JSON.stringify(r));
+    assert.ok(r.started, 'the passage began');
+    assert.ok(r.inHell && r.dist < 30 && Math.abs(r.feet) < 1.5, 'in hell, on the floor by the mark');
+    assert.ok(r.pass && r.pass.left === 0 && r.miss === 0, 'the land round drawn before the screen opened: ' + JSON.stringify(r.pass));
+    assert.equal(r.from?.start, 1);
+    assert.ok(r.markOpen, 'Creative: the mark is open');
+    assert.ok(r.back && r.backDist < 40, 'back at the start of the world: ' + r.backDist);
+    assert.deepEqual(realErrors(errors), []);
+    await page.close();
+}, { timeout: 3000000 });
