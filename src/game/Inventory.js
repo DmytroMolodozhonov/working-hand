@@ -432,7 +432,7 @@ export class Inventory {
     select(i, side = null) {
         if (i >= 0 && this.monsterShut()) return; // (the free hand, -1, stays: it takes nothing)
         if (i === this.selected && (this.inHand || i < 0)) return;
-        this.watch('выбор ячейки', () => {
+        (this.watch ? (f) => this.watch('выбор ячейки', f) : (f) => f())(() => {
             this._putBackHand(side);
             const n = this.slots.length + 1;
             this.selected = ((((i + 1) % n) + n) % n) - 1;
@@ -697,7 +697,7 @@ export class Inventory {
      * The wand's pocket (the left one): put the wand away (from whichever hand holds it), or draw
      * it — always into the RIGHT hand (the left only if the right is busy), whichever hand went in.
      */
-    wandPocket(side) { return this.watch('карман палочки', () => this._wandPocket(side)); }
+    wandPocket(side) { return this.watch ? this.watch('карман палочки', () => this._wandPocket(side)) : Inventory.prototype._wandPocket.call(this, side); }
 
     _wandPocket(side) {
         if (this.monsterShut()) return false;
