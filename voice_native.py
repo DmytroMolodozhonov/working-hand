@@ -247,7 +247,8 @@ class CtcNet:
         slopes = pts[None, :] - freqs[:, None]
         self.fb = np.maximum(0, np.minimum(-slopes[:, :-2] / diff[:-1], slopes[:, 2:] / diff[1:])).astype(np.float32)
 
-    def logprobs(self, audio):
+    def features(self, audio):
+        """16 kHz sound → the network's input: 64 mel bands per 10 ms, (n, 64) float32 (cheap: done on the processor)."""
         np = self.np
         audio = np.asarray(audio, dtype=np.float32)
         if len(audio) < 320 * 4:
@@ -257,9 +258,170 @@ class CtcNet:
         spec = np.abs(np.fft.rfft(audio[idx] * self.win, n=320)) ** 2
         # (einsum, not «@»: numpy's maths library would wake a thread on every core of the computer for
         # this small sum, and they spin on after it — the game's frames wait for them)
-        feats = np.log(np.clip(np.einsum("tf,fm->tm", spec, self.fb, optimize=False), 1e-9, 1e9)).astype(np.float32)
-        out = self.sess.run(None, {"features": feats.T[None], "feature_lengths": np.array([n], dtype=np.int64)})[0][0]
-        return out  # (T, 34)
+        return np.log(np.clip(np.einsum("tf,fm->tm", spec, self.fb, optimize=False), 1e-9, 1e9)).astype(np.float32)
+
+    def run(self, feats):
+        """The features → the network's log-probabilities (T, 34) on the processor."""
+        n = feats.shape[0]
+        return self.sess.run(None, {"features": feats.T[None], "feature_lengths": self.np.array([n], dtype=self.np.int64)})[0][0]
+
+    def logprobs(self, audio):
+        return self.run(self.features(audio))  # (T, 34)
+
+
+ORT_GPU_DIR = os.path.join(ROOT, "vendor", "ort-gpu")  # (onnxruntime with DirectML: the same folder the V5 hands install — hand_v5.ort_gpu_dir)
+GPU_GAIN = 0.85  # the video card is used when it takes at most this share of the processor's time on a look
+GPU_SAME = 0.97  # …and its letters are the processor's on at least this share of rows (a card that computes otherwise is not used)
+
+
+class GpuCtc:
+    """The same network on the video card, in a program of its own (voice_gpu.py: its own onnxruntime with DirectML / CUDA / CoreML).
+    run(feats) → (T, 34). Raises when the program is gone (the caller goes back to the processor)."""
+
+    def __init__(self, folder, ort_dir=None, timeout=120):
+        import json
+        import subprocess
+        import struct
+        self.struct = struct
+        flags = 0x08000000 if sys.platform.startswith("win") else 0  # (CREATE_NO_WINDOW; NORMAL priority: it is on the path of every spell)
+        self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "voice_gpu.py"), folder, ort_dir or ""],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=flags)
+        self.lock = threading.Lock()
+        got = [None]
+
+        def hello():
+            try:
+                tag, data = self._recv()
+                got[0] = json.loads(data) if tag == b"HELO" else {"ok": False, "why": "неверный ответ"}
+            except Exception as e:  # noqa: BLE001
+                got[0] = {"ok": False, "why": f"программа видеокарты закрылась ({e or type(e).__name__})"}
+        t = threading.Thread(target=hello, daemon=True)
+        t.start()
+        t.join(timeout)
+        info = got[0] or {"ok": False, "why": "программа видеокарты не ответила"}
+        if not info.get("ok"):
+            self.close()
+            raise RuntimeError(info.get("why") or "видеокарта недоступна")
+        self.info = info
+
+    def _recv(self):
+        r = self.p.stdout
+        head = r.read(8)
+        if len(head) < 8:
+            raise EOFError("нет ответа")
+        n = self.struct.unpack("<I", head[4:])[0]
+        data = r.read(n)
+        if len(data) < n:
+            raise EOFError("ответ оборван")
+        return head[:4], data
+
+    def run(self, feats):
+        import numpy as np
+        feats = np.ascontiguousarray(feats, dtype=np.float32)
+        with self.lock:
+            self.p.stdin.write(b"RUN " + self.struct.pack("<I", feats.shape[0]) + feats.tobytes())
+            self.p.stdin.flush()
+            tag, data = self._recv()
+        if tag != b"OUT ":
+            raise RuntimeError("программа видеокарты сломалась")
+        return np.frombuffer(data, np.float32).reshape(-1, LETTERS)
+
+    def close(self):
+        try:
+            self.p.stdin.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.p.kill()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def gpu_verdict(np, cpu_run, gpu_run, feats_list, cpu_ms, gpu_ms):
+    """Is the video card worth it? (pure: tests) → (use, why). Its letters must be the processor's, and it must be faster."""
+    same = total = 0
+    for f in feats_list:
+        a, b = cpu_run(f), gpu_run(f)
+        if a.shape != b.shape:
+            return False, f"видеокарта считает иначе (размер {b.shape} вместо {a.shape})"
+        same += int((a.argmax(1) == b.argmax(1)).sum())
+        total += a.shape[0]
+    share = same / max(1, total)
+    if share < GPU_SAME:
+        return False, f"видеокарта считает иначе (совпало {share * 100:.0f} % букв)"
+    if not gpu_ms <= cpu_ms * GPU_GAIN:
+        return False, f"видеокарта не быстрее: {gpu_ms:.0f} мс против {cpu_ms:.0f} мс на процессоре"
+    return True, f"{gpu_ms:.0f} мс на 3 с звука против {cpu_ms:.0f} мс на процессоре (совпало {share * 100:.0f} % букв)"
+
+
+class VoiceNet:
+    """What the pipeline calls: logprobs(audio). The processor's network at once; the video card's, when the background check
+    (choose_gpu) found it works and is faster. Any failure of the video card → back to the processor for good, the reason logged."""
+
+    def __init__(self, cpu):
+        self.cpu = cpu
+        self.gpu = None
+        self.device = "CPU"
+        self.why = "проверяю видеокарту…"
+
+    def logprobs(self, audio):
+        feats = self.cpu.features(audio)
+        g = self.gpu
+        if g is not None:
+            try:
+                return g.run(feats)
+            except Exception as e:  # noqa: BLE001
+                self.gpu = None
+                self.device, self.why = "CPU", f"видеокарта перестала отвечать ({type(e).__name__}: {e}) — дальше на процессоре"
+                print("  Голос: " + self.why)
+                g.close()
+        return self.cpu.run(feats)
+
+    def choose_gpu(self, folder, on_change=None):
+        """(a thread of its own, after the voice already works on the processor) Try the video card, measure, decide."""
+        import numpy as np
+        if os.environ.get("ZNS_VOICE_GPU") == "0":
+            self.why = "видеокарта выключена (ZNS_VOICE_GPU=0)"
+            print("  Голос: нейросеть на процессоре — " + self.why)
+            return
+        g = None
+        try:
+            ort_dir = None
+            if sys.platform.startswith("win"):
+                if os.path.isdir(os.path.join(ORT_GPU_DIR, "onnxruntime")):
+                    ort_dir = ORT_GPU_DIR
+                else:
+                    from hand_v5 import ort_gpu_dir  # (installs onnxruntime-directml into vendor/ort-gpu once: the hands use it too)
+                    ort_dir = ort_gpu_dir(lambda m: print(m.replace("[Камера] Кисти V5", "Голос")))
+            g = GpuCtc(folder, ort_dir)
+            rng = np.random.default_rng(7)
+            feats = [rng.normal(-6, 3, (n, 64)).astype(np.float32) for n in (120, 300)]
+            z = feats[1]
+
+            def best(run):
+                ts = []
+                for _ in range(5):
+                    t = time.perf_counter()
+                    run(z)
+                    ts.append((time.perf_counter() - t) * 1000)
+                return sorted(ts)[2]
+            cpu_ms, gpu_ms = best(self.cpu.run), best(g.run)
+            use, why = gpu_verdict(np, self.cpu.run, g.run, feats, cpu_ms, gpu_ms)
+            prov = g.info.get("provider", "?")
+            if use:
+                self.gpu, self.device, self.why = g, "GPU", f"{prov}: {why}"
+                print("  Голос: нейросеть распознавания на видеокарте — " + self.why)
+            else:
+                g.close()
+                self.why = f"{prov}: {why}"
+                print("  Голос: нейросеть распознавания на процессоре — " + self.why)
+        except Exception as e:  # noqa: BLE001
+            if g is not None:
+                g.close()
+            self.why = f"{e}"
+            print("  Голос: нейросеть распознавания на процессоре — " + self.why)
+        if on_change:
+            on_change()
 
 
 class Vad:
@@ -691,6 +853,8 @@ class NativeVoice:
             "pageRef": self._page is not None,  # (the game's voice chat is taken out of the microphone: its copy comes from the page)
             "cost": round(self.cost, 1),
             "raised": getattr(self, "raised", 0),  # (Windows: the speech threads above normal priority)
+            "device": getattr(getattr(self, "net", None), "device", None),  # (the spell network on the video card or the processor, and why)
+            "deviceWhy": getattr(getattr(self, "net", None), "why", None),
         }
 
     def download_models(self):
@@ -821,7 +985,10 @@ class NativeVoice:
             from livekit import rtc
             ctc_dir, vad_path = self.model_paths()
             before = _thread_ids()
-            ctc = CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS") or voice_threads()))
+            ctc = VoiceNet(CtcNet(ctc_dir, threads=int(os.environ.get("ZNS_VOICE_THREADS") or voice_threads())))
+            self.net = ctc
+            # (the video card is tried meanwhile: the voice works on the processor from the first second — «Всё сложное — на видеокарту»)
+            threading.Thread(target=ctc.choose_gpu, args=(ctc_dir, lambda: self._emit({"type": "status", **self.status()})), daemon=True).start()
             vad = Vad(vad_path)
             self.raised = raise_speech_threads(before)  # (Windows: above normal — a call / the game no longer delay the looks)
             mic_box, ref_box = {}, {}

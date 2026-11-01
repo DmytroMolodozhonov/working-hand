@@ -373,7 +373,7 @@ export class NativeVoice {
             // (q: s of quiet already after the words; cut: the look missed the phrase's start — TalkFlow waits for its end)
             q: Number.isFinite(d.q) ? d.q : null, cut: !!d.cut,
             // (the speech network's own time on this look, and when its sound had ended — the talk's stopwatch tells why words come late)
-            cost: d.cost, soundEnd: Number.isFinite(d.t1) && this.off != null ? d.t1 + this.off : null };
+            cost: d.cost, dev: this.status?.device || null, soundEnd: Number.isFinite(d.t1) && this.off != null ? d.t1 + this.off : null };
         // (how much better than needed the spell fit: over a villager's voice only a clear one is mine — GameVoices)
         // (when the speech itself ended — the quiet heard after it taken off: the talk's stopwatch starts there)
         if (Number.isFinite(d.q) && Number.isFinite(meta.to) && !r.heard.spell) meta.end = meta.to - d.q * 1000;

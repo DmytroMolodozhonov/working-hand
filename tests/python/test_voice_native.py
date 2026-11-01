@@ -207,3 +207,60 @@ class MicChoice(unittest.TestCase):
         self.assertFalse(v._mic_change.is_set())
         self.assertTrue(v.set_mic("default"))
         self.assertEqual(v.mic_wanted, "")
+
+
+class VoiceGpuTest(unittest.TestCase):
+    """The spell network on the video card (voice_gpu.py): used only when its letters are the processor's and it is faster."""
+
+    def _np(self):
+        import numpy as np
+        return np
+
+    def test_verdict(self):
+        import voice_native as v
+        np = self._np()
+        a = np.zeros((10, 34), np.float32); a[:, 3] = 1
+        b = a.copy()
+        same = lambda f: a  # noqa: E731
+        other = lambda f: b  # noqa: E731
+        self.assertTrue(v.gpu_verdict(np, same, other, [0], 300, 40)[0])
+        self.assertFalse(v.gpu_verdict(np, same, other, [0], 300, 290)[0])  # (not faster)
+        b[:, 3] = 0; b[:, 5] = 1
+        use, why = v.gpu_verdict(np, same, other, [0], 300, 40)
+        self.assertFalse(use)
+        self.assertIn("иначе", why)
+
+    def test_falls_back_to_processor(self):
+        import voice_native as v
+        np = self._np()
+
+        class Cpu:
+            def features(self, audio):
+                return np.zeros((8, 64), np.float32)
+
+            def run(self, f):
+                return np.full((2, 34), 7, np.float32)
+
+        class Broken:
+            def run(self, f):
+                raise EOFError("нет ответа")
+
+            def close(self):
+                pass
+        net = v.VoiceNet(Cpu())
+        net.gpu, net.device = Broken(), "GPU"
+        out = net.logprobs(np.zeros(1600, np.float32))
+        self.assertEqual(float(out[0, 0]), 7.0)
+        self.assertEqual(net.device, "CPU")
+        self.assertIsNone(net.gpu)
+
+    def test_choose_off(self):
+        import os
+        import voice_native as v
+        os.environ["ZNS_VOICE_GPU"] = "0"
+        try:
+            net = v.VoiceNet(object())
+            net.choose_gpu("nowhere")
+            self.assertEqual(net.device, "CPU")
+        finally:
+            del os.environ["ZNS_VOICE_GPU"]
