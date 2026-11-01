@@ -14,6 +14,7 @@ import { crowdStep, spotTaken } from './CrowdSources.js';
 import { wardsOf, pushOut } from './ShieldWalls.js';
 import { BODY_R } from './Crowd.js';
 import * as THREE from 'three';
+import { bootTimer } from '../core/BootTimer.js';
 import { VoiceGate } from './VoiceGate.js';
 import { VoxelWorld, MAP_CELL } from '../world/World.js';
 import { VoxelCharacter, PLAYER_GROUND_OFFSET, BODY_H, CROUCH } from '../entities/Character.js';
@@ -733,7 +734,9 @@ export class Game {
         this.playerHP = this.maxHP;
 
         progress(66, 'Расстановка объектов...');
+        bootTimer.begin('· расстановка объектов');
         if (!isTest) this._populate(config);
+        bootTimer.end('· расстановка объектов');
 
         this.net && this.net.active ? (this.sync = new NetSync(this, this.net)) : (this.sync = null);
 
@@ -3755,9 +3758,15 @@ export class Game {
      * sounds (SoundManager.warmAll) and the looks of Circle Attack and Inspirius (their shaders).
      */
     async warmUp(progress = () => {}) {
+        const B = bootTimer;
+        B.begin('· звуки (дождаться)');
         try { await this.sound?.warmAll?.(progress); } catch (e) { console.warn('[Game] sounds warm-up', e); }
+        B.end('· звуки (дождаться)');
+        B.begin('· иконки вещей');
         // the slots' pictures of the things met most (and of what the hero carries now): made on the loading screen
         try { await this.itemIcons?.warmAsync(this._iconSamples()); } catch (e) { console.warn('[Game] icons warm-up', e); }
+        B.end('· иконки вещей');
+        B.begin('· корабли, места, заклинания');
         // the ships of a harbour by the start: made and woken now (in play — up to 50 ms a frame each)
         try {
             const sh = this.ships;
@@ -3781,7 +3790,10 @@ export class Game {
         try { this.boom?.warm(); } catch (e) { /* (only a head start) */ }
         try { prepareStructure(); } catch (e) { /* (only a head start) */ } // (the buffers of the checks of the buildings — Structure.js)
         // (real trees: every shape made now — a few ms each; not over a new forest in flight)
+        B.end('· корабли, места, заклинания');
+        B.begin('· деревья');
         try { const f = this.world?.forest; if (f) for (const step of f.warmSteps()) { step(); await new Promise((r) => setTimeout(r, 0)); } } catch (e) { console.warn('[Game] trees warm-up', e); }
+        B.end('· деревья');
     }
 
     /**

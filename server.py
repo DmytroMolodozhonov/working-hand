@@ -135,8 +135,43 @@ def game_version():
         except OSError:
             pass
     date = time.strftime("%d.%m.%Y %H:%M", time.localtime(newest)) if newest else ""
+    # (build: a hash of every game file's name, size and time — the boot cache's key, BootCache.js: any change of the
+    # game, an update or an edit, gives another build and the kept results of the old one are never read)
+    build = build_id()
     # (zns: the game's own marker — the launcher never takes another program on this port for the game)
-    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else "", "zns": "zns-game"}
+    return {"date": date, "sha": sha[:7], "full": sha if len(sha) == 40 else "", "zns": "zns-game", "build": build}
+
+
+_BUILD = {"id": "", "at": 0.0}
+
+
+def build_id():
+    """A hash of the game's files (src/, the pages, the vendored libraries' names and sizes): the boot cache's version.
+    Kept 5 s (the menu asks once; walking ~700 files takes a few ms)."""
+    now = time.time()
+    if _BUILD["id"] and now - _BUILD["at"] < 5:
+        return _BUILD["id"]
+    import hashlib
+    h = hashlib.sha1()
+    for top in ("src", "vendor"):
+        for base, dirs, files in os.walk(top):
+            dirs.sort()
+            for f in sorted(files):
+                fp = os.path.join(base, f)
+                try:
+                    st = os.stat(fp)
+                except OSError:
+                    continue
+                h.update(f"{fp}|{st.st_size}|{int(st.st_mtime)}\n".encode("utf-8", "replace"))
+    for f in ("index.html", "server.py"):
+        try:
+            st = os.stat(f)
+            h.update(f"{f}|{st.st_size}|{int(st.st_mtime)}\n".encode())
+        except OSError:
+            pass
+    _BUILD["id"] = h.hexdigest()[:16]
+    _BUILD["at"] = now
+    return _BUILD["id"]
 
 
 _LATEST = {"sha": "", "at": 0.0}

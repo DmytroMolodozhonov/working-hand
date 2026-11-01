@@ -23,6 +23,7 @@
  */
 import { LEG_SAFE, safeRaise } from '../input/LegSafe.js';
 import * as THREE from 'three';
+import { readyBootCache, cacheKey } from '../core/BootCache.js';
 import { BONE_COUNT, BONE_NAMES, B, ANAT, FLOOR, FINGER_NAMES, HEADX, restPose, armRest, legRest } from './real/RealRig.js';
 import { realSkinMaterial, realProxyMaterial, realHairMaterial } from './real/RealSkinMaterial.js';
 import { wearKey } from './real/RealWear.js';
@@ -60,11 +61,26 @@ function ask(msg, local) {
         w.postMessage({ ...msg, id });
     });
 }
+/**
+ * The boot cache (BootCache.js): the worker's result of the last start of this build read back from the disk (the shapes
+ * do not depend on anything but the code: bit for bit the same — tests/unit/boot-cache.test.js); a miss — the worker, and
+ * its result kept. `field` is the part of the answer kept ('body' / 'lods').
+ */
+function askKept(kind, key, msg, local, field) {
+    return readyBootCache().then((cache) => (cache ? cache.getTree(kind, key) : null)).catch(() => null).then((kept) => {
+        if (kept && kept[field]) return kept;
+        return ask(msg, local).then((d) => {
+            // (copied into the record now: the arrays are handed to the geometries and stay as they are)
+            if (d && d[field]) readyBootCache().then((c) => c?.putTree(kind, key, { [field]: d[field] })).catch(() => {});
+            return d;
+        });
+    });
+}
 /** The skin's shapes: a promise of {lods: [{body, head}], inverses, rest}. */
 export function realLibrary() {
     if (_lib) return _lib.promise;
     _lib = { data: null };
-    _lib.promise = ask({ body: true }, () => import('./real/RealBuild.js').then((m) => ({ body: m.buildRealBody() })))
+    _lib.promise = askKept('realbody', 'realbody/v1', { body: true }, () => import('./real/RealBuild.js').then((m) => ({ body: m.buildRealBody() })), 'body')
         .then((d) => (_lib.data = toGeometries(d.body)));
     return _lib.promise;
 }
@@ -74,7 +90,7 @@ export function realWear(key) {
     let e = _wear.get(key);
     if (e) { _wear.delete(key); _wear.set(key, e); return e.promise; } // (the most recent last)
     e = { data: null };
-    e.promise = ask({ wear: key }, () => import('./real/RealWear.js').then((m) => ({ lods: [m.buildRealWear(key, 0), m.buildRealWear(key, 1)] })))
+    e.promise = askKept('realwear', 'realwear/' + cacheKey('w', key), { wear: key }, () => import('./real/RealWear.js').then((m) => ({ lods: [m.buildRealWear(key, 0), m.buildRealWear(key, 1)] })), 'lods')
         .then((d) => (e.data = d.lods.map((l) => ({ hair: l.hair && geoOf(l.hair), headAcc: l.headAcc && geoOf(l.headAcc), bodyAcc: l.bodyAcc && geoOf(l.bodyAcc) }))));
     _wear.set(key, e);
     // (only so many looks kept: the oldest one nobody wears goes)

@@ -50,6 +50,19 @@ def profile_dir(exe, home=None):
     return os.path.join(home or home_dir(), "browser", name)
 
 
+def no_cache_wanted(argv=None, environ=None):
+    """The start without the boot cache (BootCache.js): `--no-cache` on the launcher's command line or ZNS_NO_CACHE=1."""
+    argv = sys.argv if argv is None else argv
+    environ = os.environ if environ is None else environ
+    return "--no-cache" in argv or bool(environ.get("ZNS_NO_CACHE"))
+
+
+def with_no_cache(url, argv=None, environ=None):
+    if not no_cache_wanted(argv, environ) or "nocache" in url:
+        return url
+    return url + ("&" if "?" in url else "?") + "nocache=1"
+
+
 def with_app_query(url):
     if not own_profile_on() or APP_QUERY in url:
         return url
@@ -78,6 +91,7 @@ def window_cmd(exe, url, own=None, home=None):
     """The command line of the game's window (opened off the screen: the page cuts the frame away
     and brings it to the middle — zns_window)."""
     own = own_profile_on() if own is None else own
+    url = with_no_cache(url)
     cmd, flags, off = [exe], list(GAME_FLAGS), list(FEATURES_OFF)
     if own:
         d = profile_dir(exe, home)

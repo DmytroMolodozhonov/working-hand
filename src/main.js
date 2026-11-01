@@ -48,6 +48,11 @@ import { castContextLine } from './core/SpellLog.js';
 import { runUpdate, updateIfNewer, canUpdate, rememberRejoin, pendingRejoin } from './ui/UpdateScreen.js';
 import { CREATIVE_RESTART_KEY, creativeRestartConfig, takeCreativeRestart } from './game/CreativeRestart.js';
 import { setTextureRenderer } from './core/GpuTexture.js';
+import { bootTimer } from './core/BootTimer.js';
+import { prespawnTerrainWorkers } from './world/TerrainView.js';
+import { initBootCache, bootCache, clearBootCaches } from './core/BootCache.js';
+initBootCache({ log: (t) => netLog(t) }); // (the boot cache: opened at once — the server's build is asked while the menu loads)
+const PAGE_READY_MS = performance.now(); // (the page's scripts and modules loaded and run up to here: «программа → меню»)
 
 const $ = (id) => document.getElementById(id);
 
@@ -1081,16 +1086,53 @@ const ui = {
     },
 };
 
+let soundLoading = null; // (the sounds' files: started already in the menu — preloadSoundInMenu — and only waited for here)
+let soundShowProgress = false;
 async function ensureSound() {
-    if (sound) {
+    soundShowProgress = true;
+    if (sound && !soundLoading) {
         updateProgress(60);
         return;
     }
+    if (!soundLoading) startSoundLoad();
+    else updateProgress(5, 'Загрузка звуков...');
+    await soundLoading;
+    soundLoading = null;
+    if (sound.holdMusic) { sound.holdMusic = false; sound.playAmbientMusic(); } // (loaded in the menu: its music only now, in the game)
+}
+function startSoundLoad() {
     sound = new SoundManager(camera);
     window.soundManager = sound;
-    updateProgress(5, 'Загрузка звуков...');
-    await sound.loadSounds((p) => updateProgress(5 + p * 55, `Загрузка звуков: ${Math.round(p * 100)}%`));
+    if (!soundShowProgress) sound.holdMusic = true; // (the menu stays quiet)
+    if (soundShowProgress) updateProgress(5, 'Загрузка звуков...');
+    soundLoading = sound.loadSounds((p) => { if (soundShowProgress) updateProgress(5 + p * 55, `Загрузка звуков: ${Math.round(p * 100)}%`); });
+    soundLoading.catch(() => {}); // (a failure is met by ensureSound's await, as before — not an unhandled one in the menu)
 }
+/**
+ * The sounds' files are read and decoded while the player is still in the menu (the browser decodes them on its own
+ * threads): «Начать» then does not wait for them. Quiet — the music starts only with the game (SoundManager.holdMusic).
+ * Not on a phone-sized test page and not when the page is opened for a tool (no menu).
+ */
+function preloadSoundInMenu() {
+    if (window.__ZNS_NO_MENU_PRELOAD__ || starting || game) return; // (a game started already — its own workers and sounds)
+    try { prespawnTerrainWorkers(); } catch (e) { /* (made at the start, as before) */ } // (the land's workers load the generator meanwhile)
+    if (sound || soundLoading) return;
+    try { startSoundLoad(); } catch (e) { sound = null; soundLoading = null; console.warn('[Sound] preload', e); }
+}
+// Settings → Графика: «Быстрая загрузка (кеш)» (on by default; off — from the next start) and «Очистить кеш»
+{
+    const tg = document.getElementById('boot-cache-toggle'), btn = document.getElementById('boot-cache-clear'), info = document.getElementById('boot-cache-info');
+    try { if (tg) tg.checked = localStorage.getItem('zns-boot-cache') !== '0'; } catch (e) { /* no storage */ }
+    tg?.addEventListener('change', () => { try { localStorage.setItem('zns-boot-cache', tg.checked ? '1' : '0'); } catch (e) { /* no storage */ } if (info) info.textContent = tg.checked ? ' Включится со следующего запуска.' : ' Выключено со следующего запуска.'; });
+    btn?.addEventListener('click', async () => {
+        let n = 0;
+        try { n = await clearBootCaches(); } catch (e) { /* (nothing to clear) */ }
+        if (bootCache) bootCache.writable = false; // (this start writes nothing more: the next one makes everything anew)
+        if (info) info.textContent = n ? ' Кеш очищен.' : ' Кеш пуст.';
+        netLog('⚡ Кеш: очищен вручную');
+    });
+}
+setTimeout(() => { (window.requestIdleCallback || ((f) => setTimeout(f, 0)))(preloadSoundInMenu, { timeout: 2000 }); }, 600);
 
 let starting = false;
 async function startGame(config, welcome = null) {
@@ -1111,8 +1153,31 @@ async function startGameInner(config, welcome) {
     loadingScreen.classList.remove('hidden');
     loadingScreen.style.display = 'flex';
     updateProgress(2, 'Инициализация...');
+    const B = bootTimer;
+    B.reset();
+    B._readyNoted = false;
     try {
-        await ensureSound();
+        // the camera and its networks start at once, at the same time as the sounds and the world are made (they are other processes and
+        // workers: no waiting one after the other); its lines show on the bar only once the world is ready
+        let camStatus = '', camWaiting = false;
+        B.begin('камера (параллельно)');
+        const camPromise = (async () => {
+            if (window.__ZNS_NO_CAMERA__) return true;
+            try {
+                poseService.onStatus = (t) => { camStatus = t; if (camWaiting) updateProgress(75, t); };
+                // (V5 hands couldn't start: the player is told — shown once the game is on)
+                poseService.onNotice = (t) => { if (game?.active && game.hud?.notify) game.hud.notify('✋ ' + t, 9000); };
+                await poseService.initialize('webcam', 'preview-video', config);
+                // No camera: a panel explains why, lists the cameras and keeps retrying
+                return await startCamera(poseService);
+            } catch (e) {
+                console.error('Camera/AI init failed:', e);
+                camStatus = 'Камера недоступна: ' + (e?.message || e) + '. Проверьте разрешение камеры.';
+                if (camWaiting) updateProgress(85, camStatus);
+                return false;
+            }
+        })().finally(() => B.end('камера (параллельно)'));
+        await B.span('звуки (файлы)', () => ensureSound());
         await sound.resume();
         sound.enabled = true;
         sound.setVolume(parseInt(volInput.value, 10));
@@ -1128,44 +1193,38 @@ async function startGameInner(config, welcome) {
         game.settings.sensitivity = settings.sensitivity;
         game.settings.drifting = config.drifting !== false;
         game.settings.leftHanded = !!config.leftHanded;
-        await game.init(config, updateProgress);
+        await B.span('мир и объекты (init)', () => game.init(config, updateProgress));
         if (welcome && game.sync) game.sync.applyWelcome(welcome);
         // the players' voice chat (the host's choice at creation; the guests get it from the host) and the friend's-echo guard
         if (net.active) {
             game.voiceChat = new VoiceChat({ net, game, voice, serverMode: config.voiceChat });
             voiceChatUi?.attach(game.voiceChat);
         }
+        // the sounds made ahead (read from the boot cache, or synthesized a piece at a time) at the same time as the world is
+        // drawn: the land comes from the workers, the main thread mostly waits for it (Game.warmUp then finds them made)
+        const soundsWarm = game.sound ? B.span('синтез звуков (параллельно)', () => game.sound.warmAll()) : null;
         // the whole visible world is built on the loading screen (the first seconds of play stay smooth)
-        await game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`));
+        await B.span('земля вокруг', () => game.loadNearby((f) => updateProgress(66 + Math.round(f * 4), `Прорисовка мира... ${Math.round(f * 100)}%`)));
         // the sounds and the spells' looks otherwise made in the first seconds of play (each a hitch): now
-        await game.warmUp((f) => updateProgress(70, `Подготовка звуков... ${Math.round(f * 100)}%`));
+        await soundsWarm?.catch?.(() => {});
+        await B.span('прогрев (звуки, иконки, деревья)', () => game.warmUp((f) => updateProgress(70, `Подготовка звуков... ${Math.round(f * 100)}%`)));
 
         const preview = $('webcam-preview');
         if (preview) preview.style.display = config.showHands ? 'block' : 'none';
         hud.setVoice('🎤 ОЖИДАНИЕ КОМАНДЫ...', true);
 
         updateProgress(70, 'Инициализация камеры...');
-        let cameraOk = true;
-        if (!window.__ZNS_NO_CAMERA__) {
-            try {
-                poseService.onStatus = (t) => updateProgress(75, t);
-                // (V5 hands couldn't start: the player is told — shown once the game is on)
-                poseService.onNotice = (t) => { if (game?.active && game.hud?.notify) game.hud.notify('✋ ' + t, 9000); };
-                await poseService.initialize('webcam', 'preview-video', config);
-                // No camera: a panel explains why, lists the cameras and keeps retrying
-                cameraOk = await startCamera(poseService);
-            } catch (e) {
-                cameraOk = false;
-                console.error('Camera/AI init failed:', e);
-                updateProgress(85, 'Камера недоступна: ' + (e?.message || e) + '. Проверьте разрешение камеры.');
-            }
-        }
-
+        camWaiting = true;
+        if (camStatus) updateProgress(75, camStatus);
+        const cameraOk = await camPromise; // (started with the world's loading — usually ready long before)
         updateProgress(90, 'Компиляция шейдеров...');
         await new Promise((r) => requestAnimationFrame(r));
+        B.begin('шейдеры');
         // every shader and picture sent to the video card in pieces (the page keeps answering; the bar moves)
         await game.prewarmAsync((f) => updateProgress(90 + Math.round(f * 9), `Компиляция шейдеров... ${Math.round(f * 100)}%`));
+        B.end('шейдеры');
         game.revealed = false;
+        B.begin('до «можно играть»');
         game.start();
         if (poseService._noticed) setTimeout(() => game.hud?.notify?.('✋ ' + poseService._noticed, 9000), 1500); // (said before the game was on)
         if (net.isHost && game.sync) net.broadcast(game.sync.welcomeMessage());
@@ -1174,6 +1233,11 @@ async function startGameInner(config, welcome) {
 
         const reveal = () => {
             try { localStorage.removeItem('zns-gl-at'); } catch (e) { /* no storage */ }
+            B.end('до «можно играть»');
+            try { netLog(B.line(`загрузка (${config.mode}${config.saved ? ', сохранение' : ''}${net.isClient ? ', гость' : ''})`) + ` | страница до меню ${(PAGE_READY_MS / 1000).toFixed(1)} с`); } catch (e) { /* (only the journal) */ }
+            window.__zns.boot = { ...B.table(), pageMs: PAGE_READY_MS, cache: bootCache.line() };
+            try { netLog(bootCache.line()); } catch (e) { /* (only the journal) */ }
+            setTimeout(() => bootCache.trim(), 20000); // (over the limit: the oldest records go — later, when the game runs)
             game.revealed = true; // (the frames before it are behind the loading screen: PerfLog says so of their hitches)
             loadingScreen.classList.add('hidden');
             loadingScreen.style.display = 'none';
@@ -1192,6 +1256,7 @@ async function startGameInner(config, welcome) {
             // (Game.readyToShow; the safety stopwatch of 45 s inside it; the tests' software drawing skips only the smooth run)
             const rd = game.readyToShow(started, { needCalm: !window.__ZNS_FIXED_QUALITY__ });
             if (!rd.ok) { updateProgress(90 + Math.round(rd.frac * 9), rd.text); return; }
+            if (!B._readyNoted) { B._readyNoted = true; B.note(`готово (земля, шейдеры, плавность) через ${((performance.now() - started) / 1000).toFixed(1)} с после старта`); }
             // (Creative «Где появиться»: the hero is carried to the chosen place behind this screen — no start platform seen first, no visible jump;
             //  held until the ground there is made and a few frames are drawn on it; a place that cannot be made gives up in 75 s: HeroApply says why)
             if (game.heroApply?.pending && performance.now() - started < 75000) { settleFrame = null; updateProgress(100, 'Переносим к выбранному месту...'); return; }

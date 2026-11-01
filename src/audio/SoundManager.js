@@ -24,6 +24,7 @@ import { synthTaron, TARON_SOUNDS } from './TaronSounds.js';
 import { synthThrow, THROW_SOUNDS } from './ThrowSounds.js';
 import { synthGrab, GRAB_SOUNDS } from './GrabSounds.js';
 import * as THREE from 'three';
+import { readyBootCache } from '../core/BootCache.js';
 import { houseTheme, houseThemeBreak } from './HouseTheme.js';
 
 const FILES = [
@@ -156,7 +157,7 @@ export class SoundManager {
         if (this.scene) this.setScene(this.scene);
         this.loaded = true;
         this.prepareSpellMusic(); // (starts the worker now: ready long before the loading screen ends)
-        this.playAmbientMusic();
+        if (!this.holdMusic) this.playAmbientMusic(); // (loaded in the menu ahead of «Начать»: main.js starts the music with the game)
         // (the tune of «Create a House» and the other long sounds: made on the loading screen — warmAll)
     }
 
@@ -165,9 +166,19 @@ export class SoundManager {
      * of play — each of them a frozen frame: a 10 s hum, a choir, a blast), made now, on the loading
      * screen, with pauses between pieces so the loading screen still moves. Once per session (kept).
      */
-    async warmAll(onProgress) {
-        if (!this.context || !this.loaded || this._allWarm) return;
+    warmAll(onProgress) {
+        // (started early — with the world's drawing, main.js — and asked again by Game.warmUp: the same work, once)
+        if (this._warmP) return this._warmP;
+        if (!this.context || !this.loaded || this._allWarm) return Promise.resolve();
+        this._warmP = this._warmAll(onProgress).finally(() => { this._warmP = null; });
+        return this._warmP;
+    }
+
+    async _warmAll(onProgress) {
         const pause = () => new Promise((r) => setTimeout(r, 0));
+        // (the boot cache: the sounds made at the last start of this build are read back from the disk — BootCache.js)
+        const had = new Set(Object.keys(this.sounds));
+        const cached = await this._readSoundCache();
         let n = 0;
         while (this.prewarmStep()) { onProgress?.(Math.min(0.6, ++n / 20)); await pause(); }
         this.prepareHouseTheme(); this.prepareCastleTheme(); onProgress?.(0.7);
@@ -177,11 +188,51 @@ export class SoundManager {
         while (!this.prepareInspirius()) await pause();
         while (!this.prepareBoom()) await pause(); // («Бум»: the swelling groan and the blast with its long echo)
         onProgress?.(0.9);
+        this._writeSoundCache(had, cached); // (not waited for: written while the game goes on)
         // (the spells' tunes and effects: in a worker since loadSounds — SpellMusic.js; not ready yet — at most
         // a moment more: the rest come in play, only put into buffers then, no synthesis in a frame)
         await Promise.race([this.prepareSpellMusic(pause), new Promise((r) => setTimeout(r, 1500))]);
         onProgress?.(1);
         this._allWarm = true;
+    }
+
+    /** The cache's key of the sounds made on the loading screen (the build is in the cache's name; the rate changes every sample). */
+    _soundCacheKey() { return `sound/warm-${this.context.sampleRate}-${this.context.destination?.channelCount ?? 2}`; }
+
+    /** The kept sounds put back (each an AudioBuffer of the same rate, the same samples). @returns the set of their names */
+    async _readSoundCache() {
+        const got = new Set();
+        try {
+            const cache = await readyBootCache();
+            if (!cache) return got;
+            const tree = await cache.getTree('sound', this._soundCacheKey());
+            if (!tree || tree.sr !== this.context.sampleRate || !Array.isArray(tree.list)) return got;
+            for (const e of tree.list) {
+                if (!e || typeof e.k !== 'string' || this.sounds[e.k] || !Array.isArray(e.ch) || !e.ch.length) continue;
+                const len = e.ch[0].length;
+                if (!len || e.ch.some((c) => !(c instanceof Float32Array) || c.length !== len)) continue;
+                const b = this.context.createBuffer(e.ch.length, len, tree.sr);
+                e.ch.forEach((c, i) => b.copyToChannel(c, i));
+                this.sounds[e.k] = b;
+                got.add(e.k);
+            }
+        } catch (e) { /* (made as before) */ }
+        return got;
+    }
+
+    /** Every sound made on this loading screen (not the files, not the ones read back) kept for the next start. */
+    _writeSoundCache(had, cached) {
+        const list = [];
+        let fresh = 0;
+        for (const [k, b] of Object.entries(this.sounds)) {
+            if (had.has(k) || !(b instanceof AudioBuffer)) continue;
+            if (!cached.has(k)) fresh++;
+            const ch = [];
+            for (let i = 0; i < b.numberOfChannels; i++) ch.push(b.getChannelData(i));
+            list.push({ k, ch });
+        }
+        if (!fresh || !list.length) return; // (everything came from the disk: nothing new to keep)
+        readyBootCache().then((cache) => cache?.putTree('sound', this._soundCacheKey(), { sr: this.context.sampleRate, list })).catch(() => {});
     }
 
     loadBuffer(path) {

@@ -42,7 +42,7 @@ export function fakeVideo(image = 'thumb_up.jpg') {
     return out;
 }
 
-export async function launch({ video = null, extraArgs = [] } = {}) {
+export async function launch({ video = null, extraArgs = [], userDataDir = null, viewport = { width: 1280, height: 720 } } = {}) {
     const args = [
         '--use-fake-ui-for-media-stream',
         '--use-fake-device-for-media-stream',
@@ -54,6 +54,12 @@ export async function launch({ video = null, extraArgs = [] } = {}) {
     if (video) args.push(`--use-file-for-fake-video-capture=${video}`);
     args.push(...extraArgs);
     const executablePath = process.env.ZNS_CHROME || undefined; // (a Chromium of another build than the Playwright one: ZNS_CHROME=/path/to/chrome)
+    if (userDataDir) {
+        // (a profile kept on the disk between starts, as the launcher's own: the browser's shader cache and the game's
+        // boot cache live there — tools/entrybench.mjs --profile-dir, the cold and the warm start)
+        const ctx = await chromium.launchPersistentContext(userDataDir, { args, executablePath, viewport, headless: true });
+        return { newPage: async () => ctx.pages()[0] || ctx.newPage(), close: () => ctx.close(), context: ctx };
+    }
     return chromium.launch({ args, executablePath });
 }
 

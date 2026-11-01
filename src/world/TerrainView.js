@@ -45,6 +45,25 @@ const POOL_MAX = 64; // idle chunk shells kept for reuse
  */
 const PRE_MAX = 160; // chunks made ahead of time and waiting (prefetch: the land round the other side of the gates of hell)
 
+/**
+ * The land's workers started while the player is still in the menu (main.js): each loads its modules (the whole
+ * generator) ahead, so «Начать» only sends them the world's settings. Nothing is made before that — a worker
+ * does nothing until its 'init'. Taken by the first TerrainView; one that failed meanwhile is dropped.
+ */
+const _spareWorkers = [];
+export function prespawnTerrainWorkers() {
+    if (_spareWorkers.length || typeof Worker === 'undefined' || typeof window === 'undefined' || window.__ZNS_NO_TERRAIN_WORKERS__) return 0;
+    const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2)); // (as _startWorkers)
+    try {
+        for (let i = 0; i < n; i++) {
+            const w = new Worker(new URL('./terrain.worker.js', import.meta.url), { type: 'module' });
+            w.onerror = (e) => { e.preventDefault?.(); const k = _spareWorkers.indexOf(w); if (k >= 0) _spareWorkers.splice(k, 1); w.terminate(); };
+            _spareWorkers.push(w);
+        }
+    } catch (e) { /* (made at the start, as before) */ }
+    return _spareWorkers.length;
+}
+
 export class Terrain {
     constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, viewDistance = 112 } = {}) {
         this.scene = scene;
@@ -176,7 +195,7 @@ export class Terrain {
         try {
             const ws = [];
             for (let i = 0; i < n; i++) {
-                const w = new Worker(new URL('./terrain.worker.js', import.meta.url), { type: 'module' });
+                const w = _spareWorkers.shift() || new Worker(new URL('./terrain.worker.js', import.meta.url), { type: 'module' });
                 w.load = 0;
                 w.onmessage = (e) => this._onBuilt(w, e.data);
                 w.onerror = (e) => { e.preventDefault?.(); this._stopWorkers(); };

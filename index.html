@@ -424,6 +424,15 @@
                     <div id="set-graphics" class="sub-pane">
                     <div class="settings-group">
                         <label>
+                            <input type="checkbox" id="boot-cache-toggle" checked>
+                            Быстрая загрузка (кеш)
+                        </label>
+                        <div class="setting-hint">Игра запоминает на диске то, что долго готовить при каждом запуске (звуки, картинки вещей, модель героя), и следующий вход в мир быстрее. Если что-то выглядит или звучит странно — нажмите «Очистить кеш».</div>
+                        <button id="boot-cache-clear" class="menu-btn" style="background: #7f8c8d; margin-top: 6px; font-size: 0.85em;">🧹 Очистить кеш</button>
+                        <span id="boot-cache-info" class="setting-hint"></span>
+                    </div>
+                    <div class="settings-group">
+                        <label>
                             <input type="checkbox" id="show-fps-toggle">
                             Показывать FPS
                         </label>

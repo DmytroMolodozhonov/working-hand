@@ -23,16 +23,22 @@ const LIMITS = { afterMs: 120, longestMs: 9000, firstFrameS: 100, groundS: 200 }
 
 const port = 8900 + Math.floor(Math.random() * 100);
 const srv = await startServer(port);
-const browser = await launch();
+const PROFILE_DIR = opt('profile-dir', null); // (a kept profile: run twice — the first start is cold, the second warm)
+const NOCACHE = args.includes('--no-cache');
+const browser = await launch(PROFILE_DIR ? { userDataDir: PROFILE_DIR, viewport: { width: 640, height: 360 } } : {});
 let out = 0;
 try {
-    const { page, errors } = await openPage(browser, srv.url, { noCamera: true, viewport: { width: 640, height: 360 } });
+    const { page, errors } = await openPage(browser, srv.url + (NOCACHE ? '?nocache' : ''), { noCamera: true, viewport: { width: 640, height: 360 } });
     const cdp = await page.context().newCDPSession(page);
     if (CPU > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
     await page.evaluate(() => {
         window.__lt = [];
         new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push({ t: e.startTime, d: e.duration }); }).observe({ type: 'longtask', buffered: true });
     });
+    // (the player is in the menu a few seconds before «Начать»: what the menu starts ahead — the sounds' files, the land's
+    // workers, the boot cache — has that time, as at home; --menu-wait 0: the start at once)
+    const MENU_WAIT = parseFloat(opt('menu-wait', '4'));
+    if (MENU_WAIT > 0) await sleep(MENU_WAIT * 1000);
     if (PROFILE) await cdp.send('Profiler.enable'), await cdp.send('Profiler.setSamplingInterval', { interval: 1000 }), await cdp.send('Profiler.start');
     const t0 = await page.evaluate((a) => {
         const z = window.__zns, t = performance.now();
@@ -74,6 +80,13 @@ try {
     for (const e of lt.slice(0, 8)) console.log(`   +${((e.t - t0) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
     console.log(`ПОСЛЕ ЗАКРЫТИЯ ЭКРАНА (${AFTER} с): кадров ${post.frames}, очередь чанков ${post.queue}, долгих задач ${post.lt.length}, самая долгая ${(post.lt[0]?.d || 0).toFixed(0)} мс, сумма ${(post.lt.reduce((a, b) => a + b.d, 0) / 1000).toFixed(1)} с`);
     for (const e of post.lt.slice(0, 8)) console.log(`   +${((e.t - window0(e)) / 1000).toFixed(1)} с  ${e.d.toFixed(0)} мс`);
+    const boot = await page.evaluate(() => window.__zns.boot || null);
+    if (boot) {
+        console.log(`\nЭТАПЫ (страница до меню ${(boot.pageMs / 1000).toFixed(1)} с; от «Начать» до «можно играть» ${(boot.total / 1000).toFixed(1)} с):`);
+        for (const r of boot.rows) console.log(`   ${(r.ms / 1000).toFixed(2).padStart(7)} с  (с ${(r.at / 1000).toFixed(1)})  ${r.name}`);
+        for (const n of boot.notes) console.log('   ' + n);
+        if (boot.cache) console.log('   ' + boot.cache);
+    }
     const inf = await page.evaluate(() => { const g = window.__zns.game, i = g.renderer.info; const by = {}; for (const p of i.programs) by[p.name] = (by[p.name] || 0) + 1; return { programs: i.programs.length, geometries: i.memory.geometries, textures: i.memory.textures, by, prewarmed: g.prewarmedPrograms, late: i.programs.slice(g.prewarmedPrograms).map((p) => `${p.name} | ${String(p.cacheKey).slice(0, 160)}`) }; });
     console.log(`шейдеров: ${inf.programs} (после прогрева ${inf.prewarmed}), геометрий ${inf.geometries}, текстур ${inf.textures}`, JSON.stringify(inf.by));
     const who = await page.evaluate(() => { const g = window.__zns.game, r = g.renderer, late = new Set(r.info.programs.slice(g.prewarmedPrograms).map((p) => p.cacheKey)), out = [];

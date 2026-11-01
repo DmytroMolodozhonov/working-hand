@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { readyBootCache } from '../core/BootCache.js';
 
 /** The properties a thing's model is drawn by (all whole numbers, flags or names). */
 const LOOK = ['model', 'color', 'plain', 'dragon', 'type', 'magic', 'spell', 'stat', 'piece', 'named', 'archmage', 'of', 'rec', 'ward', 'swift', 'cooked'];
@@ -151,11 +152,61 @@ export class ItemIcons {
 
     /** The same, a few pictures at a time with the thread given back between (the loading screen stays alive). */
     async warmAsync(items, budget = 12) {
-        for (const it of items) this.url(it);
-        while (this.queue.length) {
-            this.update(budget);
-            await new Promise((r) => setTimeout(r, 0));
+        // (the boot cache: the pictures of the last start of this build, on this video card, are read back — BootCache.js)
+        const kept = await this._readKept();
+        this._collect = new Map();
+        try {
+            for (const it of items) this.url(it);
+            while (this.queue.length || this._pending) {
+                this.update(budget);
+                await new Promise((r) => setTimeout(r, 0));
+            }
+        } finally {
+            const fresh = this._collect;
+            this._collect = null;
+            if (fresh.size) this._writeKept(kept, fresh);
         }
+    }
+
+    /** The cache's key: the pictures depend on the video card and its driver (another card → drawn again). */
+    _keptKey() {
+        let gpu = '';
+        try {
+            const gl = this.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+            gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) + '|' + gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.RENDERER);
+        } catch (e) { gpu = '?'; }
+        return `icon/${SIZE}-${OUT}-` + Array.from(String(gpu)).reduce((h, c) => (Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0), 2166136261).toString(16);
+    }
+
+    /** The kept pictures put into the cache (each made into a data URL from its pixels: ~1 ms). @returns Map key → pixels */
+    async _readKept() {
+        const kept = new Map();
+        try {
+            const cache = await readyBootCache();
+            if (!cache || !this.renderer) return kept;
+            const tree = await cache.getTree('icon', this._keptKey());
+            if (!tree || !Array.isArray(tree.list)) return kept;
+            this._setup();
+            const out = this._ctx || (this._ctx = this._out.getContext('2d', { willReadFrequently: true }));
+            const img = this._img || (this._img = out.createImageData(OUT, OUT));
+            for (const e of tree.list) {
+                if (!e || typeof e.k !== 'string' || !(e.px instanceof Uint8Array) || e.px.length !== OUT * OUT * 4) continue;
+                kept.set(e.k, e.px);
+                if (this.cache.has(e.k)) continue;
+                img.data.set(e.px);
+                out.putImageData(img, 0, 0);
+                this._store(e.k, this._out.toDataURL('image/png'));
+            }
+        } catch (e) { /* (drawn as before) */ }
+        return kept;
+    }
+
+    /** The pictures of this start with the kept ones (the newest first, ICON_CACHE_MAX at most) — for the next start. */
+    _writeKept(kept, fresh) {
+        const list = [];
+        for (const [k, px] of fresh) list.push({ k, px });
+        for (const [k, px] of kept) if (!fresh.has(k) && list.length < ICON_CACHE_MAX) list.push({ k, px });
+        readyBootCache().then((cache) => cache?.putTree('icon', this._keptKey(), { list })).catch(() => {});
     }
 
     _setup() {
@@ -291,6 +342,7 @@ export class ItemIcons {
             }
         }
         out.putImageData(img, 0, 0);
+        if (this._collect) this._collect.set(k, new Uint8Array(d)); // (the loading screen's pictures: kept for the next start)
         if (!later || typeof this._out.toBlob !== 'function') { this._store(k, this._out.toDataURL('image/png')); if (later) this.onReady?.(); return; }
         this._out.toBlob((blob) => {
             if (!blob) { this.failed.add(k); return; }
