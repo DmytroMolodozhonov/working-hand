@@ -27,6 +27,14 @@ export const INFERNUM = {
     BACK_CD: 4, // с: только что прибыл — круг под ногами не уносит обратно, пока не сойдёшь с него
 };
 
+/**
+ * Переход (замечание автора: «пока появляешься в аду, мир ещё секунды три догружается на глазах»): экран держится тёмным, пока вокруг не нарисована вся
+ * земля в RING_M м (TerrainView.ringMissing = 0), не включились небо/свет ада и не сделан Дьяволос; не меньше MIN_S (Тароны лагеря успевают встать) и не
+ * дольше HOLD_S после того, как герой встал на землю (не успело — открывается плавно всё равно). Пока круг открыт и герой рядом (PRE_NEAR), воркеры уже
+ * делают землю той стороны (TerrainView.prefetch) — ожидание почти нулевое. Так же при возврате на Землю.
+ */
+export const PASS = { RING_M: 200, MIN_S: 0.6, HOLD_S: 8, PRE_NEAR: 30 };
+
 /** Голова горгульи: выпадает из убитой горгульи (оружием, заклинанием — не от луча «To the Sun»: та сгорела). */
 export const HEAD = { CHANCE: 0.25, DARK_MAGE: 0.005, KIND: 'gargoyleHead' }; // (25 % from a killed gargoyle; 0.5 % from a black mage — a wanderer's body, a lone black mage's chest)
 /** The head is NEVER bought or sold anywhere (the author): no shop has it, no merchant, fence or pawnbroker takes it, no price is named. */

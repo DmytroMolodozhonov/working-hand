@@ -8,7 +8,7 @@ import { PENT_NAMES, pentagramWords, pentagramSpell } from '../../src/game/Penta
 import { figureOf, CAST_COST } from '../../src/game/PentagramRules.js';
 import { PENTAGRAMS } from '../../src/game/Pentagrams.js';
 import { OFFERINGS, assess } from '../../src/game/PentagramOfferings.js';
-import { INFERNUM, anyBody, hellSpellBlock, HELL_TARGETS, HEAD, headDrops, unsellable, darkMageHead } from '../../src/game/HellRules.js';
+import { INFERNUM, PASS, anyBody, hellSpellBlock, HELL_TARGETS, HEAD, headDrops, unsellable, darkMageHead } from '../../src/game/HellRules.js';
 import { HellGate } from '../../src/game/HellGate.js';
 import { HELL, hellPlan } from '../../src/world/HellMap.js';
 import { matchSpell } from '../../src/fx/SpellManager.js';
@@ -116,6 +116,47 @@ test('the gates: open for OPEN_S s (every computer by the message), then closed;
     const k2 = [...m2.p.marks.values()][0]; k2.fade = 1; m2.g.hellGate.opened(k2);
     for (let i = 0; i < INFERNUM.OPEN_S * 10 + 5; i++) m2.g.hellGate.update(0.1);
     assert.equal(k2.gateOpen, 0, 'closed after its time');
+});
+
+test('the passage stays dark until the land round is all drawn (the author: «the world loads before my eyes»); made ahead while the gate is open; never longer than HOLD_S', () => {
+    const run = (ready) => {
+        const t = stub();
+        t.p.learnFigure('infernum'); t.p.cast(true, 'пентаграниум инфернум', aim());
+        const m = [...t.p.marks.values()][0]; m.fade = 1;
+        t.g.terrain.data.hell = true; t.g.terrain.data.hellPlan = hellPlan(1);
+        t.g.heroApply = { pending: null, _hover() {} };
+        const asked = [];
+        let miss = 40;
+        t.g.world = { terrain: { prefetch: (x, z, r) => asked.push({ x, z, r }), ringMissing: () => miss } };
+        t.g.hellRealm = { k: 1 };
+        t.g.hellGate.opened(m, true);
+        const me = t.g.character.group.position;
+        me.set(m.x + 10, m.y + 2, m.z);
+        t.g.hellGate.update(0.1);
+        assert.ok(asked.length, 'by the open gate: the land of hell is made ahead');
+        const S = hellPlan(1).spawn;
+        assert.ok(Math.hypot(asked[0].x - S.x, asked[0].z - S.z) < 1 && asked[0].r === PASS.RING_M, 'round the arrival');
+        me.set(m.x, m.y + 2, m.z);
+        for (let i = 0; i < 40 && !t.g.hellGate.trans; i++) t.g.hellGate.update(0.1);
+        for (let i = 0; i < 10; i++) t.g.hellGate.update(0.1);
+        assert.equal(t.g.heroApply.pending?.id, 'hell');
+        t.g.heroApply.pending = null; me.set(S.x, S.y + 2, S.z); // (HeroApply put me down)
+        let open = null;
+        for (let i = 0; i < 120; i++) {
+            if (ready != null && i === ready) miss = 0;
+            t.g.hellGate.update(0.1);
+            const T = t.g.hellGate.trans;
+            if (!open && T?.checked) open = i;
+            if (!T) break;
+        }
+        return { open, last: t.g.hellGate.lastPass };
+    };
+    const a = run(15);
+    assert.ok(a.open >= 15, 'dark while chunks are missing: opened at ' + a.open);
+    assert.equal(a.last.left, 0, 'nothing of the near ring is drawn after the screen opens');
+    const b = run(null);
+    assert.ok(b.open <= PASS.HOLD_S * 10 + 2 && b.open >= PASS.HOLD_S * 10 - 2, 'never stuck in the dark: opens after HOLD_S anyway — ' + b.open);
+    assert.ok(b.last.left > 0 && b.last.why === 'land');
 });
 
 test('save and death: the way back is kept; a dead hero is never reborn in hell', () => {

@@ -49,6 +49,7 @@ test('the hell: the pentagram, the offering, the passage down, the head of a gar
         me.set(m.x, m.y + 2.1, m.z); g.character.verticalVelocity = 0;
         for (let i = 0; i < 4000 && !(g.hellGate.inHell && !g.heroApply.pending && !g.hellGate.trans); i++) await sleep(100);
         out.inHell = g.hellGate.inHell;
+        out.passDown = g.hellGate.lastPass; out.missDown = g.world.terrain.ringMissing(me.x, me.z, 200); // (the land round drawn before the dark opened)
         const sp = d.hellPlan.spawn;
         out.dist = Math.hypot(me.x - sp.x, me.z - sp.z);
         out.feet = me.y - 2 - (d.heightAt(Math.round(me.x), Math.round(me.z)) - 0.5);
@@ -70,6 +71,7 @@ test('the hell: the pentagram, the offering, the passage down, the head of a gar
         me.set(bm.x, bm.y + 2.1, bm.z); g.character.verticalVelocity = 0;
         for (let i = 0; i < 4000 && (g.hellGate.inHell || g.heroApply.pending || g.hellGate.trans); i++) await sleep(100);
         out.back = !g.hellGate.inHell;
+        out.passUp = g.hellGate.lastPass; out.missUp = g.world.terrain.ringMissing(me.x, me.z, 200);
         out.backDist = Math.hypot(me.x - m.x, me.z - m.z);
         out.earthLight = g.world.hell;
         return out;
@@ -82,6 +84,7 @@ test('the hell: the pentagram, the offering, the passage down, the head of a gar
     assert.ok(r.open, 'the gates opened after the body burnt');
     assert.ok(r.inHell, 'in hell');
     assert.ok(r.dist < 30, 'by the mark: ' + r.dist);
+    assert.ok(r.passDown && r.passDown.left === 0 && r.missDown === 0, 'the dark opened only with the land round all drawn: ' + JSON.stringify(r.passDown));
     assert.ok(Math.abs(r.feet) < 1.5, 'standing on the floor: ' + r.feet);
     assert.ok(r.hellLight > 0.9, 'hell\'s light');
     assert.ok(r.from, 'the way back remembered');
@@ -89,6 +92,7 @@ test('the hell: the pentagram, the offering, the passage down, the head of a gar
     assert.ok(r.backOpen && r.headGone, 'the head burnt, the gates open');
     assert.ok(r.back, 'back on the Earth');
     assert.ok(r.backDist < 30, 'by the pentagram: ' + r.backDist);
+    assert.ok(r.passUp && r.passUp.left === 0, 'back: the land of the Earth drawn before the dark opened: ' + JSON.stringify(r.passUp));
     assert.deepEqual(realErrors(errors), []);
     await page.close();
 }, { timeout: 3000000 });

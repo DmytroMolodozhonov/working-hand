@@ -14,7 +14,7 @@
  */
 import * as THREE from 'three';
 import { HELL, inHell } from '../world/HellMap.js';
-import { INFERNUM, HELL_TEXT, hellSpellBlock } from './HellRules.js';
+import { INFERNUM, PASS, HELL_TEXT, hellSpellBlock } from './HellRules.js';
 import { PLAYER_GROUND_OFFSET } from '../entities/Character.js';
 
 const _v = new THREE.Vector3(), _d = new THREE.Vector3();
@@ -84,6 +84,7 @@ export class HellGate {
             if (m.gateOpen > 0) this._beam(m, dt);
             const d = Math.hypot(me.x - m.x, me.z - m.z), inCircle = d <= m.r * 0.85 && Math.abs(me.y - PLAYER_GROUND_OFFSET - m.y) < 3;
             if (inCircle) here = m;
+            if (m.gateOpen > 0 && d < PASS.PRE_NEAR) this._prefetch(m); // (open and I am by it: the other side's land is made ahead, the dark hardly waits)
         }
         if (this.lock && (!here || here.id !== this.lock)) this.lock = null;
         if (!here || here.id === this.lock) { this.inside = null; return; }
@@ -113,6 +114,41 @@ export class HellGate {
     }
 
     // ------------------------------------------------------------ the passage
+    /** Where this gate would take me (the other side): hell's arrival, or back by the pentagram I came through. */
+    _where(m) {
+        const plan = this.plan;
+        if (!plan) return null;
+        if (m.id !== BACK_ID) return this.inHell ? null : plan.spawn;
+        const f = this.from || { x: 0, y: 0, z: 0 };
+        return { x: f.x + 5.5, z: f.z };
+    }
+
+    /** The workers make the land of the other side now, with what they have spare (TerrainView.prefetch; once in a while — cheap). */
+    _prefetch(m) {
+        const now = performance.now();
+        if (this._preAt && now - this._preAt < 4000) return;
+        const to = this._where(m), tv = this.game.world?.terrain;
+        if (!to || !tv?.prefetch) return;
+        this._preAt = now;
+        tv.prefetch(to.x, to.z, PASS.RING_M, 40);
+    }
+
+    /**
+     * Is the other side ready to be seen (the dark opens only then): the land within RING_M all drawn, hell's sky and light on
+     * (down) / off (up), Diabolos's body made if he is to be seen. → a word what is still missing, or null.
+     */
+    _notReady(T) {
+        const g = this.game, me = g.character.group.position, tv = g.world?.terrain;
+        const miss = tv?.ringMissing ? tv.ringMissing(me.x, me.z, PASS.RING_M) : 0;
+        T.miss = miss;
+        if (miss) return 'land';
+        const k = g.hellRealm?.k ?? (T.dir === 'down' ? 1 : 0);
+        if (T.dir === 'down' ? k < 1 : k > 0) return 'sky';
+        const dv = g.diabolos;
+        if (T.dir === 'down' && dv?.site && !dv.d && !dv._remains && Math.hypot(dv.site.x - me.x, dv.site.z - me.z) < 900) return 'devil';
+        return null;
+    }
+
     _go(m) {
         const g = this.game, plan = this.plan;
         if (!plan || g.isDeadLocal || g.combat?.dead) { this.inside = null; return; }
@@ -155,6 +191,13 @@ export class HellGate {
         // (hold the dark until the hero stands on the land of the other side, then let it go)
         if (g.heroApply?.pending) { this._fade(1); if (T.t > 70) { this.trans = null; this._fade(0); } return; }
         if (!T.checked) {
+            // (on the land of the other side — still dark until everything round is drawn: no chunk appears before the eyes; at most HOLD_S)
+            T.wait = (T.wait || 0) + dt;
+            const why = T.wait < PASS.MIN_S ? 'min' : this._notReady(T);
+            if (why && T.wait < PASS.HOLD_S) { this._fade(1); return; }
+            const left = this.game.world?.terrain?.ringMissing?.(g.character.group.position.x, g.character.group.position.z, PASS.RING_M) ?? 0;
+            this.lastPass = { dark: Math.round(T.t * 100) / 100, wait: Math.round(T.wait * 100) / 100, left, why: why || 'ready' };
+            g.perf?.note?.(`🔥 Ад: экран открыт через ${this.lastPass.dark.toFixed(1)} с (ждали землю ${this.lastPass.wait.toFixed(1)} с), не достроено рядом: ${left}${why ? ' — не дождались: ' + why : ''}`);
             T.checked = true;
             const me = g.character.group.position, there = inHell(me.x, me.z);
             if ((T.dir === 'down') !== there) { // (the land there gave no place to stand — HeroApply put me back: never stuck between, the start of the world instead)

@@ -43,6 +43,8 @@ const POOL_MAX = 64; // idle chunk shells kept for reuse
  * update(focus) streams chunks in and out; explosions rebuild only the
  * touched chunks, a couple per frame, so nothing ever causes a hitch.
  */
+const PRE_MAX = 160; // chunks made ahead of time and waiting (prefetch: the land round the other side of the gates of hell)
+
 export class Terrain {
     constructor(scene, { seed = 1, mountains = false, seas = false, test = false, deepCaves = false, lush = false, slopes = false, wizHuts = false, furnish = false, bigHouses = false, meshTrees = false, bigArena = false, apart = false, dungeons = false, arenaEntries = false, buildings = false, ghostCastle = false, arenaX2 = false, iceArena = false, knightCap = false, queenMap = false, caveLake = false, hell = false, viewDistance = 112 } = {}) {
         this.scene = scene;
@@ -326,6 +328,12 @@ export class Terrain {
         if (m.type !== 'built') return;
         w.load--;
         if (this._remakeFlight?.get(m.key) === m.id) { this._remakeFlight.delete(m.key); this._remade.push(m); return; } // (a planet's ground made again)
+        if (this._preFlight?.get(m.key) === m.id) { // (made ahead of time — prefetch)
+            this._preFlight.delete(m.key);
+            if (this._center && this._inRange(m.cx, m.cz) && !this.meshes.has(m.key)) this._done.push(m); // (wanted now: in at once)
+            else if (this._pre) this._stash.set(m.key, m);
+            return;
+        }
         const f = this._inFlight.get(m.key);
         if (!f || f.id !== m.id) return; // (asked again since: an older answer)
         this._inFlight.delete(m.key);
@@ -359,6 +367,9 @@ export class Terrain {
             const job = this._queue.pop();
             if (this.meshes.has(job.key) || this._inFlight.has(job.key)) continue;
             if (this._touched(job.cx, job.cz)) { this._local.push(job); continue; }
+            const pre = this._stash?.get(job.key);
+            if (pre) { this._stash.delete(job.key); this._done.push(pre); continue; } // (made ahead of time: goes in as it is — the same seed, untouched)
+            if (this._preFlight?.has(job.key)) continue; // (being made ahead already: its answer is taken when it comes)
             let w = ws[0];
             for (const o of ws) if (o.load < w.load) w = o;
             w.load++;
@@ -497,6 +508,55 @@ export class Terrain {
         return Math.ceil(this.viewDistance / CHUNK);
     }
 
+    /**
+     * Make the land of ANOTHER place ahead of time (the gates of hell are open: the hero may step through in a moment —
+     * HellGate). The workers make the chunks round (x, z), nearest first, only with what they have spare (never more than one
+     * job each above the wanted chunks of here); the answers wait (≤ PRE_MAX, forgotten after `s` seconds) and go in at once
+     * when that place is wanted — then the dark of the passage hardly waits. Nothing is done in the frame: one key a loop.
+     */
+    prefetch(x, z, rM = 200, s = 60) {
+        if (!this._workers) return;
+        const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), R = Math.min(this.radiusChunks, Math.ceil(rM / CHUNK));
+        const P = this._pre;
+        if (P && P.cx === cx && P.cz === cz && P.R === R) { P.until = performance.now() + s * 1000; return; }
+        const list = [];
+        for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) { const d2 = dx * dx + dz * dz; if (d2 <= (R + 0.5) * (R + 0.5)) list.push({ key: chunkKey(cx + dx, cz + dz), cx: cx + dx, cz: cz + dz, d2 }); }
+        list.sort((a, b) => b.d2 - a.d2); // (popped from the end: the nearest first)
+        this._pre = { cx, cz, R, list, until: performance.now() + s * 1000 };
+        if (!this._stash) { this._stash = new Map(); this._preFlight = new Map(); }
+    }
+
+    _preStep() {
+        const P = this._pre, ws = this._workers;
+        if (!ws) return;
+        if (!P) return;
+        this._stashUntil = P.until;
+        if (performance.now() > P.until) { this._pre = null; this._stash.clear(); this._preFlight.clear(); return; }
+        const c = this._center;
+        if (c && Math.abs(c.cx - P.cx) <= 1 && Math.abs(c.cz - P.cz) <= 1) { this._pre = null; return; } // (there now: the stash goes in by `_dispatch`)
+        while (P.list.length && this._stash.size + this._preFlight.size < PRE_MAX && this._inFlight.size + this._preFlight.size < ws.length * 2 && !this._queue.length) {
+            const job = P.list.pop();
+            if (this.meshes.has(job.key) || this._inFlight.has(job.key) || this._stash.has(job.key) || this._preFlight.has(job.key)) continue;
+            let w = ws[0];
+            for (const o of ws) if (o.load < w.load) w = o;
+            w.load++;
+            const id = ++this._jobId;
+            this._preFlight.set(job.key, id);
+            w.postMessage({ type: 'build', id, key: job.key, cx: job.cx, cz: job.cz, fcx: P.cx, fcz: P.cz, R: this.radiusChunks });
+        }
+    }
+
+    /**
+     * Is the land round (x, z) all shown — every chunk within `rM` metres has its mesh (HellGate: the dark of the passage
+     * opens only then)? → number of chunks still missing (0 — ready).
+     */
+    ringMissing(x, z, rM = 200) {
+        const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), R = Math.min(this.radiusChunks, Math.ceil(rM / CHUNK));
+        let miss = 0;
+        for (let dz = -R; dz <= R; dz++) for (let dx = -R; dx <= R; dx++) if (dx * dx + dz * dz <= R * R && !this.meshes.has(chunkKey(cx + dx, cz + dz))) miss++;
+        return miss;
+    }
+
     /** Nothing left to build, in flight or to merge: the ground around is all shown (Game.readyToShow — the loading screen may close). */
     settled() {
         return !this._queue.length && !this._inFlight.size && !this._done.length && !this._local.length;
@@ -587,6 +647,8 @@ export class Terrain {
             // (at most a few a frame: each one's buffers go to the video card when it is drawn)
             for (let n = 0; this._done.length && n < 6 && performance.now() - t0 < this.budgetMs; n++) this._applyBuilt(this._done.shift());
             this._dispatch(this._workers.length * 3);
+            if (this._pre) this._preStep(); // (another place made ahead of time — prefetch)
+            else if (this._stash?.size && performance.now() > this._stashUntil) this._stash.clear(); // (made ahead, never wanted: forgotten)
             if (this._local.length) this._buildLocal(t0, this.budgetMs);
         } else {
             while (this._queue.length) {
