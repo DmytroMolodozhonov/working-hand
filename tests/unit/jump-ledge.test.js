@@ -50,7 +50,8 @@ function leap({ high, strength, roofAt = null, run = 0, T = null }) {
 const floorTop = -0.5;
 
 test('jump heights: a small hop, a normal jump, the strongest', () => {
-    assert.ok(jumpHeight(0) >= 0.45 && jumpHeight(0) < 0.7);
+    // (the weakest jump the camera still reads, strength ~0.1, must clear 2 blocks even at a slant: needs ~0.81)
+    assert.ok(jumpHeight(0.1) >= 1.0 && jumpHeight(0) < 1.1);
     assert.ok(jumpHeight(0.36) > 0.85 && jumpHeight(0.36) < 1.2);
     assert.ok(jumpHeight(1) > 1.4 && jumpHeight(1) < 1.7);
 });
@@ -126,4 +127,20 @@ test('a standing jump flush to a 3-block wall: no push, it lands where it stood;
 test('a standing jump onto a 2-block ledge under a low roof: the head never goes into it', () => {
     const r = standJump({ top: (ix, iz) => (iz <= -2 ? 2 : 0), roof: (ix, iz) => (iz <= -2 ? 5 : null), strength: 1 });
     assert.ok(r.maxY < floorTop + 2.1, JSON.stringify(r));
+});
+
+test('the weakest jump the camera reads (strength 0.1…) flush to a 2-block ledge: got onto, facing it and at 45°; 3 blocks never', () => {
+    // (complaint: «a plain jump right against a 2-block rise does not work» — JumpReader gives 0.1–0.28 for a modest real jump)
+    for (const strength of [0.1, 0.15, 0.2, 0.28]) {
+        for (const yaw of [0, 0.4, -0.4, Math.PI / 4]) {
+            const r = standJump({ top: (ix, iz) => (iz <= -2 ? 2 : 0), yaw, strength });
+            assert.ok(r.onGround && r.feet > floorTop + 2 - 0.05, `strength ${strength} yaw ${yaw}: ${JSON.stringify(r)}`);
+        }
+        const wall3 = standJump({ top: (ix, iz) => (iz <= -2 ? 3 : 0), strength });
+        assert.ok(wall3.feet < floorTop + 0.05, `3 blocks, strength ${strength}: ${JSON.stringify(wall3)}`);
+    }
+    const run = leap({ high: 2, strength: 0.1, run: 3 });
+    assert.ok(run.onGround && run.feet > floorTop + 2 - 0.05, JSON.stringify(run));
+    const max3 = standJump({ top: (ix, iz) => (iz <= -2 ? 3 : 0), strength: 1, yaw: Math.PI / 4 });
+    assert.ok(max3.feet < floorTop + 0.05, JSON.stringify(max3));
 });

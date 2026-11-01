@@ -16,7 +16,7 @@
  */
 
 export const G = 20;              // the hero's gravity on Earth (units / s²)
-export const JUMP_H = { MIN: 0.5, MAX: 1.6 }; // jump height on Earth (units) for strength 0 … 1 (see JUMP_ASSIST)
+export const JUMP_H = { MIN: 0.95, MAX: 1.6 }; // jump height on Earth (units) for strength 0 … 1 (see JUMP_ASSIST). MIN: the weakest jump the camera still reads (strength ~0.1) must clear 2 blocks (needs ~0.81 with the diagonal) with room to spare — it was 0.5 and a plain jump flush to a 2-block ledge did not get on
 export const JUMP_ASSIST = 0.3;  // in the air the body gets up onto an edge this much higher than a step (units): the edge is caught, not bumped
 
 /** The legs' take-off speed (units / s) for this strength under this gravity. */
