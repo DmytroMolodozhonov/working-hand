@@ -29,6 +29,7 @@
 import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
+import { stepBody, bounce, lieProbe, GUARD, guardWorld } from './BodyGuard.js';
 import { FIRM, absoluteStops } from './FirmRules.js';
 import { creatureHolds, creatureAbsolute, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
@@ -67,13 +68,21 @@ function wrapPivot(group, y = 0) {
     return pivot;
 }
 
-/** A body's half-width kept from a wall when it is pushed, and the longest step of one frame's slide (m). */
-const BODY_CLEAR = 0.45, SUBSTEP = 0.3;
+/** A body's half-width kept from a wall when it is pushed (m). */
+const BODY_CLEAR = 0.45;
 
-/** Move `p` by (dx, dz) in steps of at most SUBSTEP, each one pushed out of the blocks (a hard throw never skips a wall). */
-function slide(p, dx, dz, resolve) {
-    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SUBSTEP));
+const _got = { x: 0, z: 0 }, _want = { x: 0, z: 0 };
+
+/**
+ * Move `p` by (dx, dz) in sub-steps of at most half the body's radius, each one pushed out of the blocks AND the boxes (a hard throw never
+ * skips a wall or a bed). → the metres really moved {x, z} (a reused object).
+ */
+function slide(p, dx, dz, resolve, r = 0.6) {
+    const x0 = p.x, z0 = p.z;
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / (r * GUARD.SUB_K)));
     for (let i = 0; i < n; i++) { p.x += dx / n; p.z += dz / n; resolve(p); }
+    _got.x = p.x - x0; _got.z = p.z - z0;
+    return _got;
 }
 
 // ------------------------------------------------------------------ kinds
@@ -94,7 +103,7 @@ export const KINDS = {
         centre: (c, out) => out.copy(c.group.position).add(_w.set(0, 0.6, 0)),
         pivot: (c) => ({ obj: wrapPivot(c.group, -0.6), base: -0.6, lie: 0.1 }),
         head: (c) => c.head, arms: (c) => [c.leftArm, c.rightArm], legs: (c) => [c.leftLeg, c.rightLeg],
-        move(g, c, dx, dz) { slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.88, p.y - 1.0, 3.5, 1.05)); },
+        move(g, c, dx, dz) { return slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.88, p.y - 1.0, 3.5, 1.05), 0.88); },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunTimer = Math.max(c.stunTimer || 0, t); c.isAttacking = false; },
         frozen: (c) => !!c.isFrozen,
@@ -113,21 +122,16 @@ export const KINDS = {
             const cl = g.castleLife;
             // (thrown up into the air: only a wall stops it — a walker's step test would hold it in place)
             const base = c.vy && cl?._airFree ? (x, z) => cl._airFree(x, z, c.y) : (x, z) => !cl?._walkable || cl._walkable(x, z, c.y);
-            // (the whole body, not its middle point: shoulders keep BODY_CLEAR from the wall, like a walking step does)
+            // (the whole body, not its middle point: shoulders keep BODY_CLEAR from the wall, like a walking step does; the beds, chests
+            // and every other box too — BodyGuard.js — and in sub-steps of half the radius, so a 60 m/s Jolt never skips one)
             const R = BODY_CLEAR * (c.role === 'knight' || c.role === 'king' ? 1.3 : 1);
+            const W = guardWorld(g), feet = c.y;
             const ok = (x, z) => base(x, z) && base(x + R, z) && base(x - R, z) && base(x, z + R) && base(x, z - R);
-            // (small steps: a hard throw never skips over a wall in one frame)
-            const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SUBSTEP));
-            const sx = dx / n, sz = dz / n;
-            for (let i = 0; i < n; i++) {
-                if (ok(c.x + sx, c.z + sz)) { c.x += sx; c.z += sz; }
-                else if (sx && ok(c.x + sx, c.z)) c.x += sx;
-                else if (sz && ok(c.x, c.z + sz)) c.z += sz;
-                else break;
-            }
+            const o = stepBody({ boxes: W.boxes, solid: null }, c, dx, dz, R, feet, _got, ok); // (flying high over a bed: its feet clear the box — it passes over)
             // (on its feet or lying, it goes along the ground: up a slope it climbs it, never sinks into the hill)
             if (!c.vy) cl?._ground?.(c);
             if (c.arena) g.arenaDuels?.cageNpc?.(c); // (a duellist pushed at an arena in a duel: the dome's wall holds him, however hard the shove)
+            return o;
         },
         toss(g, c, vy) { c.vy = Math.max(c.vy || 0, vy); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); c.mode = 'idle'; c.speed = 0; },
@@ -142,7 +146,7 @@ export const KINDS = {
         centre: (c, out) => out.copy(c.group.position).add(_w.set(0, 0.5 * (c.group.scale.y || 1), 0)),
         pivot: (c) => { const s = c.group.scale.y || 1; return { obj: wrapPivot(c.group, 0), base: 0, lie: Math.max(0, 0.45 - 0.5 / s) }; },
         head: () => null, arms: () => [], legs: (c) => c.model?.userData?.legs || [],
-        move(g, c, dx, dz) { slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.6 * (c.group.scale.x || 1), p.y - 0.5, 2, 1.1)); },
+        move(g, c, dx, dz) { return slide(c.group.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.6 * (c.group.scale.x || 1), p.y - 0.5, 2, 1.1), 0.6 * (c.group.scale.x || 1)); },
         toss(g, c, vy) { g.animals?.push?.(c, _w.set(0, vy, 0), 0.5); },
         hold(g, c, t) { c.stunT = Math.max(c.stunT || 0, t); },
         frozen: () => false,
@@ -160,7 +164,7 @@ KINDS.T = {
     centre: (c, out) => out.copy(c.model.position).add(_w.set(0, 3 * (c.model.userData.s || 1), 0)),
     pivot: (c) => ({ obj: wrapPivot(c.model, 0), base: 0, lie: 0 }),
     head: (c) => c.model.userData.head || null, arms: () => [], legs: () => [],
-    move(g, c, dx, dz) { slide(c.model.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.95 * (c.model.userData.s || 1), p.y, 3.0, 1.05)); },
+    move(g, c, dx, dz) { return slide(c.model.position, dx, dz, (p) => g.collision?.resolveCylinder?.(p, 0.95 * (c.model.userData.s || 1), p.y, 3.0, 1.05), 0.95); },
     toss() {}, hold() {}, frozen: () => false, noKnock: () => true,
 };
 
@@ -481,14 +485,17 @@ export class CreatureImpact {
             // the slide (host: it moves the body; friction is stronger lying on the ground)
             if (this.auth && (s.vx || s.vz)) {
                 const lying = s.state === 'falling' || s.state === 'down';
-                K.move(g, c, s.vx * dt, s.vz * dt);
+                _want.x = s.vx * dt; _want.z = s.vz * dt;
+                const got = K.move(g, c, _want.x, _want.z);
+                if (got) bounce(s, _want, got); // (it hit a wall / a bed: slides along it, a little comes back — it never goes on through)
                 const air = s.airT > 0;
                 if (air) s.airT -= dt;
                 const f = air ? 1 : Math.max(0, 1 - (lying ? CREATURE.FRICTION_DOWN : CREATURE.FRICTION) * dt);
                 s.vx *= f; s.vz *= f;
                 if (Math.abs(s.vx) + Math.abs(s.vz) < 0.05) s.vx = s.vz = 0;
             }
-            if (this.auth && (ck === 'v' || ck === 'z') && (s.state === 'falling' || s.state === 'down')) this._lieClear(K, c, s, dt, ck);
+            if (this.auth && (ck === 'v' || ck === 'z' || ck === 'a') && (s.state === 'falling' || s.state === 'down')) this._lieClear(K, c, s, dt, ck);
+            else if (s.rest) s.rest = Math.max(0, s.rest - 3 * dt); // (up again: it comes down off whatever it lay on)
             this._step(ck, K, c, s, dt);
             if (s.daze > 0 && s.state === 'up') this._dazed(K, c, s, dt);
             this._draw(K, c, s, dt);
@@ -502,20 +509,57 @@ export class CreatureImpact {
      * back out of it (at most a few metres in all), never through anything (K.move) — LieClear.js.
      */
     _lieClear(K, c, s, dt, ck) {
-        const td = this.game.terrain?.data || this.game.world?.terrain?.data;
+        const g = this.game;
+        const td = g.terrain?.data || g.world?.terrain?.data;
         const piv = K.pivot(c).obj;
-        if (!td?.solidIn || !piv?.matrixWorld) return;
+        if (!piv?.matrixWorld) return;
         if ((s.clearT = (s.clearT || 0) - dt) > 0) return;
         s.clearT = 0.05;
         piv.updateWorldMatrix(true, false);
         const feet = piv.getWorldPosition(_v);
         const ax = _w.set(0, 1, 0).transformDirection(piv.matrixWorld);
-        const scale = ck === 'z' ? (c.sizeK || 1) * 2.2 : 3.4;
-        const push = lieClearPush((ix, iz, L) => td.solidIn(ix, iz, L, L), feet.x, feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0), feet.z, ax.x, ax.z, scale);
-        if (!push || (s.slid || 0) > 3) return;
+        const scale = ck === 'z' ? (c.sizeK || 1) * 2.2 : ck === 'a' ? 2.2 * (c.group.scale.y || 1) : 3.4;
         const d = 4 * 0.05;
-        s.slid = (s.slid || 0) + d;
-        K.move(this.game, c, push.x * d, push.z * d);
+        // 1) the blocks: the head or the legs in a wall → back along the body (K.move holds it to the sub-steps)
+        if (td?.solidIn && ck !== 'a') {
+            const push = lieClearPush((ix, iz, L) => td.solidIn(ix, iz, L, L), feet.x, feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0), feet.z, ax.x, ax.z, scale);
+            if (push && (s.slid || 0) <= 3) { s.slid = (s.slid || 0) + d; K.move(g, c, push.x * d, push.z * d); }
+        }
+        // 2) the boxes (a bed, a chest, a cauldron…): lain ON when low (it rests on top), shoved back out of when tall; BodyGuard.js
+        const W = guardWorld(g);
+        const floorY = ck === 'v' ? c.y : feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0);
+        const P = lieProbe(W, feet.x, feet.z, ax.x, ax.z, floorY, scale, ck === 'a' ? 0.45 : GUARD.LIE_W);
+        s.restTo = P.rest;
+        s.rest = (s.rest || 0) + (P.rest - (s.rest || 0)) * Math.min(1, 14 * 0.05); // (settles onto it, no jump)
+        if (P.hit && (s.slid2 || 0) <= 4) {
+            s.slid2 = (s.slid2 || 0) + d;
+            K.move(g, c, P.pushX * d, P.pushZ * d);
+            if (s.slid2 > 1 && !s.noted) { s.noted = true; g.castleLife?.alog?.decision?.(c, `тело вытолкнуто из ${P.tall?.kind === 'bed' ? 'кровати' : 'твёрдого предмета'} (лежало в нём)`); }
+        }
+    }
+
+    /**
+     * (host) A dead villager's body, come to rest: lain across a bed's edge or into a cupboard it is shoved back out (and where most of it
+     * is on a bed, `deadRest` — it lies ON it: CastleLife._lieFloor). The same probe as a living body lying (BodyGuard.lieProbe).
+     */
+    guardDead(c, dt) {
+        if (!this.auth || c.vy || !c.model?.root?.matrixWorld || !c.model.isDeadDone) return;
+        if ((c.guardT = (c.guardT || 0) - dt) > 0) return;
+        c.guardT = 0.25;
+        const piv = c.model.root;
+        piv.updateWorldMatrix(true, false);
+        const feet = piv.getWorldPosition(_v);
+        const ax = _w.set(0, 1, 0).transformDirection(piv.matrixWorld);
+        const W = guardWorld(this.game);
+        const floor = W.floor(c.x, c.z, c.y + 1.1);
+        const P = lieProbe(W, c.x, c.z, ax.x, ax.z, floor, 3.4);
+        c.deadRest = P.rest;
+        if (P.hit && (c.deadSlid || 0) < 4) {
+            c.deadSlid = (c.deadSlid || 0) + 0.5;
+            KINDS.v.move(this.game, c, P.pushX * 0.5, P.pushZ * 0.5);
+            this.game.death?.settle?.('v', c.id, c.x, c.y, c.z);
+            if (!c.deadNoted) { c.deadNoted = true; this.game.castleLife?.alog?.decision?.(c, `мёртвое тело сдвинуто с ${P.tall?.kind === 'bed' ? 'края кровати' : 'твёрдого предмета'} (лежало в нём)`); }
+        }
     }
 
     /** Dizzy on its feet: it sways; now and then (host) a stumble a step aside — and a moment of nothing. */
@@ -586,7 +630,7 @@ export class CreatureImpact {
             const turn = (a) => { let x = 0, z = 0; if (dir === 'back') x = -f * a; else if (dir === 'front') x = f * a; else if (dir === 'right') z = f * a; else z = -f * a; return [x, z]; };
             const [rx, rz] = turn(ang);
             piv.rotation.x = rx; piv.rotation.z = rz + sway;
-            piv.position.y = P.base + (P.lie || 0) * lift * Math.sin(ang) - 0.14 * brace; // (a little crouch to hold the ground)
+            piv.position.y = P.base + (P.lie || 0) * lift * Math.sin(ang) - 0.14 * brace + (s.rest || 0) * Math.sin(ang); // (a little crouch to hold the ground)
             if (s.tum) {
                 // round its middle, not its feet: the pivot moves so that the middle stays put
                 if (s.tum.x0 == null) { s.tum.x0 = piv.position.x; s.tum.z0 = piv.position.z; }
@@ -639,7 +683,7 @@ export class CreatureImpact {
         const [la, ra] = K.arms(c);
         overlay(la, 'z', 0); overlay(ra, 'z', 0);
         for (const l of K.legs(c)) { overlay(l, 'x', 0); overlay(l, 'z', 0); }
-        s.state = 'up'; s.held = false;
+        s.state = 'up'; s.held = false; s.rest = 0; s.slid = 0; s.slid2 = 0; s.noted = false;
     }
 }
 

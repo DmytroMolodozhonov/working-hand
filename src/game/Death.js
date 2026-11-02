@@ -803,7 +803,8 @@ export class DeathSystem {
     _ground(x, z, fromY) {
         const c = this.game.collision;
         if (!c) return fromY;
-        return c.groundAt ? c.groundAt(x, z, fromY) : c.groundY(x, z);
+        // (a body falls ONTO a bed / a chest lid under it, not into it: standAt knows the boxes' tops)
+        return c.standAt ? c.standAt(x, z, fromY) : c.groundAt ? c.groundAt(x, z, fromY) : c.groundY(x, z);
     }
 }
 

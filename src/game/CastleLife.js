@@ -23,6 +23,7 @@
  */
 
 import { ActionLog } from './ActionLog.js';
+import { guardWorld, insideSolid, freeSpot, solidName, standFree, GUARD } from './BodyGuard.js';
 import { stateOf as gestureState, sayCtx, mark as markEmo } from './GestureLife.js';
 import { isStallSite } from './CreativeMarket.js';
 import { isGuestSite } from './CreativeGuest.js';
@@ -1100,7 +1101,8 @@ export class CastleLife {
             const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y), rank: (v.cmd || v.order || v.follow || v.foe) ? 1 : 0 });
             if (!a) { v.speed = 0; return d; }
             if (a.unstick) { // (stuck for ~10 s among the others or the walls: set on the nearest free place — never a permanent stand)
-                if (this._walkable(a.unstick.x, a.unstick.z, v.y)) { this.alog?.decision(v, `долго без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
+                if (this._walkable(a.unstick.x, a.unstick.z, v.y) && standFree(guardWorld(this.game), a.unstick.x, a.unstick.z, BODY_R, v.y)) { // (set on a free place: not into a bed or a chest — BodyGuard.js)
+                     this.alog?.decision(v, `долго без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
                 v.speed = 0; return d;
             }
             ux = a.x; uz = a.z; kk = a.k ?? 1;
@@ -1350,13 +1352,52 @@ export class CastleLife {
             v.supT = 0.25;
             const w = this._deepWater(v);
             if (w && v.y >= w.surface - 0.6) return; // (the body floats)
-            const c = this.game.collision;
-            const gy = c?.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c?.groundY?.(v.x, v.z);
-            if (gy == null || v.y <= gy + 0.05) return;
+            const gy = this._lieFloor(v);
+            if (gy == null) return;
+            if (v.y < gy - 0.02) { v.y += Math.min(gy - v.y, 6 * dt + 0.05); this.game.death?.settle?.('v', v.id, v.x, v.y, v.z); return; } // (a body that fell beside a bed edge / a chest: it lies ON it, no lower)
+            if (v.y <= gy + 0.05) { this.game.creatureImpact?.guardDead?.(v, dt); return; }
             v.vy = -0.01; // (nothing under it: it starts to fall)
         }
         this._fallStep(v, dt);
         if (!v.vy) this.game.death?.settle?.('v', v.id, v.x, v.y, v.z); // (it lies here now)
+    }
+
+    /** Where a dead body's feet rest: the floor, a bed's / a chest's top under them (standAt), or the floor + how far it is lain up on one (deadRest). */
+    _lieFloor(v) {
+        const c = this.game.collision;
+        if (!c) return null;
+        const gy = c.standAt ? c.standAt(v.x, v.z, v.y + 1.1) : c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : c.groundY?.(v.x, v.z);
+        if (gy == null) return null;
+        const fl = c.groundAt ? c.groundAt(v.x, v.z, v.y + 1.1) : gy;
+        return Math.max(gy, fl + (v.deadRest || 0));
+    }
+
+    /**
+     * (the safety net, BodyGuard.js) A body that is being thrown about — knocked down, stunned, flying — and is found INSIDE a bed, a chest
+     * or a wall is led out to the nearest free place on the side it came from, softly (a few tenths of a metre a frame), never through
+     * a wall, never under a bed; the journal says it («решение: тело вытолкнуто…», so the author can send the log). Not the walkers: the walking AI
+     * goes through its own house by its own paths.
+     */
+    _bodyNet(v, dt) {
+        const g = this.game, ci = g.creatureImpact;
+        if (v.seated || v.sleep?.phase === 'lie' || v.carriedBy || v.lev) return false;
+        const thrown = v.vy || v.stunT > 0 || (ci && ci.stateOf(v) !== 'up');
+        if (!thrown) { v.netIn = 0; return false; }
+        if ((v.netT = (v.netT || 0) - dt) > 0) return false;
+        v.netT = 0.1;
+        const W = guardWorld(g), r = BODY_R;
+        const feet = v.y;
+        const inside = insideSolid(W, v.x, v.z, r, feet);
+        if (!inside) { v.netIn = 0; (v.lastOk || (v.lastOk = { x: 0, z: 0 })).x = v.x; v.lastOk.z = v.z; return false; }
+        if ((v.netIn = (v.netIn || 0) + 1) < 2) return false; // (two looks in a row: not one frame of a step)
+        const prefer = v.lastOk ? { x: v.lastOk.x - v.x, z: v.lastOk.z - v.z } : null;
+        if (prefer) { const n = Math.hypot(prefer.x, prefer.z) || 1; prefer.x /= n; prefer.z /= n; }
+        const to = freeSpot(W, v.x, v.z, r, feet, (x, z) => this._walkable(x, z, v.y), prefer);
+        if (!to) return false;
+        const sx = v.x, sz = v.z, d = Math.hypot(to.x - v.x, to.z - v.z), k = Math.min(1, (0.8 * 10 * 0.1) / Math.max(d, 1e-6)); // (≤ 0.8 m per 0.1 s: soft)
+        v.x += (to.x - v.x) * k; v.z += (to.z - v.z) * k;
+        if (!v.netNote || (this._clock || 0) - v.netNote > 5) { v.netNote = this._clock || 0; this.alog?.decision(v, `тело вытолкнуто из ${solidName(inside)} (${sx.toFixed(1)}, ${sz.toFixed(1)}) → (${to.x.toFixed(1)}, ${to.z.toFixed(1)})`); }
+        return true;
     }
 
     /** Thrown up / let go in the air: flies on with its swing and falls. */
@@ -1364,11 +1405,18 @@ export class CastleLife {
         const g = this.game;
         v.y += v.vy * dt; v.vy -= 22 * dt;
         if (v.vx || v.vz) {
-            const nx = v.x + (v.vx || 0) * dt, nz = v.z + (v.vz || 0) * dt;
-            // a wall stops a flying body (it does not go through: it strikes it — Levitation counts the blow)
-            const t = g.terrain?.data;
-            if (t?.isSolidAt && (t.isSolidAt(nx, v.y + 1.2, nz) || t.isSolidAt(nx, v.y + 2.8, nz))) { v.vx = 0; v.vz = 0; }
-            else { v.x = nx; v.z = nz; }
+            // a wall (or a bed, a chest, a cupboard) stops a flying body (it does not go through: it strikes it — Levitation counts the blow);
+            // in steps of a third of a metre: at 60 m/s one frame is two metres — a single test at the end would skip a wall
+            const t = g.terrain?.data, W = guardWorld(g);
+            const n = Math.max(1, Math.ceil(Math.hypot(v.vx || 0, v.vz || 0) * dt / 0.3));
+            const sx = (v.vx || 0) * dt / n, sz = (v.vz || 0) * dt / n;
+            for (let i = 0; i < n; i++) {
+                const nx = v.x + sx, nz = v.z + sz;
+                const wall = t?.isSolidAt && (t.isSolidAt(nx, v.y + 1.2, nz) || t.isSolidAt(nx, v.y + 2.8, nz));
+                const tall = !wall && W.boxes(nx - BODY_R, nx + BODY_R, nz - BODY_R, nz + BODY_R).some((b) => b.maxY > v.y + 0.3 && b.minY < v.y + GUARD.BODY_H && nx > b.minX - BODY_R && nx < b.maxX + BODY_R && nz > b.minZ - BODY_R && nz < b.maxZ + BODY_R);
+                if (wall || tall) { v.vx = 0; v.vz = 0; break; }
+                v.x = nx; v.z = nz;
+            }
             const k = Math.max(0, 1 - 0.6 * dt);
             v.vx = (v.vx || 0) * k; v.vz = (v.vz || 0) * k;
         }
@@ -1382,7 +1430,7 @@ export class CastleLife {
                 return;
             }
         }
-        const gy = g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z);
+        const gy = g.collision.standAt ? g.collision.standAt(v.x, v.z, v.y + 1.1) : g.collision.groundAt ? g.collision.groundAt(v.x, v.z, v.y + 1.1) : g.collision.groundY(v.x, v.z); // (a bed, a chest under it: it lands ON it)
         if (v.y <= gy && v.vy < 0) { v.y = gy; v.vy = 0; v.vx = 0; v.vz = 0; v.flyFlail = false; }
     }
 
@@ -1487,6 +1535,7 @@ export class CastleLife {
         if (v.seated && v.job === 'ride' && g.travelers?.step(v, dt)) return; // (in the saddle: Riders.js leads the horse — and gets down to fight)
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
         if (!v.seated && (v.wallT = (v.wallT || 0) - dt) <= 0) { v.wallT = 0.5; this._unwall(v); }
+        this._bodyNet(v, dt); // (thrown about and found inside a bed / a chest / a wall: led out — BodyGuard.js)
         // the hero is a monster (MonsterFear.js): most run, a quarter of the knights fight, the wizards who know «Nihilis Atra» scatter it
         if (this.mfear.step(v, dt)) return;
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())
