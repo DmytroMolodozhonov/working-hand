@@ -59,6 +59,8 @@ export function replay(rec, { side = 'right', min = 12, gameHz = 60, age = 55 } 
             t: clock, hand: ch.getHandWorldPosition(side, new THREE.Vector3()),
             qU: anchor(0).getWorldQuaternion(new THREE.Quaternion()), qE: anchor(1).getWorldQuaternion(new THREE.Quaternion()),
             raw: rawSpeed, ve: lastRaw?.ve ?? 1, vw: lastRaw?.vw ?? 1, rw: lastRaw ? { x: lastRaw.x, y: lastRaw.y } : null,
+            // (debug: the solver's state for this arm and the shown points' depth)
+            sol: (() => { const S = ch.armSolver?.[side]; return S ? { su: S.su, sf: S.sf, ku: +S.ku?.toFixed(2), kf: +S.kf?.toFixed(2), du: +(S.du / S.Lu).toFixed(2), df: +(S.df / S.Lf).toFixed(2), zu: +S.zu?.toFixed(3), zf: +S.zf?.toFixed(3), pv: +S.pv?.toFixed(2), wu: +S.fu.w.toFixed(2), wf: +S.ff.w.toFixed(2) } : null; })(),
         });
     }
     const jerks = [];
@@ -88,7 +90,7 @@ export function replay(rec, { side = 'right', min = 12, gameHz = 60, age = 55 } 
         back.push({ t: Math.round(c.t), cm: +Math.min(d1.length(), d2.length()).toFixed(3) * 100 });
     }
     const backN = back.filter((x, j) => j === 0 || x.t - back[j - 1].t > 150).length; // (one per turn, not every frame of it)
-    return { frames: out.length, jerks, calm, back, backN, rmsStepCm: Math.sqrt(s2 / Math.max(1, out.length - 1)) };
+    return { rows: out, frames: out.length, jerks, calm, back, backN, rmsStepCm: Math.sqrt(s2 / Math.max(1, out.length - 1)) };
 }
 
 if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('tools/armreplay.mjs')) {

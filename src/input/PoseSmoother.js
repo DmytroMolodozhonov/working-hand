@@ -19,6 +19,15 @@
  * Pure logic, no THREE.
  */
 
+/**
+ * How long a new picture is blended in: K of the measured interval between pictures, at most MAX ms (see sample()). A slow
+ * camera (pictures FROM…TO ms apart) blends longer - up to K_SLOW of the interval, MAX_SLOW ms: blended over half of it, the
+ * arm at 15 pictures a second went and stood still 15 times a second (its drawn speed uneven by 40 %; the author 02.11:
+ * «проблема дрожания точечная» - tools/armreplay.mjs on his caught jerks: an even move drawn in steps of 25°/19°/12°). The
+ * lag the longer blend adds (half of the extra) is carried ahead as well, so the arm is not later.
+ */
+export const BLEND = { K: 0.5, MAX: 40, K_SLOW: 0.85, MAX_SLOW: 65, FROM: 45, TO: 64 }; // (15/s: uneven 40 % → 30 %, the slow aim +20 ms; 30/s: as before)
+
 const POINT_KEYS = ['leftShoulder', 'leftElbow', 'leftWrist', 'rightShoulder', 'rightElbow', 'rightWrist', 'nose'];
 const HAND_KEYS = ['leftHandLandmarks', 'rightHandLandmarks'];
 const ARM_KEYS = { left: ['leftShoulder', 'leftElbow', 'leftWrist'], right: ['rightShoulder', 'rightElbow', 'rightWrist'] };
@@ -239,14 +248,22 @@ export class PoseSmoother {
         // image: a tracking glitch) is glided over a little longer — a fast but real
         // swing must never be delayed (it made the whole body feel slow).
         const big = Math.max(0, (this.jump || 0) - 0.25) * 1500; // +150 ms per 0.1 of the image beyond 25%
-        const duration = Math.max(16, Math.min(40, this.interval * 0.5)) + Math.min(120, big);
+        const slow = _ramp(this.interval, BLEND.FROM, BLEND.TO);
+        const base = Math.max(16, Math.min(BLEND.MAX, this.interval * BLEND.K));
+        const blend = Math.max(base, Math.min(BLEND.MAX + (BLEND.MAX_SLOW - BLEND.MAX) * slow, this.interval * (BLEND.K + (BLEND.K_SLOW - BLEND.K) * slow)));
+        const duration = blend + Math.min(120, big);
         const k = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / duration));
+        // (an arm holding a thing it may throw keeps the short blend: the hands' memory (ThrowModel) reads its speed off the shown
+        // poses - tests/unit/release-model.test.js)
+        const kS = from === to ? 1 : Math.min(1, Math.max(0, (now - this.startedAt) / (base + Math.min(120, big))));
+        const kSide = { left: this.hold.left ? kS : k, right: this.hold.right ? kS : k };
         // how far ahead of the newest picture this frame is drawn (its age now + what the camera and the filters still trail)
-        const lead = PREDICT.ON ? Math.max(0, Math.min(PREDICT.MAX, (this.toAge + (now - this.startedAt)) / 1000 + PREDICT.EXTRA)) : 0;
+        const extra = (blend - base) / 2000; // (s: the longer blend's own lag, carried ahead too)
+        const lead = PREDICT.ON ? Math.max(0, Math.min(PREDICT.MAX + extra, (this.toAge + (now - this.startedAt)) / 1000 + PREDICT.EXTRA + extra)) : 0;
         this.lead = lead;
         // (the moment the shown pose stands for: the picture's arrival, as before — an arm whose hand holds a thing to throw is
         // never carried (`hold`), so the hands' memory (ThrowModel) reads its true speed off it)
-        this.eff = this.effFrom + (this.effTo - this.effFrom) * k;
+        this.eff = this.effFrom + (this.effTo - this.effFrom) * (this.hold.left || this.hold.right ? kS : k);
         const out = Object.assign({}, to);
         const dts = this._lastSample == null ? 0 : Math.max(0, Math.min(0.1, (now - this._lastSample) / 1000));
         this._lastSample = now;
@@ -257,8 +274,8 @@ export class PoseSmoother {
             out.headRotation = mixAngles(from.headRotation, to.headRotation, k);
             out.bodyRotation = mixNum(from.bodyRotation, to.bodyRotation, k);
             out.runIntensity = mixNum(from.runIntensity, to.runIntensity, k);
-            for (const key of POINT_KEYS) out[key] = mixPoint(from[key], out[key], k);
-            for (const key of HAND_KEYS) out[key] = mixList(from[key], out[key], k);
+            for (const key of POINT_KEYS) out[key] = mixPoint(from[key], out[key], key.startsWith('left') ? kSide.left : key.startsWith('right') ? kSide.right : k);
+            for (const key of HAND_KEYS) out[key] = mixList(from[key], out[key], key.startsWith('left') ? kSide.left : kSide.right);
             if (to.torso && from.torso) {
                 out.torso = {
                     ...to.torso,
