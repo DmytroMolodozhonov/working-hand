@@ -110,7 +110,7 @@ export function frame({ crossedArms = false, arms = 'forward', raise = null, poc
     // (the left hand reaching across to the right hip)
     // (as the author asked: the things and the pouches are taken by the OTHER hand, across the body —
     // the pouches beside the right hip, the wrist out at the body's side; the pocket in front of it)
-    if (purse === 'cross') { lElbow = [0.53, sh + 0.22]; lWrist = [0.375, sh + 0.31]; }
+    if (purse === 'cross') { lElbow = [0.56, sh + 0.24]; lWrist = [0.46, sh + 0.35]; } // (the coins are taken at the things' place, on the belt: the hand there not going in — a fist grabbing)
     if (pocket === 'cross') { lElbow = [0.54, sh + 0.24]; lWrist = [0.44, sh + 0.37]; leftCurl = null; }
     // a hand brought to the mouth (eating): the elbow down in front, the hand at the mouth
     if (toMouth === 'right') { rElbow = [0.42, sh + 0.12]; rWrist = [0.485, noseY + 0.1]; }

@@ -909,8 +909,14 @@ export class PoseService {
             const h = this._hints || (this._hints = new PocketHints());
             const dt = this._hintAt ? (now - this._hintAt) / 1000 : 0.066;
             this._hintAt = now;
-            info.aspect = W / H;
-            if (h.step(dt, pl, info)) drawPocketHints(ctx, W, H, h, info);
+            // (the CAMERA's picture shape, as PoseInterpreter reads the places - not the window's: a 16:9 camera in the 4:3
+            // window put the hints off the zones the game really reads)
+            const v = this.native ? this._nativeVideo : this.videoElement;
+            info.aspect = v && v.videoWidth > 0 && v.videoHeight > 0 ? v.videoWidth / v.videoHeight : 4 / 3;
+            // (the window is drawn at W×H and shown smaller: lines and labels never thinner than a few screen pixels)
+            if (!(now - (this._hintSAt || 0) < 1000)) { this._hintSAt = now; const sh = ctx.canvas?.clientHeight; this._hintS = sh > 0 ? H / sh : 1; } // (read once a second: no layout per frame)
+            const s = this._hintS || 1;
+            if (h.step(dt, pl, info)) drawPocketHints(ctx, W, H, h, info, s);
         } catch (e) {
             if (!this._hintErr) { this._hintErr = true; console.warn('[Подсказки карманов]', e); }
         }

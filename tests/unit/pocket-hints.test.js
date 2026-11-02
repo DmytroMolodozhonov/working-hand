@@ -2,19 +2,19 @@
 // nothing without a pose, grey when shut, the glow only for the place the hand goes to, no blinking, small icons.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PocketHints, placesFrom, iconPx, ICON_H, ALPHA, HINT_AT } from '../../src/input/PocketHints.js';
+import { PocketHints, placesFrom, iconPx, ICON_H, ALPHA, HINT_AT, IDS } from '../../src/input/PocketHints.js';
 import { bodyPlaces } from '../../src/input/PoseInterpreter.js';
 import { frame } from '../e2e/poses.mjs';
 
-const mkPl = () => ({ pocket: { x: 0, y: 0 }, purse: { x: 0, y: 0 }, wand: { x: 0, y: 0 }, T: 0 });
+const mkPl = () => ({ pocket: { x: 0, y: 0 }, wand: { x: 0, y: 0 }, T: 0 });
 const pose = (o = {}) => frame({ arms: 'hang', ...o }).poseLandmarks;
-const info = (o = {}) => ({ on: true, leftHanded: false, shut: false, wand: true, purse: true, ...o });
+const info = (o = {}) => ({ on: true, leftHanded: false, shut: false, wand: true, ...o });
 
 test('places follow the body: pocket and pouch at the right hip, the wand in front a little to the other side', () => {
     const lm = pose(), P = mkPl();
     assert.ok(placesFrom(P, lm));
     assert.ok(Math.abs(P.pocket.x - lm[24].x) < P.T * 0.2, 'at the right hip joint (the pocket\'s opening)');
-    assert.ok(P.purse.x < P.pocket.x, 'the pouch further out than the pocket');
+    assert.ok(P.pocket.x > lm[24].x && P.pocket.x < (lm[23].x + lm[24].x) / 2, 'the pocket on the right half of the belt (the coins are taken there too)');
     assert.ok(P.wand.x > P.pocket.x, 'the wand towards the middle / the other side');
     assert.ok(Math.abs(P.pocket.y - lm[24].y) < P.T * 0.3, 'at the belt');
     // moves with the body, not fixed on the screen
@@ -39,7 +39,7 @@ test('a left-hander: all mirrored', () => {
     const a = mkPl(), b = mkPl();
     placesFrom(a, lm, false);
     placesFrom(b, m, true);
-    for (const id of ['pocket', 'purse', 'wand']) {
+    for (const id of ['pocket', 'wand']) {
         assert.ok(Math.abs(a[id].x - (1 - b[id].x)) < 1e-9, id + ' x');
         assert.ok(Math.abs(a[id].y - b[id].y) < 1e-9, id + ' y');
     }
@@ -84,9 +84,9 @@ test('the glow only on the place the hand goes to, and only a soft level', () =>
     const near = lm.map((p, i) => (i === 15 ? { ...p, x: P.pocket.x + 0.01, y: P.pocket.y } : p));
     for (let i = 0; i < 30; i++) h.step(0.066, near, info());
     assert.equal(h.near, 'pocket');
-    assert.ok(h.items.pocket.glow > 0.8 && h.items.purse.glow < 0.05 && h.items.wand.glow < 0.05);
+    assert.ok(h.items.pocket.glow > 0.8 && h.items.wand.glow < 0.05);
     assert.ok(h.items.pocket.a > ALPHA.base && h.items.pocket.a <= ALPHA.near + 1e-9);
-    assert.ok(Math.abs(h.items.purse.a - ALPHA.base) < 0.02, 'the others stay thin');
+    assert.ok(Math.abs(h.items.wand.a - ALPHA.base) < 0.02, 'the others stay as they are');
     // the leading (right) hand goes to the wand, not to the pocket
     const h2 = new PocketHints(), w = lm.map((p, i) => (i === 16 ? { ...p, x: P.wand.x, y: P.wand.y } : p));
     for (let i = 0; i < 30; i++) h2.step(0.066, w, info());
@@ -101,8 +101,8 @@ test('the wand not on the belt (in the hand, dropped) — its hint fades away; n
     const lm = pose(), h = new PocketHints();
     for (let i = 0; i < 20; i++) h.step(0.066, lm, info());
     assert.ok(h.items.wand.a > 0.3);
-    for (let i = 0; i < 30; i++) h.step(0.066, lm, info({ wand: false, purse: false }));
-    assert.ok(h.items.wand.a < 0.02 && h.items.purse.a < 0.02);
+    for (let i = 0; i < 30; i++) h.step(0.066, lm, info({ wand: false }));
+    assert.ok(h.items.wand.a < 0.02);
     assert.ok(h.items.pocket.a > 0.3, 'the pocket stays');
 });
 
@@ -120,7 +120,7 @@ test('icons are small: at most 9 % of the window, never when the window is tiny'
     assert.ok(iconPx(240, 0.4) <= ICON_H * 240 + 1e-9);
     assert.ok(iconPx(240, 0.2) <= 0.3 * 0.2 * 240 + 1e-9, 'a small torso — a small icon');
     assert.equal(iconPx(60, 0.4), 0, 'a tiny window: only the rings');
-    assert.ok(HINT_AT.pocket.out < HINT_AT.purse.out);
+    assert.ok(HINT_AT.pocket && !HINT_AT.purse && !IDS.includes('purse'), 'no mark of its own for the coins: they are taken at the pocket (the author)');
 });
 
 test('one call is cheap and makes no new objects', () => {
@@ -132,4 +132,37 @@ test('one call is cheap and makes no new objects', () => {
     assert.ok((performance.now() - t0) / 2000 < 0.05, 'under 0.05 ms');
     assert.equal(h.items, items);
     assert.equal(Object.keys(h.items.pocket).join(), keys);
+});
+
+test('the drawn mark is where the game reads the zone — any camera shape, right- or left-handed; the things on the belt, on the right', async () => {
+    const { BELT_AT } = await import('../../src/input/PoseInterpreter.js');
+    for (const aspect of [4 / 3, 16 / 9]) for (const lefty of [false, true]) {
+        const mirror = (lm) => { const m = lm.map((p) => ({ ...p, x: 1 - p.x })); for (const [a, b] of [[11, 12], [13, 14], [15, 16], [23, 24]]) [m[a], m[b]] = [m[b], m[a]]; return m; };
+        const get = (o) => { const lm = frame(o).poseLandmarks; return lefty ? mirror(lm) : lm; };
+        const offW = lefty ? 16 : 15, offE = lefty ? 14 : 13, domW = lefty ? 15 : 16, domE = lefty ? 13 : 14;
+        const tag = `aspect ${aspect.toFixed(2)} ${lefty ? 'left' : 'right'}-handed`;
+        // the other hand's wrist right on the drawn pocket (the elbow goes with it): the game reads «pocket»
+        let lm = get({ arms: 'hang', pocket: 'cross' }), P = mkPl();
+        assert.ok(placesFrom(P, lm, lefty, aspect), tag);
+        const move = (l, w, e, to) => { const dx = to.x - l[w].x, dy = to.y - l[w].y; l[w] = { ...l[w], x: to.x, y: to.y }; l[e] = { ...l[e], x: l[e].x + dx, y: l[e].y + dy }; };
+        move(lm, offW, offE, P.pocket);
+        assert.equal(bodyPlaces(lm, null, null, aspect, lefty).pocket.off, true, 'pocket ' + tag);
+        // ...and that place is ON the belt, on the leading side: between the hips' middle and the leading hip joint, at the hip line
+        const hip = lm[lefty ? 23 : 24], mid = (lm[23].x + lm[24].x) / 2, T = hip.y - lm[lefty ? 12 : 11].y;
+        assert.ok((P.pocket.x - hip.x) * (mid - hip.x) > 0 && Math.abs(P.pocket.x - hip.x) < Math.abs(mid - hip.x), 'on the right half of the belt ' + tag);
+        assert.ok(Math.abs(P.pocket.y - hip.y) < 0.15 * T, 'at the belt line ' + tag);
+        // the coins are taken at the SAME place: a fist (not going in) on the pocket's mark — the game reads «purse»
+        const ff = frame({ arms: 'hang', purse: 'cross', leftCurl: 0.9, mirror: lefty }), fl = ff.poseLandmarks, hd = ff.hands.find((x) => x.label === (lefty ? 'Left' : 'Right'))?.landmarks;
+        const R = mkPl(); placesFrom(R, fl, lefty, aspect);
+        assert.ok(Math.hypot((fl[offW].x - R.pocket.x) * aspect, fl[offW].y - R.pocket.y) / R.T < 0.2, 'the coins\' hand is on the pocket\'s mark ' + tag);
+        const pr = bodyPlaces(fl, lefty ? null : hd, lefty ? hd : null, aspect, lefty);
+        assert.ok(pr.purse.off === true && pr.pocket.off === false, 'purse ' + tag);
+        // the wand's mark: the leading hand there is at the wand's place
+        lm = get({ arms: 'hang', belt: 'right' });
+        if (lefty) lm = mirror(frame({ arms: 'hang', belt: 'right' }).poseLandmarks);
+        const Q = mkPl(); placesFrom(Q, lm, lefty, aspect); move(lm, domW, domE, Q.wand);
+        const b = bodyPlaces(lm, null, null, aspect, lefty).belt[lefty ? 'left' : 'right'];
+        assert.ok(b && b.dy > BELT_AT.dy[0] && b.dy < BELT_AT.dy[1] && b.u > BELT_AT.u[0] && b.u < BELT_AT.u[1], 'wand ' + tag);
+        assert.ok(Math.abs(b.u - (BELT_AT.u[0] + BELT_AT.u[1]) / 2) < 1e-6, 'the wand mark is the zone\'s middle ' + tag);
+    }
 });
