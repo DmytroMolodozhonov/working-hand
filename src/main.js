@@ -97,10 +97,29 @@ let _lastShader = null;
             try { localStorage.setItem('zns-gl-at', _lastShader); } catch (e) { /* no storage */ }
             return compile(sh);
         };
-        gl.linkProgram = (pr) => link(pr);
+        // (built: the mark is taken off a frame later - a driver reset kills the page while it builds, so a mark left at the next
+        // start means a real break; left on after every good build it said «прошлый запуск оборвался на шейдере» at every start)
+        gl.linkProgram = (pr) => { const r = link(pr), at = _lastShader; requestAnimationFrame(() => { try { if (_lastShader === at) localStorage.removeItem('zns-gl-at'); } catch (e) { /* no storage */ } }); return r; };
         try { const old = localStorage.getItem('zns-gl-at'); if (old) { localStorage.removeItem('zns-gl-at'); setTimeout(() => netLog(`🔥 прошлый запуск оборвался на шейдере: ${old.slice(0, 700)}`), 1500); } } catch (e) { /* no storage */ }
     } catch (e) { /* the card gives no hooks: the journal just says less */ }
 })();
+// (the card dropped the drawing: the page comes back by itself - as soon as the browser gives the drawing back, or in 3 s anyway - with
+// the window as it was; at most twice in 2 minutes, then the words on the screen say what to do. 02.11: a second game on the same
+// card - a test left running in the background - made it drop at the world's shaders and the player was left on a dead screen)
+const glReload = (why) => {
+    if (window.__glReloading) return;
+    let tries = [];
+    try { tries = JSON.parse(sessionStorage.getItem('zns-gl-retry') || '[]').filter((t) => Date.now() - t < 120000); } catch (e) { /* no storage */ }
+    if (tries.length >= 2) return;
+    window.__glReloading = true;
+    try { sessionStorage.setItem('zns-gl-retry', JSON.stringify([...tries, Date.now()])); } catch (e) { /* no storage */ }
+    netLog(`🎮 графика сброшена видеокартой — перезапускаю страницу (${why})`);
+    try { updateProgress(100, 'Видеокарта сбросила графику — перезапускаю игру…'); } catch (err) { /* not built yet */ }
+    try { rememberWindowSize(); } catch (err) { /* */ }
+    setTimeout(() => location.reload(), 400);
+};
+canvas.addEventListener('webglcontextrestored', () => glReload('графика вернулась'));
+canvas.addEventListener('webglcontextlost', () => setTimeout(() => glReload('за 3 с графика не вернулась'), 3000));
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__glLost = true; netLog(`🎮 видеокарта сбросила графику (WebGL context lost) — игра не может продолжать; последний шейдер: ${(_lastShader || '—').slice(0, 700)}`); try { updateProgress(100, 'Видеокарта сбросила графику (драйвер перезапустился). Закройте другие тяжёлые программы, обновите драйвер видеокарты и запустите снова.'); } catch (err) { /* the screen is not built yet */ } });
 setTextureRenderer(renderer); // (pictures made on the video card at loading: src/core/GpuTexture.js)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // the game's QualityManager adjusts it
