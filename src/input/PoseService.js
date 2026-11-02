@@ -16,7 +16,7 @@ import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js'
 import { ArmGuard } from './ArmGuard.js';
 import { PoseInterpreter } from './PoseInterpreter.js';
 import { PocketHints } from './PocketHints.js';
-import { drawPocketHints } from './PocketHintsDraw.js';
+import { drawPocketHints, drawHeldWands } from './PocketHintsDraw.js';
 import { matchSticks } from './RealStick.js';
 import { detectStick } from './StickDetector.js';
 
@@ -920,6 +920,7 @@ export class PoseService {
             if (!(now - (this._hintSAt || 0) < 1000)) { this._hintSAt = now; const sh = ctx.canvas?.clientHeight; this._hintS = sh > 0 ? H / sh : 1; } // (read once a second: no layout per frame)
             const s = this._hintS || 1;
             if (h.step(dt, pl, info)) drawPocketHints(ctx, W, H, h, info, s);
+            drawHeldWands(ctx, W, H, pl, info.held, info.aspect, s); // (a wand in a hand: the game's own line, from the real wrist)
         } catch (e) {
             if (!this._hintErr) { this._hintErr = true; console.warn('[Подсказки карманов]', e); }
         }

@@ -1,8 +1,8 @@
 /**
  * PocketHintsDraw.js - draws the hints of PocketHints.js on the camera window's 2D canvas: for every place a bright
- * outlined mark (a dark edge under a coloured line, a see-through fill) - yellow: the things' pocket (the next thing's
- * picture in it and the row of cells; the coins are taken at the same place), pink: the wand at the belt (a little wand
- * in it). No words (the author: «подписывать не нужно, достаточно значка»). The author: «видно очень плохо, почти не
+ * outlined mark (a dark edge under a coloured line, a see-through fill) for the things' pocket (yellow: the next thing's
+ * picture in it and the row of cells; the coins are taken at the same place), and for the wand at the belt just the wand
+ * itself - no cell round it (the author: «палочка имеет как бы ячейку нарисованную как в интерфейсе, так не должно быть»). No words (the author: «подписывать не нужно, достаточно значка»). The author: «видно очень плохо, почти не
  * видно» - the old thin pale rings were lost over the skeleton, so the colours are ones the skeleton never uses (green
  * bones, red joints, cyan hands).
  * Sizes follow the torso in the picture, but never below a few SCREEN pixels: the window is drawn at 320×240 and shown
@@ -31,15 +31,16 @@ export function iconImage(url) {
 /** The marks' looks: line and fill (rgb for rgba()). Grey when shut (monster, still, dead, Imperius). */
 export const HINT_STYLE = {
     pocket: { line: '#ffd400', fill: ['rgba(255,212,0,0.28)', 'rgba(255,212,0,0.58)'] },
-    wand: { line: '#ff4fd8', fill: ['rgba(255,79,216,0.28)', 'rgba(255,79,216,0.58)'] },
 };
 const GREY = { line: '#b8bec8', fill: ['rgba(184,190,200,0.28)', 'rgba(184,190,200,0.4)'] };
 const EDGE = 'rgba(0,0,0,0.85)';
 
 /** The marks' sizes in torso heights (w, h) and their least size in screen pixels. */
-// (narrow enough that the wand's and the things' marks never touch: their middles are only ~0.18 torso apart)
-export const BOX = { pocket: [0.18, 0.17], wand: [0.09, 0.34] };
-const BOX_MIN = { pocket: [12, 11], wand: [7, 16] };
+export const BOX = { pocket: [0.18, 0.17] };
+const BOX_MIN = { pocket: [12, 11] };
+/** The wand's length (torso heights) and its least length in screen pixels. */
+export const WAND_LEN = 0.32;
+const WAND_MIN = 16;
 
 function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -69,12 +70,19 @@ function mark(ctx, X, Y, w, h, a, glow, st, lw, dashed) {
     if (dashed) ctx.setLineDash([]);
 }
 
-/** The small wand tucked at the belt: handle up, the tip down towards the thigh (away from the hand that takes it). */
-function wandShape(ctx, X, Y, len, a, grey, tipDir, s) {
+/** The small wand tucked at the belt: handle up, the tip down towards the thigh (away from the hand that takes it). `glow` - the hand coming to it: a soft light round it, no frame. */
+function wandShape(ctx, X, Y, len, a, grey, tipDir, s, glow = 0) {
     ctx.globalAlpha = a;
     const hx = X - tipDir * len * 0.14, hy = Y - len * 0.4; // (the handle)
     const tx = X + tipDir * len * 0.14, ty = Y + len * 0.4; // (the tip)
     ctx.lineCap = 'round';
+    if (glow > 0.05 && !grey) { // (the hand is coming: a pink light along it)
+        ctx.globalAlpha = a * Math.min(1, glow);
+        ctx.strokeStyle = 'rgba(255,79,216,0.75)';
+        ctx.lineWidth = Math.max(7 * s, len * 0.34);
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.globalAlpha = a;
+    }
     ctx.strokeStyle = EDGE;
     ctx.lineWidth = Math.max(3.5 * s, len * 0.16);
     ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
@@ -84,6 +92,44 @@ function wandShape(ctx, X, Y, len, a, grey, tipDir, s) {
     ctx.fillStyle = grey ? '#ffffff' : '#bfe6ff'; // (a glint at the tip)
     ctx.beginPath(); ctx.arc(tx, ty, Math.max(1.5 * s, len * 0.06), 0, Math.PI * 2); ctx.fill();
     ctx.lineCap = 'butt';
+}
+
+/**
+ * A wand held in a hand, drawn in the window as the game holds it (the author: «прямо такой же линией как она в игре, а
+ * не просто рисунок»): `held` from Inventory._heldWandHint — the butt and the tip from the hero's hand (hero's space, x
+ * right, y up, metres) — laid from the player's real wrist in the picture, scaled by the player's shoulders against the
+ * hero's (the depth is not seen in the picture: as a camera would see it, foreshortened). The picture is a mirror: the
+ * hero's right is the window's right, as the player's own right hand is. Call after the skeleton, outside its mirror.
+ */
+export function drawHeldWands(ctx, W, H, lm, held, aspect = 4 / 3, s = 1) {
+    if (!held || !lm || lm.length < 17 || !(held.left?.on || held.right?.on)) return;
+    const ls = lm[11], rs = lm[12];
+    if (!ls || !rs || (ls.visibility ?? 1) < 0.5 || (rs.visibility ?? 1) < 0.5) return;
+    const S = Math.hypot((ls.x - rs.x) * aspect, ls.y - rs.y); // (the player's shoulders, picture heights)
+    if (!(S > 0.02)) return;
+    const k = S / (held.shoulder || 1); // (picture heights per metre of the hero)
+    s = Math.max(0.5, s || 1);
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const side of ['left', 'right']) {
+        const w = held[side];
+        if (!w?.on) continue;
+        const wr = lm[side === 'left' ? 15 : 16];
+        if (!wr || (wr.visibility ?? 1) < 0.3) continue;
+        const X0 = (1 - wr.x) * W, Y0 = wr.y * H, kx = (k * W) / aspect, ky = k * H;
+        const bx = X0 + w.bx * kx, by = Y0 - w.by * ky, tx = X0 + w.tx * kx, ty = Y0 - w.ty * ky;
+        const len = Math.hypot(tx - bx, ty - by);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = EDGE;
+        ctx.lineWidth = Math.max(4 * s, len * 0.09);
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = '#f3d9a4'; // (light wood: seen on the dark window, as the wand at the belt)
+        ctx.lineWidth = Math.max(2.2 * s, len * 0.045);
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.fillStyle = '#bfe6ff'; // (a glint at the tip: which end it points with)
+        ctx.beginPath(); ctx.arc(tx, ty, Math.max(2 * s, len * 0.04), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
 }
 
 /**
@@ -104,12 +150,12 @@ export function drawPocketHints(ctx, W, H, hints, d, s = 1) {
         const it = I[id];
         const a = it.a * fade;
         if (a < 0.02) continue;
+        const x = X(it), y = Y(it);
+        if (id === 'wand') { wandShape(ctx, x, y, Math.max(WAND_MIN * s, WAND_LEN * Tp), a, grey, d.leftHanded ? 1 : -1, s, it.glow); continue; }
         const st = grey ? GREY : HINT_STYLE[id];
         const w = Math.max(BOX_MIN[id][0] * s, BOX[id][0] * Tp), h = Math.max(BOX_MIN[id][1] * s, BOX[id][1] * Tp);
-        const x = X(it), y = Y(it);
-        const empty = id === 'pocket' && !d.pocketUrl;
+        const empty = !d.pocketUrl;
         mark(ctx, x, y, w, h, empty ? a * 0.85 : a, it.glow, st, lw, empty);
-        if (id === 'wand') { wandShape(ctx, x, y, h * 0.92, a, grey, d.leftHanded ? 1 : -1, s); continue; }
         const img = iconImage(d.pocketUrl);
         const px = Math.min(iconPx(H, hints.T || 0.3) || 0, Math.min(w, h) * 0.86);
         if (img && px > 0) {

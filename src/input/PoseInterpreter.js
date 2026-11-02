@@ -82,7 +82,13 @@ export const BELT_UPPER = 0.38;
  * (negative: above), u — towards the person's left from the hips' middle; or null.
  */
 /** The wand's place at the waistband (beltPose `at`): the wrist below the hip line `dy`, towards the person's other side `u` (torso heights). The camera window draws its hint at the middle (PocketHints.js). */
-export const BELT_AT = { dy: [-0.45, 0.1], u: [-0.15, 0.21] };
+// (a little further to the person's left than it was (-0.15…0.21, the middle at 0.03 - nearly the belt's middle): the author,
+// looking at the camera window - «палочка должна быть немного левее, а то она сейчас ближе к центру пояса нарисована и берется»)
+// The middle (0.115) is half way from the belt's middle to the left hip joint (~0.25) - the things' pocket's mirror; the outer edge
+// stays short of the left trouser pocket (u ~0.28: a hand in it is not at the wand).
+export const BELT_AT = { dy: [-0.45, 0.1], u: [-0.02, 0.25] };
+/** The wider zone a hand at the wand stays in / takes it from (beltPose `near`), the same way to the left. */
+export const BELT_NEAR = { dy: [-0.6, 0.25], u: [-0.2, 0.7] };
 export function beltPose(lm, side, aspect = 4 / 3) {
     const [s, e, w] = side === 'left' ? [11, 13, 15] : [12, 14, 16];
     const sh = lm?.[s], el = lm?.[e], wr = lm?.[w], lh = lm?.[23], rh = lm?.[24];
@@ -101,7 +107,7 @@ export function beltPose(lm, side, aspect = 4 / 3) {
     // left, and the wand went to the belt)
     const upper = nu / T >= BELT_UPPER;
     const at = dy > BELT_AT.dy[0] && dy < BELT_AT.dy[1] && u > BELT_AT.u[0] && u < BELT_AT.u[1] && bend > 0.55 && upper; // (u ~0.25: the left hip, its trouser pocket)
-    const near = dy > -0.6 && dy < 0.25 && u > -0.3 && u < 0.6 && bend > 0.35 && upper;
+    const near = dy > BELT_NEAR.dy[0] && dy < BELT_NEAR.dy[1] && u > BELT_NEAR.u[0] && u < BELT_NEAR.u[1] && bend > 0.35 && upper;
     return { at, near, dy, u, bend };
 }
 
@@ -127,7 +133,7 @@ export function bodyPlace(lm, side, aspect = 4 / 3) {
     const wand = b.near;
     if (purse === wand) {
         if (!purse) return null;
-        const dW = Math.abs(b.u - 0.03), dP = Math.abs(b.u + hw + 0.1); // (the wand's handle a little left of the middle; the pouches just outside the hip)
+        const dW = Math.abs(b.u - (BELT_AT.u[0] + BELT_AT.u[1]) / 2), dP = Math.abs(b.u + hw + 0.1); // (the wand's handle a little left of the middle; the pouches just outside the hip)
         if (Math.abs(dW - dP) < 0.08) return null;
         return dW < dP ? 'wand' : 'purse';
     }

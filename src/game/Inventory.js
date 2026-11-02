@@ -684,7 +684,40 @@ export class Inventory {
         const it = nx >= 0 ? this.slots[nx] : null;
         o.pocketUrl = it ? g.itemIcons?.url(it) || null : null;
         o.wand = !!this.belt.beltWand() && !(g.items?.held.left?.item.kind === 'wand' || g.items?.held.right?.item.kind === 'wand');
+        this._heldWandHint(o);
         return o;
+    }
+
+    /**
+     * A wand in a hand, for the camera window (the author: «если игрок держит в кисти палочку она также будет рисоваться …
+     * прямо такой же линией как она в игре»): the game's own wand — its butt and tip from the hand, in the hero's space
+     * (x right, y up, metres), and the hero's shoulder width (the window scales it by the player's shoulders). Filled into
+     * `o.held.left / .right` (`on` false — no wand in that hand). No allocations.
+     */
+    _heldWandHint(o) {
+        const g = this.game, ch = g.character;
+        const H = o.held || (o.held = { left: { on: false, bx: 0, by: 0, tx: 0, ty: 0 }, right: { on: false, bx: 0, by: 0, tx: 0, ty: 0 }, shoulder: 1 });
+        H.left.on = H.right.on = false;
+        if (!ch?.group || !ch.getHandWorldPosition || o.shut) return;
+        let any = false;
+        for (const side of ['left', 'right']) {
+            const h = g.items?.held?.[side];
+            if (!h || h.item.kind !== 'wand' || !h.model) continue;
+            if (!any) {
+                any = true;
+                ch.group.updateMatrixWorld(true);
+                _inv.copy(ch.group.matrixWorld).invert();
+                const ls = ch.leftArmAnchor?.getWorldPosition(_v), rs = ls && ch.rightArmAnchor?.getWorldPosition(_v2);
+                H.shoulder = rs ? Math.max(0.1, ls.applyMatrix4(_inv).distanceTo(rs.applyMatrix4(_inv))) : 1;
+            }
+            const hand = ch.getHandWorldPosition(side, _v).applyMatrix4(_inv);
+            const m = h.model, w = H[side];
+            const b = _v2.set(0, 0, 0).applyMatrix4(m.matrixWorld).applyMatrix4(_inv);
+            w.bx = b.x - hand.x; w.by = b.y - hand.y;
+            const t = _v2.set(0, m.userData?.tipY || 0.65, 0).applyMatrix4(m.matrixWorld).applyMatrix4(_inv);
+            w.tx = t.x - hand.x; w.ty = t.y - hand.y;
+            w.on = true;
+        }
     }
 
     /** The pocket's soft ring: glows only while the off hand holds a thing and is near the pocket (nothing otherwise, no noise). */

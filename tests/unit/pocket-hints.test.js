@@ -166,3 +166,37 @@ test('the drawn mark is where the game reads the zone — any camera shape, righ
         assert.ok(Math.abs(b.u - (BELT_AT.u[0] + BELT_AT.u[1]) / 2) < 1e-6, 'the wand mark is the zone\'s middle ' + tag);
     }
 });
+
+test('a wand in a hand is drawn as the game holds it: from the real wrist, its direction and length (mirror: the hero\'s right is the window\'s right)', async () => {
+    const THREE = await import('three');
+    const { Inventory } = await import('../../src/game/Inventory.js');
+    const { drawHeldWands } = await import('../../src/input/PocketHintsDraw.js');
+    // the game's side: a hero turned any way, the wand in the right hand pointing up and to the hero's right
+    const group = new THREE.Group(); group.position.set(5, 2, -3); group.rotation.y = 0.7;
+    const la = new THREE.Group(), ra = new THREE.Group(); la.position.set(-0.6, 1, 0); ra.position.set(0.6, 1, 0); group.add(la, ra);
+    const hand = new THREE.Vector3(0.6, 0, -0.5);
+    const model = new THREE.Group(); model.position.copy(hand); model.rotation.z = -Math.PI / 4; model.userData.tipY = 0.6; group.add(model);
+    group.updateMatrixWorld(true);
+    const game = { character: { group, leftArmAnchor: la, rightArmAnchor: ra, getHandWorldPosition: (s, out) => out.copy(hand).applyMatrix4(group.matrixWorld) }, items: { held: { right: { item: { kind: 'wand' }, model } } } };
+    const o = { shut: false };
+    Inventory.prototype._heldWandHint.call({ game }, o);
+    const w = o.held.right;
+    assert.ok(w.on && !o.held.left.on);
+    assert.ok(Math.abs(o.held.shoulder - 1.2) < 1e-6, 'the hero\'s shoulders');
+    assert.ok(Math.abs(w.bx) < 1e-6 && Math.abs(w.by) < 1e-6, 'the butt in the hand');
+    assert.ok(Math.abs(w.tx - 0.6 * Math.SQRT1_2) < 1e-6 && Math.abs(w.ty - 0.6 * Math.SQRT1_2) < 1e-6, 'the tip up and to the right, in the hero\'s own space');
+    // the window's side: the line from the player's right wrist, up and to the window's right, as long as the hero's wand in shoulders
+    const lm = pose(), lines = [];
+    const ctx = { save() {}, restore() {}, beginPath() {}, stroke() {}, fill() {}, arc() {}, moveTo(x, y) { this._m = [x, y]; }, lineTo(x, y) { lines.push([...this._m, x, y]); } };
+    drawHeldWands(ctx, 320, 240, lm, o.held, 4 / 3, 1);
+    assert.ok(lines.length >= 2);
+    const [x0, y0, x1, y1] = lines[0], wr = lm[16];
+    assert.ok(Math.abs(x0 - (1 - wr.x) * 320) < 1e-6 && Math.abs(y0 - wr.y * 240) < 1e-6, 'from the real right wrist (mirrored like the skeleton)');
+    assert.ok(x1 > x0 && y1 < y0, 'up and to the window\'s right');
+    const S = Math.hypot((lm[11].x - lm[12].x) * 4 / 3, lm[11].y - lm[12].y);
+    assert.ok(Math.abs(Math.hypot((x1 - x0) * (4 / 3) / 320, (y1 - y0) / 240) - 0.6 * S / 1.2) < 1e-6, 'its length: half the shoulders, as the hero\'s');
+    // no wand in a hand — nothing drawn
+    lines.length = 0;
+    drawHeldWands(ctx, 320, 240, lm, { left: { on: false }, right: { on: false }, shoulder: 1 }, 4 / 3, 1);
+    assert.equal(lines.length, 0);
+});
