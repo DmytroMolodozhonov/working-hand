@@ -37,6 +37,8 @@ export const THROWS = {
     down: [{ x: 0.5, y: 1.2, z: -0.6 }, { x: 0.5, y: 1.0, z: -1.2 }, { x: 0.5, y: -0.4, z: -1.2 }, { x: 0.5, y: -1.1, z: -0.9 }], // at the feet
     up: [{ x: 0.6, y: -0.6, z: -0.6 }, { x: 0.6, y: 0.2, z: -1.0 }, { x: 0.5, y: 1.6, z: -0.8 }, { x: 0.5, y: 2.2, z: -0.3 }],
 };
+// a small arc from below with the arm hanging and lifted a little (the author: it must NOT let the thing go): not a throw kind
+const MINI_ARC = [{ x: 0.7, y: -1.35, z: -0.3 }, { x: 0.7, y: -1.2, z: -0.55 }, { x: 0.68, y: -1.2, z: -0.8 }, { x: 0.66, y: -1.35, z: -0.8 }]; // (~0.8 m of path)
 const SHOULDER = { x: 0.7, y: 0.5, z: 0 };
 const REST = { x: 0.55, y: 0.2, z: -0.9 }; // the thing held in front (elbow bent)
 
@@ -61,8 +63,8 @@ export function simulate(o) {
     const dur = 2 * acc + 120 * r(); // the throw from A to E
     const late = o.late ?? (-10 + 40 * r()); // the fingers open this after the peak (people release at or just past it)
     const openMs = kind === 'drop' ? 150 + 150 * r() : 40 + 40 * r();
-    const P = (THROWS[kind] || THROWS.overhand).map((p) => ({ x: p.x * sx, y: p.y, z: p.z }));
-    const rest = { x: REST.x * sx, y: REST.y, z: REST.z };
+    const P = (THROWS[kind] || (kind === 'miniArc' ? MINI_ARC : THROWS.overhand)).map((p) => ({ x: p.x * sx, y: p.y, z: p.z }));
+    const rest = kind === 'miniArc' ? { ...P[0] } : { x: REST.x * sx, y: REST.y, z: REST.z }; // (a mini arc: the arm already hangs low, there is no wind-up from the front)
     // scale the throw's curve to the wanted peak speed: minimum jerk peaks at 1.875·L/T
     let L = 0; { let q = bez(P, 0); for (let i = 1; i <= 50; i++) { const p = bez(P, i / 50); L += Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z); q = p; } }
     const want = o.speed ?? 9;
@@ -99,7 +101,7 @@ export function simulate(o) {
     };
     const velAt = (t) => { const a = posAt(t - 0.5), b = posAt(t + 0.5); return { x: (b.x - a.x) * 1000, y: (b.y - a.y) * 1000, z: (b.z - a.z) * 1000 }; };
     // ---- the truth
-    const truth = { act: ['hold', 'walk', 'wave', 'chop', 'punch', 'lostRest', 'glitch', 'lower'].includes(kind) ? null : kind === 'drop' ? 'drop' : 'throw', t: tOpen };
+    const truth = { act: ['hold', 'walk', 'wave', 'chop', 'punch', 'lostRest', 'glitch', 'lower', 'miniArc'].includes(kind) ? null : kind === 'drop' ? 'drop' : 'throw', t: tOpen };
     if (truth.act === 'throw') {
         const tr = tOpen + RELEASE.REL_LEVEL * openMs * 0.5; // (the fingers' 30%: the thing slips there)
         const vh = velAt(tr);
@@ -175,7 +177,7 @@ export function simulate(o) {
         const sh = { x: SHOULDER.x * sx, y: SHOULDER.y, z: SHOULDER.z };
         const dx = hp.x - sh.x, dy = hp.y - sh.y, dz = hp.z - sh.z, len = Math.hypot(dx, dy, dz) || 1e-6;
         const arm = { reach: len / 1.9, forward: -dz / len, up: dy / len, palmUp: 0 };
-        const d = ht.decide({ t: te, arm, weight });
+        const d = ht.decide({ t: te, arm, weight, secondary: true }); // (the bench's hand is the secondary one: it is judged by the secondary rules)
         if (d && d.act) { got = { ...d, v: { ...d.v }, vRel: { ...d.vRel }, pos: { ...d.pos } }; at = t; break; }
     }
     let launch = null;
@@ -221,7 +223,7 @@ export function bench({ seeds = 3, fpsList = [15, 24, 30, 60], lats = [50, 100, 
             else if (m.fails.length < 12) m.fails.push({ kind: 'drop', side, fps, lat, sigma, why: res.got?.why || 'ничего' });
         }
         // nothing must leave the hand
-        for (const kind of ['hold', 'walk', 'wave', 'chop', 'punch', 'lostRest', 'glitch', 'lower']) for (const lose of [0, 3]) for (let s = 0; s < seeds; s++) {
+        for (const kind of ['hold', 'walk', 'wave', 'chop', 'punch', 'lostRest', 'glitch', 'lower', 'miniArc']) for (const lose of [0, 3]) for (let s = 0; s < seeds; s++) {
             if (quick && (seed++ % 3)) continue;
             const res = simulate({ kind, side, fps, lat, sigma, lose: kind === 'chop' || kind === 'punch' ? lose : 0, seed: seed * 15485863 + s });
             m.falseN++;

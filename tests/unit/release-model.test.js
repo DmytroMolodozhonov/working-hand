@@ -144,3 +144,25 @@ test('a real throw from a low arm (underhand, at the feet) still flies with the 
     }
     assert.ok(got, 'the underhand throw is a throw, whatever the arm level');
 });
+
+// the author: «рука внизу, чуть поднял и сделал мини-дугу снизу — предмет упал: это случайное выбрасывание»
+function lowArc({ path = 0.7, ms = 260, up0 = -0.9, up1 = -0.8, secondary = true, fps = 60 } = {}) {
+    const h = new HandTrack(); let t = 0, got = null;
+    const dt = 1000 / fps;
+    const step = (z, y, curl, up) => { h.push({ t, hand: { x: 0.6, y, z }, world: { x: 0, y: 4 + y, z }, curl, seen: true, fresh: true, camMs: dt }); const d = h.decide({ t, arm: ARM(up, 0.5), secondary }); if (d?.act && !got) got = d; t += dt; };
+    for (let i = 0; i < 60; i++) step(-0.3, -1.3, 0.9, up0); // the arm hangs low, gripped
+    const n = Math.round(ms / dt);
+    for (let i = 0; i < n; i++) { const k = i / (n - 1), s = k * k * (3 - 2 * k); step(-0.3 - path * s, -1.3 + 0.15 * Math.sin(Math.PI * s), k < 0.6 ? 0.9 : 0.1, up0 + (up1 - up0) * s); }
+    for (let i = 0; i < 40; i++) step(-0.3 - path, -1.3, 0.1, up1); // the fingers stay open
+    return got;
+}
+test('a small arc from below with the arm hanging low is no throw and no drop', () => {
+    assert.equal(lowArc()?.act ?? null, null, 'a mini arc 0.7 m');
+    assert.equal(lowArc({ path: 0.5, ms: 200 })?.act ?? null, null, 'a smaller one');
+    assert.equal(lowArc({ path: 0.8, ms: 180 })?.act ?? null, null, 'a quick small flick');
+    assert.equal(lowArc({ fps: 20 })?.act ?? null, null, 'on a slow computer');
+});
+test('a real swing from below (long and fast) still flies; the leading hand keeps its old rule', () => {
+    assert.equal(lowArc({ path: 2.6, ms: 220, up1: -0.5 })?.act, 'throw', 'a long fast underhand swing');
+    assert.equal(lowArc({ path: 0.7, secondary: false })?.act ?? null, 'throw', 'without the secondary rule the small arc is a throw as before');
+});

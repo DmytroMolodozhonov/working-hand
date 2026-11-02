@@ -79,6 +79,11 @@ export const RELEASE = {
     // уже выше»: the arm within 30° of hanging straight down keeps the thing with any opening of the fingers. The angle
     // is from DOWN: up = −cos(angle). It counts as raised past 30° and as lowered again within 25° — no flicker)
     LOW_IN_SEC: -Math.cos(25 * Math.PI / 180), LOW_OUT_SEC: -Math.cos(30 * Math.PI / 180),
+    // …and a small arc from below is no throw either (the author: «рука внизу, чуть поднял и сделал мини-дугу снизу — предмет
+    // упал: это случайное выбрасывание»): while the secondary hand's whole swing stayed within 50° of hanging down it is a
+    // throw only when it is a real one — fast and long. A swing that rises past that (an underhand throw, a lob) is judged
+    // as before.
+    LOW_SWING_UP: -Math.cos(50 * Math.PI / 180), LOW_SWING_SPEED: 4, LOW_SWING_TRAVEL: 0.85, LOW_SWING_FAST: 10, // (m/s and m over the last TRAVEL_MS: a toss of ~5 m/s has 0.85–1.2+ m, a mini arc under 0.8; a really fast hand is a throw whatever its path)
     LOW_IN: -0.75, LOW_OUT: -0.6, // (the leading hand: as before, with a hysteresis)
     HELD_MS: 400, // in the hand at least this long (taken just now: the fingers still closing)
     THROW_HELD_MS: 250, // (a throw: this long)
@@ -246,7 +251,7 @@ export class HandTrack {
         this.len = 0; this.head = -1;
         this.armed = armed; // (a thing that came into an open hand: kept until the fingers closed on it once)
         this.openSince = -1; this.lostAt = -1; this.lostPeak = null; this.preLostCurl = 0;
-        this.heldSince = -1; this.gap = null; this._deferSp = 0; this.armLow = null; // (null: not known yet; this.trace: a WristTrace, set by the owner)
+        this.heldSince = -1; this.gap = null; this._deferSp = 0; this.armLow = null; this.lowSwingAt = -1e9; // (null: not known yet; this.trace: a WristTrace, set by the owner)
         this.state = 'held';
         this.camMs = 50;
     }
@@ -439,6 +444,7 @@ export class HandTrack {
         const e = this._at(0), t = ctx.t;
         o.act = null; o.why = null; o.blur = false; o.curl = e.c; o.peak = 0; o.late = 0;
         if (ctx.blocked) { this.openSince = -1; this.lostAt = -1; return null; }
+        e.u = ctx.arm && Number.isFinite(ctx.arm.up) ? ctx.arm.up : NaN; // (the arm's elevation, kept with the picture)
         // ---- the arm lowered along the body: a latch with a hysteresis (only from a picture of a seen hand)
         if (e.seen && ctx.arm && Number.isFinite(ctx.arm.up)) {
             const sec = !!ctx.secondary, u = ctx.arm.up;
@@ -462,7 +468,7 @@ export class HandTrack {
                 // (the camera gets its chance to see the hand again first: a punch with a thing in the fist comes back closed)
                 && lostFor >= Math.min(lostMax, R.BLUR_WAIT_CAM * this.camMs) && lostFor <= lostMax + 120) {
                 this._launch(this._gapPeak(this.lostAt, t).t, t, o);
-                if (o.travel >= R.BLUR_TRAVEL && this._notABlow(o, ctx.weight) && throwShape(o.vRel, o.speed)) {
+                if (o.travel >= R.BLUR_TRAVEL && this._notABlow(o, ctx.weight) && throwShape(o.vRel, o.speed) && !this._lowSwing(o, ctx)) {
                     o.act = 'throw'; o.blur = true; o.peak = p.speed;
                     o.why = `бросок: кисть пропала в замахе (${Math.round(lostFor)} мс), пик ${p.speed.toFixed(1)} м/с`;
                     this.state = 'flight';
@@ -484,7 +490,7 @@ export class HandTrack {
                 const gp0 = this.gap.peak;
                 if (gp0 && gp0.speed >= R.THROW_MIN) {
                     this._launch(gp0.t, t, o);
-                    if (!ctx.strict && o.speed >= R.THROW_MIN && throwShape(o.vRel, o.speed)) { o.act = 'throw'; o.blur = true; o.peak = gp0.speed; o.why = `бросок: кисть вернулась разжатой после пропажи ${Math.round(lostFor)} мс`; this.state = 'flight'; return o; }
+                    if (!ctx.strict && o.speed >= R.THROW_MIN && throwShape(o.vRel, o.speed) && !this._lowSwing(o, ctx)) { o.act = 'throw'; o.blur = true; o.peak = gp0.speed; o.why = `бросок: кисть вернулась разжатой после пропажи ${Math.round(lostFor)} мс`; this.state = 'flight'; return o; }
                 }
                 back = true;
             }
@@ -552,6 +558,7 @@ export class HandTrack {
                 }
             }
         }
+        if (throwing && this._lowSwing(o, ctx)) throwing = false;
         if (throwing && !ctx.strict) {
             if (openFor < Math.max(R.CONFIRM_MS, R.CONFIRM_CAM * this.camMs) && !back) { o.why = null; o.act = null; return null; }
             o.act = 'throw';
@@ -566,6 +573,7 @@ export class HandTrack {
         else if (t - this.heldSince < R.HELD_MS) why = 'вещь только что взята';
         else if (!(a.reach > R.REACH)) why = `рука прижата к телу (вытянута на ${(a.reach ?? 0).toFixed(2)} из ${R.REACH})`;
         else if (!(a.forward > R.FORWARD)) why = `рука не перед собой (${(a.forward ?? 0).toFixed(2)})`;
+        else if (ctx.secondary && t - this.lowSwingAt < R.OPEN_WIN_MS) why = 'мелкая дуга рукой снизу — это не бросок';
         else if (this.armLow || (!ctx.secondary && !(a.up > R.LEVEL))) why = ctx.secondary ? 'дочерняя рука опущена (до 30° от низа) — вещь остаётся в ней' : 'рука висит вниз вдоль тела';
         else if (a.palmUp != null && !(a.palmUp < R.PALM_UP)) why = 'ладонь смотрит вверх — вещь лежит на ней';
         if (why) { o.why = why; return o; }
@@ -598,6 +606,26 @@ export class HandTrack {
         this._launch(pk.speed >= 0 ? pk.t - R.POS_LAG_MS : t, t, o);
         o.act = 'throw'; o.blur = false; o.peak = o.speed; o.why = null; o.curl = this.len ? this._at(0).c : 0;
         return o;
+    }
+
+    /**
+     * A small arc of the secondary hand from below (its whole swing within LOW_SWING_UP of hanging down) that is neither
+     * fast nor long: no throw — nor a drop (the moment is kept in lowSwingAt). `o` is the launch decision.
+     */
+    _lowSwing(o, ctx) {
+        if (!ctx.secondary || ctx.strict) return false;
+        const R = RELEASE;
+        let mx = -2, n = 0;
+        for (let i = 0; i < this.len; i++) {
+            const e = this._at(i);
+            if (e.t > o.at + 40) continue;
+            if (e.t < o.at - 350) break;
+            if (e.u === e.u) { n++; if (e.u > mx) mx = e.u; }
+        }
+        if (!n || mx >= R.LOW_SWING_UP) return false;
+        if (o.speed >= R.LOW_SWING_FAST || (o.speed >= R.LOW_SWING_SPEED && o.travel >= R.LOW_SWING_TRAVEL)) return false;
+        this.lowSwingAt = ctx.t;
+        return true;
     }
 
     /** A heavy thing swung down hard is a blow, not a throw (the camera lost the hand in it). */
