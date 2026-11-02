@@ -63,6 +63,7 @@ const canvas = $('game-canvas');
 const graphicsLevel = (() => {
     try {
         const g = (JSON.parse(localStorage.getItem('zns-settings') || '{}') || {})['graphics-quality'];
+        if (g === 'ultra') return 3;
         if (g !== undefined && g !== 'auto') return parseInt(g, 10);
         const last = parseInt(localStorage.getItem('zns-quality-level'), 10);
         return Number.isFinite(last) ? last : 2;
@@ -361,8 +362,8 @@ function readConfig() {
         modelComplexity: parseInt($('model-quality').value, 10),
         delegate: $('vision-delegate')?.value || 'auto',
         engine: $('vision-engine')?.value || 'classic',
-        graphics: $('graphics-quality')?.value || 'auto',
-        ultra: $('ultra-quality')?.value === 'on', // («Ультра качество»: Ultra.js)
+        graphics: ($('graphics-quality')?.value === 'ultra' ? '3' : $('graphics-quality')?.value) || 'auto', // «Ультра» = высокая + Ultra.js
+        ultra: $('graphics-quality')?.value === 'ultra' || $('ultra-quality')?.value === 'on', // («Ультра качество»: Ultra.js)
         viewDistance: $('view-distance')?.value || 'medium',
         resolution: $('camera-res').value,
         cameraMode: (window.__ZNS_ALLOW_TPV__ && !$('camera-mode-toggle').checked) ? 'tpv' : 'fpv', // игра только от первого лица; «tpv» — лишь для проверок
@@ -1448,7 +1449,14 @@ $('hints-mode')?.addEventListener('change', (e) => hintPolicy.setMode(e.target.v
 applyWalkMode();
 // the graphics settings change the running game at once (no restart of the world)
 $('view-distance')?.addEventListener('change', (e) => { if (game?.world) game.world.viewDistance = viewDistanceScale(e.target.value); });
-$('graphics-quality')?.addEventListener('change', (e) => { game?.quality?.setSetting(e.target.value); });
+$('graphics-quality')?.addEventListener('change', (e) => {
+    // одна настройка «Графика»: «Ультра» = высокая картинка + красивый мир (Ultra.js), остальное — как раньше
+    const ultra = e.target.value === 'ultra';
+    const u = $('ultra-quality');
+    if (u) u.value = ultra ? 'on' : 'off';
+    game?.quality?.setSetting(ultra ? '3' : e.target.value);
+    game?.ultra?.set(ultra);
+});
 $('ultra-quality')?.addEventListener('change', (e) => { game?.ultra?.set(e.target.value === 'on'); });
 $('fps-limit')?.addEventListener('change', (e) => { if (game?.config) game.config.fpsLimit = parseInt(e.target.value, 10) || 0; });
 // the hero's model changes the running game at once: mine is drawn so, and the others are told (NetSync.sendLook)
@@ -1862,6 +1870,9 @@ function escapeHtml(s) {
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
     if (saved['vision-engine'] === 'classic-main') saved['vision-engine'] = 'classic';
+    // две настройки стали одной: «Высокая» + «Ультра включено» → «Ультра»; ультра при другой графике — выключена
+    if (saved['ultra-quality'] === 'on' && ['3', 'auto', 'ultra'].includes(String(saved['graphics-quality']))) saved['graphics-quality'] = 'ultra';
+    else if (saved['graphics-quality'] !== 'ultra') saved['ultra-quality'] = 'off';
     // every sound at 20% — once for everybody (later each one's own choice is kept)
     const vol20 = !saved.vol20;
     if (vol20) for (const id of ['zombie-vol', 'music-vol', 'spell-vol']) saved[id] = '20';

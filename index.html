@@ -452,21 +452,19 @@
                         <label>Графика:</label>
                         <select id="graphics-quality">
                             <option value="auto" selected>Авто (держит FPS сама)</option>
+                            <option value="ultra">Ультра (самая красивая, нужен мощный компьютер)</option>
                             <option value="3">Высокая</option>
                             <option value="2">Средняя</option>
                             <option value="1">Низкая</option>
                             <option value="0">Очень низкая</option>
                         </select>
-                        <div class="setting-hint">Чёткость картинки и тени. «Авто» сама снижает, если игра тормозит.</div>
-                    </div>
-                    <div class="settings-group">
-                        <label>Ультра качество:</label>
-                        <select id="ultra-quality">
+                        <div class="setting-hint">Чёткость картинки и тени. «Авто» сама снижает, если игра тормозит. «Ультра» добавляет мягкий красивый мир: густую колышущуюся траву, сияние солнца и огней, лучи в воздухе, дымку, облака, звёздную ночь, отражения в воде и мокрый блеск в дождь. Меняется сразу, прямо в игре.</div>
+                        <div id="ultra-warn" class="setting-hint hidden" style="color:#ffb74d"></div>
+                        <!-- внутренний переключатель «Ультра» (его держит выбор «Ультра» выше; инструменты замеров ставят его напрямую) -->
+                        <select id="ultra-quality" hidden style="display: none;">
                             <option value="off" selected>Выключено</option>
                             <option value="on">Включено</option>
                         </select>
-                        <div class="setting-hint">Мягкий красивый мир: густая колышущаяся трава, сияние солнца и огней, лучи в воздухе, дымка, облака, звёздная ночь, отражения в воде, мокрый блеск в дождь. Включается и выключается сразу, прямо в игре. Нужен мощный компьютер.</div>
-                        <div id="ultra-warn" class="setting-hint hidden" style="color:#ffb74d"></div>
                     </div>
                     <div class="settings-group">
                         <label>Лимит FPS:</label>
