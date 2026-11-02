@@ -152,3 +152,33 @@ test('the buildings the game makes stand as built (a castle, its village, hamlet
     assert.ok(built > 3);
     assert.ok(STRUCT.Q > 0);
 });
+
+test('a big stone house left on one column and the stub beside it (a neck of two blocks) does not hang: it comes down and what is left is stable', () => {
+    // (the author: «дом стоит на 1 блоке фактически, но всё ещё стоит странно» — a column with a stub beside it counted as a braced wall that carries any weight)
+    const house = (d, R, keep) => {
+        d.box(-R, 1, -R, R, 4, R, S); d.box(-R + 1, 1, -R + 1, R - 1, 4, R - 1, 0);
+        for (let s = 0; s < 2; s++) { const b = 5 + s * 5; d.box(-R, b, -R, R, b + 4, R, S); d.box(-R + 1, b + 1, -R + 1, R - 1, b + 4, R - 1, 0); }
+        d.box(-R, 15, -R, R, 15, R, S);
+        for (let L = 1; L <= 4; L++) for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) if (keep(x, L, z)) d.set(x, L, z, S);
+    };
+    const keeps = {
+        column: (x, L, z) => x === 0 && z === 0,
+        'column and a stub': (x, L, z) => (x === 0 && z === 0) || (x === 1 && z === 0 && L <= 2),
+        'column and two stubs': (x, L, z) => (x === 0 && z === 0) || (x === 1 && z === 0) || (x === 0 && z === 1 && L <= 1),
+    };
+    const top = (d) => { let m = 0; for (let L = 1; L <= 40; L++) if (d.count(-30, L, -30, 30, L, 30, S)) m = L; return m; };
+    for (const R of [5, 6]) for (const [name, keep] of Object.entries(keeps)) {
+        const d = new FlatData(); house(d, R, keep);
+        const gone = take(d, -R, 1, -R, R, 4, R, keep);
+        collapseAfter(d, 0, 2, 0, R + 3, 0, gone);
+        assert.ok(top(d) <= 11, `${name}, R${R}: the house came down off its neck (its top was 15, now ${top(d)})`);
+        const j = judge(d, boxAround(d, 0, 3, 0, R + 6));
+        assert.deepEqual([j.lost.length, j.crushed.length, j.torn.length], [0, 0, 0], `${name}, R${R}: nothing is left hanging over a thin neck`);
+    }
+    // a thin neck by plain physics: a mass of ~800 on 2 blocks breaks them; on a wide base it stands
+    const neck = (x, L, z) => (x === 0 && z === 0) || (x === 1 && z === 0), base = (x) => Math.abs(x) <= 3;
+    const d = new FlatData(); house(d, 4, neck); take(d, -4, 1, -4, 4, 4, 4, neck);
+    assert.ok(judge(d, boxAround(d, 0, 3, 0, 8)).crushed.length > 0, 'the neck breaks');
+    const wide = new FlatData(); house(wide, 4, base); take(wide, -4, 1, -4, 4, 4, 4, base);
+    assert.equal(judge(wide, boxAround(wide, 0, 3, 0, 8)).crushed.length, 0, 'a wide base holds the same house');
+});

@@ -56,10 +56,13 @@ export const STRUCT = {
     CHAIN: 8, // layers: a lamp or a chandelier hangs on its chain this far under its ceiling
     WORSE: 1.05, // a block over its strength gives way only if it carries this much more than before the change (worse())
     TIP: 0.5, // blocks: how far beyond the feet of its columns the middle of a piece's weight may be (balance())
+    NECK: 0.12, // a patch of blocks side by side in one layer, standing on what is under them, carries this share of the sum of their `carry` (neck()): a house on a column and its stub falls
+    NECK_MIN: 60, // weight: a lighter load is never a neck
+    NECK_CELLS: 64, // a patch of more blocks than this is a wall — it holds
     BEND: 30, // weight × blocks off their feet each lone column's own stiffness holds still (a lamp's hood, a lean-to on its posts)
     MARGIN: 11, // m round the change looked at too (the roofs and floors that lean on it: a stone slab reaches 10)
     DEPTH: 4, // layers under the change looked at
-    ROUNDS: 10, // at most this many rounds of falling in one check (a chain)
+    ROUNDS: 24, // at most this many rounds of falling in one check (a chain: a house over a thin neck breaks in a dozen rounds)
     STAGE: 0.45, // s between the rounds of a chain, as seen (FallingBlocks)
     MAX_CELLS: 900_000, // a box bigger than this is cut down to it (round the change)
     WARM_CELLS: 360_000, // the buffers made ahead (~9 MB): a «Total Destruction» box
@@ -181,6 +184,7 @@ const buf = {
     // Dial's buckets as lists in flat arrays: head[p] → an entry; entry e: its cell ec[e], the next en[e]
     head: new Int32Array(STRUCT.Q + 1), ec: new Int32Array(1 << 16), en: new Int32Array(1 << 16), ne: 0,
     touched: new IntList(), marked: new IntList(), stack: new IntList(), tops: new IntList(), body: new IntList(), feet: new IntList(),
+    comp: null, stand: new IntList(), // (neck(): the patch each block is in; the blocks standing on something)
     mx: null, mz: null, // the first moments (Σ weight × x, z off the block) of what each block carries: where its weight's middle is
     // the box before the change (one job's at a time: preOwner)
     preOwner: null, preT: null, preP: null, preLoad: null, preSX: null, preSZ: null,
@@ -191,7 +195,7 @@ function ensure(n) {
     buf.n = m;
     buf.T = new Uint8Array(m); buf.P = new Int32Array(m); buf.recv = new Float32Array(m); buf.order = new Int32Array(m); buf.RUN = new Uint8Array(m);
     buf.SX = new Float32Array(m); buf.SZ = new Float32Array(m); buf.seen = new Uint8Array(m * 2); buf.lost = new Uint8Array(m);
-    buf.mx = new Float32Array(m); buf.mz = new Float32Array(m);
+    buf.mx = new Float32Array(m); buf.mz = new Float32Array(m); buf.comp = new Uint8Array(m);
     buf.preT = new Uint8Array(m); buf.preP = new Int32Array(m); buf.preLoad = new Float32Array(m); buf.preSX = new Float32Array(m); buf.preSZ = new Float32Array(m);
     buf.preOwner = null;
 }
@@ -364,6 +368,8 @@ function* weigh(job, out, record) {
     const before = (i) => (preT[i] === T[i] ? preLoad[i] : 0);
     const keepLoad = record ? job.pre.load : null;
     if (record) keepLoad.fill(0, 0, n);
+    const stand = buf.stand;
+    stand.n = 0;
     const hold = new Int32Array(10), way = new Int8Array(10), share = new Float64Array(10);
     for (let o = 0; o < m; o++) {
         if (due(6)) yield;
@@ -371,6 +377,7 @@ function* weigh(job, out, record) {
         const L = (i / NXZ) | 0, r = i - L * NXZ, z = (r / NX) | 0, x = r - z * NX;
         if (L === 0 || x === 0 || z === 0 || x === NX - 1 || z === NZ - 1 || L === NY - 1) continue; // (the box's edge: held from beyond)
         const load = W[t] + recv[i], MX = mx[i], MZ = mz[i];
+        if (!record && load > STRUCT.NECK_MIN * 0.1 && KIND[T[i - NXZ]]) stand.push(i); // (the blocks that pass their load down: neck())
         if (record) keepLoad[i] = load;
         else if (!sides(i, NX) && KIND[T[i + NXZ]] === 2 && sides(i + NXZ, NX) && recv[i] > W[t]) tops.push(i); // (the top of a lone column under something: is it balanced? — balance())
         if (!record && recv[i] > CARRY[t] * STRUCT.COLUMN * 0.25 && !sides(i, NX)) {
@@ -422,9 +429,46 @@ function* weigh(job, out, record) {
             }
         }
     }
+    if (!record && stand.n) yield* neck(job, crushed, out, pre ? before : null);
     if (!record && tops.n) yield* balance(job, crushed, out, pre ? before : null);
     yield* shear(job, out, record);
     return crushed;
+}
+
+/**
+ * The neck: a mass of a building may stand on the ground only through a section that is wide enough. The blocks of one layer side
+ * by side that stand on something (a patch: a column and the stub beside it, two posts) carry together at most STRUCT.NECK of the
+ * sum of their `carry` (a lone stone column 1×1: 72; a patch of 64 blocks is a wall: it holds). A load over it — and, against the
+ * box before the change, more than before — breaks the whole patch (the mass over it then has no way down and falls).
+ * before(i): the load before the change (null: none).
+ */
+function* neck(job, crushed, out, before) {
+    STATS.phase = 'neck';
+    const { NX, NY, NZ } = job.B, NXZ = NX * NZ, T = buf.T, recv = buf.recv, comp = buf.comp, st = buf.stand, q = buf.stack, body = buf.body;
+    comp.fill(0, 0, NXZ * NY);
+    const inner = (c) => { const L = (c / NXZ) | 0, r = c - L * NXZ, z = (r / NX) | 0, x = r - z * NX; return L > 0 && L < NY - 1 && x > 0 && x < NX - 1 && z > 0 && z < NZ - 1; };
+    for (let s = 0; s < st.n; s++) {
+        const c0 = st.a[s];
+        if (comp[c0]) continue;
+        body.n = 0; q.n = 0; q.push(c0); comp[c0] = 1; body.push(c0);
+        let load = 0, cap = 0, was = 0, wall = false;
+        while (q.n) {
+            const c = q.a[--q.n], t = T[c];
+            load += W[t] + recv[c]; cap += CARRY[t] * STRUCT.NECK;
+            if (before) was += before(c);
+            if (!inner(c) || body.n > STRUCT.NECK_CELLS) { wall = true; continue; } // (beyond the box, or a wall: held)
+            for (let d = 0; d < 4; d++) {
+                const j = d === 0 ? c + 1 : d === 1 ? c - 1 : d === 2 ? c + NX : c - NX;
+                if (comp[j] || KIND[T[j]] !== 2 || !KIND[T[j - NXZ]]) continue;
+                comp[j] = 1; body.push(j); q.push(j);
+            }
+        }
+        if (!wall && load > STRUCT.NECK_MIN && load > cap && (!before || worse(load, was))) {
+            for (let k = 0; k < body.n; k++) crushed.push(body.a[k]);
+            out.crushed++;
+        }
+        if (due(body.n + 4)) yield;
+    }
 }
 
 /**
