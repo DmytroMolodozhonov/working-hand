@@ -15,7 +15,7 @@ import { PVP } from './Combat.js';
 import { FX } from '../fx/WizardFx.js';
 
 /** The castle wizards' shields (WizardFx: the hand shield's disc before the body, the dome). */
-export const NPC_SHIELD = { R: 1.82, FWD: 1.3, UP: 2.6, SIDE: 0.35, DOME_R: 3.2, DOME_UP: 1.2 }; // (DOME_UP: the dome's middle over the feet — a full sphere round the body, as a player's)
+export const NPC_SHIELD = { R: 1.82, FWD: 1.3, UP: 2.6, SIDE: 0.35, DOME_R: 2.9, DOME_UP: 2.6 }; // (DOME_UP: the dome's middle over the feet, as a player's: feet + 2.6 — the sphere spans feet−0.3 … feet+5.5, so the whole body and the hat are inside, not only down to the shoulders; it was 1.2 / 3.2: the top at 4.4 m cut the head off)
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Vector3();
 
