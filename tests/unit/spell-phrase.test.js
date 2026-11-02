@@ -235,3 +235,13 @@ test('the author\'s journal 24.10: a spell from the middle of long speech that s
     assert.equal(lateInSpeech('Wind', 'вайнд максима', m('значит вайнд максима дальше'), 11000), null); // (in time)
     assert.equal(lateInSpeech('Wind', 'вайнд', { native: false, written: 'a b c d e' }, 99999), null);
 });
+
+// «Вингардиум Левиоса» is never «Вайнд» / «Вайнд Максима» (the author's journal 02.11: «вингарди», «лингарди», «енга», «винкад» → Wind), real «Вайнд» still casts
+test('Вингардиум Левиоса: its letters are not taken for Wind', async () => {
+    const { soundTrust } = await import('../../src/audio/SpellPhrase.js');
+    for (const w of ['вингарди', 'лингарди', 'енга', 'инга', 'винкад', 'гади', 'ингардим ессе', 'вин гардим льется', 'вингартим левеосо'])
+        for (const [spell, canonical] of [['Wind', 'вайнд'], ['WindMaxima', 'вайнд максима'], ['WindImpulse', 'вайнд импульс']])
+            assert.ok(soundTrust({ spell, canonical, written: w, fit: 2.5, lips: true }), `${w} → ${spell}`);
+    for (const [spell, canonical, written] of [['Wind', 'вайнд', 'вайнд'], ['Wind', 'вайнд', 'вайн'], ['Wind', 'вайнд', 'вина'], ['Wind', 'вайнд', 'нади'], ['WindMaxima', 'вайнд максима', 'вайн максима'], ['WindMaxima', 'вайнд максима', 'плайн максима']])
+        assert.equal(soundTrust({ spell, canonical, written, fit: 2.5, lips: true }), null, `${written} → ${spell}`);
+});

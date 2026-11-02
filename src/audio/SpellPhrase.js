@@ -367,6 +367,11 @@ export function trustedFar(d, r) {
 }
 export const TRUSTED_FAR = 0.3;
 
+/** «Wind» and the spells made of it: their «вин-» is also the start of «Вингардиум». */
+export const WIND_SPELLS = new Set(['Wind', 'WindMaxima', 'WindImpulse']);
+/** Letters no «вайнд» is written with, but «вингардиум левиоса» often is («вингарди», «лингарди», «енга», «винкад», «гади», «левесо»). */
+export const VINGARDIUM_HEARD = /га[рдт]|[еи]нга|[нл]кад|нгад|гад[иы]|лев[иеэ]|льв|лве/;
+
 /** Short spells trusted at a thin fit when the letters match and the lips are seen moving. */
 export const MOUTH_SURE = new Set(['Fire', 'LumosAhead']);
 
@@ -466,6 +471,9 @@ export function soundTrust(h) {
     const battle = battleOwn(h, fit) && !lettersOfOther(h.written ?? '', h.spell, h.canonical);
     const like = battle || lettersLike(h.written ?? h.canonical ?? '', h.canonical ?? '');
     if (h.written && h.spell !== 'Stand' && everydayHeard(h.written, h.canonical, fit)) return 'обычное слово («интересно» и т.п.), а не заклинание';
+    // «Вайнд» / «Вайнд Максима» heard from «Вингардиум Левиоса» (the author's journal: «вингарди», «лингарди», «инга», «винкад» → Wind): both begin «вин-».
+    // The letters of the network hold the sound of «гар/ганг…» or «лев…» that no «вайнд» has → it is Levitation, never the wind.
+    if (WIND_SPELLS.has(h.spell) && h.written && VINGARDIUM_HEARD.test(letters(h.written))) return 'это «Вингардиум Левиоса» (в буквах «гар/нга/лев»), а не «Вайнд»';
     const len = Number.isFinite(h.len) && h.len > 0 ? h.len : letters(h.canonical || '').length;
     const short = len <= SHORT_LEN;
     // «стоп» while something is held (a shield, a flame, a spell, flight): it must let go almost always — the thinnest sure fit is enough
