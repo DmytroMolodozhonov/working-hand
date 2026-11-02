@@ -31,7 +31,7 @@ try {
         const root = new THREE.Group();
         const foot = new THREE.Mesh(hb.geo, mats.headStem);
         const pivot = new THREE.Group(); pivot.rotation.order = 'YXZ';
-        const top = new THREE.Mesh(la, mats.head), low = new THREE.Mesh(lb, mats.head); low.rotation.x = Math.PI;
+        const top = new THREE.Mesh(la, mats.head), low = new THREE.Mesh(lb, mats.head); low.scale.y = -1; // (the lower jaw is the upper one mirrored: it faces the same way, teeth up)
         pivot.add(top, low, new THREE.Mesh(M.buildHeadCollar(1), mats.headStem));
         const neck = new M.HeadNeck(2), nm = new THREE.Mesh(neck.geo, mats.vine); nm.frustumCulled = false;
         const vines = new M.VineSet(1), vm = new THREE.Mesh(vines.geo, mats.vine); vm.frustumCulled = false;
@@ -48,7 +48,7 @@ try {
             clock += dt;
             jaw += (h.jawTarget() - jaw) * Math.min(1, dt * (h.st === 'snap' ? 45 : 9));
             pivot.position.set(h.H[0], h.H[1], h.H[2]); pivot.rotation.set(h.pitch, h.yaw, 0);
-            top.rotation.x = -jaw; low.rotation.x = Math.PI - jaw;
+            top.rotation.x = -jaw; low.rotation.x = jaw;
             const L = H.neckSpine(h.base, h.H, h.yaw, h.pitch, spine, spine.length);
             neck.update(spine, H.neckThin(L), h.bulgeAt(), 0.55, clock);
             const grabbing = h.tendril > 0 && h.prey, reach = Math.min(1, h.tendril), tg = new THREE.Vector3(h.preyPos[0], h.preyPos[1], h.preyPos[2]);

@@ -85,7 +85,7 @@ test('the jaws are open while it reaches and shut on the prey (a slam, then the 
     const h = mk(); h.begin(animal(), [6, 0.6, 3]);
     let wide = 0, shut = 1;
     for (let i = 0; i < 1200; i++) { h.step(1 / 60, { prey: h.owned ? null : [6, 0.6, 3] }); if (h.st === 'grab' || h.st === 'wrap') wide = Math.max(wide, h.jawTarget()); if (h.st === 'snap' && h.t > 0.1) shut = Math.min(shut, h.jawTarget()); }
-    assert.ok(wide > 0.9 && shut < 0.2, `wide ${wide}, shut ${shut}`);
+    assert.ok(wide > 0.65 && shut < 0.2, `wide ${wide}, shut ${shut}`);
 });
 
 test('too big does not fit: a horse is not hunted by an ordinary head, a cow only by a big one (the table maxPrey)', () => {

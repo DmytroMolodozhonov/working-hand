@@ -206,7 +206,7 @@ export class Plants {
         const pivot = new THREE.Group(); pivot.position.copy(hb.rest); pivot.rotation.order = 'YXZ';
         const top = new THREE.Mesh(la, M.head), low = new THREE.Mesh(lb, M.head);
         top.castShadow = true;
-        low.rotation.x = Math.PI;
+        low.scale.y = -1; // (the lower jaw is the upper one mirrored: it faces the same way, teeth up)
         const collar = new THREE.Mesh(headCollar(p.variant), M.headStem);
         pivot.add(top, low, collar);
         p.neck = new HeadNeck(p.variant + 1);
@@ -674,7 +674,7 @@ export class Plants {
         p.jaw += (target - p.jaw) * Math.min(1, dt * (h.st === 'snap' ? 45 : h.st === 'bite' ? 28 : 9));
         p.pivot.position.set(h.H[0], h.H[1], h.H[2]);
         p.pivot.rotation.set(h.pitch, h.yaw, 0);
-        p.top.rotation.x = -p.jaw; p.low.rotation.x = Math.PI - p.jaw;
+        p.top.rotation.x = -p.jaw; p.low.rotation.x = p.jaw;
         // chewing: the lower jaw works sideways
         const chew = h.st === 'bite' ? Math.sin(h.t * 14) * 0.09 : 0;
         p.low.position.x = chew; p.low.rotation.z = chew * 0.6;

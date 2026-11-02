@@ -328,17 +328,17 @@ export class Hunt {
     jawTarget() {
         const S = this.st, c = this.clock;
         switch (S) {
-            case 'grab': return 1.15 - 0.2 * Math.min(1, this.t * 2);
-            case 'wrap': return 1.0;
-            case 'snap': return this.t < 0.05 ? 0.9 : 0.1;
+            case 'grab': return 0.85 - 0.12 * Math.min(1, this.t * 2); // (each jaw turns this much: the gape is twice)
+            case 'wrap': return 0.72;
+            case 'snap': return this.t < 0.05 ? 0.7 : 0.06;
             case 'pull': return this.prey?.kind === 'p' ? 0.3 : 0.12;
-            case 'bite': { const ph = (this.t % HUNT.BITE_EVERY) / HUNT.BITE_EVERY; return 0.12 + 0.5 * Math.pow(Math.cos(ph * Math.PI * 0.5), 3); }
+            case 'bite': { const ph = (this.t % HUNT.BITE_EVERY) / HUNT.BITE_EVERY; return 0.1 + 0.36 * Math.pow(Math.cos(ph * Math.PI * 0.5), 3); }
             case 'gulp': return Math.max(0.02, 0.3 - this.t * 0.35);
             case 'digest': return 0.02;
-            case 'spit': return this.spat ? 1.1 : 0.12;
+            case 'spit': return this.spat ? 0.8 : 0.1;
             case 'frozen': return 0.3;
             default: {
-                const near = this.look ? 0.42 : 0.14; // (it has noticed someone near: the trap opens wider)
+                const near = this.look ? 0.32 : 0.1; // (it has noticed someone near: the trap opens wider)
                 return near + 0.05 * Math.sin(c * 1.3);
             }
         }
