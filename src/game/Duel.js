@@ -281,6 +281,23 @@ export function rayToSegment(o, d, a, b, out = {}) {
  */
 /** How far a duel charge of this spell flew BEFORE the reach depended on mana (messages / charges without `rng`), m. */
 export const legacyRange = (spell) => (spell === 'Die' ? DUEL.RANGE_DIE : spell === 'Pilbidrio' ? DUEL.RANGE_PILBIDRIO : spell === 'Electrum' ? DUEL.RANGE_ELECTRUM : DUEL.RANGE);
+/**
+ * A charge that surely misses (nobody on its way up to the end of its reach) tears off the wand: the beam's tail no longer follows
+ * the hand, it flies on after the head and catches up with it (the author: «луч оторвётся от палочки, а не будет до последнего прилеплен»).
+ * Only the picture: the hit, the damage and the range are the same. Every client decides it for itself from the same data (tk, rng, dir).
+ */
+export const DETACH = { MARGIN: 4, CHECK: 0.12, TAIL_SPEED: 1.8, MIN_LEN: 0.8 }; // m / s / × the charge's speed / m: a short bright comet stays
+
+/** Does nothing on the segment p→q come within \margin\ of its edge? (bodies: {a, b, r}) */
+export function wayIsClear(p, q, bodies, margin = DETACH.MARGIN) {
+    const c = {};
+    for (const body of bodies) {
+        segmentToSegment(p, q, body.a, body.b, c);
+        if (c.dist <= body.r + margin) return false;
+    }
+    return true;
+}
+
 /** The farthest any charge goes (bodies farther than this are never asked). */
 const RANGE_MAX = DUEL_RANGE.MAX;
 
@@ -333,7 +350,7 @@ const _qInv = new THREE.Quaternion();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _arcDir = new THREE.Vector3();
-const _vFrom = new THREE.Vector3();
+const _vFrom = new THREE.Vector3(), _vEnd = new THREE.Vector3();
 const _vPass = new THREE.Vector3();
 const _armSh = new THREE.Vector3(), _armTip = new THREE.Vector3(), _armC = {};
 /**
@@ -979,8 +996,38 @@ export class Duel {
         const hdir = b._hdir || (b._hdir = new THREE.Vector3());
         if (!this._handOf(b.by, b.side, origin, hdir)) origin.copy(b.o);
         if (b.state === 'flying' && !this._fly(b, dt)) return;
-        this._drawBolt(b.spell, origin, b.front, b.by);
+        if (b.state === 'flying' && !b.free) this._detachCheck(b, dt, origin);
+        this._drawBolt(b.spell, b.free ? this._tailOf(b, dt) : origin, b.front, b.by);
         if (b.state === 'arrived') this._arrive(b, dt);
+    }
+
+    /** Is it certain that the flying charge touches nobody (no target, no counter-charge, nobody near the rest of its way)? */
+    _surelyMisses(b) {
+        if (b.tk !== 'n' || this._opposing(b)) return false;
+        let len = (b.rng ?? legacyRange(b.spell)) - b.traveled;
+        if (!(len > 0)) return false;
+        const end = _vEnd.copy(b.front).addScaledVector(b.dir, len);
+        const w = this._wallOnWay(b.front, end);
+        if (w <= 1) { len *= w; end.copy(b.front).addScaledVector(b.dir, len); }
+        return wayIsClear(b.front, end, this._bodies(b.by, len + 5));
+    }
+
+    /** Every DETACH.CHECK s: if the charge surely misses, its beam comes off the wand (b.free, b.tail = where the wand was). */
+    _detachCheck(b, dt, hand) {
+        b.chk = (b.chk || 0) - dt;
+        if (b.chk > 0) return;
+        b.chk = DETACH.CHECK;
+        if (!this._surelyMisses(b)) return;
+        b.free = true;
+        b.tail = (b.tail || new THREE.Vector3()).copy(hand);
+    }
+
+    /** The torn-off beam's tail: flies after the head faster than it, down to a short bright comet. */
+    _tailOf(b, dt) {
+        const t = b.tail, sp = DUEL_SPELLS[b.spell]?.speed || DUEL.SPEED;
+        const gap = t.distanceTo(b.front), want = Math.max(0, gap - DETACH.MIN_LEN);
+        if (want > 0) t.addScaledVector(_dd.subVectors(b.front, t).divideScalar(gap), Math.min(want, sp * DETACH.TAIL_SPEED * dt));
+        return t;
     }
 
     /**
