@@ -548,7 +548,7 @@ export class LevitationMaxima {
         }
         // (the first words were heard as the plain «Левиоса» a moment ago: that was this — undo it)
         const lifted = g.levitation?.state;
-        if (lifted?.kind === 'weapon' && isDivine(lifted.obj)) { // (божественный меч уже поднят первыми словами «Левиоса…» — не роняем и не поднимаем заново: просто держим)
+        if ((lifted?.kind === 'weapon' && isDivine(lifted.obj)) || lifted?.kind === 'board') { // (божественный меч уже поднят первыми словами «Левиоса…» — не роняем и не поднимаем заново: просто держим)
             if (early?.name === 'Levitation') g._interimCast = null;
             this._last = now;
             return LEV_MAX.NAME;
@@ -558,7 +558,7 @@ export class LevitationMaxima {
         if (!h) return say('✋ Поднимите руку (или палочку) и направьте её на то, что хотите поднять');
         // the divine sword (DivineSword.js) is a gift of the gods that magic CAN lift: the hand at it — Leviosa Maxima holds it as Leviosa does, «Атак» sends it
         const lw = g.levitation && !g.levitation.state ? g.levitation._pick?.() : null;
-        if (lw?.kind === 'weapon' && isDivine(lw.obj)) {
+        if ((lw?.kind === 'weapon' && isDivine(lw.obj)) || lw?.kind === 'board') { // (a surfboard is held as the plain spell holds it; «Атак» throws it)
             const tired = g.combat?.check?.(LEV_MAX.NAME);
             if (tired) return say(tired);
             const no = g.levitation.cast();
@@ -566,7 +566,7 @@ export class LevitationMaxima {
             g.combat?.pay?.(LEV_MAX.NAME);
             this._last = now;
             if (!isFinal) g._interimCast = { name: LEV_MAX.NAME, at: now }; // (финал той же фразы не должен «сказать ещё раз» — это отпустило бы меч)
-            g.hud?.setVoice?.('🪶 <b>Левиоса Максима!</b> Клинок парит у вашей руки. «Атак» — он полетит вперёд; «стоп» — опустится', true);
+            g.hud?.setVoice?.(`🪶 <b>Левиоса Максима!</b> ${lw.kind === 'board' ? 'Доска парит' : 'Клинок парит'} у вашей руки. «Атак» — полетит вперёд; «стоп» — опустится`, true);
             return LEV_MAX.NAME;
         }
         const aim = this.pick(h.o, h.d);

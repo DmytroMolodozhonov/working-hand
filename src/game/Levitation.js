@@ -160,6 +160,8 @@ export class Levitation {
         for (const b of g.water?.resting || []) out.push({ kind: 'ice', obj: b, pos: b.pos });
         // a big cauldron (heavy: it floats slowly; tilted in the air it pours out) — the host's, like things
         if (g.cauldrons && (g.authority || !g.sync)) for (const c of g.cauldrons.list.values()) if (!c.lev) out.push({ kind: 'cauldron', obj: c, pos: c.pos, r: 1.6 });
+        // a surfboard («Create a Board»): lifted like a thing; not one in hands or under feet (SurfBoards.levTargets)
+        for (const b of g.boards?.levTargets() || []) out.push({ kind: 'board', obj: { id: b.id }, pos: b.pos, r: 1.6 });
         // (things and books are the host's: a guest's hand can't carry them yet)
         if (g.items?.auth) for (const L of g.items.loose.values()) if (!L.accio && !L.asked && !L.swarm) out.push({ kind: 'item', obj: L, pos: L.model.position });
         if (g.books?.auth) for (const bk of g.books.books.values()) if (!bk.accio) out.push({ kind: 'book', obj: bk, pos: bk.model.position });
@@ -194,6 +196,7 @@ export class Levitation {
     /** The object's own model (for things, books and birds). */
     _model(s) {
         if (s.kind === 'corpse') return s.obj.model || s.obj.bones || null;
+        if (s.kind === 'board') return this.game.boards?.levModel() || this.game.boards?.models.get(s.obj.id)?.model || null;
         return s.kind === 'item' || s.kind === 'book' || s.kind === 'bird' || s.kind === 'phoenix' ? s.obj.model : null;
     }
 
@@ -273,6 +276,7 @@ export class Levitation {
         if (best?.kind === 'taron') { this.game.tarons?.hit(best.obj, 0, 'Levitation', this.game.localId); return '🪓 Тарон вырвался из «Левиосы» — он слишком тяжёлый (только «Левиоса Максима»)'; }
         if (best?.kind === 'ghost') { this.game.ghosts?.hit(best.obj, 0, 'Levitation', this.game.localId); return '👻 Призрак бестелесный — «Левиоса» его не берёт'; }
         if (best?.kind === 'spencer') { this.game.spencers?.hit(best.obj, 0, 'Levitation'); return '🪶 Птичка выскользнула из «Левиосы» и улетела'; }
+        if (best?.kind === 'board' && !this.game.boards.levStart(best.obj.id)) return '🏄 Эту доску сейчас не поднять — её уже держат или стоят на ней';
         if (best?.kind === 'owl') { this.game.owls?.hit(best.obj, 0, 'Levitation'); return '🦉 Сова выскользнула из «Левиосы» и улетела'; }
         if (!best) return '🪶 Направьте руку на предмет (меч, палочку, книгу, книгу-птицу, ледяной шар, тело), на животное, зомби, жителя или на другого волшебника — не дальше 30 м — и скажите «Вингардиум Левиоса»';
         const s = {
@@ -311,6 +315,8 @@ export class Levitation {
             this.game.books.holdBird(s.obj, true); // (caught: it hangs in the air, flapping)
         } else if (s.kind === 'phoenix') {
             this.game.phoenixes.hold(s.obj, true);
+        } else if (s.kind === 'board') {
+            // (already taken in the check above: SurfBoards.levStart)
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons.levStart(s.obj);
         } else if (s.kind === 'corpse') {
@@ -355,6 +361,7 @@ export class Levitation {
         if (s.kind === 'bird' && (s.obj.state !== 'held' || !this.game.books.birds.has(s.obj.id))) { this.state = null; return; }
         if (s.kind === 'phoenix' && (s.obj.dead || s.obj.state !== 'held' || !this.game.phoenixes?.list.includes(s.obj))) { this.state = null; return; }
         if (s.kind === 'cauldron' && (!s.obj.lev || !this.game.cauldrons?.list.has(s.obj.id))) { this.state = null; return; }
+        if (s.kind === 'board' && !this.game.boards?.levAlive()) { this.state = null; return; } // (taken, wiped away, I died: gone)
         if (s.kind === 'corpse' && (!this.game.death?.bodies.has(s.obj.id) || !this._model(s))) { if (s.obj) s.obj.lev = false; this.state = null; return; }
         if (s.attack) { this._updateAttack(s, dt); return; }
 
@@ -409,6 +416,13 @@ export class Levitation {
      */
     attack() {
         const s = this.state;
+        if (s?.kind === 'board') { // the board is thrown along the hand
+            const v = this.game.character.getHandDirection(s.side, new THREE.Vector3()).multiplyScalar(18);
+            this._sparkle(this._model(s)?.position || s.target, 25);
+            this.state = null;
+            this.game.boards?.levDrop(v);
+            return null;
+        }
         if (!s || s.kind !== 'weapon') return '🪶 Сначала поднимите меч или топор «Вингардиум Левиоса», потом — «Атак»';
         const g = this.game;
         const w = s.obj;
@@ -553,6 +567,8 @@ export class Levitation {
             this.game.phoenixes.hold(s.obj, false); // free: it flies off
         } else if (s.kind === 'cauldron') {
             this.game.cauldrons?.levDrop(s.obj, vel, gentle); // (it falls; let down gently it comes down slowly)
+        } else if (s.kind === 'board') {
+            this.game.boards?.levDrop(gentle ? null : vel.length() > 16 ? vel.setLength(16) : vel); // (falls; onto water it floats)
         } else if (s.kind === 'corpse') {
             this.game.death?.dropBody(s.obj, vel, gentle); // (it falls limp to the ground and lies there)
         } else {

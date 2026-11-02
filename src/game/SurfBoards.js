@@ -51,6 +51,7 @@ export class SurfBoards {
         this.hold = null; // {id, grips: {left, right}, theta, gate: {left, right}, openSince: {left, right}}
         this.ride = null; // {id, body, foot, neutral, nT, legs0, since, cool}
         this.fly = null; // {id, t}: flying to me by «Акцио»
+        this.lev = null; // {id}: held in the air by «Левиоса» / «Левиоса Максима» (Levitation.js moves the model)
         this._open = { left: -1e9, right: -1e9 };
         this._openF = { left: -1e9, right: -1e9 };
         this._frame = 0;
@@ -134,6 +135,7 @@ export class SurfBoards {
         this.reg.remove(id);
         if (this.hold?.id === id) this._dropHold();
         if (this.ride?.id === id) this._endRide();
+        if (this.lev?.id === id) this.lev = null;
     }
 
     // ================================================================ «Create a Board»
@@ -228,6 +230,59 @@ export class SurfBoards {
             if (m) out.push({ id: b.id, pos: m.model.position });
         }
         return out;
+    }
+
+    // ---------------------------------------------------------------- «Левиоса»
+    /**
+     * Boards «Левиоса» can lift: lying on the ground or the water, or standing in the sand — like any thing.
+     * Not one in somebody's hands or under their feet (held / ridden: it is theirs), and not while I carry, ride or call another.
+     */
+    levTargets() {
+        const out = [];
+        if (this.hold || this.ride || this.fly || this.lev) return out;
+        for (const b of this.reg.map.values()) {
+            if (b.owner || b.st === 'ridden' || b.st === 'held') continue;
+            const m = this.models.get(b.id);
+            if (m) out.push({ id: b.id, pos: m.model.position });
+        }
+        return out;
+    }
+
+    /** The board is mine while the spell holds it (the others see it move with my pose: `netMine`). */
+    levStart(id) {
+        const b = this.reg.map.get(id), m = this.models.get(id);
+        if (!b || !m || b.owner || this.hold || this.ride || this.fly || this.lev) return false;
+        if (this.auth) { if (!this.reg.take(id, this.me, 1)) return false; this._broadcastOwner(id, this.me, 1); }
+        else { b.owner = this.me; b.st = 'held'; b.mode = 1; this.game.sync?.net?.send({ t: 'bdtake', id, mode: 1 }); }
+        m.body = null; m.spin = 0;
+        this._setBox(b, m);
+        this.lev = { id };
+        this._mineAt.set(id, this.simT || 0);
+        return true;
+    }
+
+    /** Still held by the spell (not taken, removed, or lost to a dead owner). */
+    levAlive() {
+        const L = this.lev;
+        if (!L) return false;
+        const b = this.reg.map.get(L.id);
+        if (!b || !this.models.has(L.id) || b.owner !== this.me) { this.lev = null; return false; }
+        return true;
+    }
+
+    /** The model of the held board (Levitation moves it). */
+    levModel() { return this.lev ? this.models.get(this.lev.id)?.model || null : null; }
+
+    /** Let go: it falls (or flies on with `vel`); onto water it floats, onto land it lies. */
+    levDrop(vel = null) {
+        const L = this.lev;
+        if (!L) return;
+        this.lev = null;
+        const b = this.reg.map.get(L.id), m = this.models.get(L.id);
+        if (!b || !m || b.owner !== this.me) return;
+        const v = vel ? [r3(vel.x), r3(vel.y), r3(vel.z)] : [0, 0, 0];
+        m.spin = vel ? (Math.random() - 0.5) * 3 : 0;
+        this._free(b, 'fall', v);
     }
 
     /** «Акцио» on a board: mine while it flies (the others see it fly with my pose). */
@@ -824,6 +879,7 @@ export class SurfBoards {
     dropAll(reason = '') {
         if (this.ride) { if (reason === 'dead') this.fall('hit'); else this.dismount('water'); }
         if (this.hold) this._dropHold(false);
+        if (this.lev) this.levDrop();
     }
 
     /** An explosion: free boards are thrown, a rider falls. */
@@ -938,7 +994,7 @@ export class SurfBoards {
 
     /** [id, x,y,z, qx,qy,qz,qw, mode] of the board I hold or ride (sent with my pose). */
     netMine() {
-        const id = this.ride?.id || this.hold?.id || this.fly?.id;
+        const id = this.ride?.id || this.hold?.id || this.fly?.id || this.lev?.id;
         if (!id) return undefined;
         const m = this.models.get(id), b = this.reg.map.get(id);
         if (!m || !b) return undefined;

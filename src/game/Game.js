@@ -1992,7 +1992,7 @@ export class Game {
             // the swarm of things («Левиоса Максима»): a volley at the one the wand points at
             if (this.levMax?.swarm?.active) { const r = this.levMax.swarm.attack(isFinal); if (r) return r; return null; }
             // my servants (a living tree, «Брейнрот») go for the one the hand points at
-            if (this.levitation.state?.kind !== 'weapon' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
+            if (this.levitation.state?.kind !== 'weapon' && this.levitation.state?.kind !== 'board' && this.servants.hasServants(this.localId)) return this._commandAttack(isFinal);
             const hint = this.levitation.attack();
             if (hint) { if (isFinal) this.hud.setVoice(hint, true); return null; }
             return 'Attack';
