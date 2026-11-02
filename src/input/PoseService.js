@@ -259,6 +259,7 @@ export class PoseService {
 
     _onHolistic(results) {
         if (this.recordSink) this.recordSink(results);
+        if (this.recordTaps) for (const f of this.recordTaps) f(results); // (the skeleton's diary - SkeletonRecorder.js)
         this.stats.results++;
         this.stats.lastResultAt = performance.now();
         const r = {
@@ -811,6 +812,7 @@ export class PoseService {
     /** Raw model output → guarded holistic-style results → poseData. */
     _handleResult(r) {
         if (this.recordSink) this.recordSink(r);
+        if (this.recordTaps) for (const f of this.recordTaps) f(r); // (the skeleton's diary - SkeletonRecorder.js)
         this.stats.results++;
         this.stats.lastResultAt = performance.now();
         this.stats.avgCost = this.stats.avgCost * 0.9 + (r.cost || 0) * 0.1;

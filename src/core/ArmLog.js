@@ -115,6 +115,7 @@ export class ArmLog {
         // a jerk: a big turn in one frame while the arm's own speed (the camera's) is small
         if (d.turn > 25 && (d.speed ?? this.speedNow[side]) < 3) {
             a.jerks++;
+            this.onJerk?.(side, { turn: Math.round(d.turn), lift: Math.round(d.lift), fix: +d.fix.toFixed(2) }); // (SkeletonRecorder keeps those seconds)
             this.event(`${SIDE[side]} рука: рывок ${Math.round(d.turn)}° за кадр при спокойной руке (подъём ${Math.round(d.lift)}°, фикс поворота ${f(d.fix)})`);
         }
         this._maybeFlush();

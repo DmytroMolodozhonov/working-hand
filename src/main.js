@@ -10,6 +10,8 @@ import { CreateMemory } from './ui/CreateMemory.js';
 import * as THREE from 'three';
 import { Face as KalidoFace } from '../vendor/kalidokit/kalidokit.es.js';
 import { HandRecorder } from './game/HandRecorder.js';
+import { SkeletonRecorder, SKEL } from './game/SkeletonRecorder.js';
+import { armLog } from './core/ArmLog.js';
 import { PoseService } from './input/PoseService.js';
 import { setHandSmoothness } from './input/HandSmooth.js';
 import { VoiceService } from './input/VoiceService.js';
@@ -1000,6 +1002,30 @@ setInterval(() => {
 }, 3000);
 setTimeout(showVoiceMic, 1500);
 
+// ------------------------------------------------------------------ the skeleton's diary (SkeletonRecorder.js)
+// (always on: a jerk of the drawn arm while the camera's arm is calm saves the seconds around it - recordings/zns-jerk-…;
+// F10: a long recording of the skeleton, no video - recordings/zns-skel-…)
+let skelRec = null;
+function ensureSkel() {
+    if (!game || !poseService) return null;
+    if (!skelRec || skelRec.game !== game) {
+        skelRec?.stop();
+        skelRec = new SkeletonRecorder(game, poseService, { save: game.config?.mode !== 'test' });
+        armLog.onJerk = (side, info) => skelRec?.jerk(side, info);
+    }
+    return skelRec;
+}
+setInterval(ensureSkel, 2000);
+function toggleSkeletonRecording() {
+    const s = ensureSkel();
+    if (!s) return;
+    const say = (t) => hud.setVoice?.(t, true);
+    if (s.toggleLong()) {
+        say(`🦴 Запись скелета (без видео) - до ${SKEL.LONG_S} с; F10 ещё раз - остановить`);
+        s.onSaved = (kind, file) => { if (kind === 'zns-skel') say(`🦴 Запись скелета сохранена: ${file || 'recordings/'}`); };
+    } else say('🦴 Запись скелета остановлена - сохраняю');
+}
+
 // ------------------------------------------------------------------ hand recording (F9)
 let handRecorder = null;
 function startHandRecording() {
@@ -1023,6 +1049,8 @@ window.addEventListener('keydown', (e) => {
     if (!$('pause-menu').classList.contains('hidden')) return; // (the menu is open)
     // F9: a 10-second recording of the hands for the developer (HandRecorder.js)
     if (e.key === 'F9') { e.preventDefault(); startHandRecording(); return; }
+    // F10: the skeleton's diary - a long recording of what the camera saw of the body and what the game made of it (no video)
+    if (e.key === 'F10') { e.preventDefault(); toggleSkeletonRecording(); return; }
     const k = e.key.toLowerCase();
     if (k >= '1' && k <= '9' && game.inventory) game.inventory.select(Math.min(parseInt(k, 10), game.inventory.slots.length) - 1);
     if ((k === '0' || k === '`' || k === 'ё') && game.inventory) game.inventory.select(-1);

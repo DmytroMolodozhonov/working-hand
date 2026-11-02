@@ -97,6 +97,8 @@ if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('tools/armre
     if (!file) { console.log('usage: node tools/armreplay.mjs recordings/zns-hands-….json [--side right|left] [--min 12]'); process.exit(1); }
     const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
     const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // (a jerk the game caught by itself - SkeletonRecorder.js: where it was, as the game saw it)
+    if (rec.jerk) console.log(`пойман рывок: ${(rec.jerk.t - (rec.camera?.[0]?.t ?? 0)) / 1000} с от начала записи, рука ${rec.jerk.side === 'left' ? 'левая' : 'правая'}, повернулась ${rec.jerk.turn}° за кадр (подъём ${rec.jerk.lift}°)`);
     for (const side of opt('--side', null) ? [opt('--side')] : ['right', 'left']) {
         const r = replay(rec, { side, min: Number(opt('--min', 12)) });
         console.log(`${side === 'left' ? 'левая' : 'правая'}: ${r.frames} кадров, шаг кисти RMS ${r.rmsStepCm.toFixed(2)} см; рывков ≥${opt('--min', 12)}°/кадр: ${r.jerks.length}, из них при спокойной руке (камера < 3 ш/с): ${r.calm.length}; перелётов туда-обратно (рука на камере не возвращалась): ${r.backN}${r.back.length ? ' (' + r.back.filter((x, j) => j === 0 || x.t - r.back[j - 1].t > 150).slice(0, 8).map((x) => (x.t / 1000).toFixed(2) + 'с').join(', ') + ')' : ''}`);

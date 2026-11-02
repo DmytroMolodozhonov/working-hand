@@ -802,9 +802,22 @@ class GameRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if length <= 0 or length > RECORD_MAX:
                     raise ValueError("Bad request body size")
                 body = self.rfile.read(length)
-                json.loads(body.decode("utf-8"))  # (only a real recording is written)
+                rec = json.loads(body.decode("utf-8"))  # (only a real recording is written)
                 os.makedirs(RECORD_DIR, exist_ok=True)
-                name = time.strftime("zns-hands-%Y%m%d-%H%M%S.json")
+                # (the skeleton's diary - SkeletonRecorder.js: a caught jerk / a long F10 recording; the hands' F9 as before)
+                kind = rec.get("kind") if isinstance(rec, dict) else None
+                prefix = kind if kind in ("zns-jerk", "zns-skel") else "zns-hands"
+                name = time.strftime(prefix + "-%Y%m%d-%H%M%S.json")
+                if os.path.exists(os.path.join(RECORD_DIR, name)):
+                    name = name[:-5] + "-%d.json" % int(time.time() * 1000 % 1000)
+                if prefix == "zns-jerk":
+                    # (caught by themselves: only the newest 40 are kept)
+                    old = sorted(glob.glob(os.path.join(RECORD_DIR, "zns-jerk-*.json")))
+                    for p in old[:-39]:
+                        try:
+                            os.remove(p)
+                        except OSError:
+                            pass
                 with open(os.path.join(RECORD_DIR, name), "wb") as f:
                     f.write(body)
                 full = os.path.join(ROOT, RECORD_DIR, name)
