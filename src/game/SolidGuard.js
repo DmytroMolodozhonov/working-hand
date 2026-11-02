@@ -1,5 +1,5 @@
 /**
- * BodyGuard.js — a body of ANY creature never goes into a solid thing, however it is pushed (the author: «житель врезается в угол дома,
+ * SolidGuard.js — a body of ANY creature never goes into a solid thing, however it is pushed (the author: «житель врезается в угол дома,
  * проваливается под кровать и в текстуры дома. Такого не должно быть… лежит как упал, но без прохода в текстуры»).
  *
  * The world has two kinds of solids: the BLOCKS of the terrain (walls, floors, furniture made of blocks — `terrain.solidIn`) and the
@@ -32,7 +32,7 @@ export const GUARD = {
 };
 
 /**
- * The world as BodyGuard.js sees it: the collision boxes (beds, chests, cauldrons…) and the terrain's blocks. Made once per game.
+ * The world as SolidGuard.js sees it: the collision boxes (beds, chests, cauldrons…) and the terrain's blocks. Made once per game.
  * (the author: a pushed villager flew through a bed and lay inside it — his walking test knew only the blocks)
  */
 export function guardWorld(g) {

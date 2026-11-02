@@ -3,14 +3,14 @@
  * bodybench — «тело не проходит сквозь твёрдое»: тесные дома × все толчки (10–60 м/с, 16 углов) × все виды тел.
  *   node tools/bodybench.mjs [--check] [--n 300]
  * Три замера на одном домике (стены из блоков, кровать, сундук, шкаф, ступени, с дверным проёмом и без):
- *   стоящее тело — толчок скользит по подшагам (BodyGuard.stepBody); считаются кадры, где тело оказалось ВНУТРИ твёрдого;
+ *   стоящее тело — толчок скользит по подшагам (SolidGuard.stepBody); считаются кадры, где тело оказалось ВНУТРИ твёрдого;
  *   кукла (Ragdoll) — брошена, лежит, засыпает; считаются проникновения шара > 0,12 м, «под полом», «не уснула»;
  *   лежащее тело — lieProbe: на кровати лежит НА ней, у шкафа выталкивается.
- * Пороги только ужесточать (в тестах — tests/unit/body-guard*.test.js).
+ * Пороги только ужесточать (в тестах — tests/unit/solid-guard*.test.js).
  */
-import { stepBody, standFree, bounce, lieProbe } from '../src/game/BodyGuard.js';
+import { stepBody, standFree, bounce, lieProbe } from '../src/game/SolidGuard.js';
 import { Ragdoll, DOLL } from '../src/game/Ragdoll.js';
-import { house, rng, FLOOR } from '../tests/unit/body-guard-world.mjs';
+import { house, rng, FLOOR } from '../tests/unit/solid-guard-world.mjs';
 
 const args = process.argv.slice(2);
 const check = args.includes('--check');

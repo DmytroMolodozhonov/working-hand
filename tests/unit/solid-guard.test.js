@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stepBody, standFree, bounce, lieProbe, freeSpot, straightFree, insideSolid, GUARD } from '../../src/game/BodyGuard.js';
+import { stepBody, standFree, bounce, lieProbe, freeSpot, straightFree, insideSolid, GUARD } from '../../src/game/SolidGuard.js';
 import { Ragdoll, DOLL, P } from '../../src/game/Ragdoll.js';
-import { house, rng, FLOOR } from './body-guard-world.mjs';
+import { house, rng, FLOOR } from './solid-guard-world.mjs';
 
 const R = 0.45;
 

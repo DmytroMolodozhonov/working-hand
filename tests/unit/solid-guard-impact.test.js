@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { VillagerModel, villagerLook } from '../../src/entities/VillagerModel.js';
 import { CreatureImpact } from '../../src/game/CreatureImpact.js';
-import { standFree } from '../../src/game/BodyGuard.js';
-import { house, rng, FLOOR } from './body-guard-world.mjs';
+import { standFree } from '../../src/game/SolidGuard.js';
+import { house, rng, FLOOR } from './solid-guard-world.mjs';
 
 /** A villager in the little house: the game's collision boxes (bed, chest) and blocks; its walking test knows only the blocks, like CastleLife._walkable. */
 function setup(x, z, { yaw = 0 } = {}) {

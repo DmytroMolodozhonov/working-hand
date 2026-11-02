@@ -1,5 +1,5 @@
 /**
- * A tiny house for the body-guard tests and the bench: floor top y = 0.5 (layer 2 is the first air layer), walls as terrain blocks,
+ * A tiny house for the solid-guard tests and the bench: floor top y = 0.5 (layer 2 is the first air layer), walls as terrain blocks,
  * a bed (collision box 2.5 × 5.5 × 1.0), a chest, a cupboard (blocks), a door gap in the south wall, a stair-step of blocks.
  */
 export const FLOOR = 0.5;

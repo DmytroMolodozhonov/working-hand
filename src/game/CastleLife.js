@@ -23,7 +23,7 @@
  */
 
 import { ActionLog } from './ActionLog.js';
-import { guardWorld, insideSolid, freeSpot, solidName, standFree, GUARD } from './BodyGuard.js';
+import { guardWorld, insideSolid, freeSpot, solidName, standFree, GUARD } from './SolidGuard.js';
 import { stateOf as gestureState, sayCtx, mark as markEmo } from './GestureLife.js';
 import { isStallSite } from './CreativeMarket.js';
 import { isGuestSite } from './CreativeGuest.js';
@@ -1101,7 +1101,7 @@ export class CastleLife {
             const a = crowdStep(this.game, v, v, ux, uz, Math.max(0.1, d - stopAt - 0.2), { r: this._bodyR(v), speed: speed * slowFactor(v), dt, room: (x, z) => this._walkable(x, z, v.y), rank: (v.cmd || v.order || v.follow || v.foe) ? 1 : 0 });
             if (!a) { v.speed = 0; return d; }
             if (a.unstick) { // (stuck for ~10 s among the others or the walls: set on the nearest free place — never a permanent stand)
-                if (this._walkable(a.unstick.x, a.unstick.z, v.y) && standFree(guardWorld(this.game), a.unstick.x, a.unstick.z, BODY_R, v.y)) { // (set on a free place: not into a bed or a chest — BodyGuard.js)
+                if (this._walkable(a.unstick.x, a.unstick.z, v.y) && standFree(guardWorld(this.game), a.unstick.x, a.unstick.z, BODY_R, v.y)) { // (set on a free place: not into a bed or a chest — SolidGuard.js)
                      this.alog?.decision(v, `долго без движения — выставлен на свободное место (${v.x.toFixed(1)}, ${v.z.toFixed(1)}) → (${a.unstick.x.toFixed(1)}, ${a.unstick.z.toFixed(1)})`); v.x = a.unstick.x; v.z = a.unstick.z; }
                 v.speed = 0; return d;
             }
@@ -1373,7 +1373,7 @@ export class CastleLife {
     }
 
     /**
-     * (the safety net, BodyGuard.js) A body that is being thrown about — knocked down, stunned, flying — and is found INSIDE a bed, a chest
+     * (the safety net, SolidGuard.js) A body that is being thrown about — knocked down, stunned, flying — and is found INSIDE a bed, a chest
      * or a wall is led out to the nearest free place on the side it came from, softly (a few tenths of a metre a frame), never through
      * a wall, never under a bed; the journal says it («решение: тело вытолкнуто…», so the author can send the log). Not the walkers: the walking AI
      * goes through its own house by its own paths.
@@ -1535,7 +1535,7 @@ export class CastleLife {
         if (v.seated && v.job === 'ride' && g.travelers?.step(v, dt)) return; // (in the saddle: Riders.js leads the horse — and gets down to fight)
         // got inside a wall somehow (a shove, a blink, a blast that moved the blocks): out to the nearest free place
         if (!v.seated && (v.wallT = (v.wallT || 0) - dt) <= 0) { v.wallT = 0.5; this._unwall(v); }
-        this._bodyNet(v, dt); // (thrown about and found inside a bed / a chest / a wall: led out — BodyGuard.js)
+        this._bodyNet(v, dt); // (thrown about and found inside a bed / a chest / a wall: led out — SolidGuard.js)
         // the hero is a monster (MonsterFear.js): most run, a quarter of the knights fight, the wizards who know «Nihilis Atra» scatter it
         if (this.mfear.step(v, dt)) return;
         // a great fire close by (the Hellfire): back off from it behind the shield, or run (fear())

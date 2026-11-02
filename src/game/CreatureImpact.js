@@ -29,7 +29,7 @@
 import * as THREE from 'three';
 import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
-import { stepBody, bounce, lieProbe, GUARD, guardWorld } from './BodyGuard.js';
+import { stepBody, bounce, lieProbe, GUARD, guardWorld } from './SolidGuard.js';
 import { FIRM, absoluteStops } from './FirmRules.js';
 import { creatureHolds, creatureAbsolute, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
@@ -123,7 +123,7 @@ export const KINDS = {
             // (thrown up into the air: only a wall stops it — a walker's step test would hold it in place)
             const base = c.vy && cl?._airFree ? (x, z) => cl._airFree(x, z, c.y) : (x, z) => !cl?._walkable || cl._walkable(x, z, c.y);
             // (the whole body, not its middle point: shoulders keep BODY_CLEAR from the wall, like a walking step does; the beds, chests
-            // and every other box too — BodyGuard.js — and in sub-steps of half the radius, so a 60 m/s Jolt never skips one)
+            // and every other box too — SolidGuard.js — and in sub-steps of half the radius, so a 60 m/s Jolt never skips one)
             const R = BODY_CLEAR * (c.role === 'knight' || c.role === 'king' ? 1.3 : 1);
             const W = guardWorld(g), feet = c.y;
             const ok = (x, z) => base(x, z) && base(x + R, z) && base(x - R, z) && base(x, z + R) && base(x, z - R);
@@ -525,7 +525,7 @@ export class CreatureImpact {
             const push = lieClearPush((ix, iz, L) => td.solidIn(ix, iz, L, L), feet.x, feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0), feet.z, ax.x, ax.z, scale);
             if (push && (s.slid || 0) <= 3) { s.slid = (s.slid || 0) + d; K.move(g, c, push.x * d, push.z * d); }
         }
-        // 2) the boxes (a bed, a chest, a cauldron…): lain ON when low (it rests on top), shoved back out of when tall; BodyGuard.js
+        // 2) the boxes (a bed, a chest, a cauldron…): lain ON when low (it rests on top), shoved back out of when tall; SolidGuard.js
         const W = guardWorld(g);
         const floorY = ck === 'v' ? c.y : feet.y - (ck === 'z' ? (c.gOff ?? 1) : 0);
         const P = lieProbe(W, feet.x, feet.z, ax.x, ax.z, floorY, scale, ck === 'a' ? 0.45 : GUARD.LIE_W);
@@ -540,7 +540,7 @@ export class CreatureImpact {
 
     /**
      * (host) A dead villager's body, come to rest: lain across a bed's edge or into a cupboard it is shoved back out (and where most of it
-     * is on a bed, `deadRest` — it lies ON it: CastleLife._lieFloor). The same probe as a living body lying (BodyGuard.lieProbe).
+     * is on a bed, `deadRest` — it lies ON it: CastleLife._lieFloor). The same probe as a living body lying (SolidGuard.lieProbe).
      */
     guardDead(c, dt) {
         if (!this.auth || c.vy || !c.model?.root?.matrixWorld || !c.model.isDeadDone) return;
