@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handTipDue, HAND_TIP_GAP, HAND_TIP } from '../../src/game/Accio.js';
+import { handTipDue, HAND_TIP_GAP, HAND_TIP, secondaryRaised } from '../../src/game/Accio.js';
 
 const base = { flying: true, caughtSide: 'left', secondary: 'left', raised: false, now: 100 };
 
@@ -23,4 +23,16 @@ test('частота: не чаще раза в HAND_TIP_GAP секунд', () =
     assert.equal(handTipDue({ ...base, last: base.now - 1 }), false);
     assert.equal(handTipDue({ ...base, last: base.now - HAND_TIP_GAP + 0.1 }), false);
     assert.equal(handTipDue({ ...base, last: base.now - HAND_TIP_GAP }), true);
+});
+
+const UP = (deg) => -Math.cos(deg * Math.PI / 180); // (deg from hanging straight down)
+test('«рука опущена» — до 30° от низа, как в правиле выпадения вещи; горизонталь — уже поднята', () => {
+    for (const d of [0, 15, 28]) assert.equal(secondaryRaised(UP(d)), false, `${d}°`);
+    for (const d of [32, 60, 90, 120]) assert.equal(secondaryRaised(UP(d)), true, `${d}°`);
+    assert.equal(secondaryRaised(undefined), false, 'нет данных — опущена');
+});
+test('гистерезис 25°/30°: поднятая рука не «опускается» от дрожи у границы', () => {
+    assert.equal(secondaryRaised(UP(28), true), true, 'уже поднята: 28° — ещё поднята');
+    assert.equal(secondaryRaised(UP(24), true), false, 'ниже 25° — опущена');
+    assert.equal(secondaryRaised(UP(28), false), false, 'была опущена: 28° — ещё опущена');
 });

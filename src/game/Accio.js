@@ -8,6 +8,7 @@
  */
 
 import * as THREE from 'three';
+import { RELEASE } from './ThrowModel.js';
 
 export const ACCIO = {
     RANGE: 60, // m (was 30: «слишком далеко» — doubled at the author’s request)
@@ -44,6 +45,15 @@ export function handTipDue({ flying, caughtSide, secondary, raised, now, last = 
     return now - last >= HAND_TIP_GAP;
 }
 
+/**
+ * The secondary hand is «raised» for the tip — by the same rule as the release of a thing (ThrowModel.RELEASE): more than
+ * 30° from hanging straight down (`up` = sin of the arm's elevation, −1 = down); back to «hanging» within 25° (no flicker).
+ * Pure (tests). `was` — it counted as raised a moment ago.
+ */
+export function secondaryRaised(up, was = false) {
+    return typeof up === 'number' && up > (was ? RELEASE.LOW_IN_SEC : RELEASE.LOW_OUT_SEC);
+}
+
 /** A dead animal «Акцио» acts on: a body, not yet bones (its meat all taken), nor one held by «Левиоса». Pure (tests). */
 export function accioBody(a) {
     return !!a && !!a.dead && !a.lev && !a.bones;
@@ -77,8 +87,10 @@ export class Accio {
         const g = this.game, st = this.state;
         if (!st || !st.side) return null;
         const sec = g.dom === 'left' ? 'right' : 'left';
-        const lift = g.currentPose?.armLift;
-        const raised = g.character.isArmRaised(sec) || !!(lift && accioLifted(lift[sec], this._up?.[sec]));
+        // (the hand «hangs» while it is within 30° of straight down — the same angle within which a thing stays in it
+        // however the fingers open, ThrowModel.RELEASE.LOW_*_SEC)
+        const up = g.character.armState?.(sec, this._tipArm || (this._tipArm = {}))?.up;
+        const raised = this._tipUp = secondaryRaised(up, !!this._tipUp);
         const now = performance.now() / 1000;
         if (!handTipDue({ flying: true, caughtSide: st.side, secondary: sec, raised, now, last: this._tipAt })) return null;
         this._tipAt = now;
