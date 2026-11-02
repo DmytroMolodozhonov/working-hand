@@ -117,6 +117,7 @@ export function journal(line) {
         fetch('/api/gamelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: 'Жители', line: String(line) }) }).catch(() => {});
     } catch (_) { /* ignore */ }
 }
+const CHANGE_S = 0.9; // s the merchant's open hand is out before the change lies on the counter
 const GOOD_IN = 0.35, PAID_IN = 0.2; // m from the counter's front edge: a good lying there; a paid one pushed to the buyer
 
 /** Across a stall's counter: the line `inset` m behind its front edge (the buyer's side). */
@@ -1341,11 +1342,18 @@ export class CastleTalk {
         const others = purses.filter((L) => L !== magic && L.item.magic);
         for (const L of purses) I.pickUp(L.item.uid, '#merchant', 'right');
         const rest = have - price;
-        if (magic) {
-            I.spawnLoose(makeMagicPouch(newUid(), rest), mAt);
-            for (const L of others) I.spawnLoose(makeMagicPouch(newUid(), 0), L.model.position.clone()); // (two magic pouches put there: both stay his buyer's)
-        } else if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
-        v.giveT = 1.2;
+        // the change is not there by magic: his hand is held out, open, and the pouch is laid on the counter a moment later
+        // (CHANGE_S; if he is killed / frightened / gone before, it is laid at once — no coin is lost: _flushChange)
+        const othersAt = others.map((L) => L.model.position.clone());
+        const laid = () => {
+            if (magic) {
+                I.spawnLoose(makeMagicPouch(newUid(), rest), mAt);
+                for (const p of othersAt) I.spawnLoose(makeMagicPouch(newUid(), 0), p); // (two magic pouches put there: both stay his buyer's)
+            } else if (rest > 0) I.spawnLoose({ kind: 'coins', uid: newUid(), count: rest }, at);
+            g.sound?.playCoins?.();
+        };
+        (this.changes || (this.changes = [])).push({ v, t: CHANGE_S, laid });
+        v.giveT = CHANGE_S + 0.9; // (the hand stays out a little after: then it is drawn back)
         G.item.shop.paid = true;
         // he pushes it to the very edge of the counter, before the buyer: there a hand takes it
         const st = cs.def.stalls?.[+s];
@@ -1743,7 +1751,23 @@ export class CastleTalk {
     }
 
     // ---------------------------------------------------------- frame
+    /** (host) the change laid on the counter when his hand has been out long enough — or at once if he can no longer do it. */
+    _flushChange(dt) {
+        const list = this.changes;
+        if (!list?.length) return;
+        for (let i = list.length - 1; i >= 0; i--) {
+            const c = list[i];
+            c.t -= dt;
+            const gone = c.v.dead || c.v.sleep || c.v.fleeT > 0 || !this.life.byId.has(c.v.id) || c.v.foe;
+            if (c.t > 0 && !gone) continue;
+            list.splice(i, 1);
+            c.laid();
+            if (gone) c.v.giveT = 0;
+        }
+    }
+
     update(dt) {
+        this._flushChange(dt);
         this.commands?.sample(dt); // (where my hand points, a few times a second: the words come later than the hand)
         const g = this.game;
         const now = performance.now();

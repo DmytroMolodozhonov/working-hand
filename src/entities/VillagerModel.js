@@ -1778,12 +1778,19 @@ export class VillagerModel {
                 T.aRX = Math.PI / 2 + this.aimPitch; T.wrist = -Math.PI;
                 rate = 30;
                 break;
-            case 'offer':
-                // holding a scroll out to you
-                T.aLX = 1.2; T.aLZ = 0.15;
-                T.headX = 0.1;
-                rate = 12;
+            case 'offer': {
+                // a merchant giving change: the right arm out and a little down over the counter, the palm up and open (the wrist
+                // turned), a small weighing of the hand — the pouch is laid in front of the buyer a moment later (CastleTalk.CHANGE_S);
+                // the left arm rests on the counter's edge, the head bowed to the hand, then to the buyer
+                const w = Math.sin(t * 5) * 0.06;
+                T.aRX = 1.45 + w; T.aRZ = -0.12; T.aRY = 0;
+                T.wrist = -1.5 + w * 0.8;
+                T.aLX = 0.5; T.aLZ = 0.2;
+                T.headX = 0.22 + w * 0.5;
+                T.hx = 0.05;
+                rate = 14;
                 break;
+            }
             case 'situp':
                 // sat up on the bed, legs over its side: a stretch, a yawn, rubbing the eyes
                 T.lL = T.lR = Math.PI / 2; T.kL = T.kR = -Math.PI / 2;
