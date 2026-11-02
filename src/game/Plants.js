@@ -4,15 +4,19 @@
  *   Телевильпин        groups of ~5 big red glowing flowers, 0.6× as often as apple trees. Prick whoever stands at one
  *                      (1 HP, once a second per flower) unless the visitor wears a full steel set. Broken → «Листок телевильпина».
  *   Ярколето           a fire flower that breathes open and shut; angered, it turns on the offender and breathes fire (BrightFlower.js). Sleeps from cold and water.
- *   Плотоядная голова  groups of 2–5, 0.5× as often as apple trees. See a living thing near → tendrils grab a leg, pull it
- *                      to the jaws, three bites, a swallow. An animal is eaten; a man without armour too (−1 HP a second inside,
- *                      spat out after ~10 s); a breastplate: it tries ~7 s and spits him out; a MAGIC robe: spat out at once.
+ *   Плотоядная голова  groups of 2–5, 0.5× as often as apple trees. See a living thing near → the NECK STRETCHES to it, the open jaws hover,
+ *                      the tendrils coil round it and draw it in (a few m/s), the jaws SLAM shut where it is, the neck draws back carrying it,
+ *                      three chews, a swallow that goes down the neck as a swelling (PlantHunt.js: the whole hunt is one pure little
+ *                      simulation, the same on every computer — nothing is ever put into the mouth, the prey moves a step a frame).
+ *                      An animal that FITS the jaws is eaten (PlantHunt.maxPrey); a man without armour is held in the throat (−1 HP a
+ *                      second, ~10 s) and put down by the lowered neck; a breastplate: it tries ~7 s; a MAGIC robe: put down at once.
  *                      Killed → «Головка плотоядной».
  * The host leads (hits, hunger, animals, the other players' fate); every computer decides about ITS OWN player (pricks, bites,
  * the hold inside) from the state the host tells — 'plant' messages. The places of the groups come from the seed (PlantLife),
  * like apple trees: the same on every computer; only worlds of generation ≥ PLANTS_FROM_GEN have them.
- * Cost: a group of flowers is two shapes + one sprite batch; a head is five shapes (stem, two jaws, tendrils, swelling);
- * the tendrils are written by the CPU only near the player (20 Hz while idle). Far groups are not drawn / are put away.
+ * Cost: a group of flowers is two shapes + one sprite batch; a head is six shapes (foot, living neck, two jaws, ruff, tendrils);
+ * the neck (18 rings) and the tendrils are written by the CPU only near the player (every frame within 40 m, 12 Hz farther, nothing beyond 90 m).
+ * Far groups are not drawn / are put away; a plant nobody is near lets its prey go (_abandon).
  */
 import * as THREE from 'three';
 import { BLOCK, PLANTS_FROM_GEN, BRIGHTFLOWER_FROM_GEN } from '../world/Terrain.js';
@@ -25,21 +29,23 @@ import {
     plantDamage, FIRE_KINDS, COLD_KINDS, DROP_STACK, WET_KINDS, BRIGHT,
 } from './PlantLife.js';
 import {
-    PLANT_CLOCK, plantMaterials, telewilpinVariant, TELE_VARIANTS, buildLobe, buildHeadStem, bulgeGeometry, VineSet, VINES, HEAD, mergePlaced,
+    PLANT_CLOCK, plantMaterials, telewilpinVariant, TELE_VARIANTS, buildLobe, buildHeadBase, buildHeadCollar, HeadNeck, NECK, VineSet, VINES, HEAD, mergePlaced,
 } from '../fx/PlantModels.js';
+import { Hunt, HUNT, HUNT_STATES, PREY_SIZE, preyFits, huntVerdict, neckSpine, neckThin } from './PlantHunt.js';
 
 export const PLANT_RANGE = { LOAD: 170, KEEP: 330, DRAW: 150, ANIM: 90, SIM: 85, IDLE_VINES: 45 };
-const STATES = ['idle', 'grab', 'pull', 'bite', 'gulp', 'digest', 'spit', 'cool', 'frozen'];
+const STATES = HUNT_STATES;
 const NO_EFFECT = new Set(['AvadaKedavra', 'Avada', 'Stupefy', 'LevitateDuel', 'Levitation', 'Jolt', 'Expelliarmus', 'Disarmor']);
 const TELE_H0 = 5.4, HEAD_H0 = 8.4, BRIGHT_H0 = 2.2;
 /** Half-width of a plant's body (m, at size 1): its collision box and the reach of a blow. */
 const bodyR = (kind) => (kind === 'carnivore' ? 0.6 : kind === 'brightflower' ? 0.3 : 0.2);
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _o = new THREE.Vector3(1, 1, 1);
+const _up = new THREE.Vector3(0, 1, 0), _w2 = new THREE.Vector3(), _tv = new THREE.Vector3(), _v = new THREE.Vector3(), _w = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _o = new THREE.Vector3(1, 1, 1);
 const r2 = (x) => Math.round(x * 100) / 100;
 const ease = (t) => t * t * (3 - 2 * t);
 
-let _lobeA = null, _lobeB = null; const _headStems = [];
-const headStem = (i) => _headStems[i] || (_headStems[i] = buildHeadStem(i + 1));
+let _lobeA = null, _lobeB = null; const _headBases = [], _collars = [];
+const headBase = (i) => _headBases[i] || (_headBases[i] = buildHeadBase(i + 1));
+const headCollar = (i) => _collars[i] || (_collars[i] = buildHeadCollar(i + 1));
 const lobes = () => { if (!_lobeA) { _lobeA = buildLobe(1, 0); _lobeB = buildLobe(2, 1); } return [_lobeA, _lobeB]; };
 
 /** Where the Creative test ground's experiment heads may grow: [angle, metres] from the start, east first — the first flat grass wins. */
@@ -163,10 +169,10 @@ export class Plants {
 
     _unload(grp) {
         const g = this.game;
-        for (const p of grp.plants) { g.collision?.removeBox(p.boxId); this.byId.delete(p.id); if (this.mine === p) this._release(p, true); }
+        for (const p of grp.plants) { this._abandon(p); g.collision?.removeBox(p.boxId); this.byId.delete(p.id); }
         g.scene.remove(grp.root);
         grp.root.traverse((o) => { if (o.isMesh || o.isPoints) { if (!o.geometry.userData.keep) o.geometry.dispose(); } });
-        for (const p of grp.plants) p.vines?.dispose();
+        for (const p of grp.plants) { p.vines?.dispose(); p.neck?.dispose(); }
     }
 
     // ---- flowers: a group's members merged into two shapes and a sprite batch (rebuilt when one is broken)
@@ -190,24 +196,32 @@ export class Plants {
         grp.halo = halo;
     }
 
-    // ---- a head
+    // ---- a head: a foot with roots, a living neck (one dynamic shape), the two jaws with a ruff of leaves, six tendrils
     _buildHead(p, grp) {
-        const M = plantMaterials(), hs = headStem(p.variant), [la, lb] = lobes();
+        const M = plantMaterials(), hb = headBase(p.variant), [la, lb] = lobes();
         const root = new THREE.Group();
         root.position.set(p.x - grp.root.position.x, p.y - grp.root.position.y, p.z - grp.root.position.z);
         root.rotation.y = p.yaw; root.scale.setScalar(p.s);
-        const stem = new THREE.Mesh(hs.geo, M.headStem); stem.castShadow = true;
-        const pivot = new THREE.Group(); pivot.position.copy(hs.top);
+        const foot = new THREE.Mesh(hb.geo, M.headStem); foot.castShadow = true;
+        const pivot = new THREE.Group(); pivot.position.copy(hb.rest); pivot.rotation.order = 'YXZ';
         const top = new THREE.Mesh(la, M.head), low = new THREE.Mesh(lb, M.head);
         top.castShadow = true;
         low.rotation.x = Math.PI;
-        pivot.add(top, low);
-        const bulge = new THREE.Mesh(bulgeGeometry(), M.vine); bulge.visible = false;
+        const collar = new THREE.Mesh(headCollar(p.variant), M.headStem);
+        pivot.add(top, low, collar);
+        p.neck = new HeadNeck(p.variant + 1);
+        const neck = new THREE.Mesh(p.neck.geo, M.vine); neck.frustumCulled = false; neck.castShadow = true;
         p.vines = new VineSet(p.variant + 1);
         const vines = new THREE.Mesh(p.vines.geo, M.vine); vines.frustumCulled = false; vines.castShadow = false;
-        root.add(stem, pivot, bulge, vines);
+        root.add(foot, neck, pivot, vines);
         grp.root.add(root);
-        Object.assign(p, { root, pivot, top, low, bulge, vinesMesh: vines, topLocal: hs.top.clone(), curve: hs.curve, vineT: 0 });
+        // the matrices of a plant never change: local ↔ world is made once (the hunt runs in the plant's own axes)
+        p.mw = new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion().setFromAxisAngle(_up, p.yaw), new THREE.Vector3(p.s, p.s, p.s));
+        p.mwi = p.mw.clone().invert();
+        p.hunt = new Hunt([hb.rest.x, hb.rest.y, hb.rest.z], [hb.base.x, hb.base.y, hb.base.z], 0);
+        p.spine = Array.from({ length: NECK.N }, () => [0, 0, 0]);
+        Object.assign(p, { root, pivot, top, low, neckMesh: neck, vinesMesh: vines, vineT: 0, drawT: 0, stretch: 1 });
+        p.hunt.step(0, {}); this._animate(p, 0, { x: p.x, z: p.z }, true);
         this._poseVines(p, 0, true);
     }
 
@@ -223,7 +237,7 @@ export class Plants {
     }
     /** World point of a plant's top (the bloom / the hinge of the jaws). */
     _top(p, out) {
-        if (p.kind === 'carnivore' && p.pivot) return p.pivot.getWorldPosition(out);
+        if (p.kind === 'carnivore' && p.hunt) return this._toWorld(p, p.hunt.H, out);
         if (p.kind === 'brightflower') return this.bright.top(p, out);
         return out.set(p.x, p.y + p.H * (p.kind === 'carnivore' ? 0.7 : 0.95), p.z);
     }
@@ -252,6 +266,7 @@ export class Plants {
         const d = plantDamage(kind, dmg);
         if (!(d > 0)) { if (p.kind === 'brightflower' && !NO_EFFECT.has(kind)) this.bright.anger(p, by); return; }
         p.hp -= d;
+        if (d >= 2) p.struck = true; // (a hard blow makes the tendrils let go)
         this._flinch(p);
         if (p.hp <= 0) this.die(p, kind, by);
         else if (p.kind === 'brightflower') this.bright.anger(p, by);
@@ -282,8 +297,18 @@ export class Plants {
     ignite(p) { if (!p.dead && p.burnT <= 0) this.game.sound?.playPlant?.(_v.set(p.x, p.y + 2, p.z), 'burn', 0.8); p.burnT = BURN.TIME; }
     _cold(p) {
         if (p.kind === 'telewilpin') { this.die(p, 'cold', null); return; } // (brittle: it shatters)
-        p.freezeT = FREEZE.TIME; this._enter(p, STATES.indexOf('frozen')); this._release(p, false);
+        this._dropHeld(p); p.freezeT = FREEZE.TIME; p.hunt.freeze(); this._sync(p);
     }
+    /** (host) Let go of whatever the plant holds (it died, froze, was left behind). */
+    _dropHeld(p) {
+        const h = p.hunt; if (!h) return;
+        if (this.auth && h.prey) { this._hold(p, h.prey, false); if (h.prey.k === 'v') { const v = this.game.castleLife?.byId?.get(h.prey.id); if (v) v.fleeT = 6; } }
+        if (h.prey) h.letGo(HUNT.COOL_LOST, 'lost');
+        if (this.mine === p) this._release(p, true);
+        this._sync(p);
+    }
+    /** A plant that nobody is near any more must not keep a creature in its tendrils. */
+    _abandon(p) { if (p.hunt && p.kind === 'carnivore') this._dropHeld(p); }
     _flinch(p) { p.flinch = 0.35; this.game.sound?.playPlant?.(_v.set(p.x, p.y + 2, p.z), 'rustle', 0.7); }
 
     /** (host) A plant is destroyed: it leaves its thing, falls, its prey is let go. */
@@ -293,7 +318,7 @@ export class Plants {
         const g = this.game, K = PLANT_KINDS[p.kind];
         this._gone.set(p.id, true);
         g.collision?.removeBox(p.boxId); p.boxId = null;
-        this._release(p, true);
+        this._dropHeld(p); this._release(p, true);
         this._top(p, _v);
         for (let i = 0; i < 18; i++) g.fx?.spark?.(_v, p.kind === 'telewilpin' ? 0xff3a1c : p.kind === 'brightflower' ? 0xffa21f : 0x6fb83a, 0.12, _w.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5), 0.8);
         g.sound?.playPlant?.(_v, 'fall', 1);
@@ -337,6 +362,7 @@ export class Plants {
 
     _rebuildNear(me) {
         const R = PLANT_RANGE.SIM;
+        const was = this.near.slice();
         this.near.length = 0; this._proxies.length = 0;
         const people = [me];
         for (const r of this.game.remotes?.values?.() || []) if (r.position && !r.dead) people.push(r.position);
@@ -349,6 +375,7 @@ export class Plants {
                 if (ok) { this.near.push(p); this._proxies.push(p.proxy); }
             }
         }
+        for (const p of was) if (!this.near.includes(p)) this._abandon(p);
     }
 
     // ============================================================ telewilpin: thorns
@@ -400,97 +427,106 @@ export class Plants {
         }
     }
 
-    // ============================================================ the carnivorous head
-    _enter(p, st) { p.st = st; p.t = 0; p.spat = false; if (st !== 6) p.meSpat = false; }
-    get _S() { return STATES; }
+    // ============================================================ the carnivorous head (the hunt itself: PlantHunt.js — one little simulation on every computer)
+    /** Old numbers of the states (the network and the tests still speak them). */
+    _enter(p, st) { // 0 = rest, 8 = frozen (the others are driven by the hunt itself)
+        const name = typeof st === 'number' ? HUNT_STATES[st] : st;
+        if (name === 'frozen') p.hunt.freeze(); else if (name === 'idle') p.hunt.letGo(0, 'done'); else p.hunt.enter(name);
+        this._sync(p);
+    }
+    _sync(p) { p.st = HUNT_STATES.indexOf(p.hunt.st); p.t = p.hunt.t; p.prey = p.hunt.prey; }
+    get _S() { return HUNT_STATES; }
+    // world ↔ the plant's local space (a plant never moves: the matrices are made once)
+    _toLocal(p, w, out) { _w2.copy(w).applyMatrix4(p.mwi); out[0] = _w2.x; out[1] = _w2.y; out[2] = _w2.z; return out; }
+    _toWorld(p, a, out) { return out.set(a[0], a[1], a[2]).applyMatrix4(p.mw); }
 
     _head(p, dt, me) {
-        const g = this.game, K = PLANT_KINDS.carnivore, S = STATES[p.st];
-        p.t += dt; p.flinch = Math.max(0, (p.flinch || 0) - dt);
+        const g = this.game, K = PLANT_KINDS.carnivore, h = p.hunt;
+        p.flinch = Math.max(0, (p.flinch || 0) - dt);
         this._burn(p, dt);
         if (p.dead) return;
-        if (p.freezeT > 0) { p.freezeT -= dt; if (p.freezeT <= 0 && this.auth) this._enter(p, 0); }
-        if (this.auth) this._think(p, dt);
-        this._animate(p, dt, me, S);
+        if (p.freezeT > 0) { p.freezeT -= dt; if (p.freezeT <= 0 && this.auth) { h.letGo(0, 'done'); this._sync(p); } }
+        // who it watches (idle) and the prey it holds
+        const d = Math.hypot(p.x - me.x, p.z - me.z);
+        h.look = !h.prey && d < 30 && h.st === 'idle' ? this._toLocal(p, me, p.lookV || (p.lookV = [0, 0, 0])) : null;
+        if (this.auth && h.st === 'idle' && p.freezeT <= 0) this._think(p, dt);
+        const prey = h.prey;
+        let obs = null, alive = true;
+        if (prey) {
+            alive = this._preyAlive(prey);
+            if (alive && !h.owned) { const w = this._preyBody(prey, _o); if (w) obs = this._toLocal(p, w, p.obsV || (p.obsV = [0, 0, 0])); else alive = false; }
+        }
+        if (p.freezeT > 0) { this._animate(p, dt, me); return; }
+        const ev = h.step(dt, { auth: this.auth, prey: obs, alive, struck: p.struck });
+        p.struck = false;
+        if (ev.length) this._events(p, ev, prey);
+        this._sync(p);
+        if (h.owned && h.prey) this._applyPrey(p, dt);
+        this._animate(p, dt, me);
+    }
+
+    /** The things that happen in a frame of the hunt (sounds, the hold, the bites, the meal, the putting down). */
+    _events(p, ev, prey) {
+        const g = this.game, h = p.hunt;
+        for (const e of ev) {
+            switch (e) {
+                case 'lash': g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'creak', 1); g.sound?.playPlant?.(_v, 'lash', 0.9); this._panic(p); break;
+                case 'hold': if (this.auth) { this._hold(p, prey, true); if (prey?.k === 'v') g.castleLife?.alarm?.(_v.set(p.x, p.y + 1, p.z), 'monster', null, 40); } break;
+                case 'wrap': g.sound?.playPlant?.(this._toWorld(p, h.mouth, _v), 'squeeze', 1); break;
+                case 'snap': g.sound?.playPlant?.(this._toWorld(p, h.mouth, _v), 'snap', 1); break;
+                case 'bite': this._bite(p, prey); break;
+                case 'gulp': g.sound?.playPlant?.(this._toWorld(p, h.H, _v), 'gulp', 1); break;
+                case 'eaten': if (this.auth && prey?.k === 'a') { const a = g.animals.byId.get(prey.id); if (a) { a.plantHeld = false; g.animals._remove(a); } } break;
+                case 'spit': this._flingPrey(p, prey); break;
+                case 'lost': case 'letgo': case 'done': if (this.auth) this._hold(p, prey, false); if (this.mine === p) this._release(p, false, false); break;
+                default: break;
+            }
+        }
+    }
+    /** The lashing tendrils frighten the herd round the prey. */
+    _panic(p) {
+        const g = this.game; if (!this.auth || !g.animals) return;
+        for (const a of g.animals.list) {
+            if (a.dead || a.plantHeld || a.fly) continue;
+            const dx = a.group.position.x - p.x, dz = a.group.position.z - p.z;
+            if (dx * dx + dz * dz < 14 * 14 * p.s * p.s && !(p.prey?.k === 'a' && p.prey.id === a.id)) g.animals._scare?.(a, { x: p.x, z: p.z });
+        }
     }
 
     /** (host) The hunger of a head: one meal at a time. */
     _think(p, dt) {
-        const g = this.game, K = PLANT_KINDS.carnivore, S = STATES[p.st];
-        if (p.freezeT > 0) return;
-        const prey = p.prey, pos = prey ? this._preyPos(prey, _v) : null;
-        if (prey && prey.k !== 'p' && p.st >= 2 && p.st <= 4) this._carry(p, prey);
-        switch (S) {
-            case 'idle': {
-                if (p.cool > 0) { p.cool -= dt; return; }
-                if ((this._tick + (p.phase | 0)) % 6 !== 0) return;
-                const list = crowdNear(g, p.x, p.y, p.z, K.notice * p.s, null, 8, this._buf || (this._buf = []));
-                let best = null, bd = 1e9;
-                for (const b of list) {
-                    if (b.kind !== 'player' && b.kind !== 'animal' && b.kind !== 'man') continue;
-                    if (b.kind === 'animal' && (b.ref.dead || b.ref.rider || b.ref.fly || b.ref.plantHeld)) continue;
-                    if (b.kind === 'man' && (b.ref.dead || b.ref.plantHeld)) continue;
-                    if (b.kind === 'player' && !this._playerFair(b)) continue;
-                    if (this._taken(b)) continue;
-                    const d = Math.hypot(b.x - p.x, b.z - p.z);
-                    if (d < bd) { bd = d; best = b; }
-                }
-                if (best) { p.prey = this._preyOf(best); p.bites = 0; p.tire = 0; p.verdict = this._verdict(p.prey); this._enter(p, 1); g.sound?.playPlant?.(_v.set(p.x, p.y + 4, p.z), 'lash', 0.9); }
-                return;
-            }
-            case 'grab':
-                if (!pos || !this._preyAlive(prey) || Math.hypot(pos.x - p.x, pos.z - p.z) > K.reach * p.s + 3) { this._letGo(p, 2); return; }
-                if (p.t >= EAT.GRAB) {
-                    if (p.verdict === 'spit') { this._enter(p, STATES.indexOf('spit')); return; } // (a magic robe: spat out at once)
-                    this._hold(p, true);
-                    this._enter(p, 2);
-                }
-                return;
-            case 'pull':
-                if (!this._preyAlive(prey)) { this._letGo(p, 2); return; }
-                if (p.t >= EAT.PULL) { p.bites = 0; this._enter(p, 3); }
-                return;
-            case 'bite': {
-                if (!this._preyAlive(prey)) { this._letGo(p, 2); return; }
-                p.tire += dt;
-                const n = Math.floor(p.t / EAT.BITE_EVERY);
-                if (n > p.bites) { p.bites = n; this._bite(p); }
-                if (p.verdict === 'tire') { if (p.tire >= EAT.SPIT_ARMOUR) this._enter(p, STATES.indexOf('spit')); return; } // (armour: it cannot eat it)
-                if (p.bites >= EAT.BITES && p.t >= EAT.BITES * EAT.BITE_EVERY) this._enter(p, prey.k === 'v' ? STATES.indexOf('spit') : 4); // (a villager cannot be taken out of the world: bitten and spat out)
-                return;
-            }
-            case 'gulp':
-                if (p.t >= EAT.GULP) {
-                    g.sound?.playPlant?.(_v.set(p.x, p.y + 3, p.z), 'gulp', 1);
-                    if (prey.k === 'a') { const a = g.animals.byId.get(prey.id); if (a) g.animals._remove(a); p.prey = null; p.digest = EAT.DIGEST; this._enter(p, 5); } // (swallowed whole: no meat, no bones)
-                    else if (prey.k === 'v') { p.prey = null; this._enter(p, 5); p.digest = EAT.DIGEST; }
-                    else { p.digest = (g.combat?.enabled ? EAT.INSIDE_MAX : 4); this._enter(p, 5); } // (a man: kept inside)
-                }
-                return;
-            case 'digest':
-                if (p.t >= p.digest) { if (p.prey) this._enter(p, STATES.indexOf('spit')); else { p.cool = EAT.COOL; this._enter(p, 0); } }
-                return;
-            case 'spit':
-                if (!p.spat) { p.spat = true; this._hold(p, false); this._flingPrey(p); }
-                if (p.t >= 0.7) { this._letGo(p, prey?.k === 'p' ? EAT.COOL_MAN : EAT.COOL); }
-                return;
-            case 'frozen': return;
-            default: p.cool = EAT.COOL; this._enter(p, 0);
+        const g = this.game, K = PLANT_KINDS.carnivore, h = p.hunt;
+        if (h.cool > 0) return;
+        if ((this._tick + (p.phase | 0)) % 6 !== 0) return;
+        const R = HUNT.START_R * p.s;
+        const list = crowdNear(g, p.x, p.y, p.z, R, null, 8, this._buf || (this._buf = []));
+        let best = null, bd = 1e9;
+        for (const b of list) {
+            if (b.kind !== 'player' && b.kind !== 'animal' && b.kind !== 'man') continue;
+            if (b.kind === 'animal' && (b.ref.dead || b.ref.rider || b.ref.fly || b.ref.plantHeld || b.ref.servantOf != null)) continue;
+            if (b.kind === 'animal' && !preyFits(PREY_SIZE[b.ref.type] ?? 99, p.s)) continue; // (the jaws are too small for it: a horse is left alone)
+            if (b.kind === 'man' && (b.ref.dead || b.ref.plantHeld || b.ref.carriedBy || b.ref.lev || b.ref.arena)) continue;
+            if (b.kind === 'player' && !this._playerFair(b)) continue;
+            if (this._taken(b)) continue;
+            const d = Math.hypot(b.x - p.x, b.z - p.z);
+            if (d < bd && Math.abs(b.y - p.y) < p.H) { bd = d; best = b; }
         }
+        if (!best) return;
+        const prey = this._preyOf(best);
+        prey.size = best.kind === 'animal' ? (PREY_SIZE[best.ref.type] ?? 1.5) : 3.5; prey.kind = prey.k; prey.inside = false;
+        prey.verdict = huntVerdict(prey.k, prey.size, p.s, this._verdict(prey));
+        if (prey.verdict === 'big') return;
+        const body = this._preyBody(prey, _o); if (!body) return;
+        const top = this._toWorld(p, h.rest, _v);
+        if (g.collision && !g.collision.lineOfSight(top.x, top.y, top.z, body.x, body.y, body.z, 1.5)) return; // (no way to it: through a wall)
+        p.bites = 0;
+        h.begin(prey, this._toLocal(p, body, [0, 0, 0]));
+        h.digestFor = g.combat?.enabled ? HUNT.INSIDE_MAX : 4;
+        this._events(p, h.events.splice(0), prey);
+        this._sync(p);
     }
 
-    /** (host) An animal / a villager held by the tendrils is drawn up to the jaws. */
-    _carry(p, prey) {
-        const g = this.game, mouth = this._mouth(p, _w);
-        const k = p.st === 2 ? ease(Math.min(1, p.t / EAT.PULL)) : 1;
-        if (!p.carryFrom) p.carryFrom = this._preyPos(prey, new THREE.Vector3());
-        if (!p.carryFrom) return;
-        _v.lerpVectors(p.carryFrom, mouth, k);
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.group.position.copy(_v).y -= 0.4; a.group.rotation.x = 0.9 * k; a.net = a.group.position; } }
-        else { const v = g.castleLife?.byId?.get(prey.id); if (v) { v.x = _v.x; v.y = _v.y - 1.4; v.z = _v.z; } }
-    }
-    _letGo(p, cool) { this._hold(p, false); p.prey = null; p.carryFrom = null; p.cool = cool; this._enter(p, 0); }
-    _taken(b) { for (const q of this.near) if (q.prey && q.prey.id === (b.kind === 'player' ? String(b.id) : b.ref.id) ) return true; return false; }
+    _taken(b) { for (const q of this.near) if (q.prey && q.prey.id === (b.kind === 'player' ? String(b.id) : b.ref.id)) return true; return false; }
     _playerFair(b) {
         const g = this.game;
         if (b.id === 'me') return !g.isDeadLocal && !g.combat?.dead && !g.flight?.active && !g.invis?.isInvisible?.(g.localId);
@@ -514,143 +550,154 @@ export class Plants {
         if (prey.id === g.localId) return !g.isDeadLocal && !g.combat?.dead;
         const r = g.remotes?.get(prey.id); return !!r && !r.dead;
     }
-    /** World point of the prey (its feet-ish middle). */
-    _preyPos(prey, out) {
+    /** World point of the middle of the prey's body (an animal: its middle; a man: his chest). */
+    _preyBody(prey, out) {
         const g = this.game;
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); return a ? out.copy(a.group.position) : null; }
+        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); return a ? out.set(a.group.position.x, a.group.position.y + 0.4, a.group.position.z) : null; }
         if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); return v ? out.set(v.x, v.y + 1.4, v.z) : null; }
-        if (prey.id === g.localId) return out.copy(g.character.group.position).setY(g.character.group.position.y - 1.6);
-        const r = g.remotes?.get(prey.id); return r ? out.copy(r.position).setY(r.position.y - 1.6) : null;
+        if (prey.id === g.localId) return out.copy(g.character.group.position);
+        const r = g.remotes?.get(prey.id); return r ? out.copy(r.position) : null;
     }
-    /** (host) Take hold of the prey (animals and villagers are carried to the jaws by the host). */
-    _hold(p, on) {
-        const g = this.game, prey = p.prey;
+    /** How far below the middle of the body the object's own origin is (to write the position back). */
+    _midOff(prey) { return prey.k === 'a' ? 0.4 : prey.k === 'v' ? 1.4 : 0; }
+
+    /** (host) Take hold of the prey (animals and villagers are carried by the host). */
+    _hold(p, prey, on) {
+        const g = this.game;
         if (!prey) return;
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.plantHeld = on; if (!on) a.group.rotation.x = 0; } }
+        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.plantHeld = on; if (on) a._plantScale0 = a.group.scale.x; if (!on) { a.group.rotation.x = 0; if (a._plantScale0) a.group.scale.setScalar(a._plantScale0); } } }
         if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) { v.carriedBy = on ? p : null; if (!on) v.vy = v.vy || -0.01; } }
     }
-    /** (host) A bite: an animal loses 6 HP a bite, a villager 3. A player takes his own bites (_holdMe). */
-    _bite(p) {
-        const g = this.game, prey = p.prey;
-        g.sound?.playPlant?.(this._top(p, _v), 'snap', 1);
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) a.hp -= EAT.ANIMAL_BITE * 0.5; if (a?.hp <= 0) a.hp = 1; } // (three bites weaken it; it is swallowed alive-or-nearly: no carcass)
+    /** (host) The prey follows the plant: its body is put where the hunt says (a step a frame, never under the ground or into rock). */
+    _applyPrey(p, dt) {
+        const g = this.game, h = p.hunt, prey = h.prey;
+        if (prey.k === 'p' || !this.auth) return; // (a player: _holdMe on his own computer)
+        const w = this._toWorld(p, h.preyPos, _w), off = this._midOff(prey) * (prey.k === 'a' ? h.preyScale : 1);
+        let oy = w.y - off;
+        const gy = g.collision?.groundAt ? g.collision.groundAt(w.x, w.z, w.y + 1) : p.y;
+        const minY = gy + (prey.k === 'a' ? 0.35 : 0);
+        if (oy < minY) oy = minY;
+        if (g.collision?.pointBlocked?.(w.x, oy + off, w.z)) { // (the way is closed: nothing is carried through rock)
+            p.blockedT = (p.blockedT || 0) + dt;
+            if (p.blockedT > 0.5) { p.blockedT = 0; this._hold(p, prey, false); h.letGo(HUNT.COOL_LOST, 'lost'); this._sync(p); }
+            return;
+        }
+        p.blockedT = 0;
+        if (prey.k === 'a') {
+            const a = g.animals?.byId?.get(prey.id); if (!a) return;
+            a.group.position.set(w.x, oy, w.z); a.net = a.group.position;
+            a.group.scale.setScalar((a._plantScale0 || 1) * h.preyScale);
+            const k = h.st === 'wrap' ? 0.35 : 0.9, f = Math.min(1, dt * 4);
+            a.group.rotation.x += (k - a.group.rotation.x) * f;
+            const ty = p.yaw + h.yaw; a.group.rotation.y += Math.atan2(Math.sin(ty - a.group.rotation.y), Math.cos(ty - a.group.rotation.y)) * Math.min(1, dt * 6);
+        } else {
+            const v = g.castleLife?.byId?.get(prey.id); if (!v) return;
+            v.x = w.x; v.y = oy; v.z = w.z;
+        }
+    }
+    /** (host) A bite: an animal loses 3 HP a bite, a villager 3. A player takes his own bites (_holdMe). */
+    _bite(p, prey) {
+        const g = this.game;
+        g.sound?.playPlant?.(this._toWorld(p, p.hunt.mouth, _v), 'snap', 1);
+        if (!this.auth || !prey) return;
+        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.hp -= EAT.ANIMAL_BITE * 0.5; if (a.hp <= 0) a.hp = 1; } } // (three bites weaken it; it is swallowed alive-or-nearly: no carcass)
         else if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) g.castleLife.hit(v, 3, null, null, { kind: 'bite' }); }
     }
-    /** (host) Spit an animal / villager out: flung away from the stem. */
-    _flingPrey(p) {
-        const g = this.game, prey = p.prey;
+    /** (host) The neck has lowered the prey: it is let out with a push (from where the mouth is, not from a new place). */
+    _flingPrey(p, prey) {
+        const g = this.game;
         if (!prey) return;
-        this._top(p, _v);
-        g.sound?.playPlant?.(_v, 'spit', 1);
-        const dir = _w.set(Math.sin(p.yaw + p.hy), 0, Math.cos(p.yaw + p.hy));
-        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.plantHeld = false; a.group.rotation.x = 0; a.group.position.set(p.x + dir.x * 4.5, p.y + 0.3, p.z + dir.z * 4.5); g.animals.push?.(a, _v.copy(dir).multiplyScalar(EAT.SPIT_V).setY(3), 0.6); a.state = 'flee'; a.stateT = 6; } }
-        else if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) { v.carriedBy = null; v.x = p.x + dir.x * 4.5; v.z = p.z + dir.z * 4.5; v.y = p.y; v.fleeT = 6; } }
+        const mouth = this._toWorld(p, p.hunt.mouth, _v);
+        g.sound?.playPlant?.(mouth, 'spit', 1);
+        const dir = _w.set(Math.sin(p.yaw + p.hunt.yaw), 0, Math.cos(p.yaw + p.hunt.yaw));
+        if (!this.auth) return;
+        if (prey.k === 'a') { const a = g.animals?.byId?.get(prey.id); if (a) { a.plantHeld = false; a.group.rotation.x = 0; if (a._plantScale0) a.group.scale.setScalar(a._plantScale0); g.animals.push?.(a, _o.copy(dir).multiplyScalar(EAT.SPIT_V * 0.6).setY(2), 0.6); a.state = 'flee'; a.stateT = 6; } }
+        else if (prey.k === 'v') { const v = g.castleLife?.byId?.get(prey.id); if (v) { v.carriedBy = null; v.fleeT = 6; v.vy = 0; } }
     }
 
     // ---- the victim's side: ME (every computer decides about its own player)
     _holdMe(dt) {
         const g = this.game, c = g.combat, ch = g.character;
         let mine = null;
-        for (const p of this.near) if (!p.dead && p.prey && p.prey.k === 'p' && p.prey.id === g.localId && p.st >= 2 && p.st <= 6 && !p.meSpat) { mine = p; break; }
+        for (const p of this.near) if (!p.dead && p.prey && p.prey.k === 'p' && p.prey.id === g.localId && p.hunt.owned && !p.meSpat) { mine = p; break; }
         if (!mine) { if (this.mine) this._release(this.mine, false); return; }
-        const p = mine, S = STATES[p.st];
-        if (this.mine !== p) { this.mine = p; p.from = ch.group.position.clone(); p.myBite = 0; p.myT = 0; }
+        const p = mine, h = p.hunt, S = h.st;
+        if (this.mine !== p) { this.mine = p; p.myBite = 0; p.myT = 0; p.meSpat = false; }
         p.myT += dt;
-        if (c) c.eaten = S === 'pull' || S === 'bite' || S === 'gulp' || S === 'digest';
+        if (c) c.eaten = (S === 'snap' && h.prey?.verdict !== 'spit') || S === 'pull' || S === 'bite' || S === 'gulp' || S === 'digest';
         ch.verticalVelocity = 0;
         if (g.knockback) g.knockback.set(0, 0, 0);
-        const mouth = this._mouth(p, _v);
-        if (S === 'pull') ch.group.position.lerpVectors(p.from, mouth, ease(Math.min(1, p.t / EAT.PULL)));
-        else if (S === 'bite' || S === 'gulp') ch.group.position.copy(mouth).add(_w.set((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.12, 0));
-        else if (S === 'digest') {
-            this._inside(p, ch.group.position);
+        // my body follows the hunt: a step a frame, above the ground, never into rock
+        const w = this._toWorld(p, h.preyPos, _v), gy = g.collision?.groundAt ? g.collision.groundAt(w.x, w.z, w.y) : p.y;
+        if (w.y < gy + 2.05) w.y = gy + 2.05;
+        if (!g.collision?.pointBlocked?.(w.x, w.y, w.z) && !g.collision?.pointBlocked?.(w.x, w.y - 1.5, w.z)) ch.group.position.copy(w);
+        if (S === 'digest') {
             p.inT = (p.inT || 0) + dt;
             if (p.inT >= 1) { p.inT -= 1; if (c?.enabled) c.damage(EAT.HURT, null, 'bite'); else g.damageLocalPlayer?.(EAT.HURT, 'bite'); }
             g.hud?.setStatus?.('🌿 Вас съела плотоядная голова! −1 ❤ в секунду. Убейте её — бейте мечом или колдуйте');
         }
-        if (S === 'bite' && Math.floor(p.t / EAT.BITE_EVERY) > p.myBite) {
-            p.myBite = Math.floor(p.t / EAT.BITE_EVERY);
+        if (S === 'bite' && Math.floor(h.t / HUNT.BITE_EVERY) > p.myBite) {
+            p.myBite = Math.floor(h.t / HUNT.BITE_EVERY);
             if (c?.enabled) c.damage(EAT.BITE_DMG, null, 'bite'); else g.damageLocalPlayer?.(EAT.BITE_DMG, 'bite'); // (steel takes its share — Armor.absorb)
             g.hud?.damageFlash?.();
         }
-        if (S === 'spit') { p.meSpat = true; this._release(p, false, true); }
+        if (S === 'spit' && h.spat) { p.meSpat = true; this._release(p, false, true); }
     }
-    _mouth(p, out) { return p.pivot ? p.pivot.localToWorld(out.set(0, 0.15, 1.5)) : out.set(p.x, p.y + 6, p.z); }
-    _inside(p, out) { return p.pivot ? p.pivot.localToWorld(out.set(0, -0.2, 1.0)) : out; }
-    /** Let me go (spat out with a push, or just freed). */
+    _mouth(p, out) { return p.hunt ? this._toWorld(p, p.hunt.mouth, out) : out.set(p.x, p.y + 6, p.z); }
+    /** Let me go (put down with a push, or just freed). */
     _release(p, died, spit = false) {
         const g = this.game, c = g.combat;
         if (this.mine !== p) return;
         if (c) c.eaten = false;
-        {
-            this.mine = null; p.inT = 0;
-            g.hud?.setStatus?.('');
-            if (spit || died) {
-                const d = _w.set(Math.sin(p.yaw + p.hy), 0, Math.cos(p.yaw + p.hy));
-                const ch = g.character;
-                ch.group.position.set(p.x + d.x * 4.2, Math.max(p.y + 2.1, ch.group.position.y - 3), p.z + d.z * 4.2);
-                ch.verticalVelocity = 3;
-                if (g.knockback) { g.knockback.x = d.x * EAT.SPIT_V * 0.8; g.knockback.z = d.z * EAT.SPIT_V * 0.8; }
-                g.sound?.playPlant?.(ch.group.position, 'spit', 1);
-            }
+        this.mine = null; p.inT = 0;
+        g.hud?.setStatus?.('');
+        if (spit || died) {
+            const d = _w.set(Math.sin(p.yaw + p.hunt.yaw), 0, Math.cos(p.yaw + p.hunt.yaw));
+            g.character.verticalVelocity = 2;
+            if (g.knockback) { g.knockback.x = d.x * EAT.SPIT_V * 0.8; g.knockback.z = d.z * EAT.SPIT_V * 0.8; }
+            g.sound?.playPlant?.(g.character.group.position, 'spit', 1);
         }
     }
 
     // ---- looks
-    _animate(p, dt, me, S) {
+    _animate(p, dt, me) {
         if (!p.root) return;
         const d = Math.hypot(p.x - me.x, p.z - me.z);
         if (d > PLANT_RANGE.ANIM) return;
-        const g = this.game, t = this._clock + p.phase;
-        // where it looks: its prey, else the nearest person within 30 m, else straight on
-        let tgt = null;
-        if (p.prey) tgt = this._preyPos(p.prey, _o);
-        else if (d < 30) tgt = _o.copy(me);
-        let hy = Math.sin(t * 0.4) * 0.35, hp = 0.1 + 0.05 * Math.sin(t * 0.7);
-        if (tgt) { hy = Math.atan2(tgt.x - p.x, tgt.z - p.z) - p.yaw; hy = Math.atan2(Math.sin(hy), Math.cos(hy)); const dh = Math.hypot(tgt.x - p.x, tgt.z - p.z); this._top(p, _v); hp = Math.max(0, Math.min(0.8, Math.atan2(_v.y - tgt.y, Math.max(1, dh)) * 0.8)); }
-        const k = Math.min(1, dt * 4);
-        p.hy += (hy - p.hy) * k; p.hpit += (hp - p.hpit) * k;
-        // the jaws by state
-        let jaw;
-        switch (S) {
-            case 'grab': jaw = 0.55 + 0.1 * Math.sin(t * 9); break;
-            case 'pull': jaw = 0.95; break;
-            case 'bite': { const ph = (p.t % EAT.BITE_EVERY) / EAT.BITE_EVERY; jaw = 0.95 * Math.pow(Math.cos(ph * Math.PI * 0.5), 3); break; }
-            case 'gulp': jaw = Math.max(0, 0.2 - p.t * 0.4); break;
-            case 'digest': jaw = 0.02; break;
-            case 'spit': jaw = 1.1 * Math.max(0, 1 - p.t * 1.2); break;
-            case 'frozen': jaw = 0.3; break;
-            default: jaw = 0.14 + 0.05 * Math.sin(t * 1.3);
-        }
-        if (p.flinch > 0) jaw += 0.3 * p.flinch;
-        p.jaw += (jaw - p.jaw) * Math.min(1, dt * (S === 'bite' ? 30 : 9));
-        p.pivot.rotation.set(p.hpit, p.hy, 0);
+        const h = p.hunt, t = this._clock + p.phase;
+        // far plants are written at 12 Hz, near ones every frame
+        p.drawT -= dt;
+        if (d > 40 && p.drawT > 0) return;
+        p.drawT = d > 40 ? 0.08 : 0;
+        // the jaws
+        const target = h.jawTarget() + (p.flinch > 0 ? 0.3 * p.flinch : 0);
+        p.jaw += (target - p.jaw) * Math.min(1, dt * (h.st === 'snap' ? 45 : h.st === 'bite' ? 28 : 9));
+        p.pivot.position.set(h.H[0], h.H[1], h.H[2]);
+        p.pivot.rotation.set(h.pitch, h.yaw, 0);
         p.top.rotation.x = -p.jaw; p.low.rotation.x = Math.PI - p.jaw;
-        // the swelling goes down the stem while it digests
-        const dig = S === 'digest' || (S === 'idle' && p.cool > EAT.COOL - 3 && p.digest > 0);
-        p.bulge.visible = S === 'digest' && !p.prey ? true : S === 'gulp';
-        if (p.bulge.visible) {
-            const u = S === 'gulp' ? 1 - Math.min(1, p.t / EAT.GULP) * 0.15 : 0.85 - 0.8 * Math.min(1, p.t / (p.digest || EAT.DIGEST));
-            const pt = p.curve.getPoint(Math.max(0.05, u));
-            p.bulge.position.copy(pt); p.bulge.scale.set(1, 1.5, 1).multiplyScalar(0.8 + 0.3 * Math.sin(t * 6));
-        }
+        // chewing: the lower jaw works sideways
+        const chew = h.st === 'bite' ? Math.sin(h.t * 14) * 0.09 : 0;
+        p.low.position.x = chew; p.low.rotation.z = chew * 0.6;
+        // the neck: it stretches and thins, the swallow goes down it as a swelling
+        const L = neckSpine(h.base, h.H, h.yaw, h.pitch, p.spine, p.spine.length);
+        p.neck.update(p.spine, neckThin(L), h.bulgeAt(), h.st === 'gulp' ? 0.35 : 0.55, t);
+        p.stretch = L / HUNT.REST_NECK;
         // the tendrils
         p.vineT -= dt;
-        const active = S !== 'idle' && S !== 'cool' && S !== 'frozen';
-        if (active || (d < PLANT_RANGE.IDLE_VINES && p.vineT <= 0)) { p.vineT = 0.05; this._poseVines(p, t, false, S); }
+        const hunting = h.tendril > 0 || h.st !== 'idle';
+        if (hunting || (d < PLANT_RANGE.IDLE_VINES && p.vineT <= 0)) { p.vineT = hunting ? 0 : 0.05; this._poseVines(p, t); }
     }
 
-    _poseVines(p, t, first, S = 'idle') {
-        const V = p.vines;
-        const grabbing = S === 'grab' || S === 'pull' || S === 'bite';
-        let tgt = null;
-        if (grabbing && p.prey) { const w = this._preyPos(p.prey, _o); if (w) tgt = p.root.worldToLocal(_v.copy(w)); }
-        const reach = S === 'grab' ? ease(Math.min(1, p.t / EAT.GRAB)) : 1;
+    _poseVines(p, t, first = false) {
+        const V = p.vines, h = p.hunt;
+        const grabbing = h.tendril > 0 && h.prey;
+        const reach = grabbing ? ease(h.tendril) : 0;
+        const tgt = grabbing ? _tv.set(h.preyPos[0], h.preyPos[1], h.preyPos[2]) : null;
         for (let i = 0; i < V.N; i++) {
-            const h = (0.22 + 0.62 * i / (V.N - 1)) * HEAD.STEM_H, base = p.curve ? p.curve.getPoint(0.2 + 0.65 * i / (V.N - 1)) : _w.set(0, h, 0);
+            const u = 0.5 + 0.45 * i / (V.N - 1), base = first || !p.neck.ring[0].p ? _w.set(0, u * HEAD.STEM_H, 0) : p.neck.sample(u, _w);
             const yaw = i * 2.4 + 0.5;
-            const mine = grabbing && tgt && i < 4; // (four of the six tendrils take hold; the rest lash about)
-            V.set(i, base, yaw, mine ? tgt : null, t * (grabbing ? 2.2 : 1), mine ? reach : 0, mine && S !== 'grab' ? 1 : 0);
+            const mine = grabbing && i < 4; // (four of the six tendrils take hold; the rest lash about)
+            V.set(i, base, yaw, mine ? tgt : null, t * (grabbing ? 2.2 : 1), mine ? reach : 0, mine && h.tendril >= 1 ? 1 : 0);
         }
         V.commit();
     }
@@ -670,7 +717,7 @@ export class Plants {
         if (this._sendT > 0 || !this.game.sync?.net) return;
         this._sendT = 0.2;
         const l = [];
-        for (const p of this.near) if (p.kind === 'carnivore' && !p.dead && (p.st !== 0 || p.freezeT > 0 || p.burnT > 0)) l.push([p.id, p.st, r2(p.t), p.prey ? p.prey.k + ':' + p.prey.id : 0, Math.round(p.hp), p.freezeT > 0 ? 1 : 0, p.burnT > 0 ? 1 : 0, p.digest || 0]);
+        for (const p of this.near) if (p.kind === 'carnivore' && !p.dead && (p.hunt.st !== 'idle' || p.freezeT > 0 || p.burnT > 0)) l.push([p.id, p.st, r2(p.t), p.prey ? p.prey.k + ':' + p.prey.id : 0, Math.round(p.hp), p.freezeT > 0 ? 1 : 0, p.burnT > 0 ? 1 : 0, r2(p.hunt.digest || 0)]);
         this._send({ op: 's', l, idle: this._lastActive && !l.length ? 1 : 0 });
         this._lastActive = l.length > 0;
     }
@@ -685,11 +732,16 @@ export class Plants {
             for (const e of m.l || []) {
                 const p = this.byId.get(e[0]); if (!p || p.dead) continue;
                 seen.add(p);
-                if (p.st !== e[1]) { p.st = e[1]; p.t = e[2]; } else if (Math.abs(p.t - e[2]) > 0.4) p.t = e[2];
-                if (e[3]) { const [k, ...rest] = String(e[3]).split(':'); p.prey = { k, id: k === 'p' ? rest.join(':') : +rest.join(':') || rest.join(':') }; } else p.prey = null;
-                p.hp = e[4]; p.freezeT = e[5] ? 1 : 0; p.burnT = e[6] ? 1 : 0; p.digest = e[7];
+                let prey = null;
+                if (e[3]) { const [k, ...rest] = String(e[3]).split(':'); prey = { k, kind: k, id: k === 'p' ? rest.join(':') : +rest.join(':') || rest.join(':'), size: 1.5, verdict: 'eat' }; }
+                if (prey && p.hunt.prey && p.hunt.prey.id === prey.id) prey = p.hunt.prey; // (the same one: keep what the hunt knows about it)
+                p.hunt.digest = +e[7] || 0;
+                p.hunt.setNet(HUNT_STATES[e[1]] || 'idle', e[2], prey);
+                if (p.hunt.st === 'digest' && p.hunt.prey?.kind === 'p') p.hunt.prey.inside = true;
+                this._sync(p);
+                p.hp = e[4]; p.freezeT = e[5] ? 1 : 0; p.burnT = e[6] ? 1 : 0;
             }
-            for (const p of this.near) if (p.kind === 'carnivore' && !seen.has(p) && p.st !== 0 && !p.dead) { p.st = 0; p.prey = null; p.freezeT = 0; }
+            for (const p of this.near) if (p.kind === 'carnivore' && !seen.has(p) && p.hunt.st !== 'idle' && !p.dead) { p.hunt.setNet('idle', 0, null); p.freezeT = 0; this._sync(p); if (this.mine === p) this._release(p, false); }
         }
     }
 

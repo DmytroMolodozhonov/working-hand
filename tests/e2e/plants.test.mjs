@@ -61,17 +61,17 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         g.character.group.position.set(head.x + 80, g.terrain.surfaceY(head.x + 80, head.z) + 5, head.z); // (away)
         await sleep(300);
         const THREE = await import('three');
-        const cow = g.animals._spawn('cow', new THREE.Vector3(head.x + 4, head.y + 0.5, head.z)) || null;
+        const cow = g.animals._spawn('pig', new THREE.Vector3(head.x + 4, head.y + 0.5, head.z)) || null;
         out.spawnedCow = !!cow;
         const states = new Set();
         if (cow) {
-            g.plants._rebuildNear(g.character.group.position); head.cool = 0;
+            g.plants._rebuildNear(g.character.group.position); head.hunt.cool = 0;
             for (let i = 0; i < 150 && g.animals.byId.has(cow.id); i++) { await run(1, head, () => states.add(head.st)); }
             out.cowEaten = !g.animals.byId.has(cow.id);
         }
         out.states = [...states];
         // ---- me, without armour: swallowed, hurt inside, spat out
-        head.cool = 0; head.st = 0; head.prey = null;
+        head.hunt.letGo(0, 'done'); head.hunt.cool = 0;
         g.combat.hp = g.combat.maxHp || 20; // (the thorns took 10 of them: a man at half health would die inside)
         const h2 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);
@@ -79,7 +79,7 @@ test('plants: groups grow, thorns prick, the head eats — and armour decides', 
         for (let i = 0; i < 260; i++) { await run(1); was.add(head.st); if (g.combat.eaten) eatenSeen = true; if (eatenSeen && !g.combat.eaten && head.st === 0) break; if (g.combat.dead) break; }
         out.meStates = [...was]; out.eatenSeen = eatenSeen; out.meLoss = h2 - hp(); out.freeAfter = !g.combat.eaten;
         // ---- a magic robe: spat out at once, no harm
-        head.cool = 0; head.st = 0; head.prey = null; g.armor.worn.robe = makeRobe(true);
+        head.hunt.letGo(0, 'done'); head.hunt.cool = 0; g.armor.worn.robe = makeRobe(true);
         g.combat.hp = g.combat.maxHp || 20;
         const h3 = hp();
         g.character.group.position.set(head.x + 3, head.y + 2.1, head.z); g.plants._rebuildNear(g.character.group.position);

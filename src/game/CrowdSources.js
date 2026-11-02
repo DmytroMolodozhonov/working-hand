@@ -51,7 +51,7 @@ export function crowdOf(g) {
             push({ x: p.x, y: p.y, z: p.z, r: BODY_R.spider, ref: s, id: s.id, kind: 'spider' });
         }
         // living trees and risen skeletons (only the ones that walk; a tree standing is the world's)
-        // plant creatures: a telewilpin is a thicket to walk round; a carnivorous head is given a wide berth (its tendrils reach ~6 m)
+        // plant creatures: a telewilpin is a thicket to walk round; a carnivorous head is given a wide berth (its neck stretches ~9 m: PlantHunt.js)
         for (const p of g.plants?.near || []) {
             if (p.dead) continue;
             push({ x: p.x, y: p.y, z: p.z, r: p.kind === 'carnivore' ? 4.5 : p.kind === 'brightflower' ? 1.8 : 1.1, ref: p, id: p.id, kind: 'plant', still: true, vx: 0, vz: 0 });

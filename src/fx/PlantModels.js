@@ -374,6 +374,129 @@ export function buildHeadStem(seed = 1) {
     return { geo: B.geometry(), top, curve };
 }
 
+/**
+ * The foot of a head (its neck is alive and is drawn by HeadNeck, so the foot is only the roots, a short thick trunk and the lower leaves):
+ * returns {geo, rest, base}: `rest` is where the hinge of the jaws rests (the same spot the old stem ended at), `base` is the root of the neck.
+ */
+export function buildHeadBase(seed = 1) {
+    const rnd = rng(seed * 31337 + 5), B = new Builder(), H = HEAD.STEM_H;
+    const lean = rnd() * 6.28;
+    const rest = new THREE.Vector3(Math.sin(lean + 3.4) * 0.4, H, Math.cos(lean + 2.7) * 0.35);
+    const A = hexRGB(0x33200f), Bc = hexRGB(0x2c5a22);
+    const trunk = [0, 0.25, 0.55, 0.85, 1.0].map((y, k) => new THREE.Vector3(Math.sin(lean + k) * 0.05, y, Math.cos(lean + k) * 0.05));
+    B.tube(trunk, (t) => 0.7 - 0.06 * t + (t < 0.2 ? (0.2 - t) * 1.6 : 0), (t) => lerpC(A, Bc, clamp01(t * 1.6)), 10, { ridge: (t, a) => 1 + 0.07 * Math.cos(a * Math.PI * 2 * 5), cap: false });
+    for (let r = 0; r < 8; r++) {
+        const a = r / 8 * 6.28 + rnd() * 0.4, L = 1.5 + rnd() * 1.2;
+        const rp = [new THREE.Vector3(Math.cos(a) * 0.3, 0.55, Math.sin(a) * 0.3), new THREE.Vector3(Math.cos(a) * L * 0.5, 0.28, Math.sin(a) * L * 0.5), new THREE.Vector3(Math.cos(a + 0.3) * L, -0.08, Math.sin(a + 0.3) * L)];
+        B.tube(rp, (t) => 0.24 * (1 - t) + 0.03, (t) => lerpC(Bc, A, t), 6);
+    }
+    for (let l = 0; l < 6; l++) { // broad leaves on the trunk
+        const lf = new Builder();
+        leafInto(lf, 1.9 + rnd() * 0.4, 0.4, 0.5, rnd);
+        B.add(lf, new THREE.Matrix4().compose(new THREE.Vector3(Math.cos(l * 1.05) * 0.4, 0.45 + 0.1 * (l % 3), Math.sin(l * 1.05) * 0.4), new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.95, l * 1.05 + rnd() * 0.4, 0, 'YXZ')), new THREE.Vector3(1, 1, 1)));
+    }
+    return { geo: B.geometry(), rest, base: new THREE.Vector3(0, 1.0, 0) };
+}
+
+/** The ruff of leaves under the jaws (sits on the hinge and turns with the head). */
+export function buildHeadCollar(seed = 1) {
+    const rnd = rng(seed * 6151 + 11), B = new Builder();
+    for (let l = 0; l < 8; l++) {
+        const lf = new Builder();
+        leafInto(lf, 1.4 + rnd() * 0.6, 0.34, 0.45, rnd);
+        B.add(lf, new THREE.Matrix4().compose(new THREE.Vector3(0, -0.2 - 0.12 * (l % 2), -0.1), new THREE.Quaternion().setFromEuler(new THREE.Euler(-2.0 + 0.25 * (l % 2), l / 8 * 6.28 + rnd() * 0.3, 0, 'YXZ')), new THREE.Vector3(1, 1, 1)));
+    }
+    return B.geometry();
+}
+
+/**
+ * The living neck of a head (one dynamic shape, written by the CPU only near the player): a ribbed, blotched tube along the spine given by
+ * PlantHunt.neckSpine; it thins when it stretches, swells where a meal goes down, and bristles with thorns that follow the bends.
+ */
+export const NECK = { N: 18, RADIAL: 9, BRISTLES: 16 };
+export class HeadNeck {
+    constructor(seed = 1) {
+        const { N, RADIAL, BRISTLES } = NECK, rnd = rng(seed * 4099 + 17);
+        const nv = N * RADIAL + BRISTLES * 4;
+        this.pos = new Float32Array(nv * 3); this.nrm = new Float32Array(nv * 3);
+        const col = new Float32Array(nv * 3), idx = [];
+        const A = hexRGB(0x33200f), Bc = hexRGB(0x2c5a22), C = hexRGB(0x5f9a30), W = hexRGB(0x9ac24a);
+        for (let k = 0; k < N; k++) for (let j = 0; j < RADIAL; j++) {
+            const t = k / (N - 1), a = j / RADIAL;
+            let c = t < 0.12 ? lerpC(A, Bc, t / 0.12) : lerpC(Bc, C, clamp01((t - 0.12) / 0.7));
+            c = lerpC(c, W, clamp01((t - 0.82) * 4) * 0.45); // (paler, wetter under the jaws)
+            c = lerpC(c, hexRGB(0x6a2a40), clamp01(Math.sin(a * 6.28 * 3 + t * 26) - 0.78) * 1.5);
+            const o = (k * RADIAL + j) * 3; col[o] = c[0]; col[o + 1] = c[1]; col[o + 2] = c[2];
+            if (k < N - 1) { const a0 = k * RADIAL + j, b0 = k * RADIAL + (j + 1) % RADIAL, c0 = a0 + RADIAL, d0 = b0 + RADIAL; idx.push(a0, c0, b0, b0, c0, d0); }
+        }
+        this.bristle = [];
+        for (let b = 0; b < BRISTLES; b++) {
+            const u = 0.16 + 0.72 * (b + rnd() * 0.6) / BRISTLES, ang = rnd() * 6.28, base = N * RADIAL + b * 4;
+            this.bristle.push({ u, ang, len: 0.2 + rnd() * 0.12 });
+            for (let v = 0; v < 4; v++) { const o = (base + v) * 3, c = v === 3 ? hexRGB(0xc0d070) : hexRGB(0x244a1c); col[o] = c[0]; col[o + 1] = c[1]; col[o + 2] = c[2]; }
+            idx.push(base, base + 3, base + 1, base + 1, base + 3, base + 2, base + 2, base + 3, base, base + 1, base + 3, base, base + 2, base + 3, base + 1, base, base + 3, base + 2);
+        }
+        this.geo = new THREE.BufferGeometry();
+        this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+        this.geo.setAttribute('normal', new THREE.BufferAttribute(this.nrm, 3).setUsage(THREE.DynamicDrawUsage));
+        this.geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        this.geo.setIndex(idx);
+        this.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 5, 0), 16);
+        this.ring = Array.from({ length: N }, () => ({ p: [0, 0, 0], n: [1, 0, 0], b: [0, 0, 1], r: 0.5 }));
+    }
+    /** `spine`: N points [x,y,z] (PlantHunt.neckSpine); `thin` 0.6…1; `bulgeU`/`amp`: a swelling at that place along the neck (u 0 root … 1 head). */
+    update(spine, thin, bulgeU = -1, amp = 0.55, t = 0) {
+        const { N, RADIAL } = NECK, R = this.ring;
+        let nx = 1, ny = 0, nz = 0;
+        for (let k = 0; k < N; k++) {
+            const a = spine[Math.max(0, k - 1)], b = spine[Math.min(N - 1, k + 1)];
+            let tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2]; const tl = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+            if (k === 0) { if (Math.abs(ty) > 0.9) { nx = 1; ny = 0; nz = 0; } else { nx = 0; ny = 1; nz = 0; } }
+            const d = nx * tx + ny * ty + nz * tz; nx -= tx * d; ny -= ty * d; nz -= tz * d;
+            let nl = Math.sqrt(nx * nx + ny * ny + nz * nz); if (nl < 1e-4) { nx = 1; ny = 0; nz = 0; nl = 1; }
+            nx /= nl; ny /= nl; nz /= nl;
+            const u = k / (N - 1), r = R[k];
+            r.p = spine[k]; r.n[0] = nx; r.n[1] = ny; r.n[2] = nz;
+            r.b[0] = ty * nz - tz * ny; r.b[1] = tz * nx - tx * nz; r.b[2] = tx * ny - ty * nx;
+            const sw = bulgeU >= 0 ? amp * Math.exp(-(((u - bulgeU) / 0.085) ** 2)) : 0;
+            r.r = (0.7 - 0.34 * u) * (0.55 + 0.45 * thin) * (1 + sw) * (1 + 0.012 * Math.sin(t * 2 + u * 9));
+            for (let j = 0; j < RADIAL; j++) {
+                const ang = j / RADIAL * 6.2832, c = Math.cos(ang), s = Math.sin(ang), o = (k * RADIAL + j) * 3;
+                const rr = r.r * (1 + 0.07 * Math.cos(ang * 5) + 0.03 * Math.sin(u * 40)); // (ribs)
+                const ex = c * nx + s * r.b[0], ey = c * ny + s * r.b[1], ez = c * nz + s * r.b[2];
+                this.pos[o] = spine[k][0] + ex * rr; this.pos[o + 1] = spine[k][1] + ey * rr; this.pos[o + 2] = spine[k][2] + ez * rr;
+                this.nrm[o] = ex; this.nrm[o + 1] = ey; this.nrm[o + 2] = ez;
+            }
+        }
+        // thorns on the bends
+        const base0 = N * RADIAL;
+        for (let b = 0; b < this.bristle.length; b++) {
+            const q = this.bristle[b], f = q.u * (N - 1), i = Math.min(N - 2, Math.floor(f)), w = f - i, A = R[i], B = R[i + 1];
+            const px = mix(A.p[0], B.p[0], w), py = mix(A.p[1], B.p[1], w), pz = mix(A.p[2], B.p[2], w);
+            const nx2 = mix(A.n[0], B.n[0], w), ny2 = mix(A.n[1], B.n[1], w), nz2 = mix(A.n[2], B.n[2], w), bx = mix(A.b[0], B.b[0], w), by = mix(A.b[1], B.b[1], w), bz = mix(A.b[2], B.b[2], w);
+            const c = Math.cos(q.ang), s = Math.sin(q.ang), ex = c * nx2 + s * bx, ey = c * ny2 + s * by, ez = c * nz2 + s * bz;
+            const rad = mix(A.r, B.r, w) * 0.96, o = (base0 + b * 4) * 3;
+            const sp = 0.045;
+            for (let v = 0; v < 3; v++) { // a small triangle base round the root of the thorn
+                const aa = v / 3 * 6.2832, cc = Math.cos(aa), ss = Math.sin(aa), oo = o + v * 3;
+                const tx2 = -s * nx2 + c * bx, ty2 = -s * ny2 + c * by, tz2 = -s * nz2 + c * bz;
+                this.pos[oo] = px + ex * rad + (cc * tx2) * sp; this.pos[oo + 1] = py + ey * rad + (cc * ty2) * sp + ss * sp * 0.5; this.pos[oo + 2] = pz + ez * rad + (cc * tz2) * sp;
+                this.nrm[oo] = ex; this.nrm[oo + 1] = ey; this.nrm[oo + 2] = ez;
+            }
+            const ot = o + 9, L = q.len;
+            this.pos[ot] = px + ex * (rad + L); this.pos[ot + 1] = py + ey * (rad + L) + 0.04; this.pos[ot + 2] = pz + ez * (rad + L);
+            this.nrm[ot] = ex; this.nrm[ot + 1] = ey; this.nrm[ot + 2] = ez;
+        }
+        this.geo.attributes.position.needsUpdate = true; this.geo.attributes.normal.needsUpdate = true;
+    }
+    /** A point along the neck, u 0 (root) … 1 (head), after `update`. */
+    sample(u, out) {
+        const { N } = NECK, f = Math.max(0, Math.min(1, u)) * (N - 1), i = Math.min(N - 2, Math.floor(f)), w = f - i, A = this.ring[i].p, B = this.ring[i + 1].p;
+        return out.set(mix(A[0], B[0], w), mix(A[1], B[1], w), mix(A[2], B[2], w));
+    }
+    dispose() { this.geo.dispose(); }
+}
+
 let _bulge = null;
 /** The swelling that slides down the stem while the meal is digested (shared). */
 export function bulgeGeometry() {
@@ -396,12 +519,12 @@ export class VineSet {
     constructor(seed = 1) {
         const { N, SEG, RADIAL } = VINES, rnd = rng(seed * 977 + 3);
         this.N = N; this.phase = Array.from({ length: N }, () => rnd() * 6.28); this.len = Array.from({ length: N }, () => 2.6 + rnd() * 1.8);
-        this.rad = Array.from({ length: N }, () => 0.13 + rnd() * 0.05);
+        this.rad = Array.from({ length: N }, () => 0.17 + rnd() * 0.06);
         this.pos = new Float32Array(N * (SEG + 1) * RADIAL * 3);
         this.nrm = new Float32Array(this.pos.length);
         const col = new Float32Array(this.pos.length), idx = [];
         for (let v = 0; v < N; v++) for (let k = 0; k <= SEG; k++) {
-            const t = k / SEG, c = lerpC(hexRGB(0x2a5a1c), hexRGB(0x9ad040), Math.pow(t, 1.5));
+            const t = k / SEG, c = lerpC(lerpC(hexRGB(0x2a5a1c), hexRGB(0x9ad040), Math.pow(t, 1.2)), hexRGB(0xe0d070), Math.pow(t, 5)); // (green, paler and yellowish toward the clinging tip)
             for (let j = 0; j < RADIAL; j++) { const o = ((v * (SEG + 1) + k) * RADIAL + j) * 3; col[o] = c[0]; col[o + 1] = c[1]; col[o + 2] = c[2]; }
         }
         for (let v = 0; v < N; v++) for (let k = 0; k < SEG; k++) for (let j = 0; j < RADIAL; j++) {
@@ -503,7 +626,8 @@ export function carnivoreHeadItemModel() {
 export function plantSamples() {
     const m = plantMaterials(), out = new THREE.Group(), tv = telewilpinVariant(0);
     out.add(new THREE.Mesh(tv.stem, m.stem), new THREE.Mesh(tv.petals, m.petal));
-    out.add(new THREE.Mesh(buildLobe(1), m.head), new THREE.Mesh(buildHeadStem(1).geo, m.headStem), new THREE.Mesh(bulgeGeometry(), m.vine));
+    out.add(new THREE.Mesh(buildLobe(1), m.head), new THREE.Mesh(buildHeadBase(1).geo, m.headStem), new THREE.Mesh(buildHeadCollar(1), m.headStem), new THREE.Mesh(bulgeGeometry(), m.vine));
+    const hn = new HeadNeck(1); out.add(new THREE.Mesh(hn.geo, m.vine));
     const vs = new VineSet(1); out.add(new THREE.Mesh(vs.geo, m.vine));
     const p = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 1, 0], 3)), m.glow); out.add(p);
     out.add(telewilpinLeafModel(), carnivoreHeadItemModel());

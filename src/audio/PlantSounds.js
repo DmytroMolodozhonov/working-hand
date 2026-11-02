@@ -5,10 +5,11 @@
  *   chomp   wet crunching bites                                         gulp   a thick swallow, the throat swelling
  *   spit    a wet burst and a cough of leaves                           burn   leaves crackling in fire
  *   fall    the stem cracking and the plant toppling
+ *   creak   the neck stretching out (a long wet creak of fibres)  squeeze  the tendrils coiling round the prey (a tight rubbery squeak)
  *   whoosh  the Brightflower's fire breath (a roaring rush)  flare  its cup opening with a soft flame  hush  the flame going out
  */
-export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall', 'whoosh', 'flare', 'hush'];
-const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4, whoosh: 0.9, flare: 0.8, hush: 0.7 };
+export const PLANT_SOUNDS = ['rustle', 'prick', 'lash', 'snap', 'chomp', 'gulp', 'spit', 'burn', 'fall', 'whoosh', 'flare', 'hush', 'creak', 'squeeze'];
+const DUR = { rustle: 0.9, prick: 0.3, lash: 0.35, snap: 0.5, chomp: 0.9, gulp: 0.7, spit: 0.6, burn: 1.2, fall: 1.4, whoosh: 0.9, flare: 0.8, hush: 0.7, creak: 1.0, squeeze: 0.6 };
 const TAU = Math.PI * 2;
 
 function noise(d, sr, at, dur, amp, lpK, decay, att = 400) {
@@ -45,6 +46,12 @@ export function synthPlant(ctx, kind) {
         case 'whoosh': noise(d, sr, 0, 0.85, 0.75, 0.22, 3.2, 60); noise(d, sr, 0.05, 0.7, 0.4, 0.5, 5); tone(d, sr, 0, 0.8, 130, 70, 0.3, 3.5); break;
         case 'flare': noise(d, sr, 0, 0.6, 0.45, 0.3, 4.5, 30); tone(d, sr, 0, 0.6, 220, 330, 0.18, 4); tone(d, sr, 0.05, 0.5, 440, 660, 0.07, 5); break;
         case 'hush': noise(d, sr, 0, 0.6, 0.5, 0.18, 6, 80); tone(d, sr, 0, 0.5, 260, 90, 0.2, 7); break;
+        case 'creak': { // a stalk stretching: a low groan with fibres snapping softly along it
+            tone(d, sr, 0, 0.9, 70, 120, 0.4, 2.2); tone(d, sr, 0.05, 0.8, 140, 230, 0.16, 2.6);
+            for (let k = 0; k < 10; k++) noise(d, sr, 0.04 + k * 0.08 + Math.random() * 0.03, 0.025, 0.45, 0.6, 70);
+            noise(d, sr, 0, 0.9, 0.1, 0.1, 3, 20); break;
+        }
+        case 'squeeze': tone(d, sr, 0, 0.45, 900, 380, 0.14, 7); noise(d, sr, 0, 0.4, 0.35, 0.2, 8, 80); tone(d, sr, 0.04, 0.5, 120, 80, 0.4, 7); break;
         default: break;
     }
     // soften the clicks
