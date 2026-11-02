@@ -30,6 +30,12 @@ export function doorHeld(t, d) {
     return above || (left && right);
 }
 
+/** A blast that went off right at a door's leaf (an orb burst on it): it breaks even if its frame still stands. */
+export function doorStruck(d, pos, reach = 1.3) {
+    const dh = d.h || 5, dw = d.w || 3;
+    return Math.hypot(pos.x - d.x, pos.z - d.z) < dw / 2 + reach && pos.y > d.y - reach && pos.y < d.y + dh + reach;
+}
+
 /** The floor height (feet y) under a thing standing at y (it falls to it); null: nothing under it. */
 export function floorUnder(t, x, y, z) {
     if (!t) return y;
@@ -61,7 +67,7 @@ export class Wreck {
             // the gates of a throne room: blasts wear them (Alohomora.blast); their archway gone — they fall
             if (d.gate) { if (d.castle && !doorHeld(t, d) && !g.locks?.gates?.get(d.castle)?.broken) g.locks?._break?.(d.castle); continue; }
             const hit = Math.hypot(d.x - pos.x, d.y + 1.8 - pos.y, d.z - pos.z) < radius + 0.8;
-            if (d.gen ? !doorHeld(t, d) : hit) this._breakDoor(d);
+            if (d.gen ? (!doorHeld(t, d) || (power > 0 && doorStruck(d, pos))) : hit) this._breakDoor(d);
         }
         // beds and chests fall to the floor below
         for (const b of [...(g.beds?.list.values() || [])]) {

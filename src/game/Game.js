@@ -501,6 +501,7 @@ export class Game {
             // a house's sphere of protection (HouseWards.js): spells from outside stop at it
             wardClip: (o, d, len) => this.wards?.clipRay(o, d, len) ?? len,
             wardHit: (a, b) => this.wards?.segmentHit(a, b) || null,
+        doorsOnWay: () => this.doors, // (an orb's step is cut against the doors' leaves: Doors.segmentHit)
             shielded: (from, to) => !!this.wards?.shields(from, to),
             drain: (casterId, mana, dt) => (casterId === this.localId || casterId === 'local' ? this.combat.drain(mana, dt) : true),
             flameOut: (casterId) => { if (casterId === this.localId || casterId === 'local') { this.hud.setVoice('🔥 Пламя погасло — мана кончилась', true); this.sync?.stopSpells?.(); } },

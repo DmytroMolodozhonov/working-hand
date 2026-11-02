@@ -292,6 +292,35 @@ export class CollisionWorld {
         return false;
     }
 
+    /**
+     * The first solid on a straight move a→b (a projectile's step): {s, x, y, z} (s: the share of the way) or null.
+     * Not only where the move ends: every box on the way is cut exactly (a door's 0.2 m leaf, a 1 m wall of a lifted house
+     * cannot be jumped over by a fast orb or a slow frame), the rest (the ground, walls, movers) is looked at every `step` m.
+     */
+    segmentHit(ax, ay, az, bx, by, bz, step = 0.15) {
+        const dx = bx - ax, dy = by - ay, dz = bz - az;
+        let best = Infinity;
+        for (const b of this.queryBoxes(Math.min(ax, bx), Math.max(ax, bx), Math.min(az, bz), Math.max(az, bz))) {
+            let t0 = 0, t1 = 1;
+            for (const [p, d, lo, hi] of [[ax, dx, b.minX, b.maxX], [ay, dy, b.minY, b.maxY], [az, dz, b.minZ, b.maxZ]]) {
+                if (Math.abs(d) < 1e-9) { if (p < lo || p > hi) { t0 = 2; break; } continue; }
+                let u0 = (lo - p) / d, u1 = (hi - p) / d;
+                if (u0 > u1) { const u = u0; u0 = u1; u1 = u; }
+                if (u0 > t0) t0 = u0;
+                if (u1 < t1) t1 = u1;
+                if (t0 > t1) break;
+            }
+            if (t0 <= t1 && t0 < best) best = t0;
+        }
+        const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const n = Math.min(400, Math.ceil(len / step));
+        for (let i = 0; i <= n && i / n < best; i++) {
+            const t = n ? i / n : 0;
+            if (this.pointBlocked(ax + dx * t, ay + dy * t, az + dz * t)) { if (t < best) best = t; break; }
+        }
+        return best <= 1 ? { s: best, x: ax + dx * best, y: ay + dy * best, z: az + dz * best } : null;
+    }
+
     /** Line of sight between two points (sampled; cheap and good enough). */
     lineOfSight(ax, ay, az, bx, by, bz, step = 1.0) {
         const dx = bx - ax, dy = by - ay, dz = bz - az;

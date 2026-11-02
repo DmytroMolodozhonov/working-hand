@@ -57,6 +57,21 @@ function playerOnWay(player, from, to, width, legacyRadius) {
 export const BOMBARDO_RADIUS = 3.6;
 export const MAXIMA_POWER = 3;
 /** Crater radius for a given power: 3× the energy → ~1.7× wider, ~5× more ground removed. */
+/**
+ * What a «Бомбардо» orb meets on its step a→b (a continuous check of the whole way, not of the end only — a fast orb or a
+ * slow frame must not jump a thin door or a wall): the nearest of the collision boxes / walls / ground and a door's leaf
+ * (Doors.segmentHit — a swung-open leaf has no box). {x, y, z, s, door?} or null; `door`: the leaf it hit (it is broken by the blast).
+ */
+export function bombardoWayStop(collision, doors, a, b) {
+    let best = null;
+    const c = collision?.segmentHit?.(a.x, a.y, a.z, b.x, b.y, b.z);
+    if (c) best = { x: c.x, y: c.y, z: c.z, s: c.s, door: null };
+    else if (collision?.pointBlocked && !collision.segmentHit && collision.pointBlocked(b.x, b.y, b.z)) best = { x: a.x, y: a.y, z: a.z, s: 0, door: null };
+    const d = doors?.segmentHit?.(a, b, 0.05);
+    if (d && (!best || d.s <= best.s)) best = { x: a.x + (b.x - a.x) * d.s, y: a.y + (b.y - a.y) * d.s, z: a.z + (b.z - a.z) * d.s, s: d.s, door: d.door };
+    return best;
+}
+
 export function bombardoRadius(power = 1) {
     return BOMBARDO_RADIUS * Math.sqrt(power);
 }
@@ -1620,17 +1635,17 @@ export class SpellManager {
                 const terrain = this.hooks.terrain ? this.hooks.terrain() : null;
                 const step = _a.subVectors(orb.position, prev);
                 const stepLen = step.length();
+                // boxes (a door, a lifted house's walls, tables…) and a door's leaf along the WHOLE step: the first one hit
+                const way = bombardoWayStop(collision, this.hooks.doorsOnWay?.() || null, prev, orb.position);
                 if (terrain && stepLen > 0) {
                     const hit = terrain.raycast(prev, step.clone().divideScalar(stepLen), stepLen);
-                    if (hit) { explodeAt(_b.set(hit.x, hit.y, hit.z)); spell.life = 0; return; }
+                    if (hit && !(way && way.s * stepLen < hit.dist)) { explodeAt(_b.set(hit.x, hit.y, hit.z)); spell.life = 0; return; }
                 }
                 // a house's sphere: the orb bursts on it, outside
                 const wh = this.hooks.wardHit?.(prev, orb.position);
                 if (wh) { explodeAt(wh); spell.life = 0; return; }
-                // Walls / tables / trees / floor
-                if (collision && collision.pointBlocked(orb.position.x, orb.position.y, orb.position.z)) {
-                    explodeAt(prev); spell.life = 0; return;
-                }
+                // Walls / tables / trees / floor / doors: it bursts at the first one on the way (a door breaks: Wreck.afterBlast)
+                if (way) { explodeAt(_b.set(way.x, way.y, way.z)); spell.life = 0; return; }
                 // a tree's crown: the orb bursts in the leaves (not through them, 50 m on)
                 if (this.hooks.leavesAt?.(orb.position.x, orb.position.y, orb.position.z)) {
                     explodeAt(orb.position); spell.life = 0; return;
