@@ -31,7 +31,7 @@ import { FX } from '../fx/WizardFx.js';
 import { lieClearPush } from './LieClear.js';
 import { stepBody, bounce, lieProbe, GUARD, guardWorld } from './SolidGuard.js';
 import { FIRM, absoluteStops } from './FirmRules.js';
-import { creatureHolds, creatureAbsolute, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
+import { creatureHolds, creatureAbsolute, ordinaryOutcome, creatureSteady, windShieldRule, STEADY, braceProfile, braceTime, braceLean } from './Steadiness.js';
 import { IMPACT, KD, KD_NAME, classify, fallDir, quadFallDir, headKick, HeadJolt, SPELL_PHYSICS, spellPush, bodyOf } from './Impact.js';
 
 export const CREATURE = { FALL_T: 0.45, RISE_T: 0.8, MIN_DOWN: 5, EXTRA_DOWN: [1, 5], // (the author: knocked off its feet, it lies 5 s at least + 1…5 s by chance — knights don't spring up at once)
@@ -192,6 +192,7 @@ export class CreatureImpact {
         this.active = new Map(); // ck|id → {ck, c, s (state)}
         this._out = [];
         this.log = []; // (tests) what happened to whom
+        this.rnd = Math.random; // (tests: a fixed roll)
     }
 
     get auth() { return this.game.authority !== false; }
@@ -260,8 +261,15 @@ export class CreatureImpact {
         // may find it on its feet — the same chance and exceptions as the hero's: it reels in the «устоял» pose, the shove
         // is halved, nothing flips it over (a hand, a horn, a sword, a ball are no spells: not resisted)
         let held = false;
+        // ordinary villagers (Steadiness.ORDINARY): Overgrown / Wind Maxima / Jolt / Disarmor ignore steadiness — they work; a rare miss is still a recoil («держится»)
+        const ord = res !== 'shatter' && !o.stand ? ordinaryOutcome(ck, c, o.spell, this.rnd) : null;
         if (o.stand && res !== 'shatter') { held = true; res = 'stagger'; } // (a snowball: a shove that never fells — the «устоял» pose, the push as given)
-        else if (res === 'knockdown' && o.spell && creatureHolds(ck, c, o.spell, { cause: o.cause })) {
+        else if (res === 'knockdown' && o.spell && !ord && creatureHolds(ck, c, o.spell, { cause: o.cause })) {
+            held = true; res = 'stagger';
+            o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 };
+        }
+        if (ord === 'works') res = 'knockdown'; // (even a weak reach: Overgrown at the edge of its range still throws him)
+        else if (ord) { // (no effect, or the rare miss: the recoil — a foot set back, the push halved, no flip)
             held = true; res = 'stagger';
             o = { ...o, v: o.v.clone().multiplyScalar(STEADY.HELD_PUSH_K), toss: (o.toss || 0) * STEADY.HELD_PUSH_K, fly: false, tumble: 0 };
         }

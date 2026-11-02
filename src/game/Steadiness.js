@@ -248,6 +248,33 @@ export function creatureHolds(ck, c, kind, opts = {}, rnd = Math.random) {
     return p > 0 && rnd() < p;
 }
 
+/**
+ * ORDINARY VILLAGERS (the author: «жители с высокой устойчивостью — Overgrown, Wind Maxima, Jolt, Disarmor на них не работают… эти
+ * заклинания должны работать почти всегда, а если нет — НПС всё равно отскакивает и встаёт в позу «держится»; у магов другая система —
+ * мантия; король — магические доспехи + устойчивость»). For a farmer, builder, trader, knight or king WITHOUT a magic set (and not a wizard)
+ * these spells ignore steadiness: they work (the creature is thrown / felled) with chance `ORDINARY.WORKS`, otherwise it still reacts — a visible
+ * recoil in the «устоял» pose (never nothing, never a flip). Plain «Wind» is NOT here: steadiness works on it as before. Wizards (a robe,
+ * the mark of absolute steadiness) and anyone in a whole magic set keep the old protection (creatureHolds).
+ */
+export const ORDINARY = {
+    SPELLS: new Set(['Overgrown', 'OvergrownMaxima', 'WindMaxima', 'Jolt', 'JoltMaxima', 'Disarmor']),
+    WORKS: 0.95,
+};
+const ORDINARY_KINDS = new Set(['resident', 'merchant', 'seller', 'knight', 'king']);
+
+/** Is `c` an ordinary villager (no wizard, no robe, no whole magic set) — steadiness does not stop the spells of ORDINARY.SPELLS on him. */
+export function isOrdinaryVillager(ck, c) {
+    if (ck !== 'v' || !c) return false;
+    if (c.wizard || c.robe || (c.magicSet && !c.stripped)) return false;
+    return ORDINARY_KINDS.has(steadyKind(ck, c));
+}
+
+/** (host) The rule for one spell on one creature: null (not this rule) | 'works' | 'braces' (the rare miss: a recoil, still a visible reaction). */
+export function ordinaryOutcome(ck, c, kind, rnd = Math.random) {
+    if (!kind || !ORDINARY.SPELLS.has(kind) || !isOrdinaryVillager(ck, c)) return null;
+    return rnd() < ORDINARY.WORKS ? 'works' : 'braces';
+}
+
 /** The «устоял» pose, 0 … 1 at `k` (0 … 1 of its time): quick into the stance, held, then back upright. */
 export function braceProfile(k) {
     k = clamp(k, 0, 1);
