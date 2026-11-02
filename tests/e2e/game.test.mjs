@@ -548,7 +548,7 @@ test('settings: third-person camera, V2 hands, hidden hands — all run without 
     for (const variant of ['tpv', 'v2', 'nohands']) {
         const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
         await page.click('[data-tab="tab-settings"]');
-        if (variant === 'tpv') await page.uncheck('#camera-mode-toggle');
+        if (variant === 'tpv') { await page.evaluate(() => { window.__ZNS_ALLOW_TPV__ = true; document.getElementById('camera-mode-toggle').checked = false; }); }
         if (variant === 'v2') await page.check('#hand-version-v2');
         if (variant === 'nohands') await page.uncheck('#show-hands-toggle');
         await page.click('[data-tab="tab-game"]');

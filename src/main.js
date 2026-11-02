@@ -365,7 +365,7 @@ function readConfig() {
         ultra: $('ultra-quality')?.value === 'on', // («Ультра качество»: Ultra.js)
         viewDistance: $('view-distance')?.value || 'medium',
         resolution: $('camera-res').value,
-        cameraMode: $('camera-mode-toggle').checked ? 'fpv' : 'tpv',
+        cameraMode: (window.__ZNS_ALLOW_TPV__ && !$('camera-mode-toggle').checked) ? 'tpv' : 'fpv', // игра только от первого лица; «tpv» — лишь для проверок
         showHands: showHandsToggle ? showHandsToggle.checked : false,
         handVersion: document.querySelector('input[name="hand-version"]:checked')?.value || 'v3',
         heroModel: $('hero-model')?.value === 'real' ? 'real' : 'std', // (the «Реалистичный» test model — RealisticBody.js)
