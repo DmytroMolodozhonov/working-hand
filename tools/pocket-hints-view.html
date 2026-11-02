@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><title>Подсказки карманов — стенд</title>
+<style>body{margin:0;background:#111;display:flex;gap:12px;padding:12px}canvas{width:480px;height:360px;background:#000;border:1px solid #333}</style>
+<body><script type="module">
+import { PocketHints } from '/src/input/PocketHints.js';
+import { drawPocketHints, iconImage } from '/src/input/PocketHintsDraw.js';
+import { frame } from '/tests/e2e/poses.mjs';
+const LINKS = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28]];
+// (stand icons: a pictured thing, as ItemIcons would give)
+const icon = (draw) => { const c = document.createElement('canvas'); c.width = c.height = 80; draw(c.getContext('2d')); return c.toDataURL(); };
+const apple = icon((x) => { x.fillStyle = '#d9a520'; x.beginPath(); x.arc(40, 46, 24, 0, 7); x.fill(); x.fillStyle = '#7a4b1c'; x.fillRect(38, 14, 4, 12); x.fillStyle = '#4c8a2b'; x.fillRect(42, 14, 16, 8); });
+const pouch = icon((x) => { x.fillStyle = '#b3202a'; x.beginPath(); x.moveTo(26, 28); x.bezierCurveTo(8, 40, 10, 70, 40, 70); x.bezierCurveTo(70, 70, 72, 40, 54, 28); x.fill(); x.fillStyle = '#f2c14e'; x.fillRect(26, 24, 28, 7); });
+const scene = (opts, lefty, near, k) => {
+  const c = document.createElement('canvas'); c.width = 320; c.height = 240; document.body.appendChild(c);
+  const ctx = c.getContext('2d'), lm = frame({ arms: 'hang', ...opts }).poseLandmarks;
+  const h = new PocketHints(), info = { on: true, leftHanded: lefty, shut: k === 'shut', wand: true, purse: true, aspect: 4 / 3 };
+  const draw = (l) => { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 320, 240); ctx.save(); ctx.translate(320, 0); ctx.scale(-1, 1); ctx.strokeStyle = '#0f0'; ctx.lineWidth = 3;
+    for (const [i, j] of LINKS) { ctx.beginPath(); ctx.moveTo(l[i].x * 320, l[i].y * 240); ctx.lineTo(l[j].x * 320, l[j].y * 240); ctx.stroke(); } ctx.restore(); };
+  for (let i = 0; i < 40; i++) { draw(lm); if (h.step(0.066, lm, info)) drawPocketHints(ctx, 320, 240, h, { leftHanded: lefty, pocketUrl: k === 'empty' ? null : apple, purseUrl: pouch, cells: [true, true, false, true, false], next: 1 }); }
+};
+iconImage(apple); iconImage(pouch); await new Promise((r) => setTimeout(r, 300)); // (the images load)
+scene({}, false, false);
+scene({ pocket: 'cross' }, false, true);
+scene({ pocket: 'cross' }, false, true, 'shut');
+window.__ready = true;
+</script>

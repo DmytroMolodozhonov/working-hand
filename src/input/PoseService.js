@@ -14,6 +14,8 @@
 import { WristTrace } from '../game/ThrowModel.js';
 import { assignHands, HandStabilizer, PoseStabilizer } from './TrackingGuard.js';
 import { PoseInterpreter } from './PoseInterpreter.js';
+import { PocketHints } from './PocketHints.js';
+import { drawPocketHints } from './PocketHintsDraw.js';
 import { matchSticks } from './RealStick.js';
 import { detectStick } from './StickDetector.js';
 
@@ -47,6 +49,8 @@ export class PoseService {
         this.stats = { frames: 0, results: 0, avgCost: 0, delegate: null, mode: null, lastResultAt: 0 };
         this._lastFace = null;
         this._lastDraw = 0;
+        this.hintSource = null; // (the game: () => {on, leftHanded, shut, wand, purse, pocketUrl, purseUrl, cells, next} — the quiet pocket hints in the window: PocketHints.js)
+        this._hints = null;
         this._quality = 1;
         this._delegate = null; // null = auto
         this.injected = false; // tests / replay can inject poses instead of the camera
@@ -894,6 +898,22 @@ export class PoseService {
             }
         }
         ctx.restore();
+        this._drawHints(ctx, W, H, pl, now);
+    }
+
+    /** The quiet pocket hints over the skeleton (never breaks the window: no game / no pose / any error — nothing). */
+    _drawHints(ctx, W, H, pl, now) {
+        try {
+            const info = this.hintSource?.();
+            if (!info) return;
+            const h = this._hints || (this._hints = new PocketHints());
+            const dt = this._hintAt ? (now - this._hintAt) / 1000 : 0.066;
+            this._hintAt = now;
+            info.aspect = W / H;
+            if (h.step(dt, pl, info)) drawPocketHints(ctx, W, H, h, info);
+        } catch (e) {
+            if (!this._hintErr) { this._hintErr = true; console.warn('[Подсказки карманов]', e); }
+        }
     }
 }
 

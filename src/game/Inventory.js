@@ -38,6 +38,7 @@ import { ENCHANT_TIERS } from './Enchant.js';
 import { handLog } from './HandRelease.js';
 
 export const SLOT_COUNT = 5;
+const PURSE_ICON_ITEM = { kind: 'coins', magic: true }; // (the picture of the pouch for the camera window's hints)
 export const STACK = 100;
 /** Creative: this many golden apples (`apple`) are always with the hero — eaten, thrown, lost: back after `APPLES_WAIT` s. */
 export const CREATIVE_APPLES = 5, APPLES_WAIT = 1.5;
@@ -660,6 +661,33 @@ export class Inventory {
         // the «hand» cell shows what the hands hold
         const hk = this._handKey();
         if (hk !== this._hk) { this._hk = hk; this._render(); }
+    }
+
+    /**
+     * What the camera window's quiet hints show (PocketHints.js): the thing the pocket gives next (its picture), the cells
+     * (lit — a thing in it), the pouch and the wand at the belt. One object, refilled (the window asks ~15 times a second).
+     * `on` — the player's setting. Shut (grey): the monster form, the hero still/dead, in Imperius's body.
+     */
+    pocketHintInfo(on = true) {
+        const g = this.game, o = this._hintInfo || (this._hintInfo = { on: true, leftHanded: false, shut: false, wand: false, purse: false, pocketUrl: null, purseUrl: null, cells: [], next: -1 });
+        o.on = !!on;
+        if (!on) return o;
+        o.leftHanded = g.dom === 'left';
+        o.shut = !!(g.monster?.active || g.combat?.immobile || g.combat?.dead || g.imperius?.active);
+        const n = this.slots.length;
+        o.cells.length = n;
+        for (let i = 0; i < n; i++) o.cells[i] = !!this.slots[i];
+        // (as takeNext: the circle goes on from the last one taken)
+        const start = this._next ?? -1;
+        let nx = -1;
+        for (let k = 1; k <= n + 1; k++) { const i = (start + k) % (n + 1); if (i < n && this.slots[i]) { nx = i; break; } }
+        o.next = nx;
+        const it = nx >= 0 ? this.slots[nx] : null;
+        o.pocketUrl = it ? g.itemIcons?.url(it) || null : null;
+        o.wand = !!this.belt.beltWand() && !(g.items?.held.left?.item.kind === 'wand' || g.items?.held.right?.item.kind === 'wand');
+        o.purse = !!this.purse;
+        o.purseUrl = o.purse ? g.itemIcons?.url(PURSE_ICON_ITEM) || null : null;
+        return o;
     }
 
     /** The pocket's soft ring: glows only while the off hand holds a thing and is near the pocket (nothing otherwise, no noise). */

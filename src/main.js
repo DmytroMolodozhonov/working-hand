@@ -329,6 +329,11 @@ camSensInput.addEventListener('input', (e) => updateSensitivity(e.target.value))
 updateSmoothness(camSmoothInput.value);
 updateSensitivity(camSensInput.value);
 
+// «Подсказки карманов в окне камеры» (PocketHints.js): включено, пока галочка не снята
+const pocketHintsToggle = $('pocket-hints-toggle');
+pocketHintsToggle?.addEventListener('change', (e) => { poseService.hintsOn = !!e.target.checked; });
+poseService.hintSource = () => (game?.active && game.inventory ? game.inventory.pocketHintInfo(poseService.hintsOn !== false) : null);
+
 const showHandsToggle = $('show-hands-toggle');
 showHandsToggle?.addEventListener('change', (e) => {
     if (game) game.character.setShowHands(e.target.checked);
@@ -1865,7 +1870,7 @@ function escapeHtml(s) {
     const KEY = 'zns-settings';
     const IDS = ['zombie-vol', 'music-vol', 'spell-vol', 'talk-vol', 'voice-filter', 'voice-engine', 'voice-mic', 'audio-ambient-toggle', 'villager-voice', 'villager-text', 'villager-ai', 'cam-smooth', 'cam-sens', 'fps-limit', 'model-quality',
         'hand-quality', 'camera-res', 'vision-engine', 'vision-delegate', 'graphics-quality', 'ultra-quality', 'view-distance', 'antialias', 'camera-mode-toggle',
-        'hero-model', 'show-hands-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
+        'hero-model', 'show-hands-toggle', 'pocket-hints-toggle', 'show-heard-toggle', 'drift-camera', 'handedness', 'walk-mode', 'hints-mode', 'creative-zombie-count', 'minimap-size', 'hotbar-size'];
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { saved = {}; }
     // (the camera network always starts in its own thread; the «game thread» choice is gone)
