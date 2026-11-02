@@ -140,7 +140,11 @@ export class CoinBelt {
         // taking it (looking down at it: above): the empty hand came open and closes on it
         if (curl < 0.4) this._open = true;
         const free = !h && !g.weapons?.hands?.[side]?.held;
-        if (free && this.magic && this._open && curl > 0.45) this._take(side);
+        if (free && this.magic && this._open && curl > 0.45) {
+            // (the same hand at the hip is the pocket's: outside a deal it is the pocket's alone — nothing is said about coins, nothing rings)
+            if (g.coinDeal && !g.coinDeal.mayTake()) { this._open = false; return; }
+            this._take(side);
+        }
     }
 
     /** Something on the belt to see / to take (the pouch, even empty). */

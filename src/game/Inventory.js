@@ -759,6 +759,7 @@ export class Inventory {
             if (h && c.item && h.item === c.item) {
                 const it = g.items.releaseHand(side);
                 this.slots[c.slot] = it; // (back into its own slot: it fits, it came from there)
+                this.game.sound?.playPocket?.('put');
                 if (this.inHand?.item === it) this.inHand = null;
                 this.selected = -1;
                 this._cyc = null;
@@ -809,21 +810,7 @@ export class Inventory {
         const start = this._next ?? -1;
         for (let k = 1; k <= n; k++) {
             const i = (start + k) % n;
-            if (i === this.slots.length) { // the pouch cell: the best pouch of the belt comes into the hand
-                if (!this.purse.any || (this.game.coinDeal && !this.game.coinDeal.mayTake())) continue; // (no deal: the pouch is not in the circle)
-                const g = this.game;
-                if (g.items?.held[side] || g.weapons.hands[side].held) { this.game.hud.toast?.('🎒 Обе руки заняты: достать вещь из кармана нечем — нужна свободная рука'); return false; }
-                this._putBackHand(side);
-                this.selected = -1;
-                this._next = i;
-                this.purse._take(side);
-                const got = g.items?.held[side];
-                if (!got || got.item.kind !== 'coins') { this._cyc = null; this._render(); return false; }
-                this._cyc = { side, pouch: true, item: got.item, slot: -1 };
-                (this._tookAt || (this._tookAt = { left: 0, right: 0 }))[side] = performance.now();
-                this._render();
-                return true;
-            }
+            if (i === this.slots.length) continue; // (the coin pouch is NOT in the pocket circle: it comes off the belt only in a deal — by its cell or the hand at the hip; CoinDeal.js)
             const it = this.slots[i];
             if (!it) continue; // (everything in the circle, in order: wands, weapons, shields too — the author: the wand never came)
             this._next = i;
@@ -836,6 +823,7 @@ export class Inventory {
             }
             this._cyc = { side, slot: i, item: ih.kind === 'item' ? ih.item : null, weapon: ih.kind === 'weapon' ? ih.weapon : null, res: it.kind === 'res' };
             (this._tookAt || (this._tookAt = { left: 0, right: 0 }))[side] = performance.now();
+            this.game.sound?.playPocket?.('take'); // (the interface answers: a soft rustle of the pocket)
             this._fx(`${it.kind === 'res' ? '🧱' : ITEM_INFO[it.kind]?.icon || '✋'} ${it.kind === 'res' ? RESOURCE[it.block]?.name || 'Блоки' : ITEM_INFO[it.kind]?.name || 'Предмет'}`, side);
             return true;
         }

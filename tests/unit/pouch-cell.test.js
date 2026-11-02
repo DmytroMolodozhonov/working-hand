@@ -22,28 +22,18 @@ function fakeGame() {
     return g;
 }
 
-test('pouch cell: circle is [slots…, pouch], the pouch goes back onto the belt without losing coins', () => {
+// (author, 02.11: «монеточки в кармане уже не делаем» — the coins come off the belt only in a deal, by the pouch cell or the hand at
+//  the hip; the pocket circle is things only, so a touch never answers with coins, a message or a clink)
+test('pocket circle: things only — the pouch is not in it, the coins stay on the belt', () => {
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' };
     inv.slots[0] = a; inv.slots[1] = b;
     inv.purse.count = 700;
-    inv.pocketTouch('left');
-    assert.equal(g.items.held.left.item, a);
-    inv.pocketTouch('left');
-    assert.equal(g.items.held.left, null);
-    inv.pocketTouch('left');
-    assert.equal(g.items.held.left.item, b);
-    inv.pocketTouch('left');
-    inv.pocketTouch('left');
-    assert.equal(g.items.held.left.item.kind, 'coins', 'the last of the circle is the pouch');
-    assert.equal(g.items.held.left.item.count, 700, 'the pouch is one: all the coins');
+    const seq = [];
+    for (let i = 0; i < 8; i++) { inv.pocketTouch('left'); seq.push(g.items.held.left?.item.kind ?? '-'); }
+    assert.deepEqual(seq, ['meat', '-', 'scroll', '-', 'meat', '-', 'scroll', '-']);
+    assert.equal(inv.purse.count, 700, 'the coins never left the belt');
     assert.equal(inv.coins(), 700);
-    inv.pocketTouch('left');
-    assert.equal(inv.purse.count, 700, 'back onto the belt: no coin lost');
-    assert.equal(inv.coins(), 700);
-    assert.equal(g.items.held.left, null, 'the empty hand');
-    inv.pocketTouch('left');
-    assert.equal(g.items.held.left.item, a, 'the circle goes on from the start');
 });
 
 test('pouch cell: the pouch is off the belt (lost) — no pouch in the circle', () => {
@@ -57,17 +47,15 @@ test('pouch cell: the pouch is off the belt (lost) — no pouch in the circle', 
     assert.equal(g.items.held.left.item, a);
 });
 
-test('pocket circle: thing, empty, thing, empty… pouch, empty, round; a thrown thing keeps the place', () => {
+test('pocket circle: thing, empty, thing, empty… round (no pouch); a thrown thing keeps the place', () => {
     const g = fakeGame(), inv = g.inventory;
     const a = { kind: 'meat', uid: 'a', count: 1 }, b = { kind: 'scroll', uid: 'b' }, c = { kind: 'apple', uid: 'c', count: 1 };
     inv.slots[0] = a; inv.slots[1] = b; inv.slots[2] = c;
     inv.purse.count = 100;
     const seq = [];
     for (let i = 0; i < 9; i++) { inv.pocketTouch('left'); seq.push(g.items.held.left?.item.kind ?? '-'); }
-    assert.deepEqual(seq, ['meat', '-', 'scroll', '-', 'apple', '-', 'coins', '-', 'meat']);
-    // thrown thing 2: the next touch gives cell 3, no extra empty step
-    inv.pocketTouch('left'); // meat back
-    inv.pocketTouch('left'); // scroll
+    assert.deepEqual(seq, ['meat', '-', 'scroll', '-', 'apple', '-', 'meat', '-', 'scroll']);
+    // the scroll (cell 2) is in the hand and is thrown away: the next touch gives cell 3 at once, no extra empty step
     assert.equal(g.items.held.left.item, b);
     g.items.releaseHand('left'); inv.slots[1] = null; // (thrown away)
     inv.pocketTouch('left');

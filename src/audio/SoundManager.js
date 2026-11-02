@@ -518,6 +518,34 @@ export class SoundManager {
         this._play(this._coinBuf, 0.5, 0.9 + Math.random() * 0.2);
     }
 
+    /**
+     * The pocket at the hip answering the hand: a soft rustle of cloth and a small leather tick (`take` — brighter and rising,
+     * `put` — duller and falling). Two tiny buffers (0.16 s), made once here — the first touch at the pocket makes them in a blink.
+     */
+    playPocket(kind = 'take') {
+        if (!this.enabled) return;
+        const ctx = this.context;
+        if (!ctx) return;
+        this._pocketBuf = this._pocketBuf || {};
+        let buf = this._pocketBuf[kind];
+        if (!buf) {
+            const rate = ctx.sampleRate, len = Math.floor(rate * 0.16), up = kind === 'take';
+            buf = ctx.createBuffer(1, len, rate);
+            const d = buf.getChannelData(0);
+            let seed = up ? 5 : 9, lp = 0;
+            const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 * 2 - 1; };
+            for (let i = 0; i < len; i++) {
+                const t = i / rate;
+                lp += (rnd() - lp) * (up ? 0.35 : 0.2); // the cloth: low-passed noise
+                const env = Math.min(1, t / 0.012) * Math.exp(-t / (up ? 0.05 : 0.065));
+                const tick = Math.exp(-t / 0.006) * Math.sin(2 * Math.PI * (up ? 520 : 340) * t); // the leather tick
+                d[i] = Math.tanh(lp * env * 1.6 + tick * 0.6) * 0.6;
+            }
+            this._pocketBuf[kind] = buf;
+        }
+        this._play(buf, 0.4, 0.95 + Math.random() * 0.1);
+    }
+
     /** A bow being drawn: a short creak of wood and string (made here). `k` 0..1: how hard. */
     playBowDraw(k = 0.5) {
         if (!this.enabled) return;

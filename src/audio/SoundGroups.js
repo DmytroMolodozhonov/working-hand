@@ -22,7 +22,7 @@ const E = 'effects', S = 'spells', M = 'music';
 /** SoundManager method → group. (Helpers that only make buffers — `_synth*`, `prepare*` — are not sounds.) */
 export const METHOD_GROUP = {
     playAmbientMusic: M,
-    playHit: E, playClang: E, playIronGate: E, playCoins: E, playBowDraw: E, playBowRelease: E, playFrozenHit: E, playDeath: E,
+    playHit: E, playClang: E, playIronGate: E, playCoins: E, playPocket: E, playBowDraw: E, playBowRelease: E, playFrozenHit: E, playDeath: E,
     playLand: E, playGiantStep: E, playSnowStep: E, playNoMana: E, playChestOpen: E,
     playCrack: E, playHammer: E, playChore: E, playBoneClack: E, playGrab: E, playThrow: E, playItemHit: E, playOink: E, playOwl: E, playSpencer: E, playGhost: E, playCanary: E, playTaron: E, playGargoyle: E, playDragon: E, playDevil: E, playPlant: E,
     playBuilding: E, // (the settlements' bells and anvils — BuildingFx.js)
