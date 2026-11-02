@@ -1654,8 +1654,8 @@ export class CastleTalk {
                 x.font = 'bold 40px sans-serif'; x.fillText(String(sh.price), 64, 42);
                 x.font = '16px sans-serif'; x.fillText('монет', 64, 63);
                 const tex = new THREE.CanvasTexture(c);
-                // (never sunk into a bulky good — a robe, an armour: drawn over it, with its own offset, above its top)
-                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+                // (never sunk into a bulky good — a robe, an armour: above its top, with its own offset; depth-tested: a wall, a counter or a person in front hides the card — no reading through objects)
+                const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
                 sp.renderOrder = 30;
                 sp.scale.set(0.46, 0.26, 1);
                 g.scene.add(sp);
@@ -1698,7 +1698,7 @@ export class CastleTalk {
             while (px > 14 && x.measureText(text).width > 236) { px -= 2; x.font = `bold ${px}px sans-serif`; }
             x.fillText(text, 128, 34);
             const tex = new THREE.CanvasTexture(c);
-            e = { tex, mat: new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), refs: 0 };
+            e = { tex, mat: new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), refs: 0 };
             this._labCache.set(text, e);
         }
         e.refs++;
