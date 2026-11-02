@@ -197,6 +197,28 @@ export const MAXIMA_TARGETS = {
 /** Magic armour stops the plain «Левиоса» — never the Maxima: Levitation.levBlocked. */
 export { levBlocked };
 
+const WHITE = new THREE.Color(0xffffff);
+
+/**
+ * A carried house's window glass: its panes in the carried group's frame (its foot at `base`). With a colour for every pane, as
+ * the village's own glass (Houses.glass: a church's stained glass has its own) - the same material drawn without one crashed
+ * the game the moment a house was lifted (three.js keeps the shader made for the coloured glass: «Cannot read properties of
+ * null (reading 'isInterleavedBufferAttribute')», the author 02.11; tools/levmax-repro.mjs).
+ */
+export function carriedGlass(panes, mat, base) {
+    const glass = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.08), mat, panes.length);
+    const q = new THREE.Quaternion(), m = new THREE.Matrix4(), v = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), c = new THREE.Color();
+    panes.forEach((p, k) => {
+        q.setFromAxisAngle(up, p.ry);
+        m.compose(v.set(p.x - base.x, p.y - base.y, p.z - base.z), q, s.set(p.w, p.h, 1));
+        glass.setMatrixAt(k, m);
+        glass.setColorAt(k, c.set(p.tint ?? 0xffffff));
+    });
+    glass.renderOrder = 2;
+    glass.frustumCulled = false;
+    return glass;
+}
+
 /** Natural ground (stays when a house is torn off; a tree takes a lump of it on its roots). */
 const GROUND = new Set([BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SNOW, BLOCK.BEDROCK, BLOCK.SAND, BLOCK.GRAVEL, BLOCK.DEEPSTONE, BLOCK.WATER, BLOCK.ICE, BLOCK.ICE_SHAPE]);
 /** A village's ground round a house (not the house itself). */
@@ -988,17 +1010,7 @@ export class LevitationMaxima {
         }
         // the glass of its windows (not the broken ones)
         const panes = (g.houses.panes || []).filter((p) => p.house === rec);
-        if (panes.length && g.houses.glassMat) {
-            const glass = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.08), g.houses.glassMat, panes.length);
-            panes.forEach((p, k) => {
-                _q.setFromAxisAngle(_v2.set(0, 1, 0), p.ry);
-                _m.compose(_v1.set(p.x - L.base.x, p.y - L.base.y, p.z - L.base.z), _q, _s.set(p.w, p.h, 1));
-                glass.setMatrixAt(k, _m);
-            });
-            glass.renderOrder = 2;
-            glass.frustumCulled = false;
-            group.add(glass);
-        }
+        if (panes.length && g.houses.glassMat) group.add(carriedGlass(panes, g.houses.glassMat, L.base));
         return furn;
     }
 
@@ -1015,17 +1027,7 @@ export class LevitationMaxima {
             group.attach(c);
         }
         const panes = (g.houses?.panes || []).filter((p) => p.extra === id);
-        if (panes.length && g.houses.glassMat) {
-            const glass = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 0.08), g.houses.glassMat, panes.length);
-            panes.forEach((p, k) => {
-                _q.setFromAxisAngle(_v2.set(0, 1, 0), p.ry);
-                _m.compose(_v1.set(p.x - L.base.x, p.y - L.base.y, p.z - L.base.z), _q, _s.set(p.w, p.h, 1));
-                glass.setMatrixAt(k, _m);
-            });
-            glass.renderOrder = 2;
-            glass.frustumCulled = false;
-            group.add(glass);
-        }
+        if (panes.length && g.houses.glassMat) group.add(carriedGlass(panes, g.houses.glassMat, L.base));
     }
 
     /**
@@ -1067,7 +1069,7 @@ export class LevitationMaxima {
         return w.treeParts(t).map((p) => {
             const one = new THREE.InstancedMesh(p.geometry, p.material, 1);
             one.setMatrixAt(0, back.clone().multiply(p.matrix));
-            if (p.color) one.setColorAt(0, p.color);
+            one.setColorAt(0, p.color || WHITE); // (always: the world's trees are drawn with a tint each - the same material without one crashed the draw)
             if (p.depth) one.customDepthMaterial = p.depth;
             one.castShadow = true;
             one.receiveShadow = true;
