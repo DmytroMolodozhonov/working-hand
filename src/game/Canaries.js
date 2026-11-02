@@ -18,7 +18,7 @@
  */
 import * as THREE from 'three';
 import { CANARIES as C, hash, campLuck, campCandidate, campMembers, campRocks, solveThrow, spreadAt, pebbleDrop } from './CanaryRules.js';
-import { canaryModel, canaryLook, canaryMaterial, poseCanary, rockGeometry, ROCK_VARIANTS, campGeometry, campLayout, reedGeometry, POSE_T } from '../fx/CanaryModel.js';
+import { canaryModel, canaryLook, canaryMaterial, poseCanary, rockGeometry, ROCK_VARIANTS, campGeometry, campPieces, reedGeometry, POSE_T } from '../fx/CanaryModel.js';
 import { BLOCK, CANARIES_FROM_GEN } from '../world/Terrain.js';
 import { earthly } from '../world/Planets.js';
 import { FarShape } from '../core/FarShape.js';
@@ -133,6 +133,7 @@ export class Canaries {
                 this.cells.set(key, earthly({ x: (gx + 0.5) * CELL, y: 0, z: (gz + 0.5) * CELL }) ? this._findCamp(gx, gz, seed) : null); // (only the Earth's marshes: never hell, the Queen's map, a planet — HellRules.HELL_SYSTEMS)
             }
         }
+        for (const camp of this.camps.values()) if (camp.pending) this._placePieces(camp); // (the land under a far totem was not made yet)
         // load the found ones that a player is near
         for (const [key, def] of this.cells) {
             if (!def || def === 'wait' || this.camps.has(key)) continue;
@@ -149,9 +150,7 @@ export class Canaries {
         const g = this.game, seed = g.seed || 1;
         const camp = { key: def.gx + ',' + def.gz, def, x: def.x, z: def.z, y: this._ground(def.x, def.z), members: [], rocks: [], boxes: [], root: new THREE.Group(), alert: 0, fleeT: 0, calmT: 0, grudge: null, rockT: 0, leaderDown: false };
         camp.root.position.set(def.x, camp.y - 0.05, def.z);
-        const props = new THREE.Mesh(campGeometry(def.seed), propsMaterial());
-        props.castShadow = true; props.frustumCulled = false;
-        camp.root.add(props);
+        camp.pieces = campPieces(def.seed, 22).map((piece) => { const mesh = new THREE.Mesh(piece.geo, propsMaterial()); mesh.castShadow = true; mesh.frustumCulled = false; mesh.visible = false; camp.root.add(mesh); return { piece, mesh, placed: false }; });
         // reeds and cattails on the water side
         const reeds = new THREE.InstancedMesh(reedGeometry(), reedMaterial(), 16);
         let n = 0;
@@ -170,11 +169,8 @@ export class Canaries {
         reeds.count = n; reeds.frustumCulled = false;
         camp.root.add(reeds); camp.reeds = reeds;
         g.scene.add(camp.root);
-        // the tents and totems stop walkers (their numbers: campLayout — the same that draw them)
-        const lay = campLayout(def.seed, 22);
-        const box = (x, z, hw, h) => { const id = g.collision?.addBox?.({ minX: x - hw, maxX: x + hw, minY: camp.y, maxY: camp.y + h, minZ: z - hw, maxZ: z + hw, kind: 'tree', noSupport: true }); if (id != null) camp.boxes.push(id); };
-        for (const tn of lay.tents) box(def.x + tn.x, def.z + tn.z, tn.r * 0.8, tn.h);
-        for (const to of lay.totems) box(def.x + to.x, def.z + to.z, 0.3, 3.4);
+        // the tents, racks and totems stand each on its own ground (see _placePieces), and the tents and totems stop walkers
+        this._placePieces(camp);
         // the people
         for (const m of campMembers(def, seed)) {
             if (this._gone.has(m.id)) continue;
@@ -183,6 +179,30 @@ export class Canaries {
         }
         for (const rk of campRocks(def, seed)) this._addRock(camp, rk.id, rk.x, rk.z, rk.r, rk.v, rk.yaw);
         return camp;
+    }
+    /**
+     * Stand each prop of the camp on the real ground under it (a totem is 22 m from the fire: a cliff, a slope or the lake's bank there is not at the fire's height).
+     * The land under a piece not made yet → it waits invisible (and is tried again, _around), never hangs at a guessed height. → true when all stand.
+     */
+    _placePieces(camp) {
+        const g = this.game, t = this._terr, def = camp.def;
+        let left = 0;
+        for (const pc of camp.pieces || []) {
+            if (pc.placed) continue;
+            const p = pc.piece, X = def.x + p.x, Z = def.z + p.z, r = Math.max(0.3, p.r * 0.8);
+            const pts = [[X, Z], [X + r, Z], [X - r, Z], [X, Z + r], [X, Z - r]];
+            if (t?.landMade && pts.some((q) => !t.landMade(Math.round(q[0]), Math.round(q[1])))) { left++; continue; }
+            const mid = this._ground(X, Z);
+            let low = mid;
+            for (const q of pts) low = Math.min(low, this._ground(q[0], q[1]));
+            const y = Math.max(low, mid - 1.0); // (the lowest bit under it, but not sunk more than a block into a bank)
+            pc.y = y; pc.placed = true;
+            pc.mesh.position.y = y - (camp.y - 0.05);
+            pc.mesh.visible = true;
+            if (p.hw > 0) { const id = g.collision?.addBox?.({ minX: X - p.hw, maxX: X + p.hw, minY: y, maxY: y + p.h, minZ: Z - p.hw, maxZ: Z + p.hw, kind: 'tree', noSupport: true }); if (id != null) camp.boxes.push(id); }
+        }
+        camp.pending = left > 0;
+        return left === 0;
     }
     _unloadCamp(camp) {
         const g = this.game;
@@ -813,9 +833,17 @@ export class Canaries {
         if (!n.rock && c.rock && c.rock.state === 'held') { c.rock.holder = null; c.rock = null; }
     }
 
+    /** A body (dead, or thrown up by a blast) falls to the ground under it and lies on it — nothing hangs (CLAUDE.md: collisions first). */
+    _settle(c, dt) {
+        const p = c.model.position, gy = this._ground(p.x, p.z);
+        if (c.deadT > C.DEATH_T) return; // (the swamp takes it: it sinks on purpose)
+        if (p.y > gy + 0.02) { c.vy = (c.vy || 0) - C.G * dt; p.y = Math.max(gy, p.y + c.vy * dt); if (p.y <= gy) c.vy = 0; }
+        else { c.vy = 0; if (p.y < gy - 0.02) p.y = gy; }
+    }
     _deadStep(c, dt, d) {
         c.deadT += dt; c.stT = c.deadT;
         c.mode = 'dead';
+        this._settle(c, dt);
         if (d < C.ANIM) poseCanary(c.model, { mode: 'dead', t: c.deadT, walk: 0, speed: 0, breath: 0, look: 0 });
         if (c.deadT > C.DEATH_T) {
             // (the body is taken: the swamp has it)

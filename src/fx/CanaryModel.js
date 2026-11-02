@@ -419,28 +419,44 @@ export function campLayout(seed, R = 22) {
         return { tents, totems, userData: { keep: true } };
     });
 }
-/** The camp's props (shape): tents round the middle, a fire ring of stones, a bone pile, racks with hides, reeds on the water side; totems at the edge of the territory. */
-export function campGeometry(seed, R = 22) {
-    return cached('camp' + (seed % 8), () => {
-        const r = rng(9000 + (seed % 8) * 13), parts = [], lay = campLayout(seed, R);
-        for (const t of lay.tents) parts.push(...tent(t.x, t.z, t.yaw, t.r, t.h));
-        // the fire ring: stones round a pit of ash and charred logs
-        for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; parts.push(placed(solid('sphere', 0.22, 0.14, 0.2, hex(0x6a6a62), { seg: 6, mottle: 0.25, seed: i }), Math.sin(a) * 1.0, 0.1, Math.cos(a) * 1.0, 0, a, 0)); }
-        parts.push(placed(solid('sphere', 0.85, 0.04, 0.85, hex(0x2a2622), { seg: 10, mottle: 0.2 }), 0, 0.03, 0));
-        for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.5; parts.push(placed(solid('cone', 0.07, 0.8, 0.07, hex(0x2e2218), { seg: 5 }), Math.sin(a) * 0.3, 0.2, Math.cos(a) * 0.3, 1.2, a, 0)); }
-        // a bone pile
-        const bx = -3 + r() * 6, bz = -4 - r() * 2;
-        for (let i = 0; i < 16; i++) parts.push(placed(solid('cone', 0.04, 0.4 + 0.2 * r(), 0.04, hex(0xe0d8bc), { seg: 4 }), bx + (r() - 0.5) * 1.2, 0.12 + 0.1 * r(), bz + (r() - 0.5) * 1.2, r() * 2, r() * TAU, r() * 2));
-        parts.push(placed(solid('sphere', 0.22, 0.18, 0.2, hex(0xe0d8bc), { seg: 8 }), bx, 0.2, bz)); // a skull on top
-        // a drying rack: two forked posts, a pole and three hides
-        const rx = 4 + r() * 2, rz = -2 + r() * 4;
-        for (const s of [1, -1]) parts.push(placed(solid('cone', 0.06, 2.0, 0.06, hex(0x4a3018), { seg: 5 }), rx, 1.0, rz + 1.1 * s));
-        parts.push(placed(solid('cone', 0.05, 2.4, 0.05, hex(0x4a3018), { seg: 5 }), rx, 1.95, rz, Math.PI / 2, 0, 0));
-        for (let i = 0; i < 3; i++) parts.push(placed(solid('box', 0.04, 0.9, 0.55, mixc(hex(0x8a6a44), hex(0xa08050), r()), { mottle: 0.2, seed: 40 + i }), rx, 1.35, rz + (i - 1) * 0.65));
+/**
+ * The camp's props as SEPARATE pieces (each stands on its own bit of ground — a camp's totems are 22 m from the fire, and the land there may be a cliff or a slope,
+ * so one mesh at the fire's height would hang them in the air): [{kind: 'tent'|'fire'|'bones'|'rack'|'totem', x, z, r, geo}] — x, z local (the fire at 0, 0), the
+ * geometry already in those local coordinates with its foot at y = 0; r — how far the piece spreads (for sampling the ground under it).
+ */
+export function campPieces(seed, R = 22) {
+    return cached('campPieces' + (seed % 8) + ',' + R, () => {
+        const r = rng(9000 + (seed % 8) * 13), lay = campLayout(seed, R), out = [];
+        const add = (kind, x, z, rr, parts, hw = 0, h = 0) => out.push({ kind, x, z, r: rr, hw, h, geo: merge(parts) });
+        for (const t of lay.tents) add('tent', t.x, t.z, t.r, tent(t.x, t.z, t.yaw, t.r, t.h), t.r * 0.8, t.h);
+        {
+            const parts = [];
+            for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; parts.push(placed(solid('sphere', 0.22, 0.14, 0.2, hex(0x6a6a62), { seg: 6, mottle: 0.25, seed: i }), Math.sin(a) * 1.0, 0.1, Math.cos(a) * 1.0, 0, a, 0)); }
+            parts.push(placed(solid('sphere', 0.85, 0.04, 0.85, hex(0x2a2622), { seg: 10, mottle: 0.2 }), 0, 0.03, 0));
+            for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.5; parts.push(placed(solid('cone', 0.07, 0.8, 0.07, hex(0x2e2218), { seg: 5 }), Math.sin(a) * 0.3, 0.2, Math.cos(a) * 0.3, 1.2, a, 0)); }
+            add('fire', 0, 0, 1.0, parts);
+        }
+        {
+            const parts = [], bx = -3 + r() * 6, bz = -4 - r() * 2; // a bone pile
+            for (let i = 0; i < 16; i++) parts.push(placed(solid('cone', 0.04, 0.4 + 0.2 * r(), 0.04, hex(0xe0d8bc), { seg: 4 }), bx + (r() - 0.5) * 1.2, 0.12 + 0.1 * r(), bz + (r() - 0.5) * 1.2, r() * 2, r() * TAU, r() * 2));
+            parts.push(placed(solid('sphere', 0.22, 0.18, 0.2, hex(0xe0d8bc), { seg: 8 }), bx, 0.2, bz)); // a skull on top
+            add('bones', bx, bz, 0.7, parts);
+        }
+        {
+            const parts = [], rx = 4 + r() * 2, rz = -2 + r() * 4; // a drying rack: two forked posts, a pole and three hides
+            for (const s of [1, -1]) parts.push(placed(solid('cone', 0.06, 2.0, 0.06, hex(0x4a3018), { seg: 5 }), rx, 1.0, rz + 1.1 * s));
+            parts.push(placed(solid('cone', 0.05, 2.4, 0.05, hex(0x4a3018), { seg: 5 }), rx, 1.95, rz, Math.PI / 2, 0, 0));
+            for (let i = 0; i < 3; i++) parts.push(placed(solid('box', 0.04, 0.9, 0.55, mixc(hex(0x8a6a44), hex(0xa08050), r()), { mottle: 0.2, seed: 40 + i }), rx, 1.35, rz + (i - 1) * 0.65));
+            add('rack', rx, rz, 1.2, parts);
+        }
         // totems at the edge of the territory: four, with a gap to the water side
-        lay.totems.forEach((t, i) => parts.push(...totem(t.x, t.z, t.yaw, 5000 + i)));
-        return merge(parts);
-    });
+        lay.totems.forEach((t, i) => add('totem', t.x, t.z, 0.3, totem(t.x, t.z, t.yaw, 5000 + i), 0.3, 3.4));
+        return { pieces: out, userData: { keep: true } };
+    }).pieces;
+}
+/** The camp's props merged into one shape (the same pieces; for a far look / tests — the game places the pieces one by one: campPieces). */
+export function campGeometry(seed, R = 22) {
+    return cached('camp' + (seed % 8), () => merge(campPieces(seed, R).map((p) => p.geo)));
 }
 /** Reeds and cattails for the marsh round a camp (a tuft: thin blades with brown heads) — placed by the caller. */
 export function reedGeometry() {
