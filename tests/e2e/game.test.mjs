@@ -617,7 +617,8 @@ test('map editor: draw a map, save it, it appears in the game list, delete it', 
 test('camera setup (test mode) opens and closes without errors', async () => {
     const { page, errors } = await openPage(browser, srv.url, { noCamera: true });
     await page.click('[data-tab="tab-settings"]');
-    await page.click('#test-mode-btn');
+    // кнопка скрыта в меню (автор: «сейчас точно не нужна»), режим остаётся рабочим — открываем программно
+    await page.evaluate(() => document.getElementById('test-mode-btn').click());
     await waitFor(page, () => window.__zns.game && window.__zns.game.active, null, 30000);
     await page.fill('#hp-s', '1.4');
     await page.dispatchEvent('#hp-s', 'input');
