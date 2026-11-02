@@ -46,6 +46,9 @@ export const PREDICT = {
     // trembling while waving the wand 38 → 15, tools/armstab.mjs «рывки в движении»), EXTRA a little more for its lag
     OFF_T: 0.1,
     RUN: 3, // pictures in a row moving one way before a move is carried fully (from the 2nd: a part)
+    // the share of the wrist's move that is the arm's own (against its shoulder): below the first the whole person moves (a step, a
+    // sway) - not carried; from the second carried as before; steadied at SHARE_CUT Hz
+    SHARE: [0.35, 0.7], SHARE_CUT: 3,
 };
 const _alpha = (cut, dt) => 1 / (1 + 1 / (2 * Math.PI * cut * dt));
 const _ramp = (v, lo, hi) => (v <= lo ? 0 : v >= hi ? 1 : ((v - lo) / (hi - lo)) ** 2 * (3 - 2 * (v - lo) / (hi - lo)));
@@ -106,6 +109,17 @@ export class PoseSmoother {
             const calm = _ramp(ts - (P.fastAt[side] ?? -1e9), PREDICT.FAST_HOLD[0], PREDICT.FAST_HOLD[1]);
             P.gain[side] = w ? _ramp(ws, PREDICT.ARM_LO, PREDICT.ARM_HI) * (1 - _ramp(ws, PREDICT.FAST[0], PREDICT.FAST[1])) * calm * _ramp(Math.hypot(w.x, w.y) / Math.max(1e-9, w.m), PREDICT.ONE_WAY[0], PREDICT.ONE_WAY[1]) : 0;
             if (w) P.gain[side] *= _ramp(w.run || 0, 1, PREDICT.RUN);
+            // (only the share of the wrist's move that is the ARM's - against its shoulder: a step or a sway of the whole person moves
+            // the wrist in the picture too, and it carried the still aiming arm and opened its filter (armMove) - the camera's noise
+            // reached it with every step; the author 02.11: «подёргивания ещё есть, особенно если я чуть передвигаюсь» -
+            // tools/armstab.mjs: the aiming arm, the body swaying 1.5° → as still. Aiming, the shoulder barely moves: the share ≈ 1)
+            const sv = P.vel[side + 'Shoulder'];
+            if (w && sv) {
+                const wm = Math.hypot(w.x, w.y), share = wm > 1e-9 ? Math.hypot(w.x - sv.x, w.y - sv.y) / wm : 1;
+                P.share = P.share || { left: 1, right: 1 };
+                P.share[side] += (share - P.share[side]) * (ok ? _alpha(PREDICT.SHARE_CUT, dt) : 1);
+                P.gain[side] *= _ramp(P.share[side], PREDICT.SHARE[0], PREDICT.SHARE[1]);
+            }
             P.calm[side] = calm;
             P.sw = P.sw || {}; P.sw[side] = sw;
             P.cap[side] = w ? PREDICT.ARM_MAX * sw / Math.max(1e-6, Math.hypot(w.ux, w.uy)) : 0; // (s: the carry's limit along the wrist)

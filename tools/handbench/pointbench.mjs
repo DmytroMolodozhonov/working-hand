@@ -13,7 +13,7 @@
  * drawn aim's second difference frame to frame (deg: steps between the camera's pictures); «перелёт» — past the target
  * after a quick flick (deg).
  */
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 export const LIMITS = { bias: 1.5, jit: 0.35, stillSm: 0.06, aimLag: 100, sweepLag: 105, trackLag: 150, flickLag: 120, over: 2, jit640: 1.0, biasLeft: 1.5 };
@@ -21,7 +21,7 @@ export const LIMITS = { bias: 1.5, jit: 0.35, stillSm: 0.06, aimLag: 100, sweepL
 
 const args = process.argv.slice(2);
 const oldDir = args.includes('--old') ? args[args.indexOf('--old') + 1] : null;
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url)); // (a real path on Windows too: the URL's pathname is «/C:/…»)
 
 const CASES = {
     '720p, 30 кадров/с': {},
