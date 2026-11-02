@@ -8,6 +8,19 @@ sys.path.insert(0, os.path.join(ROOT, "launcher"))
 import zns_window as W  # noqa: E402
 
 
+class KeepOnTop(unittest.TestCase):
+    def test_full_screen_in_front_is_put_back_over_the_taskbar(self):
+        # (a friend's taskbar stayed over the game: the game lost its top place, or the taskbar rose over it)
+        self.assertEqual(W.top_action(True, True, False, False), "top")
+        self.assertEqual(W.top_action(True, True, True, True), "top")
+        self.assertIsNone(W.top_action(True, True, True, False))  # (already right: nothing done)
+
+    def test_never_forced_when_not_full_or_not_in_front(self):
+        self.assertIsNone(W.top_action(False, True, False, True))  # (the menu's window: an ordinary one)
+        self.assertIsNone(W.top_action(True, False, False, True))  # (another program in front: not pushed over it)
+        self.assertIsNone(W.top_action(True, False, True, False))  # (and never taken off the top here either)
+
+
 class Clip(unittest.TestCase):
     def test_cuts_exactly_the_page_and_centres_it(self):
         # Windows 11: an app window 1196×819 at (100, 50) with 8 px invisible borders, a 1 px

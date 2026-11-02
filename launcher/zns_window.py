@@ -66,8 +66,11 @@ REVEAL_AFTER = 4.0  # s: a hidden window cut by a page that never says «reveal�
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE = 0x0001, 0x0002, 0x0004, 0x0010
 SWP_NOSENDCHANGING = 0x0400  # (no WM_WINDOWPOSCHANGING: Windows does not shrink a window bigger than the screen)
 HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
+GWL_EXSTYLE, WS_EX_TOPMOST, GW_HWNDPREV = -20, 0x0008, 3
+TASKBAR_CLASSES = ("Shell_TrayWnd", "Shell_SecondaryTrayWnd")  # (Windows' taskbar: the main one, another monitor's)
 
 _full = {"on": False}  # (the game is in full screen: kept on top while in front)
+_top = {"said": None}  # (the last thing the full-screen keeper wrote to the log: said once, not every half second)
 _lock = threading.Lock()  # (a cut is never checked while it is being made)
 _keeper = {"thread": None}
 _reveal = {}  # hidden window -> where to show it (x, y)
@@ -102,7 +105,7 @@ def _shown():
 def _user32():
     import ctypes
     user32 = ctypes.windll.user32
-    for fn in ("GetForegroundWindow", "MonitorFromWindow"):
+    for fn in ("GetForegroundWindow", "MonitorFromWindow", "GetWindow"):
         getattr(user32, fn).restype = ctypes.c_void_p  # (64-bit handles: never through a C int)
     # real pixels in THIS thread whatever the process is (a process-wide setting can be refused
     # once windows exist — the launcher's folder picker — and then sizes were scaled)
@@ -594,6 +597,88 @@ def _cut_now(user32, hwnd):
     return (r.left, r.top, r.right, r.bottom) if kind in (2, 3) else None
 
 
+def top_action(full, in_front, is_top, taskbar_above):
+    """(pure) What the full-screen keeper does now: "top" - put the game back over everything (the taskbar too),
+    or None. Only while the game is in full screen AND in front: never taken off the top here (the page's
+    <blur> does that - a game shown but not yet in front, Windows refusing it the focus, stays covering)."""
+    if not full or not in_front:
+        return None
+    return "top" if (not is_top or taskbar_above) else None
+
+
+def _taskbar_above(user32, hwnd, limit=600):
+    """Is a taskbar window above the game's in Windows' order of windows?"""
+    import ctypes
+    cls = ctypes.create_unicode_buffer(64)
+    h = user32.GetWindow(hwnd, GW_HWNDPREV)
+    n = 0
+    while h and n < limit:
+        user32.GetClassNameW(ctypes.c_void_p(h), cls, 64)
+        if cls.value in TASKBAR_CLASSES and user32.IsWindowVisible(ctypes.c_void_p(h)):
+            return True
+        h = user32.GetWindow(ctypes.c_void_p(h), GW_HWNDPREV)
+        n += 1
+    return False
+
+
+def _mark_fullscreen(hwnd, on):
+    """Tell Windows' shell the game's window is full screen (ITaskbarList2::MarkFullscreenWindow - what Chrome
+    itself does for its full screen): the taskbar then goes under it whenever it is active. Windows' own guess
+    (<a window covering the monitor>) failed on some computers - a friend's taskbar stayed over the game: our
+    window is bigger than the screen (Chrome's title bar above it, cut away), so it is told, not guessed."""
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD), ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitialize(None)  # (this thread's COM: S_FALSE when it already was - fine)
+
+    def guid(s):
+        g = GUID()
+        ole32.CLSIDFromString(ctypes.c_wchar_p(s), ctypes.byref(g))
+        return g
+
+    clsid = guid("{56FDF344-FD6D-11d0-958A-006097C9A090}")  # CLSID_TaskbarList
+    iid = guid("{602D4995-B13A-429b-A66E-1935E44F4317}")  # IID_ITaskbarList2
+    obj = ctypes.c_void_p()
+    hr = ole32.CoCreateInstance(ctypes.byref(clsid), None, 1 | 4, ctypes.byref(iid), ctypes.byref(obj))  # (in-proc | local server)
+    if hr != 0 or not obj:
+        return False
+    vtbl = ctypes.cast(ctypes.cast(obj, ctypes.POINTER(ctypes.c_void_p))[0], ctypes.POINTER(ctypes.c_void_p))
+    release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])
+    try:
+        # (IUnknown 0-2, ITaskbarList: HrInit 3, AddTab 4, DeleteTab 5, ActivateTab 6, SetActiveAlt 7; ITaskbarList2: MarkFullscreenWindow 8)
+        if ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(vtbl[3])(obj) != 0:
+            return False
+        mark = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int)(vtbl[8])
+        return mark(obj, hwnd, 1 if on else 0) == 0
+    finally:
+        release(obj)
+
+
+def _keep_on_top(user32, hwnd):
+    """Full screen, the game in front: it stays over everything - the taskbar too. (Before, only the page's
+    <focus> / <blur> did it: a moment when something else took the focus - a notification, an overlay, the
+    camera's program - and no <focus> after it left the taskbar over the game.)"""
+    import ctypes
+    fg = user32.GetForegroundWindow()
+    in_front = bool(fg) and fg == hwnd.value
+    is_top = bool(user32.GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST)
+    above = in_front and _taskbar_above(user32, hwnd)
+    act = top_action(_full["on"], in_front, is_top, above)
+    if act == "top":
+        user32.SetWindowPos(hwnd, ctypes.c_void_p(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        said = f"top:{is_top}:{above}"
+        if _top["said"] != said:
+            _top["said"] = said
+            _log("полный экран: игра впереди, но " + ("панель задач была над ней" if above else "она не была поверх всех")
+                 + " - поставлена поверх снова")
+    elif in_front:
+        _top["said"] = None
+
+
 def _check_cut():
     """The game's window keeps its cut (put back when lost). False when there is no game window."""
     import ctypes
@@ -604,6 +689,8 @@ def _check_cut():
     hwnd = ctypes.c_void_p(found)
     if user32.IsIconic(hwnd) or user32.IsZoomed(hwnd):
         return True
+    if _full["on"] and not _hidden(user32, hwnd):
+        _keep_on_top(user32, hwnd)
     wanted = _wanted_cut(user32, hwnd)
     if wanted is None:
         return True  # (not cut by this program: not its to keep)
@@ -747,6 +834,11 @@ def window_action(action, data=None):
             if not hidden:
                 _shown()
             _full["on"] = full
+            try:
+                marked = _mark_fullscreen(hwnd, full)
+            except Exception as e:  # noqa: BLE001
+                marked = repr(e)
+            _log(f"{action}: Windows сказано, что окно {'полноэкранное' if full else 'обычное'} (панель задач {'под ним' if full else 'как обычно'}): {marked}")
             if full and not hidden:
                 user32.SetForegroundWindow(hwnd)
             _start_keeper()  # (the cut is kept from now on: put back whenever it is lost)
