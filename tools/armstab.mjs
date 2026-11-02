@@ -140,7 +140,7 @@ export function run({ arm, seconds, seed = 1, camHz = 30, gameHz = 60, noise = 1
         const hand = ch.getHandWorldPosition('right', new THREE.Vector3());
         const S = ch.rightArmAnchor.getWorldPosition(new THREE.Vector3());
         const E = ch.rightElbowAnchor.getWorldPosition(new THREE.Vector3());
-        out.push({ t: clock, hand, S, E, qE: ch.rightElbowAnchor.getWorldQuaternion(new THREE.Quaternion()), fore: hand.clone().sub(E).normalize(), up: E.clone().sub(S).normalize(), pushed: hb ? hb.pushed.right : 0, K: hb?._mem?.get(ch)?.right.K.clone() ?? null, ch });
+        out.push({ t: clock, hand, S, E, qE: ch.rightElbowAnchor.getWorldQuaternion(new THREE.Quaternion()), qU: ch.rightArmAnchor.getWorldQuaternion(new THREE.Quaternion()), fore: hand.clone().sub(E).normalize(), up: E.clone().sub(S).normalize(), pushed: hb ? hb.pushed.right : 0, K: hb?._mem?.get(ch)?.right.K.clone() ?? null, ch });
     }
     return out;
 }

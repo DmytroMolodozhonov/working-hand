@@ -52,7 +52,10 @@ const _q2 = new THREE.Quaternion();
 const _qBody = new THREE.Quaternion();
 const _up = new THREE.Vector3();
 const _q3 = new THREE.Quaternion(), _qa0 = new THREE.Quaternion(), _qe0 = new THREE.Quaternion(), _qa1 = new THREE.Quaternion(), _qe1 = new THREE.Quaternion();
-const _armY = new THREE.Vector3();
+const _armY = new THREE.Vector3(), _bZero = new THREE.Vector3();
+const _bq1 = new THREE.Quaternion(), _bq2 = new THREE.Quaternion(), _bq3 = new THREE.Quaternion(), _bq4 = new THREE.Quaternion(), _bm = new THREE.Matrix4();
+/** rad/s: how fast an arm bone's turn round its own length comes back to the usual one (see _boneTo) */
+export const BONE_TWIST = { FAST: 12, SLOW: 0.5 };
 const _ax = new THREE.Vector3();
 const _r1 = new THREE.Vector3(), _r2 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _r4 = new THREE.Vector3();
 const _r5 = new THREE.Vector3(), _r6 = new THREE.Vector3(), _ru = new THREE.Vector3(), _rn = new THREE.Vector3();
@@ -368,16 +371,40 @@ export class VoxelCharacter {
      * (tools/armstab.mjs «руки подняты, кисти за кадром»: up to 170° a frame). Near there the bone keeps its own present turn
      * (its Y axis) instead, blended in by how vertical it is (no seam). Writes `out`; returns how much of the fix is on (0..1).
      */
-    _armUp(anchor, dir, out) {
+    //
+    // _boneTo (02.11, after the first fix above made it worse): blending the body's up with the bone's own Y axis gave a
+    // sum that swung wherever the two disagreed - the author: «когда я прицеливаюсь, она может делать мелкие подёргивания»;
+    // zns-arms.log: 109 turns of 25…180° in a frame of a still arm, 94 of them in that blend. Now a bone turns as a real
+    // joint does: the smallest rotation taking its length to the new direction (its turn round its length carried over), and
+    // that turn then glides back to the usual one (the body's up as its up) at most BONE_TWIST rad/s - fast where the usual
+    // one is clear, slowly where the bone points (almost) straight up or down and it is not. Never a jump.
+    /** Turn an arm bone (its +z) to `dir` (world, unit), smoothed as _smoothLookAt; returns how vertical it is (0..1, ArmLog). */
+    _boneTo(anchor, dir, speed, fast, dt) {
+        anchor.getWorldQuaternion(_bq1);
+        _armY.set(0, 0, 1).applyQuaternion(_bq1);
+        // the swing alone: its turn round its own length carried over
+        _bq2.setFromUnitVectors(_armY, dir).multiply(_bq1);
         const c = Math.abs(dir.dot(_up));
-        out.copy(_up);
-        if (c < 0.8) return 0;
-        const k = Math.min(1, (c - 0.8) / 0.15), s = k * k * (3 - 2 * k);
-        _armY.set(0, 1, 0).applyQuaternion(anchor.getWorldQuaternion(_q3));
-        out.lerp(_armY, s);
-        if (out.lengthSq() < 1e-6) out.copy(_armY);
-        out.normalize();
-        return s;
+        const k = Math.max(0, Math.min(1, (c - 0.8) / 0.17)), w = k * k * (3 - 2 * k);
+        if (c < 0.9995) {
+            // the usual turn (lookAt with the body's up) and how far round the length it is from the carried one
+            _bm.lookAt(dir, _bZero, _up);
+            _bq3.setFromRotationMatrix(_bm);
+            _bq4.copy(_bq2).invert().premultiply(_bq3); // (q3 · q2⁻¹: a turn about dir)
+            let a = 2 * Math.atan2(_bq4.x * dir.x + _bq4.y * dir.y + _bq4.z * dir.z, _bq4.w);
+            if (a > Math.PI) a -= 2 * Math.PI; else if (a < -Math.PI) a += 2 * Math.PI;
+            const lim = (BONE_TWIST.FAST * (1 - w) + BONE_TWIST.SLOW) * dt;
+            _bq4.setFromAxisAngle(dir, Math.max(-lim, Math.min(lim, a)));
+            _bq2.premultiply(_bq4);
+        }
+        // into the parent's frame, then the light smoothing of the drawn bone (as _smoothLookAt)
+        if (anchor.parent) { anchor.parent.getWorldQuaternion(_bq3); _bq2.premultiply(_bq3.invert()); }
+        if (fast > 0 && speed < 1) {
+            const ang = 2 * Math.acos(Math.min(1, Math.abs(anchor.quaternion.dot(_bq2))));
+            speed += (1 - speed) * Math.max(0, Math.min(1, (ang - fast) / (fast * ARM_SMOOTH.RAMP)));
+        }
+        anchor.quaternion.slerp(_bq2, speed);
+        return w;
     }
 
     _smoothLookAt(obj, worldTarget, speed, fast = 0) {
@@ -428,16 +455,11 @@ export class VoxelCharacter {
             // Upper arm
             _v1.set(so.u.x, so.u.y, so.u.z).applyQuaternion(_qBody);
             const lift = log ? Math.acos(Math.max(-1, Math.min(1, -_v1.dot(_up)))) * 57.2958 : 0; // (0 hanging, 180 straight up)
-            const fixU = this._armUp(armAnchor, _v1, armAnchor.up);
-            _v2.copy(armAnchor.position);
-            armAnchor.parent.localToWorld(_v2).add(_v1);
-            this._smoothLookAt(armAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
+            const fixU = this._boneTo(armAnchor, _v1.normalize(), armK, ARM_SMOOTH.FAST * adt * 60, adt);
             armAnchor.updateMatrixWorld(true);
             // Forearm
             _v1.set(so.f.x, so.f.y, so.f.z).applyQuaternion(_qBody);
-            const fixF = this._armUp(elbowAnchor, _v1, elbowAnchor.up);
-            elbowAnchor.getWorldPosition(_v2).add(_v1);
-            this._smoothLookAt(elbowAnchor, _v2, armK, ARM_SMOOTH.FAST * adt * 60);
+            const fixF = this._boneTo(elbowAnchor, _v1.normalize(), armK, ARM_SMOOTH.FAST * adt * 60, adt);
             if (log) {
                 armAnchor.getWorldQuaternion(_qa1); elbowAnchor.getWorldQuaternion(_qe1);
                 const turn = Math.max(_qa0.angleTo(_qa1), _qe0.angleTo(_qe1)) * 57.2958;
