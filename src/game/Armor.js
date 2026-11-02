@@ -24,7 +24,7 @@
 
 import * as THREE from 'three';
 import { logLine } from './BumpRules.js';
-import { PIECES, ARMOR, MAG, pieceMax, wornEffects, spellGuard, soakBlow, guardSpend, ensureMag, hasMag, magOf, wornCode, wearSpot, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
+import { PIECES, ARMOR, MAG, pieceMax, wornEffects, spellGuard, soakBlow, guardSpend, ensureMag, hasMag, magOf, wornCode, wearSpot, wearSpotNear, armorName, makePiece, rollNamedSet, makeRobe } from './ArmorTypes.js';
 import { shieldHitCost } from './Combat.js';
 import { dressArmor } from '../entities/ArmorLook.js';
 import { strippedLook, VillagerModel } from '../entities/VillagerModel.js';
@@ -65,6 +65,8 @@ export class ArmorSystem {
         this.remote = new Map(); // playerId -> worn code (what the others wear)
         this.stripped = new Set(); // villager ids «Disarmor» stripped (their look stays so)
         this._wearT = { right: 0, left: 0 };
+        this._offT = { right: 0, left: 0 }; // (s out of the place)
+        this._hintT = { right: 0, left: 0 };
         this._edge = { right: { cx: null, cdy: 0, lostT: 0, done: false }, left: { cx: null, cdy: 0, lostT: 0, done: false } }; // (the greaves: the hand last seen / how long out of the picture)
         this._wearLog = { right: 0, left: 0, low: 0 };
         this._told = new Set(); // (piece kinds whose «how to put it on» was said)
@@ -350,7 +352,12 @@ export class ArmorSystem {
             if (slot === 'legs') gone = this._legsEdge(side, dt, g.currentPose?.bodyEdge?.[side] ?? null);
             // (the greaves: the camera's picture said «not the thigh» but the hero's own hand is at the thigh in front —
             // held there twice as long it goes on anyway; the author: the greaves never went on)
-            const slow = !on && !gone && slot === 'legs' && !!touch && wearSpot(h.item.kind, h.item.piece, hand, null);
+            const slow = !on && !gone && !!touch && (slot === 'legs' ? wearSpot(h.item.kind, h.item.piece, hand, null) : wearSpotNear(h.item.kind, h.item.piece, hand));
+            // (a hand flying past the body does not put anything on; the speed is the hero's own hand in the body's space)
+            const P = (this._hp ||= { right: { x: 0, y: 0, z: 0, ok: false }, left: { x: 0, y: 0, z: 0, ok: false } })[side];
+            const sp = P.ok && dt > 0 ? Math.hypot(hand.x - P.x, hand.y - P.y, hand.z - P.z) / dt : 0;
+            P.x = hand.x; P.y = hand.y; P.z = hand.z; P.ok = true;
+            const fast = sp > ARMOR.WEAR_FAST;
             // (a swap: the piece taken off lands in this very hand, at the same place — it must not go straight back on;
             // the hand has to leave the place first)
             if (this._swapLock?.[side]) {
@@ -358,8 +365,18 @@ export class ArmorSystem {
                 this._swapLock[side] = false;
             }
             if (gone) this._wearT[side] = ARMOR.WEAR_T;
-            else if (slow) this._wearT[side] += 0.5 * dt;
-            else if (on) this._wearT[side] += dt; else this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
+            else if (fast) { /* (passing by: neither adds nor takes off) */ }
+            else if (slow) { this._wearT[side] += 0.6 * dt; this._offT[side] = 0; }
+            else if (on) { this._wearT[side] += dt; this._offT[side] = 0; }
+            else if ((this._offT[side] += dt) > ARMOR.WEAR_GRACE) this._wearT[side] = Math.max(0, this._wearT[side] - 0.35 * dt);
+            // (progress: little sparks at the place, brighter as it nears — only while the piece is held to the body)
+            if (!gone && (on || slow) && this._wearT[side] > 0.08 && this._wearT[side] < ARMOR.WEAR_T && (this._hintT[side] -= dt) <= 0) {
+                this._hintT[side] = 0.12;
+                const k = this._wearT[side] / ARMOR.WEAR_T;
+                ch.group.localToWorld(_v2.set(hand.x, hand.y, hand.z));
+                g.fx?.spark(_v2, k > 0.6 ? 0xffe9a0 : 0x9fd8ff, 0.06 + 0.06 * k, _v.set(0, 0.6, 0), 0.35);
+            }
+            if (!on && !slow) this._hintT[side] = 0;
             if (slot === 'legs') this._legsLog(side, dt, hand, touch, g.currentPose?.bodyEdge?.[side] ?? null, on, gone);
             if (this._wearT[side] < ARMOR.WEAR_T) continue;
             this._edge[side].lostT = 0;

@@ -284,9 +284,10 @@ export function bodyTouch(lm, side, aspect = 4 / 3, hand = null) {
     // of the shoulders — the author: the breastplate never went on; only an arm really stretched out is out)
     const out = wr.z != null && (wr.z || sz) ? (wr.z - sz) * aspect / W < -2.4 : false;
     return {
-        head: Math.abs(hx) < 0.75 && hdy > -1.1 && hdy < 0.4, // (from the chin up)
+        head: Math.abs(hx) < 0.9 && hdy > -1.25 && hdy < 0.5, // (from the chin up)
         // (the palm on the chest, the belly's top; the wrist alone — a little lower and wider: the forearm comes in from the side)
-        chest: !out && (palm ? Math.abs(px) < 0.65 && pdy > 0.02 && pdy < 0.72 : Math.abs(cx) < 0.7 && cdy > 0.02 && cdy < 0.78),
+        // (softer: the whole torso from the collarbones to the belt and a bit wider than the shoulders — the author: it went on, but not at once)
+        chest: !out && (palm ? Math.abs(px) < 0.85 && pdy > -0.12 && pdy < 0.85 : Math.abs(cx) < 0.9 && cdy > -0.12 && cdy < 0.92),
         // the greaves: the hand on the thigh, in front (drawn in from the hip line — a hand hanging at
         // the side is out there and never counts), from the belt down; or bent down to the knee. Hips
         // not seen (a camera to the waist): the hand low in front, at the belt, is enough.

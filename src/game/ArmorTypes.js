@@ -131,6 +131,8 @@ export const ARMOR = {
     FIRE_SOAK: 0.4, // fire heats through: steel takes less of it
     REGEN: 0.1, // points a second a magic piece mends by itself
     WEAR_T: 0.45, // s the piece is held at its place on the body to be put on
+    WEAR_GRACE: 0.3, // s a hand out of its place (a noisy frame, a lost wrist) takes nothing off the count
+    WEAR_FAST: 7, // m/s: a hand faster than this only passes by — the time does not add up
     SUIT_UP_R: 9, // m: «Suit Up» takes armour lying this near
     GIVE_UP: 3, // arrows bounced off a magic armour: the knights stop shooting at it (a while)
     GIVE_UP_T: 60, // s they don't try again
@@ -398,8 +400,8 @@ export function wearSpot(kind, piece, hand, touch = null) {
     if (!spot) return false;
     if (touch && !touch[spot]) return false;
     // (the camera saw the hand there: the arm's guessed depth only rules out a hand far out — loose)
-    if (spot === 'head') return y > 1.2 && y < 3.6 && Math.hypot(x, z) < (touch ? 1.8 : 1.45); // at the head (its middle at y 2.1), on it or over it
-    if (spot === 'chest') return Math.abs(x) < (touch ? 1.1 : 0.9) && y > (touch ? -0.1 : 0.2) && y < 1.9 && z < 0.4 && z > (touch ? -2.0 : -1.6); // on the chest (its front at z −0.4)
+    if (spot === 'head') return y > 1.1 && y < 3.8 && Math.hypot(x, z) < (touch ? 1.9 : 1.6); // at the head (its middle at y 2.1), on it or over it
+    if (spot === 'chest') return Math.abs(x) < (touch ? 1.3 : 1.1) && y > (touch ? -0.3 : 0.0) && y < 2.1 && z < 0.5 && z > (touch ? -2.2 : -1.6); // (the torso is 1.2 wide, 1.5 tall: a piece 0.5–0.8 m in front of it counts) // on the chest (its front at z −0.4)
     // on the thigh / at the knee: below the belt (the hero's arm hangs to y −0.65 — it can't reach lower,
     // so the camera's picture tells the thigh from a hand at the side); unseen — the hand forward of the thigh
     if (!(Math.abs(x) < 1.0 && y > -1.9 && y < (touch ? 0.6 : 0.15) && z > -1.6 && z < 0.8)) return false;
@@ -466,4 +468,10 @@ export const SPELL_DAMAGE = new Set([
 
 export function makeArchmageSuit() {
     return { kind: 'robe', uid: armorUid(), magic: true, archmage: true, color: ARCHMAGE.COLOR };
+}
+
+/** The camera said «not there», yet the hero's own hand is at the place (tighter than `wearSpot` alone): the piece goes on, but slower. */
+export function wearSpotNear(kind, piece, hand) {
+    if (!wearSpot(kind, piece, hand, null)) return false;
+    return hand.z > -1.3 && Math.abs(hand.x) < 0.9;
 }
