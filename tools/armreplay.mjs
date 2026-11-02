@@ -18,7 +18,7 @@ import { PoseSmoother } from '../src/input/PoseSmoother.js';
 import { VoxelCharacter } from '../src/entities/Character.js';
 
 /** Replay `rec` (a parsed recording). Returns { frames, jerks, summary }. */
-export function replay(rec, { side = 'right', min = 12, gameHz = 60 } = {}) {
+export function replay(rec, { side = 'right', min = 12, gameHz = 60, age = 55 } = {}) {
     const video = rec.video || { videoWidth: 640, videoHeight: 480 };
     const guard = new PoseStabilizer({ log: null }), interp = new PoseInterpreter(), sm = new PoseSmoother();
     const ch = new VoxelCharacter(new THREE.Scene(), { remote: true });
@@ -43,7 +43,13 @@ export function replay(rec, { side = 'right', min = 12, gameHz = 60 } = {}) {
             if (lastRaw) rawSpeed = Math.hypot(lm[W].x - lastRaw.x, lm[W].y - lastRaw.y) / sw / Math.max(0.01, (c.t - lastRaw.t) / 1000);
             lastRaw = { x: lm[W].x, y: lm[W].y, t: c.t, ve: lm[E].visibility, vw: lm[W].visibility };
             const g = guard.process(lm, c.t);
-            if (g) sm.push(interp.process({ poseLandmarks: g }, video), c.t);
+            if (g) {
+                const pose = interp.process({ poseLandmarks: g }, video);
+                // (the picture's own time, as PoseService gives it: taken `age` ms before it reached the game - PoseSmoother carries the
+                // arms ahead by it, as in the game: «руки показаны вперёд на 140 мс»)
+                pose.ts = c.t - age;
+                sm.push(pose, c.t);
+            }
         }
         const pose = sm.sample(clock);
         if (!pose) continue;
@@ -52,7 +58,7 @@ export function replay(rec, { side = 'right', min = 12, gameHz = 60 } = {}) {
         out.push({
             t: clock, hand: ch.getHandWorldPosition(side, new THREE.Vector3()),
             qU: anchor(0).getWorldQuaternion(new THREE.Quaternion()), qE: anchor(1).getWorldQuaternion(new THREE.Quaternion()),
-            raw: rawSpeed, ve: lastRaw?.ve ?? 1, vw: lastRaw?.vw ?? 1,
+            raw: rawSpeed, ve: lastRaw?.ve ?? 1, vw: lastRaw?.vw ?? 1, rw: lastRaw ? { x: lastRaw.x, y: lastRaw.y } : null,
         });
     }
     const jerks = [];
@@ -66,7 +72,23 @@ export function replay(rec, { side = 'right', min = 12, gameHz = 60 } = {}) {
         if (Math.max(u, e) >= min) jerks.push({ t: Math.round(a.t), u: +u.toFixed(1), e: +e.toFixed(1), cm: +cm.toFixed(1), raw: +a.raw.toFixed(2), ve: a.ve, vw: a.vw });
     }
     const calm = jerks.filter((j) => j.raw < 3);
-    return { frames: out.length, jerks, calm, rmsStepCm: Math.sqrt(s2 / Math.max(1, out.length - 1)) };
+    // back and forth: the drawn hand turns back (its way over ~0.1 s against its way the 0.1 s before) by more than 3 cm while the
+    // camera's wrist went on one way (or stood) - an overshoot the game made, not the player
+    const back = [];
+    const k = Math.round(gameHz * 0.1);
+    for (let i = 2 * k; i < out.length; i++) {
+        if (out[i].t < t0) continue;
+        const a = out[i - 2 * k], b = out[i - k], c = out[i];
+        const d1 = b.hand.clone().sub(a.hand), d2 = c.hand.clone().sub(b.hand);
+        if (d1.length() < 0.03 || d2.length() < 0.03 || d1.dot(d2) > -0.5 * d1.length() * d2.length()) continue;
+        const ra = a.rw, rb = b.rw, rc = c.rw;
+        if (!ra || !rb || !rc) continue;
+        const r1x = rb.x - ra.x, r1y = rb.y - ra.y, r2x = rc.x - rb.x, r2y = rc.y - rb.y;
+        if (r1x * r2x + r1y * r2y < -1e-5) continue; // (the player's own wrist turned back too)
+        back.push({ t: Math.round(c.t), cm: +Math.min(d1.length(), d2.length()).toFixed(3) * 100 });
+    }
+    const backN = back.filter((x, j) => j === 0 || x.t - back[j - 1].t > 150).length; // (one per turn, not every frame of it)
+    return { frames: out.length, jerks, calm, back, backN, rmsStepCm: Math.sqrt(s2 / Math.max(1, out.length - 1)) };
 }
 
 if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('tools/armreplay.mjs')) {
@@ -77,7 +99,7 @@ if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('tools/armre
     const rec = JSON.parse(fs.readFileSync(file, 'utf8'));
     for (const side of opt('--side', null) ? [opt('--side')] : ['right', 'left']) {
         const r = replay(rec, { side, min: Number(opt('--min', 12)) });
-        console.log(`${side === 'left' ? 'левая' : 'правая'}: ${r.frames} кадров, шаг кисти RMS ${r.rmsStepCm.toFixed(2)} см; рывков ≥${opt('--min', 12)}°/кадр: ${r.jerks.length}, из них при спокойной руке (камера < 3 ш/с): ${r.calm.length}`);
+        console.log(`${side === 'left' ? 'левая' : 'правая'}: ${r.frames} кадров, шаг кисти RMS ${r.rmsStepCm.toFixed(2)} см; рывков ≥${opt('--min', 12)}°/кадр: ${r.jerks.length}, из них при спокойной руке (камера < 3 ш/с): ${r.calm.length}; перелётов туда-обратно (рука на камере не возвращалась): ${r.backN}${r.back.length ? ' (' + r.back.filter((x, j) => j === 0 || x.t - r.back[j - 1].t > 150).slice(0, 8).map((x) => (x.t / 1000).toFixed(2) + 'с').join(', ') + ')' : ''}`);
         for (const j of r.calm.slice(0, 25)) console.log(`  ${(j.t / 1000).toFixed(2)} с: плечо ${j.u}°, предплечье ${j.e}°, кисть ${j.cm} см; запястье на камере ${j.raw} ш/с, видимость локтя ${j.ve}, запястья ${j.vw}`);
     }
 }
