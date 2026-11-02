@@ -213,6 +213,7 @@ export class CoinBelt {
         const it = makeMagicPouch(this.magicUid || newUid(), this.count);
         if (!g.items.takeIntoHand(it, side)) { this.log.push('take-failed:' + side); return; }
         inv?.pocketHold?.(side);
+        g.coinDeal?.noteTaken?.();
         this.count = 0; this.magic = false; this.magicUid = null;
         this.log.push('take-magic:' + side);
         this._open = false; this._left = false; this._at = performance.now();

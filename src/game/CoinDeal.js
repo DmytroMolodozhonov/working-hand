@@ -21,9 +21,14 @@ export const DEAL = {
     LOOK_S: 0.2, // s between looks at the people (not every frame)
     SWEEP_S: 1, // s between looks at the counters for left pouches
     HINT_S: 6, // s: the hint is not shown more often
+    COACH_NEAR: 6, // m: the “you can pay now” hint only when I stand at the counter, not just walking by
+    COACH_AFTER_S: 1.5, // s at the counter before it
+    COACH_GAP_S: 150, // s between two such hints
+    COACH_MAX: 3, // times in all; once the player has taken the pouch out in a deal twice he knows how
 };
 
 export const HINT = 'Монеты достаются только когда вы покупаете или продаёте';
+export const COACH = 'Хотите заплатить? Достаньте мешочек с монетами с пояса: монеты достаются только пока вы покупаете или продаёте';
 
 /** Can this person deal now (pure: tests)? v: {dead, foe, sleep, fleeT, x, y, z}; me: {x, z}. */
 export function dealer(v, me, near = DEAL.NEAR) {
@@ -41,6 +46,11 @@ export class CoinDeal {
         this._shut = 0; // s since the deal ended
         this._hintAt = -1e9;
         this._moved = false;
+        this._near = 1e9; // m² to the nearest dealer
+        this._at = 0; // s at a counter in this deal
+        this._coachAt = -1e9;
+        this._coached = 0;
+        this._learned = 0; // times the pouch was taken out in a deal
         this.mine = new Set(); // uids of the pouches that were in my hands (a counter pouch of another player is not swept)
         this.log = [];
     }
@@ -66,17 +76,35 @@ export class CoinDeal {
         const g = this.game, life = g.castleLife, me = g.character?.group?.position;
         this._look = DEAL.LOOK_S;
         let open = false;
+        this._near = 1e9;
         if (life && me) {
             const talk = life.talk, night = life.night;
             for (const v of life.byId.values()) {
                 if (!dealer(v, me) || !talk?._trader?.(v)) continue;
                 if (night?.closed?.() && !(v.entry?.stall != null && night.dealHeld(v.cs, v.entry.stall))) continue; // (the market is shut; only a deal already held open goes on)
                 open = true;
-                break;
+                const dx = v.x - me.x, dz = v.z - me.z;
+                this._near = Math.min(this._near, dx * dx + dz * dz);
             }
             if (!open && me && this._counterPouches(true)) open = true; // (my pouch lies on a counter: the deal is not over)
         }
-        this._open = open;
+        if (open !== this._open) { this._open = open; g.inventory?._renderPouch?.(); } // (the pouch cell shows whether it opens now)
+    }
+
+    /** The pouch was taken out in a deal: the player knows how (the hint below is told less and less). */
+    noteTaken() { this._learned++; }
+
+    /** Now and then, at a counter: «to pay, take the pouch off the belt» (not when it is in a hand, empty, or learned). */
+    _coach(dt) {
+        const g = this.game, inv = g.inventory;
+        if (g.config?.mode === 'creative' || this._near > DEAL.COACH_NEAR * DEAL.COACH_NEAR) { this._at = 0; return; }
+        this._at += dt;
+        if (this._at < DEAL.COACH_AFTER_S || this._coached >= DEAL.COACH_MAX || this._learned >= 2) return;
+        const now = performance.now();
+        if (now - this._coachAt < DEAL.COACH_GAP_S * 1000) return;
+        if (!inv.purse.magic || inv.purse.count <= 0 || g.combat?.dead || g.combat?.immobile) return; // (pouch not on the belt / no coins / busy)
+        this._coachAt = now; this._coached++;
+        g.hud?.toast?.('💰 ' + COACH, 4500);
     }
 
     /** Pouches lying still on a counter of an awake market (`any`: is there one; else: all of them). */
@@ -121,7 +149,8 @@ export class CoinDeal {
         for (const side of ['right', 'left']) { const h = items.held[side]; if (h && h.item.kind === 'coins' && !h.item.shop && this.mine.size < 16) this.mine.add(h.item.uid); }
         this._look -= dt;
         if (this._look <= 0) this._refresh();
-        if (this._open) { this._shut = 0; return; }
+        if (this._open) { this._shut = 0; this._coach(dt); return; }
+        this._at = 0;
         if (this.log.length > 40) this.log.splice(0, 20);
         this._shut += dt;
         if (this._shut < DEAL.GRACE_S) return;

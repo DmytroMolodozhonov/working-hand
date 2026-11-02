@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { Inventory } from '../../src/game/Inventory.js';
-import { CoinDeal, DEAL, dealer } from '../../src/game/CoinDeal.js';
+import { CoinDeal, DEAL, COACH, dealer } from '../../src/game/CoinDeal.js';
 import { makeMagicPouch } from '../../src/game/CoinBelt.js';
 
 function fakeGame({ mode = 'survival', remotes = 0 } = {}) {
@@ -135,4 +135,22 @@ test('dealer(): the pure rule', () => {
     assert.equal(dealer({ x: 30, z: 0 }, me), false);
     assert.equal(dealer({ x: 1, z: 1, dead: true }, me), false);
     assert.equal(dealer(null, me), false);
+});
+
+test('coach hint: at a counter, with coins, rarely; not when walking by, not when the pouch is out, not once learned', () => {
+    const g = fakeGame(); g.addMerchant(); g.inventory.purse.count = 100;
+    tick(g, 3);
+    assert.equal(g.toasts.filter((t) => t.includes(COACH)).length, 1, 'told once at the counter');
+    tick(g, 10);
+    assert.equal(g.toasts.filter((t) => t.includes(COACH)).length, 1, 'not again soon');
+    const far = fakeGame(); far.addMerchant({ x: 12 + 8 }); far.inventory.purse.count = 100; tick(far, 5);
+    assert.equal(far.toasts.length, 0, 'walking by (in the deal, but not at the counter): silent');
+    const none = fakeGame(); none.addMerchant(); tick(none, 5);
+    assert.equal(none.toasts.length, 0, 'no coins: nothing to pay with');
+    const out = fakeGame(); out.addMerchant(); out.inventory.purse.count = 100; take(out); tick(out, 5);
+    assert.equal(out.toasts.filter((t) => t.includes(COACH)).length, 0, 'the pouch is already out');
+    const lrn = fakeGame(); lrn.addMerchant(); lrn.inventory.purse.count = 100; lrn.coinDeal._learned = 2; tick(lrn, 5);
+    assert.equal(lrn.toasts.length, 0, 'knows how');
+    const cr = fakeGame({ mode: 'creative' }); cr.addMerchant(); cr.inventory.purse.count = 100; tick(cr, 5);
+    assert.equal(cr.toasts.length, 0, 'creative: coins are not needed');
 });

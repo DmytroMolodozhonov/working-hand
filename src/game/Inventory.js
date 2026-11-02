@@ -1083,14 +1083,16 @@ export class Inventory {
         const c = this.pouchCell;
         if (!c) return;
         const o = this.pouchInfo(), sel = !!this._cyc?.pouch;
-        const key = o.have + '|' + o.coins + '|' + sel;
+        const shut = !!(this.game.coinDeal && o.have && !this.game.coinDeal.mayTake());
+        const key = o.have + '|' + o.coins + '|' + sel + '|' + shut;
         if (key === this._pouchKey) return;
         this._pouchKey = key;
         c.classList.toggle('sel', sel);
         c.classList.toggle('empty', !o.have);
         c.querySelector('.hb-icon').innerHTML = pouchIcon();
         c.querySelector('.hb-count').textContent = '';
-        c.title = 'Бездонный мешочек, монет: ' + o.coins;
+        c.classList.toggle('locked', shut); // (dimmed: it opens only when buying or selling)
+        c.title = 'Бездонный мешочек, монет: ' + o.coins + (shut ? '\nМонеты достаются только когда вы покупаете или продаёте' : o.have && this.game.coinDeal ? '\nМожно достать: идёт торговля' : '');
     }
 
     /** My pouch: have I it (on the belt, in a slot or in a hand), and all the coins. */
